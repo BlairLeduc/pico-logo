@@ -330,11 +330,11 @@ Each character is an element of the word. The word `Hen3ry` contains six element
 H   e   n   3   r   y
 ```
 
-Words can contain any character and this includes alphanumeric characters, delimiters, tabs, and punctuation. Delimiters must be escaped by a backslash "`\`" character.
+Words can contain any character and this includes alphanumeric characters, spaces, delimiters, tabs, and punctuation. Delimiters must be escaped by a backslash "`\`" character.
 
 ## Delimiters and Spacing
 
-A word is usually _delimited_ only by spaces (a tab character is not considered a space): That is, there is a space before the word and a space after the word; they set the word off from the rest of line. There are a few other delimiting characters:
+A word is usually _delimited_ only by spaces or tabs: That is, there is a space or tab before the word and a space or tab after the word; they set the word off from the rest of line. There are a few other delimiting characters:
 
 ```
 [ ] ( ) + - * / = < > 

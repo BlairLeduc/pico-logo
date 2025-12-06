@@ -6,25 +6,25 @@ project(logo C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# # Coverage option
-# option(ENABLE_COVERAGE "Enable code coverage" OFF)
+# Coverage option
+option(ENABLE_COVERAGE "Enable code coverage" OFF)
 
-# if(ENABLE_COVERAGE)
-#     message(STATUS "Code coverage enabled")
-#     add_compile_options(--coverage -O0 -g)
-#     add_link_options(--coverage)
-# endif()
+if(ENABLE_COVERAGE)
+    message(STATUS "Code coverage enabled")
+    add_compile_options(--coverage -O0 -g)
+    add_link_options(--coverage)
+endif()
 
-# enable_testing()
+enable_testing()
 
-# add_library(logo_core
+add_library(logo_core
+    core/lexer.c
+)
 
-# )
-
-# target_include_directories(logo_core
-#     PUBLIC
-#         ${CMAKE_CURRENT_SOURCE_DIR}
-# )
+target_include_directories(logo_core
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
 
 add_library(logo_devices_host
    devices/device.c
@@ -46,104 +46,47 @@ target_include_directories(logo PRIVATE
 
 target_link_libraries(logo
     PRIVATE
-        # logo_core
+        logo_core
         logo_devices_host
 )
 
 # Test Executables
-# add_executable(test_interpreter
-#     tests/test_interpreter.c
-#     tests/unity.c
-# )
+add_executable(test_lexer
+    tests/test_lexer.c
+    tests/unity.c
+)
 
-# target_include_directories(test_interpreter PRIVATE
-#     ${CMAKE_CURRENT_SOURCE_DIR}
-#     ${CMAKE_CURRENT_SOURCE_DIR}/tests
-# )
+target_include_directories(test_lexer PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests
+)
 
-# target_link_libraries(test_interpreter PRIVATE logo_core)
+target_link_libraries(test_lexer PRIVATE logo_core)
 
-# add_test(NAME test_interpreter COMMAND test_interpreter)
+add_test(NAME test_lexer COMMAND test_lexer)
 
-# add_executable(test_lexer
-#     tests/test_lexer.c
-#     tests/unity.c
-# )
-
-# target_include_directories(test_lexer PRIVATE
-#     ${CMAKE_CURRENT_SOURCE_DIR}
-#     ${CMAKE_CURRENT_SOURCE_DIR}/tests
-# )
-
-# target_link_libraries(test_lexer PRIVATE logo_core)
-
-# add_test(NAME test_lexer COMMAND test_lexer)
-
-# add_executable(test_parser
-#     tests/test_parser.c
-#     tests/unity.c
-# )
-
-# target_include_directories(test_parser PRIVATE
-#     ${CMAKE_CURRENT_SOURCE_DIR}
-#     ${CMAKE_CURRENT_SOURCE_DIR}/tests
-# )
-
-# target_link_libraries(test_parser PRIVATE logo_core)
-
-# add_test(NAME test_parser COMMAND test_parser)
-
-# add_executable(test_env
-#     tests/test_env.c
-#     tests/unity.c
-# )
-
-# target_include_directories(test_env PRIVATE
-#     ${CMAKE_CURRENT_SOURCE_DIR}
-#     ${CMAKE_CURRENT_SOURCE_DIR}/tests
-# )
-
-# target_link_libraries(test_env PRIVATE logo_core)
-
-# add_test(NAME test_env COMMAND test_env)
-
-# add_executable(test_evaluator
-#     tests/test_evaluator.c
-#     tests/unity.c
-# )
-
-# target_include_directories(test_evaluator PRIVATE
-#     ${CMAKE_CURRENT_SOURCE_DIR}
-#     ${CMAKE_CURRENT_SOURCE_DIR}/tests
-# )
-
-# target_link_libraries(test_evaluator PRIVATE logo_core)
-
-# add_test(NAME test_evaluator COMMAND test_evaluator)
-
-
-# # Coverage target
-# if(ENABLE_COVERAGE)
-#     find_program(LCOV lcov)
+# Coverage target
+if(ENABLE_COVERAGE)
+    find_program(LCOV lcov)
     
-#     if(LCOV)
-#         add_custom_target(coverage
-#             COMMAND find ${CMAKE_BINARY_DIR} -name '*.gcda' -delete
-#             COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-#             COMMAND ${LCOV} --capture --directory . --output-file coverage.info
-#             COMMAND ${LCOV} --remove coverage.info '*/tests/*' '/usr/*' --output-file coverage.info
-#             WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-#             COMMENT "Running tests and generating coverage report"
-#             DEPENDS test_interpreter test_lexer test_parser test_env test_evaluator
-#         )
+    if(LCOV)
+        add_custom_target(coverage
+            COMMAND find ${CMAKE_BINARY_DIR} -name '*.gcda' -delete
+            COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
+            COMMAND ${LCOV} --capture --directory . --output-file coverage.info
+            COMMAND ${LCOV} --remove coverage.info '*/tests/*' '/usr/*' --output-file coverage.info
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            COMMENT "Running tests and generating coverage report"
+            DEPENDS test_lexer
+        )
         
-#         add_custom_target(coverage-clean
-#             COMMAND ${CMAKE_COMMAND} -E remove coverage.info
-#             COMMAND find ${CMAKE_BINARY_DIR} -name '*.gcda' -delete
-#             WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-#             COMMENT "Cleaning coverage data"
-#         )
-#     else()
-#         message(WARNING "lcov not found. Coverage target will not be available.")
-#     endif()
-# endif()
+        add_custom_target(coverage-clean
+            COMMAND ${CMAKE_COMMAND} -E remove coverage.info
+            COMMAND find ${CMAKE_BINARY_DIR} -name '*.gcda' -delete
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            COMMENT "Cleaning coverage data"
+        )
+    else()
+        message(WARNING "lcov not found. Coverage target will not be available.")
+    endif()
+endif()
