@@ -8,7 +8,6 @@
 #include "unity.h"
 #include "core/lexer.h"
 
-#include <stdlib.h>
 #include <string.h>
 
 void setUp(void)
@@ -29,10 +28,10 @@ static void assert_token(Lexer *lexer, TokenType expected_type, const char *expe
                                   "Token type mismatch");
     if (expected_text)
     {
-        char *text = lexer_token_text(&token);
+        char text[256];
+        lexer_token_text(&token, text, sizeof(text));
         TEST_ASSERT_EQUAL_STRING_MESSAGE(expected_text, text,
                                          "Token text mismatch");
-        free(text);
     }
 }
 

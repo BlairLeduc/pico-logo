@@ -8,7 +8,6 @@
 #include "core/lexer.h"
 
 #include <ctype.h>
-#include <stdlib.h>
 #include <string.h>
 
 // Delimiter characters that separate tokens
@@ -475,25 +474,26 @@ bool lexer_is_at_end(const Lexer *lexer)
     return *p == '\0';
 }
 
-char *lexer_token_text(const Token *token)
+size_t lexer_token_text(const Token *token, char *buffer, size_t buffer_size)
 {
-    if (token->length == 0)
+    if (buffer == NULL || buffer_size == 0)
     {
-        char *text = malloc(1);
-        if (text)
-        {
-            text[0] = '\0';
-        }
-        return text;
+        return token->length;
     }
 
-    char *text = malloc(token->length + 1);
-    if (text)
+    size_t copy_len = token->length;
+    if (copy_len >= buffer_size)
     {
-        memcpy(text, token->start, token->length);
-        text[token->length] = '\0';
+        copy_len = buffer_size - 1;
     }
-    return text;
+
+    if (copy_len > 0)
+    {
+        memcpy(buffer, token->start, copy_len);
+    }
+    buffer[copy_len] = '\0';
+
+    return copy_len;
 }
 
 const char *lexer_token_type_name(TokenType type)

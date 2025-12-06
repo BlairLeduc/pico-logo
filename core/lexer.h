@@ -67,9 +67,10 @@ extern "C"
     // Check if we've reached the end of input
     bool lexer_is_at_end(const Lexer *lexer);
 
-    // Get a null-terminated copy of the token text
-    // Caller is responsible for freeing the returned string
-    char *lexer_token_text(const Token *token);
+    // Copy token text to a caller-provided buffer.
+    // Returns the number of characters copied (excluding null terminator).
+    // If buffer is NULL or buffer_size is 0, returns the required size.
+    size_t lexer_token_text(const Token *token, char *buffer, size_t buffer_size);
 
     // Get a string name for a token type (for debugging)
     const char *lexer_token_type_name(TokenType type);

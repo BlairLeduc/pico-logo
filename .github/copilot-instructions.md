@@ -1,6 +1,7 @@
 ### Project
 
 - This project is a **Logo interpreter written in C**, targeting Raspberry Pi Pico boards (RP2040 / RP2350) using the **Pico C/C++ SDK**.
+- **Simplicity and clarity** of the implementation are prioritized over performance and advanced features.
 - For now, everything runs on the **host** (desktop) for development and testing; we’ll worry about Pico-specific integration later.
 - The interpreter aims to be strickly compatible with the semantics described in [Pico_Language_reference](../reference/Pico_Logo_Reference.md).
 - This interpreter is inspired by and based on the **LCSI Logo** implementation written in C by LCSI in the 1980s and 1990s.

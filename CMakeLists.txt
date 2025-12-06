@@ -19,6 +19,7 @@ enable_testing()
 
 add_library(logo_core
     core/lexer.c
+    core/memory.c
 )
 
 target_include_directories(logo_core
@@ -65,6 +66,20 @@ target_link_libraries(test_lexer PRIVATE logo_core)
 
 add_test(NAME test_lexer COMMAND test_lexer)
 
+add_executable(test_memory
+    tests/test_memory.c
+    tests/unity.c
+)
+
+target_include_directories(test_memory PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests
+)
+
+target_link_libraries(test_memory PRIVATE logo_core)
+
+add_test(NAME test_memory COMMAND test_memory)
+
 # Coverage target
 if(ENABLE_COVERAGE)
     find_program(LCOV lcov)
@@ -77,7 +92,7 @@ if(ENABLE_COVERAGE)
             COMMAND ${LCOV} --remove coverage.info '*/tests/*' '/usr/*' --output-file coverage.info
             WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             COMMENT "Running tests and generating coverage report"
-            DEPENDS test_lexer
+            DEPENDS test_lexer test_memory
         )
         
         add_custom_target(coverage-clean
