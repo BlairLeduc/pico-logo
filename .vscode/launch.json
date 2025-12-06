@@ -1,0 +1,90 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug logo (main.c)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/logo",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build",
+            "environment": [],
+            "externalConsole": true,
+            "MIMode": "lldb",
+            "preLaunchTask": "CMake: Build"
+        },
+        {
+            "name": "Debug test_env",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/test_env",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "lldb",
+            "preLaunchTask": "CMake: Build"
+        },
+        {
+            "name": "Debug test_evaluator",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/test_evaluator",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "lldb",
+            "preLaunchTask": "CMake: Build"
+        },
+        {
+            "name": "Debug test_interpreter",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/test_interpreter",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "lldb",
+            "preLaunchTask": "CMake: Build"
+        },
+        {
+            "name": "Debug test_lexer",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/test_lexer",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "lldb",
+            "preLaunchTask": "CMake: Build"
+        },
+        {
+            "name": "Debug test_parser",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/test_parser",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "lldb",
+            "preLaunchTask": "CMake: Build"
+        },
+        {
+            "name": "(lldb) Attach",
+            "type": "cppdbg",
+            "request": "attach",
+            "program": "${workspaceFolder}/build/logo",
+            "MIMode": "lldb"
+        }
+    ]
+}

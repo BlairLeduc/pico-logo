@@ -1,0 +1,18 @@
+{
+    "cmake.configureSettings": {
+        "ENABLE_COVERAGE": "ON"
+    },
+    "cmake.buildDirectory": "${workspaceFolder}/build",
+    "cmake.coverageInfoFiles": [
+        "${workspaceFolder}/build/coverage.info"
+    ],
+    "cmake.preRunCoverageTarget": "coverage",
+    "files.associations": {
+        "status.h": "c",
+        "stddef.h": "c",
+        "evaluator.h": "c",
+        "stdio.h": "c"
+    },
+    "markdown-preview-enhanced.codeBlockTheme": "auto.css",
+    "markdown-preview-enhanced.previewColorScheme": "editorColorScheme"
+}

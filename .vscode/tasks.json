@@ -1,0 +1,53 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "CMake: Configure",
+			"type": "shell",
+			"command": "cmake",
+			"args": [
+				"-S",
+				".",
+				"-B",
+				"build"
+			],
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "CMake: Build",
+			"type": "shell",
+			"command": "cmake",
+			"args": [
+				"--build",
+				"build"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			}
+		},
+		{
+			"label": "CMake: Configure with Coverage",
+			"type": "shell",
+			"command": "cmake",
+			"args": [
+				"-S",
+				".",
+				"-B",
+				"build",
+				"-DENABLE_COVERAGE=ON"
+			],
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build"
+		}
+	]
+}

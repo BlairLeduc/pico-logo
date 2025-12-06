@@ -1,0 +1,5 @@
+# All artefacts and build products
+build/
+
+# MacOS specific files
+.DS_Store
