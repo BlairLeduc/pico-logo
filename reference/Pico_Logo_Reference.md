@@ -536,6 +536,178 @@ difference _number1_ _number2_
 Outputs _number2_ subtracted from _number1_.
 
 
+## int
+
+int _number_
+
+`operation`
+
+Returns the integer part of _number_; any decimal part is stripped off. No rounding occurs when `int` is used (contrast this with the `round` operation described later in this chapter).
+
+## product
+
+product _number1_ _number2_
+(product _number1_ _number2_ _number3_ ...)
+
+`operation`
+
+Outputs the product of its inputs. It is equivalent to the `*` infix-form operation. With one input, `product` outputs its input.
+
+
+# quotient
+
+quotient _number1_ _number2_
+
+`operation`
+
+Outputs the result of dividing _number1_ by _number2_. It is equivalent to the `/` infix-form operation. _Number2_ must not be zero. If it is, an error occurs.
+
+
+# random
+
+random _integer_
+
+`operation`
+
+Outputs a random non-negative integer less than _integer_.
+
+
+# remainder
+
+remainder _integer1_ _interger2_
+
+`operation`
+
+Outputs the remainder obtained when _integer1_ is divided by _integer2_. The remainder is always an integer. If _integer1_ and _integer2_ are integers, this is _integer1_ mod _integer2_. If _integer1_ and _integer2_ are not integers, they are truncated. _Integer2_ must not be zero. If it is, an error occurs.
+
+# round
+
+round _number_
+
+`operation`
+
+Outputs _number_ rounded off to the nearest integer. The maximum integer is 2,147,483,647.
+
+
+# sin
+
+sin _number_
+
+`operation`
+
+Outputs the csine of _number_ in degrees.
+
+
+# sqrt
+
+sqrt _number_
+
+`operation`
+
+Outputs the square root of _number_. The value _number_ must not be negative or an error will occur.
+
+
+# sum
+
+sum _number1_ _number2_
+(sum _number1_ _number2_ _number3_ ...)
+
+`operation`
+
+Outputs the sum of its inputs. `sum` is equivalent t o the `+` infix-form operation. With one input, `sum` outputs its input.
+
+
+
+# Conditionals and Control of Flow {#conditionals-control-flow}
+
+# if
+
+if _predicate_ _list1_
+(if _predicate_ _list1_ _list2_)
+
+`command` or `operation`
+
+If _predicate_ is `true`, Logo runs _list1_. If _predicate_ is `false`,Pico Logo runs _list2_ (if present). In either case, if the selected list outputs something, the `if` is an operation. If the list outputs nothing, the `if` is a command.
+
+
+# iffalse (iff)
+
+iffalse _list_
+iff _list_
+
+`command`
+
+`iffalse` runs _list_ if the result of the most recent `test` was `false`, otherwise it does nothing. Note that if `test` has not been run in the same procedure or a superprocedure, or from top level, `iffalse` does nothing.
+
+
+# iftrue (ift)
+
+iftrue _list_ 
+ift _list_ 
+
+`command`
+
+`iftrue` runs _list_ if the result of the most recent `test` was `true`, otherwise it does nothing. Note that if `test` has not been run in the same procedure or a superprocedure, or from top level, `iftrue` does nothing.
+
+
+# test
+
+test _predicate_
+
+`command`
+
+`test` remembers whether _predicate_ is `true` or `false` for subsequent use by `iftrue` or `iffalse`. Each `test` is local to the procedure in which it occurs.
+
+
+# co
+
+co
+
+`command`
+
+The `co` (for continue) command resumes running of a procedure after a `pause` or `ESC`, continuing from wherever the procedure paused.
+
+
+# output (op)
+
+output _object_
+op _object_
+
+`command`
+
+The `output` command is meaningful only when it is within a procedure, not at top level. It makes _object_ the output of your procedure and returns control to the caller. Note that although `output` is itself a command, the procedure containing it is an operation because it has an output. Compare with `stop`.
+
+
+# pause
+
+pause
+
+`command` or `operation`
+
+The `pause` command is meaningful only when it is within a procedure, not at top level. It suspends running of the procedure and tells you that you are pausing; you can then type instructions interactively. To indicate that you are in a pause and not a t top level, the prompt character changes to the name of the procedure you were in, followed by a question mark. During a pause, `BRK` does not work; the only way to return to top level during a pause is to run `throw "toplevel`.
+
+The procedure may be resumed by typing `co`.
+
+
+# stop
+
+stop
+
+`command`
+
+The `stop` command stops the procedure that is running and returns control to the caller. This command is meaningful only when it is within a procedure—not at top level. Note that a procedure containing `stop` is a command. Compare `stop` with `output`.
+
+
+# wait
+
+wait _integer_
+
+`command`
+
+`wait` tells Logo to wait for _integer_ 60ths of a second.
+
+
+
 # Logical Operations {#logical-operations}
 
 ## and
@@ -568,4 +740,269 @@ or _predicate1_ _predicate2_
 Outputs `TRUE` if any of its inputs are `TRUE`.
 
 
+
+# Managing your Workspace {#manage-workspace}
+
+## nodes
+
+nodes
+
+`operation`
+
+`nodes` outputs the number of free nodes. This gives you an idea of how much space you have in your workspace for procedures, variables, properties, and the running of procedures. `nodes` is most useful if run immediately after `recycle`.
+
+
+## recycle
+
+recycle
+
+`command`
+
+The `recycle` command frees up as many nodes as possible, performing what is called a garbage collection. When you don't use `recycle`, garbage collections happen automatically whenever necessary, but each one takes at least one second. Running `recycle` before a time-dependent activity prevents the automatic garbage collector from slowing things down at an awkward time.
+
+
+## po
+
+po _name_
+po _list_
+
+`command`
+
+The `po` (for print out) command prints the definition(s) of the named procedure(s).
+
+
+## poall
+
+poall
+
+`command`
+
+The `poall` (for print out all) command prints the definition of every procedure and the value of every variable in the workspace.
+
+
+## pon
+
+pon _name_
+pon _list_
+
+`command`
+
+`pon` (for print out name) prints the name and value of the named variable(s).
+
+
+## pons
+
+pons
+
+`command`
+
+`pons` (for print out names) prints the name and value of every variable in the workspace.
+
+
+## pops
+
+pops
+
+`command`
+
+`pops` (for print out procedures) prints the definition of every
+procedure in the workspace. See `bury` for exceptions.
+
+
+## pot
+
+pot _name_
+pot _list_
+
+`command`
+
+The `pot` (for print out title) command prints the title line of the named procedure(s) in the workspace.
+
+
+## pots
+
+pots
+
+`command`
+
+`pots` (for print out titles) prints the title line of every procedure in the workspace. See `bury` for exceptions.
+
+
+# erall
+
+erall
+
+`command`
+
+`erall` erases all procedures, variables, and properties from the workspace. See `bury` for exceptions.
+
+
+## erase (er)
+
+erase _name_
+erase _list_
+er _name_
+er _list_
+
+`command`
+
+The `erase` command erases the named procedure(s) from the workspace.
+
+
+## ern
+
+ern _name_
+ern _list_
+
+`command`
+
+The `ern` (for erase name) command erases the named variable(s) from the workspace.
+
+
+## erns
+
+erns
+
+`command`
+
+`erns` (for erase names) erases all variables from the workspace. See `bury` for exceptions.
+
+
+## erps
+
+erps
+
+`command`
+
+The `erps` (for erase procedures) command erases all procedures from the workspace. See `bury` for exceptions.
+
+
+## bury 
+
+bury _name_
+bury _list_
+
+`command`
+
+The `bury` command buries the procedure(s) in its input. Certain commands (`erall`, `erps`, `poall`, `pops`, `pots`, and `save`) act on everything in the workspace except procedures and names that are buried. 
+
+
+## buryall 
+
+buryall
+
+`command`
+
+The `buryall` command buries all the procedures and variable names in the workspace. 
+
+Once `buryall` is run, there are no procedure titles or names visible. 
+
+
+## buryname
+
+buryname _name_
+buryname _list_
+
+`command`
+
+`buryname` buries the variable name(s) in its input.
+
+
+## unbury 
+
+unbury _name_
+unbury _list_
+
+`command`
+
+The `unbury` command unburies the named procedure(s). 
+
+
+## unburyall 
+
+unburyall
+
+`command`
+
+`unburyall` unburies all procedures and variable names that are currently buried in the workspace. 
+
+Once `unburyall` is run, the procedures and variable names are visible. 
+
+
+## unburyname 
+
+unburyname _name_
+unburyname _list_
+
+`command`
+
+`unburyname` unburies the variable name(s) in its input. 
+
+
+
+
+# File Management {#file-management}
+
+## files
+
+files
+(files _ext_)
+
+`operation`
+
+Outputs a list of file names in the currect directory. If _ext_ is present, the file names are limited to those with the _ext_ extension. If  is "*" then all files are output.
+
+
+## directories
+
+directories
+
+`operation`
+
+Outputs a list of directory names in the current directory.
+
+
+## chdir
+
+chdir _pathname_
+
+`command`
+
+Stands for change directory. Changes the current directory name to _pathname_. 
+
+
+## currentdir
+
+currentdir
+
+`operation`
+
+Stands for current directory. Outputs the current directory that was set with `chdir`.
+
+
+# erfile
+
+erfile _pathname_
+
+`command`
+
+Stands for erase file. Erases any type of file. The input must be the name of a file in the current directory or a full pathname.
+
+
+# erdir
+
+erdir _pathname_
+
+`command`
+
+Stands for erase directory. Erases a directory. The directory must be empty or this command will result in an error.
+
+
+# catalog
+
+catalog
+
+`command`
+
+Prints a list of files and directories in the current directory. Directories have the slash "`/`" character appended to their pathname.
 
