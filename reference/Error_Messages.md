@@ -33,7 +33,7 @@
 |30|Too many inputs to (procedure)
 |31|Too much inside parenthesis
 |32|Too few items in (list)
-|33|Can only do mthat inside a procedure
+|33|Can only do that inside a procedure
 |34|Turtle out of bounds
 |35|I don't know how to (symbol)
 |36|(symbol) has no value

@@ -134,8 +134,8 @@ void test_atom_uses_memory(void)
     mem_atom("test", 4);
     size_t free_after = mem_free_atoms();
     
-    // Should have used 5 bytes (1 length + 4 chars)
-    TEST_ASSERT_EQUAL(5, free_before - free_after);
+    // Should have used 8 bytes (1 length + 4 chars + 3 padding to align to 4)
+    TEST_ASSERT_EQUAL(8, free_before - free_after);
 }
 
 void test_interned_atom_no_extra_memory(void)

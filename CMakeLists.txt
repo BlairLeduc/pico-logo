@@ -17,16 +17,6 @@ endif()
 
 enable_testing()
 
-add_library(logo_core
-    core/lexer.c
-    core/memory.c
-)
-
-target_include_directories(logo_core
-    PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}
-)
-
 add_library(logo_devices_host
    devices/device.c
    devices/host/host_device.c
@@ -35,6 +25,29 @@ add_library(logo_devices_host
 target_include_directories(logo_devices_host
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_library(logo_core
+    core/lexer.c
+    core/memory.c
+    core/value.c
+    core/variables.c
+    core/eval.c
+    core/primitives.c
+    core/primitives_arithmetic.c
+    core/primitives_control.c
+    core/primitives_variables.c
+    core/primitives_output.c
+)
+
+target_include_directories(logo_core
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_link_libraries(logo_core
+    PUBLIC
+        logo_devices_host
 )
 
 add_executable(logo
@@ -79,6 +92,20 @@ target_include_directories(test_memory PRIVATE
 target_link_libraries(test_memory PRIVATE logo_core)
 
 add_test(NAME test_memory COMMAND test_memory)
+
+add_executable(test_eval
+    tests/test_eval.c
+    tests/unity.c
+)
+
+target_include_directories(test_eval PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests
+)
+
+target_link_libraries(test_eval PRIVATE logo_core)
+
+add_test(NAME test_eval COMMAND test_eval)
 
 # Coverage target
 if(ENABLE_COVERAGE)

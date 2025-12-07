@@ -18,6 +18,9 @@
 #include <ctype.h>
 #include <string.h>
 
+// Align value up to 4-byte boundary
+#define ALIGN4(x) (((x) + 3) & ~3)
+
 //==========================================================================
 // Memory Pools (static allocation)
 //==========================================================================
@@ -190,6 +193,7 @@ static bool str_eq_nocase(const char *a, size_t alen, const char *b, size_t blen
 
 // Find an existing atom in the table
 // Returns the offset if found, or LOGO_ATOM_TABLE_SIZE if not found
+// Each atom entry is aligned to 4-byte boundary: [len:1][chars:len][padding]
 static size_t find_atom(const char *str, size_t len)
 {
     size_t offset = 0;
@@ -200,12 +204,14 @@ static size_t find_atom(const char *str, size_t len)
         {
             return offset;
         }
-        offset += 1 + atom_len;
+        // Advance to next aligned entry
+        offset += ALIGN4(1 + atom_len);
     }
     return LOGO_ATOM_TABLE_SIZE; // Not found
 }
 
 // Intern a word in the atom table
+// Each entry is aligned to 4-byte boundary: [len:1][chars:len][padding]
 Node mem_atom(const char *str, size_t len)
 {
     // Limit atom length to 255 (1 byte length prefix)
@@ -222,8 +228,11 @@ Node mem_atom(const char *str, size_t len)
         return NODE_MAKE_WORD(offset);
     }
 
+    // Calculate aligned size for this entry
+    size_t entry_size = ALIGN4(1 + len);
+
     // Need to add new atom
-    if (atom_next + 1 + len > LOGO_ATOM_TABLE_SIZE)
+    if (atom_next + entry_size > LOGO_ATOM_TABLE_SIZE)
     {
         return NODE_NIL; // Out of atom space
     }
@@ -237,7 +246,7 @@ Node mem_atom(const char *str, size_t len)
     offset = atom_next;
     atom_table[atom_next] = (uint8_t)len;
     memcpy(&atom_table[atom_next + 1], str, len);
-    atom_next += 1 + len;
+    atom_next += entry_size;
 
     return NODE_MAKE_WORD(offset);
 }

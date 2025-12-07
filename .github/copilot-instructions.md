@@ -72,9 +72,7 @@
 - Reference documentation lives in `reference/`.
 - This includes information on:
   - Error messages (`reference/Error_Messages.md`)
-  - Parsing (`reference/Parsing.md`)
-  - An Introduction to Logo for Experienced Programmers (`reference/Intro Experienced Programmers.md`)
-  - Cleaning and Organizing the Workspace (`reference/Cleaning and Organizing the Workspace.md`)
+  - Apple Logo II documentation (`reference/Apple_Logo_II_Reference_Manual_HiRes_djvu.txt`) as a backup for LCSI Logo semantics.
   - And more...
 - `reference/Pico_Logo_Reference.md` is the main language reference document.
 
