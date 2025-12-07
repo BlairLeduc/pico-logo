@@ -57,8 +57,11 @@ extern "C"
     typedef struct
     {
         ResultStatus status;
-        Value value;     // Valid for RESULT_OK and RESULT_OUTPUT
-        int error_code;  // Valid for RESULT_ERROR
+        Value value;           // Valid for RESULT_OK and RESULT_OUTPUT
+        int error_code;        // Valid for RESULT_ERROR
+        const char *error_proc;  // Procedure that caused error (e.g., "sum")
+        const char *error_arg;   // Bad argument as string (e.g., "hello")
+        const char *error_caller; // User procedure where error occurred (e.g., "add")
     } Result;
 
     //==========================================================================
@@ -89,6 +92,9 @@ extern "C"
     // Get the node from a word or list value
     Node value_to_node(Value v);
 
+    // Convert value to string for error messages (returns static buffer)
+    const char *value_to_string(Value v);
+
     //==========================================================================
     // Result Constructors
     //==========================================================================
@@ -98,6 +104,12 @@ extern "C"
     Result result_stop(void);
     Result result_output(Value v);
     Result result_error(int code);
+
+    // Error with context: "proc doesn't like arg as input"
+    Result result_error_arg(int code, const char *proc, const char *arg);
+
+    // Set caller context on an existing error result
+    Result result_error_in(Result r, const char *caller);
 
     //==========================================================================
     // Result Predicates

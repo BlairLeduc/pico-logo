@@ -6,11 +6,9 @@
 //
 
 #include "primitives.h"
+#include "error.h"
 #include "variables.h"
 #include "eval.h"
-
-#define ERR_HAS_NO_VALUE 36
-#define ERR_DOESNT_LIKE_INPUT 41
 
 static Result prim_make(Evaluator *eval, int argc, Value *args)
 {
@@ -18,7 +16,7 @@ static Result prim_make(Evaluator *eval, int argc, Value *args)
     (void)argc;
     if (!value_is_word(args[0]))
     {
-        return result_error(ERR_DOESNT_LIKE_INPUT);
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "make", value_to_string(args[0]));
     }
     const char *name = mem_word_ptr(args[0].as.node);
     var_set(name, args[1]);
@@ -31,13 +29,14 @@ static Result prim_thing(Evaluator *eval, int argc, Value *args)
     (void)argc;
     if (!value_is_word(args[0]))
     {
-        return result_error(ERR_DOESNT_LIKE_INPUT);
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "thing", value_to_string(args[0]));
     }
     const char *name = mem_word_ptr(args[0].as.node);
     Value v;
     if (!var_get(name, &v))
     {
-        return result_error(ERR_HAS_NO_VALUE);
+        // Use error_arg to store the variable name
+        return result_error_arg(ERR_NO_VALUE, NULL, name);
     }
     return result_ok(v);
 }

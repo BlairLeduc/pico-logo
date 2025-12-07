@@ -6,22 +6,8 @@
 //
 
 #include "primitives.h"
+#include "error.h"
 #include "eval.h"
-
-// Error codes from Error_Messages.md
-#define ERR_DIVIDE_BY_ZERO 13
-#define ERR_DOESNT_LIKE_INPUT 41
-
-// Helper: require numeric argument
-static bool require_number(Value v, float *out, int *err_code)
-{
-    if (!value_to_number(v, out))
-    {
-        *err_code = ERR_DOESNT_LIKE_INPUT;
-        return false;
-    }
-    return true;
-}
 
 static Result prim_sum(Evaluator *eval, int argc, Value *args)
 {
@@ -30,10 +16,9 @@ static Result prim_sum(Evaluator *eval, int argc, Value *args)
     for (int i = 0; i < argc; i++)
     {
         float n;
-        int err;
-        if (!require_number(args[i], &n, &err))
+        if (!value_to_number(args[i], &n))
         {
-            return result_error(err);
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "sum", value_to_string(args[i]));
         }
         total += n;
     }
@@ -45,11 +30,10 @@ static Result prim_difference(Evaluator *eval, int argc, Value *args)
     (void)eval;
     (void)argc;
     float a, b;
-    int err;
-    if (!require_number(args[0], &a, &err))
-        return result_error(err);
-    if (!require_number(args[1], &b, &err))
-        return result_error(err);
+    if (!value_to_number(args[0], &a))
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "difference", value_to_string(args[0]));
+    if (!value_to_number(args[1], &b))
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "difference", value_to_string(args[1]));
     return result_ok(value_number(a - b));
 }
 
@@ -60,10 +44,9 @@ static Result prim_product(Evaluator *eval, int argc, Value *args)
     for (int i = 0; i < argc; i++)
     {
         float n;
-        int err;
-        if (!require_number(args[i], &n, &err))
+        if (!value_to_number(args[i], &n))
         {
-            return result_error(err);
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "product", value_to_string(args[i]));
         }
         total *= n;
     }
@@ -75,13 +58,12 @@ static Result prim_quotient(Evaluator *eval, int argc, Value *args)
     (void)eval;
     (void)argc;
     float a, b;
-    int err;
-    if (!require_number(args[0], &a, &err))
-        return result_error(err);
-    if (!require_number(args[1], &b, &err))
-        return result_error(err);
+    if (!value_to_number(args[0], &a))
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "quotient", value_to_string(args[0]));
+    if (!value_to_number(args[1], &b))
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "quotient", value_to_string(args[1]));
     if (b == 0)
-        return result_error(ERR_DIVIDE_BY_ZERO);
+        return result_error_arg(ERR_DIVIDE_BY_ZERO, "quotient", NULL);
     return result_ok(value_number(a / b));
 }
 

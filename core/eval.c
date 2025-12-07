@@ -4,18 +4,12 @@
 //
 
 #include "eval.h"
+#include "error.h"
 #include "primitives.h"
 #include "variables.h"
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
-
-// Error codes from Error_Messages.md
-#define ERR_NOT_ENOUGH_INPUTS 29
-#define ERR_DONT_KNOW_HOW 35
-#define ERR_HAS_NO_VALUE 36
-#define ERR_UNEXPECTED_PAREN 37
-#define ERR_DONT_KNOW_WHAT_TO_DO 38
 
 // Binding powers for Pratt parser
 #define BP_NONE 0
@@ -237,18 +231,14 @@ static Result eval_primary(Evaluator *eval)
         advance(eval);
         // :var is shorthand for thing "var
         // The token includes the colon, so skip it
-        char name_buf[64];
-        size_t name_len = t.length - 1;
-        if (name_len >= sizeof(name_buf))
-            name_len = sizeof(name_buf) - 1;
-        memcpy(name_buf, t.start + 1, name_len);
-        name_buf[name_len] = '\0';
+        // Intern the name so the pointer persists for error messages
+        Node name_atom = mem_atom(t.start + 1, t.length - 1);
+        const char *name = mem_word_ptr(name_atom);
 
         Value v;
-        if (!var_get(name_buf, &v))
+        if (!var_get(name, &v))
         {
-            eval->error_context = t.start + 1;
-            return result_error(ERR_HAS_NO_VALUE);
+            return result_error_arg(ERR_NO_VALUE, NULL, name);
         }
         return result_ok(v);
     }
@@ -344,7 +334,7 @@ static Result eval_primary(Evaluator *eval)
         float n;
         if (!value_to_number(r.value, &n))
         {
-            return result_error(ERR_DONT_KNOW_WHAT_TO_DO);
+            return result_error_arg(ERR_DONT_KNOW_WHAT, NULL, value_to_string(r.value));
         }
         return result_ok(value_number(-n));
     }
@@ -389,34 +379,33 @@ static Result eval_primary(Evaluator *eval)
                     return arg;
                 if (arg.status != RESULT_OK)
                 {
-                    eval->error_context = name_buf;
-                    return result_error(ERR_NOT_ENOUGH_INPUTS);
+                    // Use prim->name since it's a static string
+                    return result_error_arg(ERR_NOT_ENOUGH_INPUTS, prim->name, NULL);
                 }
                 args[argc++] = arg.value;
             }
 
             if (argc < prim->default_args)
             {
-                eval->error_context = name_buf;
-                return result_error(ERR_NOT_ENOUGH_INPUTS);
+                return result_error_arg(ERR_NOT_ENOUGH_INPUTS, prim->name, NULL);
             }
 
             return prim->func(eval, argc, args);
         }
 
-        // Unknown procedure
-        eval->error_context = name_buf;
-        return result_error(ERR_DONT_KNOW_HOW);
+        // Unknown procedure - intern the name so pointer persists
+        Node name_atom = mem_atom(t.start, t.length);
+        return result_error_arg(ERR_DONT_KNOW_HOW, mem_word_ptr(name_atom), NULL);
     }
 
     case TOKEN_RIGHT_PAREN:
-        return result_error(ERR_UNEXPECTED_PAREN);
+        return result_error(ERR_PAREN_MISMATCH);
 
     case TOKEN_EOF:
         return result_error(ERR_NOT_ENOUGH_INPUTS);
 
     default:
-        return result_error(ERR_DONT_KNOW_WHAT_TO_DO);
+        return result_error(ERR_DONT_KNOW_WHAT);
     }
 }
 
@@ -442,11 +431,27 @@ static Result eval_expr_bp(Evaluator *eval, int min_bp)
             return rhs;
 
         float left_n, right_n;
-        if (!value_to_number(lhs.value, &left_n) ||
-            !value_to_number(rhs.value, &right_n))
+        bool left_ok = value_to_number(lhs.value, &left_n);
+        bool right_ok = value_to_number(rhs.value, &right_n);
+        
+        // Get operator name for error messages
+        const char *op_name;
+        switch (op.type)
         {
-            return result_error(ERR_DONT_KNOW_WHAT_TO_DO);
+        case TOKEN_PLUS: op_name = "+"; break;
+        case TOKEN_MINUS: op_name = "-"; break;
+        case TOKEN_MULTIPLY: op_name = "*"; break;
+        case TOKEN_DIVIDE: op_name = "/"; break;
+        case TOKEN_EQUALS: op_name = "="; break;
+        case TOKEN_LESS_THAN: op_name = "<"; break;
+        case TOKEN_GREATER_THAN: op_name = ">"; break;
+        default: op_name = "?"; break;
         }
+        
+        if (!left_ok)
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, op_name, value_to_string(lhs.value));
+        if (!right_ok)
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, op_name, value_to_string(rhs.value));
 
         float result;
         switch (op.type)
@@ -462,7 +467,7 @@ static Result eval_expr_bp(Evaluator *eval, int min_bp)
             break;
         case TOKEN_DIVIDE:
             if (right_n == 0)
-                return result_error(13); // Divide by zero
+                return result_error(ERR_DIVIDE_BY_ZERO);
             result = left_n / right_n;
             break;
         case TOKEN_EQUALS:
@@ -475,7 +480,7 @@ static Result eval_expr_bp(Evaluator *eval, int min_bp)
             result = (left_n > right_n) ? 1 : 0;
             break;
         default:
-            return result_error(ERR_DONT_KNOW_WHAT_TO_DO);
+            return result_error(ERR_DONT_KNOW_WHAT);
         }
 
         lhs = result_ok(value_number(result));
@@ -565,7 +570,7 @@ Result eval_run_list(Evaluator *eval, Node list)
         // If we got a value at top level of list, it's an error
         if (r.status == RESULT_OK)
         {
-            r = result_error(ERR_DONT_KNOW_WHAT_TO_DO);
+            r = result_error_arg(ERR_DONT_KNOW_WHAT, NULL, value_to_string(r.value));
             break;
         }
     }

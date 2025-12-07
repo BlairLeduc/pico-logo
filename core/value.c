@@ -6,6 +6,7 @@
 #include "value.h"
 #include <stdlib.h>
 #include <ctype.h>
+#include <stdio.h>
 
 //==========================================================================
 // Value Constructors
@@ -94,6 +95,62 @@ Node value_to_node(Value v)
     return NODE_NIL;
 }
 
+// Helper: serialize list to string (recursive)
+static void list_to_buf(Node node, char *buf, int *pos, int max)
+{
+    if (*pos >= max - 1) return;
+    
+    buf[(*pos)++] = '[';
+    bool first = true;
+    
+    while (!mem_is_nil(node) && *pos < max - 2)
+    {
+        if (!first && *pos < max - 1) buf[(*pos)++] = ' ';
+        first = false;
+        
+        Node car = mem_car(node);
+        if (mem_is_word(car))
+        {
+            const char *word = mem_word_ptr(car);
+            while (*word && *pos < max - 2)
+            {
+                buf[(*pos)++] = *word++;
+            }
+        }
+        else if (mem_is_list(car) || mem_is_nil(car))
+        {
+            list_to_buf(car, buf, pos, max);
+        }
+        node = mem_cdr(node);
+    }
+    
+    if (*pos < max - 1) buf[(*pos)++] = ']';
+    buf[*pos] = '\0';
+}
+
+const char *value_to_string(Value v)
+{
+    static char buf[128];
+    
+    switch (v.type)
+    {
+    case VALUE_NONE:
+        return "";
+    case VALUE_NUMBER:
+        snprintf(buf, sizeof(buf), "%g", v.as.number);
+        return buf;
+    case VALUE_WORD:
+        return mem_word_ptr(v.as.node);
+    case VALUE_LIST:
+        {
+            int pos = 0;
+            list_to_buf(v.as.node, buf, &pos, sizeof(buf));
+            return buf;
+        }
+    }
+    return "";
+}
+
 //==========================================================================
 // Result Constructors
 //==========================================================================
@@ -120,7 +177,33 @@ Result result_output(Value v)
 
 Result result_error(int code)
 {
-    return (Result){.status = RESULT_ERROR, .error_code = code};
+    return (Result){
+        .status = RESULT_ERROR,
+        .error_code = code,
+        .error_proc = NULL,
+        .error_arg = NULL,
+        .error_caller = NULL
+    };
+}
+
+Result result_error_arg(int code, const char *proc, const char *arg)
+{
+    return (Result){
+        .status = RESULT_ERROR,
+        .error_code = code,
+        .error_proc = proc,
+        .error_arg = arg,
+        .error_caller = NULL
+    };
+}
+
+Result result_error_in(Result r, const char *caller)
+{
+    if (r.status == RESULT_ERROR && r.error_caller == NULL)
+    {
+        r.error_caller = caller;
+    }
+    return r;
 }
 
 //==========================================================================

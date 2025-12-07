@@ -7,6 +7,7 @@
 #include "core/memory.h"
 #include "core/lexer.h"
 #include "core/eval.h"
+#include "core/error.h"
 #include "core/primitives.h"
 #include "core/variables.h"
 #include "devices/device.h"
@@ -279,6 +280,159 @@ void test_print_variadic_parens(void)
     TEST_ASSERT_EQUAL_STRING("1 2 3\n", output_buffer);
 }
 
+//==========================================================================
+// Error Message Tests
+//==========================================================================
+
+void test_error_sum_doesnt_like(void)
+{
+    // sum doesn't like hello as input
+    Result r = eval_string("sum 1 \"hello");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL_STRING("sum", r.error_proc);
+    TEST_ASSERT_EQUAL_STRING("hello", r.error_arg);
+    
+    const char *msg = error_format(r);
+    TEST_ASSERT_EQUAL_STRING("sum doesn't like hello as input", msg);
+}
+
+void test_error_no_value(void)
+{
+    // x has no value
+    Result r = eval_string(":undefined_var");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NO_VALUE, r.error_code);
+    
+    const char *msg = error_format(r);
+    TEST_ASSERT_EQUAL_STRING("undefined_var has no value", msg);
+}
+
+void test_error_dont_know_how(void)
+{
+    // I don't know how to foobar
+    Result r = eval_string("foobar");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
+    
+    const char *msg = error_format(r);
+    TEST_ASSERT_EQUAL_STRING("I don't know how to foobar", msg);
+}
+
+void test_error_not_enough_inputs(void)
+{
+    // Not enough inputs to sum
+    Result r = eval_string("sum 1");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NOT_ENOUGH_INPUTS, r.error_code);
+    
+    const char *msg = error_format(r);
+    TEST_ASSERT_EQUAL_STRING("Not enough inputs to sum", msg);
+}
+
+void test_error_divide_by_zero_msg(void)
+{
+    // Can't divide by zero
+    Result r = eval_string("quotient 5 0");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DIVIDE_BY_ZERO, r.error_code);
+    
+    const char *msg = error_format(r);
+    TEST_ASSERT_EQUAL_STRING("Can't divide by zero", msg);
+}
+
+void test_error_infix_doesnt_like(void)
+{
+    // + doesn't like hello as input
+    Result r = eval_string("1 + \"hello");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    
+    const char *msg = error_format(r);
+    TEST_ASSERT_EQUAL_STRING("+ doesn't like hello as input", msg);
+}
+
+//==========================================================================
+// Words and Lists Tests
+//==========================================================================
+
+void test_first_number(void)
+{
+    // print first 12.345 outputs "1"
+    run_string("print first 12.345");
+    TEST_ASSERT_EQUAL_STRING("1\n", output_buffer);
+}
+
+void test_first_word(void)
+{
+    Result r = eval_string("first \"HOUSE");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("H", mem_word_ptr(r.value.as.node));
+}
+
+void test_first_list(void)
+{
+    Result r = eval_string("first [apple banana cherry]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("apple", mem_word_ptr(r.value.as.node));
+}
+
+void test_last_word(void)
+{
+    Result r = eval_string("last \"HOUSE");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("E", mem_word_ptr(r.value.as.node));
+}
+
+void test_butfirst_word(void)
+{
+    Result r = eval_string("bf \"HOUSE");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("OUSE", mem_word_ptr(r.value.as.node));
+}
+
+void test_butlast_word(void)
+{
+    Result r = eval_string("bl \"HOUSE");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("HOUS", mem_word_ptr(r.value.as.node));
+}
+
+void test_count_word(void)
+{
+    Result r = eval_string("count \"HOUSE");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(5.0f, r.value.as.number);
+}
+
+void test_count_list(void)
+{
+    Result r = eval_string("count [a b c d]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(4.0f, r.value.as.number);
+}
+
+void test_emptyp_empty_list(void)
+{
+    Result r = eval_string("emptyp []");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+}
+
+void test_emptyp_nonempty_list(void)
+{
+    Result r = eval_string("emptyp [a]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -308,6 +462,26 @@ int main(void)
     RUN_TEST(test_product_variadic_parens);
     RUN_TEST(test_sum_single_arg_parens);
     RUN_TEST(test_print_variadic_parens);
+
+    // Error message tests
+    RUN_TEST(test_error_sum_doesnt_like);
+    RUN_TEST(test_error_no_value);
+    RUN_TEST(test_error_dont_know_how);
+    RUN_TEST(test_error_not_enough_inputs);
+    RUN_TEST(test_error_divide_by_zero_msg);
+    RUN_TEST(test_error_infix_doesnt_like);
+
+    // Words and lists tests
+    RUN_TEST(test_first_number);
+    RUN_TEST(test_first_word);
+    RUN_TEST(test_first_list);
+    RUN_TEST(test_last_word);
+    RUN_TEST(test_butfirst_word);
+    RUN_TEST(test_butlast_word);
+    RUN_TEST(test_count_word);
+    RUN_TEST(test_count_list);
+    RUN_TEST(test_emptyp_empty_list);
+    RUN_TEST(test_emptyp_nonempty_list);
 
     return UNITY_END();
 }

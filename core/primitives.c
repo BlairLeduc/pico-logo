@@ -21,6 +21,7 @@ void primitives_init(void)
     primitives_control_init();
     primitives_variables_init();
     primitives_output_init();
+    primitives_words_lists_init();
 }
 
 void primitive_register(const char *name, int default_args, PrimitiveFunc func)

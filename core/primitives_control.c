@@ -6,16 +6,15 @@
 //
 
 #include "primitives.h"
+#include "error.h"
 #include "eval.h"
-
-#define ERR_DOESNT_LIKE_INPUT 41
 
 static Result prim_run(Evaluator *eval, int argc, Value *args)
 {
     (void)argc;
     if (!value_is_list(args[0]))
     {
-        return result_error(ERR_DOESNT_LIKE_INPUT);
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "run", value_to_string(args[0]));
     }
     return eval_run_list(eval, args[0].as.node);
 }
@@ -26,11 +25,11 @@ static Result prim_repeat(Evaluator *eval, int argc, Value *args)
     float count_f;
     if (!value_to_number(args[0], &count_f))
     {
-        return result_error(ERR_DOESNT_LIKE_INPUT);
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "repeat", value_to_string(args[0]));
     }
     if (!value_is_list(args[1]))
     {
-        return result_error(ERR_DOESNT_LIKE_INPUT);
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "repeat", value_to_string(args[1]));
     }
 
     int count = (int)count_f;

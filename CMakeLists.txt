@@ -32,12 +32,14 @@ add_library(logo_core
     core/memory.c
     core/value.c
     core/variables.c
+    core/error.c
     core/eval.c
     core/primitives.c
     core/primitives_arithmetic.c
     core/primitives_control.c
     core/primitives_variables.c
     core/primitives_output.c
+    core/primitives_words_lists.c
 )
 
 target_include_directories(logo_core
