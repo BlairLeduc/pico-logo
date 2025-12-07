@@ -2,7 +2,7 @@
 //  Pico Logo
 //  Copyright 2025 Blair Leduc. See LICENSE for details.
 //
-//  Variable primitives: make, thing
+//  Variable primitives: make, thing, local, name, namep
 //
 
 #include "primitives.h"
@@ -41,8 +41,79 @@ static Result prim_thing(Evaluator *eval, int argc, Value *args)
     return result_ok(v);
 }
 
+// local "name or local [name1 name2 ...]
+// Declares variable(s) as local to the current procedure
+static Result prim_local(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    
+    if (value_is_word(args[0]))
+    {
+        // Single name
+        const char *name = mem_word_ptr(args[0].as.node);
+        var_declare_local(name);
+    }
+    else if (value_is_list(args[0]))
+    {
+        // List of names
+        Node node = args[0].as.node;
+        while (!mem_is_nil(node))
+        {
+            Node element = mem_car(node);
+            if (mem_is_word(element))
+            {
+                const char *name = mem_word_ptr(element);
+                var_declare_local(name);
+            }
+            node = mem_cdr(node);
+        }
+    }
+    else
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "local", value_to_string(args[0]));
+    }
+    
+    return result_none();
+}
+
+// name "value "varname - same as make but with reversed arguments
+static Result prim_name(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    if (!value_is_word(args[1]))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "name", value_to_string(args[1]));
+    }
+    const char *name = mem_word_ptr(args[1].as.node);
+    var_set(name, args[0]);
+    return result_none();
+}
+
+// namep "name - outputs true if name has a value
+static Result prim_namep(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    if (!value_is_word(args[0]))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "namep", value_to_string(args[0]));
+    }
+    const char *name = mem_word_ptr(args[0].as.node);
+    
+    if (var_exists(name))
+    {
+        return result_ok(value_word(mem_atom("true", 4)));
+    }
+    return result_ok(value_word(mem_atom("false", 5)));
+}
+
 void primitives_variables_init(void)
 {
     primitive_register("make", 2, prim_make);
     primitive_register("thing", 1, prim_thing);
+    primitive_register("local", 1, prim_local);
+    primitive_register("name", 2, prim_name);
+    primitive_register("namep", 1, prim_namep);
 }

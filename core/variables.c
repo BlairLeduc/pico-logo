@@ -7,34 +7,81 @@
 #include <string.h>
 #include <strings.h>
 
-// Simple linear storage for now (optimize later if needed)
-#define MAX_VARIABLES 256
+// Configuration for memory constraints
+#define MAX_GLOBAL_VARIABLES 128
+#define MAX_LOCAL_VARIABLES 64
+#define MAX_SCOPE_DEPTH 32
 
 typedef struct
 {
     const char *name; // Points to interned atom string
     Value value;
     bool active;
+    bool has_value;   // false if declared but not yet assigned
 } Variable;
 
-static Variable variables[MAX_VARIABLES];
-static int variable_count = 0;
+// Global variables storage
+static Variable global_variables[MAX_GLOBAL_VARIABLES];
+static int global_count = 0;
+
+// Local scope frame
+typedef struct
+{
+    Variable variables[MAX_LOCAL_VARIABLES];
+    int count;
+} ScopeFrame;
+
+// Scope stack
+static ScopeFrame scope_stack[MAX_SCOPE_DEPTH];
+static int scope_depth = 0;  // 0 means at top level (global scope only)
 
 void variables_init(void)
 {
-    variable_count = 0;
-    for (int i = 0; i < MAX_VARIABLES; i++)
+    global_count = 0;
+    for (int i = 0; i < MAX_GLOBAL_VARIABLES; i++)
     {
-        variables[i].active = false;
+        global_variables[i].active = false;
+        global_variables[i].has_value = false;
+    }
+    scope_depth = 0;
+}
+
+void var_push_scope(void)
+{
+    if (scope_depth >= MAX_SCOPE_DEPTH)
+    {
+        // Out of scope space - could set an error flag
+        return;
+    }
+    ScopeFrame *frame = &scope_stack[scope_depth];
+    frame->count = 0;
+    for (int i = 0; i < MAX_LOCAL_VARIABLES; i++)
+    {
+        frame->variables[i].active = false;
+        frame->variables[i].has_value = false;
+    }
+    scope_depth++;
+}
+
+void var_pop_scope(void)
+{
+    if (scope_depth > 0)
+    {
+        scope_depth--;
     }
 }
 
-// Find variable index, returns -1 if not found
-static int find_variable(const char *name)
+int var_scope_depth(void)
 {
-    for (int i = 0; i < variable_count; i++)
+    return scope_depth;
+}
+
+// Find variable in a specific scope frame, returns index or -1
+static int find_in_frame(ScopeFrame *frame, const char *name)
+{
+    for (int i = 0; i < frame->count; i++)
     {
-        if (variables[i].active && strcasecmp(variables[i].name, name) == 0)
+        if (frame->variables[i].active && strcasecmp(frame->variables[i].name, name) == 0)
         {
             return i;
         }
@@ -42,37 +89,175 @@ static int find_variable(const char *name)
     return -1;
 }
 
-void var_set(const char *name, Value value)
+// Find variable in global storage, returns index or -1
+static int find_global(const char *name)
 {
-    int idx = find_variable(name);
-    if (idx >= 0)
+    for (int i = 0; i < global_count; i++)
     {
-        variables[idx].value = value;
+        if (global_variables[i].active && strcasecmp(global_variables[i].name, name) == 0)
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void var_declare_local(const char *name)
+{
+    if (scope_depth == 0)
+    {
+        // At top level, local behaves like global but unbound
+        int idx = find_global(name);
+        if (idx < 0)
+        {
+            // Create new unbound global
+            for (int i = 0; i < MAX_GLOBAL_VARIABLES; i++)
+            {
+                if (!global_variables[i].active)
+                {
+                    global_variables[i].name = name;
+                    global_variables[i].active = true;
+                    global_variables[i].has_value = false;
+                    if (i >= global_count)
+                        global_count = i + 1;
+                    return;
+                }
+            }
+        }
         return;
     }
 
-    // Find free slot or append
-    for (int i = 0; i < MAX_VARIABLES; i++)
+    ScopeFrame *frame = &scope_stack[scope_depth - 1];
+    
+    // Check if already declared in this scope
+    int idx = find_in_frame(frame, name);
+    if (idx >= 0)
     {
-        if (!variables[i].active)
+        return;  // Already declared
+    }
+
+    // Find a free slot
+    for (int i = 0; i < MAX_LOCAL_VARIABLES; i++)
+    {
+        if (!frame->variables[i].active)
         {
-            variables[i].name = name;
-            variables[i].value = value;
-            variables[i].active = true;
-            if (i >= variable_count)
-                variable_count = i + 1;
+            frame->variables[i].name = name;
+            frame->variables[i].active = true;
+            frame->variables[i].has_value = false;
+            if (i >= frame->count)
+                frame->count = i + 1;
             return;
         }
     }
-    // Out of space - silently fail for now
+    // Out of local variable space - silently fail
+}
+
+void var_set_local(const char *name, Value value)
+{
+    if (scope_depth == 0)
+    {
+        // At top level, set as global
+        var_set(name, value);
+        return;
+    }
+
+    ScopeFrame *frame = &scope_stack[scope_depth - 1];
+    
+    // Check if already in current scope
+    int idx = find_in_frame(frame, name);
+    if (idx >= 0)
+    {
+        frame->variables[idx].value = value;
+        frame->variables[idx].has_value = true;
+        return;
+    }
+
+    // Create new local variable
+    for (int i = 0; i < MAX_LOCAL_VARIABLES; i++)
+    {
+        if (!frame->variables[i].active)
+        {
+            frame->variables[i].name = name;
+            frame->variables[i].value = value;
+            frame->variables[i].active = true;
+            frame->variables[i].has_value = true;
+            if (i >= frame->count)
+                frame->count = i + 1;
+            return;
+        }
+    }
+    // Out of space - silently fail
+}
+
+void var_set(const char *name, Value value)
+{
+    // First, search scope chain from innermost to outermost
+    for (int d = scope_depth - 1; d >= 0; d--)
+    {
+        ScopeFrame *frame = &scope_stack[d];
+        int idx = find_in_frame(frame, name);
+        if (idx >= 0)
+        {
+            // Found in scope chain - update it
+            frame->variables[idx].value = value;
+            frame->variables[idx].has_value = true;
+            return;
+        }
+    }
+
+    // Not in any local scope, check/create global
+    int idx = find_global(name);
+    if (idx >= 0)
+    {
+        global_variables[idx].value = value;
+        global_variables[idx].has_value = true;
+        return;
+    }
+
+    // Create new global
+    for (int i = 0; i < MAX_GLOBAL_VARIABLES; i++)
+    {
+        if (!global_variables[i].active)
+        {
+            global_variables[i].name = name;
+            global_variables[i].value = value;
+            global_variables[i].active = true;
+            global_variables[i].has_value = true;
+            if (i >= global_count)
+                global_count = i + 1;
+            return;
+        }
+    }
+    // Out of space - silently fail
 }
 
 bool var_get(const char *name, Value *out)
 {
-    int idx = find_variable(name);
+    // Search scope chain from innermost to outermost
+    for (int d = scope_depth - 1; d >= 0; d--)
+    {
+        ScopeFrame *frame = &scope_stack[d];
+        int idx = find_in_frame(frame, name);
+        if (idx >= 0)
+        {
+            if (!frame->variables[idx].has_value)
+            {
+                return false;  // Declared but no value
+            }
+            *out = frame->variables[idx].value;
+            return true;
+        }
+    }
+
+    // Check globals
+    int idx = find_global(name);
     if (idx >= 0)
     {
-        *out = variables[idx].value;
+        if (!global_variables[idx].has_value)
+        {
+            return false;  // Declared but no value
+        }
+        *out = global_variables[idx].value;
         return true;
     }
     return false;
@@ -80,15 +265,43 @@ bool var_get(const char *name, Value *out)
 
 bool var_exists(const char *name)
 {
-    return find_variable(name) >= 0;
+    // Search scope chain
+    for (int d = scope_depth - 1; d >= 0; d--)
+    {
+        ScopeFrame *frame = &scope_stack[d];
+        int idx = find_in_frame(frame, name);
+        if (idx >= 0 && frame->variables[idx].has_value)
+        {
+            return true;
+        }
+    }
+
+    // Check globals
+    int idx = find_global(name);
+    return (idx >= 0 && global_variables[idx].has_value);
 }
 
 void var_erase(const char *name)
 {
-    int idx = find_variable(name);
+    // Search scope chain first
+    for (int d = scope_depth - 1; d >= 0; d--)
+    {
+        ScopeFrame *frame = &scope_stack[d];
+        int idx = find_in_frame(frame, name);
+        if (idx >= 0)
+        {
+            frame->variables[idx].active = false;
+            frame->variables[idx].has_value = false;
+            return;
+        }
+    }
+
+    // Erase from globals
+    int idx = find_global(name);
     if (idx >= 0)
     {
-        variables[idx].active = false;
+        global_variables[idx].active = false;
+        global_variables[idx].has_value = false;
     }
 }
 

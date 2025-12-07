@@ -180,6 +180,24 @@ A word, such as `television` or `617`, is made up of characters (letters, digits
 
 A list, such as `[rabbits television 7 [ears feet]]`, is made up of Logo objects, each of which can be either a word or a list. See [Words and Lists](#words-and-lists). 
 
+## Variables: Some General Information
+
+A _variable_ is a container that holds a Logo object. The container has a name and a value. The object held in the container is called the variable's _value_. You create a variable in one of two ways: either by using the `make` or `name` command, or by using procedure inputs.
+
+Logo has two kinds of variables: local variables and global variables. Variables used as procedure inputs are local to that procedure. They exist only as long as the procedure is running, and will disappear from your workspace after the procedure stops running.
+
+Normally a variable created by `make` is a global variable. The `local` command lets you change those variables into local variables. This can be very useful if you want to avoid cluttering up your workspace with unwanted variables.
+
+```logo
+to yesno: question
+local "answer
+pr :question
+make "answer first readlist
+(if equal? :answer "yes [output "true])
+output "false
+end
+```
+
 ## How You Might Think about Quotes 
 
 The role of quotes is best understood through the following example:
@@ -1006,3 +1024,52 @@ catalog
 
 Prints a list of files and directories in the current directory. Directories have the slash "`/`" character appended to their pathname.
 
+
+# Variables
+
+## local
+
+local _name_
+local _list_
+
+`command`
+
+The `local` command makes its input(s) local to the procedure within which the `local` occurs. A local variable is accessible only to that procedure and to procedures it calls; in this regard it resembles inputs to the procedure.
+
+
+## make
+
+make _name_ _object_
+
+`command`
+
+The `make` command puts _object_ in _name_'s container, that is, it gives the variable name the value object.
+
+
+## name
+
+name _object_ _name_
+
+`command`
+
+The `name` command puts _object_ in _name_'s container, that is, it gives the variable name the value object.
+
+`name` is equivalent to `make` with the order of the inputs reversed. Thus `name "welder "job` has the same effect as `make "job "welder`.
+
+
+## namep
+
+namep _word_
+
+`operation`
+
+`namep` outputs `true` if _word_ has a value, that is, if `:word` exists; it outputs `false` otherwise.
+
+
+## thing
+
+thing _name_
+
+`operation`
+
+`thing` outputs the thing in the container _name_, that is, the value of the variable _name_. `thing "any` is equivalent to `:any`.

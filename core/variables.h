@@ -4,6 +4,12 @@
 //
 //  Variable storage for Logo interpreter.
 //
+//  Logo has two kinds of variables: local and global.
+//  - Global variables are created by 'make' at top level or when no local
+//    declaration exists in the current scope chain.
+//  - Local variables are created by the 'local' command or as procedure inputs.
+//    They are accessible only to that procedure and procedures it calls.
+//
 
 #pragma once
 
@@ -17,19 +23,40 @@ extern "C"
     // Initialize variable storage
     void variables_init(void);
 
-    // Set a variable (creates if doesn't exist)
+    // Push a new local scope (called when entering a procedure)
+    void var_push_scope(void);
+
+    // Pop the current local scope (called when leaving a procedure)
+    void var_pop_scope(void);
+
+    // Get current scope depth (0 = global/top level)
+    int var_scope_depth(void);
+
+    // Declare a variable as local in the current scope
+    // This creates the variable with no value (unbound)
+    void var_declare_local(const char *name);
+
+    // Set a variable's value
+    // If variable exists in scope chain, updates it there
+    // If variable is declared local in current scope, updates it
+    // Otherwise creates/updates a global variable
     void var_set(const char *name, Value value);
 
-    // Get a variable's value, returns false if not found
+    // Set a local variable in current scope (for procedure inputs)
+    // This both declares and sets in one operation
+    void var_set_local(const char *name, Value value);
+
+    // Get a variable's value, searching scope chain then globals
+    // Returns false if not found
     bool var_get(const char *name, Value *out);
 
-    // Check if variable exists
+    // Check if variable exists (in scope chain or globals)
     bool var_exists(const char *name);
 
-    // Erase a variable
+    // Erase a variable (from current scope or globals)
     void var_erase(const char *name);
 
-    // Erase all variables
+    // Erase all global variables (local scopes should already be popped)
     void var_erase_all(void);
 
 #ifdef __cplusplus
