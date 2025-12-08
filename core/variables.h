@@ -59,6 +59,20 @@ extern "C"
     // Erase all global variables (local scopes should already be popped)
     void var_erase_all(void);
 
+    // Erase all global variables (respects buried flag if check_buried is true)
+    void var_erase_all_globals(bool check_buried);
+
+    // Bury/unbury variable names
+    void var_bury(const char *name);
+    void var_unbury(const char *name);
+    void var_bury_all(void);
+    void var_unbury_all(void);
+
+    // Iteration support for workspace display
+    int var_global_count(bool include_buried);
+    bool var_get_global_by_index(int index, bool include_buried,
+                                  const char **name_out, Value *value_out);
+
 #ifdef __cplusplus
 }
 #endif

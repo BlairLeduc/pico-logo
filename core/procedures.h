@@ -82,6 +82,8 @@ extern "C"
     // Bury/unbury procedures
     void proc_bury(const char *name);
     void proc_unbury(const char *name);
+    void proc_bury_all(void);
+    void proc_unbury_all(void);
 
     // Parse and define a procedure from text: "to name :param ... body ... end"
     // Returns a Result - RESULT_NONE on success, RESULT_ERROR on failure

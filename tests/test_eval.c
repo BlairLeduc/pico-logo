@@ -55,6 +55,8 @@ static LogoDevice mock_device;
 
 // Declare the function to set device in primitives_output.c
 extern void primitives_set_device(LogoDevice *device);
+// Declare the function to set device in primitives_workspace.c
+extern void primitives_workspace_set_device(LogoDevice *device);
 
 void setUp(void)
 {
@@ -68,6 +70,7 @@ void setUp(void)
     // Set up mock device
     logo_device_init(&mock_device, &mock_ops, NULL);
     primitives_set_device(&mock_device);
+    primitives_workspace_set_device(&mock_device);
 }
 
 void tearDown(void)

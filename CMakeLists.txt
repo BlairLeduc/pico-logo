@@ -42,6 +42,7 @@ add_library(logo_core
     core/primitives_output.c
     core/primitives_words_lists.c
     core/primitives_procedures.c
+    core/primitives_workspace.c
 )
 
 target_include_directories(logo_core

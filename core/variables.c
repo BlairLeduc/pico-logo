@@ -18,6 +18,7 @@ typedef struct
     Value value;
     bool active;
     bool has_value;   // false if declared but not yet assigned
+    bool buried;      // if true, hidden from pons/erns/etc
 } Variable;
 
 // Global variables storage
@@ -42,6 +43,7 @@ void variables_init(void)
     {
         global_variables[i].active = false;
         global_variables[i].has_value = false;
+        global_variables[i].buried = false;
     }
     scope_depth = 0;
 }
@@ -308,4 +310,103 @@ void var_erase(const char *name)
 void var_erase_all(void)
 {
     variables_init();
+}
+
+// Erase all global variables (respects buried flag if check_buried is true)
+void var_erase_all_globals(bool check_buried)
+{
+    for (int i = 0; i < global_count; i++)
+    {
+        if (global_variables[i].active)
+        {
+            if (!check_buried || !global_variables[i].buried)
+            {
+                global_variables[i].active = false;
+                global_variables[i].has_value = false;
+            }
+        }
+    }
+}
+
+// Bury/unbury support
+void var_bury(const char *name)
+{
+    int idx = find_global(name);
+    if (idx >= 0)
+    {
+        global_variables[idx].buried = true;
+    }
+}
+
+void var_unbury(const char *name)
+{
+    int idx = find_global(name);
+    if (idx >= 0)
+    {
+        global_variables[idx].buried = false;
+    }
+}
+
+void var_bury_all(void)
+{
+    for (int i = 0; i < global_count; i++)
+    {
+        if (global_variables[i].active && global_variables[i].has_value)
+        {
+            global_variables[i].buried = true;
+        }
+    }
+}
+
+void var_unbury_all(void)
+{
+    for (int i = 0; i < global_count; i++)
+    {
+        if (global_variables[i].active)
+        {
+            global_variables[i].buried = false;
+        }
+    }
+}
+
+// Iteration support for workspace display
+int var_global_count(bool include_buried)
+{
+    int count = 0;
+    for (int i = 0; i < global_count; i++)
+    {
+        if (global_variables[i].active && global_variables[i].has_value)
+        {
+            if (include_buried || !global_variables[i].buried)
+            {
+                count++;
+            }
+        }
+    }
+    return count;
+}
+
+// Get global variable by index (for iteration)
+// Returns false if index is out of range or variable is filtered out
+bool var_get_global_by_index(int index, bool include_buried, 
+                              const char **name_out, Value *value_out)
+{
+    int current = 0;
+    for (int i = 0; i < global_count; i++)
+    {
+        if (global_variables[i].active && global_variables[i].has_value)
+        {
+            if (include_buried || !global_variables[i].buried)
+            {
+                if (current == index)
+                {
+                    if (name_out) *name_out = global_variables[i].name;
+                    if (value_out) *value_out = global_variables[i].value;
+                    return true;
+                }
+                current++;
+            }
+        }
+    }
+    return false;
 }

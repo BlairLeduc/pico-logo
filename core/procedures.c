@@ -188,6 +188,28 @@ void proc_unbury(const char *name)
     }
 }
 
+void proc_bury_all(void)
+{
+    for (int i = 0; i < procedure_count; i++)
+    {
+        if (procedures[i].name != NULL)
+        {
+            procedures[i].buried = true;
+        }
+    }
+}
+
+void proc_unbury_all(void)
+{
+    for (int i = 0; i < procedure_count; i++)
+    {
+        if (procedures[i].name != NULL)
+        {
+            procedures[i].buried = false;
+        }
+    }
+}
+
 // Execute procedure body and handle tail calls via trampoline
 Result proc_call(Evaluator *eval, UserProcedure *proc, int argc, Value *args)
 {

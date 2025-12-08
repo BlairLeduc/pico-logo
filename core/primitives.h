@@ -44,6 +44,7 @@ extern "C"
     void primitives_output_init(void);
     void primitives_words_lists_init(void);
     void primitives_procedures_init(void);
+    void primitives_workspace_init(void);
 
 #ifdef __cplusplus
 }
