@@ -112,6 +112,91 @@ target_link_libraries(test_eval PRIVATE logo_core)
 
 add_test(NAME test_eval COMMAND test_eval)
 
+# Primitive tests
+add_executable(test_primitives_arithmetic
+    tests/test_primitives_arithmetic.c
+    tests/unity.c
+)
+
+target_include_directories(test_primitives_arithmetic PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests
+)
+
+target_link_libraries(test_primitives_arithmetic PRIVATE logo_core)
+
+add_test(NAME test_primitives_arithmetic COMMAND test_primitives_arithmetic)
+
+add_executable(test_primitives_control
+    tests/test_primitives_control.c
+    tests/unity.c
+)
+
+target_include_directories(test_primitives_control PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests
+)
+
+target_link_libraries(test_primitives_control PRIVATE logo_core)
+
+add_test(NAME test_primitives_control COMMAND test_primitives_control)
+
+add_executable(test_primitives_variables
+    tests/test_primitives_variables.c
+    tests/unity.c
+)
+
+target_include_directories(test_primitives_variables PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests
+)
+
+target_link_libraries(test_primitives_variables PRIVATE logo_core)
+
+add_test(NAME test_primitives_variables COMMAND test_primitives_variables)
+
+add_executable(test_primitives_words_lists
+    tests/test_primitives_words_lists.c
+    tests/unity.c
+)
+
+target_include_directories(test_primitives_words_lists PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests
+)
+
+target_link_libraries(test_primitives_words_lists PRIVATE logo_core)
+
+add_test(NAME test_primitives_words_lists COMMAND test_primitives_words_lists)
+
+add_executable(test_primitives_procedures
+    tests/test_primitives_procedures.c
+    tests/unity.c
+)
+
+target_include_directories(test_primitives_procedures PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests
+)
+
+target_link_libraries(test_primitives_procedures PRIVATE logo_core)
+
+add_test(NAME test_primitives_procedures COMMAND test_primitives_procedures)
+
+add_executable(test_primitives_workspace
+    tests/test_primitives_workspace.c
+    tests/unity.c
+)
+
+target_include_directories(test_primitives_workspace PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests
+)
+
+target_link_libraries(test_primitives_workspace PRIVATE logo_core)
+
+add_test(NAME test_primitives_workspace COMMAND test_primitives_workspace)
+
 # Coverage target
 if(ENABLE_COVERAGE)
     find_program(LCOV lcov)
