@@ -4,6 +4,7 @@
 //
 
 #include "variables.h"
+#include "memory.h"
 #include <string.h>
 #include <strings.h>
 
@@ -409,4 +410,38 @@ bool var_get_global_by_index(int index, bool include_buried,
         }
     }
     return false;
+}
+
+// Mark all variable values as GC roots
+void var_gc_mark_all(void)
+{
+    // Mark global variables
+    for (int i = 0; i < global_count; i++)
+    {
+        if (global_variables[i].active && global_variables[i].has_value)
+        {
+            Value v = global_variables[i].value;
+            if (v.type == VALUE_WORD || v.type == VALUE_LIST)
+            {
+                mem_gc_mark(v.as.node);
+            }
+        }
+    }
+    
+    // Mark local variables in all scopes
+    for (int s = 0; s < scope_depth; s++)
+    {
+        ScopeFrame *frame = &scope_stack[s];
+        for (int i = 0; i < frame->count; i++)
+        {
+            if (frame->variables[i].active && frame->variables[i].has_value)
+            {
+                Value v = frame->variables[i].value;
+                if (v.type == VALUE_WORD || v.type == VALUE_LIST)
+                {
+                    mem_gc_mark(v.as.node);
+                }
+            }
+        }
+    }
 }

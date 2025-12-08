@@ -2,12 +2,14 @@
 //  Pico Logo
 //  Copyright 2025 Blair Leduc. See LICENSE for details.
 //
-//  Workspace management primitives: po, poall, pon, pons, pops, pot, pots
+//  Workspace management primitives: po, poall, pon, pons, pops, pot, pots,
+//                                   nodes, recycle
 //
 
 #include "primitives.h"
 #include "procedures.h"
 #include "variables.h"
+#include "memory.h"
 #include "error.h"
 #include "eval.h"
 #include "devices/device.h"
@@ -596,6 +598,36 @@ static Result prim_unburyname(Evaluator *eval, int argc, Value *args)
     return result_none();
 }
 
+// nodes
+// Outputs the number of free nodes available
+static Result prim_nodes(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+    
+    size_t free = mem_free_nodes();
+    return result_ok(value_number((float)free));
+}
+
+// recycle
+// Runs garbage collection to free up as many nodes as possible
+static Result prim_recycle(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+    
+    // Mark all roots: variables and procedure bodies
+    var_gc_mark_all();
+    proc_gc_mark_all();
+    
+    // Sweep unmarked nodes
+    mem_gc_sweep();
+    
+    return result_none();
+}
+
 void primitives_workspace_init(void)
 {
     primitive_register("po", 1, prim_po);
@@ -613,4 +645,8 @@ void primitives_workspace_init(void)
     primitive_register("unbury", 1, prim_unbury);
     primitive_register("unburyall", 0, prim_unburyall);
     primitive_register("unburyname", 1, prim_unburyname);
+    
+    // Memory management
+    primitive_register("nodes", 0, prim_nodes);
+    primitive_register("recycle", 0, prim_recycle);
 }

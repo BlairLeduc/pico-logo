@@ -4,6 +4,7 @@
 //
 
 #include "test_scaffold.h"
+#include <stdlib.h>
 
 void setUp(void)
 {
@@ -271,6 +272,89 @@ void test_buried_variable_still_accessible(void)
     TEST_ASSERT_EQUAL_STRING("42\n", output_buffer);
 }
 
+//==========================================================================
+// Memory Management Tests (nodes, recycle)
+//==========================================================================
+
+void test_nodes_returns_number(void)
+{
+    reset_output();
+    
+    run_string("print nodes");
+    
+    // nodes should output a positive number
+    int free_nodes = atoi(output_buffer);
+    TEST_ASSERT_TRUE(free_nodes > 0);
+}
+
+void test_nodes_returns_correct_type(void)
+{
+    reset_output();
+    
+    // Use nodes in an arithmetic expression to verify it returns a number
+    run_string("print nodes > 0");
+    TEST_ASSERT_EQUAL_STRING("true\n", output_buffer);
+}
+
+void test_recycle_runs_without_error(void)
+{
+    // Create some garbage
+    run_string("make \"x [a b c d e f]");
+    run_string("ern \"x");
+    
+    // recycle should run without error
+    run_string("recycle");
+    
+    // Test passed if we got here without crashing
+    TEST_PASS();
+}
+
+void test_recycle_frees_memory(void)
+{
+    // recycle should run and free garbage nodes
+    // This is a basic smoke test - detailed memory tests are in test_memory.c
+    
+    // Create some lists (uses memory)
+    run_string("make \"x [a b c d e f g h i j]");
+    run_string("make \"y [1 2 3 4 5 6 7 8 9 10]");
+    
+    // Erase variables (makes lists garbage)
+    run_string("ern \"x");
+    run_string("ern \"y");
+    
+    // Run garbage collection - should not crash
+    run_string("recycle");
+    
+    // Verify nodes still returns a valid number after recycle
+    reset_output();
+    run_string("print nodes > 0");
+    TEST_ASSERT_EQUAL_STRING("true\n", output_buffer);
+}
+
+void test_recycle_preserves_live_data(void)
+{
+    // Create data that should be preserved
+    run_string("make \"keepme [important data]");
+    
+    const char *params[] = {};
+    define_proc("myproc", params, 0, "print \"hello");
+    
+    // Run garbage collection
+    run_string("recycle");
+    
+    reset_output();
+    
+    // Verify data is still accessible (print outputs list contents without brackets)
+    run_string("print :keepme");
+    TEST_ASSERT_EQUAL_STRING("important data\n", output_buffer);
+    
+    reset_output();
+    
+    // Verify procedure still works
+    run_string("myproc");
+    TEST_ASSERT_EQUAL_STRING("hello\n", output_buffer);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -294,6 +378,13 @@ int main(void)
     RUN_TEST(test_pon_with_list);
     RUN_TEST(test_buried_procedure_still_callable);
     RUN_TEST(test_buried_variable_still_accessible);
+    
+    // Memory management tests
+    RUN_TEST(test_nodes_returns_number);
+    RUN_TEST(test_nodes_returns_correct_type);
+    RUN_TEST(test_recycle_runs_without_error);
+    RUN_TEST(test_recycle_frees_memory);
+    RUN_TEST(test_recycle_preserves_live_data);
 
     return UNITY_END();
 }

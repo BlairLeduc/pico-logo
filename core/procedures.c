@@ -7,6 +7,7 @@
 #include "eval.h"
 #include "variables.h"
 #include "error.h"
+#include "memory.h"
 #include <string.h>
 #include <strings.h>
 
@@ -291,5 +292,17 @@ Result proc_call(Evaluator *eval, UserProcedure *proc, int argc, Value *args)
 
         // Normal completion (no stop/output)
         return result_none();
+    }
+}
+
+// Mark all procedure bodies as GC roots
+void proc_gc_mark_all(void)
+{
+    for (int i = 0; i < procedure_count; i++)
+    {
+        if (procedures[i].name != NULL && !mem_is_nil(procedures[i].body))
+        {
+            mem_gc_mark(procedures[i].body);
+        }
     }
 }

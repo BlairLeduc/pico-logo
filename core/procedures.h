@@ -89,6 +89,9 @@ extern "C"
     // Returns a Result - RESULT_NONE on success, RESULT_ERROR on failure
     Result proc_define_from_text(const char *text);
 
+    // Mark all procedure bodies as GC roots
+    void proc_gc_mark_all(void);
+
 #ifdef __cplusplus
 }
 #endif

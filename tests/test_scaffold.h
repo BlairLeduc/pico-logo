@@ -3,8 +3,7 @@
 //  Copyright 2025 Blair Leduc. See LICENSE for details.
 //
 
-#ifndef TEST_SCAFFOLD_H
-#define TEST_SCAFFOLD_H
+#pragma once
 
 #include "unity.h"
 #include "core/memory.h"
@@ -208,5 +207,3 @@ static void define_proc(const char *name, const char **params, int param_count, 
     
     proc_define(interned_name, params, param_count, body);
 }
-
-#endif // TEST_SCAFFOLD_H

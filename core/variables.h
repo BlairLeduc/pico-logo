@@ -73,6 +73,9 @@ extern "C"
     bool var_get_global_by_index(int index, bool include_buried,
                                   const char **name_out, Value *value_out);
 
+    // Mark all variable values as GC roots
+    void var_gc_mark_all(void);
+
 #ifdef __cplusplus
 }
 #endif
