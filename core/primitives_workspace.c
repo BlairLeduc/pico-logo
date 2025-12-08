@@ -598,6 +598,135 @@ static Result prim_unburyname(Evaluator *eval, int argc, Value *args)
     return result_none();
 }
 
+// erall - erase all procedures and variables (respects buried)
+static Result prim_erall(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+    
+    proc_erase_all(true);  // true = check buried flag
+    var_erase_all_globals(true);
+    
+    return result_none();
+}
+
+// erase "name or erase [name1 name2 ...]
+// Erase procedure(s) from workspace
+static Result prim_erase(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    
+    if (argc < 1)
+    {
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "erase", NULL);
+    }
+    
+    if (value_is_word(args[0]))
+    {
+        const char *name = mem_word_ptr(args[0].as.node);
+        if (!proc_exists(name))
+        {
+            return result_error_arg(ERR_DONT_KNOW_HOW, name, NULL);
+        }
+        proc_erase(name);
+    }
+    else if (value_is_list(args[0]))
+    {
+        Node curr = args[0].as.node;
+        while (!mem_is_nil(curr))
+        {
+            Node elem = mem_car(curr);
+            if (mem_is_word(elem))
+            {
+                const char *name = mem_word_ptr(elem);
+                if (!proc_exists(name))
+                {
+                    return result_error_arg(ERR_DONT_KNOW_HOW, name, NULL);
+                }
+                proc_erase(name);
+            }
+            curr = mem_cdr(curr);
+        }
+    }
+    else
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "erase", value_to_string(args[0]));
+    }
+    
+    return result_none();
+}
+
+// ern "name or ern [name1 name2 ...]
+// Erase variable name(s)
+static Result prim_ern(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    
+    if (argc < 1)
+    {
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "ern", NULL);
+    }
+    
+    if (value_is_word(args[0]))
+    {
+        const char *name = mem_word_ptr(args[0].as.node);
+        if (!var_exists(name))
+        {
+            return result_error_arg(ERR_NO_VALUE, name, NULL);
+        }
+        var_erase(name);
+    }
+    else if (value_is_list(args[0]))
+    {
+        Node curr = args[0].as.node;
+        while (!mem_is_nil(curr))
+        {
+            Node elem = mem_car(curr);
+            if (mem_is_word(elem))
+            {
+                const char *name = mem_word_ptr(elem);
+                if (!var_exists(name))
+                {
+                    return result_error_arg(ERR_NO_VALUE, name, NULL);
+                }
+                var_erase(name);
+            }
+            curr = mem_cdr(curr);
+        }
+    }
+    else
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "ern", value_to_string(args[0]));
+    }
+    
+    return result_none();
+}
+
+// erns - erase all variables (respects buried)
+static Result prim_erns(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+    
+    var_erase_all_globals(true);  // true = check buried flag
+    
+    return result_none();
+}
+
+// erps - erase all procedures (respects buried)
+static Result prim_erps(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+    
+    proc_erase_all(true);  // true = check buried flag
+    
+    return result_none();
+}
+
 // nodes
 // Outputs the number of free nodes available
 static Result prim_nodes(Evaluator *eval, int argc, Value *args)
@@ -645,6 +774,14 @@ void primitives_workspace_init(void)
     primitive_register("unbury", 1, prim_unbury);
     primitive_register("unburyall", 0, prim_unburyall);
     primitive_register("unburyname", 1, prim_unburyname);
+    
+    // Erase commands
+    primitive_register("erall", 0, prim_erall);
+    primitive_register("erase", 1, prim_erase);
+    primitive_register("er", 1, prim_erase);  // Abbreviation
+    primitive_register("ern", 1, prim_ern);
+    primitive_register("erns", 0, prim_erns);
+    primitive_register("erps", 0, prim_erps);
     
     // Memory management
     primitive_register("nodes", 0, prim_nodes);

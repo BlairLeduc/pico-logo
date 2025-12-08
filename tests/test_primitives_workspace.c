@@ -355,6 +355,163 @@ void test_recycle_preserves_live_data(void)
     TEST_ASSERT_EQUAL_STRING("hello\n", output_buffer);
 }
 
+//==========================================================================
+// Erase Tests (erall, erase, ern, erns, erps)
+//==========================================================================
+
+void test_erase_removes_procedure(void)
+{
+    const char *params[] = {};
+    define_proc("todelete", params, 0, "print 1");
+    
+    // Verify it exists
+    TEST_ASSERT_NOT_NULL(proc_find("todelete"));
+    
+    run_string("erase \"todelete");
+    
+    // Verify it's gone
+    TEST_ASSERT_NULL(proc_find("todelete"));
+}
+
+void test_er_abbreviation(void)
+{
+    const char *params[] = {};
+    define_proc("todelete", params, 0, "print 1");
+    
+    run_string("er \"todelete");
+    
+    TEST_ASSERT_NULL(proc_find("todelete"));
+}
+
+void test_erase_with_list(void)
+{
+    const char *params[] = {};
+    define_proc("proc1", params, 0, "print 1");
+    define_proc("proc2", params, 0, "print 2");
+    
+    run_string("erase [proc1 proc2]");
+    
+    TEST_ASSERT_NULL(proc_find("proc1"));
+    TEST_ASSERT_NULL(proc_find("proc2"));
+}
+
+void test_erase_nonexistent_gives_error(void)
+{
+    Result r = run_string("erase \"nonexistent");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_ern_removes_variable(void)
+{
+    run_string("make \"x 42");
+    
+    // Verify it exists
+    TEST_ASSERT_TRUE(var_exists("x"));
+    
+    run_string("ern \"x");
+    
+    // Verify it's gone
+    TEST_ASSERT_FALSE(var_exists("x"));
+}
+
+void test_ern_with_list(void)
+{
+    run_string("make \"a 1");
+    run_string("make \"b 2");
+    
+    run_string("ern [a b]");
+    
+    TEST_ASSERT_FALSE(var_exists("a"));
+    TEST_ASSERT_FALSE(var_exists("b"));
+}
+
+void test_ern_nonexistent_gives_error(void)
+{
+    Result r = run_string("ern \"nonexistent");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_erns_removes_all_variables(void)
+{
+    run_string("make \"x 1");
+    run_string("make \"y 2");
+    run_string("make \"z 3");
+    
+    run_string("erns");
+    
+    TEST_ASSERT_FALSE(var_exists("x"));
+    TEST_ASSERT_FALSE(var_exists("y"));
+    TEST_ASSERT_FALSE(var_exists("z"));
+}
+
+void test_erns_respects_buried(void)
+{
+    run_string("make \"visible 1");
+    run_string("make \"hidden 2");
+    run_string("buryname \"hidden");
+    
+    run_string("erns");
+    
+    TEST_ASSERT_FALSE(var_exists("visible"));
+    TEST_ASSERT_TRUE(var_exists("hidden"));  // Buried variables preserved
+}
+
+void test_erps_removes_all_procedures(void)
+{
+    const char *params[] = {};
+    define_proc("proc1", params, 0, "print 1");
+    define_proc("proc2", params, 0, "print 2");
+    
+    run_string("erps");
+    
+    TEST_ASSERT_NULL(proc_find("proc1"));
+    TEST_ASSERT_NULL(proc_find("proc2"));
+}
+
+void test_erps_respects_buried(void)
+{
+    const char *params[] = {};
+    define_proc("visible", params, 0, "print 1");
+    define_proc("hidden", params, 0, "print 2");
+    
+    run_string("bury \"hidden");
+    run_string("erps");
+    
+    TEST_ASSERT_NULL(proc_find("visible"));
+    TEST_ASSERT_NOT_NULL(proc_find("hidden"));  // Buried procedures preserved
+}
+
+void test_erall_removes_procedures_and_variables(void)
+{
+    const char *params[] = {};
+    define_proc("myproc", params, 0, "print 1");
+    run_string("make \"myvar 42");
+    
+    run_string("erall");
+    
+    TEST_ASSERT_NULL(proc_find("myproc"));
+    TEST_ASSERT_FALSE(var_exists("myvar"));
+}
+
+void test_erall_respects_buried(void)
+{
+    const char *params[] = {};
+    define_proc("visibleproc", params, 0, "print 1");
+    define_proc("hiddenproc", params, 0, "print 2");
+    run_string("make \"visiblevar 1");
+    run_string("make \"hiddenvar 2");
+    
+    run_string("bury \"hiddenproc");
+    run_string("buryname \"hiddenvar");
+    
+    run_string("erall");
+    
+    TEST_ASSERT_NULL(proc_find("visibleproc"));
+    TEST_ASSERT_NOT_NULL(proc_find("hiddenproc"));
+    TEST_ASSERT_FALSE(var_exists("visiblevar"));
+    TEST_ASSERT_TRUE(var_exists("hiddenvar"));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -385,6 +542,21 @@ int main(void)
     RUN_TEST(test_recycle_runs_without_error);
     RUN_TEST(test_recycle_frees_memory);
     RUN_TEST(test_recycle_preserves_live_data);
+    
+    // Erase tests
+    RUN_TEST(test_erase_removes_procedure);
+    RUN_TEST(test_er_abbreviation);
+    RUN_TEST(test_erase_with_list);
+    RUN_TEST(test_erase_nonexistent_gives_error);
+    RUN_TEST(test_ern_removes_variable);
+    RUN_TEST(test_ern_with_list);
+    RUN_TEST(test_ern_nonexistent_gives_error);
+    RUN_TEST(test_erns_removes_all_variables);
+    RUN_TEST(test_erns_respects_buried);
+    RUN_TEST(test_erps_removes_all_procedures);
+    RUN_TEST(test_erps_respects_buried);
+    RUN_TEST(test_erall_removes_procedures_and_variables);
+    RUN_TEST(test_erall_respects_buried);
 
     return UNITY_END();
 }

@@ -722,7 +722,7 @@ wait _integer_
 
 `command`
 
-`wait` tells Logo to wait for _integer_ 60ths of a second.
+`wait` tells Logo to wait for _integer_ 10ths of a second.
 
 
 
