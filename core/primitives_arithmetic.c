@@ -2,12 +2,13 @@
 //  Pico Logo
 //  Copyright 2025 Blair Leduc. See LICENSE for details.
 //
-//  Arithmetic primitives: sum, difference, product, quotient
+//  Arithmetic primitives: sum, difference, product, quotient, random
 //
 
 #include "primitives.h"
 #include "error.h"
 #include "eval.h"
+#include <stdlib.h>
 
 static Result prim_sum(Evaluator *eval, int argc, Value *args)
 {
@@ -67,10 +68,28 @@ static Result prim_quotient(Evaluator *eval, int argc, Value *args)
     return result_ok(value_number(a / b));
 }
 
+// random integer - outputs a random non-negative integer less than integer
+static Result prim_random(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    float n;
+    if (!value_to_number(args[0], &n))
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "random", value_to_string(args[0]));
+    
+    int limit = (int)n;
+    if (limit <= 0)
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "random", value_to_string(args[0]));
+    
+    int result = rand() % limit;
+    return result_ok(value_number((float)result));
+}
+
 void primitives_arithmetic_init(void)
 {
     primitive_register("sum", 2, prim_sum);
     primitive_register("difference", 2, prim_difference);
     primitive_register("product", 2, prim_product);
     primitive_register("quotient", 2, prim_quotient);
+    primitive_register("random", 1, prim_random);
 }
