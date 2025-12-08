@@ -14,5 +14,6 @@
         "stdio.h": "c"
     },
     "markdown-preview-enhanced.codeBlockTheme": "auto.css",
-    "markdown-preview-enhanced.previewColorScheme": "editorColorScheme"
+    "markdown-preview-enhanced.previewColorScheme": "editorColorScheme",
+    "chat.agent.maxRequests": 50
 }

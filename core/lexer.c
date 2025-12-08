@@ -335,14 +335,33 @@ static bool looks_like_number(const char *p)
     return true;  // End of string - it's a number
 }
 
-// Determine if minus should be unary based on previous token
+// Determine if minus should be unary based on context
+// According to the reference:
+// - If "-" immediately precedes a word/variable/paren and follows delimiter except ), it's unary
+// - If "-" immediately precedes a number and follows delimiter except ), it's a negative number
+// - The key is: no space between "-" and what follows makes it unary/negative
 static bool should_be_unary_minus(const Lexer *lexer)
 {
-    // Unary minus if:
-    // - At start of input (previous is EOF)
-    // - After any delimiter except ) 
-    // - After WORD or COLON (variable reference) - unary minus before an operand
     TokenType prev = lexer->previous.type;
+    char after = lexer->current[1];
+    
+    // Binary minus after ) or after a value (NUMBER, QUOTED)
+    if (prev == TOKEN_RIGHT_PAREN || prev == TOKEN_NUMBER || prev == TOKEN_QUOTED)
+        return false;
+    
+    // After WORD or COLON (value-producing tokens), check what follows:
+    // - If followed by space → binary minus (e.g., ":x - 1")
+    // - If followed immediately by another token → unary minus (e.g., ":x -:y")
+    if (prev == TOKEN_WORD || prev == TOKEN_COLON)
+    {
+        // If followed by space or end, it's binary minus
+        if (is_space(after) || after == '\0')
+            return false;
+        // Otherwise unary (immediately precedes something)
+        return true;
+    }
+    
+    // For operators, opening brackets, and start of input: unary minus
     return prev == TOKEN_EOF ||
            prev == TOKEN_LEFT_BRACKET ||
            prev == TOKEN_LEFT_PAREN ||
@@ -353,9 +372,7 @@ static bool should_be_unary_minus(const Lexer *lexer)
            prev == TOKEN_DIVIDE ||
            prev == TOKEN_EQUALS ||
            prev == TOKEN_LESS_THAN ||
-           prev == TOKEN_GREATER_THAN ||
-           prev == TOKEN_WORD ||
-           prev == TOKEN_COLON;
+           prev == TOKEN_GREATER_THAN;
 }
 
 Token lexer_next_token(Lexer *lexer)

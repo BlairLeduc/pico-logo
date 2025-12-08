@@ -48,6 +48,15 @@
 				"$gcc"
 			],
 			"group": "build"
+		},
+		{
+			"label": "Run Test Eval",
+			"type": "shell",
+			"command": "/Users/blair/Source/Logo/logo3/build/test_eval",
+			"args": [
+				"2>&1"
+			],
+			"group": "test"
 		}
 	]
 }

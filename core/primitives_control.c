@@ -2,12 +2,14 @@
 //  Pico Logo
 //  Copyright 2025 Blair Leduc. See LICENSE for details.
 //
-//  Control flow primitives: run, repeat, stop, output
+//  Control flow primitives: run, repeat, stop, output, if
 //
 
 #include "primitives.h"
 #include "error.h"
 #include "eval.h"
+#include "value.h"
+#include <strings.h>  // for strcasecmp
 
 static Result prim_run(Evaluator *eval, int argc, Value *args)
 {
@@ -62,6 +64,53 @@ static Result prim_output(Evaluator *eval, int argc, Value *args)
     return result_output(args[0]);
 }
 
+// if predicate list1 [list2]
+// If predicate is true, run list1
+// If predicate is false and list2 provided, run list2
+static Result prim_if(Evaluator *eval, int argc, Value *args)
+{
+    // Check predicate is a boolean word
+    Value pred = args[0];
+    bool condition;
+    
+    if (value_is_word(pred))
+    {
+        const char *str = value_to_string(pred);
+        if (strcasecmp(str, "true") == 0)
+            condition = true;
+        else if (strcasecmp(str, "false") == 0)
+            condition = false;
+        else
+            return result_error_arg(ERR_NOT_BOOL, "if", str);
+    }
+    else
+    {
+        return result_error_arg(ERR_NOT_BOOL, "if", value_to_string(pred));
+    }
+    
+    // Check that list1 is a list
+    if (!value_is_list(args[1]))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "if", value_to_string(args[1]));
+    }
+    
+    if (condition)
+    {
+        return eval_run_list(eval, args[1].as.node);
+    }
+    else if (argc >= 3)
+    {
+        // Check that list2 is a list
+        if (!value_is_list(args[2]))
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "if", value_to_string(args[2]));
+        }
+        return eval_run_list(eval, args[2].as.node);
+    }
+    
+    return result_none();
+}
+
 void primitives_control_init(void)
 {
     primitive_register("run", 1, prim_run);
@@ -69,4 +118,5 @@ void primitives_control_init(void)
     primitive_register("stop", 0, prim_stop);
     primitive_register("output", 1, prim_output);
     primitive_register("op", 1, prim_output); // Abbreviation
+    primitive_register("if", 2, prim_if);
 }
