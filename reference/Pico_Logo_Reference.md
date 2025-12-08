@@ -60,6 +60,8 @@ FORWARD 100
 
 The name is remembered using the case that is used in the definition.
 
+**Property Lists:** Any Logo word can have a _property list_ associated with it. A property list consists of an even number of elements. Each pair of elements consists of a property, and its value, a word or a list.
+
 **Expressions:** A procedure name followed by the required number of inputs is an _expression_. More generally, an _expression_ is 
 
 - a quoted word, 
@@ -256,7 +258,7 @@ make "bird "sparrow
 
 then the container `bird` contains the word `sparrow` instead of the word `pigeon`. 
 
-### How to Think about Procedures You Define and their Inputs
+## How to Think about Procedures You Define and their Inputs
 
 Procedures you define can have inputs. When you define a procedure, its title line specifies how many inputs it has and a name for each one. The inputs are put into the containers designated on the title line of the procedure definition in the order in which they occur. For example, the following procedure makes the turtle draw various polygons, depending upon what inputs are used. 
 
@@ -385,6 +387,10 @@ Good-bye
 ?print "San\ Francisco
 San Francisco
 ```
+
+Note that the quotation mark character (") and the colon (:not word delimiters.
+
+You can also have an empty word, which is a word with elements. You type in the empty word by typing `"`.
 
 ## Infix Procedures 
 
@@ -524,6 +530,246 @@ Line continuation characters are not supported.
 
 Words with internal spaces are created using the "`\`" character, not using the veritcal bar notation.
 
+`ifelse` is not a primitive. Use `(if predicate list1 list2)` instead:
+
+```logo
+to ifelse :predicate :list1 :list2
+(if :predicate :list1 :list2)
+end
+```
+
+# Words and Lists {#words-lists}
+
+## butfirst (bf)
+
+butfirst _object_
+bf _object_
+
+`operation`
+
+`butfirst` outputs all but the first element of _object_. `butfirst` of the empty word or the empty list is an error.
+
+
+## butlast (bl)
+
+butlast _object_
+bl _object_
+
+`operation`
+
+`butlast` outputs all but the last element of _object_.
+
+
+## first
+
+first _object_
+
+`operation`
+
+`first` outputs the first element of _object_. `first` of the empty word or the empty list is an error. Note that `first` of a word is a single character; `first` of a list can be a word or a list.
+
+
+## item
+
+item _integer_ _object_
+
+`operation`
+
+`item` outputs the element of _object_ whose position within _object_ corresponds to _integer_. For example, if _integer_ is 3, `item` outputs the third element in the object. _Object_ is a word or a list. An error occurs if _integer_ is greater than the length of _object_ or if _object_ is the empty word or list.
+
+
+## last
+
+last _object_
+
+`operation`
+
+`last` outputs the last element of _object_. `last` of the empty word or the empty list is an error.
+
+
+## member
+
+member _object1_ _object2_
+
+`operation`
+
+`member` outputs the part of _object2_ in which _object1_ is the first element. If _object1_ is not an element of _object2_, `member` outputs the empty list or the empty word. This operation is useful for accessing information i n a file or for sorting long lists.
+
+
+## fput
+
+fput _object_ _list_
+
+`operation`
+
+The `fput` (for first put) operation outputs a new list formed by putting _object_ at the beginning of _list_.
+
+
+## list
+
+list _object1_ _object2_
+(LIST _object1_ _object2_ _object3_ _object4_ ...)
+
+`operation`
+
+The `list` operation outputs a list whose elements are _object1_,
+_object2_, and so on.
+
+
+## lput
+
+lput _object_ _list_
+
+`operation`
+
+The `lput` (for last put) operation outputs a new list formed by
+putting _object_ at the end of _list_.
+
+
+## parse
+
+parse _word_
+
+`operation`
+
+`parse` outputs a list that is obtained from parsing _word_. `parse` is useful for converting the output of `readword` into a list.
+
+
+## sentence (se)
+
+sentence _object1_ _object2_
+(sentence _object1_ _object2_ _object3_ ...)
+se _object1_ _object2_
+(se _object1_ _object2_ _object3_ ...)
+
+`operation`
+
+`sentence` outputs a list made up of the contents in its inputs.
+
+
+## word
+
+word _word1_ _word2_
+(word _word1_ _word2_ _word3_ ...)
+
+`operation`
+
+`word` outputs a word made up of its inputs.
+
+
+## ascii
+
+ascii _character_
+
+`operation`
+
+`ascii` outputs the American Standard Code for Information Interchange (ASCII) code for _character_. If the input word contains more than one character, `ascii` uses only its first character. Also see `char`.
+
+
+## before? (beforep)
+
+before? _word1_ _word2_
+beforep _word1_ _word2_
+
+`operation`
+
+`before?` outputs `true` if _word1_ comes before _word2_. To make the comparison, Logo uses the ASCII codes of the characters in the words. Note that all uppercase letters come before all lowercase letters.
+
+
+## char
+
+char _integer_
+
+`operation`
+
+The `char` operation outputs the character whose ASCII code is _integer_. An error occurs if _integer_ is not the ASCIl code for any character.
+
+
+## count
+
+count _object_
+
+`operation`
+
+`count` outputs the number of elements in _object_, which is a word or a list.
+
+
+## empty? (emptyp)
+
+emptyp _object_
+
+`operation`
+
+`emptyp` outputs `true` if _object_ is the empty word or the empty list; otherwise it outputs `false`.
+
+
+## equal? (equalp)
+
+equal? _object1_ _object2_
+equalp _object1_ _object2_
+
+`operation`
+
+`equal?` outputs `true` if _object1_ and _object2_ are equal numbers, identical words, or identical lists; otherwise `equal?` outputs `false`. This operation is equivalent to the equal sign (`=`).
+
+
+## list? (listp)
+
+list? _object_
+listp _object_
+
+`operation`
+
+`list?` outputs `true` if _object_ is a list; otherwise it outputs `false`.
+
+
+## member? (memberp)
+
+member? _object1_ _object2_
+memberp _object1_ _object2_
+
+`operation`
+
+`member?` outputs `true` if _object1_ is an element of _object2_; otherwise it outputs `false`.
+
+
+## number? (numberp)
+
+number? _object_
+numberp _object_
+
+`operation`
+
+`number?` outputs `true` if _object_ is a number; otherwise it outputs `false`.
+
+
+## word? (wordp)
+
+wordp _object_
+
+`operation`
+
+`word?` outputs `true` if _object_ is a word; otherwise it outputs `false`. A self-quoted number is word.
+
+
+## lowercase
+
+lowercase _word_
+
+`operation`
+
+`lowercase` outputs _word_ in all lowercase letters.
+
+
+## uppercase
+
+uppercase _word_
+
+`operation`
+
+`uppercase` outputs _word_ in all uppercase letters.
+
+
 
 # Arithmatic Operations {#arithmetic-operations}
 
@@ -562,6 +808,16 @@ int _number_
 
 Returns the integer part of _number_; any decimal part is stripped off. No rounding occurs when `int` is used (contrast this with the `round` operation described later in this chapter).
 
+
+## intquotient
+
+intquotient _integer1_ _integer2_
+
+`operation`
+
+`intquotient` outputs the result of dividing _integer1_ by _integer2_, truncated to an integer. An error occurs if _integer2_ is zero. If either input is a decimal number, it is truncated.
+
+
 ## product
 
 product _number1_ _number2_
@@ -572,7 +828,7 @@ product _number1_ _number2_
 Outputs the product of its inputs. It is equivalent to the `*` infix-form operation. With one input, `product` outputs its input.
 
 
-# quotient
+## quotient
 
 quotient _number1_ _number2_
 
@@ -581,7 +837,7 @@ quotient _number1_ _number2_
 Outputs the result of dividing _number1_ by _number2_. It is equivalent to the `/` infix-form operation. _Number2_ must not be zero. If it is, an error occurs.
 
 
-# random
+## random
 
 random _integer_
 
@@ -590,7 +846,7 @@ random _integer_
 Outputs a random non-negative integer less than _integer_.
 
 
-# remainder
+## remainder
 
 remainder _integer1_ _interger2_
 
@@ -598,7 +854,7 @@ remainder _integer1_ _interger2_
 
 Outputs the remainder obtained when _integer1_ is divided by _integer2_. The remainder is always an integer. If _integer1_ and _integer2_ are integers, this is _integer1_ mod _integer2_. If _integer1_ and _integer2_ are not integers, they are truncated. _Integer2_ must not be zero. If it is, an error occurs.
 
-# round
+## round
 
 round _number_
 
@@ -607,7 +863,7 @@ round _number_
 Outputs _number_ rounded off to the nearest integer. The maximum integer is 2,147,483,647.
 
 
-# sin
+## sin
 
 sin _number_
 
@@ -616,7 +872,7 @@ sin _number_
 Outputs the csine of _number_ in degrees.
 
 
-# sqrt
+## sqrt
 
 sqrt _number_
 
@@ -625,7 +881,7 @@ sqrt _number_
 Outputs the square root of _number_. The value _number_ must not be negative or an error will occur.
 
 
-# sum
+## sum
 
 sum _number1_ _number2_
 (sum _number1_ _number2_ _number3_ ...)
@@ -638,7 +894,24 @@ Outputs the sum of its inputs. `sum` is equivalent t o the `+` infix-form operat
 
 # Conditionals and Control of Flow {#conditionals-control-flow}
 
-# if
+## true
+
+true
+
+`operation`
+
+Outputs `"true`. In Logo, boolean truth is represented by the word `true`. 
+
+
+## false
+
+false
+
+`operation`
+
+Outputs `"false`. In Logo, boolean false is represented by the word `false`.
+
+## if
 
 if _predicate_ _list1_
 (if _predicate_ _list1_ _list2_)
@@ -648,7 +921,7 @@ if _predicate_ _list1_
 If _predicate_ is `true`, Logo runs _list1_. If _predicate_ is `false`,Pico Logo runs _list2_ (if present). In either case, if the selected list outputs something, the `if` is an operation. If the list outputs nothing, the `if` is a command.
 
 
-# iffalse (iff)
+## iffalse (iff)
 
 iffalse _list_
 iff _list_
@@ -658,7 +931,7 @@ iff _list_
 `iffalse` runs _list_ if the result of the most recent `test` was `false`, otherwise it does nothing. Note that if `test` has not been run in the same procedure or a superprocedure, or from top level, `iffalse` does nothing.
 
 
-# iftrue (ift)
+## iftrue (ift)
 
 iftrue _list_ 
 ift _list_ 
@@ -668,7 +941,7 @@ ift _list_
 `iftrue` runs _list_ if the result of the most recent `test` was `true`, otherwise it does nothing. Note that if `test` has not been run in the same procedure or a superprocedure, or from top level, `iftrue` does nothing.
 
 
-# test
+## test
 
 test _predicate_
 
@@ -677,7 +950,7 @@ test _predicate_
 `test` remembers whether _predicate_ is `true` or `false` for subsequent use by `iftrue` or `iffalse`. Each `test` is local to the procedure in which it occurs.
 
 
-# co
+## co
 
 co
 
@@ -686,7 +959,7 @@ co
 The `co` (for continue) command resumes running of a procedure after a `pause` or `ESC`, continuing from wherever the procedure paused.
 
 
-# output (op)
+## output (op)
 
 output _object_
 op _object_
@@ -696,7 +969,7 @@ op _object_
 The `output` command is meaningful only when it is within a procedure, not at top level. It makes _object_ the output of your procedure and returns control to the caller. Note that although `output` is itself a command, the procedure containing it is an operation because it has an output. Compare with `stop`.
 
 
-# pause
+## pause
 
 pause
 
@@ -707,7 +980,7 @@ The `pause` command is meaningful only when it is within a procedure, not at top
 The procedure may be resumed by typing `co`.
 
 
-# stop
+## stop
 
 stop
 
@@ -716,7 +989,7 @@ stop
 The `stop` command stops the procedure that is running and returns control to the caller. This command is meaningful only when it is within a procedure—not at top level. Note that a procedure containing `stop` is a command. Compare `stop` with `output`.
 
 
-# wait
+## wait
 
 wait _integer_
 
@@ -725,37 +998,80 @@ wait _integer_
 `wait` tells Logo to wait for _integer_ 10ths of a second.
 
 
+## catch
 
-# Logical Operations {#logical-operations}
+catch _name_ _list_
 
-## and
+`command`
 
-and _predicate1_ _predicate2_
-(and _predicate1_ _predicate2_ _predicate3_ ...)
+`catch` runs _list_. If a `throw` _name_ command is called while _list_ is run, control returns to the first statement after the `catch`. The _name_ is used to match up a `throw` with a `catch`. For instance, `catch "chair [whatever]` catches a `throw "chair` but not a `throw "table`.
 
-`operation`
-
-Outputs `TRUE` if all of its inputs are `TRUE`.
+There is one special case. `catch "error` catches an error that would otherwise print an error message and return to top level. If an error is caught, the message that Logo would normally print isn't printed. See the explanation of `error` in this section to find out how to tell what the error was.
 
 
-## not
+## error
 
-not _predicate_
+error
 
 `operation`
 
-Outputs TRUE if _predicate_ is FALSE.
-Outputs FASLE if _predicate_ is TRUE.
+`error` outputs a four-element list containing information about the most recent error that has not had a message printed or output by `error`. If there was no such error, `error` outputs the empty list. The elements in the list are
+
+- a unique number identifying the error
+- a message explaining the error
+- the name of the primitive causing the error, if any
+- the name of the procedure within which the error occurred (the empty list, if top level).
+
+Logo runs `throw "error [whenever]` an error occurs during the execution of a procedure. Control passes to top level unless a `catch "error` has been run. When an error is caught in this way, no error message is printed, and you can design your own.
+
+Refer to the reference document [Error Messages](./Error_Messages.md) for a complete list of error messages and their meanings.
 
 
-## or
+## go
 
-or _predicate1_ _predicate2_
-(or _predicate1_ _predicate2_ _predicate3_ ...)
+go _word_
 
-`operation`
+`command`
 
-Outputs `TRUE` if any of its inputs are `TRUE`.
+The `go` command transfers control to the instruction following `label` _word_ in the same procedure.
+
+
+## label
+
+label _word_
+
+`command`
+
+The `label` command itself does nothing. However, a `go` _word_ passes control to the instruction following it. Note that _word_ must always be a literal word (that is, it must be preceded by a quotation mark).
+
+
+## repeat
+
+repeat _integer_ _list_
+
+`command`
+
+`repeat` runs _list_ _integer_ times. An error occurs if _integer_ is negative.
+
+
+## run
+
+run _list_
+
+`command` or `operation`
+
+The `run` command runs _list_ as if typed in directly. If _list_ is an operation, then `run` outputs whatever _list_ outputs.
+
+
+## throw
+
+throw _name_
+
+`command`
+
+The `throw` command is meaningful only within the range of the `catch` command. An error occurs if no corresponding `catch` name is found. `throw "toplevel` returns control to top level. Contrast with `stop`.
+
+See `catch`. 
 
 
 
@@ -846,7 +1162,7 @@ pots
 `pots` (for print out titles) prints the title line of every procedure in the workspace. See `bury` for exceptions.
 
 
-# erall
+## erall
 
 erall
 
@@ -998,7 +1314,7 @@ currentdir
 Stands for current directory. Outputs the current directory that was set with `chdir`.
 
 
-# erfile
+## erfile
 
 erfile _pathname_
 
@@ -1007,7 +1323,7 @@ erfile _pathname_
 Stands for erase file. Erases any type of file. The input must be the name of a file in the current directory or a full pathname.
 
 
-# erdir
+## erdir
 
 erdir _pathname_
 
@@ -1016,7 +1332,7 @@ erdir _pathname_
 Stands for erase directory. Erases a directory. The directory must be empty or this command will result in an error.
 
 
-# catalog
+## catalog
 
 catalog
 
@@ -1057,13 +1373,14 @@ The `name` command puts _object_ in _name_'s container, that is, it gives the va
 `name` is equivalent to `make` with the order of the inputs reversed. Thus `name "welder "job` has the same effect as `make "job "welder`.
 
 
-## namep
+## name? (namep)
 
+name? _word_
 namep _word_
 
 `operation`
 
-`namep` outputs `true` if _word_ has a value, that is, if `:word` exists; it outputs `false` otherwise.
+`name?` outputs `true` if _word_ has a value, that is, if `:word` exists; it outputs `false` otherwise.
 
 
 ## thing
@@ -1073,3 +1390,301 @@ thing _name_
 `operation`
 
 `thing` outputs the thing in the container _name_, that is, the value of the variable _name_. `thing "any` is equivalent to `:any`.
+
+
+
+
+# Debugging Programs
+
+## step
+
+step _name_
+step _list_
+
+`command`
+
+The `step` command takes the procedure indicated by _name_ or _list_ as input and lets you run them line by line. `step` pauses at each line of execution and continues only when you press any key on the keyboard.
+
+
+## trace
+
+trace _name_
+trace _list_
+
+`command`
+
+The `trace` command takes the procedures indicated by _name_ or _list_ as input and causes them to print tracing information when executed. It does not interrupt the execution of the procedure, but allows you to see the depth of the procedure stack during execution. `trace` is useful in understanding recursive procedures or complex programs with many subprocedures.
+
+
+## unstep
+
+unstep _name_
+unstep _list_
+
+`command`
+
+`unstep` restores the procedure(s) indicated by _name_ or _list_ back to their original states. After you step through a procedure (with `step`), you must use `unstep` so that it will execute normally again.
+
+
+## untrace
+
+untrace _name_
+untrace _list_
+
+`command`
+
+`untrace` stops the tracing of procedure _name_ and causes it to execute normally again.
+
+
+
+# Logical Operations {#logical-operations}
+
+## and
+
+and _predicate1_ _predicate2_
+(and _predicate1_ _predicate2_ _predicate3_ ...)
+
+`operation`
+
+Outputs `TRUE` if all of its inputs are `TRUE`.
+
+
+## not
+
+not _predicate_
+
+`operation`
+
+Outputs TRUE if _predicate_ is FALSE.
+Outputs FASLE if _predicate_ is TRUE.
+
+
+## or
+
+or _predicate1_ _predicate2_
+(or _predicate1_ _predicate2_ _predicate3_ ...)
+
+`operation`
+
+Outputs `TRUE` if any of its inputs are `TRUE`.
+
+
+
+# Modifying Procedures Under Program Control
+
+## copydef
+
+copydef _name_ _newname_
+
+`command`
+
+`copydef` copies the definition of _name_, making it the definition of _newname_ as well.
+
+
+## define
+
+define _name_ _list_
+
+`command`
+
+`define` makes list the definition of the procedure _name_. The first element of _list_ is a list of the inputs to _name_, with no colon (`:`) before the names.
+
+If _name_ has no inputs, this must be the empty list. Each subsequent element is a list consisting of one line of the procedure definition. (This list does not contain `end`, because `end` is not part of the procedure definition.)
+
+The second input to `define` has the same form as the output from `text`. `define` can redefine an existing procedure.
+
+
+## defined? (definedp)
+
+defined? _word_
+definedp _word_
+
+`operation`
+
+`defined?` outputs `true` if word is the name of a user-defined procedure, `false` otherwise.
+
+
+## primative? (primativep)
+
+primitive? _name_
+primitivep _name_
+
+`operation`
+
+`primitivep` outputs `true` if name is the name of a primitive, `false` otherwise.
+
+
+## text
+
+text _name_
+
+`operation`
+
+The `text` primitive outputs the definition of _name_ as a list of lists, suitable for input to `define`.
+
+
+# The Outside World {#outside-world}
+
+## keyp
+
+keyp
+
+`operation`
+
+`keyp` outputs `true` if there is at least one character waiting to be read—that is, one that has been typed on the keyboard and not yet picked up by `readchar` or `readlist`. `keyp` outputs `false` if there are no such characters.
+
+
+## readchar (rc)
+
+readchar
+rc
+
+`operation`
+
+`readchar` outputs the first character typed at the keyboard or read from the current file. If you are reading from the keyboard and no character is waiting to be read, `readchar` waits until you type something.
+
+`readchar` does not output a character if you are reading from a file and the end-of-file position is reached. In this case, `readchar` outputs an empty list. Note that `readchar` from the keyboard does not echo what you type on the display.
+
+If you are reading from the keyboard, you can set the high bit of the character being read by holding down either `Alt` key a you type the character. Setting the high bit adds 128 to the character.
+
+
+## readchars (rcs)
+
+readchars _integer_
+rcs _integer_
+
+`operation`
+
+The `readchars` operation outputs the first _integer_ number of characters typed at the keyboard or read from the current file. If you are reading from the keyboard and no characters arwaiting to be read, `readchars` waits for you to type something.
+
+If you are reading from a file and the end-of-file position reached before _integer_ characters are read, `readchars` outputs the characters read up to that point. If the end-of-file was reached before `readchars` was called, `readchars` outputs an empty list.
+
+Note that `readchars` from the keyboard does not echo what you type on the display.
+
+Remember that a carriage return is read as a character.
+
+If you are reading from the keyboard, you can set the high bit of the character being read by holding down either `Alt` key as you type the character. Setting the high bit adds 128 to character.
+
+
+## readlist (rl)
+
+EADLIST (RL)
+
+`operation`
+
+The `readlist` operation reads a line of information from the current file and outputs the information in the form of a list. Normally, the source is the keyboard, where you type in information followed by a carriage return. This information is echoed on the screen. The command `setread` allows you to read from other files.
+
+If you are reading from a file where the end-of-file position has already been reached, `readlist` outputs the empty word.
+
+
+## readword (rw)
+
+readword
+rw
+
+`operation`
+
+`readword` reads a line of information from the current file and outputs it as a word. Normally, the source is the keyboard and `readword` waits for you to type and press `ENTER`. What you type is echoed on the display. If you press `ENTER` before typing a word, `readword` outputs an empty word.
+
+If you use `readword` from a file, `readword` reads characters until it reaches a carriage return, and outputs those characters as a word. The next character to be read is the one after the cariage return. When the end-of-file position is reached, `readword` outputs an empty list.
+
+See `readlist`, `readchar`, `readchars`, and `setread`.
+
+
+## print (pr)
+
+print _object_
+(print _object1_ _object2_ ...)
+pr _object_
+(pr _object1_ _object2_ ...)
+
+`command`
+
+The `print` command prints its inputs followed by a carriage return on the display, unless the destination has been changed by `setwrite`. The outermost brackets of lists are not printed.
+
+Compare with `type` and `show`.
+
+
+## show
+
+show _object_
+
+`command`
+
+The `show` command prints _object_ followed by a carriage return on the display, unless the destination has been changed by `setwrite`. If object is a list, Logo leaves brackets around it.
+
+Compare with `type` and `print`.
+
+
+## type
+
+type _object_
+(type _object1_ _object2_ ...)
+
+`command`
+
+The `type` command prints its inputs without a carriage return on the display, unless the destination has been changed by `setwrite`. The outermost brackets of lists are not printed.
+
+Compare with `print` and `show`.
+
+
+
+# Property Lists {#property-lists}
+
+## erprops
+
+erprops
+
+`command`
+
+`erprops` (for erase properties) erases all properties from the workspace. To check which property lists are currently in the workspace, use `pps`. Use `remprop` to remove properties one at a time from the workspace.
+
+
+## gprop
+
+gprop _name_ _property_
+
+`operation`
+
+`gprop` (for get property) outputs the value of _property_ of _name_. If there is no such property, `gprop` outputs the empty list.
+
+
+## plist
+
+plist _name_
+
+`operation`
+
+`plist` outputs the property list associated with _name_. This is a list of property names paired with their values, in the form `[prop1 vall prop2 val2 ...]`.
+
+
+## pprop
+
+pprop _name_ _property_ _object_
+
+`command`
+
+The `pprop` (for put property) command gives _name_ _property_ with value _object_. Note that `erall` erases procedures, variables, and properties. Use `remprop` to erase properties one at a time or `erprops` to erase them all at once.
+
+
+## pps
+
+pps
+
+`command`
+
+The `pps` (for print properties) command prints the property lists of everything in the workspace.
+
+## remprop
+
+remprop _name_ _property_
+
+`command`
+
+
+The `remprop` (for remove property) command removes _property_ from the property list of _name_.
+
+See `pprop` and `gprop`.
+
+
+---
