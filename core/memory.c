@@ -191,7 +191,24 @@ static bool str_eq_nocase(const char *a, size_t alen, const char *b, size_t blen
     return true;
 }
 
-// Find an existing atom in the table
+// Case-sensitive string comparison
+static bool str_eq(const char *a, size_t alen, const char *b, size_t blen)
+{
+    if (alen != blen)
+    {
+        return false;
+    }
+    for (size_t i = 0; i < alen; i++)
+    {
+        if (a[i] != b[i])
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Find an existing atom in the table (case-sensitive for exact match)
 // Returns the offset if found, or LOGO_ATOM_TABLE_SIZE if not found
 // Each atom entry is aligned to 4-byte boundary: [len:1][chars:len][nul:1][padding]
 static size_t find_atom(const char *str, size_t len)
@@ -200,7 +217,8 @@ static size_t find_atom(const char *str, size_t len)
     while (offset < atom_next)
     {
         uint8_t atom_len = atom_table[offset];
-        if (str_eq_nocase(str, len, (const char *)&atom_table[offset + 1], atom_len))
+        // Use case-sensitive comparison to preserve original case
+        if (str_eq(str, len, (const char *)&atom_table[offset + 1], atom_len))
         {
             return offset;
         }

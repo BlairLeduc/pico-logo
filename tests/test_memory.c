@@ -115,9 +115,15 @@ void test_atom_interning_case_insensitive(void)
     Node word2 = mem_atom("HELLO", 5);
     Node word3 = mem_atom("hello", 5);
     
-    // Same word different case should return same node
-    TEST_ASSERT_EQUAL(word1, word2);
-    TEST_ASSERT_EQUAL(word2, word3);
+    // Atoms are case-sensitive, so different case = different atom
+    // (Case-insensitive lookup happens at variable/procedure level)
+    TEST_ASSERT_NOT_EQUAL(word1, word2);
+    TEST_ASSERT_NOT_EQUAL(word2, word3);
+    TEST_ASSERT_NOT_EQUAL(word1, word3);
+    
+    // But same case should still intern to same atom
+    Node word4 = mem_atom("Hello", 5);
+    TEST_ASSERT_EQUAL(word1, word4);
 }
 
 void test_different_atoms(void)
@@ -161,11 +167,15 @@ void test_word_eq(void)
 void test_words_equal(void)
 {
     Node word1 = mem_atom("test", 4);
-    Node word2 = mem_atom("TEST", 4);
-    Node word3 = mem_atom("other", 5);
+    Node word2 = mem_atom("test", 4); // Same case, same atom
+    Node word3 = mem_atom("TEST", 4); // Different case, different atom
+    Node word4 = mem_atom("other", 5);
     
+    // Same atom nodes are equal
     TEST_ASSERT_TRUE(mem_words_equal(word1, word2));
+    // Different atoms (even just case difference) are not equal at atom level
     TEST_ASSERT_FALSE(mem_words_equal(word1, word3));
+    TEST_ASSERT_FALSE(mem_words_equal(word1, word4));
 }
 
 void test_empty_word(void)
