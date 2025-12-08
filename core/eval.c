@@ -176,8 +176,8 @@ static Node parse_list(Evaluator *eval)
         }
         else if (t.type == TOKEN_QUOTED)
         {
-            // Skip the quote character
-            item = mem_atom(t.start + 1, t.length - 1);
+            // Keep the quote - it's needed when the list is run
+            item = mem_atom(t.start, t.length);
             advance(eval);
         }
         else if (t.type == TOKEN_COLON)
@@ -671,44 +671,22 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
 
     while (!eval_at_end(eval))
     {
-        // Save position to check if this might be the last instruction
-        Token saved_token = peek(eval);
-        
-        // For TCO: check if this is the last instruction
-        // We'll check after parsing if we've reached the end
-        if (enable_tco)
-        {
-            // Evaluate this instruction
-            // First, parse without executing to see if there's more after
-            // Actually, it's hard to know without parsing...
-            // Let's use a simpler heuristic: set tail position true,
-            // and if the next instruction exists, the current one wasn't in tail position
-            eval->in_tail_position = true;
-        }
-        
+        // Don't set tail position until we know this is the last instruction
+        // Execute the instruction normally first
         r = eval_instruction(eval);
         
-        // Check if there are more instructions
-        if (!eval_at_end(eval))
+        // Check if there's more to execute
+        bool at_end = eval_at_end(eval);
+        
+        // If TCO is enabled and this was the last instruction and we got RESULT_STOP
+        // from a tail call setup, that's correct - return it
+        if (enable_tco && at_end && r.status == RESULT_STOP)
         {
-            // There's more, so the previous wasn't actually in tail position
-            // The tail call we might have set up is wrong
-            // But since we've already executed, we need to handle this differently
-            
-            // For now, clear any pending tail call if there's more to execute
-            if (enable_tco)
+            TailCall *tc = proc_get_tail_call();
+            if (tc->is_tail_call)
             {
-                TailCall *tc = proc_get_tail_call();
-                if (tc->is_tail_call)
-                {
-                    // Oops, we signaled a tail call but there's more code
-                    // We need to actually execute the call
-                    // Reset and continue - the tail call wasn't a real tail call
-                    // This is a limitation of the current approach
-                    tc->is_tail_call = false;
-                    // Note: the call was already converted to a stop, need to undo
-                    // This is getting complicated...
-                }
+                // This is a valid tail call - return to let proc_call handle it
+                break;
             }
         }
 
