@@ -198,7 +198,7 @@ static Result prim_poall(Evaluator *eval, int argc, Value *args)
     (void)args;
     
     // Print all procedures (not buried)
-    int count = proc_count(false);
+    int count = proc_count(true);  // Get ALL, filter by buried in loop
     for (int i = 0; i < count; i++)
     {
         UserProcedure *proc = proc_get_by_index(i);
@@ -302,7 +302,7 @@ static Result prim_pops(Evaluator *eval, int argc, Value *args)
     (void)argc;
     (void)args;
     
-    int count = proc_count(false);
+    int count = proc_count(true);  // Get ALL, filter by buried in loop
     for (int i = 0; i < count; i++)
     {
         UserProcedure *proc = proc_get_by_index(i);
@@ -373,7 +373,7 @@ static Result prim_pots(Evaluator *eval, int argc, Value *args)
     (void)argc;
     (void)args;
     
-    int count = proc_count(false);
+    int count = proc_count(true);  // Get ALL procedures, filter by buried in loop
     for (int i = 0; i < count; i++)
     {
         UserProcedure *proc = proc_get_by_index(i);
@@ -381,6 +381,216 @@ static Result prim_pots(Evaluator *eval, int argc, Value *args)
         {
             print_procedure_title(proc);
         }
+    }
+    
+    return result_none();
+}
+
+// bury "name or bury [name1 name2 ...]
+// Bury procedure(s) - hidden from poall, pops, pots, erall, erps
+static Result prim_bury(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    
+    if (argc < 1)
+    {
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "bury", NULL);
+    }
+    
+    if (value_is_word(args[0]))
+    {
+        const char *name = mem_word_ptr(args[0].as.node);
+        if (!proc_exists(name))
+        {
+            return result_error_arg(ERR_DONT_KNOW_HOW, name, NULL);
+        }
+        proc_bury(name);
+    }
+    else if (value_is_list(args[0]))
+    {
+        Node curr = args[0].as.node;
+        while (!mem_is_nil(curr))
+        {
+            Node elem = mem_car(curr);
+            if (mem_is_word(elem))
+            {
+                const char *name = mem_word_ptr(elem);
+                if (!proc_exists(name))
+                {
+                    return result_error_arg(ERR_DONT_KNOW_HOW, name, NULL);
+                }
+                proc_bury(name);
+            }
+            curr = mem_cdr(curr);
+        }
+    }
+    else
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "bury", value_to_string(args[0]));
+    }
+    
+    return result_none();
+}
+
+// buryall - bury all procedures and variable names
+static Result prim_buryall(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+    
+    proc_bury_all();
+    var_bury_all();
+    
+    return result_none();
+}
+
+// buryname "name or buryname [name1 name2 ...]
+// Bury variable name(s)
+static Result prim_buryname(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    
+    if (argc < 1)
+    {
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "buryname", NULL);
+    }
+    
+    if (value_is_word(args[0]))
+    {
+        const char *name = mem_word_ptr(args[0].as.node);
+        if (!var_exists(name))
+        {
+            return result_error_arg(ERR_NO_VALUE, name, NULL);
+        }
+        var_bury(name);
+    }
+    else if (value_is_list(args[0]))
+    {
+        Node curr = args[0].as.node;
+        while (!mem_is_nil(curr))
+        {
+            Node elem = mem_car(curr);
+            if (mem_is_word(elem))
+            {
+                const char *name = mem_word_ptr(elem);
+                if (!var_exists(name))
+                {
+                    return result_error_arg(ERR_NO_VALUE, name, NULL);
+                }
+                var_bury(name);
+            }
+            curr = mem_cdr(curr);
+        }
+    }
+    else
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "buryname", value_to_string(args[0]));
+    }
+    
+    return result_none();
+}
+
+// unbury "name or unbury [name1 name2 ...]
+// Unbury procedure(s)
+static Result prim_unbury(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    
+    if (argc < 1)
+    {
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "unbury", NULL);
+    }
+    
+    if (value_is_word(args[0]))
+    {
+        const char *name = mem_word_ptr(args[0].as.node);
+        if (!proc_exists(name))
+        {
+            return result_error_arg(ERR_DONT_KNOW_HOW, name, NULL);
+        }
+        proc_unbury(name);
+    }
+    else if (value_is_list(args[0]))
+    {
+        Node curr = args[0].as.node;
+        while (!mem_is_nil(curr))
+        {
+            Node elem = mem_car(curr);
+            if (mem_is_word(elem))
+            {
+                const char *name = mem_word_ptr(elem);
+                if (!proc_exists(name))
+                {
+                    return result_error_arg(ERR_DONT_KNOW_HOW, name, NULL);
+                }
+                proc_unbury(name);
+            }
+            curr = mem_cdr(curr);
+        }
+    }
+    else
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "unbury", value_to_string(args[0]));
+    }
+    
+    return result_none();
+}
+
+// unburyall - unbury all procedures and variable names
+static Result prim_unburyall(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+    
+    proc_unbury_all();
+    var_unbury_all();
+    
+    return result_none();
+}
+
+// unburyname "name or unburyname [name1 name2 ...]
+// Unbury variable name(s)
+static Result prim_unburyname(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    
+    if (argc < 1)
+    {
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "unburyname", NULL);
+    }
+    
+    if (value_is_word(args[0]))
+    {
+        const char *name = mem_word_ptr(args[0].as.node);
+        if (!var_exists(name))
+        {
+            return result_error_arg(ERR_NO_VALUE, name, NULL);
+        }
+        var_unbury(name);
+    }
+    else if (value_is_list(args[0]))
+    {
+        Node curr = args[0].as.node;
+        while (!mem_is_nil(curr))
+        {
+            Node elem = mem_car(curr);
+            if (mem_is_word(elem))
+            {
+                const char *name = mem_word_ptr(elem);
+                if (!var_exists(name))
+                {
+                    return result_error_arg(ERR_NO_VALUE, name, NULL);
+                }
+                var_unbury(name);
+            }
+            curr = mem_cdr(curr);
+        }
+    }
+    else
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "unburyname", value_to_string(args[0]));
     }
     
     return result_none();
@@ -395,4 +605,12 @@ void primitives_workspace_init(void)
     primitive_register("pops", 0, prim_pops);
     primitive_register("pot", 1, prim_pot);
     primitive_register("pots", 0, prim_pots);
+    
+    // Bury/unbury commands
+    primitive_register("bury", 1, prim_bury);
+    primitive_register("buryall", 0, prim_buryall);
+    primitive_register("buryname", 1, prim_buryname);
+    primitive_register("unbury", 1, prim_unbury);
+    primitive_register("unburyall", 0, prim_unburyall);
+    primitive_register("unburyname", 1, prim_unburyname);
 }
