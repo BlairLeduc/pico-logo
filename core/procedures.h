@@ -83,6 +83,10 @@ extern "C"
     void proc_bury(const char *name);
     void proc_unbury(const char *name);
 
+    // Parse and define a procedure from text: "to name :param ... body ... end"
+    // Returns a Result - RESULT_NONE on success, RESULT_ERROR on failure
+    Result proc_define_from_text(const char *text);
+
 #ifdef __cplusplus
 }
 #endif

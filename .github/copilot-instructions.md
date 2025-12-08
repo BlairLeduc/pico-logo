@@ -1,20 +1,18 @@
 ### Project
 
 - This project is a **Logo interpreter written in C**, targeting Raspberry Pi Pico boards (RP2040 / RP2350) using the **Pico C/C++ SDK**.
-- **Simplicity and clarity** of the implementation are prioritized over performance and advanced features.
+- **Simplicity and clarity** of the implementation are prioritized over performance and advanced features. The codebase should be modular and well-documented to facilitate future enhancements and maintenance.
 - For now, everything runs on the **host** (desktop) for development and testing; we’ll worry about Pico-specific integration later.
 - The interpreter aims to be strickly compatible with the semantics described in [Pico_Language_reference](../reference/Pico_Logo_Reference.md).
 - This interpreter is inspired by and based on the **LCSI Logo** implementation written in C by LCSI in the 1980s and 1990s.
 - All information about LCSI Logo is available in public domain books and manuals.
   - “Apple Logo: The Language and Its Implementation (Harvey & Wright, 1985)” does not exist as a real, published book. It looks like a Franken-citation that mashed a few real things together.
-- Graphics and sound will be deferred to later.
 - The main goal of this project is to allow me to use this interpreter to learn Logo using the library of Logo books that were written in the 1980s and 1990s.
-- We will eventually add turtle graphics support, but for now we are focusing on core language semantics.
+- We will eventually add turtle graphics and sound/music support, but for now we are focusing on core language semantics and primitives.
 - Interactions happen via a simple **REPL** (read-eval-print loop) in the terminal.
   - Error messages should be friendly and informative, similar to classic Logo implementation, see [Error Messages](../reference/Error_Messages.md).
   - Support multi-line input for procedure definitions.
 - The interpreter should handle basic Logo constructs: variables, procedures, control structures (if, repeat), lists, and arithmetic operations.
-- The codebase should be modular and well-documented to facilitate future enhancements and maintenance.
 - The intepreter should be efficient and lightweight, suitable for running on resource-constrained hardware like the Raspberry Pi Pico.
   - The RP2350 has 520KiB of RAM available (200KiB for video RAM and 320KiB for the intepreter and Logo programs to run).
   - Only use single-precision floating point (32-bit) for numerical calculations. The RP2350 supports single-precision natively in hardware.
@@ -85,6 +83,7 @@
 - Each test file has a `main()` function to run the tests in that file.
 - Each test file is built into its own executable for isolated testing.
 - Shared code for tests (e.g. test utilities) can go in `tests/scaffold.c`.
+- If we find a bug while working on a feature, we should write a test that reproduces the bug first, then fix the bug.
 
 
 ### How I’d like you (the assistant) to behave

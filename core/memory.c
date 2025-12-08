@@ -193,7 +193,7 @@ static bool str_eq_nocase(const char *a, size_t alen, const char *b, size_t blen
 
 // Find an existing atom in the table
 // Returns the offset if found, or LOGO_ATOM_TABLE_SIZE if not found
-// Each atom entry is aligned to 4-byte boundary: [len:1][chars:len][padding]
+// Each atom entry is aligned to 4-byte boundary: [len:1][chars:len][nul:1][padding]
 static size_t find_atom(const char *str, size_t len)
 {
     size_t offset = 0;
@@ -204,14 +204,14 @@ static size_t find_atom(const char *str, size_t len)
         {
             return offset;
         }
-        // Advance to next aligned entry
-        offset += ALIGN4(1 + atom_len);
+        // Advance to next aligned entry (includes null terminator)
+        offset += ALIGN4(1 + atom_len + 1);
     }
     return LOGO_ATOM_TABLE_SIZE; // Not found
 }
 
 // Intern a word in the atom table
-// Each entry is aligned to 4-byte boundary: [len:1][chars:len][padding]
+// Each entry is aligned to 4-byte boundary: [len:1][chars:len][nul:1][padding]
 Node mem_atom(const char *str, size_t len)
 {
     // Limit atom length to 255 (1 byte length prefix)
@@ -229,7 +229,8 @@ Node mem_atom(const char *str, size_t len)
     }
 
     // Calculate aligned size for this entry
-    size_t entry_size = ALIGN4(1 + len);
+    // Include space for null terminator: [len:1][chars:len][nul:1][padding]
+    size_t entry_size = ALIGN4(1 + len + 1);
 
     // Need to add new atom
     if (atom_next + entry_size > LOGO_ATOM_TABLE_SIZE)
@@ -246,6 +247,7 @@ Node mem_atom(const char *str, size_t len)
     offset = atom_next;
     atom_table[atom_next] = (uint8_t)len;
     memcpy(&atom_table[atom_next + 1], str, len);
+    atom_table[atom_next + 1 + len] = '\0';  // Null terminator
     atom_next += entry_size;
 
     return NODE_MAKE_WORD(offset);

@@ -141,7 +141,7 @@ static Result prim_define(Evaluator *eval, int argc, Value *args)
 // Simple text-based procedure definition for testing
 // This parses: to name :param1 :param2 ... body... end
 // Used when we have the full definition as a string
-static Result define_from_text(Evaluator *eval, const char *text)
+Result proc_define_from_text(const char *text)
 {
     Lexer lexer;
     lexer_init(&lexer, text);
@@ -209,10 +209,19 @@ static Result define_from_text(Evaluator *eval, const char *text)
         
         if (t.type == TOKEN_LEFT_BRACKET)
         {
-            // Parse nested list - need to use eval's list parser
-            // For simplicity, just store the word for now
-            // TODO: proper list parsing
             item = mem_atom("[", 1);
+        }
+        else if (t.type == TOKEN_RIGHT_BRACKET)
+        {
+            item = mem_atom("]", 1);
+        }
+        else if (t.type == TOKEN_LEFT_PAREN)
+        {
+            item = mem_atom("(", 1);
+        }
+        else if (t.type == TOKEN_RIGHT_PAREN)
+        {
+            item = mem_atom(")", 1);
         }
         else if (t.type == TOKEN_WORD || t.type == TOKEN_NUMBER)
         {
@@ -230,7 +239,7 @@ static Result define_from_text(Evaluator *eval, const char *text)
         {
             item = mem_atom("+", 1);
         }
-        else if (t.type == TOKEN_MINUS)
+        else if (t.type == TOKEN_MINUS || t.type == TOKEN_UNARY_MINUS)
         {
             item = mem_atom("-", 1);
         }
@@ -279,7 +288,6 @@ static Result define_from_text(Evaluator *eval, const char *text)
         return result_error(ERR_OUT_OF_SPACE);
     }
     
-    (void)eval;
     return result_none();
 }
 
