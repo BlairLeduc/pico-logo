@@ -407,11 +407,54 @@ static Result prim_definedp(Evaluator *eval, int argc, Value *args)
     return result_ok(value_word(mem_atom("false", 5)));
 }
 
+// copydef "name "newname - copies the definition of name to newname
+static Result prim_copydef(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    
+    if (!value_is_word(args[0]))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "copydef", value_to_string(args[0]));
+    }
+    if (!value_is_word(args[1]))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "copydef", value_to_string(args[1]));
+    }
+    
+    const char *source_name = mem_word_ptr(args[0].as.node);
+    const char *dest_name = mem_word_ptr(args[1].as.node);
+    
+    // Check source exists
+    UserProcedure *source = proc_find(source_name);
+    if (!source)
+    {
+        return result_error_arg(ERR_DONT_KNOW_HOW, source_name, NULL);
+    }
+    
+    // Check destination is not a primitive
+    if (primitive_find(dest_name))
+    {
+        return result_error_arg(ERR_IS_PRIMITIVE, dest_name, NULL);
+    }
+    
+    // Define new procedure with same params and body
+    if (!proc_define(dest_name, source->params, source->param_count, source->body))
+    {
+        return result_error(ERR_OUT_OF_SPACE);
+    }
+    
+    return result_none();
+}
+
 void primitives_procedures_init(void)
 {
     primitive_register("define", 2, prim_define);
     primitive_register("text", 1, prim_text);
     primitive_register("procedurep", 1, prim_procedurep);
+    primitive_register("primitive?", 1, prim_primitivep);
     primitive_register("primitivep", 1, prim_primitivep);
+    primitive_register("defined?", 1, prim_definedp);
     primitive_register("definedp", 1, prim_definedp);
+    primitive_register("copydef", 2, prim_copydef);
 }

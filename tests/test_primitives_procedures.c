@@ -260,6 +260,93 @@ void test_primitivep_false(void)
     TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
 }
 
+void test_defined_question_alias(void)
+{
+    // defined? is the canonical name for definedp
+    const char *params[] = {};
+    define_proc("testproc", params, 0, "print 1");
+    
+    Result r1 = eval_string("defined? \"testproc");
+    TEST_ASSERT_EQUAL(RESULT_OK, r1.status);
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r1.value.as.node));
+    
+    Result r2 = eval_string("defined? \"undefined");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r2.value.as.node));
+}
+
+void test_primitive_question_alias(void)
+{
+    // primitive? is the canonical name for primitivep
+    Result r1 = eval_string("primitive? \"sum");
+    TEST_ASSERT_EQUAL(RESULT_OK, r1.status);
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r1.value.as.node));
+    
+    Result r2 = eval_string("primitive? \"notaprimitive");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r2.value.as.node));
+}
+
+void test_copydef_copies_procedure(void)
+{
+    // Define a procedure
+    Node p = mem_atom("x", 1);
+    const char *params[] = {mem_word_ptr(p)};
+    define_proc("double", params, 1, "output :x * 2");
+    
+    // Copy it to a new name
+    run_string("copydef \"double \"twice");
+    
+    // Both should work
+    Result r1 = eval_string("double 5");
+    TEST_ASSERT_EQUAL(RESULT_OK, r1.status);
+    TEST_ASSERT_EQUAL_FLOAT(10.0f, r1.value.as.number);
+    
+    Result r2 = eval_string("twice 7");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_FLOAT(14.0f, r2.value.as.number);
+}
+
+void test_copydef_error_source_not_found(void)
+{
+    Result r = run_string("copydef \"nonexistent \"newname");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
+}
+
+void test_copydef_error_dest_is_primitive(void)
+{
+    const char *params[] = {};
+    define_proc("myproc", params, 0, "print 1");
+    
+    Result r = run_string("copydef \"myproc \"print");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_IS_PRIMITIVE, r.error_code);
+}
+
+void test_text_outputs_procedure_definition(void)
+{
+    // Define a procedure
+    Node p = mem_atom("x", 1);
+    const char *params[] = {mem_word_ptr(p)};
+    define_proc("square", params, 1, "output :x * :x");
+    
+    Result r = eval_string("text \"square");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_list(r.value));
+    
+    // The result should be [[x] [output :x * :x]] or similar
+    Node list = r.value.as.node;
+    TEST_ASSERT_FALSE(mem_is_nil(list));
+}
+
+void test_text_error_not_found(void)
+{
+    Result r = eval_string("text \"undefined");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -276,6 +363,13 @@ int main(void)
     RUN_TEST(test_definedp_false);
     RUN_TEST(test_primitivep_true);
     RUN_TEST(test_primitivep_false);
+    RUN_TEST(test_defined_question_alias);
+    RUN_TEST(test_primitive_question_alias);
+    RUN_TEST(test_copydef_copies_procedure);
+    RUN_TEST(test_copydef_error_source_not_found);
+    RUN_TEST(test_copydef_error_dest_is_primitive);
+    RUN_TEST(test_text_outputs_procedure_definition);
+    RUN_TEST(test_text_error_not_found);
 
     return UNITY_END();
 }
