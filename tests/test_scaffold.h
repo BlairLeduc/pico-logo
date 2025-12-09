@@ -20,6 +20,10 @@
 static char output_buffer[1024];
 static int output_pos;
 
+// Buffer for simulated input
+static const char *mock_input_buffer = NULL;
+static size_t mock_input_pos = 0;
+
 // Mock device for capturing print output
 static void mock_write(void *context, const char *text)
 {
@@ -36,9 +40,54 @@ static void mock_write(void *context, const char *text)
 static int mock_read_line(void *context, char *buffer, size_t buffer_size)
 {
     (void)context;
-    (void)buffer;
-    (void)buffer_size;
-    return -1;
+    if (!mock_input_buffer || mock_input_buffer[mock_input_pos] == '\0')
+    {
+        return 0; // EOF
+    }
+    
+    // Read until newline or end of input
+    size_t i = 0;
+    while (i < buffer_size - 1 && mock_input_buffer[mock_input_pos] != '\0')
+    {
+        char c = mock_input_buffer[mock_input_pos++];
+        buffer[i++] = c;
+        if (c == '\n')
+            break;
+    }
+    buffer[i] = '\0';
+    return 1;
+}
+
+static int mock_read_char(void *context)
+{
+    (void)context;
+    if (!mock_input_buffer || mock_input_buffer[mock_input_pos] == '\0')
+    {
+        return -1; // EOF
+    }
+    return (unsigned char)mock_input_buffer[mock_input_pos++];
+}
+
+static int mock_read_chars(void *context, char *buffer, int count)
+{
+    (void)context;
+    if (!mock_input_buffer)
+    {
+        return 0;
+    }
+    
+    int i;
+    for (i = 0; i < count && mock_input_buffer[mock_input_pos] != '\0'; i++)
+    {
+        buffer[i] = mock_input_buffer[mock_input_pos++];
+    }
+    return i;
+}
+
+static bool mock_key_available(void *context)
+{
+    (void)context;
+    return mock_input_buffer && mock_input_buffer[mock_input_pos] != '\0';
 }
 
 static void mock_flush(void *context)
@@ -48,6 +97,9 @@ static void mock_flush(void *context)
 
 static LogoDeviceOps mock_ops = {
     .read_line = mock_read_line,
+    .read_char = mock_read_char,
+    .read_chars = mock_read_chars,
+    .key_available = mock_key_available,
     .write = mock_write,
     .flush = mock_flush,
     .fullscreen = NULL,
@@ -71,6 +123,8 @@ static void test_scaffold_setUp(void)
     variables_init();
     output_buffer[0] = '\0';
     output_pos = 0;
+    mock_input_buffer = NULL;
+    mock_input_pos = 0;
 
     // Set up mock device
     logo_device_init(&mock_device, &mock_ops, NULL);
@@ -81,6 +135,13 @@ static void test_scaffold_setUp(void)
 // Common tearDown function (currently empty but available for extension)
 static void test_scaffold_tearDown(void)
 {
+}
+
+// Helper to set mock input for testing input primitives
+static void set_mock_input(const char *input)
+{
+    mock_input_buffer = input;
+    mock_input_pos = 0;
 }
 
 // Helper to evaluate and return result

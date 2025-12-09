@@ -41,10 +41,16 @@ extern "C"
     void primitives_arithmetic_init(void);
     void primitives_control_init(void);
     void primitives_variables_init(void);
-    void primitives_output_init(void);
     void primitives_words_lists_init(void);
     void primitives_procedures_init(void);
     void primitives_workspace_init(void);
+    void primitives_outside_world_init(void);
+
+    // Forward declaration for LogoDevice
+    struct LogoDevice;
+
+    // Set the device for I/O primitives
+    void primitives_set_device(struct LogoDevice *device);
 
 #ifdef __cplusplus
 }

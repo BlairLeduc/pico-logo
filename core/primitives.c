@@ -20,10 +20,10 @@ void primitives_init(void)
     primitives_arithmetic_init();
     primitives_control_init();
     primitives_variables_init();
-    primitives_output_init();
     primitives_words_lists_init();
     primitives_procedures_init();
     primitives_workspace_init();
+    primitives_outside_world_init();
 }
 
 void primitive_register(const char *name, int default_args, PrimitiveFunc func)

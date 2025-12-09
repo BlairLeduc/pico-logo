@@ -45,9 +45,21 @@ extern "C"
 
     typedef struct LogoDeviceOps
     {
+        // Line-based input (echoes to output)
         int (*read_line)(void *context, char *buffer, size_t buffer_size);
+        
+        // Character-based input (does NOT echo to output)
+        int (*read_char)(void *context);        // Returns char or -1 on EOF/error
+        int (*read_chars)(void *context, char *buffer, int count);  // Returns count read
+        
+        // Check if input is available without blocking
+        bool (*key_available)(void *context);
+        
+        // Output operations
         void (*write)(void *context, const char *text);
         void (*flush)(void *context);
+        
+        // Screen mode operations
         void (*fullscreen)(void *context);
         void (*splitscreen)(void *context);
         void (*textscreen)(void *context);
@@ -63,6 +75,9 @@ extern "C"
 
     void logo_device_init(LogoDevice *device, const LogoDeviceOps *ops, void *context);
     int logo_device_read_line(const LogoDevice *device, char *buffer, size_t buffer_size);
+    int logo_device_read_char(const LogoDevice *device);
+    int logo_device_read_chars(const LogoDevice *device, char *buffer, int count);
+    bool logo_device_key_available(const LogoDevice *device);
     void logo_device_write(const LogoDevice *device, const char *text);
     void logo_device_write_line(const LogoDevice *device, const char *text);
     void logo_device_flush(const LogoDevice *device);

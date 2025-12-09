@@ -30,6 +30,36 @@ int logo_device_read_line(const LogoDevice *device, char *buffer, size_t buffer_
     return device->ops->read_line(device->context, buffer, buffer_size);
 }
 
+int logo_device_read_char(const LogoDevice *device)
+{
+    if (!device || !device->ops || !device->ops->read_char)
+    {
+        return -1;
+    }
+
+    return device->ops->read_char(device->context);
+}
+
+int logo_device_read_chars(const LogoDevice *device, char *buffer, int count)
+{
+    if (!device || !device->ops || !device->ops->read_chars || !buffer || count <= 0)
+    {
+        return 0;
+    }
+
+    return device->ops->read_chars(device->context, buffer, count);
+}
+
+bool logo_device_key_available(const LogoDevice *device)
+{
+    if (!device || !device->ops || !device->ops->key_available)
+    {
+        return false;
+    }
+
+    return device->ops->key_available(device->context);
+}
+
 void logo_device_write(const LogoDevice *device, const char *text)
 {
     if (!device || !device->ops || !device->ops->write || !text)
