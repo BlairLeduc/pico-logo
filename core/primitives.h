@@ -45,6 +45,7 @@ extern "C"
     void primitives_procedures_init(void);
     void primitives_workspace_init(void);
     void primitives_outside_world_init(void);
+    void primitives_properties_init(void);
 
     // Forward declaration for LogoDevice
     struct LogoDevice;

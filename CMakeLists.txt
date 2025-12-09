@@ -33,6 +33,7 @@ add_library(logo_core
     core/value.c
     core/variables.c
     core/procedures.c
+    core/properties.c
     core/error.c
     core/eval.c
     core/primitives.c
@@ -43,6 +44,7 @@ add_library(logo_core
     core/primitives_procedures.c
     core/primitives_workspace.c
     core/primitives_outside_world.c
+    core/primitives_properties.c
 )
 
 target_include_directories(logo_core
@@ -210,6 +212,20 @@ target_include_directories(test_primitives_outside_world PRIVATE
 target_link_libraries(test_primitives_outside_world PRIVATE logo_core)
 
 add_test(NAME test_primitives_outside_world COMMAND test_primitives_outside_world)
+
+add_executable(test_primitives_properties
+    tests/test_primitives_properties.c
+    tests/unity.c
+)
+
+target_include_directories(test_primitives_properties PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests
+)
+
+target_link_libraries(test_primitives_properties PRIVATE logo_core)
+
+add_test(NAME test_primitives_properties COMMAND test_primitives_properties)
 
 # Coverage target
 if(ENABLE_COVERAGE)

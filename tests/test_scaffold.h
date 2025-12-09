@@ -13,6 +13,7 @@
 #include "core/primitives.h"
 #include "core/procedures.h"
 #include "core/variables.h"
+#include "core/properties.h"
 #include "devices/device.h"
 #include <string.h>
 
@@ -113,6 +114,8 @@ static LogoDevice mock_device;
 extern void primitives_set_device(LogoDevice *device);
 // Declare the function to set device in primitives_workspace.c
 extern void primitives_workspace_set_device(LogoDevice *device);
+// Declare the function to set device in primitives_properties.c
+extern void primitives_properties_set_device(LogoDevice *device);
 
 // Common setUp function
 static void test_scaffold_setUp(void)
@@ -121,6 +124,7 @@ static void test_scaffold_setUp(void)
     primitives_init();
     procedures_init();
     variables_init();
+    properties_init();
     output_buffer[0] = '\0';
     output_pos = 0;
     mock_input_buffer = NULL;
@@ -130,6 +134,7 @@ static void test_scaffold_setUp(void)
     logo_device_init(&mock_device, &mock_ops, NULL);
     primitives_set_device(&mock_device);
     primitives_workspace_set_device(&mock_device);
+    primitives_properties_set_device(&mock_device);
 }
 
 // Common tearDown function (currently empty but available for extension)

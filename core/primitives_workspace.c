@@ -9,6 +9,7 @@
 #include "primitives.h"
 #include "procedures.h"
 #include "variables.h"
+#include "properties.h"
 #include "memory.h"
 #include "error.h"
 #include "eval.h"
@@ -192,7 +193,7 @@ static Result prim_po(Evaluator *eval, int argc, Value *args)
     return result_none();
 }
 
-// poall - print all procedures and variables (not buried)
+// poall - print all procedures, variables, and properties (not buried)
 static Result prim_poall(Evaluator *eval, int argc, Value *args)
 {
     (void)eval;
@@ -220,6 +221,44 @@ static Result prim_poall(Evaluator *eval, int argc, Value *args)
         if (var_get_global_by_index(i, false, &name, &value))
         {
             print_variable(name, value);
+        }
+    }
+    
+    // Print all property lists
+    int prop_count = prop_name_count();
+    for (int i = 0; i < prop_count; i++)
+    {
+        const char *name;
+        if (prop_get_name_by_index(i, &name))
+        {
+            Node list = prop_get_list(name);
+            if (!mem_is_nil(list))
+            {
+                ws_print("plist \"");
+                ws_print(name);
+                ws_print(" [");
+                bool first = true;
+                Node curr = list;
+                while (!mem_is_nil(curr))
+                {
+                    if (!first)
+                        ws_print(" ");
+                    first = false;
+                    
+                    Node elem = mem_car(curr);
+                    if (mem_is_word(elem))
+                    {
+                        ws_print(mem_word_ptr(elem));
+                    }
+                    else if (mem_is_list(elem))
+                    {
+                        ws_print("[...]");
+                    }
+                    curr = mem_cdr(curr);
+                }
+                ws_print("]");
+                ws_newline();
+            }
         }
     }
     
@@ -598,7 +637,7 @@ static Result prim_unburyname(Evaluator *eval, int argc, Value *args)
     return result_none();
 }
 
-// erall - erase all procedures and variables (respects buried)
+// erall - erase all procedures, variables, and properties (respects buried)
 static Result prim_erall(Evaluator *eval, int argc, Value *args)
 {
     (void)eval;
@@ -607,6 +646,7 @@ static Result prim_erall(Evaluator *eval, int argc, Value *args)
     
     proc_erase_all(true);  // true = check buried flag
     var_erase_all_globals(true);
+    prop_erase_all();
     
     return result_none();
 }
@@ -747,9 +787,10 @@ static Result prim_recycle(Evaluator *eval, int argc, Value *args)
     (void)argc;
     (void)args;
     
-    // Mark all roots: variables and procedure bodies
+    // Mark all roots: variables, procedure bodies, and property lists
     var_gc_mark_all();
     proc_gc_mark_all();
+    prop_gc_mark_all();
     
     // Sweep unmarked nodes
     mem_gc_sweep();
