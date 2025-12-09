@@ -102,6 +102,220 @@ void test_error_sum_doesnt_like(void)
     TEST_ASSERT_EQUAL_STRING("sum doesn't like hello as input", msg);
 }
 
+void test_random(void)
+{
+    // random should return a non-negative integer less than the input
+    Result r = eval_string("random 10");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(r.value.as.number >= 0);
+    TEST_ASSERT_TRUE(r.value.as.number < 10);
+}
+
+void test_random_error_negative(void)
+{
+    Result r = eval_string("random -5");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_arctan(void)
+{
+    // arctan 1 should be 45 degrees
+    Result r = eval_string("arctan 1");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 45.0f, r.value.as.number);
+}
+
+void test_arctan_zero(void)
+{
+    // arctan 0 should be 0 degrees
+    Result r = eval_string("arctan 0");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, r.value.as.number);
+}
+
+void test_cos(void)
+{
+    // cos 0 should be 1
+    Result r = eval_string("cos 0");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 1.0f, r.value.as.number);
+}
+
+void test_cos_90(void)
+{
+    // cos 90 should be 0
+    Result r = eval_string("cos 90");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, r.value.as.number);
+}
+
+void test_cos_60(void)
+{
+    // cos 60 should be 0.5
+    Result r = eval_string("cos 60");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.5f, r.value.as.number);
+}
+
+void test_sin(void)
+{
+    // sin 0 should be 0
+    Result r = eval_string("sin 0");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, r.value.as.number);
+}
+
+void test_sin_90(void)
+{
+    // sin 90 should be 1
+    Result r = eval_string("sin 90");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 1.0f, r.value.as.number);
+}
+
+void test_sin_30(void)
+{
+    // sin 30 should be 0.5
+    Result r = eval_string("sin 30");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.5f, r.value.as.number);
+}
+
+void test_int(void)
+{
+    // int 3.7 should be 3
+    Result r = eval_string("int 3.7");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(3.0f, r.value.as.number);
+}
+
+void test_int_negative(void)
+{
+    // int -3.7 should be -3 (truncate toward zero)
+    Result r = eval_string("int -3.7");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(-3.0f, r.value.as.number);
+}
+
+void test_int_whole(void)
+{
+    // int 5 should be 5
+    Result r = eval_string("int 5");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(5.0f, r.value.as.number);
+}
+
+void test_intquotient(void)
+{
+    // intquotient 17 5 should be 3
+    Result r = eval_string("intquotient 17 5");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(3.0f, r.value.as.number);
+}
+
+void test_intquotient_truncates_inputs(void)
+{
+    // intquotient 17.9 5.9 should truncate inputs to 17 and 5, giving 3
+    Result r = eval_string("intquotient 17.9 5.9");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(3.0f, r.value.as.number);
+}
+
+void test_intquotient_divide_by_zero(void)
+{
+    Result r = eval_string("intquotient 10 0");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DIVIDE_BY_ZERO, r.error_code);
+}
+
+void test_remainder(void)
+{
+    // remainder 17 5 should be 2
+    Result r = eval_string("remainder 17 5");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(2.0f, r.value.as.number);
+}
+
+void test_remainder_truncates_inputs(void)
+{
+    // remainder 17.9 5.9 should truncate inputs to 17 and 5, giving 2
+    Result r = eval_string("remainder 17.9 5.9");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(2.0f, r.value.as.number);
+}
+
+void test_remainder_divide_by_zero(void)
+{
+    Result r = eval_string("remainder 10 0");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DIVIDE_BY_ZERO, r.error_code);
+}
+
+void test_round(void)
+{
+    // round 3.4 should be 3
+    Result r = eval_string("round 3.4");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(3.0f, r.value.as.number);
+}
+
+void test_round_up(void)
+{
+    // round 3.6 should be 4
+    Result r = eval_string("round 3.6");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(4.0f, r.value.as.number);
+}
+
+void test_round_half(void)
+{
+    // round 3.5 should be 4 (round away from zero)
+    Result r = eval_string("round 3.5");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(4.0f, r.value.as.number);
+}
+
+void test_round_negative(void)
+{
+    // round -3.6 should be -4
+    Result r = eval_string("round -3.6");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(-4.0f, r.value.as.number);
+}
+
+void test_sqrt(void)
+{
+    // sqrt 16 should be 4
+    Result r = eval_string("sqrt 16");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(4.0f, r.value.as.number);
+}
+
+void test_sqrt_decimal(void)
+{
+    // sqrt 2 should be approximately 1.414
+    Result r = eval_string("sqrt 2");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 1.41421356f, r.value.as.number);
+}
+
+void test_sqrt_zero(void)
+{
+    // sqrt 0 should be 0
+    Result r = eval_string("sqrt 0");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, r.value.as.number);
+}
+
+void test_sqrt_negative_error(void)
+{
+    // sqrt of negative number should error
+    Result r = eval_string("sqrt -4");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -116,6 +330,33 @@ int main(void)
     RUN_TEST(test_divide_by_zero);
     RUN_TEST(test_error_divide_by_zero_msg);
     RUN_TEST(test_error_sum_doesnt_like);
+    RUN_TEST(test_random);
+    RUN_TEST(test_random_error_negative);
+    RUN_TEST(test_arctan);
+    RUN_TEST(test_arctan_zero);
+    RUN_TEST(test_cos);
+    RUN_TEST(test_cos_90);
+    RUN_TEST(test_cos_60);
+    RUN_TEST(test_sin);
+    RUN_TEST(test_sin_90);
+    RUN_TEST(test_sin_30);
+    RUN_TEST(test_int);
+    RUN_TEST(test_int_negative);
+    RUN_TEST(test_int_whole);
+    RUN_TEST(test_intquotient);
+    RUN_TEST(test_intquotient_truncates_inputs);
+    RUN_TEST(test_intquotient_divide_by_zero);
+    RUN_TEST(test_remainder);
+    RUN_TEST(test_remainder_truncates_inputs);
+    RUN_TEST(test_remainder_divide_by_zero);
+    RUN_TEST(test_round);
+    RUN_TEST(test_round_up);
+    RUN_TEST(test_round_half);
+    RUN_TEST(test_round_negative);
+    RUN_TEST(test_sqrt);
+    RUN_TEST(test_sqrt_decimal);
+    RUN_TEST(test_sqrt_zero);
+    RUN_TEST(test_sqrt_negative_error);
 
     return UNITY_END();
 }

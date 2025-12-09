@@ -771,7 +771,7 @@ uppercase _word_
 
 
 
-# Arithmatic Operations {#arithmetic-operations}
+# Arithmetic Operations {#arithmetic-operations}
 
 ## arctan
 
