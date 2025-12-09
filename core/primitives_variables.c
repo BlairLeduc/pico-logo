@@ -115,5 +115,6 @@ void primitives_variables_init(void)
     primitive_register("thing", 1, prim_thing);
     primitive_register("local", 1, prim_local);
     primitive_register("name", 2, prim_name);
+    primitive_register("name?", 1, prim_namep);
     primitive_register("namep", 1, prim_namep);
 }

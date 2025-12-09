@@ -201,6 +201,20 @@ void test_namep_false(void)
     TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
 }
 
+void test_name_question_alias(void)
+{
+    // name? is the canonical name for namep
+    run_string("make \"exists 42");
+    
+    Result r1 = eval_string("name? \"exists");
+    TEST_ASSERT_EQUAL(RESULT_OK, r1.status);
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r1.value.as.node));
+    
+    Result r2 = eval_string("name? \"doesnotexist");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r2.value.as.node));
+}
+
 void test_nested_scopes(void)
 {
     // Test multiple levels of nesting
@@ -253,6 +267,7 @@ int main(void)
     RUN_TEST(test_name_primitive);
     RUN_TEST(test_namep_true);
     RUN_TEST(test_namep_false);
+    RUN_TEST(test_name_question_alias);
     RUN_TEST(test_nested_scopes);
     RUN_TEST(test_error_no_value);
 
