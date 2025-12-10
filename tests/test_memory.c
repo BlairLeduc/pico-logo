@@ -8,6 +8,7 @@
 #include "unity.h"
 #include "core/memory.h"
 
+#include <stdio.h>
 #include <string.h>
 
 void setUp(void)
@@ -38,12 +39,14 @@ void test_init_free_atoms(void)
 
 void test_total_nodes(void)
 {
-    TEST_ASSERT_EQUAL(LOGO_NODE_POOL_SIZE - 1, mem_total_nodes());
+    // With unified memory, theoretical max is LOGO_MEMORY_SIZE / 4 - 1
+    TEST_ASSERT_EQUAL((LOGO_MEMORY_SIZE / 4) - 1, mem_total_nodes());
 }
 
 void test_total_atoms(void)
 {
-    TEST_ASSERT_EQUAL(LOGO_ATOM_TABLE_SIZE, mem_total_atoms());
+    // Total atom space is now the entire memory block
+    TEST_ASSERT_EQUAL(LOGO_MEMORY_SIZE, mem_total_atoms());
 }
 
 //============================================================================
@@ -469,6 +472,85 @@ void test_word_len_on_non_word(void)
 }
 
 //============================================================================
+// Memory Layout Tests (Unified Block)
+//============================================================================
+
+void test_atoms_and_nodes_share_space(void)
+{
+    // Create some atoms and nodes to verify they share the memory pool
+    size_t initial_free = mem_free_nodes();
+    
+    Node word = mem_atom("test", 4);
+    size_t after_atom = mem_free_nodes();
+    
+    // Adding an atom should reduce free nodes (they share space)
+    TEST_ASSERT_LESS_THAN(initial_free, after_atom);
+}
+
+void test_mixed_allocation(void)
+{
+    // Test allocating atoms and nodes in an interleaved pattern
+    Node word1 = mem_atom("first", 5);
+    Node list1 = mem_cons(word1, NODE_NIL);
+    
+    Node word2 = mem_atom("second", 6);
+    Node list2 = mem_cons(word2, NODE_NIL);
+    
+    // Verify everything is accessible
+    TEST_ASSERT_TRUE(mem_is_word(word1));
+    TEST_ASSERT_TRUE(mem_is_word(word2));
+    TEST_ASSERT_TRUE(mem_is_list(list1));
+    TEST_ASSERT_TRUE(mem_is_list(list2));
+    
+    TEST_ASSERT_TRUE(mem_word_eq(mem_car(list1), "first", 5));
+    TEST_ASSERT_TRUE(mem_word_eq(mem_car(list2), "second", 6));
+}
+
+void test_memory_pressure(void)
+{
+    // Allocate many atoms to create memory pressure
+    size_t initial_free = mem_free_nodes();
+    
+    // Create 100 small atoms
+    for (int i = 0; i < 100; i++)
+    {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "atom%d", i);
+        Node word = mem_atom(buf, strlen(buf));
+        TEST_ASSERT_FALSE(mem_is_nil(word));
+    }
+    
+    size_t after_atoms = mem_free_nodes();
+    
+    // Free nodes should be reduced due to atom space usage
+    TEST_ASSERT_LESS_THAN(initial_free, after_atoms);
+    
+    // But we should still be able to allocate nodes
+    Node list = mem_cons(mem_atom("test", 4), NODE_NIL);
+    TEST_ASSERT_FALSE(mem_is_nil(list));
+}
+
+void test_node_allocation_from_top(void)
+{
+    // Nodes should be allocated from the top of memory, growing downward
+    // Create multiple nodes and verify they work correctly
+    Node word = mem_atom("item", 4);
+    
+    Node list1 = mem_cons(word, NODE_NIL);
+    Node list2 = mem_cons(word, NODE_NIL);
+    Node list3 = mem_cons(word, NODE_NIL);
+    
+    // All should be valid and independent
+    TEST_ASSERT_FALSE(mem_is_nil(list1));
+    TEST_ASSERT_FALSE(mem_is_nil(list2));
+    TEST_ASSERT_FALSE(mem_is_nil(list3));
+    
+    TEST_ASSERT_NOT_EQUAL(list1, list2);
+    TEST_ASSERT_NOT_EQUAL(list2, list3);
+    TEST_ASSERT_NOT_EQUAL(list1, list3);
+}
+
+//============================================================================
 // Main
 //============================================================================
 
@@ -534,6 +616,12 @@ int main(void)
     RUN_TEST(test_cdr_of_word_is_nil);
     RUN_TEST(test_word_ptr_on_non_word);
     RUN_TEST(test_word_len_on_non_word);
+
+    // Memory Layout (Unified Block)
+    RUN_TEST(test_atoms_and_nodes_share_space);
+    RUN_TEST(test_mixed_allocation);
+    RUN_TEST(test_memory_pressure);
+    RUN_TEST(test_node_allocation_from_top);
 
     return UNITY_END();
 }
