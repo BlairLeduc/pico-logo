@@ -289,6 +289,11 @@ Result proc_call(Evaluator *eval, UserProcedure *proc, int argc, Value *args)
         {
             return result;
         }
+        if (result.status == RESULT_THROW)
+        {
+            // throw - propagate to caller
+            return result;
+        }
 
         // Normal completion (no stop/output)
         return result_none();

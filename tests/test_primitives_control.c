@@ -129,6 +129,61 @@ void test_test_persists_in_scope(void)
     TEST_ASSERT_EQUAL_STRING("second\n", output_buffer);
 }
 
+void test_catch_throw_basic(void)
+{
+    // Test basic catch/throw
+    run_string("catch \"mytag [print \"before throw \"mytag print \"after]");
+    TEST_ASSERT_EQUAL_STRING("before\n", output_buffer);
+}
+
+void test_catch_throw_nested(void)
+{
+    // Test that throws propagate through procedures
+    const char *params[] = {};
+    define_proc("thrower", params, 0, "print \"throwing throw \"test");
+    
+    reset_output();
+    run_string("catch \"test [print \"before thrower print \"after]");
+    TEST_ASSERT_EQUAL_STRING("before\nthrowing\n", output_buffer);
+}
+
+void test_catch_different_tags(void)
+{
+    // Test that only matching tags are caught
+    reset_output();
+    Result r = run_string("catch \"tag1 [throw \"tag2]");
+    // Should propagate the throw since tags don't match
+    TEST_ASSERT_EQUAL(RESULT_THROW, r.status);
+}
+
+void test_catch_error(void)
+{
+    // Test that catch "error catches errors
+    reset_output();
+    run_string("catch \"error [print sum \"a \"b print \"done]");
+    // Error should be caught, "done" should not print
+    TEST_ASSERT_EQUAL_STRING("", output_buffer);
+}
+
+void test_throw_toplevel(void)
+{
+    // Test throw "toplevel returns to top level
+    const char *params[] = {};
+    define_proc("deepproc", params, 0, "print \"deep throw \"toplevel print \"never");
+    
+    reset_output();
+    Result r = run_string("catch \"toplevel [print \"start deepproc print \"after]");
+    TEST_ASSERT_EQUAL_STRING("start\ndeep\n", output_buffer);
+}
+
+void test_wait(void)
+{
+    // Test wait primitive - just verify it doesn't error
+    // We can't easily test the timing without making tests slow
+    Result r = run_string("wait 1");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -142,6 +197,12 @@ int main(void)
     RUN_TEST(test_test_abbreviations);
     RUN_TEST(test_test_in_procedure);
     RUN_TEST(test_test_persists_in_scope);
+    RUN_TEST(test_catch_throw_basic);
+    RUN_TEST(test_catch_throw_nested);
+    RUN_TEST(test_catch_different_tags);
+    RUN_TEST(test_catch_error);
+    RUN_TEST(test_throw_toplevel);
+    RUN_TEST(test_wait);
 
     return UNITY_END();
 }
