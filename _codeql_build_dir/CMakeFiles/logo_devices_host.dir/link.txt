@@ -1,0 +1,2 @@
+/usr/bin/ar qc liblogo_devices_host.a CMakeFiles/logo_devices_host.dir/devices/device.c.o CMakeFiles/logo_devices_host.dir/devices/host/host_device.c.o
+/usr/bin/ranlib liblogo_devices_host.a

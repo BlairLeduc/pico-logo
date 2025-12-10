@@ -1,0 +1,17 @@
+/home/runner/work/pico-logo/pico-logo/_codeql_build_dir/CMakeFiles/logo_devices_host.dir
+/home/runner/work/pico-logo/pico-logo/_codeql_build_dir/CMakeFiles/logo_core.dir
+/home/runner/work/pico-logo/pico-logo/_codeql_build_dir/CMakeFiles/logo.dir
+/home/runner/work/pico-logo/pico-logo/_codeql_build_dir/CMakeFiles/test_lexer.dir
+/home/runner/work/pico-logo/pico-logo/_codeql_build_dir/CMakeFiles/test_memory.dir
+/home/runner/work/pico-logo/pico-logo/_codeql_build_dir/CMakeFiles/test_eval.dir
+/home/runner/work/pico-logo/pico-logo/_codeql_build_dir/CMakeFiles/test_primitives_arithmetic.dir
+/home/runner/work/pico-logo/pico-logo/_codeql_build_dir/CMakeFiles/test_primitives_control.dir
+/home/runner/work/pico-logo/pico-logo/_codeql_build_dir/CMakeFiles/test_primitives_variables.dir
+/home/runner/work/pico-logo/pico-logo/_codeql_build_dir/CMakeFiles/test_primitives_words_lists.dir
+/home/runner/work/pico-logo/pico-logo/_codeql_build_dir/CMakeFiles/test_primitives_procedures.dir
+/home/runner/work/pico-logo/pico-logo/_codeql_build_dir/CMakeFiles/test_primitives_workspace.dir
+/home/runner/work/pico-logo/pico-logo/_codeql_build_dir/CMakeFiles/test_primitives_outside_world.dir
+/home/runner/work/pico-logo/pico-logo/_codeql_build_dir/CMakeFiles/test_primitives_properties.dir
+/home/runner/work/pico-logo/pico-logo/_codeql_build_dir/CMakeFiles/test.dir
+/home/runner/work/pico-logo/pico-logo/_codeql_build_dir/CMakeFiles/edit_cache.dir
+/home/runner/work/pico-logo/pico-logo/_codeql_build_dir/CMakeFiles/rebuild_cache.dir

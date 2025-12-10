@@ -1,0 +1,43 @@
+file(REMOVE_RECURSE
+  "CMakeFiles/logo_core.dir/core/error.c.o"
+  "CMakeFiles/logo_core.dir/core/error.c.o.d"
+  "CMakeFiles/logo_core.dir/core/eval.c.o"
+  "CMakeFiles/logo_core.dir/core/eval.c.o.d"
+  "CMakeFiles/logo_core.dir/core/lexer.c.o"
+  "CMakeFiles/logo_core.dir/core/lexer.c.o.d"
+  "CMakeFiles/logo_core.dir/core/memory.c.o"
+  "CMakeFiles/logo_core.dir/core/memory.c.o.d"
+  "CMakeFiles/logo_core.dir/core/primitives.c.o"
+  "CMakeFiles/logo_core.dir/core/primitives.c.o.d"
+  "CMakeFiles/logo_core.dir/core/primitives_arithmetic.c.o"
+  "CMakeFiles/logo_core.dir/core/primitives_arithmetic.c.o.d"
+  "CMakeFiles/logo_core.dir/core/primitives_control.c.o"
+  "CMakeFiles/logo_core.dir/core/primitives_control.c.o.d"
+  "CMakeFiles/logo_core.dir/core/primitives_outside_world.c.o"
+  "CMakeFiles/logo_core.dir/core/primitives_outside_world.c.o.d"
+  "CMakeFiles/logo_core.dir/core/primitives_procedures.c.o"
+  "CMakeFiles/logo_core.dir/core/primitives_procedures.c.o.d"
+  "CMakeFiles/logo_core.dir/core/primitives_properties.c.o"
+  "CMakeFiles/logo_core.dir/core/primitives_properties.c.o.d"
+  "CMakeFiles/logo_core.dir/core/primitives_variables.c.o"
+  "CMakeFiles/logo_core.dir/core/primitives_variables.c.o.d"
+  "CMakeFiles/logo_core.dir/core/primitives_words_lists.c.o"
+  "CMakeFiles/logo_core.dir/core/primitives_words_lists.c.o.d"
+  "CMakeFiles/logo_core.dir/core/primitives_workspace.c.o"
+  "CMakeFiles/logo_core.dir/core/primitives_workspace.c.o.d"
+  "CMakeFiles/logo_core.dir/core/procedures.c.o"
+  "CMakeFiles/logo_core.dir/core/procedures.c.o.d"
+  "CMakeFiles/logo_core.dir/core/properties.c.o"
+  "CMakeFiles/logo_core.dir/core/properties.c.o.d"
+  "CMakeFiles/logo_core.dir/core/value.c.o"
+  "CMakeFiles/logo_core.dir/core/value.c.o.d"
+  "CMakeFiles/logo_core.dir/core/variables.c.o"
+  "CMakeFiles/logo_core.dir/core/variables.c.o.d"
+  "liblogo_core.a"
+  "liblogo_core.pdb"
+)
+
+# Per-language clean rules from dependency scanning.
+foreach(lang C)
+  include(CMakeFiles/logo_core.dir/cmake_clean_${lang}.cmake OPTIONAL)
+endforeach()

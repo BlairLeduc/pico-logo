@@ -1,0 +1,1 @@
+/home/runner/work/pico-logo/.codeql-scratch/dbs/cpp/working/autobuild/bin/cc -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/test_primitives_words_lists.dir/link.d CMakeFiles/test_primitives_words_lists.dir/tests/test_primitives_words_lists.c.o CMakeFiles/test_primitives_words_lists.dir/tests/unity.c.o -o test_primitives_words_lists  liblogo_core.a liblogo_devices_host.a
