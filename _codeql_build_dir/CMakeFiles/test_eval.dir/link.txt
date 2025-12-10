@@ -1,1 +1,0 @@
-/home/runner/work/pico-logo/.codeql-scratch/dbs/cpp/working/autobuild/bin/cc -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/test_eval.dir/link.d CMakeFiles/test_eval.dir/tests/test_eval.c.o CMakeFiles/test_eval.dir/tests/unity.c.o -o test_eval  liblogo_core.a liblogo_devices_host.a

@@ -1,1 +1,0 @@
-/home/runner/work/pico-logo/.codeql-scratch/dbs/cpp/working/autobuild/bin/cc -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/test_lexer.dir/link.d CMakeFiles/test_lexer.dir/tests/test_lexer.c.o CMakeFiles/test_lexer.dir/tests/unity.c.o -o test_lexer  liblogo_core.a liblogo_devices_host.a
