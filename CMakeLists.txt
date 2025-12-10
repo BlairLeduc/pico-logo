@@ -55,6 +55,7 @@ target_include_directories(logo_core
 target_link_libraries(logo_core
     PUBLIC
         logo_devices_host
+        m
 )
 
 add_executable(logo
