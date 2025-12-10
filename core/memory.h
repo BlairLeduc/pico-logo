@@ -27,16 +27,25 @@ extern "C"
     // Memory Configuration
     //==========================================================================
 
-    // Default memory sizes (can be overridden at compile time)
+    // Default memory size (can be overridden at compile time)
     // RP2040: ~64KB available (after 200KB video RAM)
     // RP2350: ~320KB available (after 200KB video RAM)
+    //
+    // Memory Layout:
+    // +------------------+ <- offset 0
+    // |   Atom Table     |
+    // |   (grows up ↓)   |
+    // +------------------+ <- atom_next
+    // |                  |
+    // |   Free Space     |
+    // |                  |
+    // +------------------+ <- node_bottom (first allocated node address)
+    // |   Node Pool      |
+    // |   (grows down ↑) |
+    // +------------------+ <- LOGO_MEMORY_SIZE (top of memory)
 
-#ifndef LOGO_NODE_POOL_SIZE
-#define LOGO_NODE_POOL_SIZE 8192 // Number of nodes (32KB at 4 bytes each)
-#endif
-
-#ifndef LOGO_ATOM_TABLE_SIZE
-#define LOGO_ATOM_TABLE_SIZE 16384 // Bytes for atom storage (16KB)
+#ifndef LOGO_MEMORY_SIZE
+#define LOGO_MEMORY_SIZE 49152 // Total memory block (48KB)
 #endif
 
     //==========================================================================

@@ -22,26 +22,86 @@
 #define ALIGN4(x) (((x) + 3) & ~3)
 
 //==========================================================================
-// Memory Pools (static allocation)
+// Memory Block (static allocation)
 //==========================================================================
 
-// Node pool - array of cons cells
-// Cell format: [car_index:16][cdr_index:16]
-// Index 0 is reserved (represents NIL in car/cdr)
-static uint32_t node_pool[LOGO_NODE_POOL_SIZE];
+// Single unified memory block
+// Atoms grow upward from offset 0
+// Nodes grow downward from the top
+static uint8_t memory_block[LOGO_MEMORY_SIZE];
 
-// Atom table - length-prefixed strings stored contiguously
-// Format: [len:1][chars:len][len:1][chars:len]...
-static uint8_t atom_table[LOGO_ATOM_TABLE_SIZE];
-
-// Free list head (index into node_pool, or 0 if empty)
+// Free list head (index into node region, or 0 if empty)
 static uint16_t free_list;
 
-// Number of free nodes
+// Number of nodes on the free list
 static size_t free_count;
 
-// Next free position in atom table
+// Next free position in atom table (grows upward from 0)
 static size_t atom_next;
+
+// Bottom of the node region (byte offset, grows downward from LOGO_MEMORY_SIZE)
+// This is the address of the lowest allocated node
+static size_t node_bottom;
+
+// Number of nodes currently allocated in the node region
+static size_t node_count;
+
+//==========================================================================
+// Node Indexing Helpers
+//==========================================================================
+
+// Get the memory address for a node index
+// Index 0 is reserved for NIL
+// Index 1 is the first node at the top of memory
+// Index N corresponds to the Nth node from the top
+static inline uint32_t *get_node_ptr(uint16_t index)
+{
+    if (index == 0)
+    {
+        return NULL;
+    }
+    
+    // Calculate byte offset from top of memory
+    // Each node is 4 bytes, index 1 is at the very top
+    size_t byte_offset = LOGO_MEMORY_SIZE - (index * 4);
+    
+    return (uint32_t *)&memory_block[byte_offset];
+}
+
+// Get the node index from a memory address
+// Returns 0 if invalid
+static inline uint16_t get_node_index(const uint32_t *ptr)
+{
+    if (ptr == NULL)
+    {
+        return 0;
+    }
+    
+    // Calculate byte offset from start of memory block
+    size_t byte_offset = (uint8_t *)ptr - memory_block;
+    
+    // Check if this is within the valid node region
+    if (byte_offset < node_bottom || byte_offset >= LOGO_MEMORY_SIZE)
+    {
+        return 0;
+    }
+    
+    // Calculate index from top
+    size_t index = (LOGO_MEMORY_SIZE - byte_offset) / 4;
+    
+    if (index > 0xFFFF)
+    {
+        return 0;
+    }
+    
+    return (uint16_t)index;
+}
+
+// Get maximum possible node index based on current layout
+static inline uint16_t get_max_node_index(void)
+{
+    return (uint16_t)((LOGO_MEMORY_SIZE - atom_next) / 4);
+}
 
 //==========================================================================
 // Initialization
@@ -51,45 +111,65 @@ static size_t atom_next;
 // Must be called before any other memory functions.
 void mem_init(void)
 {
-    // Initialize node pool as a free list
-    // Index 0 is reserved for NIL references
-    node_pool[0] = 0;
-
-    // Link all other nodes into free list
-    // Free cells use cdr field to point to next free cell
-    for (size_t i = 1; i < LOGO_NODE_POOL_SIZE - 1; i++)
-    {
-        node_pool[i] = CELL_MAKE(0, i + 1);
-    }
-    // Last node has cdr = 0 (end of free list)
-    node_pool[LOGO_NODE_POOL_SIZE - 1] = CELL_MAKE(0, 0);
-
-    free_list = 1;
-    free_count = LOGO_NODE_POOL_SIZE - 1; // Exclude index 0
-
-    // Initialize atom table
+    // Initialize atom table (grows upward from 0)
     atom_next = 0;
-    memset(atom_table, 0, LOGO_ATOM_TABLE_SIZE);
+    memset(memory_block, 0, LOGO_MEMORY_SIZE);
+    
+    // Initialize node region (grows downward from top)
+    // Start with no nodes allocated
+    node_bottom = LOGO_MEMORY_SIZE;
+    node_count = 0;
+    
+    // Initialize free list as empty
+    free_list = 0;
+    free_count = 0;
 }
 
 //==========================================================================
 // Node Allocation
 //==========================================================================
 
-// Allocate a cell from the free list
+// Allocate a cell from the free list or expand the node region downward
 // Returns index, or 0 if out of memory
 static uint16_t alloc_cell(void)
 {
-    if (free_list == 0)
+    // First, try to get a node from the free list
+    if (free_list != 0)
     {
-        return 0; // Out of memory
+        uint16_t index = free_list;
+        uint32_t *cell_ptr = get_node_ptr(index);
+        if (cell_ptr != NULL)
+        {
+            uint32_t cell = *cell_ptr;
+            free_list = CELL_GET_CDR(cell);
+            free_count--;
+            return index;
+        }
     }
-
-    uint16_t index = free_list;
-    uint32_t cell = node_pool[index];
-    free_list = CELL_GET_CDR(cell);
-    free_count--;
-
+    
+    // Free list is empty, need to expand the node region downward
+    // Check if we have space (need 4 bytes, with 4-byte alignment)
+    if (node_bottom < atom_next + 4)
+    {
+        return 0; // Out of memory - collision with atom table
+    }
+    
+    // Allocate new node at the bottom of the node region
+    node_bottom -= 4;
+    node_count++;
+    
+    // Calculate the index for this new node
+    uint16_t index = (uint16_t)((LOGO_MEMORY_SIZE - node_bottom) / 4);
+    
+    // Check if index fits in 16 bits
+    if (index == 0 || index > 0xFFFF)
+    {
+        // Restore state and fail
+        node_bottom += 4;
+        node_count--;
+        return 0;
+    }
+    
     return index;
 }
 
@@ -165,7 +245,13 @@ Node mem_cons(Node car, Node cdr)
     uint16_t car_idx = node_to_index(car);
     uint16_t cdr_idx = node_to_index(cdr);
 
-    node_pool[index] = CELL_MAKE(car_idx, cdr_idx);
+    uint32_t *cell_ptr = get_node_ptr(index);
+    if (cell_ptr == NULL)
+    {
+        return NODE_NIL; // Invalid index
+    }
+    
+    *cell_ptr = CELL_MAKE(car_idx, cdr_idx);
 
     return NODE_MAKE_LIST(index);
 }
@@ -209,23 +295,23 @@ static bool str_eq(const char *a, size_t alen, const char *b, size_t blen)
 }
 
 // Find an existing atom in the table (case-sensitive for exact match)
-// Returns the offset if found, or LOGO_ATOM_TABLE_SIZE if not found
+// Returns the offset if found, or SIZE_MAX if not found
 // Each atom entry is aligned to 4-byte boundary: [len:1][chars:len][nul:1][padding]
 static size_t find_atom(const char *str, size_t len)
 {
     size_t offset = 0;
     while (offset < atom_next)
     {
-        uint8_t atom_len = atom_table[offset];
+        uint8_t atom_len = memory_block[offset];
         // Use case-sensitive comparison to preserve original case
-        if (str_eq(str, len, (const char *)&atom_table[offset + 1], atom_len))
+        if (str_eq(str, len, (const char *)&memory_block[offset + 1], atom_len))
         {
             return offset;
         }
         // Advance to next aligned entry (includes null terminator)
         offset += ALIGN4(1 + atom_len + 1);
     }
-    return LOGO_ATOM_TABLE_SIZE; // Not found
+    return SIZE_MAX; // Not found
 }
 
 // Intern a word in the atom table
@@ -240,7 +326,7 @@ Node mem_atom(const char *str, size_t len)
 
     // Check if atom already exists
     size_t offset = find_atom(str, len);
-    if (offset < LOGO_ATOM_TABLE_SIZE)
+    if (offset != SIZE_MAX)
     {
         // Found existing atom
         return NODE_MAKE_WORD(offset);
@@ -250,10 +336,10 @@ Node mem_atom(const char *str, size_t len)
     // Include space for null terminator: [len:1][chars:len][nul:1][padding]
     size_t entry_size = ALIGN4(1 + len + 1);
 
-    // Need to add new atom
-    if (atom_next + entry_size > LOGO_ATOM_TABLE_SIZE)
+    // Need to add new atom - check for collision with node region
+    if (atom_next + entry_size > node_bottom)
     {
-        return NODE_NIL; // Out of atom space
+        return NODE_NIL; // Out of atom space - would collide with nodes
     }
 
     // Check offset fits in our encoding (15 bits = 32KB max)
@@ -263,9 +349,9 @@ Node mem_atom(const char *str, size_t len)
     }
 
     offset = atom_next;
-    atom_table[atom_next] = (uint8_t)len;
-    memcpy(&atom_table[atom_next + 1], str, len);
-    atom_table[atom_next + 1 + len] = '\0';  // Null terminator
+    memory_block[atom_next] = (uint8_t)len;
+    memcpy(&memory_block[atom_next + 1], str, len);
+    memory_block[atom_next + 1 + len] = '\0';  // Null terminator
     atom_next += entry_size;
 
     return NODE_MAKE_WORD(offset);
@@ -296,12 +382,18 @@ Node mem_car(Node n)
     }
 
     uint32_t index = NODE_GET_INDEX(n);
-    if (index == 0 || index >= LOGO_NODE_POOL_SIZE)
+    if (index == 0)
     {
         return NODE_NIL;
     }
 
-    uint32_t cell = node_pool[index];
+    uint32_t *cell_ptr = get_node_ptr((uint16_t)index);
+    if (cell_ptr == NULL)
+    {
+        return NODE_NIL;
+    }
+
+    uint32_t cell = *cell_ptr;
     uint16_t car_idx = CELL_GET_CAR(cell);
 
     return index_to_node(car_idx);
@@ -322,12 +414,18 @@ Node mem_cdr(Node n)
     }
 
     uint32_t index = NODE_GET_INDEX(n);
-    if (index == 0 || index >= LOGO_NODE_POOL_SIZE)
+    if (index == 0)
     {
         return NODE_NIL;
     }
 
-    uint32_t cell = node_pool[index];
+    uint32_t *cell_ptr = get_node_ptr((uint16_t)index);
+    if (cell_ptr == NULL)
+    {
+        return NODE_NIL;
+    }
+
+    uint32_t cell = *cell_ptr;
     uint16_t cdr_idx = CELL_GET_CDR(cell);
 
     return index_to_node(cdr_idx);
@@ -341,16 +439,22 @@ bool mem_set_car(Node n, Node value)
     }
 
     uint32_t index = NODE_GET_INDEX(n);
-    if (index == 0 || index >= LOGO_NODE_POOL_SIZE)
+    if (index == 0)
     {
         return false;
     }
 
-    uint32_t cell = node_pool[index];
+    uint32_t *cell_ptr = get_node_ptr((uint16_t)index);
+    if (cell_ptr == NULL)
+    {
+        return false;
+    }
+
+    uint32_t cell = *cell_ptr;
     uint16_t cdr_idx = CELL_GET_CDR(cell);
     uint16_t car_idx = node_to_index(value);
 
-    node_pool[index] = CELL_MAKE(car_idx, cdr_idx);
+    *cell_ptr = CELL_MAKE(car_idx, cdr_idx);
 
     return true;
 }
@@ -363,16 +467,22 @@ bool mem_set_cdr(Node n, Node value)
     }
 
     uint32_t index = NODE_GET_INDEX(n);
-    if (index == 0 || index >= LOGO_NODE_POOL_SIZE)
+    if (index == 0)
     {
         return false;
     }
 
-    uint32_t cell = node_pool[index];
+    uint32_t *cell_ptr = get_node_ptr((uint16_t)index);
+    if (cell_ptr == NULL)
+    {
+        return false;
+    }
+
+    uint32_t cell = *cell_ptr;
     uint16_t car_idx = CELL_GET_CAR(cell);
     uint16_t cdr_idx = node_to_index(value);
 
-    node_pool[index] = CELL_MAKE(car_idx, cdr_idx);
+    *cell_ptr = CELL_MAKE(car_idx, cdr_idx);
 
     return true;
 }
@@ -420,7 +530,7 @@ const char *mem_word_ptr(Node n)
     }
 
     // Return pointer to the string (after length byte)
-    return (const char *)&atom_table[offset + 1];
+    return (const char *)&memory_block[offset + 1];
 }
 
 // Get the length of a word node's string.
@@ -438,7 +548,7 @@ size_t mem_word_len(Node n)
         return 0;
     }
 
-    return atom_table[offset];
+    return memory_block[offset];
 }
 
 // Compare a word node to a given string (case-insensitive).
@@ -456,8 +566,8 @@ bool mem_word_eq(Node n, const char *str, size_t len)
         return false;
     }
 
-    uint8_t atom_len = atom_table[offset];
-    return str_eq_nocase(str, len, (const char *)&atom_table[offset + 1], atom_len);
+    uint8_t atom_len = memory_block[offset];
+    return str_eq_nocase(str, len, (const char *)&memory_block[offset + 1], atom_len);
 }
 
 // Compare two word nodes for equality.
@@ -477,8 +587,9 @@ bool mem_words_equal(Node a, Node b)
 // Garbage Collection
 //==========================================================================
 
-// Bit array for marking (1 bit per node)
-static uint32_t gc_marks[(LOGO_NODE_POOL_SIZE + 31) / 32];
+// Bit array for marking (1 bit per possible node)
+// Size based on maximum possible nodes (total memory / 4 bytes per node)
+static uint32_t gc_marks[(LOGO_MEMORY_SIZE / 4 + 31) / 32];
 
 // Recursive mark function
 static void gc_mark_index(uint16_t index);
@@ -509,7 +620,21 @@ static void gc_mark_node(Node n)
 
 static void gc_mark_index(uint16_t index)
 {
-    if (index == 0 || index >= LOGO_NODE_POOL_SIZE)
+    if (index == 0)
+    {
+        return;
+    }
+
+    // Validate that the index is within our allocated node region
+    uint32_t *cell_ptr = get_node_ptr(index);
+    if (cell_ptr == NULL)
+    {
+        return;
+    }
+    
+    // Check if the node is actually allocated (within node_bottom to LOGO_MEMORY_SIZE)
+    size_t byte_offset = (uint8_t *)cell_ptr - memory_block;
+    if (byte_offset < node_bottom || byte_offset >= LOGO_MEMORY_SIZE)
     {
         return;
     }
@@ -526,7 +651,7 @@ static void gc_mark_index(uint16_t index)
     gc_marks[word_idx] |= (1u << bit_idx);
 
     // Recursively mark car and cdr
-    uint32_t cell = node_pool[index];
+    uint32_t cell = *cell_ptr;
     uint16_t car_idx = CELL_GET_CAR(cell);
     uint16_t cdr_idx = CELL_GET_CDR(cell);
 
@@ -556,8 +681,11 @@ void mem_gc_sweep(void)
     free_list = 0;
     free_count = 0;
 
-    // Sweep through all nodes (skip 0 which is reserved)
-    for (uint16_t i = 1; i < LOGO_NODE_POOL_SIZE; i++)
+    // Calculate the maximum node index based on allocated region
+    uint16_t max_index = (uint16_t)((LOGO_MEMORY_SIZE - node_bottom) / 4);
+    
+    // Sweep through all allocated nodes (skip index 0 which is reserved)
+    for (uint16_t i = 1; i <= max_index; i++)
     {
         uint32_t word_idx = i / 32;
         uint32_t bit_idx = i % 32;
@@ -570,9 +698,13 @@ void mem_gc_sweep(void)
         else
         {
             // Not marked - free it
-            node_pool[i] = CELL_MAKE(0, free_list);
-            free_list = i;
-            free_count++;
+            uint32_t *cell_ptr = get_node_ptr(i);
+            if (cell_ptr != NULL)
+            {
+                *cell_ptr = CELL_MAKE(0, free_list);
+                free_list = i;
+                free_count++;
+            }
         }
     }
 
@@ -602,25 +734,56 @@ void mem_gc(Node *roots, size_t num_roots)
 //==========================================================================
 
 // Get the number of free nodes available.
+// Includes nodes on the free list plus space that could be allocated.
 size_t mem_free_nodes(void)
 {
-    return free_count;
+    // Nodes on the free list
+    size_t free_list_nodes = free_count;
+    
+    // Plus potential nodes from unallocated space
+    if (node_bottom > atom_next)
+    {
+        size_t free_space = node_bottom - atom_next;
+        size_t potential_nodes = free_space / 4;
+        
+        // We need to account for the fact that we can't use index 0
+        // Maximum usable nodes = (LOGO_MEMORY_SIZE / 4) - 1
+        // Already allocated = node_count
+        // Can still allocate = max - allocated
+        size_t max_nodes = (LOGO_MEMORY_SIZE / 4) - 1;
+        size_t can_allocate = (node_count < max_nodes) ? (max_nodes - node_count) : 0;
+        
+        if (potential_nodes > can_allocate)
+        {
+            potential_nodes = can_allocate;
+        }
+        
+        return free_list_nodes + potential_nodes;
+    }
+    
+    return free_list_nodes;
 }
 
-// Get the total number of nodes in the pool.
+// Get the total number of nodes (theoretical maximum).
 size_t mem_total_nodes(void)
 {
-    return LOGO_NODE_POOL_SIZE - 1; // Exclude index 0
+    // Maximum nodes that could fit in the entire memory block
+    return (LOGO_MEMORY_SIZE / 4) - 1; // Exclude index 0
 }
 
-// Get the number of free atoms available.
+// Get the number of free bytes in the atom table.
+// This represents the free space between atoms and nodes.
 size_t mem_free_atoms(void)
 {
-    return LOGO_ATOM_TABLE_SIZE - atom_next;
+    if (node_bottom > atom_next)
+    {
+        return node_bottom - atom_next;
+    }
+    return 0;
 }
 
-// Get the total number of atoms in the table.
+// Get the total size of the atom table (shared with nodes).
 size_t mem_total_atoms(void)
 {
-    return LOGO_ATOM_TABLE_SIZE;
+    return LOGO_MEMORY_SIZE;
 }

@@ -38,12 +38,14 @@ void test_init_free_atoms(void)
 
 void test_total_nodes(void)
 {
-    TEST_ASSERT_EQUAL(LOGO_NODE_POOL_SIZE - 1, mem_total_nodes());
+    // With unified memory, theoretical max is LOGO_MEMORY_SIZE / 4 - 1
+    TEST_ASSERT_EQUAL((LOGO_MEMORY_SIZE / 4) - 1, mem_total_nodes());
 }
 
 void test_total_atoms(void)
 {
-    TEST_ASSERT_EQUAL(LOGO_ATOM_TABLE_SIZE, mem_total_atoms());
+    // Total atom space is now the entire memory block
+    TEST_ASSERT_EQUAL(LOGO_MEMORY_SIZE, mem_total_atoms());
 }
 
 //============================================================================
