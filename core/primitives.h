@@ -56,6 +56,9 @@ extern "C"
     // Get the shared device for primitives that need I/O
     struct LogoDevice *primitives_get_device(void);
 
+    // Reset control flow test state (for testing purposes)
+    void primitives_control_reset_test_state(void);
+
 #ifdef __cplusplus
 }
 #endif
