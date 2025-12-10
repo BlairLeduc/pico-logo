@@ -5,12 +5,18 @@
 //  Memory management implementation.
 //
 //  Design:
-//  - Node pool: array of 32-bit cons cells, indexed by 16-bit indices
-//  - Each cell stores: car_index (16 bits) | cdr_index (16 bits)
-//  - Node values (passed around) encode type + index/offset
+//  - Single unified memory block with dual-growing allocators
+//  - Atom table grows upward from offset 0
+//  - Node pool grows downward from top of memory
+//  - Each node is a 32-bit cons cell: car_index (16 bits) | cdr_index (16 bits)
+//  - Nodes indexed from 1 (index 0 reserved for NIL)
+//  - Node index 1 is at LOGO_MEMORY_SIZE-4, index 2 at LOGO_MEMORY_SIZE-8, etc.
+//  - Node values (passed around) encode type + index/offset in 32 bits
 //  - Words are references to interned atoms (never stored in pool)
 //  - Lists are references to cons cells in the pool
 //  - Word references in cells use high bit (0x8000) to distinguish from list indices
+//  - Free nodes managed via free list (reuses cell storage)
+//  - Collision detection prevents atoms and nodes from overlapping
 //
 
 #include "core/memory.h"
