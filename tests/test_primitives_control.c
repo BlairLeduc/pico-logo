@@ -64,6 +64,71 @@ void test_infix_minus_in_list(void)
     TEST_ASSERT_EQUAL_STRING("3\n3\n", output_buffer);
 }
 
+void test_test_iftrue_iffalse(void)
+{
+    // Test with true predicate
+    run_string("test \"true");
+    run_string("iftrue [print \"yes]");
+    TEST_ASSERT_EQUAL_STRING("yes\n", output_buffer);
+    
+    reset_output();
+    run_string("test \"true");
+    run_string("iffalse [print \"no]");
+    TEST_ASSERT_EQUAL_STRING("", output_buffer);
+    
+    // Test with false predicate
+    reset_output();
+    run_string("test \"false");
+    run_string("iftrue [print \"yes]");
+    TEST_ASSERT_EQUAL_STRING("", output_buffer);
+    
+    reset_output();
+    run_string("test \"false");
+    run_string("iffalse [print \"no]");
+    TEST_ASSERT_EQUAL_STRING("no\n", output_buffer);
+}
+
+void test_test_abbreviations(void)
+{
+    // Test ift abbreviation
+    run_string("test \"true");
+    run_string("ift [print \"ift_works]");
+    TEST_ASSERT_EQUAL_STRING("ift_works\n", output_buffer);
+    
+    // Test iff abbreviation
+    reset_output();
+    run_string("test \"false");
+    run_string("iff [print \"iff_works]");
+    TEST_ASSERT_EQUAL_STRING("iff_works\n", output_buffer);
+}
+
+void test_test_in_procedure(void)
+{
+    // Test that test state is local to procedure scope
+    const char *params[] = {"val"};
+    define_proc("checktest", params, 1, 
+                "test :val iftrue [print \"true] iffalse [print \"false]");
+    
+    run_string("checktest \"true");
+    TEST_ASSERT_EQUAL_STRING("true\n", output_buffer);
+    
+    reset_output();
+    run_string("checktest \"false");
+    TEST_ASSERT_EQUAL_STRING("false\n", output_buffer);
+}
+
+void test_test_persists_in_scope(void)
+{
+    // Test result should persist across multiple iftrue/iffalse calls
+    run_string("test \"true");
+    run_string("iftrue [print \"first]");
+    TEST_ASSERT_EQUAL_STRING("first\n", output_buffer);
+    
+    reset_output();
+    run_string("iftrue [print \"second]");
+    TEST_ASSERT_EQUAL_STRING("second\n", output_buffer);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -73,6 +138,10 @@ int main(void)
     RUN_TEST(test_output);
     RUN_TEST(test_run_list);
     RUN_TEST(test_infix_minus_in_list);
+    RUN_TEST(test_test_iftrue_iffalse);
+    RUN_TEST(test_test_abbreviations);
+    RUN_TEST(test_test_in_procedure);
+    RUN_TEST(test_test_persists_in_scope);
 
     return UNITY_END();
 }

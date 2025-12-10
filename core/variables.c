@@ -31,6 +31,8 @@ typedef struct
 {
     Variable variables[MAX_LOCAL_VARIABLES];
     int count;
+    bool has_test_result;  // true if test has been called in this scope
+    bool test_result;      // result of most recent test in this scope
 } ScopeFrame;
 
 // Scope stack
@@ -58,6 +60,8 @@ void var_push_scope(void)
     }
     ScopeFrame *frame = &scope_stack[scope_depth];
     frame->count = 0;
+    frame->has_test_result = false;
+    frame->test_result = false;
     for (int i = 0; i < MAX_LOCAL_VARIABLES; i++)
     {
         frame->variables[i].active = false;
@@ -444,4 +448,53 @@ void var_gc_mark_all(void)
             }
         }
     }
+}
+
+// Test state management (for test/iftrue/iffalse primitives)
+// Test state is local to each procedure scope
+void var_set_test_result(bool result)
+{
+    // If we're in a procedure (scope_depth > 0), set in current scope
+    // If at top level (scope_depth == 0), we need to track it separately
+    // For now, we store it at top level in a special global variable behavior
+    // But according to spec, test at top level should work too
+    
+    if (scope_depth > 0)
+    {
+        // In a procedure - store in current scope
+        ScopeFrame *frame = &scope_stack[scope_depth - 1];
+        frame->has_test_result = true;
+        frame->test_result = result;
+    }
+    else
+    {
+        // At top level - store in a "scope 0" position
+        // We'll reuse the first scope frame for top-level test state
+        scope_stack[0].has_test_result = true;
+        scope_stack[0].test_result = result;
+    }
+}
+
+bool var_get_test_result(bool *out_result)
+{
+    // Search from current scope up to top level
+    // According to spec, test is local to procedure and superprocedures
+    for (int s = scope_depth - 1; s >= 0; s--)
+    {
+        ScopeFrame *frame = &scope_stack[s];
+        if (frame->has_test_result)
+        {
+            if (out_result) *out_result = frame->test_result;
+            return true;
+        }
+    }
+    
+    // Check top level (stored in scope_stack[0])
+    if (scope_stack[0].has_test_result)
+    {
+        if (out_result) *out_result = scope_stack[0].test_result;
+        return true;
+    }
+    
+    return false;
 }

@@ -76,6 +76,11 @@ extern "C"
     // Mark all variable values as GC roots
     void var_gc_mark_all(void);
 
+    // Test state management (for test/iftrue/iffalse primitives)
+    // Test state is local to procedure scope but accessible to superprocedures
+    void var_set_test_result(bool result);
+    bool var_get_test_result(bool *out_result);  // returns false if no test has been run
+
 #ifdef __cplusplus
 }
 #endif
