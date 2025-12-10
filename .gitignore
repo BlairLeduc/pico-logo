@@ -1,5 +1,6 @@
 # All artefacts and build products
 build/
+_codeql_build_dir/
 
 # MacOS specific files
 .DS_Store
