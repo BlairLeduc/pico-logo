@@ -477,23 +477,27 @@ void var_set_test_result(bool result)
 
 bool var_get_test_result(bool *out_result)
 {
-    // Search from current scope up to top level
-    // According to spec, test is local to procedure and superprocedures
-    for (int s = scope_depth - 1; s >= 0; s--)
+    if (scope_depth > 0)
     {
-        ScopeFrame *frame = &scope_stack[s];
-        if (frame->has_test_result)
+        // In a procedure - search from current scope down to global (scope 0)
+        for (int s = scope_depth - 1; s >= 0; s--)
         {
-            if (out_result) *out_result = frame->test_result;
-            return true;
+            ScopeFrame *frame = &scope_stack[s];
+            if (frame->has_test_result)
+            {
+                if (out_result) *out_result = frame->test_result;
+                return true;
+            }
         }
     }
-    
-    // Check top level (stored in scope_stack[0])
-    if (scope_stack[0].has_test_result)
+    else
     {
-        if (out_result) *out_result = scope_stack[0].test_result;
-        return true;
+        // At top level - check scope_stack[0] which stores top-level test state
+        if (scope_stack[0].has_test_result)
+        {
+            if (out_result) *out_result = scope_stack[0].test_result;
+            return true;
+        }
     }
     
     return false;
