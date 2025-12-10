@@ -67,6 +67,13 @@ static inline uint32_t *get_node_ptr(uint16_t index)
         return NULL;
     }
     
+    // Validate index to prevent underflow
+    // Each node is 4 bytes, so max index is LOGO_MEMORY_SIZE / 4
+    if (index > LOGO_MEMORY_SIZE / 4)
+    {
+        return NULL;
+    }
+    
     // Calculate byte offset from top of memory
     // Each node is 4 bytes, index 1 is at the very top
     size_t byte_offset = LOGO_MEMORY_SIZE - (index * 4);
@@ -154,10 +161,12 @@ static uint16_t alloc_cell(void)
     }
     
     // Free list is empty, need to expand the node region downward
-    // Check if we have space (need 4 bytes, with 4-byte alignment)
-    if (node_bottom < atom_next + 4)
+    // Check if we have space (need 4 bytes for a new node)
+    // After allocation: node_bottom will be node_bottom - 4
+    // This must not overlap with atom_next
+    if (node_bottom <= atom_next + 4)
     {
-        return 0; // Out of memory - collision with atom table
+        return 0; // Out of memory - would collide with atom table
     }
     
     // Allocate new node at the bottom of the node region
