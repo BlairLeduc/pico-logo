@@ -15,31 +15,25 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Forward declaration for the device - set by REPL
-static LogoDevice *current_device = NULL;
-
-void primitives_set_device(LogoDevice *device)
-{
-    current_device = device;
-}
-
 //==========================================================================
 // Output helpers
 //==========================================================================
 
 static void print_to_device(const char *str)
 {
-    if (current_device)
+    LogoDevice *device = primitives_get_device();
+    if (device)
     {
-        logo_device_write(current_device, str);
+        logo_device_write(device, str);
     }
 }
 
 static void flush_device(void)
 {
-    if (current_device)
+    LogoDevice *device = primitives_get_device();
+    if (device)
     {
-        logo_device_flush(current_device);
+        logo_device_flush(device);
     }
 }
 
@@ -122,12 +116,13 @@ static Result prim_keyp(Evaluator *eval, int argc, Value *args)
     (void)argc;
     (void)args;
 
-    if (!current_device)
+    LogoDevice *device = primitives_get_device();
+    if (!device)
     {
         return result_ok(value_word(mem_atom_cstr("false")));
     }
 
-    bool available = logo_device_key_available(current_device);
+    bool available = logo_device_key_available(device);
     if (available)
     {
         return result_ok(value_word(mem_atom_cstr("true")));
@@ -144,12 +139,13 @@ static Result prim_readchar(Evaluator *eval, int argc, Value *args)
     (void)argc;
     (void)args;
 
-    if (!current_device)
+    LogoDevice *device = primitives_get_device();
+    if (!device)
     {
         return result_ok(value_list(NODE_NIL)); // Empty list on EOF
     }
 
-    int ch = logo_device_read_char(current_device);
+    int ch = logo_device_read_char(device);
     if (ch < 0)
     {
         // EOF - return empty list
@@ -181,7 +177,8 @@ static Result prim_readchars(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, "readchars", value_to_string(args[0]));
     }
 
-    if (!current_device)
+    LogoDevice *device = primitives_get_device();
+    if (!device)
     {
         return result_ok(value_list(NODE_NIL)); // Empty list on EOF
     }
@@ -193,7 +190,7 @@ static Result prim_readchars(Evaluator *eval, int argc, Value *args)
         return result_error(ERR_OUT_OF_SPACE);
     }
 
-    int read_count = logo_device_read_chars(current_device, buffer, count);
+    int read_count = logo_device_read_chars(device, buffer, count);
     if (read_count == 0)
     {
         free(buffer);
@@ -375,13 +372,14 @@ static Result prim_readlist(Evaluator *eval, int argc, Value *args)
     (void)argc;
     (void)args;
 
-    if (!current_device)
+    LogoDevice *device = primitives_get_device();
+    if (!device)
     {
         return result_ok(value_word(mem_atom("", 0))); // Empty word on error
     }
 
     char buffer[1024];
-    if (!logo_device_read_line(current_device, buffer, sizeof(buffer)))
+    if (!logo_device_read_line(device, buffer, sizeof(buffer)))
     {
         // EOF - return empty word
         return result_ok(value_word(mem_atom("", 0)));
@@ -411,13 +409,14 @@ static Result prim_readword(Evaluator *eval, int argc, Value *args)
     (void)argc;
     (void)args;
 
-    if (!current_device)
+    LogoDevice *device = primitives_get_device();
+    if (!device)
     {
         return result_ok(value_list(NODE_NIL)); // Empty list on error/EOF
     }
 
     char buffer[1024];
-    if (!logo_device_read_line(current_device, buffer, sizeof(buffer)))
+    if (!logo_device_read_line(device, buffer, sizeof(buffer)))
     {
         // EOF - return empty list
         return result_ok(value_list(NODE_NIL));

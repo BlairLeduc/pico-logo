@@ -26,10 +26,8 @@
 // Maximum procedure definition buffer (for multi-line TO...END)
 #define MAX_PROC_BUFFER 4096
 
-// Forward declaration for the device setter in primitives_output.c
+// Forward declaration for the device setter
 extern void primitives_set_device(LogoDevice *device);
-// Forward declaration for the device setter in primitives_workspace.c
-extern void primitives_workspace_set_device(LogoDevice *device);
 
 // Check if a line starts with "to " (case-insensitive)
 static bool line_starts_with_to(const char *line)
@@ -87,7 +85,6 @@ int main(void)
     procedures_init();
     variables_init();
     primitives_set_device(device);
-    primitives_workspace_set_device(device);
 
     // Print welcome banner
     logo_device_write_line(device, "Copyright 2025 Blair Leduc");

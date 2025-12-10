@@ -4,6 +4,7 @@
 //
 
 #include "primitives.h"
+#include "devices/device.h"
 #include <string.h>
 #include <strings.h>
 
@@ -11,6 +12,19 @@
 
 static Primitive primitives[MAX_PRIMITIVES];
 static int primitive_count = 0;
+
+// Shared device for all primitives that need I/O
+static LogoDevice *shared_device = NULL;
+
+void primitives_set_device(LogoDevice *device)
+{
+    shared_device = device;
+}
+
+LogoDevice *primitives_get_device(void)
+{
+    return shared_device;
+}
 
 void primitives_init(void)
 {

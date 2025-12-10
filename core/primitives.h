@@ -50,8 +50,11 @@ extern "C"
     // Forward declaration for LogoDevice
     struct LogoDevice;
 
-    // Set the device for I/O primitives
+    // Set the device for I/O primitives (called once at startup)
     void primitives_set_device(struct LogoDevice *device);
+
+    // Get the shared device for primitives that need I/O
+    struct LogoDevice *primitives_get_device(void);
 
 #ifdef __cplusplus
 }

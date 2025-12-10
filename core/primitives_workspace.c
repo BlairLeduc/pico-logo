@@ -17,22 +17,12 @@
 #include <stdio.h>
 #include <string.h>
 
-// External device access (set by primitives_output.c)
-extern void primitives_set_device(LogoDevice *device);
-
-// Device write helper - uses the same device as print
-static LogoDevice *ws_device = NULL;
-
-void primitives_workspace_set_device(LogoDevice *device)
-{
-    ws_device = device;
-}
-
 static void ws_print(const char *str)
 {
-    if (ws_device)
+    LogoDevice *device = primitives_get_device();
+    if (device)
     {
-        logo_device_write(ws_device, str);
+        logo_device_write(device, str);
     }
 }
 

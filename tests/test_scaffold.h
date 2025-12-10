@@ -110,12 +110,8 @@ static LogoDeviceOps mock_ops = {
 
 static LogoDevice mock_device;
 
-// Declare the function to set device in primitives_output.c
+// Declare the function to set device for all primitives
 extern void primitives_set_device(LogoDevice *device);
-// Declare the function to set device in primitives_workspace.c
-extern void primitives_workspace_set_device(LogoDevice *device);
-// Declare the function to set device in primitives_properties.c
-extern void primitives_properties_set_device(LogoDevice *device);
 
 // Common setUp function
 static void test_scaffold_setUp(void)
@@ -133,8 +129,6 @@ static void test_scaffold_setUp(void)
     // Set up mock device
     logo_device_init(&mock_device, &mock_ops, NULL);
     primitives_set_device(&mock_device);
-    primitives_workspace_set_device(&mock_device);
-    primitives_properties_set_device(&mock_device);
 }
 
 // Common tearDown function (currently empty but available for extension)

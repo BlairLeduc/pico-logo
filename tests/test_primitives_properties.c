@@ -7,14 +7,10 @@
 #include "core/properties.h"
 #include <stdlib.h>
 
-// Declare the function to set device in primitives_properties.c
-extern void primitives_properties_set_device(LogoDevice *device);
-
 void setUp(void)
 {
     test_scaffold_setUp();
     properties_init();
-    primitives_properties_set_device(&mock_device);
 }
 
 void tearDown(void)
@@ -205,7 +201,7 @@ void test_pps_prints_property_lists(void)
     reset_output();
     run_string("pps");
     
-    TEST_ASSERT_TRUE(strstr(output_buffer, "plist") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "pprop") != NULL);
     TEST_ASSERT_TRUE(strstr(output_buffer, "person") != NULL);
     TEST_ASSERT_TRUE(strstr(output_buffer, "name") != NULL);
     TEST_ASSERT_TRUE(strstr(output_buffer, "John") != NULL);
