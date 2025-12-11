@@ -4,6 +4,24 @@
 //
 //  Debugging primitives: step, unstep, trace, untrace
 //
+//  These primitives help debug Logo procedures by:
+//  
+//  trace "name / trace [name1 name2 ...]
+//    - Prints procedure calls with arguments (indented by depth)
+//    - Prints return values or "stopped" on exit
+//    - Useful for understanding recursion and call flow
+//  
+//  untrace "name / untrace [name1 name2 ...]
+//    - Disables tracing for the specified procedure(s)
+//  
+//  step "name / step [name1 name2 ...]
+//    - Marks procedure for stepped execution
+//    - Note: Currently simplified - flag is set but execution is normal
+//    - TODO: Implement pause-before-each-instruction behavior
+//  
+//  unstep "name / unstep [name1 name2 ...]
+//    - Disables stepping for the specified procedure(s)
+//
 
 #include "primitives.h"
 #include "procedures.h"
