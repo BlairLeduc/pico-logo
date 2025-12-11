@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #include "devices/device.h"
 #include "devices/host/host_device.h"
@@ -203,6 +204,23 @@ int main(void)
             {
                 logo_device_write_line(device, error_format(r));
                 break;
+            }
+            else if (r.status == RESULT_THROW)
+            {
+                // Uncaught throw - check for special cases
+                if (strcasecmp(r.throw_tag, "toplevel") == 0)
+                {
+                    // throw "toplevel returns to top level silently
+                    break;
+                }
+                else
+                {
+                    // Other uncaught throws are errors
+                    char msg[128];
+                    snprintf(msg, sizeof(msg), "No one caught %s", r.throw_tag);
+                    logo_device_write_line(device, msg);
+                    break;
+                }
             }
             else if (r.status == RESULT_OK)
             {

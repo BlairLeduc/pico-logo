@@ -157,22 +157,22 @@ const char *value_to_string(Value v)
 
 Result result_ok(Value v)
 {
-    return (Result){.status = RESULT_OK, .value = v};
+    return (Result){.status = RESULT_OK, .value = v, .throw_tag = NULL};
 }
 
 Result result_none(void)
 {
-    return (Result){.status = RESULT_NONE, .value = value_none()};
+    return (Result){.status = RESULT_NONE, .value = value_none(), .throw_tag = NULL};
 }
 
 Result result_stop(void)
 {
-    return (Result){.status = RESULT_STOP, .value = value_none()};
+    return (Result){.status = RESULT_STOP, .value = value_none(), .throw_tag = NULL};
 }
 
 Result result_output(Value v)
 {
-    return (Result){.status = RESULT_OUTPUT, .value = v};
+    return (Result){.status = RESULT_OUTPUT, .value = v, .throw_tag = NULL};
 }
 
 Result result_error(int code)
@@ -182,7 +182,17 @@ Result result_error(int code)
         .error_code = code,
         .error_proc = NULL,
         .error_arg = NULL,
-        .error_caller = NULL
+        .error_caller = NULL,
+        .throw_tag = NULL
+    };
+}
+
+Result result_throw(const char *tag)
+{
+    return (Result){
+        .status = RESULT_THROW,
+        .throw_tag = tag,
+        .value = value_none()
     };
 }
 
@@ -193,7 +203,8 @@ Result result_error_arg(int code, const char *proc, const char *arg)
         .error_code = code,
         .error_proc = proc,
         .error_arg = arg,
-        .error_caller = NULL
+        .error_caller = NULL,
+        .throw_tag = NULL
     };
 }
 
