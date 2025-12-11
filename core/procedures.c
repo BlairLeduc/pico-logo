@@ -8,8 +8,11 @@
 #include "variables.h"
 #include "error.h"
 #include "memory.h"
+#include "primitives.h"
+#include "devices/device.h"
 #include <string.h>
 #include <strings.h>
+#include <stdio.h>
 
 // Maximum number of user-defined procedures
 #define MAX_PROCEDURES 128
@@ -20,6 +23,63 @@ static int procedure_count = 0;
 
 // Tail call state (global for trampoline)
 static TailCall tail_call_state;
+
+// Helper to write output for trace/step
+static void trace_write(const char *str)
+{
+    LogoDevice *device = primitives_get_device();
+    if (device)
+    {
+        logo_device_write(device, str);
+    }
+}
+
+// Helper to print a single node element
+static void print_node_element(Node elem)
+{
+    if (mem_is_word(elem))
+    {
+        trace_write(mem_word_ptr(elem));
+    }
+    else if (mem_is_list(elem))
+    {
+        trace_write("[");
+        bool first = true;
+        Node curr = elem;
+        while (!mem_is_nil(curr))
+        {
+            if (!first)
+                trace_write(" ");
+            first = false;
+            print_node_element(mem_car(curr));
+            curr = mem_cdr(curr);
+        }
+        trace_write("]");
+    }
+}
+
+// Helper to print an instruction (single element from procedure body)
+static void print_instruction(Node instr)
+{
+    print_node_element(instr);
+}
+
+// Helper to execute procedure body with step support
+// Returns Result from execution
+static Result execute_body_with_step(Evaluator *eval, Node body, bool enable_tco, bool stepped)
+{
+    if (!stepped)
+    {
+        // Normal execution without stepping
+        return eval_run_list_with_tco(eval, body, enable_tco);
+    }
+    
+    // Stepped execution - for simplicity, just execute normally
+    // The stepping behavior would require more sophisticated instruction tracking
+    // For now, just execute without step (user can use trace instead)
+    // TODO: Implement proper step-through execution
+    return eval_run_list_with_tco(eval, body, enable_tco);
+}
 
 void procedures_init(void)
 {
@@ -302,8 +362,93 @@ Result proc_call(Evaluator *eval, UserProcedure *proc, int argc, Value *args)
         // Track procedure depth for TCO detection
         eval->proc_depth++;
 
-        // Execute the body with TCO enabled
-        Result result = eval_run_list_with_tco(eval, proc->body, true);
+        // Trace entry if traced
+        if (proc->traced)
+        {
+            // Print indentation (2 spaces per depth level)
+            for (int i = 0; i < eval->proc_depth; i++)
+            {
+                trace_write("  ");
+            }
+            trace_write(proc->name);
+            
+            // Print arguments
+            for (int i = 0; i < argc; i++)
+            {
+                trace_write(" ");
+                char buf[64];
+                switch (args[i].type)
+                {
+                case VALUE_NUMBER:
+                    snprintf(buf, sizeof(buf), "%g", args[i].as.number);
+                    trace_write(buf);
+                    break;
+                case VALUE_WORD:
+                    trace_write(mem_word_ptr(args[i].as.node));
+                    break;
+                case VALUE_LIST:
+                    trace_write("[");
+                    {
+                        bool first = true;
+                        Node curr = args[i].as.node;
+                        while (!mem_is_nil(curr))
+                        {
+                            if (!first)
+                                trace_write(" ");
+                            first = false;
+                            print_node_element(mem_car(curr));
+                            curr = mem_cdr(curr);
+                        }
+                    }
+                    trace_write("]");
+                    break;
+                default:
+                    break;
+                }
+            }
+            trace_write("\n");
+        }
+
+        // Execute the body with step support if needed
+        Result result = execute_body_with_step(eval, proc->body, true, proc->stepped);
+
+        // Trace exit if traced
+        if (proc->traced)
+        {
+            // Print indentation
+            for (int i = 0; i < eval->proc_depth; i++)
+            {
+                trace_write("  ");
+            }
+            
+            if (result.status == RESULT_OUTPUT)
+            {
+                // Print return value
+                char buf[64];
+                switch (result.value.type)
+                {
+                case VALUE_NUMBER:
+                    snprintf(buf, sizeof(buf), "%g", result.value.as.number);
+                    trace_write(buf);
+                    break;
+                case VALUE_WORD:
+                    trace_write(mem_word_ptr(result.value.as.node));
+                    break;
+                case VALUE_LIST:
+                    trace_write("[...]");
+                    break;
+                default:
+                    break;
+                }
+                trace_write("\n");
+            }
+            else
+            {
+                // Print "stopped"
+                trace_write(proc->name);
+                trace_write(" stopped\n");
+            }
+        }
 
         // Restore depth
         eval->proc_depth--;

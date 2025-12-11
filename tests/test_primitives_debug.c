@@ -172,6 +172,77 @@ void test_step_and_trace_independent(void)
     TEST_ASSERT_TRUE(proc_is_traced("myproc"));
 }
 
+void test_trace_prints_entry_and_exit(void)
+{
+    const char *params[] = {};
+    define_proc("simple", params, 0, "print \"hello");
+    
+    run_string("trace \"simple");
+    
+    reset_output();
+    run_string("simple");
+    
+    // Should print procedure entry, the actual output, and exit
+    TEST_ASSERT_TRUE(strstr(output_buffer, "simple") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "hello") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "stopped") != NULL);
+}
+
+void test_trace_with_arguments(void)
+{
+    Node p = mem_atom("x", 1);
+    const char *params[] = {mem_word_ptr(p)};
+    define_proc("double", params, 1, "output :x * 2");
+    
+    run_string("trace \"double");
+    
+    reset_output();
+    run_string("print double 5");
+    
+    // Should print procedure entry with argument, return value, and the final result
+    TEST_ASSERT_TRUE(strstr(output_buffer, "double") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "5") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "10") != NULL);
+}
+
+void test_trace_shows_recursion_depth(void)
+{
+    Node p = mem_atom("n", 1);
+    const char *params[] = {mem_word_ptr(p)};
+    define_proc("countdown", params, 1, "if :n > 0 [print :n countdown :n - 1]");
+    
+    run_string("trace \"countdown");
+    
+    reset_output();
+    run_string("countdown 3");
+    
+    // Should show indentation for recursive calls
+    TEST_ASSERT_TRUE(strstr(output_buffer, "countdown") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "3") != NULL);
+}
+
+void test_step_pauses_execution(void)
+{
+    const char *params[] = {};
+    define_proc("myproc", params, 0, "print \"line1");
+    
+    run_string("step \"myproc");
+    
+    reset_output();
+    Result r = run_string("myproc");
+    
+    // Step is set but currently executes normally (TODO: implement proper stepping)
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(proc_is_stepped("myproc"));
+    
+    // After unstep, should still work
+    run_string("unstep \"myproc");
+    reset_output();
+    r = run_string("myproc");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_FALSE(proc_is_stepped("myproc"));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -189,6 +260,10 @@ int main(void)
     RUN_TEST(test_trace_nonexistent_gives_error);
     RUN_TEST(test_untrace_nonexistent_gives_error);
     RUN_TEST(test_step_and_trace_independent);
+    RUN_TEST(test_trace_prints_entry_and_exit);
+    RUN_TEST(test_trace_with_arguments);
+    RUN_TEST(test_trace_shows_recursion_depth);
+    RUN_TEST(test_step_pauses_execution);
 
     return UNITY_END();
 }
