@@ -12,11 +12,18 @@
 #include "value.h"
 #include <strings.h>  // for strcasecmp
 #include <unistd.h>   // for usleep
+#include <stdio.h>    // for snprintf
 
 //==========================================================================
 // Test state management (local to procedure scope)
 //==========================================================================
 
+// NOTE: Current implementation uses module-level state rather than
+// procedure-local state. Per the Logo spec, test state should be local
+// to the procedure in which it occurs and inherited by called procedures.
+// A full implementation would require integration with the procedure call
+// stack to maintain separate test state per procedure context.
+// For now, this simpler global state works for most use cases.
 static bool test_result_valid = false;
 static bool test_result_value = false;
 
@@ -31,6 +38,10 @@ void primitives_control_reset_test_state(void)
 // Error info storage for the error primitive
 //==========================================================================
 
+// NOTE: This structure is defined but not currently populated by the
+// error handling system. A full implementation would require integration
+// with catch/throw exception handling and would populate this when errors
+// are caught. For now, the error primitive always returns an empty list.
 typedef struct
 {
     bool has_error;
@@ -320,8 +331,8 @@ static Result prim_throw(Evaluator *eval, int argc, Value *args)
     }
     
     // TODO: Implement throw functionality
-    // For now, just return an error
-    return result_error(ERR_NO_CATCH);
+    // For now, return an error with the tag
+    return result_error_arg(ERR_NO_CATCH, "throw", value_to_string(args[0]));
 }
 
 static Result prim_error(Evaluator *eval, int argc, Value *args)
@@ -337,7 +348,11 @@ static Result prim_error(Evaluator *eval, int argc, Value *args)
     }
     
     // Build a four-element list: [error-number message primitive-name procedure-name]
-    Node error_num_word = mem_atom_cstr("0");  // TODO: Convert error_code to string
+    // Convert error code to string
+    char error_num_buf[16];
+    snprintf(error_num_buf, sizeof(error_num_buf), "%d", last_error.error_code);
+    Node error_num_word = mem_atom_cstr(error_num_buf);
+    
     Node message_word = last_error.error_message ? mem_atom_cstr(last_error.error_message) : mem_atom_cstr("");
     Node proc_word = last_error.error_proc ? mem_atom_cstr(last_error.error_proc) : mem_atom_cstr("");
     Node caller_word = last_error.error_caller ? mem_atom_cstr(last_error.error_caller) : NODE_NIL;
