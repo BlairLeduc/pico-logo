@@ -12,7 +12,7 @@ Welcome to Pico Logo.
 The question mark, `?` is the _prompt_. When the prompt is on the display, you can type something. The flashing underscore, `_` is the cursor. It appears when Logo wants you to type something and shows where the next character you type will appear.
 
 
-# An Introduction {#introduction}
+# Introduction
 
 ## Logo Programs
 
@@ -151,7 +151,7 @@ Should the addition be done first, producing `9`, or should the division be done
 (25 + 20) / 5 
 ```
 
-**Commands and operations:** In formal Logo, a given procedure is either a command or an operation, not both. In relaxed Logo, a procedure can be sometimes a command and sometimes an operation. `run` and `if` are examples of this. See [Flow of Control](#flow-of-control). 
+**Commands and operations:** In formal Logo, a given procedure is either a command or an operation, not both. In relaxed Logo, a procedure can be sometimes a command and sometimes an operation. `run` and `if` are examples of this. See [Conditionals and Control of Flow](#conditionals-and-control-of-flow). 
 
 **The command `to`:** In formal Logo, you define a procedure with the command `define`; it takes two inputs, a word (the procedure name) and a list (the definition). All the usual rules about quotes and brackets apply without exception:
 
@@ -538,11 +538,11 @@ to ifelse :predicate :list1 :list2
 end
 ```
 
-# Words and Lists {#words-lists}
+# Words and Lists
 
 ## butfirst (bf)
 
-butfirst _object_
+butfirst _object_  
 bf _object_
 
 `operation`
@@ -552,7 +552,7 @@ bf _object_
 
 ## butlast (bl)
 
-butlast _object_
+butlast _object_  
 bl _object_
 
 `operation`
@@ -607,7 +607,7 @@ The `fput` (for first put) operation outputs a new list formed by putting _objec
 
 ## list
 
-list _object1_ _object2_
+list _object1_ _object2_  
 (LIST _object1_ _object2_ _object3_ _object4_ ...)
 
 `operation`
@@ -637,10 +637,10 @@ parse _word_
 
 ## sentence (se)
 
-sentence _object1_ _object2_
-(sentence _object1_ _object2_ _object3_ ...)
-se _object1_ _object2_
-(se _object1_ _object2_ _object3_ ...)
+sentence _object1_ _object2_  
+(sentence _object1_ _object2_ _object3_ ...)  
+se _object1_ _object2_  
+(se _object1_ _object2_ _object3_ ...)  
 
 `operation`
 
@@ -649,8 +649,8 @@ se _object1_ _object2_
 
 ## word
 
-word _word1_ _word2_
-(word _word1_ _word2_ _word3_ ...)
+word _word1_ _word2_  
+(word _word1_ _word2_ _word3_ ...)  
 
 `operation`
 
@@ -659,7 +659,7 @@ word _word1_ _word2_
 
 ## ascii
 
-ascii _character_
+ascii _character_  
 
 `operation`
 
@@ -668,8 +668,8 @@ ascii _character_
 
 ## before? (beforep)
 
-before? _word1_ _word2_
-beforep _word1_ _word2_
+before? _word1_ _word2_  
+beforep _word1_ _word2_  
 
 `operation`
 
@@ -678,7 +678,7 @@ beforep _word1_ _word2_
 
 ## char
 
-char _integer_
+char _integer_  
 
 `operation`
 
@@ -687,7 +687,7 @@ The `char` operation outputs the character whose ASCII code is _integer_. An err
 
 ## count
 
-count _object_
+count _object_  
 
 `operation`
 
@@ -696,7 +696,7 @@ count _object_
 
 ## empty? (emptyp)
 
-emptyp _object_
+emptyp _object_  
 
 `operation`
 
@@ -705,8 +705,8 @@ emptyp _object_
 
 ## equal? (equalp)
 
-equal? _object1_ _object2_
-equalp _object1_ _object2_
+equal? _object1_ _object2_  
+equalp _object1_ _object2_  
 
 `operation`
 
@@ -715,8 +715,8 @@ equalp _object1_ _object2_
 
 ## list? (listp)
 
-list? _object_
-listp _object_
+list? _object_  
+listp _object_  
 
 `operation`
 
@@ -725,8 +725,8 @@ listp _object_
 
 ## member? (memberp)
 
-member? _object1_ _object2_
-memberp _object1_ _object2_
+member? _object1_ _object2_  
+memberp _object1_ _object2_  
 
 `operation`
 
@@ -735,8 +735,8 @@ memberp _object1_ _object2_
 
 ## number? (numberp)
 
-number? _object_
-numberp _object_
+number? _object_  
+numberp _object_  
 
 `operation`
 
@@ -745,7 +745,7 @@ numberp _object_
 
 ## word? (wordp)
 
-wordp _object_
+wordp _object_  
 
 `operation`
 
@@ -754,7 +754,7 @@ wordp _object_
 
 ## lowercase
 
-lowercase _word_
+lowercase _word_  
 
 `operation`
 
@@ -763,7 +763,7 @@ lowercase _word_
 
 ## uppercase
 
-uppercase _word_
+uppercase _word_  
 
 `operation`
 
@@ -771,11 +771,11 @@ uppercase _word_
 
 
 
-# Arithmetic Operations {#arithmetic-operations}
+# Arithmetic Operations
 
 ## arctan
 
-arctan _number_
+arctan _number_  
 
 `operation`
 
@@ -784,7 +784,7 @@ Outputs the arctangent of _number_ in degrees.
 
 ## cos
 
-cos _number_
+cos _number_  
 
 `operation`
 
@@ -793,7 +793,7 @@ Outputs the cosine of _number_ in degrees.
 
 ## difference
 
-difference _number1_ _number2_
+difference _number1_ _number2_  
 
 `operation`
 
@@ -802,7 +802,7 @@ Outputs _number2_ subtracted from _number1_.
 
 ## int
 
-int _number_
+int _number_  
 
 `operation`
 
@@ -811,7 +811,7 @@ Returns the integer part of _number_; any decimal part is stripped off. No round
 
 ## intquotient
 
-intquotient _integer1_ _integer2_
+intquotient _integer1_ _integer2_  
 
 `operation`
 
@@ -820,8 +820,8 @@ intquotient _integer1_ _integer2_
 
 ## product
 
-product _number1_ _number2_
-(product _number1_ _number2_ _number3_ ...)
+product _number1_ _number2_  
+(product _number1_ _number2_ _number3_ ...)  
 
 `operation`
 
@@ -830,7 +830,7 @@ Outputs the product of its inputs. It is equivalent to the `*` infix-form operat
 
 ## quotient
 
-quotient _number1_ _number2_
+quotient _number1_ _number2_  
 
 `operation`
 
@@ -839,7 +839,7 @@ Outputs the result of dividing _number1_ by _number2_. It is equivalent to the `
 
 ## random
 
-random _integer_
+random _integer_  
 
 `operation`
 
@@ -848,7 +848,7 @@ Outputs a random non-negative integer less than _integer_.
 
 ## remainder
 
-remainder _integer1_ _interger2_
+remainder _integer1_ _interger2_  
 
 `operation`
 
@@ -856,7 +856,7 @@ Outputs the remainder obtained when _integer1_ is divided by _integer2_. The rem
 
 ## round
 
-round _number_
+round _number_  
 
 `operation`
 
@@ -865,7 +865,7 @@ Outputs _number_ rounded off to the nearest integer. The maximum integer is 2,14
 
 ## sin
 
-sin _number_
+sin _number_  
 
 `operation`
 
@@ -874,7 +874,7 @@ Outputs the csine of _number_ in degrees.
 
 ## sqrt
 
-sqrt _number_
+sqrt _number_  
 
 `operation`
 
@@ -883,8 +883,8 @@ Outputs the square root of _number_. The value _number_ must not be negative or 
 
 ## sum
 
-sum _number1_ _number2_
-(sum _number1_ _number2_ _number3_ ...)
+sum _number1_ _number2_  
+(sum _number1_ _number2_ _number3_ ...)  
 
 `operation`
 
@@ -892,11 +892,11 @@ Outputs the sum of its inputs. `sum` is equivalent t o the `+` infix-form operat
 
 
 
-# Conditionals and Control of Flow {#conditionals-control-flow}
+# Conditionals and Control of Flow
 
 ## true
 
-true
+true  
 
 `operation`
 
@@ -905,7 +905,7 @@ Outputs `"true`. In Logo, boolean truth is represented by the word `true`.
 
 ## false
 
-false
+false  
 
 `operation`
 
@@ -913,8 +913,8 @@ Outputs `"false`. In Logo, boolean false is represented by the word `false`.
 
 ## if
 
-if _predicate_ _list1_
-(if _predicate_ _list1_ _list2_)
+if _predicate_ _list1_  
+(if _predicate_ _list1_ _list2_)  
 
 `command` or `operation`
 
@@ -923,8 +923,8 @@ If _predicate_ is `true`, Logo runs _list1_. If _predicate_ is `false`,Pico Logo
 
 ## iffalse (iff)
 
-iffalse _list_
-iff _list_
+iffalse _list_  
+iff _list_  
 
 `command`
 
@@ -933,8 +933,8 @@ iff _list_
 
 ## iftrue (ift)
 
-iftrue _list_ 
-ift _list_ 
+iftrue _list_  
+ift _list_  
 
 `command`
 
@@ -943,7 +943,7 @@ ift _list_
 
 ## test
 
-test _predicate_
+test _predicate_  
 
 `command`
 
@@ -952,7 +952,7 @@ test _predicate_
 
 ## co
 
-co
+co  
 
 `command`
 
@@ -961,8 +961,8 @@ The `co` (for continue) command resumes running of a procedure after a `pause` o
 
 ## output (op)
 
-output _object_
-op _object_
+output _object_  
+op _object_  
 
 `command`
 
@@ -971,7 +971,7 @@ The `output` command is meaningful only when it is within a procedure, not at to
 
 ## pause
 
-pause
+pause  
 
 `command` or `operation`
 
@@ -982,7 +982,7 @@ The procedure may be resumed by typing `co`.
 
 ## stop
 
-stop
+stop  
 
 `command`
 
@@ -991,7 +991,7 @@ The `stop` command stops the procedure that is running and returns control to th
 
 ## wait
 
-wait _integer_
+wait _integer_  
 
 `command`
 
@@ -1000,7 +1000,7 @@ wait _integer_
 
 ## catch
 
-catch _name_ _list_
+catch _name_ _list_  
 
 `command`
 
@@ -1011,7 +1011,7 @@ There is one special case. `catch "error` catches an error that would otherwise 
 
 ## error
 
-error
+error  
 
 `operation`
 
@@ -1029,7 +1029,7 @@ Refer to the reference document [Error Messages](./Error_Messages.md) for a comp
 
 ## go
 
-go _word_
+go _word_  
 
 `command`
 
@@ -1038,7 +1038,7 @@ The `go` command transfers control to the instruction following `label` _word_ i
 
 ## label
 
-label _word_
+label _word_  
 
 `command`
 
@@ -1047,7 +1047,7 @@ The `label` command itself does nothing. However, a `go` _word_ passes control t
 
 ## repeat
 
-repeat _integer_ _list_
+repeat _integer_ _list_  
 
 `command`
 
@@ -1056,7 +1056,7 @@ repeat _integer_ _list_
 
 ## run
 
-run _list_
+run _list_  
 
 `command` or `operation`
 
@@ -1065,7 +1065,7 @@ The `run` command runs _list_ as if typed in directly. If _list_ is an operation
 
 ## throw
 
-throw _name_
+throw _name_  
 
 `command`
 
@@ -1075,11 +1075,11 @@ See `catch`.
 
 
 
-# Managing your Workspace {#manage-workspace}
+# Managing your Workspace
 
 ## nodes
 
-nodes
+nodes  
 
 `operation`
 
@@ -1088,7 +1088,7 @@ nodes
 
 ## recycle
 
-recycle
+recycle  
 
 `command`
 
@@ -1097,8 +1097,8 @@ The `recycle` command frees up as many nodes as possible, performing what is cal
 
 ## po
 
-po _name_
-po _list_
+po _name_  
+po _list_  
 
 `command`
 
@@ -1107,7 +1107,7 @@ The `po` (for print out) command prints the definition(s) of the named procedure
 
 ## poall
 
-poall
+poall  
 
 `command`
 
@@ -1116,8 +1116,8 @@ The `poall` (for print out all) command prints the definition of every procedure
 
 ## pon
 
-pon _name_
-pon _list_
+pon _name_  
+pon _list_  
 
 `command`
 
@@ -1126,7 +1126,7 @@ pon _list_
 
 ## pons
 
-pons
+pons  
 
 `command`
 
@@ -1135,7 +1135,7 @@ pons
 
 ## pops
 
-pops
+pops  
 
 `command`
 
@@ -1145,8 +1145,8 @@ procedure in the workspace. See `bury` for exceptions.
 
 ## pot
 
-pot _name_
-pot _list_
+pot _name_  
+pot _list_  
 
 `command`
 
@@ -1155,7 +1155,7 @@ The `pot` (for print out title) command prints the title line of the named proce
 
 ## pots
 
-pots
+pots  
 
 `command`
 
@@ -1164,7 +1164,7 @@ pots
 
 ## erall
 
-erall
+erall  
 
 `command`
 
@@ -1173,10 +1173,10 @@ erall
 
 ## erase (er)
 
-erase _name_
-erase _list_
-er _name_
-er _list_
+erase _name_  
+erase _list_  
+er _name_  
+er _list_  
 
 `command`
 
@@ -1185,8 +1185,8 @@ The `erase` command erases the named procedure(s) from the workspace.
 
 ## ern
 
-ern _name_
-ern _list_
+ern _name_  
+ern _list_  
 
 `command`
 
@@ -1195,7 +1195,7 @@ The `ern` (for erase name) command erases the named variable(s) from the workspa
 
 ## erns
 
-erns
+erns  
 
 `command`
 
@@ -1204,7 +1204,7 @@ erns
 
 ## erps
 
-erps
+erps  
 
 `command`
 
@@ -1213,8 +1213,8 @@ The `erps` (for erase procedures) command erases all procedures from the workspa
 
 ## bury 
 
-bury _name_
-bury _list_
+bury _name_  
+bury _list_  
 
 `command`
 
@@ -1223,7 +1223,7 @@ The `bury` command buries the procedure(s) in its input. Certain commands (`eral
 
 ## buryall 
 
-buryall
+buryall  
 
 `command`
 
@@ -1234,8 +1234,8 @@ Once `buryall` is run, there are no procedure titles or names visible.
 
 ## buryname
 
-buryname _name_
-buryname _list_
+buryname _name_  
+buryname _list_  
 
 `command`
 
@@ -1244,8 +1244,8 @@ buryname _list_
 
 ## unbury 
 
-unbury _name_
-unbury _list_
+unbury _name_  
+unbury _list_  
 
 `command`
 
@@ -1254,7 +1254,7 @@ The `unbury` command unburies the named procedure(s).
 
 ## unburyall 
 
-unburyall
+unburyall  
 
 `command`
 
@@ -1265,8 +1265,8 @@ Once `unburyall` is run, the procedures and variable names are visible.
 
 ## unburyname 
 
-unburyname _name_
-unburyname _list_
+unburyname _name_  
+unburyname _list_  
 
 `command`
 
@@ -1275,12 +1275,12 @@ unburyname _list_
 
 
 
-# File Management {#file-management}
+# File Management
 
 ## files
 
-files
-(files _ext_)
+files  
+(files _ext_)  
 
 `operation`
 
@@ -1289,7 +1289,7 @@ Outputs a list of file names in the currect directory. If _ext_ is present, the 
 
 ## directories
 
-directories
+directories  
 
 `operation`
 
@@ -1298,7 +1298,7 @@ Outputs a list of directory names in the current directory.
 
 ## chdir
 
-chdir _pathname_
+chdir _pathname_  
 
 `command`
 
@@ -1307,7 +1307,7 @@ Stands for change directory. Changes the current directory name to _pathname_.
 
 ## currentdir
 
-currentdir
+currentdir  
 
 `operation`
 
@@ -1316,7 +1316,7 @@ Stands for current directory. Outputs the current directory that was set with `c
 
 ## erfile
 
-erfile _pathname_
+erfile _pathname_  
 
 `command`
 
@@ -1325,7 +1325,7 @@ Stands for erase file. Erases any type of file. The input must be the name of a 
 
 ## erdir
 
-erdir _pathname_
+erdir _pathname_  
 
 `command`
 
@@ -1334,7 +1334,7 @@ Stands for erase directory. Erases a directory. The directory must be empty or t
 
 ## catalog
 
-catalog
+catalog  
 
 `command`
 
@@ -1345,8 +1345,8 @@ Prints a list of files and directories in the current directory. Directories hav
 
 ## local
 
-local _name_
-local _list_
+local _name_  
+local _list_  
 
 `command`
 
@@ -1355,7 +1355,7 @@ The `local` command makes its input(s) local to the procedure within which the `
 
 ## make
 
-make _name_ _object_
+make _name_ _object_  
 
 `command`
 
@@ -1364,7 +1364,7 @@ The `make` command puts _object_ in _name_'s container, that is, it gives the va
 
 ## name
 
-name _object_ _name_
+name _object_ _name_  
 
 `command`
 
@@ -1375,8 +1375,8 @@ The `name` command puts _object_ in _name_'s container, that is, it gives the va
 
 ## name? (namep)
 
-name? _word_
-namep _word_
+name? _word_  
+namep _word_  
 
 `operation`
 
@@ -1385,7 +1385,7 @@ namep _word_
 
 ## thing
 
-thing _name_
+thing _name_  
 
 `operation`
 
@@ -1398,8 +1398,8 @@ thing _name_
 
 ## step
 
-step _name_
-step _list_
+step _name_  
+step _list_  
 
 `command`
 
@@ -1408,8 +1408,8 @@ The `step` command takes the procedure indicated by _name_ or _list_ as input an
 
 ## trace
 
-trace _name_
-trace _list_
+trace _name_  
+trace _list_  
 
 `command`
 
@@ -1418,8 +1418,8 @@ The `trace` command takes the procedures indicated by _name_ or _list_ as input 
 
 ## unstep
 
-unstep _name_
-unstep _list_
+unstep _name_  
+unstep _list_  
 
 `command`
 
@@ -1428,8 +1428,8 @@ unstep _list_
 
 ## untrace
 
-untrace _name_
-untrace _list_
+untrace _name_  
+untrace _list_  
 
 `command`
 
@@ -1437,12 +1437,12 @@ untrace _list_
 
 
 
-# Logical Operations {#logical-operations}
+# Logical Operations
 
 ## and
 
-and _predicate1_ _predicate2_
-(and _predicate1_ _predicate2_ _predicate3_ ...)
+and _predicate1_ _predicate2_  
+(and _predicate1_ _predicate2_ _predicate3_ ...)  
 
 `operation`
 
@@ -1451,7 +1451,7 @@ Outputs `TRUE` if all of its inputs are `TRUE`.
 
 ## not
 
-not _predicate_
+not _predicate_  
 
 `operation`
 
@@ -1461,8 +1461,8 @@ Outputs FASLE if _predicate_ is TRUE.
 
 ## or
 
-or _predicate1_ _predicate2_
-(or _predicate1_ _predicate2_ _predicate3_ ...)
+or _predicate1_ _predicate2_  
+(or _predicate1_ _predicate2_ _predicate3_ ...)  
 
 `operation`
 
@@ -1474,7 +1474,7 @@ Outputs `TRUE` if any of its inputs are `TRUE`.
 
 ## copydef
 
-copydef _name_ _newname_
+copydef _name_ _newname_  
 
 `command`
 
@@ -1483,7 +1483,7 @@ copydef _name_ _newname_
 
 ## define
 
-define _name_ _list_
+define _name_ _list_  
 
 `command`
 
@@ -1496,8 +1496,8 @@ The second input to `define` has the same form as the output from `text`. `defin
 
 ## defined? (definedp)
 
-defined? _word_
-definedp _word_
+defined? _word_  
+definedp _word_  
 
 `operation`
 
@@ -1506,8 +1506,8 @@ definedp _word_
 
 ## primative? (primativep)
 
-primitive? _name_
-primitivep _name_
+primitive? _name_  
+primitivep _name_  
 
 `operation`
 
@@ -1516,18 +1516,18 @@ primitivep _name_
 
 ## text
 
-text _name_
+text _name_  
 
 `operation`
 
 The `text` primitive outputs the definition of _name_ as a list of lists, suitable for input to `define`.
 
 
-# The Outside World {#outside-world}
+# The Outside World
 
 ## keyp
 
-keyp
+keyp  
 
 `operation`
 
@@ -1536,8 +1536,8 @@ keyp
 
 ## readchar (rc)
 
-readchar
-rc
+readchar  
+rc  
 
 `operation`
 
@@ -1550,8 +1550,8 @@ If you are reading from the keyboard, you can set the high bit of the character 
 
 ## readchars (rcs)
 
-readchars _integer_
-rcs _integer_
+readchars _integer_  
+rcs _integer_  
 
 `operation`
 
@@ -1568,7 +1568,8 @@ If you are reading from the keyboard, you can set the high bit of the character 
 
 ## readlist (rl)
 
-EADLIST (RL)
+readlist  
+rl  
 
 `operation`
 
@@ -1579,8 +1580,8 @@ If you are reading from a file where the end-of-file position has already been r
 
 ## readword (rw)
 
-readword
-rw
+readword  
+rw  
 
 `operation`
 
@@ -1593,10 +1594,10 @@ See `readlist`, `readchar`, `readchars`, and `setread`.
 
 ## print (pr)
 
-print _object_
-(print _object1_ _object2_ ...)
-pr _object_
-(pr _object1_ _object2_ ...)
+print _object_  
+(print _object1_ _object2_ ...)  
+pr _object_  
+(pr _object1_ _object2_ ...)  
 
 `command`
 
@@ -1607,7 +1608,7 @@ Compare with `type` and `show`.
 
 ## show
 
-show _object_
+show _object_  
 
 `command`
 
@@ -1618,8 +1619,8 @@ Compare with `type` and `print`.
 
 ## type
 
-type _object_
-(type _object1_ _object2_ ...)
+type _object_  
+(type _object1_ _object2_ ...)  
 
 `command`
 
@@ -1629,11 +1630,11 @@ Compare with `print` and `show`.
 
 
 
-# Property Lists {#property-lists}
+# Property Lists
 
 ## erprops
 
-erprops
+erprops  
 
 `command`
 
@@ -1642,7 +1643,7 @@ erprops
 
 ## gprop
 
-gprop _name_ _property_
+gprop _name_ _property_  
 
 `operation`
 
@@ -1651,7 +1652,7 @@ gprop _name_ _property_
 
 ## plist
 
-plist _name_
+plist _name_  
 
 `operation`
 
@@ -1660,7 +1661,7 @@ plist _name_
 
 ## pprop
 
-pprop _name_ _property_ _object_
+pprop _name_ _property_ _object_  
 
 `command`
 
@@ -1669,7 +1670,7 @@ The `pprop` (for put property) command gives _name_ _property_ with value _objec
 
 ## pps
 
-pps
+pps  
 
 `command`
 
@@ -1677,7 +1678,7 @@ The `pps` (for print properties) command prints the property lists of everything
 
 ## remprop
 
-remprop _name_ _property_
+remprop _name_ _property_  
 
 `command`
 
@@ -1686,5 +1687,3 @@ The `remprop` (for remove property) command removes _property_ from the property
 
 See `pprop` and `gprop`.
 
-
----
