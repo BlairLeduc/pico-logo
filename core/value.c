@@ -196,6 +196,15 @@ Result result_throw(const char *tag)
     };
 }
 
+Result result_goto(const char *label)
+{
+    return (Result){
+        .status = RESULT_GOTO,
+        .goto_label = label,
+        .value = value_none()
+    };
+}
+
 Result result_error_arg(int code, const char *proc, const char *arg)
 {
     return (Result){

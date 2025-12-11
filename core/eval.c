@@ -9,6 +9,7 @@
 #include "procedures.h"
 #include "variables.h"
 #include <string.h>
+#include <strings.h>
 #include <stdlib.h>
 #include <ctype.h>
 
@@ -688,6 +689,78 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
                 // This is a valid tail call - return to let proc_call handle it
                 break;
             }
+        }
+
+        // Handle RESULT_GOTO - only at procedure level (when TCO is enabled)
+        // At nested levels (if, repeat, etc.), RESULT_GOTO should propagate up
+        if (r.status == RESULT_GOTO)
+        {
+            if (!enable_tco)
+            {
+                // Not in a procedure body - propagate the RESULT_GOTO up
+                break;
+            }
+            
+            const char *target_label = r.goto_label;
+            bool label_found = false;
+            
+            // Scan through the list looking for "label <target_label>"
+            Node scan = list;
+            while (!mem_is_nil(scan))
+            {
+                Node elem = mem_car(scan);
+                Node next = mem_cdr(scan);
+                
+                // Check if this is a "label" instruction
+                if (mem_is_word(elem))
+                {
+                    const char *word = mem_word_ptr(elem);
+                    if (strcasecmp(word, "label") == 0)
+                    {
+                        // Next element should be the label name (quoted word)
+                        if (!mem_is_nil(next))
+                        {
+                            Node label_elem = mem_car(next);
+                            if (mem_is_word(label_elem))
+                            {
+                                const char *label_str = mem_word_ptr(label_elem);
+                                // Skip the quote character if present
+                                if (label_str[0] == '"')
+                                {
+                                    label_str++;
+                                }
+                                
+                                if (strcasecmp(label_str, target_label) == 0)
+                                {
+                                    // Found the label! Continue from after the label argument
+                                    label_found = true;
+                                    Node restart_from = mem_cdr(next);
+                                    
+                                    // Re-serialize from this point forward
+                                    serialize_list_to_buffer(restart_from, buffer, sizeof(buffer));
+                                    
+                                    // Reset lexer to start from after the label
+                                    lexer_init(&list_lexer, buffer);
+                                    eval->lexer = &list_lexer;
+                                    eval->has_current = false;
+                                    
+                                    r = result_none();
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                scan = next;
+            }
+            
+            if (!label_found)
+            {
+                r = result_error(ERR_CANT_FIND_LABEL);
+                break;
+            }
+            // Continue execution from the new position
+            continue;
         }
 
         // Propagate stop/output/error/throw immediately

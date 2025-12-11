@@ -401,7 +401,6 @@ static Result prim_error(Evaluator *eval, int argc, Value *args)
 
 static Result prim_go(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
     (void)argc;
     
     if (!value_is_word(args[0]))
@@ -409,9 +408,17 @@ static Result prim_go(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, "go", value_to_string(args[0]));
     }
     
-    // TODO: Implement go functionality
-    // For now, just return an error
-    return result_error(ERR_CANT_FIND_LABEL);
+    // Check if we're inside a procedure
+    if (eval->proc_depth == 0)
+    {
+        return result_error(ERR_ONLY_IN_PROCEDURE);
+    }
+    
+    // Get the label name (already interned in atom table from value_to_string)
+    const char *label = value_to_string(args[0]);
+    
+    // Return RESULT_GOTO - the eval_run_list will handle finding the label
+    return result_goto(label);
 }
 
 static Result prim_label(Evaluator *eval, int argc, Value *args)

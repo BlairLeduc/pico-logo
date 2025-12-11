@@ -285,7 +285,7 @@ void test_error_no_error(void)
 }
 
 //==========================================================================
-// Go/Label Tests (stubs for now)
+// Go/Label Tests
 //==========================================================================
 
 void test_label_basic(void)
@@ -295,12 +295,100 @@ void test_label_basic(void)
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
 }
 
-void test_go_no_label(void)
+void test_go_at_toplevel(void)
 {
-    // go without matching label should return error
+    // go at top level (not in a procedure) should return error
     Result r = run_string("go \"nowhere");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_ONLY_IN_PROCEDURE, r.error_code);
+}
+
+void test_go_label_basic_loop(void)
+{
+    // Basic countdown loop using go/label with global variable
+    run_string("make \"n 3");
+    run_string("define \"countdown [[] [label \"loop] [if :n < 1 [stop]] [print :n] [make \"n :n - 1] [go \"loop]]");
+    reset_output();
+    run_string("countdown");
+    TEST_ASSERT_EQUAL_STRING("3\n2\n1\n", output_buffer);
+    run_string("erase \"countdown");
+}
+
+void test_go_label_forward(void)
+{
+    // Go forward to skip instructions
+    run_string("define \"skipper [[] [print \"before] [go \"after] [print \"skipped] [label \"after] [print \"after]]");
+    reset_output();
+    run_string("skipper");
+    TEST_ASSERT_EQUAL_STRING("before\nafter\n", output_buffer);
+    run_string("erase \"skipper");
+}
+
+void test_go_label_backward(void)
+{
+    // Go backward to repeat instructions
+    run_string("make \"n 3");
+    run_string("make \"i 0");
+    run_string("define \"counter [[] [label \"loop] [print :i] [make \"i :i + 1] [if :i < :n [go \"loop]]]");
+    reset_output();
+    run_string("counter");
+    TEST_ASSERT_EQUAL_STRING("0\n1\n2\n", output_buffer);
+    run_string("erase \"counter");
+}
+
+void test_go_label_not_found(void)
+{
+    // go to non-existent label should return error
+    run_string("define \"nolabel [[] [go \"nowhere]]");
+    Result r = run_string("nolabel");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
     TEST_ASSERT_EQUAL(ERR_CANT_FIND_LABEL, r.error_code);
+    run_string("erase \"nolabel");
+}
+
+void test_go_label_multiple_labels(void)
+{
+    // Test with multiple labels using global variable
+    run_string("make \"which 0");
+    run_string("define \"multi [[] [if :which = 1 [go \"one]] [if :which = 2 [go \"two]] [print \"zero] [stop] [label \"one] [print \"one] [stop] [label \"two] [print \"two]]");
+    
+    run_string("make \"which 0");
+    reset_output();
+    run_string("multi");
+    TEST_ASSERT_EQUAL_STRING("zero\n", output_buffer);
+    
+    run_string("make \"which 1");
+    reset_output();
+    run_string("multi");
+    TEST_ASSERT_EQUAL_STRING("one\n", output_buffer);
+    
+    run_string("make \"which 2");
+    reset_output();
+    run_string("multi");
+    TEST_ASSERT_EQUAL_STRING("two\n", output_buffer);
+    
+    run_string("erase \"multi");
+}
+
+void test_go_label_with_repeat(void)
+{
+    // Test go/label inside repeat
+    run_string("define \"repeatgo [[] [repeat 2 [print \"before]] [label \"skip] [print \"after]]");
+    reset_output();
+    run_string("repeatgo");
+    // Should print: before, before, after (label is in the outer procedure, not inside repeat)
+    TEST_ASSERT_EQUAL_STRING("before\nbefore\nafter\n", output_buffer);
+    run_string("erase \"repeatgo");
+}
+
+void test_go_label_case_insensitive(void)
+{
+    // Test that label matching is case-insensitive
+    run_string("define \"casetest [[] [go \"LOOP] [label \"loop] [print \"found]]");
+    reset_output();
+    run_string("casetest");
+    TEST_ASSERT_EQUAL_STRING("found\n", output_buffer);
+    run_string("erase \"casetest");
 }
 
 int main(void)
@@ -344,7 +432,14 @@ int main(void)
     
     // Go/label
     RUN_TEST(test_label_basic);
-    RUN_TEST(test_go_no_label);
+    RUN_TEST(test_go_at_toplevel);
+    RUN_TEST(test_go_label_basic_loop);
+    RUN_TEST(test_go_label_forward);
+    RUN_TEST(test_go_label_backward);
+    RUN_TEST(test_go_label_not_found);
+    RUN_TEST(test_go_label_multiple_labels);
+    RUN_TEST(test_go_label_with_repeat);
+    RUN_TEST(test_go_label_case_insensitive);
 
     return UNITY_END();
 }
