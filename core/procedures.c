@@ -30,6 +30,8 @@ void procedures_init(void)
         procedures[i].param_count = 0;
         procedures[i].body = NODE_NIL;
         procedures[i].buried = false;
+        procedures[i].stepped = false;
+        procedures[i].traced = false;
     }
     proc_clear_tail_call();
 }
@@ -76,6 +78,8 @@ bool proc_define(const char *name, const char **params, int param_count, Node bo
             }
             procedures[i].body = body;
             procedures[i].buried = false;
+            procedures[i].stepped = false;
+            procedures[i].traced = false;
             if (i >= procedure_count)
                 procedure_count = i + 1;
             return true;
@@ -209,6 +213,62 @@ void proc_unbury_all(void)
             procedures[i].buried = false;
         }
     }
+}
+
+void proc_step(const char *name)
+{
+    int idx = find_procedure_index(name);
+    if (idx >= 0)
+    {
+        procedures[idx].stepped = true;
+    }
+}
+
+void proc_unstep(const char *name)
+{
+    int idx = find_procedure_index(name);
+    if (idx >= 0)
+    {
+        procedures[idx].stepped = false;
+    }
+}
+
+bool proc_is_stepped(const char *name)
+{
+    int idx = find_procedure_index(name);
+    if (idx >= 0)
+    {
+        return procedures[idx].stepped;
+    }
+    return false;
+}
+
+void proc_trace(const char *name)
+{
+    int idx = find_procedure_index(name);
+    if (idx >= 0)
+    {
+        procedures[idx].traced = true;
+    }
+}
+
+void proc_untrace(const char *name)
+{
+    int idx = find_procedure_index(name);
+    if (idx >= 0)
+    {
+        procedures[idx].traced = false;
+    }
+}
+
+bool proc_is_traced(const char *name)
+{
+    int idx = find_procedure_index(name);
+    if (idx >= 0)
+    {
+        return procedures[idx].traced;
+    }
+    return false;
 }
 
 // Execute procedure body and handle tail calls via trampoline
