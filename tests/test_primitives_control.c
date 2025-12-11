@@ -162,12 +162,49 @@ void test_catch_basic(void)
     TEST_ASSERT_EQUAL_STRING("hello\n", output_buffer);
 }
 
+void test_catch_throw_match(void)
+{
+    // Catch with matching throw
+    Result r = run_string("catch \"mytag [throw \"mytag]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+}
+
+void test_catch_throw_nomatch(void)
+{
+    // Catch with non-matching throw should propagate
+    Result r = run_string("catch \"othertag [throw \"mytag]");
+    TEST_ASSERT_EQUAL(RESULT_THROW, r.status);
+    TEST_ASSERT_EQUAL_STRING("mytag", r.throw_tag);
+}
+
 void test_throw_no_catch(void)
 {
-    // Throw without matching catch should return error
+    // Throw without matching catch should return RESULT_THROW
     Result r = run_string("throw \"mytag");
-    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_NO_CATCH, r.error_code);
+    TEST_ASSERT_EQUAL(RESULT_THROW, r.status);
+    TEST_ASSERT_EQUAL_STRING("mytag", r.throw_tag);
+}
+
+void test_throw_toplevel(void)
+{
+    // throw "toplevel should work
+    Result r = run_string("throw \"toplevel");
+    TEST_ASSERT_EQUAL(RESULT_THROW, r.status);
+    TEST_ASSERT_EQUAL_STRING("toplevel", r.throw_tag);
+}
+
+void test_catch_error(void)
+{
+    // catch "error should catch errors
+    // Test that an error is caught
+    Result r = run_string("catch \"error [sum 1 \"notanumber]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // After catching, error primitive should return error info
+    Result err = eval_string("error");
+    TEST_ASSERT_EQUAL(RESULT_OK, err.status);
+    TEST_ASSERT_TRUE(value_is_list(err.value));
+    TEST_ASSERT_FALSE(mem_is_nil(err.value.as.node));
 }
 
 void test_error_no_error(void)
@@ -227,7 +264,11 @@ int main(void)
     
     // Catch/throw/error
     RUN_TEST(test_catch_basic);
+    RUN_TEST(test_catch_throw_match);
+    RUN_TEST(test_catch_throw_nomatch);
     RUN_TEST(test_throw_no_catch);
+    RUN_TEST(test_throw_toplevel);
+    RUN_TEST(test_catch_error);
     RUN_TEST(test_error_no_error);
     
     // Go/label

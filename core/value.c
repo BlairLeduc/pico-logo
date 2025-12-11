@@ -182,7 +182,17 @@ Result result_error(int code)
         .error_code = code,
         .error_proc = NULL,
         .error_arg = NULL,
-        .error_caller = NULL
+        .error_caller = NULL,
+        .throw_tag = NULL
+    };
+}
+
+Result result_throw(const char *tag)
+{
+    return (Result){
+        .status = RESULT_THROW,
+        .throw_tag = tag,
+        .value = value_none()
     };
 }
 
@@ -193,7 +203,8 @@ Result result_error_arg(int code, const char *proc, const char *arg)
         .error_code = code,
         .error_proc = proc,
         .error_arg = arg,
-        .error_caller = NULL
+        .error_caller = NULL,
+        .throw_tag = NULL
     };
 }
 

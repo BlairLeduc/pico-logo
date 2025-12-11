@@ -690,7 +690,7 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
             }
         }
 
-        // Propagate stop/output/error immediately
+        // Propagate stop/output/error/throw immediately
         if (r.status != RESULT_NONE && r.status != RESULT_OK)
         {
             break;

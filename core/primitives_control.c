@@ -27,21 +27,12 @@
 static bool test_result_valid = false;
 static bool test_result_value = false;
 
-// Function to reset test state (for testing purposes)
-void primitives_control_reset_test_state(void)
-{
-    test_result_valid = false;
-    test_result_value = false;
-}
-
 //==========================================================================
 // Error info storage for the error primitive
 //==========================================================================
 
-// NOTE: This structure is defined but not currently populated by the
-// error handling system. A full implementation would require integration
-// with catch/throw exception handling and would populate this when errors
-// are caught. For now, the error primitive always returns an empty list.
+// NOTE: This structure stores the most recent caught error for the error
+// primitive to retrieve. It is populated when catch handles an error.
 typedef struct
 {
     bool has_error;
@@ -52,6 +43,31 @@ typedef struct
 } ErrorInfo;
 
 static ErrorInfo last_error = {false, 0, NULL, NULL, NULL};
+
+// Function to reset test state (for testing purposes)
+void primitives_control_reset_test_state(void)
+{
+    test_result_valid = false;
+    test_result_value = false;
+    last_error.has_error = false;
+    last_error.error_code = 0;
+    last_error.error_message = NULL;
+    last_error.error_proc = NULL;
+    last_error.error_caller = NULL;
+}
+
+// Helper to populate error info from a Result
+static void set_last_error(Result r)
+{
+    if (r.status == RESULT_ERROR)
+    {
+        last_error.has_error = true;
+        last_error.error_code = r.error_code;
+        last_error.error_message = error_message(r.error_code);
+        last_error.error_proc = r.error_proc;
+        last_error.error_caller = r.error_caller;
+    }
+}
 
 static Result prim_run(Evaluator *eval, int argc, Value *args)
 {
@@ -82,7 +98,7 @@ static Result prim_repeat(Evaluator *eval, int argc, Value *args)
     for (int i = 0; i < count; i++)
     {
         Result r = eval_run_list(eval, body);
-        // Propagate stop/output/error
+        // Propagate stop/output/error/throw
         if (r.status != RESULT_NONE && r.status != RESULT_OK)
         {
             return r;
@@ -298,16 +314,13 @@ static Result prim_co(Evaluator *eval, int argc, Value *args)
 }
 
 //==========================================================================
-// Exception Handling (stubs for now)
+// Exception Handling
 //==========================================================================
 
 static Result prim_catch(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
     (void)argc;
-    (void)args;
-    // TODO: Implement catch functionality
-    // For now, just run the list normally
+    
     if (!value_is_word(args[0]))
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, "catch", value_to_string(args[0]));
@@ -317,7 +330,34 @@ static Result prim_catch(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, "catch", value_to_string(args[1]));
     }
     
-    return eval_run_list(eval, args[1].as.node);
+    const char *tag = value_to_string(args[0]);
+    
+    // Run the list
+    Result r = eval_run_list(eval, args[1].as.node);
+    
+    // Check if a throw or error occurred
+    if (r.status == RESULT_THROW)
+    {
+        // Check if the tag matches
+        if (strcasecmp(r.throw_tag, tag) == 0)
+        {
+            // Caught the throw, return normally
+            return result_none();
+        }
+        // Tag doesn't match, propagate the throw
+        return r;
+    }
+    else if (r.status == RESULT_ERROR && strcasecmp(tag, "error") == 0)
+    {
+        // Special case: catch "error catches errors
+        // Save the error info for the error primitive
+        set_last_error(r);
+        // Return normally (error was caught)
+        return result_none();
+    }
+    
+    // No throw/error or didn't match, return the result as-is
+    return r;
 }
 
 static Result prim_throw(Evaluator *eval, int argc, Value *args)
@@ -330,9 +370,11 @@ static Result prim_throw(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, "throw", value_to_string(args[0]));
     }
     
-    // TODO: Implement throw functionality
-    // For now, return an error with the tag
-    return result_error_arg(ERR_NO_CATCH, "throw", value_to_string(args[0]));
+    const char *tag = value_to_string(args[0]);
+    
+    // Return a RESULT_THROW with the tag
+    // The tag will be checked by catch primitives up the call stack
+    return result_throw(tag);
 }
 
 static Result prim_error(Evaluator *eval, int argc, Value *args)
