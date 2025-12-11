@@ -400,14 +400,7 @@ static Result prim_error(Evaluator *eval, int argc, Value *args)
     Node caller_word = last_error.error_caller ? mem_atom_cstr(last_error.error_caller) : NODE_NIL;
     
     Node list = NODE_NIL;
-    if (!mem_is_nil(caller_word))
-    {
-        list = mem_cons(caller_word, list);
-    }
-    else
-    {
-        list = mem_cons(NODE_NIL, list);
-    }
+    list = mem_cons(caller_word, list);
     list = mem_cons(proc_word, list);
     list = mem_cons(message_word, list);
     list = mem_cons(error_num_word, list);
