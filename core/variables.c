@@ -31,11 +31,17 @@ typedef struct
 {
     Variable variables[MAX_LOCAL_VARIABLES];
     int count;
+    bool test_valid;   // true if TEST has been run in this scope
+    bool test_value;   // value from most recent TEST in this scope
 } ScopeFrame;
 
 // Scope stack
 static ScopeFrame scope_stack[MAX_SCOPE_DEPTH];
 static int scope_depth = 0;  // 0 means at top level (global scope only)
+
+// Top-level (global) test state
+static bool global_test_valid = false;
+static bool global_test_value = false;
 
 void variables_init(void)
 {
@@ -47,6 +53,8 @@ void variables_init(void)
         global_variables[i].buried = false;
     }
     scope_depth = 0;
+    global_test_valid = false;
+    global_test_value = false;
 }
 
 void var_push_scope(void)
@@ -58,6 +66,8 @@ void var_push_scope(void)
     }
     ScopeFrame *frame = &scope_stack[scope_depth];
     frame->count = 0;
+    frame->test_valid = false;  // New scope has no test result yet
+    frame->test_value = false;
     for (int i = 0; i < MAX_LOCAL_VARIABLES; i++)
     {
         frame->variables[i].active = false;
@@ -444,4 +454,60 @@ void var_gc_mark_all(void)
             }
         }
     }
+}
+
+//==========================================================================
+// Test state management (local to procedure scope)
+//==========================================================================
+
+void var_set_test(bool value)
+{
+    if (scope_depth == 0)
+    {
+        // At top level, set global test state
+        global_test_valid = true;
+        global_test_value = value;
+    }
+    else
+    {
+        // Set test state in current scope
+        ScopeFrame *frame = &scope_stack[scope_depth - 1];
+        frame->test_valid = true;
+        frame->test_value = value;
+    }
+}
+
+bool var_get_test(bool *out)
+{
+    // Search scope chain from innermost to outermost
+    for (int d = scope_depth - 1; d >= 0; d--)
+    {
+        ScopeFrame *frame = &scope_stack[d];
+        if (frame->test_valid)
+        {
+            if (out) *out = frame->test_value;
+            return true;
+        }
+    }
+    
+    // Check global test state
+    if (global_test_valid)
+    {
+        if (out) *out = global_test_value;
+        return true;
+    }
+    
+    return false;  // No test has been run in scope chain
+}
+
+bool var_test_is_valid(void)
+{
+    return var_get_test(NULL);
+}
+
+void var_reset_test_state(void)
+{
+    global_test_valid = false;
+    global_test_value = false;
+    // Note: scope-level test state is automatically reset when scopes are pushed
 }

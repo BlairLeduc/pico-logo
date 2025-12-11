@@ -10,22 +10,10 @@
 #include "error.h"
 #include "eval.h"
 #include "value.h"
+#include "variables.h"
 #include <strings.h>  // for strcasecmp
 #include <unistd.h>   // for usleep
 #include <stdio.h>    // for snprintf
-
-//==========================================================================
-// Test state management (local to procedure scope)
-//==========================================================================
-
-// NOTE: Current implementation uses module-level state rather than
-// procedure-local state. Per the Logo spec, test state should be local
-// to the procedure in which it occurs and inherited by called procedures.
-// A full implementation would require integration with the procedure call
-// stack to maintain separate test state per procedure context.
-// For now, this simpler global state works for most use cases.
-static bool test_result_valid = false;
-static bool test_result_value = false;
 
 //==========================================================================
 // Error info storage for the error primitive
@@ -47,8 +35,7 @@ static ErrorInfo last_error = {false, 0, NULL, NULL, NULL};
 // Function to reset test state (for testing purposes)
 void primitives_control_reset_test_state(void)
 {
-    test_result_valid = false;
-    test_result_value = false;
+    var_reset_test_state();
     last_error.has_error = false;
     last_error.error_code = 0;
     last_error.error_message = NULL;
@@ -207,13 +194,11 @@ static Result prim_test(Evaluator *eval, int argc, Value *args)
         const char *str = value_to_string(pred);
         if (strcasecmp(str, "true") == 0)
         {
-            test_result_valid = true;
-            test_result_value = true;
+            var_set_test(true);
         }
         else if (strcasecmp(str, "false") == 0)
         {
-            test_result_valid = true;
-            test_result_value = false;
+            var_set_test(false);
         }
         else
         {
@@ -237,7 +222,8 @@ static Result prim_iftrue(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, "iftrue", value_to_string(args[0]));
     }
     
-    if (test_result_valid && test_result_value)
+    bool test_value;
+    if (var_get_test(&test_value) && test_value)
     {
         return eval_run_list(eval, args[0].as.node);
     }
@@ -254,7 +240,8 @@ static Result prim_iffalse(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, "iffalse", value_to_string(args[0]));
     }
     
-    if (test_result_valid && !test_result_value)
+    bool test_value;
+    if (var_get_test(&test_value) && !test_value)
     {
         return eval_run_list(eval, args[0].as.node);
     }

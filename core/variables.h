@@ -76,6 +76,27 @@ extern "C"
     // Mark all variable values as GC roots
     void var_gc_mark_all(void);
 
+    //==========================================================================
+    // Test state management (local to procedure scope)
+    //
+    // Per Logo spec, the TEST command result is local to the procedure in which
+    // it occurs and is inherited by procedures called from that procedure.
+    // This mirrors variable scoping behavior.
+    //==========================================================================
+
+    // Set test state in current scope
+    void var_set_test(bool value);
+
+    // Get test state, searching scope chain then global
+    // Returns false if test has not been run in current scope chain
+    bool var_get_test(bool *out);
+
+    // Check if test state is valid in current scope chain
+    bool var_test_is_valid(void);
+
+    // Reset test state (for testing/initialization)
+    void var_reset_test_state(void);
+
 #ifdef __cplusplus
 }
 #endif

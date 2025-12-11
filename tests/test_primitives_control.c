@@ -139,6 +139,74 @@ void test_test_with_expression(void)
     TEST_ASSERT_EQUAL_STRING("greater\n", output_buffer);
 }
 
+void test_test_local_to_procedure(void)
+{
+    // Test state set in a procedure should NOT affect the outer scope
+    // after the procedure returns
+    
+    // Define a procedure that sets test to true using define primitive
+    run_string("define \"testproc [[] [test true]]");
+    
+    // Set test to false at top level
+    run_string("test false");
+    
+    // Call procedure that sets test to true inside it
+    run_string("testproc");
+    
+    // Test state should still be false at top level (procedure's test is local)
+    reset_output();
+    run_string("iffalse [print \"stillfalse]");
+    TEST_ASSERT_EQUAL_STRING("stillfalse\n", output_buffer);
+    
+    // Clean up
+    run_string("erase \"testproc");
+}
+
+void test_test_inherited_by_subprocedure(void)
+{
+    // Test state should be inherited by called procedures
+    // (they can see test from caller)
+    
+    // Define a procedure that checks test state using define primitive
+    run_string("define \"checktest [[] [iftrue [print \"yes]] [iffalse [print \"no]]]");
+    
+    // Set test to true at top level, then call procedure
+    run_string("test true");
+    reset_output();
+    run_string("checktest");
+    TEST_ASSERT_EQUAL_STRING("yes\n", output_buffer);
+    
+    // Set test to false at top level, then call procedure
+    run_string("test false");
+    reset_output();
+    run_string("checktest");
+    TEST_ASSERT_EQUAL_STRING("no\n", output_buffer);
+    
+    // Clean up
+    run_string("erase \"checktest");
+}
+
+void test_test_nested_procedures(void)
+{
+    // More complex test: nested procedure calls with different test states
+    
+    // Define inner procedure that also sets test (to a different value)
+    run_string("define \"inner [[] [test false] [iffalse [print \"innerfalse]]]");
+    
+    // Define outer procedure that sets test and calls inner
+    run_string("define \"outer [[] [test true] [inner] [iftrue [print \"outertrue]]]");
+    
+    // Run outer - outer sets true, calls inner which sets false locally
+    // When inner returns, outer should still see its own test=true
+    reset_output();
+    run_string("outer");
+    TEST_ASSERT_EQUAL_STRING("innerfalse\noutertrue\n", output_buffer);
+    
+    // Clean up
+    run_string("erase \"outer");
+    run_string("erase \"inner");
+}
+
 //==========================================================================
 // Wait Test
 //==========================================================================
@@ -258,6 +326,9 @@ int main(void)
     RUN_TEST(test_ift_abbreviation);
     RUN_TEST(test_iff_abbreviation);
     RUN_TEST(test_test_with_expression);
+    RUN_TEST(test_test_local_to_procedure);
+    RUN_TEST(test_test_inherited_by_subprocedure);
+    RUN_TEST(test_test_nested_procedures);
     
     // Wait
     RUN_TEST(test_wait);
