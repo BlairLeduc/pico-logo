@@ -58,12 +58,6 @@ static void print_node_element(Node elem)
     }
 }
 
-// Helper to print an instruction (single element from procedure body)
-static void print_instruction(Node instr)
-{
-    print_node_element(instr);
-}
-
 // Helper to execute procedure body with step support
 // Returns Result from execution
 static Result execute_body_with_step(Evaluator *eval, Node body, bool enable_tco, bool stepped)
