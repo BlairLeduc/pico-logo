@@ -157,22 +157,22 @@ const char *value_to_string(Value v)
 
 Result result_ok(Value v)
 {
-    return (Result){.status = RESULT_OK, .value = v};
+    return (Result){.status = RESULT_OK, .value = v, .throw_tag = NULL};
 }
 
 Result result_none(void)
 {
-    return (Result){.status = RESULT_NONE, .value = value_none()};
+    return (Result){.status = RESULT_NONE, .value = value_none(), .throw_tag = NULL};
 }
 
 Result result_stop(void)
 {
-    return (Result){.status = RESULT_STOP, .value = value_none()};
+    return (Result){.status = RESULT_STOP, .value = value_none(), .throw_tag = NULL};
 }
 
 Result result_output(Value v)
 {
-    return (Result){.status = RESULT_OUTPUT, .value = v};
+    return (Result){.status = RESULT_OUTPUT, .value = v, .throw_tag = NULL};
 }
 
 Result result_error(int code)
