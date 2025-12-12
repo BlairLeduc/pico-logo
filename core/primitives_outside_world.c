@@ -3,17 +3,22 @@
 //  Copyright 2025 Blair Leduc. See LICENSE for details.
 //
 //  Outside World primitives: keyp, readchar, readchars, readlist, readword,
-//                            print, show, type
+//                            print, show, type, load, save
 //
 
 #include "primitives.h"
+#include "procedures.h"
+#include "variables.h"
+#include "properties.h"
 #include "error.h"
 #include "eval.h"
 #include "lexer.h"
 #include "devices/io.h"
+#include "devices/host/host_file.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 //==========================================================================
 // Output helpers
@@ -1038,6 +1043,495 @@ static Result prim_type(Evaluator *eval, int argc, Value *args)
 }
 
 //==========================================================================
+// File I/O: load and save
+//==========================================================================
+
+// Helper to check if a line starts with "to " (case-insensitive)
+static bool line_starts_with_to(const char *line)
+{
+    // Skip leading whitespace
+    while (*line && isspace((unsigned char)*line))
+        line++;
+
+    if (strncasecmp(line, "to", 2) != 0)
+        return false;
+
+    // Must be followed by whitespace or end of line
+    char c = line[2];
+    return c == '\0' || isspace((unsigned char)c);
+}
+
+// Helper to check if a line is just "end" (case-insensitive)
+static bool line_is_end(const char *line)
+{
+    // Skip leading whitespace
+    while (*line && isspace((unsigned char)*line))
+        line++;
+
+    if (strncasecmp(line, "end", 3) != 0)
+        return false;
+
+    // Must be followed by whitespace, newline, or end of string
+    char c = line[3];
+    return c == '\0' || isspace((unsigned char)c);
+}
+
+// Maximum line length for load
+#define LOAD_MAX_LINE 256
+
+// Maximum procedure buffer for load
+#define LOAD_MAX_PROC 4096
+
+// load pathname - loads and executes file contents
+static Result prim_load(Evaluator *eval, int argc, Value *args)
+{
+    (void)argc;
+
+    if (!value_is_word(args[0]))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "load", value_to_string(args[0]));
+    }
+
+    const char *pathname = mem_word_ptr(args[0].as.node);
+
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    // Resolve path with prefix
+    char resolved[LOGO_STREAM_NAME_MAX];
+    char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
+    if (!full_path)
+    {
+        return result_error_arg(ERR_FILE_NOT_FOUND, "", pathname);
+    }
+
+    // Check if file exists
+    if (!logo_host_file_exists(full_path))
+    {
+        return result_error_arg(ERR_FILE_NOT_FOUND, "", pathname);
+    }
+
+    // Open the file for reading
+    LogoStream *stream = logo_io_open_read(io, full_path);
+    if (!stream)
+    {
+        return result_error_arg(ERR_FILE_NOT_FOUND, "", pathname);
+    }
+
+    // Read and execute the file line by line
+    char line[LOAD_MAX_LINE];
+    char proc_buffer[LOAD_MAX_PROC];
+    size_t proc_len = 0;
+    bool in_procedure_def = false;
+    Result result = result_none();
+
+    while (logo_stream_read_line(stream, line, sizeof(line)) >= 0)
+    {
+        // Strip trailing newline/carriage return
+        size_t len = strlen(line);
+        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r'))
+        {
+            line[--len] = '\0';
+        }
+
+        // Skip empty lines
+        if (len == 0)
+        {
+            continue;
+        }
+
+        // Handle multi-line procedure definitions
+        if (!in_procedure_def && line_starts_with_to(line))
+        {
+            // Start collecting procedure definition
+            in_procedure_def = true;
+            proc_len = 0;
+
+            // Copy the "to" line to buffer
+            if (len < LOAD_MAX_PROC - 1)
+            {
+                memcpy(proc_buffer, line, len);
+                proc_buffer[len] = ' '; // Space separator instead of newline
+                proc_len = len + 1;
+            }
+            continue;
+        }
+
+        if (in_procedure_def)
+        {
+            if (line_is_end(line))
+            {
+                // Complete the procedure definition
+                if (proc_len + 4 < LOAD_MAX_PROC)
+                {
+                    memcpy(proc_buffer + proc_len, "end", 3);
+                    proc_len += 3;
+                    proc_buffer[proc_len] = '\0';
+                }
+
+                in_procedure_def = false;
+
+                // Parse and define the procedure
+                Result r = proc_define_from_text(proc_buffer);
+                if (r.status == RESULT_ERROR)
+                {
+                    result = r;
+                    break;
+                }
+
+                proc_len = 0;
+            }
+            else
+            {
+                // Append line to procedure buffer with space separator
+                if (proc_len + len + 1 < LOAD_MAX_PROC)
+                {
+                    memcpy(proc_buffer + proc_len, line, len);
+                    proc_buffer[proc_len + len] = ' ';
+                    proc_len += len + 1;
+                }
+            }
+            continue;
+        }
+
+        // Regular instruction - evaluate it
+        Lexer lexer;
+        Evaluator load_eval;
+        lexer_init(&lexer, line);
+        eval_init(&load_eval, &lexer);
+
+        // Evaluate all instructions on the line
+        while (!eval_at_end(&load_eval))
+        {
+            Result r = eval_instruction(&load_eval);
+
+            if (r.status == RESULT_ERROR)
+            {
+                result = r;
+                break;
+            }
+            else if (r.status == RESULT_THROW)
+            {
+                // Propagate throw
+                result = r;
+                break;
+            }
+            else if (r.status == RESULT_OK)
+            {
+                // Expression returned a value - ignore in load
+                // (Unlike REPL, we don't report "I don't know what to do with")
+            }
+            // RESULT_NONE means command completed successfully - continue
+        }
+
+        if (result.status != RESULT_NONE)
+        {
+            break;
+        }
+    }
+
+    // Close the file
+    logo_io_close(io, full_path);
+
+    // If load was successful, check for startup variable
+    if (result.status == RESULT_NONE)
+    {
+        Value startup_value;
+        if (var_get("startup", &startup_value))
+        {
+            if (value_is_list(startup_value))
+            {
+                // Execute the startup list
+                result = eval_run_list(eval, startup_value.as.node);
+            }
+        }
+    }
+
+    return result;
+}
+
+//==========================================================================
+// Save helper functions
+//==========================================================================
+
+// Write a string to the current writer
+static void save_write(const char *str)
+{
+    LogoIO *io = primitives_get_io();
+    if (io)
+    {
+        logo_io_write(io, str);
+    }
+}
+
+// Write a newline
+static void save_newline(void)
+{
+    save_write("\n");
+}
+
+// Print a procedure body element (handles quoted words, etc.)
+static void save_body_element(Node elem)
+{
+    if (mem_is_word(elem))
+    {
+        save_write(mem_word_ptr(elem));
+    }
+    else if (mem_is_list(elem))
+    {
+        save_write("[");
+        bool first = true;
+        Node curr = elem;
+        while (!mem_is_nil(curr))
+        {
+            if (!first)
+                save_write(" ");
+            first = false;
+            save_body_element(mem_car(curr));
+            curr = mem_cdr(curr);
+        }
+        save_write("]");
+    }
+}
+
+// Save procedure title line: to name :param1 :param2 ...
+static void save_procedure_title(UserProcedure *proc)
+{
+    save_write("to ");
+    save_write(proc->name);
+    for (int i = 0; i < proc->param_count; i++)
+    {
+        save_write(" :");
+        save_write(proc->params[i]);
+    }
+    save_newline();
+}
+
+// Save full procedure definition
+static void save_procedure_definition(UserProcedure *proc)
+{
+    save_procedure_title(proc);
+
+    // Print body
+    Node curr = proc->body;
+    while (!mem_is_nil(curr))
+    {
+        Node elem = mem_car(curr);
+        save_body_element(elem);
+
+        // Add space between elements
+        Node next = mem_cdr(curr);
+        if (!mem_is_nil(next))
+        {
+            save_write(" ");
+        }
+        curr = next;
+    }
+    save_newline();
+    save_write("end");
+    save_newline();
+}
+
+// Save a variable and its value
+static void save_variable(const char *name, Value value)
+{
+    char buf[64];
+    save_write("make \"");
+    save_write(name);
+    save_write(" ");
+
+    switch (value.type)
+    {
+    case VALUE_NUMBER:
+        snprintf(buf, sizeof(buf), "%g", value.as.number);
+        save_write(buf);
+        break;
+    case VALUE_WORD:
+        save_write("\"");
+        save_write(mem_word_ptr(value.as.node));
+        break;
+    case VALUE_LIST:
+        save_write("[");
+        {
+            bool first = true;
+            Node curr = value.as.node;
+            while (!mem_is_nil(curr))
+            {
+                if (!first)
+                    save_write(" ");
+                first = false;
+                save_body_element(mem_car(curr));
+                curr = mem_cdr(curr);
+            }
+        }
+        save_write("]");
+        break;
+    default:
+        break;
+    }
+    save_newline();
+}
+
+// Save a property as pprop command
+static void save_property(const char *name, const char *property, Value value)
+{
+    char buf[64];
+    save_write("pprop \"");
+    save_write(name);
+    save_write(" \"");
+    save_write(property);
+    save_write(" ");
+
+    switch (value.type)
+    {
+    case VALUE_NUMBER:
+        snprintf(buf, sizeof(buf), "%g", value.as.number);
+        save_write(buf);
+        break;
+    case VALUE_WORD:
+        save_write("\"");
+        save_write(mem_word_ptr(value.as.node));
+        break;
+    case VALUE_LIST:
+        save_write("[");
+        {
+            bool first = true;
+            Node curr = value.as.node;
+            while (!mem_is_nil(curr))
+            {
+                if (!first)
+                    save_write(" ");
+                first = false;
+                save_body_element(mem_car(curr));
+                curr = mem_cdr(curr);
+            }
+        }
+        save_write("]");
+        break;
+    default:
+        break;
+    }
+    save_newline();
+}
+
+// save pathname - saves all unburied procedures, variables, and properties
+static Result prim_save(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+
+    if (!value_is_word(args[0]))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "save", value_to_string(args[0]));
+    }
+
+    const char *pathname = mem_word_ptr(args[0].as.node);
+
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    // Resolve path with prefix
+    char resolved[LOGO_STREAM_NAME_MAX];
+    char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
+    if (!full_path)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    // Check if file already exists
+    if (logo_host_file_exists(full_path))
+    {
+        return result_error_arg(ERR_FILE_EXISTS, "", pathname);
+    }
+
+    // Open the file for writing
+    LogoStream *stream = logo_io_open_write(io, full_path);
+    if (!stream)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    // Save current writer and set to file
+    LogoStream *old_writer = io->writer;
+    logo_io_set_writer(io, stream);
+
+    // Save all procedures (not buried)
+    int proc_cnt = proc_count(true); // Get ALL, filter by buried in loop
+    for (int i = 0; i < proc_cnt; i++)
+    {
+        UserProcedure *proc = proc_get_by_index(i);
+        if (proc && !proc->buried)
+        {
+            save_procedure_definition(proc);
+            save_newline();
+        }
+    }
+
+    // Save all variables (not buried)
+    int var_cnt = var_global_count(false);
+    for (int i = 0; i < var_cnt; i++)
+    {
+        const char *name;
+        Value value;
+        if (var_get_global_by_index(i, false, &name, &value))
+        {
+            save_variable(name, value);
+        }
+    }
+
+    // Save all property lists
+    int prop_cnt = prop_name_count();
+    for (int i = 0; i < prop_cnt; i++)
+    {
+        const char *name;
+        if (prop_get_name_by_index(i, &name))
+        {
+            Node list = prop_get_list(name);
+            // Property list is [prop1 val1 prop2 val2 ...]
+            Node curr = list;
+            while (!mem_is_nil(curr) && !mem_is_nil(mem_cdr(curr)))
+            {
+                Node prop_node = mem_car(curr);
+                Node val_node = mem_car(mem_cdr(curr));
+
+                if (mem_is_word(prop_node))
+                {
+                    const char *prop = mem_word_ptr(prop_node);
+                    Value val;
+                    if (mem_is_word(val_node))
+                    {
+                        val = value_word(val_node);
+                    }
+                    else if (mem_is_list(val_node))
+                    {
+                        val = value_list(val_node);
+                    }
+                    else
+                    {
+                        val = value_list(NODE_NIL);
+                    }
+                    save_property(name, prop, val);
+                }
+
+                curr = mem_cdr(mem_cdr(curr));
+            }
+        }
+    }
+
+    // Restore writer and close file
+    logo_io_set_writer(io, old_writer == &io->console->output ? NULL : old_writer);
+    logo_io_close(io, full_path);
+
+    return result_none();
+}
+
+//==========================================================================
 // Registration
 //==========================================================================
 
@@ -1080,4 +1574,8 @@ void primitives_outside_world_init(void)
     primitive_register("filelen", 1, prim_filelen);
     primitive_register("dribble", 1, prim_dribble);
     primitive_register("nodribble", 0, prim_nodribble);
+
+    // Load and save
+    primitive_register("load", 1, prim_load);
+    primitive_register("save", 1, prim_save);
 }
