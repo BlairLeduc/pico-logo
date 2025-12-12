@@ -42,7 +42,7 @@
 |40|Disk is write-protected
 |41|(procedure) doesn't like (symbol) as input
 |42|(procedure) didn't output
-||!!! LOGO SYSTEM BUG !!! _Should not occur. Please write to LCSI if it does._
+||!!! LOGO SYSTEM BUG !!! _Should not occur. Please let me know._
 
 
 

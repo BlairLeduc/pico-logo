@@ -538,6 +538,358 @@ to ifelse :predicate :list1 :list2
 end
 ```
 
+
+# Turtle Graphics
+
+Pico Logo has two kinds of screens: the graphics screen and the text screen. When you use any primitive or procedure that renders to the turtle, Logo shows you the graphics screen. The commands `fullscreen`, `splitscreen`, and `textscreen` allow you to switch between the two kinds of screens.
+
+The screen limits are 320 turtle steps high and 320 steps wide. Hence, when using Cartesian coordinates (as in `setpos`), you reach the edge of the screen when the y-coordinate is 160 (top) or -159 (bottom) and the x-coordinate is -159 (left edge) or 160 (right edge). 
+
+
+## back (bk)
+
+back `distance`  
+bk  
+
+`command`
+
+The `back` command moves the turtle _distance_ steps back. Its heading does not change. If the pen is down, Logo draws a line the specified _distance_.
+
+
+## clearscreen (cs)
+
+clearscreen  
+cs
+
+`command`
+
+`clearscreen` erases the graphics screen, puts the turtle in the center of the screen, and sets the turtle's heading too (north). The center of the screen is position [0 0] and is called the **home position**.
+
+
+## forward (fd)
+
+forward _distance_  
+fd
+
+`command`
+
+`forward` moves the turtle forward _distance_ steps in the direction in which it is heading. If the pen is down, Logo draws a line the specified _distance_.
+
+
+## hideturtle (ht)
+
+hideturtle  
+ht
+
+`command`
+
+`hideturtle` makes the turtle invisible. (The turtle draws faster when it is hidden.)
+
+
+## home
+
+home  
+
+`command`
+
+The `home` command moves the turtle to the center of the screen and sets its heading to 0. If the pen is down, Logo draws a line to the new position. The `home` command is equivalent to
+
+```logo
+setpos [0 0]
+setheading 0
+```
+
+
+## left (lt)
+
+left _degrees_  
+lt
+
+`command`
+
+The `left` command turns the turtle left (counterclockwise) the specified number of degrees. The number of degrees must not be greater than approximately 3.4e38, the maximum value for a (32-bit) IEEE 754 floating point number.
+
+
+## right (rt)
+
+right `degrees`  
+rt
+
+`command`
+
+The `right` command turns the turtle right (clockwise) the specified number of degrees. The number of degrees must not be greater than than approximately 3.4e38, the maximum value for a (32-bit) IEEE 754 floating point number.
+
+
+## setheading (seth)
+
+setheading _degrees_  
+seth
+
+`command`
+
+`setheading` turns the turtle so that it is heading in the direction _degrees_, which can be any decimal number less than than approximately 3.4e38, the maximum value for a (32-bit) IEEE 754 floating point number. Positive numbers are clockwise from north, negative numbers are counterclockwise from north. Note that `right` and `left` do relative motion, but `setheading` does absolute motion.
+
+
+## setpos 
+
+setpos [_xcor_ _ycor_]  
+
+`command`
+
+The `setpos` (for set position) command moves the turtle to the indicated coordinates. If the pen is down, Logo draws a line to the new position.
+
+
+## setx
+
+setx _xcor_  
+
+`command`
+
+`setx` moves the turtle horizontally to a point with x-coordinate _xcor_. The y-coordinate is unchanged. If the pen is down, Logo draws a line to the new position.
+
+
+## sety
+
+sety _ycor_  
+
+`command`
+
+`sety` moves the turtle vertically to a point with y-coordinate _ycor_. The x-coordinate is unchanged. If the pen is down, Logo draws a line to the new position.
+
+
+## showturtle (st)
+
+showturtle  
+st  
+
+`command`
+
+`showturtle` makes the turtle visible. See `hideturtle`. 
+
+
+## heading
+
+heading  
+
+`operation`
+
+`heading` outputs the turtle's heading, a decimal number greater than or equal to 0 and less than 360. Logo follows the compass system where north is a heading of 0 degrees, east 90, south 180, and west 270. When you start up Logo, the turtle has a heading of 0 (straight up).
+
+
+## pos
+
+pos
+
+`operation`
+
+`pos` (for position) outputs the coordinates of the current position of the turtle in the form of a list [xcor ycor]. When you start up Logo, the turtle is at [0 0], the centre of the turtle field.
+
+
+## shown? (shownp)
+
+shown?  
+shownp  
+
+`operation`
+
+`shown?` outputs `true` if the turtle is not hidden, `false` otherwise.
+
+
+## towards
+
+towards [_xcor_ _ycor_]  
+
+`operation`
+
+`towards` outputs a heading that would make the turtle face in the direction indicated by [_xcor_ _ycor_].
+
+
+## xcor
+
+xcor  
+
+`operation`
+
+`xcor` outputs the x-coordinate of the current position of the turtle.
+
+
+## ycor
+
+ycor  
+
+`operation`
+
+`ycor` outputs the y-coordinate of the current position of the turtle.
+
+
+## clean
+
+clean  
+
+`operation`
+
+The `clean` command erases the graphics display but doesn't affect the turtle.
+
+
+## dot
+
+dot [_xcor_ _ycor_]  
+
+`command`
+
+The `dot` command puts a dot of the current pen colour at the specified coordinates, without moving the turtle. It does not draw a line, even if the pen is down.
+
+
+## fence
+
+fence
+
+`command`
+
+The `fence` command fences in the turtle within the edges of the display. If you try to move the turtle beyond the edges of the display, an error, "Turtle out of bounds" occurs and the turtle does not move. If the turtle is already out of bounds, Logo repositions it at its home position [0 0].
+
+See `window` and `wrap`.
+
+
+## fill
+
+fill  
+
+`command`
+
+The `fill` command fills the shape outlined by the current pen colour with the current pen colour. If the turtle is not enclosed, the background is filled with the current pen colour. Logo ignores lines of colours other than the current pen colour when determining what to fill.
+
+
+## pendown (pd)
+
+pendown  
+pd 
+
+`command`
+
+The `pendown` command puts the turtle's pen down. When the turtle moves, it draws lines in the current pen colour. When you start up Logo, the pen is down.
+
+
+## penerase (pe)
+
+penerase  
+pe  
+
+`command`
+
+`penerase` puts the turtle's eraser down. When the turtle moves, it erases lines it passes over. To take away the eraser, use either `pendown` or `penup`.
+
+
+## penreverse (px)
+
+penreverse  
+px  
+
+`command`
+
+`penreverse` puts the reversing pen down. When the turtle moves, it tries to interchange the pen colour and background colour, drawing where there aren't lines and erasing where there are. The exact effect of this reversal is complex; what it looks like on the screen depends on the pen colour, background colour, and whether lines are horizontal or vertical. The best results are on a black background.
+
+
+## penup (pu)
+
+penup  
+pu
+
+`command`
+
+The `penup` command lifts the pen up: when the turtle moves, it does not draw lines. The turtle cannot draw until the pen is put down again.
+
+
+# setbg
+
+setbg _colournumber_  
+
+`command`
+
+The `setbg` (for set background) command sets the background colour to the colour represented by _colournumber_, where _colournumber_ is a value between 0 and 255.
+
+See [Colours](Colours.md).
+
+
+## setpc
+
+setpc _colournumber_  
+
+`command`
+
+The `setpc` (for set pencolor) command sets the color of the pen to _colourumber_, where _colournumber_ is a value between 0 and 255. 
+
+See [Colours](Colours.md).
+
+
+## window
+
+window  
+
+`command`
+
+The `window` command makes the turtle field unbounded; what you see is a portion of the turtle field as if looking through a small window around the center of the display. When the turtle moves beyond the visible bounds of the display, it continues to move but can't be seen: The display is 320 turtle steps high and 320 steps wide. The entire turtle field is 32,768 steps high and 32,768 steps wide.
+
+Changing `window` to `fence` or `wrap` when the turtle is off
+the screen sends the turtle to its home position [0 0].
+
+See `fence` and `wrap`.
+
+
+## wrap
+
+wrap  
+
+`command`
+
+The `wrap` command makes the turtle field wrap around the edges of the display: if the turtle moves beyond one edge of the display, it continues from the opposite edge. The turtle never leaves the visible bounds of the display; when it tries to, it wraps around to the other side.
+
+See `fence` and `window`.
+
+
+## background (bg)
+
+background
+bg  
+
+`operation`
+
+`background` outputs a number representing the color of the background and is a value between 0 and 255. 
+
+See [Colours](Colours.md).
+
+
+## dot? (dotp)
+
+dot? [_xcor_ _ycor_]  
+dotp [_xcor_ _ycor_]  
+
+`operation`
+
+The `dot?` operation outputs `true` if there is a dot on the display at the indicated coordinates. If there is no dot, `dotp` outputs `false`.
+
+
+## pen
+
+pen  
+
+`operation`
+
+`pen` outputs the current state of the turtle's pen. The states are `pendown`, `penerase`, `penup`, and `penreverse`. When the turtle first starts up, `pen` outputs `pendown`.
+
+
+## pencolor (pc)
+
+pencolor  
+pc  
+
+`pencolor` outputs a number representing the current colour of the pen.
+
+See [Colours](Colours.md).
+
+
+
+
 # Words and Lists
 
 ## butfirst (bf)
