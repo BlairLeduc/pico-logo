@@ -2,10 +2,13 @@
 //  Pico Logo
 //  Copyright 2025 Blair Leduc. See LICENSE for details.
 //
-//  Implements a host device that uses standard input and output
+//  Implements a host device that uses standard input and output.
+//  Provides both the new LogoConsole API and the legacy LogoDevice API.
 // 
 
 #include "devices/host/host_device.h"
+#include "devices/console.h"
+#include "devices/stream.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,7 +24,10 @@
 #include <sys/select.h>
 #endif
 
-typedef struct LogoHostDeviceContext
+//
+// Host console context - shared between input and output streams
+//
+typedef struct LogoHostContext
 {
     FILE *input;
     FILE *output;
@@ -29,11 +35,11 @@ typedef struct LogoHostDeviceContext
     struct termios original_termios;
     bool termios_saved;
 #endif
-} LogoHostDeviceContext;
+} LogoHostContext;
 
 #ifndef _WIN32
 // Put terminal into raw mode for single-character input without echo
-static void set_raw_mode(LogoHostDeviceContext *ctx)
+static void set_raw_mode(LogoHostContext *ctx)
 {
     if (!ctx->termios_saved && isatty(fileno(ctx->input)))
     {
@@ -52,7 +58,7 @@ static void set_raw_mode(LogoHostDeviceContext *ctx)
 }
 
 // Restore original terminal settings
-static void restore_mode(LogoHostDeviceContext *ctx)
+static void restore_mode(LogoHostContext *ctx)
 {
     if (ctx->termios_saved)
     {
@@ -61,25 +67,13 @@ static void restore_mode(LogoHostDeviceContext *ctx)
 }
 #endif
 
-static int host_device_read_line(void *context, char *buffer, size_t buffer_size)
+//
+// Stream operations for keyboard input
+//
+
+static int host_input_read_char(LogoStream *stream)
 {
-    LogoHostDeviceContext *ctx = (LogoHostDeviceContext *)context;
-    if (!ctx || !buffer || buffer_size == 0)
-    {
-        return 0;
-    }
-
-    if (!fgets(buffer, (int)buffer_size, ctx->input))
-    {
-        return 0;
-    }
-
-    return 1;
-}
-
-static int host_device_read_char(void *context)
-{
-    LogoHostDeviceContext *ctx = (LogoHostDeviceContext *)context;
+    LogoHostContext *ctx = (LogoHostContext *)stream->context;
     if (!ctx)
     {
         return -1;
@@ -95,9 +89,9 @@ static int host_device_read_char(void *context)
 #endif
 }
 
-static int host_device_read_chars(void *context, char *buffer, int count)
+static int host_input_read_chars(LogoStream *stream, char *buffer, int count)
 {
-    LogoHostDeviceContext *ctx = (LogoHostDeviceContext *)context;
+    LogoHostContext *ctx = (LogoHostContext *)stream->context;
     if (!ctx || !buffer || count <= 0)
     {
         return 0;
@@ -132,9 +126,32 @@ static int host_device_read_chars(void *context, char *buffer, int count)
 #endif
 }
 
-static bool host_device_key_available(void *context)
+static int host_input_read_line(LogoStream *stream, char *buffer, size_t size)
 {
-    LogoHostDeviceContext *ctx = (LogoHostDeviceContext *)context;
+    LogoHostContext *ctx = (LogoHostContext *)stream->context;
+    if (!ctx || !buffer || size == 0)
+    {
+        return -1;
+    }
+
+    if (!fgets(buffer, (int)size, ctx->input))
+    {
+        return -1;
+    }
+
+    // Return length without newline
+    size_t len = strlen(buffer);
+    if (len > 0 && buffer[len - 1] == '\n')
+    {
+        buffer[len - 1] = '\0';
+        len--;
+    }
+    return (int)len;
+}
+
+static bool host_input_can_read(LogoStream *stream)
+{
+    LogoHostContext *ctx = (LogoHostContext *)stream->context;
     if (!ctx)
     {
         return false;
@@ -181,9 +198,13 @@ static bool host_device_key_available(void *context)
 #endif
 }
 
-static void host_device_write(void *context, const char *text)
+//
+// Stream operations for screen output
+//
+
+static void host_output_write(LogoStream *stream, const char *text)
 {
-    LogoHostDeviceContext *ctx = (LogoHostDeviceContext *)context;
+    LogoHostContext *ctx = (LogoHostContext *)stream->context;
     if (!ctx || !text)
     {
         return;
@@ -192,9 +213,223 @@ static void host_device_write(void *context, const char *text)
     fputs(text, ctx->output);
 }
 
-static void host_device_flush(void *context)
+static void host_output_flush(LogoStream *stream)
 {
-    LogoHostDeviceContext *ctx = (LogoHostDeviceContext *)context;
+    LogoHostContext *ctx = (LogoHostContext *)stream->context;
+    if (!ctx)
+    {
+        return;
+    }
+
+    fflush(ctx->output);
+}
+
+//
+// Stream ops tables
+//
+
+static const LogoStreamOps host_input_ops = {
+    .read_char = host_input_read_char,
+    .read_chars = host_input_read_chars,
+    .read_line = host_input_read_line,
+    .can_read = host_input_can_read,
+    .write = NULL,
+    .flush = NULL,
+    .get_read_pos = NULL,
+    .set_read_pos = NULL,
+    .get_write_pos = NULL,
+    .set_write_pos = NULL,
+    .get_length = NULL,
+    .close = NULL,
+};
+
+static const LogoStreamOps host_output_ops = {
+    .read_char = NULL,
+    .read_chars = NULL,
+    .read_line = NULL,
+    .can_read = NULL,
+    .write = host_output_write,
+    .flush = host_output_flush,
+    .get_read_pos = NULL,
+    .set_read_pos = NULL,
+    .get_write_pos = NULL,
+    .set_write_pos = NULL,
+    .get_length = NULL,
+    .close = NULL,
+};
+
+//
+// LogoConsole API (new)
+//
+
+LogoConsole *logo_host_console_create(void)
+{
+    LogoConsole *console = (LogoConsole *)malloc(sizeof(LogoConsole));
+    LogoHostContext *context = (LogoHostContext *)malloc(sizeof(LogoHostContext));
+
+    if (!console || !context)
+    {
+        free(console);
+        free(context);
+        return NULL;
+    }
+
+    context->input = stdin;
+    context->output = stdout;
+#ifndef _WIN32
+    context->termios_saved = false;
+#endif
+
+    logo_console_init(console, &host_input_ops, &host_output_ops, context);
+    
+    return console;
+}
+
+void logo_host_console_destroy(LogoConsole *console)
+{
+    if (!console)
+    {
+        return;
+    }
+
+    free(console->context);
+    free(console);
+}
+
+//
+// Legacy LogoDevice API (for backward compatibility)
+//
+
+// Adapter functions that use context from LogoDevice
+static int legacy_read_line(void *context, char *buffer, size_t buffer_size)
+{
+    LogoHostContext *ctx = (LogoHostContext *)context;
+    if (!ctx || !buffer || buffer_size == 0)
+    {
+        return 0;
+    }
+
+    if (!fgets(buffer, (int)buffer_size, ctx->input))
+    {
+        return 0;
+    }
+
+    return 1;
+}
+
+static int legacy_read_char(void *context)
+{
+    LogoHostContext *ctx = (LogoHostContext *)context;
+    if (!ctx)
+    {
+        return -1;
+    }
+
+#ifdef _WIN32
+    return _getch();
+#else
+    set_raw_mode(ctx);
+    int ch = fgetc(ctx->input);
+    restore_mode(ctx);
+    return ch;
+#endif
+}
+
+static int legacy_read_chars(void *context, char *buffer, int count)
+{
+    LogoHostContext *ctx = (LogoHostContext *)context;
+    if (!ctx || !buffer || count <= 0)
+    {
+        return 0;
+    }
+
+#ifdef _WIN32
+    for (int i = 0; i < count; i++)
+    {
+        int ch = _getch();
+        if (ch == EOF)
+        {
+            return i;
+        }
+        buffer[i] = (char)ch;
+    }
+    return count;
+#else
+    set_raw_mode(ctx);
+    int read_count = 0;
+    for (int i = 0; i < count; i++)
+    {
+        int ch = fgetc(ctx->input);
+        if (ch == EOF)
+        {
+            break;
+        }
+        buffer[i] = (char)ch;
+        read_count++;
+    }
+    restore_mode(ctx);
+    return read_count;
+#endif
+}
+
+static bool legacy_key_available(void *context)
+{
+    LogoHostContext *ctx = (LogoHostContext *)context;
+    if (!ctx)
+    {
+        return false;
+    }
+
+#ifdef _WIN32
+    return _kbhit() != 0;
+#else
+    if (!isatty(fileno(ctx->input)))
+    {
+        int ch = fgetc(ctx->input);
+        if (ch != EOF)
+        {
+            ungetc(ch, ctx->input);
+            return true;
+        }
+        return false;
+    }
+    
+    struct termios old_termios;
+    tcgetattr(fileno(ctx->input), &old_termios);
+    
+    struct termios new_termios = old_termios;
+    new_termios.c_lflag &= ~(ICANON | ECHO);
+    new_termios.c_cc[VMIN] = 0;
+    new_termios.c_cc[VTIME] = 0;
+    tcsetattr(fileno(ctx->input), TCSANOW, &new_termios);
+    
+    fd_set readfds;
+    FD_ZERO(&readfds);
+    FD_SET(fileno(ctx->input), &readfds);
+    
+    struct timeval timeout = {0, 0};
+    int result = select(fileno(ctx->input) + 1, &readfds, NULL, NULL, &timeout);
+    
+    tcsetattr(fileno(ctx->input), TCSANOW, &old_termios);
+    
+    return result > 0;
+#endif
+}
+
+static void legacy_write(void *context, const char *text)
+{
+    LogoHostContext *ctx = (LogoHostContext *)context;
+    if (!ctx || !text)
+    {
+        return;
+    }
+
+    fputs(text, ctx->output);
+}
+
+static void legacy_flush(void *context)
+{
+    LogoHostContext *ctx = (LogoHostContext *)context;
     if (!ctx)
     {
         return;
@@ -206,7 +441,7 @@ static void host_device_flush(void *context)
 LogoDevice *logo_host_device_create(void)
 {
     LogoDevice *device = (LogoDevice *)malloc(sizeof(LogoDevice));
-    LogoHostDeviceContext *context = (LogoHostDeviceContext *)malloc(sizeof(LogoHostDeviceContext));
+    LogoHostContext *context = (LogoHostContext *)malloc(sizeof(LogoHostContext));
 
     if (!device || !context)
     {
@@ -222,12 +457,12 @@ LogoDevice *logo_host_device_create(void)
 #endif
 
     static const LogoDeviceOps ops = {
-        .read_line = host_device_read_line,
-        .read_char = host_device_read_char,
-        .read_chars = host_device_read_chars,
-        .key_available = host_device_key_available,
-        .write = host_device_write,
-        .flush = host_device_flush,
+        .read_line = legacy_read_line,
+        .read_char = legacy_read_char,
+        .read_chars = legacy_read_chars,
+        .key_available = legacy_key_available,
+        .write = legacy_write,
+        .flush = legacy_flush,
     };
 
     logo_device_init(device, &ops, context);

@@ -19,6 +19,9 @@ enable_testing()
 
 add_library(logo_devices_host
    devices/device.c
+   devices/stream.c
+   devices/console.c
+   devices/io.c
    devices/host/host_device.c
 )
 
