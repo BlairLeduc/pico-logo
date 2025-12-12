@@ -23,6 +23,7 @@ add_library(logo_devices_host
    devices/console.c
    devices/io.c
    devices/host/host_device.c
+   devices/host/host_file.c
 )
 
 target_include_directories(logo_devices_host

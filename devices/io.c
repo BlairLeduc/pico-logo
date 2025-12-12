@@ -30,10 +30,19 @@ void logo_io_init(LogoIO *io, LogoConsole *console)
     io->dribble = NULL;
     io->open_count = 0;
     io->prefix[0] = '\0';
+    io->file_opener = NULL;
 
     for (int i = 0; i < LOGO_MAX_OPEN_FILES; i++)
     {
         io->open_streams[i] = NULL;
+    }
+}
+
+void logo_io_set_file_opener(LogoIO *io, LogoFileOpener opener)
+{
+    if (io)
+    {
+        io->file_opener = opener;
     }
 }
 
@@ -145,8 +154,16 @@ LogoStream *logo_io_open(LogoIO *io, const char *pathname)
         return NULL;
     }
 
+    // Resolve the pathname with prefix
+    char resolved[LOGO_STREAM_NAME_MAX];
+    char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
+    if (!full_path)
+    {
+        return NULL;
+    }
+
     // Check if already open
-    LogoStream *existing = logo_io_find_open(io, pathname);
+    LogoStream *existing = logo_io_find_open(io, full_path);
     if (existing)
     {
         return existing;
@@ -158,11 +175,119 @@ LogoStream *logo_io_open(LogoIO *io, const char *pathname)
         return NULL;
     }
 
-    // TODO: Platform-specific file opening will be implemented
-    // For now, this is a placeholder that will be extended in Phase 4
-    // when we add file stream implementation
+    // Check if we have a file opener
+    if (!io->file_opener)
+    {
+        return NULL;
+    }
 
+    // Try to open the file - if it doesn't exist, create it
+    LogoStream *stream = io->file_opener(full_path, LOGO_FILE_UPDATE);
+    if (!stream)
+    {
+        // File doesn't exist, try to create it
+        stream = io->file_opener(full_path, LOGO_FILE_WRITE);
+    }
+
+    if (!stream)
+    {
+        return NULL;
+    }
+
+    // Find an empty slot
+    for (int i = 0; i < LOGO_MAX_OPEN_FILES; i++)
+    {
+        if (io->open_streams[i] == NULL)
+        {
+            io->open_streams[i] = stream;
+            io->open_count++;
+            return stream;
+        }
+    }
+
+    // No slot found (shouldn't happen since we checked count above)
+    logo_stream_close(stream);
+    free(stream);
     return NULL;
+}
+
+// Helper function to open a file with a specific mode
+static LogoStream *logo_io_open_with_mode(LogoIO *io, const char *pathname, LogoFileMode mode)
+{
+    if (!io || !pathname)
+    {
+        return NULL;
+    }
+
+    // Resolve the pathname with prefix
+    char resolved[LOGO_STREAM_NAME_MAX];
+    char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
+    if (!full_path)
+    {
+        return NULL;
+    }
+
+    // Check if already open
+    LogoStream *existing = logo_io_find_open(io, full_path);
+    if (existing)
+    {
+        return existing;
+    }
+
+    // Check if we have room
+    if (io->open_count >= LOGO_MAX_OPEN_FILES)
+    {
+        return NULL;
+    }
+
+    // Check if we have a file opener
+    if (!io->file_opener)
+    {
+        return NULL;
+    }
+
+    // Open the file
+    LogoStream *stream = io->file_opener(full_path, mode);
+    if (!stream)
+    {
+        return NULL;
+    }
+
+    // Find an empty slot
+    for (int i = 0; i < LOGO_MAX_OPEN_FILES; i++)
+    {
+        if (io->open_streams[i] == NULL)
+        {
+            io->open_streams[i] = stream;
+            io->open_count++;
+            return stream;
+        }
+    }
+
+    // No slot found
+    logo_stream_close(stream);
+    free(stream);
+    return NULL;
+}
+
+LogoStream *logo_io_open_read(LogoIO *io, const char *pathname)
+{
+    return logo_io_open_with_mode(io, pathname, LOGO_FILE_READ);
+}
+
+LogoStream *logo_io_open_write(LogoIO *io, const char *pathname)
+{
+    return logo_io_open_with_mode(io, pathname, LOGO_FILE_WRITE);
+}
+
+LogoStream *logo_io_open_append(LogoIO *io, const char *pathname)
+{
+    return logo_io_open_with_mode(io, pathname, LOGO_FILE_APPEND);
+}
+
+LogoStream *logo_io_open_update(LogoIO *io, const char *pathname)
+{
+    return logo_io_open_with_mode(io, pathname, LOGO_FILE_UPDATE);
 }
 
 void logo_io_close(LogoIO *io, const char *pathname)
@@ -391,10 +516,29 @@ bool logo_io_start_dribble(LogoIO *io, const char *pathname)
     // Stop any existing dribble first
     logo_io_stop_dribble(io);
 
-    // TODO: Open file for dribble output
-    // This will be implemented in Phase 4 with file support
-    
-    return false;
+    // Check if we have a file opener
+    if (!io->file_opener)
+    {
+        return false;
+    }
+
+    // Resolve the pathname with prefix
+    char resolved[LOGO_STREAM_NAME_MAX];
+    char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
+    if (!full_path)
+    {
+        return false;
+    }
+
+    // Open file for writing (append mode for dribble)
+    LogoStream *stream = io->file_opener(full_path, LOGO_FILE_APPEND);
+    if (!stream)
+    {
+        return false;
+    }
+
+    io->dribble = stream;
+    return true;
 }
 
 void logo_io_stop_dribble(LogoIO *io)

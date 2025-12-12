@@ -23,6 +23,23 @@ extern "C"
     #define LOGO_PREFIX_MAX 64
 
     //
+    // File opening modes (used by file opener callback)
+    //
+    typedef enum LogoFileMode
+    {
+        LOGO_FILE_READ,     // Open for reading (file must exist)
+        LOGO_FILE_WRITE,    // Open for writing (creates/truncates)
+        LOGO_FILE_APPEND,   // Open for appending (creates if needed)
+        LOGO_FILE_UPDATE,   // Open for reading and writing (file must exist)
+    } LogoFileMode;
+
+    //
+    // File opener callback type
+    // Platform-specific implementation should be provided to logo_io_init()
+    //
+    typedef LogoStream *(*LogoFileOpener)(const char *pathname, LogoFileMode mode);
+
+    //
     // LogoIO manages the I/O state for the Logo interpreter
     //
     typedef struct LogoIO
@@ -46,6 +63,9 @@ extern "C"
 
         // Current file prefix (for relative pathnames)
         char prefix[LOGO_PREFIX_MAX];
+
+        // Platform-specific file opener (NULL if file I/O not supported)
+        LogoFileOpener file_opener;
     } LogoIO;
 
     //
@@ -53,7 +73,11 @@ extern "C"
     //
 
     // Initialize I/O with a console (keyboard/screen or serial-only)
+    // file_opener can be NULL if file I/O is not needed
     void logo_io_init(LogoIO *io, LogoConsole *console);
+
+    // Set the file opener callback (for platforms that support file I/O)
+    void logo_io_set_file_opener(LogoIO *io, LogoFileOpener opener);
 
     // Clean up all open files and reset state
     void logo_io_cleanup(LogoIO *io);
@@ -77,8 +101,22 @@ extern "C"
     // File/device management
     //
 
-    // Open a file or device, returns the stream or NULL on error
+    // Open a file for read/write (Logo "open" primitive)
+    // Creates file if it doesn't exist
     LogoStream *logo_io_open(LogoIO *io, const char *pathname);
+
+    // Open a file for reading only (Logo "openread" primitive)
+    LogoStream *logo_io_open_read(LogoIO *io, const char *pathname);
+
+    // Open a file for writing (Logo "openwrite" primitive)
+    // Creates/truncates the file
+    LogoStream *logo_io_open_write(LogoIO *io, const char *pathname);
+
+    // Open a file for appending (Logo "openappend" primitive)
+    LogoStream *logo_io_open_append(LogoIO *io, const char *pathname);
+
+    // Open a file for update/read+write (Logo "openupdate" primitive)
+    LogoStream *logo_io_open_update(LogoIO *io, const char *pathname);
 
     // Close a specific file by name
     void logo_io_close(LogoIO *io, const char *pathname);

@@ -14,6 +14,7 @@
 #include "devices/console.h"
 #include "devices/io.h"
 #include "devices/host/host_device.h"
+#include "devices/host/host_file.h"
 #include "core/memory.h"
 #include "core/lexer.h"
 #include "core/eval.h"
@@ -74,6 +75,9 @@ int main(void)
     // Initialize the I/O manager
     LogoIO io;
     logo_io_init(&io, console);
+    
+    // Set up host file support
+    logo_io_set_file_opener(&io, logo_host_file_open);
 
     // Initialize Logo subsystems
     mem_init();
@@ -95,14 +99,14 @@ int main(void)
     // Main REPL loop
     while (1)
     {
-        // Print prompt
+        // Print prompt directly to console (not to writer, so setwrite doesn't redirect it)
         if (in_procedure_def)
         {
-            logo_io_write(&io, ">");
+            logo_io_console_write(&io, ">");
         }
         else
         {
-            logo_io_write(&io, "?");
+            logo_io_console_write(&io, "?");
         }
         logo_io_flush(&io);
 

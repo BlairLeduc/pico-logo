@@ -431,6 +431,566 @@ static Result prim_readword(Evaluator *eval, int argc, Value *args)
 }
 
 //==========================================================================
+// File management primitives
+//==========================================================================
+
+// open file - opens file for read/write, creates if doesn't exist
+static Result prim_open(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+
+    if (args[0].type != VALUE_WORD)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "open", value_to_string(args[0]));
+    }
+
+    const char *pathname = mem_word_ptr(args[0].as.node);
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    LogoStream *stream = logo_io_open(io, pathname);
+    if (!stream)
+    {
+        // Check if we hit the file limit
+        if (logo_io_open_count(io) >= LOGO_MAX_OPEN_FILES)
+        {
+            return result_error(ERR_NO_FILE_BUFFERS);
+        }
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    return result_none();
+}
+
+// openread file - opens file for reading only
+static Result prim_openread(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+
+    if (args[0].type != VALUE_WORD)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "openread", value_to_string(args[0]));
+    }
+
+    const char *pathname = mem_word_ptr(args[0].as.node);
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    LogoStream *stream = logo_io_open_read(io, pathname);
+    if (!stream)
+    {
+        if (logo_io_open_count(io) >= LOGO_MAX_OPEN_FILES)
+        {
+            return result_error(ERR_NO_FILE_BUFFERS);
+        }
+        return result_error_arg(ERR_FILE_NOT_FOUND, "", pathname);
+    }
+
+    return result_none();
+}
+
+// openwrite file - opens file for writing, creates/truncates
+static Result prim_openwrite(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+
+    if (args[0].type != VALUE_WORD)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "openwrite", value_to_string(args[0]));
+    }
+
+    const char *pathname = mem_word_ptr(args[0].as.node);
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    LogoStream *stream = logo_io_open_write(io, pathname);
+    if (!stream)
+    {
+        if (logo_io_open_count(io) >= LOGO_MAX_OPEN_FILES)
+        {
+            return result_error(ERR_NO_FILE_BUFFERS);
+        }
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    return result_none();
+}
+
+// openappend file - opens file for appending
+static Result prim_openappend(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+
+    if (args[0].type != VALUE_WORD)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "openappend", value_to_string(args[0]));
+    }
+
+    const char *pathname = mem_word_ptr(args[0].as.node);
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    LogoStream *stream = logo_io_open_append(io, pathname);
+    if (!stream)
+    {
+        if (logo_io_open_count(io) >= LOGO_MAX_OPEN_FILES)
+        {
+            return result_error(ERR_NO_FILE_BUFFERS);
+        }
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    return result_none();
+}
+
+// openupdate file - opens file for reading and writing
+static Result prim_openupdate(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+
+    if (args[0].type != VALUE_WORD)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "openupdate", value_to_string(args[0]));
+    }
+
+    const char *pathname = mem_word_ptr(args[0].as.node);
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    LogoStream *stream = logo_io_open_update(io, pathname);
+    if (!stream)
+    {
+        if (logo_io_open_count(io) >= LOGO_MAX_OPEN_FILES)
+        {
+            return result_error(ERR_NO_FILE_BUFFERS);
+        }
+        return result_error_arg(ERR_FILE_NOT_FOUND, "", pathname);
+    }
+
+    return result_none();
+}
+
+// close file - closes the named file
+static Result prim_close(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+
+    if (args[0].type != VALUE_WORD)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "close", value_to_string(args[0]));
+    }
+
+    const char *pathname = mem_word_ptr(args[0].as.node);
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    // Check if file is open
+    if (!logo_io_is_open(io, pathname))
+    {
+        return result_error_arg(ERR_FILE_NOT_FOUND, "", pathname);
+    }
+
+    logo_io_close(io, pathname);
+    return result_none();
+}
+
+// closeall - closes all open files (not dribble)
+static Result prim_closeall(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    LogoIO *io = primitives_get_io();
+    if (io)
+    {
+        logo_io_close_all(io);
+    }
+
+    return result_none();
+}
+
+// setread file - sets current reader to file (empty list for keyboard)
+static Result prim_setread(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    // Empty list means reset to keyboard
+    if (args[0].type == VALUE_LIST && mem_is_nil(args[0].as.node))
+    {
+        logo_io_set_reader(io, NULL);
+        return result_none();
+    }
+
+    if (args[0].type != VALUE_WORD)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setread", value_to_string(args[0]));
+    }
+
+    const char *pathname = mem_word_ptr(args[0].as.node);
+    
+    // Find the open stream
+    LogoStream *stream = logo_io_find_open(io, pathname);
+    if (!stream)
+    {
+        return result_error_arg(ERR_FILE_NOT_FOUND, "", pathname);
+    }
+
+    logo_io_set_reader(io, stream);
+    return result_none();
+}
+
+// setwrite file - sets current writer to file (empty list for screen)
+static Result prim_setwrite(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    // Empty list means reset to screen
+    if (args[0].type == VALUE_LIST && mem_is_nil(args[0].as.node))
+    {
+        logo_io_set_writer(io, NULL);
+        return result_none();
+    }
+
+    if (args[0].type != VALUE_WORD)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setwrite", value_to_string(args[0]));
+    }
+
+    const char *pathname = mem_word_ptr(args[0].as.node);
+    
+    // Find the open stream
+    LogoStream *stream = logo_io_find_open(io, pathname);
+    if (!stream)
+    {
+        return result_error_arg(ERR_FILE_NOT_FOUND, "", pathname);
+    }
+
+    logo_io_set_writer(io, stream);
+    return result_none();
+}
+
+// reader - outputs the current reader name (empty list for keyboard)
+static Result prim_reader(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_ok(value_list(NODE_NIL));
+    }
+
+    if (logo_io_reader_is_keyboard(io))
+    {
+        return result_ok(value_list(NODE_NIL));
+    }
+
+    const char *name = logo_io_get_reader_name(io);
+    return result_ok(value_word(mem_atom_cstr(name)));
+}
+
+// writer - outputs the current writer name (empty list for screen)
+static Result prim_writer(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_ok(value_list(NODE_NIL));
+    }
+
+    if (logo_io_writer_is_screen(io))
+    {
+        return result_ok(value_list(NODE_NIL));
+    }
+
+    const char *name = logo_io_get_writer_name(io);
+    return result_ok(value_word(mem_atom_cstr(name)));
+}
+
+// allopen - outputs a list of all open files
+static Result prim_allopen(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_ok(value_list(NODE_NIL));
+    }
+
+    // Build list of open file names
+    Node list = NODE_NIL;
+    int count = logo_io_open_count(io);
+    
+    // Build in reverse order so first file ends up first in list
+    for (int i = count - 1; i >= 0; i--)
+    {
+        LogoStream *stream = logo_io_get_open(io, i);
+        if (stream)
+        {
+            Node name_node = mem_atom_cstr(stream->name);
+            list = mem_cons(name_node, list);
+        }
+    }
+
+    return result_ok(value_list(list));
+}
+
+// readpos - outputs the current read position in the current file
+static Result prim_readpos(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    LogoIO *io = primitives_get_io();
+    if (!io || !io->reader)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    // Error if reader is keyboard
+    if (logo_io_reader_is_keyboard(io))
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    long pos = logo_stream_get_read_pos(io->reader);
+    if (pos < 0)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    return result_ok(value_number((float)pos));
+}
+
+// setreadpos integer - sets the read position in the current file
+static Result prim_setreadpos(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+
+    float pos_f;
+    if (!value_to_number(args[0], &pos_f))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setreadpos", value_to_string(args[0]));
+    }
+    long pos = (long)pos_f;
+    if (pos < 0)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setreadpos", value_to_string(args[0]));
+    }
+
+    LogoIO *io = primitives_get_io();
+    if (!io || !io->reader)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    // Error if reader is keyboard
+    if (logo_io_reader_is_keyboard(io))
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    if (!logo_stream_set_read_pos(io->reader, pos))
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    return result_none();
+}
+
+// writepos - outputs the current write position in the current file
+static Result prim_writepos(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    LogoIO *io = primitives_get_io();
+    if (!io || !io->writer)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    // Error if writer is screen
+    if (logo_io_writer_is_screen(io))
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    long pos = logo_stream_get_write_pos(io->writer);
+    if (pos < 0)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    return result_ok(value_number((float)pos));
+}
+
+// setwritepos integer - sets the write position in the current file
+static Result prim_setwritepos(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+
+    float pos_f;
+    if (!value_to_number(args[0], &pos_f))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setwritepos", value_to_string(args[0]));
+    }
+    long pos = (long)pos_f;
+    if (pos < 0)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setwritepos", value_to_string(args[0]));
+    }
+
+    LogoIO *io = primitives_get_io();
+    if (!io || !io->writer)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    // Error if writer is screen
+    if (logo_io_writer_is_screen(io))
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    if (!logo_stream_set_write_pos(io->writer, pos))
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    return result_none();
+}
+
+// filelen pathname - outputs the length in bytes of the file
+// The file must be open
+static Result prim_filelen(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+
+    if (args[0].type != VALUE_WORD)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "filelen", value_to_string(args[0]));
+    }
+
+    const char *pathname = mem_word_ptr(args[0].as.node);
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    // Find the open stream
+    LogoStream *stream = logo_io_find_open(io, pathname);
+    if (!stream)
+    {
+        return result_error_arg(ERR_FILE_NOT_FOUND, "", pathname);
+    }
+
+    long len = logo_stream_get_length(stream);
+    if (len < 0)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    return result_ok(value_number((float)len));
+}
+
+// dribble file - starts dribbling output to file
+static Result prim_dribble(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+
+    if (args[0].type != VALUE_WORD)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "dribble", value_to_string(args[0]));
+    }
+
+    const char *pathname = mem_word_ptr(args[0].as.node);
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    if (!logo_io_start_dribble(io, pathname))
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    return result_none();
+}
+
+// nodribble - stops dribbling
+static Result prim_nodribble(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    LogoIO *io = primitives_get_io();
+    if (io)
+    {
+        logo_io_stop_dribble(io);
+    }
+
+    return result_none();
+}
+
+//==========================================================================
 // Output primitives
 //==========================================================================
 
@@ -499,4 +1059,25 @@ void primitives_outside_world_init(void)
     primitive_register("pr", 1, prim_print);
     primitive_register("show", 1, prim_show);
     primitive_register("type", 1, prim_type);
+
+    // File management
+    primitive_register("open", 1, prim_open);
+    primitive_register("openread", 1, prim_openread);
+    primitive_register("openwrite", 1, prim_openwrite);
+    primitive_register("openappend", 1, prim_openappend);
+    primitive_register("openupdate", 1, prim_openupdate);
+    primitive_register("close", 1, prim_close);
+    primitive_register("closeall", 0, prim_closeall);
+    primitive_register("setread", 1, prim_setread);
+    primitive_register("setwrite", 1, prim_setwrite);
+    primitive_register("reader", 0, prim_reader);
+    primitive_register("writer", 0, prim_writer);
+    primitive_register("allopen", 0, prim_allopen);
+    primitive_register("readpos", 0, prim_readpos);
+    primitive_register("setreadpos", 1, prim_setreadpos);
+    primitive_register("writepos", 0, prim_writepos);
+    primitive_register("setwritepos", 1, prim_setwritepos);
+    primitive_register("filelen", 1, prim_filelen);
+    primitive_register("dribble", 1, prim_dribble);
+    primitive_register("nodribble", 0, prim_nodribble);
 }
