@@ -12,6 +12,8 @@
 #include <strings.h>
 
 #include "devices/device.h"
+#include "devices/console.h"
+#include "devices/io.h"
 #include "devices/host/host_device.h"
 #include "core/memory.h"
 #include "core/lexer.h"
@@ -27,8 +29,9 @@
 // Maximum procedure definition buffer (for multi-line TO...END)
 #define MAX_PROC_BUFFER 4096
 
-// Forward declaration for the device setter
+// Forward declaration for the device setters
 extern void primitives_set_device(LogoDevice *device);
+extern void primitives_set_io(LogoIO *io);
 
 // Check if a line starts with "to " (case-insensitive)
 static bool line_starts_with_to(const char *line)
@@ -60,36 +63,30 @@ static bool line_is_end(const char *line)
     return c == '\0' || isspace((unsigned char)c);
 }
 
-// Strip trailing newline/carriage return
-static void strip_newline(char *line)
-{
-    size_t len = strlen(line);
-    while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r'))
-    {
-        line[--len] = '\0';
-    }
-}
-
 int main(void)
 {
-    // Initialize the host device for I/O
-    LogoDevice *device = logo_host_device_create();
-    if (!device)
+    // Initialize the host console for I/O
+    LogoConsole *console = logo_host_console_create();
+    if (!console)
     {
-        fprintf(stderr, "Failed to create device\n");
+        fprintf(stderr, "Failed to create console\n");
         return EXIT_FAILURE;
     }
+
+    // Initialize the I/O manager
+    LogoIO io;
+    logo_io_init(&io, console);
 
     // Initialize Logo subsystems
     mem_init();
     primitives_init();
     procedures_init();
     variables_init();
-    primitives_set_device(device);
+    primitives_set_io(&io);
 
     // Print welcome banner
-    logo_device_write_line(device, "Copyright 2025 Blair Leduc");
-    logo_device_write_line(device, "Welcome to Pico Logo.");
+    logo_io_write_line(&io, "Copyright 2025 Blair Leduc");
+    logo_io_write_line(&io, "Welcome to Pico Logo.");
 
     // Input buffers
     char line[MAX_LINE_LENGTH];
@@ -103,23 +100,22 @@ int main(void)
         // Print prompt
         if (in_procedure_def)
         {
-            logo_device_write(device, ">");
+            logo_io_write(&io, ">");
         }
         else
         {
-            logo_device_write(device, "?");
+            logo_io_write(&io, "?");
         }
-        logo_device_flush(device);
+        logo_io_flush(&io);
 
-        // Read input line
-        if (!logo_device_read_line(device, line, sizeof(line)))
+        // Read input line (directly from console, not through setread)
+        int len = logo_stream_read_line(&console->input, line, sizeof(line));
+        if (len < 0)
         {
             // EOF or error - exit gracefully
-            logo_device_write_line(device, "");
+            logo_io_write_line(&io, "");
             break;
         }
-
-        strip_newline(line);
 
         // Skip empty lines
         if (line[0] == '\0')
@@ -135,12 +131,12 @@ int main(void)
             proc_len = 0;
             
             // Copy the "to" line to buffer
-            size_t len = strlen(line);
-            if (len < MAX_PROC_BUFFER - 1)
+            size_t line_len = strlen(line);
+            if (line_len < MAX_PROC_BUFFER - 1)
             {
-                memcpy(proc_buffer, line, len);
-                proc_buffer[len] = ' ';  // Space separator instead of newline
-                proc_len = len + 1;
+                memcpy(proc_buffer, line, line_len);
+                proc_buffer[line_len] = ' ';  // Space separator instead of newline
+                proc_len = line_len + 1;
             }
             continue;
         }
@@ -164,7 +160,7 @@ int main(void)
                 Result r = proc_define_from_text(proc_buffer);
                 if (r.status == RESULT_ERROR)
                 {
-                    logo_device_write_line(device, error_format(r));
+                    logo_io_write_line(&io, error_format(r));
                 }
                 
                 proc_len = 0;
@@ -172,16 +168,16 @@ int main(void)
             else
             {
                 // Append line to procedure buffer with space separator
-                size_t len = strlen(line);
-                if (proc_len + len + 1 < MAX_PROC_BUFFER)
+                size_t line_len = strlen(line);
+                if (proc_len + line_len + 1 < MAX_PROC_BUFFER)
                 {
-                    memcpy(proc_buffer + proc_len, line, len);
-                    proc_buffer[proc_len + len] = ' ';
-                    proc_len += len + 1;
+                    memcpy(proc_buffer + proc_len, line, line_len);
+                    proc_buffer[proc_len + line_len] = ' ';
+                    proc_len += line_len + 1;
                 }
                 else
                 {
-                    logo_device_write_line(device, "Procedure too long");
+                    logo_io_write_line(&io, "Procedure too long");
                     in_procedure_def = false;
                     proc_len = 0;
                 }
@@ -202,7 +198,7 @@ int main(void)
             
             if (r.status == RESULT_ERROR)
             {
-                logo_device_write_line(device, error_format(r));
+                logo_io_write_line(&io, error_format(r));
                 break;
             }
             else if (r.status == RESULT_THROW)
@@ -218,7 +214,7 @@ int main(void)
                     // Other uncaught throws are errors
                     char msg[128];
                     snprintf(msg, sizeof(msg), "No one caught %s", r.throw_tag);
-                    logo_device_write_line(device, msg);
+                    logo_io_write_line(&io, msg);
                     break;
                 }
             }
@@ -228,7 +224,7 @@ int main(void)
                 char msg[128];
                 snprintf(msg, sizeof(msg), "I don't know what to do with %s", 
                          value_to_string(r.value));
-                logo_device_write_line(device, msg);
+                logo_io_write_line(&io, msg);
                 break;
             }
             // RESULT_NONE means command completed successfully - continue
@@ -236,7 +232,8 @@ int main(void)
     }
 
     // Cleanup
-    logo_host_device_destroy(device);
+    logo_io_cleanup(&io);
+    logo_host_console_destroy(console);
 
     return EXIT_SUCCESS;
 }

@@ -57,6 +57,68 @@
 				"2>&1"
 			],
 			"group": "test"
+		},
+		{
+			"label": "Run All Tests",
+			"type": "shell",
+			"command": "ctest",
+			"args": [
+				"--output-on-failure"
+			],
+			"group": "test"
+		},
+		{
+			"label": "CTest in Build Dir",
+			"type": "shell",
+			"command": "cmake",
+			"args": [
+				"-S",
+				".",
+				"-B",
+				"build",
+				"&&",
+				"ctest",
+				"--test-dir",
+				"build",
+				"--output-on-failure"
+			],
+			"group": "test"
+		},
+		{
+			"label": "Run Outside World Test",
+			"type": "shell",
+			"command": "./build/test_primitives_outside_world",
+			"args": [],
+			"group": "test"
+		},
+		{
+			"label": "CTest All",
+			"type": "shell",
+			"command": "ctest",
+			"args": [
+				"--test-dir",
+				"build",
+				"--output-on-failure"
+			],
+			"group": "test"
+		},
+		{
+			"label": "Outside World Direct",
+			"type": "shell",
+			"command": "./build/test_primitives_outside_world",
+			"args": [],
+			"group": "test"
+		},
+		{
+			"label": "CTest All Tests",
+			"type": "shell",
+			"command": "ctest",
+			"args": [
+				"--test-dir",
+				"build",
+				"--output-on-failure"
+			],
+			"group": "test"
 		}
 	]
 }

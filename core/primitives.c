@@ -5,6 +5,7 @@
 
 #include "primitives.h"
 #include "devices/device.h"
+#include "devices/io.h"
 #include <string.h>
 #include <strings.h>
 
@@ -13,8 +14,11 @@
 static Primitive primitives[MAX_PRIMITIVES];
 static int primitive_count = 0;
 
-// Shared device for all primitives that need I/O
+// Shared device for all primitives that need I/O (legacy)
 static LogoDevice *shared_device = NULL;
+
+// Shared I/O manager for all primitives (new)
+static LogoIO *shared_io = NULL;
 
 void primitives_set_device(LogoDevice *device)
 {
@@ -24,6 +28,16 @@ void primitives_set_device(LogoDevice *device)
 LogoDevice *primitives_get_device(void)
 {
     return shared_device;
+}
+
+void primitives_set_io(LogoIO *io)
+{
+    shared_io = io;
+}
+
+LogoIO *primitives_get_io(void)
+{
+    return shared_io;
 }
 
 void primitives_init(void)

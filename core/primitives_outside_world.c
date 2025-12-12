@@ -10,7 +10,7 @@
 #include "error.h"
 #include "eval.h"
 #include "lexer.h"
-#include "devices/device.h"
+#include "devices/io.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,21 +19,21 @@
 // Output helpers
 //==========================================================================
 
-static void print_to_device(const char *str)
+static void print_to_writer(const char *str)
 {
-    LogoDevice *device = primitives_get_device();
-    if (device)
+    LogoIO *io = primitives_get_io();
+    if (io)
     {
-        logo_device_write(device, str);
+        logo_io_write(io, str);
     }
 }
 
-static void flush_device(void)
+static void flush_writer(void)
 {
-    LogoDevice *device = primitives_get_device();
-    if (device)
+    LogoIO *io = primitives_get_io();
+    if (io)
     {
-        logo_device_flush(device);
+        logo_io_flush(io);
     }
 }
 
@@ -43,19 +43,19 @@ static void print_list_contents(Node node)
     while (!mem_is_nil(node))
     {
         if (!first)
-            print_to_device(" ");
+            print_to_writer(" ");
         first = false;
 
         Node element = mem_car(node);
         if (mem_is_word(element))
         {
-            print_to_device(mem_word_ptr(element));
+            print_to_writer(mem_word_ptr(element));
         }
         else if (mem_is_list(element))
         {
-            print_to_device("[");
+            print_to_writer("[");
             print_list_contents(element);
-            print_to_device("]");
+            print_to_writer("]");
         }
         node = mem_cdr(node);
     }
@@ -71,10 +71,10 @@ static void print_value(Value v)
         break;
     case VALUE_NUMBER:
         snprintf(buf, sizeof(buf), "%g", v.as.number);
-        print_to_device(buf);
+        print_to_writer(buf);
         break;
     case VALUE_WORD:
-        print_to_device(mem_word_ptr(v.as.node));
+        print_to_writer(mem_word_ptr(v.as.node));
         break;
     case VALUE_LIST:
         print_list_contents(v.as.node);
@@ -92,15 +92,15 @@ static void show_value(Value v)
         break;
     case VALUE_NUMBER:
         snprintf(buf, sizeof(buf), "%g", v.as.number);
-        print_to_device(buf);
+        print_to_writer(buf);
         break;
     case VALUE_WORD:
-        print_to_device(mem_word_ptr(v.as.node));
+        print_to_writer(mem_word_ptr(v.as.node));
         break;
     case VALUE_LIST:
-        print_to_device("[");
+        print_to_writer("[");
         print_list_contents(v.as.node);
-        print_to_device("]");
+        print_to_writer("]");
         break;
     }
 }
@@ -116,13 +116,13 @@ static Result prim_keyp(Evaluator *eval, int argc, Value *args)
     (void)argc;
     (void)args;
 
-    LogoDevice *device = primitives_get_device();
-    if (!device)
+    LogoIO *io = primitives_get_io();
+    if (!io)
     {
         return result_ok(value_word(mem_atom_cstr("false")));
     }
 
-    bool available = logo_device_key_available(device);
+    bool available = logo_io_key_available(io);
     if (available)
     {
         return result_ok(value_word(mem_atom_cstr("true")));
@@ -139,13 +139,13 @@ static Result prim_readchar(Evaluator *eval, int argc, Value *args)
     (void)argc;
     (void)args;
 
-    LogoDevice *device = primitives_get_device();
-    if (!device)
+    LogoIO *io = primitives_get_io();
+    if (!io)
     {
         return result_ok(value_list(NODE_NIL)); // Empty list on EOF
     }
 
-    int ch = logo_device_read_char(device);
+    int ch = logo_io_read_char(io);
     if (ch < 0)
     {
         // EOF - return empty list
@@ -177,8 +177,8 @@ static Result prim_readchars(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, "readchars", value_to_string(args[0]));
     }
 
-    LogoDevice *device = primitives_get_device();
-    if (!device)
+    LogoIO *io = primitives_get_io();
+    if (!io)
     {
         return result_ok(value_list(NODE_NIL)); // Empty list on EOF
     }
@@ -190,7 +190,7 @@ static Result prim_readchars(Evaluator *eval, int argc, Value *args)
         return result_error(ERR_OUT_OF_SPACE);
     }
 
-    int read_count = logo_device_read_chars(device, buffer, count);
+    int read_count = logo_io_read_chars(io, buffer, count);
     if (read_count == 0)
     {
         free(buffer);
@@ -372,28 +372,18 @@ static Result prim_readlist(Evaluator *eval, int argc, Value *args)
     (void)argc;
     (void)args;
 
-    LogoDevice *device = primitives_get_device();
-    if (!device)
+    LogoIO *io = primitives_get_io();
+    if (!io)
     {
         return result_ok(value_word(mem_atom("", 0))); // Empty word on error
     }
 
     char buffer[1024];
-    if (!logo_device_read_line(device, buffer, sizeof(buffer)))
+    int len = logo_io_read_line(io, buffer, sizeof(buffer));
+    if (len < 0)
     {
         // EOF - return empty word
         return result_ok(value_word(mem_atom("", 0)));
-    }
-
-    // Remove trailing newline if present
-    size_t len = strlen(buffer);
-    if (len > 0 && buffer[len - 1] == '\n')
-    {
-        buffer[--len] = '\0';
-    }
-    if (len > 0 && buffer[len - 1] == '\r')
-    {
-        buffer[--len] = '\0';
     }
 
     // Parse the line into a list
@@ -409,28 +399,30 @@ static Result prim_readword(Evaluator *eval, int argc, Value *args)
     (void)argc;
     (void)args;
 
-    LogoDevice *device = primitives_get_device();
-    if (!device)
+    LogoIO *io = primitives_get_io();
+    if (!io)
     {
         return result_ok(value_list(NODE_NIL)); // Empty list on error/EOF
     }
 
     char buffer[1024];
-    if (!logo_device_read_line(device, buffer, sizeof(buffer)))
+    int len = logo_io_read_line(io, buffer, sizeof(buffer));
+    if (len < 0)
     {
         // EOF - return empty list
         return result_ok(value_list(NODE_NIL));
     }
 
-    // Remove trailing newline if present
-    size_t len = strlen(buffer);
+    // Strip trailing newline if present
     if (len > 0 && buffer[len - 1] == '\n')
     {
-        buffer[--len] = '\0';
+        len--;
     }
+    
+    // Strip trailing carriage return if present (for Windows line endings)
     if (len > 0 && buffer[len - 1] == '\r')
     {
-        buffer[--len] = '\0';
+        len--;
     }
 
     // Return as a single word (even if empty)
@@ -450,11 +442,11 @@ static Result prim_print(Evaluator *eval, int argc, Value *args)
     for (int i = 0; i < argc; i++)
     {
         if (i > 0)
-            print_to_device(" ");
+            print_to_writer(" ");
         print_value(args[i]);
     }
-    print_to_device("\n");
-    flush_device();
+    print_to_writer("\n");
+    flush_writer();
     return result_none();
 }
 
@@ -465,8 +457,8 @@ static Result prim_show(Evaluator *eval, int argc, Value *args)
     (void)eval;
     (void)argc;
     show_value(args[0]);
-    print_to_device("\n");
-    flush_device();
+    print_to_writer("\n");
+    flush_writer();
     return result_none();
 }
 
@@ -478,10 +470,10 @@ static Result prim_type(Evaluator *eval, int argc, Value *args)
     for (int i = 0; i < argc; i++)
     {
         if (i > 0)
-            print_to_device(" ");
+            print_to_writer(" ");
         print_value(args[i]);
     }
-    flush_device();
+    flush_writer();
     return result_none();
 }
 

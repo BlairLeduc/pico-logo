@@ -48,14 +48,23 @@ extern "C"
     void primitives_properties_init(void);
     void primitives_debug_init(void);
 
-    // Forward declaration for LogoDevice
+    // Forward declarations for I/O
     struct LogoDevice;
+    struct LogoIO;
 
     // Set the device for I/O primitives (called once at startup)
+    // Legacy API - use primitives_set_io() for new code
     void primitives_set_device(struct LogoDevice *device);
 
     // Get the shared device for primitives that need I/O
+    // Legacy API - use primitives_get_io() for new code
     struct LogoDevice *primitives_get_device(void);
+
+    // Set the I/O manager for primitives (called once at startup)
+    void primitives_set_io(struct LogoIO *io);
+
+    // Get the shared I/O manager for primitives
+    struct LogoIO *primitives_get_io(void);
 
     // Reset control flow test state (for testing purposes)
     void primitives_control_reset_test_state(void);
