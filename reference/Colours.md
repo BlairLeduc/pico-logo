@@ -2,7 +2,7 @@
 
 Each row is one hue group from `palette_24bit` (see `devices/palette.h`). The number on each block is the index into that array (0–255). This follows the palette from the Atari 8‑bit GTIA.
 
-## Grayscale (hue: N/A)
+## Hue 0: (gray scale, black to white)
 
 <div style="display:flex; flex-wrap:nowrap; width:100%; overflow-x:auto; font:12px monospace; font-weight: bold;">
   <div style="background:#000000; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#ffffff; mix-blend-mode:difference;">0</div>
@@ -23,7 +23,7 @@ Each row is one hue group from `palette_24bit` (see `devices/palette.h`). The nu
   <div style="background:#ffffff; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#111111; mix-blend-mode:difference;">15</div>
 </div>
 
-## Yellow-Brown (hue: ~45°)
+## Hue 1: ~22.5° (brown to gold)
 
 <div style="display:flex; flex-wrap:nowrap; width:100%; overflow-x:auto; font:12px monospace; font-weight: bold;">
   <div style="background:#190700; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#ffff96; mix-blend-mode:difference;">16</div>
@@ -44,7 +44,7 @@ Each row is one hue group from `palette_24bit` (see `devices/palette.h`). The nu
   <div style="background:#ffff96; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#2a1800; mix-blend-mode:difference;">31</div>
 </div>
 
-## Orange (hue: ~30°)
+## Hue 2: ~45° (orange to yellow)
 
 <div style="display:flex; flex-wrap:nowrap; width:100%; overflow-x:auto; font:12px monospace; font-weight: bold;">
   <div style="background:#310000; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#fff4b2; mix-blend-mode:difference;">32</div>
@@ -65,7 +65,7 @@ Each row is one hue group from `palette_24bit` (see `devices/palette.h`). The nu
   <div style="background:#fff4b2; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#3f0000; mix-blend-mode:difference;">47</div>
 </div>
 
-## Red-Orange (hue: ~15°)
+## Hue 3: ~67.5° (terra cotta to pink/red)
 
 <div style="display:flex; flex-wrap:nowrap; width:100%; overflow-x:auto; font:12px monospace; font-weight: bold;">
   <div style="background:#420404; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#ffe5da; mix-blend-mode:difference;">48</div>
@@ -86,7 +86,7 @@ Each row is one hue group from `palette_24bit` (see `devices/palette.h`). The nu
   <div style="background:#ffe5da; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#4f0000; mix-blend-mode:difference;">63</div>
 </div>
 
-## Red-Pink (hue: ~350°)
+## Hue 4: ~90° (mulberry to magenta/purple)
 
 <div style="display:flex; flex-wrap:nowrap; width:100%; overflow-x:auto; font:12px monospace; font-weight: bold;">
   <div style="background:#410103; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#fbdcf6; mix-blend-mode:difference;">64</div>
@@ -107,7 +107,7 @@ Each row is one hue group from `palette_24bit` (see `devices/palette.h`). The nu
   <div style="background:#fbdcf6; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#50000f; mix-blend-mode:difference;">79</div>
 </div>
 
-## Magenta (hue: ~300°)
+## Hue 5: ~112.5° (violet to lavender)
 
 <div style="display:flex; flex-wrap:nowrap; width:100%; overflow-x:auto; font:12px monospace; font-weight: bold;">
   <div style="background:#330035; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#ffd8f3; mix-blend-mode:difference;">80</div>
@@ -128,7 +128,7 @@ Each row is one hue group from `palette_24bit` (see `devices/palette.h`). The nu
   <div style="background:#ffd8f3; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#440041; mix-blend-mode:difference;">95</div>
 </div>
 
-## Purple (hue: ~280°)
+## Hue 6: ~135° (indigo to white/cyan)
 
 <div style="display:flex; flex-wrap:nowrap; width:100%; overflow-x:auto; font:12px monospace; font-weight: bold;">
   <div style="background:#1d005c; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#ffdff9; mix-blend-mode:difference;">96</div>
@@ -149,7 +149,7 @@ Each row is one hue group from `palette_24bit` (see `devices/palette.h`). The nu
   <div style="background:#ffdff9; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#2e0068; mix-blend-mode:difference;">111</div>
 </div>
 
-## Violet (hue: ~260°)
+## Hue 7: ~157.5° (sky blue)
 
 <div style="display:flex; flex-wrap:nowrap; width:100%; overflow-x:auto; font:12px monospace; font-weight: bold;">
   <div style="background:#020071; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#ffe8f8; mix-blend-mode:difference;">112</div>
@@ -170,7 +170,7 @@ Each row is one hue group from `palette_24bit` (see `devices/palette.h`). The nu
   <div style="background:#ffe8f8; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#13007d; mix-blend-mode:difference;">127</div>
 </div>
 
-## Blue (hue: ~240°)
+## Hue 8: ~180° (royal blue to baby blue)
 
 <div style="display:flex; flex-wrap:nowrap; width:100%; overflow-x:auto; font:12px monospace; font-weight: bold;">
   <div style="background:#000068; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#e5f8ff; mix-blend-mode:difference;">128</div>
@@ -191,7 +191,7 @@ Each row is one hue group from `palette_24bit` (see `devices/palette.h`). The nu
   <div style="background:#e5f8ff; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#000a7c; mix-blend-mode:difference;">143</div>
 </div>
 
-## Azure (hue: ~210°)
+## Hue 9: ~202.5° (turquoise blue)
 
 <div style="display:flex; flex-wrap:nowrap; width:100%; overflow-x:auto; font:12px monospace; font-weight: bold;">
   <div style="background:#000a4d; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#ceffff; mix-blend-mode:difference;">144</div>
@@ -212,7 +212,7 @@ Each row is one hue group from `palette_24bit` (see `devices/palette.h`). The nu
   <div style="background:#ceffff; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#001b63; mix-blend-mode:difference;">159</div>
 </div>
 
-## Cyan (hue: ~190°)
+## Hue 10: ~225° (ultramarine to powder blue)
 
 <div style="display:flex; flex-wrap:nowrap; width:100%; overflow-x:auto; font:12px monospace; font-weight: bold;">
   <div style="background:#001a26; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#c1ffff; mix-blend-mode:difference;">160</div>
@@ -233,7 +233,7 @@ Each row is one hue group from `palette_24bit` (see `devices/palette.h`). The nu
   <div style="background:#c1ffff; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#002b3c; mix-blend-mode:difference;">175</div>
 </div>
 
-## Teal (hue: ~160°)
+## Hue 11: ~247.5° (midnight blue to aquamarine)
 
 <div style="display:flex; flex-wrap:nowrap; width:100%; overflow-x:auto; font:12px monospace; font-weight: bold;">
   <div style="background:#01250a; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#c0fffd; mix-blend-mode:difference;">176</div>
@@ -254,7 +254,7 @@ Each row is one hue group from `palette_24bit` (see `devices/palette.h`). The nu
   <div style="background:#c0fffd; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#023610; mix-blend-mode:difference;">191</div>
 </div>
 
-## Green (hue: ~120°)
+## Hue 12: ~270° (sea green to turquoise green)
 
 <div style="display:flex; flex-wrap:nowrap; width:100%; overflow-x:auto; font:12px monospace; font-weight: bold;">
   <div style="background:#04260d; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#cbffcb; mix-blend-mode:difference;">192</div>
@@ -275,7 +275,7 @@ Each row is one hue group from `palette_24bit` (see `devices/palette.h`). The nu
   <div style="background:#cbffcb; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#043811; mix-blend-mode:difference;">207</div>
 </div>
 
-## Lime (hue: ~90°)
+## Hue 13: ~292.5° (forest green)
 
 <div style="display:flex; flex-wrap:nowrap; width:100%; overflow-x:auto; font:12px monospace; font-weight: bold;">
   <div style="background:#00230a; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#e1ffa3; mix-blend-mode:difference;">208</div>
@@ -296,7 +296,7 @@ Each row is one hue group from `palette_24bit` (see `devices/palette.h`). The nu
   <div style="background:#e1ffa3; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#003510; mix-blend-mode:difference;">223</div>
 </div>
 
-## Chartreuse (hue: ~75°)
+## Hue 14: ~315° (kelly green)
 
 <div style="display:flex; flex-wrap:nowrap; width:100%; overflow-x:auto; font:12px monospace; font-weight: bold;">
   <div style="background:#001707; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#fcff8e; mix-blend-mode:difference;">224</div>
@@ -317,7 +317,7 @@ Each row is one hue group from `palette_24bit` (see `devices/palette.h`). The nu
   <div style="background:#fcff8e; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#0e2808; mix-blend-mode:difference;">239</div>
 </div>
 
-## Gold (hue: ~50°)
+## Hue 15: ~337.5° (olive khaki to yellow)
 
 <div style="display:flex; flex-wrap:nowrap; width:100%; overflow-x:auto; font:12px monospace; font-weight: bold;">
   <div style="background:#1b0701; flex:0 0 6.25%; height:28px; line-height:28px; text-align:center; color:#ffff99; mix-blend-mode:difference;">240</div>

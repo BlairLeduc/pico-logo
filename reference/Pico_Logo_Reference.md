@@ -890,6 +890,106 @@ See [Colours](Colours.md).
 
 
 
+# Text and Screen Commands
+
+Your PicoCalc has 32 lines of text on the display, with 40 or 64 characters on each line, depending on the current display width setting. You can use the display entirely for text or entirely for graphics. The PicoCalc also lets you use the top 24 lines for graphics and the bottom eight for text at the same time. When you start up Logo, the entire screen is available for text. 
+
+You can switch between the two width settings with the `setwidth` primitive.
+
+here are two ways to change the use of your display:
+
+- With regular Logo commands, which you can type at top level or insert within procedures (`fullscreen`, `splitscreen`, `textscreen`, and `setwidth`)
+- With special control characters, which are read from the keyboard and obeyed almost immediately (while a procedure continues running); these cannot be placed within procedures (`F1`–textscreen, `F2`–splitscreen, and `F3`–fullscreen).
+
+
+## cleartext (ct)
+
+cleartext  
+ct  
+
+`command`
+
+`cleartext` clears the entire screen and puts the cursor at the upper-left corner of the text part of the screen. If you have been using the split screen, the cursor is on the eighth line from the bottom.
+
+
+## cursor
+
+cursor
+
+`operation`
+
+`cursor` outputs a list of the column and line numbers of the cursor position. The upper-left corner of the screen is [0 0]. The upper-right is [39 0] if the screen width is 40, and [63 0] if the
+screen width is 64.
+
+See `setcursor`.
+
+
+## fullscreen (fs)
+
+fullscreen  
+fs  
+
+`command`
+
+The `fullscreen` command devotes the entire screen to graphics. Only the turtle field shows; any text you type will be invisible to you, although Logo will still carry out your instructions.
+
+If Logo needs to display an error message while you are using the full graphics screen, Logo splits the screen.
+
+
+## setcursor
+
+setcursor [_columnnumber_ _linenumber_]  
+
+`command`
+
+`secursor` sets the cursor to the position indicated by _columnnumber_ and _linenumber_. Lines on the screen are numbered from 0 to 31. Character positions (columns) are numbered from 0 to 39 if the display width is 40 and 0 to 63 if the display width is 64.
+
+See `width`.
+
+
+## setwidth
+
+setwidth width  
+
+`command`
+
+The `setwidth` command sets the width of the display to width characters per line. The width input must have a value of either 40 or 64. The default setting for the display width is 40.
+
+
+## splitscreen
+
+splitscreen  
+ss  
+
+`command`
+
+`splitscreen` devotes the top 24 lines of the screen to graphics and the bottom eight lines to text.
+
+
+
+## textscreen
+
+textscreen  
+ts  
+
+`command`
+
+`textscreen` devotes the entire screen to text; the graphics display is invisible to you until a graphics procedure is run.
+
+
+## width
+
+width  
+
+`operation`
+
+`width` outputs the current width of the screen, either 40 or 64.
+
+See `setwidth` for changing the screen width.
+
+
+
+
 # Words and Lists
 
 ## butfirst (bf)
@@ -1120,6 +1220,60 @@ uppercase _word_
 `operation`
 
 `uppercase` outputs _word_ in all uppercase letters.
+
+
+
+
+# Variables
+
+## local
+
+local _name_  
+local _list_  
+
+`command`
+
+The `local` command makes its input(s) local to the procedure within which the `local` occurs. A local variable is accessible only to that procedure and to procedures it calls; in this regard it resembles inputs to the procedure.
+
+
+## make
+
+make _name_ _object_  
+
+`command`
+
+The `make` command puts _object_ in _name_'s container, that is, it gives the variable name the value object.
+
+
+## name
+
+name _object_ _name_  
+
+`command`
+
+The `name` command puts _object_ in _name_'s container, that is, it gives the variable name the value object.
+
+`name` is equivalent to `make` with the order of the inputs reversed. Thus `name "welder "job` has the same effect as `make "job "welder`.
+
+
+## name? (namep)
+
+name? _word_  
+namep _word_  
+
+`operation`
+
+`name?` outputs `true` if _word_ has a value, that is, if `:word` exists; it outputs `false` otherwise.
+
+
+## thing
+
+thing _name_  
+
+`operation`
+
+`thing` outputs the thing in the container _name_, that is, the value of the variable _name_. `thing "any` is equivalent to `:any`.
+
 
 
 
@@ -1426,6 +1580,244 @@ The `throw` command is meaningful only within the range of the `catch` command. 
 See `catch`. 
 
 
+## step
+
+step _name_  
+step _list_  
+
+`command`
+
+The `step` command takes the procedure indicated by _name_ or _list_ as input and lets you run them line by line. `step` pauses at each line of execution and continues only when you press any key on the keyboard.
+
+
+## trace
+
+trace _name_  
+trace _list_  
+
+`command`
+
+The `trace` command takes the procedures indicated by _name_ or _list_ as input and causes them to print tracing information when executed. It does not interrupt the execution of the procedure, but allows you to see the depth of the procedure stack during execution. `trace` is useful in understanding recursive procedures or complex programs with many subprocedures.
+
+
+## unstep
+
+unstep _name_  
+unstep _list_  
+
+`command`
+
+`unstep` restores the procedure(s) indicated by _name_ or _list_ back to their original states. After you step through a procedure (with `step`), you must use `unstep` so that it will execute normally again.
+
+
+## untrace
+
+untrace _name_  
+untrace _list_  
+
+`command`
+
+`untrace` stops the tracing of procedure _name_ and causes it to execute normally again.
+
+
+
+
+# Modifying Procedures Under Program Control
+
+## copydef
+
+copydef _name_ _newname_  
+
+`command`
+
+`copydef` copies the definition of _name_, making it the definition of _newname_ as well.
+
+
+## define
+
+define _name_ _list_  
+
+`command`
+
+`define` makes list the definition of the procedure _name_. The first element of _list_ is a list of the inputs to _name_, with no colon (`:`) before the names.
+
+If _name_ has no inputs, this must be the empty list. Each subsequent element is a list consisting of one line of the procedure definition. (This list does not contain `end`, because `end` is not part of the procedure definition.)
+
+The second input to `define` has the same form as the output from `text`. `define` can redefine an existing procedure.
+
+
+## defined? (definedp)
+
+defined? _word_  
+definedp _word_  
+
+`operation`
+
+`defined?` outputs `true` if word is the name of a user-defined procedure, `false` otherwise.
+
+
+## primative? (primativep)
+
+primitive? _name_  
+primitivep _name_  
+
+`operation`
+
+`primitivep` outputs `true` if name is the name of a primitive, `false` otherwise.
+
+
+## text
+
+text _name_  
+
+`operation`
+
+The `text` primitive outputs the definition of _name_ as a list of lists, suitable for input to `define`.
+
+
+
+
+# Logical Operations
+
+## and
+
+and _predicate1_ _predicate2_  
+(and _predicate1_ _predicate2_ _predicate3_ ...)  
+
+`operation`
+
+Outputs `TRUE` if all of its inputs are `TRUE`.
+
+
+## not
+
+not _predicate_  
+
+`operation`
+
+Outputs TRUE if _predicate_ is FALSE.
+Outputs FASLE if _predicate_ is TRUE.
+
+
+## or
+
+or _predicate1_ _predicate2_  
+(or _predicate1_ _predicate2_ _predicate3_ ...)  
+
+`operation`
+
+Outputs `TRUE` if any of its inputs are `TRUE`.
+
+
+
+
+# The Outside World
+
+## keyp
+
+keyp  
+
+`operation`
+
+`keyp` outputs `true` if there is at least one character waiting to be read—that is, one that has been typed on the keyboard and not yet picked up by `readchar` or `readlist`. `keyp` outputs `false` if there are no such characters.
+
+
+## readchar (rc)
+
+readchar  
+rc  
+
+`operation`
+
+`readchar` outputs the first character typed at the keyboard or read from the current file. If you are reading from the keyboard and no character is waiting to be read, `readchar` waits until you type something.
+
+`readchar` does not output a character if you are reading from a file and the end-of-file position is reached. In this case, `readchar` outputs an empty list. Note that `readchar` from the keyboard does not echo what you type on the display.
+
+If you are reading from the keyboard, you can set the high bit of the character being read by holding down either `Alt` key a you type the character. Setting the high bit adds 128 to the character.
+
+
+## readchars (rcs)
+
+readchars _integer_  
+rcs _integer_  
+
+`operation`
+
+The `readchars` operation outputs the first _integer_ number of characters typed at the keyboard or read from the current file. If you are reading from the keyboard and no characters arwaiting to be read, `readchars` waits for you to type something.
+
+If you are reading from a file and the end-of-file position reached before _integer_ characters are read, `readchars` outputs the characters read up to that point. If the end-of-file was reached before `readchars` was called, `readchars` outputs an empty list.
+
+Note that `readchars` from the keyboard does not echo what you type on the display.
+
+Remember that a carriage return is read as a character.
+
+If you are reading from the keyboard, you can set the high bit of the character being read by holding down either `Alt` key as you type the character. Setting the high bit adds 128 to character.
+
+
+## readlist (rl)
+
+readlist  
+rl  
+
+`operation`
+
+The `readlist` operation reads a line of information from the current file and outputs the information in the form of a list. Normally, the source is the keyboard, where you type in information followed by a carriage return. This information is echoed on the screen. The command `setread` allows you to read from other files.
+
+If you are reading from a file where the end-of-file position has already been reached, `readlist` outputs the empty word.
+
+
+## readword (rw)
+
+readword  
+rw  
+
+`operation`
+
+`readword` reads a line of information from the current file and outputs it as a word. Normally, the source is the keyboard and `readword` waits for you to type and press `ENTER`. What you type is echoed on the display. If you press `ENTER` before typing a word, `readword` outputs an empty word.
+
+If you use `readword` from a file, `readword` reads characters until it reaches a carriage return, and outputs those characters as a word. The next character to be read is the one after the cariage return. When the end-of-file position is reached, `readword` outputs an empty list.
+
+See `readlist`, `readchar`, `readchars`, and `setread`.
+
+
+## print (pr)
+
+print _object_  
+(print _object1_ _object2_ ...)  
+pr _object_  
+(pr _object1_ _object2_ ...)  
+
+`command`
+
+The `print` command prints its inputs followed by a carriage return on the display, unless the destination has been changed by `setwrite`. The outermost brackets of lists are not printed.
+
+Compare with `type` and `show`.
+
+
+## show
+
+show _object_  
+
+`command`
+
+The `show` command prints _object_ followed by a carriage return on the display, unless the destination has been changed by `setwrite`. If object is a list, Logo leaves brackets around it.
+
+Compare with `type` and `print`.
+
+
+## type
+
+type _object_  
+(type _object1_ _object2_ ...)  
+
+`command`
+
+The `type` command prints its inputs without a carriage return on the display, unless the destination has been changed by `setwrite`. The outermost brackets of lists are not printed.
+
+Compare with `print` and `show`.
+
+
+
 
 # Managing your Workspace
 
@@ -1648,36 +2040,34 @@ directories
 Outputs a list of directory names in the current directory.
 
 
-## chdir
+## setprefix
 
-chdir _pathname_  
+setprefix _pathname_  
 
 `command`
 
-Stands for change directory. Changes the current directory name to _pathname_. 
+Sets a prefix that will be used as the implicit beginning of filenames in `openread`, `openwrite`, `openappend`, `openupdate`, `load`, and `save` commands. The input to `setprefix` must be a word, unless it is the empty list, to indicate that there should be no prefix.
 
+## prefix
 
-## currentdir
-
-currentdir  
+prefix  
 
 `operation`
 
-Stands for current directory. Outputs the current directory that was set with `chdir`.
+Outputs the current file prefix, or `[]` if there is no prefix.
 
+## erasefile
 
-## erfile
-
-erfile _pathname_  
+erasefile _pathname_  
 
 `command`
 
 Stands for erase file. Erases any type of file. The input must be the name of a file in the current directory or a full pathname.
 
 
-## erdir
+## erasedir
 
-erdir _pathname_  
+erasedir _pathname_  
 
 `command`
 
@@ -1693,293 +2083,225 @@ catalog
 Prints a list of files and directories in the current directory. Directories have the slash "`/`" character appended to their pathname.
 
 
-# Variables
+## file? (filep)
 
-## local
+file? _pathname_  
+filep _pathname_  
 
-local _name_  
-local _list_  
+`operation`
+
+Outputs `true` if the file exists, otherwise `false`.
+
+
+## dir? (dirp)
+
+dir? _pathname_  
+dirp _pathname_  
+
+`operation`
+
+Outputs `true` if the directory exists, otherwise `false`.
+
+
+## rename
+
+rename _pathname1_ _pathname2_
+
+`operation`
+
+Renames the file or directory from _pathname1_ to _pathname2_. A file or directory can be moved if the paths are different.
+
+
+## pofile
+
+pofile _pathname_  
 
 `command`
 
-The `local` command makes its input(s) local to the procedure within which the `local` occurs. A local variable is accessible only to that procedure and to procedures it calls; in this regard it resembles inputs to the procedure.
+`pofile` (for print out file) prints out the contents of the file indicated by _pathname_. Logo prints the contents to the screen. An error occurs if you try to use `pofile` on a file that is already open.
 
 
-## make
+# Managing Various Files
 
-make _name_ _object_  
+## load
 
-`command`
-
-The `make` command puts _object_ in _name_'s container, that is, it gives the variable name the value object.
-
-
-## name
-
-name _object_ _name_  
+load _pathname_  
 
 `command`
 
-The `name` command puts _object_ in _name_'s container, that is, it gives the variable name the value object.
+The `load` command loads the contents of the file indicated by _pathname_ into the workspace, as if you typed it directly from top level. An error occurs if the file does not exist.
 
-`name` is equivalent to `make` with the order of the inputs reversed. Thus `name "welder "job` has the same effect as `make "job "welder`.
-
-
-## name? (namep)
-
-name? _word_  
-namep _word_  
-
-`operation`
-
-`name?` outputs `true` if _word_ has a value, that is, if `:word` exists; it outputs `false` otherwise.
+After Logo loads the contents of a file, it looks for a variable called `startup`. If one exists, Logo executes its contents.
 
 
-## thing
+## save
 
-thing _name_  
-
-`operation`
-
-`thing` outputs the thing in the container _name_, that is, the value of the variable _name_. `thing "any` is equivalent to `:any`.
-
-
-
-
-# Debugging Programs
-
-## step
-
-step _name_  
-step _list_  
+save _pathname_  
 
 `command`
 
-The `step` command takes the procedure indicated by _name_ or _list_ as input and lets you run them line by line. `step` pauses at each line of execution and continues only when you press any key on the keyboard.
+The `save` command creates a file and saves in it all unburied procedures and variables and all properties in the workspace. An error occurs if the file you name already exists. In inis case, you should first either erase the existing file using `erfile` or rename it using `rename`.
 
 
-## trace
+## loadpic
 
-trace _name_  
-trace _list_  
-
-`command`
-
-The `trace` command takes the procedures indicated by _name_ or _list_ as input and causes them to print tracing information when executed. It does not interrupt the execution of the procedure, but allows you to see the depth of the procedure stack during execution. `trace` is useful in understanding recursive procedures or complex programs with many subprocedures.
-
-
-## unstep
-
-unstep _name_  
-unstep _list_  
+loadpic _pathname_  
 
 `command`
 
-`unstep` restores the procedure(s) indicated by _name_ or _list_ back to their original states. After you step through a procedure (with `step`), you must use `unstep` so that it will execute normally again.
+The `loadpic` command loads the picture named by _pathname_ onto the graphics screen. Logo will load any file onto the graphics screen. If the file is not a picture, something will be put on the graphics screen, but you cannot be sure what it will be.
 
 
-## untrace
+## savepic
 
-untrace _name_  
-untrace _list_  
+SAVEPIC pathname (command)
 
-`command`
-
-`untrace` stops the tracing of procedure _name_ and causes it to execute normally again.
+`savepic` saves the graphics screen into the file indicated by _pathname_. You can retrieve the screen later using `loadpic`. The image is saved as a bitmap (.bmp) file.
 
 
+## dribble
 
-# Logical Operations
-
-## and
-
-and _predicate1_ _predicate2_  
-(and _predicate1_ _predicate2_ _predicate3_ ...)  
-
-`operation`
-
-Outputs `TRUE` if all of its inputs are `TRUE`.
-
-
-## not
-
-not _predicate_  
-
-`operation`
-
-Outputs TRUE if _predicate_ is FALSE.
-Outputs FASLE if _predicate_ is TRUE.
-
-
-## or
-
-or _predicate1_ _predicate2_  
-(or _predicate1_ _predicate2_ _predicate3_ ...)  
-
-`operation`
-
-Outputs `TRUE` if any of its inputs are `TRUE`.
-
-
-
-# Modifying Procedures Under Program Control
-
-## copydef
-
-copydef _name_ _newname_  
+dribble _file_  
 
 `command`
 
-`copydef` copies the definition of _name_, making it the definition of _newname_ as well.
+`dribble` starts the process of sending a copy of the characters displayed on the text screen to _file_. `dribble` records interactions between the PicoCalc and the person at the keyboard. `dribble` automatically opens file. `nodribble` stops the process of dribbling. You cannot use `setread` or `setwrite` with a dribble file while still dribbling. However, once a dribble file on disk has been closed with `nodribble`, you can treat it like any other file. You can then open it, read from it, or write to it. Note that only one dribble file can be open at one time.
 
 
-## define
+## nodribble
 
-define _name_ _list_  
-
-`command`
-
-`define` makes list the definition of the procedure _name_. The first element of _list_ is a list of the inputs to _name_, with no colon (`:`) before the names.
-
-If _name_ has no inputs, this must be the empty list. Each subsequent element is a list consisting of one line of the procedure definition. (This list does not contain `end`, because `end` is not part of the procedure definition.)
-
-The second input to `define` has the same form as the output from `text`. `define` can redefine an existing procedure.
-
-
-## defined? (definedp)
-
-defined? _word_  
-definedp _word_  
-
-`operation`
-
-`defined?` outputs `true` if word is the name of a user-defined procedure, `false` otherwise.
-
-
-## primative? (primativep)
-
-primitive? _name_  
-primitivep _name_  
-
-`operation`
-
-`primitivep` outputs `true` if name is the name of a primitive, `false` otherwise.
-
-
-## text
-
-text _name_  
-
-`operation`
-
-The `text` primitive outputs the definition of _name_ as a list of lists, suitable for input to `define`.
-
-
-# The Outside World
-
-## keyp
-
-keyp  
-
-`operation`
-
-`keyp` outputs `true` if there is at least one character waiting to be read—that is, one that has been typed on the keyboard and not yet picked up by `readchar` or `readlist`. `keyp` outputs `false` if there are no such characters.
-
-
-## readchar (rc)
-
-readchar  
-rc  
-
-`operation`
-
-`readchar` outputs the first character typed at the keyboard or read from the current file. If you are reading from the keyboard and no character is waiting to be read, `readchar` waits until you type something.
-
-`readchar` does not output a character if you are reading from a file and the end-of-file position is reached. In this case, `readchar` outputs an empty list. Note that `readchar` from the keyboard does not echo what you type on the display.
-
-If you are reading from the keyboard, you can set the high bit of the character being read by holding down either `Alt` key a you type the character. Setting the high bit adds 128 to the character.
-
-
-## readchars (rcs)
-
-readchars _integer_  
-rcs _integer_  
-
-`operation`
-
-The `readchars` operation outputs the first _integer_ number of characters typed at the keyboard or read from the current file. If you are reading from the keyboard and no characters arwaiting to be read, `readchars` waits for you to type something.
-
-If you are reading from a file and the end-of-file position reached before _integer_ characters are read, `readchars` outputs the characters read up to that point. If the end-of-file was reached before `readchars` was called, `readchars` outputs an empty list.
-
-Note that `readchars` from the keyboard does not echo what you type on the display.
-
-Remember that a carriage return is read as a character.
-
-If you are reading from the keyboard, you can set the high bit of the character being read by holding down either `Alt` key as you type the character. Setting the high bit adds 128 to character.
-
-
-## readlist (rl)
-
-readlist  
-rl  
-
-`operation`
-
-The `readlist` operation reads a line of information from the current file and outputs the information in the form of a list. Normally, the source is the keyboard, where you type in information followed by a carriage return. This information is echoed on the screen. The command `setread` allows you to read from other files.
-
-If you are reading from a file where the end-of-file position has already been reached, `readlist` outputs the empty word.
-
-
-## readword (rw)
-
-readword  
-rw  
-
-`operation`
-
-`readword` reads a line of information from the current file and outputs it as a word. Normally, the source is the keyboard and `readword` waits for you to type and press `ENTER`. What you type is echoed on the display. If you press `ENTER` before typing a word, `readword` outputs an empty word.
-
-If you use `readword` from a file, `readword` reads characters until it reaches a carriage return, and outputs those characters as a word. The next character to be read is the one after the cariage return. When the end-of-file position is reached, `readword` outputs an empty list.
-
-See `readlist`, `readchar`, `readchars`, and `setread`.
-
-
-## print (pr)
-
-print _object_  
-(print _object1_ _object2_ ...)  
-pr _object_  
-(pr _object1_ _object2_ ...)  
+nodribble  
 
 `command`
 
-The `print` command prints its inputs followed by a carriage return on the display, unless the destination has been changed by `setwrite`. The outermost brackets of lists are not printed.
-
-Compare with `type` and `show`.
+`nodribble` turns off the dribble feature so a copy of the characters from the screen will no longer be sent to the file or device named previously by the `dribble` command.
 
 
-## show
+## allopen
 
-show _object_  
+allopen  
 
-`command`
+`operation`
 
-The `show` command prints _object_ followed by a carriage return on the display, unless the destination has been changed by `setwrite`. If object is a list, Logo leaves brackets around it.
-
-Compare with `type` and `print`.
+`allopen` outputs a list of all files and devices currently open. The `open` command opens a file or a device.
 
 
-## type
+## close
 
-type _object_  
-(type _object1_ _object2_ ...)  
+close _file_  
 
 `command`
 
-The `type` command prints its inputs without a carriage return on the display, unless the destination has been changed by `setwrite`. The outermost brackets of lists are not printed.
+The `close` command closes the named file or device that is currently `open`. See `open` to open a file or device. An error occurs if you try to use `close` with a file or device that is not open. An error also occurs if you try to use `close` with a file that is opened by the `dribble` command.
 
-Compare with `print` and `show`.
 
+## closeall
+
+closeall  
+
+`command`
+
+The `closeall` command closes all files and devices that are currently open. Dribble files are not closed with `closeall`. Use the `open` and `close` commands to open and close one file at a time. If you try to use `closeall` when no files or device are open, it is ignored.
+
+See `nodribble` for closing dribble files.
+
+
+## filelen
+
+filelen _pathname_  
+
+`operation`
+
+`filelen` outputs the length in bytes of the contents of the file indicated by pathname. The file must be open to use this primitive. An error occurs if the file is not open.
+
+
+## open
+
+open _file_  
+
+`command`
+
+The `open` command opens file so it can send or receive characters. You must open a data file before you can access it. Note that you can open only one device at a time. You can open a maximum of six disk files at once. If the file named by _file_ does not exist, then `open` creates the file. When you finish using Logo, you must close all devices or files that are open.
+
+See the `close` and `closeall` commands.
+
+
+## reader
+
+reader
+
+`operation`
+
+`reader` outputs the current file that is open for reading. You can change the current read file with the `setread` primitive. `reader` returns the name of the file or the empty list if the current reader is the keyboard.
+
+
+## readpos
+
+READPOS (operation)
+
+`readpos` (for `read` `pos`ition) outputs the position in the current reader. An error occurs if the current reader is the keyboard or a device. To set the position in the read file, see the `setreadpos` command.
+
+## setread
+
+setread _file_  
+
+`command`
+
+`setread` sets the current reader to _file_. After you give this command, `readlist`, `readword`, `readchar`, and `readchars` read information from this file.
+
+Before you use `setread`, you must open the file with the `open` command. An error occurs if the file is not open. To set the current reader back to the keyboard, give `setread` the empty list as input.
+
+
+## setreadpos
+
+SETREADPOS integer (command)
+
+`setreadpos` sets the read position in the current reader. The integer should be a number between 0 and the current length of the file. An error occurs if it is not in this range. An error also occurs if the current reader is the keyboard or a device.
+
+See `readpos` for more information about the `setreadpos` command.
+
+
+## setwrite
+
+setwrite _file_  
+
+`command`
+
+`setwrite` sets the current writer to the file you name. The primitives `print`, `type`, and `show` all print to the current writer. You cannot use `setwrite` unless the file has previously been opened.
+
+To restore the screen as the current writer, use the `setwrite` command with the empty list as input.
+
+> [!NOTE]
+> The commands `po`, `poall`, `pon`, `pons`, `pops`, `pot`, `pots`, and `pofile` all print to the display but not to the current writer.
+
+
+## setwritepos
+
+setwritepos _integer_  
+
+`command`
+
+`setwritepos` sets the write position in the current file. This command is useful when modifying information in a file. You must set the write position to a number that is between 0 and the end-of-file position. If you try to set it somewhere out of this range, an error occurs. An error also occurs if you try to set the write position when the current writer is the display or a device.
+
+To check the current position, use the `writepos` command.
+
+
+## writepos
+
+writepos  
+
+`operation`
+
+`writepos` (for write position) outputs where in the current write file the the next character will be written. An error occurs if the current writer is the screen or a device.
+
+
+## writer
+
+writer  
+
+`operation`
+
+`writer` outputs the current file or device that is open for writing. Compare this with the `allopen` operation.
 
 
 # Property Lists
