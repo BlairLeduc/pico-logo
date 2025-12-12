@@ -54,6 +54,7 @@ void primitives_init(void)
     primitives_outside_world_init();
     primitives_properties_init();
     primitives_debug_init();
+    primitives_files_init();
 }
 
 void primitive_register(const char *name, int default_args, PrimitiveFunc func)
