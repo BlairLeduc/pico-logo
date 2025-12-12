@@ -38,6 +38,8 @@ extern "C"
         int param_count;            // Number of parameters
         Node body;                  // Body as a list of instructions
         bool buried;                // If true, hidden from poall/erall/etc
+        bool stepped;               // If true, pause at each instruction
+        bool traced;                // If true, print trace info on call/return
     } UserProcedure;
 
     // Tail call information for optimization
@@ -84,6 +86,16 @@ extern "C"
     void proc_unbury(const char *name);
     void proc_bury_all(void);
     void proc_unbury_all(void);
+
+    // Step/unstep procedures (for debugging)
+    void proc_step(const char *name);
+    void proc_unstep(const char *name);
+    bool proc_is_stepped(const char *name);
+
+    // Trace/untrace procedures (for debugging)
+    void proc_trace(const char *name);
+    void proc_untrace(const char *name);
+    bool proc_is_traced(const char *name);
 
     // Parse and define a procedure from text: "to name :param ... body ... end"
     // Returns a Result - RESULT_NONE on success, RESULT_ERROR on failure
