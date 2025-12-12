@@ -11,7 +11,6 @@
 #include <string.h>
 #include <strings.h>
 
-#include "devices/device.h"
 #include "devices/console.h"
 #include "devices/io.h"
 #include "devices/host/host_device.h"
@@ -29,8 +28,7 @@
 // Maximum procedure definition buffer (for multi-line TO...END)
 #define MAX_PROC_BUFFER 4096
 
-// Forward declaration for the device setters
-extern void primitives_set_device(LogoDevice *device);
+// Forward declaration for the I/O setter
 extern void primitives_set_io(LogoIO *io);
 
 // Check if a line starts with "to " (case-insensitive)

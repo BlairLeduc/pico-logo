@@ -14,7 +14,6 @@
 #include "core/procedures.h"
 #include "core/variables.h"
 #include "core/properties.h"
-#include "devices/device.h"
 #include "devices/stream.h"
 #include "devices/console.h"
 #include "devices/io.h"
@@ -148,65 +147,6 @@ static LogoConsole mock_console;
 // Mock I/O manager
 static LogoIO mock_io;
 
-// ============================================================================
-// Legacy Mock Device (kept for backward compatibility with some tests)
-// These functions have the old LogoDevice callback signatures (void* context)
-// but call the mock_stream_* implementations (which take LogoStream*).
-// Since our mocks don't use the context/stream parameter anyway, passing NULL is fine.
-// ============================================================================
-
-static void mock_write(void *context, const char *text)
-{
-    (void)context;
-    mock_stream_write(NULL, text);
-}
-
-static int mock_read_line(void *context, char *buffer, size_t buffer_size)
-{
-    (void)context;
-    return mock_stream_read_line(NULL, buffer, buffer_size);
-}
-
-static int mock_read_char(void *context)
-{
-    (void)context;
-    return mock_stream_read_char(NULL);
-}
-
-static int mock_read_chars(void *context, char *buffer, int count)
-{
-    (void)context;
-    return mock_stream_read_chars(NULL, buffer, count);
-}
-
-static bool mock_key_available(void *context)
-{
-    (void)context;
-    return mock_stream_can_read(NULL);
-}
-
-static void mock_flush(void *context)
-{
-    mock_stream_flush(NULL);
-}
-
-static LogoDeviceOps mock_ops = {
-    .read_line = mock_read_line,
-    .read_char = mock_read_char,
-    .read_chars = mock_read_chars,
-    .key_available = mock_key_available,
-    .write = mock_write,
-    .flush = mock_flush,
-    .fullscreen = NULL,
-    .splitscreen = NULL,
-    .textscreen = NULL
-};
-
-static LogoDevice mock_device;
-
-// Declare the function to set device for all primitives
-extern void primitives_set_device(LogoDevice *device);
-
 // Common setUp function
 static void test_scaffold_setUp(void)
 {
@@ -228,10 +168,6 @@ static void test_scaffold_setUp(void)
     
     // Register I/O with primitives
     primitives_set_io(&mock_io);
-
-    // Also set up legacy mock device for backward compatibility
-    logo_device_init(&mock_device, &mock_ops, NULL);
-    primitives_set_device(&mock_device);
 }
 
 // Common tearDown function (currently empty but available for extension)

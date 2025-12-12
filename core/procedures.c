@@ -9,7 +9,7 @@
 #include "error.h"
 #include "memory.h"
 #include "primitives.h"
-#include "devices/device.h"
+#include "devices/io.h"
 #include <string.h>
 #include <strings.h>
 #include <stdio.h>
@@ -27,10 +27,10 @@ static TailCall tail_call_state;
 // Helper to write output for trace/step
 static void trace_write(const char *str)
 {
-    LogoDevice *device = primitives_get_device();
-    if (device)
+    LogoIO *io = primitives_get_io();
+    if (io)
     {
-        logo_device_write(device, str);
+        logo_io_write(io, str);
     }
 }
 

@@ -10,17 +10,17 @@
 #include "memory.h"
 #include "error.h"
 #include "eval.h"
-#include "devices/device.h"
+#include "devices/io.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 static void prop_print(const char *str)
 {
-    LogoDevice *device = primitives_get_device();
-    if (device)
+    LogoIO *io = primitives_get_io();
+    if (io)
     {
-        logo_device_write(device, str);
+        logo_io_write(io, str);
     }
 }
 

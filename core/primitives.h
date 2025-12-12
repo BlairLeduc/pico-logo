@@ -52,12 +52,12 @@ extern "C"
     struct LogoDevice;
     struct LogoIO;
 
-    // Set the device for I/O primitives (called once at startup)
-    // Legacy API - use primitives_set_io() for new code
+    // DEPRECATED: Use primitives_set_io() instead
+    // This function is kept for backward compatibility and will be removed
     void primitives_set_device(struct LogoDevice *device);
 
-    // Get the shared device for primitives that need I/O
-    // Legacy API - use primitives_get_io() for new code
+    // DEPRECATED: Use primitives_get_io() instead
+    // This function is kept for backward compatibility and will be removed
     struct LogoDevice *primitives_get_device(void);
 
     // Set the I/O manager for primitives (called once at startup)
