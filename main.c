@@ -13,8 +13,10 @@
 
 #include "devices/console.h"
 #include "devices/io.h"
-#include "devices/picocalc/picocalc_device.h"
-#include "devices/picocalc/picocalc_file.h"
+#include "devices/storage.h"
+#include "devices/picocalc/picocalc_console.h"
+#include "devices/picocalc/picocalc_storage.h"
+#include "devices/picocalc/picocalc_hardware.h"
 #include "core/memory.h"
 #include "core/lexer.h"
 #include "core/eval.h"
@@ -64,7 +66,7 @@ static bool line_is_end(const char *line)
 
 int main(void)
 {
-    // Initialize the host console for I/O
+    // Initialise the console for I/O
     LogoConsole *console = logo_picocalc_console_create();
     if (!console)
     {
@@ -72,12 +74,26 @@ int main(void)
         return EXIT_FAILURE;
     }
 
+    // Initialise the storage for file I/O
+    LogoStorage *storage = logo_picocalc_storage_create();
+    if (!storage)
+    {
+        fprintf(stderr, "Failed to create storage\n");
+        return EXIT_FAILURE;
+    }
+
+    // Initialise the hardware (abstraction layer)
+    LogoHardware *hardware = logo_picocalc_hardware_create();
+    if (!hardware)
+    {
+        fprintf(stderr, "Failed to create hardware\n");
+        return EXIT_FAILURE;
+    }
+
     // Initialize the I/O manager
     LogoIO io;
-    logo_io_init(&io, console);
+    logo_io_init(&io, console, storage, hardware);
     
-    // Set up host file support
-    logo_io_set_file_opener(&io, logo_host_file_open);
 
     // Initialize Logo subsystems
     mem_init();

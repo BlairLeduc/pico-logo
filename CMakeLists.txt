@@ -67,10 +67,16 @@ add_executable(pico-logo
     core/primitives_text.c
     core/primitives_turtle.c
     devices/console.c
+    devices/hardware.c
     devices/io.c
+    devices/storage.c
     devices/stream.c
-    devices/picocalc/picocalc_device.c
-    devices/picocalc/picocalc_file.c
+    devices/picocalc/clib.c
+    devices/picocalc/fat32.c
+    devices/picocalc/picocalc_console.c
+    devices/picocalc/picocalc_storage.c
+    devices/picocalc/picocalc_hardware.c
+    devices/picocalc/sdcard.c
     devices/picocalc/southbridge.c
     main.c
 )

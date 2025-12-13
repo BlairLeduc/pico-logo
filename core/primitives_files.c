@@ -15,7 +15,6 @@
 #include "eval.h"
 #include "lexer.h"
 #include "devices/io.h"
-#include "devices/host/host_file.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -649,7 +648,7 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
     }
 
     // Check if file exists
-    if (!logo_host_file_exists(full_path))
+    if (!logo_io_file_exists(io, full_path))
     {
         return result_error_arg(ERR_FILE_NOT_FOUND, "", pathname);
     }
@@ -985,7 +984,7 @@ static Result prim_save(Evaluator *eval, int argc, Value *args)
     }
 
     // Check if file already exists
-    if (logo_host_file_exists(full_path))
+    if (logo_io_file_exists(io, full_path))
     {
         return result_error_arg(ERR_FILE_EXISTS, "", pathname);
     }

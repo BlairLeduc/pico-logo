@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "devices/hardware.h"
+#include "devices/storage.h"
 #include "devices/stream.h"
 #include "devices/console.h"
 
@@ -23,29 +25,18 @@ extern "C"
     #define LOGO_PREFIX_MAX 64
 
     //
-    // File opening modes (used by file opener callback)
-    //
-    typedef enum LogoFileMode
-    {
-        LOGO_FILE_READ,     // Open for reading (file must exist)
-        LOGO_FILE_WRITE,    // Open for writing (creates/truncates)
-        LOGO_FILE_APPEND,   // Open for appending (creates if needed)
-        LOGO_FILE_UPDATE,   // Open for reading and writing (file must exist)
-    } LogoFileMode;
-
-    //
-    // File opener callback type
-    // Platform-specific implementation should be provided to logo_io_init()
-    //
-    typedef LogoStream *(*LogoFileOpener)(const char *pathname, LogoFileMode mode);
-
-    //
     // LogoIO manages the I/O state for the Logo interpreter
     //
     typedef struct LogoIO
     {
         // The physical console (always available, may be serial-only)
         LogoConsole *console;
+
+        // The physical storage (may be NULL if no file I/O support)
+        LogoStorage *storage;
+
+        // The physical hardware (always available)
+        LogoHardware *hardware;
 
         // Current input source (defaults to &console->input)
         LogoStream *reader;
@@ -63,9 +54,6 @@ extern "C"
 
         // Current file prefix (for relative pathnames)
         char prefix[LOGO_PREFIX_MAX];
-
-        // Platform-specific file opener (NULL if file I/O not supported)
-        LogoFileOpener file_opener;
     } LogoIO;
 
     //
@@ -74,13 +62,20 @@ extern "C"
 
     // Initialize I/O with a console (keyboard/screen or serial-only)
     // file_opener can be NULL if file I/O is not needed
-    void logo_io_init(LogoIO *io, LogoConsole *console);
-
-    // Set the file opener callback (for platforms that support file I/O)
-    void logo_io_set_file_opener(LogoIO *io, LogoFileOpener opener);
+    void logo_io_init(LogoIO *io, LogoConsole *console, LogoStorage *storage, LogoHardware *hardware);
 
     // Clean up all open files and reset state
     void logo_io_cleanup(LogoIO *io);
+
+    //
+    // Device specific functions
+    //
+
+    // Sleep for specified milliseconds
+    void logo_io_usleep(LogoIO *io, int milliseconds);
+    
+    // Get a random 32-bit number from the device
+    uint32_t logo_io_random(LogoIO *io);
 
     //
     // File prefix management
@@ -136,6 +131,25 @@ extern "C"
     // Get open file by index (for allopen primitive)
     LogoStream *logo_io_get_open(const LogoIO *io, int index);
 
+    // Check if a file exists
+    bool logo_io_file_exists(const LogoIO *io, const char *pathname);
+
+    // Check if a directory exists
+    bool logo_io_dir_exists(const LogoIO *io, const char *pathname);
+    
+    // Delete a file
+    bool logo_io_file_delete(const LogoIO *io, const char *pathname);
+    
+    // Delete a directory
+    bool logo_io_dir_delete(const LogoIO *io, const char *pathname);
+    
+    // Rename a file or directory
+    bool logo_io_rename(const LogoIO *io, const char *old_path, const char *new_path);
+    
+    // Get file size, returns -1 on error
+    long logo_io_file_size(const LogoIO *io, const char *pathname);
+    
+    
     //
     // Reader/writer control
     //

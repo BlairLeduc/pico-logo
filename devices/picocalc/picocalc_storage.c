@@ -2,10 +2,11 @@
 //  Pico Logo
 //  Copyright 2025 Blair Leduc. See LICENSE for details.
 //
-//  Host (desktop) file stream implementation using standard C FILE*.
+//  Implements the LogoStorage interface for PicoCalc device.
 //
 
-#include "picocalc_file.h"
+#include "../storage.h"
+#include "picocalc_storage.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,7 +27,7 @@ typedef struct HostFileContext
 // Stream operation implementations
 //
 
-static int host_file_read_char(LogoStream *stream)
+static int picocalc_file_read_char(LogoStream *stream)
 {
     if (!stream || !stream->context)
     {
@@ -43,7 +44,7 @@ static int host_file_read_char(LogoStream *stream)
     return (ch == EOF) ? -1 : ch;
 }
 
-static int host_file_read_chars(LogoStream *stream, char *buffer, int count)
+static int picocalc_file_read_chars(LogoStream *stream, char *buffer, int count)
 {
     if (!stream || !stream->context || !buffer || count <= 0)
     {
@@ -60,7 +61,7 @@ static int host_file_read_chars(LogoStream *stream, char *buffer, int count)
     return (int)read;
 }
 
-static int host_file_read_line(LogoStream *stream, char *buffer, size_t size)
+static int picocalc_file_read_line(LogoStream *stream, char *buffer, size_t size)
 {
     if (!stream || !stream->context || !buffer || size == 0)
     {
@@ -81,7 +82,7 @@ static int host_file_read_line(LogoStream *stream, char *buffer, size_t size)
     return (int)strlen(buffer);
 }
 
-static bool host_file_can_read(LogoStream *stream)
+static bool picocalc_file_can_read(LogoStream *stream)
 {
     if (!stream || !stream->context)
     {
@@ -104,7 +105,7 @@ static bool host_file_can_read(LogoStream *stream)
     return true;
 }
 
-static void host_file_write(LogoStream *stream, const char *text)
+static void picocalc_file_write(LogoStream *stream, const char *text)
 {
     if (!stream || !stream->context || !text)
     {
@@ -120,7 +121,7 @@ static void host_file_write(LogoStream *stream, const char *text)
     fputs(text, ctx->file);
 }
 
-static void host_file_flush(LogoStream *stream)
+static void picocalc_file_flush(LogoStream *stream)
 {
     if (!stream || !stream->context)
     {
@@ -134,7 +135,7 @@ static void host_file_flush(LogoStream *stream)
     }
 }
 
-static long host_file_get_read_pos(LogoStream *stream)
+static long picocalc_file_get_read_pos(LogoStream *stream)
 {
     if (!stream || !stream->context)
     {
@@ -150,7 +151,7 @@ static long host_file_get_read_pos(LogoStream *stream)
     return ftell(ctx->file);
 }
 
-static bool host_file_set_read_pos(LogoStream *stream, long pos)
+static bool picocalc_file_set_read_pos(LogoStream *stream, long pos)
 {
     if (!stream || !stream->context)
     {
@@ -166,19 +167,19 @@ static bool host_file_set_read_pos(LogoStream *stream, long pos)
     return fseek(ctx->file, pos, SEEK_SET) == 0;
 }
 
-static long host_file_get_write_pos(LogoStream *stream)
+static long picocalc_file_get_write_pos(LogoStream *stream)
 {
     // For simple files, read and write position are the same
-    return host_file_get_read_pos(stream);
+    return picocalc_file_get_read_pos(stream);
 }
 
-static bool host_file_set_write_pos(LogoStream *stream, long pos)
+static bool picocalc_file_set_write_pos(LogoStream *stream, long pos)
 {
     // For simple files, read and write position are the same
-    return host_file_set_read_pos(stream, pos);
+    return picocalc_file_set_read_pos(stream, pos);
 }
 
-static long host_file_get_length(LogoStream *stream)
+static long picocalc_file_get_length(LogoStream *stream)
 {
     if (!stream || !stream->context)
     {
@@ -213,7 +214,7 @@ static long host_file_get_length(LogoStream *stream)
     return length;
 }
 
-static void host_file_close(LogoStream *stream)
+static void picocalc_file_close(LogoStream *stream)
 {
     if (!stream || !stream->context)
     {
@@ -236,26 +237,26 @@ static void host_file_close(LogoStream *stream)
 //
 // Stream operations table
 //
-static const LogoStreamOps host_file_ops = {
-    .read_char = host_file_read_char,
-    .read_chars = host_file_read_chars,
-    .read_line = host_file_read_line,
-    .can_read = host_file_can_read,
-    .write = host_file_write,
-    .flush = host_file_flush,
-    .get_read_pos = host_file_get_read_pos,
-    .set_read_pos = host_file_set_read_pos,
-    .get_write_pos = host_file_get_write_pos,
-    .set_write_pos = host_file_set_write_pos,
-    .get_length = host_file_get_length,
-    .close = host_file_close,
+static const LogoStreamOps picocalc_stream_ops = {
+    .read_char = picocalc_file_read_char,
+    .read_chars = picocalc_file_read_chars,
+    .read_line = picocalc_file_read_line,
+    .can_read = picocalc_file_can_read,
+    .write = picocalc_file_write,
+    .flush = picocalc_file_flush,
+    .get_read_pos = picocalc_file_get_read_pos,
+    .set_read_pos = picocalc_file_set_read_pos,
+    .get_write_pos = picocalc_file_get_write_pos,
+    .set_write_pos = picocalc_file_set_write_pos,
+    .get_length = picocalc_file_get_length,
+    .close = picocalc_file_close,
 };
 
 //
-// Public API
+// File Manager API
 //
 
-LogoStream *logo_host_file_open(const char *pathname, LogoFileMode mode)
+static LogoStream *logo_picocalc_file_open(const char *pathname, LogoFileMode mode)
 {
     if (!pathname)
     {
@@ -310,7 +311,7 @@ LogoStream *logo_host_file_open(const char *pathname, LogoFileMode mode)
 
     // Initialize stream
     stream->type = LOGO_STREAM_FILE;
-    stream->ops = &host_file_ops;
+    stream->ops = &picocalc_stream_ops;
     stream->context = ctx;
     stream->is_open = true;
 
@@ -321,7 +322,7 @@ LogoStream *logo_host_file_open(const char *pathname, LogoFileMode mode)
     return stream;
 }
 
-bool logo_host_file_exists(const char *pathname)
+static bool logo_picocalc_file_exists(const char *pathname)
 {
     if (!pathname)
     {
@@ -337,7 +338,7 @@ bool logo_host_file_exists(const char *pathname)
     return S_ISREG(st.st_mode);
 }
 
-bool logo_host_dir_exists(const char *pathname)
+static bool logo_picocalc_dir_exists(const char *pathname)
 {
     if (!pathname)
     {
@@ -353,7 +354,7 @@ bool logo_host_dir_exists(const char *pathname)
     return S_ISDIR(st.st_mode);
 }
 
-bool logo_host_file_delete(const char *pathname)
+static bool logo_picocalc_file_delete(const char *pathname)
 {
     if (!pathname)
     {
@@ -363,17 +364,17 @@ bool logo_host_file_delete(const char *pathname)
     return remove(pathname) == 0;
 }
 
-bool logo_host_dir_delete(const char *pathname)
+static bool logo_picocalc_dir_delete(const char *pathname)
 {
     if (!pathname)
     {
         return false;
     }
 
-    return rmdir(pathname) == 0;
+    return unlink(pathname) == 0;
 }
 
-bool logo_host_rename(const char *old_path, const char *new_path)
+static bool logo_picocalc_rename(const char *old_path, const char *new_path)
 {
     if (!old_path || !new_path)
     {
@@ -383,7 +384,7 @@ bool logo_host_rename(const char *old_path, const char *new_path)
     return rename(old_path, new_path) == 0;
 }
 
-long logo_host_file_size(const char *pathname)
+static long logo_picocalc_file_size(const char *pathname)
 {
     if (!pathname)
     {
@@ -397,4 +398,43 @@ long logo_host_file_size(const char *pathname)
     }
 
     return (long)st.st_size;
+}
+
+static const LogoStorageOps picocalc_storage_ops = {
+    .open = logo_picocalc_file_open,
+    .file_exists = logo_picocalc_file_exists,
+    .dir_exists = logo_picocalc_dir_exists,
+    .file_delete = logo_picocalc_file_delete,
+    .dir_delete = logo_picocalc_dir_delete,
+    .rename = logo_picocalc_rename,
+    .file_size = logo_picocalc_file_size,
+};
+
+
+//
+// LogoStorage lifecycle functions
+//
+
+LogoStorage *logo_picocalc_storage_create(void)
+{
+    LogoStorage *storage = (LogoStorage *)malloc(sizeof(LogoStorage));
+
+    if (!storage)
+    {
+        return NULL;
+    }
+
+    logo_storage_init(storage, &picocalc_storage_ops);
+
+    return storage;
+}
+
+void logo_picocalc_storage_destroy(LogoStorage *storage)
+{
+    if (!storage)
+    {
+        return;
+    }
+
+    free(storage);
 }

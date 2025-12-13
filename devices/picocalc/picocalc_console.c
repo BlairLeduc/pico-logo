@@ -2,11 +2,10 @@
 //  Pico Logo
 //  Copyright 2025 Blair Leduc. See LICENSE for details.
 //
-//  Implements a host device that uses standard input and output.
-//  Provides both the new LogoConsole API and the legacy LogoDevice API.
+//  Implements a PicoCalc device that uses standard input and output.
 // 
 
-#include "devices/picocalc/picocalc_device.h"
+#include "picocalc_console.h"
 #include "devices/console.h"
 #include "devices/stream.h"
 
@@ -15,24 +14,27 @@
 #include <string.h>
 #include <stdbool.h>
 
+#include <pico/stdlib.h>
+#include <pico/rand.h>
+
 //
 // Host console context - shared between input and output streams
 //
-typedef struct LogoHostContext
+typedef struct LogoContext
 {
     FILE *input;
     FILE *output;
-} LogoHostContext;
+} LogoContext;
 
 #ifndef _WIN32
 // Put terminal into raw mode for single-character input without echo
-static void set_raw_mode(LogoHostContext *ctx)
+static void set_raw_mode(LogoContext *ctx)
 {
 
 }
 
 // Restore original terminal settings
-static void restore_mode(LogoHostContext *ctx)
+static void restore_mode(LogoContext *ctx)
 {
 
 }
@@ -42,18 +44,18 @@ static void restore_mode(LogoHostContext *ctx)
 // Stream operations for keyboard input
 //
 
-static int host_input_read_char(LogoStream *stream)
+static int input_read_char(LogoStream *stream)
 {
-    LogoHostContext *ctx = (LogoHostContext *)stream->context;
+    LogoContext *ctx = (LogoContext *)stream->context;
     if (!ctx)
     {
         return -1;
     }
 }
 
-static int host_input_read_chars(LogoStream *stream, char *buffer, int count)
+static int input_read_chars(LogoStream *stream, char *buffer, int count)
 {
-    LogoHostContext *ctx = (LogoHostContext *)stream->context;
+    LogoContext *ctx = (LogoContext *)stream->context;
     if (!ctx || !buffer || count <= 0)
     {
         return 0;
@@ -61,9 +63,9 @@ static int host_input_read_chars(LogoStream *stream, char *buffer, int count)
 
 }
 
-static int host_input_read_line(LogoStream *stream, char *buffer, size_t size)
+static int input_read_line(LogoStream *stream, char *buffer, size_t size)
 {
-    LogoHostContext *ctx = (LogoHostContext *)stream->context;
+    LogoContext *ctx = (LogoContext *)stream->context;
     if (!ctx || !buffer || size == 0)
     {
         return -1;
@@ -84,9 +86,9 @@ static int host_input_read_line(LogoStream *stream, char *buffer, size_t size)
     return (int)len;
 }
 
-static bool host_input_can_read(LogoStream *stream)
+static bool input_can_read(LogoStream *stream)
 {
-    LogoHostContext *ctx = (LogoHostContext *)stream->context;
+    LogoContext *ctx = (LogoContext *)stream->context;
     if (!ctx)
     {
         return false;
@@ -97,9 +99,9 @@ static bool host_input_can_read(LogoStream *stream)
 // Stream operations for screen output
 //
 
-static void host_output_write(LogoStream *stream, const char *text)
+static void output_write(LogoStream *stream, const char *text)
 {
-    LogoHostContext *ctx = (LogoHostContext *)stream->context;
+    LogoContext *ctx = (LogoContext *)stream->context;
     if (!ctx || !text)
     {
         return;
@@ -108,9 +110,9 @@ static void host_output_write(LogoStream *stream, const char *text)
     fputs(text, ctx->output);
 }
 
-static void host_output_flush(LogoStream *stream)
+static void output_flush(LogoStream *stream)
 {
-    LogoHostContext *ctx = (LogoHostContext *)stream->context;
+    LogoContext *ctx = (LogoContext *)stream->context;
     if (!ctx)
     {
         return;
@@ -123,11 +125,11 @@ static void host_output_flush(LogoStream *stream)
 // Stream ops tables
 //
 
-static const LogoStreamOps host_input_ops = {
-    .read_char = host_input_read_char,
-    .read_chars = host_input_read_chars,
-    .read_line = host_input_read_line,
-    .can_read = host_input_can_read,
+static const LogoStreamOps picocalc_input_ops = {
+    .read_char = input_read_char,
+    .read_chars = input_read_chars,
+    .read_line = input_read_line,
+    .can_read = input_can_read,
     .write = NULL,
     .flush = NULL,
     .get_read_pos = NULL,
@@ -138,13 +140,13 @@ static const LogoStreamOps host_input_ops = {
     .close = NULL,
 };
 
-static const LogoStreamOps host_output_ops = {
+static const LogoStreamOps picocalc_output_ops = {
     .read_char = NULL,
     .read_chars = NULL,
     .read_line = NULL,
     .can_read = NULL,
-    .write = host_output_write,
-    .flush = host_output_flush,
+    .write = output_write,
+    .flush = output_flush,
     .get_read_pos = NULL,
     .set_read_pos = NULL,
     .get_write_pos = NULL,
@@ -160,7 +162,7 @@ static const LogoStreamOps host_output_ops = {
 LogoConsole *logo_picocalc_console_create(void)
 {
     LogoConsole *console = (LogoConsole *)malloc(sizeof(LogoConsole));
-    LogoHostContext *context = (LogoHostContext *)malloc(sizeof(LogoHostContext));
+    LogoContext *context = (LogoContext *)malloc(sizeof(LogoContext));
 
     if (!console || !context)
     {
@@ -172,7 +174,7 @@ LogoConsole *logo_picocalc_console_create(void)
     context->input = stdin;
     context->output = stdout;
 
-    logo_console_init(console, &host_input_ops, &host_output_ops, context);
+    logo_console_init(console, &picocalc_input_ops, &picocalc_output_ops, context);
     
     return console;
 }

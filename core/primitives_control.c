@@ -11,6 +11,7 @@
 #include "eval.h"
 #include "value.h"
 #include "variables.h"
+#include "devices/io.h"
 #include <strings.h>  // for strcasecmp
 #include <unistd.h>   // for usleep
 #include <stdio.h>    // for snprintf
@@ -269,9 +270,15 @@ static Result prim_wait(Evaluator *eval, int argc, Value *args)
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, "wait", value_to_string(args[0]));
     }
+
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error(ERR_UNDEFINED);
+    }
     
     // Wait for tenths of a second (each tenth is 100,000 microseconds)
-    usleep(tenths * 100000);
+    logo_io_usleep(io, tenths * 100000);
     
     return result_none();
 }

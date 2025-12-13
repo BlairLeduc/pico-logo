@@ -9,6 +9,7 @@
 #include "primitives.h"
 #include "error.h"
 #include "eval.h"
+#include "devices/io.h"
 #include <stdlib.h>
 #include <math.h>
 
@@ -88,7 +89,13 @@ static Result prim_random(Evaluator *eval, int argc, Value *args)
     if (limit <= 0)
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, "random", value_to_string(args[0]));
     
-    int result = rand() % limit;
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error(ERR_UNDEFINED);
+    }
+
+    int result = logo_io_random(io) % limit;
     return result_ok(value_number((float)result));
 }
 
