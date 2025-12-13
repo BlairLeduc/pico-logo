@@ -55,6 +55,7 @@ void primitives_init(void)
     primitives_properties_init();
     primitives_debug_init();
     primitives_files_init();
+    primitives_text_init();
 }
 
 void primitive_register(const char *name, int default_args, PrimitiveFunc func)
