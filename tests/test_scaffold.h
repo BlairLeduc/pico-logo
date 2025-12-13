@@ -17,6 +17,7 @@
 #include "devices/stream.h"
 #include "devices/console.h"
 #include "devices/io.h"
+#include "mock_device.h"
 #include <string.h>
 
 // Buffer for capturing print output
@@ -147,6 +148,9 @@ static LogoConsole mock_console;
 // Mock I/O manager
 static LogoIO mock_io;
 
+// Flag to track if we're using mock_device for turtle/text testing
+static bool use_mock_device = false;
+
 // Common setUp function
 static void test_scaffold_setUp(void)
 {
@@ -159,12 +163,35 @@ static void test_scaffold_setUp(void)
     output_pos = 0;
     mock_input_buffer = NULL;
     mock_input_pos = 0;
+    use_mock_device = false;
 
     // Set up mock console (embeds streams internally)
     logo_console_init(&mock_console, &mock_input_stream_ops, &mock_output_stream_ops, NULL);
     
     // Set up mock I/O manager
     logo_io_init(&mock_io, &mock_console);
+    
+    // Register I/O with primitives
+    primitives_set_io(&mock_io);
+}
+
+// Setup function that enables turtle/text mock device
+static void test_scaffold_setUp_with_device(void)
+{
+    mem_init();
+    primitives_init();
+    procedures_init();
+    variables_init();
+    properties_init();
+    output_buffer[0] = '\0';
+    output_pos = 0;
+    use_mock_device = true;
+
+    // Initialize the mock device with turtle, text, and screen capabilities
+    mock_device_init();
+    
+    // Set up mock I/O manager with the mock device's console
+    logo_io_init(&mock_io, mock_device_get_console());
     
     // Register I/O with primitives
     primitives_set_io(&mock_io);
@@ -178,8 +205,15 @@ static void test_scaffold_tearDown(void)
 // Helper to set mock input for testing input primitives
 static void set_mock_input(const char *input)
 {
-    mock_input_buffer = input;
-    mock_input_pos = 0;
+    if (use_mock_device)
+    {
+        mock_device_set_input(input);
+    }
+    else
+    {
+        mock_input_buffer = input;
+        mock_input_pos = 0;
+    }
 }
 
 // Helper to evaluate and return result

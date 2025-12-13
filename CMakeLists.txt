@@ -79,9 +79,22 @@ target_link_libraries(logo
 )
 
 # Test Executables
+
+# Test utilities library (includes mock device)
+add_library(test_utils
+    tests/mock_device.c
+    tests/unity.c
+)
+
+target_include_directories(test_utils PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests
+)
+
+target_link_libraries(test_utils PUBLIC logo_core m)
+
 add_executable(test_lexer
     tests/test_lexer.c
-    tests/unity.c
 )
 
 target_include_directories(test_lexer PRIVATE
@@ -89,13 +102,12 @@ target_include_directories(test_lexer PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/tests
 )
 
-target_link_libraries(test_lexer PRIVATE logo_core)
+target_link_libraries(test_lexer PRIVATE test_utils)
 
 add_test(NAME test_lexer COMMAND test_lexer)
 
 add_executable(test_memory
     tests/test_memory.c
-    tests/unity.c
 )
 
 target_include_directories(test_memory PRIVATE
@@ -103,13 +115,12 @@ target_include_directories(test_memory PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/tests
 )
 
-target_link_libraries(test_memory PRIVATE logo_core)
+target_link_libraries(test_memory PRIVATE test_utils)
 
 add_test(NAME test_memory COMMAND test_memory)
 
 add_executable(test_eval
     tests/test_eval.c
-    tests/unity.c
 )
 
 target_include_directories(test_eval PRIVATE
@@ -117,14 +128,13 @@ target_include_directories(test_eval PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/tests
 )
 
-target_link_libraries(test_eval PRIVATE logo_core)
+target_link_libraries(test_eval PRIVATE test_utils)
 
 add_test(NAME test_eval COMMAND test_eval)
 
 # Primitive tests
 add_executable(test_primitives_arithmetic
     tests/test_primitives_arithmetic.c
-    tests/unity.c
 )
 
 target_include_directories(test_primitives_arithmetic PRIVATE
@@ -132,13 +142,12 @@ target_include_directories(test_primitives_arithmetic PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/tests
 )
 
-target_link_libraries(test_primitives_arithmetic PRIVATE logo_core)
+target_link_libraries(test_primitives_arithmetic PRIVATE test_utils)
 
 add_test(NAME test_primitives_arithmetic COMMAND test_primitives_arithmetic)
 
 add_executable(test_primitives_control
     tests/test_primitives_control.c
-    tests/unity.c
 )
 
 target_include_directories(test_primitives_control PRIVATE
@@ -146,13 +155,12 @@ target_include_directories(test_primitives_control PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/tests
 )
 
-target_link_libraries(test_primitives_control PRIVATE logo_core)
+target_link_libraries(test_primitives_control PRIVATE test_utils)
 
 add_test(NAME test_primitives_control COMMAND test_primitives_control)
 
 add_executable(test_primitives_variables
     tests/test_primitives_variables.c
-    tests/unity.c
 )
 
 target_include_directories(test_primitives_variables PRIVATE
@@ -160,13 +168,12 @@ target_include_directories(test_primitives_variables PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/tests
 )
 
-target_link_libraries(test_primitives_variables PRIVATE logo_core)
+target_link_libraries(test_primitives_variables PRIVATE test_utils)
 
 add_test(NAME test_primitives_variables COMMAND test_primitives_variables)
 
 add_executable(test_primitives_words_lists
     tests/test_primitives_words_lists.c
-    tests/unity.c
 )
 
 target_include_directories(test_primitives_words_lists PRIVATE
@@ -174,13 +181,12 @@ target_include_directories(test_primitives_words_lists PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/tests
 )
 
-target_link_libraries(test_primitives_words_lists PRIVATE logo_core)
+target_link_libraries(test_primitives_words_lists PRIVATE test_utils)
 
 add_test(NAME test_primitives_words_lists COMMAND test_primitives_words_lists)
 
 add_executable(test_primitives_procedures
     tests/test_primitives_procedures.c
-    tests/unity.c
 )
 
 target_include_directories(test_primitives_procedures PRIVATE
@@ -188,13 +194,12 @@ target_include_directories(test_primitives_procedures PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/tests
 )
 
-target_link_libraries(test_primitives_procedures PRIVATE logo_core)
+target_link_libraries(test_primitives_procedures PRIVATE test_utils)
 
 add_test(NAME test_primitives_procedures COMMAND test_primitives_procedures)
 
 add_executable(test_primitives_workspace
     tests/test_primitives_workspace.c
-    tests/unity.c
 )
 
 target_include_directories(test_primitives_workspace PRIVATE
@@ -202,13 +207,12 @@ target_include_directories(test_primitives_workspace PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/tests
 )
 
-target_link_libraries(test_primitives_workspace PRIVATE logo_core)
+target_link_libraries(test_primitives_workspace PRIVATE test_utils)
 
 add_test(NAME test_primitives_workspace COMMAND test_primitives_workspace)
 
 add_executable(test_primitives_outside_world
     tests/test_primitives_outside_world.c
-    tests/unity.c
 )
 
 target_include_directories(test_primitives_outside_world PRIVATE
@@ -216,13 +220,12 @@ target_include_directories(test_primitives_outside_world PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/tests
 )
 
-target_link_libraries(test_primitives_outside_world PRIVATE logo_core)
+target_link_libraries(test_primitives_outside_world PRIVATE test_utils)
 
 add_test(NAME test_primitives_outside_world COMMAND test_primitives_outside_world)
 
 add_executable(test_primitives_properties
     tests/test_primitives_properties.c
-    tests/unity.c
 )
 
 target_include_directories(test_primitives_properties PRIVATE
@@ -230,13 +233,12 @@ target_include_directories(test_primitives_properties PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/tests
 )
 
-target_link_libraries(test_primitives_properties PRIVATE logo_core)
+target_link_libraries(test_primitives_properties PRIVATE test_utils)
 
 add_test(NAME test_primitives_properties COMMAND test_primitives_properties)
 
 add_executable(test_primitives_debug
     tests/test_primitives_debug.c
-    tests/unity.c
 )
 
 target_include_directories(test_primitives_debug PRIVATE
@@ -244,13 +246,12 @@ target_include_directories(test_primitives_debug PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/tests
 )
 
-target_link_libraries(test_primitives_debug PRIVATE logo_core)
+target_link_libraries(test_primitives_debug PRIVATE test_utils)
 
 add_test(NAME test_primitives_debug COMMAND test_primitives_debug)
 
 add_executable(test_primitives_files
     tests/test_primitives_files.c
-    tests/unity.c
 )
 
 target_include_directories(test_primitives_files PRIVATE
@@ -258,9 +259,23 @@ target_include_directories(test_primitives_files PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/tests
 )
 
-target_link_libraries(test_primitives_files PRIVATE logo_core)
+target_link_libraries(test_primitives_files PRIVATE test_utils)
 
 add_test(NAME test_primitives_files COMMAND test_primitives_files)
+
+# Mock device test
+add_executable(test_mock_device
+    tests/test_mock_device.c
+)
+
+target_include_directories(test_mock_device PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests
+)
+
+target_link_libraries(test_mock_device PRIVATE test_utils)
+
+add_test(NAME test_mock_device COMMAND test_mock_device)
 
 
 # Coverage target

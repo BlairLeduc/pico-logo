@@ -1,0 +1,229 @@
+//
+//  Pico Logo
+//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//
+//  Mock device for testing turtle graphics and text screen primitives.
+//  Provides trackable state and command history for verification in tests.
+//
+
+#pragma once
+
+#include "devices/console.h"
+#include <stdbool.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+    //
+    // Turtle boundary mode enumeration
+    //
+    typedef enum MockTurtleBoundaryMode
+    {
+        MOCK_BOUNDARY_FENCE,   // Turtle stops at boundary (error if hits edge)
+        MOCK_BOUNDARY_WINDOW,  // Turtle can go off-screen (unbounded)
+        MOCK_BOUNDARY_WRAP     // Turtle wraps around edges
+    } MockTurtleBoundaryMode;
+
+    //
+    // Pen mode enumeration
+    //
+    typedef enum MockPenMode
+    {
+        MOCK_PEN_DOWN,     // Normal drawing
+        MOCK_PEN_UP,       // No drawing
+        MOCK_PEN_ERASE,    // Erases as it moves
+        MOCK_PEN_REVERSE   // Reverses colors
+    } MockPenMode;
+
+    //
+    // Screen mode enumeration
+    //
+    typedef enum MockScreenMode
+    {
+        MOCK_SCREEN_TEXT,       // Full text mode
+        MOCK_SCREEN_SPLIT,      // Split: graphics top, text bottom
+        MOCK_SCREEN_FULLSCREEN  // Full graphics mode
+    } MockScreenMode;
+
+    //
+    // Command types for history tracking
+    //
+    typedef enum MockCommandType
+    {
+        MOCK_CMD_NONE,
+        // Turtle movement
+        MOCK_CMD_MOVE,
+        MOCK_CMD_HOME,
+        MOCK_CMD_SET_POSITION,
+        MOCK_CMD_SET_HEADING,
+        // Turtle appearance
+        MOCK_CMD_SET_PEN_DOWN,
+        MOCK_CMD_SET_PEN_MODE,
+        MOCK_CMD_SET_PEN_COLOUR,
+        MOCK_CMD_SET_BG_COLOUR,
+        MOCK_CMD_SET_VISIBLE,
+        // Graphics operations
+        MOCK_CMD_CLEAR_GRAPHICS,
+        MOCK_CMD_DOT,
+        MOCK_CMD_FILL,
+        // Boundary modes
+        MOCK_CMD_SET_FENCE,
+        MOCK_CMD_SET_WINDOW,
+        MOCK_CMD_SET_WRAP,
+        // Text operations
+        MOCK_CMD_CLEAR_TEXT,
+        MOCK_CMD_SET_CURSOR,
+        MOCK_CMD_SET_WIDTH,
+        // Screen modes
+        MOCK_CMD_FULLSCREEN,
+        MOCK_CMD_SPLITSCREEN,
+        MOCK_CMD_TEXTSCREEN,
+        // Draw (redraw turtle)
+        MOCK_CMD_DRAW
+    } MockCommandType;
+
+    //
+    // Recorded command with parameters
+    //
+    typedef struct MockCommand
+    {
+        MockCommandType type;
+        union
+        {
+            float distance;                  // MOVE
+            struct { float x, y; } position; // SET_POSITION, DOT
+            float heading;                   // SET_HEADING
+            bool flag;                       // SET_PEN_DOWN, SET_VISIBLE
+            MockPenMode pen_mode;            // SET_PEN_MODE
+            uint16_t colour;                 // SET_PEN_COLOUR, SET_BG_COLOUR
+            struct { uint8_t col, row; } cursor;  // SET_CURSOR
+            uint8_t width;                   // SET_WIDTH
+        } params;
+    } MockCommand;
+
+    //
+    // Maximum commands to record in history
+    //
+    #define MOCK_COMMAND_HISTORY_SIZE 256
+
+    //
+    // Mock dot record for tracking drawn dots
+    //
+    typedef struct MockDot
+    {
+        float x, y;
+        uint16_t colour;
+    } MockDot;
+
+    //
+    // Maximum dots to track
+    //
+    #define MOCK_MAX_DOTS 1024
+
+    //
+    // Mock line segment for tracking drawn lines
+    //
+    typedef struct MockLine
+    {
+        float x1, y1;
+        float x2, y2;
+        uint16_t colour;
+    } MockLine;
+
+    //
+    // Maximum lines to track
+    //
+    #define MOCK_MAX_LINES 1024
+
+    //
+    // Mock device state - all trackable state in one structure
+    //
+    typedef struct MockDeviceState
+    {
+        // Turtle state
+        struct
+        {
+            float x, y;                      // Current position
+            float heading;                   // 0 = north, 90 = east
+            bool pen_down;                   // Is pen down?
+            MockPenMode pen_mode;            // Current pen mode
+            uint16_t pen_colour;             // Current pen color
+            uint16_t bg_colour;              // Background color
+            bool visible;                    // Is turtle visible?
+            MockTurtleBoundaryMode boundary_mode;  // Fence/window/wrap
+        } turtle;
+
+        // Text screen state
+        struct
+        {
+            uint8_t cursor_col;              // Current cursor column (0-based)
+            uint8_t cursor_row;              // Current cursor row (0-based)
+            uint8_t width;                   // Screen width (40 or 64)
+            bool cleared;                    // Was screen cleared?
+        } text;
+
+        // Screen mode
+        MockScreenMode screen_mode;
+
+        // Graphics tracking
+        struct
+        {
+            bool cleared;                    // Was graphics screen cleared?
+            MockDot dots[MOCK_MAX_DOTS];     // Recorded dots
+            int dot_count;
+            MockLine lines[MOCK_MAX_LINES];  // Recorded lines
+            int line_count;
+        } graphics;
+
+        // Command history
+        MockCommand commands[MOCK_COMMAND_HISTORY_SIZE];
+        int command_count;
+
+        // Error tracking
+        bool boundary_error;                 // Set when turtle hits boundary in fence mode
+    } MockDeviceState;
+
+    //
+    // Mock device API
+    //
+
+    // Initialize/reset mock device state
+    void mock_device_init(void);
+    void mock_device_reset(void);
+
+    // Get the current mock device state (read-only)
+    const MockDeviceState *mock_device_get_state(void);
+
+    // Get the mock console (to register with IO)
+    LogoConsole *mock_device_get_console(void);
+
+    // Command history helpers
+    int mock_device_command_count(void);
+    const MockCommand *mock_device_get_command(int index);
+    const MockCommand *mock_device_last_command(void);
+    void mock_device_clear_commands(void);
+
+    // Graphics tracking helpers
+    int mock_device_dot_count(void);
+    const MockDot *mock_device_get_dot(int index);
+    int mock_device_line_count(void);
+    const MockLine *mock_device_get_line(int index);
+    void mock_device_clear_graphics(void);
+
+    // Verify helpers for tests
+    bool mock_device_verify_position(float x, float y, float tolerance);
+    bool mock_device_verify_heading(float heading, float tolerance);
+    bool mock_device_has_line_from_to(float x1, float y1, float x2, float y2, float tolerance);
+    bool mock_device_has_dot_at(float x, float y, float tolerance);
+
+    // I/O helpers for testing
+    void mock_device_set_input(const char *input);
+    const char *mock_device_get_output(void);
+    void mock_device_clear_output(void);
+
+#ifdef __cplusplus
+}
+#endif
