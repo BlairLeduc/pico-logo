@@ -13,8 +13,8 @@
 
 #include "devices/console.h"
 #include "devices/io.h"
-#include "devices/host/host_device.h"
-#include "devices/host/host_file.h"
+#include "devices/picocalc/picocalc_device.h"
+#include "devices/picocalc/picocalc_file.h"
 #include "core/memory.h"
 #include "core/lexer.h"
 #include "core/eval.h"
@@ -65,7 +65,7 @@ static bool line_is_end(const char *line)
 int main(void)
 {
     // Initialize the host console for I/O
-    LogoConsole *console = logo_host_console_create();
+    LogoConsole *console = logo_picocalc_console_create();
     if (!console)
     {
         fprintf(stderr, "Failed to create console\n");
@@ -235,7 +235,6 @@ int main(void)
 
     // Cleanup
     logo_io_cleanup(&io);
-    logo_host_console_destroy(console);
 
     return EXIT_SUCCESS;
 }

@@ -8,8 +8,8 @@
 
 #pragma once
 
-#include "stream.h"
-#include "console.h"
+#include "devices/stream.h"
+#include "devices/console.h"
 
 #ifdef __cplusplus
 extern "C"

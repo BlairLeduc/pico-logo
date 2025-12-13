@@ -2,89 +2,49 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug logo (main.c)",
-            "type": "cppdbg",
+            "name": "Pico Debug (Cortex-Debug)",
+            "cwd": "${userHome}/.pico-sdk/openocd/0.12.0+dev/scripts",
+            "executable": "${command:raspberry-pi-pico.launchTargetPath}",
             "request": "launch",
-            "program": "${workspaceFolder}/build/logo",
-            "args": [],
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/build",
-            "environment": [],
-            "externalConsole": true,
-            "MIMode": "lldb",
-            "preLaunchTask": "CMake: Build"
+            "type": "cortex-debug",
+            "servertype": "openocd",
+            "serverpath": "${userHome}/.pico-sdk/openocd/0.12.0+dev/openocd.exe",
+            "gdbPath": "${command:raspberry-pi-pico.getGDBPath}",
+            "device": "${command:raspberry-pi-pico.getChipUppercase}",
+            "configFiles": [
+                "interface/cmsis-dap.cfg",
+                "target/${command:raspberry-pi-pico.getTarget}.cfg"
+            ],
+            "svdFile": "${userHome}/.pico-sdk/sdk/2.2.0/src/${command:raspberry-pi-pico.getChip}/hardware_regs/${command:raspberry-pi-pico.getChipUppercase}.svd",
+            "runToEntryPoint": "main",
+            // Fix for no_flash binaries, where monitor reset halt doesn't do what is expected
+            // Also works fine for flash binaries
+            "overrideLaunchCommands": [
+                "monitor reset init",
+                "load \"${command:raspberry-pi-pico.launchTargetPath}\""
+            ],
+            "openOCDLaunchCommands": [
+                "adapter speed 5000"
+            ]
         },
         {
-            "name": "Debug test_env",
-            "type": "cppdbg",
+            "name": "Pico Debug (Cortex-Debug with external OpenOCD)",
+            "cwd": "${workspaceRoot}",
+            "executable": "${command:raspberry-pi-pico.launchTargetPath}",
             "request": "launch",
-            "program": "${workspaceFolder}/build/test_env",
-            "args": [],
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/build",
-            "environment": [],
-            "externalConsole": false,
-            "MIMode": "lldb",
-            "preLaunchTask": "CMake: Build"
+            "type": "cortex-debug",
+            "servertype": "external",
+            "gdbTarget": "localhost:3333",
+            "gdbPath": "${command:raspberry-pi-pico.getGDBPath}",
+            "device": "${command:raspberry-pi-pico.getChipUppercase}",
+            "svdFile": "${userHome}/.pico-sdk/sdk/2.2.0/src/${command:raspberry-pi-pico.getChip}/hardware_regs/${command:raspberry-pi-pico.getChipUppercase}.svd",
+            "runToEntryPoint": "main",
+            // Fix for no_flash binaries, where monitor reset halt doesn't do what is expected
+            // Also works fine for flash binaries
+            "overrideLaunchCommands": [
+                "monitor reset init",
+                "load \"${command:raspberry-pi-pico.launchTargetPath}\""
+            ]
         },
-        {
-            "name": "Debug test_evaluator",
-            "type": "cppdbg",
-            "request": "launch",
-            "program": "${workspaceFolder}/build/test_evaluator",
-            "args": [],
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/build",
-            "environment": [],
-            "externalConsole": false,
-            "MIMode": "lldb",
-            "preLaunchTask": "CMake: Build"
-        },
-        {
-            "name": "Debug test_interpreter",
-            "type": "cppdbg",
-            "request": "launch",
-            "program": "${workspaceFolder}/build/test_interpreter",
-            "args": [],
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/build",
-            "environment": [],
-            "externalConsole": false,
-            "MIMode": "lldb",
-            "preLaunchTask": "CMake: Build"
-        },
-        {
-            "name": "Debug test_lexer",
-            "type": "cppdbg",
-            "request": "launch",
-            "program": "${workspaceFolder}/build/test_lexer",
-            "args": [],
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/build",
-            "environment": [],
-            "externalConsole": false,
-            "MIMode": "lldb",
-            "preLaunchTask": "CMake: Build"
-        },
-        {
-            "name": "Debug test_parser",
-            "type": "cppdbg",
-            "request": "launch",
-            "program": "${workspaceFolder}/build/test_parser",
-            "args": [],
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/build",
-            "environment": [],
-            "externalConsole": false,
-            "MIMode": "lldb",
-            "preLaunchTask": "CMake: Build"
-        },
-        {
-            "name": "(lldb) Attach",
-            "type": "cppdbg",
-            "request": "attach",
-            "program": "${workspaceFolder}/build/logo",
-            "MIMode": "lldb"
-        }
     ]
 }
