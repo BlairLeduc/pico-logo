@@ -68,9 +68,9 @@ void test_procedure_local_scope(void)
     
     Node p = mem_atom("x", 1);
     const char *params[] = {mem_word_ptr(p)};
-    define_proc("setx", params, 1, "print :x");
+    define_proc("printx", params, 1, "print :x");
     
-    run_string("setx 42");
+    run_string("printx 42");
     TEST_ASSERT_EQUAL_STRING("42\n", output_buffer);
     
     // Global x should be unchanged

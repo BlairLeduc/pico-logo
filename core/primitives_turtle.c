@@ -1,0 +1,911 @@
+//
+//  Pico Logo
+//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//
+//  Turtle graphics primitives
+//
+
+#include "primitives.h"
+#include "error.h"
+#include "eval.h"
+#include "devices/io.h"
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+
+//==========================================================================
+// Helper functions
+//==========================================================================
+
+// Get the console's turtle operations, or NULL if not available
+static const LogoConsoleTurtle *get_turtle_ops(void)
+{
+    LogoIO *io = primitives_get_io();
+    if (!io || !io->console)
+        return NULL;
+    return io->console->turtle;
+}
+
+// Helper to extract [x y] list into coordinates
+static bool extract_position(Value pos, float *x, float *y, const char *proc_name, Result *error)
+{
+    if (pos.type != VALUE_LIST)
+    {
+        *error = result_error_arg(ERR_DOESNT_LIKE_INPUT, proc_name, value_to_string(pos));
+        return false;
+    }
+
+    Node list = pos.as.node;
+    if (mem_is_nil(list))
+    {
+        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, proc_name, NULL);
+        return false;
+    }
+
+    Node x_node = mem_car(list);
+    list = mem_cdr(list);
+    
+    if (mem_is_nil(list))
+    {
+        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, proc_name, NULL);
+        return false;
+    }
+    
+    Node y_node = mem_car(list);
+
+    // Convert to numbers
+    Value x_val = mem_is_word(x_node) ? value_word(x_node) : value_list(x_node);
+    Value y_val = mem_is_word(y_node) ? value_word(y_node) : value_list(y_node);
+    
+    float x_num, y_num;
+    if (!value_to_number(x_val, &x_num) || !value_to_number(y_val, &y_num))
+    {
+        *error = result_error_arg(ERR_DOESNT_LIKE_INPUT, proc_name, value_to_string(pos));
+        return false;
+    }
+
+    *x = x_num;
+    *y = y_num;
+    return true;
+}
+
+// Helper to build [x y] list from coordinates
+static Value make_position_list(float x, float y)
+{
+    char x_buf[32], y_buf[32];
+    snprintf(x_buf, sizeof(x_buf), "%g", x);
+    snprintf(y_buf, sizeof(y_buf), "%g", y);
+    
+    Node x_atom = mem_atom(x_buf, strlen(x_buf));
+    Node y_atom = mem_atom(y_buf, strlen(y_buf));
+    
+    return value_list(mem_cons(x_atom, mem_cons(y_atom, NODE_NIL)));
+}
+
+//==========================================================================
+// Movement primitives
+//==========================================================================
+
+// back (bk) - Move turtle backward
+static Result prim_back(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+
+    if (argc < 1)
+    {
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "back", NULL);
+    }
+
+    float distance;
+    if (!value_to_number(args[0], &distance))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "back", value_to_string(args[0]));
+    }
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->move)
+    {
+        turtle->move(-distance);  // Negative for backward
+    }
+    
+    return result_none();
+}
+
+// forward (fd) - Move turtle forward
+static Result prim_forward(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+
+    if (argc < 1)
+    {
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "forward", NULL);
+    }
+
+    float distance;
+    if (!value_to_number(args[0], &distance))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "forward", value_to_string(args[0]));
+    }
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->move)
+    {
+        turtle->move(distance);
+    }
+    
+    return result_none();
+}
+
+// home - Move turtle to center, heading north
+static Result prim_home(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->home)
+    {
+        turtle->home();
+    }
+    
+    return result_none();
+}
+
+// setpos [x y] - Move turtle to position
+static Result prim_setpos(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+
+    if (argc < 1)
+    {
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "setpos", NULL);
+    }
+
+    float x, y;
+    Result error;
+    if (!extract_position(args[0], &x, &y, "setpos", &error))
+    {
+        return error;
+    }
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->set_position)
+    {
+        turtle->set_position(x, y);
+    }
+    
+    return result_none();
+}
+
+// setx - Set turtle x-coordinate
+static Result prim_setx(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+
+    if (argc < 1)
+    {
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "setx", NULL);
+    }
+
+    float x;
+    if (!value_to_number(args[0], &x))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setx", value_to_string(args[0]));
+    }
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->set_position && turtle->get_position)
+    {
+        float curr_x, curr_y;
+        turtle->get_position(&curr_x, &curr_y);
+        turtle->set_position(x, curr_y);
+    }
+    
+    return result_none();
+}
+
+// sety - Set turtle y-coordinate
+static Result prim_sety(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+
+    if (argc < 1)
+    {
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "sety", NULL);
+    }
+
+    float y;
+    if (!value_to_number(args[0], &y))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "sety", value_to_string(args[0]));
+    }
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->set_position && turtle->get_position)
+    {
+        float curr_x, curr_y;
+        turtle->get_position(&curr_x, &curr_y);
+        turtle->set_position(curr_x, y);
+    }
+    
+    return result_none();
+}
+
+//==========================================================================
+// Rotation primitives
+//==========================================================================
+
+// left (lt) - Turn turtle left
+static Result prim_left(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+
+    if (argc < 1)
+    {
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "left", NULL);
+    }
+
+    float degrees;
+    if (!value_to_number(args[0], &degrees))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "left", value_to_string(args[0]));
+    }
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->get_heading && turtle->set_heading)
+    {
+        float heading = turtle->get_heading();
+        heading -= degrees;  // Left is counterclockwise (negative)
+        turtle->set_heading(heading);
+    }
+    
+    return result_none();
+}
+
+// right (rt) - Turn turtle right
+static Result prim_right(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+
+    if (argc < 1)
+    {
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "right", NULL);
+    }
+
+    float degrees;
+    if (!value_to_number(args[0], &degrees))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "right", value_to_string(args[0]));
+    }
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->get_heading && turtle->set_heading)
+    {
+        float heading = turtle->get_heading();
+        heading += degrees;  // Right is clockwise (positive)
+        turtle->set_heading(heading);
+    }
+    
+    return result_none();
+}
+
+// setheading (seth) - Set absolute heading
+static Result prim_setheading(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+
+    if (argc < 1)
+    {
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "setheading", NULL);
+    }
+
+    float degrees;
+    if (!value_to_number(args[0], &degrees))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setheading", value_to_string(args[0]));
+    }
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->set_heading)
+    {
+        turtle->set_heading(degrees);
+    }
+    
+    return result_none();
+}
+
+//==========================================================================
+// Query primitives
+//==========================================================================
+
+// heading - Output current heading
+static Result prim_heading(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    
+    float heading = 0.0f;
+    if (turtle && turtle->get_heading)
+    {
+        heading = turtle->get_heading();
+    }
+
+    return result_ok(value_number(heading));
+}
+
+// pos - Output current position as [x y]
+static Result prim_pos(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    
+    float x = 0.0f, y = 0.0f;
+    if (turtle && turtle->get_position)
+    {
+        turtle->get_position(&x, &y);
+    }
+
+    return result_ok(make_position_list(x, y));
+}
+
+// xcor - Output x-coordinate
+static Result prim_xcor(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    
+    float x = 0.0f, y = 0.0f;
+    if (turtle && turtle->get_position)
+    {
+        turtle->get_position(&x, &y);
+    }
+
+    return result_ok(value_number(x));
+}
+
+// ycor - Output y-coordinate
+static Result prim_ycor(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    
+    float x = 0.0f, y = 0.0f;
+    if (turtle && turtle->get_position)
+    {
+        turtle->get_position(&x, &y);
+    }
+
+    return result_ok(value_number(y));
+}
+
+// towards [x y] - Output heading towards position
+static Result prim_towards(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+
+    if (argc < 1)
+    {
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "towards", NULL);
+    }
+
+    float target_x, target_y;
+    Result error;
+    if (!extract_position(args[0], &target_x, &target_y, "towards", &error))
+    {
+        return error;
+    }
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    
+    float x = 0.0f, y = 0.0f;
+    if (turtle && turtle->get_position)
+    {
+        turtle->get_position(&x, &y);
+    }
+
+    // Calculate angle from current position to target
+    // Logo heading: 0 = north, 90 = east (clockwise from north)
+    float dx = target_x - x;
+    float dy = target_y - y;
+    
+    // atan2 gives angle from positive x-axis (counterclockwise)
+    // Convert to Logo heading (clockwise from north)
+    float angle = atan2f(dx, dy) * (180.0f / 3.14159265358979f);
+    
+    // Normalize to [0, 360)
+    while (angle < 0.0f) angle += 360.0f;
+    while (angle >= 360.0f) angle -= 360.0f;
+
+    return result_ok(value_number(angle));
+}
+
+//==========================================================================
+// Pen control primitives
+//==========================================================================
+
+// pendown (pd) - Put pen down
+static Result prim_pendown(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->set_pen_down)
+    {
+        turtle->set_pen_down(true);
+    }
+    
+    return result_none();
+}
+
+// penerase (pe) - Put eraser down
+static Result prim_penerase(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    // Note: penerase sets a special mode - the mock device tracks pen_mode
+    // The actual implementation would need to set pen down in erase mode
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->set_pen_down)
+    {
+        turtle->set_pen_down(true);  // Pen is down, but in erase mode
+        // The device should track erase mode separately
+    }
+    
+    return result_none();
+}
+
+// penreverse (px) - Put reversing pen down
+static Result prim_penreverse(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->set_pen_down)
+    {
+        turtle->set_pen_down(true);  // Pen is down, but in reverse mode
+        // The device should track reverse mode separately
+    }
+    
+    return result_none();
+}
+
+// penup (pu) - Lift pen up
+static Result prim_penup(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->set_pen_down)
+    {
+        turtle->set_pen_down(false);
+    }
+    
+    return result_none();
+}
+
+// pen - Output current pen state
+static Result prim_pen(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    
+    // Default to pendown
+    const char *state = "pendown";
+    if (turtle && turtle->get_pen_down)
+    {
+        if (!turtle->get_pen_down())
+        {
+            state = "penup";
+        }
+        // Note: penerase and penreverse would need additional mode tracking
+    }
+
+    return result_ok(value_word(mem_atom(state, strlen(state))));
+}
+
+// setpc (setpencolor) - Set pen color
+static Result prim_setpc(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+
+    if (argc < 1)
+    {
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "setpc", NULL);
+    }
+
+    float colour;
+    if (!value_to_number(args[0], &colour))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setpc", value_to_string(args[0]));
+    }
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->set_pen_colour)
+    {
+        turtle->set_pen_colour((uint16_t)colour);
+    }
+    
+    return result_none();
+}
+
+// pencolor (pc) - Output pen color
+static Result prim_pencolor(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    
+    uint16_t colour = 0;
+    if (turtle && turtle->get_pen_colour)
+    {
+        colour = turtle->get_pen_colour();
+    }
+
+    return result_ok(value_number((float)colour));
+}
+
+// setbg - Set background color
+static Result prim_setbg(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+
+    if (argc < 1)
+    {
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "setbg", NULL);
+    }
+
+    float colour;
+    if (!value_to_number(args[0], &colour))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setbg", value_to_string(args[0]));
+    }
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->set_bg_colour)
+    {
+        turtle->set_bg_colour((uint16_t)colour);
+    }
+    
+    return result_none();
+}
+
+// background (bg) - Output background color
+static Result prim_background(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    
+    uint16_t colour = 0;
+    if (turtle && turtle->get_bg_colour)
+    {
+        colour = turtle->get_bg_colour();
+    }
+
+    return result_ok(value_number((float)colour));
+}
+
+//==========================================================================
+// Visibility primitives
+//==========================================================================
+
+// hideturtle (ht) - Hide the turtle
+static Result prim_hideturtle(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->set_visible)
+    {
+        turtle->set_visible(false);
+    }
+    
+    return result_none();
+}
+
+// showturtle (st) - Show the turtle
+static Result prim_showturtle(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->set_visible)
+    {
+        turtle->set_visible(true);
+    }
+    
+    return result_none();
+}
+
+// shown? (shownp) - Output whether turtle is visible
+static Result prim_shownp(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    
+    bool visible = true;
+    if (turtle && turtle->get_visible)
+    {
+        visible = turtle->get_visible();
+    }
+
+    return result_ok(value_word(mem_atom(visible ? "true" : "false", visible ? 4 : 5)));
+}
+
+//==========================================================================
+// Screen primitives
+//==========================================================================
+
+// clearscreen (cs) - Clear screen and reset turtle
+static Result prim_clearscreen(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle)
+    {
+        if (turtle->clear)
+        {
+            turtle->clear();
+        }
+        if (turtle->home)
+        {
+            turtle->home();
+        }
+    }
+    
+    return result_none();
+}
+
+// clean - Clear graphics without moving turtle
+static Result prim_clean(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->clear)
+    {
+        turtle->clear();
+    }
+    
+    return result_none();
+}
+
+//==========================================================================
+// Drawing primitives
+//==========================================================================
+
+// dot [x y] - Draw a dot at position
+static Result prim_dot(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+
+    if (argc < 1)
+    {
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "dot", NULL);
+    }
+
+    float x, y;
+    Result error;
+    if (!extract_position(args[0], &x, &y, "dot", &error))
+    {
+        return error;
+    }
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->dot)
+    {
+        turtle->dot(x, y);
+    }
+    
+    return result_none();
+}
+
+// dot? (dotp) - Check if dot at position
+static Result prim_dotp(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+
+    if (argc < 1)
+    {
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "dot?", NULL);
+    }
+
+    float x, y;
+    Result error;
+    if (!extract_position(args[0], &x, &y, "dot?", &error))
+    {
+        return error;
+    }
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    
+    bool has_dot = false;
+    if (turtle && turtle->dot_at)
+    {
+        has_dot = turtle->dot_at(x, y);
+    }
+
+    return result_ok(value_word(mem_atom(has_dot ? "true" : "false", has_dot ? 4 : 5)));
+}
+
+// fill - Fill enclosed area
+static Result prim_fill(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->fill)
+    {
+        turtle->fill();
+    }
+    
+    return result_none();
+}
+
+//==========================================================================
+// Boundary mode primitives
+//==========================================================================
+
+// fence - Turtle stops at boundary
+static Result prim_fence(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->set_fence)
+    {
+        turtle->set_fence();
+    }
+    
+    return result_none();
+}
+
+// window - Turtle can go off-screen
+static Result prim_window(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->set_window)
+    {
+        turtle->set_window();
+    }
+    
+    return result_none();
+}
+
+// wrap - Turtle wraps around edges
+static Result prim_wrap(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->set_wrap)
+    {
+        turtle->set_wrap();
+    }
+    
+    return result_none();
+}
+
+//==========================================================================
+// Registration
+//==========================================================================
+
+void primitives_turtle_init(void)
+{
+    // Movement primitives
+    primitive_register("back", 1, prim_back);
+    primitive_register("bk", 1, prim_back);
+    primitive_register("forward", 1, prim_forward);
+    primitive_register("fd", 1, prim_forward);
+    primitive_register("home", 0, prim_home);
+    primitive_register("setpos", 1, prim_setpos);
+    primitive_register("setx", 1, prim_setx);
+    primitive_register("sety", 1, prim_sety);
+    
+    // Rotation primitives
+    primitive_register("left", 1, prim_left);
+    primitive_register("lt", 1, prim_left);
+    primitive_register("right", 1, prim_right);
+    primitive_register("rt", 1, prim_right);
+    primitive_register("setheading", 1, prim_setheading);
+    primitive_register("seth", 1, prim_setheading);
+    
+    // Query primitives
+    primitive_register("heading", 0, prim_heading);
+    primitive_register("pos", 0, prim_pos);
+    primitive_register("xcor", 0, prim_xcor);
+    primitive_register("ycor", 0, prim_ycor);
+    primitive_register("towards", 1, prim_towards);
+    
+    // Pen control primitives
+    primitive_register("pendown", 0, prim_pendown);
+    primitive_register("pd", 0, prim_pendown);
+    primitive_register("penerase", 0, prim_penerase);
+    primitive_register("pe", 0, prim_penerase);
+    primitive_register("penreverse", 0, prim_penreverse);
+    primitive_register("px", 0, prim_penreverse);
+    primitive_register("penup", 0, prim_penup);
+    primitive_register("pu", 0, prim_penup);
+    primitive_register("pen", 0, prim_pen);
+    primitive_register("setpc", 1, prim_setpc);
+    primitive_register("setpencolor", 1, prim_setpc);
+    primitive_register("pencolor", 0, prim_pencolor);
+    primitive_register("pc", 0, prim_pencolor);
+    primitive_register("setbg", 1, prim_setbg);
+    primitive_register("background", 0, prim_background);
+    primitive_register("bg", 0, prim_background);
+    
+    // Visibility primitives
+    primitive_register("hideturtle", 0, prim_hideturtle);
+    primitive_register("ht", 0, prim_hideturtle);
+    primitive_register("showturtle", 0, prim_showturtle);
+    primitive_register("st", 0, prim_showturtle);
+    primitive_register("shown?", 0, prim_shownp);
+    primitive_register("shownp", 0, prim_shownp);
+    
+    // Screen primitives
+    primitive_register("clearscreen", 0, prim_clearscreen);
+    primitive_register("cs", 0, prim_clearscreen);
+    primitive_register("clean", 0, prim_clean);
+    
+    // Drawing primitives
+    primitive_register("dot", 1, prim_dot);
+    primitive_register("dot?", 1, prim_dotp);
+    primitive_register("dotp", 1, prim_dotp);
+    primitive_register("fill", 0, prim_fill);
+    
+    // Boundary mode primitives
+    primitive_register("fence", 0, prim_fence);
+    primitive_register("window", 0, prim_window);
+    primitive_register("wrap", 0, prim_wrap);
+}

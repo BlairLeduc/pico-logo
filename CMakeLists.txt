@@ -52,6 +52,7 @@ add_library(logo_core
     core/primitives_debug.c
     core/primitives_files.c
     core/primitives_text.c
+    core/primitives_turtle.c
 )
 
 target_include_directories(logo_core
@@ -291,6 +292,20 @@ target_include_directories(test_primitives_text PRIVATE
 target_link_libraries(test_primitives_text PRIVATE test_utils)
 
 add_test(NAME test_primitives_text COMMAND test_primitives_text)
+
+# Turtle primitives test
+add_executable(test_primitives_turtle
+    tests/test_primitives_turtle.c
+)
+
+target_include_directories(test_primitives_turtle PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests
+)
+
+target_link_libraries(test_primitives_turtle PRIVATE test_utils)
+
+add_test(NAME test_primitives_turtle COMMAND test_primitives_turtle)
 
 
 # Coverage target
