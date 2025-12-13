@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pico palette as a 16x16 grid. Each cell shows the palette index. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="768" height="576" viewBox="0 0 768 576" role="img" aria-label="Colour Palette for Pico Logo">
+  <style>
+    .cell { width:48px; height:36px; }
+    .idx { font-family: monospace, monospace; font-size:12px; font-weight:700; paint-order: stroke; stroke-width:1.5px; stroke: #ffffff; fill: #000000; }
+  </style>
+  <!-- 16 columns x 16 rows (index 0..255). Cell size: 48x36 -->
+  <!-- Row 0: indices 0..15 -->
+  <rect x="0"   y="0"   width="96" height="36" fill="#000000"/><text x="72"  y="22" class="idx">0</text>
+  <rect x="96"  y="0"   width="96" height="36" fill="#333333"/><text x="168" y="22" class="idx">1</text>
+  <rect x="192"  y="0"   width="96" height="36" fill="#555555"/><text x="264" y="22" class="idx">2</text>
+  <rect x="288"  y="0"   width="96" height="36" fill="#777777"/><text x="360" y="22" class="idx">3</text>
+  <rect x="384"  y="0"   width="96" height="36" fill="#999999"/><text x="456" y="22" class="idx">4</text>
+  <rect x="480"  y="0"   width="96" height="36" fill="#bbbbbb"/><text x="552" y="22" class="idx">5</text>
+  <rect x="576"  y="0"   width="96" height="36" fill="#dddddd"/><text x="648" y="22" class="idx">6</text>
+  <rect x="672"  y="0"   width="96" height="36" fill="#ffffff"/><text x="744" y="22" class="idx">7</text>
+
+  <!-- Row 1: 16..31 -->
+  <rect x="0"   y="36"  width="96" height="36" fill="#2a1800"/><text x="72"  y="58" class="idx">8</text>
+  <rect x="96"  y="36"  width="96" height="36" fill="#4c3a00"/><text x="168" y="58" class="idx">9</text>
+  <rect x="192"  y="36"  width="96" height="36" fill="#6e5c00"/><text x="264" y="58" class="idx">10</text>
+  <rect x="288"  y="36"  width="96" height="36" fill="#907e09"/><text x="360" y="58" class="idx">11</text>
+  <rect x="384"  y="36"  width="96" height="36" fill="#b3a02b"/><text x="456" y="58" class="idx">12</text>
+  <rect x="480"  y="36"  width="96" height="36" fill="#d4c24d"/><text x="552" y="58" class="idx">13</text>
+  <rect x="576"  y="36"  width="96" height="36" fill="#f7e46f"/><text x="648" y="58" class="idx">14</text>
+  <rect x="672"  y="36"  width="96" height="36" fill="#ffff96"/><text x="744" y="58" class="idx">15</text>
+
+  <!-- Row 2: 32..47 -->
+  <rect x="0"   y="72"  width="96" height="36" fill="#3f0000"/><text x="72"  y="94" class="idx">16</text>
+  <rect x="96"  y="72"  width="96" height="36" fill="#642800"/><text x="168" y="94" class="idx">17</text>
+  <rect x="192"  y="72"  width="96" height="36" fill="#864a00"/><text x="264" y="94" class="idx">18</text>
+  <rect x="288"  y="72"  width="96" height="36" fill="#a86c1b"/><text x="360" y="94" class="idx">19</text>
+  <rect x="384"  y="72"  width="96" height="36" fill="#ca8e3d"/><text x="456" y="94" class="idx">20</text>
+  <rect x="480"  y="72"  width="96" height="36" fill="#ecb05f"/><text x="552" y="94" class="idx">21</text>
+  <rect x="576"  y="72"  width="96" height="36" fill="#ffd285"/><text x="648" y="94" class="idx">22</text>
+  <rect x="672"  y="72"  width="96" height="36" fill="#fff4b2"/><text x="744" y="94" class="idx">23</text>
+
+  <!-- Row 3: 48..63 -->
+  <rect x="0"   y="108" width="96" height="36" fill="#4f0000"/><text x="72"  y="130" class="idx">24</text>
+  <rect x="96"  y="108" width="96" height="36" fill="#711900"/><text x="168" y="130" class="idx">25</text>
+  <rect x="192"  y="108" width="96" height="36" fill="#933b1e"/><text x="264" y="130" class="idx">26</text>
+  <rect x="288"  y="108" width="96" height="36" fill="#b55d40"/><text x="360" y="130" class="idx">27</text>
+  <rect x="384"  y="108" width="96" height="36" fill="#d77f62"/><text x="456" y="130" class="idx">28</text>
+  <rect x="480"  y="108" width="96" height="36" fill="#f9a183"/><text x="552" y="130" class="idx">29</text>
+  <rect x="576"  y="108" width="96" height="36" fill="#ffc3ae"/><text x="648" y="130" class="idx">30</text>
+  <rect x="672"  y="108" width="96" height="36" fill="#ffe5da"/><text x="744" y="130" class="idx">31</text>
+
+  <!-- Row 4: 64..79 -->
+  <rect x="0"   y="144" width="96" height="36" fill="#50000f"/><text x="72"  y="166" class="idx">32</text>
+  <rect x="96"  y="144" width="96" height="36" fill="#720f2b"/><text x="168" y="166" class="idx">33</text>
+  <rect x="192"  y="144" width="96" height="36" fill="#94314d"/><text x="264" y="166" class="idx">34</text>
+  <rect x="288"  y="144" width="96" height="36" fill="#b6536f"/><text x="360" y="166" class="idx">35</text>
+  <rect x="384"  y="144" width="96" height="36" fill="#d87591"/><text x="456" y="166" class="idx">36</text>
+  <rect x="480"  y="144" width="96" height="36" fill="#fa97b3"/><text x="552" y="166" class="idx">37</text>
+  <rect x="576"  y="144" width="96" height="36" fill="#ffb9de"/><text x="648" y="166" class="idx">38</text>
+  <rect x="672"  y="144" width="96" height="36" fill="#fbdcf6"/><text x="744" y="166" class="idx">39</text>
+
+  <!-- Row 5: 80..95 -->
+  <rect x="0"   y="180" width="96" height="36" fill="#440041"/><text x="72"  y="202" class="idx">40</text>
+  <rect x="96"  y="180" width="96" height="36" fill="#660c5c"/><text x="168" y="202" class="idx">41</text>
+  <rect x="192"  y="180" width="96" height="36" fill="#882e7e"/><text x="264" y="202" class="idx">42</text>
+  <rect x="288"  y="180" width="96" height="36" fill="#aa50a0"/><text x="360" y="202" class="idx">43</text>
+  <rect x="384"  y="180" width="96" height="36" fill="#cc72c2"/><text x="456" y="202" class="idx">44</text>
+  <rect x="480"  y="180" width="96" height="36" fill="#ee94e4"/><text x="552" y="202" class="idx">45</text>
+  <rect x="576"  y="180" width="96" height="36" fill="#ffb6e9"/><text x="648" y="202" class="idx">46</text>
+  <rect x="672"  y="180" width="96" height="36" fill="#ffd8f3"/><text x="744" y="202" class="idx">47</text>
+
+  <!-- Row 6: 96..111 -->
+  <rect x="0"   y="216" width="96" height="36" fill="#2e0068"/><text x="72"  y="238" class="idx">48</text>
+  <rect x="96"  y="216" width="96" height="36" fill="#511084"/><text x="168" y="238" class="idx">49</text>
+  <rect x="192"  y="216" width="96" height="36" fill="#7332a6"/><text x="264" y="238" class="idx">50</text>
+  <rect x="288"  y="216" width="96" height="36" fill="#9554c8"/><text x="360" y="238" class="idx">51</text>
+  <rect x="384"  y="216" width="96" height="36" fill="#b776ea"/><text x="456" y="238" class="idx">52</text>
+  <rect x="480"  y="216" width="96" height="36" fill="#d998eb"/><text x="552" y="238" class="idx">53</text>
+  <rect x="576"  y="216" width="96" height="36" fill="#fbbaeb"/><text x="648" y="238" class="idx">54</text>
+  <rect x="672"  y="216" width="96" height="36" fill="#ffdff9"/><text x="744" y="238" class="idx">55</text>
+
+  <!-- Row 7: 112..127 -->
+  <rect x="0"   y="252" width="96" height="36" fill="#13007d"/><text x="72"  y="274" class="idx">56</text>
+  <rect x="96"  y="252" width="96" height="36" fill="#351c9d"/><text x="168" y="274" class="idx">57</text>
+  <rect x="192"  y="252" width="96" height="36" fill="#573ebf"/><text x="264" y="274" class="idx">58</text>
+  <rect x="288"  y="252" width="96" height="36" fill="#7960e1"/><text x="360" y="274" class="idx">59</text>
+  <rect x="384"  y="252" width="96" height="36" fill="#9b82f7"/><text x="456" y="274" class="idx">60</text>
+  <rect x="480"  y="252" width="96" height="36" fill="#bda4f7"/><text x="552" y="274" class="idx">61</text>
+  <rect x="576"  y="252" width="96" height="36" fill="#dfc6f7"/><text x="648" y="274" class="idx">62</text>
+  <rect x="672"  y="252" width="96" height="36" fill="#ffe8f8"/><text x="744" y="274" class="idx">63</text>
+
+  <!-- Row 8: 128..143 -->
+  <rect x="0"   y="288" width="96" height="36" fill="#000a7c"/><text x="72"  y="310" class="idx">64</text>
+  <rect x="96"  y="288" width="96" height="36" fill="#192ca1"/><text x="168" y="310" class="idx">65</text>
+  <rect x="192"  y="288" width="96" height="36" fill="#3b4ec3"/><text x="264" y="310" class="idx">66</text>
+  <rect x="288"  y="288" width="96" height="36" fill="#5d70e5"/><text x="360" y="310" class="idx">67</text>
+  <rect x="384"  y="288" width="96" height="36" fill="#7f92ff"/><text x="456" y="310" class="idx">68</text>
+  <rect x="480"  y="288" width="96" height="36" fill="#a1b4ff"/><text x="552" y="310" class="idx">69</text>
+  <rect x="576"  y="288" width="96" height="36" fill="#c3d6ff"/><text x="648" y="310" class="idx">70</text>
+  <rect x="672"  y="288" width="96" height="36" fill="#e5f8ff"/><text x="744" y="310" class="idx">71</text>
+
+  <!-- Row 9: 144..159 -->
+  <rect x="0"   y="324" width="96" height="36" fill="#001b63"/><text x="72"  y="346" class="idx">72</text>
+  <rect x="96"  y="324" width="96" height="36" fill="#023d8f"/><text x="168" y="346" class="idx">73</text>
+  <rect x="192"  y="324" width="96" height="36" fill="#245fb1"/><text x="264" y="346" class="idx">74</text>
+  <rect x="288"  y="324" width="96" height="36" fill="#4681d3"/><text x="360" y="346" class="idx">75</text>
+  <rect x="384"  y="324" width="96" height="36" fill="#68a3f5"/><text x="456" y="346" class="idx">76</text>
+  <rect x="480"  y="324" width="96" height="36" fill="#8ac5ff"/><text x="552" y="346" class="idx">77</text>
+  <rect x="576"  y="324" width="96" height="36" fill="#ace7ff"/><text x="648" y="346" class="idx">78</text>
+  <rect x="672"  y="324" width="96" height="36" fill="#ceffff"/><text x="744" y="346" class="idx">79</text>
+
+  <!-- Row 10: 160..175 -->
+  <rect x="0"   y="360" width="96" height="36" fill="#002b3c"/><text x="72"  y="382" class="idx">80</text>
+  <rect x="96"  y="360" width="96" height="36" fill="#004d68"/><text x="168" y="382" class="idx">81</text>
+  <rect x="192"  y="360" width="96" height="36" fill="#176f8d"/><text x="264" y="382" class="idx">82</text>
+  <rect x="288"  y="360" width="96" height="36" fill="#3991af"/><text x="360" y="382" class="idx">83</text>
+  <rect x="384"  y="360" width="96" height="36" fill="#5bb3d1"/><text x="456" y="382" class="idx">84</text>
+  <rect x="480"  y="360" width="96" height="36" fill="#7dd5f3"/><text x="552" y="382" class="idx">85</text>
+  <rect x="576"  y="360" width="96" height="36" fill="#9ff7ff"/><text x="648" y="382" class="idx">86</text>
+  <rect x="672"  y="360" width="96" height="36" fill="#c1ffff"/><text x="744" y="382" class="idx">87</text>
+
+  <!-- Row 11: 176..191 -->
+  <rect x="0"   y="396" width="96" height="36" fill="#023610"/><text x="72"  y="418" class="idx">88</text>
+  <rect x="96"  y="396" width="96" height="36" fill="#005738"/><text x="168" y="418" class="idx">89</text>
+  <rect x="192"  y="396" width="96" height="36" fill="#16795e"/><text x="264" y="418" class="idx">90</text>
+  <rect x="288"  y="396" width="96" height="36" fill="#389b80"/><text x="360" y="418" class="idx">91</text>
+  <rect x="384"  y="396" width="96" height="36" fill="#5abda2"/><text x="456" y="418" class="idx">92</text>
+  <rect x="480"  y="396" width="96" height="36" fill="#7cdfc4"/><text x="552" y="418" class="idx">93</text>
+  <rect x="576"  y="396" width="96" height="36" fill="#9effe5"/><text x="648" y="418" class="idx">94</text>
+  <rect x="672"  y="396" width="96" height="36" fill="#c0fffd"/><text x="744" y="418" class="idx">95</text>
+
+  <!-- Row 12: 192..207 -->
+  <rect x="0"   y="432" width="96" height="36" fill="#043811"/><text x="72"  y="454" class="idx">96</text>
+  <rect x="96"  y="432" width="96" height="36" fill="#005a1b"/><text x="168" y="454" class="idx">97</text>
+  <rect x="192"  y="432" width="96" height="36" fill="#217c2c"/><text x="264" y="454" class="idx">98</text>
+  <rect x="288"  y="432" width="96" height="36" fill="#439e4e"/><text x="360" y="454" class="idx">99</text>
+  <rect x="384"  y="432" width="96" height="36" fill="#65c070"/><text x="456" y="454" class="idx">100</text>
+  <rect x="480"  y="432" width="96" height="36" fill="#87e292"/><text x="552" y="454" class="idx">101</text>
+  <rect x="576"  y="432" width="96" height="36" fill="#a9ffb3"/><text x="648" y="454" class="idx">102</text>
+  <rect x="672"  y="432" width="96" height="36" fill="#cbffcb"/><text x="744" y="454" class="idx">103</text>
+
+  <!-- Row 13: 208..223 -->
+  <rect x="0"   y="468" width="96" height="36" fill="#003510"/><text x="72"  y="490" class="idx">104</text>
+  <rect x="96"  y="468" width="96" height="36" fill="#155613"/><text x="168" y="490" class="idx">105</text>
+  <rect x="192"  y="468" width="96" height="36" fill="#377813"/><text x="264" y="490" class="idx">106</text>
+  <rect x="288"  y="468" width="96" height="36" fill="#599a25"/><text x="360" y="490" class="idx">107</text>
+  <rect x="384"  y="468" width="96" height="36" fill="#7bbc47"/><text x="456" y="490" class="idx">108</text>
+  <rect x="480"  y="468" width="96" height="36" fill="#9dde69"/><text x="552" y="490" class="idx">109</text>
+  <rect x="576"  y="468" width="96" height="36" fill="#bfff8b"/><text x="648" y="490" class="idx">110</text>
+  <rect x="672"  y="468" width="96" height="36" fill="#e1ffa3"/><text x="744" y="490" class="idx">111</text>
+
+  <!-- Row 14: 224..239 -->
+  <rect x="0"   y="504" width="96" height="36" fill="#0e2808"/><text x="72"  y="526" class="idx">112</text>
+  <rect x="96"  y="504" width="96" height="36" fill="#304a08"/><text x="168" y="526" class="idx">113</text>
+  <rect x="192"  y="504" width="96" height="36" fill="#526c08"/><text x="264" y="526" class="idx">114</text>
+  <rect x="288"  y="504" width="96" height="36" fill="#748e0d"/><text x="360" y="526" class="idx">115</text>
+  <rect x="384"  y="504" width="96" height="36" fill="#96b02f"/><text x="456" y="526" class="idx">116</text>
+  <rect x="480"  y="504" width="96" height="36" fill="#b8d251"/><text x="552" y="526" class="idx">117</text>
+  <rect x="576"  y="504" width="96" height="36" fill="#daf473"/><text x="648" y="526" class="idx">118</text>
+  <rect x="672"  y="504" width="96" height="36" fill="#fcff8e"/><text x="744" y="526" class="idx">119</text>
+
+  <!-- Row 15: 240..255 -->
+  <rect x="0"   y="540" width="96" height="36" fill="#2c1801"/><text x="72"  y="562" class="idx">120</text>
+  <rect x="96"  y="540" width="96" height="36" fill="#4d3b00"/><text x="168" y="562" class="idx">121</text>
+  <rect x="192"  y="540" width="96" height="36" fill="#705e00"/><text x="264" y="562" class="idx">122</text>
+  <rect x="288"  y="540" width="96" height="36" fill="#938009"/><text x="360" y="562" class="idx">123</text>
+  <rect x="384"  y="540" width="96" height="36" fill="#b2a02b"/><text x="456" y="562" class="idx">124</text>
+  <rect x="480"  y="540" width="96" height="36" fill="#d8c64e"/><text x="552" y="562" class="idx">125</text>
+  <rect x="576"  y="540" width="96" height="36" fill="#f6e46f"/><text x="648" y="562" class="idx">126</text>
+  <rect x="672"  y="540" width="96" height="36" fill="#ffff99"/><text x="744" y="562" class="idx">127</text>
+</svg>
