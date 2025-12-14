@@ -7,10 +7,11 @@
 
 #include <stdint.h>
 
+#define GLYPH_WIDTH 8   // Width of each glyph in pixels
 #define GLYPH_HEIGHT 10 // Height of each glyph in pixels
 
-typedef struct {
-    uint8_t width;
+typedef struct
+{
     uint8_t glyphs[1280];
 } font_t;
 

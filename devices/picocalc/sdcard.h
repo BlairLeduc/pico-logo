@@ -2,6 +2,8 @@
 //  Pico Logo
 //  Copyright 2025 Blair Leduc. See LICENSE for details.
 //
+//  Defines SD card interface for PicoCalc device.
+//
 
 #pragma once
 

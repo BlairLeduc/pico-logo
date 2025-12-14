@@ -2,7 +2,8 @@
 //  Pico Logo
 //  Copyright 2025 Blair Leduc. See LICENSE for details.
 //
-
+//  Defines FAT32 file system interface for PicoCalc device.
+//
 
 #pragma once
 

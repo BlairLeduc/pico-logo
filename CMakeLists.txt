@@ -73,9 +73,13 @@ add_executable(pico-logo
     devices/stream.c
     devices/picocalc/clib.c
     devices/picocalc/fat32.c
+    devices/picocalc/keyboard.c
+    devices/picocalc/lcd.c
     devices/picocalc/picocalc_console.c
-    devices/picocalc/picocalc_storage.c
     devices/picocalc/picocalc_hardware.c
+    devices/picocalc/picocalc_storage.c
+    devices/picocalc/picocalc.c
+    devices/picocalc/screen.c
     devices/picocalc/sdcard.c
     devices/picocalc/southbridge.c
     main.c

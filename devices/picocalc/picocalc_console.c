@@ -8,6 +8,8 @@
 #include "picocalc_console.h"
 #include "devices/console.h"
 #include "devices/stream.h"
+#include "keyboard.h"
+#include "screen.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,81 +20,33 @@
 #include <pico/rand.h>
 
 //
-// Host console context - shared between input and output streams
-//
-typedef struct LogoContext
-{
-    FILE *input;
-    FILE *output;
-} LogoContext;
-
-#ifndef _WIN32
-// Put terminal into raw mode for single-character input without echo
-static void set_raw_mode(LogoContext *ctx)
-{
-
-}
-
-// Restore original terminal settings
-static void restore_mode(LogoContext *ctx)
-{
-
-}
-#endif
-
-//
 // Stream operations for keyboard input
 //
 
 static int input_read_char(LogoStream *stream)
 {
-    LogoContext *ctx = (LogoContext *)stream->context;
-    if (!ctx)
-    {
-        return -1;
-    }
+    return keyboard_get_key();
 }
 
 static int input_read_chars(LogoStream *stream, char *buffer, int count)
 {
-    LogoContext *ctx = (LogoContext *)stream->context;
-    if (!ctx || !buffer || count <= 0)
+    int n = 0;
+    while (n < count)
     {
-        return 0;
+        int c = keyboard_get_key();
+        buffer[n++] = (char)c;
     }
-
+    return n;
 }
 
 static int input_read_line(LogoStream *stream, char *buffer, size_t size)
 {
-    LogoContext *ctx = (LogoContext *)stream->context;
-    if (!ctx || !buffer || size == 0)
-    {
-        return -1;
-    }
-
-    if (!fgets(buffer, (int)size, ctx->input))
-    {
-        return -1;
-    }
-
-    // Return length without newline
-    size_t len = strlen(buffer);
-    if (len > 0 && buffer[len - 1] == '\n')
-    {
-        buffer[len - 1] = '\0';
-        len--;
-    }
-    return (int)len;
+    return input_read_chars(stream, buffer, size - 1);
 }
 
 static bool input_can_read(LogoStream *stream)
 {
-    LogoContext *ctx = (LogoContext *)stream->context;
-    if (!ctx)
-    {
-        return false;
-    }
+    return true; // Always return true for simplicity
 }
 
 //
@@ -101,24 +55,12 @@ static bool input_can_read(LogoStream *stream)
 
 static void output_write(LogoStream *stream, const char *text)
 {
-    LogoContext *ctx = (LogoContext *)stream->context;
-    if (!ctx || !text)
-    {
-        return;
-    }
-
-    fputs(text, ctx->output);
+    screen_txt_puts(text);
 }
 
 static void output_flush(LogoStream *stream)
 {
-    LogoContext *ctx = (LogoContext *)stream->context;
-    if (!ctx)
-    {
-        return;
-    }
-
-    fflush(ctx->output);
+    screen_txt_update();
 }
 
 //
@@ -156,25 +98,19 @@ static const LogoStreamOps picocalc_output_ops = {
 };
 
 //
-// LogoConsole API (new)
+// LogoConsole API
 //
 
 LogoConsole *logo_picocalc_console_create(void)
 {
     LogoConsole *console = (LogoConsole *)malloc(sizeof(LogoConsole));
-    LogoContext *context = (LogoContext *)malloc(sizeof(LogoContext));
 
-    if (!console || !context)
+    if (!console)
     {
-        free(console);
-        free(context);
         return NULL;
     }
 
-    context->input = stdin;
-    context->output = stdout;
-
-    logo_console_init(console, &picocalc_input_ops, &picocalc_output_ops, context);
+    logo_console_init(console, &picocalc_input_ops, &picocalc_output_ops, NULL);
     
     return console;
 }

@@ -17,6 +17,7 @@
 #include "devices/picocalc/picocalc_console.h"
 #include "devices/picocalc/picocalc_storage.h"
 #include "devices/picocalc/picocalc_hardware.h"
+#include "devices/picocalc/picocalc.h"
 #include "core/memory.h"
 #include "core/lexer.h"
 #include "core/eval.h"
@@ -30,6 +31,9 @@
 
 // Maximum procedure definition buffer (for multi-line TO...END)
 #define MAX_PROC_BUFFER 4096
+
+
+volatile bool user_interrupt;
 
 // Forward declaration for the I/O setter
 extern void primitives_set_io(LogoIO *io);
@@ -66,6 +70,8 @@ static bool line_is_end(const char *line)
 
 int main(void)
 {
+    picocalc_init();
+
     // Initialise the console for I/O
     LogoConsole *console = logo_picocalc_console_create();
     if (!console)
