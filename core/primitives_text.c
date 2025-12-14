@@ -168,42 +168,6 @@ static Result prim_setcursor(Evaluator *eval, int argc, Value *args)
     return result_none();
 }
 
-//==========================================================================
-// setwidth width - Set screen width (40 or 64)
-//==========================================================================
-
-static Result prim_setwidth(Evaluator *eval, int argc, Value *args)
-{
-    (void)eval;
-
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "setwidth", NULL);
-    }
-
-    Value width_val = args[0];
-    float width_num;
-    if (!value_to_number(width_val, &width_num))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setwidth", value_to_string(width_val));
-    }
-
-    int width = (int)width_num;
-    
-    // Only 40 or 64 are valid
-    if (width != 40 && width != 64)
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setwidth", value_to_string(width_val));
-    }
-
-    const LogoConsoleText *text = get_text_ops();
-    if (text && text->set_width)
-    {
-        text->set_width((uint8_t)width);
-    }
-    
-    return result_none();
-}
 
 //==========================================================================
 // splitscreen (ss) - Split screen mode
@@ -244,27 +208,6 @@ static Result prim_textscreen(Evaluator *eval, int argc, Value *args)
 }
 
 //==========================================================================
-// width - Output current screen width
-//==========================================================================
-
-static Result prim_width(Evaluator *eval, int argc, Value *args)
-{
-    (void)eval;
-    (void)argc;
-    (void)args;
-
-    const LogoConsoleText *text = get_text_ops();
-    
-    uint8_t width = 40;  // Default
-    if (text && text->get_width)
-    {
-        width = text->get_width();
-    }
-
-    return result_ok(value_number((float)width));
-}
-
-//==========================================================================
 // Registration
 //==========================================================================
 
@@ -275,7 +218,6 @@ void primitives_text_init(void)
     primitive_register("ct", 0, prim_cleartext);
     
     primitive_register("setcursor", 1, prim_setcursor);
-    primitive_register("setwidth", 1, prim_setwidth);
     
     // Screen mode commands
     primitive_register("fullscreen", 0, prim_fullscreen);
@@ -289,5 +231,4 @@ void primitives_text_init(void)
     
     // Operations (queries)
     primitive_register("cursor", 0, prim_cursor);
-    primitive_register("width", 0, prim_width);
 }

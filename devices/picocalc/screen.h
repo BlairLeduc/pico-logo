@@ -18,16 +18,19 @@
 // Screen dimensions
 #define SCREEN_WIDTH (320)                                                            // Width of the screen in pixels
 #define SCREEN_HEIGHT (320)                                                           // Height of the screen in pixels
-#define SCREEN_COLUMNS (40)                                                           // Max Number of text columns that fit on the screen
+#define SCREEN_COLUMNS (SCREEN_WIDTH / GLYPH_WIDTH)                                   // Max Number of text columns that fit on the screen
 #define SCREEN_ROWS (SCREEN_HEIGHT / GLYPH_HEIGHT)                                    // Number of text rows that fit on the screen
 #define SCREEN_SPLIT_GFX_HEIGHT (240)                                                 // Height of the graphics area in split mode
 #define SCREEN_SPLIT_TXT_HEIGHT (SCREEN_HEIGHT - SCREEN_SPLIT_GFX_HEIGHT)             // Height of the text area in split mode
-#define SCREEN_SPLIT_TXT_ROW (SCREEN_HEIGHT - SCREEN_SPLIT_TXT_HEIGHT) / GLYPH_HEIGHT // Star row of text rows in split mode
+#define SCREEN_SPLIT_TXT_ROW (SCREEN_HEIGHT - SCREEN_SPLIT_TXT_HEIGHT) / GLYPH_HEIGHT // Start row of text rows in split mode
 #define SCREEN_SPLIT_TXT_ROWS (SCREEN_SPLIT_TXT_HEIGHT / GLYPH_HEIGHT)                // Number of text rows in split mode
 
 // Text definitions
-#define TXT_DEFAULT_FOREGROUND (79) // Default foreground color (white)
-#define TXT_DEFAULT_BACKGROUND (74) // Default background color (black)
+#define TXT_DEFAULT_FOREGROUND (79) // Default foreground color (light blue)
+#define TXT_DEFAULT_BACKGROUND (74) // Default background color (blue)
+
+// Text definitions
+#define GFX_DEFAULT_BACKGROUND (74) // Default background color (blue)
 
 // BMP definitions
 #define BMP_FILE_HEADER_SIZE (14)                          // Size of the BMP file header in bytes

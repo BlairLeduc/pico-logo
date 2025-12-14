@@ -892,13 +892,11 @@ See [Colours](Colours.md).
 
 # Text and Screen Commands
 
-Your PicoCalc has 32 lines of text on the display, with 40 or 64 characters on each line, depending on the current display width setting. You can use the display entirely for text or entirely for graphics. The PicoCalc also lets you use the top 24 lines for graphics and the bottom eight for text at the same time. When you start up Logo, the entire screen is available for text. 
+Your PicoCalc has 32 lines of text on the display, with 40 characters on each line. You can use the display entirely for text or entirely for graphics. The PicoCalc also lets you use the top 24 lines for graphics and the bottom eight for text at the same time. When you start up Logo, the entire screen is available for text. 
 
-You can switch between the two width settings with the `setwidth` primitive.
+There are two ways to change the use of your display:
 
-here are two ways to change the use of your display:
-
-- With regular Logo commands, which you can type at top level or insert within procedures (`fullscreen`, `splitscreen`, `textscreen`, and `setwidth`)
+- With regular Logo commands, which you can type at top level or insert within procedures (`fullscreen`, `splitscreen`, and `textscreen`)
 - With special control characters, which are read from the keyboard and obeyed almost immediately (while a procedure continues running); these cannot be placed within procedures (`F1`–textscreen, `F2`–splitscreen, and `F3`–fullscreen).
 
 
@@ -942,18 +940,7 @@ setcursor [_columnnumber_ _linenumber_]
 
 `command`
 
-`secursor` sets the cursor to the position indicated by _columnnumber_ and _linenumber_. Lines on the screen are numbered from 0 to 31. Character positions (columns) are numbered from 0 to 39 if the display width is 40 and 0 to 63 if the display width is 64.
-
-See `width`.
-
-
-## setwidth
-
-setwidth width  
-
-`command`
-
-The `setwidth` command sets the width of the display to width characters per line. The width input must have a value of either 40 or 64. The default setting for the display width is 40.
+`secursor` sets the cursor to the position indicated by _columnnumber_ and _linenumber_. Lines on the screen are numbered from 0 to 31. Character positions (columns) are numbered from 0 to 39.
 
 
 ## splitscreen
@@ -976,16 +963,6 @@ ts
 
 `textscreen` devotes the entire screen to text; the graphics display is invisible to you until a graphics procedure is run.
 
-
-## width
-
-width  
-
-`operation`
-
-`width` outputs the current width of the screen, either 40 or 64.
-
-See `setwidth` for changing the screen width.
 
 
 

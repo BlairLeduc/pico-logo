@@ -44,12 +44,12 @@ extern "C"
         float (*get_heading)(void);
 
         // Pen color
-        void (*set_pen_colour)(uint16_t colour);
-        uint16_t (*get_pen_colour)(void);
+        void (*set_pen_colour)(uint8_t colour);
+        uint8_t (*get_pen_colour)(void);
 
         // Background color
-        void (*set_bg_colour)(uint16_t colour);
-        uint16_t (*get_bg_colour)(void);
+        void (*set_bg_colour)(uint8_t colour);
+        uint8_t (*get_bg_colour)(void);
 
         // Pen state
         void (*set_pen_down)(bool down);
@@ -86,10 +86,6 @@ extern "C"
         // Cursor position (column 0 = left, row 0 = top)
         void (*set_cursor)(uint8_t column, uint8_t row);
         void (*get_cursor)(uint8_t *column, uint8_t *row);
-
-        // Text width (40 or 64 characters per line)
-        void (*set_width)(uint8_t width);
-        uint8_t (*get_width)(void);
     } LogoConsoleText;
 
     //

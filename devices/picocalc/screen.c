@@ -191,7 +191,7 @@ uint8_t *screen_gfx_frame()
 // Clear the graphics buffer
 void screen_gfx_clear(void)
 {
-    memset(gfx_buffer, 0, sizeof(gfx_buffer)); // Clear the graphics buffer
+    memset(gfx_buffer, GFX_DEFAULT_BACKGROUND, sizeof(gfx_buffer)); // Clear the graphics buffer
 
     if (screen_mode == SCREEN_MODE_GFX)
     {
@@ -346,25 +346,17 @@ uint8_t *screen_txt_frame()
 // Clear the text buffer
 void screen_txt_clear(void)
 {
-    text_row = 0;                              // Reset the text row to the top
+    text_row = 0;                                 // Reset the text row to the top
     memset(txt_buffer, 0x20, sizeof(txt_buffer)); // Clear the text buffer
-
-    if (screen_mode == SCREEN_MODE_TXT)
-    {
-        lcd_clear_screen(); // Clear the LCD screen in text mode
-    }
-    else if (screen_mode == SCREEN_MODE_SPLIT)
-    {
-        // Clear the text area in split mode
-        lcd_scroll_clear();
-    }
+    lcd_clear_screen(); // Clear the LCD screen in text mode
+    screen_txt_set_cursor(0, screen_mode == SCREEN_MODE_SPLIT ? SCREEN_SPLIT_TXT_ROW : 0);
 }
 
 // Update the text display
 void screen_txt_set_cursor(uint8_t column, uint8_t row)
 {
-    cursor_column = column < MAX_COLUMN ? column : MAX_COLUMN;    // Ensure column is within bounds
-    cursor_row = row < SCREEN_ROWS ? row : SCREEN_ROWS - 1; // Ensure row is within bounds
+    cursor_column = column < MAX_COLUMN ? column : MAX_COLUMN; // Ensure column is within bounds
+    cursor_row = row < SCREEN_ROWS ? row : SCREEN_ROWS - 1;    // Ensure row is within bounds
 
     screen_txt_map_location(&column, &row);
     lcd_move_cursor(column, row);
@@ -646,7 +638,7 @@ void screen_txt_update(void)
                 // Copy this row from the buffer to the display
                 for (uint8_t col = 0; col < SCREEN_COLUMNS; col++)
                 {
-                    uint8_t c = txt_buffer[buffer_row * SCREEN_COLUMNS + col] & 0xFF;
+                    uint8_t c = txt_buffer[buffer_row * SCREEN_COLUMNS + col];
                     lcd_putc(col, SCREEN_SPLIT_TXT_ROW + display_row, c > 0 && c < 0x7F ? c : ' ');
                 }
             }

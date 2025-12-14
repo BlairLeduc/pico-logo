@@ -9,6 +9,9 @@
 
 #include "devices/storage.h"
 
+#define LOGO_STORAGE_ROOT "/Logo/"
+
+
 #ifdef __cplusplus
 extern "C"
 {

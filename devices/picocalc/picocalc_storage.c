@@ -283,8 +283,12 @@ static LogoStream *logo_picocalc_file_open(const char *pathname, LogoFileMode mo
         return NULL;
     }
 
+    // Force all file operations to be within the LOGO_STORAGE_ROOT directory
+    char full_path[512];
+    snprintf(full_path, sizeof(full_path), "%s%s", LOGO_STORAGE_ROOT, pathname);
+
     // Open the file
-    FILE *file = fopen(pathname, fmode);
+    FILE *file = fopen(full_path, fmode);
     if (!file)
     {
         return NULL;
@@ -329,8 +333,12 @@ static bool logo_picocalc_file_exists(const char *pathname)
         return false;
     }
 
+    // Force all file operations to be within the LOGO_STORAGE_ROOT directory
+    char full_path[512];
+    snprintf(full_path, sizeof(full_path), "%s%s", LOGO_STORAGE_ROOT, pathname);
+
     struct stat st;
-    if (stat(pathname, &st) != 0)
+    if (stat(full_path, &st) != 0)
     {
         return false;
     }
@@ -345,8 +353,13 @@ static bool logo_picocalc_dir_exists(const char *pathname)
         return false;
     }
 
+    // Force all file operations to be within the LOGO_STORAGE_ROOT directory
+    char full_path[512];
+    snprintf(full_path, sizeof(full_path), "%s%s", LOGO_STORAGE_ROOT, pathname);
+
+
     struct stat st;
-    if (stat(pathname, &st) != 0)
+    if (stat(full_path, &st) != 0)
     {
         return false;
     }
@@ -361,7 +374,11 @@ static bool logo_picocalc_file_delete(const char *pathname)
         return false;
     }
 
-    return remove(pathname) == 0;
+    // Force all file operations to be within the LOGO_STORAGE_ROOT directory
+    char full_path[512];
+    snprintf(full_path, sizeof(full_path), "%s%s", LOGO_STORAGE_ROOT, pathname);
+
+    return remove(full_path) == 0;
 }
 
 static bool logo_picocalc_dir_delete(const char *pathname)
@@ -371,7 +388,11 @@ static bool logo_picocalc_dir_delete(const char *pathname)
         return false;
     }
 
-    return unlink(pathname) == 0;
+    // Force all file operations to be within the LOGO_STORAGE_ROOT directory
+    char full_path[512];
+    snprintf(full_path, sizeof(full_path), "%s%s", LOGO_STORAGE_ROOT, pathname);
+
+    return unlink(full_path) == 0;
 }
 
 static bool logo_picocalc_rename(const char *old_path, const char *new_path)
@@ -381,7 +402,12 @@ static bool logo_picocalc_rename(const char *old_path, const char *new_path)
         return false;
     }
 
-    return rename(old_path, new_path) == 0;
+    // Force all file operations to be within the LOGO_STORAGE_ROOT directory
+    char full_old_path[512], full_new_path[512];
+    snprintf(full_old_path, sizeof(full_old_path), "%s%s", LOGO_STORAGE_ROOT, old_path);
+    snprintf(full_new_path, sizeof(full_new_path), "%s%s", LOGO_STORAGE_ROOT, new_path);
+
+    return rename(full_old_path, full_new_path) == 0;
 }
 
 static long logo_picocalc_file_size(const char *pathname)
@@ -391,8 +417,12 @@ static long logo_picocalc_file_size(const char *pathname)
         return -1;
     }
 
+    // Force all file operations to be within the LOGO_STORAGE_ROOT directory
+    char full_path[512];
+    snprintf(full_path, sizeof(full_path), "%s%s", LOGO_STORAGE_ROOT, pathname);
+
     struct stat st;
-    if (stat(pathname, &st) != 0)
+    if (stat(full_path, &st) != 0)
     {
         return -1;
     }

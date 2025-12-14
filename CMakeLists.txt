@@ -73,6 +73,8 @@ add_executable(pico-logo
     devices/stream.c
     devices/picocalc/clib.c
     devices/picocalc/fat32.c
+    devices/picocalc/history.c
+    devices/picocalc/input.c
     devices/picocalc/keyboard.c
     devices/picocalc/lcd.c
     devices/picocalc/picocalc_console.c
