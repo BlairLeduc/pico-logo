@@ -35,7 +35,7 @@ static uint8_t foreground = 0xFF; // default foreground colour (white)
 static uint8_t background = 0x00; // default background colour (black)
 
 // Text drawing
-const font_t *font = &font_8x10; // default font is 8x10
+const font_t *font = &logo_font; // default font
 static uint8_t char_buffer[GLYPH_WIDTH * GLYPH_HEIGHT] __attribute__((aligned(4)));
 static uint8_t line_buffer[WIDTH * GLYPH_HEIGHT] __attribute__((aligned(4)));
 

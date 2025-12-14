@@ -18,7 +18,7 @@
 
 #include "screen.h"
 #include "devices/font.h"
-#include "devices/font-8x10.h"
+#include "devices/logo-font.h"
 #include "lcd.h"
 
 //
@@ -46,7 +46,7 @@ static uint8_t txt_buffer[SCREEN_COLUMNS * SCREEN_ROWS] = {0};
 static uint8_t screen_mode = SCREEN_MODE_TXT;
 
 // Text state
-static const font_t *screen_font = &font_8x10;       // Default font for text mode
+static const font_t *screen_font = &logo_font;       // Default font for text mode
 static uint16_t text_row = 0;                        // The last row written to in text mode
 static uint16_t foreground = TXT_DEFAULT_FOREGROUND; // Default foreground colour (white)
 static uint16_t background = TXT_DEFAULT_BACKGROUND; // Default background colour (black)

@@ -15,4 +15,4 @@ typedef struct
     uint8_t glyphs[1280];
 } font_t;
 
-extern const font_t font_8x10; // 8x10 pixel font
+extern const font_t logo_font; // 8x10 pixel font
