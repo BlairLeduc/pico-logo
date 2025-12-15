@@ -571,6 +571,10 @@ bool screen_txt_putc(uint8_t c)
                 {
                     // Scroll the text buffer up one line
                     screen_txt_scroll_up();
+                    if (screen_mode == SCREEN_MODE_TXT || screen_mode == SCREEN_MODE_SPLIT)
+                    {
+                        lcd_scroll_up(); // Scroll the LCD display up one line in TXT mode
+                    }
                     cursor_row = SCREEN_ROWS - 1;
                     scrolled = true;
                     lcd_move_cursor(cursor_column, cursor_row);
