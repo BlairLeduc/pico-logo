@@ -24,6 +24,7 @@ void logo_io_init(LogoIO *io, LogoConsole *console, LogoStorage *storage, LogoHa
 
     io->console = console;
     io->storage = storage;
+    io->hardware = hardware;
     
     // Default reader is keyboard, writer is screen
     io->reader = console ? &console->input : NULL;
@@ -61,14 +62,14 @@ void logo_io_cleanup(LogoIO *io)
 // Device-specific operations
 //
 
-void logo_io_usleep(LogoIO *io, int microseconds)
+void logo_io_sleep(LogoIO *io, int milliseconds)
 {
     if (!io)
     {
         return;
     }
 
-    io->hardware->ops->usleep(microseconds);
+    io->hardware->ops->sleep(milliseconds);
 }
 
 uint32_t logo_io_random(LogoIO *io)
@@ -79,6 +80,24 @@ uint32_t logo_io_random(LogoIO *io)
     }
 
     return io->hardware->ops->random();
+}
+
+void logo_io_get_battery_level(LogoIO *io, int *level, bool *charging)
+{
+    if (!level || !charging)
+    {
+        return;
+    }
+
+    // Default values
+    *level = -1;
+    *charging = false;
+
+    if (!io || !io->hardware || !io->hardware->ops || !io->hardware->ops->get_battery_level)
+    {
+        return;
+    }
+    io->hardware->ops->get_battery_level(level, charging);
 }
 
 //

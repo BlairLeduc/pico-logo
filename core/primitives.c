@@ -43,6 +43,7 @@ void primitives_init(void)
     primitives_files_init();
     primitives_text_init();
     primitives_turtle_init();
+    primitives_hardware_init();
 }
 
 void primitive_register(const char *name, int default_args, PrimitiveFunc func)

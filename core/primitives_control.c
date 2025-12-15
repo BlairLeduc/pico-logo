@@ -277,8 +277,8 @@ static Result prim_wait(Evaluator *eval, int argc, Value *args)
         return result_error(ERR_UNDEFINED);
     }
     
-    // Wait for tenths of a second (each tenth is 100,000 microseconds)
-    logo_io_usleep(io, tenths * 100000);
+    // Wait for tenths of a second (each tenth is 100 milliseconds)
+    logo_io_sleep(io, tenths * 100);
     
     return result_none();
 }

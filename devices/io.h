@@ -72,10 +72,13 @@ extern "C"
     //
 
     // Sleep for specified milliseconds
-    void logo_io_usleep(LogoIO *io, int milliseconds);
+    void logo_io_sleep(LogoIO *io, int milliseconds);
     
     // Get a random 32-bit number from the device
     uint32_t logo_io_random(LogoIO *io);
+
+    // Get battery level as a percentage (0-100) and charging status
+    void logo_io_get_battery_level(LogoIO *io, int *level, bool *charging);
 
     //
     // File prefix management

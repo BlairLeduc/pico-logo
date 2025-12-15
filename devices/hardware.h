@@ -25,10 +25,13 @@ extern "C"
     typedef struct LogoHardwareOps
     {
         // Sleep for specified milliseconds
-        void (*usleep)(int milliseconds);
+        void (*sleep)(int milliseconds);
 
         // Get a random 32-bit number
         uint32_t (*random)(void);
+
+        // Get battery level as a percentage (0-100) 
+        void (*get_battery_level)(int *level, bool *charging);
     } LogoHardwareOps;
 
     typedef struct LogoHardware

@@ -64,6 +64,7 @@ add_executable(pico-logo
     core/primitives_properties.c
     core/primitives_debug.c
     core/primitives_files.c
+    core/primitives_hardware.c
     core/primitives_text.c
     core/primitives_turtle.c
     devices/console.c
