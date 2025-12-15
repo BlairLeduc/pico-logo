@@ -100,19 +100,6 @@ extern "C"
     // Creates file if it doesn't exist
     LogoStream *logo_io_open(LogoIO *io, const char *pathname);
 
-    // Open a file for reading only (Logo "openread" primitive)
-    LogoStream *logo_io_open_read(LogoIO *io, const char *pathname);
-
-    // Open a file for writing (Logo "openwrite" primitive)
-    // Creates/truncates the file
-    LogoStream *logo_io_open_write(LogoIO *io, const char *pathname);
-
-    // Open a file for appending (Logo "openappend" primitive)
-    LogoStream *logo_io_open_append(LogoIO *io, const char *pathname);
-
-    // Open a file for update/read+write (Logo "openupdate" primitive)
-    LogoStream *logo_io_open_update(LogoIO *io, const char *pathname);
-
     // Close a specific file by name
     void logo_io_close(LogoIO *io, const char *pathname);
 
@@ -140,6 +127,9 @@ extern "C"
     // Delete a file
     bool logo_io_file_delete(const LogoIO *io, const char *pathname);
     
+    // Create a new empty directory
+    bool logo_io_dir_create(const LogoIO *io, const char *pathname);
+
     // Delete a directory
     bool logo_io_dir_delete(const LogoIO *io, const char *pathname);
     
@@ -149,7 +139,9 @@ extern "C"
     // Get file size, returns -1 on error
     long logo_io_file_size(const LogoIO *io, const char *pathname);
     
-    
+    bool logo_io_list_directory(const LogoIO *io, const char *pathname,
+                                LogoDirCallback callback, void *user_data,
+                                const char *filter);
     //
     // Reader/writer control
     //

@@ -99,6 +99,7 @@ int main(void)
     // Initialize the I/O manager
     LogoIO io;
     logo_io_init(&io, console, storage, hardware);
+    strcpy(io.prefix, "/Logo/"); // Default prefix
     
 
     // Initialize Logo subsystems
@@ -185,6 +186,13 @@ int main(void)
                 if (r.status == RESULT_ERROR)
                 {
                     logo_io_write_line(&io, error_format(r));
+                }
+                else if (r.status == RESULT_OK)
+                {
+                    // Procedure defined successfully
+                    static char buf[256];
+                    snprintf(buf, sizeof(buf), "%s defined", r.value.as.node ? mem_word_ptr(r.value.as.node) : "procedure");
+                    logo_io_write_line(&io, buf);
                 }
                 
                 proc_len = 0;

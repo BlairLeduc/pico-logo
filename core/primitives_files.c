@@ -56,130 +56,6 @@ static Result prim_open(Evaluator *eval, int argc, Value *args)
     return result_none();
 }
 
-// openread file - opens file for reading only
-static Result prim_openread(Evaluator *eval, int argc, Value *args)
-{
-    (void)eval;
-    (void)argc;
-
-    if (args[0].type != VALUE_WORD)
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "openread", value_to_string(args[0]));
-    }
-
-    const char *pathname = mem_word_ptr(args[0].as.node);
-    LogoIO *io = primitives_get_io();
-    if (!io)
-    {
-        return result_error(ERR_DISK_TROUBLE);
-    }
-
-    LogoStream *stream = logo_io_open_read(io, pathname);
-    if (!stream)
-    {
-        if (logo_io_open_count(io) >= LOGO_MAX_OPEN_FILES)
-        {
-            return result_error(ERR_NO_FILE_BUFFERS);
-        }
-        return result_error_arg(ERR_FILE_NOT_FOUND, "", pathname);
-    }
-
-    return result_none();
-}
-
-// openwrite file - opens file for writing, creates/truncates
-static Result prim_openwrite(Evaluator *eval, int argc, Value *args)
-{
-    (void)eval;
-    (void)argc;
-
-    if (args[0].type != VALUE_WORD)
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "openwrite", value_to_string(args[0]));
-    }
-
-    const char *pathname = mem_word_ptr(args[0].as.node);
-    LogoIO *io = primitives_get_io();
-    if (!io)
-    {
-        return result_error(ERR_DISK_TROUBLE);
-    }
-
-    LogoStream *stream = logo_io_open_write(io, pathname);
-    if (!stream)
-    {
-        if (logo_io_open_count(io) >= LOGO_MAX_OPEN_FILES)
-        {
-            return result_error(ERR_NO_FILE_BUFFERS);
-        }
-        return result_error(ERR_DISK_TROUBLE);
-    }
-
-    return result_none();
-}
-
-// openappend file - opens file for appending
-static Result prim_openappend(Evaluator *eval, int argc, Value *args)
-{
-    (void)eval;
-    (void)argc;
-
-    if (args[0].type != VALUE_WORD)
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "openappend", value_to_string(args[0]));
-    }
-
-    const char *pathname = mem_word_ptr(args[0].as.node);
-    LogoIO *io = primitives_get_io();
-    if (!io)
-    {
-        return result_error(ERR_DISK_TROUBLE);
-    }
-
-    LogoStream *stream = logo_io_open_append(io, pathname);
-    if (!stream)
-    {
-        if (logo_io_open_count(io) >= LOGO_MAX_OPEN_FILES)
-        {
-            return result_error(ERR_NO_FILE_BUFFERS);
-        }
-        return result_error(ERR_DISK_TROUBLE);
-    }
-
-    return result_none();
-}
-
-// openupdate file - opens file for reading and writing
-static Result prim_openupdate(Evaluator *eval, int argc, Value *args)
-{
-    (void)eval;
-    (void)argc;
-
-    if (args[0].type != VALUE_WORD)
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "openupdate", value_to_string(args[0]));
-    }
-
-    const char *pathname = mem_word_ptr(args[0].as.node);
-    LogoIO *io = primitives_get_io();
-    if (!io)
-    {
-        return result_error(ERR_DISK_TROUBLE);
-    }
-
-    LogoStream *stream = logo_io_open_update(io, pathname);
-    if (!stream)
-    {
-        if (logo_io_open_count(io) >= LOGO_MAX_OPEN_FILES)
-        {
-            return result_error(ERR_NO_FILE_BUFFERS);
-        }
-        return result_error_arg(ERR_FILE_NOT_FOUND, "", pathname);
-    }
-
-    return result_none();
-}
-
 // close file - closes the named file
 static Result prim_close(Evaluator *eval, int argc, Value *args)
 {
@@ -580,6 +456,408 @@ static Result prim_nodribble(Evaluator *eval, int argc, Value *args)
     return result_none();
 }
 
+//==========================================================================
+// Directory listing primitives: files, directories, catalog
+//==========================================================================
+
+// Context for building file list
+typedef struct FileListContext
+{
+    Node list;       // The list being built (in reverse order)
+    bool files_only; // If true, only include files; if false, only directories
+} FileListContext;
+
+// Callback for building file/directory list
+static bool file_list_callback(const char *name, LogoEntryType type, void *user_data)
+{
+    FileListContext *ctx = (FileListContext *)user_data;
+    
+    // Filter by type
+    if (ctx->files_only && type != LOGO_ENTRY_FILE)
+    {
+        return true; // Skip directories
+    }
+    if (!ctx->files_only && type != LOGO_ENTRY_DIRECTORY)
+    {
+        return true; // Skip files
+    }
+
+    // Add to list
+    Node name_node = mem_atom_cstr(name);
+    ctx->list = mem_cons(name_node, ctx->list);
+    
+    return true; // Continue
+}
+
+// files - outputs a list of file names in the current directory
+// (files ext) - outputs files with the specified extension
+static Result prim_files(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+
+    const char *filter = NULL;
+    
+    // Check for optional extension argument
+    if (argc >= 1)
+    {
+        if (!value_is_word(args[0]))
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "files", value_to_string(args[0]));
+        }
+        filter = mem_word_ptr(args[0].as.node);
+    }
+
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_ok(value_list(NODE_NIL));
+    }
+
+    // Get current directory (use prefix if set, otherwise ".")
+    const char *dir = logo_io_get_prefix(io);
+    if (!dir || dir[0] == '\0')
+    {
+        dir = ".";
+    }
+
+    FileListContext ctx = {NODE_NIL, true};
+    
+    if (!logo_io_list_directory(io, dir, file_list_callback, &ctx, filter))
+    {
+        return result_ok(value_list(NODE_NIL));
+    }
+
+    return result_ok(value_list(ctx.list));
+}
+
+// directories - outputs a list of directory names in the current directory
+static Result prim_directories(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_ok(value_list(NODE_NIL));
+    }
+
+    // Get current directory (use prefix if set, otherwise ".")
+    const char *dir = logo_io_get_prefix(io);
+    if (!dir || dir[0] == '\0')
+    {
+        dir = ".";
+    }
+
+    FileListContext ctx = {NODE_NIL, false};
+    
+    if (!logo_io_list_directory(io, dir, file_list_callback, &ctx, NULL))
+    {
+        return result_ok(value_list(NODE_NIL));
+    }
+
+    return result_ok(value_list(ctx.list));
+}
+
+// Context for catalog - collects entries then sorts them
+#define CATALOG_MAX_ENTRIES 256
+
+typedef struct CatalogEntry
+{
+    char name[LOGO_STREAM_NAME_MAX];
+    bool is_directory;
+} CatalogEntry;
+
+typedef struct CatalogContext
+{
+    CatalogEntry entries[CATALOG_MAX_ENTRIES];
+    int count;
+} CatalogContext;
+
+// Callback for collecting catalog entries
+static bool catalog_callback(const char *name, LogoEntryType type, void *user_data)
+{
+    CatalogContext *ctx = (CatalogContext *)user_data;
+    
+    if (ctx->count >= CATALOG_MAX_ENTRIES)
+    {
+        return false; // Stop - too many entries
+    }
+
+    CatalogEntry *entry = &ctx->entries[ctx->count++];
+    strncpy(entry->name, name, LOGO_STREAM_NAME_MAX - 1);
+    entry->name[LOGO_STREAM_NAME_MAX - 1] = '\0';
+    entry->is_directory = (type == LOGO_ENTRY_DIRECTORY);
+    
+    return true;
+}
+
+// Compare function for sorting catalog entries alphabetically
+static int catalog_compare(const void *a, const void *b)
+{
+    const CatalogEntry *ea = (const CatalogEntry *)a;
+    const CatalogEntry *eb = (const CatalogEntry *)b;
+    return strcasecmp(ea->name, eb->name);
+}
+
+// catalog - prints a list of files and directories, sorted alphabetically
+static Result prim_catalog(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_none();
+    }
+
+    // Get current directory (use prefix if set, otherwise ".")
+    const char *dir = logo_io_get_prefix(io);
+    if (!dir || dir[0] == '\0')
+    {
+        dir = ".";
+    }
+
+    CatalogContext ctx = {{{{0}}}, 0};
+    
+    if (!logo_io_list_directory(io, dir, catalog_callback, &ctx, "*"))
+    {
+        return result_none();
+    }
+
+    // Sort entries alphabetically
+    if (ctx.count > 0)
+    {
+        qsort(ctx.entries, ctx.count, sizeof(CatalogEntry), catalog_compare);
+    }
+
+    // Print each entry
+    for (int i = 0; i < ctx.count; i++)
+    {
+        CatalogEntry *entry = &ctx.entries[i];
+        if (entry->is_directory)
+        {
+            logo_stream_write(io->writer, entry->name);
+            logo_stream_write(io->writer, "/\n");
+        }
+        else
+        {
+            logo_stream_write(io->writer, entry->name);
+            logo_stream_write(io->writer, "\n");
+        }
+        
+        // Also write to dribble if active
+        if (io->dribble)
+        {
+            if (entry->is_directory)
+            {
+                logo_stream_write(io->dribble, entry->name);
+                logo_stream_write(io->dribble, "/\n");
+            }
+            else
+            {
+                logo_stream_write(io->dribble, entry->name);
+                logo_stream_write(io->dribble, "\n");
+            }
+        }
+    }
+
+    return result_none();
+}
+
+// Sets the file prefix
+static Result prim_setprefix(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+
+    if (args[0].type != VALUE_WORD)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setprefix", value_to_string(args[0]));
+    }
+
+    const char *prefix = mem_word_ptr(args[0].as.node);
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    // Set the prefix
+    strncpy(io->prefix, prefix, LOGO_PREFIX_MAX - 1);
+    io->prefix[LOGO_PREFIX_MAX - 1] = '\0';
+
+    return result_none();
+}
+
+// Gets the file prefix
+static Result prim_getprefix(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_ok(value_word(mem_atom_cstr("")));
+    }
+
+    return result_ok(value_word(mem_atom_cstr(io->prefix)));
+}
+
+// Erase the file
+static Result prim_erase_file(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+
+    if (args[0].type != VALUE_WORD)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "erasefile", value_to_string(args[0]));
+    }
+
+    const char *filename = mem_word_ptr(args[0].as.node);
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    if (!logo_io_file_delete(io, filename))
+    {
+        return result_error_arg(ERR_FILE_NOT_FOUND, "", filename);
+    }
+    return result_none();
+}
+
+// Erase the directory
+static Result prim_erase_directory(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+
+    if (args[0].type != VALUE_WORD)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "erasedirectory", value_to_string(args[0]));
+    }
+
+    const char *dirname = mem_word_ptr(args[0].as.node);
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    if (!logo_io_dir_delete(io, dirname))
+    {
+        return result_error_arg(ERR_FILE_NOT_FOUND, "", dirname);
+    }
+    return result_none();
+}
+
+// Check if files exists
+static Result prim_filep(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    if (args[0].type != VALUE_WORD)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "file?", value_to_string(args[0]));
+    }
+    const char *filename = mem_word_ptr(args[0].as.node);
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    if (logo_io_file_exists(io, filename))
+    {
+        return result_ok(value_word(mem_atom("true", 4)));
+    }
+    return result_ok(value_word(mem_atom("false", 5)));
+} 
+
+// Check if directory exists
+static Result prim_dirp(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    if (args[0].type != VALUE_WORD)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "dir?", value_to_string(args[0]));
+    }
+    const char *dirname = mem_word_ptr(args[0].as.node);
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    if (logo_io_dir_exists(io, dirname))
+    {
+        return result_ok(value_word(mem_atom("true", 4)));
+    }
+    return result_ok(value_word(mem_atom("false", 5)));
+}
+
+// Rename a file or directory
+static Result prim_rename(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    if (args[0].type != VALUE_WORD)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "rename", value_to_string(args[0]));
+    }
+    if (args[1].type != VALUE_WORD)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "rename", value_to_string(args[1]));
+    }
+
+    const char *old_name = mem_word_ptr(args[0].as.node);
+    const char *new_name = mem_word_ptr(args[1].as.node);
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    if (!logo_io_rename(io, old_name, new_name))
+    {
+        return result_error_arg(ERR_FILE_NOT_FOUND, "", old_name);
+    }
+    return result_none();
+}
+
+// Create a new directory
+static Result prim_createdir(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    if (args[0].type != VALUE_WORD)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "createdir", value_to_string(args[0]));
+    }
+
+    const char *filename = mem_word_ptr(args[0].as.node);
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    if (!logo_io_dir_create(io, filename))
+    {
+        return result_error_arg(ERR_FILE_NOT_FOUND, "", filename);
+    }
+    return result_none();
+}
+
 
 //==========================================================================
 // File I/O: load and save
@@ -654,7 +932,7 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
     }
 
     // Open the file for reading
-    LogoStream *stream = logo_io_open_read(io, full_path);
+    LogoStream *stream = logo_io_open(io, full_path);
     if (!stream)
     {
         return result_error_arg(ERR_FILE_NOT_FOUND, "", pathname);
@@ -990,7 +1268,7 @@ static Result prim_save(Evaluator *eval, int argc, Value *args)
     }
 
     // Open the file for writing
-    LogoStream *stream = logo_io_open_write(io, full_path);
+    LogoStream *stream = logo_io_open(io, full_path);
     if (!stream)
     {
         return result_error(ERR_DISK_TROUBLE);
@@ -1078,10 +1356,6 @@ void primitives_files_init(void)
 {
     // File management
     primitive_register("open", 1, prim_open);
-    primitive_register("openread", 1, prim_openread);
-    primitive_register("openwrite", 1, prim_openwrite);
-    primitive_register("openappend", 1, prim_openappend);
-    primitive_register("openupdate", 1, prim_openupdate);
     primitive_register("close", 1, prim_close);
     primitive_register("closeall", 0, prim_closeall);
     primitive_register("setread", 1, prim_setread);
@@ -1096,6 +1370,21 @@ void primitives_files_init(void)
     primitive_register("filelen", 1, prim_filelen);
     primitive_register("dribble", 1, prim_dribble);
     primitive_register("nodribble", 0, prim_nodribble);
+
+    // Directory listing
+    primitive_register("files", 0, prim_files);
+    primitive_register("directories", 0, prim_directories);
+    primitive_register("catalog", 0, prim_catalog);
+    primitive_register("setprefix", 1, prim_setprefix);
+    primitive_register("prefix", 0, prim_getprefix);
+    primitive_register("erasefile", 1, prim_erase_file);
+    primitive_register("createdir", 1, prim_createdir);
+    primitive_register("erasedir", 1, prim_erase_directory);
+    primitive_register("file?", 1, prim_filep);
+    primitive_register("filep", 1, prim_filep);
+    primitive_register("dir?", 1, prim_dirp);
+    primitive_register("dirp", 1, prim_dirp);
+    primitive_register("rename", 2, prim_rename);
 
     // Load and save
     primitive_register("load", 1, prim_load);

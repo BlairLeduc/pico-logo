@@ -199,11 +199,11 @@ LogoStream *logo_io_open(LogoIO *io, const char *pathname)
     }
 
     // Try to open the file - if it doesn't exist, create it
-    LogoStream *stream = io->storage->ops->open(full_path, LOGO_FILE_UPDATE);
+    LogoStream *stream = io->storage->ops->open(full_path);
     if (!stream)
     {
         // File doesn't exist, try to create it
-        stream = io->storage->ops->open(full_path, LOGO_FILE_WRITE);
+        stream = io->storage->ops->open(full_path);
     }
 
     if (!stream)
@@ -226,85 +226,6 @@ LogoStream *logo_io_open(LogoIO *io, const char *pathname)
     logo_stream_close(stream);
     free(stream);
     return NULL;
-}
-
-// Helper function to open a file with a specific mode
-static LogoStream *logo_io_open_with_mode(LogoIO *io, const char *pathname, LogoFileMode mode)
-{
-    if (!io || !pathname)
-    {
-        return NULL;
-    }
-
-    // Resolve the pathname with prefix
-    char resolved[LOGO_STREAM_NAME_MAX];
-    char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
-    if (!full_path)
-    {
-        return NULL;
-    }
-
-    // Check if already open
-    LogoStream *existing = logo_io_find_open(io, full_path);
-    if (existing)
-    {
-        return existing;
-    }
-
-    // Check if we have room
-    if (io->open_count >= LOGO_MAX_OPEN_FILES)
-    {
-        return NULL;
-    }
-
-    // Check if we have a file opener
-    if (!io->storage->ops->open)
-    {
-        return NULL;
-    }
-
-    // Open the file
-    LogoStream *stream = io->storage->ops->open(full_path, mode);
-    if (!stream)
-    {
-        return NULL;
-    }
-
-    // Find an empty slot
-    for (int i = 0; i < LOGO_MAX_OPEN_FILES; i++)
-    {
-        if (io->open_streams[i] == NULL)
-        {
-            io->open_streams[i] = stream;
-            io->open_count++;
-            return stream;
-        }
-    }
-
-    // No slot found
-    logo_stream_close(stream);
-    free(stream);
-    return NULL;
-}
-
-LogoStream *logo_io_open_read(LogoIO *io, const char *pathname)
-{
-    return logo_io_open_with_mode(io, pathname, LOGO_FILE_READ);
-}
-
-LogoStream *logo_io_open_write(LogoIO *io, const char *pathname)
-{
-    return logo_io_open_with_mode(io, pathname, LOGO_FILE_WRITE);
-}
-
-LogoStream *logo_io_open_append(LogoIO *io, const char *pathname)
-{
-    return logo_io_open_with_mode(io, pathname, LOGO_FILE_APPEND);
-}
-
-LogoStream *logo_io_open_update(LogoIO *io, const char *pathname)
-{
-    return logo_io_open_with_mode(io, pathname, LOGO_FILE_UPDATE);
 }
 
 void logo_io_close(LogoIO *io, const char *pathname)
@@ -438,7 +359,15 @@ bool logo_io_file_exists(const LogoIO *io, const char *pathname)
         return false;
     }
 
-    return io->storage->ops->file_exists(pathname);
+    // Resolve the pathname with prefix
+    char resolved[LOGO_STREAM_NAME_MAX];
+    char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
+    if (!full_path)
+    {
+        return NULL;
+    }
+
+    return io->storage->ops->file_exists(full_path);
 }   
 
 bool logo_io_dir_exists(const LogoIO *io, const char *pathname)
@@ -448,7 +377,15 @@ bool logo_io_dir_exists(const LogoIO *io, const char *pathname)
         return false;
     }
 
-    return io->storage->ops->dir_exists(pathname);
+    // Resolve the pathname with prefix
+    char resolved[LOGO_STREAM_NAME_MAX];
+    char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
+    if (!full_path)
+    {
+        return NULL;
+    }
+
+    return io->storage->ops->dir_exists(full_path);
 }
 
 bool logo_io_file_delete(const LogoIO *io, const char *pathname)
@@ -458,7 +395,33 @@ bool logo_io_file_delete(const LogoIO *io, const char *pathname)
         return false;
     }
 
-    return io->storage->ops->file_delete(pathname);
+    // Resolve the pathname with prefix
+    char resolved[LOGO_STREAM_NAME_MAX];
+    char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
+    if (!full_path)
+    {
+        return NULL;
+    }
+
+    return io->storage->ops->file_delete(full_path);
+}
+
+bool logo_io_dir_create(const LogoIO *io, const char *pathname)
+{
+    if (!io || !io->storage || !pathname)
+    {
+        return false;
+    }
+
+    // Resolve the pathname with prefix
+    char resolved[LOGO_STREAM_NAME_MAX];
+    char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
+    if (!full_path)
+    {
+        return NULL;
+    }
+
+    return io->storage->ops->dir_create(full_path);
 }
 
 bool logo_io_dir_delete(const LogoIO *io, const char *pathname)
@@ -468,7 +431,15 @@ bool logo_io_dir_delete(const LogoIO *io, const char *pathname)
         return false;
     }
 
-    return io->storage->ops->dir_delete(pathname);
+    // Resolve the pathname with prefix
+    char resolved[LOGO_STREAM_NAME_MAX];
+    char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
+    if (!full_path)
+    {
+        return NULL;
+    }
+
+    return io->storage->ops->dir_delete(full_path);
 }
 
 bool logo_io_rename(const LogoIO *io, const char *old_path, const char *new_path)
@@ -478,7 +449,20 @@ bool logo_io_rename(const LogoIO *io, const char *old_path, const char *new_path
         return false;
     }
 
-    return io->storage->ops->rename(old_path, new_path);
+    // Resolve the pathname with prefix
+    char resolved[LOGO_STREAM_NAME_MAX];
+    char *full_old_path = logo_io_resolve_path(io, old_path, resolved, sizeof(resolved));
+    if (!full_old_path)
+    {
+        return NULL;
+    }
+    char *full_new_path = logo_io_resolve_path(io, new_path, resolved, sizeof(resolved));
+    if (!full_new_path)
+    {
+        return NULL;
+    }
+
+    return io->storage->ops->rename(full_old_path, full_new_path);
 }
 
 long logo_io_file_size(const LogoIO *io, const char *pathname)
@@ -488,7 +472,27 @@ long logo_io_file_size(const LogoIO *io, const char *pathname)
         return -1;
     }
 
-    return io->storage->ops->file_size(pathname);
+    // Resolve the pathname with prefix
+    char resolved[LOGO_STREAM_NAME_MAX];
+    char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
+    if (!full_path)
+    {
+        return -1;
+    }
+
+    return io->storage->ops->file_size(full_path);
+}
+
+bool logo_io_list_directory(const LogoIO *io, const char *pathname,
+                             LogoDirCallback callback, void *user_data,
+                             const char *filter)
+{
+    if (!io || !io->storage || !pathname || !callback)
+    {
+        return false;
+    }
+
+    return io->storage->ops->list_directory(pathname, callback, user_data, filter);
 }
 
 //
@@ -608,11 +612,12 @@ bool logo_io_start_dribble(LogoIO *io, const char *pathname)
     }
 
     // Open file for writing (append mode for dribble)
-    LogoStream *stream = io->storage->ops->open(full_path, LOGO_FILE_APPEND);
+    LogoStream *stream = io->storage->ops->open(full_path);
     if (!stream)
     {
         return false;
     }
+    stream->ops->set_write_pos(stream, stream->ops->get_length(stream));
 
     io->dribble = stream;
     return true;

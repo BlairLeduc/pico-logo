@@ -166,11 +166,13 @@ void screen_set_mode(uint8_t mode)
         else if (mode == SCREEN_MODE_GFX)
         {
             // In full-screen graphics mode, we clear the screen
+            lcd_erase_cursor();
             lcd_define_scrolling(0, 0); // No scrolling area in full-screen graphics mode
             screen_gfx_update();
         }
         else if (mode == SCREEN_MODE_SPLIT)
         {
+            lcd_erase_cursor();
             lcd_define_scrolling(SCREEN_SPLIT_GFX_HEIGHT, 0); // Set scrolling area for text at the bottom
             screen_gfx_update();
             screen_txt_update();
@@ -211,6 +213,14 @@ void screen_gfx_point(float x, float y, uint8_t colour, bool xor)
     int pixel_y = wrap_and_round(y, SCREEN_HEIGHT);
 
     set_pixel(pixel_x, pixel_y, colour, xor);
+}
+
+uint8_t screen_gfx_point_at(float x, float y)
+{
+    int pixel_x = wrap_and_round(x, SCREEN_WIDTH);
+    int pixel_y = wrap_and_round(y, SCREEN_HEIGHT);
+    
+    return gfx_buffer[pixel_y * SCREEN_WIDTH + pixel_x];
 }
 
 // Draw a line in the graphics buffer using Bresenham's algorithm

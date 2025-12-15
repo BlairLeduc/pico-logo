@@ -2017,13 +2017,22 @@ directories
 Outputs a list of directory names in the current directory.
 
 
+## createdir
+
+createdir _pathname_  
+
+`command`
+
+`createdir` creates the subdirectory indicated by _pathname_. The last file name in _pathname_ is the subdirectory to be created, and preceding names indicate where it should be placed.
+
+
 ## setprefix
 
 setprefix _pathname_  
 
 `command`
 
-Sets a prefix that will be used as the implicit beginning of filenames in `openread`, `openwrite`, `openappend`, `openupdate`, `load`, and `save` commands. The input to `setprefix` must be a word, unless it is the empty list, to indicate that there should be no prefix.
+Sets a prefix that will be used as the implicit beginning of filenames in `open`, `load`, and `save` commands. The input to `setprefix` must be a word, unless it is the empty list, to indicate that there should be no prefix.
 
 ## prefix
 

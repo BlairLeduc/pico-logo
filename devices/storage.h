@@ -21,15 +21,20 @@ extern "C"
 #endif
 
     //
-    // File opening modes (used by file opener callback)
+    // Directory entry type for listing
     //
-    typedef enum LogoFileMode
+    typedef enum LogoEntryType
     {
-        LOGO_FILE_READ,     // Open for reading (file must exist)
-        LOGO_FILE_WRITE,    // Open for writing (creates/truncates)
-        LOGO_FILE_APPEND,   // Open for appending (creates if needed)
-        LOGO_FILE_UPDATE,   // Open for reading and writing (file must exist)
-    } LogoFileMode;
+        LOGO_ENTRY_FILE,
+        LOGO_ENTRY_DIRECTORY
+    } LogoEntryType;
+
+    //
+    // Callback for directory listing
+    // Called for each entry in the directory
+    // Return true to continue, false to stop
+    //
+    typedef bool (*LogoDirCallback)(const char *name, LogoEntryType type, void *user_data);
 
     //
     // LogoStorage interface
@@ -37,7 +42,7 @@ extern "C"
     //
     typedef struct LogoStorageOps
     {
-        LogoStream *(*open)(const char *pathname, LogoFileMode mode);
+        LogoStream *(*open)(const char *pathname);
 
         // Check if a file exists
         bool (*file_exists)(const char *pathname);
@@ -48,6 +53,9 @@ extern "C"
         // Delete a file
         bool (*file_delete)(const char *pathname);
 
+        // Create a new empty directory
+        bool (*dir_create)(const char *pathname);
+
         // Delete an empty directory
         bool (*dir_delete)(const char *pathname);
 
@@ -56,11 +64,16 @@ extern "C"
 
         // Get file size in bytes, or -1 on error
         long (*file_size)(const char *pathname);
+
+        // List directory contents
+        bool (*list_directory)(const char *pathname, LogoDirCallback callback,
+                               void *user_data, const char *filter);
+
     } LogoStorageOps;
 
     typedef struct LogoStorage
     {
-        LogoStorageOps *ops;
+        const LogoStorageOps *ops;
     } LogoStorage;
 
     //
@@ -71,8 +84,6 @@ extern "C"
     // Initialize a storage with streams and optional capabilities
     void logo_storage_init(LogoStorage *storage,
                            const LogoStorageOps *ops);
-
-    
 
 #ifdef __cplusplus
 }

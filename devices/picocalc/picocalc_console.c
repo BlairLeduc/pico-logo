@@ -3,13 +3,14 @@
 //  Copyright 2025 Blair Leduc. See LICENSE for details.
 //
 //  Implements a PicoCalc device that uses standard input and output.
-// 
+//
 
 #include "picocalc_console.h"
 #include "devices/console.h"
 #include "devices/stream.h"
 #include "input.h"
 #include "keyboard.h"
+#include "lcd.h"
 #include "screen.h"
 
 #include <stdio.h>
@@ -22,10 +23,11 @@
 #include <pico/rand.h>
 
 // Turtle state
-float turtle_x = TURTLE_HOME_X;                  // Current x position for graphics
-float turtle_y = TURTLE_HOME_Y;                  // Current y position for graphics
-float turtle_angle = TURTLE_DEFAULT_ANGLE;       // Current angle for graphics
-uint16_t turtle_colour = TURTLE_DEFAULT_COLOUR;    // Turtle color for graphics
+float turtle_x = TURTLE_HOME_X;                         // Current x position for graphics
+float turtle_y = TURTLE_HOME_Y;                         // Current y position for graphics
+float turtle_angle = TURTLE_DEFAULT_ANGLE;              // Current angle for graphics
+uint8_t turtle_colour = TURTLE_DEFAULT_COLOUR;          // Turtle color for graphics
+uint8_t background_colour = GFX_DEFAULT_BACKGROUND;     // Background color for graphics
 static bool turtle_pen_down = TURTLE_DEFAULT_PEN_DOWN;  // Pen state for graphics
 static bool turtle_visible = TURTLE_DEFAULT_VISIBILITY; // Turtle visibility state for graphics
 
@@ -157,7 +159,7 @@ static const LogoConsoleText picocalc_text_ops = {
 
 //
 //  Turtle graphics functions
-//  
+//
 
 //  Draw the turtle at the current position
 static void turtle_draw()
@@ -214,7 +216,7 @@ static void turtle_move(float distance)
     turtle_y -= distance * cosf(turtle_angle * (M_PI / 180.0f));
 
     // Draw the turtle at the new position
-    
+
     if (turtle_pen_down)
     {
         // Draw a line from the old position to the new position
@@ -222,7 +224,7 @@ static void turtle_move(float distance)
     }
 
     turtle_draw();
-    
+
     // Ensure the turtle stays within bounds
     turtle_x = fmodf(turtle_x + SCREEN_WIDTH, SCREEN_WIDTH);
     turtle_y = fmodf(turtle_y + SCREEN_HEIGHT, SCREEN_HEIGHT);
@@ -233,7 +235,7 @@ static void turtle_move(float distance)
 // Reset the turtle to the home position
 static void turtle_home(void)
 {
-    // Draw the turtle at the home position
+    // Erase the turtle at the current position
     turtle_draw();
 
     // Reset the turtle to the home position
@@ -243,7 +245,7 @@ static void turtle_home(void)
 
     // Draw the turtle at the home position
     turtle_draw();
-    
+
     screen_gfx_update();
 }
 
@@ -281,6 +283,8 @@ static void turtle_set_angle(float angle)
     turtle_draw();
     turtle_angle = fmodf(angle, 360.0f); // Normalize the angle
     turtle_draw();
+
+    screen_gfx_update();
 }
 
 // Get the current turtle angle
@@ -307,6 +311,33 @@ static void turtle_set_colour(uint8_t colour)
 static uint8_t turtle_get_colour(void)
 {
     return turtle_colour; // Return the current turtle color
+}
+
+static void turtle_set_bg_colour(uint8_t slot)
+{
+    // Set the background color
+    uint16_t palette_value = lcd_get_palette_value(slot);
+    lcd_set_palette_value(PALETTE_BG, palette_value);
+    background_colour = slot;
+
+    // The foreground colour will be the minimum or maxium shade in the hue for contrast
+    if ((slot & 0x07) < 4)
+    {
+        slot |= 0x07;
+    }
+    else
+    {
+        slot &= ~0x07;
+    }
+    palette_value = lcd_get_palette_value(slot);
+    lcd_set_palette_value(PALETTE_FG, palette_value);
+
+    screen_gfx_update();
+}
+
+static uint8_t turtle_get_bg_colour(void)
+{
+    return background_colour;
 }
 
 // Set the pen state (down or up)
@@ -339,6 +370,16 @@ static bool turtle_get_visibility(void)
     return turtle_visible;
 }
 
+static void turtle_dot(float x, float y)
+{
+    screen_gfx_point(x, y, turtle_colour, false);
+}
+
+static bool turtle_dot_at(float x, float y)
+{
+    return screen_gfx_point_at(x, y) != GFX_DEFAULT_BACKGROUND;
+}
+
 static const LogoConsoleTurtle picocalc_turtle_ops = {
     .clear = turtle_clearscreen,
     .draw = turtle_draw,
@@ -350,15 +391,15 @@ static const LogoConsoleTurtle picocalc_turtle_ops = {
     .get_heading = turtle_get_angle,
     .set_pen_colour = turtle_set_colour,
     .get_pen_colour = turtle_get_colour,
-    .set_bg_colour = NULL, // Not implemented
-    .get_bg_colour = NULL, // Not implemented
+    .set_bg_colour = turtle_set_bg_colour,
+    .get_bg_colour = turtle_get_bg_colour,
     .set_pen_down = turtle_set_pen_down,
     .get_pen_down = turtle_get_pen_down,
     .set_visible = turtle_set_visibility,
     .get_visible = turtle_get_visibility,
-    .dot = NULL,      // Not implemented
-    .dot_at = NULL,   // Not implemented
-    .fill = NULL,     // Not implemented
+    .dot = turtle_dot,
+    .dot_at = turtle_dot_at,
+    .fill = NULL,       // Not implemented
     .set_fence = NULL,  // Not implemented
     .set_window = NULL, // Not implemented
     .set_wrap = NULL,   // Not implemented
@@ -381,7 +422,11 @@ LogoConsole *logo_picocalc_console_create(void)
     console->screen = &picocalc_screen_ops;
     console->text = &picocalc_text_ops;
     console->turtle = &picocalc_turtle_ops;
-    
+
+    turtle_set_bg_colour(74); // Set default background color
+    turtle_clearscreen(); // Clear the screen and reset the turtle
+    text_clear();         // Clear the text screen
+
     return console;
 }
 

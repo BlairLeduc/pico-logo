@@ -43,7 +43,7 @@ extern "C"
 
     // Initialize a hardware with streams and optional capabilities
     void logo_hardware_init(LogoHardware *hardware,
-                            const LogoHardwareOps *ops);
+                            LogoHardwareOps *ops);
 
     
 

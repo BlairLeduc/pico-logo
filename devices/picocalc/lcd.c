@@ -31,8 +31,8 @@ static uint16_t lcd_memory_scroll_height = FRAME_HEIGHT; // scroll area height
 static uint16_t lcd_scroll_bottom = 0;                   // bottom fixed area for vertical scrolling
 static uint16_t lcd_y_offset = 0;                        // offset for vertical scrolling
 
-static uint8_t foreground = 0xFF; // default foreground colour (white)
-static uint8_t background = 0x00; // default background colour (black)
+static uint8_t foreground = 254; // foreground palette slot
+static uint8_t background = 255; // background palette slot
 
 // Text drawing
 const font_t *font = &logo_font; // default font
@@ -59,19 +59,37 @@ static void lcd_enable_interrupts()
 }
 
 //
+// Palette functions
+//
+
+void lcd_set_palette_value(uint8_t slot, uint16_t colour)
+{
+    if (slot >= PALETTE_FIXED_COLORS)
+    {
+        palette[slot] = colour;
+    }
+}
+
+uint16_t lcd_get_palette_value(uint8_t slot)
+{
+    return palette[slot];
+}
+
+
+//
 // Character attributes
 //
 
 // Set foreground colour
-void lcd_set_foreground(uint8_t colour)
+void lcd_set_foreground(uint8_t slot)
 {
-    foreground = colour;
+    foreground = slot;
 }
 
 // Set background colour
-void lcd_set_background(uint8_t colour)
+void lcd_set_background(uint8_t slot)
 {
-    background = colour;
+    background = slot;
 }
 
 //

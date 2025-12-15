@@ -7,6 +7,7 @@
 
 #include "../storage.h"
 #include "picocalc_storage.h"
+#include "fat32.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,11 +18,10 @@
 //
 // File stream context - wraps a FILE*
 //
-typedef struct HostFileContext
+typedef struct FileContext
 {
-    FILE *file;
-    LogoFileMode mode;
-} HostFileContext;
+    fat32_file_t *file;
+} FileContext;
 
 //
 // Stream operation implementations
@@ -29,19 +29,24 @@ typedef struct HostFileContext
 
 static int picocalc_file_read_char(LogoStream *stream)
 {
+    char buffer[2];
     if (!stream || !stream->context)
     {
         return -1;
     }
 
-    HostFileContext *ctx = (HostFileContext *)stream->context;
+    FileContext *ctx = (FileContext *)stream->context;
     if (!ctx->file)
     {
         return -1;
     }
 
-    int ch = fgetc(ctx->file);
-    return (ch == EOF) ? -1 : ch;
+    size_t read;
+    if (fat32_read(ctx->file, buffer, 1, &read) == FAT32_OK && read == 1)
+    {
+        return (unsigned char)buffer[0];
+    }
+    return -1;
 }
 
 static int picocalc_file_read_chars(LogoStream *stream, char *buffer, int count)
@@ -51,14 +56,20 @@ static int picocalc_file_read_chars(LogoStream *stream, char *buffer, int count)
         return -1;
     }
 
-    HostFileContext *ctx = (HostFileContext *)stream->context;
+    FileContext *ctx = (FileContext *)stream->context;
     if (!ctx->file)
     {
         return -1;
     }
 
-    size_t read = fread(buffer, 1, (size_t)count, ctx->file);
-    return (int)read;
+    size_t read;
+    
+    if (fat32_read(ctx->file, buffer, (size_t)count, &read) == FAT32_OK)
+    {
+        return (int)read;
+    }
+
+    return -1;
 }
 
 static int picocalc_file_read_line(LogoStream *stream, char *buffer, size_t size)
@@ -68,18 +79,28 @@ static int picocalc_file_read_line(LogoStream *stream, char *buffer, size_t size
         return -1;
     }
 
-    HostFileContext *ctx = (HostFileContext *)stream->context;
+    FileContext *ctx = (FileContext *)stream->context;
     if (!ctx->file)
     {
         return -1;
     }
 
-    if (fgets(buffer, (int)size, ctx->file) == NULL)
+    size_t total_read = 0;
+    while (total_read < size - 1) // Leave space for null terminator
     {
-        return -1; // EOF or error
+        size_t read;
+        if (fat32_read(ctx->file, &buffer[total_read], 1, &read) != FAT32_OK || read == 0)
+        {
+            return -1; // Read error or EOF
+        }
+        if (buffer[total_read] == '\n' || buffer[total_read] == '\r')
+        {
+            break; // End of line
+        }
+        total_read++;
     }
-
-    return (int)strlen(buffer);
+    buffer[total_read] = '\0';
+    return (int)total_read;
 }
 
 static bool picocalc_file_can_read(LogoStream *stream)
@@ -89,20 +110,13 @@ static bool picocalc_file_can_read(LogoStream *stream)
         return false;
     }
 
-    HostFileContext *ctx = (HostFileContext *)stream->context;
+    FileContext *ctx = (FileContext *)stream->context;
     if (!ctx->file)
     {
         return false;
     }
 
-    // Check if we're at EOF
-    int ch = fgetc(ctx->file);
-    if (ch == EOF)
-    {
-        return false;
-    }
-    ungetc(ch, ctx->file);
-    return true;
+    return !fat32_eof(ctx->file);
 }
 
 static void picocalc_file_write(LogoStream *stream, const char *text)
@@ -112,27 +126,21 @@ static void picocalc_file_write(LogoStream *stream, const char *text)
         return;
     }
 
-    HostFileContext *ctx = (HostFileContext *)stream->context;
+    FileContext *ctx = (FileContext *)stream->context;
     if (!ctx->file)
     {
         return;
     }
 
-    fputs(text, ctx->file);
+    size_t len = strlen(text);
+    size_t written;
+    fat32_write(ctx->file, text, len, &written);
 }
 
 static void picocalc_file_flush(LogoStream *stream)
 {
-    if (!stream || !stream->context)
-    {
-        return;
-    }
-
-    HostFileContext *ctx = (HostFileContext *)stream->context;
-    if (ctx->file)
-    {
-        fflush(ctx->file);
-    }
+    // No-op for FAT32 files
+    (void)stream;
 }
 
 static long picocalc_file_get_read_pos(LogoStream *stream)
@@ -142,13 +150,13 @@ static long picocalc_file_get_read_pos(LogoStream *stream)
         return -1;
     }
 
-    HostFileContext *ctx = (HostFileContext *)stream->context;
+    FileContext *ctx = (FileContext *)stream->context;
     if (!ctx->file)
     {
         return -1;
     }
 
-    return ftell(ctx->file);
+    return (long)fat32_tell(ctx->file);
 }
 
 static bool picocalc_file_set_read_pos(LogoStream *stream, long pos)
@@ -158,13 +166,13 @@ static bool picocalc_file_set_read_pos(LogoStream *stream, long pos)
         return false;
     }
 
-    HostFileContext *ctx = (HostFileContext *)stream->context;
+    FileContext *ctx = (FileContext *)stream->context;
     if (!ctx->file)
     {
         return false;
     }
 
-    return fseek(ctx->file, pos, SEEK_SET) == 0;
+    return fat32_seek(ctx->file, (uint32_t)pos) == FAT32_OK;
 }
 
 static long picocalc_file_get_write_pos(LogoStream *stream)
@@ -186,32 +194,13 @@ static long picocalc_file_get_length(LogoStream *stream)
         return -1;
     }
 
-    HostFileContext *ctx = (HostFileContext *)stream->context;
+    FileContext *ctx = (FileContext *)stream->context;
     if (!ctx->file)
     {
         return -1;
     }
 
-    // Save current position
-    long current = ftell(ctx->file);
-    if (current < 0)
-    {
-        return -1;
-    }
-
-    // Seek to end
-    if (fseek(ctx->file, 0, SEEK_END) != 0)
-    {
-        return -1;
-    }
-
-    // Get length
-    long length = ftell(ctx->file);
-
-    // Restore position
-    fseek(ctx->file, current, SEEK_SET);
-
-    return length;
+    return fat32_size(ctx->file);
 }
 
 static void picocalc_file_close(LogoStream *stream)
@@ -221,10 +210,11 @@ static void picocalc_file_close(LogoStream *stream)
         return;
     }
 
-    HostFileContext *ctx = (HostFileContext *)stream->context;
+    FileContext *ctx = (FileContext *)stream->context;
     if (ctx->file)
     {
-        fclose(ctx->file);
+        fat32_close(ctx->file);
+        free(ctx->file);
         ctx->file = NULL;
     }
 
@@ -256,59 +246,49 @@ static const LogoStreamOps picocalc_stream_ops = {
 // File Manager API
 //
 
-static LogoStream *logo_picocalc_file_open(const char *pathname, LogoFileMode mode)
+static LogoStream *logo_picocalc_file_open(const char *pathname)
 {
     if (!pathname)
     {
         return NULL;
     }
 
-    // Determine the fopen mode string
-    const char *fmode;
-    switch (mode)
-    {
-    case LOGO_FILE_READ:
-        fmode = "r";
-        break;
-    case LOGO_FILE_WRITE:
-        fmode = "w";
-        break;
-    case LOGO_FILE_APPEND:
-        fmode = "a";
-        break;
-    case LOGO_FILE_UPDATE:
-        fmode = "r+";
-        break;
-    default:
-        return NULL;
-    }
-
-    // Force all file operations to be within the LOGO_STORAGE_ROOT directory
-    char full_path[512];
-    snprintf(full_path, sizeof(full_path), "%s%s", LOGO_STORAGE_ROOT, pathname);
-
     // Open the file
-    FILE *file = fopen(full_path, fmode);
+    fat32_file_t *file = (fat32_file_t *)malloc(sizeof(fat32_file_t));
     if (!file)
     {
         return NULL;
     }
+    if (fat32_open(file, pathname) != FAT32_OK)
+    {
+        free(file);
+        return NULL;
+    }
+
+    if (file->attributes & FAT32_ATTR_DIRECTORY)
+    {
+        // Cannot open directories as files
+        fat32_close(file);
+        free(file);
+        return NULL;
+    }
 
     // Allocate context
-    HostFileContext *ctx = (HostFileContext *)malloc(sizeof(HostFileContext));
+    FileContext *ctx = (FileContext *)malloc(sizeof(FileContext));
     if (!ctx)
     {
-        fclose(file);
+        fat32_close(file);
+        free(file);
         return NULL;
     }
     ctx->file = file;
-    ctx->mode = mode;
 
     // Allocate stream
     LogoStream *stream = (LogoStream *)malloc(sizeof(LogoStream));
     if (!stream)
     {
-        fclose(file);
+        fat32_close(file);
+        free(file);
         free(ctx);
         return NULL;
     }
@@ -333,17 +313,14 @@ static bool logo_picocalc_file_exists(const char *pathname)
         return false;
     }
 
-    // Force all file operations to be within the LOGO_STORAGE_ROOT directory
-    char full_path[512];
-    snprintf(full_path, sizeof(full_path), "%s%s", LOGO_STORAGE_ROOT, pathname);
-
-    struct stat st;
-    if (stat(full_path, &st) != 0)
+    fat32_file_t file;
+    if (fat32_open(&file, pathname) == FAT32_OK)
     {
-        return false;
+        
+        fat32_close(&file);
+        return (file.attributes & FAT32_ATTR_DIRECTORY) == 0;
     }
-
-    return S_ISREG(st.st_mode);
+    return false;
 }
 
 static bool logo_picocalc_dir_exists(const char *pathname)
@@ -353,18 +330,13 @@ static bool logo_picocalc_dir_exists(const char *pathname)
         return false;
     }
 
-    // Force all file operations to be within the LOGO_STORAGE_ROOT directory
-    char full_path[512];
-    snprintf(full_path, sizeof(full_path), "%s%s", LOGO_STORAGE_ROOT, pathname);
-
-
-    struct stat st;
-    if (stat(full_path, &st) != 0)
+    fat32_file_t dir;
+    if (fat32_open(&dir, pathname) == FAT32_OK)
     {
-        return false;
+        fat32_close(&dir);
+        return (dir.attributes & FAT32_ATTR_DIRECTORY) != 0;
     }
-
-    return S_ISDIR(st.st_mode);
+    return false;
 }
 
 static bool logo_picocalc_file_delete(const char *pathname)
@@ -374,11 +346,34 @@ static bool logo_picocalc_file_delete(const char *pathname)
         return false;
     }
 
-    // Force all file operations to be within the LOGO_STORAGE_ROOT directory
-    char full_path[512];
-    snprintf(full_path, sizeof(full_path), "%s%s", LOGO_STORAGE_ROOT, pathname);
+    fat32_file_t file;
+    if (fat32_open(&file, pathname) == FAT32_OK)
+    {
+        if (file.attributes & FAT32_ATTR_DIRECTORY)
+        {
+            fat32_close(&file);
+            return false; // Not a file
+        }
+        fat32_close(&file);
+        return fat32_delete(pathname) == FAT32_OK;
+    }
+    return false;
+}
 
-    return remove(full_path) == 0;
+static bool logo_picocalc_dir_create(const char *pathname)
+{
+    if (!pathname)
+    {
+        return false;
+    }
+
+    fat32_file_t dir;
+    if (fat32_dir_create(&dir, pathname) == FAT32_OK)
+    {
+        fat32_close(&dir);
+        return true;
+    }
+    return false;
 }
 
 static bool logo_picocalc_dir_delete(const char *pathname)
@@ -388,11 +383,29 @@ static bool logo_picocalc_dir_delete(const char *pathname)
         return false;
     }
 
-    // Force all file operations to be within the LOGO_STORAGE_ROOT directory
-    char full_path[512];
-    snprintf(full_path, sizeof(full_path), "%s%s", LOGO_STORAGE_ROOT, pathname);
+    fat32_file_t dir;
+    if (fat32_open(&dir, pathname) == FAT32_OK)
+    {
+        if (!(dir.attributes & FAT32_ATTR_DIRECTORY))
+        {
+            fat32_close(&dir);
+            return false; // Not a directory
+        }
+        // Check if directory is empty
+        fat32_entry_t entry;
+        while (fat32_dir_read(&dir, &entry) == FAT32_OK && entry.filename[0])
+        {
+            if (strcmp(entry.filename, ".") != 0 && strcmp(entry.filename, "..") != 0)
+            {   
+                fat32_close(&dir);
+                return false; // Directory not empty
+            }
+        }
 
-    return unlink(full_path) == 0;
+        fat32_close(&dir);
+        return fat32_delete(pathname) == FAT32_OK;
+    }
+    return false;
 }
 
 static bool logo_picocalc_rename(const char *old_path, const char *new_path)
@@ -402,12 +415,7 @@ static bool logo_picocalc_rename(const char *old_path, const char *new_path)
         return false;
     }
 
-    // Force all file operations to be within the LOGO_STORAGE_ROOT directory
-    char full_old_path[512], full_new_path[512];
-    snprintf(full_old_path, sizeof(full_old_path), "%s%s", LOGO_STORAGE_ROOT, old_path);
-    snprintf(full_new_path, sizeof(full_new_path), "%s%s", LOGO_STORAGE_ROOT, new_path);
-
-    return rename(full_old_path, full_new_path) == 0;
+    return fat32_rename(old_path, new_path) == FAT32_OK;
 }
 
 static long logo_picocalc_file_size(const char *pathname)
@@ -417,17 +425,87 @@ static long logo_picocalc_file_size(const char *pathname)
         return -1;
     }
 
-    // Force all file operations to be within the LOGO_STORAGE_ROOT directory
-    char full_path[512];
-    snprintf(full_path, sizeof(full_path), "%s%s", LOGO_STORAGE_ROOT, pathname);
-
-    struct stat st;
-    if (stat(full_path, &st) != 0)
+    fat32_file_t file;
+    if (fat32_open(&file, pathname) == FAT32_OK)
     {
-        return -1;
+        if (file.attributes & FAT32_ATTR_DIRECTORY)
+        {
+            fat32_close(&file);
+            return -1; // Not a file
+        }
+        long size = (long)fat32_size(&file);
+        fat32_close(&file);
+        return size;
+    }
+    return -1;
+}
+
+bool logo_picocalc_list_directory(const char *pathname, LogoDirCallback callback,
+                                  void *user_data, const char *filter)
+{
+    if (!pathname || !callback)
+    {
+        return false;
     }
 
-    return (long)st.st_size;
+    fat32_file_t dir;
+    if (fat32_open(&dir, pathname) != FAT32_OK || !(dir.attributes & FAT32_ATTR_DIRECTORY))
+    {
+        return false;
+    }
+
+    fat32_entry_t entry;
+
+    while (fat32_dir_read(&dir, &entry) == FAT32_OK && entry.filename[0])
+    {
+        // Skip . and ..
+        if (strcmp(entry.filename, ".") == 0 || strcmp(entry.filename, "..") == 0)
+        {
+            continue;
+        }
+
+        // Determine entry type
+        LogoEntryType type;
+
+        if (entry.attr & FAT32_ATTR_DIRECTORY)
+        {
+            type = LOGO_ENTRY_DIRECTORY;
+        }
+        else if (!(entry.attr & FAT32_ATTR_VOLUME_ID) && !(entry.attr & FAT32_ATTR_HIDDEN) &&
+                 !(entry.attr & FAT32_ATTR_SYSTEM))
+        {
+            type = LOGO_ENTRY_FILE;
+            
+            // Apply extension filter for files
+            if (filter && strcmp(filter, "*") != 0)
+            {
+                // Find the extension in the filename
+                const char *dot = strrchr(entry.filename, '.');
+                if (!dot || dot == entry.filename)
+                {
+                    continue; // No extension, skip
+                }
+                // Compare extension (case-insensitive)
+                if (strcasecmp(dot + 1, filter) != 0)
+                {
+                    continue; // Extension doesn't match
+                }
+            }
+        }
+        else
+        {
+            continue; // Not a file or directory, skip
+        }
+
+        // Call callback
+        if (!callback(entry.filename, type, user_data))
+        {
+            break; // Callback requested stop
+        }
+    }
+
+    fat32_close(&dir);
+    return true;
 }
 
 static const LogoStorageOps picocalc_storage_ops = {
@@ -435,9 +513,11 @@ static const LogoStorageOps picocalc_storage_ops = {
     .file_exists = logo_picocalc_file_exists,
     .dir_exists = logo_picocalc_dir_exists,
     .file_delete = logo_picocalc_file_delete,
+    .dir_create = logo_picocalc_dir_create,
     .dir_delete = logo_picocalc_dir_delete,
     .rename = logo_picocalc_rename,
     .file_size = logo_picocalc_file_size,
+    .list_directory = logo_picocalc_list_directory,
 };
 
 
@@ -455,6 +535,7 @@ LogoStorage *logo_picocalc_storage_create(void)
     }
 
     logo_storage_init(storage, &picocalc_storage_ops);
+    
 
     return storage;
 }

@@ -26,11 +26,11 @@
 #define SCREEN_SPLIT_TXT_ROWS (SCREEN_SPLIT_TXT_HEIGHT / GLYPH_HEIGHT)                // Number of text rows in split mode
 
 // Text definitions
-#define TXT_DEFAULT_FOREGROUND (79) // Default foreground color (light blue)
-#define TXT_DEFAULT_BACKGROUND (74) // Default background color (blue)
+#define TXT_DEFAULT_FOREGROUND (254) // Default foreground color (light blue)
+#define TXT_DEFAULT_BACKGROUND (255) // Default background color (blue)
 
 // Text definitions
-#define GFX_DEFAULT_BACKGROUND (74) // Default background color (blue)
+#define GFX_DEFAULT_BACKGROUND (255) // Default background color (blue)
 
 // BMP definitions
 #define BMP_FILE_HEADER_SIZE (14)                          // Size of the BMP file header in bytes
@@ -56,6 +56,7 @@ void screen_set_mode(uint8_t mode);
 uint8_t *screen_gfx_frame();
 void screen_gfx_clear(void);
 void screen_gfx_point(float x, float y, uint8_t colour, bool xor);
+uint8_t screen_gfx_point_at(float x, float y);
 void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, bool xor);
 void screen_gfx_update(void);
 int screen_gfx_save(const char *filename);

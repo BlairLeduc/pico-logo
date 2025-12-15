@@ -98,7 +98,7 @@ static Result prim_namep(Evaluator *eval, int argc, Value *args)
     (void)argc;
     if (!value_is_word(args[0]))
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "namep", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "name?", value_to_string(args[0]));
     }
     const char *name = mem_word_ptr(args[0].as.node);
     

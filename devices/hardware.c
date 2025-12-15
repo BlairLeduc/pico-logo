@@ -9,7 +9,7 @@
 
 #include <string.h>
 
-void logo_hardware_init(LogoHardware *hardware, const LogoHardwareOps *ops)
+void logo_hardware_init(LogoHardware *hardware, LogoHardwareOps *ops)
 {
     if (!hardware)
     {
