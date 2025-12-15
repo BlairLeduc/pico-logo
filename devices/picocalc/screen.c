@@ -152,6 +152,11 @@ uint8_t screen_get_mode()
 
 void screen_set_mode(uint8_t mode)
 {
+    if (mode == screen_mode)
+    {
+        return; // No change
+    }
+
     if (mode == SCREEN_MODE_TXT || mode == SCREEN_MODE_GFX || mode == SCREEN_MODE_SPLIT)
     {
         screen_mode = mode;
@@ -178,6 +183,15 @@ void screen_set_mode(uint8_t mode)
             screen_txt_update();
         }
     }
+}
+
+void screen_show_field()
+{
+    if (screen_mode == SCREEN_MODE_GFX || screen_mode == SCREEN_MODE_SPLIT)
+    {
+        return;
+    }
+    screen_set_mode(SCREEN_MODE_SPLIT);
 }
 
 //

@@ -188,6 +188,8 @@ static void turtle_draw()
 // Clear the graphics buffer and reset the turtle to the home position
 static void turtle_clearscreen(void)
 {
+    screen_show_field();
+
     // Clear the graphics buffer
     screen_gfx_clear();
 
@@ -206,6 +208,8 @@ static void turtle_clearscreen(void)
 // Move the turtle forward or backward by the specified distance
 static void turtle_move(float distance)
 {
+    screen_show_field();
+
     float x = turtle_x;
     float y = turtle_y;
 
@@ -235,6 +239,8 @@ static void turtle_move(float distance)
 // Reset the turtle to the home position
 static void turtle_home(void)
 {
+    screen_show_field();
+
     // Erase the turtle at the current position
     turtle_draw();
 
@@ -252,6 +258,8 @@ static void turtle_home(void)
 // Set the turtle position to the specified coordinates
 static void turtle_set_position(float x, float y)
 {
+    screen_show_field();
+
     // Draw the current turtle position before moving
     turtle_draw();
 
@@ -280,7 +288,11 @@ static void turtle_get_position(float *x, float *y)
 // Set the turtle angle to the specified value
 static void turtle_set_angle(float angle)
 {
+    screen_show_field();
+
+    // Draw the current turtle position before changing angle
     turtle_draw();
+
     turtle_angle = fmodf(angle, 360.0f); // Normalize the angle
     turtle_draw();
 
@@ -296,6 +308,7 @@ static float turtle_get_angle(void)
 // Set the turtle color to the specified value
 static void turtle_set_colour(uint8_t colour)
 {
+    screen_show_field();
     // Draw the current turtle position before changing color
     turtle_draw(turtle_x, turtle_y, turtle_angle);
 
@@ -343,6 +356,7 @@ static uint8_t turtle_get_bg_colour(void)
 // Set the pen state (down or up)
 static void turtle_set_pen_down(bool down)
 {
+    screen_show_field();
     turtle_pen_down = down; // Set the pen state
 }
 
@@ -360,6 +374,7 @@ static void turtle_set_visibility(bool visible)
         return; // No change in visibility
     }
 
+    screen_show_field();
     turtle_draw(); // XOR the current turtle to draw/erase it
     turtle_visible = visible;
 }
@@ -372,6 +387,7 @@ static bool turtle_get_visibility(void)
 
 static void turtle_dot(float x, float y)
 {
+    screen_show_field();
     screen_gfx_point(x, y, turtle_colour, false);
 }
 
@@ -424,8 +440,10 @@ LogoConsole *logo_picocalc_console_create(void)
     console->turtle = &picocalc_turtle_ops;
 
     turtle_set_bg_colour(74); // Set default background color
-    turtle_clearscreen(); // Clear the screen and reset the turtle
-    text_clear();         // Clear the text screen
+    screen_gfx_clear();
+    screen_txt_clear();
+    turtle_draw();
+    screen_set_mode(SCREEN_MODE_TXT); // Start in split screen mode
 
     return console;
 }

@@ -49,11 +49,12 @@
 // Function prototypes
 
 // Screen mode functions (TXT, GFX, SPLIT)
-uint8_t screen_get_mode();
+uint8_t screen_get_mode(void);
 void screen_set_mode(uint8_t mode);
+void screen_show_field(void);
 
 // Graphics functions
-uint8_t *screen_gfx_frame();
+uint8_t *screen_gfx_frame(void);
 void screen_gfx_clear(void);
 void screen_gfx_point(float x, float y, uint8_t colour, bool xor);
 uint8_t screen_gfx_point_at(float x, float y);
@@ -62,7 +63,7 @@ void screen_gfx_update(void);
 int screen_gfx_save(const char *filename);
 
 // Text functions
-uint8_t *screen_txt_frame();
+uint8_t *screen_txt_frame(void);
 void screen_txt_clear(void);
 bool screen_txt_putc(uint8_t c);
 bool screen_txt_puts(const char *str);
