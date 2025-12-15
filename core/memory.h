@@ -45,7 +45,7 @@ extern "C"
     // +------------------+ <- LOGO_MEMORY_SIZE (top of memory)
 
 #ifndef LOGO_MEMORY_SIZE
-#define LOGO_MEMORY_SIZE 49152 // Total memory block (48KB)
+#define LOGO_MEMORY_SIZE 131072 // Total memory block (128KB)
 #endif
 
     //==========================================================================

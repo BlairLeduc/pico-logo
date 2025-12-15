@@ -84,9 +84,9 @@ int picocalc_read_line(char *buf, int size)
             screen_set_mode(SCREEN_MODE_GFX);
             screen_txt_enable_cursor(false);
             break;
-        case KEY_F5:
-            screen_gfx_save("/Logo/screenshot.bmp");
-            break;
+        // case KEY_F5:
+        //     screen_gfx_save("/Logo/screenshot.bmp");
+        //     break;
         case KEY_DEL: // DEL key
             if (index < length)
             {
