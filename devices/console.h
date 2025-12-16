@@ -17,6 +17,14 @@ extern "C"
 {
 #endif
 
+    typedef enum LogoPen
+    {
+        LOGO_PEN_UP,
+        LOGO_PEN_DOWN,
+        LOGO_PEN_ERASE,
+        LOGO_PEN_REVERSE,
+    } LogoPen;
+
     //
     // Turtle graphics operations (optional)
     // These are available on devices with graphics capability.
@@ -52,8 +60,8 @@ extern "C"
         uint8_t (*get_bg_colour)(void);
 
         // Pen state
-        void (*set_pen_down)(bool down);
-        bool (*get_pen_down)(void);
+        void (*set_pen_state)(LogoPen state);
+        LogoPen (*get_pen_state)(void);
 
         // Turtle visibility
         void (*set_visible)(bool visible);

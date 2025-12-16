@@ -9,6 +9,7 @@
 
 #include "pico/stdlib.h"
 #include "devices/font.h"
+#include "devices/console.h"
 
 // Screen modes
 #define SCREEN_MODE_TXT (0)   // Full-screen text, no graphics
@@ -56,9 +57,9 @@ void screen_show_field(void);
 // Graphics functions
 uint8_t *screen_gfx_frame(void);
 void screen_gfx_clear(void);
-void screen_gfx_point(float x, float y, uint8_t colour, bool xor);
-uint8_t screen_gfx_point_at(float x, float y);
-void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, bool xor);
+void screen_gfx_set_point(float x, float y, uint8_t colour);
+uint8_t screen_gfx_get_point(float x, float y);
+void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, bool reverse);
 void screen_gfx_update(void);
 int screen_gfx_save(const char *filename);
 

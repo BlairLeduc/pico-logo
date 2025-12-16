@@ -444,9 +444,9 @@ static Result prim_pendown(Evaluator *eval, int argc, Value *args)
     (void)args;
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
-    if (turtle && turtle->set_pen_down)
+    if (turtle && turtle->set_pen_state)
     {
-        turtle->set_pen_down(true);
+        turtle->set_pen_state(LOGO_PEN_DOWN);
     }
     
     return result_none();
@@ -462,9 +462,9 @@ static Result prim_penerase(Evaluator *eval, int argc, Value *args)
     // Note: penerase sets a special mode - the mock device tracks pen_mode
     // The actual implementation would need to set pen down in erase mode
     const LogoConsoleTurtle *turtle = get_turtle_ops();
-    if (turtle && turtle->set_pen_down)
+    if (turtle && turtle->set_pen_state)
     {
-        turtle->set_pen_down(true);  // Pen is down, but in erase mode
+        turtle->set_pen_state(LOGO_PEN_ERASE);  // Pen is down, but in erase mode
         // The device should track erase mode separately
     }
     
@@ -479,9 +479,9 @@ static Result prim_penreverse(Evaluator *eval, int argc, Value *args)
     (void)args;
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
-    if (turtle && turtle->set_pen_down)
+    if (turtle && turtle->set_pen_state)
     {
-        turtle->set_pen_down(true);  // Pen is down, but in reverse mode
+        turtle->set_pen_state(LOGO_PEN_REVERSE);  // Pen is down, but in reverse mode
         // The device should track reverse mode separately
     }
     
@@ -496,9 +496,9 @@ static Result prim_penup(Evaluator *eval, int argc, Value *args)
     (void)args;
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
-    if (turtle && turtle->set_pen_down)
+    if (turtle && turtle->set_pen_state)
     {
-        turtle->set_pen_down(false);
+        turtle->set_pen_state(LOGO_PEN_UP);
     }
     
     return result_none();
@@ -515,13 +515,24 @@ static Result prim_pen(Evaluator *eval, int argc, Value *args)
     
     // Default to pendown
     const char *state = "pendown";
-    if (turtle && turtle->get_pen_down)
+    if (turtle && turtle->get_pen_state)
     {
-        if (!turtle->get_pen_down())
+        LogoPen pen_state = turtle->get_pen_state();
+        switch (pen_state)
         {
-            state = "penup";
+            case LOGO_PEN_UP:
+                state = "penup";
+                break;
+            case LOGO_PEN_DOWN:
+                state = "pendown";
+                break;
+            case LOGO_PEN_ERASE:
+                state = "penerase";
+                break;
+            case LOGO_PEN_REVERSE:
+                state = "penreverse";
+                break;
         }
-        // Note: penerase and penreverse would need additional mode tracking
     }
 
     return result_ok(value_word(mem_atom(state, strlen(state))));

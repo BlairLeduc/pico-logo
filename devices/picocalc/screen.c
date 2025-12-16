@@ -19,6 +19,7 @@
 #include "screen.h"
 #include "devices/font.h"
 #include "devices/logo-font.h"
+#include "devices/console.h"
 #include "lcd.h"
 
 //
@@ -69,19 +70,6 @@ static int wrap_and_round(float value, int max)
     pixel = ((pixel % max) + max) % max;
 
     return pixel;
-}
-
-// Set a pixel in the graphics buffer
-static void set_pixel(int x, int y, uint8_t colour, bool xor)
-{
-    if (xor)
-    {
-        gfx_buffer[y * SCREEN_WIDTH + x] ^= colour;
-    }
-    else
-    {
-        gfx_buffer[y * SCREEN_WIDTH + x] = colour;
-    }
 }
 
 // Helper function to scroll the text buffer up one line
@@ -221,24 +209,33 @@ void screen_gfx_clear(void)
 }
 
 // Draw a point in the graphics buffer
-void screen_gfx_point(float x, float y, uint8_t colour, bool xor)
+void screen_gfx_set_point(float x, float y, uint8_t colour)
 {
     int pixel_x = wrap_and_round(x, SCREEN_WIDTH);
     int pixel_y = wrap_and_round(y, SCREEN_HEIGHT);
 
-    set_pixel(pixel_x, pixel_y, colour, xor);
+    gfx_buffer[pixel_y * SCREEN_WIDTH + pixel_x] = colour;
 }
 
-uint8_t screen_gfx_point_at(float x, float y)
+uint8_t screen_gfx_get_point(float x, float y)
 {
     int pixel_x = wrap_and_round(x, SCREEN_WIDTH);
     int pixel_y = wrap_and_round(y, SCREEN_HEIGHT);
-    
+
     return gfx_buffer[pixel_y * SCREEN_WIDTH + pixel_x];
 }
 
+void screen_gfx_reverse_point(float x, float y)
+{
+    int pixel_x = wrap_and_round(x, SCREEN_WIDTH);
+    int pixel_y = wrap_and_round(y, SCREEN_HEIGHT);
+
+    uint8_t *pixel = &gfx_buffer[pixel_y * SCREEN_WIDTH + pixel_x];
+    *pixel = (*pixel == GFX_DEFAULT_BACKGROUND) ? foreground : GFX_DEFAULT_BACKGROUND;
+}
+
 // Draw a line in the graphics buffer using Bresenham's algorithm
-void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, bool xor)
+void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, bool reverse)
 {
     // Calculate the number of steps based on the longest axis
     float dx = x2 - x1;
@@ -248,7 +245,7 @@ void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, boo
     if (steps == 0)
     {
         // Single point
-        screen_gfx_point(x1, y1, colour, xor);
+        screen_gfx_set_point(x1, y1, colour);
         return;
     }
 
@@ -258,15 +255,32 @@ void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, boo
     float x = x1;
     float y = y1;
 
-    for (int i = 0; i <= steps; ++i)
+    if (reverse)
     {
-        int px = wrap_and_round(x, SCREEN_WIDTH);
-        int py = wrap_and_round(y, SCREEN_HEIGHT);
+        uint8_t *pixel;
 
-        set_pixel(px, py, colour, xor);
+        // XOR mode: invert the pixel colour
+        for (int i = 0; i <= steps; ++i)
+        {
+            int pixel_x = wrap_and_round(x, SCREEN_WIDTH);
+            int pixel_y = wrap_and_round(y, SCREEN_HEIGHT);
+            
+            pixel = &gfx_buffer[pixel_y * SCREEN_WIDTH + pixel_x];
+            *pixel = *pixel == GFX_DEFAULT_BACKGROUND ? colour : GFX_DEFAULT_BACKGROUND;
 
-        x += x_inc;
-        y += y_inc;
+            x += x_inc;
+            y += y_inc;
+        }
+    }
+    else
+    {
+        for (int i = 0; i <= steps; ++i)
+        {
+            screen_gfx_set_point(x, y, colour);
+
+            x += x_inc;
+            y += y_inc;
+        }
     }
 }
 
@@ -372,7 +386,7 @@ void screen_txt_clear(void)
 {
     text_row = 0;                                 // Reset the text row to the top
     memset(txt_buffer, 0x20, sizeof(txt_buffer)); // Clear the text buffer
-    lcd_clear_screen(); // Clear the LCD screen in text mode
+    lcd_clear_screen();                           // Clear the LCD screen in text mode
     screen_txt_set_cursor(0, screen_mode == SCREEN_MODE_SPLIT ? SCREEN_SPLIT_TXT_ROW : 0);
 }
 

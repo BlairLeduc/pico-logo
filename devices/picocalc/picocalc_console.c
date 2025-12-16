@@ -28,7 +28,7 @@ float turtle_y = TURTLE_HOME_Y;                         // Current y position fo
 float turtle_angle = TURTLE_DEFAULT_ANGLE;              // Current angle for graphics
 uint8_t turtle_colour = TURTLE_DEFAULT_COLOUR;          // Turtle color for graphics
 uint8_t background_colour = GFX_DEFAULT_BACKGROUND;     // Background color for graphics
-static bool turtle_pen_down = TURTLE_DEFAULT_PEN_DOWN;  // Pen state for graphics
+static LogoPen turtle_pen_state = LOGO_PEN_DOWN;   // Pen state for graphics
 static bool turtle_visible = TURTLE_DEFAULT_VISIBILITY; // Turtle visibility state for graphics
 
 //
@@ -221,11 +221,22 @@ static void turtle_move(float distance)
 
     // Draw the turtle at the new position
 
-    if (turtle_pen_down)
+    if (turtle_pen_state == LOGO_PEN_DOWN)
     {
         // Draw a line from the old position to the new position
         screen_gfx_line(x, y, turtle_x, turtle_y, turtle_colour, false);
     }
+    else if (turtle_pen_state == LOGO_PEN_ERASE)
+    {
+        // Erase a line from the old position to the new position
+        screen_gfx_line(x, y, turtle_x, turtle_y, GFX_DEFAULT_BACKGROUND, false);
+    }
+    else if (turtle_pen_state == LOGO_PEN_REVERSE)
+    {
+        // Reverse the pixels along the line from the old position to the new position
+        screen_gfx_line(x, y, turtle_x, turtle_y, turtle_colour, true);
+    }
+    // else if LOGO_PEN_UP: do not draw anything
 
     turtle_draw();
 
@@ -317,6 +328,7 @@ static void turtle_set_colour(uint8_t colour)
 
     // Draw the turtle at the current position with the new color
     turtle_draw(turtle_x, turtle_y, turtle_angle);
+
     screen_gfx_update();
 }
 
@@ -346,6 +358,7 @@ static void turtle_set_bg_colour(uint8_t slot)
     lcd_set_palette_value(PALETTE_FG, palette_value);
 
     screen_gfx_update();
+    screen_txt_update();
 }
 
 static uint8_t turtle_get_bg_colour(void)
@@ -354,16 +367,16 @@ static uint8_t turtle_get_bg_colour(void)
 }
 
 // Set the pen state (down or up)
-static void turtle_set_pen_down(bool down)
+static void turtle_set_pen_state(LogoPen state)
 {
     screen_show_field();
-    turtle_pen_down = down; // Set the pen state
+    turtle_pen_state = state; // Set the pen state
 }
 
 // Get the current pen state (down or up)
-static bool turtle_get_pen_down(void)
+static LogoPen turtle_get_pen_state(void)
 {
-    return turtle_pen_down; // Return the current pen state
+    return turtle_pen_state; // Return the current pen state
 }
 
 // Set the turtle visibility (visible or hidden)
@@ -377,6 +390,8 @@ static void turtle_set_visibility(bool visible)
     screen_show_field();
     turtle_draw(); // XOR the current turtle to draw/erase it
     turtle_visible = visible;
+
+    screen_gfx_update();
 }
 
 // Draw or erase the turtle based on visibility
@@ -388,12 +403,12 @@ static bool turtle_get_visibility(void)
 static void turtle_dot(float x, float y)
 {
     screen_show_field();
-    screen_gfx_point(x, y, turtle_colour, false);
+    screen_gfx_set_point(x, y, turtle_colour);
 }
 
 static bool turtle_dot_at(float x, float y)
 {
-    return screen_gfx_point_at(x, y) != GFX_DEFAULT_BACKGROUND;
+    return screen_gfx_get_point(x, y) != GFX_DEFAULT_BACKGROUND;
 }
 
 static const LogoConsoleTurtle picocalc_turtle_ops = {
@@ -409,8 +424,8 @@ static const LogoConsoleTurtle picocalc_turtle_ops = {
     .get_pen_colour = turtle_get_colour,
     .set_bg_colour = turtle_set_bg_colour,
     .get_bg_colour = turtle_get_bg_colour,
-    .set_pen_down = turtle_set_pen_down,
-    .get_pen_down = turtle_get_pen_down,
+    .set_pen_state = turtle_set_pen_state,
+    .get_pen_state = turtle_get_pen_state,
     .set_visible = turtle_set_visibility,
     .get_visible = turtle_get_visibility,
     .dot = turtle_dot,
