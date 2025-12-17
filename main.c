@@ -249,11 +249,14 @@ int main(void)
                 memcpy(expr_buffer + expr_len, line, line_len);
                 expr_buffer[expr_len + line_len] = ' ';
                 expr_len += line_len + 1;
+                expr_buffer[expr_len] = '\0';  // Null-terminate for safety
                 
                 // Update bracket depth
                 bracket_depth += count_bracket_balance(line);
                 
                 // If brackets are balanced (depth <= 0), evaluate the expression
+                // Note: We accept depth <= 0 to handle cases where the user enters
+                // too many closing brackets - this lets the parser report the error
                 if (bracket_depth <= 0)
                 {
                     expr_buffer[expr_len] = '\0';
@@ -332,6 +335,13 @@ int main(void)
                 memcpy(expr_buffer, line, line_len);
                 expr_buffer[line_len] = ' ';  // Space separator instead of newline
                 expr_len = line_len + 1;
+                expr_buffer[expr_len] = '\0';  // Null-terminate for safety
+            }
+            else
+            {
+                logo_io_write_line(&io, "Expression too long");
+                bracket_depth = 0;
+                expr_len = 0;
             }
             continue;
         }
