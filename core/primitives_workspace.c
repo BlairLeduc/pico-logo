@@ -73,18 +73,73 @@ static void print_procedure_definition(UserProcedure *proc)
 {
     print_procedure_title(proc);
     
-    // Print body
+    // Print body with newline detection and indentation
+    int bracket_depth = 0;
     Node curr = proc->body;
+    bool need_indent = true;
+    
     while (!mem_is_nil(curr))
     {
         Node elem = mem_car(curr);
+        
+        // Check if this is a newline marker
+        if (mem_is_word(elem))
+        {
+            const char *word = mem_word_ptr(elem);
+            if (strcmp(word, "\\n") == 0)
+            {
+                // Output newline and set flag to indent next line
+                ws_newline();
+                need_indent = true;
+                curr = mem_cdr(curr);
+                continue;
+            }
+        }
+        
+        // Output indentation if needed
+        if (need_indent)
+        {
+            for (int i = 0; i < bracket_depth; i++)
+            {
+                ws_print("  ");  // 2 spaces per bracket depth
+            }
+            need_indent = false;
+        }
+        
+        // Track bracket depth for indentation
+        if (mem_is_word(elem))
+        {
+            const char *word = mem_word_ptr(elem);
+            if (strcmp(word, "[") == 0)
+            {
+                bracket_depth++;
+            }
+            else if (strcmp(word, "]") == 0)
+            {
+                bracket_depth--;
+            }
+        }
+        
         print_body_element(elem);
         
-        // Add space between elements, newline at certain points (simple approach)
+        // Add space between elements
         Node next = mem_cdr(curr);
         if (!mem_is_nil(next))
         {
-            ws_print(" ");
+            // Don't add space before newline marker
+            Node next_elem = mem_car(next);
+            if (mem_is_word(next_elem))
+            {
+                const char *next_word = mem_word_ptr(next_elem);
+                if (strcmp(next_word, "\\n") != 0)
+                {
+                    ws_print(" ");
+                }
+            }
+            else
+            {
+                ws_print(" ");
+            }
         }
         curr = next;
     }
