@@ -1015,8 +1015,8 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
             else
             {
                 // Append line to procedure buffer with newline marker
-                // Need space for line + " \n " (space + newline marker + space)
-                if (proc_len + len + 1 + NEWLINE_MARKER_LENGTH + 1 < LOAD_MAX_PROC)
+                // Need space for line + " \n " (space + newline marker + space) + room for "end" and null terminator
+                if (proc_len + len + 1 + NEWLINE_MARKER_LENGTH + 1 <= LOAD_MAX_PROC - 10)
                 {
                     memcpy(proc_buffer + proc_len, line, len);
                     // Use a special newline marker: space + NEWLINE_MARKER + space
@@ -1024,6 +1024,11 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
                     memcpy(proc_buffer + proc_len + len + 1, NEWLINE_MARKER, NEWLINE_MARKER_LENGTH);
                     proc_buffer[proc_len + len + 1 + NEWLINE_MARKER_LENGTH] = ' ';
                     proc_len += len + 1 + NEWLINE_MARKER_LENGTH + 1;
+                }
+                else
+                {
+                    // Line does not fit - silently skip to avoid breaking load on partial file read
+                    // The procedure will be incomplete but load continues
                 }
             }
             continue;
