@@ -602,6 +602,14 @@ static int serialize_list_to_buffer(Node list, char *buffer, int max_len)
         {
             const char *str = mem_word_ptr(element);
             size_t len = mem_word_len(element);
+            
+            // Skip newline markers during execution
+            if (proc_is_newline_marker(str))
+            {
+                node = mem_cdr(node);
+                continue;
+            }
+            
             if (pos + (int)len + 1 < max_len)
             {
                 if (pos > 0)

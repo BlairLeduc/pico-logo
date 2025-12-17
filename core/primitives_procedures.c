@@ -331,6 +331,44 @@ static Result prim_text(Evaluator *eval, int argc, Value *args)
         }
     }
     
+    // Filter out newline markers from body
+    Node filtered_body = NODE_NIL;
+    Node filtered_tail = NODE_NIL;
+    Node curr = proc->body;
+    
+    while (!mem_is_nil(curr))
+    {
+        Node elem = mem_car(curr);
+        
+        // Skip newline markers
+        bool skip = false;
+        if (mem_is_word(elem))
+        {
+            const char *word = mem_word_ptr(elem);
+            if (proc_is_newline_marker(word))
+            {
+                skip = true;
+            }
+        }
+        
+        if (!skip)
+        {
+            Node new_cons = mem_cons(elem, NODE_NIL);
+            if (mem_is_nil(filtered_body))
+            {
+                filtered_body = new_cons;
+                filtered_tail = new_cons;
+            }
+            else
+            {
+                mem_set_cdr(filtered_tail, new_cons);
+                filtered_tail = new_cons;
+            }
+        }
+        
+        curr = mem_cdr(curr);
+    }
+    
     // Build result: [[params] body...]
     // Mark params as a list
     Node params_list = mem_is_nil(params) ? params : NODE_MAKE_LIST(NODE_GET_INDEX(params));
@@ -340,7 +378,7 @@ static Result prim_text(Evaluator *eval, int argc, Value *args)
     Node result_tail = result;
     
     // Add body as second element (as a list)
-    Node body_list = mem_is_nil(proc->body) ? proc->body : NODE_MAKE_LIST(NODE_GET_INDEX(proc->body));
+    Node body_list = mem_is_nil(filtered_body) ? filtered_body : NODE_MAKE_LIST(NODE_GET_INDEX(filtered_body));
     Node body_cons = mem_cons(body_list, NODE_NIL);
     mem_set_cdr(result_tail, body_cons);
     

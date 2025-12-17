@@ -968,11 +968,22 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
             proc_len = 0;
 
             // Copy the "to" line to buffer
-            if (len < LOAD_MAX_PROC - 1)
+            // Need space for line + " \n " (space + newline marker + space) + room for "end" and null terminator
+            if (len + 1 + NEWLINE_MARKER_LENGTH + 1 <= LOAD_MAX_PROC - 10)
             {
                 memcpy(proc_buffer, line, len);
-                proc_buffer[len] = ' '; // Space separator instead of newline
-                proc_len = len + 1;
+                // Use a special newline marker: space + NEWLINE_MARKER + space
+                proc_buffer[len] = ' ';
+                memcpy(proc_buffer + len + 1, NEWLINE_MARKER, NEWLINE_MARKER_LENGTH);
+                proc_buffer[len + 1 + NEWLINE_MARKER_LENGTH] = ' ';
+                proc_len = len + 1 + NEWLINE_MARKER_LENGTH + 1;
+            }
+            else
+            {
+                // Initial "to" line does not fit in the procedure buffer - skip this procedure
+                in_procedure_def = false;
+                proc_len = 0;
+                // Note: Error is not reported to avoid breaking load operation on partial file read
             }
             continue;
         }
@@ -1003,12 +1014,21 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
             }
             else
             {
-                // Append line to procedure buffer with space separator
-                if (proc_len + len + 1 < LOAD_MAX_PROC)
+                // Append line to procedure buffer with newline marker
+                // Need space for line + " \n " (space + newline marker + space) + room for "end" and null terminator
+                if (proc_len + len + 1 + NEWLINE_MARKER_LENGTH + 1 <= LOAD_MAX_PROC - 10)
                 {
                     memcpy(proc_buffer + proc_len, line, len);
+                    // Use a special newline marker: space + NEWLINE_MARKER + space
                     proc_buffer[proc_len + len] = ' ';
-                    proc_len += len + 1;
+                    memcpy(proc_buffer + proc_len + len + 1, NEWLINE_MARKER, NEWLINE_MARKER_LENGTH);
+                    proc_buffer[proc_len + len + 1 + NEWLINE_MARKER_LENGTH] = ' ';
+                    proc_len += len + 1 + NEWLINE_MARKER_LENGTH + 1;
+                }
+                else
+                {
+                    // Line does not fit - silently skip to avoid breaking load on partial file read
+                    // The procedure will be incomplete but load continues
                 }
             }
             continue;
@@ -1132,18 +1152,79 @@ static void save_procedure_definition(UserProcedure *proc)
 {
     save_procedure_title(proc);
 
-    // Print body
+    // Print body with newline detection and indentation
+    int bracket_depth = 0;
     Node curr = proc->body;
+    bool need_indent = true;
+    
     while (!mem_is_nil(curr))
     {
         Node elem = mem_car(curr);
+        
+        // Check if this is a newline marker
+        if (mem_is_word(elem))
+        {
+            const char *word = mem_word_ptr(elem);
+            if (proc_is_newline_marker(word))
+            {
+                // Output newline and set flag to indent next line
+                save_newline();
+                need_indent = true;
+                curr = mem_cdr(curr);
+                continue;
+            }
+        }
+        
+        // Check if this is a closing bracket - decrease depth before indenting
+        if (mem_is_word(elem))
+        {
+            const char *word = mem_word_ptr(elem);
+            if (strcmp(word, "]") == 0 && bracket_depth > 0)
+            {
+                bracket_depth--;
+            }
+        }
+        
+        // Output indentation if needed
+        if (need_indent)
+        {
+            for (int i = 0; i < bracket_depth; i++)
+            {
+                save_write("  ");  // 2 spaces per bracket depth
+            }
+            need_indent = false;
+        }
+        
         save_body_element(elem);
+        
+        // Track bracket depth after printing (for opening brackets)
+        if (mem_is_word(elem))
+        {
+            const char *word = mem_word_ptr(elem);
+            if (strcmp(word, "[") == 0)
+            {
+                bracket_depth++;
+            }
+        }
 
         // Add space between elements
         Node next = mem_cdr(curr);
         if (!mem_is_nil(next))
         {
-            save_write(" ");
+            // Don't add space before newline marker
+            Node next_elem = mem_car(next);
+            if (mem_is_word(next_elem))
+            {
+                const char *next_word = mem_word_ptr(next_elem);
+                if (!proc_is_newline_marker(next_word))
+                {
+                    save_write(" ");
+                }
+            }
+            else
+            {
+                save_write(" ");
+            }
         }
         curr = next;
     }

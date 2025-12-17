@@ -29,6 +29,10 @@ extern "C"
 
     // Maximum parameters per procedure
     #define MAX_PROC_PARAMS 16
+    
+    // Newline marker for preserving line breaks in procedure definitions
+    #define NEWLINE_MARKER "\\n"
+    #define NEWLINE_MARKER_LENGTH 2
 
     // User-defined procedure
     typedef struct UserProcedure
@@ -103,6 +107,10 @@ extern "C"
 
     // Mark all procedure bodies as GC roots
     void proc_gc_mark_all(void);
+    
+    // Helper to check if a word is a newline marker
+    #define proc_is_newline_marker(word) \
+        ((word) != NULL && (word)[0] == '\\' && (word)[1] == 'n' && (word)[2] == '\0')
 
 #ifdef __cplusplus
 }
