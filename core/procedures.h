@@ -109,10 +109,8 @@ extern "C"
     void proc_gc_mark_all(void);
     
     // Helper to check if a word is a newline marker
-    static inline bool proc_is_newline_marker(const char *word)
-    {
-        return word != NULL && word[0] == '\\' && word[1] == 'n' && word[2] == '\0';
-    }
+    #define proc_is_newline_marker(word) \
+        ((word) != NULL && (word)[0] == '\\' && (word)[1] == 'n' && (word)[2] == '\0')
 
 #ifdef __cplusplus
 }
