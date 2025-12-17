@@ -178,16 +178,15 @@ int main(void)
             
             // Copy the "to" line to buffer
             size_t line_len = strlen(line);
-            // Need space for line + " \n " (newline marker with spaces)
-            if (line_len + 4 < MAX_PROC_BUFFER)
+            // Need space for line + " \n " (space + newline marker + space)
+            if (line_len + 1 + NEWLINE_MARKER_LENGTH + 1 < MAX_PROC_BUFFER)
             {
                 memcpy(proc_buffer, line, line_len);
-                // Use a special newline marker: space + "\n" + space
+                // Use a special newline marker: space + NEWLINE_MARKER + space
                 proc_buffer[line_len] = ' ';
-                proc_buffer[line_len + 1] = '\\';
-                proc_buffer[line_len + 2] = 'n';
-                proc_buffer[line_len + 3] = ' ';
-                proc_len = line_len + 4;
+                memcpy(proc_buffer + line_len + 1, NEWLINE_MARKER, NEWLINE_MARKER_LENGTH);
+                proc_buffer[line_len + 1 + NEWLINE_MARKER_LENGTH] = ' ';
+                proc_len = line_len + 1 + NEWLINE_MARKER_LENGTH + 1;
             }
             continue;
         }
@@ -227,16 +226,15 @@ int main(void)
             {
                 // Append line to procedure buffer with newline marker
                 size_t line_len = strlen(line);
-                // Need space for line + " \n " (newline marker with spaces)
-                if (proc_len + line_len + 4 < MAX_PROC_BUFFER)
+                // Need space for line + " \n " (space + newline marker + space)
+                if (proc_len + line_len + 1 + NEWLINE_MARKER_LENGTH + 1 < MAX_PROC_BUFFER)
                 {
                     memcpy(proc_buffer + proc_len, line, line_len);
-                    // Use a special newline marker: space + "\n" + space
+                    // Use a special newline marker: space + NEWLINE_MARKER + space
                     proc_buffer[proc_len + line_len] = ' ';
-                    proc_buffer[proc_len + line_len + 1] = '\\';
-                    proc_buffer[proc_len + line_len + 2] = 'n';
-                    proc_buffer[proc_len + line_len + 3] = ' ';
-                    proc_len += line_len + 4;
+                    memcpy(proc_buffer + proc_len + line_len + 1, NEWLINE_MARKER, NEWLINE_MARKER_LENGTH);
+                    proc_buffer[proc_len + line_len + 1 + NEWLINE_MARKER_LENGTH] = ' ';
+                    proc_len += line_len + 1 + NEWLINE_MARKER_LENGTH + 1;
                 }
                 else
                 {

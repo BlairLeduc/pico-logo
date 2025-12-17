@@ -968,16 +968,15 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
             proc_len = 0;
 
             // Copy the "to" line to buffer
-            // Need space for line + " \n " (newline marker with spaces)
-            if (len + 4 < LOAD_MAX_PROC)
+            // Need space for line + " \n " (space + newline marker + space)
+            if (len + 1 + NEWLINE_MARKER_LENGTH + 1 < LOAD_MAX_PROC)
             {
                 memcpy(proc_buffer, line, len);
-                // Use a special newline marker: space + "\n" + space
+                // Use a special newline marker: space + NEWLINE_MARKER + space
                 proc_buffer[len] = ' ';
-                proc_buffer[len + 1] = '\\';
-                proc_buffer[len + 2] = 'n';
-                proc_buffer[len + 3] = ' ';
-                proc_len = len + 4;
+                memcpy(proc_buffer + len + 1, NEWLINE_MARKER, NEWLINE_MARKER_LENGTH);
+                proc_buffer[len + 1 + NEWLINE_MARKER_LENGTH] = ' ';
+                proc_len = len + 1 + NEWLINE_MARKER_LENGTH + 1;
             }
             continue;
         }
@@ -1009,16 +1008,15 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
             else
             {
                 // Append line to procedure buffer with newline marker
-                // Need space for line + " \n " (newline marker with spaces)
-                if (proc_len + len + 4 < LOAD_MAX_PROC)
+                // Need space for line + " \n " (space + newline marker + space)
+                if (proc_len + len + 1 + NEWLINE_MARKER_LENGTH + 1 < LOAD_MAX_PROC)
                 {
                     memcpy(proc_buffer + proc_len, line, len);
-                    // Use a special newline marker: space + "\n" + space
+                    // Use a special newline marker: space + NEWLINE_MARKER + space
                     proc_buffer[proc_len + len] = ' ';
-                    proc_buffer[proc_len + len + 1] = '\\';
-                    proc_buffer[proc_len + len + 2] = 'n';
-                    proc_buffer[proc_len + len + 3] = ' ';
-                    proc_len += len + 4;
+                    memcpy(proc_buffer + proc_len + len + 1, NEWLINE_MARKER, NEWLINE_MARKER_LENGTH);
+                    proc_buffer[proc_len + len + 1 + NEWLINE_MARKER_LENGTH] = ' ';
+                    proc_len += len + 1 + NEWLINE_MARKER_LENGTH + 1;
                 }
             }
             continue;
@@ -1155,7 +1153,7 @@ static void save_procedure_definition(UserProcedure *proc)
         if (mem_is_word(elem))
         {
             const char *word = mem_word_ptr(elem);
-            if (strcmp(word, "\\n") == 0)
+            if (proc_is_newline_marker(word))
             {
                 // Output newline and set flag to indent next line
                 save_newline();
@@ -1206,7 +1204,7 @@ static void save_procedure_definition(UserProcedure *proc)
             if (mem_is_word(next_elem))
             {
                 const char *next_word = mem_word_ptr(next_elem);
-                if (strcmp(next_word, "\\n") != 0)
+                if (!proc_is_newline_marker(next_word))
                 {
                     save_write(" ");
                 }

@@ -345,7 +345,7 @@ static Result prim_text(Evaluator *eval, int argc, Value *args)
         if (mem_is_word(elem))
         {
             const char *word = mem_word_ptr(elem);
-            if (strcmp(word, "\\n") == 0)
+            if (proc_is_newline_marker(word))
             {
                 skip = true;
             }

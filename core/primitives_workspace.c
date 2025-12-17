@@ -86,7 +86,7 @@ static void print_procedure_definition(UserProcedure *proc)
         if (mem_is_word(elem))
         {
             const char *word = mem_word_ptr(elem);
-            if (strcmp(word, "\\n") == 0)
+            if (proc_is_newline_marker(word))
             {
                 // Output newline and set flag to indent next line
                 ws_newline();
@@ -137,7 +137,7 @@ static void print_procedure_definition(UserProcedure *proc)
             if (mem_is_word(next_elem))
             {
                 const char *next_word = mem_word_ptr(next_elem);
-                if (strcmp(next_word, "\\n") != 0)
+                if (!proc_is_newline_marker(next_word))
                 {
                     ws_print(" ");
                 }
