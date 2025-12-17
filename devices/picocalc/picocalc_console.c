@@ -275,8 +275,8 @@ static void turtle_set_position(float x, float y)
     turtle_draw();
 
     // Set the new position
-    turtle_x = fmodf(x + SCREEN_WIDTH, SCREEN_WIDTH);
-    turtle_y = fmodf(y + SCREEN_HEIGHT, SCREEN_HEIGHT);
+    turtle_x = fmodf((x + SCREEN_WIDTH / 2) + SCREEN_WIDTH, SCREEN_WIDTH);
+    turtle_y = fmodf((y + SCREEN_HEIGHT / 2) + SCREEN_HEIGHT, SCREEN_HEIGHT);
 
     // Draw the turtle at the new position
     turtle_draw();
@@ -288,11 +288,11 @@ static void turtle_get_position(float *x, float *y)
 {
     if (x)
     {
-        *x = turtle_x;
+        *x = turtle_x - SCREEN_WIDTH / 2;
     }
     if (y)
     {
-        *y = turtle_y;
+        *y = turtle_y - SCREEN_HEIGHT / 2;
     }
 }
 
