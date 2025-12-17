@@ -188,6 +188,13 @@ int main(void)
                 proc_buffer[line_len + 1 + NEWLINE_MARKER_LENGTH] = ' ';
                 proc_len = line_len + 1 + NEWLINE_MARKER_LENGTH + 1;
             }
+            else
+            {
+                // Initial "to" line does not fit in the procedure buffer
+                logo_io_write_line(&io, "Procedure too long");
+                in_procedure_def = false;
+                proc_len = 0;
+            }
             continue;
         }
 
