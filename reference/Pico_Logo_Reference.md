@@ -1537,6 +1537,14 @@ repeat _integer_ _list_
 `repeat` runs _list_ _integer_ times. An error occurs if _integer_ is negative.
 
 
+## repcount
+
+repcount
+
+`operation`
+
+`recount` outputs the repetition count of the innermost current `repeat`, starting from 1. If no `repeat` is active, outputs –1.
+
 ## run
 
 run _list_  
