@@ -259,8 +259,15 @@ static LogoStream *logo_picocalc_file_open(const char *pathname)
     {
         return NULL;
     }
-    if (fat32_open(file, pathname) != FAT32_OK)
+    fat32_error_t result = fat32_open(file, pathname);
+    if (result == FAT32_ERROR_FILE_NOT_FOUND)
     {
+        // Try to create the file
+        result = fat32_create(file, pathname);
+    }
+    if (result != FAT32_OK)
+    {
+
         free(file);
         return NULL;
     }
@@ -459,7 +466,8 @@ bool logo_picocalc_list_directory(const char *pathname, LogoDirCallback callback
     while (fat32_dir_read(&dir, &entry) == FAT32_OK && entry.filename[0])
     {
         // Skip . and ..
-        if (strcmp(entry.filename, ".") == 0 || strcmp(entry.filename, "..") == 0)
+        if (entry.filename[0] == '.'
+            || ((entry.attr & (FAT32_ATTR_VOLUME_ID|FAT32_ATTR_HIDDEN|FAT32_ATTR_SYSTEM)) != 0))
         {
             continue;
         }
@@ -471,8 +479,7 @@ bool logo_picocalc_list_directory(const char *pathname, LogoDirCallback callback
         {
             type = LOGO_ENTRY_DIRECTORY;
         }
-        else if (!(entry.attr & FAT32_ATTR_VOLUME_ID) && !(entry.attr & FAT32_ATTR_HIDDEN) &&
-                 !(entry.attr & FAT32_ATTR_SYSTEM))
+        else if ((entry.attr & (FAT32_ATTR_VOLUME_ID|FAT32_ATTR_HIDDEN|FAT32_ATTR_SYSTEM)) == 0)
         {
             type = LOGO_ENTRY_FILE;
             
