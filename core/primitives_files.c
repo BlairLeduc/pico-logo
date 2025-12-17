@@ -968,8 +968,8 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
             proc_len = 0;
 
             // Copy the "to" line to buffer
-            // Need space for line + " \n " (space + newline marker + space)
-            if (len + 1 + NEWLINE_MARKER_LENGTH + 1 < LOAD_MAX_PROC)
+            // Need space for line + " \n " (space + newline marker + space) + room for "end" and null terminator
+            if (len + 1 + NEWLINE_MARKER_LENGTH + 1 <= LOAD_MAX_PROC - 10)
             {
                 memcpy(proc_buffer, line, len);
                 // Use a special newline marker: space + NEWLINE_MARKER + space
@@ -977,6 +977,13 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
                 memcpy(proc_buffer + len + 1, NEWLINE_MARKER, NEWLINE_MARKER_LENGTH);
                 proc_buffer[len + 1 + NEWLINE_MARKER_LENGTH] = ' ';
                 proc_len = len + 1 + NEWLINE_MARKER_LENGTH + 1;
+            }
+            else
+            {
+                // Initial "to" line does not fit in the procedure buffer - skip this procedure
+                in_procedure_def = false;
+                proc_len = 0;
+                // Note: Error is not reported to avoid breaking load operation on partial file read
             }
             continue;
         }

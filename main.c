@@ -178,8 +178,8 @@ int main(void)
             
             // Copy the "to" line to buffer
             size_t line_len = strlen(line);
-            // Need space for line + " \n " (space + newline marker + space)
-            if (line_len + 1 + NEWLINE_MARKER_LENGTH + 1 < MAX_PROC_BUFFER)
+            // Need space for line + " \n " (space + newline marker + space) + room for "end" and null terminator
+            if (line_len + 1 + NEWLINE_MARKER_LENGTH + 1 <= MAX_PROC_BUFFER - 10)
             {
                 memcpy(proc_buffer, line, line_len);
                 // Use a special newline marker: space + NEWLINE_MARKER + space
@@ -233,8 +233,8 @@ int main(void)
             {
                 // Append line to procedure buffer with newline marker
                 size_t line_len = strlen(line);
-                // Need space for line + " \n " (space + newline marker + space)
-                if (proc_len + line_len + 1 + NEWLINE_MARKER_LENGTH + 1 < MAX_PROC_BUFFER)
+                // Need space for line + " \n " (space + newline marker + space) + room for "end" and null terminator
+                if (proc_len + line_len + 1 + NEWLINE_MARKER_LENGTH + 1 <= MAX_PROC_BUFFER - 10)
                 {
                     memcpy(proc_buffer + proc_len, line, line_len);
                     // Use a special newline marker: space + NEWLINE_MARKER + space
