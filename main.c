@@ -68,6 +68,18 @@ static bool line_is_end(const char *line)
     return c == '\0' || isspace((unsigned char)c);
 }
 
+// Count bracket balance in a line
+static int count_bracket_balance(const char *line)
+{
+    int balance = 0;
+    for (const char *p = line; *p; p++)
+    {
+        if (*p == '[') balance++;
+        else if (*p == ']') balance--;
+    }
+    return balance;
+}
+
 int main(void)
 {
     picocalc_init();
@@ -118,6 +130,11 @@ int main(void)
     char proc_buffer[MAX_PROC_BUFFER];
     size_t proc_len = 0;
     bool in_procedure_def = false;
+    
+    // Bracket expression buffer (reuse MAX_PROC_BUFFER size)
+    char expr_buffer[MAX_PROC_BUFFER];
+    size_t expr_len = 0;
+    int bracket_depth = 0;
 
     // Main REPL loop
     while (1)
@@ -126,6 +143,10 @@ int main(void)
         if (in_procedure_def)
         {
             logo_io_console_write(&io, ">");
+        }
+        else if (bracket_depth > 0)
+        {
+            logo_io_console_write(&io, "~");
         }
         else
         {
@@ -213,6 +234,114 @@ int main(void)
                     in_procedure_def = false;
                     proc_len = 0;
                 }
+            }
+            continue;
+        }
+
+        // Handle multi-line bracket expressions
+        if (bracket_depth > 0)
+        {
+            // We're accumulating a multi-line bracket expression
+            // Append line to expression buffer with space separator
+            size_t line_len = strlen(line);
+            if (expr_len + line_len + 1 < MAX_PROC_BUFFER)
+            {
+                memcpy(expr_buffer + expr_len, line, line_len);
+                expr_buffer[expr_len + line_len] = ' ';
+                expr_len += line_len + 1;
+                expr_buffer[expr_len] = '\0';  // Null-terminate for safety
+                
+                // Update bracket depth
+                bracket_depth += count_bracket_balance(line);
+                
+                // If brackets are balanced (depth <= 0), evaluate the expression
+                // Note: We accept depth <= 0 to handle cases where the user enters
+                // too many closing brackets - this lets the parser report the error
+                if (bracket_depth <= 0)
+                {
+                    expr_buffer[expr_len] = '\0';
+                    
+                    // Evaluate the complete expression
+                    Lexer lexer;
+                    Evaluator eval;
+                    lexer_init(&lexer, expr_buffer);
+                    eval_init(&eval, &lexer);
+
+                    // Evaluate all instructions
+                    while (!eval_at_end(&eval))
+                    {
+                        Result r = eval_instruction(&eval);
+                        
+                        if (r.status == RESULT_ERROR)
+                        {
+                            logo_io_write_line(&io, error_format(r));
+                            break;
+                        }
+                        else if (r.status == RESULT_THROW)
+                        {
+                            // Uncaught throw - check for special cases
+                            if (strcasecmp(r.throw_tag, "toplevel") == 0)
+                            {
+                                // throw "toplevel returns to top level silently
+                                break;
+                            }
+                            else
+                            {
+                                // Other uncaught throws are errors
+                                char msg[128];
+                                snprintf(msg, sizeof(msg), "No one caught %s", r.throw_tag);
+                                logo_io_write_line(&io, msg);
+                                break;
+                            }
+                        }
+                        else if (r.status == RESULT_OK)
+                        {
+                            // Expression returned a value - show "I don't know what to do with" error
+                            char msg[128];
+                            snprintf(msg, sizeof(msg), "I don't know what to do with %s", 
+                                     value_to_string(r.value));
+                            logo_io_write_line(&io, msg);
+                            break;
+                        }
+                        // RESULT_NONE means command completed successfully - continue
+                    }
+                    
+                    // Reset bracket state
+                    bracket_depth = 0;
+                    expr_len = 0;
+                }
+            }
+            else
+            {
+                logo_io_write_line(&io, "Expression too long");
+                bracket_depth = 0;
+                expr_len = 0;
+            }
+            continue;
+        }
+
+        // Check if this line starts a multi-line bracket expression
+        int line_balance = count_bracket_balance(line);
+        if (line_balance > 0)
+        {
+            // Start accumulating bracket expression
+            bracket_depth = line_balance;
+            expr_len = 0;
+            
+            // Copy the line to buffer
+            size_t line_len = strlen(line);
+            if (line_len < MAX_PROC_BUFFER - 1)
+            {
+                memcpy(expr_buffer, line, line_len);
+                expr_buffer[line_len] = ' ';  // Space separator instead of newline
+                expr_len = line_len + 1;
+                expr_buffer[expr_len] = '\0';  // Null-terminate for safety
+            }
+            else
+            {
+                logo_io_write_line(&io, "Expression too long");
+                bracket_depth = 0;
+                expr_len = 0;
             }
             continue;
         }
