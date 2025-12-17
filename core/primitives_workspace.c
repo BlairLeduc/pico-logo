@@ -96,6 +96,16 @@ static void print_procedure_definition(UserProcedure *proc)
             }
         }
         
+        // Check if this is a closing bracket - decrease depth before indenting
+        if (mem_is_word(elem))
+        {
+            const char *word = mem_word_ptr(elem);
+            if (strcmp(word, "]") == 0 && bracket_depth > 0)
+            {
+                bracket_depth--;
+            }
+        }
+        
         // Output indentation if needed
         if (need_indent)
         {
@@ -106,7 +116,9 @@ static void print_procedure_definition(UserProcedure *proc)
             need_indent = false;
         }
         
-        // Track bracket depth for indentation
+        print_body_element(elem);
+        
+        // Track bracket depth after printing (for opening brackets)
         if (mem_is_word(elem))
         {
             const char *word = mem_word_ptr(elem);
@@ -114,13 +126,7 @@ static void print_procedure_definition(UserProcedure *proc)
             {
                 bracket_depth++;
             }
-            else if (strcmp(word, "]") == 0)
-            {
-                bracket_depth--;
-            }
         }
-        
-        print_body_element(elem);
         
         // Add space between elements
         Node next = mem_cdr(curr);
