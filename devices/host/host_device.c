@@ -27,7 +27,7 @@
 //
 // Host console context - shared between input and output streams
 //
-typedef struct LogoHostContext
+typedef struct LogoContext
 {
     FILE *input;
     FILE *output;
@@ -35,11 +35,11 @@ typedef struct LogoHostContext
     struct termios original_termios;
     bool termios_saved;
 #endif
-} LogoHostContext;
+} LogoContext;
 
 #ifndef _WIN32
 // Put terminal into raw mode for single-character input without echo
-static void set_raw_mode(LogoHostContext *ctx)
+static void set_raw_mode(LogoContext *ctx)
 {
     if (!ctx->termios_saved && isatty(fileno(ctx->input)))
     {
@@ -58,7 +58,7 @@ static void set_raw_mode(LogoHostContext *ctx)
 }
 
 // Restore original terminal settings
-static void restore_mode(LogoHostContext *ctx)
+static void restore_mode(LogoContext *ctx)
 {
     if (ctx->termios_saved)
     {
@@ -73,7 +73,7 @@ static void restore_mode(LogoHostContext *ctx)
 
 static int host_input_read_char(LogoStream *stream)
 {
-    LogoHostContext *ctx = (LogoHostContext *)stream->context;
+    LogoContext *ctx = (LogoContext *)stream->context;
     if (!ctx)
     {
         return -1;
@@ -128,7 +128,7 @@ static int host_input_read_chars(LogoStream *stream, char *buffer, int count)
 
 static int host_input_read_line(LogoStream *stream, char *buffer, size_t size)
 {
-    LogoHostContext *ctx = (LogoHostContext *)stream->context;
+    LogoContext *ctx = (LogoContext *)stream->context;
     if (!ctx || !buffer || size == 0)
     {
         return -1;
@@ -151,7 +151,7 @@ static int host_input_read_line(LogoStream *stream, char *buffer, size_t size)
 
 static bool host_input_can_read(LogoStream *stream)
 {
-    LogoHostContext *ctx = (LogoHostContext *)stream->context;
+    LogoContext *ctx = (LogoContext *)stream->context;
     if (!ctx)
     {
         return false;
@@ -204,7 +204,7 @@ static bool host_input_can_read(LogoStream *stream)
 
 static void host_output_write(LogoStream *stream, const char *text)
 {
-    LogoHostContext *ctx = (LogoHostContext *)stream->context;
+    LogoContext *ctx = (LogoContext *)stream->context;
     if (!ctx || !text)
     {
         return;
@@ -215,7 +215,7 @@ static void host_output_write(LogoStream *stream, const char *text)
 
 static void host_output_flush(LogoStream *stream)
 {
-    LogoHostContext *ctx = (LogoHostContext *)stream->context;
+    LogoContext *ctx = (LogoContext *)stream->context;
     if (!ctx)
     {
         return;
@@ -265,7 +265,7 @@ static const LogoStreamOps host_output_ops = {
 LogoConsole *logo_host_console_create(void)
 {
     LogoConsole *console = (LogoConsole *)malloc(sizeof(LogoConsole));
-    LogoHostContext *context = (LogoHostContext *)malloc(sizeof(LogoHostContext));
+    LogoContext *context = (LogoContext *)malloc(sizeof(LogoContext));
 
     if (!console || !context)
     {
@@ -303,7 +303,7 @@ void logo_host_console_destroy(LogoConsole *console)
 // Adapter functions that use context from LogoDevice
 static int legacy_read_line(void *context, char *buffer, size_t buffer_size)
 {
-    LogoHostContext *ctx = (LogoHostContext *)context;
+    LogoContext *ctx = (LogoContext *)context;
     if (!ctx || !buffer || buffer_size == 0)
     {
         return 0;
@@ -319,7 +319,7 @@ static int legacy_read_line(void *context, char *buffer, size_t buffer_size)
 
 static int legacy_read_char(void *context)
 {
-    LogoHostContext *ctx = (LogoHostContext *)context;
+    LogoContext *ctx = (LogoContext *)context;
     if (!ctx)
     {
         return -1;
@@ -337,7 +337,7 @@ static int legacy_read_char(void *context)
 
 static int legacy_read_chars(void *context, char *buffer, int count)
 {
-    LogoHostContext *ctx = (LogoHostContext *)context;
+    LogoContext *ctx = (LogoContext *)context;
     if (!ctx || !buffer || count <= 0)
     {
         return 0;
@@ -374,7 +374,7 @@ static int legacy_read_chars(void *context, char *buffer, int count)
 
 static bool legacy_key_available(void *context)
 {
-    LogoHostContext *ctx = (LogoHostContext *)context;
+    LogoContext *ctx = (LogoContext *)context;
     if (!ctx)
     {
         return false;
@@ -418,7 +418,7 @@ static bool legacy_key_available(void *context)
 
 static void legacy_write(void *context, const char *text)
 {
-    LogoHostContext *ctx = (LogoHostContext *)context;
+    LogoContext *ctx = (LogoContext *)context;
     if (!ctx || !text)
     {
         return;
@@ -429,7 +429,7 @@ static void legacy_write(void *context, const char *text)
 
 static void legacy_flush(void *context)
 {
-    LogoHostContext *ctx = (LogoHostContext *)context;
+    LogoContext *ctx = (LogoContext *)context;
     if (!ctx)
     {
         return;
@@ -441,7 +441,7 @@ static void legacy_flush(void *context)
 LogoDevice *logo_host_device_create(void)
 {
     LogoDevice *device = (LogoDevice *)malloc(sizeof(LogoDevice));
-    LogoHostContext *context = (LogoHostContext *)malloc(sizeof(LogoHostContext));
+    LogoContext *context = (LogoContext *)malloc(sizeof(LogoContext));
 
     if (!device || !context)
     {

@@ -834,6 +834,61 @@ void test_setwritepos_negative(void)
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
+
+//==========================================================================
+// Directory listing tests: files, directories, catalog
+//==========================================================================
+
+void test_files_returns_list(void)
+{
+    // files should return a list (even if empty)
+    Result r = eval_string("files");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
+}
+
+void test_files_with_extension_returns_list(void)
+{
+    // (files "txt") should return a list
+    Result r = eval_string("(files \"txt)");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
+}
+
+void test_files_with_star_returns_all(void)
+{
+    // (files "*") should return all files
+    Result r = eval_string("(files \"*)");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
+}
+
+void test_files_invalid_input_error(void)
+{
+    // (files [not a word]) should error
+    Result r = eval_string("(files [not a word])");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_directories_returns_list(void)
+{
+    // directories should return a list (even if empty)
+    Result r = eval_string("directories");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
+}
+
+void test_catalog_runs_without_error(void)
+{
+    // catalog should run without error (it prints to output)
+    output_pos = 0;
+    output_buffer[0] = '\0';
+    Result r = run_string("catalog");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    // Output buffer should have something (or be empty if no files)
+    // We just verify it doesn't crash
+}
+
 //==========================================================================
 // Main
 //==========================================================================
@@ -907,5 +962,13 @@ int main(void)
     RUN_TEST(test_setwritepos_invalid_input);
     RUN_TEST(test_setwritepos_negative);
     
+    // Directory listing tests
+    RUN_TEST(test_files_returns_list);
+    RUN_TEST(test_files_with_extension_returns_list);
+    RUN_TEST(test_files_with_star_returns_all);
+    RUN_TEST(test_files_invalid_input_error);
+    RUN_TEST(test_directories_returns_list);
+    RUN_TEST(test_catalog_runs_without_error);
+
     return UNITY_END();
 }

@@ -2,6 +2,7 @@
 build/
 _codeql_build_dir/
 _codeql*
-
+Testing/
+*.log
 # MacOS specific files
 .DS_Store

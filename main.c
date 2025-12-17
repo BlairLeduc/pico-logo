@@ -13,8 +13,11 @@
 
 #include "devices/console.h"
 #include "devices/io.h"
-#include "devices/host/host_device.h"
-#include "devices/host/host_file.h"
+#include "devices/storage.h"
+#include "devices/picocalc/picocalc_console.h"
+#include "devices/picocalc/picocalc_storage.h"
+#include "devices/picocalc/picocalc_hardware.h"
+#include "devices/picocalc/picocalc.h"
 #include "core/memory.h"
 #include "core/lexer.h"
 #include "core/eval.h"
@@ -28,6 +31,9 @@
 
 // Maximum procedure definition buffer (for multi-line TO...END)
 #define MAX_PROC_BUFFER 4096
+
+
+volatile bool user_interrupt;
 
 // Forward declaration for the I/O setter
 extern void primitives_set_io(LogoIO *io);
@@ -64,20 +70,37 @@ static bool line_is_end(const char *line)
 
 int main(void)
 {
-    // Initialize the host console for I/O
-    LogoConsole *console = logo_host_console_create();
+    picocalc_init();
+
+    // Initialise the console for I/O
+    LogoConsole *console = logo_picocalc_console_create();
     if (!console)
     {
         fprintf(stderr, "Failed to create console\n");
         return EXIT_FAILURE;
     }
 
+    // Initialise the storage for file I/O
+    LogoStorage *storage = logo_picocalc_storage_create();
+    if (!storage)
+    {
+        fprintf(stderr, "Failed to create storage\n");
+        return EXIT_FAILURE;
+    }
+
+    // Initialise the hardware (abstraction layer)
+    LogoHardware *hardware = logo_picocalc_hardware_create();
+    if (!hardware)
+    {
+        fprintf(stderr, "Failed to create hardware\n");
+        return EXIT_FAILURE;
+    }
+
     // Initialize the I/O manager
     LogoIO io;
-    logo_io_init(&io, console);
+    logo_io_init(&io, console, storage, hardware);
+    strcpy(io.prefix, "/Logo/"); // Default prefix
     
-    // Set up host file support
-    logo_io_set_file_opener(&io, logo_host_file_open);
 
     // Initialize Logo subsystems
     mem_init();
@@ -164,6 +187,13 @@ int main(void)
                 {
                     logo_io_write_line(&io, error_format(r));
                 }
+                else if (r.status == RESULT_OK)
+                {
+                    // Procedure defined successfully
+                    static char buf[256];
+                    snprintf(buf, sizeof(buf), "%s defined", r.value.as.node ? mem_word_ptr(r.value.as.node) : "procedure");
+                    logo_io_write_line(&io, buf);
+                }
                 
                 proc_len = 0;
             }
@@ -235,7 +265,6 @@ int main(void)
 
     // Cleanup
     logo_io_cleanup(&io);
-    logo_host_console_destroy(console);
 
     return EXIT_SUCCESS;
 }

@@ -11,6 +11,7 @@
 #include "eval.h"
 #include "value.h"
 #include "variables.h"
+#include "devices/io.h"
 #include <strings.h>  // for strcasecmp
 #include <unistd.h>   // for usleep
 #include <stdio.h>    // for snprintf
@@ -82,16 +83,30 @@ static Result prim_repeat(Evaluator *eval, int argc, Value *args)
     int count = (int)count_f;
     Node body = args[1].as.node;
 
+    int previous_repcount = eval->repcount;
     for (int i = 0; i < count; i++)
     {
+        eval->repcount = i + 1;  // repcount is 1-based
         Result r = eval_run_list(eval, body);
         // Propagate stop/output/error/throw
         if (r.status != RESULT_NONE && r.status != RESULT_OK)
         {
+            eval->repcount = previous_repcount;  // Restore previous repcount
             return r;
         }
     }
+    eval->repcount = previous_repcount;  // Restore previous repcount
     return result_none();
+}
+
+static Result prim_repcount(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+    
+    // Return the innermost repeat count (1-based)
+    return result_ok(value_number(eval->repcount));
 }
 
 static Result prim_stop(Evaluator *eval, int argc, Value *args)
@@ -269,9 +284,15 @@ static Result prim_wait(Evaluator *eval, int argc, Value *args)
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, "wait", value_to_string(args[0]));
     }
+
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error(ERR_UNDEFINED);
+    }
     
-    // Wait for tenths of a second (each tenth is 100,000 microseconds)
-    usleep(tenths * 100000);
+    // Wait for tenths of a second (each tenth is 100 milliseconds)
+    logo_io_sleep(io, tenths * 100);
     
     return result_none();
 }
@@ -432,6 +453,7 @@ void primitives_control_init(void)
 {
     primitive_register("run", 1, prim_run);
     primitive_register("repeat", 2, prim_repeat);
+    primitive_register("repcount", 0, prim_repcount);
     primitive_register("stop", 0, prim_stop);
     primitive_register("output", 1, prim_output);
     primitive_register("op", 1, prim_output); // Abbreviation

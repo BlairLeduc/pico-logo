@@ -17,6 +17,14 @@ extern "C"
 {
 #endif
 
+    typedef enum LogoPen
+    {
+        LOGO_PEN_UP,
+        LOGO_PEN_DOWN,
+        LOGO_PEN_ERASE,
+        LOGO_PEN_REVERSE,
+    } LogoPen;
+
     //
     // Turtle graphics operations (optional)
     // These are available on devices with graphics capability.
@@ -44,16 +52,16 @@ extern "C"
         float (*get_heading)(void);
 
         // Pen color
-        void (*set_pen_colour)(uint16_t colour);
-        uint16_t (*get_pen_colour)(void);
+        void (*set_pen_colour)(uint8_t colour);
+        uint8_t (*get_pen_colour)(void);
 
         // Background color
-        void (*set_bg_colour)(uint16_t colour);
-        uint16_t (*get_bg_colour)(void);
+        void (*set_bg_colour)(uint8_t colour);
+        uint8_t (*get_bg_colour)(void);
 
         // Pen state
-        void (*set_pen_down)(bool down);
-        bool (*get_pen_down)(void);
+        void (*set_pen_state)(LogoPen state);
+        LogoPen (*get_pen_state)(void);
 
         // Turtle visibility
         void (*set_visible)(bool visible);
@@ -86,10 +94,6 @@ extern "C"
         // Cursor position (column 0 = left, row 0 = top)
         void (*set_cursor)(uint8_t column, uint8_t row);
         void (*get_cursor)(uint8_t *column, uint8_t *row);
-
-        // Text width (40 or 64 characters per line)
-        void (*set_width)(uint8_t width);
-        uint8_t (*get_width)(void);
     } LogoConsoleText;
 
     //

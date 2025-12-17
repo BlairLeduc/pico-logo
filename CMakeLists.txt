@@ -1,37 +1,50 @@
+# Generated Cmake Pico project file
+
 cmake_minimum_required(VERSION 3.13)
 
-project(logo C)
-
-# Use C11 for nice, modern-ish C
 set(CMAKE_C_STANDARD 11)
-set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# Initialise pico_sdk from installed location
+# (note this can come from environment, CMake cache etc)
+
+# == DO NOT EDIT THE FOLLOWING LINES for the Raspberry Pi Pico VS Code Extension to work ==
+if(WIN32)
+    set(USERHOME $ENV{USERPROFILE})
+else()
+    set(USERHOME $ENV{HOME})
+endif()
+set(sdkVersion 2.2.0)
+set(toolchainVersion 14_2_Rel1)
+set(picotoolVersion 2.2.0-a4)
+set(picoVscode ${USERHOME}/.pico-sdk/cmake/pico-vscode.cmake)
+if (EXISTS ${picoVscode})
+    include(${picoVscode})
+endif()
+# ====================================================================================
+set(PICO_BOARD pico2 CACHE STRING "Board type")
+
+# Pull in Raspberry Pi Pico SDK (must be before project)
+include(pico_sdk_import.cmake)
+
+project(pico-logo C CXX ASM)
+
+# Initialise the Raspberry Pi Pico SDK
+pico_sdk_init()
 
 # Coverage option
-option(ENABLE_COVERAGE "Enable code coverage" OFF)
+# option(ENABLE_COVERAGE "Enable code coverage" OFF)
 
-if(ENABLE_COVERAGE)
-    message(STATUS "Code coverage enabled")
-    add_compile_options(--coverage -O0 -g)
-    add_link_options(--coverage)
-endif()
+# if(ENABLE_COVERAGE)
+#     message(STATUS "Code coverage enabled")
+#     add_compile_options(--coverage -O0 -g)
+#     add_link_options(--coverage)
+# endif()
 
-enable_testing()
+# enable_testing()
 
-add_library(logo_devices_host
-   devices/device.c
-   devices/stream.c
-   devices/console.c
-   devices/io.c
-   devices/host/host_device.c
-   devices/host/host_file.c
-)
-
-target_include_directories(logo_devices_host
-    PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}
-)
-
-add_library(logo_core
+add_executable(pico-logo
     core/lexer.c
     core/memory.c
     core/value.c
@@ -51,285 +64,310 @@ add_library(logo_core
     core/primitives_properties.c
     core/primitives_debug.c
     core/primitives_files.c
+    core/primitives_hardware.c
     core/primitives_text.c
     core/primitives_turtle.c
-)
-
-target_include_directories(logo_core
-    PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}
-)
-
-target_link_libraries(logo_core
-    PUBLIC
-        logo_devices_host
-        m
-)
-
-add_executable(logo
+    devices/console.c
+    devices/hardware.c
+    devices/io.c
+    devices/storage.c
+    devices/stream.c
+    devices/picocalc/clib.c
+    devices/picocalc/fat32.c
+    devices/picocalc/history.c
+    devices/picocalc/input.c
+    devices/picocalc/keyboard.c
+    devices/picocalc/lcd.c
+    devices/picocalc/picocalc_console.c
+    devices/picocalc/picocalc_hardware.c
+    devices/picocalc/picocalc_storage.c
+    devices/picocalc/picocalc.c
+    devices/picocalc/screen.c
+    devices/picocalc/sdcard.c
+    devices/picocalc/southbridge.c
     main.c
 )
 
-target_include_directories(logo PRIVATE
+pico_set_program_name(pico-logo "pico-logo")
+pico_set_program_version(pico-logo "0.1")
+
+
+# Modify the below lines to enable/disable output over UART/USB
+pico_enable_stdio_uart(pico-logo 0)
+pico_enable_stdio_usb(pico-logo 0)
+
+# Turn on all warnings
+# target_compile_options(pico-logo PRIVATE -Wall -Werror)
+
+
+target_link_libraries(pico-logo
+        pico_stdlib
+        pico_printf
+        pico_float
+        pico_rand
+        hardware_gpio
+        hardware_i2c
+        hardware_spi
+        hardware_clocks
+)
+
+target_include_directories(pico-logo PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-target_link_libraries(logo
-    PRIVATE
-        logo_core
-        logo_devices_host
-)
+pico_add_extra_outputs(pico-logo)
 
-# Test Executables
 
-# Test utilities library (includes mock device)
-add_library(test_utils
-    tests/mock_device.c
-    tests/unity.c
-)
+# # Test Executables
 
-target_include_directories(test_utils PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests
-)
+# # Test utilities library (includes mock device)
+# add_library(test_utils
+#     tests/mock_device.c
+#     tests/unity.c
+# )
 
-target_link_libraries(test_utils PUBLIC logo_core m)
+# target_include_directories(test_utils PUBLIC
+#     ${CMAKE_CURRENT_SOURCE_DIR}
+#     ${CMAKE_CURRENT_SOURCE_DIR}/tests
+# )
 
-add_executable(test_lexer
-    tests/test_lexer.c
-)
+# target_link_libraries(test_utils PUBLIC logo_core m)
 
-target_include_directories(test_lexer PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests
-)
+# add_executable(test_lexer
+#     tests/test_lexer.c
+# )
 
-target_link_libraries(test_lexer PRIVATE test_utils)
+# target_include_directories(test_lexer PRIVATE
+#     ${CMAKE_CURRENT_SOURCE_DIR}
+#     ${CMAKE_CURRENT_SOURCE_DIR}/tests
+# )
 
-add_test(NAME test_lexer COMMAND test_lexer)
+# target_link_libraries(test_lexer PRIVATE test_utils)
 
-add_executable(test_memory
-    tests/test_memory.c
-)
+# add_test(NAME test_lexer COMMAND test_lexer)
 
-target_include_directories(test_memory PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests
-)
+# add_executable(test_memory
+#     tests/test_memory.c
+# )
 
-target_link_libraries(test_memory PRIVATE test_utils)
+# target_include_directories(test_memory PRIVATE
+#     ${CMAKE_CURRENT_SOURCE_DIR}
+#     ${CMAKE_CURRENT_SOURCE_DIR}/tests
+# )
 
-add_test(NAME test_memory COMMAND test_memory)
+# target_link_libraries(test_memory PRIVATE test_utils)
 
-add_executable(test_eval
-    tests/test_eval.c
-)
+# add_test(NAME test_memory COMMAND test_memory)
 
-target_include_directories(test_eval PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests
-)
+# add_executable(test_eval
+#     tests/test_eval.c
+# )
 
-target_link_libraries(test_eval PRIVATE test_utils)
+# target_include_directories(test_eval PRIVATE
+#     ${CMAKE_CURRENT_SOURCE_DIR}
+#     ${CMAKE_CURRENT_SOURCE_DIR}/tests
+# )
 
-add_test(NAME test_eval COMMAND test_eval)
+# target_link_libraries(test_eval PRIVATE test_utils)
 
-# Primitive tests
-add_executable(test_primitives_arithmetic
-    tests/test_primitives_arithmetic.c
-)
+# add_test(NAME test_eval COMMAND test_eval)
 
-target_include_directories(test_primitives_arithmetic PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests
-)
+# # Primitive tests
+# add_executable(test_primitives_arithmetic
+#     tests/test_primitives_arithmetic.c
+# )
 
-target_link_libraries(test_primitives_arithmetic PRIVATE test_utils)
+# target_include_directories(test_primitives_arithmetic PRIVATE
+#     ${CMAKE_CURRENT_SOURCE_DIR}
+#     ${CMAKE_CURRENT_SOURCE_DIR}/tests
+# )
 
-add_test(NAME test_primitives_arithmetic COMMAND test_primitives_arithmetic)
+# target_link_libraries(test_primitives_arithmetic PRIVATE test_utils)
 
-add_executable(test_primitives_control
-    tests/test_primitives_control.c
-)
+# add_test(NAME test_primitives_arithmetic COMMAND test_primitives_arithmetic)
 
-target_include_directories(test_primitives_control PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests
-)
+# add_executable(test_primitives_control
+#     tests/test_primitives_control.c
+# )
 
-target_link_libraries(test_primitives_control PRIVATE test_utils)
+# target_include_directories(test_primitives_control PRIVATE
+#     ${CMAKE_CURRENT_SOURCE_DIR}
+#     ${CMAKE_CURRENT_SOURCE_DIR}/tests
+# )
 
-add_test(NAME test_primitives_control COMMAND test_primitives_control)
+# target_link_libraries(test_primitives_control PRIVATE test_utils)
 
-add_executable(test_primitives_variables
-    tests/test_primitives_variables.c
-)
+# add_test(NAME test_primitives_control COMMAND test_primitives_control)
 
-target_include_directories(test_primitives_variables PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests
-)
+# add_executable(test_primitives_variables
+#     tests/test_primitives_variables.c
+# )
 
-target_link_libraries(test_primitives_variables PRIVATE test_utils)
+# target_include_directories(test_primitives_variables PRIVATE
+#     ${CMAKE_CURRENT_SOURCE_DIR}
+#     ${CMAKE_CURRENT_SOURCE_DIR}/tests
+# )
 
-add_test(NAME test_primitives_variables COMMAND test_primitives_variables)
+# target_link_libraries(test_primitives_variables PRIVATE test_utils)
 
-add_executable(test_primitives_words_lists
-    tests/test_primitives_words_lists.c
-)
+# add_test(NAME test_primitives_variables COMMAND test_primitives_variables)
 
-target_include_directories(test_primitives_words_lists PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests
-)
+# add_executable(test_primitives_words_lists
+#     tests/test_primitives_words_lists.c
+# )
 
-target_link_libraries(test_primitives_words_lists PRIVATE test_utils)
+# target_include_directories(test_primitives_words_lists PRIVATE
+#     ${CMAKE_CURRENT_SOURCE_DIR}
+#     ${CMAKE_CURRENT_SOURCE_DIR}/tests
+# )
 
-add_test(NAME test_primitives_words_lists COMMAND test_primitives_words_lists)
+# target_link_libraries(test_primitives_words_lists PRIVATE test_utils)
 
-add_executable(test_primitives_procedures
-    tests/test_primitives_procedures.c
-)
+# add_test(NAME test_primitives_words_lists COMMAND test_primitives_words_lists)
 
-target_include_directories(test_primitives_procedures PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests
-)
+# add_executable(test_primitives_procedures
+#     tests/test_primitives_procedures.c
+# )
 
-target_link_libraries(test_primitives_procedures PRIVATE test_utils)
+# target_include_directories(test_primitives_procedures PRIVATE
+#     ${CMAKE_CURRENT_SOURCE_DIR}
+#     ${CMAKE_CURRENT_SOURCE_DIR}/tests
+# )
 
-add_test(NAME test_primitives_procedures COMMAND test_primitives_procedures)
+# target_link_libraries(test_primitives_procedures PRIVATE test_utils)
 
-add_executable(test_primitives_workspace
-    tests/test_primitives_workspace.c
-)
+# add_test(NAME test_primitives_procedures COMMAND test_primitives_procedures)
 
-target_include_directories(test_primitives_workspace PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests
-)
+# add_executable(test_primitives_workspace
+#     tests/test_primitives_workspace.c
+# )
 
-target_link_libraries(test_primitives_workspace PRIVATE test_utils)
+# target_include_directories(test_primitives_workspace PRIVATE
+#     ${CMAKE_CURRENT_SOURCE_DIR}
+#     ${CMAKE_CURRENT_SOURCE_DIR}/tests
+# )
 
-add_test(NAME test_primitives_workspace COMMAND test_primitives_workspace)
+# target_link_libraries(test_primitives_workspace PRIVATE test_utils)
 
-add_executable(test_primitives_outside_world
-    tests/test_primitives_outside_world.c
-)
+# add_test(NAME test_primitives_workspace COMMAND test_primitives_workspace)
 
-target_include_directories(test_primitives_outside_world PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests
-)
+# add_executable(test_primitives_outside_world
+#     tests/test_primitives_outside_world.c
+# )
 
-target_link_libraries(test_primitives_outside_world PRIVATE test_utils)
+# target_include_directories(test_primitives_outside_world PRIVATE
+#     ${CMAKE_CURRENT_SOURCE_DIR}
+#     ${CMAKE_CURRENT_SOURCE_DIR}/tests
+# )
 
-add_test(NAME test_primitives_outside_world COMMAND test_primitives_outside_world)
+# target_link_libraries(test_primitives_outside_world PRIVATE test_utils)
 
-add_executable(test_primitives_properties
-    tests/test_primitives_properties.c
-)
+# add_test(NAME test_primitives_outside_world COMMAND test_primitives_outside_world)
 
-target_include_directories(test_primitives_properties PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests
-)
+# add_executable(test_primitives_properties
+#     tests/test_primitives_properties.c
+# )
 
-target_link_libraries(test_primitives_properties PRIVATE test_utils)
+# target_include_directories(test_primitives_properties PRIVATE
+#     ${CMAKE_CURRENT_SOURCE_DIR}
+#     ${CMAKE_CURRENT_SOURCE_DIR}/tests
+# )
 
-add_test(NAME test_primitives_properties COMMAND test_primitives_properties)
+# target_link_libraries(test_primitives_properties PRIVATE test_utils)
 
-add_executable(test_primitives_debug
-    tests/test_primitives_debug.c
-)
+# add_test(NAME test_primitives_properties COMMAND test_primitives_properties)
 
-target_include_directories(test_primitives_debug PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests
-)
+# add_executable(test_primitives_debug
+#     tests/test_primitives_debug.c
+# )
 
-target_link_libraries(test_primitives_debug PRIVATE test_utils)
+# target_include_directories(test_primitives_debug PRIVATE
+#     ${CMAKE_CURRENT_SOURCE_DIR}
+#     ${CMAKE_CURRENT_SOURCE_DIR}/tests
+# )
 
-add_test(NAME test_primitives_debug COMMAND test_primitives_debug)
+# target_link_libraries(test_primitives_debug PRIVATE test_utils)
 
-add_executable(test_primitives_files
-    tests/test_primitives_files.c
-)
+# add_test(NAME test_primitives_debug COMMAND test_primitives_debug)
 
-target_include_directories(test_primitives_files PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests
-)
+# add_executable(test_primitives_files
+#     tests/test_primitives_files.c
+# )
 
-target_link_libraries(test_primitives_files PRIVATE test_utils)
+# target_include_directories(test_primitives_files PRIVATE
+#     ${CMAKE_CURRENT_SOURCE_DIR}
+#     ${CMAKE_CURRENT_SOURCE_DIR}/tests
+# )
 
-add_test(NAME test_primitives_files COMMAND test_primitives_files)
+# target_link_libraries(test_primitives_files PRIVATE test_utils)
 
-# Mock device test
-add_executable(test_mock_device
-    tests/test_mock_device.c
-)
+# add_test(NAME test_primitives_files COMMAND test_primitives_files)
 
-target_include_directories(test_mock_device PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests
-)
+# # Mock device test
+# add_executable(test_mock_device
+#     tests/test_mock_device.c
+# )
 
-target_link_libraries(test_mock_device PRIVATE test_utils)
+# target_include_directories(test_mock_device PRIVATE
+#     ${CMAKE_CURRENT_SOURCE_DIR}
+#     ${CMAKE_CURRENT_SOURCE_DIR}/tests
+# )
 
-add_test(NAME test_mock_device COMMAND test_mock_device)
+# target_link_libraries(test_mock_device PRIVATE test_utils)
 
-# Text primitives test
-add_executable(test_primitives_text
-    tests/test_primitives_text.c
-)
+# add_test(NAME test_mock_device COMMAND test_mock_device)
 
-target_include_directories(test_primitives_text PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests
-)
+# # Text primitives test
+# add_executable(test_primitives_text
+#     tests/test_primitives_text.c
+# )
 
-target_link_libraries(test_primitives_text PRIVATE test_utils)
+# target_include_directories(test_primitives_text PRIVATE
+#     ${CMAKE_CURRENT_SOURCE_DIR}
+#     ${CMAKE_CURRENT_SOURCE_DIR}/tests
+# )
 
-add_test(NAME test_primitives_text COMMAND test_primitives_text)
+# target_link_libraries(test_primitives_text PRIVATE test_utils)
 
-# Turtle primitives test
-add_executable(test_primitives_turtle
-    tests/test_primitives_turtle.c
-)
+# add_test(NAME test_primitives_text COMMAND test_primitives_text)
 
-target_include_directories(test_primitives_turtle PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests
-)
+# # Turtle primitives test
+# add_executable(test_primitives_turtle
+#     tests/test_primitives_turtle.c
+# )
 
-target_link_libraries(test_primitives_turtle PRIVATE test_utils)
+# target_include_directories(test_primitives_turtle PRIVATE
+#     ${CMAKE_CURRENT_SOURCE_DIR}
+#     ${CMAKE_CURRENT_SOURCE_DIR}/tests
+# )
 
-add_test(NAME test_primitives_turtle COMMAND test_primitives_turtle)
+# target_link_libraries(test_primitives_turtle PRIVATE test_utils)
 
+# add_test(NAME test_primitives_turtle COMMAND test_primitives_turtle)
 
-# Coverage target
-if(ENABLE_COVERAGE)
-    find_program(LCOV lcov)
+
+# # Coverage target
+# if(ENABLE_COVERAGE)
+#     find_program(LCOV lcov)
     
-    if(LCOV)
-        add_custom_target(coverage
-            COMMAND find ${CMAKE_BINARY_DIR} -name '*.gcda' -delete
-            COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-            COMMAND ${LCOV} --capture --directory . --output-file coverage.info
-            COMMAND ${LCOV} --remove coverage.info '*/tests/*' '/usr/*' --output-file coverage.info
-            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-            COMMENT "Running tests and generating coverage report"
-            DEPENDS test_lexer test_memory
-        )
+#     if(LCOV)
+#         add_custom_target(coverage
+#             COMMAND find ${CMAKE_BINARY_DIR} -name '*.gcda' -delete
+#             COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
+#             COMMAND ${LCOV} --capture --directory . --output-file coverage.info
+#             COMMAND ${LCOV} --remove coverage.info '*/tests/*' '/usr/*' --output-file coverage.info
+#             WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+#             COMMENT "Running tests and generating coverage report"
+#             DEPENDS test_lexer test_memory
+#         )
         
-        add_custom_target(coverage-clean
-            COMMAND ${CMAKE_COMMAND} -E remove coverage.info
-            COMMAND find ${CMAKE_BINARY_DIR} -name '*.gcda' -delete
-            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-            COMMENT "Cleaning coverage data"
-        )
-    else()
-        message(WARNING "lcov not found. Coverage target will not be available.")
-    endif()
-endif()
+#         add_custom_target(coverage-clean
+#             COMMAND ${CMAKE_COMMAND} -E remove coverage.info
+#             COMMAND find ${CMAKE_BINARY_DIR} -name '*.gcda' -delete
+#             WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+#             COMMENT "Cleaning coverage data"
+#         )
+#     else()
+#         message(WARNING "lcov not found. Coverage target will not be available.")
+#     endif()
+# endif()

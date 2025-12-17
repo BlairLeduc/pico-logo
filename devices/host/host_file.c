@@ -12,15 +12,16 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <dirent.h>
 
 //
 // File stream context - wraps a FILE*
 //
-typedef struct HostFileContext
+typedef struct FileContext
 {
     FILE *file;
     LogoFileMode mode;
-} HostFileContext;
+} FileContext;
 
 //
 // Stream operation implementations
@@ -50,7 +51,7 @@ static int host_file_read_chars(LogoStream *stream, char *buffer, int count)
         return -1;
     }
 
-    HostFileContext *ctx = (HostFileContext *)stream->context;
+    FileContext *ctx = (FileContext *)stream->context;
     if (!ctx->file)
     {
         return -1;
@@ -67,7 +68,7 @@ static int host_file_read_line(LogoStream *stream, char *buffer, size_t size)
         return -1;
     }
 
-    HostFileContext *ctx = (HostFileContext *)stream->context;
+    FileContext *ctx = (FileContext *)stream->context;
     if (!ctx->file)
     {
         return -1;
@@ -88,7 +89,7 @@ static bool host_file_can_read(LogoStream *stream)
         return false;
     }
 
-    HostFileContext *ctx = (HostFileContext *)stream->context;
+    FileContext *ctx = (FileContext *)stream->context;
     if (!ctx->file)
     {
         return false;
@@ -111,7 +112,7 @@ static void host_file_write(LogoStream *stream, const char *text)
         return;
     }
 
-    HostFileContext *ctx = (HostFileContext *)stream->context;
+    FileContext *ctx = (FileContext *)stream->context;
     if (!ctx->file)
     {
         return;
@@ -127,7 +128,7 @@ static void host_file_flush(LogoStream *stream)
         return;
     }
 
-    HostFileContext *ctx = (HostFileContext *)stream->context;
+    FileContext *ctx = (FileContext *)stream->context;
     if (ctx->file)
     {
         fflush(ctx->file);
@@ -141,7 +142,7 @@ static long host_file_get_read_pos(LogoStream *stream)
         return -1;
     }
 
-    HostFileContext *ctx = (HostFileContext *)stream->context;
+    FileContext *ctx = (FileContext *)stream->context;
     if (!ctx->file)
     {
         return -1;
@@ -157,7 +158,7 @@ static bool host_file_set_read_pos(LogoStream *stream, long pos)
         return false;
     }
 
-    HostFileContext *ctx = (HostFileContext *)stream->context;
+    FileContext *ctx = (FileContext *)stream->context;
     if (!ctx->file)
     {
         return false;
@@ -185,7 +186,7 @@ static long host_file_get_length(LogoStream *stream)
         return -1;
     }
 
-    HostFileContext *ctx = (HostFileContext *)stream->context;
+    FileContext *ctx = (FileContext *)stream->context;
     if (!ctx->file)
     {
         return -1;
@@ -290,7 +291,7 @@ LogoStream *logo_host_file_open(const char *pathname, LogoFileMode mode)
     }
 
     // Allocate context
-    HostFileContext *ctx = (HostFileContext *)malloc(sizeof(HostFileContext));
+    FileContext *ctx = (FileContext *)malloc(sizeof(FileContext));
     if (!ctx)
     {
         fclose(file);
@@ -397,4 +398,94 @@ long logo_host_file_size(const char *pathname)
     }
 
     return (long)st.st_size;
+}
+
+
+bool logo_host_list_directory(const char *pathname, LogoDirCallback callback,
+                              void *user_data, const char *filter)
+{
+    if (!pathname || !callback)
+    {
+        return false;
+    }
+
+    DIR *dir = opendir(pathname);
+    if (!dir)
+    {
+        return false;
+    }
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL)
+    {
+        // Skip . and ..
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+        {
+            continue;
+        }
+
+        // Determine entry type
+        LogoEntryType type;
+        
+        // Build full path to check type
+        char full_path[1024];
+        size_t dir_len = strlen(pathname);
+        size_t name_len = strlen(entry->d_name);
+        
+        if (dir_len + 1 + name_len >= sizeof(full_path))
+        {
+            continue; // Path too long, skip
+        }
+        
+        strcpy(full_path, pathname);
+        if (pathname[dir_len - 1] != '/')
+        {
+            strcat(full_path, "/");
+        }
+        strcat(full_path, entry->d_name);
+
+        struct stat st;
+        if (stat(full_path, &st) != 0)
+        {
+            continue; // Can't stat, skip
+        }
+
+        if (S_ISDIR(st.st_mode))
+        {
+            type = LOGO_ENTRY_DIRECTORY;
+        }
+        else if (S_ISREG(st.st_mode))
+        {
+            type = LOGO_ENTRY_FILE;
+            
+            // Apply extension filter for files
+            if (filter && strcmp(filter, "*") != 0)
+            {
+                // Find the extension in the filename
+                const char *dot = strrchr(entry->d_name, '.');
+                if (!dot || dot == entry->d_name)
+                {
+                    continue; // No extension, skip
+                }
+                // Compare extension (case-insensitive)
+                if (strcasecmp(dot + 1, filter) != 0)
+                {
+                    continue; // Extension doesn't match
+                }
+            }
+        }
+        else
+        {
+            continue; // Not a file or directory, skip
+        }
+
+        // Call callback
+        if (!callback(entry->d_name, type, user_data))
+        {
+            break; // Callback requested stop
+        }
+    }
+
+    closedir(dir);
+    return true;
 }

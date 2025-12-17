@@ -5,7 +5,7 @@
 //  Implements the LogoConsole initialization and helper functions.
 //
 
-#include "devices/console.h"
+#include "console.h"
 
 #include <string.h>
 

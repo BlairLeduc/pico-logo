@@ -288,7 +288,7 @@ Result proc_define_from_text(const char *text)
         return result_error(ERR_OUT_OF_SPACE);
     }
     
-    return result_none();
+    return result_ok(value_word(name_atom));
 }
 
 // text "name - outputs the text (definition) of a procedure as a list

@@ -26,6 +26,35 @@ void test_repeat(void)
     TEST_ASSERT_EQUAL_STRING("1\n1\n1\n", output_buffer);
 }
 
+void test_repcount_basic(void)
+{
+    // repcount should output current repeat iteration (1-based)
+    run_string("repeat 3 [print repcount]");
+    TEST_ASSERT_EQUAL_STRING("1\n2\n3\n", output_buffer);
+}
+
+void test_repcount_no_repeat(void)
+{
+    // repcount outside repeat should output -1
+    Result r = eval_string("repcount");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(-1.0f, r.value.as.number);
+}
+
+void test_repcount_nested(void)
+{
+    // repcount should output innermost repeat count
+    run_string("repeat 2 [repeat 3 [print repcount]]");
+    TEST_ASSERT_EQUAL_STRING("1\n2\n3\n1\n2\n3\n", output_buffer);
+}
+
+void test_repcount_used_in_expression(void)
+{
+    // repcount can be used in arithmetic expressions
+    run_string("repeat 3 [print repcount * 10]");
+    TEST_ASSERT_EQUAL_STRING("10\n20\n30\n", output_buffer);
+}
+
 void test_stop(void)
 {
     // stop should return RESULT_STOP
@@ -309,6 +338,10 @@ int main(void)
 
     // Existing tests
     RUN_TEST(test_repeat);
+    RUN_TEST(test_repcount_basic);
+    RUN_TEST(test_repcount_no_repeat);
+    RUN_TEST(test_repcount_nested);
+    RUN_TEST(test_repcount_used_in_expression);
     RUN_TEST(test_stop);
     RUN_TEST(test_output);
     RUN_TEST(test_run_list);
