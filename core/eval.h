@@ -26,6 +26,7 @@ extern "C"
         const char *error_context; // For error messages
         bool in_tail_position;     // True if evaluating last instruction of procedure body
         int proc_depth;            // Depth of user procedure calls (for TCO)
+        int repcount;             // Current repeat count (for REPCOUNT)
     } Evaluator;
 
     // Initialize evaluator with a lexer

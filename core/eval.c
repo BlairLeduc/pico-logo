@@ -31,6 +31,7 @@ void eval_init(Evaluator *eval, Lexer *lexer)
     eval->error_context = NULL;
     eval->in_tail_position = false;
     eval->proc_depth = 0;
+    eval->repcount = -1;
 }
 
 // Get current token, fetching if needed

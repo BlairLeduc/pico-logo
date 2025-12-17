@@ -33,14 +33,6 @@ typedef struct
 
 static ErrorInfo last_error = {false, 0, NULL, NULL, NULL};
 
-//==========================================================================
-// Repcount stack for nested repeats
-//==========================================================================
-
-#define MAX_REPEAT_DEPTH 32
-static int repcount_stack[MAX_REPEAT_DEPTH];
-static int repcount_depth = 0;
-
 // Function to reset test state (for testing purposes)
 void primitives_control_reset_test_state(void)
 {
@@ -50,7 +42,6 @@ void primitives_control_reset_test_state(void)
     last_error.error_message = NULL;
     last_error.error_proc = NULL;
     last_error.error_caller = NULL;
-    repcount_depth = 0;
 }
 
 // Helper to populate error info from a Result
@@ -92,25 +83,19 @@ static Result prim_repeat(Evaluator *eval, int argc, Value *args)
     int count = (int)count_f;
     Node body = args[1].as.node;
 
-    // Push onto repcount stack
-    if (repcount_depth >= MAX_REPEAT_DEPTH)
-    {
-        return result_error(ERR_OUT_OF_SPACE);
-    }
-    repcount_stack[repcount_depth++] = 0;
-
+    int previous_repcount = eval->repcount;
     for (int i = 0; i < count; i++)
     {
-        repcount_stack[repcount_depth - 1] = i + 1;  // repcount is 1-based
+        eval->repcount = i + 1;  // repcount is 1-based
         Result r = eval_run_list(eval, body);
         // Propagate stop/output/error/throw
         if (r.status != RESULT_NONE && r.status != RESULT_OK)
         {
-            repcount_depth--;  // Pop before returning
+            eval->repcount = previous_repcount;  // Restore previous repcount
             return r;
         }
     }
-    repcount_depth--;  // Pop after completion
+    eval->repcount = previous_repcount;  // Restore previous repcount
     return result_none();
 }
 
@@ -120,14 +105,8 @@ static Result prim_repcount(Evaluator *eval, int argc, Value *args)
     (void)argc;
     (void)args;
     
-    // If no repeat is active, return -1
-    if (repcount_depth == 0)
-    {
-        return result_ok(value_number(-1));
-    }
-    
     // Return the innermost repeat count (1-based)
-    return result_ok(value_number(repcount_stack[repcount_depth - 1]));
+    return result_ok(value_number(eval->repcount));
 }
 
 static Result prim_stop(Evaluator *eval, int argc, Value *args)
