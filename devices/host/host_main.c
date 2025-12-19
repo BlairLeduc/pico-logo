@@ -105,13 +105,13 @@ int main(void)
         return EXIT_FAILURE;
     }
 
-    // Initialize the I/O manager
+    // Initialise the I/O manager
     LogoIO io;
     logo_io_init(&io, console, storage, hardware);
     snprintf(io.prefix, sizeof io.prefix, "/Logo/"); // Default prefix
     
 
-    // Initialize Logo subsystems
+    // Initialise Logo subsystems
     mem_init();
     primitives_init();
     procedures_init();
