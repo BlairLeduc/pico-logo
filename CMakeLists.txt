@@ -8,9 +8,10 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Option to build tests instead of Pico target
 option(BUILD_TESTING "Build native host tests instead of Pico target" OFF)
+option(BUILD_FOR_HOST "Build for native host instead of Pico target" OFF)
 
-# If building tests, skip all Pico SDK setup
-if(NOT BUILD_TESTING)
+# If building tests or building for host, skip all Pico SDK setup
+if(NOT BUILD_TESTING AND NOT BUILD_FOR_HOST)
     # Initialise pico_sdk from installed location
     # (note this can come from environment, CMake cache etc)
 
@@ -34,12 +35,15 @@ if(NOT BUILD_TESTING)
     include(pico_sdk_import.cmake)
 
     project(pico-logo C CXX ASM)
+elseif(BUILD_FOR_HOST)
+    # Native build for host
+    project(logo C)
 else()
     # Native build for tests
     project(pico-logo-tests C)
 endif()
 
-if(NOT BUILD_TESTING)
+if(NOT BUILD_TESTING AND NOT BUILD_FOR_HOST)
     # Initialise the Raspberry Pi Pico SDK
     pico_sdk_init()
 endif()
@@ -47,7 +51,7 @@ endif()
 # ============================================================================
 # Raspberry Pi Pico Build
 # ============================================================================
-if(NOT BUILD_TESTING)
+if(NOT BUILD_TESTING AND NOT BUILD_FOR_HOST)
 
 # Core Logo interpreter library
 add_library(logo_core
@@ -132,7 +136,75 @@ target_include_directories(pico-logo PRIVATE
 
 pico_add_extra_outputs(pico-logo)
 
-endif() # NOT BUILD_TESTING
+endif() # NOT BUILD_TESTING AND NOT BUILD_FOR_HOST
+
+# ============================================================================
+# Native Host Build
+# ============================================================================
+
+if(BUILD_FOR_HOST)
+
+    # Host device library for tests (without Pico SDK dependencies)
+    add_library(logo_devices
+        ${CMAKE_CURRENT_SOURCE_DIR}/devices/stream.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/devices/console.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/devices/hardware.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/devices/io.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/devices/storage.c
+    )
+
+    target_include_directories(logo_devices PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+
+
+    # Core Logo interpreter library for host (with host device implementations)
+    add_library(logo_core
+        core/lexer.c
+        core/memory.c
+        core/value.c
+        core/variables.c
+        core/procedures.c
+        core/properties.c
+        core/error.c
+        core/eval.c
+        core/primitives.c
+        core/primitives_arithmetic.c
+        core/primitives_control.c
+        core/primitives_variables.c
+        core/primitives_words_lists.c
+        core/primitives_procedures.c
+        core/primitives_workspace.c
+        core/primitives_outside_world.c
+        core/primitives_properties.c
+        core/primitives_debug.c
+        core/primitives_files.c
+        core/primitives_hardware.c
+        core/primitives_text.c
+        core/primitives_turtle.c
+    )
+
+    target_include_directories(logo_core PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+
+    add_executable(logo
+        devices/host/host_console.c
+        devices/host/host_hardware.c
+        devices/host/host_storage.c
+        devices/host/host_main.c
+    )
+
+    target_link_libraries(logo
+        logo_core
+        logo_devices
+        m
+    )
+
+    target_include_directories(logo PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+endif()
 
 # ============================================================================
 # Native Host Tests
@@ -145,27 +217,45 @@ if(BUILD_TESTING)
         message(STATUS "Code coverage enabled")
         add_compile_options(--coverage -O0 -g)
         add_link_options(--coverage)
+
+        # Find required tools
+        find_program(LCOV lcov REQUIRED)
+        find_program(GENHTML genhtml REQUIRED)
+
+        # Add coverage target
+        add_custom_target(coverage
+            # Clean previous coverage data
+            COMMAND ${LCOV} --directory . --zerocounters
+            # Run tests
+            COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
+            # Capture coverage data
+            COMMAND ${LCOV} --directory . --capture --output-file coverage.info
+            # Remove system headers and test files from coverage
+            COMMAND ${LCOV} --remove coverage.info '/usr/*' '*/tests/*' --output-file coverage.info
+            # Generate HTML report
+            COMMAND ${GENHTML} coverage.info --output-directory coverage-report
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            COMMENT "Running tests and generating coverage report..."
+        )
     endif()
 
     enable_testing()
 
     # Host device library for tests (without Pico SDK dependencies)
-    add_library(logo_devices_host
+    add_library(logo_devices
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/stream.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/console.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/hardware.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/io.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/storage.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/devices/host/host_device.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/devices/host/host_storage.c
     )
 
-    target_include_directories(logo_devices_host PUBLIC
+    target_include_directories(logo_devices PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
     )
 
     # Core library without device-specific code
-    add_library(logo_core_host
+    add_library(logo_core
         ${CMAKE_CURRENT_SOURCE_DIR}/core/lexer.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/memory.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/value.c
@@ -190,11 +280,11 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_turtle.c
     )
 
-    target_include_directories(logo_core_host PUBLIC
+    target_include_directories(logo_core PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
     )
 
-    target_link_libraries(logo_core_host logo_devices_host m)
+    target_link_libraries(logo_core logo_devices m)
 
     # Include the tests subdirectory
     add_subdirectory(tests)

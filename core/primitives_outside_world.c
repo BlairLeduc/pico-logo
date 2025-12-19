@@ -14,7 +14,6 @@
 #include "eval.h"
 #include "lexer.h"
 #include "devices/io.h"
-#include "devices/host/host_file.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

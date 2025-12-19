@@ -1,6 +1,9 @@
 # All artefacts and build products
 build/
+build-host/
+build-host-debug/
 build-tests/
+build-tests-coverage/
 _codeql_build_dir/
 _codeql*
 Testing/

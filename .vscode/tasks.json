@@ -207,6 +207,90 @@
                 "panel": "dedicated"
             },
             "problemMatcher": []
+        },
+        {
+            "label": "Configure Host",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--preset=host"
+            ],
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Build Host",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "build-host"
+            ],
+            "group": "build",
+            "dependsOn": ["Configure Host"],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Run Host",
+            "type": "shell",
+            "command": "${workspaceFolder}/build-host/logo",
+            "dependsOn": ["Build Host"],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "focus": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Configure Host (Debug)",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--preset=host-debug"
+            ],
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Build Host (Debug)",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "build-host-debug"
+            ],
+            "group": "build",
+            "dependsOn": ["Configure Host (Debug)"],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Run Host (Debug)",
+            "type": "shell",
+            "command": "${workspaceFolder}/build-host-debug/logo",
+            "dependsOn": ["Build Host (Debug)"],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "focus": true
+            },
+            "problemMatcher": []
         }
     ]
 }

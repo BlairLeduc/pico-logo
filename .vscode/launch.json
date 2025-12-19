@@ -58,6 +58,19 @@
             "externalConsole": false,
             "MIMode": "lldb",
             "preLaunchTask": "Build Tests"
+        },
+        {
+            "name": "Host Debug",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build-host-debug/logo",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "lldb",
+            "preLaunchTask": "Build Host (Debug)"
         }
     ]
 }

@@ -18,6 +18,20 @@
             "intelliSenseMode": "linux-gcc-arm"
         },
         {
+            "name": "Host",
+            "includePath": [
+                "${workspaceFolder}/**"
+            ],
+            "defines": [
+                "BUILD_FOR_HOST=1"
+            ],
+            "compilerPath": "/usr/bin/clang",
+            "compileCommands": "${workspaceFolder}/build-host/compile_commands.json",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "macos-clang-arm64"
+        },
+        {
             "name": "Tests",
             "includePath": [
                 "${workspaceFolder}/**"
