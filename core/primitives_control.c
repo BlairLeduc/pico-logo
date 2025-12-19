@@ -292,7 +292,15 @@ static Result prim_wait(Evaluator *eval, int argc, Value *args)
     }
     
     // Wait for tenths of a second (each tenth is 100 milliseconds)
-    logo_io_sleep(io, tenths * 100);
+    // Check for user interrupt every 100ms to make the wait interruptible
+    for (int i = 0; i < tenths; i++)
+    {
+        if (logo_io_check_user_interrupt(io))
+        {
+            return result_error(ERR_STOPPED);
+        }
+        logo_io_sleep(io, 100);
+    }
     
     return result_none();
 }

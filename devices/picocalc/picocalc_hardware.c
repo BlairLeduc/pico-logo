@@ -18,6 +18,8 @@
 #include <pico/stdlib.h>
 #include <pico/rand.h>
 
+// External reference to user interrupt flag (set by keyboard driver)
+extern volatile bool user_interrupt;
 
 // Hardware operation implementations
 
@@ -39,10 +41,22 @@ static void picocalc_get_battery_level(int *level, bool *charging)
     *charging = (raw_level & 0x80) != 0; // Check if charging
 }
 
+static bool picocalc_check_user_interrupt(void)
+{
+    return user_interrupt;
+}
+
+static void picocalc_clear_user_interrupt(void)
+{
+    user_interrupt = false;
+}
+
 static LogoHardwareOps picocalc_hardware_ops = {
     .sleep = picocalc_sleep,
     .random = picocalc_random,
     .get_battery_level = picocalc_get_battery_level,
+    .check_user_interrupt = picocalc_check_user_interrupt,
+    .clear_user_interrupt = picocalc_clear_user_interrupt,
 }; 
 
 

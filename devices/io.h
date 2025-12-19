@@ -80,6 +80,10 @@ extern "C"
     // Get battery level as a percentage (0-100) and charging status
     void logo_io_get_battery_level(LogoIO *io, int *level, bool *charging);
 
+    // Check if user interrupt has been requested and clear the flag
+    // Returns true if interrupt was requested
+    bool logo_io_check_user_interrupt(LogoIO *io);
+
     //
     // File prefix management
     //

@@ -100,6 +100,25 @@ void logo_io_get_battery_level(LogoIO *io, int *level, bool *charging)
     io->hardware->ops->get_battery_level(level, charging);
 }
 
+bool logo_io_check_user_interrupt(LogoIO *io)
+{
+    if (!io || !io->hardware || !io->hardware->ops || !io->hardware->ops->check_user_interrupt)
+    {
+        return false;
+    }
+
+    if (io->hardware->ops->check_user_interrupt())
+    {
+        // Clear the interrupt flag and return true
+        if (io->hardware->ops->clear_user_interrupt)
+        {
+            io->hardware->ops->clear_user_interrupt();
+        }
+        return true;
+    }
+    return false;
+}
+
 //
 // File prefix management
 //
