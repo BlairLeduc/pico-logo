@@ -430,10 +430,11 @@ static const LogoConsoleTurtle picocalc_turtle_ops = {
     .get_visible = turtle_get_visibility,
     .dot = turtle_dot,
     .dot_at = turtle_dot_at,
-    .fill = NULL,       // Not implemented
-    .set_fence = NULL,  // Not implemented
-    .set_window = NULL, // Not implemented
-    .set_wrap = NULL,   // Not implemented
+    .fill = NULL,            // Not implemented
+    .set_fence = NULL,       // Not implemented
+    .set_window = NULL,      // Not implemented
+    .set_wrap = NULL,        // Not implemented
+    .gfx_save = screen_gfx_save,
 };
 
 //

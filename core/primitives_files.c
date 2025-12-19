@@ -1429,6 +1429,55 @@ static Result prim_save(Evaluator *eval, int argc, Value *args)
     return result_none();
 }
 
+// savepic pathname - saves the graphics screen as a BMP file
+static Result prim_savepic(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+
+    if (!value_is_word(args[0]))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "savepic", value_to_string(args[0]));
+    }
+
+    const char *pathname = mem_word_ptr(args[0].as.node);
+
+    LogoIO *io = primitives_get_io();
+    if (!io || !io->console || !io->console->turtle)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    const LogoConsoleTurtle *turtle = io->console->turtle;
+    if (!turtle->gfx_save)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    // Resolve path with prefix
+    char resolved[LOGO_STREAM_NAME_MAX];
+    char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
+    if (!full_path)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    // Check if file already exists
+    if (logo_io_file_exists(io, full_path))
+    {
+        return result_error_arg(ERR_FILE_EXISTS, "", pathname);
+    }
+
+    // Call the turtle graphics save function
+    int err = turtle->gfx_save(full_path);
+    if (err != 0)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    return result_none();
+}
+
 //==========================================================================
 // Registration
 //==========================================================================
@@ -1470,4 +1519,5 @@ void primitives_files_init(void)
     // Load and save
     primitive_register("load", 1, prim_load);
     primitive_register("save", 1, prim_save);
+    primitive_register("savepic", 1, prim_savepic);
 }

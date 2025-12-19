@@ -302,6 +302,7 @@ void screen_gfx_update(void)
 int screen_gfx_save(const char *filename)
 {
     // Save the current graphics buffer to a BMP file (16-bit RGB565)
+    // Convert 8-bit palette indices to 16-bit RGB565 values
     FILE *fp = fopen(filename, "wb");
     if (!fp)
     {
@@ -357,14 +358,27 @@ int screen_gfx_save(const char *filename)
     fwrite(&blue_mask, 4, 1, fp);
 
     // --- PIXEL DATA (bottom-up) ---
+    // Allocate a row buffer for RGB565 pixels
+    uint16_t *row_buffer = (uint16_t *)malloc(SCREEN_WIDTH * sizeof(uint16_t));
+    if (!row_buffer)
+    {
+        fclose(fp);
+        return ENOMEM;
+    }
+
+    // Convert palette indices to RGB565 and write row by row
     for (int y = SCREEN_HEIGHT - 1; y >= 0; y--)
     {
-        fwrite(
-            gfx_buffer + y * SCREEN_WIDTH,
-            BMP_BYTES_PER_PIXEL,
-            SCREEN_WIDTH,
-            fp);
+        uint8_t *src_row = gfx_buffer + y * SCREEN_WIDTH;
+        for (int x = 0; x < SCREEN_WIDTH; x++)
+        {
+            uint8_t palette_index = src_row[x];
+            row_buffer[x] = lcd_get_palette_value(palette_index);
+        }
+        fwrite(row_buffer, BMP_BYTES_PER_PIXEL, SCREEN_WIDTH, fp);
     }
+
+    free(row_buffer);
 
     fclose(fp);
 

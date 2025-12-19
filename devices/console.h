@@ -80,6 +80,10 @@ extern "C"
         void (*set_fence)(void);    // Turtle stops at boundary
         void (*set_window)(void);   // Turtle can go off-screen
         void (*set_wrap)(void);     // Turtle wraps around
+
+        // Save graphics screen to file
+        // Returns 0 on success, errno on failure
+        int (*gfx_save)(const char *filename);
     } LogoConsoleTurtle;
 
     //

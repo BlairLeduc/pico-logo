@@ -2148,7 +2148,7 @@ The `loadpic` command loads the picture named by _pathname_ onto the graphics sc
 
 ## savepic
 
-SAVEPIC pathname (command)
+savepic _pathname_ (command)
 
 `savepic` saves the graphics screen into the file indicated by _pathname_. You can retrieve the screen later using `loadpic`. The image is saved as a bitmap (.bmp) file.
 
