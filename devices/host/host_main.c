@@ -31,9 +31,6 @@
 // Maximum procedure definition buffer (for multi-line TO...END)
 #define MAX_PROC_BUFFER 4096
 
-
-volatile bool user_interrupt;
-
 // Forward declaration for the I/O setter
 extern void primitives_set_io(LogoIO *io);
 
