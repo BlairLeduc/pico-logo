@@ -488,13 +488,14 @@ bool logo_io_rename(const LogoIO *io, const char *old_path, const char *new_path
     }
 
     // Resolve the pathname with prefix
-    char resolved[LOGO_STREAM_NAME_MAX];
-    char *full_old_path = logo_io_resolve_path(io, old_path, resolved, sizeof(resolved));
+    char resolved_old[LOGO_STREAM_NAME_MAX];
+    char *full_old_path = logo_io_resolve_path(io, old_path, resolved_old, sizeof(resolved_old));
     if (!full_old_path)
     {
         return NULL;
     }
-    char *full_new_path = logo_io_resolve_path(io, new_path, resolved, sizeof(resolved));
+    char resolved_new[LOGO_STREAM_NAME_MAX];
+    char *full_new_path = logo_io_resolve_path(io, new_path, resolved_new, sizeof(resolved_new));
     if (!full_new_path)
     {
         return NULL;

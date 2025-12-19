@@ -28,6 +28,7 @@ endmacro()
 add_logo_test(test_lexer)
 add_logo_test(test_memory)
 add_logo_test(test_eval)
+add_logo_test(test_error)
 add_logo_test(test_mock_device)
 
 # Primitive tests
@@ -43,3 +44,5 @@ add_logo_test(test_primitives_debug)
 add_logo_test(test_primitives_files)
 add_logo_test(test_primitives_text)
 add_logo_test(test_primitives_turtle)
+add_logo_test(test_primitives_hardware)
+add_logo_test(test_io)

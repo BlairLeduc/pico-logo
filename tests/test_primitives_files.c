@@ -27,6 +27,7 @@ typedef struct MockFile
     char data[MOCK_FILE_SIZE];
     size_t size;
     bool exists;
+    bool is_directory;
 } MockFile;
 
 // Mock file storage
@@ -208,6 +209,7 @@ static MockFile *mock_fs_get_file(const char *name, bool create)
             mock_files[i].data[0] = '\0';
             mock_files[i].size = 0;
             mock_files[i].exists = true;
+            mock_files[i].is_directory = false;
             return &mock_files[i];
         }
     }
@@ -227,6 +229,7 @@ static void mock_fs_create_file(const char *name, const char *content)
         memcpy(file->data, content, len);
         file->data[len] = '\0';
         file->size = len;
+        file->is_directory = false;
     }
 }
 
@@ -236,6 +239,7 @@ static void mock_fs_reset(void)
     for (int i = 0; i < MOCK_MAX_FILES; i++)
     {
         mock_files[i].exists = false;
+        mock_files[i].is_directory = false;
         mock_files[i].name[0] = '\0';
         mock_files[i].data[0] = '\0';
         mock_files[i].size = 0;
@@ -275,19 +279,20 @@ static LogoStream *mock_storage_open(const char *pathname)
 // Mock storage operations
 static bool mock_storage_file_exists(const char *pathname)
 {
-    return mock_fs_get_file(pathname, false) != NULL;
+    MockFile *file = mock_fs_get_file(pathname, false);
+    return file && !file->is_directory;
 }
 
 static bool mock_storage_dir_exists(const char *pathname)
 {
-    (void)pathname;
-    return false;  // No directory support in mock
+    MockFile *file = mock_fs_get_file(pathname, false);
+    return file && file->is_directory;
 }
 
 static bool mock_storage_file_delete(const char *pathname)
 {
     MockFile *file = mock_fs_get_file(pathname, false);
-    if (!file)
+    if (!file || file->is_directory)
         return false;
     file->exists = false;
     return true;
@@ -295,14 +300,22 @@ static bool mock_storage_file_delete(const char *pathname)
 
 static bool mock_storage_dir_create(const char *pathname)
 {
-    (void)pathname;
-    return false;  // No directory support in mock
+    MockFile *file = mock_fs_get_file(pathname, true);
+    if (file)
+    {
+        file->is_directory = true;
+        return true;
+    }
+    return false;
 }
 
 static bool mock_storage_dir_delete(const char *pathname)
 {
-    (void)pathname;
-    return false;  // No directory support in mock
+    MockFile *file = mock_fs_get_file(pathname, false);
+    if (!file || !file->is_directory)
+        return false;
+    file->exists = false;
+    return true;
 }
 
 static bool mock_storage_rename(const char *old_path, const char *new_path)
@@ -324,11 +337,31 @@ static long mock_storage_file_size(const char *pathname)
 static bool mock_storage_list_directory(const char *pathname, LogoDirCallback callback,
                                         void *user_data, const char *filter)
 {
-    (void)pathname;
-    (void)callback;
-    (void)user_data;
-    (void)filter;
-    return true;  // Return empty directory
+    (void)pathname; // Ignore path for flat mock fs
+    
+    for (int i = 0; i < MOCK_MAX_FILES; i++)
+    {
+        if (mock_files[i].exists)
+        {
+            // Simple filter check (extension)
+            if (filter && strcmp(filter, "*") != 0)
+            {
+                // Check extension
+                const char *ext = strrchr(mock_files[i].name, '.');
+                if (!ext || strcmp(ext + 1, filter) != 0)
+                {
+                    continue;
+                }
+            }
+            
+            LogoEntryType type = mock_files[i].is_directory ? LOGO_ENTRY_DIRECTORY : LOGO_ENTRY_FILE;
+            if (!callback(mock_files[i].name, type, user_data))
+            {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 static LogoStorageOps mock_storage_ops = {
@@ -1084,6 +1117,157 @@ void test_loadpic_with_prefix(void)
 }
 
 //==========================================================================
+// Directory Management Tests
+//==========================================================================
+
+void test_createdir(void)
+{
+    Result r = run_string("createdir \"newdir");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    TEST_ASSERT_TRUE(mock_storage_dir_exists("newdir"));
+}
+
+void test_erasedir(void)
+{
+    mock_storage_dir_create("todelete");
+    
+    Result r = run_string("erasedir \"todelete");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    TEST_ASSERT_FALSE(mock_storage_dir_exists("todelete"));
+}
+
+void test_erasefile(void)
+{
+    mock_fs_create_file("todelete.txt", "data");
+    
+    Result r = run_string("erasefile \"todelete.txt");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    TEST_ASSERT_FALSE(mock_storage_file_exists("todelete.txt"));
+}
+
+void test_filep_true(void)
+{
+    mock_fs_create_file("exists.txt", "data");
+    
+    Result r = eval_string("file? \"exists.txt");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_word(r.value));
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+}
+
+void test_filep_false(void)
+{
+    Result r = eval_string("file? \"missing.txt");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_word(r.value));
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
+}
+
+void test_dirp_true(void)
+{
+    mock_storage_dir_create("exists");
+    
+    Result r = eval_string("dir? \"exists");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_word(r.value));
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+}
+
+void test_dirp_false(void)
+{
+    Result r = eval_string("dir? \"missing");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_word(r.value));
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
+}
+
+void test_rename_file(void)
+{
+    mock_fs_create_file("old.txt", "data");
+    
+    Result r = run_string("rename \"old.txt \"new.txt");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    TEST_ASSERT_FALSE(mock_storage_file_exists("old.txt"));
+    TEST_ASSERT_TRUE(mock_storage_file_exists("new.txt"));
+}
+
+void test_setprefix_and_prefix(void)
+{
+    Result r = run_string("setprefix \"my\\/path");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    Result r2 = eval_string("prefix");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_STRING("my\\/path", mem_word_ptr(r2.value.as.node));
+}
+
+//==========================================================================
+// Load/Save Tests
+//==========================================================================
+
+void test_load_executes_file(void)
+{
+    mock_fs_create_file("script.logo", "make \"x 10\nmake \"y 20\n");
+    
+    Result r = run_string("load \"script.logo");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Check if variables were set
+    Value val;
+    TEST_ASSERT_TRUE(var_get("x", &val));
+    TEST_ASSERT_EQUAL_FLOAT(10.0, val.as.number);
+    TEST_ASSERT_TRUE(var_get("y", &val));
+    TEST_ASSERT_EQUAL_FLOAT(20.0, val.as.number);
+}
+
+void test_load_defines_procedure(void)
+{
+    mock_fs_create_file("proc.logo", "to testproc\nmake \"x 100\nend\n");
+    
+    Result r = run_string("load \"proc.logo");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Check if procedure is defined
+    TEST_ASSERT_TRUE(proc_exists("testproc"));
+    
+    // Run it
+    run_string("testproc");
+    Value val;
+    TEST_ASSERT_TRUE(var_get("x", &val));
+    TEST_ASSERT_EQUAL_FLOAT(100.0, val.as.number);
+}
+
+void test_save_writes_workspace(void)
+{
+    // Setup workspace
+    run_string("define \"testproc [[] [print \"hello]]");
+    run_string("make \"myvar 123");
+    
+    Result r = run_string("save \"workspace.logo");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Check file content
+    MockFile *file = mock_fs_get_file("workspace.logo", false);
+    TEST_ASSERT_NOT_NULL(file);
+    
+    // Should contain procedure and variable
+    TEST_ASSERT_NOT_NULL(strstr(file->data, "to testproc"));
+    TEST_ASSERT_NOT_NULL(strstr(file->data, "make \"myvar 123"));
+}
+
+void test_save_file_exists_error(void)
+{
+    mock_fs_create_file("exists.logo", "");
+    
+    Result r = run_string("save \"exists.logo");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+//==========================================================================
 // Main
 //==========================================================================
 
@@ -1169,6 +1353,23 @@ int main(void)
     RUN_TEST(test_loadpic_invalid_input_error);
     RUN_TEST(test_savepic_with_prefix);
     RUN_TEST(test_loadpic_with_prefix);
+
+    // Directory Management tests
+    RUN_TEST(test_createdir);
+    RUN_TEST(test_erasedir);
+    RUN_TEST(test_erasefile);
+    RUN_TEST(test_filep_true);
+    RUN_TEST(test_filep_false);
+    RUN_TEST(test_dirp_true);
+    RUN_TEST(test_dirp_false);
+    RUN_TEST(test_rename_file);
+    RUN_TEST(test_setprefix_and_prefix);
+
+    // Load/Save tests
+    RUN_TEST(test_load_executes_file);
+    RUN_TEST(test_load_defines_procedure);
+    RUN_TEST(test_save_writes_workspace);
+    RUN_TEST(test_save_file_exists_error);
 
     return UNITY_END();
 }
