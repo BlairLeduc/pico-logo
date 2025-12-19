@@ -347,6 +347,342 @@ void test_text_error_not_found(void)
     TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
 }
 
+//==========================================================================
+// DEFINE primitive tests
+//==========================================================================
+
+void test_define_simple_procedure(void)
+{
+    // define "name [[params] [body]]
+    // Define a procedure with no params: define "hello [[] [print "hi]]
+    Result r = run_string("define \"hello [[] [print \"hi]]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Now call it
+    reset_output();
+    run_string("hello");
+    TEST_ASSERT_EQUAL_STRING("hi\n", output_buffer);
+}
+
+void test_define_procedure_with_params(void)
+{
+    // define "double [[x] [output :x * 2]]
+    Result r = run_string("define \"double [[x] [output :x * 2]]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Now call it
+    Result r2 = eval_string("double 5");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_FLOAT(10.0f, r2.value.as.number);
+}
+
+void test_define_procedure_multiple_params(void)
+{
+    // define "add3 [[a b c] [output :a + :b + :c]]
+    Result r = run_string("define \"add3 [[a b c] [output :a + :b + :c]]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Now call it
+    Result r2 = eval_string("add3 1 2 3");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_FLOAT(6.0f, r2.value.as.number);
+}
+
+void test_define_error_name_not_word(void)
+{
+    // First arg must be a word
+    Result r = run_string("define [notaword] [[] [print 1]]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_define_error_def_not_list(void)
+{
+    // Second arg must be a list
+    Result r = run_string("define \"myproc \"notalist");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_define_error_redefine_primitive(void)
+{
+    // Cannot redefine primitives
+    Result r = run_string("define \"print [[] [print 1]]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_IS_PRIMITIVE, r.error_code);
+}
+
+void test_define_error_empty_definition_list(void)
+{
+    // Empty definition list
+    Result r = run_string("define \"myproc []");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_TOO_FEW_ITEMS, r.error_code);
+}
+
+//==========================================================================
+// PROCEDUREP tests
+//==========================================================================
+
+void test_procedurep_true_for_user_defined(void)
+{
+    const char *params[] = {};
+    define_proc("userproc", params, 0, "print 1");
+    
+    Result r = eval_string("procedurep \"userproc");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+}
+
+void test_procedurep_true_for_primitive(void)
+{
+    // procedurep should return true for primitives too
+    Result r = eval_string("procedurep \"print");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+}
+
+void test_procedurep_false_for_undefined(void)
+{
+    Result r = eval_string("procedurep \"notaprocedure");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
+}
+
+void test_procedurep_error_not_word(void)
+{
+    Result r = eval_string("procedurep [notaword]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+//==========================================================================
+// Additional error path tests
+//==========================================================================
+
+void test_primitivep_error_not_word(void)
+{
+    Result r = eval_string("primitivep [notaword]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_definedp_error_not_word(void)
+{
+    Result r = eval_string("definedp [notaword]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_text_error_not_word(void)
+{
+    Result r = eval_string("text [notaword]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_copydef_error_source_not_word(void)
+{
+    Result r = run_string("copydef [notaword] \"newname");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_copydef_error_dest_not_word(void)
+{
+    const char *params[] = {};
+    define_proc("myproc", params, 0, "print 1");
+    
+    Result r = run_string("copydef \"myproc [notaword]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+//==========================================================================
+// TEXT primitive detailed tests
+//==========================================================================
+
+void test_text_with_params(void)
+{
+    // Define a procedure with parameters
+    Node p1 = mem_atom("x", 1);
+    Node p2 = mem_atom("y", 1);
+    const char *params[] = {mem_word_ptr(p1), mem_word_ptr(p2)};
+    define_proc("addxy", params, 2, "output :x + :y");
+    
+    Result r = eval_string("text \"addxy");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_list(r.value));
+    
+    // First element should be parameter list
+    Node list = r.value.as.node;
+    Node params_list = mem_car(list);
+    // params_list is marked as a list type
+    TEST_ASSERT_EQUAL(NODE_TYPE_LIST, NODE_GET_TYPE(params_list));
+}
+
+void test_text_no_params(void)
+{
+    // Define a procedure with no parameters
+    const char *params[] = {};
+    define_proc("noparam", params, 0, "print \"hello");
+    
+    Result r = eval_string("text \"noparam");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_list(r.value));
+}
+
+//==========================================================================
+// proc_define_from_text tests
+//==========================================================================
+
+void test_proc_define_from_text_simple(void)
+{
+    // Define using text format: to name ... end
+    Result r = proc_define_from_text("to greetings print \"hello end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    // Verify the procedure was defined
+    TEST_ASSERT_TRUE(proc_exists("greetings"));
+    
+    // Run it
+    reset_output();
+    run_string("greetings");
+    TEST_ASSERT_EQUAL_STRING("hello\n", output_buffer);
+}
+
+void test_proc_define_from_text_with_param(void)
+{
+    // Define a procedure with parameters
+    Result r = proc_define_from_text("to triple :n output :n * 3 end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    Result r2 = eval_string("triple 4");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_FLOAT(12.0f, r2.value.as.number);
+}
+
+void test_proc_define_from_text_multiple_params(void)
+{
+    Result r = proc_define_from_text("to avg :a :b output (:a + :b) / 2 end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    Result r2 = eval_string("avg 10 20");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_FLOAT(15.0f, r2.value.as.number);
+}
+
+void test_proc_define_from_text_with_brackets(void)
+{
+    // Test with brackets in the body
+    Result r = proc_define_from_text("to countdown :n if :n > 0 [print :n countdown :n - 1] end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    reset_output();
+    run_string("countdown 3");
+    TEST_ASSERT_EQUAL_STRING("3\n2\n1\n", output_buffer);
+}
+
+void test_proc_define_from_text_with_comparison(void)
+{
+    // Test with comparison operators
+    Result r = proc_define_from_text("to bigger :a :b if :a > :b [output :a] output :b end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    Result r2 = eval_string("bigger 5 3");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_FLOAT(5.0f, r2.value.as.number);
+    
+    Result r3 = eval_string("bigger 2 7");
+    TEST_ASSERT_EQUAL(RESULT_OK, r3.status);
+    TEST_ASSERT_EQUAL_FLOAT(7.0f, r3.value.as.number);
+}
+
+void test_proc_define_from_text_error_not_to(void)
+{
+    // First token should be a word (the "to" keyword, though value isn't validated)
+    // Pass a number first to trigger the error
+    Result r = proc_define_from_text("123 myproc print 1 end");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_proc_define_from_text_error_no_name(void)
+{
+    // Missing procedure name - only "to"
+    Result r = proc_define_from_text("to");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NOT_ENOUGH_INPUTS, r.error_code);
+}
+
+void test_proc_define_from_text_error_redefine_primitive(void)
+{
+    // Cannot redefine primitives
+    Result r = proc_define_from_text("to print :x output :x end");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_IS_PRIMITIVE, r.error_code);
+}
+
+void test_proc_define_from_text_quoted_word(void)
+{
+    // Test with quoted words in body
+    Result r = proc_define_from_text("to sayhello print \"hello end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    reset_output();
+    run_string("sayhello");
+    TEST_ASSERT_EQUAL_STRING("hello\n", output_buffer);
+}
+
+void test_proc_define_from_text_all_operators(void)
+{
+    // Test all arithmetic and comparison operators
+    Result r = proc_define_from_text("to mathtest :x output :x + 1 - 1 * 2 / 2 end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    Result r2 = eval_string("mathtest 10");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    // Due to operator precedence: 10 + 1 - 1 * 2 / 2 = 10 + 1 - 1 = 10
+    TEST_ASSERT_EQUAL_FLOAT(10.0f, r2.value.as.number);
+}
+
+void test_proc_define_from_text_equals_operator(void)
+{
+    // Test equals operator
+    Result r = proc_define_from_text("to iseq :a :b if :a = :b [output \"yes] output \"no end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    Result r2 = eval_string("iseq 5 5");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_STRING("yes", mem_word_ptr(r2.value.as.node));
+    
+    Result r3 = eval_string("iseq 3 4");
+    TEST_ASSERT_EQUAL(RESULT_OK, r3.status);
+    TEST_ASSERT_EQUAL_STRING("no", mem_word_ptr(r3.value.as.node));
+}
+
+void test_proc_define_from_text_less_than_operator(void)
+{
+    // Test less than operator
+    Result r = proc_define_from_text("to isless :a :b if :a < :b [output \"yes] output \"no end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    Result r2 = eval_string("isless 3 5");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_STRING("yes", mem_word_ptr(r2.value.as.node));
+}
+
+void test_proc_define_from_text_with_parentheses(void)
+{
+    // Test with parentheses in body
+    Result r = proc_define_from_text("to sumall :a :b :c output (:a + :b + :c) end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    Result r2 = eval_string("sumall 1 2 3");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_FLOAT(6.0f, r2.value.as.number);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -370,6 +706,47 @@ int main(void)
     RUN_TEST(test_copydef_error_dest_is_primitive);
     RUN_TEST(test_text_outputs_procedure_definition);
     RUN_TEST(test_text_error_not_found);
+    
+    // DEFINE primitive tests
+    RUN_TEST(test_define_simple_procedure);
+    RUN_TEST(test_define_procedure_with_params);
+    RUN_TEST(test_define_procedure_multiple_params);
+    RUN_TEST(test_define_error_name_not_word);
+    RUN_TEST(test_define_error_def_not_list);
+    RUN_TEST(test_define_error_redefine_primitive);
+    RUN_TEST(test_define_error_empty_definition_list);
+    
+    // PROCEDUREP tests
+    RUN_TEST(test_procedurep_true_for_user_defined);
+    RUN_TEST(test_procedurep_true_for_primitive);
+    RUN_TEST(test_procedurep_false_for_undefined);
+    RUN_TEST(test_procedurep_error_not_word);
+    
+    // Additional error path tests
+    RUN_TEST(test_primitivep_error_not_word);
+    RUN_TEST(test_definedp_error_not_word);
+    RUN_TEST(test_text_error_not_word);
+    RUN_TEST(test_copydef_error_source_not_word);
+    RUN_TEST(test_copydef_error_dest_not_word);
+    
+    // TEXT primitive detailed tests
+    RUN_TEST(test_text_with_params);
+    RUN_TEST(test_text_no_params);
+    
+    // proc_define_from_text tests
+    RUN_TEST(test_proc_define_from_text_simple);
+    RUN_TEST(test_proc_define_from_text_with_param);
+    RUN_TEST(test_proc_define_from_text_multiple_params);
+    RUN_TEST(test_proc_define_from_text_with_brackets);
+    RUN_TEST(test_proc_define_from_text_with_comparison);
+    RUN_TEST(test_proc_define_from_text_error_not_to);
+    RUN_TEST(test_proc_define_from_text_error_no_name);
+    RUN_TEST(test_proc_define_from_text_error_redefine_primitive);
+    RUN_TEST(test_proc_define_from_text_quoted_word);
+    RUN_TEST(test_proc_define_from_text_all_operators);
+    RUN_TEST(test_proc_define_from_text_equals_operator);
+    RUN_TEST(test_proc_define_from_text_less_than_operator);
+    RUN_TEST(test_proc_define_from_text_with_parentheses);
 
     return UNITY_END();
 }
