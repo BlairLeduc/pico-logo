@@ -167,7 +167,7 @@ static LogoHardwareOps mock_hardware_ops = {
     .sleep = mock_sleep,
     .random = mock_random,
     .get_battery_level = mock_get_battery_level,
-}; 
+};
 
 // Mock console (contains embedded streams)
 static LogoConsole mock_console;
