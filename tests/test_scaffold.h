@@ -17,6 +17,8 @@
 #include "devices/stream.h"
 #include "devices/console.h"
 #include "devices/io.h"
+#include "devices/hardware.h"
+#include "devices/storage.h"
 #include "mock_device.h"
 #include <string.h>
 
@@ -142,8 +144,36 @@ static LogoStreamOps mock_output_stream_ops = {
     .close = mock_stream_close
 };
 
+// Mock hardware operation implementations
+static void mock_sleep(int milliseconds)
+{
+    (void)milliseconds;
+    // No-op for testing
+}
+
+static uint32_t mock_random(void)
+{
+    return 42; // Fixed value for testing
+}
+
+static void mock_get_battery_level(int *level, bool *charging)
+{
+    *level = 100; // Always full for testing
+    *charging = false;
+}
+
+
+static LogoHardwareOps mock_hardware_ops = {
+    .sleep = mock_sleep,
+    .random = mock_random,
+    .get_battery_level = mock_get_battery_level,
+}; 
+
 // Mock console (contains embedded streams)
 static LogoConsole mock_console;
+
+// Mock hardware
+static LogoHardware mock_hardware;
 
 // Mock I/O manager
 static LogoIO mock_io;
@@ -168,8 +198,11 @@ static void test_scaffold_setUp(void)
     // Set up mock console (embeds streams internally)
     logo_console_init(&mock_console, &mock_input_stream_ops, &mock_output_stream_ops, NULL);
     
+    // Set up mock hardware
+    logo_hardware_init(&mock_hardware, &mock_hardware_ops);
+    
     // Set up mock I/O manager
-    logo_io_init(&mock_io, &mock_console);
+    logo_io_init(&mock_io, &mock_console, NULL, &mock_hardware);
     
     // Register I/O with primitives
     primitives_set_io(&mock_io);
@@ -191,7 +224,7 @@ static void test_scaffold_setUp_with_device(void)
     mock_device_init();
     
     // Set up mock I/O manager with the mock device's console
-    logo_io_init(&mock_io, mock_device_get_console());
+    logo_io_init(&mock_io, mock_device_get_console(), NULL, NULL);
     
     // Register I/O with primitives
     primitives_set_io(&mock_io);

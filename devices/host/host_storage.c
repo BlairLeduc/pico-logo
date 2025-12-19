@@ -2,10 +2,12 @@
 //  Pico Logo
 //  Copyright 2025 Blair Leduc. See LICENSE for details.
 //
-//  Host (desktop) file stream implementation using standard C FILE*.
+//  Implements the LogoStorage interface for host (desktop) device.
 //
 
-#include "host_file.h"
+#include "host_storage.h"
+#include "../storage.h"
+#include "../stream.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,6 +15,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <dirent.h>
+#include <strings.h>  // for strcasecmp
 
 //
 // File stream context - wraps a FILE*
@@ -20,7 +23,6 @@
 typedef struct FileContext
 {
     FILE *file;
-    LogoFileMode mode;
 } FileContext;
 
 //
@@ -34,7 +36,7 @@ static int host_file_read_char(LogoStream *stream)
         return -1;
     }
 
-    HostFileContext *ctx = (HostFileContext *)stream->context;
+    FileContext *ctx = (FileContext *)stream->context;
     if (!ctx->file)
     {
         return -1;
@@ -221,7 +223,7 @@ static void host_file_close(LogoStream *stream)
         return;
     }
 
-    HostFileContext *ctx = (HostFileContext *)stream->context;
+    FileContext *ctx = (FileContext *)stream->context;
     if (ctx->file)
     {
         fclose(ctx->file);
@@ -253,38 +255,23 @@ static const LogoStreamOps host_file_ops = {
 };
 
 //
-// Public API
+// Storage API implementation
 //
 
-LogoStream *logo_host_file_open(const char *pathname, LogoFileMode mode)
+static LogoStream *logo_host_file_open(const char *pathname)
 {
     if (!pathname)
     {
         return NULL;
     }
 
-    // Determine the fopen mode string
-    const char *fmode;
-    switch (mode)
+    // Try to open existing file for read/write
+    FILE *file = fopen(pathname, "r+");
+    if (!file)
     {
-    case LOGO_FILE_READ:
-        fmode = "r";
-        break;
-    case LOGO_FILE_WRITE:
-        fmode = "w";
-        break;
-    case LOGO_FILE_APPEND:
-        fmode = "a";
-        break;
-    case LOGO_FILE_UPDATE:
-        fmode = "r+";
-        break;
-    default:
-        return NULL;
+        // Try to create the file
+        file = fopen(pathname, "w+");
     }
-
-    // Open the file
-    FILE *file = fopen(pathname, fmode);
     if (!file)
     {
         return NULL;
@@ -298,7 +285,6 @@ LogoStream *logo_host_file_open(const char *pathname, LogoFileMode mode)
         return NULL;
     }
     ctx->file = file;
-    ctx->mode = mode;
 
     // Allocate stream
     LogoStream *stream = (LogoStream *)malloc(sizeof(LogoStream));
@@ -322,7 +308,7 @@ LogoStream *logo_host_file_open(const char *pathname, LogoFileMode mode)
     return stream;
 }
 
-bool logo_host_file_exists(const char *pathname)
+static bool logo_host_file_exists(const char *pathname)
 {
     if (!pathname)
     {
@@ -338,7 +324,7 @@ bool logo_host_file_exists(const char *pathname)
     return S_ISREG(st.st_mode);
 }
 
-bool logo_host_dir_exists(const char *pathname)
+static bool logo_host_dir_exists(const char *pathname)
 {
     if (!pathname)
     {
@@ -354,7 +340,7 @@ bool logo_host_dir_exists(const char *pathname)
     return S_ISDIR(st.st_mode);
 }
 
-bool logo_host_file_delete(const char *pathname)
+static bool logo_host_file_delete(const char *pathname)
 {
     if (!pathname)
     {
@@ -364,7 +350,21 @@ bool logo_host_file_delete(const char *pathname)
     return remove(pathname) == 0;
 }
 
-bool logo_host_dir_delete(const char *pathname)
+static bool logo_host_dir_create(const char *pathname)
+{
+    if (!pathname)
+    {
+        return false;
+    }
+
+#ifdef _WIN32
+    return mkdir(pathname) == 0;
+#else
+    return mkdir(pathname, 0755) == 0;
+#endif
+}
+
+static bool logo_host_dir_delete(const char *pathname)
 {
     if (!pathname)
     {
@@ -374,7 +374,7 @@ bool logo_host_dir_delete(const char *pathname)
     return rmdir(pathname) == 0;
 }
 
-bool logo_host_rename(const char *old_path, const char *new_path)
+static bool logo_host_rename(const char *old_path, const char *new_path)
 {
     if (!old_path || !new_path)
     {
@@ -384,7 +384,7 @@ bool logo_host_rename(const char *old_path, const char *new_path)
     return rename(old_path, new_path) == 0;
 }
 
-long logo_host_file_size(const char *pathname)
+static long logo_host_file_size(const char *pathname)
 {
     if (!pathname)
     {
@@ -400,9 +400,8 @@ long logo_host_file_size(const char *pathname)
     return (long)st.st_size;
 }
 
-
-bool logo_host_list_directory(const char *pathname, LogoDirCallback callback,
-                              void *user_data, const char *filter)
+static bool logo_host_list_directory(const char *pathname, LogoDirCallback callback,
+                                     void *user_data, const char *filter)
 {
     if (!pathname || !callback)
     {
@@ -488,4 +487,47 @@ bool logo_host_list_directory(const char *pathname, LogoDirCallback callback,
 
     closedir(dir);
     return true;
+}
+
+//
+// Storage operations table
+//
+static const LogoStorageOps host_storage_ops = {
+    .open = logo_host_file_open,
+    .file_exists = logo_host_file_exists,
+    .dir_exists = logo_host_dir_exists,
+    .file_delete = logo_host_file_delete,
+    .dir_create = logo_host_dir_create,
+    .dir_delete = logo_host_dir_delete,
+    .rename = logo_host_rename,
+    .file_size = logo_host_file_size,
+    .list_directory = logo_host_list_directory,
+};
+
+//
+// LogoStorage lifecycle functions
+//
+
+LogoStorage *logo_host_storage_create(void)
+{
+    LogoStorage *storage = (LogoStorage *)malloc(sizeof(LogoStorage));
+
+    if (!storage)
+    {
+        return NULL;
+    }
+
+    logo_storage_init(storage, &host_storage_ops);
+
+    return storage;
+}
+
+void logo_host_storage_destroy(LogoStorage *storage)
+{
+    if (!storage)
+    {
+        return;
+    }
+
+    free(storage);
 }

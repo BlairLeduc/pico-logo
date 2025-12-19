@@ -60,8 +60,7 @@ extern "C"
         MOCK_CMD_SET_POSITION,
         MOCK_CMD_SET_HEADING,
         // Turtle appearance
-        MOCK_CMD_SET_PEN_DOWN,
-        MOCK_CMD_SET_PEN_MODE,
+        MOCK_CMD_SET_PEN_STATE,
         MOCK_CMD_SET_PEN_COLOUR,
         MOCK_CMD_SET_BG_COLOUR,
         MOCK_CMD_SET_VISIBLE,
@@ -148,8 +147,7 @@ extern "C"
         {
             float x, y;                      // Current position
             float heading;                   // 0 = north, 90 = east
-            bool pen_down;                   // Is pen down?
-            MockPenMode pen_mode;            // Current pen mode
+            LogoPen pen_state;               // Pen state (up/down/erase/reverse)
             uint16_t pen_colour;             // Current pen color
             uint16_t bg_colour;              // Background color
             bool visible;                    // Is turtle visible?

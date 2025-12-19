@@ -283,7 +283,7 @@ void test_pendown_puts_pen_down(void)
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     
     const MockDeviceState *state = mock_device_get_state();
-    TEST_ASSERT_TRUE(state->turtle.pen_down);
+    TEST_ASSERT_EQUAL(LOGO_PEN_DOWN, state->turtle.pen_state);
 }
 
 void test_pd_alias(void)
@@ -293,7 +293,7 @@ void test_pd_alias(void)
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     
     const MockDeviceState *state = mock_device_get_state();
-    TEST_ASSERT_TRUE(state->turtle.pen_down);
+    TEST_ASSERT_EQUAL(LOGO_PEN_DOWN, state->turtle.pen_state);
 }
 
 void test_penup_lifts_pen(void)
@@ -302,7 +302,7 @@ void test_penup_lifts_pen(void)
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     
     const MockDeviceState *state = mock_device_get_state();
-    TEST_ASSERT_FALSE(state->turtle.pen_down);
+    TEST_ASSERT_EQUAL(LOGO_PEN_UP, state->turtle.pen_state);
 }
 
 void test_pu_alias(void)
@@ -311,7 +311,7 @@ void test_pu_alias(void)
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     
     const MockDeviceState *state = mock_device_get_state();
-    TEST_ASSERT_FALSE(state->turtle.pen_down);
+    TEST_ASSERT_EQUAL(LOGO_PEN_UP, state->turtle.pen_state);
 }
 
 void test_pen_outputs_pendown_when_down(void)

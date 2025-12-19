@@ -1,0 +1,85 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 13,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "pico",
+      "displayName": "Raspberry Pi Pico",
+      "description": "Cross-compile for Raspberry Pi Pico (RP2040/RP2350)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "PICO_BOARD": "pico2",
+        "BUILD_TESTING": "OFF"
+      }
+    },
+    {
+      "name": "pico-debug",
+      "inherits": "pico",
+      "displayName": "Raspberry Pi Pico (Debug)",
+      "description": "Cross-compile for Pico with debug symbols",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "tests",
+      "displayName": "Native Host Tests",
+      "description": "Build unit tests for native host platform",
+      "binaryDir": "${sourceDir}/build-tests",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BUILD_TESTING": "ON"
+      }
+    },
+    {
+      "name": "tests-coverage",
+      "inherits": "tests",
+      "displayName": "Tests with Coverage",
+      "description": "Build tests with code coverage enabled",
+      "binaryDir": "${sourceDir}/build-tests-coverage",
+      "cacheVariables": {
+        "ENABLE_COVERAGE": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "pico",
+      "configurePreset": "pico"
+    },
+    {
+      "name": "pico-debug",
+      "configurePreset": "pico-debug"
+    },
+    {
+      "name": "tests",
+      "configurePreset": "tests"
+    },
+    {
+      "name": "tests-coverage",
+      "configurePreset": "tests-coverage"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "tests",
+      "configurePreset": "tests",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "tests-coverage",
+      "configurePreset": "tests-coverage",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

@@ -111,7 +111,7 @@ static void mock_turtle_move(float distance)
     }
     
     // Draw line if pen is down
-    if (mock_state.turtle.pen_down && mock_state.turtle.pen_mode == MOCK_PEN_DOWN)
+    if (mock_state.turtle.pen_state == LOGO_PEN_DOWN)
     {
         if (mock_state.graphics.line_count < MOCK_MAX_LINES)
         {
@@ -133,7 +133,7 @@ static void mock_turtle_move(float distance)
 static void mock_turtle_home(void)
 {
     // Draw line to home if pen is down
-    if (mock_state.turtle.pen_down && mock_state.turtle.pen_mode == MOCK_PEN_DOWN)
+    if (mock_state.turtle.pen_state == LOGO_PEN_DOWN)
     {
         if (mock_state.graphics.line_count < MOCK_MAX_LINES)
         {
@@ -155,7 +155,7 @@ static void mock_turtle_home(void)
 static void mock_turtle_set_position(float x, float y)
 {
     // Draw line to new position if pen is down
-    if (mock_state.turtle.pen_down && mock_state.turtle.pen_mode == MOCK_PEN_DOWN)
+    if (mock_state.turtle.pen_state == LOGO_PEN_DOWN)
     {
         if (mock_state.graphics.line_count < MOCK_MAX_LINES)
         {
@@ -190,41 +190,37 @@ static float mock_turtle_get_heading(void)
     return mock_state.turtle.heading;
 }
 
-static void mock_turtle_set_pen_colour(uint16_t colour)
+static void mock_turtle_set_pen_colour(uint8_t colour)
 {
     mock_state.turtle.pen_colour = colour;
     record_command_colour(MOCK_CMD_SET_PEN_COLOUR, colour);
 }
 
-static uint16_t mock_turtle_get_pen_colour(void)
+static uint8_t mock_turtle_get_pen_colour(void)
 {
     return mock_state.turtle.pen_colour;
 }
 
-static void mock_turtle_set_bg_colour(uint16_t colour)
+static void mock_turtle_set_bg_colour(uint8_t colour)
 {
     mock_state.turtle.bg_colour = colour;
     record_command_colour(MOCK_CMD_SET_BG_COLOUR, colour);
 }
 
-static uint16_t mock_turtle_get_bg_colour(void)
+static uint8_t mock_turtle_get_bg_colour(void)
 {
     return mock_state.turtle.bg_colour;
 }
 
-static void mock_turtle_set_pen_down(bool down)
+static void mock_turtle_set_pen_state(LogoPen pen)
 {
-    mock_state.turtle.pen_down = down;
-    if (down)
-    {
-        mock_state.turtle.pen_mode = MOCK_PEN_DOWN;
-    }
-    record_command_bool(MOCK_CMD_SET_PEN_DOWN, down);
+    mock_state.turtle.pen_state = pen;
+    record_command_bool(MOCK_CMD_SET_PEN_STATE, pen);
 }
 
-static bool mock_turtle_get_pen_down(void)
+static LogoPen mock_turtle_get_pen_state(void)
 {
-    return mock_state.turtle.pen_down;
+    return mock_state.turtle.pen_state;
 }
 
 static void mock_turtle_set_visible(bool visible)
@@ -302,8 +298,8 @@ static const LogoConsoleTurtle mock_turtle_ops = {
     .get_pen_colour = mock_turtle_get_pen_colour,
     .set_bg_colour = mock_turtle_set_bg_colour,
     .get_bg_colour = mock_turtle_get_bg_colour,
-    .set_pen_down = mock_turtle_set_pen_down,
-    .get_pen_down = mock_turtle_get_pen_down,
+    .set_pen_state = mock_turtle_set_pen_state,
+    .get_pen_state = mock_turtle_get_pen_state,
     .set_visible = mock_turtle_set_visible,
     .get_visible = mock_turtle_get_visible,
     .dot = mock_turtle_dot,
@@ -354,9 +350,7 @@ static uint8_t mock_text_get_width(void)
 static const LogoConsoleText mock_text_ops = {
     .clear = mock_text_clear,
     .set_cursor = mock_text_set_cursor,
-    .get_cursor = mock_text_get_cursor,
-    .set_width = mock_text_set_width,
-    .get_width = mock_text_get_width
+    .get_cursor = mock_text_get_cursor
 };
 
 //
@@ -606,8 +600,7 @@ void mock_device_reset(void)
     mock_state.turtle.x = 0.0f;
     mock_state.turtle.y = 0.0f;
     mock_state.turtle.heading = 0.0f;  // North
-    mock_state.turtle.pen_down = true;
-    mock_state.turtle.pen_mode = MOCK_PEN_DOWN;
+    mock_state.turtle.pen_state = LOGO_PEN_DOWN;
     mock_state.turtle.pen_colour = 1;  // Default color (not black)
     mock_state.turtle.bg_colour = 0;   // Black background
     mock_state.turtle.visible = true;

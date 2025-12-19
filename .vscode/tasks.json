@@ -103,6 +103,110 @@
             "windows": {
                 "command": "${env:USERPROFILE}/.pico-sdk/openocd/0.12.0+dev/openocd.exe"
             }
+        },
+        {
+            "label": "Configure Tests",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--preset=tests"
+            ],
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Build Tests",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "--preset=tests"
+            ],
+            "group": "build",
+            "dependsOn": ["Configure Tests"],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Run Tests",
+            "type": "shell",
+            "command": "ctest",
+            "args": [
+                "--preset=tests"
+            ],
+            "dependsOn": ["Build Tests"],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Test (Quick)",
+            "type": "shell",
+            "command": "cmake --build --preset=tests && ctest --preset=tests",
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Configure Tests with Coverage",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--preset=tests-coverage"
+            ],
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Build Tests with Coverage",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "--preset=tests-coverage"
+            ],
+            "group": "build",
+            "dependsOn": ["Configure Tests with Coverage"],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Run Tests with Coverage",
+            "type": "shell",
+            "command": "ctest",
+            "args": [
+                "--preset=tests-coverage"
+            ],
+            "dependsOn": ["Build Tests with Coverage"],
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
         }
     ]
 }

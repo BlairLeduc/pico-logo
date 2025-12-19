@@ -150,72 +150,6 @@ void test_setcursor_rejects_negative(void)
 }
 
 // ============================================================================
-// setwidth tests
-// ============================================================================
-
-void test_setwidth_to_40(void)
-{
-    const MockDeviceState *state = mock_device_get_state();
-    
-    run_string("setwidth 64");  // First change to 64
-    run_string("setwidth 40");  // Then back to 40
-    
-    TEST_ASSERT_EQUAL(40, state->text.width);
-}
-
-void test_setwidth_to_64(void)
-{
-    const MockDeviceState *state = mock_device_get_state();
-    
-    run_string("setwidth 64");
-    
-    TEST_ASSERT_EQUAL(64, state->text.width);
-}
-
-void test_setwidth_rejects_invalid(void)
-{
-    Result r = run_string("setwidth 80");
-    
-    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-}
-
-void test_setwidth_rejects_zero(void)
-{
-    Result r = run_string("setwidth 0");
-    
-    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-}
-
-// ============================================================================
-// width tests
-// ============================================================================
-
-void test_width_returns_default(void)
-{
-    Result r = eval_string("width");
-    
-    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
-    TEST_ASSERT_TRUE(value_is_number(r.value));
-    
-    float width;
-    TEST_ASSERT_TRUE(value_to_number(r.value, &width));
-    TEST_ASSERT_EQUAL_FLOAT(40.0, width);
-}
-
-void test_width_reflects_setwidth(void)
-{
-    run_string("setwidth 64");
-    
-    Result r = eval_string("width");
-    
-    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
-    
-    float width;
-    TEST_ASSERT_TRUE(value_to_number(r.value, &width));
-    TEST_ASSERT_EQUAL_FLOAT(64.0, width);
-}
-
-// ============================================================================
 // fullscreen / fs tests
 // ============================================================================
 
@@ -338,18 +272,6 @@ void test_setcursor_records_command(void)
     TEST_ASSERT_EQUAL(10, cmd->params.cursor.row);
 }
 
-void test_setwidth_records_command(void)
-{
-    mock_device_clear_commands();
-    
-    run_string("setwidth 64");
-    
-    const MockCommand *cmd = mock_device_last_command();
-    TEST_ASSERT_NOT_NULL(cmd);
-    TEST_ASSERT_EQUAL(MOCK_CMD_SET_WIDTH, cmd->type);
-    TEST_ASSERT_EQUAL(64, cmd->params.width);
-}
-
 void test_fullscreen_records_command(void)
 {
     mock_device_clear_commands();
@@ -434,16 +356,6 @@ int main(void)
     RUN_TEST(test_setcursor_requires_two_items);
     RUN_TEST(test_setcursor_rejects_negative);
     
-    // setwidth tests
-    RUN_TEST(test_setwidth_to_40);
-    RUN_TEST(test_setwidth_to_64);
-    RUN_TEST(test_setwidth_rejects_invalid);
-    RUN_TEST(test_setwidth_rejects_zero);
-    
-    // width tests
-    RUN_TEST(test_width_returns_default);
-    RUN_TEST(test_width_reflects_setwidth);
-    
     // fullscreen tests
     RUN_TEST(test_fullscreen_sets_mode);
     RUN_TEST(test_fs_is_alias);
@@ -462,7 +374,6 @@ int main(void)
     // Command recording
     RUN_TEST(test_cleartext_records_command);
     RUN_TEST(test_setcursor_records_command);
-    RUN_TEST(test_setwidth_records_command);
     RUN_TEST(test_fullscreen_records_command);
     RUN_TEST(test_splitscreen_records_command);
     RUN_TEST(test_textscreen_records_command);

@@ -38,8 +38,7 @@ void test_initial_turtle_heading(void)
 void test_initial_pen_state(void)
 {
     const MockDeviceState *state = mock_device_get_state();
-    TEST_ASSERT_TRUE(state->turtle.pen_down);
-    TEST_ASSERT_EQUAL(MOCK_PEN_DOWN, state->turtle.pen_mode);
+    TEST_ASSERT_EQUAL(LOGO_PEN_DOWN, state->turtle.pen_state);
 }
 
 void test_initial_turtle_visibility(void)
@@ -125,7 +124,7 @@ void test_turtle_no_line_when_pen_up(void)
     LogoConsole *console = mock_device_get_console();
     
     // Lift pen
-    console->turtle->set_pen_down(false);
+    console->turtle->set_pen_state(LOGO_PEN_UP);
     
     // Move forward
     console->turtle->move(100.0f);
@@ -214,16 +213,16 @@ void test_turtle_set_position_draws_line(void)
 // Pen State Tests
 // ============================================================================
 
-void test_pen_down_state(void)
+void test_pen_state(void)
 {
     LogoConsole *console = mock_device_get_console();
     const MockDeviceState *state = mock_device_get_state();
     
-    console->turtle->set_pen_down(true);
-    TEST_ASSERT_TRUE(state->turtle.pen_down);
+    console->turtle->set_pen_state(LOGO_PEN_DOWN);
+    TEST_ASSERT_EQUAL(LOGO_PEN_DOWN, state->turtle.pen_state);
     
-    console->turtle->set_pen_down(false);
-    TEST_ASSERT_FALSE(state->turtle.pen_down);
+    console->turtle->set_pen_state(LOGO_PEN_UP);
+    TEST_ASSERT_EQUAL(LOGO_PEN_UP, state->turtle.pen_state);
 }
 
 // ============================================================================
@@ -363,19 +362,6 @@ void test_text_get_cursor(void)
     TEST_ASSERT_EQUAL(15, row);
 }
 
-void test_text_set_width(void)
-{
-    LogoConsole *console = mock_device_get_console();
-    const MockDeviceState *state = mock_device_get_state();
-    
-    console->text->set_width(64);
-    TEST_ASSERT_EQUAL(64, state->text.width);
-    TEST_ASSERT_EQUAL(64, console->text->get_width());
-    
-    console->text->set_width(40);
-    TEST_ASSERT_EQUAL(40, state->text.width);
-}
-
 void test_text_clear(void)
 {
     LogoConsole *console = mock_device_get_console();
@@ -491,7 +477,7 @@ void test_reset_restores_defaults(void)
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, state->turtle.y);
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, state->turtle.heading);
     TEST_ASSERT_TRUE(state->turtle.visible);
-    TEST_ASSERT_TRUE(state->turtle.pen_down);
+    TEST_ASSERT_EQUAL(LOGO_PEN_DOWN, state->turtle.pen_state);
     TEST_ASSERT_EQUAL(0, state->text.cursor_col);
     TEST_ASSERT_EQUAL(0, state->text.cursor_row);
     TEST_ASSERT_EQUAL(MOCK_SCREEN_TEXT, state->screen_mode);
@@ -558,7 +544,7 @@ int main(void)
     RUN_TEST(test_turtle_set_position_draws_line);
     
     // Pen state
-    RUN_TEST(test_pen_down_state);
+    RUN_TEST(test_pen_state);
     
     // Visibility
     RUN_TEST(test_turtle_visibility);
@@ -579,7 +565,6 @@ int main(void)
     // Text screen
     RUN_TEST(test_text_set_cursor);
     RUN_TEST(test_text_get_cursor);
-    RUN_TEST(test_text_set_width);
     RUN_TEST(test_text_clear);
     
     // Screen modes
