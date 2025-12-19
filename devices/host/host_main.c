@@ -108,7 +108,7 @@ int main(void)
     // Initialize the I/O manager
     LogoIO io;
     logo_io_init(&io, console, storage, hardware);
-    strcpy(io.prefix, "/Logo/"); // Default prefix
+    snprintf(io.prefix, sizeof io.prefix, "/Logo/"); // Default prefix
     
 
     // Initialize Logo subsystems
