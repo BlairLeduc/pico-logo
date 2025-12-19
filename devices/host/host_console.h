@@ -15,7 +15,7 @@ extern "C"
 #endif
 
     //
-    // New LogoConsole API
+    // Functions to create and destroy a host LogoConsole instance.
     //
 
     LogoConsole *logo_host_console_create(void);
