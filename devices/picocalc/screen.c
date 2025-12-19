@@ -345,8 +345,10 @@ int screen_gfx_save(const char *filename)
     dib_header[25] = (BMP_PIXELS_PER_METER >> 8) & 0xFF;
     dib_header[28] = (BMP_PIXELS_PER_METER & 0xFF);
     dib_header[29] = (BMP_PIXELS_PER_METER >> 8) & 0xFF;
-    dib_header[32] = 0; // Colors used (0 = all)
-    dib_header[36] = 0; // Important colors (0 = all)
+#define BMP_DIB_COLORS_USED_OFFSET        32  /* DIB header byte offset: Colors used */
+#define BMP_DIB_IMPORTANT_COLORS_OFFSET   36  /* DIB header byte offset: Important colors */
+    dib_header[BMP_DIB_COLORS_USED_OFFSET] = 0;      // Colors used (0 = all)
+    dib_header[BMP_DIB_IMPORTANT_COLORS_OFFSET] = 0; // Important colors (0 = all)
 
     fwrite(dib_header, 1, BMP_DIB_HEADER_SIZE, fp);
 
