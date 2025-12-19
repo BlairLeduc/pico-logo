@@ -156,10 +156,21 @@ static uint32_t mock_random(void)
     return 42; // Fixed value for testing
 }
 
+// Mock battery state for testing
+static int mock_battery_level = 100;
+static bool mock_battery_charging = false;
+
 static void mock_get_battery_level(int *level, bool *charging)
 {
-    *level = 100; // Always full for testing
-    *charging = false;
+    *level = mock_battery_level;
+    *charging = mock_battery_charging;
+}
+
+// Helper to set mock battery level for testing
+static void set_mock_battery(int level, bool charging)
+{
+    mock_battery_level = level;
+    mock_battery_charging = charging;
 }
 
 // User interrupt flag for testing
@@ -209,6 +220,8 @@ static void test_scaffold_setUp(void)
     mock_input_pos = 0;
     use_mock_device = false;
     mock_user_interrupt = false;  // Reset user interrupt flag
+    mock_battery_level = 100;     // Reset mock battery state
+    mock_battery_charging = false;
 
     // Set up mock console (embeds streams internally)
     logo_console_init(&mock_console, &mock_input_stream_ops, &mock_output_stream_ops, NULL);
