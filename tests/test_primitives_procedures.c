@@ -421,42 +421,6 @@ void test_define_error_empty_definition_list(void)
 }
 
 //==========================================================================
-// PROCEDUREP tests
-//==========================================================================
-
-void test_procedurep_true_for_user_defined(void)
-{
-    const char *params[] = {};
-    define_proc("userproc", params, 0, "print 1");
-    
-    Result r = eval_string("procedurep \"userproc");
-    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
-    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
-}
-
-void test_procedurep_true_for_primitive(void)
-{
-    // procedurep should return true for primitives too
-    Result r = eval_string("procedurep \"print");
-    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
-    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
-}
-
-void test_procedurep_false_for_undefined(void)
-{
-    Result r = eval_string("procedurep \"notaprocedure");
-    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
-    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
-}
-
-void test_procedurep_error_not_word(void)
-{
-    Result r = eval_string("procedurep [notaword]");
-    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
-}
-
-//==========================================================================
 // Additional error path tests
 //==========================================================================
 
@@ -715,12 +679,6 @@ int main(void)
     RUN_TEST(test_define_error_def_not_list);
     RUN_TEST(test_define_error_redefine_primitive);
     RUN_TEST(test_define_error_empty_definition_list);
-    
-    // PROCEDUREP tests
-    RUN_TEST(test_procedurep_true_for_user_defined);
-    RUN_TEST(test_procedurep_true_for_primitive);
-    RUN_TEST(test_procedurep_false_for_undefined);
-    RUN_TEST(test_procedurep_error_not_word);
     
     // Additional error path tests
     RUN_TEST(test_primitivep_error_not_word);

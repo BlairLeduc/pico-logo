@@ -1641,7 +1641,7 @@ definedp _word_
 `defined?` outputs `true` if word is the name of a user-defined procedure, `false` otherwise.
 
 
-## primative? (primativep)
+## primitive? (primitivep)
 
 primitive? _name_  
 primitivep _name_  
@@ -2354,4 +2354,17 @@ remprop _name_ _property_
 The `remprop` (for remove property) command removes _property_ from the property list of _name_.
 
 See `pprop` and `gprop`.
+
+
+
+# Device Specific
+
+
+## battery
+
+battery
+
+`operation`
+
+The `battery` operation returns a list where the first value is the percent remaining in the barrery and the second value is `true` is the battery is currectly charging.
 

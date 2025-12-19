@@ -40,6 +40,7 @@ extern "C"
     // Initialize primitive categories
     void primitives_arithmetic_init(void);
     void primitives_control_init(void);
+    void primitives_logical_init(void);
     void primitives_variables_init(void);
     void primitives_words_lists_init(void);
     void primitives_procedures_init(void);
