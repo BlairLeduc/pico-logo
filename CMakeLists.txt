@@ -196,6 +196,6 @@ if(BUILD_TESTING)
 
     target_link_libraries(logo_core_host logo_devices_host m)
 
-    # Include all test subdirectory
+    # Include the tests subdirectory
     add_subdirectory(tests)
 endif()
