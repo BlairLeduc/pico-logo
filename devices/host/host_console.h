@@ -2,7 +2,7 @@
 //  Pico Logo
 //  Copyright 2025 Blair Leduc. See LICENSE for details.
 //
-//  Defines the PicoCalc device interface for standard input and output.
+//  Defines the host device interface for standard input and output for the Logo interpreter.
 //
 
 #pragma once
