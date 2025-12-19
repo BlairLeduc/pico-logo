@@ -28,8 +28,30 @@
       }
     },
     {
+      "name": "host",
+      "displayName": "Native Host",
+      "description": "Build for native host platform",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build-host",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_FOR_HOST": "ON",
+        "BUILD_TESTING": "OFF"
+      }
+    },
+    {
+      "name": "host-debug",
+      "inherits": "host",
+      "displayName": "Native Host (Debug)",
+      "description": "Build for native host platform with debug symbols",
+      "binaryDir": "${sourceDir}/build-host-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
       "name": "tests",
-      "displayName": "Native Host Tests",
+      "displayName": "Native Tests",
       "description": "Build unit tests for native host platform",
       "binaryDir": "${sourceDir}/build-tests",
       "cacheVariables": {
@@ -40,11 +62,13 @@
     {
       "name": "tests-coverage",
       "inherits": "tests",
-      "displayName": "Tests with Coverage",
+      "displayName": "Native Tests with Coverage",
       "description": "Build tests with code coverage enabled",
       "binaryDir": "${sourceDir}/build-tests-coverage",
       "cacheVariables": {
-        "ENABLE_COVERAGE": "ON"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ENABLE_COVERAGE": "ON",
+        "BUILD_TESTING": "ON"
       }
     }
   ],
@@ -56,6 +80,14 @@
     {
       "name": "pico-debug",
       "configurePreset": "pico-debug"
+    },
+    {
+      "name": "host",
+      "configurePreset": "host"
+    },
+    {
+      "name": "host-debug",
+      "configurePreset": "host-debug"
     },
     {
       "name": "tests",

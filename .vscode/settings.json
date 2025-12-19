@@ -38,7 +38,7 @@
     "raspberry-pi-pico.cmakePath": "${HOME}/.pico-sdk/cmake/v3.31.5/bin/cmake",
     "raspberry-pi-pico.ninjaPath": "${HOME}/.pico-sdk/ninja/v1.12.1/ninja",
     "cmake.coverageInfoFiles": [
-        "${workspaceFolder}/build/coverage.info"
+        "${workspaceFolder}/build-tests-coverage/coverage.info"
     ],
     "cmake.preRunCoverageTarget": "coverage",
     "files.associations": {
@@ -47,5 +47,10 @@
         "evaluator.h": "c",
         "stdio.h": "c"
     },
-    "chat.agent.maxRequests": 50
+    "chat.agent.maxRequests": 50,
+    "coverage-gutters.coverageReportFileName": "coverage-report/**/index.html",
+    "coverage-gutters.coverageBaseDir": "**",
+    "coverage-gutters.coverageFileNames": [
+        "coverage.info"
+    ]
 }

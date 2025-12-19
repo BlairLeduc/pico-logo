@@ -12,7 +12,7 @@ target_include_directories(test_utils PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-target_link_libraries(test_utils PUBLIC logo_core_host)
+target_link_libraries(test_utils PUBLIC logo_core)
 
 # Macro to define a test executable
 macro(add_logo_test TEST_NAME)
