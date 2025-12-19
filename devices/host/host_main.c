@@ -91,6 +91,7 @@ int main(void)
     if (!storage)
     {
         fprintf(stderr, "Failed to create storage\n");
+        logo_host_console_destroy(console);
         return EXIT_FAILURE;
     }
 
@@ -99,6 +100,8 @@ int main(void)
     if (!hardware)
     {
         fprintf(stderr, "Failed to create hardware\n");
+        logo_host_storage_destroy(storage);
+        logo_host_console_destroy(console);
         return EXIT_FAILURE;
     }
 
@@ -403,6 +406,9 @@ int main(void)
 
     // Cleanup
     logo_io_cleanup(&io);
+    logo_host_hardware_destroy(hardware);
+    logo_host_storage_destroy(storage);
+    logo_host_console_destroy(console);
 
     return EXIT_SUCCESS;
 }
