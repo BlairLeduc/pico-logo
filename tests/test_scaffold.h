@@ -162,11 +162,25 @@ static void mock_get_battery_level(int *level, bool *charging)
     *charging = false;
 }
 
+// User interrupt flag for testing
+static bool mock_user_interrupt = false;
+
+static bool mock_check_user_interrupt(void)
+{
+    return mock_user_interrupt;
+}
+
+static void mock_clear_user_interrupt(void)
+{
+    mock_user_interrupt = false;
+}
 
 static LogoHardwareOps mock_hardware_ops = {
     .sleep = mock_sleep,
     .random = mock_random,
     .get_battery_level = mock_get_battery_level,
+    .check_user_interrupt = mock_check_user_interrupt,
+    .clear_user_interrupt = mock_clear_user_interrupt,
 };
 
 // Mock console (contains embedded streams)
@@ -194,6 +208,7 @@ static void test_scaffold_setUp(void)
     mock_input_buffer = NULL;
     mock_input_pos = 0;
     use_mock_device = false;
+    mock_user_interrupt = false;  // Reset user interrupt flag
 
     // Set up mock console (embeds streams internally)
     logo_console_init(&mock_console, &mock_input_stream_ops, &mock_output_stream_ops, NULL);

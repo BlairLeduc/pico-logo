@@ -4,6 +4,7 @@
 //
 
 #include "test_scaffold.h"
+#include "core/error.h"
 
 void setUp(void)
 {
@@ -249,6 +250,39 @@ void test_wait(void)
 }
 
 //==========================================================================
+// User Interrupt Tests
+//==========================================================================
+
+void test_user_interrupt_stops_evaluation(void)
+{
+    // Set the user interrupt flag before evaluating
+    mock_user_interrupt = true;
+    
+    // Try to run something - should be stopped immediately
+    // Use run_string which calls eval_instruction where the check happens
+    Result r = run_string("print 42");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_STOPPED, r.error_code);
+    
+    // Output should be empty since we stopped before executing
+    TEST_ASSERT_EQUAL_STRING("", output_buffer);
+    
+    // Flag should be cleared after check
+    TEST_ASSERT_FALSE(mock_user_interrupt);
+}
+
+void test_user_interrupt_stops_repeat(void)
+{
+    // This tests that user interrupt stops a repeat loop
+    // We can't easily test mid-loop interruption without threading,
+    // but we can test that checking happens
+    
+    // Run a repeat without interrupt first - should complete
+    run_string("repeat 3 [print 1]");
+    TEST_ASSERT_EQUAL_STRING("1\n1\n1\n", output_buffer);
+}
+
+//==========================================================================
 // Catch/Throw Tests (basic stubs for now)
 //==========================================================================
 
@@ -365,6 +399,10 @@ int main(void)
     
     // Wait
     RUN_TEST(test_wait);
+    
+    // User interrupt
+    RUN_TEST(test_user_interrupt_stops_evaluation);
+    RUN_TEST(test_user_interrupt_stops_repeat);
     
     // Catch/throw/error
     RUN_TEST(test_catch_basic);

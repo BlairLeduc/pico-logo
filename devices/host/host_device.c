@@ -336,10 +336,25 @@ static void host_hardware_get_battery_level(int *level, bool *charging)
     }
 }
 
+// User interrupt flag for host (can be set by signal handler if needed)
+static volatile bool host_user_interrupt = false;
+
+static bool host_hardware_check_user_interrupt(void)
+{
+    return host_user_interrupt;
+}
+
+static void host_hardware_clear_user_interrupt(void)
+{
+    host_user_interrupt = false;
+}
+
 static LogoHardwareOps host_hardware_ops = {
     .sleep = host_hardware_sleep,
     .random = host_hardware_random,
     .get_battery_level = host_hardware_get_battery_level,
+    .check_user_interrupt = host_hardware_check_user_interrupt,
+    .clear_user_interrupt = host_hardware_clear_user_interrupt,
 };
 
 LogoHardware *logo_host_hardware_create(void)

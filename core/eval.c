@@ -8,6 +8,7 @@
 #include "primitives.h"
 #include "procedures.h"
 #include "variables.h"
+#include "devices/io.h"
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
@@ -576,6 +577,13 @@ Result eval_expression(Evaluator *eval)
 
 Result eval_instruction(Evaluator *eval)
 {
+    // Check for user interrupt at the start of each instruction
+    LogoIO *io = primitives_get_io();
+    if (io && logo_io_check_user_interrupt(io))
+    {
+        return result_error(ERR_STOPPED);
+    }
+
     if (eval_at_end(eval))
     {
         return result_none();

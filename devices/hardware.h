@@ -32,6 +32,13 @@ extern "C"
 
         // Get battery level as a percentage (0-100) 
         void (*get_battery_level)(int *level, bool *charging);
+
+        // Check if user interrupt has been requested
+        // Returns true if interrupt was requested
+        bool (*check_user_interrupt)(void);
+
+        // Clear the user interrupt flag
+        void (*clear_user_interrupt)(void);
     } LogoHardwareOps;
 
     typedef struct LogoHardware
