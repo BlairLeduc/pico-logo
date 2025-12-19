@@ -84,6 +84,10 @@ extern "C"
         // Save graphics screen to file
         // Returns 0 on success, errno on failure
         int (*gfx_save)(const char *filename);
+
+        // Load graphics screen from file
+        // Returns 0 on success, errno on failure
+        int (*gfx_load)(const char *filename);
     } LogoConsoleTurtle;
 
     //

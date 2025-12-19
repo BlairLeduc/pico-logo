@@ -411,6 +411,18 @@ static bool turtle_dot_at(float x, float y)
     return screen_gfx_get_point(x, y) != GFX_DEFAULT_BACKGROUND;
 }
 
+static int turtle_gfx_save(const char *filename)
+{
+    return screen_gfx_save(filename);
+}
+
+static int turtle_gfx_load(const char *filename)
+{
+    int result = screen_gfx_load(filename);
+    screen_gfx_update();
+    return result;
+}
+
 static const LogoConsoleTurtle picocalc_turtle_ops = {
     .clear = turtle_clearscreen,
     .draw = turtle_draw,
@@ -434,7 +446,8 @@ static const LogoConsoleTurtle picocalc_turtle_ops = {
     .set_fence = NULL,       // Not implemented
     .set_window = NULL,      // Not implemented
     .set_wrap = NULL,        // Not implemented
-    .gfx_save = screen_gfx_save,
+    .gfx_save = turtle_gfx_save,
+    .gfx_load = turtle_gfx_load,
 };
 
 //

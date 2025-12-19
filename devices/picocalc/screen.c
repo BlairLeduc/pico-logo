@@ -301,8 +301,7 @@ void screen_gfx_update(void)
 
 int screen_gfx_save(const char *filename)
 {
-    // Save the current graphics buffer to a BMP file (16-bit RGB565)
-    // Convert 8-bit palette indices to 16-bit RGB565 values
+    // Save the current graphics buffer to an 8-bit indexed color BMP file
     FILE *fp = fopen(filename, "wb");
     if (!fp)
     {
@@ -335,9 +334,9 @@ int screen_gfx_save(const char *filename)
     dib_header[9] = (SCREEN_HEIGHT >> 8) & 0xFF;
     dib_header[10] = (SCREEN_HEIGHT >> 16) & 0xFF;
     dib_header[11] = (SCREEN_HEIGHT >> 24) & 0xFF;
-    dib_header[12] = BMP_COLOUR_PLANES;
-    dib_header[14] = BMP_COLOR_DEPTH;
-    dib_header[16] = BMP_COMPRESSION;
+    dib_header[12] = BMP_COLOUR_PLANES;     // Planes
+    dib_header[14] = BMP_COLOR_DEPTH;       // Bits per pixel
+    dib_header[16] = BMP_COMPRESSION;       // Compression (0 = none)
     dib_header[20] = BMP_PIXEL_DATA_SIZE & 0xFF;
     dib_header[21] = (BMP_PIXEL_DATA_SIZE >> 8) & 0xFF;
     dib_header[22] = (BMP_PIXEL_DATA_SIZE >> 16) & 0xFF;
@@ -346,42 +345,147 @@ int screen_gfx_save(const char *filename)
     dib_header[25] = (BMP_PIXELS_PER_METER >> 8) & 0xFF;
     dib_header[28] = (BMP_PIXELS_PER_METER & 0xFF);
     dib_header[29] = (BMP_PIXELS_PER_METER >> 8) & 0xFF;
+    dib_header[32] = 0; // Colors used (0 = all)
+    dib_header[36] = 0; // Important colors (0 = all)
 
     fwrite(dib_header, 1, BMP_DIB_HEADER_SIZE, fp);
 
-    // --- BITFIELDS MASKS for RGB565 ---
-    uint32_t red_mask = 0xF800;
-    uint32_t green_mask = 0x07E0;
-    uint32_t blue_mask = 0x001F;
-    fwrite(&red_mask, 4, 1, fp);
-    fwrite(&green_mask, 4, 1, fp);
-    fwrite(&blue_mask, 4, 1, fp);
-
-    // --- PIXEL DATA (bottom-up) ---
-    // Allocate a row buffer for RGB565 pixels
-    uint16_t *row_buffer = (uint16_t *)malloc(SCREEN_WIDTH * sizeof(uint16_t));
-    if (!row_buffer)
+    // --- COLOR PALETTE (256 entries, BGRA format) ---
+    // Convert RGB565 palette to BGRA
+    for (int i = 0; i < 256; i++)
     {
-        fclose(fp);
-        return ENOMEM;
+        uint16_t rgb565 = lcd_get_palette_value(i);
+        
+        // Extract RGB565 components (5-6-5 bits)
+        uint8_t r5 = (rgb565 >> 11) & 0x1F;
+        uint8_t g6 = (rgb565 >> 5) & 0x3F;
+        uint8_t b5 = rgb565 & 0x1F;
+        
+        // Convert to 8-bit RGB (expand to full range)
+        uint8_t r8 = (r5 * 255 + 15) / 31;
+        uint8_t g8 = (g6 * 255 + 31) / 63;
+        uint8_t b8 = (b5 * 255 + 15) / 31;
+        
+        // Write as BGRA
+        uint8_t palette_entry[4] = {b8, g8, r8, 0};
+        fwrite(palette_entry, 1, 4, fp);
     }
 
-    // Convert palette indices to RGB565 and write row by row
+    // --- PIXEL DATA (bottom-up, with row padding) ---
+    // BMP rows must be padded to 4-byte boundaries
+    uint8_t padding[3] = {0, 0, 0};
+    int padding_bytes = (4 - (SCREEN_WIDTH % 4)) % 4;
+    
     for (int y = SCREEN_HEIGHT - 1; y >= 0; y--)
     {
-        uint8_t *src_row = gfx_buffer + y * SCREEN_WIDTH;
-        for (int x = 0; x < SCREEN_WIDTH; x++)
+        fwrite(gfx_buffer + y * SCREEN_WIDTH, 1, SCREEN_WIDTH, fp);
+        if (padding_bytes > 0)
         {
-            uint8_t palette_index = src_row[x];
-            row_buffer[x] = lcd_get_palette_value(palette_index);
+            fwrite(padding, 1, padding_bytes, fp);
         }
-        fwrite(row_buffer, BMP_BYTES_PER_PIXEL, SCREEN_WIDTH, fp);
     }
 
-    free(row_buffer);
+    fclose(fp);
+    return 0;
+}
+
+int screen_gfx_load(const char *filename)
+{
+    // Load an 8-bit indexed color BMP file into the graphics buffer and palette
+    FILE *fp = fopen(filename, "rb");
+    if (!fp)
+    {
+        return errno;
+    }
+
+    // --- READ AND VALIDATE BMP FILE HEADER ---
+    uint8_t file_header[BMP_FILE_HEADER_SIZE];
+    if (fread(file_header, 1, BMP_FILE_HEADER_SIZE, fp) != BMP_FILE_HEADER_SIZE)
+    {
+        fclose(fp);
+        return EIO;
+    }
+
+    // Check signature
+    if (file_header[0] != 'B' || file_header[1] != 'M')
+    {
+        fclose(fp);
+        return EINVAL;
+    }
+
+    // Get pixel data offset
+    uint32_t pixel_offset = file_header[10] | (file_header[11] << 8) | 
+                           (file_header[12] << 16) | (file_header[13] << 24);
+
+    // --- READ AND VALIDATE DIB HEADER ---
+    uint8_t dib_header[BMP_DIB_HEADER_SIZE];
+    if (fread(dib_header, 1, BMP_DIB_HEADER_SIZE, fp) != BMP_DIB_HEADER_SIZE)
+    {
+        fclose(fp);
+        return EIO;
+    }
+
+    // Extract image properties
+    int32_t width = dib_header[4] | (dib_header[5] << 8) | 
+                    (dib_header[6] << 16) | (dib_header[7] << 24);
+    int32_t height = dib_header[8] | (dib_header[9] << 8) | 
+                     (dib_header[10] << 16) | (dib_header[11] << 24);
+    uint16_t bits_per_pixel = dib_header[14] | (dib_header[15] << 8);
+
+    // Validate dimensions and format
+    if (width != SCREEN_WIDTH || height != SCREEN_HEIGHT || bits_per_pixel != 8)
+    {
+        fclose(fp);
+        return EINVAL;
+    }
+
+    // --- READ COLOR PALETTE ---
+    uint8_t palette_data[256 * 4];
+    if (fread(palette_data, 1, 256 * 4, fp) != 256 * 4)
+    {
+        fclose(fp);
+        return EIO;
+    }
+
+    // Convert BGRA palette to RGB565 and update the LCD palette
+    for (int i = 0; i < 256; i++)
+    {
+        uint8_t b = palette_data[i * 4 + 0];
+        uint8_t g = palette_data[i * 4 + 1];
+        uint8_t r = palette_data[i * 4 + 2];
+        
+        // Convert 8-bit RGB to RGB565
+        uint16_t r5 = (r * 31 + 127) / 255;
+        uint16_t g6 = (g * 63 + 127) / 255;
+        uint16_t b5 = (b * 31 + 127) / 255;
+        uint16_t rgb565 = (r5 << 11) | (g6 << 5) | b5;
+        
+        lcd_set_palette_value(i, rgb565);
+    }
+
+    // --- READ PIXEL DATA ---
+    // Seek to pixel data offset
+    fseek(fp, pixel_offset, SEEK_SET);
+
+    // Calculate row padding
+    int padding_bytes = (4 - (SCREEN_WIDTH % 4)) % 4;
+    uint8_t padding[3];
+
+    // Read pixel data (bottom-up)
+    for (int y = SCREEN_HEIGHT - 1; y >= 0; y--)
+    {
+        if (fread(gfx_buffer + y * SCREEN_WIDTH, 1, SCREEN_WIDTH, fp) != SCREEN_WIDTH)
+        {
+            fclose(fp);
+            return EIO;
+        }
+        if (padding_bytes > 0)
+        {
+            fread(padding, 1, padding_bytes, fp);
+        }
+    }
 
     fclose(fp);
-
     return 0;
 }
 
