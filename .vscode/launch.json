@@ -46,5 +46,18 @@
                 "load \"${command:raspberry-pi-pico.launchTargetPath}\""
             ]
         },
+        {
+            "name": "Unity Test Explorer Debug",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/${command:unityExplorer.debugTestExecutable}",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "lldb",
+            "preLaunchTask": "Build Tests"
+        }
     ]
 }

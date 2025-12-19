@@ -7,8 +7,8 @@
 
 #pragma once
 
-#include "devices/device.h"
 #include "devices/console.h"
+#include "devices/hardware.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -16,16 +16,16 @@ extern "C"
 #endif
 
     //
-    // New LogoConsole API
+    // LogoConsole API
     //
     LogoConsole *logo_host_console_create(void);
     void logo_host_console_destroy(LogoConsole *console);
 
     //
-    // Legacy LogoDevice API (for backward compatibility)
+    // LogoHardware API
     //
-    LogoDevice *logo_host_device_create(void);
-    void logo_host_device_destroy(LogoDevice *device);
+    LogoHardware *logo_host_hardware_create(void);
+    void logo_host_hardware_destroy(LogoHardware *hardware);
 
 #ifdef __cplusplus
 }

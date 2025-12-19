@@ -2,7 +2,7 @@
 //  Pico Logo
 //  Copyright 2025 Blair Leduc. See LICENSE for details.
 //
-//  Tests for Files primitives: open, openread, openwrite, openappend, openupdate, close, closeall,
+//  Tests for Files primitives: open, close, closeall,
 //                              setread, setwrite, reader, writer, allopen, readpos, setreadpos,
 //                              writepos, setwritepos, filelen, dribble, nodribble, load, save
 //
@@ -10,6 +10,8 @@
 #include "test_scaffold.h"
 #include <stdlib.h>
 #include <string.h>
+#include "devices/console.h"
+#include "devices/storage.h"
 
 //==========================================================================
 // Mock File System
@@ -35,7 +37,6 @@ typedef struct MockFileContext
     MockFile *file;
     size_t read_pos;
     size_t write_pos;
-    LogoFileMode mode;
 } MockFileContext;
 
 // Mock file stream operations
@@ -240,37 +241,13 @@ static void mock_fs_reset(void)
     }
 }
 
-// Mock file opener callback
-static LogoStream *mock_file_opener(const char *pathname, LogoFileMode mode)
+// Mock file opener - creates file if it doesn't exist (matches new storage API)
+static LogoStream *mock_storage_open(const char *pathname)
 {
-    MockFile *file = NULL;
-    
-    switch (mode)
-    {
-    case LOGO_FILE_READ:
-    case LOGO_FILE_UPDATE:
-        // File must exist
-        file = mock_fs_get_file(pathname, false);
-        if (!file)
-            return NULL;
-        break;
-        
-    case LOGO_FILE_WRITE:
-        // Create/truncate file
-        file = mock_fs_get_file(pathname, true);
-        if (!file)
-            return NULL;
-        file->size = 0;
-        file->data[0] = '\0';
-        break;
-        
-    case LOGO_FILE_APPEND:
-        // Create if doesn't exist
-        file = mock_fs_get_file(pathname, true);
-        if (!file)
-            return NULL;
-        break;
-    }
+    // Create file if it doesn't exist
+    MockFile *file = mock_fs_get_file(pathname, true);
+    if (!file)
+        return NULL;
     
     // Create the stream
     LogoStream *stream = malloc(sizeof(LogoStream));
@@ -286,14 +263,86 @@ static LogoStream *mock_file_opener(const char *pathname, LogoFileMode mode)
     
     ctx->file = file;
     ctx->read_pos = 0;
-    ctx->write_pos = (mode == LOGO_FILE_APPEND) ? file->size : 0;
-    ctx->mode = mode;
+    ctx->write_pos = 0;
     
     logo_stream_init(stream, LOGO_STREAM_FILE, &mock_file_ops, ctx, pathname);
     stream->is_open = true;
     
     return stream;
 }
+
+// Mock storage operations
+static bool mock_storage_file_exists(const char *pathname)
+{
+    return mock_fs_get_file(pathname, false) != NULL;
+}
+
+static bool mock_storage_dir_exists(const char *pathname)
+{
+    (void)pathname;
+    return false;  // No directory support in mock
+}
+
+static bool mock_storage_file_delete(const char *pathname)
+{
+    MockFile *file = mock_fs_get_file(pathname, false);
+    if (!file)
+        return false;
+    file->exists = false;
+    return true;
+}
+
+static bool mock_storage_dir_create(const char *pathname)
+{
+    (void)pathname;
+    return false;  // No directory support in mock
+}
+
+static bool mock_storage_dir_delete(const char *pathname)
+{
+    (void)pathname;
+    return false;  // No directory support in mock
+}
+
+static bool mock_storage_rename(const char *old_path, const char *new_path)
+{
+    MockFile *file = mock_fs_get_file(old_path, false);
+    if (!file)
+        return false;
+    strncpy(file->name, new_path, LOGO_STREAM_NAME_MAX - 1);
+    file->name[LOGO_STREAM_NAME_MAX - 1] = '\0';
+    return true;
+}
+
+static long mock_storage_file_size(const char *pathname)
+{
+    MockFile *file = mock_fs_get_file(pathname, false);
+    return file ? (long)file->size : -1;
+}
+
+static bool mock_storage_list_directory(const char *pathname, LogoDirCallback callback,
+                                        void *user_data, const char *filter)
+{
+    (void)pathname;
+    (void)callback;
+    (void)user_data;
+    (void)filter;
+    return true;  // Return empty directory
+}
+
+static LogoStorageOps mock_storage_ops = {
+    .open = mock_storage_open,
+    .file_exists = mock_storage_file_exists,
+    .dir_exists = mock_storage_dir_exists,
+    .file_delete = mock_storage_file_delete,
+    .dir_create = mock_storage_dir_create,
+    .dir_delete = mock_storage_dir_delete,
+    .rename = mock_storage_rename,
+    .file_size = mock_storage_file_size,
+    .list_directory = mock_storage_list_directory
+};
+
+static LogoStorage mock_storage;
 
 //==========================================================================
 // Test Setup/Teardown
@@ -304,8 +353,12 @@ void setUp(void)
     test_scaffold_setUp();
     mock_fs_reset();
     
-    // Set the mock file opener
-    logo_io_set_file_opener(&mock_io, mock_file_opener);
+    // Initialize mock storage with our operations
+    logo_storage_init(&mock_storage, &mock_storage_ops);
+    
+    // Re-initialize I/O with mock storage (using mock_console from scaffold)
+    logo_io_init(&mock_io, &mock_console, &mock_storage, NULL);
+    primitives_set_io(&mock_io);
 }
 
 void tearDown(void)
@@ -330,68 +383,18 @@ void test_open_creates_new_file(void)
     TEST_ASSERT_NOT_NULL(file);
 }
 
-void test_openread_existing_file(void)
+void test_open_existing_file(void)
 {
     mock_fs_create_file("existing.txt", "hello world");
     
-    Result r = run_string("openread \"existing.txt");
+    Result r = run_string("open \"existing.txt");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
-}
-
-void test_openread_nonexistent_file_error(void)
-{
-    Result r = run_string("openread \"nonexistent.txt");
-    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-}
-
-void test_openwrite_creates_file(void)
-{
-    Result r = run_string("openwrite \"newfile.txt");
-    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
-    
-    MockFile *file = mock_fs_get_file("newfile.txt", false);
-    TEST_ASSERT_NOT_NULL(file);
-}
-
-void test_openwrite_truncates_existing(void)
-{
-    mock_fs_create_file("existing.txt", "original content");
-    
-    Result r = run_string("openwrite \"existing.txt");
-    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
-    
-    MockFile *file = mock_fs_get_file("existing.txt", false);
-    TEST_ASSERT_NOT_NULL(file);
-    TEST_ASSERT_EQUAL(0, file->size);
-}
-
-void test_openappend_creates_file(void)
-{
-    Result r = run_string("openappend \"appendfile.txt");
-    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
-    
-    MockFile *file = mock_fs_get_file("appendfile.txt", false);
-    TEST_ASSERT_NOT_NULL(file);
-}
-
-void test_openupdate_existing_file(void)
-{
-    mock_fs_create_file("update.txt", "data");
-    
-    Result r = run_string("openupdate \"update.txt");
-    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
-}
-
-void test_openupdate_nonexistent_file_error(void)
-{
-    Result r = run_string("openupdate \"nonexistent.txt");
-    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
 void test_close_file(void)
 {
     mock_fs_create_file("toclose.txt", "data");
-    run_string("openread \"toclose.txt");
+    run_string("open \"toclose.txt");
     
     Result r = run_string("close \"toclose.txt");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
@@ -408,8 +411,8 @@ void test_closeall(void)
     mock_fs_create_file("file1.txt", "a");
     mock_fs_create_file("file2.txt", "b");
     
-    run_string("openread \"file1.txt");
-    run_string("openread \"file2.txt");
+    run_string("open \"file1.txt");
+    run_string("open \"file2.txt");
     
     Result r = run_string("closeall");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
@@ -444,7 +447,7 @@ void test_writer_default_screen(void)
 void test_setread_to_file(void)
 {
     mock_fs_create_file("input.txt", "file content\n");
-    run_string("openread \"input.txt");
+    run_string("open \"input.txt");
     run_string("setread \"input.txt");
     
     Result r = eval_string("reader");
@@ -456,7 +459,7 @@ void test_setread_to_file(void)
 void test_setread_back_to_keyboard(void)
 {
     mock_fs_create_file("input.txt", "content");
-    run_string("openread \"input.txt");
+    run_string("open \"input.txt");
     run_string("setread \"input.txt");
     run_string("setread []");
     
@@ -474,7 +477,7 @@ void test_setread_unopened_file_error(void)
 
 void test_setwrite_to_file(void)
 {
-    run_string("openwrite \"output.txt");
+    run_string("open \"output.txt");
     run_string("setwrite \"output.txt");
     
     Result r = eval_string("writer");
@@ -485,7 +488,7 @@ void test_setwrite_to_file(void)
 
 void test_setwrite_back_to_screen(void)
 {
-    run_string("openwrite \"output.txt");
+    run_string("open \"output.txt");
     run_string("setwrite \"output.txt");
     run_string("setwrite []");
     
@@ -516,7 +519,7 @@ void test_allopen_empty(void)
 void test_allopen_one_file(void)
 {
     mock_fs_create_file("file.txt", "data");
-    run_string("openread \"file.txt");
+    run_string("open \"file.txt");
     
     Result r = eval_string("allopen");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
@@ -533,8 +536,8 @@ void test_allopen_multiple_files(void)
     mock_fs_create_file("a.txt", "a");
     mock_fs_create_file("b.txt", "b");
     
-    run_string("openread \"a.txt");
-    run_string("openread \"b.txt");
+    run_string("open \"a.txt");
+    run_string("open \"b.txt");
     
     Result r = eval_string("allopen");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
@@ -554,7 +557,7 @@ void test_allopen_multiple_files(void)
 void test_readpos_at_start(void)
 {
     mock_fs_create_file("pos.txt", "hello world");
-    run_string("openread \"pos.txt");
+    run_string("open \"pos.txt");
     run_string("setread \"pos.txt");
     
     Result r = eval_string("readpos");
@@ -566,7 +569,7 @@ void test_readpos_at_start(void)
 void test_readpos_after_read(void)
 {
     mock_fs_create_file("pos.txt", "hello world");
-    run_string("openread \"pos.txt");
+    run_string("open \"pos.txt");
     run_string("setread \"pos.txt");
     eval_string("readchars 5");  // Read "hello"
     
@@ -578,7 +581,7 @@ void test_readpos_after_read(void)
 void test_setreadpos(void)
 {
     mock_fs_create_file("pos.txt", "hello world");
-    run_string("openread \"pos.txt");
+    run_string("open \"pos.txt");
     run_string("setread \"pos.txt");
     run_string("setreadpos 6");
     
@@ -596,7 +599,7 @@ void test_readpos_keyboard_error(void)
 
 void test_writepos_at_start(void)
 {
-    run_string("openwrite \"pos.txt");
+    run_string("open \"pos.txt");
     run_string("setwrite \"pos.txt");
     
     Result r = eval_string("writepos");
@@ -607,7 +610,7 @@ void test_writepos_at_start(void)
 
 void test_writepos_after_write(void)
 {
-    run_string("openwrite \"pos.txt");
+    run_string("open \"pos.txt");
     run_string("setwrite \"pos.txt");
     run_string("type \"hello");
     
@@ -619,7 +622,7 @@ void test_writepos_after_write(void)
 void test_setwritepos(void)
 {
     mock_fs_create_file("pos.txt", "hello world");
-    run_string("openupdate \"pos.txt");
+    run_string("open \"pos.txt");
     run_string("setwrite \"pos.txt");
     run_string("setwritepos 6");
     run_string("type \"WORLD");
@@ -642,7 +645,7 @@ void test_writepos_screen_error(void)
 void test_filelen_returns_size(void)
 {
     mock_fs_create_file("sized.txt", "12345678901234567890");  // 20 chars
-    run_string("openread \"sized.txt");
+    run_string("open \"sized.txt");
     
     Result r = eval_string("filelen \"sized.txt");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
@@ -653,7 +656,7 @@ void test_filelen_returns_size(void)
 void test_filelen_empty_file(void)
 {
     mock_fs_create_file("empty.txt", "");
-    run_string("openread \"empty.txt");
+    run_string("open \"empty.txt");
     
     Result r = eval_string("filelen \"empty.txt");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
@@ -699,14 +702,14 @@ void test_nodribble_when_not_dribbling(void)
 void test_write_and_read_file(void)
 {
     // Write to file
-    run_string("openwrite \"data.txt");
+    run_string("open \"data.txt");
     run_string("setwrite \"data.txt");
     run_string("print \"hello");
     run_string("setwrite []");
     run_string("close \"data.txt");
     
     // Read from file
-    run_string("openread \"data.txt");
+    run_string("open \"data.txt");
     run_string("setread \"data.txt");
     Result r = eval_string("readword");
     
@@ -719,8 +722,11 @@ void test_append_to_file(void)
 {
     mock_fs_create_file("append.txt", "first\n");
     
-    run_string("openappend \"append.txt");
+    // Open file and set write position to end to simulate append
+    run_string("open \"append.txt");
     run_string("setwrite \"append.txt");
+    // Move write position to end of file (after "first\n" = 6 bytes)
+    run_string("setwritepos 6");
     run_string("print \"second");
     run_string("setwrite []");
     run_string("close \"append.txt");
@@ -733,7 +739,7 @@ void test_readlist_from_file(void)
 {
     mock_fs_create_file("list.txt", "hello world\n");
     
-    run_string("openread \"list.txt");
+    run_string("open \"list.txt");
     run_string("setread \"list.txt");
     Result r = eval_string("readlist");
     
@@ -749,7 +755,7 @@ void test_readchar_from_file(void)
 {
     mock_fs_create_file("chars.txt", "ABC");
     
-    run_string("openread \"chars.txt");
+    run_string("open \"chars.txt");
     run_string("setread \"chars.txt");
     
     Result r1 = eval_string("readchar");
@@ -799,7 +805,7 @@ void test_filelen_invalid_input(void)
 void test_setreadpos_invalid_input(void)
 {
     mock_fs_create_file("pos.txt", "data");
-    run_string("openread \"pos.txt");
+    run_string("open \"pos.txt");
     run_string("setread \"pos.txt");
     
     Result r = run_string("setreadpos \"abc");
@@ -809,7 +815,7 @@ void test_setreadpos_invalid_input(void)
 void test_setreadpos_negative(void)
 {
     mock_fs_create_file("pos.txt", "data");
-    run_string("openread \"pos.txt");
+    run_string("open \"pos.txt");
     run_string("setread \"pos.txt");
     
     Result r = run_string("setreadpos -1");
@@ -818,7 +824,7 @@ void test_setreadpos_negative(void)
 
 void test_setwritepos_invalid_input(void)
 {
-    run_string("openwrite \"pos.txt");
+    run_string("open \"pos.txt");
     run_string("setwrite \"pos.txt");
     
     Result r = run_string("setwritepos \"abc");
@@ -827,7 +833,7 @@ void test_setwritepos_invalid_input(void)
 
 void test_setwritepos_negative(void)
 {
-    run_string("openwrite \"pos.txt");
+    run_string("open \"pos.txt");
     run_string("setwrite \"pos.txt");
     
     Result r = run_string("setwritepos -1");
@@ -899,13 +905,7 @@ int main(void)
     
     // Open/Close tests
     RUN_TEST(test_open_creates_new_file);
-    RUN_TEST(test_openread_existing_file);
-    RUN_TEST(test_openread_nonexistent_file_error);
-    RUN_TEST(test_openwrite_creates_file);
-    RUN_TEST(test_openwrite_truncates_existing);
-    RUN_TEST(test_openappend_creates_file);
-    RUN_TEST(test_openupdate_existing_file);
-    RUN_TEST(test_openupdate_nonexistent_file_error);
+    RUN_TEST(test_open_existing_file);
     RUN_TEST(test_close_file);
     RUN_TEST(test_close_unopened_file_error);
     RUN_TEST(test_closeall);
