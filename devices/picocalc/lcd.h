@@ -74,7 +74,6 @@
 #define MAX_ROW (ROWS - 1)            // maximum row index (0-based)
 #define PALETTE_FG (254)              // foreground colour palette slot
 #define PALETTE_BG (255)              // background colour palette slot
-#define PALETTE_FIXED_COLORS (128)    // number of fixed palette colours
 
 // Handy macros
 #define RGB(r, g, b) ((uint16_t)(((r) >> 3) << 11 | ((g) >> 2) << 5 | ((b) >> 3)))

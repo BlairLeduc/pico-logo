@@ -284,6 +284,32 @@ static void mock_turtle_set_wrap(void)
     record_command(MOCK_CMD_SET_WRAP);
 }
 
+static int mock_turtle_gfx_save(const char *filename)
+{
+    // Track the call
+    mock_state.gfx_io.gfx_save_call_count++;
+    if (filename)
+    {
+        strncpy(mock_state.gfx_io.last_save_filename, filename,
+                sizeof(mock_state.gfx_io.last_save_filename) - 1);
+        mock_state.gfx_io.last_save_filename[sizeof(mock_state.gfx_io.last_save_filename) - 1] = '\0';
+    }
+    return mock_state.gfx_io.gfx_save_result;
+}
+
+static int mock_turtle_gfx_load(const char *filename)
+{
+    // Track the call
+    mock_state.gfx_io.gfx_load_call_count++;
+    if (filename)
+    {
+        strncpy(mock_state.gfx_io.last_load_filename, filename,
+                sizeof(mock_state.gfx_io.last_load_filename) - 1);
+        mock_state.gfx_io.last_load_filename[sizeof(mock_state.gfx_io.last_load_filename) - 1] = '\0';
+    }
+    return mock_state.gfx_io.gfx_load_result;
+}
+
 // Turtle operations structure
 static const LogoConsoleTurtle mock_turtle_ops = {
     .clear = mock_turtle_clear,
@@ -307,7 +333,9 @@ static const LogoConsoleTurtle mock_turtle_ops = {
     .fill = mock_turtle_fill,
     .set_fence = mock_turtle_set_fence,
     .set_window = mock_turtle_set_window,
-    .set_wrap = mock_turtle_set_wrap
+    .set_wrap = mock_turtle_set_wrap,
+    .gfx_save = mock_turtle_gfx_save,
+    .gfx_load = mock_turtle_gfx_load
 };
 
 //
@@ -626,6 +654,14 @@ void mock_device_reset(void)
     // Clear boundary error
     mock_state.boundary_error = false;
     
+    // Clear gfx I/O state
+    mock_state.gfx_io.last_save_filename[0] = '\0';
+    mock_state.gfx_io.last_load_filename[0] = '\0';
+    mock_state.gfx_io.gfx_save_call_count = 0;
+    mock_state.gfx_io.gfx_load_call_count = 0;
+    mock_state.gfx_io.gfx_save_result = 0;  // Default to success
+    mock_state.gfx_io.gfx_load_result = 0;  // Default to success
+    
     // Clear I/O buffers
     mock_output_buffer[0] = '\0';
     mock_output_pos = 0;
@@ -775,4 +811,38 @@ void mock_device_clear_output(void)
 {
     mock_output_buffer[0] = '\0';
     mock_output_pos = 0;
+}
+
+//
+// Graphics file I/O helpers for testing
+//
+
+void mock_device_set_gfx_save_result(int result)
+{
+    mock_state.gfx_io.gfx_save_result = result;
+}
+
+void mock_device_set_gfx_load_result(int result)
+{
+    mock_state.gfx_io.gfx_load_result = result;
+}
+
+const char *mock_device_get_last_gfx_save_filename(void)
+{
+    return mock_state.gfx_io.last_save_filename;
+}
+
+const char *mock_device_get_last_gfx_load_filename(void)
+{
+    return mock_state.gfx_io.last_load_filename;
+}
+
+int mock_device_get_gfx_save_call_count(void)
+{
+    return mock_state.gfx_io.gfx_save_call_count;
+}
+
+int mock_device_get_gfx_load_call_count(void)
+{
+    return mock_state.gfx_io.gfx_load_call_count;
 }

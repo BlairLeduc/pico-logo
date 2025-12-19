@@ -182,6 +182,17 @@ extern "C"
 
         // Error tracking
         bool boundary_error;                 // Set when turtle hits boundary in fence mode
+
+        // Graphics file operations tracking
+        struct
+        {
+            char last_save_filename[256];    // Last filename passed to gfx_save
+            char last_load_filename[256];    // Last filename passed to gfx_load
+            int gfx_save_call_count;         // Number of times gfx_save was called
+            int gfx_load_call_count;         // Number of times gfx_load was called
+            int gfx_save_result;             // Result to return from gfx_save (0 = success)
+            int gfx_load_result;             // Result to return from gfx_load (0 = success)
+        } gfx_io;
     } MockDeviceState;
 
     //
@@ -221,6 +232,14 @@ extern "C"
     void mock_device_set_input(const char *input);
     const char *mock_device_get_output(void);
     void mock_device_clear_output(void);
+
+    // Graphics file I/O helpers for testing
+    void mock_device_set_gfx_save_result(int result);
+    void mock_device_set_gfx_load_result(int result);
+    const char *mock_device_get_last_gfx_save_filename(void);
+    const char *mock_device_get_last_gfx_load_filename(void);
+    int mock_device_get_gfx_save_call_count(void);
+    int mock_device_get_gfx_load_call_count(void);
 
 #ifdef __cplusplus
 }

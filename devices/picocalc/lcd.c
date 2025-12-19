@@ -64,10 +64,7 @@ static void lcd_enable_interrupts()
 
 void lcd_set_palette_value(uint8_t slot, uint16_t colour)
 {
-    if (slot >= PALETTE_FIXED_COLORS)
-    {
-        palette[slot] = colour;
-    }
+    palette[slot] = colour;
 }
 
 uint16_t lcd_get_palette_value(uint8_t slot)
