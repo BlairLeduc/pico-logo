@@ -51,6 +51,6 @@
     "coverage-gutters.coverageReportFileName": "coverage-report/**/index.html",
     "coverage-gutters.coverageBaseDir": "**",
     "coverage-gutters.coverageFileNames": [
-        "coverage.info",
+        "coverage.info"
     ]
 }
