@@ -2143,14 +2143,14 @@ loadpic _pathname_
 
 `command`
 
-The `loadpic` command loads the picture named by _pathname_ onto the graphics screen. Logo will load any file onto the graphics screen. If the file is not a picture, something will be put on the graphics screen, but you cannot be sure what it will be.
+The `loadpic` command loads the picture named by _pathname_ onto the graphics screen. Logo will only load 8-bit indexed color BMP onto the graphics screen. 
 
 
 ## savepic
 
 savepic _pathname_ (command)
 
-`savepic` saves the graphics screen into the file indicated by _pathname_. You can retrieve the screen later using `loadpic`. The image is saved as a bitmap (.bmp) file.
+`savepic` saves the graphics screen into the file indicated by _pathname_. You can retrieve the screen later using `loadpic`. The image is saved as a 8-bit indexed color BMP (.bmp) file.
 
 
 ## dribble

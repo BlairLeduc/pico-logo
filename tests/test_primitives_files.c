@@ -10,6 +10,7 @@
 #include "test_scaffold.h"
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include "devices/console.h"
 #include "devices/storage.h"
 
@@ -896,6 +897,193 @@ void test_catalog_runs_without_error(void)
 }
 
 //==========================================================================
+// Savepic/Loadpic Tests
+//==========================================================================
+
+// Special setup for savepic/loadpic tests - needs turtle and storage
+// Note: This is called AFTER setUp(), so don't reinitialize mem/primitives
+static void setUp_with_turtle(void)
+{
+    mock_fs_reset();
+    
+    // Initialize mock device (provides turtle with gfx_save/gfx_load)
+    mock_device_init();
+    
+    // Re-initialize I/O with mock device console AND mock storage
+    // (mock_storage was already initialized in setUp())
+    logo_io_init(&mock_io, mock_device_get_console(), &mock_storage, NULL);
+    primitives_set_io(&mock_io);
+}
+
+static void tearDown_with_turtle(void)
+{
+    logo_io_close_all(&mock_io);
+    mock_fs_reset();
+}
+
+void test_savepic_creates_file(void)
+{
+    setUp_with_turtle();
+    
+    Result r = run_string("savepic \"test.bmp");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_NONE, r.status, "savepic should succeed");
+    
+    // Verify gfx_save was called
+    TEST_ASSERT_EQUAL(1, mock_device_get_gfx_save_call_count());
+    TEST_ASSERT_EQUAL_STRING("test.bmp", mock_device_get_last_gfx_save_filename());
+    
+    tearDown_with_turtle();
+}
+
+void test_savepic_file_exists_error(void)
+{
+    setUp_with_turtle();
+    
+    // Create an existing file
+    mock_fs_create_file("exists.bmp", "existing content");
+    
+    Result r = run_string("savepic \"exists.bmp");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_ERROR, r.status, "savepic should error when file exists");
+    
+    // Verify gfx_save was NOT called (file exists check should fail first)
+    TEST_ASSERT_EQUAL(0, mock_device_get_gfx_save_call_count());
+    
+    tearDown_with_turtle();
+}
+
+void test_savepic_disk_trouble_error(void)
+{
+    setUp_with_turtle();
+    
+    // Set up gfx_save to return an error
+    mock_device_set_gfx_save_result(EIO);
+    
+    Result r = run_string("savepic \"trouble.bmp");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_ERROR, r.status, "savepic should error on disk trouble");
+    
+    // Verify gfx_save was called
+    TEST_ASSERT_EQUAL(1, mock_device_get_gfx_save_call_count());
+    
+    tearDown_with_turtle();
+}
+
+void test_savepic_invalid_input_error(void)
+{
+    setUp_with_turtle();
+    
+    Result r = run_string("savepic [not a word]");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_ERROR, r.status, "savepic should error on non-word input");
+    
+    // Verify gfx_save was NOT called
+    TEST_ASSERT_EQUAL(0, mock_device_get_gfx_save_call_count());
+    
+    tearDown_with_turtle();
+}
+
+void test_loadpic_loads_file(void)
+{
+    setUp_with_turtle();
+    
+    // Create the file to load
+    mock_fs_create_file("picture.bmp", "BMP data");
+    
+    Result r = run_string("loadpic \"picture.bmp");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_NONE, r.status, "loadpic should succeed");
+    
+    // Verify gfx_load was called
+    TEST_ASSERT_EQUAL(1, mock_device_get_gfx_load_call_count());
+    TEST_ASSERT_EQUAL_STRING("picture.bmp", mock_device_get_last_gfx_load_filename());
+    
+    tearDown_with_turtle();
+}
+
+void test_loadpic_file_not_found_error(void)
+{
+    setUp_with_turtle();
+    
+    Result r = run_string("loadpic \"missing.bmp");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_ERROR, r.status, "loadpic should error when file not found");
+    
+    // Verify gfx_load was NOT called (file exists check should fail first)
+    TEST_ASSERT_EQUAL(0, mock_device_get_gfx_load_call_count());
+    
+    tearDown_with_turtle();
+}
+
+void test_loadpic_wrong_type_error(void)
+{
+    setUp_with_turtle();
+    
+    // Create the file to load
+    mock_fs_create_file("badpic.bmp", "bad data");
+    
+    // Set up gfx_load to return EINVAL (wrong file type)
+    mock_device_set_gfx_load_result(EINVAL);
+    
+    Result r = run_string("loadpic \"badpic.bmp");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_ERROR, r.status, "loadpic should error on wrong file type");
+    
+    // Verify gfx_load was called
+    TEST_ASSERT_EQUAL(1, mock_device_get_gfx_load_call_count());
+    
+    tearDown_with_turtle();
+}
+
+void test_loadpic_invalid_input_error(void)
+{
+    setUp_with_turtle();
+    
+    Result r = run_string("loadpic [not a word]");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_ERROR, r.status, "loadpic should error on non-word input");
+    
+    // Verify gfx_load was NOT called
+    TEST_ASSERT_EQUAL(0, mock_device_get_gfx_load_call_count());
+    
+    tearDown_with_turtle();
+}
+
+void test_savepic_with_prefix(void)
+{
+    setUp_with_turtle();
+    
+    // Set prefix after setUp_with_turtle
+    // Note: use prefix without trailing slash - resolve_path will add separator
+    Result pr = run_string("setprefix \"pics");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_NONE, pr.status, "setprefix should succeed");
+    
+    Result r = run_string("savepic \"test.bmp");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_NONE, r.status, "savepic with prefix should succeed");
+    
+    // Verify gfx_save was called with full path
+    TEST_ASSERT_EQUAL(1, mock_device_get_gfx_save_call_count());
+    TEST_ASSERT_EQUAL_STRING("pics/test.bmp", mock_device_get_last_gfx_save_filename());
+    
+    tearDown_with_turtle();
+}
+
+void test_loadpic_with_prefix(void)
+{
+    setUp_with_turtle();
+    
+    // Create the file to load with prefix path
+    mock_fs_create_file("pics/test.bmp", "BMP data");
+    
+    // Set prefix after setUp_with_turtle
+    // Note: use prefix without trailing slash - resolve_path will add separator
+    Result pr = run_string("setprefix \"pics");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_NONE, pr.status, "setprefix should succeed");
+    
+    Result r = run_string("loadpic \"test.bmp");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_NONE, r.status, "loadpic with prefix should succeed");
+    
+    // Verify gfx_load was called with full path
+    TEST_ASSERT_EQUAL(1, mock_device_get_gfx_load_call_count());
+    TEST_ASSERT_EQUAL_STRING("pics/test.bmp", mock_device_get_last_gfx_load_filename());
+    
+    tearDown_with_turtle();
+}
+
+//==========================================================================
 // Main
 //==========================================================================
 
@@ -969,6 +1157,18 @@ int main(void)
     RUN_TEST(test_files_invalid_input_error);
     RUN_TEST(test_directories_returns_list);
     RUN_TEST(test_catalog_runs_without_error);
+
+    // Savepic/Loadpic tests
+    RUN_TEST(test_savepic_creates_file);
+    RUN_TEST(test_savepic_file_exists_error);
+    RUN_TEST(test_savepic_disk_trouble_error);
+    RUN_TEST(test_savepic_invalid_input_error);
+    RUN_TEST(test_loadpic_loads_file);
+    RUN_TEST(test_loadpic_file_not_found_error);
+    RUN_TEST(test_loadpic_wrong_type_error);
+    RUN_TEST(test_loadpic_invalid_input_error);
+    RUN_TEST(test_savepic_with_prefix);
+    RUN_TEST(test_loadpic_with_prefix);
 
     return UNITY_END();
 }

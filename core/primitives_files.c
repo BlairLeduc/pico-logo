@@ -1455,18 +1455,18 @@ static Result prim_savepic(Evaluator *eval, int argc, Value *args)
         return result_error(ERR_DISK_TROUBLE);
     }
 
-    // Resolve path with prefix
+    // Check if file already exists (logo_io_file_exists resolves path internally)
+    if (logo_io_file_exists(io, pathname))
+    {
+        return result_error_arg(ERR_FILE_EXISTS, "", pathname);
+    }
+
+    // Resolve path with prefix for the actual save
     char resolved[LOGO_STREAM_NAME_MAX];
     char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
     if (!full_path)
     {
         return result_error(ERR_DISK_TROUBLE);
-    }
-
-    // Check if file already exists
-    if (logo_io_file_exists(io, full_path))
-    {
-        return result_error_arg(ERR_FILE_EXISTS, "", pathname);
     }
 
     // Call the turtle graphics save function
@@ -1504,18 +1504,18 @@ static Result prim_loadpic(Evaluator *eval, int argc, Value *args)
         return result_error(ERR_DISK_TROUBLE);
     }
 
-    // Resolve path with prefix
+    // Check if file exists (logo_io_file_exists resolves path internally)
+    if (!logo_io_file_exists(io, pathname))
+    {
+        return result_error(ERR_FILE_NOT_FOUND);
+    }
+
+    // Resolve path with prefix for the actual load
     char resolved[LOGO_STREAM_NAME_MAX];
     char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
     if (!full_path)
     {
         return result_error(ERR_DISK_TROUBLE);
-    }
-
-    // Check if file exists
-    if (!logo_io_file_exists(io, full_path))
-    {
-        return result_error(ERR_FILE_NOT_FOUND);
     }
 
     // Call the turtle graphics load function
