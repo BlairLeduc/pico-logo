@@ -15,7 +15,7 @@
 
 // Function prototypes
 void history_add(const char *line);
-void history_get(char *buf, int size, int index);
+void history_get(char *buf, int size, uint index);
 void history_clear(void);
 uint history_get_start_index(void);
 uint history_prev_index(uint index);

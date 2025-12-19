@@ -25,14 +25,14 @@ void history_add(const char *line)
     }
 }
 
-void history_get(char *buf, int size, int index)
+void history_get(char *buf, int size, uint index)
 {
-    if (index < 0 || index >= HISTORY_SIZE)
+    if (index >= HISTORY_SIZE)
     {
         buf[0] = '\0'; // Invalid index, return empty string
         return;
     }
-    strncpy(buf, history_buffer[(history_tail + index) % HISTORY_SIZE], size - 1);
+    strncpy(buf, history_buffer[index], size - 1);
     buf[size - 1] = '\0'; // Ensure null-termination
 }
 
