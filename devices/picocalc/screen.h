@@ -34,17 +34,17 @@
 #define GFX_DEFAULT_BACKGROUND (255) // Default background color (blue)
 
 // BMP definitions (8-bit indexed color)
-#define BMP_FILE_HEADER_SIZE (14)                                                                     // Size of the BMP file header in bytes
-#define BMP_DIB_HEADER_SIZE (40)                                                                      // Size of the DIB header in bytes
-#define BMP_PALETTE_SIZE (256 * 4)                                                                    // 256 colors, 4 bytes each (BGRA)
-#define BMP_BYTES_PER_PIXEL (1)                                                                       // Bytes per pixel for 8-bit indexed
-#define BMP_ROW_SIZE (((SCREEN_WIDTH * BMP_BYTES_PER_PIXEL + 3) / 4) * 4)                            // Size of a row in bytes (padded to 4-byte boundary)
-#define BMP_PIXEL_DATA_SIZE (BMP_ROW_SIZE * SCREEN_HEIGHT)                                            // Size of the pixel data in bytes
-#define BMP_COLOR_DEPTH (8)                                                                           // Color depth in bits per pixel
-#define BMP_COMPRESSION (0)                                                                           // Compression type (BI_RGB, no compression)
-#define BMP_COLOUR_PLANES (1)                                                                         // Number of color planes
-#define BMP_PIXELS_PER_METER (2835)                                                                   // Pixels per meter for X and Y (default)
-#define BMP_PIXEL_DATA_OFFSET (BMP_FILE_HEADER_SIZE + BMP_DIB_HEADER_SIZE + BMP_PALETTE_SIZE)        // Offset to pixel data
+#define BMP_FILE_HEADER_SIZE (14)                                                                           // Size of the BMP file header in bytes
+#define BMP_DIB_HEADER_SIZE (40)                                                                            // Size of the DIB header in bytes
+#define BMP_PALETTE_SIZE (256 * 4)                                                                          // 256 colors, 4 bytes each (BGRA)
+#define BMP_BYTES_PER_PIXEL (1)                                                                             // Bytes per pixel for 8-bit indexed
+#define BMP_ROW_SIZE (((SCREEN_WIDTH * BMP_BYTES_PER_PIXEL + 3) / 4) * 4)                                   // Size of a row in bytes (padded to 4-byte boundary)
+#define BMP_PIXEL_DATA_SIZE (BMP_ROW_SIZE * SCREEN_HEIGHT)                                                  // Size of the pixel data in bytes
+#define BMP_COLOR_DEPTH (8)                                                                                 // Color depth in bits per pixel
+#define BMP_COMPRESSION (0)                                                                                 // Compression type (BI_RGB, no compression)
+#define BMP_COLOUR_PLANES (1)                                                                               // Number of color planes
+#define BMP_PIXELS_PER_METER (2835)                                                                         // Pixels per meter for X and Y (default)
+#define BMP_PIXEL_DATA_OFFSET (BMP_FILE_HEADER_SIZE + BMP_DIB_HEADER_SIZE + BMP_PALETTE_SIZE)               // Offset to pixel data
 #define BMP_FILE_SIZE (BMP_FILE_HEADER_SIZE + BMP_DIB_HEADER_SIZE + BMP_PALETTE_SIZE + BMP_PIXEL_DATA_SIZE) // Total file size
 
 // Function prototypes

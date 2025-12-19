@@ -9,7 +9,6 @@
 //  The screen is a 320x320 pixel display with a 5x10 pixel or 8x10 pixel font.
 //
 
-#include <stdio.h>
 #include <errno.h>
 #include <math.h>
 #include <string.h>
@@ -17,6 +16,7 @@
 #include <pico/stdlib.h>
 
 #include "screen.h"
+#include "fat32.h"
 #include "devices/font.h"
 #include "devices/logo-font.h"
 #include "devices/console.h"
@@ -302,11 +302,14 @@ void screen_gfx_update(void)
 int screen_gfx_save(const char *filename)
 {
     // Save the current graphics buffer to an 8-bit indexed color BMP file
-    FILE *fp = fopen(filename, "wb");
-    if (!fp)
+    fat32_file_t file;
+    fat32_error_t err = fat32_create(&file, filename);
+    if (err != FAT32_OK)
     {
-        return errno;
+        return (err == FAT32_ERROR_FILE_EXISTS) ? EEXIST : EIO;
     }
+
+    size_t written;
 
     // --- BMP FILE HEADER ---
     uint8_t file_header[BMP_FILE_HEADER_SIZE] = {
@@ -321,7 +324,7 @@ int screen_gfx_save(const char *filename)
         (BMP_PIXEL_DATA_OFFSET >> 8) & 0xFF,
         (BMP_PIXEL_DATA_OFFSET >> 16) & 0xFF,
         (BMP_PIXEL_DATA_OFFSET >> 24) & 0xFF};
-    fwrite(file_header, 1, BMP_FILE_HEADER_SIZE, fp);
+    fat32_write(&file, file_header, BMP_FILE_HEADER_SIZE, &written);
 
     // --- DIB HEADER (BITMAPINFOHEADER) ---
     uint8_t dib_header[BMP_DIB_HEADER_SIZE] = {0};
@@ -350,7 +353,7 @@ int screen_gfx_save(const char *filename)
     dib_header[BMP_DIB_COLORS_USED_OFFSET] = 0;      // Colors used (0 = all)
     dib_header[BMP_DIB_IMPORTANT_COLORS_OFFSET] = 0; // Important colors (0 = all)
 
-    fwrite(dib_header, 1, BMP_DIB_HEADER_SIZE, fp);
+    fat32_write(&file, dib_header, BMP_DIB_HEADER_SIZE, &written);
 
     // --- COLOR PALETTE (256 entries, BGRA format) ---
     // Convert RGB565 palette to BGRA
@@ -370,7 +373,7 @@ int screen_gfx_save(const char *filename)
         
         // Write as BGRA
         uint8_t palette_entry[4] = {b8, g8, r8, 0};
-        fwrite(palette_entry, 1, 4, fp);
+        fat32_write(&file, palette_entry, 4, &written);
     }
 
     // --- PIXEL DATA (bottom-up, with row padding) ---
@@ -380,38 +383,42 @@ int screen_gfx_save(const char *filename)
     
     for (int y = SCREEN_HEIGHT - 1; y >= 0; y--)
     {
-        fwrite(gfx_buffer + y * SCREEN_WIDTH, 1, SCREEN_WIDTH, fp);
+        fat32_write(&file, gfx_buffer + y * SCREEN_WIDTH, SCREEN_WIDTH, &written);
         if (padding_bytes > 0)
         {
-            fwrite(padding, 1, padding_bytes, fp);
+            fat32_write(&file, padding, padding_bytes, &written);
         }
     }
 
-    fclose(fp);
+    fat32_close(&file);
     return 0;
 }
 
 int screen_gfx_load(const char *filename)
 {
     // Load an 8-bit indexed color BMP file into the graphics buffer and palette
-    FILE *fp = fopen(filename, "rb");
-    if (!fp)
+    fat32_file_t file;
+    fat32_error_t err = fat32_open(&file, filename);
+    if (err != FAT32_OK)
     {
-        return errno;
+        return (err == FAT32_ERROR_FILE_NOT_FOUND) ? ENOENT : EIO;
     }
+
+    size_t bytes_read;
 
     // --- READ AND VALIDATE BMP FILE HEADER ---
     uint8_t file_header[BMP_FILE_HEADER_SIZE];
-    if (fread(file_header, 1, BMP_FILE_HEADER_SIZE, fp) != BMP_FILE_HEADER_SIZE)
+    err = fat32_read(&file, file_header, BMP_FILE_HEADER_SIZE, &bytes_read);
+    if (err != FAT32_OK || bytes_read != BMP_FILE_HEADER_SIZE)
     {
-        fclose(fp);
+        fat32_close(&file);
         return EIO;
     }
 
     // Check signature
     if (file_header[0] != 'B' || file_header[1] != 'M')
     {
-        fclose(fp);
+        fat32_close(&file);
         return EINVAL;
     }
 
@@ -421,9 +428,10 @@ int screen_gfx_load(const char *filename)
 
     // --- READ AND VALIDATE DIB HEADER ---
     uint8_t dib_header[BMP_DIB_HEADER_SIZE];
-    if (fread(dib_header, 1, BMP_DIB_HEADER_SIZE, fp) != BMP_DIB_HEADER_SIZE)
+    err = fat32_read(&file, dib_header, BMP_DIB_HEADER_SIZE, &bytes_read);
+    if (err != FAT32_OK || bytes_read != BMP_DIB_HEADER_SIZE)
     {
-        fclose(fp);
+        fat32_close(&file);
         return EIO;
     }
 
@@ -437,15 +445,16 @@ int screen_gfx_load(const char *filename)
     // Validate dimensions and format
     if (width != SCREEN_WIDTH || height != SCREEN_HEIGHT || bits_per_pixel != 8)
     {
-        fclose(fp);
+        fat32_close(&file);
         return EINVAL;
     }
 
     // --- READ COLOR PALETTE ---
     uint8_t palette_data[256 * 4];
-    if (fread(palette_data, 1, 256 * 4, fp) != 256 * 4)
+    err = fat32_read(&file, palette_data, 256 * 4, &bytes_read);
+    if (err != FAT32_OK || bytes_read != 256 * 4)
     {
-        fclose(fp);
+        fat32_close(&file);
         return EIO;
     }
 
@@ -467,7 +476,11 @@ int screen_gfx_load(const char *filename)
 
     // --- READ PIXEL DATA ---
     // Seek to pixel data offset
-    fseek(fp, pixel_offset, SEEK_SET);
+    if (fat32_seek(&file, pixel_offset) != FAT32_OK)
+    {
+        fat32_close(&file);
+        return EIO;
+    }
 
     // Calculate row padding
     int padding_bytes = (4 - (SCREEN_WIDTH % 4)) % 4;
@@ -476,18 +489,23 @@ int screen_gfx_load(const char *filename)
     // Read pixel data (bottom-up)
     for (int y = SCREEN_HEIGHT - 1; y >= 0; y--)
     {
-        if (fread(gfx_buffer + y * SCREEN_WIDTH, 1, SCREEN_WIDTH, fp) != SCREEN_WIDTH)
+        err = fat32_read(&file, gfx_buffer + y * SCREEN_WIDTH, SCREEN_WIDTH, &bytes_read);
+        if (err != FAT32_OK || bytes_read != SCREEN_WIDTH)
         {
-            fclose(fp);
+            fat32_close(&file);
             return EIO;
         }
         if (padding_bytes > 0)
         {
-            fread(padding, 1, padding_bytes, fp);
+            if (fat32_read(&file, padding, padding_bytes, &bytes_read) != FAT32_OK || bytes_read != padding_bytes)
+            {
+                fat32_close(&file);
+                return EIO;
+            }
         }
     }
 
-    fclose(fp);
+    fat32_close(&file);
     return 0;
 }
 
