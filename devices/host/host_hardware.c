@@ -10,6 +10,7 @@
 #include "devices/hardware.h"
 #include "devices/stream.h"
 
+#include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
 
