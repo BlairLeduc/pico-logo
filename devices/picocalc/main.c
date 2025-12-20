@@ -121,6 +121,20 @@ int main(void)
     variables_init();
     primitives_set_io(&io);
 
+    // Load startup file if it exists (uses default prefix)
+    if (logo_io_file_exists(&io, "startup"))
+    {
+        Lexer startup_lexer;
+        Evaluator startup_eval;
+        lexer_init(&startup_lexer, "load \"startup");
+        eval_init(&startup_eval, &startup_lexer);
+        Result r = eval_instruction(&startup_eval);
+        if (r.status == RESULT_ERROR)
+        {
+            logo_io_write_line(&io, error_format(r));
+        }
+    }
+
     // Print welcome banner
     logo_io_write_line(&io, "Copyright 2025 Blair Leduc");
     logo_io_write_line(&io, "Welcome to Pico Logo.");

@@ -530,12 +530,35 @@ Line continuation characters are not supported.
 
 Words with internal spaces are created using the "`\`" character, not using the veritcal bar notation.
 
-`ifelse` is not a primitive. Use `(if predicate list1 list2)` instead:
+`ifelse` is not a primitive. Use `(if predicate list1 list2)` instead.
+
+`ifelse` can be implemented as follows:
 
 ```logo
 to ifelse :predicate :list1 :list2
 (if :predicate :list1 :list2)
 end
+```
+
+
+
+# Startup
+
+This section describes the feature of Logo that lets you automatically load a file into your workspace when you start up Logo. You must call the file `startup`. There can be only one file with the name `startup`, although it can include commands to load other files.
+
+The default prefix is `/Logo/`. On the SD card, the `startup` file is located at `/Logo/startup`.
+
+You can `bury` procedures and `burname` variables created in your `startup` file (using the `startup` variable!) so they are not a distraction. `buryall` is a good approach.
+
+For example:
+
+```logo
+?erall
+?to welcome
+>pr [Hello there!]
+>end
+?make "startup [welcome buryall]
+?save "startup
 ```
 
 

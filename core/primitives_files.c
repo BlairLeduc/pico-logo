@@ -924,6 +924,15 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_FILE_NOT_FOUND, "", pathname);
     }
 
+    // Remember startup variable state before loading
+    // We only run startup if the loaded file sets it (changes the value)
+    bool startup_existed_before = var_exists("startup");
+    Value startup_before = {0};
+    if (startup_existed_before)
+    {
+        var_get("startup", &startup_before);
+    }
+
     // Open the file for reading (logo_io_open resolves path internally)
     LogoStream *stream = logo_io_open(io, pathname);
     if (!stream)
@@ -1066,16 +1075,23 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
     // Close the file (logo_io_close resolves path internally)
     logo_io_close(io, pathname);
 
-    // If load was successful, check for startup variable
+    // If load was successful, check if the file set the startup variable
+    // Run startup only if the loaded file set it (value changed or newly created)
     if (result.status == RESULT_NONE)
     {
-        Value startup_value;
-        if (var_get("startup", &startup_value))
+        Value startup_after;
+        if (var_get("startup", &startup_after))
         {
-            if (value_is_list(startup_value))
+            // Check if startup was set by the loaded file:
+            // - It didn't exist before, or
+            // - It existed but the value (node pointer) changed
+            bool startup_set_by_file = !startup_existed_before ||
+                                       (startup_after.as.node != startup_before.as.node);
+            
+            if (startup_set_by_file && value_is_list(startup_after))
             {
                 // Execute the startup list
-                result = eval_run_list(eval, startup_value.as.node);
+                result = eval_run_list(eval, startup_after.as.node);
             }
         }
     }
