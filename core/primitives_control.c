@@ -141,11 +141,11 @@ static Result prim_if(Evaluator *eval, int argc, Value *args)
         else if (strcasecmp(str, "false") == 0)
             condition = false;
         else
-            return result_error_arg(ERR_NOT_BOOL, "if", str);
+            return result_error_arg(ERR_NOT_BOOL, NULL, str);
     }
     else
     {
-        return result_error_arg(ERR_NOT_BOOL, "if", value_to_string(pred));
+        return result_error_arg(ERR_NOT_BOOL, NULL, value_to_string(pred));
     }
     
     // Check that list1 is a list
@@ -217,12 +217,12 @@ static Result prim_test(Evaluator *eval, int argc, Value *args)
         }
         else
         {
-            return result_error_arg(ERR_NOT_BOOL, "test", str);
+            return result_error_arg(ERR_NOT_BOOL, NULL, str);
         }
     }
     else
     {
-        return result_error_arg(ERR_NOT_BOOL, "test", value_to_string(pred));
+        return result_error_arg(ERR_NOT_BOOL, NULL, value_to_string(pred));
     }
     
     return result_none();
