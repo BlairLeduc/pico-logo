@@ -1429,7 +1429,7 @@ Outputs the sum of its inputs. `sum` is equivalent t o the `+` infix-form operat
 
 # Conditionals and Control of Flow
 
-In Logo, the boolean value of true is repeasted by `"true` and false is represented by `"false`.
+In Logo, the boolean value of true is represented by `"true` and false is represented by `"false`.
 
 ## true
 
