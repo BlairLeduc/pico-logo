@@ -685,7 +685,8 @@ void test_primitives_are_registered(void)
         "hideturtle", "ht", "showturtle", "st", "shown?", "shownp",
         "clearscreen", "cs", "clean",
         "dot", "dot?", "dotp", "fill",
-        "fence", "window", "wrap"
+        "fence", "window", "wrap",
+        "setpalette", "palette", ".restorepalette"
     };
     
     for (size_t i = 0; i < sizeof(prims) / sizeof(prims[0]); i++)
@@ -693,6 +694,114 @@ void test_primitives_are_registered(void)
         const Primitive *p = primitive_find(prims[i]);
         TEST_ASSERT_NOT_NULL_MESSAGE(p, prims[i]);
     }
+}
+
+//==========================================================================
+// Palette Tests
+//==========================================================================
+
+void test_setpalette_sets_rgb_values(void)
+{
+    Result r = run_string("setpalette 128 [255 128 64]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(mock_device_verify_palette(128, 255, 128, 64));
+}
+
+void test_palette_outputs_rgb_list(void)
+{
+    // First set a palette value
+    run_string("setpalette 200 [100 150 200]");
+    
+    // Then read it back
+    Result r = run_string("palette 200");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
+    
+    // Extract the list elements
+    Node list = r.value.as.node;
+    TEST_ASSERT_FALSE(mem_is_nil(list));
+    
+    // Check R value
+    Node r_node = mem_car(list);
+    const char *r_str = mem_word_ptr(r_node);
+    TEST_ASSERT_EQUAL_STRING("100", r_str);
+    
+    // Check G value
+    list = mem_cdr(list);
+    TEST_ASSERT_FALSE(mem_is_nil(list));
+    Node g_node = mem_car(list);
+    const char *g_str = mem_word_ptr(g_node);
+    TEST_ASSERT_EQUAL_STRING("150", g_str);
+    
+    // Check B value
+    list = mem_cdr(list);
+    TEST_ASSERT_FALSE(mem_is_nil(list));
+    Node b_node = mem_car(list);
+    const char *b_str = mem_word_ptr(b_node);
+    TEST_ASSERT_EQUAL_STRING("200", b_str);
+}
+
+void test_restorepalette_resets_palette(void)
+{
+    // Set a custom palette value
+    run_string("setpalette 50 [255 0 0]");
+    
+    // Restore palette
+    Result r = run_string(".restorepalette");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Check that restore was called
+    TEST_ASSERT_TRUE(mock_device_was_restore_palette_called());
+}
+
+void test_setpalette_clamps_values(void)
+{
+    // Test values get clamped to 0-255
+    // Note: Can't use negative numbers in list as -50 parses as "- 50"
+    Result r = run_string("setpalette 128 [300 0 128]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Verify via palette primitive to see actual stored values
+    r = run_string("palette 128");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
+    
+    // Extract and verify each component
+    Node list = r.value.as.node;
+    const char *r_str = mem_word_ptr(mem_car(list));
+    TEST_ASSERT_EQUAL_STRING("255", r_str);  // 300 clamped to 255
+    
+    list = mem_cdr(list);
+    const char *g_str = mem_word_ptr(mem_car(list));
+    TEST_ASSERT_EQUAL_STRING("0", g_str);    // 0 stays 0
+    
+    list = mem_cdr(list);
+    const char *b_str = mem_word_ptr(mem_car(list));
+    TEST_ASSERT_EQUAL_STRING("128", b_str);  // 128 stays 128
+}
+
+void test_setpalette_requires_list(void)
+{
+    Result r = run_string("setpalette 128 \"red");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_setpalette_requires_three_elements(void)
+{
+    // Too few elements
+    Result r = run_string("setpalette 128 [255 128]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_palette_validates_slot(void)
+{
+    // Slot out of range (negative)
+    Result r = run_string("palette -1");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    
+    // Slot out of range (too high)
+    r = run_string("palette 256");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
 //==========================================================================
@@ -787,6 +896,15 @@ int main(void)
     RUN_TEST(test_forward_with_penup_no_line);
     RUN_TEST(test_setpos_with_pendown_draws_line);
     RUN_TEST(test_back_with_pendown_draws_line);
+    
+    // Palette tests
+    RUN_TEST(test_setpalette_sets_rgb_values);
+    RUN_TEST(test_palette_outputs_rgb_list);
+    RUN_TEST(test_restorepalette_resets_palette);
+    RUN_TEST(test_setpalette_clamps_values);
+    RUN_TEST(test_setpalette_requires_list);
+    RUN_TEST(test_setpalette_requires_three_elements);
+    RUN_TEST(test_palette_validates_slot);
     
     // Integration tests
     RUN_TEST(test_draw_square);

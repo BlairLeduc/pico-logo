@@ -819,8 +819,29 @@ setpc _colournumber_
 
 The `setpc` (for set pencolor) command sets the color of the pen to _colourumber_, where _colournumber_ is a value between 0 and 255. 
 
-See [Colours](Colours.md).
+See [Colours](Colours.md) for the default palette.
 
+
+## setpalette
+
+setpalette _slot_ _list_
+
+`command`
+
+`setpalette` sets the actual colour corresponding to a given _slot_ and _slot_ must be an integer greater than or equal to 0. The second input is a list of three nonnegative numbers less than 256 specifying the saturation of red, green, and blue in the desired colour.
+
+The first 128 slots are the default palette for Pico Logo, and changing these slots should be avoided. Slots 254 and 255 are the foreground text and background colours.
+
+
+## palette
+
+palette _slot_
+
+`operation`
+
+`palette` outputs a list of three nonnegative numbers less than 256 specifying the saturation of red, green, and blue in the color associated with the given number. 
+
+Slots 254 and 255 are the foreground text and background colours.
 
 ## window
 
@@ -940,7 +961,7 @@ setcursor [_columnnumber_ _linenumber_]
 
 `command`
 
-`secursor` sets the cursor to the position indicated by _columnnumber_ and _linenumber_. Lines on the screen are numbered from 0 to 31. Character positions (columns) are numbered from 0 to 39.
+`setcursor` sets the cursor to the position indicated by _columnnumber_ and _linenumber_. Lines on the screen are numbered from 0 to 31. Character positions (columns) are numbered from 0 to 39.
 
 
 ## splitscreen
@@ -1331,7 +1352,7 @@ Outputs a random non-negative integer less than _integer_.
 
 ## remainder
 
-remainder _integer1_ _interger2_  
+remainder _integer1_ _integer2_  
 
 `operation`
 
@@ -1728,7 +1749,7 @@ rcs _integer_
 
 `operation`
 
-The `readchars` operation outputs the first _integer_ number of characters typed at the keyboard or read from the current file. If you are reading from the keyboard and no characters arwaiting to be read, `readchars` waits for you to type something.
+The `readchars` operation outputs the first _integer_ number of characters typed at the keyboard or read from the current file. If you are reading from the keyboard and no characters are waiting to be read, `readchars` waits for you to type something.
 
 If you are reading from a file and the end-of-file position reached before _integer_ characters are read, `readchars` outputs the characters read up to that point. If the end-of-file was reached before `readchars` was called, `readchars` outputs an empty list.
 
@@ -1760,7 +1781,7 @@ rw
 
 `readword` reads a line of information from the current file and outputs it as a word. Normally, the source is the keyboard and `readword` waits for you to type and press `ENTER`. What you type is echoed on the display. If you press `ENTER` before typing a word, `readword` outputs an empty word.
 
-If you use `readword` from a file, `readword` reads characters until it reaches a carriage return, and outputs those characters as a word. The next character to be read is the one after the cariage return. When the end-of-file position is reached, `readword` outputs an empty list.
+If you use `readword` from a file, `readword` reads characters until it reaches a carriage return, and outputs those characters as a word. The next character to be read is the one after the carriage return. When the end-of-file position is reached, `readword` outputs an empty list.
 
 See `readlist`, `readchar`, `readchars`, and `setread`.
 
@@ -2134,7 +2155,7 @@ save _pathname_
 
 `command`
 
-The `save` command creates a file and saves in it all unburied procedures and variables and all properties in the workspace. An error occurs if the file you name already exists. In inis case, you should first either erase the existing file using `erfile` or rename it using `rename`.
+The `save` command creates a file and saves in it all unburied procedures and variables and all properties in the workspace. An error occurs if the file you name already exists. In in this case, you should first either erase the existing file using `erfile` or rename it using `rename`.
 
 
 ## loadpic
@@ -2143,7 +2164,7 @@ loadpic _pathname_
 
 `command`
 
-The `loadpic` command loads the picture named by _pathname_ onto the graphics screen. Logo will only load 8-bit indexed color BMP onto the graphics screen. 
+The `loadpic` command loads the picture named by _pathname_ onto the graphics screen. Logo will only load 8-bit indexed color BMP onto the graphics screen. The palette will be changed to match that in the BMP file.
 
 
 ## savepic
@@ -2357,8 +2378,8 @@ See `pprop` and `gprop`.
 
 
 
-# Device Specific
 
+# Device Specific
 
 ## battery
 
@@ -2366,5 +2387,15 @@ battery
 
 `operation`
 
-The `battery` operation returns a list where the first value is the percent remaining in the barrery and the second value is `true` is the battery is currectly charging.
+The `battery` operation returns a list where the first value is the percent remaining in the battery and the second value is `true` if the battery is currently charging.
 
+
+
+
+# Special Primatives
+
+## .restorepalette
+
+.restorepalette
+
+Restores the palette's default colours. This only impacts slots 0 through 127.

@@ -193,6 +193,15 @@ extern "C"
             int gfx_save_result;             // Result to return from gfx_save (0 = success)
             int gfx_load_result;             // Result to return from gfx_load (0 = success)
         } gfx_io;
+
+        // Palette tracking
+        struct
+        {
+            uint8_t r[256];                  // Red components (0-255)
+            uint8_t g[256];                  // Green components (0-255)
+            uint8_t b[256];                  // Blue components (0-255)
+            bool restore_palette_called;     // Was restore_palette called?
+        } palette;
     } MockDeviceState;
 
     //
@@ -240,6 +249,10 @@ extern "C"
     const char *mock_device_get_last_gfx_load_filename(void);
     int mock_device_get_gfx_save_call_count(void);
     int mock_device_get_gfx_load_call_count(void);
+
+    // Palette helpers for testing
+    bool mock_device_verify_palette(uint8_t slot, uint8_t r, uint8_t g, uint8_t b);
+    bool mock_device_was_restore_palette_called(void);
 
 #ifdef __cplusplus
 }

@@ -848,6 +848,171 @@ static Result prim_wrap(Evaluator *eval, int argc, Value *args)
 }
 
 //==========================================================================
+// Palette primitives
+//==========================================================================
+
+// Helper to extract [r g b] list into RGB components
+static bool extract_rgb(Value rgb, uint8_t *r, uint8_t *g, uint8_t *b, const char *proc_name, Result *error)
+{
+    if (rgb.type != VALUE_LIST)
+    {
+        *error = result_error_arg(ERR_DOESNT_LIKE_INPUT, proc_name, value_to_string(rgb));
+        return false;
+    }
+
+    Node list = rgb.as.node;
+    if (mem_is_nil(list))
+    {
+        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, proc_name, NULL);
+        return false;
+    }
+
+    Node r_node = mem_car(list);
+    list = mem_cdr(list);
+    
+    if (mem_is_nil(list))
+    {
+        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, proc_name, NULL);
+        return false;
+    }
+    
+    Node g_node = mem_car(list);
+    list = mem_cdr(list);
+    
+    if (mem_is_nil(list))
+    {
+        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, proc_name, NULL);
+        return false;
+    }
+    
+    Node b_node = mem_car(list);
+
+    // Convert to numbers
+    Value r_val = mem_is_word(r_node) ? value_word(r_node) : value_list(r_node);
+    Value g_val = mem_is_word(g_node) ? value_word(g_node) : value_list(g_node);
+    Value b_val = mem_is_word(b_node) ? value_word(b_node) : value_list(b_node);
+    
+    float r_num, g_num, b_num;
+    if (!value_to_number(r_val, &r_num) || 
+        !value_to_number(g_val, &g_num) || 
+        !value_to_number(b_val, &b_num))
+    {
+        *error = result_error_arg(ERR_DOESNT_LIKE_INPUT, proc_name, value_to_string(rgb));
+        return false;
+    }
+
+    // Clamp to 0-255 range
+    *r = (uint8_t)(r_num < 0 ? 0 : (r_num > 255 ? 255 : r_num));
+    *g = (uint8_t)(g_num < 0 ? 0 : (g_num > 255 ? 255 : g_num));
+    *b = (uint8_t)(b_num < 0 ? 0 : (b_num > 255 ? 255 : b_num));
+    
+    return true;
+}
+
+// Helper to build [r g b] list from RGB components
+static Value make_rgb_list(uint8_t r, uint8_t g, uint8_t b)
+{
+    char r_buf[8], g_buf[8], b_buf[8];
+    snprintf(r_buf, sizeof(r_buf), "%d", r);
+    snprintf(g_buf, sizeof(g_buf), "%d", g);
+    snprintf(b_buf, sizeof(b_buf), "%d", b);
+    
+    Node r_atom = mem_atom(r_buf, strlen(r_buf));
+    Node g_atom = mem_atom(g_buf, strlen(g_buf));
+    Node b_atom = mem_atom(b_buf, strlen(b_buf));
+    
+    return value_list(mem_cons(r_atom, mem_cons(g_atom, mem_cons(b_atom, NODE_NIL))));
+}
+
+// setpalette slot [r g b] - Set palette slot to RGB color
+static Result prim_setpalette(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+
+    if (argc < 2)
+    {
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "setpalette", NULL);
+    }
+
+    float slot_num;
+    if (!value_to_number(args[0], &slot_num))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setpalette", value_to_string(args[0]));
+    }
+
+    if (slot_num < 0 || slot_num > 255)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setpalette", value_to_string(args[0]));
+    }
+
+    uint8_t slot = (uint8_t)slot_num;
+    uint8_t r, g, b;
+    Result error;
+    
+    if (!extract_rgb(args[1], &r, &g, &b, "setpalette", &error))
+    {
+        return error;
+    }
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->set_palette)
+    {
+        turtle->set_palette(slot, r, g, b);
+    }
+    
+    return result_none();
+}
+
+// palette slot - Output RGB list for palette slot
+static Result prim_palette(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+
+    if (argc < 1)
+    {
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "palette", NULL);
+    }
+
+    float slot_num;
+    if (!value_to_number(args[0], &slot_num))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "palette", value_to_string(args[0]));
+    }
+
+    if (slot_num < 0 || slot_num > 255)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "palette", value_to_string(args[0]));
+    }
+
+    uint8_t slot = (uint8_t)slot_num;
+    uint8_t r = 0, g = 0, b = 0;
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->get_palette)
+    {
+        turtle->get_palette(slot, &r, &g, &b);
+    }
+    
+    return result_ok(make_rgb_list(r, g, b));
+}
+
+// .restorepalette - Restore default palette (slots 0-127)
+static Result prim_restorepalette(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->restore_palette)
+    {
+        turtle->restore_palette();
+    }
+    
+    return result_none();
+}
+
+//==========================================================================
 // Registration
 //==========================================================================
 
@@ -919,4 +1084,9 @@ void primitives_turtle_init(void)
     primitive_register("fence", 0, prim_fence);
     primitive_register("window", 0, prim_window);
     primitive_register("wrap", 0, prim_wrap);
+    
+    // Palette primitives
+    primitive_register("setpalette", 2, prim_setpalette);
+    primitive_register("palette", 1, prim_palette);
+    primitive_register(".restorepalette", 0, prim_restorepalette);
 }

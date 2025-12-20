@@ -310,6 +310,32 @@ static int mock_turtle_gfx_load(const char *filename)
     return mock_state.gfx_io.gfx_load_result;
 }
 
+static void mock_turtle_set_palette(uint8_t slot, uint8_t r, uint8_t g, uint8_t b)
+{
+    mock_state.palette.r[slot] = r;
+    mock_state.palette.g[slot] = g;
+    mock_state.palette.b[slot] = b;
+}
+
+static void mock_turtle_get_palette(uint8_t slot, uint8_t *r, uint8_t *g, uint8_t *b)
+{
+    if (r) *r = mock_state.palette.r[slot];
+    if (g) *g = mock_state.palette.g[slot];
+    if (b) *b = mock_state.palette.b[slot];
+}
+
+static void mock_turtle_restore_palette(void)
+{
+    mock_state.palette.restore_palette_called = true;
+    // Reset to some default values (black) for first 128 slots
+    for (int i = 0; i < 128; i++)
+    {
+        mock_state.palette.r[i] = 0;
+        mock_state.palette.g[i] = 0;
+        mock_state.palette.b[i] = 0;
+    }
+}
+
 // Turtle operations structure
 static const LogoConsoleTurtle mock_turtle_ops = {
     .clear = mock_turtle_clear,
@@ -335,7 +361,10 @@ static const LogoConsoleTurtle mock_turtle_ops = {
     .set_window = mock_turtle_set_window,
     .set_wrap = mock_turtle_set_wrap,
     .gfx_save = mock_turtle_gfx_save,
-    .gfx_load = mock_turtle_gfx_load
+    .gfx_load = mock_turtle_gfx_load,
+    .set_palette = mock_turtle_set_palette,
+    .get_palette = mock_turtle_get_palette,
+    .restore_palette = mock_turtle_restore_palette
 };
 
 //
@@ -845,4 +874,20 @@ int mock_device_get_gfx_save_call_count(void)
 int mock_device_get_gfx_load_call_count(void)
 {
     return mock_state.gfx_io.gfx_load_call_count;
+}
+
+//
+// Palette helpers for testing
+//
+
+bool mock_device_verify_palette(uint8_t slot, uint8_t r, uint8_t g, uint8_t b)
+{
+    return mock_state.palette.r[slot] == r &&
+           mock_state.palette.g[slot] == g &&
+           mock_state.palette.b[slot] == b;
+}
+
+bool mock_device_was_restore_palette_called(void)
+{
+    return mock_state.palette.restore_palette_called;
 }

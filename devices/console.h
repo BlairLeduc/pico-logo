@@ -88,6 +88,16 @@ extern "C"
         // Load graphics screen from file
         // Returns 0 on success, errno on failure
         int (*gfx_load)(const char *filename);
+
+        // Palette functions
+        // Set palette slot to RGB565 value (from 24-bit RGB components)
+        void (*set_palette)(uint8_t slot, uint8_t r, uint8_t g, uint8_t b);
+
+        // Get palette slot RGB components (from RGB565 value)
+        void (*get_palette)(uint8_t slot, uint8_t *r, uint8_t *g, uint8_t *b);
+
+        // Restore default palette (slots 0-127)
+        void (*restore_palette)(void);
     } LogoConsoleTurtle;
 
     //
