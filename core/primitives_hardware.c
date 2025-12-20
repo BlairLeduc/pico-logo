@@ -60,7 +60,7 @@ static Result prim_poweroff(Evaluator *eval, int argc, Value *args)
         bool success = io->hardware->ops->power_off();
         if (success)
         {
-            // Power off has a forced 6 second delay before powering off, so close I/O now
+            // Power off has a forced delay before powering off, so close I/O now
             logo_io_close_all(io); // Close all I/O before powering off
 
             // Wait indefinitely
