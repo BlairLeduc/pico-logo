@@ -75,6 +75,7 @@ static LogoHardwareOps host_hardware_ops = {
     .sleep = host_hardware_sleep,
     .random = host_hardware_random,
     .get_battery_level = host_hardware_get_battery_level,
+    .power_off = NULL,
     .check_user_interrupt = host_hardware_check_user_interrupt,
     .clear_user_interrupt = host_hardware_clear_user_interrupt,
 };

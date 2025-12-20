@@ -41,6 +41,18 @@ static void picocalc_get_battery_level(int *level, bool *charging)
     *charging = (raw_level & 0x80) != 0; // Check if charging
 }
 
+static bool picocalc_power_off(void)
+{
+    // Call southbridge power off function
+    if (sb_is_power_off_supported())
+    {
+        sb_write_power_off_delay(5);
+        return true;
+    }
+
+    return false;
+}
+
 static bool picocalc_check_user_interrupt(void)
 {
     return user_interrupt;
@@ -55,6 +67,7 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .sleep = picocalc_sleep,
     .random = picocalc_random,
     .get_battery_level = picocalc_get_battery_level,
+    .power_off = picocalc_power_off,
     .check_user_interrupt = picocalc_check_user_interrupt,
     .clear_user_interrupt = picocalc_clear_user_interrupt,
 }; 

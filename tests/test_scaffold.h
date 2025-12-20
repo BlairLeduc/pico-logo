@@ -186,13 +186,39 @@ static void mock_clear_user_interrupt(void)
     mock_user_interrupt = false;
 }
 
+// Mock power_off state for testing
+static bool mock_power_off_available = false;
+static bool mock_power_off_result = false;
+static bool mock_power_off_called = false;
+
+static bool mock_power_off(void)
+{
+    mock_power_off_called = true;
+    return mock_power_off_result;
+}
+
 static LogoHardwareOps mock_hardware_ops = {
     .sleep = mock_sleep,
     .random = mock_random,
     .get_battery_level = mock_get_battery_level,
+    .power_off = NULL,  // Default: not available, use set_mock_power_off() to enable
     .check_user_interrupt = mock_check_user_interrupt,
     .clear_user_interrupt = mock_clear_user_interrupt,
 };
+
+// Helper to configure mock power_off for testing
+static void set_mock_power_off(bool available, bool result)
+{
+    mock_power_off_available = available;
+    mock_power_off_result = result;
+    mock_power_off_called = false;
+    mock_hardware_ops.power_off = mock_power_off_available ? mock_power_off : NULL;
+}
+
+static bool was_mock_power_off_called(void)
+{
+    return mock_power_off_called;
+}
 
 // Mock console (contains embedded streams)
 static LogoConsole mock_console;
@@ -222,6 +248,12 @@ static void test_scaffold_setUp(void)
     mock_user_interrupt = false;  // Reset user interrupt flag
     mock_battery_level = 100;     // Reset mock battery state
     mock_battery_charging = false;
+    
+    // Reset mock power_off state (default: not available)
+    mock_power_off_available = false;
+    mock_power_off_result = false;
+    mock_power_off_called = false;
+    mock_hardware_ops.power_off = NULL;
 
     // Set up mock console (embeds streams internally)
     logo_console_init(&mock_console, &mock_input_stream_ops, &mock_output_stream_ops, NULL);

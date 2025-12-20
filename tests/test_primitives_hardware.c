@@ -149,6 +149,57 @@ void test_battery_show_output(void)
 }
 
 //==========================================================================
+// Poweroff Primitive Tests
+//==========================================================================
+
+void test_poweroff_not_available(void)
+{
+    // Default: power_off is NULL, so .poweroff should return an error
+    Result r = eval_string(".poweroff");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
+}
+
+void test_poweroff_available_but_fails(void)
+{
+    // power_off available but returns false (failure)
+    set_mock_power_off(true, false);
+    
+    Result r = eval_string(".poweroff");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
+    TEST_ASSERT_TRUE(was_mock_power_off_called());
+}
+
+void test_poweroff_calls_hardware_function(void)
+{
+    // Verify the power_off function is called when available
+    set_mock_power_off(true, false);
+    
+    eval_string(".poweroff");
+    
+    TEST_ASSERT_TRUE(was_mock_power_off_called());
+}
+
+void test_poweroff_reset_state_between_tests(void)
+{
+    // Verify state is properly reset - power_off should not be available
+    // after not explicitly setting it
+    TEST_ASSERT_FALSE(was_mock_power_off_called());
+    
+    Result r = eval_string(".poweroff");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_FALSE(was_mock_power_off_called());
+}
+
+void test_poweroff_no_inputs(void)
+{
+    // .poweroff takes no inputs - verify giving inputs causes error
+    Result r = eval_string(".poweroff 1");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+//==========================================================================
 // Main
 //==========================================================================
 
@@ -169,6 +220,13 @@ int main(void)
     RUN_TEST(test_battery_charging_in_procedure);
     RUN_TEST(test_battery_print_output);
     RUN_TEST(test_battery_show_output);
+    
+    // Poweroff tests
+    RUN_TEST(test_poweroff_not_available);
+    RUN_TEST(test_poweroff_available_but_fails);
+    RUN_TEST(test_poweroff_calls_hardware_function);
+    RUN_TEST(test_poweroff_reset_state_between_tests);
+    RUN_TEST(test_poweroff_no_inputs);
     
     return UNITY_END();
 }

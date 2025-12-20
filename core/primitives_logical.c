@@ -40,7 +40,7 @@ static Result prim_and(Evaluator *eval, int argc, Value *args)
         bool b;
         if (!get_bool_arg(args[i], &b))
         {
-            return result_error_arg(ERR_NOT_BOOL, "and", value_to_string(args[i]));
+            return result_error_arg(ERR_NOT_BOOL, NULL, value_to_string(args[i]));
         }
         result = result && b;
     }
@@ -57,7 +57,7 @@ static Result prim_or(Evaluator *eval, int argc, Value *args)
         bool b;
         if (!get_bool_arg(args[i], &b))
         {
-            return result_error_arg(ERR_NOT_BOOL, "or", value_to_string(args[i]));
+            return result_error_arg(ERR_NOT_BOOL, NULL, value_to_string(args[i]));
         }
         result = result || b;
     }
@@ -72,7 +72,7 @@ static Result prim_not(Evaluator *eval, int argc, Value *args)
     bool b;
     if (!get_bool_arg(args[0], &b))
     {
-        return result_error_arg(ERR_NOT_BOOL, "not", value_to_string(args[0]));
+        return result_error_arg(ERR_NOT_BOOL, NULL, value_to_string(args[0]));
     }
     return result_ok(value_word(mem_atom_cstr(b ? "false" : "true")));
 }
