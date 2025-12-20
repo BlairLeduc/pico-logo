@@ -4,7 +4,6 @@
         "raspberry-pi.raspberry-pi-pico",
         "ms-vscode.cpptools",
         "ms-vscode.cpptools-extension-pack",
-        "ms-vscode.vscode-serial-monitor",
         "ryanluker.vscode-coverage-gutters"
     ]
 }
