@@ -1545,7 +1545,8 @@ static Result prim_pofile(Evaluator *eval, int argc, Value *args)
     // (logo_io_is_open resolves path internally)
     if (logo_io_is_open(io, pathname))
     {
-        return result_error_arg(ERR_FILE_NOT_FOUND, "", pathname);
+        // Report a disk-related error instead of "file not found" to avoid confusion
+        return result_error_arg(ERR_DISK_TROUBLE, "", pathname);
     }
 
     // Check if file exists (logo_io_file_exists resolves path internally)
