@@ -882,6 +882,8 @@ Slots 254 and 255 are the foreground text and background colours.
 
 restorepalette
 
+`command`
+
 Restores the palette's default colours. This only impacts slots 0 through 127.
 
 
