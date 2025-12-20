@@ -1268,6 +1268,144 @@ void test_save_file_exists_error(void)
 }
 
 //==========================================================================
+// Prefix Handling Tests
+//==========================================================================
+
+void test_open_close_with_prefix(void)
+{
+    // Create a file in a subdirectory
+    mock_fs_create_file("subdir/file.txt", "content");
+    
+    // Set prefix
+    Result pr = run_string("setprefix \"subdir");
+    TEST_ASSERT_EQUAL(RESULT_NONE, pr.status);
+    
+    // Open the file using just the filename (prefix should resolve)
+    Result r1 = run_string("open \"file.txt");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r1.status);
+    
+    // Close using just the filename 
+    Result r2 = run_string("close \"file.txt");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+}
+
+void test_setread_setwrite_with_prefix(void)
+{
+    // Create a file in a subdirectory
+    mock_fs_create_file("mydir/data.txt", "test data");
+    
+    // Set prefix
+    run_string("setprefix \"mydir");
+    
+    // Open and set as reader
+    run_string("open \"data.txt");
+    Result r = run_string("setread \"data.txt");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_NONE, r.status, "setread with prefix should succeed");
+    
+    // Reset reader
+    run_string("setread []");
+    run_string("close \"data.txt");
+}
+
+void test_load_with_prefix(void)
+{
+    mock_fs_create_file("scripts/init.logo", "make \"loaded 42\n");
+    
+    run_string("setprefix \"scripts");
+    
+    Result r = run_string("load \"init.logo");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Verify the file was loaded
+    Value val;
+    TEST_ASSERT_TRUE(var_get("loaded", &val));
+    TEST_ASSERT_EQUAL_FLOAT(42.0, val.as.number);
+}
+
+void test_save_with_prefix(void)
+{
+    // Set up
+    run_string("make \"testvar 99");
+    
+    run_string("setprefix \"saves");
+    
+    Result r = run_string("save \"test.logo");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Verify the file was created at the right path
+    MockFile *file = mock_fs_get_file("saves/test.logo", false);
+    TEST_ASSERT_NOT_NULL(file);
+    TEST_ASSERT_NOT_NULL(strstr(file->data, "make \"testvar 99"));
+}
+
+//==========================================================================
+// Pofile Tests
+//==========================================================================
+
+void test_pofile_prints_file_contents(void)
+{
+    mock_fs_create_file("test.txt", "Hello World\nSecond line\n");
+    
+    reset_output();
+    Result r = run_string("pofile \"test.txt");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Output should contain the file contents
+    TEST_ASSERT_TRUE(strstr(output_buffer, "Hello World") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "Second line") != NULL);
+}
+
+void test_pofile_empty_file(void)
+{
+    mock_fs_create_file("empty.txt", "");
+    
+    reset_output();
+    Result r = run_string("pofile \"empty.txt");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Output should be empty (no lines)
+    TEST_ASSERT_EQUAL_STRING("", output_buffer);
+}
+
+void test_pofile_file_not_found(void)
+{
+    Result r = run_string("pofile \"missing.txt");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_pofile_already_open_error(void)
+{
+    mock_fs_create_file("open.txt", "content");
+    
+    // Open the file first
+    Result r1 = run_string("open \"open.txt");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r1.status);
+    
+    // Now pofile should fail because file is already open
+    Result r2 = run_string("pofile \"open.txt");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r2.status);
+}
+
+void test_pofile_invalid_input(void)
+{
+    Result r = run_string("pofile [not a word]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_pofile_with_prefix(void)
+{
+    mock_fs_create_file("subdir/test.txt", "Prefixed content\n");
+    
+    run_string("setprefix \"subdir");
+    
+    reset_output();
+    Result r = run_string("pofile \"test.txt");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    TEST_ASSERT_TRUE(strstr(output_buffer, "Prefixed content") != NULL);
+}
+
+//==========================================================================
 // Main
 //==========================================================================
 
@@ -1370,6 +1508,20 @@ int main(void)
     RUN_TEST(test_load_defines_procedure);
     RUN_TEST(test_save_writes_workspace);
     RUN_TEST(test_save_file_exists_error);
+
+    // Prefix handling tests
+    RUN_TEST(test_open_close_with_prefix);
+    RUN_TEST(test_setread_setwrite_with_prefix);
+    RUN_TEST(test_load_with_prefix);
+    RUN_TEST(test_save_with_prefix);
+
+    // Pofile tests
+    RUN_TEST(test_pofile_prints_file_contents);
+    RUN_TEST(test_pofile_empty_file);
+    RUN_TEST(test_pofile_file_not_found);
+    RUN_TEST(test_pofile_already_open_error);
+    RUN_TEST(test_pofile_invalid_input);
+    RUN_TEST(test_pofile_with_prefix);
 
     return UNITY_END();
 }

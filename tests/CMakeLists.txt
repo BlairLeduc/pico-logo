@@ -27,6 +27,7 @@ endmacro()
 # Core tests
 add_logo_test(test_lexer)
 add_logo_test(test_memory)
+add_logo_test(test_value)
 add_logo_test(test_eval)
 add_logo_test(test_error)
 add_logo_test(test_mock_device)

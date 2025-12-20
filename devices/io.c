@@ -273,10 +273,18 @@ void logo_io_close(LogoIO *io, const char *pathname)
         return;
     }
 
+    // Resolve the pathname with prefix
+    char resolved[LOGO_STREAM_NAME_MAX];
+    char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
+    if (!full_path)
+    {
+        return;
+    }
+
     for (int i = 0; i < LOGO_MAX_OPEN_FILES; i++)
     {
         LogoStream *stream = io->open_streams[i];
-        if (stream && strcmp(stream->name, pathname) == 0)
+        if (stream && strcmp(stream->name, full_path) == 0)
         {
             // If this stream is the current reader or writer, reset to console
             if (io->reader == stream)
@@ -330,10 +338,18 @@ LogoStream *logo_io_find_open(LogoIO *io, const char *pathname)
         return NULL;
     }
 
+    // Resolve the pathname with prefix
+    char resolved[LOGO_STREAM_NAME_MAX];
+    char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
+    if (!full_path)
+    {
+        return NULL;
+    }
+
     for (int i = 0; i < LOGO_MAX_OPEN_FILES; i++)
     {
         LogoStream *stream = io->open_streams[i];
-        if (stream && strcmp(stream->name, pathname) == 0)
+        if (stream && strcmp(stream->name, full_path) == 0)
         {
             return stream;
         }
@@ -349,10 +365,18 @@ bool logo_io_is_open(const LogoIO *io, const char *pathname)
         return false;
     }
 
+    // Resolve the pathname with prefix
+    char resolved[LOGO_STREAM_NAME_MAX];
+    char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
+    if (!full_path)
+    {
+        return false;
+    }
+
     for (int i = 0; i < LOGO_MAX_OPEN_FILES; i++)
     {
         LogoStream *stream = io->open_streams[i];
-        if (stream && strcmp(stream->name, pathname) == 0)
+        if (stream && strcmp(stream->name, full_path) == 0)
         {
             return true;
         }

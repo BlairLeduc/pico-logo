@@ -918,22 +918,14 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
         return result_error(ERR_DISK_TROUBLE);
     }
 
-    // Resolve path with prefix
-    char resolved[LOGO_STREAM_NAME_MAX];
-    char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
-    if (!full_path)
+    // Check if file exists (logo_io_file_exists resolves path internally)
+    if (!logo_io_file_exists(io, pathname))
     {
         return result_error_arg(ERR_FILE_NOT_FOUND, "", pathname);
     }
 
-    // Check if file exists
-    if (!logo_io_file_exists(io, full_path))
-    {
-        return result_error_arg(ERR_FILE_NOT_FOUND, "", pathname);
-    }
-
-    // Open the file for reading
-    LogoStream *stream = logo_io_open(io, full_path);
+    // Open the file for reading (logo_io_open resolves path internally)
+    LogoStream *stream = logo_io_open(io, pathname);
     if (!stream)
     {
         return result_error_arg(ERR_FILE_NOT_FOUND, "", pathname);
@@ -1071,8 +1063,8 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
         }
     }
 
-    // Close the file
-    logo_io_close(io, full_path);
+    // Close the file (logo_io_close resolves path internally)
+    logo_io_close(io, pathname);
 
     // If load was successful, check for startup variable
     if (result.status == RESULT_NONE)
@@ -1335,22 +1327,14 @@ static Result prim_save(Evaluator *eval, int argc, Value *args)
         return result_error(ERR_DISK_TROUBLE);
     }
 
-    // Resolve path with prefix
-    char resolved[LOGO_STREAM_NAME_MAX];
-    char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
-    if (!full_path)
-    {
-        return result_error(ERR_DISK_TROUBLE);
-    }
-
-    // Check if file already exists
-    if (logo_io_file_exists(io, full_path))
+    // Check if file already exists (logo_io_file_exists resolves path internally)
+    if (logo_io_file_exists(io, pathname))
     {
         return result_error_arg(ERR_FILE_EXISTS, "", pathname);
     }
 
-    // Open the file for writing
-    LogoStream *stream = logo_io_open(io, full_path);
+    // Open the file for writing (logo_io_open resolves path internally)
+    LogoStream *stream = logo_io_open(io, pathname);
     if (!stream)
     {
         return result_error(ERR_DISK_TROUBLE);
@@ -1423,9 +1407,9 @@ static Result prim_save(Evaluator *eval, int argc, Value *args)
         }
     }
 
-    // Restore writer and close file
+    // Restore writer and close file (logo_io_close resolves path internally)
     logo_io_set_writer(io, old_writer == &io->console->output ? NULL : old_writer);
-    logo_io_close(io, full_path);
+    logo_io_close(io, pathname);
 
     return result_none();
 }
@@ -1533,6 +1517,71 @@ static Result prim_loadpic(Evaluator *eval, int argc, Value *args)
     return result_none();
 }
 
+// Maximum line size for pofile
+#define POFILE_MAX_LINE 256
+
+// pofile pathname - prints the contents of a file to the screen
+// Always prints to the display, not to the current writer.
+// Errors if the file is already open.
+static Result prim_pofile(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+
+    if (!value_is_word(args[0]))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "pofile", value_to_string(args[0]));
+    }
+
+    const char *pathname = mem_word_ptr(args[0].as.node);
+
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    // Check if file is already open - this is an error per the spec
+    // (logo_io_is_open resolves path internally)
+    if (logo_io_is_open(io, pathname))
+    {
+        return result_error_arg(ERR_FILE_NOT_FOUND, "", pathname);
+    }
+
+    // Check if file exists (logo_io_file_exists resolves path internally)
+    if (!logo_io_file_exists(io, pathname))
+    {
+        return result_error_arg(ERR_FILE_NOT_FOUND, "", pathname);
+    }
+
+    // Open the file for reading (logo_io_open resolves path internally)
+    LogoStream *stream = logo_io_open(io, pathname);
+    if (!stream)
+    {
+        return result_error_arg(ERR_FILE_NOT_FOUND, "", pathname);
+    }
+
+    // Read and print each line to the console (not the writer)
+    char line[POFILE_MAX_LINE];
+    int len;
+    while ((len = logo_stream_read_line(stream, line, sizeof(line))) >= 0)
+    {
+        // Strip trailing newline/carriage return
+        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r'))
+        {
+            line[--len] = '\0';
+        }
+
+        // Print directly to console (bypasses writer)
+        logo_io_console_write_line(io, line);
+    }
+
+    // Close the file (logo_io_close resolves path internally)
+    logo_io_close(io, pathname);
+
+    return result_none();
+}
+
 //==========================================================================
 // Registration
 //==========================================================================
@@ -1576,4 +1625,5 @@ void primitives_files_init(void)
     primitive_register("save", 1, prim_save);
     primitive_register("savepic", 1, prim_savepic);
     primitive_register("loadpic", 1, prim_loadpic);
+    primitive_register("pofile", 1, prim_pofile);
 }
