@@ -832,7 +832,7 @@ pu
 The `penup` command lifts the pen up: when the turtle moves, it does not draw lines. The turtle cannot draw until the pen is put down again.
 
 
-# setbg
+## setbg
 
 setbg _colournumber_  
 
