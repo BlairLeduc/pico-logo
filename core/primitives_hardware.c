@@ -48,7 +48,33 @@ static Result prim_battery_level(Evaluator *eval, int argc, Value *args)
     return result_ok(value_list(list));
 }
 
+static Result prim_poweroff(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    LogoIO *io = primitives_get_io();
+    if (io && io->hardware && io->hardware->ops && io->hardware->ops->power_off)
+    {
+        bool success = io->hardware->ops->power_off();
+        if (success)
+        {
+            // Power off has a forced 6 second delay before powering off, so close I/O now
+            logo_io_close_all(io); // Close all I/O before powering off
+
+            // Wait indefinitely
+            while (1)
+            {
+                io->hardware->ops->sleep(1000);
+            }
+        }
+    }
+    return result_error_arg(ERR_DONT_KNOW_HOW, ".poweroff", "");
+}
+
 void primitives_hardware_init(void)
 {
     primitive_register("battery", 0, prim_battery_level);
+    primitive_register(".poweroff", 0, prim_poweroff);
 }

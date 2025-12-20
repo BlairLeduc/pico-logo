@@ -1429,6 +1429,8 @@ Outputs the sum of its inputs. `sum` is equivalent t o the `+` infix-form operat
 
 # Conditionals and Control of Flow
 
+In Logo, the boolean value of true is repeasted by `"true` and false is represented by `"false`.
+
 ## true
 
 true  
@@ -2419,5 +2421,15 @@ battery
 `operation`
 
 The `battery` operation returns a list where the first value is the percent remaining in the battery and the second value is `true` if the battery is currently charging.
+
+
+## .poweroff
+
+.poweroff
+
+`operation`
+
+`.poweroff` closes all open files and powers off the device. If the device does not support this capability, an error is dislayed.
+
 
 
