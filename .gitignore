@@ -1,5 +1,8 @@
 # All artefacts and build products
 build/
+build-debug/
+build-pico/
+build-pico-debug/
 build-host/
 build-host-debug/
 build-tests/
