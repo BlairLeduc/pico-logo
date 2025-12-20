@@ -385,26 +385,6 @@ static Result prim_text(Evaluator *eval, int argc, Value *args)
     return result_ok(value_list(result));
 }
 
-// procedurep "name - outputs true if name is a defined procedure
-static Result prim_procedurep(Evaluator *eval, int argc, Value *args)
-{
-    (void)eval;
-    (void)argc;
-    
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "procedurep", value_to_string(args[0]));
-    }
-    
-    const char *name = mem_word_ptr(args[0].as.node);
-    
-    if (proc_exists(name) || primitive_find(name))
-    {
-        return result_ok(value_word(mem_atom("true", 4)));
-    }
-    return result_ok(value_word(mem_atom("false", 5)));
-}
-
 // primitivep "name - outputs true if name is a primitive
 static Result prim_primitivep(Evaluator *eval, int argc, Value *args)
 {
@@ -489,7 +469,6 @@ void primitives_procedures_init(void)
 {
     primitive_register("define", 2, prim_define);
     primitive_register("text", 1, prim_text);
-    primitive_register("procedurep", 1, prim_procedurep);
     primitive_register("primitive?", 1, prim_primitivep);
     primitive_register("primitivep", 1, prim_primitivep);
     primitive_register("defined?", 1, prim_definedp);

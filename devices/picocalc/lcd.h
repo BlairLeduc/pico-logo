@@ -85,6 +85,9 @@
 // Palette functions
 void lcd_set_palette_value(uint8_t slot, uint16_t colour);
 uint16_t lcd_get_palette_value(uint8_t slot);
+void lcd_set_palette_rgb(uint8_t slot, uint8_t r, uint8_t g, uint8_t b);
+void lcd_get_palette_rgb(uint8_t slot, uint8_t *r, uint8_t *g, uint8_t *b);
+void lcd_restore_palette(void);
 
 // Foreground and background colour functions
 void lcd_set_foreground(uint8_t slot);

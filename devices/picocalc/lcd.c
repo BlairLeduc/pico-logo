@@ -72,6 +72,34 @@ uint16_t lcd_get_palette_value(uint8_t slot)
     return palette[slot];
 }
 
+void lcd_set_palette_rgb(uint8_t slot, uint8_t r, uint8_t g, uint8_t b)
+{
+    // Convert 8-bit RGB to RGB565
+    uint16_t r5 = (r >> 3) & 0x1F;
+    uint16_t g6 = (g >> 2) & 0x3F;
+    uint16_t b5 = (b >> 3) & 0x1F;
+    palette[slot] = (r5 << 11) | (g6 << 5) | b5;
+}
+
+void lcd_get_palette_rgb(uint8_t slot, uint8_t *r, uint8_t *g, uint8_t *b)
+{
+    uint16_t colour = palette[slot];
+    // Convert RGB565 to 8-bit RGB
+    // Expand by replicating high bits into low bits for better accuracy
+    uint8_t r5 = (colour >> 11) & 0x1F;
+    uint8_t g6 = (colour >> 5) & 0x3F;
+    uint8_t b5 = colour & 0x1F;
+    *r = (r5 << 3) | (r5 >> 2);
+    *g = (g6 << 2) | (g6 >> 4);
+    *b = (b5 << 3) | (b5 >> 2);
+}
+
+void lcd_restore_palette(void)
+{
+    // Restore first 128 slots from the default palette
+    memcpy(palette, palette_16bit, sizeof(palette_16bit));
+}
+
 
 //
 // Character attributes

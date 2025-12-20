@@ -55,28 +55,29 @@ if(NOT BUILD_TESTING AND NOT BUILD_FOR_HOST)
 
 # Core Logo interpreter library
 add_library(logo_core
-    core/lexer.c
-    core/memory.c
-    core/value.c
-    core/variables.c
-    core/procedures.c
-    core/properties.c
     core/error.c
     core/eval.c
-    core/primitives.c
+    core/lexer.c
+    core/memory.c
     core/primitives_arithmetic.c
     core/primitives_control.c
-    core/primitives_variables.c
-    core/primitives_words_lists.c
-    core/primitives_procedures.c
-    core/primitives_workspace.c
-    core/primitives_outside_world.c
-    core/primitives_properties.c
     core/primitives_debug.c
     core/primitives_files.c
     core/primitives_hardware.c
+    core/primitives_logical.c
+    core/primitives_outside_world.c
+    core/primitives_procedures.c
+    core/primitives_properties.c
     core/primitives_text.c
     core/primitives_turtle.c
+    core/primitives_variables.c
+    core/primitives_words_lists.c
+    core/primitives_workspace.c
+    core/primitives.c
+    core/procedures.c
+    core/properties.c
+    core/value.c
+    core/variables.c
     devices/console.c
     devices/hardware.c
     devices/io.c
@@ -96,6 +97,7 @@ add_executable(pico-logo
     devices/picocalc/input.c
     devices/picocalc/keyboard.c
     devices/picocalc/lcd.c
+    devices/picocalc/main.c
     devices/picocalc/picocalc_console.c
     devices/picocalc/picocalc_hardware.c
     devices/picocalc/picocalc_storage.c
@@ -103,7 +105,6 @@ add_executable(pico-logo
     devices/picocalc/screen.c
     devices/picocalc/sdcard.c
     devices/picocalc/southbridge.c
-    devices/picocalc/main.c
 )
 
 pico_set_program_name(pico-logo "pico-logo")
@@ -146,11 +147,11 @@ if(BUILD_FOR_HOST)
 
     # Host device library for tests (without Pico SDK dependencies)
     add_library(logo_devices
-        ${CMAKE_CURRENT_SOURCE_DIR}/devices/stream.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/console.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/hardware.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/io.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/storage.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/devices/stream.c
     )
 
     target_include_directories(logo_devices PUBLIC
@@ -160,28 +161,29 @@ if(BUILD_FOR_HOST)
 
     # Core Logo interpreter library for host (with host device implementations)
     add_library(logo_core
-        core/lexer.c
-        core/memory.c
-        core/value.c
-        core/variables.c
-        core/procedures.c
-        core/properties.c
         core/error.c
         core/eval.c
-        core/primitives.c
+        core/lexer.c
+        core/memory.c
         core/primitives_arithmetic.c
         core/primitives_control.c
-        core/primitives_variables.c
-        core/primitives_words_lists.c
-        core/primitives_procedures.c
-        core/primitives_workspace.c
-        core/primitives_outside_world.c
-        core/primitives_properties.c
         core/primitives_debug.c
         core/primitives_files.c
         core/primitives_hardware.c
+        core/primitives_logical.c
+        core/primitives_outside_world.c
+        core/primitives_procedures.c
+        core/primitives_properties.c
         core/primitives_text.c
         core/primitives_turtle.c
+        core/primitives_variables.c
+        core/primitives_words_lists.c
+        core/primitives_workspace.c
+        core/primitives.c
+        core/procedures.c
+        core/properties.c
+        core/value.c
+        core/variables.c
     )
 
     target_include_directories(logo_core PUBLIC
@@ -191,8 +193,8 @@ if(BUILD_FOR_HOST)
     add_executable(logo
         devices/host/host_console.c
         devices/host/host_hardware.c
-        devices/host/host_storage.c
         devices/host/host_main.c
+        devices/host/host_storage.c
     )
 
     target_link_libraries(logo
@@ -243,11 +245,11 @@ if(BUILD_TESTING)
 
     # Host device library for tests (without Pico SDK dependencies)
     add_library(logo_devices
-        ${CMAKE_CURRENT_SOURCE_DIR}/devices/stream.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/console.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/hardware.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/io.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/storage.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/devices/stream.c
     )
 
     target_include_directories(logo_devices PUBLIC
@@ -256,28 +258,29 @@ if(BUILD_TESTING)
 
     # Core library without device-specific code
     add_library(logo_core
-        ${CMAKE_CURRENT_SOURCE_DIR}/core/lexer.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/core/memory.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/core/value.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/core/variables.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/core/procedures.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/core/properties.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/error.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/eval.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/lexer.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/memory.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_arithmetic.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_control.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_variables.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_words_lists.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_procedures.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_workspace.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_outside_world.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_properties.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_debug.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_files.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_hardware.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_logical.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_outside_world.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_procedures.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_properties.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_text.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_turtle.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_variables.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_words_lists.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_workspace.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/procedures.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/properties.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/value.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/variables.c
     )
 
     target_include_directories(logo_core PUBLIC

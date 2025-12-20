@@ -28,7 +28,7 @@ float turtle_y = TURTLE_HOME_Y;                         // Current y position fo
 float turtle_angle = TURTLE_DEFAULT_ANGLE;              // Current angle for graphics
 uint8_t turtle_colour = TURTLE_DEFAULT_COLOUR;          // Turtle color for graphics
 uint8_t background_colour = GFX_DEFAULT_BACKGROUND;     // Background color for graphics
-static LogoPen turtle_pen_state = LOGO_PEN_DOWN;   // Pen state for graphics
+static LogoPen turtle_pen_state = LOGO_PEN_DOWN;        // Pen state for graphics
 static bool turtle_visible = TURTLE_DEFAULT_VISIBILITY; // Turtle visibility state for graphics
 
 //
@@ -423,6 +423,27 @@ static int turtle_gfx_load(const char *filename)
     return result;
 }
 
+static void turtle_set_palette(uint8_t slot, uint8_t r, uint8_t g, uint8_t b)
+{
+    lcd_set_palette_rgb(slot, r, g, b);
+    screen_gfx_update();
+    screen_txt_update();
+}
+
+static void turtle_get_palette(uint8_t slot, uint8_t *r, uint8_t *g, uint8_t *b)
+{
+    lcd_get_palette_rgb(slot, r, g, b);
+}
+
+static void turtle_restore_palette(void)
+{
+    lcd_restore_palette();
+    turtle_set_bg_colour(background_colour);
+    
+    screen_gfx_update();
+    screen_txt_update();
+}
+
 static const LogoConsoleTurtle picocalc_turtle_ops = {
     .clear = turtle_clearscreen,
     .draw = turtle_draw,
@@ -442,12 +463,15 @@ static const LogoConsoleTurtle picocalc_turtle_ops = {
     .get_visible = turtle_get_visibility,
     .dot = turtle_dot,
     .dot_at = turtle_dot_at,
-    .fill = NULL,            // Not implemented
-    .set_fence = NULL,       // Not implemented
-    .set_window = NULL,      // Not implemented
-    .set_wrap = NULL,        // Not implemented
+    .fill = NULL,       // Not implemented
+    .set_fence = NULL,  // Not implemented
+    .set_window = NULL, // Not implemented
+    .set_wrap = NULL,   // Not implemented
     .gfx_save = turtle_gfx_save,
     .gfx_load = turtle_gfx_load,
+    .set_palette = turtle_set_palette,
+    .get_palette = turtle_get_palette,
+    .restore_palette = turtle_restore_palette,
 };
 
 //
