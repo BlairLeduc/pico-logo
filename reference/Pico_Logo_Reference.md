@@ -435,10 +435,11 @@ The list `[]`, a list with no elements, is an _empty list_. There also exists an
 
 Parentheses group things in ways Logo ordinarily would not, and vary the number of inputs for certain primitives. 
 
-If the end of a Logo line is reached (that is, the `ENTER` key is pressed) and brackets or parentheses are still open, Logo closes all sublists or expressions. For example: 
+If the end of a Logo line is reached (that is, the `ENTER` key is pressed) and brackets are still open, Logo will ask for additional lines of input (prompted with "`~`") until the brackets are closed: 
 
 ```logo
-?repeat 4 [print [This [is [a [test 
+?repeat 4 [print [This [is [a [test
+~]]]
 This [is [a [test]]] 
 This [is [a [test]]] 
 This [is [a [test]]] 
@@ -553,7 +554,7 @@ This section describes the feature of Logo that lets you automatically load a fi
 
 The default prefix is `/Logo/`. On the SD card, the `startup` file is located at `/Logo/startup`.
 
-You can `bury` procedures and `burname` variables created in your `startup` file (using the `startup` variable!) so they are not a distraction. `buryall` is a good approach.
+You can [`bury`](#bury) procedures and [`burname`](#buryname) variables created in your `startup` file (using the `startup` variable!) so they are not a distraction. [`buryall`](#buryall) is a good approach.
 
 For example:
 
@@ -566,12 +567,14 @@ For example:
 ?save "startup
 ```
 
+You also erase procedures and veriables that are only needed for startup processing (see [`erase`](#erase-er) and [`ern`](#ern)).
+
 
 # Turtle Graphics
 
-Pico Logo has two kinds of screens: the graphics screen and the text screen. When you use any primitive or procedure that renders to the turtle, Logo shows you the graphics screen. The commands `fullscreen`, `splitscreen`, and `textscreen` allow you to switch between the two kinds of screens.
+Pico Logo has two kinds of screens: the graphics screen and the text screen. When you use any primitive or procedure that renders to the turtle, Logo shows you the graphics screen. The commands [`fullscreen`](#fullscreen-fs), [`splitscreen`](#splitscreen-ss), and [`textscreen`](#textscreen-ts) allow you to switch between the two kinds of screens.
 
-The screen limits are 320 turtle steps high and 320 steps wide. Hence, when using Cartesian coordinates (as in `setpos`), you reach the edge of the screen when the y-coordinate is 160 (top) or -159 (bottom) and the x-coordinate is -159 (left edge) or 160 (right edge). 
+The screen limits are 320 turtle steps high and 320 steps wide. Hence, when using Cartesian coordinates (as in [`setpos`](#setpos)), you reach the edge of the screen when the y-coordinate is 160 (top) or -159 (bottom) and the x-coordinate is -159 (left edge) or 160 (right edge). 
 
 
 ## back (bk)
@@ -655,7 +658,7 @@ seth
 
 `command`
 
-`setheading` turns the turtle so that it is heading in the direction _degrees_, which can be any decimal number less than than approximately 3.4e38, the maximum value for a (32-bit) IEEE 754 floating point number. Positive numbers are clockwise from north, negative numbers are counterclockwise from north. Note that `right` and `left` do relative motion, but `setheading` does absolute motion.
+`setheading` turns the turtle so that it is heading in the direction _degrees_, which can be any decimal number less than than approximately 3.4e38, the maximum value for a (32-bit) IEEE 754 floating point number. Positive numbers are clockwise from north, negative numbers are counterclockwise from north. Note that [`right`](#right-rt) and [`left`](#left-lt) do relative motion, but `setheading` does absolute motion.
 
 
 ## setpos 
@@ -692,7 +695,7 @@ st
 
 `command`
 
-`showturtle` makes the turtle visible. See `hideturtle`. 
+`showturtle` makes the turtle visible. See [`hideturtle`](#hideturtle-ht). 
 
 
 ## heading
@@ -776,7 +779,7 @@ fence
 
 The `fence` command fences in the turtle within the edges of the display. If you try to move the turtle beyond the edges of the display, an error, "Turtle out of bounds" occurs and the turtle does not move. If the turtle is already out of bounds, Logo repositions it at its home position [0 0].
 
-See `window` and `wrap`.
+See [`window`](#window) and [`wrap`](#wrap).
 
 
 ## fill
@@ -805,7 +808,7 @@ pe
 
 `command`
 
-`penerase` puts the turtle's eraser down. When the turtle moves, it erases lines it passes over. To take away the eraser, use either `pendown` or `penup`.
+`penerase` puts the turtle's eraser down. When the turtle moves, it erases lines it passes over. To take away the eraser, use either [`pendown`](#pendown-pd) or [`penup`](#penup-pu).
 
 
 ## penreverse (px)
@@ -834,9 +837,11 @@ setbg _colournumber_
 
 `command`
 
-The `setbg` (for set background) command sets the background colour to the colour represented by _colournumber_, where _colournumber_ is a value between 0 and 255.
+The `setbg` (for set background) command sets the background colour to the colour represented by _colournumber_, where _colournumber_ is a value between 0 and 253.
 
-See [Colours](Colours.md).
+The background palette slot is 255 and the text colour palette slot is 254. The text colour is chosen to be in the same hue as the set background colour with a contrasting shade.
+
+See [Colours](Colours.md) for the default palette.
 
 
 ## setpc
@@ -887,10 +892,9 @@ window
 
 The `window` command makes the turtle field unbounded; what you see is a portion of the turtle field as if looking through a small window around the center of the display. When the turtle moves beyond the visible bounds of the display, it continues to move but can't be seen: The display is 320 turtle steps high and 320 steps wide. The entire turtle field is 32,768 steps high and 32,768 steps wide.
 
-Changing `window` to `fence` or `wrap` when the turtle is off
-the screen sends the turtle to its home position [0 0].
+Changing `window` to [`fence`](#fence) or [`wrap`](#wrap) when the turtle is off the screen sends the turtle to its home position [0 0].
 
-See `fence` and `wrap`.
+See [`fence`](#fence) and [`wrap`](#wrap).
 
 
 ## wrap
@@ -901,7 +905,7 @@ wrap
 
 The `wrap` command makes the turtle field wrap around the edges of the display: if the turtle moves beyond one edge of the display, it continues from the opposite edge. The turtle never leaves the visible bounds of the display; when it tries to, it wraps around to the other side.
 
-See `fence` and `window`.
+See [`fence`](#fence) and [`window`](#window).
 
 
 ## background (bg)
@@ -913,7 +917,7 @@ bg
 
 `background` outputs a number representing the color of the background and is a value between 0 and 255. 
 
-See [Colours](Colours.md).
+See [Colours](Colours.md) for the default palette.
 
 
 ## dot? (dotp)
@@ -923,7 +927,7 @@ dotp [_xcor_ _ycor_]
 
 `operation`
 
-The `dot?` operation outputs `true` if there is a dot on the display at the indicated coordinates. If there is no dot, `dotp` outputs `false`.
+The `dot?` operation outputs `true` if there is a dot on the display at the indicated coordinates. If there is no dot, `dot?` outputs `false`.
 
 
 ## pen
@@ -942,7 +946,7 @@ pc
 
 `pencolor` outputs a number representing the current colour of the pen.
 
-See [Colours](Colours.md).
+See [Colours](Colours.md) for the default palette.
 
 
 
@@ -953,7 +957,7 @@ Your PicoCalc has 32 lines of text on the display, with 40 characters on each li
 
 There are two ways to change the use of your display:
 
-- With regular Logo commands, which you can type at top level or insert within procedures (`fullscreen`, `splitscreen`, and `textscreen`)
+- With regular Logo commands, which you can type at top level or insert within procedures ([`fullscreen`](#fullscreen-fs), [`splitscreen`](#splitscreen-ss), and [`textscreen`](#textscreen-ts))
 - With special control characters, which are read from the keyboard and obeyed almost immediately (while a procedure continues running); these cannot be placed within procedures (`F1`–textscreen, `F2`–splitscreen, and `F3`–fullscreen).
 
 
@@ -976,7 +980,7 @@ cursor
 `cursor` outputs a list of the column and line numbers of the cursor position. The upper-left corner of the screen is [0 0]. The upper-right is [39 0] if the screen width is 40, and [63 0] if the
 screen width is 64.
 
-See `setcursor`.
+See [`setcursor`](#setcursor).
 
 
 ## fullscreen (fs)
@@ -1000,7 +1004,7 @@ setcursor [_columnnumber_ _linenumber_]
 `setcursor` sets the cursor to the position indicated by _columnnumber_ and _linenumber_. Lines on the screen are numbered from 0 to 31. Character positions (columns) are numbered from 0 to 39.
 
 
-## splitscreen
+## splitscreen (ss)
 
 splitscreen  
 ss  
@@ -1011,7 +1015,7 @@ ss
 
 
 
-## textscreen
+## textscreen (ts)
 
 textscreen  
 ts  
@@ -1118,7 +1122,7 @@ parse _word_
 
 `operation`
 
-`parse` outputs a list that is obtained from parsing _word_. `parse` is useful for converting the output of `readword` into a list.
+`parse` outputs a list that is obtained from parsing _word_. `parse` is useful for converting the output of [`readword`](#readword-rw) into a list.
 
 
 ## sentence (se)
@@ -1149,7 +1153,7 @@ ascii _character_
 
 `operation`
 
-`ascii` outputs the American Standard Code for Information Interchange (ASCII) code for _character_. If the input word contains more than one character, `ascii` uses only its first character. Also see `char`.
+`ascii` outputs the American Standard Code for Information Interchange (ASCII) code for _character_. If the input word contains more than one character, `ascii` uses only its first character. Also see [`char`](#char).
 
 
 ## before? (beforep)
@@ -1287,7 +1291,7 @@ name _object_ _name_
 
 The `name` command puts _object_ in _name_'s container, that is, it gives the variable name the value object.
 
-`name` is equivalent to `make` with the order of the inputs reversed. Thus `name "welder "job` has the same effect as `make "job "welder`.
+`name` is equivalent to [`make`](#make) with the order of the inputs reversed. Thus `name "welder "job` has the same effect as `make "job "welder`.
 
 
 ## name? (namep)
@@ -1346,7 +1350,7 @@ int _number_
 
 `operation`
 
-Returns the integer part of _number_; any decimal part is stripped off. No rounding occurs when `int` is used (contrast this with the `round` operation described later in this chapter).
+Returns the integer part of _number_; any decimal part is stripped off. No rounding occurs when `int` is used (contrast this with the [`round`](#round) operation described later in this chapter).
 
 
 ## intquotient
@@ -1470,7 +1474,7 @@ iff _list_
 
 `command`
 
-`iffalse` runs _list_ if the result of the most recent `test` was `false`, otherwise it does nothing. Note that if `test` has not been run in the same procedure or a superprocedure, or from top level, `iffalse` does nothing.
+`iffalse` runs _list_ if the result of the most recent [`test`](#test) was `false`, otherwise it does nothing. Note that if [`test`](#test) has not been run in the same procedure or a superprocedure, or from top level, `iffalse` does nothing.
 
 
 ## iftrue (ift)
@@ -1480,7 +1484,7 @@ ift _list_
 
 `command`
 
-`iftrue` runs _list_ if the result of the most recent `test` was `true`, otherwise it does nothing. Note that if `test` has not been run in the same procedure or a superprocedure, or from top level, `iftrue` does nothing.
+`iftrue` runs _list_ if the result of the most recent [`test`](#test) was `true`, otherwise it does nothing. Note that if [`test`](#test) has not been run in the same procedure or a superprocedure, or from top level, `iftrue` does nothing.
 
 
 ## test
@@ -1489,7 +1493,7 @@ test _predicate_
 
 `command`
 
-`test` remembers whether _predicate_ is `true` or `false` for subsequent use by `iftrue` or `iffalse`. Each `test` is local to the procedure in which it occurs.
+`test` remembers whether _predicate_ is `true` or `false` for subsequent use by [`iftrue`](#iftrue-ift) or [`iffalse`](#iffalse-iff). Each `test` is local to the procedure in which it occurs.
 
 
 ## co
@@ -1498,7 +1502,7 @@ co
 
 `command`
 
-The `co` (for continue) command resumes running of a procedure after a `pause` or `ESC`, continuing from wherever the procedure paused.
+The `co` (for continue) command resumes running of a procedure after a [`pause`](#pause) or `ESC`, continuing from wherever the procedure paused.
 
 
 ## output (op)
@@ -1508,7 +1512,7 @@ op _object_
 
 `command`
 
-The `output` command is meaningful only when it is within a procedure, not at top level. It makes _object_ the output of your procedure and returns control to the caller. Note that although `output` is itself a command, the procedure containing it is an operation because it has an output. Compare with `stop`.
+The `output` command is meaningful only when it is within a procedure, not at top level. It makes _object_ the output of your procedure and returns control to the caller. Note that although `output` is itself a command, the procedure containing it is an operation because it has an output. Compare with [`stop`](#stop).
 
 
 ## pause
@@ -1519,7 +1523,7 @@ pause
 
 The `pause` command is meaningful only when it is within a procedure, not at top level. It suspends running of the procedure and tells you that you are pausing; you can then type instructions interactively. To indicate that you are in a pause and not a t top level, the prompt character changes to the name of the procedure you were in, followed by a question mark. During a pause, `BRK` does not work; the only way to return to top level during a pause is to run `throw "toplevel`.
 
-The procedure may be resumed by typing `co`.
+The procedure may be resumed by typing [`co`](#co).
 
 
 ## stop
@@ -1528,7 +1532,7 @@ stop
 
 `command`
 
-The `stop` command stops the procedure that is running and returns control to the caller. This command is meaningful only when it is within a procedure—not at top level. Note that a procedure containing `stop` is a command. Compare `stop` with `output`.
+The `stop` command stops the procedure that is running and returns control to the caller. This command is meaningful only when it is within a procedure—not at top level. Note that a procedure containing `stop` is a command. Compare `stop` with [`output`](#output-op).
 
 
 ## wait
@@ -1546,9 +1550,9 @@ catch _name_ _list_
 
 `command`
 
-`catch` runs _list_. If a `throw` _name_ command is called while _list_ is run, control returns to the first statement after the `catch`. The _name_ is used to match up a `throw` with a `catch`. For instance, `catch "chair [whatever]` catches a `throw "chair` but not a `throw "table`.
+`catch` runs _list_. If a [`throw`](#throw) _name_ command is called while _list_ is run, control returns to the first statement after the `catch`. The _name_ is used to match up a [`throw`](#throw) with a `catch`. For instance, `catch "chair [whatever]` catches a `throw "chair` but not a `throw "table`.
 
-There is one special case. `catch "error` catches an error that would otherwise print an error message and return to top level. If an error is caught, the message that Logo would normally print isn't printed. See the explanation of `error` in this section to find out how to tell what the error was.
+There is one special case. `catch "error` catches an error that would otherwise print an error message and return to top level. If an error is caught, the message that Logo would normally print isn't printed. See the explanation of [`error`](#error) in this section to find out how to tell what the error was.
 
 
 ## error
@@ -1575,7 +1579,7 @@ go _word_
 
 `command`
 
-The `go` command transfers control to the instruction following `label` _word_ in the same procedure.
+The `go` command transfers control to the instruction following [`label`](#label) _word_ in the same procedure.
 
 
 ## label
@@ -1584,7 +1588,7 @@ label _word_
 
 `command`
 
-The `label` command itself does nothing. However, a `go` _word_ passes control to the instruction following it. Note that _word_ must always be a literal word (that is, it must be preceded by a quotation mark).
+The `label` command itself does nothing. However, a [`go`](#go) _word_ passes control to the instruction following it. Note that _word_ must always be a literal word (that is, it must be preceded by a quotation mark).
 
 
 ## repeat
@@ -1602,7 +1606,7 @@ repcount
 
 `operation`
 
-`recount` outputs the repetition count of the innermost current `repeat`, starting from 1. If no `repeat` is active, outputs –1.
+`recount` outputs the repetition count of the innermost current [`repeat`](#repeat), starting from 1. If no [`repeat`](#repeat) is active, outputs –1.
 
 ## run
 
@@ -1619,9 +1623,9 @@ throw _name_
 
 `command`
 
-The `throw` command is meaningful only within the range of the `catch` command. An error occurs if no corresponding `catch` name is found. `throw "toplevel` returns control to top level. Contrast with `stop`.
+The `throw` command is meaningful only within the range of the [`catch`](#catch) command. An error occurs if no corresponding [`catch`](#catch) name is found. `throw "toplevel` returns control to top level. Contrast with [`stop`](#stop).
 
-See `catch`. 
+See [`catch`](#catch). 
 
 
 ## step
@@ -1651,7 +1655,7 @@ unstep _list_
 
 `command`
 
-`unstep` restores the procedure(s) indicated by _name_ or _list_ back to their original states. After you step through a procedure (with `step`), you must use `unstep` so that it will execute normally again.
+`unstep` restores the procedure(s) indicated by _name_ or _list_ back to their original states. After you step through a procedure (with [`step`](#step)), you must use `unstep` so that it will execute normally again.
 
 
 ## untrace
@@ -1687,7 +1691,7 @@ define _name_ _list_
 
 If _name_ has no inputs, this must be the empty list. Each subsequent element is a list consisting of one line of the procedure definition. (This list does not contain `end`, because `end` is not part of the procedure definition.)
 
-The second input to `define` has the same form as the output from `text`. `define` can redefine an existing procedure.
+The second input to `define` has the same form as the output from [`text`](#text). `define` can redefine an existing procedure.
 
 
 ## defined? (definedp)
@@ -1707,7 +1711,7 @@ primitivep _name_
 
 `operation`
 
-`primitivep` outputs `true` if name is the name of a primitive, `false` otherwise.
+`primitive?` outputs `true` if name is the name of a primitive, `false` otherwise.
 
 
 ## text
@@ -1716,7 +1720,7 @@ text _name_
 
 `operation`
 
-The `text` primitive outputs the definition of _name_ as a list of lists, suitable for input to `define`.
+The `text` primitive outputs the definition of _name_ as a list of lists, suitable for input to [`define`](#define).
 
 
 
@@ -1730,7 +1734,7 @@ and _predicate1_ _predicate2_
 
 `operation`
 
-Outputs `TRUE` if all of its inputs are `TRUE`.
+Outputs `true` if all of its inputs are `true`. All inputs are evaluated.
 
 
 ## not
@@ -1739,8 +1743,8 @@ not _predicate_
 
 `operation`
 
-Outputs TRUE if _predicate_ is FALSE.
-Outputs FASLE if _predicate_ is TRUE.
+Outputs `true` if _predicate_ is `false`.  
+Outputs `false` if _predicate_ is `true`.
 
 
 ## or
@@ -1750,20 +1754,21 @@ or _predicate1_ _predicate2_
 
 `operation`
 
-Outputs `TRUE` if any of its inputs are `TRUE`.
+Outputs `true` if any of its inputs are `true`. All inputs are evaluated.
 
 
 
 
 # The Outside World
 
-## keyp
+## key? (keyp)
 
+key?
 keyp  
 
 `operation`
 
-`keyp` outputs `true` if there is at least one character waiting to be read—that is, one that has been typed on the keyboard and not yet picked up by `readchar` or `readlist`. `keyp` outputs `false` if there are no such characters.
+`key?` outputs `true` if there is at least one character waiting to be read—that is, one that has been typed on the keyboard and not yet picked up by [`readchar`](#readchar-rc) or [`readlist`](#readlist-rl). `key?` outputs `false` if there are no such characters.
 
 
 ## readchar (rc)
@@ -1805,7 +1810,7 @@ rl
 
 `operation`
 
-The `readlist` operation reads a line of information from the current file and outputs the information in the form of a list. Normally, the source is the keyboard, where you type in information followed by a carriage return. This information is echoed on the screen. The command `setread` allows you to read from other files.
+The `readlist` operation reads a line of information from the current file and outputs the information in the form of a list. Normally, the source is the keyboard, where you type in information followed by a carriage return. This information is echoed on the screen. The command [`setread`](#setread) allows you to read from other files.
 
 If you are reading from a file where the end-of-file position has already been reached, `readlist` outputs the empty word.
 
@@ -1821,7 +1826,7 @@ rw
 
 If you use `readword` from a file, `readword` reads characters until it reaches a carriage return, and outputs those characters as a word. The next character to be read is the one after the carriage return. When the end-of-file position is reached, `readword` outputs an empty list.
 
-See `readlist`, `readchar`, `readchars`, and `setread`.
+See [`readlist`](#readlist-rl), [`readchar`](#readchar-rc), [`readchars`](#readchars-rcs), and [`setread`](#setread).
 
 
 ## print (pr)
@@ -1833,9 +1838,9 @@ pr _object_
 
 `command`
 
-The `print` command prints its inputs followed by a carriage return on the display, unless the destination has been changed by `setwrite`. The outermost brackets of lists are not printed.
+The `print` command prints its inputs followed by a carriage return on the display, unless the destination has been changed by [`setwrite`](#setwrite). The outermost brackets of lists are not printed.
 
-Compare with `type` and `show`.
+Compare with [`type`](#type) and [`show`](#show).
 
 
 ## show
@@ -1844,9 +1849,9 @@ show _object_
 
 `command`
 
-The `show` command prints _object_ followed by a carriage return on the display, unless the destination has been changed by `setwrite`. If object is a list, Logo leaves brackets around it.
+The `show` command prints _object_ followed by a carriage return on the display, unless the destination has been changed by [`setwrite`](#setwrite). If object is a list, Logo leaves brackets around it.
 
-Compare with `type` and `print`.
+Compare with [`type`](#type) and [`print`](#print-pr).
 
 
 ## type
@@ -1856,9 +1861,9 @@ type _object_
 
 `command`
 
-The `type` command prints its inputs without a carriage return on the display, unless the destination has been changed by `setwrite`. The outermost brackets of lists are not printed.
+The `type` command prints its inputs without a carriage return on the display, unless the destination has been changed by [`setwrite`](#setwrite). The outermost brackets of lists are not printed.
 
-Compare with `print` and `show`.
+Compare with [`print`](#print-pr) and [`show`](#show).
 
 
 
@@ -1871,7 +1876,7 @@ nodes
 
 `operation`
 
-`nodes` outputs the number of free nodes. This gives you an idea of how much space you have in your workspace for procedures, variables, properties, and the running of procedures. `nodes` is most useful if run immediately after `recycle`.
+`nodes` outputs the number of free nodes. This gives you an idea of how much space you have in your workspace for procedures, variables, properties, and the running of procedures. `nodes` is most useful if run immediately after [`recycle`](#recycle).
 
 
 ## recycle
@@ -1927,8 +1932,9 @@ pops
 
 `command`
 
-`pops` (for print out procedures) prints the definition of every
-procedure in the workspace. See `bury` for exceptions.
+`pops` (for print out procedures) prints the definition of every procedure in the workspace.
+
+See [`bury`](#bury) for exceptions.
 
 
 ## pot
@@ -1947,7 +1953,9 @@ pots
 
 `command`
 
-`pots` (for print out titles) prints the title line of every procedure in the workspace. See `bury` for exceptions.
+`pots` (for print out titles) prints the title line of every procedure in the workspace.
+
+See [`bury`](#bury) for exceptions.
 
 
 ## erall
@@ -1956,7 +1964,9 @@ erall
 
 `command`
 
-`erall` erases all procedures, variables, and properties from the workspace. See `bury` for exceptions.
+`erall` erases all procedures, variables, and properties from the workspace.
+
+See [`bury`](#bury) for exceptions.
 
 
 ## erase (er)
@@ -1987,7 +1997,9 @@ erns
 
 `command`
 
-`erns` (for erase names) erases all variables from the workspace. See `bury` for exceptions.
+`erns` (for erase names) erases all variables from the workspace.
+
+See [`bury`](#bury) for exceptions.
 
 
 ## erps
@@ -1996,7 +2008,9 @@ erps
 
 `command`
 
-The `erps` (for erase procedures) command erases all procedures from the workspace. See `bury` for exceptions.
+The `erps` (for erase procedures) command erases all procedures from the workspace.
+
+See [`bury`](#bury) for exceptions.
 
 
 ## bury 
@@ -2006,7 +2020,7 @@ bury _list_
 
 `command`
 
-The `bury` command buries the procedure(s) in its input. Certain commands (`erall`, `erps`, `poall`, `pops`, `pots`, and `save`) act on everything in the workspace except procedures and names that are buried. 
+The `bury` command buries the procedure(s) in its input. Certain commands ([`erall`](#erall), [`erps`](#erps), [`poall`](#poall), [`pops`](#pops), [`pots`](#pots), and [`save`](#save)) act on everything in the workspace except procedures and names that are buried. 
 
 
 ## buryall 
@@ -2072,7 +2086,7 @@ files
 
 `operation`
 
-Outputs a list of file names in the currect directory. If _ext_ is present, the file names are limited to those with the _ext_ extension. If  is "*" then all files are output.
+Outputs a list of file names in the currect directory. If _ext_ is present, the file names are limited to those with the _ext_ extension. If _ext_ is "*" then all files are output.
 
 
 ## directories
@@ -2099,7 +2113,7 @@ setprefix _pathname_
 
 `command`
 
-Sets a prefix that will be used as the implicit beginning of filenames in `open`, `load`, and `save` commands. The input to `setprefix` must be a word, unless it is the empty list, to indicate that there should be no prefix.
+Sets a prefix that will be used as the implicit beginning of filenames in [`open`](#open), [`load`](#load), and [`save`](#save) commands. The input to `setprefix` must be a word, unless it is the empty list, to indicate that there should be no prefix.
 
 ## prefix
 
@@ -2134,6 +2148,8 @@ catalog
 `command`
 
 Prints a list of files and directories in the current directory. Directories have the slash "`/`" character appended to their pathname.
+
+`catalog` prints to the display but not to the current writer.
 
 
 ## file? (filep)
@@ -2173,6 +2189,8 @@ pofile _pathname_
 
 `pofile` (for print out file) prints out the contents of the file indicated by _pathname_. Logo prints the contents to the screen. An error occurs if you try to use `pofile` on a file that is already open.
 
+`pofile` prints to the display but not to the current writer.
+
 
 # Managing Various Files
 
@@ -2193,7 +2211,7 @@ save _pathname_
 
 `command`
 
-The `save` command creates a file and saves in it all unburied procedures and variables and all properties in the workspace. An error occurs if the file you name already exists. In in this case, you should first either erase the existing file using `erfile` or rename it using `rename`.
+The `save` command creates a file and saves in it all unburied procedures and variables and all properties in the workspace. An error occurs if the file you name already exists. In in this case, you should first either erase the existing file using [`erasefile`](#erasefile) or rename it using [`rename`](#rename).
 
 
 ## loadpic
@@ -2209,7 +2227,7 @@ The `loadpic` command loads the picture named by _pathname_ onto the graphics sc
 
 savepic _pathname_ (command)
 
-`savepic` saves the graphics screen into the file indicated by _pathname_. You can retrieve the screen later using `loadpic`. The image is saved as a 8-bit indexed color BMP (.bmp) file.
+`savepic` saves the graphics screen into the file indicated by _pathname_. You can retrieve the screen later using [`loadpic`](#loadpic). The image is saved as a 8-bit indexed color BMP (.bmp) file.
 
 
 ## dribble
@@ -2218,7 +2236,7 @@ dribble _file_
 
 `command`
 
-`dribble` starts the process of sending a copy of the characters displayed on the text screen to _file_. `dribble` records interactions between the PicoCalc and the person at the keyboard. `dribble` automatically opens file. `nodribble` stops the process of dribbling. You cannot use `setread` or `setwrite` with a dribble file while still dribbling. However, once a dribble file on disk has been closed with `nodribble`, you can treat it like any other file. You can then open it, read from it, or write to it. Note that only one dribble file can be open at one time.
+`dribble` starts the process of sending a copy of the characters displayed on the text screen to _file_. `dribble` records interactions between the PicoCalc and the person at the keyboard. `dribble` automatically opens file. `nodribble` stops the process of dribbling. You cannot use [`setread`](#setread) or [`setwrite`](#setwrite) with a dribble file while still dribbling. However, once a dribble file on disk has been closed with [`nodribble`](#nodribble), you can treat it like any other file. You can then open it, read from it, or write to it. Note that only one dribble file can be open at one time.
 
 
 ## nodribble
@@ -2227,7 +2245,7 @@ nodribble
 
 `command`
 
-`nodribble` turns off the dribble feature so a copy of the characters from the screen will no longer be sent to the file or device named previously by the `dribble` command.
+`nodribble` turns off the dribble feature so a copy of the characters from the screen will no longer be sent to the file or device named previously by the [`dribble`](#dribble) command.
 
 
 ## allopen
@@ -2236,7 +2254,7 @@ allopen
 
 `operation`
 
-`allopen` outputs a list of all files and devices currently open. The `open` command opens a file or a device.
+`allopen` outputs a list of all files and devices currently open. The [`open`](#open) command opens a file or a device.
 
 
 ## close
@@ -2245,7 +2263,7 @@ close _file_
 
 `command`
 
-The `close` command closes the named file or device that is currently `open`. See `open` to open a file or device. An error occurs if you try to use `close` with a file or device that is not open. An error also occurs if you try to use `close` with a file that is opened by the `dribble` command.
+The `close` command closes the named file or device that is currently [`open`](#open). See [`open`](#open) to open a file or device. An error occurs if you try to use [`close`](#close) with a file or device that is not open. An error also occurs if you try to use [`close`](#close) with a file that is opened by the [`dribble`](#dribble) command.
 
 
 ## closeall
@@ -2254,9 +2272,9 @@ closeall
 
 `command`
 
-The `closeall` command closes all files and devices that are currently open. Dribble files are not closed with `closeall`. Use the `open` and `close` commands to open and close one file at a time. If you try to use `closeall` when no files or device are open, it is ignored.
+The `closeall` command closes all files and devices that are currently open. Dribble files are not closed with `closeall`. Use the [`open`](#open) and [`close`](#close) commands to open and close one file at a time. If you try to use `closeall` when no files or device are open, it is ignored.
 
-See `nodribble` for closing dribble files.
+See [`nodribble`](#nodribble) for closing dribble files.
 
 
 ## filelen
@@ -2276,7 +2294,7 @@ open _file_
 
 The `open` command opens file so it can send or receive characters. You must open a data file before you can access it. Note that you can open only one device at a time. You can open a maximum of six disk files at once. If the file named by _file_ does not exist, then `open` creates the file. When you finish using Logo, you must close all devices or files that are open.
 
-See the `close` and `closeall` commands.
+See the [`close`](#close) and [`closeall`](#closeall) commands.
 
 
 ## reader
@@ -2285,14 +2303,14 @@ reader
 
 `operation`
 
-`reader` outputs the current file that is open for reading. You can change the current read file with the `setread` primitive. `reader` returns the name of the file or the empty list if the current reader is the keyboard.
+`reader` outputs the current file that is open for reading. You can change the current read file with the [`setread`](#setread) primitive. `reader` returns the name of the file or the empty list if the current reader is the keyboard.
 
 
 ## readpos
 
 READPOS (operation)
 
-`readpos` (for `read` `pos`ition) outputs the position in the current reader. An error occurs if the current reader is the keyboard or a device. To set the position in the read file, see the `setreadpos` command.
+`readpos` (for `read` `pos`ition) outputs the position in the current reader. An error occurs if the current reader is the keyboard or a device. To set the position in the read file, see the [`setreadpos`](#setreadpos) command.
 
 ## setread
 
@@ -2300,18 +2318,20 @@ setread _file_
 
 `command`
 
-`setread` sets the current reader to _file_. After you give this command, `readlist`, `readword`, `readchar`, and `readchars` read information from this file.
+`setread` sets the current reader to _file_. After you give this command, [`readlist`](#readlist-rl), [`readword`](#readword-rw), [`readchar`](#readchar-rc), and [`readchars`](#readchars-rcs) read information from this file.
 
-Before you use `setread`, you must open the file with the `open` command. An error occurs if the file is not open. To set the current reader back to the keyboard, give `setread` the empty list as input.
+Before you use `setread`, you must open the file with the [`open`](#open) command. An error occurs if the file is not open. To set the current reader back to the keyboard, give `setread` the empty list as input.
 
 
 ## setreadpos
 
-SETREADPOS integer (command)
+setreadpos _integer_ 
 
-`setreadpos` sets the read position in the current reader. The integer should be a number between 0 and the current length of the file. An error occurs if it is not in this range. An error also occurs if the current reader is the keyboard or a device.
+`command`
 
-See `readpos` for more information about the `setreadpos` command.
+`setreadpos` sets the read position in the current reader. The _integer_ should be a number between 0 and the current length of the file. An error occurs if it is not in this range. An error also occurs if the current reader is the keyboard or a device.
+
+See [`readpos`](#readpos) for more information about the `setreadpos` command.
 
 
 ## setwrite
@@ -2320,12 +2340,12 @@ setwrite _file_
 
 `command`
 
-`setwrite` sets the current writer to the file you name. The primitives `print`, `type`, and `show` all print to the current writer. You cannot use `setwrite` unless the file has previously been opened.
+`setwrite` sets the current writer to the file you name. The primitives [`print`](#print), [`type`](#type), and [`show`](#show) all print to the current writer. You cannot use `setwrite` unless the file has previously been opened.
 
 To restore the screen as the current writer, use the `setwrite` command with the empty list as input.
 
 > [!NOTE]
-> The commands `po`, `poall`, `pon`, `pons`, `pops`, `pot`, `pots`, and `pofile` all print to the display but not to the current writer.
+> The commands [`po`](#po), [`poall`](#poall), [`pon`](#pon), [`pons`](#pons), [`pops`](#pops), [`pot`](#pot), [`pots`](#pots), and [`pofile`](#pofile) all print to the display but not to the current writer.
 
 
 ## setwritepos
@@ -2336,7 +2356,7 @@ setwritepos _integer_
 
 `setwritepos` sets the write position in the current file. This command is useful when modifying information in a file. You must set the write position to a number that is between 0 and the end-of-file position. If you try to set it somewhere out of this range, an error occurs. An error also occurs if you try to set the write position when the current writer is the display or a device.
 
-To check the current position, use the `writepos` command.
+To check the current position, use the [`writepos`](#writepos) command.
 
 
 ## writepos
@@ -2354,7 +2374,7 @@ writer
 
 `operation`
 
-`writer` outputs the current file or device that is open for writing. Compare this with the `allopen` operation.
+`writer` outputs the current file or device that is open for writing. Compare this with the [`allopen`](#allopen) operation.
 
 
 # Property Lists
@@ -2365,7 +2385,7 @@ erprops
 
 `command`
 
-`erprops` (for erase properties) erases all properties from the workspace. To check which property lists are currently in the workspace, use `pps`. Use `remprop` to remove properties one at a time from the workspace.
+`erprops` (for erase properties) erases all properties from the workspace. To check which property lists are currently in the workspace, use [`pps`](#pps). Use [`remprop`](#remprop) to remove properties one at a time from the workspace.
 
 
 ## gprop
@@ -2392,7 +2412,7 @@ pprop _name_ _property_ _object_
 
 `command`
 
-The `pprop` (for put property) command gives _name_ _property_ with value _object_. Note that `erall` erases procedures, variables, and properties. Use `remprop` to erase properties one at a time or `erprops` to erase them all at once.
+The `pprop` (for put property) command gives _name_ _property_ with value _object_. Note that [`erall`](#erall) erases procedures, variables, and properties. Use [`remprop`](#remprop) to erase properties one at a time or [`erprops`](#erprops) to erase them all at once.
 
 
 ## pps
@@ -2412,7 +2432,7 @@ remprop _name_ _property_
 
 The `remprop` (for remove property) command removes _property_ from the property list of _name_.
 
-See `pprop` and `gprop`.
+See [`pprop`](#pprop) and [`gprop`](#gprop).
 
 
 
@@ -2437,5 +2457,5 @@ The `battery` operation returns a list where the first value is the percent rema
 `.poweroff` closes all open files and powers off the device. If the device does not support this capability, an error is displayed.
 
 > [!WARNING]
-> Primitives whose names start with a period are **dangerous**. You can loose work if used incorrectly.
+> Primitives whose names start with a period are **dangerous**. You may loose work if used incorrectly.
 

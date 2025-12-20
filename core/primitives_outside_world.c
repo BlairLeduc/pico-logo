@@ -488,6 +488,7 @@ static Result prim_type(Evaluator *eval, int argc, Value *args)
 void primitives_outside_world_init(void)
 {
     // Input
+    primitive_register("key?", 0, prim_keyp);
     primitive_register("keyp", 0, prim_keyp);
     primitive_register("readchar", 0, prim_readchar);
     primitive_register("rc", 0, prim_readchar);
