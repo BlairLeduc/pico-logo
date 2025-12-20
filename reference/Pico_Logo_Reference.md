@@ -2429,7 +2429,7 @@ The `battery` operation returns a list where the first value is the percent rema
 
 `operation`
 
-`.poweroff` closes all open files and powers off the device. If the device does not support this capability, an error is dislayed.
+`.poweroff` closes all open files and powers off the device. If the device does not support this capability, an error is displayed.
 
 
 
