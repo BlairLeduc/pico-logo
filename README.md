@@ -4,6 +4,12 @@ Pico Logo is a lightweight, modular Logo interpreter written in C, designed for 
 
 ![screenshot](assets/spiral.bmp)
 
+## Goals
+
+- Enable learning and experimentation with Logo using classic resources.
+- Provide a clear, maintainable codebase for future enhancements (graphics, sound, hardware integration).
+- Ensure efficient operation on resource-constrained hardware.
+
 ## Features
 
 - **Classic Logo Semantics:** Compatible with Logo books and manuals from the 1980s and 1990s.
@@ -29,9 +35,29 @@ Pico Logo is a lightweight, modular Logo interpreter written in C, designed for 
 - Raspberry Pi Pico 2 or compatible board (RP2350) for hardware supported floating-point
 - PicoCalc device with the latest firmware
 
+# Learn Logo
+Pico Logo follows the LCSI dialect, however, basic logo and turtle graphics from the follow books should work without or minor modifications. 
+
+See the [Pico Logo Reference](/reference/Pico_Logo_Reference.md) for specific language details.
+
+## Beginning Logo
+- [Primarily Logo](https://archive.org/details/primarilylogo/page/n37/mode/2up) by Donna Bearden, Kathleen Martin, Brad Foster
+- [Logo for Kids: An Introduction](https://www.snee.com/logo/logo4kids.pdf) by Bob DuCharme
+- [The Great Logo Adventure](https://softronix.com/download/tgla.zip) by Jim Muller
+- [Introducing Logo](https://archive.org/details/tibook_introducing-logo/) by Peter Ross
+
+## Advanced Logo
+- [LogoWorks: Challenging Programs in Logo](https://logothings.github.io/logothings/logoworks/Home.html) by Cynthia Solomon, Margaret Minsky, Brian Harvey
+- [Turtle Geometry: The Computer as a Medium for Exploring Mathematics](https://direct.mit.edu/books/oa-monograph/4663/Turtle-GeometryThe-Computer-as-a-Medium-for) by Harold Abelson, Andrea diSessa
+- <ins>Computer Science Logo Style</ins> by Brian Harvey
+  - [Volume 1: Symbolic Computing](https://people.eecs.berkeley.edu/~bh/v1-toc2.html) (For purchase from [MIT Press](https://mitpress.mit.edu/9780262581486/computer-science-logo-style-volume-1/))
+  - [Volume 2: Advanced Techniques](https://people.eecs.berkeley.edu/~bh/v2-toc2.html) (For purchase from [MIT Press](https://mitpress.mit.edu/9780262581493/computer-science-logo-style-volume-2/))
+  - [Volume 3: Beyond Programming](https://people.eecs.berkeley.edu/~bh/v3-toc2.html) (For purchase from [MIT Press](https://mitpress.mit.edu/9780262581509/computer-science-logo-style-volume-3/))
+
+
 # Contributing
 
-The following informationwill allow to to configure your development environment.
+The following information will allow you to configure your development environment.
 
 ## Visual Studio Code
 
@@ -101,15 +127,12 @@ cmake --build --preset=pico
 
 This produces `build-pico/pico-logo.uf2`.
 
-## Goals
-
-- Enable learning and experimentation with Logo using classic resources.
-- Provide a clear, maintainable codebase for future enhancements (graphics, sound, hardware integration).
-- Ensure efficient operation on resource-constrained hardware.
-
-## References
-
-- See the [Pico Logo Reference](/reference/Pico_Logo_Reference.md) for language details.
+# About Logo
+- [Mindstorms](http://worrydream.com/refs/Papert%20-%20Mindstorms%201st%20ed.pdf) by Seymour Papert
+- [Logo's Lineage](https://www.atarimagazines.com/v2n12/logoslineage.php) by Ian Chadwick
+- [History of Logo](https://escholarship.org/uc/item/1623m1p3) by Cynthia Solomon, Brian Harvey, Ken Kahn, Henry Lieberman, Mark L. Miller, Margaret Minsky, Artemis Papert, Brian Silverman
+- [Logo Philosophy and Implementation](http://www.microworlds.com/support/logo-philosophy-implementation.html) by Seymour Papert, Clotilde Fonseca, Geraldine Kozberg and Michael Tempel, Sergei Soprunov and Elena Yakovleva, Horacio C. Reggini, Jeff Richardson, Maria Elizabeth B. Almeida, David Cavallo
+- [Logo Tree project](https://web.archive.org/web/20180820132053/http://elica.net/download/papers/LogoTreeProject.pdf) by Pavel Boytchev
 
 ## License
 

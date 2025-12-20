@@ -11,6 +11,11 @@ Welcome to Pico Logo.
 
 The question mark, `?` is the _prompt_. When the prompt is on the display, you can type something. The flashing underscore, `_` is the cursor. It appears when Logo wants you to type something and shows where the next character you type will appear.
 
+The following reference material is collected from:
+
+- [Apple Logo Reference Manual](https://archive.org/details/apple-logo-reference-manual)
+- [Atari Logo Reference Manual](https://archive.org/details/AtariLOGOReferenceManual)
+- [Berkeley Logo](https://people.eecs.berkeley.edu/~bh/downloads/ucblogo.pdf)
 
 # Introduction
 
