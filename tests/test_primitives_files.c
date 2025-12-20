@@ -1241,6 +1241,66 @@ void test_load_defines_procedure(void)
     TEST_ASSERT_EQUAL_FLOAT(100.0, val.as.number);
 }
 
+void test_load_runs_startup_from_file(void)
+{
+    // Create a file that sets startup variable
+    mock_fs_create_file("startup.logo", "make \"startup [make \"ran_startup 1]\n");
+    
+    // Ensure startup doesn't exist before loading
+    TEST_ASSERT_FALSE(var_exists("startup"));
+    TEST_ASSERT_FALSE(var_exists("ran_startup"));
+    
+    Result r = run_string("load \"startup.logo");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // The startup should have been executed
+    Value val;
+    TEST_ASSERT_TRUE(var_get("ran_startup", &val));
+    TEST_ASSERT_EQUAL_FLOAT(1.0, val.as.number);
+}
+
+void test_load_does_not_run_preexisting_startup(void)
+{
+    // Set up a startup variable before loading
+    run_string("make \"startup [make \"ran_startup 1]");
+    TEST_ASSERT_TRUE(var_exists("startup"));
+    TEST_ASSERT_FALSE(var_exists("ran_startup"));
+    
+    // Create a file that does NOT set startup
+    mock_fs_create_file("nostart.logo", "make \"loaded 1\n");
+    
+    Result r = run_string("load \"nostart.logo");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // The preexisting startup should NOT have been executed
+    TEST_ASSERT_FALSE(var_exists("ran_startup"));
+    
+    // But the file contents should have executed
+    Value val;
+    TEST_ASSERT_TRUE(var_get("loaded", &val));
+    TEST_ASSERT_EQUAL_FLOAT(1.0, val.as.number);
+}
+
+void test_load_runs_startup_when_file_overwrites(void)
+{
+    // Set up a startup variable before loading
+    run_string("make \"startup [make \"ran_old_startup 1]");
+    TEST_ASSERT_TRUE(var_exists("startup"));
+    
+    // Create a file that sets a different startup
+    mock_fs_create_file("newstart.logo", "make \"startup [make \"ran_new_startup 1]\n");
+    
+    Result r = run_string("load \"newstart.logo");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // The old startup should NOT have been executed (it was overwritten)
+    TEST_ASSERT_FALSE(var_exists("ran_old_startup"));
+    // The new startup FROM THE FILE should have been executed
+    Value val;
+    TEST_ASSERT_TRUE(var_get("ran_new_startup", &val));
+    TEST_ASSERT_EQUAL_FLOAT(1.0, val.as.number);
+}
+
 void test_save_writes_workspace(void)
 {
     // Setup workspace
@@ -1506,6 +1566,9 @@ int main(void)
     // Load/Save tests
     RUN_TEST(test_load_executes_file);
     RUN_TEST(test_load_defines_procedure);
+    RUN_TEST(test_load_runs_startup_from_file);
+    RUN_TEST(test_load_does_not_run_preexisting_startup);
+    RUN_TEST(test_load_runs_startup_when_file_overwrites);
     RUN_TEST(test_save_writes_workspace);
     RUN_TEST(test_save_file_exists_error);
 
