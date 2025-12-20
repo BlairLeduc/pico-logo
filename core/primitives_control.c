@@ -64,7 +64,8 @@ static Result prim_run(Evaluator *eval, int argc, Value *args)
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, "run", value_to_string(args[0]));
     }
-    return eval_run_list(eval, args[0].as.node);
+    // Use eval_run_list_expr so run can act as an operation
+    return eval_run_list_expr(eval, args[0].as.node);
 }
 
 static Result prim_repeat(Evaluator *eval, int argc, Value *args)
@@ -156,7 +157,8 @@ static Result prim_if(Evaluator *eval, int argc, Value *args)
     
     if (condition)
     {
-        return eval_run_list(eval, args[1].as.node);
+        // Use eval_run_list_expr so if can act as an operation
+        return eval_run_list_expr(eval, args[1].as.node);
     }
     else if (argc >= 3)
     {
@@ -165,7 +167,8 @@ static Result prim_if(Evaluator *eval, int argc, Value *args)
         {
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, "if", value_to_string(args[2]));
         }
-        return eval_run_list(eval, args[2].as.node);
+        // Use eval_run_list_expr so if can act as an operation
+        return eval_run_list_expr(eval, args[2].as.node);
     }
     
     return result_none();
