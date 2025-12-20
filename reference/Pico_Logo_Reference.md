@@ -843,6 +843,14 @@ palette _slot_
 
 Slots 254 and 255 are the foreground text and background colours.
 
+
+## restorepalette
+
+restorepalette
+
+Restores the palette's default colours. This only impacts slots 0 through 127.
+
+
 ## window
 
 window  
@@ -2390,12 +2398,3 @@ battery
 The `battery` operation returns a list where the first value is the percent remaining in the battery and the second value is `true` if the battery is currently charging.
 
 
-
-
-# Special Primatives
-
-## .restorepalette
-
-.restorepalette
-
-Restores the palette's default colours. This only impacts slots 0 through 127.

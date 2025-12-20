@@ -996,7 +996,7 @@ static Result prim_palette(Evaluator *eval, int argc, Value *args)
     return result_ok(make_rgb_list(r, g, b));
 }
 
-// .restorepalette - Restore default palette (slots 0-127)
+// restorepalette - Restore default palette (slots 0-127)
 static Result prim_restorepalette(Evaluator *eval, int argc, Value *args)
 {
     (void)eval;
@@ -1088,5 +1088,5 @@ void primitives_turtle_init(void)
     // Palette primitives
     primitive_register("setpalette", 2, prim_setpalette);
     primitive_register("palette", 1, prim_palette);
-    primitive_register(".restorepalette", 0, prim_restorepalette);
+    primitive_register("restorepalette", 0, prim_restorepalette);
 }

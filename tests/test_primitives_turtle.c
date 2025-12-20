@@ -686,7 +686,7 @@ void test_primitives_are_registered(void)
         "clearscreen", "cs", "clean",
         "dot", "dot?", "dotp", "fill",
         "fence", "window", "wrap",
-        "setpalette", "palette", ".restorepalette"
+        "setpalette", "palette", "restorepalette"
     };
     
     for (size_t i = 0; i < sizeof(prims) / sizeof(prims[0]); i++)
@@ -747,7 +747,7 @@ void test_restorepalette_resets_palette(void)
     run_string("setpalette 50 [255 0 0]");
     
     // Restore palette
-    Result r = run_string(".restorepalette");
+    Result r = run_string("restorepalette");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     
     // Check that restore was called
