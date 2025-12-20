@@ -14,6 +14,7 @@ The question mark, `?` is the _prompt_. When the prompt is on the display, you c
 The following reference material is collected from:
 
 - [Apple Logo Reference Manual](https://archive.org/details/apple-logo-reference-manual)
+- [Apple Logo II Reference Manual](https://archive.org/details/Apple_Logo_II_Reference_Manual_HiRes)
 - [Atari Logo Reference Manual](https://archive.org/details/AtariLOGOReferenceManual)
 - [Berkeley Logo](https://people.eecs.berkeley.edu/~bh/downloads/ucblogo.pdf)
 
@@ -156,7 +157,7 @@ Should the addition be done first, producing `9`, or should the division be done
 (25 + 20) / 5 
 ```
 
-**Commands and operations:** In formal Logo, a given procedure is either a command or an operation, not both. In relaxed Logo, a procedure can be sometimes a command and sometimes an operation. `run` and `if` are examples of this. See [Conditionals and Control of Flow](#conditionals-and-control-of-flow). 
+**Commands and operations:** In formal Logo, a given procedure is either a command or an operation, not both. In relaxed Logo, a procedure can be sometimes a command and sometimes an operation. [`run`](#run) and [`if`](#if) are examples of this. See [Conditionals and Control of Flow](#conditionals-and-control-of-flow). 
 
 **The command `to`:** In formal Logo, you define a procedure with the command `define`; it takes two inputs, a word (the procedure name) and a list (the definition). All the usual rules about quotes and brackets apply without exception:
 
@@ -1030,6 +1031,13 @@ ts
 
 # Words and Lists
 
+This section describes the primitives that work on two types of objects in Logo: words and lists. With the primitives described in this section, you can
+
+- break words and lists into pieces
+- put words and lists together
+- examine words and lists
+- change the case of words and lists.
+
 ## butfirst (bf)
 
 butfirst _object_  
@@ -1264,6 +1272,8 @@ uppercase _word_
 
 # Variables
 
+This section gives you some general information about how Logo uses variables and then provides descriptions of the primitives that you use with variables. 
+
 ## local
 
 local _name_  
@@ -1316,6 +1326,13 @@ thing _name_
 
 
 # Arithmetic Operations
+
+This section presents all the Logo operations that manipulate numbers. Logo has two kinds of notation for expressing arithmetic operations: prefix notation and infix notation. Prefix notation means that the name of the procedure comes betore its inputs. With infix notation, the name of the procedure goes between its inputs, not before them.
+
+This chapter contains
+- a general introduction to Logo's arithmetic operations
+- descriptions of the prefix-form operations
+- descriptions of the infix-form operations.
 
 ## arctan
 
@@ -1466,6 +1483,26 @@ if _predicate_ _list1_
 
 If _predicate_ is `true`, Logo runs _list1_. If _predicate_ is `false`,Pico Logo runs _list2_ (if present). In either case, if the selected list outputs something, the `if` is an operation. If the list outputs nothing, the `if` is a command.
 
+`if` as a command:
+
+```logo
+to decide
+  if 0 = random 2 [op "yes]
+  op "no
+end
+
+to decide
+  (if 0 = random 2 [op "yes] [op "no])
+end
+```
+
+`if` as an operation:
+
+```logo
+to decide
+  output (if 0 = random 2 ["yes] ["no])
+end
+```
 
 ## iffalse (iff)
 

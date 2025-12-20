@@ -1,0 +1,6 @@
+make "startup [
+    load "graphics_tools
+    load "math_tools
+    load "program_tools
+    buryall
+]

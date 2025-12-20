@@ -1,0 +1,61 @@
+to abs :num
+  op (if :num < 0 [-:num] [:num])
+end
+
+to divisor? :a :b
+  op 0 = remainder :b :a
+end
+
+to log :x
+  op 0.434294 * ln :x
+end
+
+to ln :x
+  local "rlist
+  if :x < 0 [op [I can't do log of negative numbers]]
+  if :x = 1 [op 0]
+  (if :x < 1
+    [make "rlist root (1 / :x) 1 -1]
+    [make "rlist root :x 1 1])
+  op (first bf :rlist) * (ln1 first :rlist) / (last :rlist)
+end
+
+to root :x :npwr :const
+  if :x < 1.2 [op (list :x :npwr :const)]
+  op root (sqrt :x) (2 * :npwr) :const
+end
+
+to ln1 :x
+  make "x (:x - 1) / (:x + 1)
+  op 2 * (:x + (pwr :x 3) / 3 + (pwr :x 5) / 5)
+end
+
+to pwr :a :x
+  if and (:a < 0) not (:x = int :x) [pr (se :a [to power] :x [is a complex number!]) stop]
+  if or :a = 1 :x = int :x [op intpwr :a :x]
+  op exp ((ln :a) * :x)
+end
+
+to intpwr :a :intp
+  if or :a = 1 :intp = 0 [op 1]
+  if :intp < 0 [ op 1 / pwrloop (:a) (-: intp) ]
+  op pwrloop :a :intp
+end
+
+to pwrloop :a :intp
+  if :intp = 0 [op 1]
+  op :a * pwrloop :a :intp - 1
+end
+
+to exp :x
+  local "e
+  make "e 2.71828
+  if (:x - int :x) = 0 [op intpwr :e :x]
+  op (intpwr :e int :x) * (1 + efrac (:x - int: x) 1 1)
+end
+
+to efrac :frac :count :term
+  if :count > 9 [op 0]
+  make "term :term * :frac / :count
+  op :term + efrac :frac :count + 1 :term
+end

@@ -38,13 +38,15 @@ Pico Logo is a lightweight, modular Logo interpreter written in C, designed for 
 # Learn Logo
 Pico Logo follows the LCSI dialect, however, basic logo and turtle graphics from the follow books should work without or minor modifications. 
 
-See the [Pico Logo Reference](/reference/Pico_Logo_Reference.md) for specific language details.
+The best place to start is the [Pico Logo Reference](/reference/Pico_Logo_Reference.md). Continue your learning journey wil the following books. 
 
 ## Beginning Logo
 - [Primarily Logo](https://archive.org/details/primarilylogo/page/n37/mode/2up) by Donna Bearden, Kathleen Martin, Brad Foster
 - [Logo for Kids: An Introduction](https://www.snee.com/logo/logo4kids.pdf) by Bob DuCharme
 - [The Great Logo Adventure](https://softronix.com/download/tgla.zip) by Jim Muller
 - [Introducing Logo](https://archive.org/details/tibook_introducing-logo/) by Peter Ross
+
+Many more books are freely available on the internet.
 
 ## Advanced Logo
 - [LogoWorks: Challenging Programs in Logo](https://logothings.github.io/logothings/logoworks/Home.html) by Cynthia Solomon, Margaret Minsky, Brian Harvey
@@ -67,6 +69,7 @@ Visual Studio Code is recommended to build Pico Logo. You will need the followin
 - [C/C++](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools)
 - [C/C++ Extension Pack](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools-extension-pack)
 
+The [CMake Tools](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cmake-tools) extension should be installed and I recommend learning how to use it and how it integrates with the test explorer.
 
 ## Directory Structure
 
