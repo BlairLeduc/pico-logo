@@ -63,7 +63,7 @@ static Result prim_poweroff(Evaluator *eval, int argc, Value *args)
             // Power off has a forced delay before powering off, so close I/O now
             logo_io_close_all(io); // Close all I/O before powering off
 
-            // Wait indefinitely
+            // Wait indefinitely, the device will power off and we won't return
             while (1)
             {
                 io->hardware->ops->sleep(1000);
