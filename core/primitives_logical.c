@@ -8,7 +8,6 @@
 #include "primitives.h"
 #include "error.h"
 #include "eval.h"
-#include "devices/io.h"
 #include <stdlib.h>
 #include <string.h>
 
