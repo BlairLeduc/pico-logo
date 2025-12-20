@@ -359,7 +359,7 @@ static bool should_be_unary_minus(const Lexer *lexer)
         if (prev == TOKEN_RIGHT_PAREN)
             return false;
         // Whitespace before AND immediately precedes something = unary/negative
-        // e.g., "print 3*-4" or "[-1 -2 -3]"
+        // e.g., "print 3 * -4" or "[-1 -2 -3]"
         if (immediately_precedes)
             return true;
         // Whitespace both before and after = binary
