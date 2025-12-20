@@ -312,6 +312,17 @@ void test_list_with_numbers(void)
     assert_token(&lexer, TOKEN_RIGHT_BRACKET, "]");
 }
 
+void test_list_with_negative_numbers(void)
+{
+    Lexer lexer;
+    lexer_init(&lexer, "[-1 -2 -3]");
+    assert_token(&lexer, TOKEN_LEFT_BRACKET, "[");
+    assert_token(&lexer, TOKEN_NUMBER, "-1");
+    assert_token(&lexer, TOKEN_NUMBER, "-2");
+    assert_token(&lexer, TOKEN_NUMBER, "-3");
+    assert_token(&lexer, TOKEN_RIGHT_BRACKET, "]");
+}
+
 void test_repeat_with_list(void)
 {
     // repeat 4 [fd 100 rt 90]
@@ -860,6 +871,7 @@ int main(void)
     RUN_TEST(test_nested_lists);
     RUN_TEST(test_empty_list);
     RUN_TEST(test_list_with_numbers);
+    RUN_TEST(test_list_with_negative_numbers);
     RUN_TEST(test_repeat_with_list);
 
     // Parentheses

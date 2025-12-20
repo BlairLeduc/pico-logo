@@ -107,13 +107,16 @@ void lexer_init(Lexer *lexer, const char *source)
     lexer->previous.type = TOKEN_EOF;
     lexer->previous.start = NULL;
     lexer->previous.length = 0;
+    lexer->had_whitespace = true; // Start of input acts like whitespace
 }
 
-// Skip whitespace
+// Skip whitespace and track if any was found
 static void skip_whitespace(Lexer *lexer)
 {
+    lexer->had_whitespace = false;
     while (*lexer->current && is_space(*lexer->current))
     {
+        lexer->had_whitespace = true;
         lexer->current++;
     }
 }
@@ -339,27 +342,39 @@ static bool looks_like_number(const char *p)
 // According to the reference:
 // - If "-" immediately precedes a word/variable/paren and follows delimiter except ), it's unary
 // - If "-" immediately precedes a number and follows delimiter except ), it's a negative number
-// - The key is: no space between "-" and what follows makes it unary/negative
+// - Space counts as a delimiter
+// Key: "immediately precedes" means no space between - and what follows
 static bool should_be_unary_minus(const Lexer *lexer)
 {
     TokenType prev = lexer->previous.type;
     char after = lexer->current[1];
     
-    // Binary minus after ) or after a value (NUMBER, QUOTED)
+    // Check: does minus immediately precede something (no space after)?
+    bool immediately_precedes = !is_space(after) && after != '\0';
+    
+    // If there was whitespace before the minus, it follows a delimiter
+    if (lexer->had_whitespace)
+    {
+        // After ), even with whitespace, it's still binary minus
+        if (prev == TOKEN_RIGHT_PAREN)
+            return false;
+        // Whitespace before AND immediately precedes something = unary/negative
+        // e.g., "print 3 * -4" or "[-1 -2 -3]"
+        if (immediately_precedes)
+            return true;
+        // Whitespace both before and after = binary
+        // e.g., "7 - 3"
+        return false;
+    }
+    
+    // No whitespace before: binary minus after ), NUMBER, or QUOTED
     if (prev == TOKEN_RIGHT_PAREN || prev == TOKEN_NUMBER || prev == TOKEN_QUOTED)
         return false;
     
-    // After WORD or COLON (value-producing tokens), check what follows:
-    // - If followed by space → binary minus (e.g., ":x - 1")
-    // - If followed immediately by another token → unary minus (e.g., ":x -:y")
+    // No whitespace before: After WORD or COLON (value-producing tokens)
+    // e.g., "xcor-ycor" parses as xcor minus ycor (binary)
     if (prev == TOKEN_WORD || prev == TOKEN_COLON)
-    {
-        // If followed by space or end, it's binary minus
-        if (is_space(after) || after == '\0')
-            return false;
-        // Otherwise unary (immediately precedes something)
-        return true;
-    }
+        return false;
     
     // For operators, opening brackets, and start of input: unary minus
     return prev == TOKEN_EOF ||

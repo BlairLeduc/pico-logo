@@ -52,6 +52,7 @@ extern "C"
         const char *source;  // Source input string
         const char *current; // Current position in source
         Token previous;      // Previous token (for context)
+        bool had_whitespace; // Whitespace before current token
     } Lexer;
 
     // Initialize the lexer with source input
