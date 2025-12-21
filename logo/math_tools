@@ -51,7 +51,7 @@ to exp :x
   local "e
   make "e 2.71828
   if (:x - int :x) = 0 [op intpwr :e :x]
-  op (intpwr :e int :x) * (1 + efrac (:x - int: x) 1 1)
+  op (intpwr :e int :x) * (1 + efrac (:x - int :x) 1 1)
 end
 
 to efrac :frac :count :term
