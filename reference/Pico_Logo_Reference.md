@@ -571,6 +571,146 @@ For example:
 You also erase procedures and veriables that are only needed for startup processing (see [`erase`](#erase-er) and [`ern`](#ern)).
 
 
+
+# Useful Tools
+
+The procedures presented here are for your convenience when constructing your own procedures. Some of them were defined as examples for primitives and others appear here for the first time. These procedures are in the logo archive in the release. You can extract the contents of the archive into the `/Logo` directory on your SD Card. A sample `startup` file is also included to load these tools.
+
+## Graphics Tools
+
+### arcr and arcl
+
+arcr _radius_ _degrees_  
+arc1 _radius_ _degrees_  
+
+`command`
+
+`arcr` and `arcl` draw right and left turn arcs, respectively. Their inputs are
+
+- the _radius_ of the circle from which the arc is
+taken
+- the _degrees_ of the arc (the length of the edge)
+
+
+### circler and circlel
+
+circler _radius_  
+circlel _radius_  
+
+`command`
+
+`circler` and `circlel` draw right and left turn circles with a specified _radius_ as input.
+
+
+## Math Tools
+
+### abs
+
+abs _number_
+
+`operation`
+
+`abs` outputs the absolute value of its input.
+
+
+### divisor?
+
+divisor? _number1_ _number2_
+
+`operation`
+
+`divisor?` indicates (`true` or `false`) whether _number1_ divides evenly into _number2_.
+
+
+### log
+
+log _number_
+
+`operation`
+
+`log` returns the logarithm to the base 10 of _number_. It uses the `ln` procedure, which follows.
+
+
+### ln
+
+ln _number_
+
+`operation`
+
+`ln` calculates the natural logarithm of _number_.
+
+
+### pwr
+
+pwr _number1_ _number2_
+
+`operation`
+
+`pwr` returns the value of _number1_ to the _number2_ power. If _number2_ is a fraction and _number1_ is not equal to one, `pwr` uses the natural functions `exp` and `ln`. If _number1_ is less then 0 and _number2_ is a fraction, the result should be a complex number.
+
+
+### exp
+
+exp _number_
+
+`operation`
+
+`exp` is the natural exponential function, calculated using a Taylor series. `e` is declared a local variable to ensure that it always contains the correct value.
+
+
+## Program Logic or Debugging Tools
+
+### comment
+
+; _list_
+
+`command`
+
+';' allows you to embed comments in your programs in the form:
+
+```logo
+; [This is a comment]
+```
+
+### forever
+
+forever _instructionlist_
+
+`command`
+
+`forever` repeats a group of instructions until you press
+`BRK` or turn off the power.
+
+
+### map
+
+map _command_ _list_
+
+`command`
+
+`map` applies _command_ to every element of _list_.
+
+
+### sort
+
+sort _arg_ _list_
+
+`operation`
+
+`sort` takes _list_ of words and outputs them alphabetically.
+
+
+### while
+
+while _condition_ _instructionlist_
+
+`command`
+
+`while` repeats a group of instructions until _condition_
+becomes `false`.
+
+
+
 # Turtle Graphics
 
 Pico Logo has two kinds of screens: the graphics screen and the text screen. When you use any primitive or procedure that renders to the turtle, Logo shows you the graphics screen. The commands [`fullscreen`](#fullscreen-fs), [`splitscreen`](#splitscreen-ss), and [`textscreen`](#textscreen-ts) allow you to switch between the two kinds of screens.

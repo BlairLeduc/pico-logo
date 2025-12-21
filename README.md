@@ -38,7 +38,7 @@ Pico Logo is a lightweight, modular Logo interpreter written in C, designed for 
 # Learn Logo
 Pico Logo follows the LCSI dialect, however, basic logo and turtle graphics from the follow books should work without or minor modifications. 
 
-The best place to start is the [Pico Logo Reference](/reference/Pico_Logo_Reference.md). Continue your learning journey wil the following books. 
+The best place to start is the [Pico Logo Reference](/reference/Pico_Logo_Reference.md). Continue your learning journey with the following books.
 
 ## Beginning Logo
 - [Primarily Logo](https://archive.org/details/primarilylogo/page/n37/mode/2up) by Donna Bearden, Kathleen Martin, Brad Foster
