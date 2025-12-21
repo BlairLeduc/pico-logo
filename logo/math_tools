@@ -38,7 +38,7 @@ end
 
 to intpwr :a :intp
   if or :a = 1 :intp = 0 [op 1]
-  if :intp < 0 [ op 1 / pwrloop (:a) (-: intp) ]
+  if :intp < 0 [ op 1 / pwrloop (:a) (-:intp) ]
   op pwrloop :a :intp
 end
 
