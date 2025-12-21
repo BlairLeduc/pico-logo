@@ -841,7 +841,9 @@ setbg _colournumber_
 
 The `setbg` (for set background) command sets the background colour to the colour represented by _colournumber_, where _colournumber_ is a value between 0 and 253.
 
-The background palette slot is 255 and the text colour palette slot is 254. The text colour is chosen to be in the same hue as the set background colour with a contrasting shade.
+The background colour number is 255 and the text colour number is 254. The text colour is chosen to be in the same hue as the set background colour with a contrasting shade.
+
+The default background colour number is 74.
 
 See [Colours](Colours.md) for the default palette.
 
@@ -859,24 +861,24 @@ See [Colours](Colours.md) for the default palette.
 
 ## setpalette
 
-setpalette _slot_ _list_
+setpalette _colournumber_ _list_
 
 `command`
 
-`setpalette` sets the actual colour corresponding to a given _slot_ and _slot_ must be an integer greater than or equal to 0. The second input is a list of three nonnegative numbers less than 256 specifying the saturation of red, green, and blue in the desired colour.
+`setpalette` sets the actual colour corresponding to a given _colournumber_ and _colournumber_ must be an integer greater than or equal to 0. The second input is a list of three nonnegative numbers less than 256 specifying the saturation of red, green, and blue in the desired colour.
 
-The first 128 slots are the default palette for Pico Logo, and changing these slots should be avoided. Slots 254 and 255 are the foreground text and background colours.
+The first 128 colour numbers are the default palette for Pico Logo, and changing these colour numbers should be avoided. Colour numbers 254 and 255 are the foreground text and background colour numbers.
 
 
 ## palette
 
-palette _slot_
+palette _colournumber_
 
 `operation`
 
-`palette` outputs a list of three nonnegative numbers less than 256 specifying the saturation of red, green, and blue in the color associated with the given number. 
+`palette` outputs a list of three nonnegative numbers less than 256 specifying the saturation of red, green, and blue in the colour associated with the given colour number. 
 
-Slots 254 and 255 are the foreground text and background colours.
+Colour numbers 254 and 255 are the foreground text and background colours.
 
 
 ## restorepalette
@@ -885,7 +887,7 @@ restorepalette
 
 `command`
 
-Restores the palette's default colours. This only impacts slots 0 through 127.
+Restores the palette's default colours. This command only restores colour numbers 0 through 127.
 
 
 ## window
