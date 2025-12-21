@@ -876,7 +876,7 @@ palette _colournumber_
 
 `operation`
 
-`palette` outputs a list of three nonnegative numbers less than 256 specifying the saturation of red, green, and blue in the color associated with the given colour number. 
+`palette` outputs a list of three nonnegative numbers less than 256 specifying the saturation of red, green, and blue in the colour associated with the given colour number. 
 
 Colour numbers 254 and 255 are the foreground text and background colours.
 
