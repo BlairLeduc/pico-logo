@@ -116,6 +116,213 @@ void test_false(void)
 }
 
 //==========================================================================
+// IF Command/Operation Tests
+//==========================================================================
+
+// --- IF as a command (one list) ---
+
+void test_if_true_one_list_command(void)
+{
+    // if true [print "yes] - should print "yes"
+    run_string("if true [print \"yes]");
+    TEST_ASSERT_EQUAL_STRING("yes\n", output_buffer);
+}
+
+void test_if_false_one_list_command(void)
+{
+    // if false [print "yes] - should do nothing
+    run_string("if false [print \"yes]");
+    TEST_ASSERT_EQUAL_STRING("", output_buffer);
+}
+
+void test_if_with_expression_predicate(void)
+{
+    // if 5 > 3 [print "greater]
+    run_string("if 5 > 3 [print \"greater]");
+    TEST_ASSERT_EQUAL_STRING("greater\n", output_buffer);
+}
+
+void test_if_with_equal_expression(void)
+{
+    // if 5 = 5 [print "equal]
+    run_string("if 5 = 5 [print \"equal]");
+    TEST_ASSERT_EQUAL_STRING("equal\n", output_buffer);
+}
+
+void test_if_with_less_than_expression(void)
+{
+    // if 3 < 5 [print "less]
+    run_string("if 3 < 5 [print \"less]");
+    TEST_ASSERT_EQUAL_STRING("less\n", output_buffer);
+}
+
+// --- IF as a command (two lists using parentheses) ---
+
+void test_if_true_two_lists_command(void)
+{
+    // (if true [print "yes] [print "no]) - should print "yes"
+    run_string("(if true [print \"yes] [print \"no])");
+    TEST_ASSERT_EQUAL_STRING("yes\n", output_buffer);
+}
+
+void test_if_false_two_lists_command(void)
+{
+    // (if false [print "yes] [print "no]) - should print "no"
+    run_string("(if false [print \"yes] [print \"no])");
+    TEST_ASSERT_EQUAL_STRING("no\n", output_buffer);
+}
+
+void test_if_two_lists_with_expression(void)
+{
+    // (if 2 > 5 [print "greater] [print "notgreater]) - should print "notgreater"
+    run_string("(if 2 > 5 [print \"greater] [print \"notgreater])");
+    TEST_ASSERT_EQUAL_STRING("notgreater\n", output_buffer);
+}
+
+// --- IF as an operation ---
+
+void test_if_true_operation_returns_value(void)
+{
+    // (if true ["yes] ["no]) - should output "yes"
+    Result r = eval_string("(if true [\"yes] [\"no])");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_word(r.value));
+    TEST_ASSERT_EQUAL_STRING("yes", value_to_string(r.value));
+}
+
+void test_if_false_operation_returns_value(void)
+{
+    // (if false ["yes] ["no]) - should output "no"
+    Result r = eval_string("(if false [\"yes] [\"no])");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_word(r.value));
+    TEST_ASSERT_EQUAL_STRING("no", value_to_string(r.value));
+}
+
+void test_if_operation_with_arithmetic(void)
+{
+    // (if true [sum 1 2] [sum 3 4]) - should output 3
+    Result r = eval_string("(if true [sum 1 2] [sum 3 4])");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(3.0f, r.value.as.number);
+}
+
+void test_if_operation_false_with_arithmetic(void)
+{
+    // (if false [sum 1 2] [sum 3 4]) - should output 7
+    Result r = eval_string("(if false [sum 1 2] [sum 3 4])");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(7.0f, r.value.as.number);
+}
+
+void test_if_operation_used_in_print(void)
+{
+    // print (if true ["hello] ["goodbye])
+    run_string("print (if true [\"hello] [\"goodbye])");
+    TEST_ASSERT_EQUAL_STRING("hello\n", output_buffer);
+}
+
+void test_if_operation_used_in_expression(void)
+{
+    // sum 10 (if true [5] [0]) - should output 15
+    Result r = eval_string("sum 10 (if true [5] [0])");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(15.0f, r.value.as.number);
+}
+
+void test_if_operation_nested(void)
+{
+    // (if true [(if false ["inner_yes] ["inner_no])] ["outer_no])
+    Result r = eval_string("(if true [(if false [\"inner_yes] [\"inner_no])] [\"outer_no])");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_word(r.value));
+    TEST_ASSERT_EQUAL_STRING("inner_no", value_to_string(r.value));
+}
+
+// --- IF with stop/output in lists ---
+
+void test_if_list_with_stop(void)
+{
+    // if with stop inside should propagate stop
+    Result r = run_string("if true [stop]");
+    TEST_ASSERT_EQUAL(RESULT_STOP, r.status);
+}
+
+void test_if_list_with_output(void)
+{
+    // if with output inside should propagate output
+    Result r = eval_string("if true [output 42]");
+    TEST_ASSERT_EQUAL(RESULT_OUTPUT, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(42.0f, r.value.as.number);
+}
+
+// --- IF error cases ---
+
+void test_if_non_boolean_predicate_error(void)
+{
+    // if with non-boolean predicate should error
+    Result r = run_string("if \"notabool [print \"test]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NOT_BOOL, r.error_code);
+}
+
+void test_if_number_predicate_error(void)
+{
+    // if with number predicate should error
+    Result r = run_string("if 42 [print \"test]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NOT_BOOL, r.error_code);
+}
+
+void test_if_list_predicate_error(void)
+{
+    // if with list predicate should error
+    Result r = run_string("if [a b c] [print \"test]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NOT_BOOL, r.error_code);
+}
+
+void test_if_non_list_body_error(void)
+{
+    // if with non-list body should error
+    Result r = run_string("if true \"notalist");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_if_non_list_else_body_error(void)
+{
+    // (if predicate list1 non-list) should error when else branch is taken
+    Result r = run_string("(if false [print \"test] \"notalist)");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+// --- IF case insensitivity ---
+
+void test_if_true_case_insensitive(void)
+{
+    // TRUE, True, true should all work
+    run_string("if \"TRUE [print \"yes]");
+    TEST_ASSERT_EQUAL_STRING("yes\n", output_buffer);
+    
+    reset_output();
+    run_string("if \"True [print \"yes]");
+    TEST_ASSERT_EQUAL_STRING("yes\n", output_buffer);
+}
+
+void test_if_false_case_insensitive(void)
+{
+    // FALSE, False, false should all work
+    run_string("(if \"FALSE [print \"yes] [print \"no])");
+    TEST_ASSERT_EQUAL_STRING("no\n", output_buffer);
+    
+    reset_output();
+    run_string("(if \"False [print \"yes] [print \"no])");
+    TEST_ASSERT_EQUAL_STRING("no\n", output_buffer);
+}
+
+//==========================================================================
 // Test/Conditional Flow Tests
 //==========================================================================
 
@@ -384,6 +591,32 @@ int main(void)
     // Boolean operations
     RUN_TEST(test_true);
     RUN_TEST(test_false);
+    
+    // IF command/operation tests
+    RUN_TEST(test_if_true_one_list_command);
+    RUN_TEST(test_if_false_one_list_command);
+    RUN_TEST(test_if_with_expression_predicate);
+    RUN_TEST(test_if_with_equal_expression);
+    RUN_TEST(test_if_with_less_than_expression);
+    RUN_TEST(test_if_true_two_lists_command);
+    RUN_TEST(test_if_false_two_lists_command);
+    RUN_TEST(test_if_two_lists_with_expression);
+    RUN_TEST(test_if_true_operation_returns_value);
+    RUN_TEST(test_if_false_operation_returns_value);
+    RUN_TEST(test_if_operation_with_arithmetic);
+    RUN_TEST(test_if_operation_false_with_arithmetic);
+    RUN_TEST(test_if_operation_used_in_print);
+    RUN_TEST(test_if_operation_used_in_expression);
+    RUN_TEST(test_if_operation_nested);
+    RUN_TEST(test_if_list_with_stop);
+    RUN_TEST(test_if_list_with_output);
+    RUN_TEST(test_if_non_boolean_predicate_error);
+    RUN_TEST(test_if_number_predicate_error);
+    RUN_TEST(test_if_list_predicate_error);
+    RUN_TEST(test_if_non_list_body_error);
+    RUN_TEST(test_if_non_list_else_body_error);
+    RUN_TEST(test_if_true_case_insensitive);
+    RUN_TEST(test_if_false_case_insensitive);
     
     // Test/conditional flow
     RUN_TEST(test_test_iftrue);

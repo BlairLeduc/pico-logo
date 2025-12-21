@@ -90,6 +90,11 @@ target_include_directories(logo_core
         ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+# Allow LOGO_MEMORY_SIZE to be set via CMake cache variable
+if(DEFINED LOGO_MEMORY_SIZE)
+    target_compile_definitions(logo_core PUBLIC LOGO_MEMORY_SIZE=${LOGO_MEMORY_SIZE})
+endif()
+
 add_executable(pico-logo
     devices/picocalc/clib.c
     devices/picocalc/fat32.c

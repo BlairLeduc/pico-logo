@@ -735,3 +735,58 @@ Result eval_run_list(Evaluator *eval, Node list)
     // Regular run_list without TCO
     return eval_run_list_with_tco(eval, list, false);
 }
+
+// Run a list as an expression - allows the list to output a value
+// Used by 'run' and 'if' when they act as operations
+Result eval_run_list_expr(Evaluator *eval, Node list)
+{
+    // Save current lexer state
+    Lexer *old_lexer = eval->lexer;
+    Token old_current = eval->current;
+    bool old_has_current = eval->has_current;
+    bool old_tail = eval->in_tail_position;
+
+    // Build string from list for lexing
+    char buffer[512];
+    serialize_list_to_buffer(list, buffer, sizeof(buffer));
+
+    // Create new lexer for list content
+    Lexer list_lexer;
+    lexer_init(&list_lexer, buffer);
+    eval->lexer = &list_lexer;
+    eval->has_current = false;
+
+    Result r = result_none();
+
+    while (!eval_at_end(eval))
+    {
+        r = eval_instruction(eval);
+        
+        // Propagate stop/output/error/throw immediately
+        if (r.status != RESULT_NONE && r.status != RESULT_OK)
+        {
+            break;
+        }
+
+        // If we got a value and there's more to execute, that's an error
+        if (r.status == RESULT_OK && !eval_at_end(eval))
+        {
+            r = result_error_arg(ERR_DONT_KNOW_WHAT, NULL, value_to_string(r.value));
+            break;
+        }
+        
+        // If we got a value and we're at the end, return it (this is the operation case)
+        if (r.status == RESULT_OK)
+        {
+            break;
+        }
+    }
+
+    // Restore state
+    eval->in_tail_position = old_tail;
+    eval->lexer = old_lexer;
+    eval->current = old_current;
+    eval->has_current = old_has_current;
+
+    return r;
+}

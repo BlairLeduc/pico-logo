@@ -38,8 +38,12 @@ extern "C"
     // Evaluate a single expression (operation that returns a value)
     Result eval_expression(Evaluator *eval);
 
-    // Run a list as code (for run, repeat, if, etc.)
+    // Run a list as code (for repeat, etc.) - errors if list outputs a value
     Result eval_run_list(Evaluator *eval, Node list);
+
+    // Run a list as an expression (for run, if as operation)
+    // Allows the list to output a value which is returned
+    Result eval_run_list_expr(Evaluator *eval, Node list);
 
     // Run a list as code with tail call optimization enabled
     // Used internally by proc_call for procedure bodies

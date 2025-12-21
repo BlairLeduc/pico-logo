@@ -40,30 +40,21 @@ extern "C"
     // Initialize primitive categories
     void primitives_arithmetic_init(void);
     void primitives_control_init(void);
-    void primitives_logical_init(void);
-    void primitives_variables_init(void);
-    void primitives_words_lists_init(void);
-    void primitives_procedures_init(void);
-    void primitives_workspace_init(void);
-    void primitives_outside_world_init(void);
-    void primitives_properties_init(void);
     void primitives_debug_init(void);
     void primitives_files_init(void);
+    void primitives_hardware_init(void);
+    void primitives_logical_init(void);
+    void primitives_outside_world_init(void);
+    void primitives_procedures_init(void);
+    void primitives_properties_init(void);
     void primitives_text_init(void);
     void primitives_turtle_init(void);
-    void primitives_hardware_init(void);
+    void primitives_variables_init(void);
+    void primitives_words_lists_init(void);
+    void primitives_workspace_init(void);
 
     // Forward declarations for I/O
-    struct LogoDevice;
     struct LogoIO;
-
-    // DEPRECATED: Use primitives_set_io() instead
-    // This function is kept for backward compatibility and will be removed
-    void primitives_set_device(struct LogoDevice *device);
-
-    // DEPRECATED: Use primitives_get_io() instead
-    // This function is kept for backward compatibility and will be removed
-    struct LogoDevice *primitives_get_device(void);
 
     // Set the I/O manager for primitives (called once at startup)
     void primitives_set_io(struct LogoIO *io);
