@@ -568,7 +568,7 @@ For example:
 ?save "startup
 ```
 
-You also erase procedures and veriables that are only needed for startup processing (see [`erase`](#erase-er) and [`ern`](#ern)).
+You also erase procedures and variables that are only needed for startup processing (see [`erase`](#erase-er) and [`ern`](#ern)).
 
 
 
