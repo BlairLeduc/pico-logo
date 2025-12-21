@@ -630,17 +630,52 @@ void lcd_init()
     lcd_write_cmd(LCD_CMD_SWRESET); // reset the commands and parameters to their S/W Reset default values
     busy_wait_us(10000);            // required to wait at least 5ms
 
-    lcd_write_cmd(LCD_CMD_COLMOD); // pixel format set
-    lcd_write_data(1, 0x55);       // 16 bit/pixel (RGB565)
+    lcd_write_cmd(LCD_CMD_PGC); // Positive Gamma Control
+    lcd_write_data(15, 
+        0x00, 0x03, 0x09, 0x08, 0x16, 0x0A, 0x3F, 0x78, 0x4C, 0x09, 0x0A, 0x08, 0x16, 0x1A, 0x0F);
+
+    lcd_write_cmd(LCD_CMD_NGC); // Negative Gamma Control
+    lcd_write_data(15,
+        0x00, 0x16, 0x19, 0x03, 0x0F, 0x05, 0x32, 0x45, 0x46, 0x04, 0x0E, 0x0D, 0x35, 0x37, 0x0F);
+
+    lcd_write_cmd(LCD_CMD_PWR1); // Power Control 1
+    lcd_write_data(2, 0x17, 0x15);
+
+    lcd_write_cmd(LCD_CMD_PWR2); // Power Control 2
+    lcd_write_data(1, 0x41);
+
+    lcd_write_cmd(LCD_CMD_VCMPCTL); // VCOM Control
+    lcd_write_data(3, 0x00, 0x12, 0x80);
 
     lcd_write_cmd(LCD_CMD_MADCTL); // memory access control
     lcd_write_data(1, 0x48);       // BGR colour filter panel, top to bottom, left to right
 
+    lcd_write_cmd(LCD_CMD_COLMOD); // pixel format set
+    lcd_write_data(1, 0x55);       // 16 bit/pixel (RGB565)
+
+    lcd_write_cmd(LCD_CMD_IFMODE); // Interface Mode Control
+    lcd_write_data(1, 0x00);
+
+    lcd_write_cmd(LCD_CMD_FRMCTR1); // Frame Rate Control
+    lcd_write_data(1, 0xA0);
+
     lcd_write_cmd(LCD_CMD_INVON); // display inversion on
+
+    lcd_write_cmd(LCD_CMD_DIC); // Display Inversion Control
+    lcd_write_data(1, 0x02);
+
+    lcd_write_cmd(LCD_CMD_DFC); // Display Function Control
+    lcd_write_data(3, 0x02, 0x02, 0x3B);
 
     lcd_write_cmd(LCD_CMD_EMS); // entry mode set
     lcd_write_data(1, 0x06);    // normal display, 16-bit (RGB) to 18-bit (rgb) colour
                                 //   conversion: r(0) = b(0) = 0
+
+    lcd_write_cmd(LCD_CMD_E9); // Manufacturer command
+    lcd_write_data(1, 0x00);
+
+    lcd_write_cmd(LCD_CMD_F7); // Adjust Control 3
+    lcd_write_data(4, 0xA9, 0x51, 0x2C, 0x82);
 
     lcd_write_cmd(LCD_CMD_VSCRDEF); // vertical scroll definition
     lcd_write_data(6,
