@@ -2497,7 +2497,7 @@ The `battery` operation returns a list where the first value is the percent rema
 `.poweroff` closes all open files and powers off the device. If the device does not support this capability, an error is displayed.
 
 > [!WARNING]
-> Primitives whose names start with a period are **dangerous**. You may loose work if used incorrectly.
+> Primitives whose names start with a period are **dangerous**. You may lose work if used incorrectly.
 
 
 
