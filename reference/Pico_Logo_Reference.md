@@ -867,7 +867,7 @@ setpalette _colournumber_ _list_
 
 `setpalette` sets the actual colour corresponding to a given _colournumber_ and _colournumber_ must be an integer greater than or equal to 0. The second input is a list of three nonnegative numbers less than 256 specifying the saturation of red, green, and blue in the desired colour.
 
-The first 128 colour numners are the default palette for Pico Logo, and changing these colour numbers should be avoided. Colour numbers 254 and 255 are the foreground text and background colour numbers.
+The first 128 colour numbers are the default palette for Pico Logo, and changing these colour numbers should be avoided. Colour numbers 254 and 255 are the foreground text and background colour numbers.
 
 
 ## palette
