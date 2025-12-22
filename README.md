@@ -2,8 +2,11 @@
 
 Pico Logo is a lightweight, modular Logo interpreter written in C, designed for the Raspberry Pi Pico (RP2040/RP2350). The project aims for compatibility with classic LCSI Logo semantics, _although is influenced by classic MIT Logo semantics_, focusing on clarity, maintainability, and resource efficiency.
 
-![screenshot](assets/spiral.bmp)
+![sqiral](assets/sqiral.png)
 
+```
+repeat 220 [ fd repcount rt 88 ]
+```
 ## Goals
 
 - Enable learning and experimentation with Logo using classic resources.
@@ -35,6 +38,8 @@ Pico Logo is a lightweight, modular Logo interpreter written in C, designed for 
 - Raspberry Pi Pico 2 or compatible board (RP2350) for hardware supported floating-point
 - PicoCalc device with the latest firmware
 
+
+
 # Learn Logo
 Pico Logo follows the LCSI dialect, however, basic logo and turtle graphics from the follow books should work without or minor modifications. 
 
@@ -46,15 +51,21 @@ The best place to start is the [Pico Logo Reference](/reference/Pico_Logo_Refere
 - [The Great Logo Adventure](https://softronix.com/download/tgla.zip) by Jim Muller
 - [Introducing Logo](https://archive.org/details/tibook_introducing-logo/) by Peter Ross
 
-Many more books are freely available on the internet.
+## Science with Logo
+
+- [Exploring language with Logo](https://archive.org/details/exploringlanguag00gold) by E. Paul Goldenberg and Wallace Feurzeig
+- [Logo physics](https://archive.org/details/logo-physics-1985) by James P. Hurley
 
 ## Advanced Logo
 - [LogoWorks: Challenging Programs in Logo](https://logothings.github.io/logothings/logoworks/Home.html) by Cynthia Solomon, Margaret Minsky, Brian Harvey
 - [Turtle Geometry: The Computer as a Medium for Exploring Mathematics](https://direct.mit.edu/books/oa-monograph/4663/Turtle-GeometryThe-Computer-as-a-Medium-for) by Harold Abelson, Andrea diSessa
 - <ins>Computer Science Logo Style</ins> by Brian Harvey
-  - [Volume 1: Symbolic Computing](https://people.eecs.berkeley.edu/~bh/v1-toc2.html) (For purchase from [MIT Press](https://mitpress.mit.edu/9780262581486/computer-science-logo-style-volume-1/))
-  - [Volume 2: Advanced Techniques](https://people.eecs.berkeley.edu/~bh/v2-toc2.html) (For purchase from [MIT Press](https://mitpress.mit.edu/9780262581493/computer-science-logo-style-volume-2/))
-  - [Volume 3: Beyond Programming](https://people.eecs.berkeley.edu/~bh/v3-toc2.html) (For purchase from [MIT Press](https://mitpress.mit.edu/9780262581509/computer-science-logo-style-volume-3/))
+  - [Volume 1: Intermediate programming](https://archive.org/details/computersciencel0000harv)
+  - [Volume 2: Projects, styles, and techniques](https://archive.org/details/computersciencel02harv)
+  - [Volume 3: Advanced Topics](https://archive.org/details/computersciencel03harv)
+
+Many more books are freely available on the internet.
+
 
 
 # Contributing
