@@ -4,9 +4,8 @@
 ;   SPDX-License-Identifier: BSD-3-Clause
 ;
 ;   ISR is used to control the frequency of the tone.
-;   OSR sets the volume of the tone. (Potentially use DMA to use a envelope)
-
-
+;   OSR sets the PWM duty cycle of the tone (which affects perceived volume).
+;   (Potentially use DMA to apply an envelope)
 ; Side-set pin 0 is used for PWM output
 
 .program audio_pwm
