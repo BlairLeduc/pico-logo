@@ -41,7 +41,7 @@ static inline bool audio_pwm_is_not_silence(uint16_t frequency) {
 
 // Write `period` to the input shift register
 static inline void audio_pwm_set_frequency(PIO pio, uint sm, uint32_t frequency) {
-    // This sets the frequence of the tone, we will keep it like this.
+    // This sets the frequency of the tone, we will keep it like this.
     pio_sm_set_enabled(pio, sm, false);
     if (audio_pwm_is_not_silence(frequency)) {
         int period = clock_get_hz(clk_sys) / (frequency * 3);
