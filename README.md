@@ -54,7 +54,7 @@ The best place to start is the [Pico Logo Reference](/reference/Pico_Logo_Refere
 ## Science with Logo
 
 - [Exploring language with Logo](https://archive.org/details/exploringlanguag00gold) by E. Paul Goldenberg and Wallace Feurzeig
-- [Logo physics](https://archive.org/details/logo-physics-1985) by James P. Hurley
+- [Logo Physics](https://archive.org/details/logo-physics-1985) by James P. Hurley
 
 ## Advanced Logo
 - [LogoWorks: Challenging Programs in Logo](https://logothings.github.io/logothings/logoworks/Home.html) by Cynthia Solomon, Margaret Minsky, Brian Harvey
