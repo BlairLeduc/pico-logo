@@ -23,7 +23,6 @@
 #include "keyboard.h"
 #include "southbridge.h"
 
-extern volatile bool user_interrupt;
 keyboard_key_available_callback_t keyboard_key_available_callback = NULL;
 
 static bool keyboard_initialised = false; // flag to indicate if the keyboard is initialised

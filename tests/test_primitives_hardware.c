@@ -200,6 +200,152 @@ void test_poweroff_no_inputs(void)
 }
 
 //==========================================================================
+// Toot Primitive Tests
+//==========================================================================
+
+void test_toot_basic(void)
+{
+    // toot duration frequency - should succeed silently when no audio hardware
+    Result r = eval_string("toot 500 440");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+}
+
+void test_toot_stereo(void)
+{
+    // (toot duration leftfreq rightfreq) - three arguments with parentheses
+    Result r = eval_string("(toot 500 440 880)");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+}
+
+void test_toot_zero_duration(void)
+{
+    // Zero duration should work
+    Result r = eval_string("toot 0 440");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+}
+
+void test_toot_zero_frequency(void)
+{
+    // Zero frequency (silence) should work
+    Result r = eval_string("toot 500 0");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+}
+
+void test_toot_missing_frequency(void)
+{
+    // toot with only duration should fail
+    Result r = eval_string("toot 500");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NOT_ENOUGH_INPUTS, r.error_code);
+}
+
+void test_toot_no_inputs(void)
+{
+    // toot with no inputs should fail
+    Result r = eval_string("toot");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NOT_ENOUGH_INPUTS, r.error_code);
+}
+
+void test_toot_too_many_inputs(void)
+{
+    // toot with more than 3 inputs should fail
+    Result r = eval_string("(toot 500 440 880 123)");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_TOO_MANY_INPUTS, r.error_code);
+}
+
+void test_toot_negative_duration_error(void)
+{
+    // Negative duration should fail
+    Result r = eval_string("toot -500 440");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_toot_word_duration_error(void)
+{
+    // Word as duration should fail
+    Result r = eval_string("toot \"abc 440");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_toot_word_frequency_error(void)
+{
+    // Word as frequency should fail
+    Result r = eval_string("toot 500 \"abc");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_toot_list_duration_error(void)
+{
+    // List as duration should fail
+    Result r = eval_string("toot [1 2] 440");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_toot_list_frequency_error(void)
+{
+    // List as frequency should fail
+    Result r = eval_string("toot 500 [1 2]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_toot_stereo_word_leftfreq_error(void)
+{
+    // Word as left frequency in stereo mode should fail
+    Result r = eval_string("(toot 500 \"abc 880)");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_toot_stereo_word_rightfreq_error(void)
+{
+    // Word as right frequency in stereo mode should fail
+    Result r = eval_string("(toot 500 440 \"abc)");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_toot_in_procedure(void)
+{
+    // Test using toot within a procedure
+    const char *params[] = {};
+    define_proc("beep", params, 0, "toot 100 440");
+    
+    run_string("beep");
+    // No output expected, just verify no errors
+}
+
+void test_toot_negative_frequency_error(void)
+{
+    // Negative frequency should fail
+    Result r = eval_string("toot 500 -440");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_toot_stereo_negative_leftfreq_error(void)
+{
+    // Negative left frequency in stereo mode should fail
+    Result r = eval_string("(toot 500 -440 880)");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_toot_stereo_negative_rightfreq_error(void)
+{
+    // Negative right frequency in stereo mode should fail
+    Result r = eval_string("(toot 500 440 -880)");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+//==========================================================================
 // Main
 //==========================================================================
 
@@ -227,6 +373,26 @@ int main(void)
     RUN_TEST(test_poweroff_calls_hardware_function);
     RUN_TEST(test_poweroff_reset_state_between_tests);
     RUN_TEST(test_poweroff_no_inputs);
+    
+    // Toot tests
+    RUN_TEST(test_toot_basic);
+    RUN_TEST(test_toot_stereo);
+    RUN_TEST(test_toot_zero_duration);
+    RUN_TEST(test_toot_zero_frequency);
+    RUN_TEST(test_toot_missing_frequency);
+    RUN_TEST(test_toot_no_inputs);
+    RUN_TEST(test_toot_too_many_inputs);
+    RUN_TEST(test_toot_negative_duration_error);
+    RUN_TEST(test_toot_word_duration_error);
+    RUN_TEST(test_toot_word_frequency_error);
+    RUN_TEST(test_toot_list_duration_error);
+    RUN_TEST(test_toot_list_frequency_error);
+    RUN_TEST(test_toot_stereo_word_leftfreq_error);
+    RUN_TEST(test_toot_stereo_word_rightfreq_error);
+    RUN_TEST(test_toot_negative_frequency_error);
+    RUN_TEST(test_toot_stereo_negative_leftfreq_error);
+    RUN_TEST(test_toot_stereo_negative_rightfreq_error);
+    RUN_TEST(test_toot_in_procedure);
     
     return UNITY_END();
 }

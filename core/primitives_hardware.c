@@ -73,8 +73,104 @@ static Result prim_poweroff(Evaluator *eval, int argc, Value *args)
     return result_error_arg(ERR_DONT_KNOW_HOW, ".poweroff", "");
 }
 
+// toot duration frequency
+// (toot duration leftfrequency rightfrequency)
+// Plays a tone for the specified duration.
+// Duration is in 1/1000ths of a second (milliseconds).
+// Frequency is in Hz (131 to 1976).
+static Result prim_toot(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+
+    // Validate argument count (2 or 3)
+    if (argc < 2 || argc > 3)
+    {
+        if (argc < 2)
+        {
+            return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "toot", NULL);
+        }
+        return result_error_arg(ERR_TOO_MANY_INPUTS, "toot", NULL);
+    }
+
+    // Get duration (first argument)
+    if (args[0].type != VALUE_NUMBER)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "toot", 
+            args[0].type == VALUE_WORD ? mem_word_ptr(args[0].as.node) : "[]");
+    }
+    int duration_ms = (int)args[0].as.number;
+    if (duration_ms < 0)
+    {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%d", duration_ms);
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "toot", buf);
+    }
+
+    // Get frequency/frequencies
+    uint32_t left_freq, right_freq;
+    
+    if (argc == 2)
+    {
+        // Single frequency for both channels
+        if (args[1].type != VALUE_NUMBER)
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "toot", 
+                args[1].type == VALUE_WORD ? mem_word_ptr(args[1].as.node) : "[]");
+        }
+        int freq = (int)args[1].as.number;
+        if (freq < 0)
+        {
+            char buf[32];
+            snprintf(buf, sizeof(buf), "%d", freq);
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "toot", buf);
+        }
+        left_freq = right_freq = (uint32_t)freq;
+    }
+    else
+    {
+        // Separate frequencies for left and right channels
+        if (args[1].type != VALUE_NUMBER)
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "toot", 
+                args[1].type == VALUE_WORD ? mem_word_ptr(args[1].as.node) : "[]");
+        }
+        if (args[2].type != VALUE_NUMBER)
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "toot", 
+                args[2].type == VALUE_WORD ? mem_word_ptr(args[2].as.node) : "[]");
+        }
+        int lfreq = (int)args[1].as.number;
+        int rfreq = (int)args[2].as.number;
+        if (lfreq < 0)
+        {
+            char buf[32];
+            snprintf(buf, sizeof(buf), "%d", lfreq);
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "toot", buf);
+        }
+        if (rfreq < 0)
+        {
+            char buf[32];
+            snprintf(buf, sizeof(buf), "%d", rfreq);
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "toot", buf);
+        }
+        left_freq = (uint32_t)lfreq;
+        right_freq = (uint32_t)rfreq;
+    }
+
+    // Play the tone if hardware supports it
+    LogoIO *io = primitives_get_io();
+    if (io && io->hardware && io->hardware->ops && io->hardware->ops->toot)
+    {
+        io->hardware->ops->toot((uint32_t)duration_ms, left_freq, right_freq);
+    }
+    // If no audio hardware, silently succeed (command has no output)
+
+    return result_none();
+}
+
 void primitives_hardware_init(void)
 {
     primitive_register("battery", 0, prim_battery_level);
     primitive_register(".poweroff", 0, prim_poweroff);
+    primitive_register("toot", 2, prim_toot);
 }

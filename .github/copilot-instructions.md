@@ -19,7 +19,7 @@
 - The interpreter needs target different devices with well-defined abstraction layers to separate platform-specific code from core interpreter logic:
   - A host system (Linux, macOS, Windows) for development and testing, using standard input/output for the REPL and no graphics or sound.
   - Raspberry Pi Pico hardware using the Pico SDK and the USB serial port for input/output (no graphics or sound).
-  - A PicoCalc device with a small LCD display (320x320 with RGB565 color), keyboard for input/output and a SD Card for file storage.
+  - A PicoCalc device with a small LCD display (320x320 with RGB565 color), keyboard for input/output, stereo sound, and a SD Card for file storage.
 
 
 ### Core

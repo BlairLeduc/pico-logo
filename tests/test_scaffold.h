@@ -204,6 +204,7 @@ static LogoHardwareOps mock_hardware_ops = {
     .power_off = NULL,  // Default: not available, use set_mock_power_off() to enable
     .check_user_interrupt = mock_check_user_interrupt,
     .clear_user_interrupt = mock_clear_user_interrupt,
+    .toot = NULL,  // Mock: no audio
 };
 
 // Helper to configure mock power_off for testing

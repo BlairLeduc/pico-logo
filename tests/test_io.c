@@ -134,7 +134,8 @@ static LogoHardwareOps mock_hardware_ops = {
     .random = mock_random,
     .get_battery_level = mock_get_battery_level,
     .check_user_interrupt = mock_check_user_interrupt,
-    .clear_user_interrupt = mock_clear_user_interrupt
+    .clear_user_interrupt = mock_clear_user_interrupt,
+    .toot = NULL,  // Mock: no audio
 };
 
 static LogoHardware mock_hardware = {

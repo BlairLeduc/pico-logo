@@ -78,6 +78,7 @@ static LogoHardwareOps host_hardware_ops = {
     .power_off = NULL,
     .check_user_interrupt = host_hardware_check_user_interrupt,
     .clear_user_interrupt = host_hardware_clear_user_interrupt,
+    .toot = NULL,  // Host device has no audio
 };
 
 LogoHardware *logo_host_hardware_create(void)

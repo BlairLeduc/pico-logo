@@ -47,7 +47,7 @@
         "evaluator.h": "c",
         "stdio.h": "c"
     },
-    "chat.agent.maxRequests": 50,
+    "chat.agent.maxRequests": 100,
     "coverage-gutters.coverageReportFileName": "coverage-report/**/index.html",
     "coverage-gutters.coverageBaseDir": "**",
     "coverage-gutters.coverageFileNames": [

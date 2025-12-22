@@ -42,6 +42,11 @@ extern "C"
 
         // Clear the user interrupt flag
         void (*clear_user_interrupt)(void);
+
+        // Play a tone
+        // duration is in milliseconds, frequencies are in Hz
+        // If the device is already playing a tone, block until it finishes
+        void (*toot)(uint32_t duration_ms, uint32_t left_freq, uint32_t right_freq);
     } LogoHardwareOps;
 
     typedef struct LogoHardware
