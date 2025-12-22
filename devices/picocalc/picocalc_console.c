@@ -244,8 +244,10 @@ static bool turtle_move(float distance)
     {
     case BOUNDARY_MODE_FENCE:
         // Check if new position is out of bounds (in Logo coordinates)
-        if (logo_x < TURTLE_MIN_X || logo_x > TURTLE_MAX_X ||
-            logo_y < TURTLE_MIN_Y || logo_y > TURTLE_MAX_Y)
+        // Use 0.5 threshold to align with pixel rounding: (int)(value + 0.5f)
+        // This ensures coordinates that round to valid pixels are accepted
+        if (logo_x < TURTLE_MIN_X - 0.5f || logo_x >= TURTLE_MAX_X + 0.5f ||
+            logo_y < TURTLE_MIN_Y - 0.5f || logo_y >= TURTLE_MAX_Y + 0.5f)
         {
             // Redraw turtle at original position and don't move
             turtle_draw();
