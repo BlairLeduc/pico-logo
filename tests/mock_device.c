@@ -72,7 +72,7 @@ static void mock_turtle_draw(void)
     record_command(MOCK_CMD_DRAW);
 }
 
-static void mock_turtle_move(float distance)
+static bool mock_turtle_move(float distance)
 {
     float heading_rad = heading_to_radians(mock_state.turtle.heading);
     float dx = distance * cosf(heading_rad);
@@ -88,12 +88,14 @@ static void mock_turtle_move(float distance)
     {
     case MOCK_BOUNDARY_FENCE:
         // Check if new position is out of bounds
-        if (new_x < -SCREEN_HALF_WIDTH || new_x >= SCREEN_HALF_WIDTH ||
-            new_y < -SCREEN_HALF_HEIGHT || new_y >= SCREEN_HALF_HEIGHT)
+        // Valid Logo coordinates are [-160, 159], but we use 0.5 threshold to align
+        // with pixel rounding (coordinates that round to valid pixels are accepted)
+        if (new_x < -SCREEN_HALF_WIDTH - 0.5f || new_x >= SCREEN_HALF_WIDTH - 0.5f ||
+            new_y < -SCREEN_HALF_HEIGHT - 0.5f || new_y >= SCREEN_HALF_HEIGHT - 0.5f)
         {
             mock_state.boundary_error = true;
             // Don't move
-            return;
+            return false;  // Boundary error
         }
         break;
         
@@ -102,11 +104,16 @@ static void mock_turtle_move(float distance)
         break;
         
     case MOCK_BOUNDARY_WRAP:
-        // Wrap around edges
-        while (new_x < -SCREEN_HALF_WIDTH) new_x += SCREEN_WIDTH;
-        while (new_x >= SCREEN_HALF_WIDTH) new_x -= SCREEN_WIDTH;
-        while (new_y < -SCREEN_HALF_HEIGHT) new_y += SCREEN_HEIGHT;
-        while (new_y >= SCREEN_HALF_HEIGHT) new_y -= SCREEN_HEIGHT;
+        // Wrap around edges using robust formula
+        // First normalize to [0, SCREEN_WIDTH), then shift back to [-HALF, HALF)
+        {
+            float norm_x = new_x + SCREEN_HALF_WIDTH;  // Shift to [0, 320) range
+            float norm_y = new_y + SCREEN_HALF_HEIGHT;
+            norm_x = norm_x - floorf(norm_x / SCREEN_WIDTH) * SCREEN_WIDTH;
+            norm_y = norm_y - floorf(norm_y / SCREEN_HEIGHT) * SCREEN_HEIGHT;
+            new_x = norm_x - SCREEN_HALF_WIDTH;  // Shift back to [-160, 160)
+            new_y = norm_y - SCREEN_HALF_HEIGHT;
+        }
         break;
     }
     
@@ -128,6 +135,7 @@ static void mock_turtle_move(float distance)
     mock_state.turtle.y = new_y;
     
     record_command_float(MOCK_CMD_MOVE, distance);
+    return true;  // Success
 }
 
 static void mock_turtle_home(void)

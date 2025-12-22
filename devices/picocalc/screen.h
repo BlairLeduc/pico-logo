@@ -33,6 +33,13 @@
 // Text definitions
 #define GFX_DEFAULT_BACKGROUND (255) // Default background color (blue)
 
+// Screen boundary modes for graphics
+typedef enum {
+    SCREEN_BOUNDARY_FENCE,   // Error if turtle hits edge (not used for drawing)
+    SCREEN_BOUNDARY_WINDOW,  // Clip drawing to screen bounds
+    SCREEN_BOUNDARY_WRAP     // Wrap coordinates around edges (default)
+} ScreenBoundaryMode;
+
 // BMP definitions (8-bit indexed color)
 #define BMP_FILE_HEADER_SIZE (14)                                                                           // Size of the BMP file header in bytes
 #define BMP_DIB_HEADER_SIZE (40)                                                                            // Size of the DIB header in bytes
@@ -57,6 +64,8 @@ void screen_show_field(void);
 // Graphics functions
 uint8_t *screen_gfx_frame(void);
 void screen_gfx_clear(void);
+void screen_gfx_set_boundary_mode(ScreenBoundaryMode mode);
+ScreenBoundaryMode screen_gfx_get_boundary_mode(void);
 void screen_gfx_set_point(float x, float y, uint8_t colour);
 uint8_t screen_gfx_get_point(float x, float y);
 void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, bool reverse);

@@ -592,6 +592,73 @@ void test_wrap_sets_wrap_mode(void)
     TEST_ASSERT_EQUAL(MOCK_BOUNDARY_WRAP, state->turtle.boundary_mode);
 }
 
+void test_fence_prevents_movement_past_boundary(void)
+{
+    // Set fence mode
+    run_string("fence");
+    
+    // Try to move past the boundary (screen is 320x320, so boundary is at 160)
+    Result r = run_string("forward 200");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    
+    // Turtle should not have moved
+    ASSERT_POSITION(0, 0);
+}
+
+void test_fence_allows_movement_within_bounds(void)
+{
+    // Set fence mode
+    run_string("fence");
+    
+    // Move within bounds
+    Result r = run_string("forward 100");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Turtle should have moved
+    ASSERT_POSITION(0, 100);
+}
+
+void test_window_allows_movement_past_boundary(void)
+{
+    // Set window mode
+    run_string("window");
+    
+    // Move past the boundary
+    Result r = run_string("forward 500");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Turtle should have moved past boundary
+    ASSERT_POSITION(0, 500);
+}
+
+void test_wrap_wraps_at_boundary(void)
+{
+    // Default mode is wrap
+    run_string("wrap");
+    
+    // Move past the boundary (screen is 320x320, boundary at +/-160)
+    Result r = run_string("forward 200");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Turtle should have wrapped around
+    // 200 from center (0,0) heading north goes to y=200
+    // Since boundary is at 160, 200 wraps to 200-320 = -120
+    ASSERT_POSITION(0, -120);
+}
+
+void test_back_in_fence_mode_errors_at_boundary(void)
+{
+    // Set fence mode
+    run_string("fence");
+    
+    // Try to move backward past the boundary
+    Result r = run_string("back 200");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    
+    // Turtle should not have moved
+    ASSERT_POSITION(0, 0);
+}
+
 //==========================================================================
 // Line Drawing Tests (pen down movement)
 //==========================================================================
@@ -890,6 +957,11 @@ int main(void)
     RUN_TEST(test_fence_sets_fence_mode);
     RUN_TEST(test_window_sets_window_mode);
     RUN_TEST(test_wrap_sets_wrap_mode);
+    RUN_TEST(test_fence_prevents_movement_past_boundary);
+    RUN_TEST(test_fence_allows_movement_within_bounds);
+    RUN_TEST(test_window_allows_movement_past_boundary);
+    RUN_TEST(test_wrap_wraps_at_boundary);
+    RUN_TEST(test_back_in_fence_mode_errors_at_boundary);
     
     // Line drawing tests
     RUN_TEST(test_forward_with_pendown_draws_line);

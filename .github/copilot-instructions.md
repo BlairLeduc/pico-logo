@@ -2,48 +2,30 @@
 
 - This project is a **Logo interpreter written in C**, targeting Raspberry Pi Pico boards (RP2040 / RP2350) using the **Pico C/C++ SDK**.
 - **Simplicity and clarity** of the implementation are prioritized over performance and advanced features. The codebase should be modular and well-documented to facilitate future enhancements and maintenance.
-- For now, everything runs on the **host** (desktop) for development and testing; we’ll worry about Pico-specific integration later.
-- The interpreter aims to be strickly compatible with the semantics described in [Pico_Language_reference](../reference/Pico_Logo_Reference.md).
+- The code should be written in standard C (C11 or later) to ensure compatibility with the Pico SDK and ease of cross-compilation.
+- The interpreter aims to be strictly compatible with the semantics described in [Pico_Language_reference](../reference/Pico_Logo_Reference.md).
 - This interpreter is inspired by and based on the **LCSI Logo** implementation written in C by LCSI in the 1980s and 1990s.
 - All information about LCSI Logo is available in public domain books and manuals.
   - “Apple Logo: The Language and Its Implementation (Harvey & Wright, 1985)” does not exist as a real, published book. It looks like a Franken-citation that mashed a few real things together.
 - The main goal of this project is to allow me to use this interpreter to learn Logo using the library of Logo books that were written in the 1980s and 1990s.
-- We will eventually add turtle graphics and sound/music support, but for now we are focusing on core language semantics and primitives.
 - Interactions happen via a simple **REPL** (read-eval-print loop) in the terminal.
   - Error messages should be friendly and informative, similar to classic Logo implementation, see [Error Messages](../reference/Error_Messages.md).
-  - Support multi-line input for procedure definitions.
-- The interpreter should handle basic Logo constructs: variables, procedures, control structures (if, repeat), lists, and arithmetic operations.
-- The intepreter should be efficient and lightweight, suitable for running on resource-constrained hardware like the Raspberry Pi Pico.
-  - The RP2350 has 520KiB of RAM available (200KiB for video RAM and 320KiB for the intepreter and Logo programs to run).
+- The interpreter should be efficient and lightweight, suitable for running on resource-constrained hardware like the Raspberry Pi Pico.
+  - The RP2350 has 520KiB of RAM available (100KiB for video RAM and 420KiB for the interpreter and Logo programs to run).
   - Only use single-precision floating point (32-bit) for numerical calculations. The RP2350 supports single-precision natively in hardware.
-  - However, I would like to provide basic support the RP2040 (only has integer math hardware) and limited to 264KiB of RAM (200KiB for video RAM and 64KiB for the intepreter and Logo programs to run). The interpreter should run correctly on both devices, though not optimally on the RP2040.
+  - We need to also provide support for the RP2040 (only has integer math hardware) and limited to 264KiB of RAM (100KiB for video RAM and 164KiB for the interpreter and Logo programs to run).
   - The interpreter should be designed with these constraints in mind.
-- The project should use **CMake** for building and managing dependencies.
-- The interpreter needs target different devices:
-  - Initially, focus on host-based development for ease of testing and debugging.
-  - Later, Raspberry Pi Pico hardware using the Pico SDK and the USB serial port for input/output.
-  - Later, a device with a small LCD screen and keyboard for input/output.
-  - We need well-defined abstraction layers to separate platform-specific code from core interpreter logic.
-- The code should be written in standard C (C99 or later) to ensure compatibility with the Pico SDK and ease of cross-compilation.
-- We need to support basic file I/O operations to load and save Logo programs from/to files on the host system.
-  - On the Pico, we will be using an SD card or the onboard flash memory for file storage in the future.
+- The project should use **CMake** with presets for building and managing dependencies.
+- The interpreter needs target different devices with well-defined abstraction layers to separate platform-specific code from core interpreter logic:
+  - A host system (Linux, macOS, Windows) for development and testing, using standard input/output for the REPL and no graphics or sound.
+  - Raspberry Pi Pico hardware using the Pico SDK and the USB serial port for input/output (no graphics or sound).
+  - A PicoCalc device with a small LCD display (320x320 with RGB565 color), keyboard for input/output and a SD Card for file storage.
 
 
 ### Core
 
 - Core interpreter files live in `core/`.
 - Primatives are defined in `core/primitives_<topic>.c` and declared in `core/primitives.h`.
-  - The topics include:
-    - `arithmetic`
-    - `conditionals_control_flow`
-    - `logical`
-    - `manage_workspace`
-    - `ourside_world`
-    - `procedures`
-    - `variables`
-    - `words_lists`
-    - `turtle` (later)
-    - etc.
   - Primitives are registered in `core/primitives.c`.
   - Primitives must be easy to implement. Common patterns should be abstracted away.
 - The core includes implemations for:
@@ -62,17 +44,13 @@
 ### Devices
 
 - Device-specific code lives in `devices/`.
-- Each device has its own subdirectory (e.g. `devices/host/`, `devices/pico/`).
-- Device-specific code should implement a common interface defined in `devices/device.h`.
-
-### Reference
-
-- Reference documentation lives in `reference/`.
-- This includes information on:
-  - Error messages (`reference/Error_Messages.md`)
-  - Apple Logo II documentation (`reference/Apple_Logo_II_Reference_Manual_HiRes_djvu.txt`) as a backup for LCSI Logo semantics.
-  - And more...
-- `reference/Pico_Logo_Reference.md` is the main language reference document.
+- Each device has its own subdirectory (e.g. `devices/host/`, `devices/picocalc/`).
+- Device-specific code should implement a common interfaces defined in:
+  - `devices/console.h`
+  - `devices/hardware.h`
+  - `devices/io.h`
+  - `devices/storage.h`
+  - `devices/stream.h`
 
 ### Testing
 
@@ -82,9 +60,17 @@
 - Each test file should include setup and teardown functions as needed.
 - Each test file has a `main()` function to run the tests in that file.
 - Each test file is built into its own executable for isolated testing.
-- Shared code for tests (e.g. test utilities) can go in `tests/scaffold.c`.
+- Shared code for tests (e.g. test utilities) can go in `tests/scaffold.c` and `tests/scaffold.h`.
 - If we find a bug while working on a feature, we should write a test that reproduces the bug first, then fix the bug.
+- Tests should cover both typical use cases and edge cases.
+- Tests should be easy to read and understand, with clear assertions and descriptive names.
+- Tests should run quickly to facilitate rapid development.
+- Tests should use the mock device and the mock device should be updated as needed to support testing
+- We aim for high test coverage of core interpreter logic and primitives.
 
+## Development and testing
+- Use cmake presets to build and run tests.
+- Only use the test framework when working. Do not use the host device for developing or testing new functionality or fixing bugs.
 
 ### How I’d like you (the assistant) to behave
 
@@ -95,8 +81,8 @@
   - Propose or update **unit tests first or alongside** the code changes.
 - Work incrementally toward the larger goal of LCSI semantics, focusing on small, testable changes.
 - When I ask for new features or bug fixes, clarify any ambiguities by asking questions before proceeding.
-- Prioritize code clarity, maintainability, and adherence to classic Logo semantics.
+- Prioritize code **clarity**, **maintainability**, **simplicity of implementation**, and adherence to classic Logo semantics.
 - When I ask for explanations, provide concise and clear answers focused on the Logo interpreter context.
-- Remember that the target platform is Raspberry Pi Pico, but for now we are focusing on host-based development.
+- Remember that the target platform is the Raspberry Pi Pico.
 - When I ask for help with specific files, functions, or modules, focus your responses on those areas.
 - Avoid introducing unnecessary dependencies; keep the project lightweight and focused on C and the Pico SDK.
