@@ -15,6 +15,7 @@
 
 #include "audio.h"
 #include "audio.pio.h"
+#include "keyboard.h"
 
 static bool audio_initialised = false;
 PIO pio = pio0;
@@ -173,7 +174,6 @@ void audio_play_song_blocking(const audio_song_t *song)
         note_index++;
 
         // Check for user interrupt (BREAK key)
-        extern volatile bool user_interrupt;
         if (user_interrupt)
         {
             audio_stop();

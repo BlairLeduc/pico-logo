@@ -9,6 +9,7 @@
 #include "picocalc_hardware.h"
 #include "southbridge.h"
 #include "audio.h"
+#include "keyboard.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,9 +19,6 @@
 
 #include <pico/stdlib.h>
 #include <pico/rand.h>
-
-// External reference to user interrupt flag (set by keyboard driver)
-extern volatile bool user_interrupt;
 
 // Hardware operation implementations
 
@@ -77,7 +75,7 @@ static void picocalc_toot(uint32_t duration_ms, uint32_t left_freq, uint32_t rig
         }
 
         // Sleep for a short period to avoid tight busy-waiting.
-        sleep_ms(10);
+        sleep_ms(1);
     }
     // Play the tone (non-blocking with automatic stop after duration)
     audio_play_sound_timed(left_freq, right_freq, duration_ms);

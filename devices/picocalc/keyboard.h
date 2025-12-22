@@ -60,6 +60,7 @@
 #define KBD_BUFFER_SIZE     (32)
 #define KEYBOARD_POLL_MS    (100) // poll keyboard every 100 ms
 
+extern volatile bool user_interrupt;
 
 // Callback function type for when a key becomes available
 typedef void (*keyboard_key_available_callback_t)(void);

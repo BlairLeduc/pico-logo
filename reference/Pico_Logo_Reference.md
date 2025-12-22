@@ -1921,6 +1921,8 @@ If one frequency is provided the same tone is produced on both left and right ch
 
 `toot` does not block. If a second `toot` is requested, Logo will wait until the previous `toot` completes. 
 
+> [!NOTE]
+> The actual frequency range is 100Hz to 2000Hz. If the input is outside this range, no tone is produced and but `toot` behaves as if a rest is requested. By convention, a rest is produced using a frequency of 0Hz.
 
 
 
