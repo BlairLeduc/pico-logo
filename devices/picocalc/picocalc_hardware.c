@@ -66,12 +66,19 @@ static void picocalc_clear_user_interrupt(void)
 
 static void picocalc_toot(uint32_t duration_ms, uint32_t left_freq, uint32_t right_freq)
 {
-    // Wait for any existing tone to finish before starting a new one
+    // Wait for any existing tone to finish before starting a new one.
+    // Use a cooperative wait: poll less frequently and respect user interrupts.
     while (audio_is_playing())
     {
-        sleep_ms(1);
+        if (user_interrupt)
+        {
+            // If the user has requested an interrupt, abort waiting and skip this toot.
+            return;
+        }
+
+        // Sleep for a short period to avoid tight busy-waiting.
+        sleep_ms(10);
     }
-    
     // Play the tone (non-blocking with automatic stop after duration)
     audio_play_sound_timed(left_freq, right_freq, duration_ms);
 }
