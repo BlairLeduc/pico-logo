@@ -287,8 +287,10 @@ static bool turtle_move(float distance)
     // Now wrap the turtle position after drawing (for wrap mode only)
     if (turtle_boundary_mode == BOUNDARY_MODE_WRAP)
     {
-        turtle_x = fmodf(turtle_x + SCREEN_WIDTH, SCREEN_WIDTH);
-        turtle_y = fmodf(turtle_y + SCREEN_HEIGHT, SCREEN_HEIGHT);
+        // Robust wrapping formula that handles any value (positive or negative)
+        // Uses the same approach as wrap_and_round() in screen.c
+        turtle_x = turtle_x - floorf(turtle_x / SCREEN_WIDTH) * SCREEN_WIDTH;
+        turtle_y = turtle_y - floorf(turtle_y / SCREEN_HEIGHT) * SCREEN_HEIGHT;
     }
 
     turtle_draw();

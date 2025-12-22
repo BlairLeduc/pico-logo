@@ -3,17 +3,17 @@
 - This project is a **Logo interpreter written in C**, targeting Raspberry Pi Pico boards (RP2040 / RP2350) using the **Pico C/C++ SDK**.
 - **Simplicity and clarity** of the implementation are prioritized over performance and advanced features. The codebase should be modular and well-documented to facilitate future enhancements and maintenance.
 - The code should be written in standard C (C11 or later) to ensure compatibility with the Pico SDK and ease of cross-compilation.
-- The interpreter aims to be strickly compatible with the semantics described in [Pico_Language_reference](../reference/Pico_Logo_Reference.md).
+- The interpreter aims to be strictly compatible with the semantics described in [Pico_Language_reference](../reference/Pico_Logo_Reference.md).
 - This interpreter is inspired by and based on the **LCSI Logo** implementation written in C by LCSI in the 1980s and 1990s.
 - All information about LCSI Logo is available in public domain books and manuals.
   - “Apple Logo: The Language and Its Implementation (Harvey & Wright, 1985)” does not exist as a real, published book. It looks like a Franken-citation that mashed a few real things together.
 - The main goal of this project is to allow me to use this interpreter to learn Logo using the library of Logo books that were written in the 1980s and 1990s.
 - Interactions happen via a simple **REPL** (read-eval-print loop) in the terminal.
   - Error messages should be friendly and informative, similar to classic Logo implementation, see [Error Messages](../reference/Error_Messages.md).
-- The intepreter should be efficient and lightweight, suitable for running on resource-constrained hardware like the Raspberry Pi Pico.
-  - The RP2350 has 520KiB of RAM available (100KiB for video RAM and 420KiB for the intepreter and Logo programs to run).
+- The interpreter should be efficient and lightweight, suitable for running on resource-constrained hardware like the Raspberry Pi Pico.
+  - The RP2350 has 520KiB of RAM available (100KiB for video RAM and 420KiB for the interpreter and Logo programs to run).
   - Only use single-precision floating point (32-bit) for numerical calculations. The RP2350 supports single-precision natively in hardware.
-  - However, I would like to provide support the RP2040 (only has integer math hardware) and limited to 264KiB of RAM (100KiB for video RAM and 164KiB for the intepreter and Logo programs to run).
+  - We need to also provide support for the RP2040 (only has integer math hardware) and limited to 264KiB of RAM (100KiB for video RAM and 164KiB for the interpreter and Logo programs to run).
   - The interpreter should be designed with these constraints in mind.
 - The project should use **CMake** with presets for building and managing dependencies.
 - The interpreter needs target different devices with well-defined abstraction layers to separate platform-specific code from core interpreter logic:
@@ -81,7 +81,7 @@
   - Propose or update **unit tests first or alongside** the code changes.
 - Work incrementally toward the larger goal of LCSI semantics, focusing on small, testable changes.
 - When I ask for new features or bug fixes, clarify any ambiguities by asking questions before proceeding.
-- Prioritize code **clarity**, **maintainability**, **simplicity of implementation**and adherence to classic Logo semantics.
+- Prioritize code **clarity**, **maintainability**, **simplicity of implementation**, and adherence to classic Logo semantics.
 - When I ask for explanations, provide concise and clear answers focused on the Logo interpreter context.
 - Remember that the target platform is the Raspberry Pi Pico.
 - When I ask for help with specific files, functions, or modules, focus your responses on those areas.
