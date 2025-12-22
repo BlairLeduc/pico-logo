@@ -105,7 +105,10 @@ static Result prim_back(Evaluator *eval, int argc, Value *args)
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->move)
     {
-        turtle->move(-distance);  // Negative for backward
+        if (!turtle->move(-distance))  // Negative for backward
+        {
+            return result_error(ERR_TURTLE_BOUNDS);
+        }
     }
     
     return result_none();
@@ -130,7 +133,10 @@ static Result prim_forward(Evaluator *eval, int argc, Value *args)
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->move)
     {
-        turtle->move(distance);
+        if (!turtle->move(distance))
+        {
+            return result_error(ERR_TURTLE_BOUNDS);
+        }
     }
     
     return result_none();

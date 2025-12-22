@@ -46,6 +46,9 @@ static uint8_t txt_buffer[SCREEN_COLUMNS * SCREEN_ROWS] = {0};
 
 static uint8_t screen_mode = SCREEN_MODE_TXT;
 
+// Graphics boundary mode (for turtle graphics)
+static ScreenBoundaryMode screen_boundary_mode = SCREEN_BOUNDARY_WRAP;
+
 // Text state
 static const font_t *screen_font = &logo_font;       // Default font for text mode
 static uint16_t text_row = 0;                        // The last row written to in text mode
@@ -60,6 +63,7 @@ static bool cursor_enabled = true;                   // Cursor visibility state 
 //
 
 // Wrap and round a floating point value to the nearest pixel in the range [0, max)
+// Used when boundary mode is WRAP
 static int wrap_and_round(float value, int max)
 {
     // Wrap into [0, max)
@@ -70,6 +74,33 @@ static int wrap_and_round(float value, int max)
     pixel = ((pixel % max) + max) % max;
 
     return pixel;
+}
+
+// Clip and round a floating point value to the nearest pixel
+// Returns -1 if the value is outside the range [0, max)
+// Used when boundary mode is WINDOW or FENCE
+static int clip_and_round(float value, int max)
+{
+    // Round to nearest integer
+    int pixel = (int)(value + 0.5f);
+    // Clip to bounds
+    if (pixel < 0 || pixel >= max)
+    {
+        return -1;  // Out of bounds
+    }
+    return pixel;
+}
+
+// Set the graphics boundary mode
+void screen_gfx_set_boundary_mode(ScreenBoundaryMode mode)
+{
+    screen_boundary_mode = mode;
+}
+
+// Get the current graphics boundary mode
+ScreenBoundaryMode screen_gfx_get_boundary_mode(void)
+{
+    return screen_boundary_mode;
 }
 
 // Helper function to scroll the text buffer up one line
@@ -211,24 +242,72 @@ void screen_gfx_clear(void)
 // Draw a point in the graphics buffer
 void screen_gfx_set_point(float x, float y, uint8_t colour)
 {
-    int pixel_x = wrap_and_round(x, SCREEN_WIDTH);
-    int pixel_y = wrap_and_round(y, SCREEN_HEIGHT);
+    int pixel_x, pixel_y;
+
+    if (screen_boundary_mode == SCREEN_BOUNDARY_WINDOW || screen_boundary_mode == SCREEN_BOUNDARY_FENCE)
+    {
+        // Clip to screen bounds
+        pixel_x = clip_and_round(x, SCREEN_WIDTH);
+        pixel_y = clip_and_round(y, SCREEN_HEIGHT);
+        if (pixel_x < 0 || pixel_y < 0)
+        {
+            return;  // Point is off-screen, don't draw
+        }
+    }
+    else
+    {
+        // Wrap around edges
+        pixel_x = wrap_and_round(x, SCREEN_WIDTH);
+        pixel_y = wrap_and_round(y, SCREEN_HEIGHT);
+    }
 
     gfx_buffer[pixel_y * SCREEN_WIDTH + pixel_x] = colour;
 }
 
 uint8_t screen_gfx_get_point(float x, float y)
 {
-    int pixel_x = wrap_and_round(x, SCREEN_WIDTH);
-    int pixel_y = wrap_and_round(y, SCREEN_HEIGHT);
+    int pixel_x, pixel_y;
+
+    if (screen_boundary_mode == SCREEN_BOUNDARY_WINDOW || screen_boundary_mode == SCREEN_BOUNDARY_FENCE)
+    {
+        // Clip to screen bounds
+        pixel_x = clip_and_round(x, SCREEN_WIDTH);
+        pixel_y = clip_and_round(y, SCREEN_HEIGHT);
+        if (pixel_x < 0 || pixel_y < 0)
+        {
+            return GFX_DEFAULT_BACKGROUND;  // Off-screen returns background
+        }
+    }
+    else
+    {
+        // Wrap around edges
+        pixel_x = wrap_and_round(x, SCREEN_WIDTH);
+        pixel_y = wrap_and_round(y, SCREEN_HEIGHT);
+    }
 
     return gfx_buffer[pixel_y * SCREEN_WIDTH + pixel_x];
 }
 
 void screen_gfx_reverse_point(float x, float y)
 {
-    int pixel_x = wrap_and_round(x, SCREEN_WIDTH);
-    int pixel_y = wrap_and_round(y, SCREEN_HEIGHT);
+    int pixel_x, pixel_y;
+
+    if (screen_boundary_mode == SCREEN_BOUNDARY_WINDOW || screen_boundary_mode == SCREEN_BOUNDARY_FENCE)
+    {
+        // Clip to screen bounds
+        pixel_x = clip_and_round(x, SCREEN_WIDTH);
+        pixel_y = clip_and_round(y, SCREEN_HEIGHT);
+        if (pixel_x < 0 || pixel_y < 0)
+        {
+            return;  // Point is off-screen, don't draw
+        }
+    }
+    else
+    {
+        // Wrap around edges
+        pixel_x = wrap_and_round(x, SCREEN_WIDTH);
+        pixel_y = wrap_and_round(y, SCREEN_HEIGHT);
+    }
 
     uint8_t *pixel = &gfx_buffer[pixel_y * SCREEN_WIDTH + pixel_x];
     *pixel = (*pixel == GFX_DEFAULT_BACKGROUND) ? foreground : GFX_DEFAULT_BACKGROUND;
@@ -257,16 +336,30 @@ void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, boo
 
     if (reverse)
     {
-        uint8_t *pixel;
-
         // XOR mode: invert the pixel colour
         for (int i = 0; i <= steps; ++i)
         {
-            int pixel_x = wrap_and_round(x, SCREEN_WIDTH);
-            int pixel_y = wrap_and_round(y, SCREEN_HEIGHT);
-            
-            pixel = &gfx_buffer[pixel_y * SCREEN_WIDTH + pixel_x];
-            *pixel = *pixel == GFX_DEFAULT_BACKGROUND ? colour : GFX_DEFAULT_BACKGROUND;
+            int pixel_x, pixel_y;
+
+            if (screen_boundary_mode == SCREEN_BOUNDARY_WINDOW || screen_boundary_mode == SCREEN_BOUNDARY_FENCE)
+            {
+                // Clip to screen bounds
+                pixel_x = clip_and_round(x, SCREEN_WIDTH);
+                pixel_y = clip_and_round(y, SCREEN_HEIGHT);
+                if (pixel_x >= 0 && pixel_y >= 0)
+                {
+                    uint8_t *pixel = &gfx_buffer[pixel_y * SCREEN_WIDTH + pixel_x];
+                    *pixel = *pixel == GFX_DEFAULT_BACKGROUND ? colour : GFX_DEFAULT_BACKGROUND;
+                }
+            }
+            else
+            {
+                // Wrap around edges
+                pixel_x = wrap_and_round(x, SCREEN_WIDTH);
+                pixel_y = wrap_and_round(y, SCREEN_HEIGHT);
+                uint8_t *pixel = &gfx_buffer[pixel_y * SCREEN_WIDTH + pixel_x];
+                *pixel = *pixel == GFX_DEFAULT_BACKGROUND ? colour : GFX_DEFAULT_BACKGROUND;
+            }
 
             x += x_inc;
             y += y_inc;

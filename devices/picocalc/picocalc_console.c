@@ -31,6 +31,21 @@ uint8_t background_colour = GFX_DEFAULT_BACKGROUND;     // Background color for 
 static LogoPen turtle_pen_state = LOGO_PEN_DOWN;        // Pen state for graphics
 static bool turtle_visible = TURTLE_DEFAULT_VISIBILITY; // Turtle visibility state for graphics
 
+// Boundary mode constants
+typedef enum {
+    BOUNDARY_MODE_FENCE,   // Turtle stops at boundary (error if hits edge)
+    BOUNDARY_MODE_WINDOW,  // Turtle can go off-screen (unbounded)
+    BOUNDARY_MODE_WRAP     // Turtle wraps around edges (default)
+} BoundaryMode;
+
+static BoundaryMode turtle_boundary_mode = BOUNDARY_MODE_WRAP;  // Default to wrap mode
+
+// Screen boundary constants (in turtle coordinates, centered at origin)
+#define TURTLE_MIN_X (-SCREEN_WIDTH / 2)
+#define TURTLE_MAX_X (SCREEN_WIDTH / 2 - 1)
+#define TURTLE_MIN_Y (-SCREEN_HEIGHT / 2)
+#define TURTLE_MAX_Y (SCREEN_HEIGHT / 2 - 1)
+
 //
 //  Stream operations for keyboard input
 //
@@ -206,45 +221,79 @@ static void turtle_clearscreen(void)
 }
 
 // Move the turtle forward or backward by the specified distance
-static void turtle_move(float distance)
+// Returns true on success, false if boundary error in fence mode
+static bool turtle_move(float distance)
 {
     screen_show_field();
 
-    float x = turtle_x;
-    float y = turtle_y;
+    float old_x = turtle_x;
+    float old_y = turtle_y;
 
     turtle_draw();
 
-    // Move the turtle forward by the specified distance
-    turtle_x += distance * sinf(turtle_angle * (M_PI / 180.0f));
-    turtle_y -= distance * cosf(turtle_angle * (M_PI / 180.0f));
+    // Calculate new position in screen coordinates
+    float new_x = turtle_x + distance * sinf(turtle_angle * (M_PI / 180.0f));
+    float new_y = turtle_y - distance * cosf(turtle_angle * (M_PI / 180.0f));
 
-    // Draw the turtle at the new position
+    // Convert to Logo coordinates (centered at origin) for boundary checking
+    float logo_x = new_x - SCREEN_WIDTH / 2;
+    float logo_y = new_y - SCREEN_HEIGHT / 2;
 
+    // Handle boundary modes
+    switch (turtle_boundary_mode)
+    {
+    case BOUNDARY_MODE_FENCE:
+        // Check if new position is out of bounds (in Logo coordinates)
+        if (logo_x < TURTLE_MIN_X || logo_x > TURTLE_MAX_X ||
+            logo_y < TURTLE_MIN_Y || logo_y > TURTLE_MAX_Y)
+        {
+            // Redraw turtle at original position and don't move
+            turtle_draw();
+            return false;  // Boundary error
+        }
+        turtle_x = new_x;
+        turtle_y = new_y;
+        break;
+
+    case BOUNDARY_MODE_WINDOW:
+        // Allow any position, no restrictions
+        turtle_x = new_x;
+        turtle_y = new_y;
+        break;
+
+    case BOUNDARY_MODE_WRAP:
+        // Don't wrap yet - we need unwrapped coordinates for line drawing
+        // so that pixel-by-pixel wrapping happens correctly in screen_gfx_line
+        turtle_x = new_x;
+        turtle_y = new_y;
+        break;
+    }
+
+    // Draw line if pen is down
     if (turtle_pen_state == LOGO_PEN_DOWN)
     {
-        // Draw a line from the old position to the new position
-        screen_gfx_line(x, y, turtle_x, turtle_y, turtle_colour, false);
+        screen_gfx_line(old_x, old_y, turtle_x, turtle_y, turtle_colour, false);
     }
     else if (turtle_pen_state == LOGO_PEN_ERASE)
     {
-        // Erase a line from the old position to the new position
-        screen_gfx_line(x, y, turtle_x, turtle_y, GFX_DEFAULT_BACKGROUND, false);
+        screen_gfx_line(old_x, old_y, turtle_x, turtle_y, GFX_DEFAULT_BACKGROUND, false);
     }
     else if (turtle_pen_state == LOGO_PEN_REVERSE)
     {
-        // Reverse the pixels along the line from the old position to the new position
-        screen_gfx_line(x, y, turtle_x, turtle_y, turtle_colour, true);
+        screen_gfx_line(old_x, old_y, turtle_x, turtle_y, turtle_colour, true);
     }
     // else if LOGO_PEN_UP: do not draw anything
 
+    // Now wrap the turtle position after drawing (for wrap mode only)
+    if (turtle_boundary_mode == BOUNDARY_MODE_WRAP)
+    {
+        turtle_x = fmodf(turtle_x + SCREEN_WIDTH, SCREEN_WIDTH);
+        turtle_y = fmodf(turtle_y + SCREEN_HEIGHT, SCREEN_HEIGHT);
+    }
+
     turtle_draw();
-
-    // Ensure the turtle stays within bounds
-    turtle_x = fmodf(turtle_x + SCREEN_WIDTH, SCREEN_WIDTH);
-    turtle_y = fmodf(turtle_y + SCREEN_HEIGHT, SCREEN_HEIGHT);
-
     screen_gfx_update();
+    return true;  // Success
 }
 
 // Reset the turtle to the home position
@@ -444,6 +493,54 @@ static void turtle_restore_palette(void)
     screen_txt_update();
 }
 
+// Helper to check if turtle is within visible bounds (in screen coordinates)
+static bool turtle_is_on_screen(void)
+{
+    return turtle_x >= 0 && turtle_x < SCREEN_WIDTH &&
+           turtle_y >= 0 && turtle_y < SCREEN_HEIGHT;
+}
+
+// Set fence boundary mode - turtle stops at boundary with error
+static void turtle_set_fence(void)
+{
+    // If switching from window mode and turtle is off-screen, send to home
+    if (turtle_boundary_mode == BOUNDARY_MODE_WINDOW && !turtle_is_on_screen())
+    {
+        turtle_draw();  // Erase at old position
+        turtle_x = TURTLE_HOME_X;
+        turtle_y = TURTLE_HOME_Y;
+        turtle_angle = TURTLE_DEFAULT_ANGLE;
+        turtle_draw();  // Draw at home
+        screen_gfx_update();
+    }
+    turtle_boundary_mode = BOUNDARY_MODE_FENCE;
+    screen_gfx_set_boundary_mode(SCREEN_BOUNDARY_FENCE);
+}
+
+// Set window boundary mode - turtle can go off-screen (unbounded)
+static void turtle_set_window(void)
+{
+    turtle_boundary_mode = BOUNDARY_MODE_WINDOW;
+    screen_gfx_set_boundary_mode(SCREEN_BOUNDARY_WINDOW);
+}
+
+// Set wrap boundary mode - turtle wraps around edges
+static void turtle_set_wrap(void)
+{
+    // If switching from window mode and turtle is off-screen, send to home
+    if (turtle_boundary_mode == BOUNDARY_MODE_WINDOW && !turtle_is_on_screen())
+    {
+        turtle_draw();  // Erase at old position
+        turtle_x = TURTLE_HOME_X;
+        turtle_y = TURTLE_HOME_Y;
+        turtle_angle = TURTLE_DEFAULT_ANGLE;
+        turtle_draw();  // Draw at home
+        screen_gfx_update();
+    }
+    turtle_boundary_mode = BOUNDARY_MODE_WRAP;
+    screen_gfx_set_boundary_mode(SCREEN_BOUNDARY_WRAP);
+}
+
 static const LogoConsoleTurtle picocalc_turtle_ops = {
     .clear = turtle_clearscreen,
     .draw = turtle_draw,
@@ -464,9 +561,9 @@ static const LogoConsoleTurtle picocalc_turtle_ops = {
     .dot = turtle_dot,
     .dot_at = turtle_dot_at,
     .fill = NULL,       // Not implemented
-    .set_fence = NULL,  // Not implemented
-    .set_window = NULL, // Not implemented
-    .set_wrap = NULL,   // Not implemented
+    .set_fence = turtle_set_fence,
+    .set_window = turtle_set_window,
+    .set_wrap = turtle_set_wrap,
     .gfx_save = turtle_gfx_save,
     .gfx_load = turtle_gfx_load,
     .set_palette = turtle_set_palette,

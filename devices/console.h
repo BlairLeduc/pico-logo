@@ -38,7 +38,8 @@ extern "C"
         void (*draw)(void);
 
         // Move turtle forward/backward by distance (draws if pen is down)
-        void (*move)(float distance);
+        // Returns true on success, false if boundary error (fence mode)
+        bool (*move)(float distance);
 
         // Move turtle to home position (0,0) heading north
         void (*home)(void);

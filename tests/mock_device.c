@@ -72,7 +72,7 @@ static void mock_turtle_draw(void)
     record_command(MOCK_CMD_DRAW);
 }
 
-static void mock_turtle_move(float distance)
+static bool mock_turtle_move(float distance)
 {
     float heading_rad = heading_to_radians(mock_state.turtle.heading);
     float dx = distance * cosf(heading_rad);
@@ -93,7 +93,7 @@ static void mock_turtle_move(float distance)
         {
             mock_state.boundary_error = true;
             // Don't move
-            return;
+            return false;  // Boundary error
         }
         break;
         
@@ -128,6 +128,7 @@ static void mock_turtle_move(float distance)
     mock_state.turtle.y = new_y;
     
     record_command_float(MOCK_CMD_MOVE, distance);
+    return true;  // Success
 }
 
 static void mock_turtle_home(void)

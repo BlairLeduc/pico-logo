@@ -9,7 +9,7 @@ Welcome to Pico Logo.
 ?_
 ```
 
-The question mark, `?` is the _prompt_. When the prompt is on the display, you can type something. The flashing underscore, `_` is the cursor. It appears when Logo wants you to type something and shows where the next character you type will appear.
+The question mark, `?` is the _prompt_. When the prompt is on the screen, you can type something. The flashing underscore, `_` is the cursor. It appears when Logo wants you to type something and shows where the next character you type will appear.
 
 The following reference material is collected from:
 
@@ -761,7 +761,7 @@ clean
 
 `operation`
 
-The `clean` command erases the graphics display but doesn't affect the turtle.
+The `clean` command erases the graphics screen but doesn't affect the turtle.
 
 
 ## dot
@@ -779,7 +779,7 @@ fence
 
 `command`
 
-The `fence` command fences in the turtle within the edges of the display. If you try to move the turtle beyond the edges of the display, an error, "Turtle out of bounds" occurs and the turtle does not move. If the turtle is already out of bounds, Logo repositions it at its home position [0 0].
+The `fence` command fences in the turtle within the edges of the screen. If you try to move the turtle beyond the edges of the screen, an error, "Turtle out of bounds" occurs and the turtle does not move. If the turtle is already out of bounds, Logo repositions it at its home position [0 0].
 
 See [`window`](#window) and [`wrap`](#wrap).
 
@@ -896,7 +896,7 @@ window
 
 `command`
 
-The `window` command makes the turtle field unbounded; what you see is a portion of the turtle field as if looking through a small window around the center of the display. When the turtle moves beyond the visible bounds of the display, it continues to move but can't be seen: The display is 320 turtle steps high and 320 steps wide. The entire turtle field is 32,768 steps high and 32,768 steps wide.
+The `window` command makes the turtle field unbounded; what you see is a portion of the turtle field as if looking through a small window around the center of the screen. When the turtle moves beyond the visible bounds of the screen, it continues to move but can't be seen: The screen is 320 turtle steps high and 320 steps wide. The entire turtle field is 32,768 steps high and 32,768 steps wide.
 
 Changing `window` to [`fence`](#fence) or [`wrap`](#wrap) when the turtle is off the screen sends the turtle to its home position [0 0].
 
@@ -909,7 +909,7 @@ wrap
 
 `command`
 
-The `wrap` command makes the turtle field wrap around the edges of the display: if the turtle moves beyond one edge of the display, it continues from the opposite edge. The turtle never leaves the visible bounds of the display; when it tries to, it wraps around to the other side.
+The `wrap` command makes the turtle field wrap around the edges of the screen: if the turtle moves beyond one edge of the screen, it continues from the opposite edge. The turtle never leaves the visible bounds of the screen; when it tries to, it wraps around to the other side.
 
 See [`fence`](#fence) and [`window`](#window).
 
@@ -933,7 +933,7 @@ dotp [_xcor_ _ycor_]
 
 `operation`
 
-The `dot?` operation outputs `true` if there is a dot on the display at the indicated coordinates. If there is no dot, `dot?` outputs `false`.
+The `dot?` operation outputs `true` if there is a dot on the screen at the indicated coordinates. If there is no dot, `dot?` outputs `false`.
 
 
 ## pen
@@ -959,9 +959,9 @@ See [Colours](Colours.md) for the default palette.
 
 # Text and Screen Commands
 
-Your PicoCalc has 32 lines of text on the display, with 40 characters on each line. You can use the display entirely for text or entirely for graphics. The PicoCalc also lets you use the top 24 lines for graphics and the bottom eight for text at the same time. When you start up Logo, the entire screen is available for text. 
+Your PicoCalc has 32 lines of text on the screen, with 40 characters on each line. You can use the screen entirely for text or entirely for graphics. The PicoCalc also lets you use the top 24 lines for graphics and the bottom eight for text at the same time. When you start up Logo, the entire screen is available for text. 
 
-There are two ways to change the use of your display:
+There are two ways to change the use of your screen:
 
 - With regular Logo commands, which you can type at top level or insert within procedures ([`fullscreen`](#fullscreen-fs), [`splitscreen`](#splitscreen-ss), and [`textscreen`](#textscreen-ts))
 - With special control characters, which are read from the keyboard and obeyed almost immediately (while a procedure continues running); these cannot be placed within procedures (`F1`–textscreen, `F2`–splitscreen, and `F3`–fullscreen).
@@ -1028,7 +1028,7 @@ ts
 
 `command`
 
-`textscreen` devotes the entire screen to text; the graphics display is invisible to you until a graphics procedure is run.
+`textscreen` devotes the entire screen to text; the graphics screen is invisible to you until a graphics procedure is run.
 
 
 
@@ -1822,7 +1822,7 @@ rc
 
 `readchar` outputs the first character typed at the keyboard or read from the current file. If you are reading from the keyboard and no character is waiting to be read, `readchar` waits until you type something.
 
-`readchar` does not output a character if you are reading from a file and the end-of-file position is reached. In this case, `readchar` outputs an empty list. Note that `readchar` from the keyboard does not echo what you type on the display.
+`readchar` does not output a character if you are reading from a file and the end-of-file position is reached. In this case, `readchar` outputs an empty list. Note that `readchar` from the keyboard does not echo what you type on the screen.
 
 If you are reading from the keyboard, you can set the high bit of the character being read by holding down either `Alt` key a you type the character. Setting the high bit adds 128 to the character.
 
@@ -1838,7 +1838,7 @@ The `readchars` operation outputs the first _integer_ number of characters typed
 
 If you are reading from a file and the end-of-file position reached before _integer_ characters are read, `readchars` outputs the characters read up to that point. If the end-of-file was reached before `readchars` was called, `readchars` outputs an empty list.
 
-Note that `readchars` from the keyboard does not echo what you type on the display.
+Note that `readchars` from the keyboard does not echo what you type on the screen.
 
 Remember that a carriage return is read as a character.
 
@@ -1864,7 +1864,7 @@ rw
 
 `operation`
 
-`readword` reads a line of information from the current file and outputs it as a word. Normally, the source is the keyboard and `readword` waits for you to type and press `ENTER`. What you type is echoed on the display. If you press `ENTER` before typing a word, `readword` outputs an empty word.
+`readword` reads a line of information from the current file and outputs it as a word. Normally, the source is the keyboard and `readword` waits for you to type and press `ENTER`. What you type is echoed on the screen. If you press `ENTER` before typing a word, `readword` outputs an empty word.
 
 If you use `readword` from a file, `readword` reads characters until it reaches a carriage return, and outputs those characters as a word. The next character to be read is the one after the carriage return. When the end-of-file position is reached, `readword` outputs an empty list.
 
@@ -1880,7 +1880,7 @@ pr _object_
 
 `command`
 
-The `print` command prints its inputs followed by a carriage return on the display, unless the destination has been changed by [`setwrite`](#setwrite). The outermost brackets of lists are not printed.
+The `print` command prints its inputs followed by a carriage return on the screen, unless the destination has been changed by [`setwrite`](#setwrite). The outermost brackets of lists are not printed.
 
 Compare with [`type`](#type) and [`show`](#show).
 
@@ -1891,7 +1891,7 @@ show _object_
 
 `command`
 
-The `show` command prints _object_ followed by a carriage return on the display, unless the destination has been changed by [`setwrite`](#setwrite). If object is a list, Logo leaves brackets around it.
+The `show` command prints _object_ followed by a carriage return on the screen, unless the destination has been changed by [`setwrite`](#setwrite). If object is a list, Logo leaves brackets around it.
 
 Compare with [`type`](#type) and [`print`](#print-pr).
 
@@ -1903,7 +1903,7 @@ type _object_
 
 `command`
 
-The `type` command prints its inputs without a carriage return on the display, unless the destination has been changed by [`setwrite`](#setwrite). The outermost brackets of lists are not printed.
+The `type` command prints its inputs without a carriage return on the screen, unless the destination has been changed by [`setwrite`](#setwrite). The outermost brackets of lists are not printed.
 
 Compare with [`print`](#print-pr) and [`show`](#show).
 
@@ -2191,7 +2191,7 @@ catalog
 
 Prints a list of files and directories in the current directory. Directories have the slash "`/`" character appended to their pathname.
 
-`catalog` prints to the display but not to the current writer.
+`catalog` prints to the screen but not to the current writer.
 
 
 ## file? (filep)
@@ -2231,7 +2231,7 @@ pofile _pathname_
 
 `pofile` (for print out file) prints out the contents of the file indicated by _pathname_. Logo prints the contents to the screen. An error occurs if you try to use `pofile` on a file that is already open.
 
-`pofile` prints to the display but not to the current writer.
+`pofile` prints to the screen but not to the current writer.
 
 
 # Managing Various Files
@@ -2387,7 +2387,7 @@ setwrite _file_
 To restore the screen as the current writer, use the `setwrite` command with the empty list as input.
 
 > [!NOTE]
-> The commands [`po`](#po), [`poall`](#poall), [`pon`](#pon), [`pons`](#pons), [`pops`](#pops), [`pot`](#pot), [`pots`](#pots), and [`pofile`](#pofile) all print to the display but not to the current writer.
+> The commands [`po`](#po), [`poall`](#poall), [`pon`](#pon), [`pons`](#pons), [`pops`](#pops), [`pot`](#pot), [`pots`](#pots), and [`pofile`](#pofile) all print to the screen but not to the current writer.
 
 
 ## setwritepos
@@ -2396,7 +2396,7 @@ setwritepos _integer_
 
 `command`
 
-`setwritepos` sets the write position in the current file. This command is useful when modifying information in a file. You must set the write position to a number that is between 0 and the end-of-file position. If you try to set it somewhere out of this range, an error occurs. An error also occurs if you try to set the write position when the current writer is the display or a device.
+`setwritepos` sets the write position in the current file. This command is useful when modifying information in a file. You must set the write position to a number that is between 0 and the end-of-file position. If you try to set it somewhere out of this range, an error occurs. An error also occurs if you try to set the write position when the current writer is the screen or a device.
 
 To check the current position, use the [`writepos`](#writepos) command.
 
