@@ -117,7 +117,14 @@ static Result prim_toot(Evaluator *eval, int argc, Value *args)
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, "toot", 
                 args[1].type == VALUE_WORD ? mem_word_ptr(args[1].as.node) : "[]");
         }
-        left_freq = right_freq = (uint32_t)args[1].as.number;
+        int freq = (int)args[1].as.number;
+        if (freq < 0)
+        {
+            char buf[32];
+            snprintf(buf, sizeof(buf), "%d", freq);
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "toot", buf);
+        }
+        left_freq = right_freq = (uint32_t)freq;
     }
     else
     {
@@ -132,8 +139,22 @@ static Result prim_toot(Evaluator *eval, int argc, Value *args)
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, "toot", 
                 args[2].type == VALUE_WORD ? mem_word_ptr(args[2].as.node) : "[]");
         }
-        left_freq = (uint32_t)args[1].as.number;
-        right_freq = (uint32_t)args[2].as.number;
+        int lfreq = (int)args[1].as.number;
+        int rfreq = (int)args[2].as.number;
+        if (lfreq < 0)
+        {
+            char buf[32];
+            snprintf(buf, sizeof(buf), "%d", lfreq);
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "toot", buf);
+        }
+        if (rfreq < 0)
+        {
+            char buf[32];
+            snprintf(buf, sizeof(buf), "%d", rfreq);
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "toot", buf);
+        }
+        left_freq = (uint32_t)lfreq;
+        right_freq = (uint32_t)rfreq;
     }
 
     // Play the tone if hardware supports it

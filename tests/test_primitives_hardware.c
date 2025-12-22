@@ -321,6 +321,30 @@ void test_toot_in_procedure(void)
     // No output expected, just verify no errors
 }
 
+void test_toot_negative_frequency_error(void)
+{
+    // Negative frequency should fail
+    Result r = eval_string("toot 500 -440");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_toot_stereo_negative_leftfreq_error(void)
+{
+    // Negative left frequency in stereo mode should fail
+    Result r = eval_string("(toot 500 -440 880)");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_toot_stereo_negative_rightfreq_error(void)
+{
+    // Negative right frequency in stereo mode should fail
+    Result r = eval_string("(toot 500 440 -880)");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
 //==========================================================================
 // Main
 //==========================================================================
@@ -365,6 +389,9 @@ int main(void)
     RUN_TEST(test_toot_list_frequency_error);
     RUN_TEST(test_toot_stereo_word_leftfreq_error);
     RUN_TEST(test_toot_stereo_word_rightfreq_error);
+    RUN_TEST(test_toot_negative_frequency_error);
+    RUN_TEST(test_toot_stereo_negative_leftfreq_error);
+    RUN_TEST(test_toot_stereo_negative_rightfreq_error);
     RUN_TEST(test_toot_in_procedure);
     
     return UNITY_END();
