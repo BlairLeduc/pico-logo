@@ -8,6 +8,7 @@
 #include "../hardware.h"
 #include "picocalc_hardware.h"
 #include "southbridge.h"
+#include "audio.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -63,6 +64,18 @@ static void picocalc_clear_user_interrupt(void)
     user_interrupt = false;
 }
 
+static void picocalc_toot(uint32_t duration_ms, uint32_t left_freq, uint32_t right_freq)
+{
+    // Wait for any existing tone to finish before starting a new one
+    while (audio_is_playing())
+    {
+        sleep_ms(1);
+    }
+    
+    // Play the tone (non-blocking with automatic stop after duration)
+    audio_play_sound_timed(left_freq, right_freq, duration_ms);
+}
+
 static LogoHardwareOps picocalc_hardware_ops = {
     .sleep = picocalc_sleep,
     .random = picocalc_random,
@@ -70,6 +83,7 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .power_off = picocalc_power_off,
     .check_user_interrupt = picocalc_check_user_interrupt,
     .clear_user_interrupt = picocalc_clear_user_interrupt,
+    .toot = picocalc_toot,
 }; 
 
 

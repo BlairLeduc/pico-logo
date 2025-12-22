@@ -89,6 +89,37 @@ void audio_play_sound(uint32_t left_frequency, uint32_t right_frequency)
     set_pwm_frequency(RIGHT_CHANNEL, right_frequency);
 }
 
+// Play a stereo sound for a specific duration (non-blocking)
+// Sets up an alarm to stop the tone after the duration and returns immediately
+void audio_play_sound_timed(uint32_t left_frequency, uint32_t right_frequency, uint32_t duration_ms)
+{
+    if (!audio_initialised)
+    {
+        return;
+    }
+
+    // Cancel any existing tone alarm
+    if (tone_alarm_id >= 0)
+    {
+        cancel_alarm(tone_alarm_id);
+        tone_alarm_id = -1;
+    }
+
+    set_pwm_frequency(LEFT_CHANNEL, left_frequency);
+    set_pwm_frequency(RIGHT_CHANNEL, right_frequency);
+
+    if ((audio_pwm_is_not_silence(left_frequency) || audio_pwm_is_not_silence(right_frequency)) && duration_ms > 0)
+    {
+        // Set up alarm to stop the tone after duration
+        tone_alarm_id = add_alarm_in_ms(duration_ms, tone_stop_callback, NULL, false);
+    }
+    else
+    {
+        // Silence or zero duration - stop immediately
+        audio_stop();
+    }
+}
+
 // Stop audio output
 void audio_stop(void)
 {

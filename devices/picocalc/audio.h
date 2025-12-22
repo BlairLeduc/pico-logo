@@ -127,6 +127,7 @@ typedef struct {
 void audio_init(void);
 
 void audio_play_sound_blocking(uint32_t left_frequency, uint32_t right_frequency, uint32_t duration_ms);
+void audio_play_sound_timed(uint32_t left_frequency, uint32_t right_frequency, uint32_t duration_ms);
 void audio_play_sound(uint32_t left_frequency, uint32_t right_frequency);
 
 void audio_play_note_blocking(const audio_note_t *note);
