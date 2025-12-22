@@ -413,49 +413,68 @@ void lcd_erase_line(uint8_t row, uint8_t col_start, uint8_t col_end)
     lcd_solid_rectangle(background, col_start * GLYPH_WIDTH, row * GLYPH_HEIGHT, (col_end - col_start + 1) * GLYPH_WIDTH, GLYPH_HEIGHT);
 }
 
+// Helper function to decode a character and determine colours for rendering
+// Handles reverse video: if bit 7 is set, foreground and background are swapped
+static inline void decode_char(uint8_t c, uint8_t *char_code, uint8_t *fg, uint8_t *bg)
+{
+    bool reverse = (c & 0x80) != 0;
+    *char_code = c & 0x7F;
+    *fg = reverse ? background : foreground;
+    *bg = reverse ? foreground : background;
+}
+
 // Draw a character at the specified position
+// If the high bit (0x80) is set, the character is rendered in reverse video
+// (background and foreground colours are swapped)
 void lcd_putc(uint8_t column, uint8_t row, uint8_t c)
 {
-    const uint8_t *glyph = &font->glyphs[c * GLYPH_HEIGHT];
+    uint8_t char_code, fg, bg;
+    decode_char(c, &char_code, &fg, &bg);
+    
+    const uint8_t *glyph = &font->glyphs[char_code * GLYPH_HEIGHT];
     uint8_t *buffer = char_buffer;
 
     for (uint8_t i = 0; i < GLYPH_HEIGHT; i++, glyph++)
     {
         // Fill the row with the glyph data
-        *(buffer++) = (*glyph & 0x80) ? foreground : background;
-        *(buffer++) = (*glyph & 0x40) ? foreground : background;
-        *(buffer++) = (*glyph & 0x20) ? foreground : background;
-        *(buffer++) = (*glyph & 0x10) ? foreground : background;
-        *(buffer++) = (*glyph & 0x08) ? foreground : background;
-        *(buffer++) = (*glyph & 0x04) ? foreground : background;
-        *(buffer++) = (*glyph & 0x02) ? foreground : background;
-        *(buffer++) = (*glyph & 0x01) ? foreground : background;
+        *(buffer++) = (*glyph & 0x80) ? fg : bg;
+        *(buffer++) = (*glyph & 0x40) ? fg : bg;
+        *(buffer++) = (*glyph & 0x20) ? fg : bg;
+        *(buffer++) = (*glyph & 0x10) ? fg : bg;
+        *(buffer++) = (*glyph & 0x08) ? fg : bg;
+        *(buffer++) = (*glyph & 0x04) ? fg : bg;
+        *(buffer++) = (*glyph & 0x02) ? fg : bg;
+        *(buffer++) = (*glyph & 0x01) ? fg : bg;
     }
 
     lcd_blit(char_buffer, column * GLYPH_WIDTH, row * GLYPH_HEIGHT, GLYPH_WIDTH, GLYPH_HEIGHT);
 }
 
 // Draw a string at the specified position
+// Characters with the high bit (0x80) set are rendered in reverse video
 void lcd_putstr(uint8_t column, uint8_t row, const char *str)
 {
     int len = strlen(str);
     int pos = 0;
     while (*str)
     {
+        uint8_t char_code, fg, bg;
+        decode_char(*str++, &char_code, &fg, &bg);
+        
         uint8_t *buffer = line_buffer + (pos++ * GLYPH_WIDTH);
-        const uint8_t *glyph = &font->glyphs[*str++ * GLYPH_HEIGHT];
+        const uint8_t *glyph = &font->glyphs[char_code * GLYPH_HEIGHT];
 
         for (uint8_t i = 0; i < GLYPH_HEIGHT; i++, glyph++)
         {
             // Fill the row with the glyph data
-            *(buffer++) = (*glyph & 0x80) ? foreground : background;
-            *(buffer++) = (*glyph & 0x40) ? foreground : background;
-            *(buffer++) = (*glyph & 0x20) ? foreground : background;
-            *(buffer++) = (*glyph & 0x10) ? foreground : background;
-            *(buffer++) = (*glyph & 0x08) ? foreground : background;
-            *(buffer++) = (*glyph & 0x04) ? foreground : background;
-            *(buffer++) = (*glyph & 0x02) ? foreground : background;
-            *(buffer++) = (*glyph & 0x01) ? foreground : background;
+            *(buffer++) = (*glyph & 0x80) ? fg : bg;
+            *(buffer++) = (*glyph & 0x40) ? fg : bg;
+            *(buffer++) = (*glyph & 0x20) ? fg : bg;
+            *(buffer++) = (*glyph & 0x10) ? fg : bg;
+            *(buffer++) = (*glyph & 0x08) ? fg : bg;
+            *(buffer++) = (*glyph & 0x04) ? fg : bg;
+            *(buffer++) = (*glyph & 0x02) ? fg : bg;
+            *(buffer++) = (*glyph & 0x01) ? fg : bg;
             buffer += (len - 1) * GLYPH_WIDTH;
         }
     }

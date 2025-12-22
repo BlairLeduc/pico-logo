@@ -789,7 +789,7 @@ bool screen_txt_putc(uint8_t c)
         }
     }
 
-    else if (c >= 0x20 && c < 0x7F) // Printable characters
+    else // All other characters are stored in the buffer
     {
         // Store character in buffer
         if (cursor_row < SCREEN_ROWS && cursor_column < SCREEN_COLUMNS)
@@ -880,8 +880,7 @@ void screen_txt_update(void)
         {
             for (uint8_t col = 0; col < SCREEN_COLUMNS; col++)
             {
-                uint8_t c = txt_buffer[row * SCREEN_COLUMNS + col] & 0xFF;
-                lcd_putc(col, row, c > 0 && c < 0x7F ? c : ' ');
+                lcd_putc(col, row, txt_buffer[row * SCREEN_COLUMNS + col]);
             }
         }
     }
@@ -911,8 +910,7 @@ void screen_txt_update(void)
                 // Copy this row from the buffer to the display
                 for (uint8_t col = 0; col < SCREEN_COLUMNS; col++)
                 {
-                    uint8_t c = txt_buffer[buffer_row * SCREEN_COLUMNS + col];
-                    lcd_putc(col, SCREEN_SPLIT_TXT_ROW + display_row, c > 0 && c < 0x7F ? c : ' ');
+                    lcd_putc(col, SCREEN_SPLIT_TXT_ROW + display_row, txt_buffer[buffer_row * SCREEN_COLUMNS + col]);
                 }
             }
             // If buffer_row >= SCREEN_ROWS, the row remains empty (already cleared)
