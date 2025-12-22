@@ -320,6 +320,8 @@ static void turtle_home(void)
 }
 
 // Set the turtle position to the specified coordinates
+// Logo coordinates: origin at center, Y increases upward (north)
+// Screen coordinates: origin at top-left, Y increases downward
 static void turtle_set_position(float x, float y)
 {
     screen_show_field();
@@ -327,9 +329,11 @@ static void turtle_set_position(float x, float y)
     // Draw the current turtle position before moving
     turtle_draw();
 
-    // Set the new position
+    // Convert Logo coordinates to screen coordinates:
+    // - X: Logo 0 -> Screen center (SCREEN_WIDTH/2)
+    // - Y: Logo 0 -> Screen center, but Y axis is flipped (Logo Y up, Screen Y down)
     turtle_x = fmodf((x + SCREEN_WIDTH / 2) + SCREEN_WIDTH, SCREEN_WIDTH);
-    turtle_y = fmodf((y + SCREEN_HEIGHT / 2) + SCREEN_HEIGHT, SCREEN_HEIGHT);
+    turtle_y = fmodf((-y + SCREEN_HEIGHT / 2) + SCREEN_HEIGHT, SCREEN_HEIGHT);
 
     // Draw the turtle at the new position
     turtle_draw();
@@ -337,6 +341,7 @@ static void turtle_set_position(float x, float y)
 }
 
 // Get the current turtle position
+// Returns Logo coordinates (origin at center, Y increases upward)
 static void turtle_get_position(float *x, float *y)
 {
     if (x)
@@ -345,7 +350,8 @@ static void turtle_get_position(float *x, float *y)
     }
     if (y)
     {
-        *y = turtle_y - SCREEN_HEIGHT / 2;
+        // Convert screen Y to Logo Y (flip the axis)
+        *y = -(turtle_y - SCREEN_HEIGHT / 2);
     }
 }
 
