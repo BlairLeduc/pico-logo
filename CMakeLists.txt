@@ -97,6 +97,7 @@ endif()
 
 add_executable(pico-logo
     devices/picocalc/clib.c
+    devices/picocalc/audio.c
     devices/picocalc/fat32.c
     devices/picocalc/history.c
     devices/picocalc/input.c
@@ -115,6 +116,8 @@ add_executable(pico-logo
 pico_set_program_name(pico-logo "pico-logo")
 pico_set_program_version(pico-logo "0.1")
 
+# Generate PIO header
+pico_generate_pio_header(pico-logo ${CMAKE_CURRENT_LIST_DIR}/devices/picocalc/audio.pio)
 
 # Modify the below lines to enable/disable output over UART/USB
 pico_enable_stdio_uart(pico-logo 0)
@@ -130,10 +133,11 @@ target_link_libraries(pico-logo
         pico_printf
         pico_float
         pico_rand
+        hardware_clocks
         hardware_gpio
         hardware_i2c
+        hardware_pio
         hardware_spi
-        hardware_clocks
 )
 
 target_include_directories(pico-logo PRIVATE
