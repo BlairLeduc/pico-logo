@@ -789,9 +789,9 @@ bool screen_txt_putc(uint8_t c)
         }
     }
 
-    else if ((c & 0x7F) >= 0x20 && (c & 0x7F) < 0x7F) // Printable characters (with optional reverse video bit)
+    else // All other characters are stored in the buffer
     {
-        // Store character in buffer (preserving the reverse video bit)
+        // Store character in buffer
         if (cursor_row < SCREEN_ROWS && cursor_column < SCREEN_COLUMNS)
         {
             txt_buffer[cursor_row * SCREEN_COLUMNS + cursor_column] = c;
@@ -880,10 +880,7 @@ void screen_txt_update(void)
         {
             for (uint8_t col = 0; col < SCREEN_COLUMNS; col++)
             {
-                uint8_t c = txt_buffer[row * SCREEN_COLUMNS + col];
-                uint8_t char_code = c & 0x7F;  // Get character without reverse video bit
-                // Pass valid printable chars (with reverse bit preserved), else space
-                lcd_putc(col, row, (char_code > 0 && char_code < 0x7F) ? c : ' ');
+                lcd_putc(col, row, txt_buffer[row * SCREEN_COLUMNS + col]);
             }
         }
     }
@@ -913,10 +910,7 @@ void screen_txt_update(void)
                 // Copy this row from the buffer to the display
                 for (uint8_t col = 0; col < SCREEN_COLUMNS; col++)
                 {
-                    uint8_t c = txt_buffer[buffer_row * SCREEN_COLUMNS + col];
-                    uint8_t char_code = c & 0x7F;  // Get character without reverse video bit
-                    // Pass valid printable chars (with reverse bit preserved), else space
-                    lcd_putc(col, SCREEN_SPLIT_TXT_ROW + display_row, (char_code > 0 && char_code < 0x7F) ? c : ' ');
+                    lcd_putc(col, SCREEN_SPLIT_TXT_ROW + display_row, txt_buffer[buffer_row * SCREEN_COLUMNS + col]);
                 }
             }
             // If buffer_row >= SCREEN_ROWS, the row remains empty (already cleared)

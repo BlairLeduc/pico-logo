@@ -413,18 +413,23 @@ void lcd_erase_line(uint8_t row, uint8_t col_start, uint8_t col_end)
     lcd_solid_rectangle(background, col_start * GLYPH_WIDTH, row * GLYPH_HEIGHT, (col_end - col_start + 1) * GLYPH_WIDTH, GLYPH_HEIGHT);
 }
 
+// Helper function to decode a character and determine colours for rendering
+// Handles reverse video: if bit 7 is set, foreground and background are swapped
+static inline void decode_char(uint8_t c, uint8_t *char_code, uint8_t *fg, uint8_t *bg)
+{
+    bool reverse = (c & 0x80) != 0;
+    *char_code = c & 0x7F;
+    *fg = reverse ? background : foreground;
+    *bg = reverse ? foreground : background;
+}
+
 // Draw a character at the specified position
 // If the high bit (0x80) is set, the character is rendered in reverse video
 // (background and foreground colours are swapped)
 void lcd_putc(uint8_t column, uint8_t row, uint8_t c)
 {
-    // Check for reverse video (high bit set)
-    bool reverse = (c & 0x80) != 0;
-    uint8_t char_code = c & 0x7F;  // Mask off the reverse video bit
-    
-    // Select colours based on reverse video mode
-    uint8_t fg = reverse ? background : foreground;
-    uint8_t bg = reverse ? foreground : background;
+    uint8_t char_code, fg, bg;
+    decode_char(c, &char_code, &fg, &bg);
     
     const uint8_t *glyph = &font->glyphs[char_code * GLYPH_HEIGHT];
     uint8_t *buffer = char_buffer;
@@ -453,15 +458,8 @@ void lcd_putstr(uint8_t column, uint8_t row, const char *str)
     int pos = 0;
     while (*str)
     {
-        uint8_t c = *str++;
-        
-        // Check for reverse video (high bit set)
-        bool reverse = (c & 0x80) != 0;
-        uint8_t char_code = c & 0x7F;  // Mask off the reverse video bit
-        
-        // Select colours based on reverse video mode
-        uint8_t fg = reverse ? background : foreground;
-        uint8_t bg = reverse ? foreground : background;
+        uint8_t char_code, fg, bg;
+        decode_char(*str++, &char_code, &fg, &bg);
         
         uint8_t *buffer = line_buffer + (pos++ * GLYPH_WIDTH);
         const uint8_t *glyph = &font->glyphs[char_code * GLYPH_HEIGHT];
