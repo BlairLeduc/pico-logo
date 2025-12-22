@@ -1915,7 +1915,7 @@ toot _duration_ _frequency_
 
 `command`
 
-Generates a tone via audio output. Duration is measured in units of 1/1000th of a second (A whole note is 2000 units; a eighth note is 250 units). A frequency is spcified in Hertz (cycles per second) and can range from 131 (C3) to 1976 (B6). 440Hz is the tuning frequency A. 
+Generates a tone via audio output. Duration is measured in units of 1/1000th of a second (A whole note is 2000 units; a eighth note is 250 units). A frequency is specified in Hertz (cycles per second) and can range from 131 (C3) to 1976 (B6). 440Hz is the tuning frequency A. 
 
 If one frequency is provided the same tone is produced on both left and right channels.
 
