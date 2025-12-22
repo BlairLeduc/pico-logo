@@ -272,6 +272,43 @@ void test_towards_west(void)
     TEST_ASSERT_TRUE(strstr(mock_device_get_output(), "270") != NULL);
 }
 
+void test_towards_origin_from_north(void)
+{
+    // Turtle at [0 100], target is origin - should be 180 (south)
+    run_string("setpos [0 100]");
+    Result r = run_string("print towards [0 0]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(strstr(mock_device_get_output(), "180") != NULL);
+}
+
+void test_towards_origin_from_east(void)
+{
+    // Turtle at [100 0], target is origin - should be 270 (west)
+    run_string("setpos [100 0]");
+    Result r = run_string("print towards [0 0]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(strstr(mock_device_get_output(), "270") != NULL);
+}
+
+void test_towards_origin_from_south(void)
+{
+    // Turtle at [0 -100], target is origin - should be 0 (north)
+    run_string("make \"negy (0 - 100)");
+    run_string("setpos (list 0 :negy)");
+    Result r = run_string("print towards [0 0]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(strstr(mock_device_get_output(), "0") != NULL);
+}
+
+void test_towards_origin_from_west(void)
+{
+    // Turtle at [-100 0], target is origin - should be 90 (east)
+    run_string("setpos [-100 0]");
+    Result r = run_string("print towards [0 0]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(strstr(mock_device_get_output(), "90") != NULL);
+}
+
 //==========================================================================
 // Pen Control Tests
 //==========================================================================
@@ -913,6 +950,10 @@ int main(void)
     RUN_TEST(test_towards_east);
     RUN_TEST(test_towards_south);
     RUN_TEST(test_towards_west);
+    RUN_TEST(test_towards_origin_from_north);
+    RUN_TEST(test_towards_origin_from_east);
+    RUN_TEST(test_towards_origin_from_south);
+    RUN_TEST(test_towards_origin_from_west);
     
     // Pen control tests
     RUN_TEST(test_pendown_puts_pen_down);
