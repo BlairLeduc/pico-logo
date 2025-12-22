@@ -53,7 +53,7 @@ The best place to start is the [Pico Logo Reference](/reference/Pico_Logo_Refere
 
 ## Science with Logo
 
-- [Exploring language with Logo](https://archive.org/details/exploringlanguag00gold) by E. Paul Goldenberg and Wallace Feurzeig
+- [Exploring Language with Logo](https://archive.org/details/exploringlanguag00gold) by E. Paul Goldenberg and Wallace Feurzeig
 - [Logo Physics](https://archive.org/details/logo-physics-1985) by James P. Hurley
 
 ## Advanced Logo
