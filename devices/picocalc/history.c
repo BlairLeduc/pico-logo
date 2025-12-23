@@ -5,6 +5,7 @@
 //  PicoCalc history buffer
 //
 
+#include <ctype.h>
 #include <string.h>
 #include "pico/types.h"
 
@@ -14,10 +15,24 @@ char history_buffer[HISTORY_SIZE][HISTORY_LINE_LENGTH] = {0};
 uint history_head = 0;
 uint history_tail = 0;
 
+// Helper to check if a string contains only whitespace
+static bool is_blank(const char *str)
+{
+    while (*str)
+    {
+        if (!isspace((unsigned char)*str))
+        {
+            return false;
+        }
+        str++;
+    }
+    return true;
+}
+
 void history_add(const char *line)
 {
-    // Don't add empty or blank lines to history
-    if (line == NULL || line[0] == '\0')
+    // Don't add empty or blank (whitespace-only) lines to history
+    if (line == NULL || line[0] == '\0' || is_blank(line))
     {
         return;
     }
