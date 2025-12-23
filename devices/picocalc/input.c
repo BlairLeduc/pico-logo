@@ -36,16 +36,22 @@ static void calc_cursor_pos(uint8_t start_col, uint8_t start_row, uint8_t index,
 static void calc_start_row(uint8_t start_col, uint8_t end_col, uint8_t end_row,
                            uint8_t length, uint8_t *out_start_row)
 {
+    (void)end_col; // Unused but kept for API consistency
+    
     // Total characters from start to end position
     uint16_t total_offset = start_col + length;
     // Number of rows the text spans
     uint8_t rows_used = total_offset / SCREEN_COLUMNS;
-    if (total_offset % SCREEN_COLUMNS == 0 && length > 0)
+    
+    // Bounds check to prevent underflow
+    if (rows_used > end_row)
     {
-        // If we ended exactly at column 0, we wrapped but cursor is on new row
-        // The end_row is one past the last character
+        *out_start_row = 0;
     }
-    *out_start_row = end_row - rows_used;
+    else
+    {
+        *out_start_row = end_row - rows_used;
+    }
 }
 
 int picocalc_read_line(char *buf, int size)

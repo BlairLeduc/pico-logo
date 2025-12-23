@@ -829,6 +829,8 @@ bool screen_txt_putc(uint8_t c)
         cursor_column = 0;
         cursor_row++;
 
+        // GFX mode is included here to maintain text buffer state for when
+        // switching back to TXT or SPLIT mode. The LCD is only updated in TXT mode.
         if (screen_mode == SCREEN_MODE_TXT || screen_mode == SCREEN_MODE_GFX)
         {
             if (cursor_row >= SCREEN_ROWS)
@@ -961,6 +963,8 @@ bool screen_txt_putc(uint8_t c)
                 cursor_column = 0;
                 cursor_row++;
 
+                // GFX mode is included here to maintain text buffer state for when
+                // switching back to TXT or SPLIT mode. The LCD is only updated in TXT mode.
                 if (screen_mode == SCREEN_MODE_TXT || screen_mode == SCREEN_MODE_GFX)
                 {
                     if (cursor_row >= SCREEN_ROWS)
