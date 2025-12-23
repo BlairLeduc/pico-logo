@@ -38,7 +38,9 @@ static uint16_t turtle_shapes[15][16];  // shapes[0] = shape 1, shapes[14] = sha
 static uint8_t turtle_current_shape = 0;
 
 // Background buffer: 16x16 pixels saved before drawing turtle
-// Buffer origin is at (turtle_x - 8, turtle_y - 16) relative to turtle position
+// Buffer origin X is always at (turtle_x - 8); origin Y depends on shape:
+//   - shape 0:  (turtle_y - 8)   (centered on turtle position)
+//   - shapes 1-15: (turtle_y - 15) (bottom row aligned with turtle_y)
 static uint8_t turtle_background[16][16];
 static int turtle_bg_saved_x;  // Screen X where background was saved (top-left)
 static int turtle_bg_saved_y;  // Screen Y where background was saved (top-left)
