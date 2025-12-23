@@ -470,9 +470,28 @@ static bool turtle_dot_at(float x, float y)
     return screen_gfx_get_point(x, y) != GFX_DEFAULT_BACKGROUND;
 }
 
-// Fill enclosed area with current pen colour starting from turtle position
+// Fill enclosed area starting from turtle position
+// Respects current pen state:
+// - PEN_DOWN: fill with pen colour
+// - PEN_ERASE: fill with background colour  
+// - PEN_UP/PEN_REVERSE: do nothing
 static void turtle_fill(void)
 {
+    uint8_t fill_colour;
+
+    switch (turtle_pen_state)
+    {
+        case LOGO_PEN_DOWN:
+            fill_colour = turtle_colour;
+            break;
+        case LOGO_PEN_ERASE:
+            fill_colour = background_colour;
+            break;
+        default:
+            // Pen up or reverse - don't fill
+            return;
+    }
+
     screen_show_field();
 
     // Temporarily hide the turtle so it doesn't interfere with the fill
@@ -483,7 +502,7 @@ static void turtle_fill(void)
     }
 
     // Perform the fill from the turtle's current position
-    screen_gfx_fill(turtle_x, turtle_y, turtle_colour);
+    screen_gfx_fill(turtle_x, turtle_y, fill_colour);
 
     // Restore turtle visibility
     if (was_visible)
