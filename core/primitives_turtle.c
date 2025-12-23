@@ -1019,6 +1019,172 @@ static Result prim_restorepalette(Evaluator *eval, int argc, Value *args)
 }
 
 //==========================================================================
+// Shape primitives
+//==========================================================================
+
+// getsh shapenumber - Output list of 16 numbers representing shape (1-15)
+static Result prim_getsh(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+
+    if (argc < 1)
+    {
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "getsh", NULL);
+    }
+
+    float shape_num;
+    if (!value_to_number(args[0], &shape_num))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "getsh", value_to_string(args[0]));
+    }
+
+    // Shape must be 1-15 (shape 0 is the line-drawn turtle)
+    if (shape_num < 1 || shape_num > 15)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "getsh", value_to_string(args[0]));
+    }
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (!turtle || !turtle->get_shape_data)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "getsh", value_to_string(args[0]));
+    }
+
+    uint8_t shape_data[16];
+    if (!turtle->get_shape_data((uint8_t)shape_num, shape_data))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "getsh", value_to_string(args[0]));
+    }
+
+    // Build a list of 16 numbers
+    Node list = NODE_NIL;
+    for (int i = 15; i >= 0; i--)
+    {
+        char buf[8];
+        snprintf(buf, sizeof(buf), "%d", shape_data[i]);
+        Node atom = mem_atom(buf, strlen(buf));
+        list = mem_cons(atom, list);
+    }
+
+    return result_ok(value_list(list));
+}
+
+// putsh shapenumber shapespec - Set shape data for shapes 1-15
+static Result prim_putsh(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+
+    if (argc < 2)
+    {
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "putsh", NULL);
+    }
+
+    float shape_num;
+    if (!value_to_number(args[0], &shape_num))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "putsh", value_to_string(args[0]));
+    }
+
+    // Shape must be 1-15 (shape 0 cannot be changed)
+    if (shape_num < 1 || shape_num > 15)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "putsh", value_to_string(args[0]));
+    }
+
+    if (args[1].type != VALUE_LIST)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "putsh", value_to_string(args[1]));
+    }
+
+    // Extract 16 numbers from the list
+    uint8_t shape_data[16];
+    Node list = args[1].as.node;
+    int count = 0;
+
+    while (!mem_is_nil(list) && count < 16)
+    {
+        Node item = mem_car(list);
+        Value item_val = mem_is_word(item) ? value_word(item) : value_list(item);
+        
+        float num;
+        if (!value_to_number(item_val, &num))
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "putsh", value_to_string(args[1]));
+        }
+
+        if (num < 0 || num > 255)
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "putsh", value_to_string(args[1]));
+        }
+
+        shape_data[count] = (uint8_t)num;
+        count++;
+        list = mem_cdr(list);
+    }
+
+    if (count != 16)
+    {
+        return result_error_arg(ERR_TOO_FEW_ITEMS_LIST, "putsh", NULL);
+    }
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (!turtle || !turtle->put_shape_data)
+    {
+        return result_none();
+    }
+
+    turtle->put_shape_data((uint8_t)shape_num, shape_data);
+    return result_none();
+}
+
+// setsh shapenumber - Set the current turtle shape (0-15)
+static Result prim_setsh(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+
+    if (argc < 1)
+    {
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "setsh", NULL);
+    }
+
+    float shape_num;
+    if (!value_to_number(args[0], &shape_num))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setsh", value_to_string(args[0]));
+    }
+
+    if (shape_num < 0 || shape_num > 15)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setsh", value_to_string(args[0]));
+    }
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->set_shape)
+    {
+        turtle->set_shape((uint8_t)shape_num);
+    }
+
+    return result_none();
+}
+
+// shape - Output the current turtle shape number
+static Result prim_shape(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    (void)args;
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (!turtle || !turtle->get_shape)
+    {
+        return result_ok(value_number(0));
+    }
+
+    uint8_t shape = turtle->get_shape();
+    return result_ok(value_number(shape));
+}
+
+//==========================================================================
 // Registration
 //==========================================================================
 
@@ -1095,4 +1261,10 @@ void primitives_turtle_init(void)
     primitive_register("setpalette", 2, prim_setpalette);
     primitive_register("palette", 1, prim_palette);
     primitive_register("restorepalette", 0, prim_restorepalette);
+
+    // Shape primitives
+    primitive_register("getsh", 1, prim_getsh);
+    primitive_register("putsh", 2, prim_putsh);
+    primitive_register("setsh", 1, prim_setsh);
+    primitive_register("shape", 0, prim_shape);
 }

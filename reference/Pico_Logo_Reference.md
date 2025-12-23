@@ -609,6 +609,17 @@ fd
 `forward` moves the turtle forward _distance_ steps in the direction in which it is heading. If the pen is down, Logo draws a line the specified _distance_.
 
 
+## getsh
+
+getsh _shapenumber_
+
+`operation`
+
+Outputs a list of 16 numbers repesnting the turtle shape _shapenumber_ (an integer between 1 and 15). Note that shape number cannot be 0. Each shape consists of 8 columns by 16 rows. Each element is in the list is the sum of the bit values for a row in the shape.
+
+The first element of the list is the first row of the shape. If the whole row is filled in, the number is 255. If the row is empty, the number is 0. If only the right-most position is filled, the number is 1. If only the fifth position is filled, the number is 16.
+
+
 ## hideturtle (ht)
 
 hideturtle  
@@ -643,6 +654,17 @@ lt
 The `left` command turns the turtle left (counterclockwise) the specified number of degrees. The number of degrees must not be greater than approximately 3.4e38, the maximum value for a (32-bit) IEEE 754 floating point number.
 
 
+# putsh
+
+putsh _shapenumber_ _shapespec_
+
+`command`
+
+Gives _shapenumber_ the specified _shapespec_ as its shape. The output of [`getsh`](#getsh) can be the input of `putsh`. _shapenumber_ is in the range of 1 to 15. Shape 0 cannot be changed.
+
+See [`getsh`](#getsh) to learn about _shapespec_.
+
+
 ## right (rt)
 
 right `degrees`  
@@ -672,6 +694,15 @@ setpos [_xcor_ _ycor_]
 The `setpos` (for set position) command moves the turtle to the indicated coordinates. If the pen is down, Logo draws a line to the new position.
 
 
+## setsh
+
+setsh _shapenumber_
+
+`command`
+
+Stand for `set sh`ape. Sets the shape of the current turtle to the shape specified by _shapenumber_ which must be in the range 0 to 15. you can create your own shape using [`putsh`](#putsh). Shapes 1 through 15 are blank when Logo stsrts.
+
+
 ## setx
 
 setx _xcor_  
@@ -688,6 +719,15 @@ sety _ycor_
 `command`
 
 `sety` moves the turtle vertically to a point with y-coordinate _ycor_. The x-coordinate is unchanged. If the pen is down, Logo draws a line to the new position.
+
+
+## shape
+
+shape
+
+`operation`
+
+Output the shape number of the current turtle. The normal turtle shape is 0. 
 
 
 ## showturtle (st)

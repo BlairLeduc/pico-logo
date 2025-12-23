@@ -202,6 +202,13 @@ extern "C"
             uint8_t b[256];                  // Blue components (0-255)
             bool restore_palette_called;     // Was restore_palette called?
         } palette;
+
+        // Shape tracking
+        struct
+        {
+            uint8_t current_shape;           // Current shape number (0-15)
+            uint8_t shapes[15][16];          // Shape data for shapes 1-15 (8 columns x 16 rows)
+        } shape;
     } MockDeviceState;
 
     //
