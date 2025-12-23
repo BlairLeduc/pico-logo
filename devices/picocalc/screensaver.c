@@ -90,7 +90,7 @@ static void cycle_palette(void)
         
         // Apply shade offset within 0-7 range for 50% brightness
         // Cycling by 3: 0→3→6→1→4→7→2→5→0 visits all 8 darker shades
-        int new_shade = (orig_shade_index + shade_offset) % SCREENSAVER_MAX_SHADE;
+        int new_shade = (orig_shade_index + shade_offset) % SCREENSAVER_NUM_SHADES;
 
         // Look up RGB565 from palette_16bit using (hue << 4) | shade
         uint16_t rgb565 = palette_16bit[(new_hue << 4) | new_shade];
