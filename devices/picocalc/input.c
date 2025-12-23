@@ -21,6 +21,16 @@ static void picocalc_beep(void)
     //audio_play_sound_blocking(HIGH_BEEP, HIGH_BEEP, NOTE_EIGHTH);
 }
 
+// Helper to calculate cursor position from character index
+// Takes the starting column/row and character index, returns the target column/row
+static void calc_cursor_pos(uint8_t start_col, uint8_t start_row, uint8_t index,
+                            uint8_t *out_col, uint8_t *out_row)
+{
+    uint16_t total_offset = start_col + index;
+    *out_col = total_offset % SCREEN_COLUMNS;
+    *out_row = start_row + (total_offset / SCREEN_COLUMNS);
+}
+
 int picocalc_read_line(char *buf, int size)
 {
     char key;
@@ -183,15 +193,19 @@ int picocalc_read_line(char *buf, int size)
         case KEY_LEFT:
             if (index > 0)
             {
+                uint8_t col, row;
                 index--;
-                screen_txt_set_cursor(start_col + index, start_row);
+                calc_cursor_pos(start_col, start_row, index, &col, &row);
+                screen_txt_set_cursor(col, row);
             }
             break;
         case KEY_RIGHT:
             if (index < length)
             {
+                uint8_t col, row;
                 index++;
-                screen_txt_set_cursor(start_col + index, start_row);
+                calc_cursor_pos(start_col, start_row, index, &col, &row);
+                screen_txt_set_cursor(col, row);
             }
             break;
         default:
@@ -231,7 +245,9 @@ int picocalc_read_line(char *buf, int size)
                             start_row--; // Adjust start row if text scrolled
                         }
                         screen_txt_get_cursor(&end_col, &end_row);
-                        screen_txt_set_cursor(col + 1, row);
+                        // Calculate new cursor position accounting for wrap
+                        calc_cursor_pos(start_col, start_row, index, &col, &row);
+                        screen_txt_set_cursor(col, row);
                     }
                 }
                 else

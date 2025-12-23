@@ -960,17 +960,55 @@ bool screen_txt_putc(uint8_t c)
             {
                 cursor_column = 0;
                 cursor_row++;
-                if (cursor_row >= SCREEN_ROWS)
+
+                if (screen_mode == SCREEN_MODE_TXT || screen_mode == SCREEN_MODE_GFX)
                 {
-                    // Scroll the text buffer up one line
-                    screen_txt_scroll_up();
-                    if (screen_mode == SCREEN_MODE_TXT || screen_mode == SCREEN_MODE_SPLIT)
+                    if (cursor_row >= SCREEN_ROWS)
                     {
-                        lcd_scroll_up(); // Scroll the LCD display up one line in TXT mode
+                        // Scroll the text buffer up one line
+                        screen_txt_scroll_up();
+                        if (screen_mode == SCREEN_MODE_TXT)
+                        {
+                            lcd_scroll_up(); // Scroll the LCD display up one line in TXT mode
+                        }
+                        cursor_row = SCREEN_ROWS - 1;
+                        scrolled = true;
                     }
-                    cursor_row = SCREEN_ROWS - 1;
-                    scrolled = true;
-                    lcd_move_cursor(cursor_column, cursor_row);
+                    screen_txt_set_cursor(cursor_column, cursor_row);
+                }
+                else
+                {
+                    // Calculate the starting row in the buffer to display
+                    int16_t start_row = text_row - (SCREEN_SPLIT_TXT_ROWS - 1);
+                    if (start_row < 0)
+                    {
+                        start_row = 0;
+                    }
+
+                    // In split mode, we need to check the text area height
+                    if (cursor_row >= start_row + SCREEN_SPLIT_TXT_ROWS)
+                    {
+                        // Scroll the text buffer up one line
+                        if (text_row == SCREEN_ROWS - 1)
+                        {
+                            // If we are at the last row, scroll the text area up
+                            screen_txt_scroll_up();
+                        }
+                        else
+                        {
+                            // Just increment the text row
+                            text_row++;
+                            start_row++;
+                        }
+
+                        lcd_scroll_up(); // Scroll the LCD display up one line in split mode
+                        cursor_row = start_row + SCREEN_SPLIT_TXT_ROWS - 1;
+                        scrolled = true;
+                    }
+
+                    // Update the last row written to
+                    text_row = cursor_row;
+                    screen_txt_set_cursor(cursor_column, cursor_row);
                 }
             }
         }

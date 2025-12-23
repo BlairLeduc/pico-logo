@@ -16,6 +16,12 @@ uint history_tail = 0;
 
 void history_add(const char *line)
 {
+    // Don't add empty or blank lines to history
+    if (line == NULL || line[0] == '\0')
+    {
+        return;
+    }
+
     strncpy(history_buffer[history_head], line, HISTORY_LINE_LENGTH - 1);
     history_buffer[history_head][HISTORY_LINE_LENGTH - 1] = '\0';
     history_head = (history_head + 1) % HISTORY_SIZE;
