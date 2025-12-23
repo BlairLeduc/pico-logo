@@ -615,7 +615,7 @@ getsh _shapenumber_
 
 `operation`
 
-Outputs a list of 16 numbers repesnting the turtle shape _shapenumber_ (an integer between 1 and 15). Note that shape number cannot be 0. Each shape consists of 8 columns by 16 rows. Each element is in the list is the sum of the bit values for a row in the shape.
+Outputs a list of 16 numbers representing the turtle shape _shapenumber_ (an integer between 1 and 15). Note that shape number cannot be 0. Each shape consists of 8 columns by 16 rows. Each element in the list is the sum of the bit values for a row in the shape.
 
 The first element of the list is the first row of the shape. If the whole row is filled in, the number is 255. If the row is empty, the number is 0. If only the right-most position is filled, the number is 1. If only the fifth position is filled, the number is 16.
 
