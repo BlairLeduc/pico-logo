@@ -65,16 +65,16 @@ typedef struct {
     int8_t dir;      // Direction: 1 = down, -1 = up
 } FillSpan;
 
-    // Helper macro to push a span onto the stack
-    #define PUSH_SPAN(Y, XL, XR, D) do { \
-        if (stack_ptr < FILL_STACK_SIZE) { \
-            stack[stack_ptr].y = (Y); \
-            stack[stack_ptr].x_left = (XL); \
-            stack[stack_ptr].x_right = (XR); \
-            stack[stack_ptr].dir = (D); \
-            stack_ptr++; \
-        } \
-    } while(0)
+// Helper macro to push a span onto the stack
+#define PUSH_SPAN(Y, XL, XR, D) do { \
+    if (stack_ptr < FILL_STACK_SIZE) { \
+        stack[stack_ptr].y = (Y); \
+        stack[stack_ptr].x_left = (XL); \
+        stack[stack_ptr].x_right = (XR); \
+        stack[stack_ptr].dir = (D); \
+        stack_ptr++; \
+    } \
+} while(0)
 
 // Function prototypes
 
