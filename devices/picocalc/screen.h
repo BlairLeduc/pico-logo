@@ -54,6 +54,28 @@ typedef enum {
 #define BMP_PIXEL_DATA_OFFSET (BMP_FILE_HEADER_SIZE + BMP_DIB_HEADER_SIZE + BMP_PALETTE_SIZE)               // Offset to pixel data
 #define BMP_FILE_SIZE (BMP_FILE_HEADER_SIZE + BMP_DIB_HEADER_SIZE + BMP_PALETTE_SIZE + BMP_PIXEL_DATA_SIZE) // Total file size
 
+// Scanline fill algorithm with a fixed-size stack
+// Each stack entry stores a scanline segment to process
+// Stack size of 1024 handles most reasonable shapes on a 320x320 screen
+#define FILL_STACK_SIZE 1024
+typedef struct {
+    int16_t y;       // Y coordinate of the scanline
+    int16_t x_left;  // Left X of the segment
+    int16_t x_right; // Right X of the segment
+    int8_t dir;      // Direction: 1 = down, -1 = up
+} FillSpan;
+
+    // Helper macro to push a span onto the stack
+    #define PUSH_SPAN(Y, XL, XR, D) do { \
+        if (stack_ptr < FILL_STACK_SIZE) { \
+            stack[stack_ptr].y = (Y); \
+            stack[stack_ptr].x_left = (XL); \
+            stack[stack_ptr].x_right = (XR); \
+            stack[stack_ptr].dir = (D); \
+            stack_ptr++; \
+        } \
+    } while(0)
+
 // Function prototypes
 
 // Screen mode functions (TXT, GFX, SPLIT)
@@ -69,6 +91,7 @@ ScreenBoundaryMode screen_gfx_get_boundary_mode(void);
 void screen_gfx_set_point(float x, float y, uint8_t colour);
 uint8_t screen_gfx_get_point(float x, float y);
 void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, bool reverse);
+void screen_gfx_fill(float x, float y, uint8_t colour);
 void screen_gfx_update(void);
 int screen_gfx_save(const char *filename);
 int screen_gfx_load(const char *filename);

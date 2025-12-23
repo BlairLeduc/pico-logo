@@ -377,6 +377,140 @@ void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, boo
     }
 }
 
+// Flood fill using scanline algorithm
+// Uses the colour as both boundary and fill colour (as per Logo spec)
+// Fill starts at (x, y) and fills all pixels that are NOT the boundary colour
+void screen_gfx_fill(float x, float y, uint8_t colour)
+{
+    // Convert to pixel coordinates
+    int start_x = (int)(x + 0.5f);
+    int start_y = (int)(y + 0.5f);
+
+    // Bounds check
+    if (start_x < 0 || start_x >= SCREEN_WIDTH || 
+        start_y < 0 || start_y >= SCREEN_HEIGHT)
+    {
+        return;
+    }
+
+    // The fill colour is the same as the boundary colour
+    uint8_t boundary_colour = colour;
+
+    // Check if starting point is already the boundary colour - nothing to fill
+    if (gfx_buffer[start_y * SCREEN_WIDTH + start_x] == boundary_colour)
+    {
+        return;
+    }
+
+    static FillSpan stack[FILL_STACK_SIZE];
+    int stack_ptr = 0;
+
+    // Find the initial span containing the start point
+    int left = start_x;
+    int right = start_x;
+    uint8_t *row = &gfx_buffer[start_y * SCREEN_WIDTH];
+
+    // Extend left
+    while (left > 0 && row[left - 1] != boundary_colour)
+    {
+        left--;
+    }
+    // Extend right
+    while (right < SCREEN_WIDTH - 1 && row[right + 1] != boundary_colour)
+    {
+        right++;
+    }
+
+    // Fill the initial span
+    for (int i = left; i <= right; i++)
+    {
+        row[i] = colour;
+    }
+
+    // Push spans above and below to process
+    if (start_y > 0)
+    {
+        PUSH_SPAN(start_y - 1, left, right, -1);
+    }
+    if (start_y < SCREEN_HEIGHT - 1)
+    {
+        PUSH_SPAN(start_y + 1, left, right, 1);
+    }
+
+    // Process the stack
+    while (stack_ptr > 0)
+    {
+        // Pop a span
+        stack_ptr--;
+        int y = stack[stack_ptr].y;
+        int x_left = stack[stack_ptr].x_left;
+        int x_right = stack[stack_ptr].x_right;
+        int dir = stack[stack_ptr].dir;
+
+        row = &gfx_buffer[y * SCREEN_WIDTH];
+
+        // Scan the row from x_left to x_right, finding and filling spans
+        int x = x_left;
+        while (x <= x_right)
+        {
+            // Skip boundary pixels
+            while (x <= x_right && row[x] == boundary_colour)
+            {
+                x++;
+            }
+            if (x > x_right)
+            {
+                break;
+            }
+
+            // Found a fillable pixel, extend to find the full span
+            int span_left = x;
+
+            // Extend left beyond the parent span if possible
+            while (span_left > 0 && row[span_left - 1] != boundary_colour)
+            {
+                span_left--;
+            }
+
+            // Find right edge
+            while (x < SCREEN_WIDTH && row[x] != boundary_colour)
+            {
+                x++;
+            }
+            int span_right = x - 1;
+
+            // Fill this span
+            for (int i = span_left; i <= span_right; i++)
+            {
+                row[i] = colour;
+            }
+
+            // Push span in same direction
+            int next_y = y + dir;
+            if (next_y >= 0 && next_y < SCREEN_HEIGHT)
+            {
+                PUSH_SPAN(next_y, span_left, span_right, dir);
+            }
+
+            // Push span in opposite direction if we extended beyond parent
+            int prev_y = y - dir;
+            if (prev_y >= 0 && prev_y < SCREEN_HEIGHT)
+            {
+                // Push for the left extension
+                if (span_left < x_left)
+                {
+                    PUSH_SPAN(prev_y, span_left, x_left - 1, -dir);
+                }
+                // Push for the right extension
+                if (span_right > x_right)
+                {
+                    PUSH_SPAN(prev_y, x_right + 1, span_right, -dir);
+                }
+            }
+        }
+    }
+}
+
 // Write the frame buffer to the LCD display
 void screen_gfx_update(void)
 {

@@ -470,6 +470,30 @@ static bool turtle_dot_at(float x, float y)
     return screen_gfx_get_point(x, y) != GFX_DEFAULT_BACKGROUND;
 }
 
+// Fill enclosed area with current pen colour starting from turtle position
+static void turtle_fill(void)
+{
+    screen_show_field();
+
+    // Temporarily hide the turtle so it doesn't interfere with the fill
+    bool was_visible = turtle_visible;
+    if (was_visible)
+    {
+        turtle_draw();  // XOR to erase turtle
+    }
+
+    // Perform the fill from the turtle's current position
+    screen_gfx_fill(turtle_x, turtle_y, turtle_colour);
+
+    // Restore turtle visibility
+    if (was_visible)
+    {
+        turtle_draw();  // XOR to redraw turtle
+    }
+
+    screen_gfx_update();
+}
+
 static int turtle_gfx_save(const char *filename)
 {
     return screen_gfx_save(filename);
@@ -570,7 +594,7 @@ static const LogoConsoleTurtle picocalc_turtle_ops = {
     .get_visible = turtle_get_visibility,
     .dot = turtle_dot,
     .dot_at = turtle_dot_at,
-    .fill = NULL,       // Not implemented
+    .fill = turtle_fill,
     .set_fence = turtle_set_fence,
     .set_window = turtle_set_window,
     .set_wrap = turtle_set_wrap,
