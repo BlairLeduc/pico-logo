@@ -619,6 +619,11 @@ Outputs a list of 16 numbers repesnting the turtle shape _shapenumber_ (an integ
 
 The first element of the list is the first row of the shape. If the whole row is filled in, the number is 255. If the row is empty, the number is 0. If only the right-most position is filled, the number is 1. If only the fifth position is filled, the number is 16.
 
+```logo
+>getsh 3
+24 60 126 90 90 90 126 231 189 189 165 36 36 36 102 0
+```
+
 
 ## hideturtle (ht)
 
@@ -662,6 +667,11 @@ putsh _shapenumber_ _shapespec_
 
 Gives _shapenumber_ the specified _shapespec_ as its shape. The output of [`getsh`](#getsh) can be the input of `putsh`. _shapenumber_ is in the range of 1 to 15. Shape 0 cannot be changed.
 
+```logo
+>putsh 1 [8 28 28 8 93 127 62 127 127 127 127 127 62 62 93 65]
+>setsh 1
+```
+
 See [`getsh`](#getsh) to learn about _shapespec_.
 
 
@@ -700,7 +710,7 @@ setsh _shapenumber_
 
 `command`
 
-Stand for `set sh`ape. Sets the shape of the current turtle to the shape specified by _shapenumber_ which must be in the range 0 to 15. you can create your own shape using [`putsh`](#putsh). Shapes 1 through 15 are blank when Logo stsrts.
+Stands for `set sh`ape. Sets the shape of the current turtle to the shape specified by _shapenumber_ which must be in the range 1 to 15. You can create your own shape using [`putsh`](#putsh). Shapes 1 through 15 are blank when Logo starts.
 
 
 ## setx
