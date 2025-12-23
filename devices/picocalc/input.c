@@ -31,6 +31,23 @@ static void calc_cursor_pos(uint8_t start_col, uint8_t start_row, uint8_t index,
     *out_row = start_row + (total_offset / SCREEN_COLUMNS);
 }
 
+// Helper to calculate start row from end position and text length
+// After displaying text that may have scrolled, recalculate where the line starts
+static void calc_start_row(uint8_t start_col, uint8_t end_col, uint8_t end_row,
+                           uint8_t length, uint8_t *out_start_row)
+{
+    // Total characters from start to end position
+    uint16_t total_offset = start_col + length;
+    // Number of rows the text spans
+    uint8_t rows_used = total_offset / SCREEN_COLUMNS;
+    if (total_offset % SCREEN_COLUMNS == 0 && length > 0)
+    {
+        // If we ended exactly at column 0, we wrapped but cursor is on new row
+        // The end_row is one past the last character
+    }
+    *out_start_row = end_row - rows_used;
+}
+
 int picocalc_read_line(char *buf, int size)
 {
     char key;
@@ -148,16 +165,15 @@ int picocalc_read_line(char *buf, int size)
 
                 index = strlen(buf);
                 screen_txt_set_cursor(start_col, start_row);
-                if (screen_txt_puts(buf))
-                {
-                    start_row--; // Adjust start row if text scrolled
-                }
+                screen_txt_puts(buf);
                 screen_txt_get_cursor(&end_col, &end_row);
                 for (int i = index; i < length; i++)
                 {
                     screen_txt_putc(' '); // Clear the rest of the line
                 }
                 length = index;
+                // Recalculate start_row based on where we ended up after potential scrolling
+                calc_start_row(start_col, end_col, end_row, length, &start_row);
                 screen_txt_set_cursor(end_col, end_row);
             }
             break;
@@ -177,16 +193,15 @@ int picocalc_read_line(char *buf, int size)
                 }
                 index = strlen(buf);
                 screen_txt_set_cursor(start_col, start_row);
-                if (screen_txt_puts(buf))
-                {
-                    start_row--; // Adjust start row if text scrolled
-                }
+                screen_txt_puts(buf);
                 screen_txt_get_cursor(&end_col, &end_row);
                 for (int i = index; i < length; i++)
                 {
                     screen_txt_putc(' '); // Clear the rest of the line
                 }
                 length = index;
+                // Recalculate start_row based on where we ended up after potential scrolling
+                calc_start_row(start_col, end_col, end_row, length, &start_row);
                 screen_txt_set_cursor(end_col, end_row);
             }
             break;
