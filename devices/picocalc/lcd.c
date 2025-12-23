@@ -97,7 +97,7 @@ void lcd_get_palette_rgb(uint8_t slot, uint8_t *r, uint8_t *g, uint8_t *b)
 void lcd_restore_palette(void)
 {
     // Restore first 128 slots from the default palette
-    memcpy(palette, palette_16bit, sizeof(palette_16bit));
+    memcpy(palette, default_palette, sizeof(default_palette));
 }
 
 
@@ -617,7 +617,7 @@ void lcd_init()
     }
 
     // Load the palette
-    memcpy(palette, palette_16bit, sizeof(palette_16bit));
+    memcpy(palette, default_palette, sizeof(default_palette));
 
     // initialise GPIO
     gpio_init(LCD_SCL);
