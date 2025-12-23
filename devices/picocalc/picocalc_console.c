@@ -807,13 +807,14 @@ static bool turtle_get_shape_data(uint8_t shape_num, uint8_t *data)
     
     // Convert internal 16-bit rows to user's 8-bit rows
     // Internal format has each pixel doubled horizontally
-    // So we take every other bit (the odd-numbered bits when 0-indexed from left)
+    // So we take every other bit from the 16-bit value
+    // (bits 15, 13, 11, 9, 7, 5, 3, 1 when counting from the right, LSB = bit 0)
     for (int row = 0; row < 16; row++)
     {
         uint8_t result = 0;
         uint16_t internal_row = shape[row];
         
-        // Extract bits 14, 12, 10, 8, 6, 4, 2, 0 (every other bit)
+        // Extract bits 15, 13, 11, 9, 7, 5, 3, 1 (every other bit from MSB downward)
         // These represent the original 8 columns
         for (int col = 0; col < 8; col++)
         {
