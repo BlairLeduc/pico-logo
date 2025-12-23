@@ -51,6 +51,7 @@
   - `devices/io.h`
   - `devices/storage.h`
   - `devices/stream.h`
+- The host device uses standard input/output for the REPL and does not implement graphics or sound.
 
 ### Testing
 
@@ -69,7 +70,7 @@
 - We aim for high test coverage of core interpreter logic and primitives.
 
 ## Development and testing
-- Use cmake presets to build and run tests.
+- Use the command line and cmake presets to build and run tests. Do not use tasks.
 - Only use the test framework when working. Do not use the host device for developing or testing new functionality or fixing bugs.
 
 ### How I’d like you (the assistant) to behave
