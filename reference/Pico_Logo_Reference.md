@@ -659,7 +659,7 @@ lt
 The `left` command turns the turtle left (counterclockwise) the specified number of degrees. The number of degrees must not be greater than approximately 3.4e38, the maximum value for a (32-bit) IEEE 754 floating point number.
 
 
-# putsh
+## putsh
 
 putsh _shapenumber_ _shapespec_
 
