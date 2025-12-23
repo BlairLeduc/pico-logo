@@ -175,7 +175,7 @@ static void advance_cycle(void)
 {
     // Increment shade offset by 3 (mod 8)
     // Cycle: 0→3→6→1→4→7→2→5→0
-    shade_offset = (shade_offset + SCREENSAVER_SHADE_STEP) % SCREENSAVER_MAX_SHADE;
+    shade_offset = (shade_offset + SCREENSAVER_SHADE_STEP) % SCREENSAVER_NUM_SHADES;
     
     // Count each shade cycle
     shade_cycle_count++;
