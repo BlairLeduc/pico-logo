@@ -73,7 +73,7 @@ static void restore_palette(void)
 //   - Look up the RGB565 value from palette_16bit[(hue << 4) | shade]
 //   - Shades are limited to 0-7 for 50% brightness
 //
-// Upper 128 slots (128-253) are copies of lower 128
+// Upper 126 slots (128-253) are copies of lower 128
 // Slots 254/255 are foreground/background derived from background_colour
 //
 static void cycle_palette(void)
