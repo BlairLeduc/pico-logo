@@ -369,7 +369,7 @@ static void turtle_clearscreen(void)
     turtle_x = TURTLE_HOME_X;
     turtle_y = TURTLE_HOME_Y;
     turtle_angle = TURTLE_DEFAULT_ANGLE;
-    turtle_current_shape = 0;
+    // Note: turtle shape is NOT reset by clearscreen
 
     // Draw the turtle at the home position
     turtle_draw();
