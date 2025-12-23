@@ -909,6 +909,258 @@ void test_palette_validates_slot(void)
 }
 
 //==========================================================================
+// Shape Tests
+//==========================================================================
+
+void test_shape_outputs_current_shape(void)
+{
+    // Default shape is 0
+    Result r = run_string("shape");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    float shape;
+    TEST_ASSERT_TRUE(value_to_number(r.value, &shape));
+    TEST_ASSERT_EQUAL_FLOAT(0, shape);
+}
+
+void test_setsh_sets_shape(void)
+{
+    Result r = run_string("setsh 1");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Verify shape changed
+    const MockDeviceState *state = mock_device_get_state();
+    TEST_ASSERT_EQUAL(1, state->shape.current_shape);
+}
+
+void test_setsh_and_shape_roundtrip(void)
+{
+    run_string("setsh 5");
+    Result r = run_string("shape");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    float shape;
+    TEST_ASSERT_TRUE(value_to_number(r.value, &shape));
+    TEST_ASSERT_EQUAL_FLOAT(5, shape);
+}
+
+void test_setsh_shape_0(void)
+{
+    run_string("setsh 5");  // Change to something else first
+    Result r = run_string("setsh 0");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    const MockDeviceState *state = mock_device_get_state();
+    TEST_ASSERT_EQUAL(0, state->shape.current_shape);
+}
+
+void test_setsh_shape_15(void)
+{
+    Result r = run_string("setsh 15");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    const MockDeviceState *state = mock_device_get_state();
+    TEST_ASSERT_EQUAL(15, state->shape.current_shape);
+}
+
+void test_setsh_rejects_negative(void)
+{
+    Result r = run_string("setsh -1");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_setsh_rejects_above_15(void)
+{
+    Result r = run_string("setsh 16");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_setsh_requires_input(void)
+{
+    Result r = run_string("setsh");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_putsh_sets_shape_data(void)
+{
+    // Set shape 1 data
+    Result r = run_string("putsh 1 [0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Verify shape data was set
+    const MockDeviceState *state = mock_device_get_state();
+    for (int i = 0; i < 16; i++)
+    {
+        TEST_ASSERT_EQUAL(i, state->shape.shapes[0][i]);  // Shape 1 is at index 0
+    }
+}
+
+void test_putsh_shape_15(void)
+{
+    Result r = run_string("putsh 15 [255 254 253 252 251 250 249 248 247 246 245 244 243 242 241 240]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    const MockDeviceState *state = mock_device_get_state();
+    for (int i = 0; i < 16; i++)
+    {
+        TEST_ASSERT_EQUAL(255 - i, state->shape.shapes[14][i]);  // Shape 15 is at index 14
+    }
+}
+
+void test_putsh_rejects_shape_0(void)
+{
+    // Shape 0 cannot be changed (it's the line-drawn turtle)
+    Result r = run_string("putsh 0 [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_putsh_rejects_negative_shape(void)
+{
+    Result r = run_string("putsh -1 [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_putsh_rejects_shape_above_15(void)
+{
+    Result r = run_string("putsh 16 [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_putsh_requires_list(void)
+{
+    Result r = run_string("putsh 1 123");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_putsh_requires_16_elements(void)
+{
+    // Too few elements
+    Result r = run_string("putsh 1 [0 1 2 3 4 5 6 7 8 9 10 11 12 13 14]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_putsh_requires_valid_numbers(void)
+{
+    // Non-numeric value in list
+    Result r = run_string("putsh 1 [0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 abc]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_putsh_rejects_negative_values(void)
+{
+    Result r = run_string("putsh 1 [0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 -1]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_putsh_rejects_values_above_255(void)
+{
+    Result r = run_string("putsh 1 [0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 256]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_putsh_requires_inputs(void)
+{
+    Result r = run_string("putsh");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    
+    r = run_string("putsh 1");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_getsh_outputs_shape_data(void)
+{
+    // First set some shape data
+    run_string("putsh 1 [24 60 126 90 90 90 126 231 189 189 165 36 36 36 102 0]");
+    
+    // Now get it back
+    Result r = run_string("getsh 1");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
+    
+    // Verify the list contains the correct values
+    Node list = r.value.as.node;
+    int expected[] = {24, 60, 126, 90, 90, 90, 126, 231, 189, 189, 165, 36, 36, 36, 102, 0};
+    
+    for (int i = 0; i < 16; i++)
+    {
+        TEST_ASSERT_FALSE(mem_is_nil(list));
+        Node item = mem_car(list);
+        Value item_val = value_word(item);
+        float num;
+        TEST_ASSERT_TRUE(value_to_number(item_val, &num));
+        TEST_ASSERT_EQUAL_FLOAT((float)expected[i], num);
+        list = mem_cdr(list);
+    }
+    TEST_ASSERT_TRUE(mem_is_nil(list));
+}
+
+void test_getsh_shape_15(void)
+{
+    run_string("putsh 15 [1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16]");
+    
+    Result r = run_string("getsh 15");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
+}
+
+void test_getsh_rejects_shape_0(void)
+{
+    // Shape 0 is the line-drawn turtle, not a bitmap
+    Result r = run_string("getsh 0");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_getsh_rejects_negative(void)
+{
+    Result r = run_string("getsh -1");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_getsh_rejects_above_15(void)
+{
+    Result r = run_string("getsh 16");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_getsh_requires_input(void)
+{
+    Result r = run_string("getsh");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_putsh_getsh_roundtrip(void)
+{
+    // Set shape data
+    run_string("putsh 3 [255 128 64 32 16 8 4 2 1 0 255 128 64 32 16 8]");
+    
+    // Get it back and verify
+    Result r = run_string("getsh 3");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    Node list = r.value.as.node;
+    int expected[] = {255, 128, 64, 32, 16, 8, 4, 2, 1, 0, 255, 128, 64, 32, 16, 8};
+    
+    for (int i = 0; i < 16; i++)
+    {
+        TEST_ASSERT_FALSE(mem_is_nil(list));
+        Node item = mem_car(list);
+        Value item_val = value_word(item);
+        float num;
+        TEST_ASSERT_TRUE(value_to_number(item_val, &num));
+        TEST_ASSERT_EQUAL_FLOAT((float)expected[i], num);
+        list = mem_cdr(list);
+    }
+}
+
+void test_shape_primitives_registered(void)
+{
+    // Verify primitives are registered by checking they don't produce "I don't know how to" error
+    Result r = run_string("shape");
+    TEST_ASSERT_NOT_EQUAL(RESULT_ERROR, r.status);
+    
+    r = run_string("setsh 0");
+    TEST_ASSERT_NOT_EQUAL(RESULT_ERROR, r.status);
+}
+
+//==========================================================================
 // Main
 //==========================================================================
 
@@ -1026,5 +1278,34 @@ int main(void)
     RUN_TEST(test_combined_movements);
     RUN_TEST(test_primitives_are_registered);
     
+    // Shape tests
+    RUN_TEST(test_shape_outputs_current_shape);
+    RUN_TEST(test_setsh_sets_shape);
+    RUN_TEST(test_setsh_and_shape_roundtrip);
+    RUN_TEST(test_setsh_shape_0);
+    RUN_TEST(test_setsh_shape_15);
+    RUN_TEST(test_setsh_rejects_negative);
+    RUN_TEST(test_setsh_rejects_above_15);
+    RUN_TEST(test_setsh_requires_input);
+    RUN_TEST(test_putsh_sets_shape_data);
+    RUN_TEST(test_putsh_shape_15);
+    RUN_TEST(test_putsh_rejects_shape_0);
+    RUN_TEST(test_putsh_rejects_negative_shape);
+    RUN_TEST(test_putsh_rejects_shape_above_15);
+    RUN_TEST(test_putsh_requires_list);
+    RUN_TEST(test_putsh_requires_16_elements);
+    RUN_TEST(test_putsh_requires_valid_numbers);
+    RUN_TEST(test_putsh_rejects_negative_values);
+    RUN_TEST(test_putsh_rejects_values_above_255);
+    RUN_TEST(test_putsh_requires_inputs);
+    RUN_TEST(test_getsh_outputs_shape_data);
+    RUN_TEST(test_getsh_shape_15);
+    RUN_TEST(test_getsh_rejects_shape_0);
+    RUN_TEST(test_getsh_rejects_negative);
+    RUN_TEST(test_getsh_rejects_above_15);
+    RUN_TEST(test_getsh_requires_input);
+    RUN_TEST(test_putsh_getsh_roundtrip);
+    RUN_TEST(test_shape_primitives_registered);
+
     return UNITY_END();
 }
