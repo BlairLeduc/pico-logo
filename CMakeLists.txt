@@ -109,6 +109,7 @@ add_executable(pico-logo
     devices/picocalc/picocalc_storage.c
     devices/picocalc/picocalc.c
     devices/picocalc/screen.c
+    devices/picocalc/screensaver.c
     devices/picocalc/sdcard.c
     devices/picocalc/southbridge.c
 )

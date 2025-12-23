@@ -22,6 +22,7 @@
 
 #include "keyboard.h"
 #include "southbridge.h"
+#include "screensaver.h"
 
 keyboard_key_available_callback_t keyboard_key_available_callback = NULL;
 
@@ -144,10 +145,16 @@ bool keyboard_key_available()
 
 char keyboard_get_key()
 {
+    // Wait for a key, running the screen saver while idle
     while (!keyboard_key_available())
     {
+        // Update screen saver (checks idle time, cycles palette if active)
+        screensaver_update();
         tight_loop_contents();
     }
+
+    // Key is available - notify screen saver to restore palette if active
+    screensaver_on_key_press();
 
     char ch = rx_buffer[rx_tail];
     rx_tail = (rx_tail + 1) & (KBD_BUFFER_SIZE - 1);
@@ -193,6 +200,9 @@ void keyboard_init(void)
 
     // Initialize the south bridge if not already done
     sb_init(); // Initialize the south bridge
+
+    // Initialize the screen saver
+    screensaver_init();
 
     keyboard_initialised = true;
 }
