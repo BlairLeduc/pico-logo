@@ -31,6 +31,21 @@ uint8_t background_colour = GFX_DEFAULT_BACKGROUND;     // Background color for 
 static LogoPen turtle_pen_state = LOGO_PEN_DOWN;        // Pen state for graphics
 static bool turtle_visible = TURTLE_DEFAULT_VISIBILITY; // Turtle visibility state for graphics
 
+// Shape system
+// Shapes 1-15 stored internally as 16-bit rows (doubled from user's 8-bit)
+// Shape 0 is the line-drawn turtle and doesn't use this storage
+static uint16_t turtle_shapes[15][16];  // shapes[0] = shape 1, shapes[14] = shape 15
+static uint8_t turtle_current_shape = 0;
+
+// Background buffer: 16x16 pixels saved before drawing turtle
+// Buffer origin X is always at (turtle_x - 8); origin Y depends on shape:
+//   - shape 0:  (turtle_y - 8)   (centered on turtle position)
+//   - shapes 1-15: (turtle_y - 15) (bottom row aligned with turtle_y)
+static uint8_t turtle_background[16][16];
+static int turtle_bg_saved_x;  // Screen X where background was saved (top-left)
+static int turtle_bg_saved_y;  // Screen Y where background was saved (top-left)
+static bool turtle_bg_valid = false;  // Whether background has been saved
+
 // Boundary mode constants
 typedef enum {
     BOUNDARY_MODE_FENCE,   // Turtle stops at boundary (error if hits edge)
@@ -176,34 +191,176 @@ static const LogoConsoleText picocalc_text_ops = {
 //  Turtle graphics functions
 //
 
-//  Draw the turtle at the current position
-static void turtle_draw()
+// Helper: wrap coordinate to screen bounds
+static inline int wrap_coord(int val, int max)
 {
-    // Convert the angle to radians
+    val = val % max;
+    if (val < 0) val += max;
+    return val;
+}
+
+// Helper: check if turtle is visible on screen (for window mode)
+static bool turtle_should_draw(void)
+{
+    if (!turtle_visible)
+        return false;
+    
+    // In window mode, don't draw if turtle center is off-screen
+    if (turtle_boundary_mode == BOUNDARY_MODE_WINDOW)
+    {
+        if (turtle_x < 0 || turtle_x >= SCREEN_WIDTH ||
+            turtle_y < 0 || turtle_y >= SCREEN_HEIGHT)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Get the graphics frame buffer pointer
+static uint8_t *get_gfx_pixel(int x, int y)
+{
+    // Wrap coordinates
+    x = wrap_coord(x, SCREEN_WIDTH);
+    y = wrap_coord(y, SCREEN_HEIGHT);
+    return &screen_gfx_frame()[y * SCREEN_WIDTH + x];
+}
+
+// Save the 16x16 background area under the turtle
+// For shape 0 (rotating): centered at turtle position
+// For shapes 1-15 (non-rotating): bottom row at turtle_y
+static void turtle_save_background(void)
+{
+    turtle_bg_saved_x = (int)turtle_x - 8;
+    
+    // Shape 0 rotates, so we need the buffer centered on turtle position
+    // Shapes 1-15 don't rotate, so buffer extends above turtle position
+    if (turtle_current_shape == 0)
+    {
+        turtle_bg_saved_y = (int)turtle_y - 8;  // Centered vertically
+    }
+    else
+    {
+        turtle_bg_saved_y = (int)turtle_y - 15; // Bottom row at turtle_y
+    }
+    
+    for (int row = 0; row < 16; row++)
+    {
+        for (int col = 0; col < 16; col++)
+        {
+            int sx = wrap_coord(turtle_bg_saved_x + col, SCREEN_WIDTH);
+            int sy = wrap_coord(turtle_bg_saved_y + row, SCREEN_HEIGHT);
+            turtle_background[row][col] = screen_gfx_frame()[sy * SCREEN_WIDTH + sx];
+        }
+    }
+    turtle_bg_valid = true;
+}
+
+// Restore the saved background (erase turtle)
+static void turtle_erase(void)
+{
+    if (!turtle_bg_valid)
+        return;
+    
+    for (int row = 0; row < 16; row++)
+    {
+        for (int col = 0; col < 16; col++)
+        {
+            int sx = wrap_coord(turtle_bg_saved_x + col, SCREEN_WIDTH);
+            int sy = wrap_coord(turtle_bg_saved_y + row, SCREEN_HEIGHT);
+            screen_gfx_frame()[sy * SCREEN_WIDTH + sx] = turtle_background[row][col];
+        }
+    }
+    turtle_bg_valid = false;
+}
+
+// Draw shape 0: the default line-drawn turtle triangle
+// Must fit within 16x16 centered on turtle position in any rotation
+// Max extent from center = 7 pixels
+static void turtle_draw_shape0(void)
+{
+    // Convert angle to radians
     float radians = turtle_angle * (M_PI / 180.0f);
-
-    // Calculate the vertices of the turtle triangle
-    float half_base = 4.0f; // Half the base width of the turtle triangle
-    float height = 12.0f;   // Height of the turtle triangle
-
+    float sin_a = sinf(radians);
+    float cos_a = cosf(radians);
+    
+    // Triangle dimensions to fit in 16x16 centered area (max 7 pixels from center)
+    // Base width = 6 pixels (half_base = 3), height = 7 pixels
+    // Turtle position is at center of base
+    float half_base = 3.0f;
+    float height = 7.0f;
+    
     // Calculate the three vertices of the triangle
-    float x1 = turtle_x + half_base * cosf(radians);
-    float y1 = turtle_y + half_base * sinf(radians);
-    float x2 = turtle_x - half_base * cosf(radians);
-    float y2 = turtle_y - half_base * sinf(radians);
-    float x3 = turtle_x + height * sinf(radians);
-    float y3 = turtle_y - height * cosf(radians);
+    // Base vertices: perpendicular to heading direction at turtle position
+    float x1 = turtle_x + half_base * cos_a;
+    float y1 = turtle_y + half_base * sin_a;
+    float x2 = turtle_x - half_base * cos_a;
+    float y2 = turtle_y - half_base * sin_a;
+    
+    // Tip vertex: in the direction of heading, 'height' pixels away
+    float x3 = turtle_x + height * sin_a;
+    float y3 = turtle_y - height * cos_a;
+    
+    // Draw the triangle using lines (non-XOR, with current pen color)
+    screen_gfx_line(x1, y1, x2, y2, turtle_colour, false);
+    screen_gfx_line(x2, y2, x3, y3, turtle_colour, false);
+    screen_gfx_line(x3, y3, x1, y1, turtle_colour, false);
+}
 
-    // Draw the triangle using lines
-    screen_gfx_line(x1, y1, x2, y2, turtle_colour, true);
-    screen_gfx_line(x2, y2, x3, y3, turtle_colour, true);
-    screen_gfx_line(x3, y3, x1, y1, turtle_colour, true);
+// Draw shapes 1-15: bitmap shapes that don't rotate
+// Shape is 16 pixels wide (doubled from user's 8) x 16 pixels tall
+// Bottom row (row 15) is at turtle_y
+static void turtle_draw_bitmap_shape(void)
+{
+    uint16_t *shape = turtle_shapes[turtle_current_shape - 1];
+    int base_x = (int)turtle_x - 8;  // Center horizontally
+    int base_y = (int)turtle_y - 15; // Row 15 (bottom) at turtle_y
+    
+    for (int row = 0; row < 16; row++)
+    {
+        uint16_t row_bits = shape[row];
+        if (row_bits == 0) continue;  // Skip empty rows
+        
+        for (int col = 0; col < 16; col++)
+        {
+            // MSB is leftmost column
+            if (row_bits & (0x8000 >> col))
+            {
+                int sx = wrap_coord(base_x + col, SCREEN_WIDTH);
+                int sy = wrap_coord(base_y + row, SCREEN_HEIGHT);
+                screen_gfx_frame()[sy * SCREEN_WIDTH + sx] = turtle_colour;
+            }
+        }
+    }
+}
+
+// Draw the turtle at the current position
+static void turtle_draw(void)
+{
+    if (!turtle_should_draw())
+        return;
+    
+    // Save background before drawing
+    turtle_save_background();
+    
+    // Draw the appropriate shape
+    if (turtle_current_shape == 0)
+    {
+        turtle_draw_shape0();
+    }
+    else
+    {
+        turtle_draw_bitmap_shape();
+    }
 }
 
 // Clear the graphics buffer and reset the turtle to the home position
 static void turtle_clearscreen(void)
 {
     screen_show_field();
+
+    // Invalidate background buffer since screen is being cleared
+    turtle_bg_valid = false;
 
     // Clear the graphics buffer
     screen_gfx_clear();
@@ -212,6 +369,7 @@ static void turtle_clearscreen(void)
     turtle_x = TURTLE_HOME_X;
     turtle_y = TURTLE_HOME_Y;
     turtle_angle = TURTLE_DEFAULT_ANGLE;
+    turtle_current_shape = 0;
 
     // Draw the turtle at the home position
     turtle_draw();
@@ -229,7 +387,8 @@ static bool turtle_move(float distance)
     float old_x = turtle_x;
     float old_y = turtle_y;
 
-    turtle_draw();
+    // Erase turtle at current position
+    turtle_erase();
 
     // Calculate new position in screen coordinates
     float new_x = turtle_x + distance * sinf(turtle_angle * (M_PI / 180.0f));
@@ -306,7 +465,7 @@ static void turtle_home(void)
     screen_show_field();
 
     // Erase the turtle at the current position
-    turtle_draw();
+    turtle_erase();
 
     // Reset the turtle to the home position
     turtle_x = TURTLE_HOME_X;
@@ -326,8 +485,8 @@ static void turtle_set_position(float x, float y)
 {
     screen_show_field();
 
-    // Draw the current turtle position before moving
-    turtle_draw();
+    // Erase the turtle at current position
+    turtle_erase();
 
     // Convert Logo coordinates to screen coordinates:
     // - X: Logo 0 -> Screen center (SCREEN_WIDTH/2)
@@ -360,8 +519,8 @@ static void turtle_set_angle(float angle)
 {
     screen_show_field();
 
-    // Draw the current turtle position before changing angle
-    turtle_draw();
+    // Erase the turtle at current position before changing angle
+    turtle_erase();
 
     turtle_angle = fmodf(angle, 360.0f); // Normalize the angle
     turtle_draw();
@@ -379,14 +538,15 @@ static float turtle_get_angle(void)
 static void turtle_set_colour(uint8_t colour)
 {
     screen_show_field();
-    // Draw the current turtle position before changing color
-    turtle_draw(turtle_x, turtle_y, turtle_angle);
+    
+    // Erase turtle at current position before changing color
+    turtle_erase();
 
     // Set the new turtle color
     turtle_colour = colour;
 
     // Draw the turtle at the current position with the new color
-    turtle_draw(turtle_x, turtle_y, turtle_angle);
+    turtle_draw();
 
     screen_gfx_update();
 }
@@ -447,8 +607,20 @@ static void turtle_set_visibility(bool visible)
     }
 
     screen_show_field();
-    turtle_draw(); // XOR the current turtle to draw/erase it
+    
+    if (turtle_visible)
+    {
+        // Currently visible, becoming hidden - erase it
+        turtle_erase();
+    }
+    
     turtle_visible = visible;
+    
+    if (turtle_visible)
+    {
+        // Now visible - draw it
+        turtle_draw();
+    }
 
     screen_gfx_update();
 }
@@ -498,7 +670,7 @@ static void turtle_fill(void)
     bool was_visible = turtle_visible;
     if (was_visible)
     {
-        turtle_draw();  // XOR to erase turtle
+        turtle_erase();
     }
 
     // Perform the fill from the turtle's current position
@@ -507,7 +679,7 @@ static void turtle_fill(void)
     // Restore turtle visibility
     if (was_visible)
     {
-        turtle_draw();  // XOR to redraw turtle
+        turtle_draw();
     }
 
     screen_gfx_update();
@@ -559,7 +731,7 @@ static void turtle_set_fence(void)
     // If switching from window mode and turtle is off-screen, send to home
     if (turtle_boundary_mode == BOUNDARY_MODE_WINDOW && !turtle_is_on_screen())
     {
-        turtle_draw();  // Erase at old position
+        turtle_erase();  // Erase at old position (if any)
         turtle_x = TURTLE_HOME_X;
         turtle_y = TURTLE_HOME_Y;
         turtle_angle = TURTLE_DEFAULT_ANGLE;
@@ -583,7 +755,7 @@ static void turtle_set_wrap(void)
     // If switching from window mode and turtle is off-screen, send to home
     if (turtle_boundary_mode == BOUNDARY_MODE_WINDOW && !turtle_is_on_screen())
     {
-        turtle_draw();  // Erase at old position
+        turtle_erase();  // Erase at old position (if any)
         turtle_x = TURTLE_HOME_X;
         turtle_y = TURTLE_HOME_Y;
         turtle_angle = TURTLE_DEFAULT_ANGLE;
@@ -592,6 +764,111 @@ static void turtle_set_wrap(void)
     }
     turtle_boundary_mode = BOUNDARY_MODE_WRAP;
     screen_gfx_set_boundary_mode(SCREEN_BOUNDARY_WRAP);
+}
+
+// Set the current turtle shape (0-15)
+static void turtle_set_shape_num(uint8_t shape_num)
+{
+    if (shape_num > 15)
+        return;
+    
+    if (shape_num == turtle_current_shape)
+        return;
+    
+    screen_show_field();
+    
+    // Erase turtle with old shape
+    turtle_erase();
+    
+    // Change shape
+    turtle_current_shape = shape_num;
+    
+    // Draw turtle with new shape
+    turtle_draw();
+    screen_gfx_update();
+}
+
+// Get the current turtle shape number
+static uint8_t turtle_get_shape_num(void)
+{
+    return turtle_current_shape;
+}
+
+// Get shape data for shapes 1-15
+// Returns 16 bytes representing 8 columns x 16 rows
+// Each byte is one row, MSB = leftmost column
+// Returns false if shape_num is 0 or > 15
+static bool turtle_get_shape_data(uint8_t shape_num, uint8_t *data)
+{
+    if (shape_num == 0 || shape_num > 15 || data == NULL)
+        return false;
+    
+    uint16_t *shape = turtle_shapes[shape_num - 1];
+    
+    // Convert internal 16-bit rows to user's 8-bit rows
+    // Internal format has each pixel doubled horizontally
+    // So we take every other bit from the 16-bit value
+    // (bits 15, 13, 11, 9, 7, 5, 3, 1 when counting from the right, LSB = bit 0)
+    for (int row = 0; row < 16; row++)
+    {
+        uint8_t result = 0;
+        uint16_t internal_row = shape[row];
+        
+        // Extract bits 15, 13, 11, 9, 7, 5, 3, 1 (every other bit from MSB downward)
+        // These represent the original 8 columns
+        for (int col = 0; col < 8; col++)
+        {
+            if (internal_row & (0x8000 >> (col * 2)))
+            {
+                result |= (0x80 >> col);
+            }
+        }
+        data[row] = result;
+    }
+    
+    return true;
+}
+
+// Put shape data for shapes 1-15
+// Takes 16 bytes representing 8 columns x 16 rows
+// Each byte is one row, MSB = leftmost column
+// Returns false if shape_num is 0 or > 15
+static bool turtle_put_shape_data(uint8_t shape_num, const uint8_t *data)
+{
+    if (shape_num == 0 || shape_num > 15 || data == NULL)
+        return false;
+    
+    uint16_t *shape = turtle_shapes[shape_num - 1];
+    
+    // Convert user's 8-bit rows to internal 16-bit rows
+    // Double each pixel horizontally
+    for (int row = 0; row < 16; row++)
+    {
+        uint16_t result = 0;
+        uint8_t user_row = data[row];
+        
+        // Each bit in user_row becomes two bits in internal row
+        for (int col = 0; col < 8; col++)
+        {
+            if (user_row & (0x80 >> col))
+            {
+                // Set two adjacent bits
+                result |= (0xC000 >> (col * 2));
+            }
+        }
+        shape[row] = result;
+    }
+    
+    // If we're currently using this shape, redraw
+    if (turtle_current_shape == shape_num && turtle_visible)
+    {
+        screen_show_field();
+        turtle_erase();
+        turtle_draw();
+        screen_gfx_update();
+    }
+    
+    return true;
 }
 
 static const LogoConsoleTurtle picocalc_turtle_ops = {
@@ -622,6 +899,10 @@ static const LogoConsoleTurtle picocalc_turtle_ops = {
     .set_palette = turtle_set_palette,
     .get_palette = turtle_get_palette,
     .restore_palette = turtle_restore_palette,
+    .set_shape = turtle_set_shape_num,
+    .get_shape = turtle_get_shape_num,
+    .get_shape_data = turtle_get_shape_data,
+    .put_shape_data = turtle_put_shape_data,
 };
 
 //

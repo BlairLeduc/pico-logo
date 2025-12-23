@@ -344,6 +344,36 @@ static void mock_turtle_restore_palette(void)
     }
 }
 
+static void mock_turtle_set_shape(uint8_t shape_num)
+{
+    if (shape_num > 15)
+        return;
+    mock_state.shape.current_shape = shape_num;
+}
+
+static uint8_t mock_turtle_get_shape(void)
+{
+    return mock_state.shape.current_shape;
+}
+
+static bool mock_turtle_get_shape_data(uint8_t shape_num, uint8_t *data)
+{
+    if (shape_num == 0 || shape_num > 15 || data == NULL)
+        return false;
+    
+    memcpy(data, mock_state.shape.shapes[shape_num - 1], 16);
+    return true;
+}
+
+static bool mock_turtle_put_shape_data(uint8_t shape_num, const uint8_t *data)
+{
+    if (shape_num == 0 || shape_num > 15 || data == NULL)
+        return false;
+    
+    memcpy(mock_state.shape.shapes[shape_num - 1], data, 16);
+    return true;
+}
+
 // Turtle operations structure
 static const LogoConsoleTurtle mock_turtle_ops = {
     .clear = mock_turtle_clear,
@@ -372,7 +402,11 @@ static const LogoConsoleTurtle mock_turtle_ops = {
     .gfx_load = mock_turtle_gfx_load,
     .set_palette = mock_turtle_set_palette,
     .get_palette = mock_turtle_get_palette,
-    .restore_palette = mock_turtle_restore_palette
+    .restore_palette = mock_turtle_restore_palette,
+    .set_shape = mock_turtle_set_shape,
+    .get_shape = mock_turtle_get_shape,
+    .get_shape_data = mock_turtle_get_shape_data,
+    .put_shape_data = mock_turtle_put_shape_data
 };
 
 //

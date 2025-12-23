@@ -99,6 +99,22 @@ extern "C"
 
         // Restore default palette (slots 0-127)
         void (*restore_palette)(void);
+
+        // Shape management (shapes 0-15)
+        // Shape 0 is the default line-drawn turtle that rotates with heading
+        // Shapes 1-15 are 8x16 bitmaps that do not rotate
+        void (*set_shape)(uint8_t shape_num);
+        uint8_t (*get_shape)(void);
+
+        // Get shape data for shapes 1-15 (8 columns x 16 rows as 16 uint8_t values)
+        // Each byte represents one row, MSB = leftmost column
+        // Returns false if shape_num is 0 or > 15
+        bool (*get_shape_data)(uint8_t shape_num, uint8_t *data);
+
+        // Put shape data for shapes 1-15 (8 columns x 16 rows as 16 uint8_t values)
+        // Each byte represents one row, MSB = leftmost column
+        // Returns false if shape_num is 0 or > 15
+        bool (*put_shape_data)(uint8_t shape_num, const uint8_t *data);
     } LogoConsoleTurtle;
 
     //
