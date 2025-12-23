@@ -1122,14 +1122,9 @@ static Result prim_putsh(Evaluator *eval, int argc, Value *args)
         list = mem_cdr(list);
     }
 
-    if (count != 16)
+    if (count != 16 || !mem_is_nil(list))
     {
-        return result_error_arg(ERR_TOO_FEW_ITEMS_LIST, "putsh", NULL);
-    }
-
-    if (!mem_is_nil(list))
-    {
-        return result_error_arg(ERR_TOO_MANY_ITEMS_LIST, "putsh", NULL);
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "putsh", value_to_string(args[1]));
     }
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (!turtle || !turtle->put_shape_data)
