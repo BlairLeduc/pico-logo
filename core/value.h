@@ -104,6 +104,10 @@ extern "C"
     // Convert value to string for error messages (returns static buffer)
     const char *value_to_string(Value v);
 
+    // Format a number to a buffer, removing trailing zeros
+    // Returns the number of characters written (excluding null terminator)
+    int format_number(char *buf, size_t size, float n);
+
     //==========================================================================
     // Result Constructors
     //==========================================================================

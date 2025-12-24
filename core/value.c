@@ -4,9 +4,8 @@
 //
 
 #include "value.h"
-#include <stdlib.h>
 #include <ctype.h>
-#include <stdio.h>
+#include <stdlib.h>
 
 //==========================================================================
 // Value Constructors
@@ -161,6 +160,218 @@ Node value_to_node(Value v)
     return NODE_NIL;
 }
 
+// Format a number to a buffer using Logo conventions:
+// - Remove trailing zeros after decimal point
+// - Use 'e' for positive exponents (1e7), 'n' for negative exponents (1n6)
+// Uses up to 6 significant digits for single-precision floats.
+// Returns the number of characters written (excluding null terminator).
+//
+// This custom implementation avoids snprintf for efficiency on embedded systems.
+int format_number(char *buf, size_t size, float n)
+{
+    if (size == 0)
+        return 0;
+
+    char *p = buf;
+    char *end = buf + size - 1;  // Leave room for null terminator
+
+    // Handle special cases
+    if (n != n)  // NaN check
+    {
+        if (end - p >= 3)
+        {
+            *p++ = 'n';
+            *p++ = 'a';
+            *p++ = 'n';
+        }
+        *p = '\0';
+        return p - buf;
+    }
+
+    // Handle sign
+    if (n < 0)
+    {
+        if (p < end)
+            *p++ = '-';
+        n = -n;
+    }
+
+    // Handle infinity
+    if (n > 3.4e38f)
+    {
+        if (end - p >= 3)
+        {
+            *p++ = 'i';
+            *p++ = 'n';
+            *p++ = 'f';
+        }
+        *p = '\0';
+        return p - buf;
+    }
+
+    // Handle zero
+    if (n == 0.0f)
+    {
+        if (p < end)
+            *p++ = '0';
+        *p = '\0';
+        return p - buf;
+    }
+
+    // Determine the decimal exponent
+    // We want to find exp10 such that 1 <= n * 10^(-exp10) < 10
+    int exp10 = 0;
+    float scaled = n;
+
+    // Scale down large numbers
+    if (scaled >= 10.0f)
+    {
+        // Use larger steps for efficiency
+        while (scaled >= 1e32f) { scaled *= 1e-32f; exp10 += 32; }
+        while (scaled >= 1e16f) { scaled *= 1e-16f; exp10 += 16; }
+        while (scaled >= 1e8f)  { scaled *= 1e-8f;  exp10 += 8; }
+        while (scaled >= 1e4f)  { scaled *= 1e-4f;  exp10 += 4; }
+        while (scaled >= 10.0f) { scaled *= 0.1f;   exp10 += 1; }
+    }
+    // Scale up small numbers
+    else if (scaled < 1.0f)
+    {
+        while (scaled < 1e-31f) { scaled *= 1e32f; exp10 -= 32; }
+        while (scaled < 1e-15f) { scaled *= 1e16f; exp10 -= 16; }
+        while (scaled < 1e-7f)  { scaled *= 1e8f;  exp10 -= 8; }
+        while (scaled < 1e-3f)  { scaled *= 1e4f;  exp10 -= 4; }
+        while (scaled < 1.0f)   { scaled *= 10.0f; exp10 -= 1; }
+    }
+
+    // Now scaled is in [1.0, 10.0) and exp10 is the exponent
+    // Decide between fixed-point and scientific notation
+    // Use fixed-point for exponents -4 to 5 (like %g behavior)
+    bool use_scientific = (exp10 < -4 || exp10 > 5);
+
+    // Extract up to 6 significant digits
+    // Add small rounding factor
+    scaled += 0.0000005f;
+    if (scaled >= 10.0f)
+    {
+        scaled *= 0.1f;
+        exp10++;
+    }
+
+    // Extract digits
+    char digits[8];
+    int num_digits = 0;
+    float temp = scaled;
+    for (int i = 0; i < 6 && temp > 0.000001f; i++)
+    {
+        int d = (int)temp;
+        if (d > 9) d = 9;  // Clamp for safety
+        digits[num_digits++] = '0' + d;
+        temp = (temp - d) * 10.0f;
+    }
+
+    // Remove trailing zeros from significant digits
+    while (num_digits > 1 && digits[num_digits - 1] == '0')
+    {
+        num_digits--;
+    }
+
+    if (use_scientific)
+    {
+        // Scientific notation: d.dddde±exp or d.ddddn±exp
+        if (p < end)
+            *p++ = digits[0];
+
+        if (num_digits > 1)
+        {
+            if (p < end)
+                *p++ = '.';
+            for (int i = 1; i < num_digits && p < end; i++)
+            {
+                *p++ = digits[i];
+            }
+        }
+
+        // Write exponent: 'e' for positive, 'n' for negative
+        if (p < end)
+            *p++ = (exp10 >= 0) ? 'e' : 'n';
+
+        // Write absolute exponent value
+        int abs_exp = (exp10 >= 0) ? exp10 : -exp10;
+        if (abs_exp >= 100)
+        {
+            if (p < end) *p++ = '0' + (abs_exp / 100);
+            abs_exp %= 100;
+            if (p < end) *p++ = '0' + (abs_exp / 10);
+            if (p < end) *p++ = '0' + (abs_exp % 10);
+        }
+        else if (abs_exp >= 10)
+        {
+            if (p < end) *p++ = '0' + (abs_exp / 10);
+            if (p < end) *p++ = '0' + (abs_exp % 10);
+        }
+        else
+        {
+            if (p < end) *p++ = '0' + abs_exp;
+        }
+    }
+    else
+    {
+        // Fixed-point notation
+        // Position of decimal point: after digit at index exp10
+        // e.g., exp10=2 means ###.### (3 digits before decimal)
+        //       exp10=-1 means 0.0### (decimal before first digit)
+
+        if (exp10 >= 0)
+        {
+            // Digits before decimal point
+            int before_decimal = exp10 + 1;
+
+            for (int i = 0; i < before_decimal && p < end; i++)
+            {
+                if (i < num_digits)
+                    *p++ = digits[i];
+                else
+                    *p++ = '0';
+            }
+
+            // Digits after decimal point (if any significant ones remain)
+            if (num_digits > before_decimal)
+            {
+                if (p < end)
+                    *p++ = '.';
+                for (int i = before_decimal; i < num_digits && p < end; i++)
+                {
+                    *p++ = digits[i];
+                }
+            }
+        }
+        else
+        {
+            // exp10 is negative: need leading "0." and possibly zeros
+            if (p < end)
+                *p++ = '0';
+            if (p < end)
+                *p++ = '.';
+
+            // Leading zeros after decimal point
+            int leading_zeros = -exp10 - 1;
+            for (int i = 0; i < leading_zeros && p < end; i++)
+            {
+                *p++ = '0';
+            }
+
+            // Significant digits
+            for (int i = 0; i < num_digits && p < end; i++)
+            {
+                *p++ = digits[i];
+            }
+        }
+    }
+
+    *p = '\0';
+    return p - buf;
+}
+
 // Helper: serialize list to string (recursive)
 static void list_to_buf(Node node, char *buf, int *pos, int max)
 {
@@ -203,7 +414,7 @@ const char *value_to_string(Value v)
     case VALUE_NONE:
         return "";
     case VALUE_NUMBER:
-        snprintf(buf, sizeof(buf), "%g", v.as.number);
+        format_number(buf, sizeof(buf), v.as.number);
         return buf;
     case VALUE_WORD:
         return mem_word_ptr(v.as.node);

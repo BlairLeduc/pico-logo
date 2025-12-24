@@ -74,7 +74,7 @@ static void print_value(Value v)
     case VALUE_NONE:
         break;
     case VALUE_NUMBER:
-        snprintf(buf, sizeof(buf), "%g", v.as.number);
+        format_number(buf, sizeof(buf), v.as.number);
         print_to_writer(buf);
         break;
     case VALUE_WORD:
@@ -95,7 +95,7 @@ static void show_value(Value v)
     case VALUE_NONE:
         break;
     case VALUE_NUMBER:
-        snprintf(buf, sizeof(buf), "%g", v.as.number);
+        format_number(buf, sizeof(buf), v.as.number);
         print_to_writer(buf);
         break;
     case VALUE_WORD:
