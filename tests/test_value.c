@@ -317,6 +317,91 @@ void test_value_to_node_from_none(void)
     TEST_ASSERT_EQUAL(NODE_NIL, value_to_node(v));
 }
 
+//============================================================================
+// format_number Tests
+//============================================================================
+
+void test_format_number_integer(void)
+{
+    char buf[32];
+    format_number(buf, sizeof(buf), 5.0f);
+    TEST_ASSERT_EQUAL_STRING("5", buf);
+}
+
+void test_format_number_decimal(void)
+{
+    char buf[32];
+    format_number(buf, sizeof(buf), 24.983f);
+    TEST_ASSERT_EQUAL_STRING("24.983", buf);
+}
+
+void test_format_number_strips_trailing_zeros(void)
+{
+    char buf[32];
+    format_number(buf, sizeof(buf), 3.50000f);
+    TEST_ASSERT_EQUAL_STRING("3.5", buf);
+}
+
+void test_format_number_zero(void)
+{
+    char buf[32];
+    format_number(buf, sizeof(buf), 0.0f);
+    TEST_ASSERT_EQUAL_STRING("0", buf);
+}
+
+void test_format_number_negative(void)
+{
+    char buf[32];
+    format_number(buf, sizeof(buf), -7.0f);
+    TEST_ASSERT_EQUAL_STRING("-7", buf);
+}
+
+void test_format_number_negative_decimal(void)
+{
+    char buf[32];
+    format_number(buf, sizeof(buf), -3.14f);
+    TEST_ASSERT_EQUAL_STRING("-3.14", buf);
+}
+
+void test_format_number_small(void)
+{
+    char buf[32];
+    format_number(buf, sizeof(buf), 0.1f);
+    TEST_ASSERT_EQUAL_STRING("0.1", buf);
+}
+
+void test_format_number_scientific_positive(void)
+{
+    char buf[32];
+    format_number(buf, sizeof(buf), 1e7f);
+    TEST_ASSERT_EQUAL_STRING("1e7", buf);
+}
+
+void test_format_number_scientific_negative(void)
+{
+    char buf[32];
+    format_number(buf, sizeof(buf), 1e-6f);
+    TEST_ASSERT_EQUAL_STRING("1n6", buf);
+}
+
+void test_format_number_scientific_with_mantissa(void)
+{
+    char buf[32];
+    format_number(buf, sizeof(buf), 2.5e8f);
+    TEST_ASSERT_EQUAL_STRING("2.5e8", buf);
+}
+
+void test_format_number_scientific_negative_mantissa(void)
+{
+    char buf[32];
+    format_number(buf, sizeof(buf), -3.14e-5f);
+    TEST_ASSERT_EQUAL_STRING("-3.14n5", buf);
+}
+
+//============================================================================
+// value_to_string Tests
+//============================================================================
+
 void test_value_to_string_none(void)
 {
     Value v = value_none();
@@ -339,6 +424,36 @@ void test_value_to_string_number_negative(void)
 {
     Value v = value_number(-7.0f);
     TEST_ASSERT_EQUAL_STRING("-7", value_to_string(v));
+}
+
+void test_value_to_string_number_decimal(void)
+{
+    Value v = value_number(24.983f);
+    TEST_ASSERT_EQUAL_STRING("24.983", value_to_string(v));
+}
+
+void test_value_to_string_number_small_decimal(void)
+{
+    Value v = value_number(0.1f);
+    TEST_ASSERT_EQUAL_STRING("0.1", value_to_string(v));
+}
+
+void test_value_to_string_number_trailing_zeros(void)
+{
+    Value v = value_number(5.5000f);
+    TEST_ASSERT_EQUAL_STRING("5.5", value_to_string(v));
+}
+
+void test_value_to_string_number_large(void)
+{
+    Value v = value_number(12345.0f);
+    TEST_ASSERT_EQUAL_STRING("12345", value_to_string(v));
+}
+
+void test_value_to_string_number_zero(void)
+{
+    Value v = value_number(0.0f);
+    TEST_ASSERT_EQUAL_STRING("0", value_to_string(v));
 }
 
 void test_value_to_string_word(void)
@@ -688,10 +803,30 @@ int main(void)
     RUN_TEST(test_value_to_node_from_empty_list);
     RUN_TEST(test_value_to_node_from_number);
     RUN_TEST(test_value_to_node_from_none);
+
+    // format_number Tests
+    RUN_TEST(test_format_number_integer);
+    RUN_TEST(test_format_number_decimal);
+    RUN_TEST(test_format_number_strips_trailing_zeros);
+    RUN_TEST(test_format_number_zero);
+    RUN_TEST(test_format_number_negative);
+    RUN_TEST(test_format_number_negative_decimal);
+    RUN_TEST(test_format_number_small);
+    RUN_TEST(test_format_number_scientific_positive);
+    RUN_TEST(test_format_number_scientific_negative);
+    RUN_TEST(test_format_number_scientific_with_mantissa);
+    RUN_TEST(test_format_number_scientific_negative_mantissa);
+
+    // value_to_string Tests
     RUN_TEST(test_value_to_string_none);
     RUN_TEST(test_value_to_string_number_integer);
     RUN_TEST(test_value_to_string_number_float);
     RUN_TEST(test_value_to_string_number_negative);
+    RUN_TEST(test_value_to_string_number_decimal);
+    RUN_TEST(test_value_to_string_number_small_decimal);
+    RUN_TEST(test_value_to_string_number_trailing_zeros);
+    RUN_TEST(test_value_to_string_number_large);
+    RUN_TEST(test_value_to_string_number_zero);
     RUN_TEST(test_value_to_string_word);
     RUN_TEST(test_value_to_string_empty_list);
     RUN_TEST(test_value_to_string_single_item_list);

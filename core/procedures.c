@@ -374,7 +374,7 @@ Result proc_call(Evaluator *eval, UserProcedure *proc, int argc, Value *args)
                 switch (args[i].type)
                 {
                 case VALUE_NUMBER:
-                    snprintf(buf, sizeof(buf), "%g", args[i].as.number);
+                    format_number(buf, sizeof(buf), args[i].as.number);
                     trace_write(buf);
                     break;
                 case VALUE_WORD:
@@ -422,7 +422,7 @@ Result proc_call(Evaluator *eval, UserProcedure *proc, int argc, Value *args)
                 switch (result.value.type)
                 {
                 case VALUE_NUMBER:
-                    snprintf(buf, sizeof(buf), "%g", result.value.as.number);
+                    format_number(buf, sizeof(buf), result.value.as.number);
                     trace_write(buf);
                     break;
                 case VALUE_WORD:

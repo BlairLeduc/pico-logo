@@ -37,7 +37,7 @@ static void print_value(Value value)
     switch (value.type)
     {
     case VALUE_NUMBER:
-        snprintf(buf, sizeof(buf), "%g", value.as.number);
+        format_number(buf, sizeof(buf), value.as.number);
         prop_print(buf);
         break;
     case VALUE_WORD:
