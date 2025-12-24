@@ -62,6 +62,7 @@ static void editor_draw_content(void);
 static void editor_draw_line(int screen_row, int line_index);
 static void editor_position_cursor(void);
 static void editor_insert_char(char c);
+static void editor_insert_tab(void);
 static void editor_delete_char(void);
 static void editor_backspace(void);
 static void editor_delete_selection(void);
@@ -312,6 +313,19 @@ static void editor_insert_char(char c)
     editor.cursor_pos++;
     editor.content_length++;
     editor.buffer[editor.content_length] = '\0';
+}
+
+//
+// Insert spaces until the next tab stop (tab stops every 2 columns)
+//
+static void editor_insert_tab(void)
+{
+    int current_col = editor_get_col_at_pos(editor.cursor_pos);
+    int spaces_to_insert = 2 - (current_col % 2);
+    
+    for (int i = 0; i < spaces_to_insert; i++) {
+        editor_insert_char(' ');
+    }
 }
 
 //
@@ -720,6 +734,13 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
             case KEY_RETURN:
                 editor_new_line();
                 needs_redraw = true;
+                break;
+                
+            case KEY_TAB:
+                if (!editor.selecting) {
+                    editor_insert_tab();
+                    needs_redraw = true;
+                }
                 break;
                 
             case 0x02:  // Ctrl+B - toggle block selection

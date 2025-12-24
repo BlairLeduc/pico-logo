@@ -2,7 +2,7 @@
 //  Pico Logo
 //  Copyright 2025 Blair Leduc. See LICENSE for details.
 //
-//  Editor primitives: edit, edn, edns
+//  Editor primitives: edit, edn, edns, editfile
 //
 
 #include "primitives.h"
@@ -12,6 +12,7 @@
 #include "error.h"
 #include "eval.h"
 #include "devices/io.h"
+#include "devices/stream.h"
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -670,10 +671,135 @@ static Result prim_edns(Evaluator *eval, int argc, Value *args)
     return run_editor_and_process(eval, editor_buffer);
 }
 
+// editfile pathname - edit a file's contents (not run as Logo code)
+static Result prim_editfile(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+    
+    if (!value_is_word(args[0]))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "editfile", value_to_string(args[0]));
+    }
+    
+    const char *pathname = mem_word_ptr(args[0].as.node);
+    
+    LogoIO *io = primitives_get_io();
+    if (!io || !io->console)
+    {
+        return result_error_arg(ERR_UNDEFINED, "editfile", NULL);
+    }
+    
+    // Check if editor is available
+    if (!logo_console_has_editor(io->console))
+    {
+        logo_io_write(io, "Editor not available on this device\n");
+        return result_none();
+    }
+    
+    // Check if file is already open - this is an error per the spec
+    if (logo_io_is_open(io, pathname))
+    {
+        return result_error_arg(ERR_DISK_TROUBLE, "", pathname);
+    }
+    
+    // Initialize buffer
+    editor_buffer[0] = '\0';
+    size_t content_len = 0;
+    
+    // If file exists, load its contents
+    if (logo_io_file_exists(io, pathname))
+    {
+        // Check file size first
+        long file_size = logo_io_file_size(io, pathname);
+        if (file_size > EDITOR_BUFFER_SIZE - 1)
+        {
+            return result_error_arg(ERR_OUT_OF_SPACE, "editfile", NULL);
+        }
+        
+        // Open and read file
+        LogoStream *stream = logo_io_open(io, pathname);
+        if (!stream)
+        {
+            return result_error_arg(ERR_FILE_NOT_FOUND, "", pathname);
+        }
+        
+        // Read file line by line into buffer
+        char line[256];
+        int len;
+        while ((len = logo_stream_read_line(stream, line, sizeof(line))) >= 0)
+        {
+            // Check if line fits in buffer
+            size_t line_len = strlen(line);
+            if (content_len + line_len + 1 >= EDITOR_BUFFER_SIZE)
+            {
+                logo_io_close(io, pathname);
+                return result_error_arg(ERR_OUT_OF_SPACE, "editfile", NULL);
+            }
+            
+            // Append line to buffer (without stripping newlines - keep as-is)
+            memcpy(editor_buffer + content_len, line, line_len);
+            content_len += line_len;
+            
+            // Add newline if line didn't end with one
+            if (line_len == 0 || line[line_len - 1] != '\n')
+            {
+                if (content_len + 1 >= EDITOR_BUFFER_SIZE)
+                {
+                    logo_io_close(io, pathname);
+                    return result_error_arg(ERR_OUT_OF_SPACE, "editfile", NULL);
+                }
+                editor_buffer[content_len++] = '\n';
+            }
+        }
+        
+        editor_buffer[content_len] = '\0';
+        logo_io_close(io, pathname);
+    }
+    // If file doesn't exist, start with empty buffer (will create on save)
+    
+    // Call the editor
+    LogoEditorResult editor_result = io->console->editor->edit(editor_buffer, EDITOR_BUFFER_SIZE);
+    
+    if (editor_result == LOGO_EDITOR_CANCEL)
+    {
+        // User cancelled - file remains unchanged
+        return result_none();
+    }
+    
+    if (editor_result == LOGO_EDITOR_ERROR)
+    {
+        return result_error_arg(ERR_OUT_OF_SPACE, "editfile", NULL);
+    }
+    
+    // Save the buffer to the file
+    // First, delete the old file if it exists
+    if (logo_io_file_exists(io, pathname))
+    {
+        logo_io_file_delete(io, pathname);
+    }
+    
+    // Open for writing (creates new file)
+    LogoStream *stream = logo_io_open(io, pathname);
+    if (!stream)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+    
+    // Write buffer contents to file
+    logo_stream_write(stream, editor_buffer);
+    
+    // Close the file
+    logo_io_close(io, pathname);
+    
+    return result_none();
+}
+
 void primitives_editor_init(void)
 {
     primitive_register("edit", 1, prim_edit);  // 1 argument, (edit) for none
     primitive_register("ed", 1, prim_edit);    // Abbreviation
     primitive_register("edn", 1, prim_edn);
     primitive_register("edns", 0, prim_edns);
+    primitive_register("editfile", 1, prim_editfile);
 }

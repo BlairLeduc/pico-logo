@@ -623,6 +623,7 @@ The cursor will not move if that position is not valid.
 - `RETURN` - creates a new line at the current cursor position and moves the cursor (and any text that comes after it) to the new line
 - `BACKSPACE` - erases the character to the left of the cursor
 - `DEL` - erases the character at the cursor position
+- `TAB` - inserts spaces until the next tab stop (tab stops are every 2 columns)
 - `Ctrl` `X` - erases the current line and stores the text in the copy buffer, including the new line
 - `Ctrl` `C` - copies the current line and stores the text in the copy buffer, including the new line
 - `Ctrl` `V` - inserts the text in the copy buffer at the cursor position
@@ -2396,7 +2397,7 @@ The edit buffer cannot hold more than 8192 characters. If the file you try to ed
 
 If you exit the editor with `Brk`, the file remains unchanged.
 
-When exiting the editor, the contents of the buffer are nor run.
+When exiting the editor, the contents of the buffer are not run.
 
 
 ## erasefile
