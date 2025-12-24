@@ -637,66 +637,58 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                 return LOGO_EDITOR_CANCEL;
             
             case KEY_LEFT:
-                if (editor.selecting) {
-                    // Cancel selection on cursor move without Ctrl
-                    editor.selecting = false;
-                    needs_redraw = true;
-                }
                 editor_move_cursor_left();
+                if (editor.selecting) {
+                    needs_redraw = true;  // Selection changed, need to redraw
+                }
                 break;
                 
             case KEY_RIGHT:
-                if (editor.selecting) {
-                    editor.selecting = false;
-                    needs_redraw = true;
-                }
                 editor_move_cursor_right();
+                if (editor.selecting) {
+                    needs_redraw = true;  // Selection changed, need to redraw
+                }
                 break;
                 
             case KEY_UP:
-                if (editor.selecting) {
-                    editor.selecting = false;
-                    needs_redraw = true;
-                }
                 editor_move_cursor_up();
+                if (editor.selecting) {
+                    needs_redraw = true;  // Selection changed, need to redraw
+                }
                 break;
                 
             case KEY_DOWN:
-                if (editor.selecting) {
-                    editor.selecting = false;
-                    needs_redraw = true;
-                }
                 editor_move_cursor_down();
+                if (editor.selecting) {
+                    needs_redraw = true;  // Selection changed, need to redraw
+                }
                 break;
                 
             case KEY_HOME:
-                if (editor.selecting) {
-                    editor.selecting = false;
-                    needs_redraw = true;
-                }
                 editor_move_cursor_home();
+                if (editor.selecting) {
+                    needs_redraw = true;  // Selection changed, need to redraw
+                }
                 break;
                 
             case KEY_END:
-                if (editor.selecting) {
-                    editor.selecting = false;
-                    needs_redraw = true;
-                }
                 editor_move_cursor_end();
+                if (editor.selecting) {
+                    needs_redraw = true;  // Selection changed, need to redraw
+                }
                 break;
                 
             case KEY_PAGE_UP:
-                if (editor.selecting) {
-                    editor.selecting = false;
-                    needs_redraw = true;
-                }
                 editor_page_up();
+                if (editor.selecting) {
+                    needs_redraw = true;  // Selection changed, need to redraw
+                }
                 break;
                 
             case KEY_PAGE_DOWN:
+                editor_page_down();
                 if (editor.selecting) {
-                    editor.selecting = false;
-                    needs_redraw = true;
+                    needs_redraw = true;  // Selection changed, need to redraw
                 }
                 editor_page_down();
                 break;
