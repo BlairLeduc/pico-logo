@@ -14,13 +14,11 @@
 #include "devices/io.h"
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 
 // Static editor buffer (8KB as specified in reference)
 #define EDITOR_BUFFER_SIZE 8192
 static char editor_buffer[EDITOR_BUFFER_SIZE];
-
-// Secondary buffer for newline conversion
-static char converted_buffer[EDITOR_BUFFER_SIZE];
 
 // Helper to append string to buffer with bounds checking
 static bool buffer_append(char *buffer, size_t buffer_size, size_t *pos, const char *str)
@@ -33,43 +31,6 @@ static bool buffer_append(char *buffer, size_t buffer_size, size_t *pos, const c
     memcpy(buffer + *pos, str, len);
     *pos += len;
     buffer[*pos] = '\0';
-    return true;
-}
-
-// Convert actual newlines to newline markers (\n) in the buffer
-// This is needed because proc_define_from_text expects markers, not actual newlines
-static bool convert_newlines_to_markers(const char *src, char *dst, size_t dst_size)
-{
-    size_t src_pos = 0;
-    size_t dst_pos = 0;
-    size_t src_len = strlen(src);
-    
-    while (src_pos < src_len)
-    {
-        if (src[src_pos] == '\n')
-        {
-            // Insert " \n " (space + marker + space)
-            if (dst_pos + 4 >= dst_size - 1)
-            {
-                return false;  // Buffer too small
-            }
-            dst[dst_pos++] = ' ';
-            dst[dst_pos++] = '\\';
-            dst[dst_pos++] = 'n';
-            dst[dst_pos++] = ' ';
-            src_pos++;
-        }
-        else
-        {
-            if (dst_pos >= dst_size - 1)
-            {
-                return false;  // Buffer too small
-            }
-            dst[dst_pos++] = src[src_pos++];
-        }
-    }
-    
-    dst[dst_pos] = '\0';
     return true;
 }
 
@@ -279,9 +240,42 @@ static bool format_variable(char *buffer, size_t buffer_size, size_t *pos,
     return true;
 }
 
+// Helper to check if a line starts with "to " (case-insensitive)
+static bool line_starts_with_to(const char *line)
+{
+    // Skip leading whitespace
+    while (*line && (*line == ' ' || *line == '\t'))
+        line++;
+    
+    if (strncasecmp(line, "to", 2) != 0)
+        return false;
+    
+    // Must be followed by whitespace or end of line
+    char c = line[2];
+    return c == '\0' || c == ' ' || c == '\t' || c == '\n';
+}
+
+// Helper to check if a line is just "end" (case-insensitive)
+static bool line_is_end(const char *line)
+{
+    // Skip leading whitespace
+    while (*line && (*line == ' ' || *line == '\t'))
+        line++;
+    
+    if (strncasecmp(line, "end", 3) != 0)
+        return false;
+    
+    // Must be followed by whitespace, newline, or end of string
+    char c = line[3];
+    return c == '\0' || c == ' ' || c == '\t' || c == '\n';
+}
+
 // Run editor and process results
+// Processes buffer as if each line were typed at top level
 static Result run_editor_and_process(Evaluator *eval, char *buffer)
 {
+    (void)eval;  // Not used directly
+    
     LogoIO *io = primitives_get_io();
     if (!io || !io->console)
     {
@@ -310,22 +304,202 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
         return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
     }
     
-    // Convert newlines to markers before processing
-    // proc_define_from_text expects \n markers, not actual newlines
-    if (!convert_newlines_to_markers(buffer, converted_buffer, EDITOR_BUFFER_SIZE))
+    // Process the buffer content - each line is executed as if typed at top level
+    // We need to handle procedure definitions (to...end) specially
+    
+    // Procedure definition buffer
+    char proc_buffer[EDITOR_BUFFER_SIZE];
+    size_t proc_len = 0;
+    bool in_procedure_def = false;
+    
+    // Process line by line
+    char *line_start = buffer;
+    while (*line_start)
     {
-        return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
+        // Find end of line
+        char *line_end = line_start;
+        while (*line_end && *line_end != '\n')
+            line_end++;
+        
+        // Calculate line length
+        size_t line_len = line_end - line_start;
+        
+        // Skip empty lines
+        bool is_empty = true;
+        for (size_t i = 0; i < line_len; i++)
+        {
+            if (line_start[i] != ' ' && line_start[i] != '\t')
+            {
+                is_empty = false;
+                break;
+            }
+        }
+        
+        if (!is_empty)
+        {
+            // Temporarily null-terminate the line for processing
+            char saved = *line_end;
+            *line_end = '\0';
+            
+            if (!in_procedure_def && line_starts_with_to(line_start))
+            {
+                // Start collecting procedure definition
+                in_procedure_def = true;
+                proc_len = 0;
+                
+                // Copy the "to" line to buffer with newline marker
+                if (line_len + 4 < EDITOR_BUFFER_SIZE - 10)
+                {
+                    memcpy(proc_buffer, line_start, line_len);
+                    proc_buffer[line_len] = ' ';
+                    proc_buffer[line_len + 1] = '\\';
+                    proc_buffer[line_len + 2] = 'n';
+                    proc_buffer[line_len + 3] = ' ';
+                    proc_len = line_len + 4;
+                }
+                else
+                {
+                    logo_io_write(io, "Procedure too long\n");
+                    in_procedure_def = false;
+                }
+            }
+            else if (in_procedure_def)
+            {
+                if (line_is_end(line_start))
+                {
+                    // Complete the procedure definition
+                    if (proc_len + 4 < EDITOR_BUFFER_SIZE)
+                    {
+                        memcpy(proc_buffer + proc_len, "end", 3);
+                        proc_len += 3;
+                        proc_buffer[proc_len] = '\0';
+                    }
+                    
+                    in_procedure_def = false;
+                    
+                    // Parse and define the procedure
+                    Result r = proc_define_from_text(proc_buffer);
+                    if (r.status == RESULT_ERROR)
+                    {
+                        logo_io_write(io, error_format(r));
+                        logo_io_write(io, "\n");
+                    }
+                    else if (r.status == RESULT_OK)
+                    {
+                        // Procedure defined successfully
+                        char buf[256];
+                        snprintf(buf, sizeof(buf), "%s defined\n", 
+                                r.value.as.node ? mem_word_ptr(r.value.as.node) : "procedure");
+                        logo_io_write(io, buf);
+                    }
+                    
+                    proc_len = 0;
+                }
+                else
+                {
+                    // Append line to procedure buffer with newline marker
+                    if (proc_len + line_len + 4 < EDITOR_BUFFER_SIZE - 10)
+                    {
+                        memcpy(proc_buffer + proc_len, line_start, line_len);
+                        proc_buffer[proc_len + line_len] = ' ';
+                        proc_buffer[proc_len + line_len + 1] = '\\';
+                        proc_buffer[proc_len + line_len + 2] = 'n';
+                        proc_buffer[proc_len + line_len + 3] = ' ';
+                        proc_len += line_len + 4;
+                    }
+                    else
+                    {
+                        logo_io_write(io, "Procedure too long\n");
+                        in_procedure_def = false;
+                        proc_len = 0;
+                    }
+                }
+            }
+            else
+            {
+                // Regular instruction - evaluate it
+                Lexer lexer;
+                Evaluator line_eval;
+                lexer_init(&lexer, line_start);
+                eval_init(&line_eval, &lexer);
+                
+                // Evaluate all instructions on the line
+                while (!eval_at_end(&line_eval))
+                {
+                    Result r = eval_instruction(&line_eval);
+                    
+                    if (r.status == RESULT_ERROR)
+                    {
+                        logo_io_write(io, error_format(r));
+                        logo_io_write(io, "\n");
+                        break;
+                    }
+                    else if (r.status == RESULT_THROW)
+                    {
+                        // Uncaught throw - check for special cases
+                        if (strcasecmp(r.throw_tag, "toplevel") == 0)
+                        {
+                            // throw "toplevel returns to top level silently
+                            break;
+                        }
+                        else
+                        {
+                            // Other uncaught throws are errors
+                            char msg[128];
+                            snprintf(msg, sizeof(msg), "No one caught %s\n", r.throw_tag);
+                            logo_io_write(io, msg);
+                            break;
+                        }
+                    }
+                    else if (r.status == RESULT_OK)
+                    {
+                        // Expression returned a value - show "I don't know what to do with" error
+                        char msg[128];
+                        snprintf(msg, sizeof(msg), "I don't know what to do with %s\n", 
+                                 value_to_string(r.value));
+                        logo_io_write(io, msg);
+                        break;
+                    }
+                    // RESULT_NONE means command completed successfully - continue
+                }
+            }
+            
+            // Restore the character
+            *line_end = saved;
+        }
+        
+        // Move to next line
+        if (*line_end == '\n')
+            line_start = line_end + 1;
+        else
+            break;  // End of buffer
     }
     
-    // Process the buffer content - run through evaluator
-    // Each line is executed as if typed at top level
-    Result result = proc_define_from_text(converted_buffer);
-    
-    // If there was an error, show it at top level
-    if (result.status == RESULT_ERROR)
+    // If still in procedure definition at end of buffer, auto-complete with "end"
+    if (in_procedure_def && proc_len > 0)
     {
-        logo_io_write(io, error_format(result));
-        logo_io_write(io, "\n");
+        if (proc_len + 4 < EDITOR_BUFFER_SIZE)
+        {
+            memcpy(proc_buffer + proc_len, "end", 3);
+            proc_len += 3;
+            proc_buffer[proc_len] = '\0';
+            
+            // Parse and define the procedure
+            Result r = proc_define_from_text(proc_buffer);
+            if (r.status == RESULT_ERROR)
+            {
+                logo_io_write(io, error_format(r));
+                logo_io_write(io, "\n");
+            }
+            else if (r.status == RESULT_OK)
+            {
+                // Procedure defined successfully
+                char buf[256];
+                snprintf(buf, sizeof(buf), "%s defined\n", 
+                        r.value.as.node ? mem_word_ptr(r.value.as.node) : "procedure");
+                logo_io_write(io, buf);
+            }
+        }
     }
     
     return result_none();

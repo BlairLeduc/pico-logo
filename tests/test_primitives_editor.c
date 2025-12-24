@@ -238,6 +238,66 @@ void test_edit_no_args_uses_empty_buffer(void)
     TEST_ASSERT_EQUAL_STRING("", editor_input);
 }
 
+void test_edit_runs_regular_commands(void)
+{
+    // Editor content should be run as if typed at top level
+    mock_device_clear_editor();
+    mock_device_set_editor_result(LOGO_EDITOR_ACCEPT);
+    mock_device_set_editor_content("make \"myvar 42\n");
+    
+    // Ensure variable doesn't exist first
+    Value dummy;
+    TEST_ASSERT_FALSE(var_get("myvar", &dummy));
+    
+    Result r = run_string("(edit)");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Variable should now exist
+    Value value;
+    TEST_ASSERT_TRUE(var_get("myvar", &value));
+    TEST_ASSERT_EQUAL(VALUE_NUMBER, value.type);
+    TEST_ASSERT_EQUAL(42, value.as.number);
+}
+
+void test_edit_runs_multiple_commands(void)
+{
+    mock_device_clear_editor();
+    mock_device_set_editor_result(LOGO_EDITOR_ACCEPT);
+    mock_device_set_editor_content("make \"x 10\nmake \"y 20\n");
+    
+    Result r = run_string("(edit)");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    Value value;
+    TEST_ASSERT_TRUE(var_get("x", &value));
+    TEST_ASSERT_EQUAL(10, value.as.number);
+    
+    TEST_ASSERT_TRUE(var_get("y", &value));
+    TEST_ASSERT_EQUAL(20, value.as.number);
+}
+
+void test_edit_runs_mixed_content(void)
+{
+    // Test both procedure definition and regular commands
+    mock_device_clear_editor();
+    mock_device_set_editor_result(LOGO_EDITOR_ACCEPT);
+    mock_device_set_editor_content("make \"before 1\nto myproc\nprint \"hello\nend\nmake \"after 2\n");
+    
+    Result r = run_string("(edit)");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Both variables should exist
+    Value value;
+    TEST_ASSERT_TRUE(var_get("before", &value));
+    TEST_ASSERT_EQUAL(1, value.as.number);
+    
+    TEST_ASSERT_TRUE(var_get("after", &value));
+    TEST_ASSERT_EQUAL(2, value.as.number);
+    
+    // And procedure should exist
+    TEST_ASSERT_TRUE(proc_exists("myproc"));
+}
+
 //==========================================================================
 // Main
 //==========================================================================
@@ -262,6 +322,9 @@ int main(void)
     RUN_TEST(test_edn_unknown_variable_error);
     RUN_TEST(test_edns_formats_all_variables);
     RUN_TEST(test_edit_no_args_uses_empty_buffer);
+    RUN_TEST(test_edit_runs_regular_commands);
+    RUN_TEST(test_edit_runs_multiple_commands);
+    RUN_TEST(test_edit_runs_mixed_content);
     
     return UNITY_END();
 }
