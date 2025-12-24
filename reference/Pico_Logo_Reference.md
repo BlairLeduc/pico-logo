@@ -520,7 +520,7 @@ The parser tries to be clever about this potential ambiguity and figure out whic
 
 # Difference from other Logo interpreters
 
-Comments are not supported in Pico Logo. A cooment procedure can be defined to support comments:
+Comments are not supported in Pico Logo. A comment procedure can be defined to support comments:
 
 ```logo
 to ; :comment
