@@ -261,6 +261,18 @@ extern "C"
     bool mock_device_verify_palette(uint8_t slot, uint8_t r, uint8_t g, uint8_t b);
     bool mock_device_was_restore_palette_called(void);
 
+    // Editor helpers for testing
+    // Set the result that the mock editor should return
+    void mock_device_set_editor_result(LogoEditorResult result);
+    // Set the content that the mock editor should return (replaces buffer content)
+    void mock_device_set_editor_content(const char *content);
+    // Get the content that was passed to the editor
+    const char *mock_device_get_editor_input(void);
+    // Check if the editor was called
+    bool mock_device_was_editor_called(void);
+    // Clear editor state
+    void mock_device_clear_editor(void);
+
 #ifdef __cplusplus
 }
 #endif

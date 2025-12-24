@@ -515,9 +515,12 @@ The parser tries to be clever about this potential ambiguity and figure out whic
   - `print 3 - 4` (parses exactly like the previous example) 
   - `print - 3 4` (procedurally the same as the previous example) 
 
+
+
+
 # Difference from other Logo interpreters
 
-Comments are not supported in Pico Logo. A cooment procedure can be defined to support comments:
+Comments are not supported in Pico Logo. A comment procedure can be defined to support comments:
 
 ```logo
 to ; :comment
@@ -549,6 +552,27 @@ end
 
 
 
+# Processor Limits
+
+The following lists the capabilities of the different supported processors.
+
+**RP2040** (Pico family of devices):
+
+- 8192 nodes for procedure and variable storage
+- 8192 characters of editor buffer
+- 1024 characters in the copy buffer
+- Software floating-point operations
+
+**RP2350** (Pico 2 family of devices):
+
+- 32768 nodes for procedure and variable storage
+- 65536 characters of editor buffer
+- 8192 characters in the copy buffer
+- Hardware float-point operations
+
+
+
+
 # Startup
 
 This section describes the feature of Logo that lets you automatically load a file into your workspace when you start up Logo. You must call the file `startup`. There can be only one file with the name `startup`, although it can include commands to load other files.
@@ -569,6 +593,156 @@ For example:
 ```
 
 You also erase procedures and variables that are only needed for startup processing (see [`erase`](#erase-er) and [`ern`](#ern)).
+
+
+
+
+# Using the Logo Editor
+
+The Logo Editor is an interactive screen-oriented text editor, which provides a flexible way to define and change Logo instructions. The main command for starting up the Logo Editor is [`edit`](#edit).
+
+## How the editor works
+
+When you call the Editor, Logo changes the screen. The editor uses for all text screen with:
+
+`PICO LOGO EDITOR`
+
+centred on the top row (the top row is reverse video). The bottom line has centered in reverse video
+
+`ESC - ACCEPT    BRK - CANCEL`
+
+ The content you edit is on the 30 lines between the top and bottom rows. There is no prompt character, but the cursor shows where you are typing.
+
+The text that you edit is in an area of memory called a **buffer**. When you enter the Editor, Logo displays the text from the edit buffer, up to 30 lines per screen.
+
+You can move the cursor anywhere in the text using the cursor control keys described later in this section. You can also delete and insert characters using the appropriate keys.
+
+Each key that you type makes the Editor take some action. Most typewriter characters (letters, numbers, punctuation, and `RETURN`) are simply inserted into the buffer at the place marked on the screen by the cursor.
+
+When you press `RETURN`, the cursor (and any text that comes after it) moves to the next line, ready for you to continue typing.
+
+You can have more characters on a line of text than fit across the screen. When you get to the end of the line on the screen, just continue typing without pressing `RETURN`. An right arrow glyph (ASCII code 31) appears in the rightmost character position on the line and the cursor moves to the next line.
+
+The Editor has an auxiliary line buffer called the copy buffer. You can use it to move text in a procedure or to repeat them in different places. The copy buffer can hold a [`limited number of characters`](#processor-limits). While this is true for the copy buffer, the length of a line is limited only by the [`length of the edit buffer`](#processor-limits).
+
+## Editing actions
+
+When you are in the editor, you can use the following editing keys:
+
+### Cursor motion
+
+- `LEFT` - moves the cursor one character to the left
+- `RIGHT` - moves the cursor one character to the right
+- `DOWN` - moves the cursor down to the next line at the same column
+- `UP` - moves the cursor up to the previous line at the same column
+- `HOME` - moves the cursor to the beginning of the line
+- `END` - moves the cursor to the end of the line
+- `PAGE_DOWN` - moves the cursor to the next page
+- `PAGE_UP` - moves the cursor to the previous page
+
+The cursor will not move if that position is not valid.
+
+### Inserting and deleting
+
+- `RETURN` - creates a new line at the current cursor position and moves the cursor (and any text that comes after it) to the new line
+- `BACKSPACE` - erases the character to the left of the cursor
+- `DEL` - erases the character at the cursor position
+- `TAB` - inserts spaces until the next tab stop (tab stops are every 2 columns)
+- `Ctrl` `X` - erases the current line and stores the text in the copy buffer, including the new line
+- `Ctrl` `C` - copies the current line and stores the text in the copy buffer, including the new line
+- `Ctrl` `V` - inserts the text in the copy buffer at the cursor position
+
+### Block editing
+
+Selected text is between the start anchor and the cursor and is shown in reverse video. The character at the cursor is not included in the selection. `Ctrl` `B` sets the start anchor at the cursor position. Pressing `Ctrl` `B` when the start anchor is set removes the start anchor and cancels the selection. The cursor motion keys are used to select text when the start anchor is set.
+
+- `DEL` or `BACKSPACE` - erases the selected text without storing the text in the copy buffer
+- `Ctrl` `X` - erases the selected text and stores the text in the copy buffer
+- `Ctrl` `C` - copies the selected text and stores the text in the copy buffer
+- `Ctrl` `V` - replace the selected text with the text in the copy buffer.
+
+Typing any other key (except `Esc` or `Brk`) is ignored while the selection of text is active.
+
+### Viewing screens
+
+`F3` lets you see temporarily the graphics screen and its most recent contents. `F1` restores the screen back to the Editor so you can pick up where you left off.
+
+### Exiting the editor
+
+When you exit from the Editor using `Esc`, Logo reads each
+line in the edit buffer as if you had typed it directly from top level.
+
+If the instructions in the edit buffer define a procedure (that is, if there is a title line `to` ... that starts the definition), Logo behaves as though you had typed the definition of the procedure using `to`. If the buffer contains a procedure definition, but there is no `end` instruction at the end of the buffer, Logo helps out by ending the definition for you.
+
+If there are Logo instructions on lines in the edit buffer that are part of the definition of a procedure, Logo caries them out when you exit the editor. Logo will not carry out any graphics commands or editing commands.
+
+In the Editor, you may define more than one procedure at a
+time as long as each procedure is terminated by `end`.
+
+Exiting the editor using `Brk`, Logo does not read any lines in the edit buffer. If you were defining a procedure, the definition will be the same before you started editing.
+
+
+## edit (ed)
+
+edit _name_
+edit _namelist_
+ed _name_
+ed _namelist_
+(edit)
+(ed)
+
+`command`
+
+Starts the Pico Logo Editor. Starts the Logo Editor with the procedure named _name_ (or procedures in the list _namelist_) and their definitions in it. This is the same output as [`pops`](#pops). 
+
+If `edit` does not have an input the current contents of the buffer are used.
+
+## edn
+
+edn _name_
+edn _namelist_
+
+
+`command`
+
+Stands for `ed`it `n`ame (name must be quoted). Starts the Logo Editor with the variable named _name_ (or variables in the list _namelist_) and their values in it. This is the same output as [`pon`](#pon). When you exit the editor the [`make`](#make) are run, so whatever variables and values have been changed in the editor are changed in Logo.
+
+
+## edns
+
+edns
+
+`command`
+
+Stands for `ed`it `n`ame`s`. Starts the Logo Editor with all the names and their values in it. This is the same output as [`pons`](#pons). When you exit the editor the [`make`](#make) are run, so whatever variables and values have been changed in the editor are changed in Logo.
+
+
+## to
+
+to _name_ _input1_ _input2_ ...
+
+`command`
+
+`to` tells Logo you are defining a procedure called _name_ with the inputs (if any) as indicated. From top level, the prompt character changes from `?` to `>` to remind you that you are defining a procedure. While you are defining a procedure, Logo does not carry out the instructions.
+
+> [!NOTE]
+> You need not put a quotation mark before name because TO puts one there automatically.
+
+To complete the procedure and return Logo to top level, type the word [`end`](#end) as the last line of the procedure. The special
+word [`end`](#end) must be used alone on the last line.
+
+If you change your mind while defining a procedure with `to`,
+press `Brk` to stop the definition. 
+
+
+## end
+
+end
+
+`command`
+
+`end` is necessary, when you are using [`to`](#to), to tell Logo that you are done defining a procedure. It must be on a line by itself. `end` also must be used to separate procedures when defining multiple procedures in the Logo Editor.
+
 
 
 
@@ -2223,6 +2397,7 @@ setprefix _pathname_
 
 Sets a prefix that will be used as the implicit beginning of filenames in [`open`](#open), [`load`](#load), and [`save`](#save) commands. The input to `setprefix` must be a word, unless it is the empty list, to indicate that there should be no prefix.
 
+
 ## prefix
 
 prefix  
@@ -2230,6 +2405,24 @@ prefix
 `operation`
 
 Outputs the current file prefix, or `[]` if there is no prefix.
+
+
+## editfile
+
+editfile _pathname_
+
+`command`
+
+`editfile` loads the file indicated by _pathname_ into the edit buffer and saves the edited contents under the same filename. The old contents will be lost.
+
+You can use `editfile` on any file, whether it exists or not. If it does not exist, the editor buffer is erased and Logo creates the file when you save the contents of the edit buffer.
+
+The edit buffer is limited based on [`Processor Limits`](#processor-limits). If the file you try to edit contains more than this, Logo displays an error message and does not let you edit the file.
+
+If you exit the editor with `Brk`, the file remains unchanged.
+
+When exiting the editor, the contents of the buffer are not run.
+
 
 ## erasefile
 

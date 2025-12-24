@@ -62,6 +62,7 @@ add_library(logo_core
     core/primitives_arithmetic.c
     core/primitives_control.c
     core/primitives_debug.c
+    core/primitives_editor.c
     core/primitives_files.c
     core/primitives_hardware.c
     core/primitives_logical.c
@@ -95,9 +96,15 @@ if(DEFINED LOGO_MEMORY_SIZE)
     target_compile_definitions(logo_core PUBLIC LOGO_MEMORY_SIZE=${LOGO_MEMORY_SIZE})
 endif()
 
+# Allow LOGO_EDITOR_BUFFER_SIZE to be set via CMake cache variable
+if(DEFINED LOGO_EDITOR_BUFFER_SIZE)
+    target_compile_definitions(logo_core PUBLIC LOGO_EDITOR_BUFFER_SIZE=${LOGO_EDITOR_BUFFER_SIZE})
+endif()
+
 add_executable(pico-logo
     devices/picocalc/clib.c
     devices/picocalc/audio.c
+    devices/picocalc/editor.c
     devices/picocalc/fat32.c
     devices/picocalc/history.c
     devices/picocalc/input.c
@@ -145,6 +152,11 @@ target_include_directories(pico-logo PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+# Allow LOGO_COPY_BUFFER_SIZE to be set via CMake cache variable
+if(DEFINED LOGO_COPY_BUFFER_SIZE)
+    target_compile_definitions(pico-logo PRIVATE LOGO_COPY_BUFFER_SIZE=${LOGO_COPY_BUFFER_SIZE})
+endif()
+
 pico_add_extra_outputs(pico-logo)
 
 endif() # NOT BUILD_TESTING AND NOT BUILD_FOR_HOST
@@ -178,6 +190,7 @@ if(BUILD_FOR_HOST)
         core/primitives_arithmetic.c
         core/primitives_control.c
         core/primitives_debug.c
+        core/primitives_editor.c
         core/primitives_files.c
         core/primitives_hardware.c
         core/primitives_logical.c
@@ -275,6 +288,7 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_arithmetic.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_control.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_debug.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_editor.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_files.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_hardware.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_logical.c

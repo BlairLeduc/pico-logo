@@ -8,6 +8,7 @@
 #include "picocalc_console.h"
 #include "devices/console.h"
 #include "devices/stream.h"
+#include "editor.h"
 #include "input.h"
 #include "keyboard.h"
 #include "lcd.h"
@@ -68,7 +69,13 @@ static BoundaryMode turtle_boundary_mode = BOUNDARY_MODE_WRAP;  // Default to wr
 static int input_read_char(LogoStream *stream)
 {
     (void)stream;
-    return keyboard_get_key();
+    int ch = keyboard_get_key();
+    // Convert KEY_BREAK to LOGO_STREAM_INTERRUPTED
+    if (ch == KEY_BREAK)
+    {
+        return LOGO_STREAM_INTERRUPTED;
+    }
+    return ch;
 }
 
 static int input_read_chars(LogoStream *stream, char *buffer, int count)
@@ -922,6 +929,7 @@ LogoConsole *logo_picocalc_console_create(void)
     console->screen = &picocalc_screen_ops;
     console->text = &picocalc_text_ops;
     console->turtle = &picocalc_turtle_ops;
+    console->editor = picocalc_editor_get_ops();
 
     turtle_set_bg_colour(74); // Set default background color
     screen_gfx_clear();

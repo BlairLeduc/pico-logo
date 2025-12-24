@@ -14,6 +14,7 @@
 #include "eval.h"
 #include "lexer.h"
 #include "devices/io.h"
+#include "devices/stream.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -150,6 +151,11 @@ static Result prim_readchar(Evaluator *eval, int argc, Value *args)
     }
 
     int ch = logo_io_read_char(io);
+    if (ch == LOGO_STREAM_INTERRUPTED)
+    {
+        // User pressed BRK - return "Stopped!" error
+        return result_error(ERR_STOPPED);
+    }
     if (ch < 0)
     {
         // EOF - return empty list
@@ -195,6 +201,11 @@ static Result prim_readchars(Evaluator *eval, int argc, Value *args)
     }
 
     int read_count = logo_io_read_chars(io, buffer, count);
+    if (read_count == LOGO_STREAM_INTERRUPTED)
+    {
+        free(buffer);
+        return result_error(ERR_STOPPED);
+    }
     if (read_count == 0)
     {
         free(buffer);
@@ -384,6 +395,10 @@ static Result prim_readlist(Evaluator *eval, int argc, Value *args)
 
     char buffer[1024];
     int len = logo_io_read_line(io, buffer, sizeof(buffer));
+    if (len == LOGO_STREAM_INTERRUPTED)
+    {
+        return result_error(ERR_STOPPED);
+    }
     if (len < 0)
     {
         // EOF - return empty word
@@ -411,6 +426,10 @@ static Result prim_readword(Evaluator *eval, int argc, Value *args)
 
     char buffer[1024];
     int len = logo_io_read_line(io, buffer, sizeof(buffer));
+    if (len == LOGO_STREAM_INTERRUPTED)
+    {
+        return result_error(ERR_STOPPED);
+    }
     if (len < 0)
     {
         // EOF - return empty list

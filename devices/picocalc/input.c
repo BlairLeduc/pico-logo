@@ -13,6 +13,7 @@
 #include "screen.h"
 #include "history.h"
 #include "input.h"
+#include "devices/stream.h"
 
 static bool using_serial = false; // Flag to indicate if using serial input
 
@@ -74,6 +75,13 @@ int picocalc_read_line(char *buf, int size)
         screen_txt_draw_cursor();
         key = getchar();
         screen_txt_erase_cursor();
+
+        // Check for user interrupt (BRK key)
+        if (key == KEY_BREAK)
+        {
+            screen_txt_enable_cursor(false);
+            return LOGO_STREAM_INTERRUPTED;  // Signal user interrupt
+        }
 
         switch (key)
         {
