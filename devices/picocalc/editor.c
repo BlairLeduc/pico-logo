@@ -29,8 +29,10 @@
 #define EDITOR_MAX_COLS       40     // Maximum columns per line
 #define EDITOR_LINE_WRAP_CHAR 31     // Right arrow glyph for line wrap
 
-// Copy buffer size
-#define COPY_BUFFER_SIZE      1020
+// Copy buffer size (default 1024 for RP2040, 8192 for RP2350)
+#ifndef LOGO_COPY_BUFFER_SIZE
+#define LOGO_COPY_BUFFER_SIZE 1024
+#endif
 
 // Editor state
 typedef struct {
@@ -49,7 +51,7 @@ typedef struct {
     size_t select_anchor;   // Start of selection (buffer position)
     
     // Copy buffer
-    char copy_buffer[COPY_BUFFER_SIZE];
+    char copy_buffer[LOGO_COPY_BUFFER_SIZE];
     size_t copy_length;
 } EditorState;
 
@@ -414,8 +416,8 @@ static void editor_copy_selection(void)
                      editor.select_anchor : editor.cursor_pos;
     size_t sel_len = sel_end - sel_start + 1;
     
-    if (sel_len > COPY_BUFFER_SIZE - 1) {
-        sel_len = COPY_BUFFER_SIZE - 1;
+    if (sel_len > LOGO_COPY_BUFFER_SIZE - 1) {
+        sel_len = LOGO_COPY_BUFFER_SIZE - 1;
     }
     
     memcpy(editor.copy_buffer, &editor.buffer[sel_start], sel_len);
@@ -548,8 +550,8 @@ static void editor_copy_line(void)
     }
     
     size_t line_len = line_end - line_start;
-    if (line_len > COPY_BUFFER_SIZE - 1) {
-        line_len = COPY_BUFFER_SIZE - 1;
+    if (line_len > LOGO_COPY_BUFFER_SIZE - 1) {
+        line_len = LOGO_COPY_BUFFER_SIZE - 1;
     }
     
     memcpy(editor.copy_buffer, &editor.buffer[line_start], line_len);
@@ -572,8 +574,8 @@ static void editor_cut_line(void)
     }
     
     size_t line_len = line_end - line_start;
-    if (line_len > COPY_BUFFER_SIZE - 1) {
-        line_len = COPY_BUFFER_SIZE - 1;
+    if (line_len > LOGO_COPY_BUFFER_SIZE - 1) {
+        line_len = LOGO_COPY_BUFFER_SIZE - 1;
     }
     
     // Copy to buffer

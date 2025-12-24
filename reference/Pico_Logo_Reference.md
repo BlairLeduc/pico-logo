@@ -515,6 +515,9 @@ The parser tries to be clever about this potential ambiguity and figure out whic
   - `print 3 - 4` (parses exactly like the previous example) 
   - `print - 3 4` (procedurally the same as the previous example) 
 
+
+
+
 # Difference from other Logo interpreters
 
 Comments are not supported in Pico Logo. A cooment procedure can be defined to support comments:
@@ -546,6 +549,27 @@ to ifelse :predicate :list1 :list2
 (if :predicate :list1 :list2)
 end
 ```
+
+
+
+# Processor Limits
+
+The following lists the capabilities of the different supported processors.
+
+**RP2040** (Pico family of devices):
+
+- 8192 nodes for procedure and variable storage
+- 8192 characters of editor buffer
+- 1024 characters in the copy buffer
+- Software floating-point operations
+
+**RP2350** (Pico 2 family of devices):
+
+- 32768 nodes for procedure and variaible storage
+- 65536 characters of editor buffer
+- 8192 characters in the copy buffer
+- Hardware float-point operations
+
 
 
 
@@ -599,7 +623,7 @@ When you press `RETURN`, the cursor (and any text that comes after it) moves to 
 
 You can have more characters on a line of text than fit across the screen. When you get to the end of the line on the screen, just continue typing without pressing `RETURN`. An right arrow glyph (ASCII code 31) appears in the rightmost character position on the line and the cursor moves to the next line.
 
-The Editor has an auxiliary line buffer called the copy buffer. You can use it to move text in a procedure or to repeat them in different places. The buffer can hold a maximum of 1020 characters. While this is true for the copy buffer, the length of a line is limited only by the length of the edit buffer (8192).
+The Editor has an auxiliary line buffer called the copy buffer. You can use it to move text in a procedure or to repeat them in different places. The copy buffer can hold a [`limited number of characters`](#processor-limits). While this is true for the copy buffer, the length of a line is limited only by the [`length of the edit buffer`](#processor-limits).
 
 ## Editing actions
 
@@ -2393,7 +2417,7 @@ editfile _pathname_
 
 You can use `editfile` on any file, whether it exists or not. If it does not exist, the editor buffer is erased and Logo creates the file when you save the contents of the edit buffer.
 
-The edit buffer cannot hold more than 8192 characters. If the file you try to edit contains more than this, Logo displays an error message and does not let you edit the file.
+The edit buffer is limited based on [`Processor Limits`](#processor-limits). If the file you try to edit contains more than this, Logo displays an error message and does not let you edit the file.
 
 If you exit the editor with `Brk`, the file remains unchanged.
 

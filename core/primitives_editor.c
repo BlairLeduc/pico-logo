@@ -17,9 +17,11 @@
 #include <string.h>
 #include <strings.h>
 
-// Static editor buffer (8KB as specified in reference)
-#define EDITOR_BUFFER_SIZE 8192
-static char editor_buffer[EDITOR_BUFFER_SIZE];
+// Static editor buffer (8KB default as specified in reference)
+#ifndef LOGO_EDITOR_BUFFER_SIZE
+#define LOGO_EDITOR_BUFFER_SIZE 8192
+#endif
+static char editor_buffer[LOGO_EDITOR_BUFFER_SIZE];
 
 // Helper to append string to buffer with bounds checking
 static bool buffer_append(char *buffer, size_t buffer_size, size_t *pos, const char *str)
@@ -292,7 +294,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
     }
     
     // Call the editor
-    LogoEditorResult editor_result = io->console->editor->edit(buffer, EDITOR_BUFFER_SIZE);
+    LogoEditorResult editor_result = io->console->editor->edit(buffer, LOGO_EDITOR_BUFFER_SIZE);
     
     if (editor_result == LOGO_EDITOR_CANCEL)
     {
@@ -309,7 +311,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
     // We need to handle procedure definitions (to...end) specially
     
     // Procedure definition buffer
-    char proc_buffer[EDITOR_BUFFER_SIZE];
+    char proc_buffer[LOGO_EDITOR_BUFFER_SIZE];
     size_t proc_len = 0;
     bool in_procedure_def = false;
     
@@ -349,7 +351,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
                 proc_len = 0;
                 
                 // Copy the "to" line to buffer with newline marker
-                if (line_len + 4 < EDITOR_BUFFER_SIZE - 10)
+                if (line_len + 4 < LOGO_EDITOR_BUFFER_SIZE - 10)
                 {
                     memcpy(proc_buffer, line_start, line_len);
                     proc_buffer[line_len] = ' ';
@@ -369,7 +371,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
                 if (line_is_end(line_start))
                 {
                     // Complete the procedure definition
-                    if (proc_len + 4 < EDITOR_BUFFER_SIZE)
+                    if (proc_len + 4 < LOGO_EDITOR_BUFFER_SIZE)
                     {
                         memcpy(proc_buffer + proc_len, "end", 3);
                         proc_len += 3;
@@ -399,7 +401,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
                 else
                 {
                     // Append line to procedure buffer with newline marker
-                    if (proc_len + line_len + 4 < EDITOR_BUFFER_SIZE - 10)
+                    if (proc_len + line_len + 4 < LOGO_EDITOR_BUFFER_SIZE - 10)
                     {
                         memcpy(proc_buffer + proc_len, line_start, line_len);
                         proc_buffer[proc_len + line_len] = ' ';
@@ -479,7 +481,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
     // If still in procedure definition at end of buffer, auto-complete with "end"
     if (in_procedure_def && proc_len > 0)
     {
-        if (proc_len + 4 < EDITOR_BUFFER_SIZE)
+        if (proc_len + 4 < LOGO_EDITOR_BUFFER_SIZE)
         {
             memcpy(proc_buffer + proc_len, "end", 3);
             proc_len += 3;
@@ -530,16 +532,16 @@ static Result prim_edit(Evaluator *eval, int argc, Value *args)
         {
             // Procedure doesn't exist - create template: "to name\n"
             // Cursor will be on line below, ready for user to define body
-            if (!buffer_append(editor_buffer, EDITOR_BUFFER_SIZE, &pos, "to "))
+            if (!buffer_append(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, "to "))
                 return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
-            if (!buffer_append(editor_buffer, EDITOR_BUFFER_SIZE, &pos, name))
+            if (!buffer_append(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, name))
                 return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
-            if (!buffer_append(editor_buffer, EDITOR_BUFFER_SIZE, &pos, "\n"))
+            if (!buffer_append(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, "\n"))
                 return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
         }
         else
         {
-            if (!format_procedure_definition(editor_buffer, EDITOR_BUFFER_SIZE, &pos, proc))
+            if (!format_procedure_definition(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, proc))
             {
                 return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
             }
@@ -561,18 +563,18 @@ static Result prim_edit(Evaluator *eval, int argc, Value *args)
                     // Procedure doesn't exist - create template: "to name\n"
                     if (!first_proc)
                     {
-                        if (!buffer_append(editor_buffer, EDITOR_BUFFER_SIZE, &pos, "\n"))
+                        if (!buffer_append(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, "\n"))
                         {
                             return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
                         }
                     }
                     first_proc = false;
                     
-                    if (!buffer_append(editor_buffer, EDITOR_BUFFER_SIZE, &pos, "to "))
+                    if (!buffer_append(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, "to "))
                         return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
-                    if (!buffer_append(editor_buffer, EDITOR_BUFFER_SIZE, &pos, name))
+                    if (!buffer_append(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, name))
                         return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
-                    if (!buffer_append(editor_buffer, EDITOR_BUFFER_SIZE, &pos, "\n"))
+                    if (!buffer_append(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, "\n"))
                         return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
                 }
                 else
@@ -580,14 +582,14 @@ static Result prim_edit(Evaluator *eval, int argc, Value *args)
                     // Add blank line between definitions
                     if (!first_proc)
                     {
-                        if (!buffer_append(editor_buffer, EDITOR_BUFFER_SIZE, &pos, "\n"))
+                        if (!buffer_append(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, "\n"))
                         {
                             return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
                         }
                     }
                     first_proc = false;
                     
-                    if (!format_procedure_definition(editor_buffer, EDITOR_BUFFER_SIZE, &pos, proc))
+                    if (!format_procedure_definition(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, proc))
                     {
                         return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
                     }
@@ -625,7 +627,7 @@ static Result prim_edn(Evaluator *eval, int argc, Value *args)
         {
             return result_error_arg(ERR_NO_VALUE, name, NULL);
         }
-        if (!format_variable(editor_buffer, EDITOR_BUFFER_SIZE, &pos, name, value))
+        if (!format_variable(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, name, value))
         {
             return result_error_arg(ERR_OUT_OF_SPACE, "edn", NULL);
         }
@@ -646,7 +648,7 @@ static Result prim_edn(Evaluator *eval, int argc, Value *args)
                     return result_error_arg(ERR_NO_VALUE, name, NULL);
                 }
                 
-                if (!format_variable(editor_buffer, EDITOR_BUFFER_SIZE, &pos, name, value))
+                if (!format_variable(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, name, value))
                 {
                     return result_error_arg(ERR_OUT_OF_SPACE, "edn", NULL);
                 }
@@ -678,7 +680,7 @@ static Result prim_edns(Evaluator *eval, int argc, Value *args)
         Value value;
         if (var_get_global_by_index(i, false, &name, &value))
         {
-            if (!format_variable(editor_buffer, EDITOR_BUFFER_SIZE, &pos, name, value))
+            if (!format_variable(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, name, value))
             {
                 return result_error_arg(ERR_OUT_OF_SPACE, "edns", NULL);
             }
@@ -729,7 +731,7 @@ static Result prim_editfile(Evaluator *eval, int argc, Value *args)
     {
         // Check file size first
         long file_size = logo_io_file_size(io, pathname);
-        if (file_size > EDITOR_BUFFER_SIZE - 1)
+        if (file_size > LOGO_EDITOR_BUFFER_SIZE - 1)
         {
             return result_error_arg(ERR_OUT_OF_SPACE, "editfile", NULL);
         }
@@ -748,7 +750,7 @@ static Result prim_editfile(Evaluator *eval, int argc, Value *args)
         {
             // Check if line fits in buffer
             size_t line_len = strlen(line);
-            if (content_len + line_len + 1 >= EDITOR_BUFFER_SIZE)
+            if (content_len + line_len + 1 >= LOGO_EDITOR_BUFFER_SIZE)
             {
                 logo_io_close(io, pathname);
                 return result_error_arg(ERR_OUT_OF_SPACE, "editfile", NULL);
@@ -761,7 +763,7 @@ static Result prim_editfile(Evaluator *eval, int argc, Value *args)
             // Add newline if line didn't end with one
             if (line_len == 0 || line[line_len - 1] != '\n')
             {
-                if (content_len + 1 >= EDITOR_BUFFER_SIZE)
+                if (content_len + 1 >= LOGO_EDITOR_BUFFER_SIZE)
                 {
                     logo_io_close(io, pathname);
                     return result_error_arg(ERR_OUT_OF_SPACE, "editfile", NULL);
@@ -776,7 +778,7 @@ static Result prim_editfile(Evaluator *eval, int argc, Value *args)
     // If file doesn't exist, start with empty buffer (will create on save)
     
     // Call the editor
-    LogoEditorResult editor_result = io->console->editor->edit(editor_buffer, EDITOR_BUFFER_SIZE);
+    LogoEditorResult editor_result = io->console->editor->edit(editor_buffer, LOGO_EDITOR_BUFFER_SIZE);
     
     if (editor_result == LOGO_EDITOR_CANCEL)
     {

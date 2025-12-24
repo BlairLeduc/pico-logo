@@ -96,6 +96,11 @@ if(DEFINED LOGO_MEMORY_SIZE)
     target_compile_definitions(logo_core PUBLIC LOGO_MEMORY_SIZE=${LOGO_MEMORY_SIZE})
 endif()
 
+# Allow LOGO_EDITOR_BUFFER_SIZE to be set via CMake cache variable
+if(DEFINED LOGO_EDITOR_BUFFER_SIZE)
+    target_compile_definitions(logo_core PUBLIC LOGO_EDITOR_BUFFER_SIZE=${LOGO_EDITOR_BUFFER_SIZE})
+endif()
+
 add_executable(pico-logo
     devices/picocalc/clib.c
     devices/picocalc/audio.c
@@ -146,6 +151,11 @@ target_link_libraries(pico-logo
 target_include_directories(pico-logo PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
+
+# Allow LOGO_COPY_BUFFER_SIZE to be set via CMake cache variable
+if(DEFINED LOGO_COPY_BUFFER_SIZE)
+    target_compile_definitions(pico-logo PRIVATE LOGO_COPY_BUFFER_SIZE=${LOGO_COPY_BUFFER_SIZE})
+endif()
 
 pico_add_extra_outputs(pico-logo)
 
