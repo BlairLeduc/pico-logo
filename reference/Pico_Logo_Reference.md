@@ -654,7 +654,7 @@ The cursor will not move if that position is not valid.
 
 ### Block editing
 
-Selected text is between the start anchor and the cursor and is shown in reverse video. The character at the cursor is included in the selection. `Ctrl` `B` sets the start anchor at the cursor position. Pressing `Ctrl` `B` when the start anchor is set removes the start anchor and cancels the selection. The cursor motion keys are used to select text when the start anchor is set.
+Selected text is between the start anchor and the cursor and is shown in reverse video. The character at the cursor is not included in the selection. `Ctrl` `B` sets the start anchor at the cursor position. Pressing `Ctrl` `B` when the start anchor is set removes the start anchor and cancels the selection. The cursor motion keys are used to select text when the start anchor is set.
 
 - `DEL` or `BACKSPACE` - erases the selected text without storing the text in the copy buffer
 - `Ctrl` `X` - erases the selected text and stores the text in the copy buffer
