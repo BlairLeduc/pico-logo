@@ -35,6 +35,7 @@ add_logo_test(test_mock_device)
 # Primitive tests
 add_logo_test(test_primitives_arithmetic)
 add_logo_test(test_primitives_control)
+add_logo_test(test_primitives_editor)
 add_logo_test(test_primitives_logical)
 add_logo_test(test_primitives_variables)
 add_logo_test(test_primitives_words_lists)

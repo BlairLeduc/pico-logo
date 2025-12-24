@@ -27,6 +27,12 @@ static int mock_output_pos = 0;
 static const char *mock_input_buffer = NULL;
 static size_t mock_input_pos = 0;
 
+// Editor state for testing
+static char mock_editor_input[8192];      // Content passed to editor
+static char mock_editor_content[8192];    // Content editor returns
+static LogoEditorResult mock_editor_result = LOGO_EDITOR_ACCEPT;
+static bool mock_editor_called = false;
+
 //
 // Forward declarations for console operations
 //
@@ -593,6 +599,43 @@ static const LogoStreamOps mock_output_ops = {
 };
 
 //
+// Editor operations
+//
+
+static LogoEditorResult mock_editor_edit(char *buffer, size_t buffer_size)
+{
+    mock_editor_called = true;
+    
+    // Save the input content
+    if (buffer)
+    {
+        strncpy(mock_editor_input, buffer, sizeof(mock_editor_input) - 1);
+        mock_editor_input[sizeof(mock_editor_input) - 1] = '\0';
+    }
+    
+    // If accepting, replace buffer with mock content
+    if (mock_editor_result == LOGO_EDITOR_ACCEPT && mock_editor_content[0] != '\0')
+    {
+        size_t len = strlen(mock_editor_content);
+        if (len < buffer_size)
+        {
+            strcpy(buffer, mock_editor_content);
+        }
+        else
+        {
+            return LOGO_EDITOR_ERROR;
+        }
+    }
+    
+    return mock_editor_result;
+}
+
+// Editor operations structure
+static const LogoConsoleEditor mock_editor_ops = {
+    .edit = mock_editor_edit
+};
+
+//
 // Command recording helpers
 //
 
@@ -685,10 +728,11 @@ void mock_device_init(void)
     // Initialize console with our mock operations
     logo_console_init(&mock_console, &mock_input_ops, &mock_output_ops, NULL);
     
-    // Attach turtle, text, and screen operations
+    // Attach turtle, text, screen, and editor operations
     mock_console.turtle = &mock_turtle_ops;
     mock_console.text = &mock_text_ops;
     mock_console.screen = &mock_screen_ops;
+    mock_console.editor = &mock_editor_ops;
 }
 
 void mock_device_reset(void)
@@ -738,6 +782,12 @@ void mock_device_reset(void)
     mock_output_pos = 0;
     mock_input_buffer = NULL;
     mock_input_pos = 0;
+    
+    // Clear editor state
+    mock_editor_input[0] = '\0';
+    mock_editor_content[0] = '\0';
+    mock_editor_result = LOGO_EDITOR_ACCEPT;
+    mock_editor_called = false;
 }
 
 const MockDeviceState *mock_device_get_state(void)
@@ -932,4 +982,44 @@ bool mock_device_verify_palette(uint8_t slot, uint8_t r, uint8_t g, uint8_t b)
 bool mock_device_was_restore_palette_called(void)
 {
     return mock_state.palette.restore_palette_called;
+}
+
+//
+// Editor helpers for testing
+//
+
+void mock_device_set_editor_result(LogoEditorResult result)
+{
+    mock_editor_result = result;
+}
+
+void mock_device_set_editor_content(const char *content)
+{
+    if (content)
+    {
+        strncpy(mock_editor_content, content, sizeof(mock_editor_content) - 1);
+        mock_editor_content[sizeof(mock_editor_content) - 1] = '\0';
+    }
+    else
+    {
+        mock_editor_content[0] = '\0';
+    }
+}
+
+const char *mock_device_get_editor_input(void)
+{
+    return mock_editor_input;
+}
+
+bool mock_device_was_editor_called(void)
+{
+    return mock_editor_called;
+}
+
+void mock_device_clear_editor(void)
+{
+    mock_editor_input[0] = '\0';
+    mock_editor_content[0] = '\0';
+    mock_editor_result = LOGO_EDITOR_ACCEPT;
+    mock_editor_called = false;
 }

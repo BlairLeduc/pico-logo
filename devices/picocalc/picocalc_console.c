@@ -8,6 +8,7 @@
 #include "picocalc_console.h"
 #include "devices/console.h"
 #include "devices/stream.h"
+#include "editor.h"
 #include "input.h"
 #include "keyboard.h"
 #include "lcd.h"
@@ -922,6 +923,7 @@ LogoConsole *logo_picocalc_console_create(void)
     console->screen = &picocalc_screen_ops;
     console->text = &picocalc_text_ops;
     console->turtle = &picocalc_turtle_ops;
+    console->editor = picocalc_editor_get_ops();
 
     turtle_set_bg_colour(74); // Set default background color
     screen_gfx_clear();

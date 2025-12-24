@@ -37,6 +37,7 @@ void logo_console_init(LogoConsole *console,
     console->turtle = NULL;
     console->text = NULL;
     console->screen = NULL;
+    console->editor = NULL;
     console->context = context;
 }
 
@@ -53,4 +54,9 @@ bool logo_console_has_text(const LogoConsole *console)
 bool logo_console_has_screen_modes(const LogoConsole *console)
 {
     return console && console->screen != NULL;
+}
+
+bool logo_console_has_editor(const LogoConsole *console)
+{
+    return console && console->editor != NULL;
 }

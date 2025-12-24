@@ -148,6 +148,29 @@ extern "C"
     } LogoConsoleScreen;
 
     //
+    // Editor result codes
+    //
+    typedef enum LogoEditorResult
+    {
+        LOGO_EDITOR_ACCEPT,     // User pressed ESC to accept changes
+        LOGO_EDITOR_CANCEL,     // User pressed BRK to cancel
+        LOGO_EDITOR_ERROR       // Editor error (buffer too small, etc.)
+    } LogoEditorResult;
+
+    //
+    // Editor operations (optional)
+    // These are available on devices with full-screen text editing capability.
+    //
+    typedef struct LogoConsoleEditor
+    {
+        // Edit text in a full-screen editor
+        // buffer: the text to edit (in/out), must be pre-filled with initial content
+        // buffer_size: maximum size of the buffer
+        // Returns: LOGO_EDITOR_ACCEPT if user accepted, LOGO_EDITOR_CANCEL if cancelled
+        LogoEditorResult (*edit)(char *buffer, size_t buffer_size);
+    } LogoConsoleEditor;
+
+    //
     // Console structure
     // Represents a physical device with keyboard input and screen output.
     //
@@ -168,6 +191,9 @@ extern "C"
         // Optional screen mode operations (NULL if single mode only)
         const LogoConsoleScreen *screen;
 
+        // Optional editor operations (NULL if no editor support)
+        const LogoConsoleEditor *editor;
+
         // Private context for the console implementation
         void *context;
     } LogoConsole;
@@ -187,6 +213,7 @@ extern "C"
     bool logo_console_has_turtle(const LogoConsole *console);
     bool logo_console_has_text(const LogoConsole *console);
     bool logo_console_has_screen_modes(const LogoConsole *console);
+    bool logo_console_has_editor(const LogoConsole *console);
 
 #ifdef __cplusplus
 }

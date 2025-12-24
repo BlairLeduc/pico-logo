@@ -41,6 +41,7 @@ extern "C"
     void primitives_arithmetic_init(void);
     void primitives_control_init(void);
     void primitives_debug_init(void);
+    void primitives_editor_init(void);
     void primitives_files_init(void);
     void primitives_hardware_init(void);
     void primitives_logical_init(void);
