@@ -558,22 +558,39 @@ static Result prim_edit(Evaluator *eval, int argc, Value *args)
                 UserProcedure *proc = proc_find(name);
                 if (proc == NULL)
                 {
-                    return result_error_arg(ERR_DONT_KNOW_HOW, name, NULL);
-                }
-                
-                // Add blank line between definitions
-                if (!first_proc)
-                {
+                    // Procedure doesn't exist - create template: "to name\n"
+                    if (!first_proc)
+                    {
+                        if (!buffer_append(editor_buffer, EDITOR_BUFFER_SIZE, &pos, "\n"))
+                        {
+                            return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
+                        }
+                    }
+                    first_proc = false;
+                    
+                    if (!buffer_append(editor_buffer, EDITOR_BUFFER_SIZE, &pos, "to "))
+                        return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
+                    if (!buffer_append(editor_buffer, EDITOR_BUFFER_SIZE, &pos, name))
+                        return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
                     if (!buffer_append(editor_buffer, EDITOR_BUFFER_SIZE, &pos, "\n"))
+                        return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
+                }
+                else
+                {
+                    // Add blank line between definitions
+                    if (!first_proc)
+                    {
+                        if (!buffer_append(editor_buffer, EDITOR_BUFFER_SIZE, &pos, "\n"))
+                        {
+                            return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
+                        }
+                    }
+                    first_proc = false;
+                    
+                    if (!format_procedure_definition(editor_buffer, EDITOR_BUFFER_SIZE, &pos, proc))
                     {
                         return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
                     }
-                }
-                first_proc = false;
-                
-                if (!format_procedure_definition(editor_buffer, EDITOR_BUFFER_SIZE, &pos, proc))
-                {
-                    return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
                 }
             }
             curr = mem_cdr(curr);

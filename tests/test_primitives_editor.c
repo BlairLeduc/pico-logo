@@ -99,6 +99,19 @@ void test_edit_undefined_procedure_opens_with_template(void)
     TEST_ASSERT_EQUAL_STRING("to newproc\n", editor_input);
 }
 
+void test_edit_list_with_undefined_procedure_opens_with_template(void)
+{
+    // edit [test2] should open editor with template for test2
+    mock_device_clear_editor();
+    
+    Result r = run_string("edit [test2]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(mock_device_was_editor_called());
+    
+    const char *editor_input = mock_device_get_editor_input();
+    TEST_ASSERT_EQUAL_STRING("to test2\n", editor_input);
+}
+
 void test_edit_undefined_procedure_accept_creates_procedure(void)
 {
     mock_device_clear_editor();
@@ -311,6 +324,7 @@ int main(void)
     RUN_TEST(test_edit_with_parameters);
     RUN_TEST(test_edit_list_of_procedures);
     RUN_TEST(test_edit_undefined_procedure_opens_with_template);
+    RUN_TEST(test_edit_list_with_undefined_procedure_opens_with_template);
     RUN_TEST(test_edit_undefined_procedure_accept_creates_procedure);
     RUN_TEST(test_edit_cancel_does_nothing);
     RUN_TEST(test_edit_accept_redefines_procedure);
