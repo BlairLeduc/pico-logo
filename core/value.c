@@ -57,6 +57,72 @@ bool value_is_list(Value v)
 }
 
 //==========================================================================
+// Value Comparisons
+//==========================================================================
+
+bool values_equal(Value a, Value b)
+{
+    if (a.type != b.type)
+    {
+        // Allow number-word comparison if word is numeric
+        if (value_is_number(a) && value_is_word(b))
+        {
+            float n;
+            if (value_to_number(b, &n))
+            {
+                return a.as.number == n;
+            }
+        }
+        else if (value_is_word(a) && value_is_number(b))
+        {
+            float n;
+            if (value_to_number(a, &n))
+            {
+                return n == b.as.number;
+            }
+        }
+        return false;
+    }
+    
+    if (value_is_number(a))
+    {
+        // Direct floating-point comparison is intentional for Logo semantics.
+        // Classic Logo uses exact equality, matching user expectations in an
+        // educational context. Floating-point precision issues (e.g., 0.1 + 0.2
+        // not equaling 0.3) are inherent to IEEE 754 and would already be visible
+        // in arithmetic results before comparison.
+        return a.as.number == b.as.number;
+    }
+    else if (value_is_word(a))
+    {
+        return mem_words_equal(a.as.node, b.as.node);
+    }
+    else if (value_is_list(a))
+    {
+        // Compare lists element by element
+        Node la = a.as.node;
+        Node lb = b.as.node;
+        while (!mem_is_nil(la) && !mem_is_nil(lb))
+        {
+            Node car_a = mem_car(la);
+            Node car_b = mem_car(lb);
+            Value va = mem_is_word(car_a) ? value_word(car_a) : value_list(car_a);
+            Value vb = mem_is_word(car_b) ? value_word(car_b) : value_list(car_b);
+            if (!values_equal(va, vb))
+            {
+                return false;
+            }
+            la = mem_cdr(la);
+            lb = mem_cdr(lb);
+        }
+        return mem_is_nil(la) && mem_is_nil(lb);
+    }
+    // VALUE_NONE is not a valid Logo object, so two NONE values are not equal.
+    // This case should not occur in normal Logo evaluation.
+    return false;
+}
+
+//==========================================================================
 // Value Conversions
 //==========================================================================
 
