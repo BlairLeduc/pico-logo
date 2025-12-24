@@ -592,7 +592,6 @@ static Result prim_edn(Evaluator *eval, int argc, Value *args)
 {
     size_t pos = 0;
     editor_buffer[0] = '\0';
-    bool first_var = true;
     
     if (argc < 1)
     {
@@ -629,16 +628,6 @@ static Result prim_edn(Evaluator *eval, int argc, Value *args)
                     return result_error_arg(ERR_NO_VALUE, name, NULL);
                 }
                 
-                // Add blank line between definitions
-                if (!first_var)
-                {
-                    if (!buffer_append(editor_buffer, EDITOR_BUFFER_SIZE, &pos, "\n"))
-                    {
-                        return result_error_arg(ERR_OUT_OF_SPACE, "edn", NULL);
-                    }
-                }
-                first_var = false;
-                
                 if (!format_variable(editor_buffer, EDITOR_BUFFER_SIZE, &pos, name, value))
                 {
                     return result_error_arg(ERR_OUT_OF_SPACE, "edn", NULL);
@@ -663,7 +652,6 @@ static Result prim_edns(Evaluator *eval, int argc, Value *args)
     
     size_t pos = 0;
     editor_buffer[0] = '\0';
-    bool first_var = true;
     
     int count = var_global_count(false);  // Exclude buried
     for (int i = 0; i < count; i++)
@@ -672,16 +660,6 @@ static Result prim_edns(Evaluator *eval, int argc, Value *args)
         Value value;
         if (var_get_global_by_index(i, false, &name, &value))
         {
-            // Add blank line between definitions
-            if (!first_var)
-            {
-                if (!buffer_append(editor_buffer, EDITOR_BUFFER_SIZE, &pos, "\n"))
-                {
-                    return result_error_arg(ERR_OUT_OF_SPACE, "edns", NULL);
-                }
-            }
-            first_var = false;
-            
             if (!format_variable(editor_buffer, EDITOR_BUFFER_SIZE, &pos, name, value))
             {
                 return result_error_arg(ERR_OUT_OF_SPACE, "edns", NULL);

@@ -2372,6 +2372,7 @@ setprefix _pathname_
 
 Sets a prefix that will be used as the implicit beginning of filenames in [`open`](#open), [`load`](#load), and [`save`](#save) commands. The input to `setprefix` must be a word, unless it is the empty list, to indicate that there should be no prefix.
 
+
 ## prefix
 
 prefix  
@@ -2379,6 +2380,24 @@ prefix
 `operation`
 
 Outputs the current file prefix, or `[]` if there is no prefix.
+
+
+## editfile
+
+editfile _pathname_
+
+`command`
+
+`editfile` loads the file indicated by _pathname_ into the edit buffer and saves the edited contents under the same filename. The old contents will be lost.
+
+You can use `editfile` on any file, whether it exists or not. If it does not exist, the editor buffer is erased and Logo creates the file when you save the contents of the edit buffer.
+
+The edit buffer cannot hold more than 8192 characters. If the file you try to edit contains more than this, Logo displays an error message and does not let you edit the file.
+
+If you exit the editor with `Brk`, the file remains unchanged.
+
+When exiting the editor, the contents of the buffer are nor run.
+
 
 ## erasefile
 

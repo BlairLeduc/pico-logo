@@ -582,9 +582,10 @@ static void editor_cut_line(void)
 //
 LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
 {
-    // Save cursor position to restore on exit
+    // Save cursor position and screen mode to restore on exit
     uint8_t saved_cursor_col, saved_cursor_row;
     screen_txt_get_cursor(&saved_cursor_col, &saved_cursor_row);
+    uint8_t saved_screen_mode = screen_get_mode();
     
     // Initialize editor state
     editor.buffer = buffer;
@@ -600,18 +601,28 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
     // Ensure cursor is on second line if we have "to name\n" template
     // (cursor_pos is already at end which is correct for template)
     
+    // Switch to full-screen text mode for the editor
+    // This is necessary when coming from splitscreen mode
+    screen_set_mode(SCREEN_MODE_TXT);
+    
     // Clear screen and draw initial content
     lcd_clear_screen();
     editor_draw_header();
     editor_draw_footer();
     editor_draw_content();
     editor_ensure_cursor_visible();
+    
+    // Position cursor BEFORE enabling it - this ensures screen_txt_enable_cursor
+    // sees a valid cursor location (important when coming from splitscreen)
     editor_position_cursor();
+    
+    // Now enable and draw cursor - cursor position is already set
     screen_txt_enable_cursor(true);
+    screen_txt_draw_cursor();  // Draw cursor immediately after enabling
     
     // Main editor loop
     while (true) {
-        // Draw cursor before waiting for key
+        // Draw cursor before waiting for key (in case it was erased)
         screen_txt_draw_cursor();
         char key = keyboard_get_key();
         // Erase cursor before modifying screen
@@ -626,6 +637,7 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                 // Accept changes
                 screen_txt_erase_cursor();
                 screen_txt_enable_cursor(false);
+                screen_set_mode(saved_screen_mode);  // Restore screen mode
                 screen_txt_set_cursor(saved_cursor_col, saved_cursor_row);
                 return LOGO_EDITOR_ACCEPT;
                 
@@ -633,7 +645,8 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                 // Cancel changes - restore original buffer
                 screen_txt_erase_cursor();
                 screen_txt_enable_cursor(false);
-                screen_txt_set_cursor(saved_cursor_col, saved_cursor_row);;
+                screen_set_mode(saved_screen_mode);  // Restore screen mode
+                screen_txt_set_cursor(saved_cursor_col, saved_cursor_row);
                 return LOGO_EDITOR_CANCEL;
             
             case KEY_LEFT:
