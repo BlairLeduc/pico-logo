@@ -86,6 +86,11 @@ bool values_equal(Value a, Value b)
     
     if (value_is_number(a))
     {
+        // Direct floating-point comparison is intentional for Logo semantics.
+        // Classic Logo uses exact equality, matching user expectations in an
+        // educational context. Floating-point precision issues (e.g., 0.1 + 0.2
+        // not equaling 0.3) are inherent to IEEE 754 and would already be visible
+        // in arithmetic results before comparison.
         return a.as.number == b.as.number;
     }
     else if (value_is_word(a))
@@ -112,6 +117,8 @@ bool values_equal(Value a, Value b)
         }
         return mem_is_nil(la) && mem_is_nil(lb);
     }
+    // VALUE_NONE is not a valid Logo object, so two NONE values are not equal.
+    // This case should not occur in normal Logo evaluation.
     return false;
 }
 

@@ -172,6 +172,60 @@ void test_infix_equal_number_word(void)
     TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
 }
 
+void test_infix_equal_lists(void)
+{
+    // Test that = works with identical lists
+    Result r = eval_string("[1 2 3] = [1 2 3]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+}
+
+void test_infix_equal_lists_false(void)
+{
+    // Test that = returns false for different lists
+    Result r = eval_string("[1 2 3] = [1 2 4]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
+}
+
+void test_infix_equal_lists_different_length(void)
+{
+    // Test that = returns false for lists of different lengths
+    Result r = eval_string("[1 2] = [1 2 3]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
+}
+
+void test_infix_equal_empty_lists(void)
+{
+    // Test that = works with empty lists
+    Result r = eval_string("[] = []");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+}
+
+void test_infix_equal_nested_lists(void)
+{
+    // Test that = works with nested lists
+    Result r = eval_string("[[a b] [c d]] = [[a b] [c d]]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+}
+
+void test_infix_equal_nested_lists_false(void)
+{
+    // Test that = returns false for different nested lists
+    Result r = eval_string("[[a b] [c d]] = [[a b] [c e]]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -200,6 +254,12 @@ int main(void)
     RUN_TEST(test_infix_equal_variable_word);
     RUN_TEST(test_infix_equal_numbers);
     RUN_TEST(test_infix_equal_number_word);
+    RUN_TEST(test_infix_equal_lists);
+    RUN_TEST(test_infix_equal_lists_false);
+    RUN_TEST(test_infix_equal_lists_different_length);
+    RUN_TEST(test_infix_equal_empty_lists);
+    RUN_TEST(test_infix_equal_nested_lists);
+    RUN_TEST(test_infix_equal_nested_lists_false);
 
     return UNITY_END();
 }
