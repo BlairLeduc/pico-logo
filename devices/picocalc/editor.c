@@ -719,7 +719,6 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                 if (editor.selecting) {
                     needs_redraw = true;  // Selection changed, need to redraw
                 }
-                editor_page_down();
                 break;
                 
             case KEY_BACKSPACE:
