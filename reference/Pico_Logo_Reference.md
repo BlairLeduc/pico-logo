@@ -607,7 +607,7 @@ When you call the Editor, Logo changes the screen. The editor uses for all text 
 
 `PICO LOGO EDITOR`
 
-centred on the top row (the top row is reverse viseo). The bottom line has centered in reverse video
+centred on the top row (the top row is reverse video). The bottom line has centered in reverse video
 
 `ESC - ACCEPT    BRK - CANCEL`
 
