@@ -565,7 +565,7 @@ The following lists the capabilities of the different supported processors.
 
 **RP2350** (Pico 2 family of devices):
 
-- 32768 nodes for procedure and variaible storage
+- 32768 nodes for procedure and variable storage
 - 65536 characters of editor buffer
 - 8192 characters in the copy buffer
 - Hardware float-point operations
