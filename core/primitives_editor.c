@@ -527,6 +527,13 @@ static Result prim_edit(Evaluator *eval, int argc, Value *args)
     {
         // Single procedure name
         const char *name = mem_word_ptr(args[0].as.node);
+        
+        // Check if it's a primitive - can't edit primitives
+        if (primitive_find(name))
+        {
+            return result_error_arg(ERR_IS_PRIMITIVE, name, NULL);
+        }
+        
         UserProcedure *proc = proc_find(name);
         if (proc == NULL)
         {
@@ -557,6 +564,13 @@ static Result prim_edit(Evaluator *eval, int argc, Value *args)
             if (mem_is_word(elem))
             {
                 const char *name = mem_word_ptr(elem);
+                
+                // Check if it's a primitive - can't edit primitives
+                if (primitive_find(name))
+                {
+                    return result_error_arg(ERR_IS_PRIMITIVE, name, NULL);
+                }
+                
                 UserProcedure *proc = proc_find(name);
                 if (proc == NULL)
                 {

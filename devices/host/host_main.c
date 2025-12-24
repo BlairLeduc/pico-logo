@@ -64,6 +64,35 @@ static bool line_is_end(const char *line)
     return c == '\0' || isspace((unsigned char)c);
 }
 
+// Extract procedure name from a "to" line into buffer
+// Returns pointer to the name in buffer, or NULL if no valid name found
+static const char *extract_proc_name(const char *line, char *buffer, size_t buffer_size)
+{
+    // Skip leading whitespace
+    while (*line && isspace((unsigned char)*line))
+        line++;
+    
+    // Skip "to"
+    line += 2;
+    
+    // Skip whitespace after "to"
+    while (*line && isspace((unsigned char)*line))
+        line++;
+    
+    if (*line == '\0')
+        return NULL;  // No name provided
+    
+    // Copy name until whitespace or end
+    size_t i = 0;
+    while (*line && !isspace((unsigned char)*line) && i < buffer_size - 1)
+    {
+        buffer[i++] = *line++;
+    }
+    buffer[i] = '\0';
+    
+    return i > 0 ? buffer : NULL;
+}
+
 // Count bracket balance in a line
 static int count_bracket_balance(const char *line)
 {
@@ -183,6 +212,17 @@ int main(void)
         // Handle multi-line procedure definitions
         if (!in_procedure_def && line_starts_with_to(line))
         {
+            // Extract procedure name and check if it's a primitive
+            char name_buf[64];
+            const char *proc_name = extract_proc_name(line, name_buf, sizeof(name_buf));
+            if (proc_name && primitive_find(proc_name))
+            {
+                // Can't redefine a primitive
+                Result r = result_error_arg(ERR_IS_PRIMITIVE, proc_name, NULL);
+                logo_io_write_line(&io, error_format(r));
+                continue;
+            }
+            
             // Start collecting procedure definition
             in_procedure_def = true;
             proc_len = 0;
