@@ -71,6 +71,8 @@ void keyboard_poll()
             else if (key_code == KEY_BREAK)
             {
                 user_interrupt = true; // set user interrupt flag
+                // Don't add to buffer - keyboard_get_key() will synthesize KEY_BREAK
+                // when it sees user_interrupt is set
             }
             else if (key_code == KEY_CAPS_LOCK)
             {
@@ -148,6 +150,13 @@ char keyboard_get_key()
     // Wait for a key, running the screen saver while idle
     while (!keyboard_key_available())
     {
+        // Check if user pressed BREAK (interrupt flag set but buffer might be full)
+        if (user_interrupt)
+        {
+            user_interrupt = false;  // Clear the flag
+            screensaver_on_key_press();  // Restore palette if screensaver was active
+            return KEY_BREAK;
+        }
         // Update screen saver (checks idle time, cycles palette if active)
         screensaver_update();
         tight_loop_contents();

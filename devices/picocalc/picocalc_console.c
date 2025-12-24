@@ -69,7 +69,13 @@ static BoundaryMode turtle_boundary_mode = BOUNDARY_MODE_WRAP;  // Default to wr
 static int input_read_char(LogoStream *stream)
 {
     (void)stream;
-    return keyboard_get_key();
+    int ch = keyboard_get_key();
+    // Convert KEY_BREAK to LOGO_STREAM_INTERRUPTED
+    if (ch == KEY_BREAK)
+    {
+        return LOGO_STREAM_INTERRUPTED;
+    }
+    return ch;
 }
 
 static int input_read_chars(LogoStream *stream, char *buffer, int count)

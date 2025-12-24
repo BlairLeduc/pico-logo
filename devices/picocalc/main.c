@@ -14,6 +14,7 @@
 #include "devices/console.h"
 #include "devices/io.h"
 #include "devices/storage.h"
+#include "devices/stream.h"
 #include "devices/picocalc/picocalc_console.h"
 #include "devices/picocalc/picocalc_storage.h"
 #include "devices/picocalc/picocalc_hardware.h"
@@ -170,6 +171,12 @@ int main(void)
 
         // Read input line (directly from console, not through setread)
         int len = logo_stream_read_line(&console->input, line, sizeof(line));
+        if (len == LOGO_STREAM_INTERRUPTED)
+        {
+            // User pressed BRK at the prompt - show "Stopped!" and continue
+            logo_io_write_line(&io, "Stopped!");
+            continue;
+        }
         if (len < 0)
         {
             // EOF or error - exit gracefully

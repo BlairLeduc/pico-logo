@@ -21,6 +21,10 @@ extern "C"
     // Maximum length of a stream name (pathname or device name)
     #define LOGO_STREAM_NAME_MAX 64
 
+    // Special return values for read operations
+    #define LOGO_STREAM_EOF        (-1)   // End of file or error
+    #define LOGO_STREAM_INTERRUPTED (-2)  // User pressed BRK key
+
     typedef enum LogoStreamType
     {
         LOGO_STREAM_CONSOLE_INPUT,  // Keyboard or serial input
