@@ -122,6 +122,56 @@ void test_error_infix_doesnt_like(void)
     TEST_ASSERT_EQUAL_STRING("+ doesn't like hello as input", msg);
 }
 
+//==========================================================================
+// Infix Equality Tests
+//==========================================================================
+
+void test_infix_equal_words(void)
+{
+    // Test that = works with words
+    Result r = eval_string("\"hello = \"hello");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+}
+
+void test_infix_equal_words_false(void)
+{
+    // Test that = returns false for different words
+    Result r = eval_string("\"hello = \"world");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
+}
+
+void test_infix_equal_variable_word(void)
+{
+    // Test the specific case from user: make "ans "f pr :ans = "f
+    run_string("make \"ans \"f");
+    Result r = eval_string(":ans = \"f");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+}
+
+void test_infix_equal_numbers(void)
+{
+    // Test that = still works with numbers
+    Result r = eval_string("3 = 3");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+}
+
+void test_infix_equal_number_word(void)
+{
+    // Test that = works when comparing numeric word to number
+    Result r = eval_string("\"3 = 3");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -143,6 +193,13 @@ int main(void)
     RUN_TEST(test_error_dont_know_how);
     RUN_TEST(test_error_not_enough_inputs);
     RUN_TEST(test_error_infix_doesnt_like);
+
+    // Infix equality tests
+    RUN_TEST(test_infix_equal_words);
+    RUN_TEST(test_infix_equal_words_false);
+    RUN_TEST(test_infix_equal_variable_word);
+    RUN_TEST(test_infix_equal_numbers);
+    RUN_TEST(test_infix_equal_number_word);
 
     return UNITY_END();
 }

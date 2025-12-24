@@ -508,6 +508,14 @@ static Result eval_expr_bp(Evaluator *eval, int min_bp)
         if (rhs.status != RESULT_OK)
             return rhs;
 
+        // Handle = separately since it works with all value types
+        if (op.type == TOKEN_EQUALS)
+        {
+            bool equal = values_equal(lhs.value, rhs.value);
+            lhs = result_ok(value_word(mem_atom_cstr(equal ? "true" : "false")));
+            continue;
+        }
+
         float left_n, right_n;
         bool left_ok = value_to_number(lhs.value, &left_n);
         bool right_ok = value_to_number(rhs.value, &right_n);
@@ -520,7 +528,6 @@ static Result eval_expr_bp(Evaluator *eval, int min_bp)
         case TOKEN_MINUS: op_name = "-"; break;
         case TOKEN_MULTIPLY: op_name = "*"; break;
         case TOKEN_DIVIDE: op_name = "/"; break;
-        case TOKEN_EQUALS: op_name = "="; break;
         case TOKEN_LESS_THAN: op_name = "<"; break;
         case TOKEN_GREATER_THAN: op_name = ">"; break;
         default: op_name = "?"; break;
@@ -548,10 +555,6 @@ static Result eval_expr_bp(Evaluator *eval, int min_bp)
                 return result_error(ERR_DIVIDE_BY_ZERO);
             result = left_n / right_n;
             break;
-        case TOKEN_EQUALS:
-            // Return boolean word "true" or "false"
-            lhs = result_ok(value_word(mem_atom_cstr((left_n == right_n) ? "true" : "false")));
-            continue;
         case TOKEN_LESS_THAN:
             // Return boolean word "true" or "false"
             lhs = result_ok(value_word(mem_atom_cstr((left_n < right_n) ? "true" : "false")));
