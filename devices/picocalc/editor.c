@@ -242,7 +242,7 @@ static void editor_draw_line(int screen_row, int line_index)
             size_t sel_end = editor.select_anchor > editor.cursor_pos ?
                              editor.select_anchor : editor.cursor_pos;
             size_t buf_pos = line_start + i;
-            in_selection = (buf_pos >= sel_start && buf_pos <= sel_end);
+            in_selection = (buf_pos >= sel_start && buf_pos < sel_end);
         }
         
         // Use bit 7 for reverse video when selected
@@ -390,7 +390,7 @@ static void editor_delete_selection(void)
                        editor.select_anchor : editor.cursor_pos;
     size_t sel_end = editor.select_anchor > editor.cursor_pos ?
                      editor.select_anchor : editor.cursor_pos;
-    size_t sel_len = sel_end - sel_start + 1;
+    size_t sel_len = sel_end - sel_start;
     
     // Shift content
     for (size_t i = sel_start; i < editor.content_length - sel_len; i++) {
@@ -414,7 +414,7 @@ static void editor_copy_selection(void)
                        editor.select_anchor : editor.cursor_pos;
     size_t sel_end = editor.select_anchor > editor.cursor_pos ?
                      editor.select_anchor : editor.cursor_pos;
-    size_t sel_len = sel_end - sel_start + 1;
+    size_t sel_len = sel_end - sel_start;
     
     if (sel_len > LOGO_COPY_BUFFER_SIZE - 1) {
         sel_len = LOGO_COPY_BUFFER_SIZE - 1;
