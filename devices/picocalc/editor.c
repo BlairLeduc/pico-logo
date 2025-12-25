@@ -289,20 +289,22 @@ static bool editor_ensure_cursor_visible(void)
 //
 // Draw a single line of content at the specified screen row
 // Handles horizontal scrolling with left/right arrow indicators
+// Always draws full 40 characters to avoid flicker (no erase needed)
 //
 static void editor_draw_line(int screen_row, int line_index)
 {
     int actual_row = EDITOR_FIRST_ROW + screen_row;
     
-    // Clear the row
-    lcd_erase_line(actual_row, 0, EDITOR_MAX_COLS - 1);
-    
     int line_start = editor_get_line_start(line_index);
     int line_end = editor_get_line_end(line_index);
     int line_len = line_end - line_start;
     
+    // Handle empty/non-existent lines - just draw spaces
     if (line_start >= (int)editor.content_length) {
-        return;  // Line doesn't exist
+        for (int col = 0; col < EDITOR_MAX_COLS; col++) {
+            lcd_putc(col, actual_row, ' ');
+        }
+        return;
     }
     
     // Check if this is the line with the cursor (uses h_scroll)
@@ -316,46 +318,56 @@ static void editor_draw_line(int screen_row, int line_index)
     // Recalculate right arrow after knowing left arrow status
     int visible_cols = EDITOR_MAX_COLS;
     int start_col = 0;
+    int screen_col = 0;
     
+    // Draw left arrow if needed
     if (show_left_arrow) {
+        lcd_putc(screen_col++, actual_row, EDITOR_LEFT_ARROW);
         visible_cols--;
         start_col = 1;
-        lcd_putc(0, actual_row, EDITOR_LEFT_ARROW);
     }
     
+    // Reserve space for right arrow if needed
     if (show_right_arrow) {
         visible_cols--;
     }
     
-    // Draw visible characters
+    // Draw visible characters (or spaces if past end of line content)
     for (int col = 0; col < visible_cols; col++) {
         int buf_col = h_offset + col;
-        if (buf_col >= line_len) break;
-        
-        size_t buf_pos = line_start + buf_col;
-        char c = editor.buffer[buf_pos];
-        
-        // Check if this character is in selection
+        char c = ' ';  // Default to space
         bool in_selection = false;
-        if (editor.selecting) {
-            size_t sel_start = editor.select_anchor < editor.cursor_pos ? 
-                               editor.select_anchor : editor.cursor_pos;
-            size_t sel_end = editor.select_anchor > editor.cursor_pos ?
-                             editor.select_anchor : editor.cursor_pos;
-            in_selection = (buf_pos >= sel_start && buf_pos < sel_end);
+        
+        if (buf_col < line_len) {
+            size_t buf_pos = line_start + buf_col;
+            c = editor.buffer[buf_pos];
+            
+            // Check if this character is in selection
+            if (editor.selecting) {
+                size_t sel_start = editor.select_anchor < editor.cursor_pos ? 
+                                   editor.select_anchor : editor.cursor_pos;
+                size_t sel_end = editor.select_anchor > editor.cursor_pos ?
+                                 editor.select_anchor : editor.cursor_pos;
+                in_selection = (buf_pos >= sel_start && buf_pos < sel_end);
+            }
         }
         
         // Use bit 7 for reverse video when selected
         if (in_selection) {
-            lcd_putc(start_col + col, actual_row, c | 0x80);
+            lcd_putc(screen_col++, actual_row, c | 0x80);
         } else {
-            lcd_putc(start_col + col, actual_row, c);
+            lcd_putc(screen_col++, actual_row, c);
         }
     }
     
-    // Draw right arrow if needed
+    // Draw right arrow or final space
     if (show_right_arrow) {
-        lcd_putc(EDITOR_MAX_COLS - 1, actual_row, EDITOR_RIGHT_ARROW);
+        lcd_putc(screen_col++, actual_row, EDITOR_RIGHT_ARROW);
+    }
+    
+    // Fill any remaining columns with spaces (shouldn't happen but be safe)
+    while (screen_col < EDITOR_MAX_COLS) {
+        lcd_putc(screen_col++, actual_row, ' ');
     }
 }
 
@@ -1025,6 +1037,7 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                 break;
                 
             case 0x03:  // Ctrl+C - copy
+            case 0x19:  // Ctrl+Y - yank (also copy, Y is for yank)
                 if (editor.selecting) {
                     editor_copy_selection();
                     editor.selecting = false;
@@ -1036,6 +1049,7 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                 break;
                 
             case 0x16:  // Ctrl+V - paste
+            case 0x10:  // Ctrl+P - paste (also Paste, P is for paste)
                 {
                     // Check if paste includes newlines
                     bool has_newline = false;
@@ -1055,6 +1069,7 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                 break;
                 
             case 0x18:  // Ctrl+X - cut
+            case 0x14:  // Ctrl+T - cut (also cut, T is for take)
                 if (editor.selecting) {
                     editor_copy_selection();
                     editor_delete_selection();

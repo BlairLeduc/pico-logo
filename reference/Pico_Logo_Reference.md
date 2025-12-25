@@ -648,18 +648,18 @@ The cursor will not move if that position is not valid.
 - `BACKSPACE` - erases the character to the left of the cursor
 - `DEL` - erases the character at the cursor position
 - `TAB` - inserts spaces until the next tab stop (tab stops are every 2 columns)
-- `Ctrl` `X` - erases the current line and stores the text in the copy buffer, including the new line
-- `Ctrl` `C` - copies the current line and stores the text in the copy buffer, including the new line
-- `Ctrl` `V` - inserts the text in the copy buffer at the cursor position
+- `Ctrl` `X` or `Ctrl` `T` - erases (or takes) the current line and stores the text in the copy buffer, including the new line
+- `Ctrl` `C` or `Ctrl` `Y` - copies (or yanks) the current line and stores the text in the copy buffer, including the new line
+- `Ctrl` `V` or `Ctrl` `P`- inserts (or pastes) the text in the copy buffer at the cursor position
 
 ### Block editing
 
 Selected text is between the start anchor and the cursor and is shown in reverse video. The character at the cursor is not included in the selection. `Ctrl` `B` sets the start anchor at the cursor position. Pressing `Ctrl` `B` when the start anchor is set removes the start anchor and cancels the selection. The cursor motion keys are used to select text when the start anchor is set.
 
 - `DEL` or `BACKSPACE` - erases the selected text without storing the text in the copy buffer
-- `Ctrl` `X` - erases the selected text and stores the text in the copy buffer
-- `Ctrl` `C` - copies the selected text and stores the text in the copy buffer
-- `Ctrl` `V` - replace the selected text with the text in the copy buffer.
+- `Ctrl` `X` or `Ctrl` `T` - erases (or takes) the selected text and stores the text in the copy buffer
+- `Ctrl` `C` or `Ctrl` `Y` - copies (or yanks) the selected text and stores the text in the copy buffer
+- `Ctrl` `V` or `Ctrl` `P`- replaces (or pastes over) the selected text with the text in the copy buffer.
 
 Typing any other key (except `Esc` or `Brk`) is ignored while the selection of text is active.
 
