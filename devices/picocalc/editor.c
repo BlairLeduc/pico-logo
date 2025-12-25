@@ -315,14 +315,12 @@ static void editor_draw_line(int screen_row, int line_index)
     
     // Recalculate right arrow after knowing left arrow status
     int visible_cols = EDITOR_MAX_COLS;
-    int start_col = 0;
     int screen_col = 0;
     
     // Draw left arrow if needed
     if (show_left_arrow) {
         lcd_putc(screen_col++, actual_row, EDITOR_LEFT_ARROW);
         visible_cols--;
-        start_col = 1;
     }
     
     // Reserve space for right arrow if needed
