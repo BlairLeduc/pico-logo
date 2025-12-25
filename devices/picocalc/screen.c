@@ -169,6 +169,27 @@ uint8_t screen_get_mode()
     return screen_mode;
 }
 
+bool screen_handle_mode_key(int key_code)
+{
+    switch (key_code)
+    {
+    case 0x81: // KEY_F1
+        screen_set_mode(SCREEN_MODE_TXT);
+        screen_txt_enable_cursor(true);
+        return true;
+    case 0x82: // KEY_F2
+        screen_set_mode(SCREEN_MODE_SPLIT);
+        screen_txt_enable_cursor(true);
+        return true;
+    case 0x83: // KEY_F3
+        screen_set_mode(SCREEN_MODE_GFX);
+        screen_txt_enable_cursor(false);
+        return true;
+    default:
+        return false;
+    }
+}
+
 void screen_set_mode(uint8_t mode)
 {
     if (mode == screen_mode)

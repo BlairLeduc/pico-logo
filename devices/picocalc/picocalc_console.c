@@ -85,22 +85,8 @@ static int input_read_char(LogoStream *stream)
         }
         
         // Handle F1/F2/F3 for screen mode switching, then get another key
-        if (ch == KEY_F1)
+        if (screen_handle_mode_key(ch))
         {
-            screen_set_mode(SCREEN_MODE_TXT);
-            screen_txt_enable_cursor(true);
-            continue;  // Get next key
-        }
-        if (ch == KEY_F2)
-        {
-            screen_set_mode(SCREEN_MODE_SPLIT);
-            screen_txt_enable_cursor(true);
-            continue;  // Get next key
-        }
-        if (ch == KEY_F3)
-        {
-            screen_set_mode(SCREEN_MODE_GFX);
-            screen_txt_enable_cursor(false);
             continue;  // Get next key
         }
         

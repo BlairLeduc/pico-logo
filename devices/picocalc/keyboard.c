@@ -82,21 +82,7 @@ void keyboard_poll()
                 // and let the input handler decide what to do
                 if (!input_active)
                 {
-                    if (key_code == KEY_F1)
-                    {
-                        screen_set_mode(SCREEN_MODE_TXT);
-                        screen_txt_enable_cursor(true);
-                    }
-                    else if (key_code == KEY_F2)
-                    {
-                        screen_set_mode(SCREEN_MODE_SPLIT);
-                        screen_txt_enable_cursor(true);
-                    }
-                    else // KEY_F3
-                    {
-                        screen_set_mode(SCREEN_MODE_GFX);
-                        screen_txt_enable_cursor(false);
-                    }
+                    screen_handle_mode_key(key_code);
                 }
                 // Always buffer the key so input handlers can respond
                 uint16_t next_head = (rx_head + 1) & (KBD_BUFFER_SIZE - 1);

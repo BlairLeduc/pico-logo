@@ -115,19 +115,9 @@ int picocalc_read_line(char *buf, int size)
             }
             break;
         case KEY_F1:
-            // Switch to text mode
-            screen_set_mode(SCREEN_MODE_TXT);
-            screen_txt_enable_cursor(true);
-            break;
         case KEY_F2:
-            // Switch to split mode
-            screen_set_mode(SCREEN_MODE_SPLIT);
-            screen_txt_enable_cursor(true);
-            break;
         case KEY_F3:
-            // Switch to graphics mode
-            screen_set_mode(SCREEN_MODE_GFX);
-            screen_txt_enable_cursor(false);
+            screen_handle_mode_key(key);
             break;
         // case KEY_F5:
         //     screen_gfx_save("/Logo/screenshot.bmp");
