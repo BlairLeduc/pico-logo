@@ -223,37 +223,75 @@ static int editor_count_lines(void)
 static void editor_update_h_scroll(void)
 {
     int cursor_col = editor_get_col_at_pos(editor.cursor_pos);
-    
-    // Calculate visible columns (account for scroll indicators)
-    int visible_start = 0;
-    int visible_cols = EDITOR_MAX_COLS;
-    
-    if (editor.h_scroll_offset > 0) {
-        // Left arrow takes column 0
-        visible_start = 1;
-        visible_cols--;
-    }
-    
-    // Check if we need to show right arrow (content extends past visible area)
     int cursor_line = editor_get_line_at_pos(editor.cursor_pos);
     int line_len = editor_get_line_end(cursor_line) - editor_get_line_start(cursor_line);
     
-    if (line_len > editor.h_scroll_offset + EDITOR_MAX_COLS - (editor.h_scroll_offset > 0 ? 1 : 0)) {
-        // Right arrow takes last column
-        visible_cols--;
-    }
+    // Calculate how many columns are available for content given current h_scroll
+    // When h_scroll > 0, left arrow takes column 0
+    // When content extends past view, right arrow takes last column
     
-    // Calculate screen column for cursor
+    // First, check if we need to scroll right (cursor past visible area)
+    // Account for left arrow if we'll have h_scroll > 0 after adjustment
+    // and right arrow if content extends past the view
+    
+    // Calculate visible content columns assuming we might scroll
+    // If h_scroll will be > 0, we lose 1 column for left arrow
+    // If line extends past view, we lose 1 column for right arrow
+    
+    // Simple approach: calculate the rightmost cursor position we can display
+    // With both arrows shown, we have 38 content columns (positions 1-38)
+    // With only right arrow, we have 39 content columns (positions 0-38)
+    // With only left arrow, we have 39 content columns (positions 1-39)
+    // With no arrows, we have 40 content columns (positions 0-39)
+    
+    // Check if cursor is past visible area (need to scroll right)
+    bool needs_left_arrow = (editor.h_scroll_offset > 0);
+    int visible_start = needs_left_arrow ? 1 : 0;
+    bool needs_right_arrow = (line_len > editor.h_scroll_offset + EDITOR_MAX_COLS - visible_start);
+    int visible_cols = EDITOR_MAX_COLS - visible_start - (needs_right_arrow ? 1 : 0);
+    
     int screen_col = cursor_col - editor.h_scroll_offset + visible_start;
     
-    // Scroll right if cursor is past visible area
     if (screen_col >= visible_start + visible_cols) {
-        editor.h_scroll_offset = cursor_col - visible_cols + 1;
-        if (editor.h_scroll_offset < 0) editor.h_scroll_offset = 0;
+        // Need to scroll right
+        // After scrolling, we'll definitely have left arrow (h_scroll > 0)
+        // Check if we'll also need right arrow
+        // With left arrow, content starts at column 1
+        // Target: put cursor near right edge but visible
+        
+        // Calculate new offset: cursor should be at rightmost visible position
+        // Visible positions: 1 to (39 or 38 depending on right arrow)
+        // We want cursor_col - new_offset + 1 = rightmost_visible
+        // So new_offset = cursor_col - rightmost_visible + 1
+        
+        // After scroll, will we need right arrow?
+        // We need right arrow if: line_len > new_offset + 39 (since left arrow takes col 0)
+        // Let's assume we might need it (38 visible) and recalculate if not
+        
+        int target_visible = EDITOR_MAX_COLS - 2;  // Assume both arrows (38 cols)
+        int new_offset = cursor_col - target_visible + 1;
+        if (new_offset < 0) new_offset = 0;
+        
+        // Now check if we actually need right arrow with this offset
+        bool will_need_right = (new_offset > 0) && (line_len > new_offset + EDITOR_MAX_COLS - 1);
+        if (!will_need_right && new_offset > 0) {
+            // Only left arrow needed, we have 39 visible columns
+            target_visible = EDITOR_MAX_COLS - 1;
+            new_offset = cursor_col - target_visible + 1;
+            if (new_offset < 0) new_offset = 0;
+        }
+        
+        editor.h_scroll_offset = new_offset;
     }
     
-    // Scroll left if cursor is before visible area
+    // Check if cursor is before visible area (need to scroll left)
+    // Recalculate with potentially new h_scroll
+    needs_left_arrow = (editor.h_scroll_offset > 0);
+    visible_start = needs_left_arrow ? 1 : 0;
+    screen_col = cursor_col - editor.h_scroll_offset + visible_start;
+    
     if (screen_col < visible_start || cursor_col < editor.h_scroll_offset) {
+        // Scroll left - position cursor with some margin from left edge
         editor.h_scroll_offset = cursor_col > EDITOR_SCROLL_MARGIN ? cursor_col - EDITOR_SCROLL_MARGIN : 0;
     }
 }
