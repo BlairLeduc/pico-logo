@@ -204,6 +204,30 @@ void screen_set_mode(uint8_t mode)
     }
 }
 
+// Switch mode without redrawing buffers - for use by editor
+void screen_set_mode_no_update(uint8_t mode)
+{
+    if (mode == SCREEN_MODE_TXT || mode == SCREEN_MODE_GFX || mode == SCREEN_MODE_SPLIT)
+    {
+        screen_mode = mode;
+
+        if (mode == SCREEN_MODE_TXT)
+        {
+            lcd_define_scrolling(0, 0);
+        }
+        else if (mode == SCREEN_MODE_GFX)
+        {
+            lcd_erase_cursor();
+            lcd_define_scrolling(0, 0);
+        }
+        else if (mode == SCREEN_MODE_SPLIT)
+        {
+            lcd_erase_cursor();
+            lcd_define_scrolling(SCREEN_SPLIT_GFX_HEIGHT, 0);
+        }
+    }
+}
+
 void screen_show_field()
 {
     if (screen_mode == SCREEN_MODE_GFX || screen_mode == SCREEN_MODE_SPLIT)

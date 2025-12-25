@@ -23,6 +23,7 @@
 #include "keyboard.h"
 #include "southbridge.h"
 #include "screensaver.h"
+#include "screen.h"
 
 keyboard_key_available_callback_t keyboard_key_available_callback = NULL;
 
@@ -73,6 +74,34 @@ void keyboard_poll()
                 user_interrupt = true; // set user interrupt flag
                 // Don't add to buffer - keyboard_get_key() will synthesize KEY_BREAK
                 // when it sees user_interrupt is set
+            }
+            else if (key_code == KEY_F1 || key_code == KEY_F2 || key_code == KEY_F3)
+            {
+                // During execution (input_active=false), switch screen mode immediately
+                // When input is active (editor or line input), just buffer the key
+                // and let the input handler decide what to do
+                if (!input_active)
+                {
+                    if (key_code == KEY_F1)
+                    {
+                        screen_set_mode(SCREEN_MODE_TXT);
+                        screen_txt_enable_cursor(true);
+                    }
+                    else if (key_code == KEY_F2)
+                    {
+                        screen_set_mode(SCREEN_MODE_SPLIT);
+                        screen_txt_enable_cursor(true);
+                    }
+                    else // KEY_F3
+                    {
+                        screen_set_mode(SCREEN_MODE_GFX);
+                        screen_txt_enable_cursor(false);
+                    }
+                }
+                // Always buffer the key so input handlers can respond
+                uint16_t next_head = (rx_head + 1) & (KBD_BUFFER_SIZE - 1);
+                rx_buffer[rx_head] = key_code;
+                rx_head = next_head;
             }
             else if (key_code == KEY_CAPS_LOCK)
             {

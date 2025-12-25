@@ -69,6 +69,9 @@ int picocalc_read_line(char *buf, int size)
     end_col = start_col;
     screen_txt_enable_cursor(true);
     buf[0] = 0; // Null-terminate the string
+    
+    // Tell keyboard_poll that we're handling input - it should buffer F1/F2/F3
+    input_active = true;
 
     while (true)
     {
@@ -80,6 +83,7 @@ int picocalc_read_line(char *buf, int size)
         if (key == KEY_BREAK)
         {
             screen_txt_enable_cursor(false);
+            input_active = false;  // Re-enable keyboard mode switching during execution
             return LOGO_STREAM_INTERRUPTED;  // Signal user interrupt
         }
 
@@ -245,6 +249,7 @@ int picocalc_read_line(char *buf, int size)
                 printf("\n"); // Print newline
 
                 history_add((const char *)buf); // Add to history
+                input_active = false;  // Re-enable keyboard mode switching during execution
                 return length;
             }
             if (key >= 0x20 && key < 0x7F)
