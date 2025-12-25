@@ -841,7 +841,7 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
     editor.prev_h_scroll = 0;
     
     // Ensure cursor is on second line if we have "to name\n" template
-    // (cursor_pos is already at end which is correct for template)
+    // (currently we start at beginning; template-specific positioning can be added here)
     
     // Switch to full-screen text mode for the editor
     // Use no_update to avoid redrawing txt_buffer - we'll draw editor content instead
