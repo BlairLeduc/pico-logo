@@ -69,19 +69,56 @@ static BoundaryMode turtle_boundary_mode = BOUNDARY_MODE_WRAP;  // Default to wr
 static int input_read_char(LogoStream *stream)
 {
     (void)stream;
-    int ch = keyboard_get_key();
-    // Convert KEY_BREAK to LOGO_STREAM_INTERRUPTED
-    if (ch == KEY_BREAK)
+    
+    // Set input_active so keyboard_poll buffers F1/F2/F3 instead of switching modes
+    input_active = true;
+    
+    while (true)
     {
-        return LOGO_STREAM_INTERRUPTED;
+        int ch = keyboard_get_key();
+        
+        // Convert KEY_BREAK to LOGO_STREAM_INTERRUPTED
+        if (ch == KEY_BREAK)
+        {
+            input_active = false;
+            return LOGO_STREAM_INTERRUPTED;
+        }
+        
+        // Handle F1/F2/F3 for screen mode switching, then get another key
+        if (screen_handle_mode_key(ch))
+        {
+            continue;  // Get next key
+        }
+        
+        input_active = false;
+        return ch;
     }
-    return ch;
 }
 
 static int input_read_chars(LogoStream *stream, char *buffer, int count)
 {
-    (void)stream;
-    return picocalc_read_line(buffer, count);
+    if (!buffer || count <= 0)
+    {
+        return 0;
+    }
+
+    int read_count = 0;
+    for (int i = 0; i < count; i++)
+    {
+        int ch = input_read_char(stream);
+        if (ch == LOGO_STREAM_INTERRUPTED)
+        {
+            // Return what we have so far, or signal interrupted if nothing read
+            return (read_count > 0) ? read_count : LOGO_STREAM_INTERRUPTED;
+        }
+        if (ch == EOF || ch < 0)
+        {
+            break;
+        }
+        buffer[i] = (char)ch;
+        read_count++;
+    }
+    return read_count;
 }
 
 static int input_read_line(LogoStream *stream, char *buffer, size_t size)

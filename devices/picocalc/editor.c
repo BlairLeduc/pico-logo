@@ -53,6 +53,9 @@ typedef struct {
     // Copy buffer
     char copy_buffer[LOGO_COPY_BUFFER_SIZE];
     size_t copy_length;
+    
+    // Graphics preview state
+    bool in_graphics_preview;  // True when viewing graphics screen (F3)
 } EditorState;
 
 static EditorState editor;
@@ -613,13 +616,17 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
     editor.select_anchor = 0;
     editor.copy_buffer[0] = '\0';
     editor.copy_length = 0;
+    editor.in_graphics_preview = false;
     
     // Ensure cursor is on second line if we have "to name\n" template
     // (cursor_pos is already at end which is correct for template)
     
     // Switch to full-screen text mode for the editor
-    // This is necessary when coming from splitscreen mode
-    screen_set_mode(SCREEN_MODE_TXT);
+    // Use no_update to avoid redrawing txt_buffer - we'll draw editor content instead
+    screen_set_mode_no_update(SCREEN_MODE_TXT);
+    
+    // Tell keyboard_poll to skip mode switching - editor handles it
+    input_active = true;
     
     // Clear screen and draw initial content
     lcd_clear_screen();
@@ -653,6 +660,7 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                 // Accept changes
                 screen_txt_erase_cursor();
                 screen_txt_enable_cursor(false);
+                input_active = false;  // Re-enable keyboard mode switching
                 screen_set_mode(saved_screen_mode);  // Restore screen mode
                 screen_txt_set_cursor(saved_cursor_col, saved_cursor_row);
                 return LOGO_EDITOR_ACCEPT;
@@ -661,6 +669,7 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                 // Cancel changes - restore original buffer
                 screen_txt_erase_cursor();
                 screen_txt_enable_cursor(false);
+                input_active = false;  // Re-enable keyboard mode switching
                 screen_set_mode(saved_screen_mode);  // Restore screen mode
                 screen_txt_set_cursor(saved_cursor_col, saved_cursor_row);
                 return LOGO_EDITOR_CANCEL;
@@ -780,13 +789,34 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                 break;
                 
             case KEY_F1:
-                // Restore to text screen (from graphics preview)
-                needs_redraw = true;
+                // Restore editor from graphics preview
+                if (editor.in_graphics_preview) {
+                    // Switch to text mode WITHOUT redrawing txt_buffer
+                    // Then redraw the editor content directly to LCD
+                    screen_set_mode_no_update(SCREEN_MODE_TXT);
+                    lcd_clear_screen();
+                    editor_draw_header();
+                    editor_draw_footer();
+                    editor_draw_content();
+                    screen_txt_enable_cursor(true);
+                    editor.in_graphics_preview = false;
+                }
+                // If not in preview, F1 does nothing (already showing editor)
+                break;
+            
+            case KEY_F2:
+                // Split screen doesn't make sense in editor - ignore
                 break;
                 
             case KEY_F3:
-                // Preview graphics screen - not implemented yet
-                // Would switch to graphics mode temporarily
+                // Preview graphics screen temporarily
+                if (!editor.in_graphics_preview) {
+                    screen_txt_enable_cursor(false);
+                    // Use no_update to avoid unnecessary txt_buffer redraw
+                    screen_set_mode_no_update(SCREEN_MODE_GFX);
+                    screen_gfx_update();  // Just update graphics
+                    editor.in_graphics_preview = true;
+                }
                 needs_cursor_update = false;
                 break;
                 

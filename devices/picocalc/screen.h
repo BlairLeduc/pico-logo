@@ -81,7 +81,9 @@ typedef struct {
 // Screen mode functions (TXT, GFX, SPLIT)
 uint8_t screen_get_mode(void);
 void screen_set_mode(uint8_t mode);
+void screen_set_mode_no_update(uint8_t mode);  // Switch mode without redrawing buffers
 void screen_show_field(void);
+bool screen_handle_mode_key(int key_code);  // Handle F1/F2/F3 screen mode keys, returns true if handled
 
 // Graphics functions
 uint8_t *screen_gfx_frame(void);
