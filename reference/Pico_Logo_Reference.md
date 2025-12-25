@@ -621,7 +621,7 @@ Each key that you type makes the Editor take some action. Most typewriter charac
 
 When you press `RETURN`, the cursor (and any text that comes after it) moves to the next line, ready for you to continue typing.
 
-You can have more characters on a line of text than fit across the screen. When you get to the end of the line on the screen, just continue typing without pressing `RETURN`. An right arrow glyph (ASCII code 31) appears in the rightmost character position on the line and the cursor moves to the next line.
+You can have more characters on a line of text than fit across the screen. When you get to the end of the line on the screen, just continue typing without pressing `RETURN`. The screen will scroll horizontally to show the rest of the line.
 
 The Editor has an auxiliary line buffer called the copy buffer. You can use it to move text in a procedure or to repeat them in different places. The copy buffer can hold a [`limited number of characters`](#processor-limits). While this is true for the copy buffer, the length of a line is limited only by the [`length of the edit buffer`](#processor-limits).
 
