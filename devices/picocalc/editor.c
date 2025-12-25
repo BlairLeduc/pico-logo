@@ -27,12 +27,21 @@
 #define EDITOR_FOOTER_ROW     31     // Footer at bottom
 #define EDITOR_VISIBLE_ROWS   30     // Number of visible editable rows
 #define EDITOR_MAX_COLS       40     // Maximum columns per line
-#define EDITOR_LINE_WRAP_CHAR 31     // Right arrow glyph for line wrap
+#define EDITOR_SCROLL_MARGIN  5      // Columns from edge before horizontal scroll triggers
+#define EDITOR_LEFT_ARROW     30     // Left arrow glyph (content scrolled left)
+#define EDITOR_RIGHT_ARROW    31     // Right arrow glyph (content continues right)
 
 // Copy buffer size (default 1024 for RP2040, 8192 for RP2350)
 #ifndef LOGO_COPY_BUFFER_SIZE
 #define LOGO_COPY_BUFFER_SIZE 1024
 #endif
+
+// Dirty tracking flags
+#define DIRTY_NONE      0x00    // No redraw needed
+#define DIRTY_LINE      0x01    // Single line needs redraw
+#define DIRTY_FROM_LINE 0x02    // Redraw from line to bottom
+#define DIRTY_ALL       0x04    // Full screen redraw
+#define DIRTY_CURSOR    0x08    // Just cursor position changed
 
 // Editor state
 typedef struct {
@@ -44,7 +53,8 @@ typedef struct {
     size_t cursor_pos;      // Cursor position in buffer (0-based)
     
     // View position (for scrolling)
-    int view_start_line;    // First visible line index
+    int view_start_line;    // First visible line index (vertical scroll)
+    int h_scroll_offset;    // Horizontal scroll offset for current line
     
     // Selection state
     bool selecting;         // Whether selection is active
@@ -56,6 +66,11 @@ typedef struct {
     
     // Graphics preview state
     bool in_graphics_preview;  // True when viewing graphics screen (F3)
+    
+    // Dirty tracking for optimized redraws
+    uint8_t dirty_flags;    // What needs to be redrawn
+    int dirty_line;         // Line that needs redraw (for DIRTY_LINE)
+    int dirty_from;         // First line to redraw (for DIRTY_FROM_LINE)
 } EditorState;
 
 static EditorState editor;
@@ -87,7 +102,12 @@ static int editor_get_line_end(int line_index);
 static int editor_get_line_at_pos(size_t pos);
 static int editor_get_col_at_pos(size_t pos);
 static int editor_count_lines(void);
-static void editor_ensure_cursor_visible(void);
+static bool editor_ensure_cursor_visible(void);
+static void editor_update_h_scroll(void);
+static void editor_mark_line_dirty(int line_index);
+static void editor_mark_from_line_dirty(int line_index);
+static void editor_mark_all_dirty(void);
+static void editor_update_dirty(void);
 
 //
 // Draw a string in reverse video at the specified row
@@ -197,11 +217,93 @@ static int editor_count_lines(void)
 }
 
 //
-// Ensure cursor is visible in the view
+// Update horizontal scroll offset based on cursor position
+// Ensures cursor is visible within the line's horizontal view
 //
-static void editor_ensure_cursor_visible(void)
+static void editor_update_h_scroll(void)
+{
+    int cursor_col = editor_get_col_at_pos(editor.cursor_pos);
+    int cursor_line = editor_get_line_at_pos(editor.cursor_pos);
+    int line_len = editor_get_line_end(cursor_line) - editor_get_line_start(cursor_line);
+    
+    // Calculate how many columns are available for content given current h_scroll
+    // When h_scroll > 0, left arrow takes column 0
+    // When content extends past view, right arrow takes last column
+    
+    // First, check if we need to scroll right (cursor past visible area)
+    // Account for left arrow if we'll have h_scroll > 0 after adjustment
+    // and right arrow if content extends past the view
+    
+    // Calculate visible content columns assuming we might scroll
+    // If h_scroll will be > 0, we lose 1 column for left arrow
+    // If line extends past view, we lose 1 column for right arrow
+    
+    // Simple approach: calculate the rightmost cursor position we can display
+    // With both arrows shown, we have 38 content columns (positions 1-38)
+    // With only right arrow, we have 39 content columns (positions 0-38)
+    // With only left arrow, we have 39 content columns (positions 1-39)
+    // With no arrows, we have 40 content columns (positions 0-39)
+    
+    // Check if cursor is past visible area (need to scroll right)
+    bool needs_left_arrow = (editor.h_scroll_offset > 0);
+    int visible_start = needs_left_arrow ? 1 : 0;
+    bool needs_right_arrow = (line_len > editor.h_scroll_offset + EDITOR_MAX_COLS - visible_start);
+    int visible_cols = EDITOR_MAX_COLS - visible_start - (needs_right_arrow ? 1 : 0);
+    
+    int screen_col = cursor_col - editor.h_scroll_offset + visible_start;
+    
+    if (screen_col >= visible_start + visible_cols) {
+        // Need to scroll right
+        // After scrolling, we'll definitely have left arrow (h_scroll > 0)
+        // Check if we'll also need right arrow
+        // With left arrow, content starts at column 1
+        // Target: put cursor near right edge but visible
+        
+        // Calculate new offset: cursor should be at rightmost visible position
+        // Visible positions: 1 to (39 or 38 depending on right arrow)
+        // We want cursor_col - new_offset + 1 = rightmost_visible
+        // So new_offset = cursor_col - rightmost_visible + 1
+        
+        // After scroll, will we need right arrow?
+        // We need right arrow if: line_len > new_offset + 39 (since left arrow takes col 0)
+        // Let's assume we might need it (38 visible) and recalculate if not
+        
+        int target_visible = EDITOR_MAX_COLS - 2;  // Assume both arrows (38 cols)
+        int new_offset = cursor_col - target_visible + 1;
+        if (new_offset < 0) new_offset = 0;
+        
+        // Now check if we actually need right arrow with this offset
+        bool will_need_right = (new_offset > 0) && (line_len > new_offset + EDITOR_MAX_COLS - 1);
+        if (!will_need_right && new_offset > 0) {
+            // Only left arrow needed, we have 39 visible columns
+            target_visible = EDITOR_MAX_COLS - 1;
+            new_offset = cursor_col - target_visible + 1;
+            if (new_offset < 0) new_offset = 0;
+        }
+        
+        editor.h_scroll_offset = new_offset;
+    }
+    
+    // Check if cursor is before visible area (need to scroll left)
+    // Recalculate with potentially new h_scroll
+    needs_left_arrow = (editor.h_scroll_offset > 0);
+    visible_start = needs_left_arrow ? 1 : 0;
+    screen_col = cursor_col - editor.h_scroll_offset + visible_start;
+    
+    if (screen_col < visible_start || cursor_col < editor.h_scroll_offset) {
+        // Scroll left - position cursor with some margin from left edge
+        editor.h_scroll_offset = cursor_col > EDITOR_SCROLL_MARGIN ? cursor_col - EDITOR_SCROLL_MARGIN : 0;
+    }
+}
+
+//
+// Ensure cursor is visible in the view (vertical scrolling)
+// Returns true if vertical scrolling occurred
+//
+static bool editor_ensure_cursor_visible(void)
 {
     int cursor_line = editor_get_line_at_pos(editor.cursor_pos);
+    int old_view_start = editor.view_start_line;
     
     // Scroll up if cursor is above view
     if (cursor_line < editor.view_start_line) {
@@ -212,55 +314,94 @@ static void editor_ensure_cursor_visible(void)
     if (cursor_line >= editor.view_start_line + EDITOR_VISIBLE_ROWS) {
         editor.view_start_line = cursor_line - EDITOR_VISIBLE_ROWS + 1;
     }
+    
+    // Also update horizontal scroll for the current line
+    editor_update_h_scroll();
+    
+    // Return true if vertical scroll changed (full redraw needed)
+    return editor.view_start_line != old_view_start;
 }
 
 //
 // Draw a single line of content at the specified screen row
+// Handles horizontal scrolling with left/right arrow indicators
+// Always draws full 40 characters to avoid flicker (no erase needed)
 //
 static void editor_draw_line(int screen_row, int line_index)
 {
     int actual_row = EDITOR_FIRST_ROW + screen_row;
     
-    // Clear the row using lcd_erase_line
-    lcd_erase_line(actual_row, 0, EDITOR_MAX_COLS - 1);
-    
     int line_start = editor_get_line_start(line_index);
     int line_end = editor_get_line_end(line_index);
     int line_len = line_end - line_start;
     
+    // Handle empty/non-existent lines - just draw spaces
     if (line_start >= (int)editor.content_length) {
-        return;  // Line doesn't exist
+        for (int col = 0; col < EDITOR_MAX_COLS; col++) {
+            lcd_putc(col, actual_row, ' ');
+        }
+        return;
     }
     
-    // Draw characters
-    int col = 0;
-    for (int i = 0; i < line_len && col < EDITOR_MAX_COLS; i++) {
-        char c = editor.buffer[line_start + i];
-        
-        // Check if this character is in selection
+    // Check if this is the line with the cursor (uses h_scroll)
+    int cursor_line = editor_get_line_at_pos(editor.cursor_pos);
+    int h_offset = (line_index == cursor_line) ? editor.h_scroll_offset : 0;
+    
+    // Determine if we need scroll indicators
+    bool show_left_arrow = (h_offset > 0);
+    bool show_right_arrow = (line_len > h_offset + EDITOR_MAX_COLS - (show_left_arrow ? 1 : 0));
+    
+    // Recalculate right arrow after knowing left arrow status
+    int visible_cols = EDITOR_MAX_COLS;
+    int screen_col = 0;
+    
+    // Draw left arrow if needed
+    if (show_left_arrow) {
+        lcd_putc(screen_col++, actual_row, EDITOR_LEFT_ARROW);
+        visible_cols--;
+    }
+    
+    // Reserve space for right arrow if needed
+    if (show_right_arrow) {
+        visible_cols--;
+    }
+    
+    // Draw visible characters (or spaces if past end of line content)
+    for (int col = 0; col < visible_cols; col++) {
+        int buf_col = h_offset + col;
+        char c = ' ';  // Default to space
         bool in_selection = false;
-        if (editor.selecting) {
-            size_t sel_start = editor.select_anchor < editor.cursor_pos ? 
-                               editor.select_anchor : editor.cursor_pos;
-            size_t sel_end = editor.select_anchor > editor.cursor_pos ?
-                             editor.select_anchor : editor.cursor_pos;
-            size_t buf_pos = line_start + i;
-            in_selection = (buf_pos >= sel_start && buf_pos < sel_end);
+        
+        if (buf_col < line_len) {
+            size_t buf_pos = line_start + buf_col;
+            c = editor.buffer[buf_pos];
+            
+            // Check if this character is in selection
+            if (editor.selecting) {
+                size_t sel_start = editor.select_anchor < editor.cursor_pos ? 
+                                   editor.select_anchor : editor.cursor_pos;
+                size_t sel_end = editor.select_anchor > editor.cursor_pos ?
+                                 editor.select_anchor : editor.cursor_pos;
+                in_selection = (buf_pos >= sel_start && buf_pos < sel_end);
+            }
         }
         
         // Use bit 7 for reverse video when selected
         if (in_selection) {
-            lcd_putc(col, actual_row, c | 0x80);
+            lcd_putc(screen_col++, actual_row, c | 0x80);
         } else {
-            lcd_putc(col, actual_row, c);
+            lcd_putc(screen_col++, actual_row, c);
         }
-        
-        col++;
     }
     
-    // If line is longer than screen, show wrap indicator
-    if (line_len > EDITOR_MAX_COLS) {
-        lcd_putc(EDITOR_MAX_COLS - 1, actual_row, EDITOR_LINE_WRAP_CHAR);
+    // Draw right arrow or final space
+    if (show_right_arrow) {
+        lcd_putc(screen_col++, actual_row, EDITOR_RIGHT_ARROW);
+    }
+    
+    // Fill any remaining columns with spaces (shouldn't happen but be safe)
+    while (screen_col < EDITOR_MAX_COLS) {
+        lcd_putc(screen_col++, actual_row, ' ');
     }
 }
 
@@ -275,6 +416,100 @@ static void editor_draw_content(void)
 }
 
 //
+// Mark a single line as needing redraw
+//
+static void editor_mark_line_dirty(int line_index)
+{
+    int screen_row = line_index - editor.view_start_line;
+    if (screen_row < 0 || screen_row >= EDITOR_VISIBLE_ROWS) {
+        return;  // Line not visible, no need to mark dirty
+    }
+    
+    if (editor.dirty_flags & DIRTY_ALL) {
+        return;  // Already doing full redraw
+    }
+    
+    if (editor.dirty_flags & DIRTY_FROM_LINE) {
+        // Already redrawing from a line - extend if needed
+        if (line_index < editor.dirty_from) {
+            editor.dirty_from = line_index;
+        }
+        return;
+    }
+    
+    if (editor.dirty_flags & DIRTY_LINE) {
+        // Already have one dirty line - if it's different, upgrade to FROM_LINE
+        if (editor.dirty_line != line_index) {
+            int earlier = editor.dirty_line < line_index ? editor.dirty_line : line_index;
+            editor.dirty_flags = DIRTY_FROM_LINE;
+            editor.dirty_from = earlier;
+        }
+        return;
+    }
+    
+    editor.dirty_flags |= DIRTY_LINE;
+    editor.dirty_line = line_index;
+}
+
+//
+// Mark from a line to the bottom as needing redraw
+// Used for operations that may affect multiple lines (insert/delete newline)
+//
+static void editor_mark_from_line_dirty(int line_index)
+{
+    if (editor.dirty_flags & DIRTY_ALL) {
+        return;  // Already doing full redraw
+    }
+    
+    if (editor.dirty_flags & DIRTY_FROM_LINE) {
+        // Extend existing range if needed
+        if (line_index < editor.dirty_from) {
+            editor.dirty_from = line_index;
+        }
+        return;
+    }
+    
+    editor.dirty_flags = DIRTY_FROM_LINE;
+    editor.dirty_from = line_index;
+}
+
+//
+// Mark entire screen as needing redraw
+//
+static void editor_mark_all_dirty(void)
+{
+    editor.dirty_flags = DIRTY_ALL;
+}
+
+//
+// Update screen based on dirty flags
+//
+static void editor_update_dirty(void)
+{
+    if (editor.dirty_flags & DIRTY_ALL) {
+        // Full redraw
+        editor_draw_content();
+    } else if (editor.dirty_flags & DIRTY_FROM_LINE) {
+        // Redraw from dirty_from to bottom
+        int start_row = editor.dirty_from - editor.view_start_line;
+        if (start_row < 0) start_row = 0;
+        for (int row = start_row; row < EDITOR_VISIBLE_ROWS; row++) {
+            editor_draw_line(row, editor.view_start_line + row);
+        }
+    } else if (editor.dirty_flags & DIRTY_LINE) {
+        // Redraw single line
+        int screen_row = editor.dirty_line - editor.view_start_line;
+        if (screen_row >= 0 && screen_row < EDITOR_VISIBLE_ROWS) {
+            editor_draw_line(screen_row, editor.dirty_line);
+        }
+    }
+    // DIRTY_CURSOR doesn't need any content redraw, just cursor positioning
+    
+    // Clear dirty flags
+    editor.dirty_flags = DIRTY_NONE;
+}
+
+//
 // Position the hardware cursor at the current cursor position
 //
 static void editor_position_cursor(void)
@@ -282,10 +517,19 @@ static void editor_position_cursor(void)
     int cursor_line = editor_get_line_at_pos(editor.cursor_pos);
     int cursor_col = editor_get_col_at_pos(editor.cursor_pos);
     
+    // Calculate screen row
     int screen_row = cursor_line - editor.view_start_line + EDITOR_FIRST_ROW;
-    int screen_col = cursor_col;
+    
+    // Calculate screen column accounting for horizontal scroll
+    int screen_col = cursor_col - editor.h_scroll_offset;
+    
+    // Adjust for left arrow indicator if scrolled
+    if (editor.h_scroll_offset > 0) {
+        screen_col++;  // Left arrow takes column 0
+    }
     
     // Clamp to visible area
+    if (screen_col < 0) screen_col = 0;
     if (screen_col >= EDITOR_MAX_COLS) screen_col = EDITOR_MAX_COLS - 1;
     if (screen_row < EDITOR_FIRST_ROW) screen_row = EDITOR_FIRST_ROW;
     if (screen_row > EDITOR_LAST_ROW) screen_row = EDITOR_LAST_ROW;
@@ -490,6 +734,9 @@ static void editor_move_cursor_up(void)
         } else {
             editor.cursor_pos = prev_line_start + current_col;
         }
+        
+        // Reset horizontal scroll when changing lines
+        editor.h_scroll_offset = 0;
     }
 }
 
@@ -509,6 +756,9 @@ static void editor_move_cursor_down(void)
         } else {
             editor.cursor_pos = next_line_start + current_col;
         }
+        
+        // Reset horizontal scroll when changing lines
+        editor.h_scroll_offset = 0;
     }
 }
 
@@ -516,12 +766,14 @@ static void editor_move_cursor_home(void)
 {
     int current_line = editor_get_line_at_pos(editor.cursor_pos);
     editor.cursor_pos = editor_get_line_start(current_line);
+    editor.h_scroll_offset = 0;  // Reset horizontal scroll
 }
 
 static void editor_move_cursor_end(void)
 {
     int current_line = editor_get_line_at_pos(editor.cursor_pos);
     editor.cursor_pos = editor_get_line_end(current_line);
+    // h_scroll will be updated by editor_update_h_scroll()
 }
 
 static void editor_page_up(void)
@@ -610,16 +862,18 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
     editor.buffer = buffer;
     editor.buffer_size = buffer_size;
     editor.content_length = strlen(buffer);
-    editor.cursor_pos = editor.content_length;  // Start at end of content
+    editor.cursor_pos = 0;  // Start at beginning of content
     editor.view_start_line = 0;
+    editor.h_scroll_offset = 0;
     editor.selecting = false;
     editor.select_anchor = 0;
     editor.copy_buffer[0] = '\0';
     editor.copy_length = 0;
     editor.in_graphics_preview = false;
+    editor.dirty_flags = DIRTY_NONE;
     
     // Ensure cursor is on second line if we have "to name\n" template
-    // (cursor_pos is already at end which is correct for template)
+    // (currently we start at beginning; template-specific positioning can be added here)
     
     // Switch to full-screen text mode for the editor
     // Use no_update to avoid redrawing txt_buffer - we'll draw editor content instead
@@ -651,8 +905,13 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
         // Erase cursor before modifying screen
         screen_txt_erase_cursor();
         
-        bool needs_redraw = false;
+        // Track cursor line before operation for dirty tracking
+        int cursor_line_before = editor_get_line_at_pos(editor.cursor_pos);
+        int h_scroll_before = editor.h_scroll_offset;
         bool needs_cursor_update = true;
+        
+        // Reset dirty flags at start of each key press
+        editor.dirty_flags = DIRTY_NONE;
         
         // Handle special keys
         switch (key) {
@@ -677,79 +936,124 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
             case KEY_LEFT:
                 editor_move_cursor_left();
                 if (editor.selecting) {
-                    needs_redraw = true;  // Selection changed, need to redraw
+                    // Selection changed - redraw affected lines
+                    editor_mark_line_dirty(cursor_line_before);
+                    editor_mark_line_dirty(editor_get_line_at_pos(editor.cursor_pos));
+                } else {
+                    editor.dirty_flags = DIRTY_CURSOR;
                 }
                 break;
                 
             case KEY_RIGHT:
                 editor_move_cursor_right();
                 if (editor.selecting) {
-                    needs_redraw = true;  // Selection changed, need to redraw
+                    editor_mark_line_dirty(cursor_line_before);
+                    editor_mark_line_dirty(editor_get_line_at_pos(editor.cursor_pos));
+                } else {
+                    editor.dirty_flags = DIRTY_CURSOR;
                 }
                 break;
                 
             case KEY_UP:
                 editor_move_cursor_up();
                 if (editor.selecting) {
-                    needs_redraw = true;  // Selection changed, need to redraw
+                    // Selection spans lines - mark range
+                    editor_mark_from_line_dirty(editor_get_line_at_pos(editor.cursor_pos));
+                } else {
+                    editor.dirty_flags = DIRTY_CURSOR;
                 }
                 break;
                 
             case KEY_DOWN:
                 editor_move_cursor_down();
                 if (editor.selecting) {
-                    needs_redraw = true;  // Selection changed, need to redraw
+                    editor_mark_from_line_dirty(cursor_line_before);
+                } else {
+                    editor.dirty_flags = DIRTY_CURSOR;
                 }
                 break;
                 
             case KEY_HOME:
                 editor_move_cursor_home();
                 if (editor.selecting) {
-                    needs_redraw = true;  // Selection changed, need to redraw
+                    editor_mark_line_dirty(cursor_line_before);
+                } else {
+                    editor.dirty_flags = DIRTY_CURSOR;
                 }
                 break;
                 
             case KEY_END:
                 editor_move_cursor_end();
                 if (editor.selecting) {
-                    needs_redraw = true;  // Selection changed, need to redraw
+                    editor_mark_line_dirty(cursor_line_before);
+                } else {
+                    editor.dirty_flags = DIRTY_CURSOR;
                 }
                 break;
                 
             case KEY_PAGE_UP:
                 editor_page_up();
                 if (editor.selecting) {
-                    needs_redraw = true;  // Selection changed, need to redraw
+                    // Selection spans many lines
+                    editor_mark_all_dirty();
+                } else {
+                    // Page moves likely cause vertical scroll - check after ensure_visible
+                    editor.dirty_flags = DIRTY_CURSOR;
                 }
                 break;
                 
             case KEY_PAGE_DOWN:
                 editor_page_down();
                 if (editor.selecting) {
-                    needs_redraw = true;  // Selection changed, need to redraw
+                    editor_mark_all_dirty();
+                } else {
+                    editor.dirty_flags = DIRTY_CURSOR;
                 }
                 break;
                 
             case KEY_BACKSPACE:
-                editor_backspace();
-                needs_redraw = true;
+                {
+                    // Check if we're deleting a newline (cursor at start of line, will merge with prev)
+                    int col_before = editor_get_col_at_pos(editor.cursor_pos);
+                    editor_backspace();
+                    if (col_before == 0 && cursor_line_before > 0) {
+                        // Deleted a newline - need to redraw from previous line down
+                        editor_mark_from_line_dirty(cursor_line_before - 1);
+                    } else {
+                        // Just deleted a char on the same line
+                        editor_mark_line_dirty(editor_get_line_at_pos(editor.cursor_pos));
+                    }
+                }
                 break;
                 
             case KEY_DEL:
-                editor_delete_char();
-                needs_redraw = true;
+                {
+                    // Check if we're deleting a newline (at end of line)
+                    int line_end = editor_get_line_end(cursor_line_before);
+                    bool deleting_newline = (editor.cursor_pos == (size_t)line_end && 
+                                             editor.cursor_pos < editor.content_length);
+                    editor_delete_char();
+                    if (deleting_newline) {
+                        // Deleted a newline - need to redraw from current line down
+                        editor_mark_from_line_dirty(cursor_line_before);
+                    } else {
+                        // Just deleted a char on the same line
+                        editor_mark_line_dirty(cursor_line_before);
+                    }
+                }
                 break;
                 
             case KEY_ENTER:
             case KEY_RETURN:
                 editor_new_line();
-                needs_redraw = true;
+                // Newline insertion affects current line and everything below
+                editor_mark_from_line_dirty(cursor_line_before);
                 break;
                 
             case KEY_TAB:
                 if (!editor.selecting) {
                     editor_insert_tab();
-                    needs_redraw = true;
+                    editor_mark_line_dirty(editor_get_line_at_pos(editor.cursor_pos));
                 }
                 break;
                 
@@ -760,32 +1064,54 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                     editor.selecting = true;
                     editor.select_anchor = editor.cursor_pos;
                 }
-                needs_redraw = true;
+                // Selection visual needs redraw - mark the lines involved
+                editor_mark_all_dirty();  // Selection can span multiple lines
                 break;
                 
             case 0x03:  // Ctrl+C - copy
+            case 0x19:  // Ctrl+Y - yank (also copy, Y is for yank)
                 if (editor.selecting) {
                     editor_copy_selection();
                     editor.selecting = false;
+                    editor_mark_all_dirty();  // Clear selection highlighting
                 } else {
                     editor_copy_line();
+                    // No visual change for copy line
                 }
-                needs_redraw = true;
                 break;
                 
             case 0x16:  // Ctrl+V - paste
-                editor_paste();
-                needs_redraw = true;
+            case 0x10:  // Ctrl+P - paste (also Paste, P is for paste)
+                {
+                    // Check if paste includes newlines
+                    bool has_newline = false;
+                    for (size_t i = 0; i < editor.copy_length; i++) {
+                        if (editor.copy_buffer[i] == '\n') {
+                            has_newline = true;
+                            break;
+                        }
+                    }
+                    editor_paste();
+                    if (has_newline) {
+                        editor_mark_from_line_dirty(cursor_line_before);
+                    } else {
+                        editor_mark_line_dirty(editor_get_line_at_pos(editor.cursor_pos));
+                    }
+                }
                 break;
                 
             case 0x18:  // Ctrl+X - cut
+            case 0x14:  // Ctrl+T - take (also cut, T is for take)
                 if (editor.selecting) {
                     editor_copy_selection();
                     editor_delete_selection();
+                    // Cut selection may span lines
+                    editor_mark_from_line_dirty(editor_get_line_at_pos(editor.cursor_pos));
                 } else {
                     editor_cut_line();
+                    // Cut line affects everything below
+                    editor_mark_from_line_dirty(editor_get_line_at_pos(editor.cursor_pos));
                 }
-                needs_redraw = true;
                 break;
                 
             case KEY_F1:
@@ -825,16 +1151,42 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                 if (key >= 0x20 && key <= 0x7E) {
                     if (!editor.selecting) {
                         editor_insert_char(key);
-                        needs_redraw = true;
+                        editor_mark_line_dirty(editor_get_line_at_pos(editor.cursor_pos));
                     }
                 }
                 break;
         }
         
-        // Update display
-        if (needs_redraw) {
-            editor_ensure_cursor_visible();
-            editor_draw_content();
+        // Update display based on what changed
+        if (editor.dirty_flags != DIRTY_NONE) {
+            // Check if vertical scroll occurred
+            bool scrolled = editor_ensure_cursor_visible();
+            
+            if (scrolled) {
+                // Vertical scroll requires full redraw
+                editor_mark_all_dirty();
+            } else if (editor.dirty_flags == DIRTY_CURSOR) {
+                // Just cursor movement - only redraw if h_scroll changed
+                int cursor_line_after = editor_get_line_at_pos(editor.cursor_pos);
+                if (editor.h_scroll_offset != h_scroll_before) {
+                    // H_scroll changed - redraw the new line
+                    editor_mark_line_dirty(cursor_line_after);
+                    // If we moved lines and old line had h_scroll, redraw it too
+                    if (cursor_line_after != cursor_line_before && h_scroll_before > 0) {
+                        editor_mark_line_dirty(cursor_line_before);
+                    }
+                } else if (cursor_line_after != cursor_line_before && h_scroll_before > 0) {
+                    // Moved lines but h_scroll didn't change on new line
+                    // Old line may need redraw if it had h_scroll
+                    editor_mark_line_dirty(cursor_line_before);
+                }
+                // If h_scroll was 0 before and after, no line redraw needed
+            }
+            // For other dirty flags (DIRTY_LINE, DIRTY_FROM_LINE, DIRTY_ALL),
+            // the flags were already set by the operation
+            
+            // Actually do the redraw
+            editor_update_dirty();
         }
         
         if (needs_cursor_update) {
