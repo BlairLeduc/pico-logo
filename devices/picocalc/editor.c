@@ -71,8 +71,6 @@ typedef struct {
     uint8_t dirty_flags;    // What needs to be redrawn
     int dirty_line;         // Line that needs redraw (for DIRTY_LINE)
     int dirty_from;         // First line to redraw (for DIRTY_FROM_LINE)
-    int prev_cursor_line;   // Previous cursor line (for tracking line changes)
-    int prev_h_scroll;      // Previous h_scroll (for detecting scroll changes)
 } EditorState;
 
 static EditorState editor;
@@ -837,8 +835,6 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
     editor.copy_length = 0;
     editor.in_graphics_preview = false;
     editor.dirty_flags = DIRTY_NONE;
-    editor.prev_cursor_line = 0;
-    editor.prev_h_scroll = 0;
     
     // Ensure cursor is on second line if we have "to name\n" template
     // (currently we start at beginning; template-specific positioning can be added here)
