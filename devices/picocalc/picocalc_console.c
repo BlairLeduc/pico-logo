@@ -69,13 +69,44 @@ static BoundaryMode turtle_boundary_mode = BOUNDARY_MODE_WRAP;  // Default to wr
 static int input_read_char(LogoStream *stream)
 {
     (void)stream;
-    int ch = keyboard_get_key();
-    // Convert KEY_BREAK to LOGO_STREAM_INTERRUPTED
-    if (ch == KEY_BREAK)
+    
+    // Set input_active so keyboard_poll buffers F1/F2/F3 instead of switching modes
+    input_active = true;
+    
+    while (true)
     {
-        return LOGO_STREAM_INTERRUPTED;
+        int ch = keyboard_get_key();
+        
+        // Convert KEY_BREAK to LOGO_STREAM_INTERRUPTED
+        if (ch == KEY_BREAK)
+        {
+            input_active = false;
+            return LOGO_STREAM_INTERRUPTED;
+        }
+        
+        // Handle F1/F2/F3 for screen mode switching, then get another key
+        if (ch == KEY_F1)
+        {
+            screen_set_mode(SCREEN_MODE_TXT);
+            screen_txt_enable_cursor(true);
+            continue;  // Get next key
+        }
+        if (ch == KEY_F2)
+        {
+            screen_set_mode(SCREEN_MODE_SPLIT);
+            screen_txt_enable_cursor(true);
+            continue;  // Get next key
+        }
+        if (ch == KEY_F3)
+        {
+            screen_set_mode(SCREEN_MODE_GFX);
+            screen_txt_enable_cursor(false);
+            continue;  // Get next key
+        }
+        
+        input_active = false;
+        return ch;
     }
-    return ch;
 }
 
 static int input_read_chars(LogoStream *stream, char *buffer, int count)
