@@ -577,7 +577,11 @@ The following lists the capabilities of the different supported processors.
 
 This section describes the feature of Logo that lets you automatically load a file into your workspace when you start up Logo. You must call the file `startup`. There can be only one file with the name `startup`, although it can include commands to load other files.
 
-The default prefix is `/Logo/`. On the SD card, the `startup` file is located at `/Logo/startup`.
+The default prefix is `/Logo/`. On the SD card, the `startup` file is located at `/Logo/startup`. You can change the `startup` file, with [`editfile`](#editfile).
+
+```logo
+>editfile "startup
+```
 
 You can [`bury`](#bury) procedures and [`burname`](#buryname) variables created in your `startup` file (using the `startup` variable!) so they are not a distraction. [`buryall`](#buryall) is a good approach.
 
