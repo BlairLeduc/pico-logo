@@ -38,13 +38,16 @@ static bool turtle_visible = TURTLE_DEFAULT_VISIBILITY; // Turtle visibility sta
 static uint16_t turtle_shapes[15][16];  // shapes[0] = shape 1, shapes[14] = shape 15
 static uint8_t turtle_current_shape = 0;
 
-// Background buffer: 16x16 pixels saved before drawing turtle
-// Buffer origin X is always at (turtle_x - 8); origin Y depends on shape:
-//   - shape 0:  (turtle_y - 8)   (centered on turtle position)
-//   - shapes 1-15: (turtle_y - 15) (bottom row aligned with turtle_y)
-static uint8_t turtle_background[16][16];
+// Background buffers for saving pixels under turtle before drawing
+// Shape 0 (line-drawn turtle) needs larger buffer due to rotation and line drawing
+// Shapes 1-15 (bitmap) use smaller 16x16 buffer
+#define SHAPE0_BG_SIZE 24
+#define BITMAP_BG_SIZE 16
+static uint8_t turtle_background_shape0[SHAPE0_BG_SIZE][SHAPE0_BG_SIZE];  // For shape 0
+static uint8_t turtle_background_bitmap[BITMAP_BG_SIZE][BITMAP_BG_SIZE];  // For shapes 1-15
 static int turtle_bg_saved_x;  // Screen X where background was saved (top-left)
 static int turtle_bg_saved_y;  // Screen Y where background was saved (top-left)
+static int turtle_bg_saved_size;  // Size of buffer that was saved (24 or 16)
 static bool turtle_bg_valid = false;  // Whether background has been saved
 
 // Boundary mode constants
@@ -270,31 +273,43 @@ static uint8_t *get_gfx_pixel(int x, int y)
     return &screen_gfx_frame()[y * SCREEN_WIDTH + x];
 }
 
-// Save the 16x16 background area under the turtle
-// For shape 0 (rotating): centered at turtle position
-// For shapes 1-15 (non-rotating): bottom row at turtle_y
+// Save the background area under the turtle
+// For shape 0 (rotating): 24x24 centered at turtle position
+// For shapes 1-15 (non-rotating): 16x16 with bottom row at turtle_y
 static void turtle_save_background(void)
 {
-    turtle_bg_saved_x = (int)turtle_x - 8;
-    
-    // Shape 0 rotates, so we need the buffer centered on turtle position
-    // Shapes 1-15 don't rotate, so buffer extends above turtle position
+    // Shape 0 rotates, so we need larger buffer centered on turtle position
+    // Shapes 1-15 don't rotate, so smaller buffer extends above turtle position
     if (turtle_current_shape == 0)
     {
-        turtle_bg_saved_y = (int)turtle_y - 8;  // Centered vertically
+        turtle_bg_saved_size = SHAPE0_BG_SIZE;
+        turtle_bg_saved_x = (int)turtle_x - SHAPE0_BG_SIZE / 2;
+        turtle_bg_saved_y = (int)turtle_y - SHAPE0_BG_SIZE / 2;  // Centered
+        
+        for (int row = 0; row < SHAPE0_BG_SIZE; row++)
+        {
+            for (int col = 0; col < SHAPE0_BG_SIZE; col++)
+            {
+                int sx = wrap_coord(turtle_bg_saved_x + col, SCREEN_WIDTH);
+                int sy = wrap_coord(turtle_bg_saved_y + row, SCREEN_HEIGHT);
+                turtle_background_shape0[row][col] = screen_gfx_frame()[sy * SCREEN_WIDTH + sx];
+            }
+        }
     }
     else
     {
+        turtle_bg_saved_size = BITMAP_BG_SIZE;
+        turtle_bg_saved_x = (int)turtle_x - BITMAP_BG_SIZE / 2;
         turtle_bg_saved_y = (int)turtle_y - 15; // Bottom row at turtle_y
-    }
-    
-    for (int row = 0; row < 16; row++)
-    {
-        for (int col = 0; col < 16; col++)
+        
+        for (int row = 0; row < BITMAP_BG_SIZE; row++)
         {
-            int sx = wrap_coord(turtle_bg_saved_x + col, SCREEN_WIDTH);
-            int sy = wrap_coord(turtle_bg_saved_y + row, SCREEN_HEIGHT);
-            turtle_background[row][col] = screen_gfx_frame()[sy * SCREEN_WIDTH + sx];
+            for (int col = 0; col < BITMAP_BG_SIZE; col++)
+            {
+                int sx = wrap_coord(turtle_bg_saved_x + col, SCREEN_WIDTH);
+                int sy = wrap_coord(turtle_bg_saved_y + row, SCREEN_HEIGHT);
+                turtle_background_bitmap[row][col] = screen_gfx_frame()[sy * SCREEN_WIDTH + sx];
+            }
         }
     }
     turtle_bg_valid = true;
@@ -306,13 +321,29 @@ static void turtle_erase(void)
     if (!turtle_bg_valid)
         return;
     
-    for (int row = 0; row < 16; row++)
+    // Use the buffer size that was saved
+    if (turtle_bg_saved_size == SHAPE0_BG_SIZE)
     {
-        for (int col = 0; col < 16; col++)
+        for (int row = 0; row < SHAPE0_BG_SIZE; row++)
         {
-            int sx = wrap_coord(turtle_bg_saved_x + col, SCREEN_WIDTH);
-            int sy = wrap_coord(turtle_bg_saved_y + row, SCREEN_HEIGHT);
-            screen_gfx_frame()[sy * SCREEN_WIDTH + sx] = turtle_background[row][col];
+            for (int col = 0; col < SHAPE0_BG_SIZE; col++)
+            {
+                int sx = wrap_coord(turtle_bg_saved_x + col, SCREEN_WIDTH);
+                int sy = wrap_coord(turtle_bg_saved_y + row, SCREEN_HEIGHT);
+                screen_gfx_frame()[sy * SCREEN_WIDTH + sx] = turtle_background_shape0[row][col];
+            }
+        }
+    }
+    else
+    {
+        for (int row = 0; row < BITMAP_BG_SIZE; row++)
+        {
+            for (int col = 0; col < BITMAP_BG_SIZE; col++)
+            {
+                int sx = wrap_coord(turtle_bg_saved_x + col, SCREEN_WIDTH);
+                int sy = wrap_coord(turtle_bg_saved_y + row, SCREEN_HEIGHT);
+                screen_gfx_frame()[sy * SCREEN_WIDTH + sx] = turtle_background_bitmap[row][col];
+            }
         }
     }
     turtle_bg_valid = false;
