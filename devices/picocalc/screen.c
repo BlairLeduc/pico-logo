@@ -225,7 +225,23 @@ void screen_set_mode(uint8_t mode)
     }
 }
 
-// Switch mode without redrawing buffers - for use by editor
+// Switch screen mode without redrawing the graphics or text buffers.
+//
+// This is a low-level helper used by the on-device editor when it knows that the
+// contents of gfx_buffer/txt_buffer and the LCD are already in the correct state
+// for the new mode. It only updates the LCD scrolling region and cursor visibility
+// to match the requested mode; it does *not* call screen_gfx_update() or
+// screen_txt_update().
+//
+// In most cases, callers should use screen_set_mode(), which both changes the
+// logical screen_mode and redraws the display from the frame buffers to keep the
+// LCD contents and internal state in sync.
+//
+// Using this function when the current LCD contents do not match the in-memory
+// buffers (for example after drawing or writing text in a different mode) may
+// leave the display in an inconsistent or partially updated state. Only use this
+// variant when you explicitly want to avoid a full redraw and you can guarantee
+// that the buffers and hardware are already consistent for the new mode.
 void screen_set_mode_no_update(uint8_t mode)
 {
     if (mode == SCREEN_MODE_TXT || mode == SCREEN_MODE_GFX || mode == SCREEN_MODE_SPLIT)
