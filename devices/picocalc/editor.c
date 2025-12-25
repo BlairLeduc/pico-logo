@@ -1065,7 +1065,7 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                 break;
                 
             case 0x18:  // Ctrl+X - cut
-            case 0x14:  // Ctrl+T - cut (also cut, T is for take)
+            case 0x14:  // Ctrl+T - take (also cut, T is for take)
                 if (editor.selecting) {
                     editor_copy_selection();
                     editor_delete_selection();
