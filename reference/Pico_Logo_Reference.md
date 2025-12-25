@@ -650,7 +650,7 @@ The cursor will not move if that position is not valid.
 - `TAB` - inserts spaces until the next tab stop (tab stops are every 2 columns)
 - `Ctrl` `X` or `Ctrl` `T` - erases (or takes) the current line and stores the text in the copy buffer, including the new line
 - `Ctrl` `C` or `Ctrl` `Y` - copies (or yanks) the current line and stores the text in the copy buffer, including the new line
-- `Ctrl` `V` or `Ctrl` `P`- inserts (or pastes) the text in the copy buffer at the cursor position
+- `Ctrl` `V` or `Ctrl` `P` - inserts (or pastes) the text in the copy buffer at the cursor position
 
 ### Block editing
 
@@ -659,7 +659,7 @@ Selected text is between the start anchor and the cursor and is shown in reverse
 - `DEL` or `BACKSPACE` - erases the selected text without storing the text in the copy buffer
 - `Ctrl` `X` or `Ctrl` `T` - erases (or takes) the selected text and stores the text in the copy buffer
 - `Ctrl` `C` or `Ctrl` `Y` - copies (or yanks) the selected text and stores the text in the copy buffer
-- `Ctrl` `V` or `Ctrl` `P`- replaces (or pastes over) the selected text with the text in the copy buffer.
+- `Ctrl` `V` or `Ctrl` `P` - replaces (or pastes over) the selected text with the text in the copy buffer.
 
 Typing any other key (except `Esc` or `Brk`) is ignored while the selection of text is active.
 
