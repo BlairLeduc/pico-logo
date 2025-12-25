@@ -375,67 +375,92 @@ void screen_gfx_reverse_point(float x, float y)
 }
 
 // Draw a line in the graphics buffer using Bresenham's algorithm
+// This is a true integer-only Bresenham implementation for efficiency on RP2040
 void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, bool reverse)
 {
-    // Calculate the number of steps based on the longest axis
-    float dx = x2 - x1;
-    float dy = y2 - y1;
-    int steps = (int)ceilf(fmaxf(fabsf(dx), fabsf(dy)));
+    // Convert float endpoints to integers (round to nearest)
+    int ix1 = (int)(x1 + 0.5f);
+    int iy1 = (int)(y1 + 0.5f);
+    int ix2 = (int)(x2 + 0.5f);
+    int iy2 = (int)(y2 + 0.5f);
 
-    if (steps == 0)
+    int dx = ix2 - ix1;
+    int dy = iy2 - iy1;
+
+    // Determine step direction for each axis
+    int sx = (dx > 0) ? 1 : (dx < 0) ? -1 : 0;
+    int sy = (dy > 0) ? 1 : (dy < 0) ? -1 : 0;
+
+    // Work with absolute differences
+    dx = (dx < 0) ? -dx : dx;
+    dy = (dy < 0) ? -dy : dy;
+
+    int x = ix1;
+    int y = iy1;
+
+    // Helper macro to plot a pixel with boundary handling
+    #define PLOT_PIXEL(px, py) do { \
+        int plot_x, plot_y; \
+        if (screen_boundary_mode == SCREEN_BOUNDARY_WINDOW || screen_boundary_mode == SCREEN_BOUNDARY_FENCE) { \
+            if ((px) < 0 || (px) >= SCREEN_WIDTH || (py) < 0 || (py) >= SCREEN_HEIGHT) { \
+                /* Skip out-of-bounds pixels */ \
+            } else { \
+                plot_x = (px); \
+                plot_y = (py); \
+                uint8_t *pixel = &gfx_buffer[plot_y * SCREEN_WIDTH + plot_x]; \
+                if (reverse) { \
+                    *pixel = (*pixel == GFX_DEFAULT_BACKGROUND) ? colour : GFX_DEFAULT_BACKGROUND; \
+                } else { \
+                    *pixel = colour; \
+                } \
+            } \
+        } else { \
+            /* Wrap mode */ \
+            plot_x = (((px) % SCREEN_WIDTH) + SCREEN_WIDTH) % SCREEN_WIDTH; \
+            plot_y = (((py) % SCREEN_HEIGHT) + SCREEN_HEIGHT) % SCREEN_HEIGHT; \
+            uint8_t *pixel = &gfx_buffer[plot_y * SCREEN_WIDTH + plot_x]; \
+            if (reverse) { \
+                *pixel = (*pixel == GFX_DEFAULT_BACKGROUND) ? colour : GFX_DEFAULT_BACKGROUND; \
+            } else { \
+                *pixel = colour; \
+            } \
+        } \
+    } while(0)
+
+    if (dx >= dy)
     {
-        // Single point
-        screen_gfx_set_point(x1, y1, colour);
-        return;
-    }
-
-    float x_inc = dx / steps;
-    float y_inc = dy / steps;
-
-    float x = x1;
-    float y = y1;
-
-    if (reverse)
-    {
-        // XOR mode: invert the pixel colour
-        for (int i = 0; i <= steps; ++i)
+        // X is the driving axis
+        int err = 2 * dy - dx;
+        for (int i = 0; i <= dx; ++i)
         {
-            int pixel_x, pixel_y;
-
-            if (screen_boundary_mode == SCREEN_BOUNDARY_WINDOW || screen_boundary_mode == SCREEN_BOUNDARY_FENCE)
+            PLOT_PIXEL(x, y);
+            if (err > 0)
             {
-                // Clip to screen bounds
-                pixel_x = clip_and_round(x, SCREEN_WIDTH);
-                pixel_y = clip_and_round(y, SCREEN_HEIGHT);
-                if (pixel_x >= 0 && pixel_y >= 0)
-                {
-                    uint8_t *pixel = &gfx_buffer[pixel_y * SCREEN_WIDTH + pixel_x];
-                    *pixel = *pixel == GFX_DEFAULT_BACKGROUND ? colour : GFX_DEFAULT_BACKGROUND;
-                }
+                y += sy;
+                err -= 2 * dx;
             }
-            else
-            {
-                // Wrap around edges
-                pixel_x = wrap_and_round(x, SCREEN_WIDTH);
-                pixel_y = wrap_and_round(y, SCREEN_HEIGHT);
-                uint8_t *pixel = &gfx_buffer[pixel_y * SCREEN_WIDTH + pixel_x];
-                *pixel = *pixel == GFX_DEFAULT_BACKGROUND ? colour : GFX_DEFAULT_BACKGROUND;
-            }
-
-            x += x_inc;
-            y += y_inc;
+            err += 2 * dy;
+            x += sx;
         }
     }
     else
     {
-        for (int i = 0; i <= steps; ++i)
+        // Y is the driving axis
+        int err = 2 * dx - dy;
+        for (int i = 0; i <= dy; ++i)
         {
-            screen_gfx_set_point(x, y, colour);
-
-            x += x_inc;
-            y += y_inc;
+            PLOT_PIXEL(x, y);
+            if (err > 0)
+            {
+                x += sx;
+                err -= 2 * dy;
+            }
+            err += 2 * dx;
+            y += sy;
         }
     }
+
+    #undef PLOT_PIXEL
 }
 
 // Flood fill using scanline algorithm
