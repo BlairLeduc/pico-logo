@@ -111,8 +111,28 @@ static int input_read_char(LogoStream *stream)
 
 static int input_read_chars(LogoStream *stream, char *buffer, int count)
 {
-    (void)stream;
-    return picocalc_read_line(buffer, count);
+    if (!buffer || count <= 0)
+    {
+        return 0;
+    }
+
+    int read_count = 0;
+    for (int i = 0; i < count; i++)
+    {
+        int ch = input_read_char(stream);
+        if (ch == LOGO_STREAM_INTERRUPTED)
+        {
+            // Return what we have so far, or signal interrupted if nothing read
+            return (read_count > 0) ? read_count : LOGO_STREAM_INTERRUPTED;
+        }
+        if (ch == EOF || ch < 0)
+        {
+            break;
+        }
+        buffer[i] = (char)ch;
+        read_count++;
+    }
+    return read_count;
 }
 
 static int input_read_line(LogoStream *stream, char *buffer, size_t size)
