@@ -627,7 +627,12 @@ static void turtle_set_angle(float angle)
     // Erase the turtle at current position before changing angle
     turtle_erase();
 
-    turtle_angle = fmodf(angle, 360.0f); // Normalize the angle
+    // Normalize the angle to [0, 360)
+    turtle_angle = fmodf(angle, 360.0f);
+    if (turtle_angle < 0.0f)
+    {
+        turtle_angle += 360.0f;
+    }
     turtle_draw();
 
     screen_gfx_update();
