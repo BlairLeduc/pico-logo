@@ -39,6 +39,7 @@
 |36|(symbol) has no value
 |37|) without (
 |38|I don't know what to do with (symbol)
+|39|] without [
 |40|Disk is write-protected
 |41|(procedure) doesn't like (symbol) as input
 |42|(procedure) didn't output

@@ -122,6 +122,28 @@ void test_error_infix_doesnt_like(void)
     TEST_ASSERT_EQUAL_STRING("+ doesn't like hello as input", msg);
 }
 
+void test_error_bracket_mismatch(void)
+{
+    // Unmatched right bracket - use run_string since fd is a command
+    Result r = run_string("fd 8]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_BRACKET_MISMATCH, r.error_code);
+    
+    const char *msg = error_format(r);
+    TEST_ASSERT_EQUAL_STRING("] without [", msg);
+}
+
+void test_error_paren_mismatch(void)
+{
+    // Unmatched right parenthesis - use run_string since print is a command
+    Result r = run_string("print 3)");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_PAREN_MISMATCH, r.error_code);
+    
+    const char *msg = error_format(r);
+    TEST_ASSERT_EQUAL_STRING(") without (", msg);
+}
+
 //==========================================================================
 // Infix Equality Tests
 //==========================================================================
@@ -247,6 +269,8 @@ int main(void)
     RUN_TEST(test_error_dont_know_how);
     RUN_TEST(test_error_not_enough_inputs);
     RUN_TEST(test_error_infix_doesnt_like);
+    RUN_TEST(test_error_bracket_mismatch);
+    RUN_TEST(test_error_paren_mismatch);
 
     // Infix equality tests
     RUN_TEST(test_infix_equal_words);

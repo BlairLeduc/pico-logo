@@ -479,6 +479,9 @@ static Result eval_primary(Evaluator *eval)
     case TOKEN_RIGHT_PAREN:
         return result_error(ERR_PAREN_MISMATCH);
 
+    case TOKEN_RIGHT_BRACKET:
+        return result_error(ERR_BRACKET_MISMATCH);
+
     case TOKEN_EOF:
         return result_error(ERR_NOT_ENOUGH_INPUTS);
 

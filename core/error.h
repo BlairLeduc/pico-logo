@@ -52,6 +52,7 @@ extern "C"
     #define ERR_NO_VALUE             36
     #define ERR_PAREN_MISMATCH       37
     #define ERR_DONT_KNOW_WHAT       38
+    #define ERR_BRACKET_MISMATCH     39
     #define ERR_DISK_PROTECTED       40
     #define ERR_DOESNT_LIKE_INPUT    41
     #define ERR_DIDNT_OUTPUT         42

@@ -50,6 +50,7 @@ static const char *error_templates[] = {
     [ERR_NO_VALUE] = "%s has no value",
     [ERR_PAREN_MISMATCH] = ") without (",
     [ERR_DONT_KNOW_WHAT] = "I don't know what to do with %s",
+    [ERR_BRACKET_MISMATCH] = "] without [",
     [ERR_DISK_PROTECTED] = "Disk is write-protected",
     [ERR_DOESNT_LIKE_INPUT] = "%s doesn't like %s as input",
     [ERR_DIDNT_OUTPUT] = "%s didn't output",
