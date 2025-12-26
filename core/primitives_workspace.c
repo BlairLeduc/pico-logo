@@ -159,6 +159,11 @@ static void print_procedure_definition(UserProcedure *proc)
         }
         curr = next;
     }
+    // Add newline before 'end' if body was printed
+    if (!need_indent)
+    {
+        ws_newline();
+    }
     ws_print("end");
     ws_newline();
 }

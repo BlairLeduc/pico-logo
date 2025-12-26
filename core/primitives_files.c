@@ -1161,10 +1161,20 @@ static void save_procedure_definition(UserProcedure *proc)
 {
     save_procedure_title(proc);
 
-    // Print body with newline detection and indentation
+    // Save body with newline detection and indentation
     int bracket_depth = 0;
     Node curr = proc->body;
     bool need_indent = true;
+    
+    // Skip leading newline marker (title already provides the first newline)
+    if (!mem_is_nil(curr))
+    {
+        Node first_elem = mem_car(curr);
+        if (mem_is_word(first_elem) && proc_is_newline_marker(mem_word_ptr(first_elem)))
+        {
+            curr = mem_cdr(curr);
+        }
+    }
     
     while (!mem_is_nil(curr))
     {
@@ -1194,12 +1204,12 @@ static void save_procedure_definition(UserProcedure *proc)
             }
         }
         
-        // Output indentation if needed
+        // Output indentation if needed (base indent of 1 for procedure body)
         if (need_indent)
         {
-            for (int i = 0; i < bracket_depth; i++)
+            for (int i = 0; i < bracket_depth + 1; i++)
             {
-                save_write("  ");  // 2 spaces per bracket depth
+                save_write("  ");  // 2 spaces per indent level
             }
             need_indent = false;
         }
@@ -1237,7 +1247,11 @@ static void save_procedure_definition(UserProcedure *proc)
         }
         curr = next;
     }
-    save_newline();
+    // Add newline before 'end' if body was printed
+    if (!need_indent)
+    {
+        save_newline();
+    }
     save_write("end");
     save_newline();
 }
