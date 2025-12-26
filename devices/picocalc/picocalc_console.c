@@ -440,13 +440,7 @@ static void turtle_clearscreen(void)
     // Clear the graphics buffer
     screen_gfx_clear();
 
-    // Reset the turtle to the home position
-    turtle_x = TURTLE_HOME_X;
-    turtle_y = TURTLE_HOME_Y;
-    turtle_angle = TURTLE_DEFAULT_ANGLE;
-    // Note: turtle shape is NOT reset by clearscreen
-
-    // Draw the turtle at the home position
+    // Draw the turtle at its current position
     turtle_draw();
 
     // Update the graphics display
