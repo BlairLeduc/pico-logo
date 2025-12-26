@@ -533,6 +533,9 @@ static void turtle_home(void)
 {
     screen_show_field();
 
+    float old_x = turtle_x;
+    float old_y = turtle_y;
+
     // Erase the turtle at the current position
     turtle_erase();
 
@@ -540,6 +543,21 @@ static void turtle_home(void)
     turtle_x = TURTLE_HOME_X;
     turtle_y = TURTLE_HOME_Y;
     turtle_angle = TURTLE_DEFAULT_ANGLE;
+
+    // Draw line if pen is down
+    if (turtle_pen_state == LOGO_PEN_DOWN)
+    {
+        screen_gfx_line(old_x, old_y, turtle_x, turtle_y, turtle_colour, false);
+    }
+    else if (turtle_pen_state == LOGO_PEN_ERASE)
+    {
+        screen_gfx_line(old_x, old_y, turtle_x, turtle_y, GFX_DEFAULT_BACKGROUND, false);
+    }
+    else if (turtle_pen_state == LOGO_PEN_REVERSE)
+    {
+        screen_gfx_line(old_x, old_y, turtle_x, turtle_y, turtle_colour, true);
+    }
+    // else if LOGO_PEN_UP: do not draw anything
 
     // Draw the turtle at the home position
     turtle_draw();
@@ -554,6 +572,9 @@ static void turtle_set_position(float x, float y)
 {
     screen_show_field();
 
+    float old_x = turtle_x;
+    float old_y = turtle_y;
+
     // Erase the turtle at current position
     turtle_erase();
 
@@ -562,6 +583,21 @@ static void turtle_set_position(float x, float y)
     // - Y: Logo 0 -> Screen center, but Y axis is flipped (Logo Y up, Screen Y down)
     turtle_x = fmodf((x + SCREEN_WIDTH / 2) + SCREEN_WIDTH, SCREEN_WIDTH);
     turtle_y = fmodf((-y + SCREEN_HEIGHT / 2) + SCREEN_HEIGHT, SCREEN_HEIGHT);
+
+    // Draw line if pen is down
+    if (turtle_pen_state == LOGO_PEN_DOWN)
+    {
+        screen_gfx_line(old_x, old_y, turtle_x, turtle_y, turtle_colour, false);
+    }
+    else if (turtle_pen_state == LOGO_PEN_ERASE)
+    {
+        screen_gfx_line(old_x, old_y, turtle_x, turtle_y, GFX_DEFAULT_BACKGROUND, false);
+    }
+    else if (turtle_pen_state == LOGO_PEN_REVERSE)
+    {
+        screen_gfx_line(old_x, old_y, turtle_x, turtle_y, turtle_colour, true);
+    }
+    // else if LOGO_PEN_UP: do not draw anything
 
     // Draw the turtle at the new position
     turtle_draw();
