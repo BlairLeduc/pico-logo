@@ -703,12 +703,23 @@ static bool turtle_get_visibility(void)
 static void turtle_dot(float x, float y)
 {
     screen_show_field();
-    screen_gfx_set_point(x, y, turtle_colour);
+    // Convert Logo coordinates to screen coordinates:
+    // - X: Logo 0 -> Screen center (SCREEN_WIDTH/2)
+    // - Y: Logo 0 -> Screen center, but Y axis is flipped (Logo Y up, Screen Y down)
+    float screen_x = x + SCREEN_WIDTH / 2;
+    float screen_y = -y + SCREEN_HEIGHT / 2;
+    screen_gfx_set_point(screen_x, screen_y, turtle_colour);
+    screen_gfx_update();
 }
 
 static bool turtle_dot_at(float x, float y)
 {
-    return screen_gfx_get_point(x, y) != GFX_DEFAULT_BACKGROUND;
+    // Convert Logo coordinates to screen coordinates:
+    // - X: Logo 0 -> Screen center (SCREEN_WIDTH/2)
+    // - Y: Logo 0 -> Screen center, but Y axis is flipped (Logo Y up, Screen Y down)
+    float screen_x = x + SCREEN_WIDTH / 2;
+    float screen_y = -y + SCREEN_HEIGHT / 2;
+    return screen_gfx_get_point(screen_x, screen_y) != GFX_DEFAULT_BACKGROUND;
 }
 
 // Fill enclosed area starting from turtle position
