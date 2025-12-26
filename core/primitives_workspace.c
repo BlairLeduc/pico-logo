@@ -174,7 +174,7 @@ static void print_variable(const char *name, Value value)
     switch (value.type)
     {
     case VALUE_NUMBER:
-        snprintf(buf, sizeof(buf), "%g", value.as.number);
+        format_number(buf, sizeof(buf), value.as.number);
         ws_print(buf);
         break;
     case VALUE_WORD:

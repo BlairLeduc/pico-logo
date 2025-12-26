@@ -20,7 +20,7 @@
 static Node number_to_word(float n)
 {
     char buf[32];
-    snprintf(buf, sizeof(buf), "%g", n);
+    format_number(buf, sizeof(buf), n);
     return mem_atom_cstr(buf);
 }
 

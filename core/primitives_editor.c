@@ -201,7 +201,7 @@ static bool format_variable(char *buffer, size_t buffer_size, size_t *pos,
     switch (value.type)
     {
     case VALUE_NUMBER:
-        snprintf(num_buf, sizeof(num_buf), "%g", value.as.number);
+        format_number(num_buf, sizeof(num_buf), value.as.number);
         if (!buffer_append(buffer, buffer_size, pos, num_buf))
             return false;
         break;

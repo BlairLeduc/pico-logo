@@ -42,7 +42,7 @@ static Result prim_battery_level(Evaluator *eval, int argc, Value *args)
     }
     
     char buf[32];
-    snprintf(buf, sizeof(buf), "%g", (double)level);
+    format_number(buf, sizeof(buf), level);
     list = mem_cons(mem_atom_cstr(buf), list);
 
     return result_ok(value_list(list));

@@ -73,8 +73,8 @@ static bool extract_position(Value pos, float *x, float *y, const char *proc_nam
 static Value make_position_list(float x, float y)
 {
     char x_buf[32], y_buf[32];
-    snprintf(x_buf, sizeof(x_buf), "%g", x);
-    snprintf(y_buf, sizeof(y_buf), "%g", y);
+    format_number(x_buf, sizeof(x_buf), x);
+    format_number(y_buf, sizeof(y_buf), y);
     
     Node x_atom = mem_atom(x_buf, strlen(x_buf));
     Node y_atom = mem_atom(y_buf, strlen(y_buf));

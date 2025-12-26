@@ -1253,7 +1253,7 @@ static void save_variable(const char *name, Value value)
     switch (value.type)
     {
     case VALUE_NUMBER:
-        snprintf(buf, sizeof(buf), "%g", value.as.number);
+        format_number(buf, sizeof(buf), value.as.number);
         save_write(buf);
         break;
     case VALUE_WORD:
@@ -1295,7 +1295,7 @@ static void save_property(const char *name, const char *property, Value value)
     switch (value.type)
     {
     case VALUE_NUMBER:
-        snprintf(buf, sizeof(buf), "%g", value.as.number);
+        format_number(buf, sizeof(buf), value.as.number);
         save_write(buf);
         break;
     case VALUE_WORD:
