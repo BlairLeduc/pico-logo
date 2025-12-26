@@ -704,7 +704,25 @@ static Result prim_clearscreen(Evaluator *eval, int argc, Value *args)
         }
         if (turtle->home)
         {
+            // Save pen state and set to pen up so home() doesn't draw a line
+            // on the freshly cleared screen
+            LogoPen saved_pen = LOGO_PEN_DOWN;
+            if (turtle->get_pen_state)
+            {
+                saved_pen = turtle->get_pen_state();
+            }
+            if (turtle->set_pen_state)
+            {
+                turtle->set_pen_state(LOGO_PEN_UP);
+            }
+            
             turtle->home();
+            
+            // Restore pen state
+            if (turtle->set_pen_state)
+            {
+                turtle->set_pen_state(saved_pen);
+            }
         }
     }
     
