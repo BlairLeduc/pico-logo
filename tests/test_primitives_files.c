@@ -1197,12 +1197,13 @@ void test_rename_file(void)
 
 void test_setprefix_and_prefix(void)
 {
+    // Using \/ to escape the forward slash - should result in unescaped "my/path"
     Result r = run_string("setprefix \"my\\/path");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     
     Result r2 = eval_string("prefix");
     TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
-    TEST_ASSERT_EQUAL_STRING("my\\/path", mem_word_ptr(r2.value.as.node));
+    TEST_ASSERT_EQUAL_STRING("my/path", mem_word_ptr(r2.value.as.node));
 }
 
 //==========================================================================
@@ -1317,6 +1318,34 @@ void test_save_writes_workspace(void)
     // Should contain procedure and variable
     TEST_ASSERT_NOT_NULL(strstr(file->data, "to testproc"));
     TEST_ASSERT_NOT_NULL(strstr(file->data, "make \"myvar 123"));
+}
+
+void test_save_format_matches_poall(void)
+{
+    // Setup workspace with a simple procedure using define (no newlines)
+    // Note: define creates a flat body list, so all instructions are on one line
+    run_string("define \"testproc [[x y] [print :x] [print :y]]");
+    run_string("make \"myvar [hello world]");
+    
+    Result r = run_string("save \"formatted.logo");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Check file content has proper formatting
+    MockFile *file = mock_fs_get_file("formatted.logo", false);
+    TEST_ASSERT_NOT_NULL(file);
+    
+    // Procedure should have proper formatting with indentation
+    // With define, the body is flattened to one line with base indent
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(file->data, "to testproc :x :y\n"),
+        "Title line should be formatted correctly");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(file->data, "  print :x print :y\n"),
+        "Body should have 2-space indent and be on one line");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(file->data, "end\n"),
+        "End should be present");
+    
+    // Variable should be properly formatted
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(file->data, "make \"myvar [hello world]\n"),
+        "Variable should be formatted like make command");
 }
 
 void test_save_file_exists_error(void)
@@ -1570,6 +1599,7 @@ int main(void)
     RUN_TEST(test_load_does_not_run_preexisting_startup);
     RUN_TEST(test_load_runs_startup_when_file_overwrites);
     RUN_TEST(test_save_writes_workspace);
+    RUN_TEST(test_save_format_matches_poall);
     RUN_TEST(test_save_file_exists_error);
 
     // Prefix handling tests

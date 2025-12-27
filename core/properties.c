@@ -14,6 +14,7 @@
 
 #include "properties.h"
 #include "memory.h"
+#include "value.h"
 #include <string.h>
 #include <strings.h>
 #include <stdio.h>
@@ -38,7 +39,7 @@ static Node prop_value_to_node(Value v)
     {
         // Store numbers as word atoms
         char buf[32];
-        snprintf(buf, sizeof(buf), "%g", v.as.number);
+        format_number(buf, sizeof(buf), v.as.number);
         return mem_atom_cstr(buf);
     }
     return NODE_NIL;

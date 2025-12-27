@@ -242,8 +242,8 @@ static Result eval_primary(Evaluator *eval)
     case TOKEN_QUOTED:
     {
         advance(eval);
-        // Skip the quote character
-        Node atom = mem_atom(t.start + 1, t.length - 1);
+        // Skip the quote character and process escape sequences
+        Node atom = mem_atom_unescape(t.start + 1, t.length - 1);
         return result_ok(value_word(atom));
     }
 
@@ -253,7 +253,8 @@ static Result eval_primary(Evaluator *eval)
         // :var is shorthand for thing "var
         // The token includes the colon, so skip it
         // Intern the name so the pointer persists for error messages
-        Node name_atom = mem_atom(t.start + 1, t.length - 1);
+        // Process escape sequences in variable names
+        Node name_atom = mem_atom_unescape(t.start + 1, t.length - 1);
         const char *name = mem_word_ptr(name_atom);
 
         Value v;
@@ -479,6 +480,9 @@ static Result eval_primary(Evaluator *eval)
     case TOKEN_RIGHT_PAREN:
         return result_error(ERR_PAREN_MISMATCH);
 
+    case TOKEN_RIGHT_BRACKET:
+        return result_error(ERR_BRACKET_MISMATCH);
+
     case TOKEN_EOF:
         return result_error(ERR_NOT_ENOUGH_INPUTS);
 
@@ -601,6 +605,9 @@ Result eval_instruction(Evaluator *eval)
 
 // Serialize a list to a string buffer for evaluation
 // Returns the number of characters written
+// Forward declaration for recursive serialization
+static int serialize_node_to_buffer(Node element, char *buffer, int max_len, bool needs_space);
+
 static int serialize_list_to_buffer(Node list, char *buffer, int max_len)
 {
     int pos = 0;
@@ -609,62 +616,146 @@ static int serialize_list_to_buffer(Node list, char *buffer, int max_len)
     while (!mem_is_nil(node) && pos < max_len - 5)
     {
         Node element = mem_car(node);
+        
+        // Skip newline markers during execution
         if (mem_is_word(element))
         {
             const char *str = mem_word_ptr(element);
-            size_t len = mem_word_len(element);
-            
-            // Skip newline markers during execution
             if (proc_is_newline_marker(str))
             {
                 node = mem_cdr(node);
                 continue;
             }
-            
-            if (pos + (int)len + 1 < max_len)
-            {
-                if (pos > 0)
-                    buffer[pos++] = ' ';
-                memcpy(buffer + pos, str, len);
-                pos += len;
-            }
         }
-        else if (mem_is_list(element))
-        {
-            // Recursively serialize nested list
-            if (pos > 0)
-                buffer[pos++] = ' ';
-            buffer[pos++] = '[';
-            
-            // Get the inner list content
-            Node inner = element;
-            if (NODE_GET_TYPE(inner) == NODE_TYPE_LIST)
-            {
-                // It's a list reference - iterate through it
-                while (!mem_is_nil(inner) && pos < max_len - 3)
-                {
-                    Node inner_elem = mem_car(inner);
-                    if (mem_is_word(inner_elem))
-                    {
-                        const char *str = mem_word_ptr(inner_elem);
-                        size_t len = mem_word_len(inner_elem);
-                        if (pos + (int)len + 1 < max_len)
-                        {
-                            if (buffer[pos - 1] != '[')
-                                buffer[pos++] = ' ';
-                            memcpy(buffer + pos, str, len);
-                            pos += len;
-                        }
-                    }
-                    inner = mem_cdr(inner);
-                }
-            }
-            buffer[pos++] = ']';
-        }
+        
+        int written = serialize_node_to_buffer(element, buffer + pos, max_len - pos, pos > 0);
+        pos += written;
+        
         node = mem_cdr(node);
     }
     buffer[pos] = '\0';
     return pos;
+}
+
+// Serialize a single node (word or list) to buffer
+static int serialize_node_to_buffer(Node element, char *buffer, int max_len, bool needs_space)
+{
+    int pos = 0;
+    
+    if (mem_is_word(element))
+    {
+        const char *str = mem_word_ptr(element);
+        size_t len = mem_word_len(element);
+        
+        if (pos + (int)len + 1 < max_len)
+        {
+            if (needs_space)
+                buffer[pos++] = ' ';
+            memcpy(buffer + pos, str, len);
+            pos += len;
+        }
+    }
+    else if (mem_is_nil(element))
+    {
+        // Empty list []
+        if (needs_space)
+            buffer[pos++] = ' ';
+        buffer[pos++] = '[';
+        buffer[pos++] = ']';
+    }
+    else if (mem_is_list(element))
+    {
+        // Serialize nested list recursively
+        if (needs_space)
+            buffer[pos++] = ' ';
+        buffer[pos++] = '[';
+        
+        // Iterate through inner list elements
+        Node inner = element;
+        bool first_in_list = true;
+        while (!mem_is_nil(inner) && pos < max_len - 3)
+        {
+            Node inner_elem = mem_car(inner);
+            int written = serialize_node_to_buffer(inner_elem, buffer + pos, max_len - pos, !first_in_list);
+            pos += written;
+            first_in_list = false;
+            inner = mem_cdr(inner);
+        }
+        buffer[pos++] = ']';
+    }
+    
+    return pos;
+}
+
+// Skip/peek helpers for tail-call lookahead (no execution)
+static bool skip_primary(Evaluator *eval);
+static bool skip_expr_bp(Evaluator *eval, int min_bp);
+
+static bool skip_primary(Evaluator *eval)
+{
+    Token t = peek(eval);
+
+    switch (t.type)
+    {
+    case TOKEN_NUMBER:
+    case TOKEN_QUOTED:
+    case TOKEN_COLON:
+    case TOKEN_WORD:
+        advance(eval);
+        return true;
+
+    case TOKEN_LEFT_BRACKET:
+        advance(eval);
+        while (true)
+        {
+            Token inner = peek(eval);
+            if (inner.type == TOKEN_EOF)
+                return false;
+            if (inner.type == TOKEN_RIGHT_BRACKET)
+            {
+                advance(eval);
+                break;
+            }
+            if (!skip_primary(eval))
+                return false;
+        }
+        return true;
+
+    case TOKEN_LEFT_PAREN:
+        advance(eval);
+        if (!skip_expr_bp(eval, BP_NONE))
+            return false;
+        if (peek(eval).type == TOKEN_RIGHT_PAREN)
+            advance(eval);
+        return true;
+
+    case TOKEN_MINUS:
+    case TOKEN_UNARY_MINUS:
+        advance(eval);
+        return skip_primary(eval);
+
+    default:
+        return false;
+    }
+}
+
+static bool skip_expr_bp(Evaluator *eval, int min_bp)
+{
+    if (!skip_primary(eval))
+        return false;
+
+    while (true)
+    {
+        Token op = peek(eval);
+        int bp = get_infix_bp(op.type);
+        if (bp == BP_NONE || bp < min_bp)
+            break;
+
+        advance(eval);
+        if (!skip_expr_bp(eval, bp + 1))
+            return false;
+    }
+    return true;
 }
 
 // Evaluate a list as procedure body with tail call optimization
@@ -691,10 +782,27 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
 
     while (!eval_at_end(eval))
     {
-        // Don't set tail position until we know this is the last instruction
-        // Execute the instruction normally first
+        // Determine if this instruction is the last one
+        bool last_instruction = false;
+        if (enable_tco)
+        {
+            Evaluator lookahead = *eval;
+            Lexer lookahead_lexer = *eval->lexer;
+            lookahead.lexer = &lookahead_lexer;
+            lookahead.has_current = eval->has_current;
+            lookahead.current = eval->current;
+            last_instruction = skip_expr_bp(&lookahead, BP_NONE) && eval_at_end(&lookahead);
+        }
+
+        // Set tail position for this instruction (don't redeclare old_tail)
+        eval->in_tail_position = enable_tco && last_instruction;
+
+        // Execute instruction
         r = eval_instruction(eval);
-        
+
+        // Restore tail flag
+        eval->in_tail_position = old_tail;
+
         // Check if there's more to execute
         bool at_end = eval_at_end(eval);
         

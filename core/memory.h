@@ -115,6 +115,11 @@ extern "C"
     // Returns NODE_NIL if out of memory.
     Node mem_atom(const char *str, size_t len);
 
+    // Intern a word while processing backslash escapes.
+    // Each \X sequence becomes just X in the resulting atom.
+    // Returns NODE_NIL if out of memory.
+    Node mem_atom_unescape(const char *str, size_t len);
+
     // Convenience: intern a null-terminated string
     Node mem_atom_cstr(const char *str);
 

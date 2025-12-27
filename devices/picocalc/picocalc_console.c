@@ -440,13 +440,7 @@ static void turtle_clearscreen(void)
     // Clear the graphics buffer
     screen_gfx_clear();
 
-    // Reset the turtle to the home position
-    turtle_x = TURTLE_HOME_X;
-    turtle_y = TURTLE_HOME_Y;
-    turtle_angle = TURTLE_DEFAULT_ANGLE;
-    // Note: turtle shape is NOT reset by clearscreen
-
-    // Draw the turtle at the home position
+    // Draw the turtle at its current position
     turtle_draw();
 
     // Update the graphics display
@@ -539,6 +533,9 @@ static void turtle_home(void)
 {
     screen_show_field();
 
+    float old_x = turtle_x;
+    float old_y = turtle_y;
+
     // Erase the turtle at the current position
     turtle_erase();
 
@@ -546,6 +543,21 @@ static void turtle_home(void)
     turtle_x = TURTLE_HOME_X;
     turtle_y = TURTLE_HOME_Y;
     turtle_angle = TURTLE_DEFAULT_ANGLE;
+
+    // Draw line if pen is down
+    if (turtle_pen_state == LOGO_PEN_DOWN)
+    {
+        screen_gfx_line(old_x, old_y, turtle_x, turtle_y, turtle_colour, false);
+    }
+    else if (turtle_pen_state == LOGO_PEN_ERASE)
+    {
+        screen_gfx_line(old_x, old_y, turtle_x, turtle_y, GFX_DEFAULT_BACKGROUND, false);
+    }
+    else if (turtle_pen_state == LOGO_PEN_REVERSE)
+    {
+        screen_gfx_line(old_x, old_y, turtle_x, turtle_y, turtle_colour, true);
+    }
+    // else if LOGO_PEN_UP: do not draw anything
 
     // Draw the turtle at the home position
     turtle_draw();
@@ -560,6 +572,9 @@ static void turtle_set_position(float x, float y)
 {
     screen_show_field();
 
+    float old_x = turtle_x;
+    float old_y = turtle_y;
+
     // Erase the turtle at current position
     turtle_erase();
 
@@ -568,6 +583,21 @@ static void turtle_set_position(float x, float y)
     // - Y: Logo 0 -> Screen center, but Y axis is flipped (Logo Y up, Screen Y down)
     turtle_x = fmodf((x + SCREEN_WIDTH / 2) + SCREEN_WIDTH, SCREEN_WIDTH);
     turtle_y = fmodf((-y + SCREEN_HEIGHT / 2) + SCREEN_HEIGHT, SCREEN_HEIGHT);
+
+    // Draw line if pen is down
+    if (turtle_pen_state == LOGO_PEN_DOWN)
+    {
+        screen_gfx_line(old_x, old_y, turtle_x, turtle_y, turtle_colour, false);
+    }
+    else if (turtle_pen_state == LOGO_PEN_ERASE)
+    {
+        screen_gfx_line(old_x, old_y, turtle_x, turtle_y, GFX_DEFAULT_BACKGROUND, false);
+    }
+    else if (turtle_pen_state == LOGO_PEN_REVERSE)
+    {
+        screen_gfx_line(old_x, old_y, turtle_x, turtle_y, turtle_colour, true);
+    }
+    // else if LOGO_PEN_UP: do not draw anything
 
     // Draw the turtle at the new position
     turtle_draw();
@@ -597,7 +627,12 @@ static void turtle_set_angle(float angle)
     // Erase the turtle at current position before changing angle
     turtle_erase();
 
-    turtle_angle = fmodf(angle, 360.0f); // Normalize the angle
+    // Normalize the angle to [0, 360)
+    turtle_angle = fmodf(angle, 360.0f);
+    if (turtle_angle < 0.0f)
+    {
+        turtle_angle += 360.0f;
+    }
     turtle_draw();
 
     screen_gfx_update();
@@ -709,12 +744,23 @@ static bool turtle_get_visibility(void)
 static void turtle_dot(float x, float y)
 {
     screen_show_field();
-    screen_gfx_set_point(x, y, turtle_colour);
+    // Convert Logo coordinates to screen coordinates:
+    // - X: Logo 0 -> Screen center (SCREEN_WIDTH/2)
+    // - Y: Logo 0 -> Screen center, but Y axis is flipped (Logo Y up, Screen Y down)
+    float screen_x = x + SCREEN_WIDTH / 2;
+    float screen_y = -y + SCREEN_HEIGHT / 2;
+    screen_gfx_set_point(screen_x, screen_y, turtle_colour);
+    screen_gfx_update();
 }
 
 static bool turtle_dot_at(float x, float y)
 {
-    return screen_gfx_get_point(x, y) != GFX_DEFAULT_BACKGROUND;
+    // Convert Logo coordinates to screen coordinates:
+    // - X: Logo 0 -> Screen center (SCREEN_WIDTH/2)
+    // - Y: Logo 0 -> Screen center, but Y axis is flipped (Logo Y up, Screen Y down)
+    float screen_x = x + SCREEN_WIDTH / 2;
+    float screen_y = -y + SCREEN_HEIGHT / 2;
+    return screen_gfx_get_point(screen_x, screen_y) != GFX_DEFAULT_BACKGROUND;
 }
 
 // Fill enclosed area starting from turtle position

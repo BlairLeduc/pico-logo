@@ -159,6 +159,11 @@ static void print_procedure_definition(UserProcedure *proc)
         }
         curr = next;
     }
+    // Add newline before 'end' if body was printed
+    if (!need_indent)
+    {
+        ws_newline();
+    }
     ws_print("end");
     ws_newline();
 }
@@ -174,7 +179,7 @@ static void print_variable(const char *name, Value value)
     switch (value.type)
     {
     case VALUE_NUMBER:
-        snprintf(buf, sizeof(buf), "%g", value.as.number);
+        format_number(buf, sizeof(buf), value.as.number);
         ws_print(buf);
         break;
     case VALUE_WORD:

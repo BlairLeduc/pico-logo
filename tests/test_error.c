@@ -155,6 +155,59 @@ void test_error_format_single_placeholder_missing_fields(void)
     TEST_ASSERT_EQUAL_STRING("%s isn't a procedure", error_format(r));
 }
 
+void test_error_format_single_placeholder_with_caller(void)
+{
+    Result r = {0};
+    r.status = RESULT_ERROR;
+    r.error_code = ERR_NOT_PROCEDURE;
+    r.error_proc = "foo";
+    r.error_caller = "myproc";
+    
+    TEST_ASSERT_EQUAL_STRING("foo isn't a procedure in myproc", error_format(r));
+}
+
+void test_error_format_no_placeholder_with_caller(void)
+{
+    Result r = {0};
+    r.status = RESULT_ERROR;
+    r.error_code = ERR_DISK_FULL;
+    r.error_caller = "save_data";
+    
+    TEST_ASSERT_EQUAL_STRING("Disk full in save_data", error_format(r));
+}
+
+void test_error_format_too_few_items_with_caller(void)
+{
+    Result r = {0};
+    r.status = RESULT_ERROR;
+    r.error_code = ERR_TOO_FEW_ITEMS;
+    r.error_arg = "[1 2]";
+    r.error_caller = "my_list_proc";
+    
+    TEST_ASSERT_EQUAL_STRING("Too few items in [1 2] in my_list_proc", error_format(r));
+}
+
+void test_error_format_no_value_with_caller(void)
+{
+    Result r = {0};
+    r.status = RESULT_ERROR;
+    r.error_code = ERR_NO_VALUE;
+    r.error_arg = "x";
+    r.error_caller = "calculate";
+    
+    TEST_ASSERT_EQUAL_STRING("x has no value in calculate", error_format(r));
+}
+
+void test_error_format_divide_by_zero_with_caller(void)
+{
+    Result r = {0};
+    r.status = RESULT_ERROR;
+    r.error_code = ERR_DIVIDE_BY_ZERO;
+    r.error_caller = "average";
+    
+    TEST_ASSERT_EQUAL_STRING("Can't divide by zero in average", error_format(r));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -173,5 +226,10 @@ int main(void)
     RUN_TEST(test_error_format_didnt_output_to_missing_proc);
     RUN_TEST(test_error_format_too_few_items_missing_arg);
     RUN_TEST(test_error_format_single_placeholder_missing_fields);
+    RUN_TEST(test_error_format_single_placeholder_with_caller);
+    RUN_TEST(test_error_format_no_placeholder_with_caller);
+    RUN_TEST(test_error_format_too_few_items_with_caller);
+    RUN_TEST(test_error_format_no_value_with_caller);
+    RUN_TEST(test_error_format_divide_by_zero_with_caller);
     return UNITY_END();
 }

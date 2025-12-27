@@ -372,6 +372,54 @@ Node mem_atom(const char *str, size_t len)
     return NODE_MAKE_WORD(offset);
 }
 
+// Intern a word while processing backslash escapes.
+// Each \X sequence becomes just X in the resulting atom.
+Node mem_atom_unescape(const char *str, size_t len)
+{
+    // First, calculate the unescaped length
+    size_t unescaped_len = 0;
+    for (size_t i = 0; i < len; i++)
+    {
+        if (str[i] == '\\' && i + 1 < len)
+        {
+            // Skip the backslash, count the next character
+            i++;
+        }
+        unescaped_len++;
+    }
+
+    // If no escapes found, just use mem_atom directly
+    if (unescaped_len == len)
+    {
+        return mem_atom(str, len);
+    }
+
+    // Limit atom length to 255 (1 byte length prefix)
+    if (unescaped_len > 255)
+    {
+        unescaped_len = 255;
+    }
+
+    // Build unescaped string on stack (max 255 chars)
+    char buffer[256];
+    size_t j = 0;
+    for (size_t i = 0; i < len && j < unescaped_len; i++)
+    {
+        if (str[i] == '\\' && i + 1 < len)
+        {
+            // Skip backslash, take next character
+            i++;
+            buffer[j++] = str[i];
+        }
+        else
+        {
+            buffer[j++] = str[i];
+        }
+    }
+
+    return mem_atom(buffer, j);
+}
+
 // Convenience: intern a null-terminated string
 Node mem_atom_cstr(const char *str)
 {

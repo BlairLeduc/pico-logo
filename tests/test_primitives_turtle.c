@@ -215,6 +215,35 @@ void test_heading_outputs_current_heading(void)
     TEST_ASSERT_TRUE(strstr(mock_device_get_output(), "90") != NULL);
 }
 
+void test_heading_outputs_normalized_after_negative(void)
+{
+    // left 100 from 0 should give 260 (not -100)
+    run_string("left 100");
+    Result r = run_string("print heading");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    // Should print 260, not -100
+    TEST_ASSERT_TRUE(strstr(mock_device_get_output(), "260") != NULL);
+}
+
+void test_heading_outputs_normalized_after_large_positive(void)
+{
+    // right 400 should give 40 (not 400)
+    run_string("right 400");
+    Result r = run_string("print heading");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    // Should print 40, not 400
+    TEST_ASSERT_TRUE(strstr(mock_device_get_output(), "40") != NULL);
+}
+
+void test_setheading_negative_normalized(void)
+{
+    // setheading -90 should give 270
+    run_string("setheading -90");
+    Result r = run_string("print heading");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(strstr(mock_device_get_output(), "270") != NULL);
+}
+
 void test_pos_outputs_position_list(void)
 {
     run_string("setpos [30 40]");
@@ -527,6 +556,23 @@ void test_clearscreen_clears_and_homes(void)
     TEST_ASSERT_TRUE(state->graphics.cleared);
 }
 
+void test_clearscreen_does_not_draw_line(void)
+{
+    // Move turtle away from home
+    run_string("forward 100");
+    
+    // Clear the graphics state (including line count) after the forward drew a line
+    mock_device_clear_graphics();
+    
+    // Clearscreen should not draw a line when homing
+    Result r = run_string("clearscreen");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Verify no lines were drawn
+    const MockDeviceState *state = mock_device_get_state();
+    TEST_ASSERT_EQUAL_INT(0, state->graphics.line_count);
+}
+
 void test_cs_alias(void)
 {
     run_string("fd 50");
@@ -732,6 +778,41 @@ void test_back_with_pendown_draws_line(void)
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     
     TEST_ASSERT_TRUE(mock_device_has_line_from_to(0, 0, 0, -50, TOLERANCE));
+}
+
+void test_home_with_pendown_draws_line(void)
+{
+    // Move turtle away from home without drawing (pen up)
+    run_string("penup");
+    run_string("setpos [50 50]");
+    run_string("pendown");
+    
+    // Clear any graphics state
+    mock_device_clear_graphics();
+    
+    // Home should draw a line back to origin
+    Result r = run_string("home");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    TEST_ASSERT_TRUE(mock_device_has_line_from_to(50, 50, 0, 0, TOLERANCE));
+}
+
+void test_setx_with_pendown_draws_line(void)
+{
+    Result r = run_string("setx 75");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Should draw horizontal line from (0,0) to (75,0)
+    TEST_ASSERT_TRUE(mock_device_has_line_from_to(0, 0, 75, 0, TOLERANCE));
+}
+
+void test_sety_with_pendown_draws_line(void)
+{
+    Result r = run_string("sety 75");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Should draw vertical line from (0,0) to (0,75)
+    TEST_ASSERT_TRUE(mock_device_has_line_from_to(0, 0, 0, 75, TOLERANCE));
 }
 
 //==========================================================================
@@ -1195,6 +1276,9 @@ int main(void)
     
     // Query tests
     RUN_TEST(test_heading_outputs_current_heading);
+    RUN_TEST(test_heading_outputs_normalized_after_negative);
+    RUN_TEST(test_heading_outputs_normalized_after_large_positive);
+    RUN_TEST(test_setheading_negative_normalized);
     RUN_TEST(test_pos_outputs_position_list);
     RUN_TEST(test_xcor_outputs_x_coordinate);
     RUN_TEST(test_ycor_outputs_y_coordinate);
@@ -1236,6 +1320,7 @@ int main(void)
     
     // Screen tests
     RUN_TEST(test_clearscreen_clears_and_homes);
+    RUN_TEST(test_clearscreen_does_not_draw_line);
     RUN_TEST(test_cs_alias);
     RUN_TEST(test_clean_clears_without_moving_turtle);
     
@@ -1261,6 +1346,9 @@ int main(void)
     RUN_TEST(test_forward_with_penup_no_line);
     RUN_TEST(test_setpos_with_pendown_draws_line);
     RUN_TEST(test_back_with_pendown_draws_line);
+    RUN_TEST(test_home_with_pendown_draws_line);
+    RUN_TEST(test_setx_with_pendown_draws_line);
+    RUN_TEST(test_sety_with_pendown_draws_line);
     
     // Palette tests
     RUN_TEST(test_setpalette_sets_rgb_values);

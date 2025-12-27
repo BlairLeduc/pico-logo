@@ -73,8 +73,8 @@ static bool extract_position(Value pos, float *x, float *y, const char *proc_nam
 static Value make_position_list(float x, float y)
 {
     char x_buf[32], y_buf[32];
-    snprintf(x_buf, sizeof(x_buf), "%g", x);
-    snprintf(y_buf, sizeof(y_buf), "%g", y);
+    format_number(x_buf, sizeof(x_buf), x);
+    format_number(y_buf, sizeof(y_buf), y);
     
     Node x_atom = mem_atom(x_buf, strlen(x_buf));
     Node y_atom = mem_atom(y_buf, strlen(y_buf));
@@ -704,7 +704,25 @@ static Result prim_clearscreen(Evaluator *eval, int argc, Value *args)
         }
         if (turtle->home)
         {
+            // Save pen state and set to pen up so home() doesn't draw a line
+            // on the freshly cleared screen
+            LogoPen saved_pen = LOGO_PEN_DOWN;
+            if (turtle->get_pen_state)
+            {
+                saved_pen = turtle->get_pen_state();
+            }
+            if (turtle->set_pen_state)
+            {
+                turtle->set_pen_state(LOGO_PEN_UP);
+            }
+            
             turtle->home();
+            
+            // Restore pen state
+            if (turtle->set_pen_state)
+            {
+                turtle->set_pen_state(saved_pen);
+            }
         }
     }
     

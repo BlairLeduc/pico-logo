@@ -837,8 +837,20 @@ void screen_txt_clear(void)
 {
     text_row = 0;                                 // Reset the text row to the top
     memset(txt_buffer, 0x20, sizeof(txt_buffer)); // Clear the text buffer
-    lcd_clear_screen();                           // Clear the LCD screen in text mode
-    screen_txt_set_cursor(0, screen_mode == SCREEN_MODE_SPLIT ? SCREEN_SPLIT_TXT_ROW : 0);
+    
+    if (screen_mode == SCREEN_MODE_SPLIT)
+    {
+        lcd_scroll_clear();                       // Clear only the text area in split mode
+    }
+    else
+    {
+        lcd_clear_screen();                       // Clear the entire LCD screen in text mode
+    }
+    
+    // Always set cursor to row 0 in the text buffer.
+    // screen_txt_map_location will map this to the correct LCD row
+    // (row 0 in text mode, row 24 in split mode).
+    screen_txt_set_cursor(0, 0);
 }
 
 // Update the text display
