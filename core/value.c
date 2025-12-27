@@ -470,7 +470,11 @@ Result result_throw(const char *tag)
         .status = RESULT_THROW,
         .throw_tag = tag,
         .value = value_none(),
-        .pause_proc = NULL
+        .pause_proc = NULL,
+        .error_code = 0,
+        .error_proc = NULL,
+        .error_arg = NULL,
+        .error_caller = NULL
     };
 }
 
