@@ -154,7 +154,11 @@ static Result prim_butfirst(Evaluator *eval, int argc, Value *args)
         Node word = number_to_word(obj.as.number);
         const char *str = mem_word_ptr(word);
         size_t len = strlen(str);
-        if (len <= 1)
+        if (len == 0)
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "butfirst", value_to_string(obj));
+        }
+        if (len == 1)
         {
             // Return empty word
             Node empty = mem_atom("", 0);
@@ -167,7 +171,11 @@ static Result prim_butfirst(Evaluator *eval, int argc, Value *args)
     {
         const char *str = mem_word_ptr(obj.as.node);
         size_t len = mem_word_len(obj.as.node);
-        if (len <= 1)
+        if (len == 0)
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "butfirst", value_to_string(obj));
+        }
+        if (len == 1)
         {
             Node empty = mem_atom("", 0);
             return result_ok(value_word(empty));
@@ -180,7 +188,7 @@ static Result prim_butfirst(Evaluator *eval, int argc, Value *args)
         Node list = obj.as.node;
         if (mem_is_nil(list))
         {
-            return result_error_arg(ERR_TOO_FEW_ITEMS, "butfirst", "[]");
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "butfirst", "[]");
         }
         return result_ok(value_list(mem_cdr(list)));
     }
@@ -202,7 +210,11 @@ static Result prim_butlast(Evaluator *eval, int argc, Value *args)
         Node word = number_to_word(obj.as.number);
         const char *str = mem_word_ptr(word);
         size_t len = strlen(str);
-        if (len <= 1)
+        if (len == 0)
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "butlast", value_to_string(obj));
+        }
+        if (len == 1)
         {
             Node empty = mem_atom("", 0);
             return result_ok(value_word(empty));
@@ -214,7 +226,11 @@ static Result prim_butlast(Evaluator *eval, int argc, Value *args)
     {
         const char *str = mem_word_ptr(obj.as.node);
         size_t len = mem_word_len(obj.as.node);
-        if (len <= 1)
+        if (len == 0)
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "butlast", value_to_string(obj));
+        }
+        if (len == 1)
         {
             Node empty = mem_atom("", 0);
             return result_ok(value_word(empty));
@@ -227,7 +243,7 @@ static Result prim_butlast(Evaluator *eval, int argc, Value *args)
         Node list = obj.as.node;
         if (mem_is_nil(list))
         {
-            return result_error_arg(ERR_TOO_FEW_ITEMS, "butlast", "[]");
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "butlast", "[]");
         }
         // Build new list without last element
         if (mem_is_nil(mem_cdr(list)))

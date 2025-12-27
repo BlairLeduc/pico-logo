@@ -58,12 +58,40 @@ void test_butfirst_word(void)
     TEST_ASSERT_EQUAL_STRING("OUSE", mem_word_ptr(r.value.as.node));
 }
 
+void test_butfirst_empty_word_error(void)
+{
+    Result r = eval_string("bf \"");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_butfirst_empty_list_error(void)
+{
+    Result r = eval_string("bf []");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
 void test_butlast_word(void)
 {
     Result r = eval_string("bl \"HOUSE");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
     TEST_ASSERT_EQUAL_STRING("HOUS", mem_word_ptr(r.value.as.node));
+}
+
+void test_butlast_empty_word_error(void)
+{
+    Result r = eval_string("bl \"");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_butlast_empty_list_error(void)
+{
+    Result r = eval_string("bl []");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
 }
 
 //==========================================================================
@@ -456,7 +484,11 @@ int main(void)
     RUN_TEST(test_first_list);
     RUN_TEST(test_last_word);
     RUN_TEST(test_butfirst_word);
+    RUN_TEST(test_butfirst_empty_word_error);
+    RUN_TEST(test_butfirst_empty_list_error);
     RUN_TEST(test_butlast_word);
+    RUN_TEST(test_butlast_empty_word_error);
+    RUN_TEST(test_butlast_empty_list_error);
     
     // Item
     RUN_TEST(test_item_word);
