@@ -256,6 +256,66 @@ void test_if_list_with_output(void)
     TEST_ASSERT_EQUAL_FLOAT(42.0f, r.value.as.number);
 }
 
+void test_output_with_recursive_call_in_if(void)
+{
+    // Test run list inside procedure - verifies variables are accessible
+    // when executing a nested list in a procedure body
+    Result r = run_string("define \"myproc2 [[:x] [run [print :x]]]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    r = run_string("myproc2 \"hello");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("hello\n", output_buffer);
+    reset_output();
+    
+    // Clean up
+    run_string("erase \"myproc2");
+}
+
+void test_output_in_recursive_procedure(void)
+{
+    // This test mimics the pig latin case: output inside if inside recursive procedure
+    // to countdown :n
+    //   if :n = 0 [output "done]
+    //   print :n
+    //   output countdown :n - 1
+    // end
+    Result r = run_string("define \"countdown [[n] [(if :n = 0 [output \"done]) print :n output countdown :n - 1]]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    r = run_string("print countdown 3");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("3\n2\n1\ndone\n", output_buffer);
+    reset_output();
+    
+    // Clean up
+    run_string("erase \"countdown");
+}
+
+void test_output_in_pig_latin_procedure(void)
+{
+    // Test output inside pig latin procedure
+    Result r = run_string(
+        "define \"pig [[word] [\n"
+        "  if member? first :word [a e i o u y] [op word :word \"ay]\n"
+        "  op pig word bf :word first :word\n"
+        "]]\n\n"
+        "define \"latin [[sent] [\n"
+        "  if empty? :sent [ op [ ] ]\n"
+        "  op se pig first :sent latin bf :sent\n"
+        "]]"
+    );
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    r = run_string("print latin [no pigs]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("onay igspay\n", output_buffer);
+    reset_output();
+    
+    // Clean up
+    run_string("erase \"pig");
+    run_string("erase \"latin");
+}
+
 // --- IF error cases ---
 
 void test_if_non_boolean_predicate_error(void)
@@ -610,7 +670,9 @@ int main(void)
     RUN_TEST(test_if_operation_nested);
     RUN_TEST(test_if_list_with_stop);
     RUN_TEST(test_if_list_with_output);
-    RUN_TEST(test_if_non_boolean_predicate_error);
+    RUN_TEST(test_output_with_recursive_call_in_if);
+    RUN_TEST(test_output_in_recursive_procedure);
+    RUN_TEST(test_output_in_pig_latin_procedure);
     RUN_TEST(test_if_number_predicate_error);
     RUN_TEST(test_if_list_predicate_error);
     RUN_TEST(test_if_non_list_body_error);

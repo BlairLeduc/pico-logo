@@ -605,6 +605,9 @@ Result eval_instruction(Evaluator *eval)
 
 // Serialize a list to a string buffer for evaluation
 // Returns the number of characters written
+// Forward declaration for recursive serialization
+static int serialize_node_to_buffer(Node element, char *buffer, int max_len, bool needs_space);
+
 static int serialize_list_to_buffer(Node list, char *buffer, int max_len)
 {
     int pos = 0;
@@ -613,61 +616,74 @@ static int serialize_list_to_buffer(Node list, char *buffer, int max_len)
     while (!mem_is_nil(node) && pos < max_len - 5)
     {
         Node element = mem_car(node);
+        
+        // Skip newline markers during execution
         if (mem_is_word(element))
         {
             const char *str = mem_word_ptr(element);
-            size_t len = mem_word_len(element);
-            
-            // Skip newline markers during execution
             if (proc_is_newline_marker(str))
             {
                 node = mem_cdr(node);
                 continue;
             }
-            
-            if (pos + (int)len + 1 < max_len)
-            {
-                if (pos > 0)
-                    buffer[pos++] = ' ';
-                memcpy(buffer + pos, str, len);
-                pos += len;
-            }
         }
-        else if (mem_is_list(element))
-        {
-            // Recursively serialize nested list
-            if (pos > 0)
-                buffer[pos++] = ' ';
-            buffer[pos++] = '[';
-            
-            // Get the inner list content
-            Node inner = element;
-            if (NODE_GET_TYPE(inner) == NODE_TYPE_LIST)
-            {
-                // It's a list reference - iterate through it
-                while (!mem_is_nil(inner) && pos < max_len - 3)
-                {
-                    Node inner_elem = mem_car(inner);
-                    if (mem_is_word(inner_elem))
-                    {
-                        const char *str = mem_word_ptr(inner_elem);
-                        size_t len = mem_word_len(inner_elem);
-                        if (pos + (int)len + 1 < max_len)
-                        {
-                            if (buffer[pos - 1] != '[')
-                                buffer[pos++] = ' ';
-                            memcpy(buffer + pos, str, len);
-                            pos += len;
-                        }
-                    }
-                    inner = mem_cdr(inner);
-                }
-            }
-            buffer[pos++] = ']';
-        }
+        
+        int written = serialize_node_to_buffer(element, buffer + pos, max_len - pos, pos > 0);
+        pos += written;
+        
         node = mem_cdr(node);
     }
     buffer[pos] = '\0';
+    return pos;
+}
+
+// Serialize a single node (word or list) to buffer
+static int serialize_node_to_buffer(Node element, char *buffer, int max_len, bool needs_space)
+{
+    int pos = 0;
+    
+    if (mem_is_word(element))
+    {
+        const char *str = mem_word_ptr(element);
+        size_t len = mem_word_len(element);
+        
+        if (pos + (int)len + 1 < max_len)
+        {
+            if (needs_space)
+                buffer[pos++] = ' ';
+            memcpy(buffer + pos, str, len);
+            pos += len;
+        }
+    }
+    else if (mem_is_nil(element))
+    {
+        // Empty list []
+        if (needs_space)
+            buffer[pos++] = ' ';
+        buffer[pos++] = '[';
+        buffer[pos++] = ']';
+    }
+    else if (mem_is_list(element))
+    {
+        // Serialize nested list recursively
+        if (needs_space)
+            buffer[pos++] = ' ';
+        buffer[pos++] = '[';
+        
+        // Iterate through inner list elements
+        Node inner = element;
+        bool first_in_list = true;
+        while (!mem_is_nil(inner) && pos < max_len - 3)
+        {
+            Node inner_elem = mem_car(inner);
+            int written = serialize_node_to_buffer(inner_elem, buffer + pos, max_len - pos, !first_in_list);
+            pos += written;
+            first_in_list = false;
+            inner = mem_cdr(inner);
+        }
+        buffer[pos++] = ']';
+    }
+    
     return pos;
 }
 
