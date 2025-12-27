@@ -248,6 +248,63 @@ void test_infix_equal_nested_lists_false(void)
     TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
 }
 
+//==========================================================================
+// Backslash Escape Tests
+//==========================================================================
+
+void test_quoted_word_escape_hyphen(void)
+{
+    // "H\-1 should become H-1
+    Result r = eval_string("\"H\\-1");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("H-1", mem_word_ptr(r.value.as.node));
+}
+
+void test_quoted_word_escape_middle(void)
+{
+    // "h\ee should become hee
+    Result r = eval_string("\"h\\ee");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("hee", mem_word_ptr(r.value.as.node));
+}
+
+void test_print_escaped_hyphen(void)
+{
+    // pr "H\-1 should print H-1
+    run_string("print \"H\\-1");
+    TEST_ASSERT_EQUAL_STRING("H-1\n", output_buffer);
+}
+
+void test_quoted_word_escape_space(void)
+{
+    // "San\ Francisco should become San Francisco
+    Result r = eval_string("\"San\\ Francisco");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("San Francisco", mem_word_ptr(r.value.as.node));
+}
+
+void test_quoted_word_escape_bracket(void)
+{
+    // "\[ should become [
+    Result r = eval_string("\"\\[");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("[", mem_word_ptr(r.value.as.node));
+}
+
+void test_variable_escape_in_name(void)
+{
+    // make "test\-1 42, then :test\-1 should get 42
+    run_string("make \"test\\-1 42");
+    Result r = eval_string(":test\\-1");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_NUMBER, r.value.type);
+    TEST_ASSERT_EQUAL_FLOAT(42.0f, r.value.as.number);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -284,6 +341,14 @@ int main(void)
     RUN_TEST(test_infix_equal_empty_lists);
     RUN_TEST(test_infix_equal_nested_lists);
     RUN_TEST(test_infix_equal_nested_lists_false);
+
+    // Backslash escape tests
+    RUN_TEST(test_quoted_word_escape_hyphen);
+    RUN_TEST(test_quoted_word_escape_middle);
+    RUN_TEST(test_print_escaped_hyphen);
+    RUN_TEST(test_quoted_word_escape_space);
+    RUN_TEST(test_quoted_word_escape_bracket);
+    RUN_TEST(test_variable_escape_in_name);
 
     return UNITY_END();
 }

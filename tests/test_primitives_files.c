@@ -1197,12 +1197,13 @@ void test_rename_file(void)
 
 void test_setprefix_and_prefix(void)
 {
+    // Using \/ to escape the forward slash - should result in unescaped "my/path"
     Result r = run_string("setprefix \"my\\/path");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     
     Result r2 = eval_string("prefix");
     TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
-    TEST_ASSERT_EQUAL_STRING("my\\/path", mem_word_ptr(r2.value.as.node));
+    TEST_ASSERT_EQUAL_STRING("my/path", mem_word_ptr(r2.value.as.node));
 }
 
 //==========================================================================

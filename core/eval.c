@@ -242,8 +242,8 @@ static Result eval_primary(Evaluator *eval)
     case TOKEN_QUOTED:
     {
         advance(eval);
-        // Skip the quote character
-        Node atom = mem_atom(t.start + 1, t.length - 1);
+        // Skip the quote character and process escape sequences
+        Node atom = mem_atom_unescape(t.start + 1, t.length - 1);
         return result_ok(value_word(atom));
     }
 
@@ -253,7 +253,8 @@ static Result eval_primary(Evaluator *eval)
         // :var is shorthand for thing "var
         // The token includes the colon, so skip it
         // Intern the name so the pointer persists for error messages
-        Node name_atom = mem_atom(t.start + 1, t.length - 1);
+        // Process escape sequences in variable names
+        Node name_atom = mem_atom_unescape(t.start + 1, t.length - 1);
         const char *name = mem_word_ptr(name_atom);
 
         Value v;
