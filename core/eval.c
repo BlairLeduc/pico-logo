@@ -670,6 +670,77 @@ static int serialize_list_to_buffer(Node list, char *buffer, int max_len)
     return pos;
 }
 
+// Skip/peek helpers for tail-call lookahead (no execution)
+static bool skip_primary(Evaluator *eval);
+static bool skip_expr_bp(Evaluator *eval, int min_bp);
+
+static bool skip_primary(Evaluator *eval)
+{
+    Token t = peek(eval);
+
+    switch (t.type)
+    {
+    case TOKEN_NUMBER:
+    case TOKEN_QUOTED:
+    case TOKEN_COLON:
+    case TOKEN_WORD:
+        advance(eval);
+        return true;
+
+    case TOKEN_LEFT_BRACKET:
+        advance(eval);
+        while (true)
+        {
+            Token inner = peek(eval);
+            if (inner.type == TOKEN_EOF)
+                return false;
+            if (inner.type == TOKEN_RIGHT_BRACKET)
+            {
+                advance(eval);
+                break;
+            }
+            if (!skip_primary(eval))
+                return false;
+        }
+        return true;
+
+    case TOKEN_LEFT_PAREN:
+        advance(eval);
+        if (!skip_expr_bp(eval, BP_NONE))
+            return false;
+        if (peek(eval).type == TOKEN_RIGHT_PAREN)
+            advance(eval);
+        return true;
+
+    case TOKEN_MINUS:
+    case TOKEN_UNARY_MINUS:
+        advance(eval);
+        return skip_primary(eval);
+
+    default:
+        return false;
+    }
+}
+
+static bool skip_expr_bp(Evaluator *eval, int min_bp)
+{
+    if (!skip_primary(eval))
+        return false;
+
+    while (true)
+    {
+        Token op = peek(eval);
+        int bp = get_infix_bp(op.type);
+        if (bp == BP_NONE || bp < min_bp)
+            break;
+
+        advance(eval);
+        if (!skip_expr_bp(eval, bp + 1))
+            return false;
+    }
+    return true;
+}
+
 // Evaluate a list as procedure body with tail call optimization
 // The last instruction in the list is evaluated in tail position
 Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
@@ -694,10 +765,27 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
 
     while (!eval_at_end(eval))
     {
-        // Don't set tail position until we know this is the last instruction
-        // Execute the instruction normally first
+        // Determine if this instruction is the last one
+        bool last_instruction = false;
+        if (enable_tco)
+        {
+            Evaluator lookahead = *eval;
+            Lexer lookahead_lexer = *eval->lexer;
+            lookahead.lexer = &lookahead_lexer;
+            lookahead.has_current = eval->has_current;
+            lookahead.current = eval->current;
+            last_instruction = skip_expr_bp(&lookahead, BP_NONE) && eval_at_end(&lookahead);
+        }
+
+        // Set tail position for this instruction (don't redeclare old_tail)
+        eval->in_tail_position = enable_tco && last_instruction;
+
+        // Execute instruction
         r = eval_instruction(eval);
-        
+
+        // Restore tail flag
+        eval->in_tail_position = old_tail;
+
         // Check if there's more to execute
         bool at_end = eval_at_end(eval);
         
