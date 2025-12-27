@@ -67,6 +67,16 @@ const char *error_message(int code)
     return error_templates[0];
 }
 
+// Helper to append " in <proc>" suffix if caller is present
+static void append_caller_suffix(char *buf, size_t bufsize, const char *caller)
+{
+    if (caller)
+    {
+        size_t len = strlen(buf);
+        snprintf(buf + len, bufsize - len, " in %s", caller);
+    }
+}
+
 const char *error_format(Result r)
 {
     static char buf[256];
@@ -84,19 +94,11 @@ const char *error_format(Result r)
     {
     case ERR_DOESNT_LIKE_INPUT:
         // "proc doesn't like arg as input"
-        // or "proc doesn't like arg as input in caller"
         if (r.error_proc && r.error_arg)
         {
-            if (r.error_caller)
-            {
-                snprintf(buf, sizeof(buf), "%s doesn't like %s as input in %s",
-                         r.error_proc, r.error_arg, r.error_caller);
-            }
-            else
-            {
-                snprintf(buf, sizeof(buf), "%s doesn't like %s as input",
-                         r.error_proc, r.error_arg);
-            }
+            snprintf(buf, sizeof(buf), "%s doesn't like %s as input",
+                     r.error_proc, r.error_arg);
+            append_caller_suffix(buf, sizeof(buf), r.error_caller);
             return buf;
         }
         break;
@@ -107,11 +109,13 @@ const char *error_format(Result r)
         {
             snprintf(buf, sizeof(buf), "%s didn't output to %s",
                      r.error_proc, r.error_caller);
+            // Note: error_caller is already used in the message itself
             return buf;
         }
         else if (r.error_proc)
         {
             snprintf(buf, sizeof(buf), "%s didn't output", r.error_proc);
+            append_caller_suffix(buf, sizeof(buf), r.error_caller);
             return buf;
         }
         break;
@@ -122,6 +126,7 @@ const char *error_format(Result r)
         if (r.error_arg)
         {
             snprintf(buf, sizeof(buf), "Too few items in %s", r.error_arg);
+            append_caller_suffix(buf, sizeof(buf), r.error_caller);
             return buf;
         }
         break;
@@ -143,17 +148,24 @@ const char *error_format(Result r)
         if (r.error_proc)
         {
             snprintf(buf, sizeof(buf), tmpl, r.error_proc);
+            append_caller_suffix(buf, sizeof(buf), r.error_caller);
             return buf;
         }
         else if (r.error_arg)
         {
             snprintf(buf, sizeof(buf), tmpl, r.error_arg);
+            append_caller_suffix(buf, sizeof(buf), r.error_caller);
             return buf;
         }
         break;
         
     default:
-        // No placeholders or context not needed
+        // No placeholders or context not needed - still append caller if present
+        if (r.error_caller)
+        {
+            snprintf(buf, sizeof(buf), "%s in %s", tmpl, r.error_caller);
+            return buf;
+        }
         break;
     }
     
