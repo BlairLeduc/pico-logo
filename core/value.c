@@ -469,7 +469,39 @@ Result result_throw(const char *tag)
     return (Result){
         .status = RESULT_THROW,
         .throw_tag = tag,
-        .value = value_none()
+        .value = value_none(),
+        .pause_proc = NULL,
+        .error_code = 0,
+        .error_proc = NULL,
+        .error_arg = NULL,
+        .error_caller = NULL
+    };
+}
+
+Result result_pause(const char *proc_name)
+{
+    return (Result){
+        .status = RESULT_PAUSE,
+        .pause_proc = proc_name,
+        .value = value_none(),
+        .error_code = 0,
+        .error_proc = NULL,
+        .error_arg = NULL,
+        .error_caller = NULL,
+        .throw_tag = NULL
+    };
+}
+
+Result result_eof(void)
+{
+    return (Result){
+        .status = RESULT_EOF,
+        .value = value_none(),
+        .error_code = 0,
+        .error_proc = NULL,
+        .error_arg = NULL,
+        .error_caller = NULL,
+        .throw_tag = NULL
     };
 }
 

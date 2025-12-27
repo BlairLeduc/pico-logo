@@ -381,12 +381,29 @@ static Result prim_pon(Evaluator *eval, int argc, Value *args)
 }
 
 // pons - print out all variable names and values (not buried)
+// Also prints local variables if in a procedure scope (e.g., during pause)
 static Result prim_pons(Evaluator *eval, int argc, Value *args)
 {
     (void)eval;
     (void)argc;
     (void)args;
     
+    // Print local variables first (if any)
+    int local_count = var_local_count();
+    if (local_count > 0)
+    {
+        for (int i = 0; i < local_count; i++)
+        {
+            const char *name;
+            Value value;
+            if (var_get_local_by_index(i, &name, &value))
+            {
+                print_variable(name, value);
+            }
+        }
+    }
+    
+    // Print global variables
     int count = var_global_count(false);
     for (int i = 0; i < count; i++)
     {

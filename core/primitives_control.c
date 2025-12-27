@@ -7,8 +7,11 @@
 //
 
 #include "primitives.h"
+#include "procedures.h"
 #include "error.h"
 #include "eval.h"
+#include "lexer.h"
+#include "repl.h"
 #include "value.h"
 #include "variables.h"
 #include "devices/io.h"
@@ -309,17 +312,58 @@ static Result prim_wait(Evaluator *eval, int argc, Value *args)
 }
 
 //==========================================================================
-// Pause/Continue (stubs for now)
+// Pause/Continue
 //==========================================================================
+
+// Flag to signal continue from pause
+static bool pause_continue_requested = false;
+
+// Check if continue has been requested and reset the flag
+bool pause_check_continue(void)
+{
+    bool result = pause_continue_requested;
+    pause_continue_requested = false;
+    return result;
+}
+
+// Request continue from pause
+void pause_request_continue(void)
+{
+    pause_continue_requested = true;
+}
+
+// Reset pause state (for testing)
+void pause_reset_state(void)
+{
+    pause_continue_requested = false;
+}
 
 static Result prim_pause(Evaluator *eval, int argc, Value *args)
 {
     (void)eval;
     (void)argc;
     (void)args;
-    // TODO: Implement pause functionality
-    // For now, just return an error indicating it's not implemented
-    return result_error(ERR_PAUSING);
+    
+    // Get the current procedure name
+    const char *proc_name = proc_get_current();
+    if (proc_name == NULL)
+    {
+        // pause at top level is an error
+        return result_error(ERR_AT_TOPLEVEL);
+    }
+    
+    // Run the pause REPL - this blocks until co is called or throw "toplevel
+    LogoIO *io = primitives_get_io();
+    if (!io || !io->console)
+    {
+        return result_none();
+    }
+    
+    logo_io_write_line(io, "Pausing...");
+    
+    ReplState state;
+    repl_init(&state, io, REPL_FLAGS_PAUSE, proc_name);
+    return repl_run(&state);
 }
 
 static Result prim_co(Evaluator *eval, int argc, Value *args)
@@ -327,8 +371,9 @@ static Result prim_co(Evaluator *eval, int argc, Value *args)
     (void)eval;
     (void)argc;
     (void)args;
-    // TODO: Implement continue functionality
-    // For now, just do nothing
+    
+    // Signal to exit the pause REPL
+    pause_request_continue();
     return result_none();
 }
 

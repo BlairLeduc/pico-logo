@@ -17,12 +17,19 @@
 // Maximum number of user-defined procedures
 #define MAX_PROCEDURES 128
 
+// Maximum procedure call stack depth (for current proc tracking)
+#define MAX_CURRENT_PROC_DEPTH 32
+
 // Procedure storage
 static UserProcedure procedures[MAX_PROCEDURES];
 static int procedure_count = 0;
 
 // Tail call state (global for trampoline)
 static TailCall tail_call_state;
+
+// Current procedure stack (for pause prompt)
+static const char *current_proc_stack[MAX_CURRENT_PROC_DEPTH];
+static int current_proc_depth = 0;
 
 // Helper to write output for trace/step
 static void trace_write(const char *str)
@@ -88,6 +95,7 @@ void procedures_init(void)
         procedures[i].traced = false;
     }
     proc_clear_tail_call();
+    current_proc_depth = 0;
 }
 
 // Find procedure index, returns -1 if not found
@@ -356,6 +364,9 @@ Result proc_call(Evaluator *eval, UserProcedure *proc, int argc, Value *args)
         // Track procedure depth for TCO detection
         eval->proc_depth++;
 
+        // Track current procedure name (for pause prompt)
+        proc_push_current(proc->name);
+
         // Trace entry if traced
         if (proc->traced)
         {
@@ -447,6 +458,9 @@ Result proc_call(Evaluator *eval, UserProcedure *proc, int argc, Value *args)
         // Restore depth
         eval->proc_depth--;
 
+        // Pop current procedure name
+        proc_pop_current();
+
         // Pop scope before handling tail call
         var_pop_scope();
 
@@ -488,9 +502,51 @@ Result proc_call(Evaluator *eval, UserProcedure *proc, int argc, Value *args)
         {
             return result;
         }
+        if (result.status == RESULT_THROW)
+        {
+            // Propagate throws (e.g., throw "toplevel from pause)
+            return result;
+        }
 
         // Normal completion (no stop/output)
         return result_none();
+    }
+}
+
+//==========================================================================
+// Current Procedure Tracking (for pause prompt)
+//==========================================================================
+
+void proc_set_current(const char *name)
+{
+    if (current_proc_depth > 0)
+    {
+        current_proc_stack[current_proc_depth - 1] = name;
+    }
+}
+
+const char *proc_get_current(void)
+{
+    if (current_proc_depth > 0)
+    {
+        return current_proc_stack[current_proc_depth - 1];
+    }
+    return NULL;
+}
+
+void proc_push_current(const char *name)
+{
+    if (current_proc_depth < MAX_CURRENT_PROC_DEPTH)
+    {
+        current_proc_stack[current_proc_depth++] = name;
+    }
+}
+
+void proc_pop_current(void)
+{
+    if (current_proc_depth > 0)
+    {
+        current_proc_depth--;
     }
 }
 

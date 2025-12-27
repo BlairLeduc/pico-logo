@@ -1938,6 +1938,26 @@ untrace _list_
 `untrace` stops the tracing of procedure _name_ and causes it to execute normally again.
 
 
+# Special Control Characters
+
+## Break
+
+`Brk`
+
+Pressing `Brk` immediately stops whatever is running, returning Logo to top level, unless in a pause mode.
+
+
+## F4
+
+`F4`
+
+Pressing `F4` interrupts whatever is running. Typing any character resumes normal execution. This special character is particularly useful in giving yourself time to read when Logo is displaying more than one screenful of information.
+
+## F9
+
+`F9`
+
+Pressing `F9` interrupts whatever is running, causing a pause. `F9` is equivalent in effect to [`pause`](#pause), but different in its use: you press `F9` at the keyboard during the running of a procedure, while [`pause`](#pause) is part of the definition of a procedure.
 
 
 # Modifying Procedures Under Program Control

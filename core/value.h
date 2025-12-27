@@ -51,7 +51,9 @@ extern "C"
         RESULT_STOP,   // stop command, exit procedure
         RESULT_OUTPUT, // output command, has value, exit procedure
         RESULT_ERROR,  // Error occurred
-        RESULT_THROW   // throw command, propagate to catch
+        RESULT_THROW,  // throw command, propagate to catch
+        RESULT_PAUSE,  // pause command, enter nested REPL
+        RESULT_EOF     // End of input, exit REPL
     } ResultStatus;
 
     // Evaluation result (FP-style)
@@ -64,6 +66,7 @@ extern "C"
         const char *error_arg;   // Bad argument as string (e.g., "hello")
         const char *error_caller; // User procedure where error occurred (e.g., "add")
         const char *throw_tag;   // Tag for RESULT_THROW (e.g., "error", "toplevel")
+        const char *pause_proc;  // Procedure name for RESULT_PAUSE
     } Result;
 
     //==========================================================================
@@ -118,6 +121,8 @@ extern "C"
     Result result_output(Value v);
     Result result_error(int code);
     Result result_throw(const char *tag);
+    Result result_pause(const char *proc_name);
+    Result result_eof(void);
 
     // Error with context: "proc doesn't like arg as input"
     Result result_error_arg(int code, const char *proc, const char *arg);

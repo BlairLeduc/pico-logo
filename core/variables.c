@@ -422,6 +422,50 @@ bool var_get_global_by_index(int index, bool include_buried,
     return false;
 }
 
+// Count local variables visible in the current scope chain
+int var_local_count(void)
+{
+    int count = 0;
+    for (int s = 0; s < scope_depth; s++)
+    {
+        ScopeFrame *frame = &scope_stack[s];
+        for (int i = 0; i < frame->count; i++)
+        {
+            if (frame->variables[i].active && frame->variables[i].has_value)
+            {
+                count++;
+            }
+        }
+    }
+    return count;
+}
+
+// Get local variable by index (for iteration)
+// Iterates from newest scope to oldest (most recent first)
+bool var_get_local_by_index(int index, const char **name_out, Value *value_out)
+{
+    int current = 0;
+    // Iterate from newest scope to oldest
+    for (int s = scope_depth - 1; s >= 0; s--)
+    {
+        ScopeFrame *frame = &scope_stack[s];
+        for (int i = 0; i < frame->count; i++)
+        {
+            if (frame->variables[i].active && frame->variables[i].has_value)
+            {
+                if (current == index)
+                {
+                    if (name_out) *name_out = frame->variables[i].name;
+                    if (value_out) *value_out = frame->variables[i].value;
+                    return true;
+                }
+                current++;
+            }
+        }
+    }
+    return false;
+}
+
 // Mark all variable values as GC roots
 void var_gc_mark_all(void)
 {

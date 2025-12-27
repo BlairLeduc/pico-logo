@@ -92,6 +92,28 @@ void test_pons_shows_variables(void)
     TEST_ASSERT_TRUE(strstr(output_buffer, "make \"name \"John") != NULL);
 }
 
+void test_pons_shows_local_variables(void)
+{
+    // Create a global variable
+    run_string("make \"global 100");
+    
+    // Push a scope to simulate being inside a procedure
+    var_push_scope();
+    
+    // Create a local variable
+    var_set_local("local", value_number(42));
+    
+    reset_output();
+    
+    // pons should show both local and global variables
+    run_string("pons");
+    TEST_ASSERT_TRUE(strstr(output_buffer, "make \"local 42") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "make \"global 100") != NULL);
+    
+    // Clean up
+    var_pop_scope();
+}
+
 void test_pon_shows_single_variable(void)
 {
     run_string("make \"myvar 123");
@@ -522,6 +544,7 @@ int main(void)
     RUN_TEST(test_pot_with_params);
     RUN_TEST(test_po_shows_full_procedure);
     RUN_TEST(test_pons_shows_variables);
+    RUN_TEST(test_pons_shows_local_variables);
     RUN_TEST(test_pon_shows_single_variable);
     RUN_TEST(test_bury_hides_procedure_from_pots);
     RUN_TEST(test_unbury_shows_procedure_in_pots);

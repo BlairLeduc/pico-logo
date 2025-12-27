@@ -60,6 +60,8 @@ static void host_hardware_get_battery_level(int *level, bool *charging)
 
 // User interrupt flag for host (can be set by signal handler if needed)
 static volatile bool host_user_interrupt = false;
+static volatile bool host_pause_requested = false;
+static volatile bool host_freeze_requested = false;
 
 static bool host_hardware_check_user_interrupt(void)
 {
@@ -71,6 +73,26 @@ static void host_hardware_clear_user_interrupt(void)
     host_user_interrupt = false;
 }
 
+static bool host_hardware_check_pause_request(void)
+{
+    return host_pause_requested;
+}
+
+static void host_hardware_clear_pause_request(void)
+{
+    host_pause_requested = false;
+}
+
+static bool host_hardware_check_freeze_request(void)
+{
+    return host_freeze_requested;
+}
+
+static void host_hardware_clear_freeze_request(void)
+{
+    host_freeze_requested = false;
+}
+
 static LogoHardwareOps host_hardware_ops = {
     .sleep = host_hardware_sleep,
     .random = host_hardware_random,
@@ -78,6 +100,10 @@ static LogoHardwareOps host_hardware_ops = {
     .power_off = NULL,
     .check_user_interrupt = host_hardware_check_user_interrupt,
     .clear_user_interrupt = host_hardware_clear_user_interrupt,
+    .check_pause_request = host_hardware_check_pause_request,
+    .clear_pause_request = host_hardware_clear_pause_request,
+    .check_freeze_request = host_hardware_check_freeze_request,
+    .clear_freeze_request = host_hardware_clear_freeze_request,
     .toot = NULL,  // Host device has no audio
 };
 
