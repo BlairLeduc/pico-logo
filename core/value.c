@@ -480,6 +480,10 @@ Result result_pause(const char *proc_name)
         .status = RESULT_PAUSE,
         .pause_proc = proc_name,
         .value = value_none(),
+        .error_code = 0,
+        .error_proc = NULL,
+        .error_arg = NULL,
+        .error_caller = NULL,
         .throw_tag = NULL
     };
 }
