@@ -71,7 +71,13 @@ static Result prim_define(Evaluator *eval, int argc, Value *args)
             if (mem_is_word(param))
             {
                 // Parameter name - intern it
-                params[param_count++] = mem_word_ptr(param);
+                // Skip leading colon if present (e.g., ":x" -> "x")
+                const char *pname = mem_word_ptr(param);
+                if (pname[0] == ':')
+                {
+                    pname++;  // Skip the colon
+                }
+                params[param_count++] = pname;
             }
             curr = mem_cdr(curr);
         }
