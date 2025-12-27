@@ -114,6 +114,32 @@ void test_pons_shows_local_variables(void)
     var_pop_scope();
 }
 
+void test_pons_hides_shadowed_globals(void)
+{
+    // Create a global variable
+    run_string("make \"c 555");
+    
+    // Push a scope to simulate being inside a procedure
+    var_push_scope();
+    
+    // Create a local variable with same name, shadowing the global
+    var_set_local("c", value_number(2));
+    
+    reset_output();
+    
+    // pons should only show the local variable, not the shadowed global
+    run_string("pons");
+    
+    // Should show the local value (2)
+    TEST_ASSERT_TRUE(strstr(output_buffer, "make \"c 2") != NULL);
+    
+    // Should NOT show the global value (555) - it's shadowed
+    TEST_ASSERT_TRUE(strstr(output_buffer, "make \"c 555") == NULL);
+    
+    // Clean up
+    var_pop_scope();
+}
+
 void test_pon_shows_single_variable(void)
 {
     run_string("make \"myvar 123");
@@ -545,6 +571,7 @@ int main(void)
     RUN_TEST(test_po_shows_full_procedure);
     RUN_TEST(test_pons_shows_variables);
     RUN_TEST(test_pons_shows_local_variables);
+    RUN_TEST(test_pons_hides_shadowed_globals);
     RUN_TEST(test_pon_shows_single_variable);
     RUN_TEST(test_bury_hides_procedure_from_pots);
     RUN_TEST(test_unbury_shows_procedure_in_pots);

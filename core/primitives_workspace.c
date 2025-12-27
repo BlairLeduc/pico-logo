@@ -403,7 +403,7 @@ static Result prim_pons(Evaluator *eval, int argc, Value *args)
         }
     }
     
-    // Print global variables
+    // Print global variables (skip those shadowed by locals)
     int count = var_global_count(false);
     for (int i = 0; i < count; i++)
     {
@@ -411,7 +411,11 @@ static Result prim_pons(Evaluator *eval, int argc, Value *args)
         Value value;
         if (var_get_global_by_index(i, false, &name, &value))
         {
-            print_variable(name, value);
+            // Skip if shadowed by a local variable
+            if (!var_is_shadowed_by_local(name))
+            {
+                print_variable(name, value);
+            }
         }
     }
     
