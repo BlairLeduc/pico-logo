@@ -199,6 +199,19 @@ static void mock_clear_pause_request(void)
     mock_pause_requested = false;
 }
 
+// Freeze request flag for testing (F4 key)
+static bool mock_freeze_requested = false;
+
+static bool mock_check_freeze_request(void)
+{
+    return mock_freeze_requested;
+}
+
+static void mock_clear_freeze_request(void)
+{
+    mock_freeze_requested = false;
+}
+
 // Mock power_off state for testing
 static bool mock_power_off_available = false;
 static bool mock_power_off_result = false;
@@ -219,6 +232,8 @@ static LogoHardwareOps mock_hardware_ops = {
     .clear_user_interrupt = mock_clear_user_interrupt,
     .check_pause_request = mock_check_pause_request,
     .clear_pause_request = mock_clear_pause_request,
+    .check_freeze_request = mock_check_freeze_request,
+    .clear_freeze_request = mock_clear_freeze_request,
     .toot = NULL,  // Mock: no audio
 };
 
@@ -263,6 +278,7 @@ static void test_scaffold_setUp(void)
     use_mock_device = false;
     mock_user_interrupt = false;  // Reset user interrupt flag
     mock_pause_requested = false; // Reset pause request flag
+    mock_freeze_requested = false; // Reset freeze request flag
     mock_battery_level = 100;     // Reset mock battery state
     mock_battery_charging = false;
     

@@ -50,6 +50,13 @@ extern "C"
         // Clear the pause request flag
         void (*clear_pause_request)(void);
 
+        // Check if freeze has been requested (F4 key)
+        // Returns true if freeze was requested
+        bool (*check_freeze_request)(void);
+
+        // Clear the freeze request flag
+        void (*clear_freeze_request)(void);
+
         // Play a tone
         // duration is in milliseconds, frequencies are in Hz
         // If the device is already playing a tone, block until it finishes

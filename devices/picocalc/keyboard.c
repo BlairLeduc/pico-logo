@@ -84,6 +84,15 @@ void keyboard_poll()
                 }
                 // Don't buffer F9 - it's handled via the flag
             }
+            else if (key_code == KEY_F4)
+            {
+                // F4 requests freeze during execution (not during input)
+                if (!input_active)
+                {
+                    freeze_requested = true;
+                }
+                // Don't buffer F4 - it's handled via the flag
+            }
             else if (key_code == KEY_F1 || key_code == KEY_F2 || key_code == KEY_F3)
             {
                 // During execution (input_active=false), switch screen mode immediately

@@ -591,6 +591,47 @@ void test_pause_request_ignored_at_toplevel(void)
     mock_pause_requested = false;
 }
 
+void test_freeze_request_waits_for_key(void)
+{
+    // Define a procedure
+    proc_define_from_text("to freezeme\nprint 1\nprint 2\nend");
+    
+    // Set mock input to provide a key to continue after freeze
+    set_mock_input("x");
+    
+    // Set the freeze request flag
+    mock_freeze_requested = true;
+    
+    // Run the procedure - should freeze briefly then continue after key
+    run_string("freezeme");
+    
+    // Should complete normally after key was pressed
+    TEST_ASSERT_TRUE(strstr(output_buffer, "1") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "2") != NULL);
+    
+    // Flag should be cleared
+    TEST_ASSERT_FALSE(mock_freeze_requested);
+}
+
+void test_freeze_request_break_stops_execution(void)
+{
+    // Define a procedure
+    proc_define_from_text("to freezeme2\nprint 1\nprint 2\nend");
+    
+    // Set the freeze request flag
+    mock_freeze_requested = true;
+    
+    // Set user interrupt to simulate Brk during freeze
+    mock_user_interrupt = true;
+    
+    // Run the procedure - should stop due to Brk
+    Result r = run_string("freezeme2");
+    
+    // Should have stopped
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_STOPPED, r.error_code);
+}
+
 //==========================================================================
 // Catch/Throw Tests (basic stubs for now)
 //==========================================================================
@@ -848,6 +889,10 @@ int main(void)
     // F9 pause request
     RUN_TEST(test_pause_request_triggers_pause_in_procedure);
     RUN_TEST(test_pause_request_ignored_at_toplevel);
+    
+    // F4 freeze request
+    RUN_TEST(test_freeze_request_waits_for_key);
+    RUN_TEST(test_freeze_request_break_stops_execution);
     
     // Catch/throw/error
     RUN_TEST(test_catch_basic);

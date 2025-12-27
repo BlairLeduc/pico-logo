@@ -140,6 +140,34 @@ void logo_io_clear_pause_request(LogoIO *io)
     io->hardware->ops->clear_pause_request();
 }
 
+bool logo_io_check_freeze_request(LogoIO *io)
+{
+    if (!io || !io->hardware || !io->hardware->ops || !io->hardware->ops->check_freeze_request)
+    {
+        return false;
+    }
+
+    if (io->hardware->ops->check_freeze_request())
+    {
+        // Clear the freeze flag and return true
+        if (io->hardware->ops->clear_freeze_request)
+        {
+            io->hardware->ops->clear_freeze_request();
+        }
+        return true;
+    }
+    return false;
+}
+
+void logo_io_clear_freeze_request(LogoIO *io)
+{
+    if (!io || !io->hardware || !io->hardware->ops || !io->hardware->ops->clear_freeze_request)
+    {
+        return;
+    }
+    io->hardware->ops->clear_freeze_request();
+}
+
 //
 // File prefix management
 //

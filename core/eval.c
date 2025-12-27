@@ -592,6 +592,58 @@ Result eval_instruction(Evaluator *eval)
         return result_error(ERR_STOPPED);
     }
 
+    // Check for freeze request (F4 key) - temporarily pause until key pressed
+    if (io && logo_io_check_freeze_request(io))
+    {
+        // Wait for any key to be pressed (except F4)
+        // During freeze: F9 triggers pause, Brk stops execution, F4 is ignored
+        bool freeze_done = false;
+        while (!freeze_done)
+        {
+            // Check for user interrupt (Brk) while waiting
+            if (logo_io_check_user_interrupt(io))
+            {
+                return result_error(ERR_STOPPED);
+            }
+            // Check for pause request (F9) while waiting
+            if (logo_io_check_pause_request(io))
+            {
+                const char *proc_name = proc_get_current();
+                if (proc_name != NULL)
+                {
+                    logo_io_clear_pause_request(io);
+                    logo_io_write_line(io, "Pausing...");
+                    
+                    ReplState state;
+                    repl_init(&state, io, REPL_FLAGS_PAUSE, proc_name);
+                    Result r = repl_run(&state);
+                    
+                    if (r.status != RESULT_OK && r.status != RESULT_NONE)
+                    {
+                        return r;
+                    }
+                }
+                // After pause REPL exits, continue execution
+                freeze_done = true;
+            }
+            // Eat any additional F4 presses while frozen
+            else if (logo_io_check_freeze_request(io))
+            {
+                // Just consume it and keep waiting
+            }
+            else if (logo_io_key_available(io))
+            {
+                // Consume the key that ended the freeze
+                logo_io_read_char(io);
+                freeze_done = true;
+            }
+            else
+            {
+                logo_io_sleep(io, 10);  // Small sleep to avoid busy waiting
+            }
+        }
+    }
+
     // Check for pause request (F9 key) - only works inside a procedure
     // We check if the flag is set, but only clear it if we actually pause
     if (io && logo_io_check_pause_request(io))

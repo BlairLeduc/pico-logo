@@ -91,6 +91,13 @@ extern "C"
     // Clear the pause request flag
     void logo_io_clear_pause_request(LogoIO *io);
 
+    // Check if freeze has been requested (F4 key)
+    // Returns true if freeze was requested
+    bool logo_io_check_freeze_request(LogoIO *io);
+
+    // Clear the freeze request flag
+    void logo_io_clear_freeze_request(LogoIO *io);
+
     //
     // File prefix management
     //
