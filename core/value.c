@@ -492,6 +492,19 @@ Result result_pause(const char *proc_name)
     };
 }
 
+Result result_eof(void)
+{
+    return (Result){
+        .status = RESULT_EOF,
+        .value = value_none(),
+        .error_code = 0,
+        .error_proc = NULL,
+        .error_arg = NULL,
+        .error_caller = NULL,
+        .throw_tag = NULL
+    };
+}
+
 Result result_error_arg(int code, const char *proc, const char *arg)
 {
     return (Result){
