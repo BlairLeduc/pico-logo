@@ -101,6 +101,12 @@ extern "C"
     void proc_untrace(const char *name);
     bool proc_is_traced(const char *name);
 
+    // Current procedure tracking (for pause prompt)
+    void proc_set_current(const char *name);
+    const char *proc_get_current(void);
+    void proc_push_current(const char *name);
+    void proc_pop_current(void);
+
     // Parse and define a procedure from text: "to name :param ... body ... end"
     // Returns a Result - RESULT_NONE on success, RESULT_ERROR on failure
     Result proc_define_from_text(const char *text);

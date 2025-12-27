@@ -633,6 +633,110 @@ void test_go_no_label(void)
     TEST_ASSERT_EQUAL(ERR_CANT_FIND_LABEL, r.error_code);
 }
 
+//==========================================================================
+// Pause/Continue Tests
+//==========================================================================
+
+void test_pause_at_toplevel_error(void)
+{
+    // pause at top level should return error
+    Result r = run_string("pause");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_AT_TOPLEVEL, r.error_code);
+}
+
+void test_co_at_toplevel(void)
+{
+    // co at top level should do nothing (no pause to continue)
+    Result r = run_string("co");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+}
+
+void test_pause_in_procedure_with_co(void)
+{
+    // Define a procedure that pauses using proc_define_from_text
+    Result def = proc_define_from_text("to testproc :x print :x pause print :x + 1 end");
+    TEST_ASSERT_EQUAL(RESULT_OK, def.status);
+    reset_output();
+    
+    // Set up input: "co\n" to continue immediately after pause
+    set_mock_input("co\n");
+    
+    // Run the procedure
+    Result r = run_string("testproc 5");
+    
+    // Should complete normally (RESULT_NONE)
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Should print "5" then "Pausing..." then "6"
+    // The Pausing... message and prompt are also written to output
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "5\n"));
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "Pausing..."));
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "6\n"));
+}
+
+void test_pause_can_inspect_local_variables(void)
+{
+    // Define a procedure that pauses
+    Result def = proc_define_from_text("to testproc :val pause end");
+    TEST_ASSERT_EQUAL(RESULT_OK, def.status);
+    reset_output();
+    
+    // Set up input: print the local variable, then continue
+    set_mock_input("print :val\nco\n");
+    
+    // Run the procedure
+    Result r = run_string("testproc 42");
+    
+    // Should complete normally
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Output should contain "42" (the value of :val)
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "42"));
+}
+
+void test_pause_prompt_shows_procedure_name(void)
+{
+    // Define a procedure that pauses
+    Result def = proc_define_from_text("to myproc pause end");
+    TEST_ASSERT_EQUAL(RESULT_OK, def.status);
+    reset_output();
+    
+    // Set up input: continue
+    set_mock_input("co\n");
+    
+    // Run the procedure
+    Result r = run_string("myproc");
+    
+    // Should complete normally
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Prompt should contain "myproc?"
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "myproc?"));
+}
+
+void test_pause_throw_toplevel_exits(void)
+{
+    // Define a procedure that pauses
+    Result def = proc_define_from_text("to testpause print \"before pause print \"after end");
+    TEST_ASSERT_EQUAL(RESULT_OK, def.status);
+    reset_output();
+    
+    // Set up input: throw "toplevel to exit pause
+    set_mock_input("throw \"toplevel\n");
+    
+    // Run the procedure
+    Result r = run_string("testpause");
+    
+    // Should return throw result
+    TEST_ASSERT_EQUAL(RESULT_THROW, r.status);
+    TEST_ASSERT_EQUAL_STRING("toplevel", r.throw_tag);
+    
+    // Should have printed "before" but not "after"
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "before"));
+    TEST_ASSERT_NULL(strstr(output_buffer, "after\n"));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -711,6 +815,14 @@ int main(void)
     // Go/label
     RUN_TEST(test_label_basic);
     RUN_TEST(test_go_no_label);
+    
+    // Pause/continue
+    RUN_TEST(test_pause_at_toplevel_error);
+    RUN_TEST(test_co_at_toplevel);
+    RUN_TEST(test_pause_in_procedure_with_co);
+    RUN_TEST(test_pause_can_inspect_local_variables);
+    RUN_TEST(test_pause_prompt_shows_procedure_name);
+    RUN_TEST(test_pause_throw_toplevel_exits);
 
     return UNITY_END();
 }

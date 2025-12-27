@@ -66,6 +66,14 @@ extern "C"
     // Reset control flow test state (for testing purposes)
     void primitives_control_reset_test_state(void);
 
+    // Pause/Continue support
+    // Check if continue has been requested (and reset the flag)
+    bool pause_check_continue(void);
+    // Request continue from pause (called by co primitive)
+    void pause_request_continue(void);
+    // Reset pause state (for testing)
+    void pause_reset_state(void);
+
 #ifdef __cplusplus
 }
 #endif

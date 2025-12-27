@@ -469,7 +469,18 @@ Result result_throw(const char *tag)
     return (Result){
         .status = RESULT_THROW,
         .throw_tag = tag,
-        .value = value_none()
+        .value = value_none(),
+        .pause_proc = NULL
+    };
+}
+
+Result result_pause(const char *proc_name)
+{
+    return (Result){
+        .status = RESULT_PAUSE,
+        .pause_proc = proc_name,
+        .value = value_none(),
+        .throw_tag = NULL
     };
 }
 
