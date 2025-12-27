@@ -236,6 +236,8 @@ int picocalc_read_line(char *buf, int size)
             {
                 screen_txt_erase_cursor();
                 screen_txt_enable_cursor(false);
+                // Move cursor to end of input before newline (handles wrapped lines)
+                screen_txt_set_cursor(end_col, end_row);
                 printf("\n"); // Print newline
 
                 history_add((const char *)buf); // Add to history
