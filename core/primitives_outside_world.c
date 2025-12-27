@@ -62,6 +62,11 @@ static void print_list_contents(Node node)
             print_list_contents(element);
             print_to_writer("]");
         }
+        else if (mem_is_nil(element))
+        {
+            // Empty list as element
+            print_to_writer("[]");
+        }
         node = mem_cdr(node);
     }
 }

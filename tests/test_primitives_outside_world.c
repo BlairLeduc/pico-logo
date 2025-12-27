@@ -83,6 +83,30 @@ void test_show_nested_list(void)
     TEST_ASSERT_EQUAL_STRING("[a [b c] d]\n", output_buffer);
 }
 
+void test_show_empty_list(void)
+{
+    run_string("show []");
+    TEST_ASSERT_EQUAL_STRING("[]\n", output_buffer);
+}
+
+void test_print_empty_list(void)
+{
+    run_string("print []");
+    TEST_ASSERT_EQUAL_STRING("\n", output_buffer);
+}
+
+void test_type_empty_list(void)
+{
+    run_string("type []");
+    TEST_ASSERT_EQUAL_STRING("", output_buffer);
+}
+
+void test_show_list_with_empty_list(void)
+{
+    run_string("show [a [] b]");
+    TEST_ASSERT_EQUAL_STRING("[a [] b]\n", output_buffer);
+}
+
 void test_type_number_no_newline(void)
 {
     run_string("type 42");
@@ -349,12 +373,17 @@ int main(void)
     RUN_TEST(test_show_word);
     RUN_TEST(test_show_list_with_brackets);
     RUN_TEST(test_show_nested_list);
+    RUN_TEST(test_show_empty_list);
+    RUN_TEST(test_show_list_with_empty_list);
+    
+    RUN_TEST(test_print_empty_list);
     
     RUN_TEST(test_type_number_no_newline);
     RUN_TEST(test_type_word_no_newline);
     RUN_TEST(test_type_list_no_outer_brackets);
     RUN_TEST(test_type_multiple_args);
     RUN_TEST(test_type_then_print);
+    RUN_TEST(test_type_empty_list);
     
     // Input tests
     RUN_TEST(test_keyp_no_input_returns_false);
