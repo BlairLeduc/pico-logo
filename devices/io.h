@@ -84,6 +84,13 @@ extern "C"
     // Returns true if interrupt was requested
     bool logo_io_check_user_interrupt(LogoIO *io);
 
+    // Check if pause has been requested (F9 key) and clear the flag
+    // Returns true if pause was requested
+    bool logo_io_check_pause_request(LogoIO *io);
+
+    // Clear the pause request flag
+    void logo_io_clear_pause_request(LogoIO *io);
+
     //
     // File prefix management
     //

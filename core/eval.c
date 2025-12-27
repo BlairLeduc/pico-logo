@@ -7,6 +7,7 @@
 #include "error.h"
 #include "primitives.h"
 #include "procedures.h"
+#include "repl.h"
 #include "variables.h"
 #include "devices/io.h"
 #include <string.h>
@@ -589,6 +590,33 @@ Result eval_instruction(Evaluator *eval)
     if (io && logo_io_check_user_interrupt(io))
     {
         return result_error(ERR_STOPPED);
+    }
+
+    // Check for pause request (F9 key) - only works inside a procedure
+    // We check if the flag is set, but only clear it if we actually pause
+    if (io && logo_io_check_pause_request(io))
+    {
+        const char *proc_name = proc_get_current();
+        if (proc_name != NULL)
+        {
+            // Clear the flag now that we're actually pausing
+            logo_io_clear_pause_request(io);
+            
+            // Run the pause REPL - this blocks until co is called or throw "toplevel
+            logo_io_write_line(io, "Pausing...");
+            
+            ReplState state;
+            repl_init(&state, io, REPL_FLAGS_PAUSE, proc_name);
+            Result r = repl_run(&state);
+            
+            // If pause REPL exited with throw or error, propagate it
+            if (r.status != RESULT_OK && r.status != RESULT_NONE)
+            {
+                return r;
+            }
+            // Otherwise continue execution
+        }
+        // Don't clear flag if at top level - defer to when we're inside a procedure
     }
 
     if (eval_at_end(eval))

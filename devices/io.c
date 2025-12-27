@@ -119,6 +119,27 @@ bool logo_io_check_user_interrupt(LogoIO *io)
     return false;
 }
 
+bool logo_io_check_pause_request(LogoIO *io)
+{
+    if (!io || !io->hardware || !io->hardware->ops || !io->hardware->ops->check_pause_request)
+    {
+        return false;
+    }
+
+    // Don't clear the flag here - let the caller decide when to clear
+    // This allows the pause to be deferred until inside a procedure
+    return io->hardware->ops->check_pause_request();
+}
+
+void logo_io_clear_pause_request(LogoIO *io)
+{
+    if (!io || !io->hardware || !io->hardware->ops || !io->hardware->ops->clear_pause_request)
+    {
+        return;
+    }
+    io->hardware->ops->clear_pause_request();
+}
+
 //
 // File prefix management
 //

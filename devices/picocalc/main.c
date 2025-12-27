@@ -28,6 +28,7 @@
 
 
 volatile bool user_interrupt;
+volatile bool pause_requested = false;  // F9 key triggers pause during execution
 volatile bool input_active = false;  // When true, keyboard_poll skips F1/F2/F3 mode switching
 
 // Forward declaration for the I/O setter

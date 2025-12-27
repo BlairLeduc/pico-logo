@@ -549,6 +549,48 @@ void test_user_interrupt_stops_repeat(void)
     TEST_ASSERT_EQUAL_STRING("1\n1\n1\n", output_buffer);
 }
 
+void test_pause_request_triggers_pause_in_procedure(void)
+{
+    // Define a procedure that will be paused by F9
+    proc_define_from_text("to pauseme\nprint 1\nprint 2\nend");
+    
+    // Set mock input to simulate user typing "co" in the pause REPL
+    set_mock_input("co\n");
+    
+    // Set the pause request flag before evaluating
+    mock_pause_requested = true;
+    
+    // Run the procedure - should pause then continue after co
+    run_string("pauseme");
+    
+    // Should see "Pausing..." then continue after co
+    TEST_ASSERT_TRUE(strstr(output_buffer, "Pausing...") != NULL);
+    // Should complete after co
+    TEST_ASSERT_TRUE(strstr(output_buffer, "1") != NULL);
+    
+    // Flag should be cleared after check
+    TEST_ASSERT_FALSE(mock_pause_requested);
+}
+
+void test_pause_request_ignored_at_toplevel(void)
+{
+    // Set the pause request flag at top level (no procedure running)
+    mock_pause_requested = true;
+    
+    // Run something at top level - pause should be ignored
+    run_string("print 42");
+    
+    // Should execute normally (F9 only works inside procedures)
+    TEST_ASSERT_EQUAL_STRING("42\n", output_buffer);
+    
+    // Flag should still be set since we didn't enter a procedure
+    // (it will be consumed next time we're inside a procedure)
+    TEST_ASSERT_TRUE(mock_pause_requested);
+    
+    // Clean up
+    mock_pause_requested = false;
+}
+
 //==========================================================================
 // Catch/Throw Tests (basic stubs for now)
 //==========================================================================
@@ -802,6 +844,10 @@ int main(void)
     // User interrupt
     RUN_TEST(test_user_interrupt_stops_evaluation);
     RUN_TEST(test_user_interrupt_stops_repeat);
+    
+    // F9 pause request
+    RUN_TEST(test_pause_request_triggers_pause_in_procedure);
+    RUN_TEST(test_pause_request_ignored_at_toplevel);
     
     // Catch/throw/error
     RUN_TEST(test_catch_basic);

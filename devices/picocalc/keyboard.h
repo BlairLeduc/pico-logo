@@ -61,6 +61,7 @@
 #define KEYBOARD_POLL_MS    (100) // poll keyboard every 100 ms
 
 extern volatile bool user_interrupt;
+extern volatile bool pause_requested;  // F9 key triggers pause during execution
 extern volatile bool input_active;  // When true, keyboard_poll skips F1/F2/F3 mode switching
 
 // Callback function type for when a key becomes available

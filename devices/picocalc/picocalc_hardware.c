@@ -62,6 +62,16 @@ static void picocalc_clear_user_interrupt(void)
     user_interrupt = false;
 }
 
+static bool picocalc_check_pause_request(void)
+{
+    return pause_requested;
+}
+
+static void picocalc_clear_pause_request(void)
+{
+    pause_requested = false;
+}
+
 static void picocalc_toot(uint32_t duration_ms, uint32_t left_freq, uint32_t right_freq)
 {
     // Wait for any existing tone to finish before starting a new one.
@@ -88,6 +98,8 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .power_off = picocalc_power_off,
     .check_user_interrupt = picocalc_check_user_interrupt,
     .clear_user_interrupt = picocalc_clear_user_interrupt,
+    .check_pause_request = picocalc_check_pause_request,
+    .clear_pause_request = picocalc_clear_pause_request,
     .toot = picocalc_toot,
 }; 
 

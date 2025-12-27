@@ -75,6 +75,15 @@ void keyboard_poll()
                 // Don't add to buffer - keyboard_get_key() will synthesize KEY_BREAK
                 // when it sees user_interrupt is set
             }
+            else if (key_code == KEY_F9)
+            {
+                // F9 requests pause during execution (not during input)
+                if (!input_active)
+                {
+                    pause_requested = true;
+                }
+                // Don't buffer F9 - it's handled via the flag
+            }
             else if (key_code == KEY_F1 || key_code == KEY_F2 || key_code == KEY_F3)
             {
                 // During execution (input_active=false), switch screen mode immediately
