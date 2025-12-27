@@ -57,12 +57,12 @@ void variables_init(void)
     global_test_value = false;
 }
 
-void var_push_scope(void)
+bool var_push_scope(void)
 {
     if (scope_depth >= MAX_SCOPE_DEPTH)
     {
-        // Out of scope space - could set an error flag
-        return;
+        // Out of scope space
+        return false;
     }
     ScopeFrame *frame = &scope_stack[scope_depth];
     frame->count = 0;
@@ -74,6 +74,7 @@ void var_push_scope(void)
         frame->variables[i].has_value = false;
     }
     scope_depth++;
+    return true;
 }
 
 void var_pop_scope(void)

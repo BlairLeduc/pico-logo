@@ -647,6 +647,132 @@ void test_proc_define_from_text_with_parentheses(void)
     TEST_ASSERT_EQUAL_FLOAT(6.0f, r2.value.as.number);
 }
 
+void test_unconditional_tco_no_args(void)
+{
+    // Test unconditional infinite recursion with no args - should use TCO
+    // This tests that `to foo pr "Hey foo end` doesn't overflow
+    // We use a counter to stop after enough iterations
+    run_string("make \"counter 0");
+    
+    Result r = proc_define_from_text("to infloop make \"counter :counter + 1 "
+                                     "if :counter > 100 [stop] "
+                                     "infloop end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    Result r2 = run_string("infloop");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);  // Should complete successfully
+    
+    Result r3 = eval_string(":counter");
+    TEST_ASSERT_EQUAL(VALUE_NUMBER, r3.value.type);
+    TEST_ASSERT_EQUAL_FLOAT(101.0f, r3.value.as.number);
+}
+
+void test_unconditional_tco_with_args(void)
+{
+    // Test unconditional infinite recursion WITH args - the bug case
+    // This is the case that crashes: `to foo2 :n pr se "Hey :n foo2 :n end`
+    // We use a counter to stop after enough iterations
+    run_string("make \"counter 0");
+    
+    Result r = proc_define_from_text("to infloop2 :n make \"counter :counter + 1 "
+                                     "if :counter > 100 [stop] "
+                                     "infloop2 :n end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    Result r2 = run_string("infloop2 42");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);  // Should complete successfully with TCO
+    
+    Result r3 = eval_string(":counter");
+    TEST_ASSERT_EQUAL(VALUE_NUMBER, r3.value.type);
+    TEST_ASSERT_EQUAL_FLOAT(101.0f, r3.value.as.number);
+}
+
+void test_tco_with_args_exact_failing_case(void)
+{
+    // This is the EXACT failing case from the user:
+    // to foo2 :n
+    //   pr se "Hey :n
+    //   foo2 :n
+    // end
+    // The key difference is the recursive call uses the argument
+    // Let's verify it works with > 32 recursions (scope limit)
+    run_string("make \"loopcount 0");
+    
+    // Define procedure that uses its argument in recursive call
+    Result r = proc_define_from_text(
+        "to foo2 :n "
+        "make \"loopcount :loopcount + 1 "
+        "if :loopcount > 100 [stop] "
+        "foo2 :n "
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    Result r2 = run_string("foo2 5");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+    
+    Result r3 = eval_string(":loopcount");
+    TEST_ASSERT_EQUAL(VALUE_NUMBER, r3.value.type);
+    TEST_ASSERT_EQUAL_FLOAT(101.0f, r3.value.as.number);  // Should get to 101 with TCO
+}
+
+void test_tco_with_print_and_args(void)
+{
+    // Test the EXACT case that fails:
+    // to foo2 :n
+    //   pr se "Hey :n
+    //   foo2 :n
+    // end
+    // With a counter to terminate
+    run_string("make \"cnt 0");
+    
+    reset_output();
+    
+    Result r = proc_define_from_text(
+        "to fooprint :n "
+        "make \"cnt :cnt + 1 "
+        "if :cnt > 50 [stop] "
+        "pr (se \"Hey :n) "
+        "fooprint :n "
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    Result r2 = run_string("fooprint 42");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);  // Should complete with TCO
+    
+    Result r3 = eval_string(":cnt");
+    TEST_ASSERT_EQUAL_FLOAT(51.0f, r3.value.as.number);  // Should reach 51
+}
+
+void test_tco_scope_depth_stability(void)
+{
+    // Verify that scope depth stays at 1 throughout TCO execution
+    // This ensures TCO is working and not accumulating scopes
+    run_string("make \"maxdepth 0");
+    run_string("make \"cnt 0");
+    
+    Result r = proc_define_from_text(
+        "to checkdepth :n "
+        "make \"cnt :cnt + 1 "
+        "if :cnt > 100 [stop] "
+        "checkdepth :n "
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    // Track scope depth before
+    int depth_before = var_scope_depth();
+    
+    Result r2 = run_string("checkdepth 5");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+    
+    // Scope depth should be back to same level after
+    int depth_after = var_scope_depth();
+    TEST_ASSERT_EQUAL(depth_before, depth_after);
+    
+    // Should have completed 101 iterations without overflow
+    Result r3 = eval_string(":cnt");
+    TEST_ASSERT_EQUAL_FLOAT(101.0f, r3.value.as.number);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -705,6 +831,11 @@ int main(void)
     RUN_TEST(test_proc_define_from_text_equals_operator);
     RUN_TEST(test_proc_define_from_text_less_than_operator);
     RUN_TEST(test_proc_define_from_text_with_parentheses);
+    RUN_TEST(test_unconditional_tco_no_args);
+    RUN_TEST(test_unconditional_tco_with_args);
+    RUN_TEST(test_tco_with_args_exact_failing_case);
+    RUN_TEST(test_tco_with_print_and_args);
+    RUN_TEST(test_tco_scope_depth_stability);
 
     return UNITY_END();
 }

@@ -305,7 +305,12 @@ static Result eval_primary(Evaluator *eval)
                     if (t.type == TOKEN_RIGHT_PAREN || t.type == TOKEN_EOF)
                         break;
                     
+                    // Arguments to primitives are not in tail position
+                    bool old_tail = eval->in_tail_position;
+                    eval->in_tail_position = false;
                     Result arg = eval_expression(eval);
+                    eval->in_tail_position = old_tail;
+                    
                     if (arg.status == RESULT_ERROR)
                     {
                         eval->paren_depth--;
@@ -397,7 +402,12 @@ static Result eval_primary(Evaluator *eval)
                     break;
                 }
 
+                // Arguments to primitives are not in tail position
+                bool old_tail = eval->in_tail_position;
+                eval->in_tail_position = false;
                 Result arg = eval_expression(eval);
+                eval->in_tail_position = old_tail;
+                
                 if (arg.status == RESULT_ERROR)
                     return arg;
                 if (arg.status != RESULT_OK)
@@ -768,9 +778,12 @@ static int serialize_node_to_buffer(Node element, char *buffer, int max_len, boo
 }
 
 // Skip/peek helpers for tail-call lookahead (no execution)
+// Forward declarations
 static bool skip_primary(Evaluator *eval);
 static bool skip_expr_bp(Evaluator *eval, int min_bp);
+static bool skip_instruction(Evaluator *eval);
 
+// Skip a single primary expression (literal, variable, list, or parens)
 static bool skip_primary(Evaluator *eval)
 {
     Token t = peek(eval);
@@ -780,9 +793,67 @@ static bool skip_primary(Evaluator *eval)
     case TOKEN_NUMBER:
     case TOKEN_QUOTED:
     case TOKEN_COLON:
-    case TOKEN_WORD:
         advance(eval);
         return true;
+
+    case TOKEN_WORD:
+    {
+        // For words, we need to check if it's a procedure and skip its args
+        // But this is called from skip_expr_bp for arguments, where the word
+        // might be a variable reference or just a literal in context.
+        // For primitive args, we just need to skip one expression.
+        
+        // Check if it's a number (self-quoting)
+        if (is_number_string(t.start, t.length))
+        {
+            advance(eval);
+            return true;
+        }
+        
+        // Look up as primitive or user proc
+        char name_buf[64];
+        size_t name_len = t.length;
+        if (name_len >= sizeof(name_buf))
+            name_len = sizeof(name_buf) - 1;
+        memcpy(name_buf, t.start, name_len);
+        name_buf[name_len] = '\0';
+        
+        const Primitive *prim = primitive_find(name_buf);
+        if (prim)
+        {
+            advance(eval);
+            // Skip the expected number of arguments
+            for (int i = 0; i < prim->default_args && !eval_at_end(eval); i++)
+            {
+                Token next = peek(eval);
+                if (next.type == TOKEN_RIGHT_PAREN || next.type == TOKEN_RIGHT_BRACKET)
+                    break;
+                if (!skip_expr_bp(eval, BP_NONE))
+                    return false;
+            }
+            return true;
+        }
+        
+        UserProcedure *user_proc = proc_find(name_buf);
+        if (user_proc)
+        {
+            advance(eval);
+            // Skip the expected number of arguments
+            for (int i = 0; i < user_proc->param_count && !eval_at_end(eval); i++)
+            {
+                Token next = peek(eval);
+                if (next.type == TOKEN_RIGHT_PAREN || next.type == TOKEN_RIGHT_BRACKET)
+                    break;
+                if (!skip_expr_bp(eval, BP_NONE))
+                    return false;
+            }
+            return true;
+        }
+        
+        // Unknown word - just skip it (might be undefined procedure)
+        advance(eval);
+        return true;
+    }
 
     case TOKEN_LEFT_BRACKET:
         advance(eval);
@@ -803,10 +874,20 @@ static bool skip_primary(Evaluator *eval)
 
     case TOKEN_LEFT_PAREN:
         advance(eval);
-        if (!skip_expr_bp(eval, BP_NONE))
-            return false;
-        if (peek(eval).type == TOKEN_RIGHT_PAREN)
-            advance(eval);
+        // Skip contents of parens - could be grouped expr or varargs call
+        while (true)
+        {
+            Token inner = peek(eval);
+            if (inner.type == TOKEN_EOF)
+                return false;
+            if (inner.type == TOKEN_RIGHT_PAREN)
+            {
+                advance(eval);
+                break;
+            }
+            if (!skip_expr_bp(eval, BP_NONE))
+                return false;
+        }
         return true;
 
     case TOKEN_MINUS:
@@ -836,6 +917,16 @@ static bool skip_expr_bp(Evaluator *eval, int min_bp)
             return false;
     }
     return true;
+}
+
+// Skip a complete instruction (used for TCO lookahead)
+// This mirrors eval_instruction/eval_expression logic
+static bool skip_instruction(Evaluator *eval)
+{
+    if (eval_at_end(eval))
+        return false;
+    
+    return skip_expr_bp(eval, BP_NONE);
 }
 
 // Evaluate a list as procedure body with tail call optimization
@@ -871,7 +962,7 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
             lookahead.lexer = &lookahead_lexer;
             lookahead.has_current = eval->has_current;
             lookahead.current = eval->current;
-            last_instruction = skip_expr_bp(&lookahead, BP_NONE) && eval_at_end(&lookahead);
+            last_instruction = skip_instruction(&lookahead) && eval_at_end(&lookahead);
         }
 
         // Set tail position for this instruction (don't redeclare old_tail)
@@ -929,8 +1020,14 @@ Result eval_run_list(Evaluator *eval, Node list)
 
 // Run a list as an expression - allows the list to output a value
 // Used by 'run' and 'if' when they act as operations
+// Propagates tail position for TCO
 Result eval_run_list_expr(Evaluator *eval, Node list)
 {
+    // If we're in tail position inside a procedure, the last instruction 
+    // in this list is also in tail position - enables TCO for:
+    //   if :n > 0 [recurse :n - 1]
+    bool enable_tco = eval->in_tail_position && eval->proc_depth > 0;
+    
     // Save current lexer state
     Lexer *old_lexer = eval->lexer;
     Token old_current = eval->current;
@@ -951,7 +1048,39 @@ Result eval_run_list_expr(Evaluator *eval, Node list)
 
     while (!eval_at_end(eval))
     {
+        // Determine if this instruction is the last one (for TCO)
+        bool last_instruction = false;
+        if (enable_tco)
+        {
+            Evaluator lookahead = *eval;
+            Lexer lookahead_lexer = *eval->lexer;
+            lookahead.lexer = &lookahead_lexer;
+            lookahead.has_current = eval->has_current;
+            lookahead.current = eval->current;
+            last_instruction = skip_instruction(&lookahead) && eval_at_end(&lookahead);
+        }
+
+        // Set tail position for this instruction
+        eval->in_tail_position = enable_tco && last_instruction;
+        
         r = eval_instruction(eval);
+        
+        // Restore tail flag
+        eval->in_tail_position = old_tail;
+        
+        // Check if there's more to execute
+        bool at_end = eval_at_end(eval);
+        
+        // If TCO is enabled and this was the last instruction and we got RESULT_STOP
+        // from a tail call setup, return it to let proc_call handle it
+        if (enable_tco && at_end && r.status == RESULT_STOP)
+        {
+            TailCall *tc = proc_get_tail_call();
+            if (tc->is_tail_call)
+            {
+                break;
+            }
+        }
         
         // Propagate stop/output/error/throw immediately
         if (r.status != RESULT_NONE && r.status != RESULT_OK)
@@ -960,13 +1089,13 @@ Result eval_run_list_expr(Evaluator *eval, Node list)
         }
 
         // If we got a value and there's more to execute, that's an error
-        if (r.status == RESULT_OK && !eval_at_end(eval))
+        if (r.status == RESULT_OK && !at_end)
         {
             r = result_error_arg(ERR_DONT_KNOW_WHAT, NULL, value_to_string(r.value));
             break;
         }
         
-        // If we got a value and we're at the end, return it (this is the operation case)
+        // If we got a value and we're at the end, return it (operation case)
         if (r.status == RESULT_OK)
         {
             break;

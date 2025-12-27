@@ -223,9 +223,16 @@ static Result prim_readchars(Evaluator *eval, int argc, Value *args)
     return result_ok(value_word(word));
 }
 
+// Helper result for parse_line_to_list
+typedef struct {
+    Node node;
+    bool success;
+} ParseResult;
+
 // Helper: Parse a line into a list of words
 // This is similar to what the lexer does but returns a list structure
-static Node parse_line_to_list(const char *line)
+// Returns success=false if memory allocation fails
+static ParseResult parse_line_to_list(const char *line)
 {
     Lexer lexer;
     lexer_init(&lexer, line);
@@ -305,15 +312,21 @@ static Node parse_line_to_list(const char *line)
             if (inner_len > 0)
             {
                 char *inner_str = (char *)malloc(inner_len + 1);
-                if (inner_str)
+                if (!inner_str)
                 {
-                    memcpy(inner_str, list_start, inner_len);
-                    inner_str[inner_len] = '\0';
-                    element = parse_line_to_list(inner_str);
-                    free(inner_str);
-                    // Wrap in list type
-                    element = NODE_MAKE_LIST(NODE_GET_INDEX(element)) | (NODE_TYPE_LIST << NODE_TYPE_SHIFT);
+                    return (ParseResult){.node = NODE_NIL, .success = false};
                 }
+                memcpy(inner_str, list_start, inner_len);
+                inner_str[inner_len] = '\0';
+                ParseResult inner_result = parse_line_to_list(inner_str);
+                free(inner_str);
+                if (!inner_result.success)
+                {
+                    return inner_result;
+                }
+                element = inner_result.node;
+                // Wrap in list type
+                element = NODE_MAKE_LIST(NODE_GET_INDEX(element)) | (NODE_TYPE_LIST << NODE_TYPE_SHIFT);
             }
             else
             {
@@ -381,7 +394,7 @@ static Node parse_line_to_list(const char *line)
         }
     }
 
-    return result;
+    return (ParseResult){.node = result, .success = true};
 }
 
 // readlist (rl) - reads a line of input and outputs it as a list
@@ -411,8 +424,12 @@ static Result prim_readlist(Evaluator *eval, int argc, Value *args)
     }
 
     // Parse the line into a list
-    Node list = parse_line_to_list(buffer);
-    return result_ok(value_list(list));
+    ParseResult parse_result = parse_line_to_list(buffer);
+    if (!parse_result.success)
+    {
+        return result_error(ERR_OUT_OF_SPACE);
+    }
+    return result_ok(value_list(parse_result.node));
 }
 
 // readword (rw) - reads a line of input and outputs it as a word

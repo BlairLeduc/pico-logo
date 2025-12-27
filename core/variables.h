@@ -24,7 +24,8 @@ extern "C"
     void variables_init(void);
 
     // Push a new local scope (called when entering a procedure)
-    void var_push_scope(void);
+    // Returns true if successful, false if out of scope space
+    bool var_push_scope(void);
 
     // Pop the current local scope (called when leaving a procedure)
     void var_pop_scope(void);
