@@ -73,6 +73,13 @@ extern "C"
     bool var_get_global_by_index(int index, bool include_buried,
                                   const char **name_out, Value *value_out);
 
+    // Iteration support for local variables (for pause debugging)
+    // Returns count of local variables visible in the current scope chain
+    int var_local_count(void);
+    // Get local variable by index (0-based, newest scope first)
+    // Returns false if index is out of range
+    bool var_get_local_by_index(int index, const char **name_out, Value *value_out);
+
     // Mark all variable values as GC roots
     void var_gc_mark_all(void);
 

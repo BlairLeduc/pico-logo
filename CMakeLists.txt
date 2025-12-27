@@ -77,6 +77,7 @@ add_library(logo_core
     core/primitives.c
     core/procedures.c
     core/properties.c
+    core/repl.c
     core/value.c
     core/variables.c
     devices/console.c
@@ -205,6 +206,7 @@ if(BUILD_FOR_HOST)
         core/primitives.c
         core/procedures.c
         core/properties.c
+        core/repl.c
         core/value.c
         core/variables.c
     )
@@ -303,6 +305,7 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/procedures.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/properties.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/repl.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/value.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/variables.c
     )

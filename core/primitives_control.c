@@ -11,6 +11,7 @@
 #include "error.h"
 #include "eval.h"
 #include "lexer.h"
+#include "repl.h"
 #include "value.h"
 #include "variables.h"
 #include "devices/io.h"
@@ -337,107 +338,6 @@ void pause_reset_state(void)
     pause_continue_requested = false;
 }
 
-// Pause REPL - runs a nested interpreter loop while preserving variable scopes
-// Returns RESULT_NONE to continue, RESULT_THROW for throw "toplevel
-static Result run_pause_repl(const char *proc_name)
-{
-    LogoIO *io = primitives_get_io();
-    if (!io || !io->console)
-    {
-        return result_none();
-    }
-    
-    // Build the prompt: "proc_name?"
-    char prompt[128];
-    snprintf(prompt, sizeof(prompt), "%s?", proc_name);
-    
-    // Print "Pausing..."
-    logo_io_write_line(io, "Pausing...");
-    
-    // Line buffer for input
-    char line[256];
-    
-    // Run nested REPL until co is called or throw "toplevel
-    while (1)
-    {
-        // Print prompt
-        logo_io_console_write(io, prompt);
-        logo_io_flush(io);
-        
-        // Read input line directly from console
-        int len = logo_stream_read_line(&io->console->input, line, sizeof(line));
-        if (len < 0)
-        {
-            // EOF or error - return to continue
-            return result_none();
-        }
-        
-        // Skip empty lines
-        if (line[0] == '\0')
-        {
-            continue;
-        }
-        
-        // Evaluate the line
-        Lexer lexer;
-        Evaluator eval;
-        lexer_init(&lexer, line);
-        eval_init(&eval, &lexer);
-        
-        while (!eval_at_end(&eval))
-        {
-            Result r = eval_instruction(&eval);
-            
-            if (r.status == RESULT_ERROR)
-            {
-                logo_io_write_line(io, error_format(r));
-                break;
-            }
-            else if (r.status == RESULT_THROW)
-            {
-                if (strcasecmp(r.throw_tag, "toplevel") == 0)
-                {
-                    // throw "toplevel exits pause and returns to top level
-                    // Propagate the throw
-                    return r;
-                }
-                else
-                {
-                    char msg[128];
-                    snprintf(msg, sizeof(msg), "Can't find a catch for %s", r.throw_tag);
-                    logo_io_write_line(io, msg);
-                    break;
-                }
-            }
-            else if (r.status == RESULT_PAUSE)
-            {
-                // Nested pause - recursively run pause REPL
-                Result pr = run_pause_repl(r.pause_proc);
-                if (pr.status == RESULT_THROW)
-                {
-                    // Propagate throw
-                    return pr;
-                }
-            }
-            else if (r.status == RESULT_OK)
-            {
-                char msg[128];
-                snprintf(msg, sizeof(msg), "I don't know what to do with %s", 
-                         value_to_string(r.value));
-                logo_io_write_line(io, msg);
-                break;
-            }
-            // RESULT_NONE, RESULT_STOP, RESULT_OUTPUT - continue
-        }
-        
-        // Check if co was called (continue was requested)
-        if (pause_check_continue())
-        {
-            return result_none();
-        }
-    }
-}
-
 static Result prim_pause(Evaluator *eval, int argc, Value *args)
 {
     (void)eval;
@@ -453,7 +353,17 @@ static Result prim_pause(Evaluator *eval, int argc, Value *args)
     }
     
     // Run the pause REPL - this blocks until co is called or throw "toplevel
-    return run_pause_repl(proc_name);
+    LogoIO *io = primitives_get_io();
+    if (!io || !io->console)
+    {
+        return result_none();
+    }
+    
+    logo_io_write_line(io, "Pausing...");
+    
+    ReplState state;
+    repl_init(&state, io, REPL_FLAGS_PAUSE, proc_name);
+    return repl_run(&state);
 }
 
 static Result prim_co(Evaluator *eval, int argc, Value *args)
