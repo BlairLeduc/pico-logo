@@ -148,9 +148,9 @@ static Result execute_body_with_step(Evaluator *eval, Node body, bool enable_tco
     {
         // Collect tokens for this line (until newline marker or end)
         Node line_start = curr;
-        Node line_end = NODE_NIL;
+        Node line_end = NODE_NIL;  // NODE_NIL means "end of body"
         
-        // Find the end of this line
+        // Find the end of this line (newline marker or end of body)
         while (!mem_is_nil(curr))
         {
             Node elem = mem_car(curr);
@@ -164,6 +164,8 @@ static Result execute_body_with_step(Evaluator *eval, Node body, bool enable_tco
             }
             curr = mem_cdr(curr);
         }
+        // If no newline marker found, line_end remains NODE_NIL,
+        // which means this line extends to the end of the body
         
         // Build the line string for display and execution
         char line_buf[512];
