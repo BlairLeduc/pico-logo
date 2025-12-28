@@ -16,8 +16,8 @@
 //  
 //  step "name / step [name1 name2 ...]
 //    - Marks procedure for stepped execution
-//    - Note: Currently simplified - flag is set but execution is normal
-//    - TODO: Implement pause-before-each-instruction behavior
+//    - Prints each line before execution and waits for a keypress
+//    - Useful for step-by-step debugging
 //  
 //  unstep "name / unstep [name1 name2 ...]
 //    - Disables stepping for the specified procedure(s)

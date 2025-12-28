@@ -65,6 +65,53 @@ static void print_node_element(Node elem)
     }
 }
 
+// Helper to serialize a node element to buffer (for step display)
+static int serialize_step_node(Node elem, char *buf, int max_len, bool need_space)
+{
+    int pos = 0;
+    
+    if (mem_is_word(elem))
+    {
+        const char *str = mem_word_ptr(elem);
+        size_t len = mem_word_len(elem);
+        
+        if (pos + (int)len + 1 < max_len)
+        {
+            if (need_space)
+                buf[pos++] = ' ';
+            memcpy(buf + pos, str, len);
+            pos += len;
+        }
+    }
+    else if (mem_is_nil(elem))
+    {
+        // Empty list
+        if (need_space)
+            buf[pos++] = ' ';
+        buf[pos++] = '[';
+        buf[pos++] = ']';
+    }
+    else if (mem_is_list(elem))
+    {
+        if (need_space)
+            buf[pos++] = ' ';
+        buf[pos++] = '[';
+        
+        Node inner = elem;
+        bool first = true;
+        while (!mem_is_nil(inner) && pos < max_len - 3)
+        {
+            int written = serialize_step_node(mem_car(inner), buf + pos, max_len - pos, !first);
+            pos += written;
+            first = false;
+            inner = mem_cdr(inner);
+        }
+        buf[pos++] = ']';
+    }
+    
+    return pos;
+}
+
 // Helper to execute procedure body with step support
 // Returns Result from execution
 static Result execute_body_with_step(Evaluator *eval, Node body, bool enable_tco, bool stepped)
@@ -75,11 +122,129 @@ static Result execute_body_with_step(Evaluator *eval, Node body, bool enable_tco
         return eval_run_list_with_tco(eval, body, enable_tco);
     }
     
-    // Stepped execution - for simplicity, just execute normally
-    // The stepping behavior would require more sophisticated instruction tracking
-    // For now, just execute without step (user can use trace instead)
-    // TODO: Implement proper step-through execution
-    return eval_run_list_with_tco(eval, body, enable_tco);
+    // Stepped execution: print each line, wait for key, then execute
+    LogoIO *io = primitives_get_io();
+    Node curr = body;
+    Result r = result_none();
+    
+    while (!mem_is_nil(curr))
+    {
+        // Collect tokens for this line (until newline marker or end)
+        Node line_start = curr;
+        Node line_end = NODE_NIL;
+        
+        // Find the end of this line
+        while (!mem_is_nil(curr))
+        {
+            Node elem = mem_car(curr);
+            
+            // Check for newline marker
+            if (mem_is_word(elem) && proc_is_newline_marker(mem_word_ptr(elem)))
+            {
+                line_end = curr;  // End before the newline marker
+                curr = mem_cdr(curr);  // Skip past the marker
+                break;
+            }
+            curr = mem_cdr(curr);
+        }
+        
+        // Build the line string for display and execution
+        char line_buf[512];
+        int pos = 0;
+        bool first = true;
+        Node n = line_start;
+        
+        while (n != line_end && !mem_is_nil(n))
+        {
+            Node elem = mem_car(n);
+            
+            // Skip newline markers (shouldn't happen here, but be safe)
+            if (mem_is_word(elem) && proc_is_newline_marker(mem_word_ptr(elem)))
+            {
+                n = mem_cdr(n);
+                continue;
+            }
+            
+            int written = serialize_step_node(elem, line_buf + pos, sizeof(line_buf) - pos, !first);
+            pos += written;
+            first = false;
+            n = mem_cdr(n);
+        }
+        line_buf[pos] = '\0';
+        
+        // Skip empty lines
+        if (pos == 0)
+            continue;
+        
+        // Print the line
+        if (io)
+        {
+            logo_io_write(io, line_buf);
+            logo_io_write(io, "\n");
+            logo_io_flush(io);
+        }
+        
+        // Wait for a key press
+        if (io)
+        {
+            int ch = logo_io_read_char(io);
+            if (ch == LOGO_STREAM_INTERRUPTED)
+            {
+                return result_error(ERR_STOPPED);
+            }
+        }
+        
+        // Execute this line
+        // Build a temporary list node for just this line
+        Node exec_list = NODE_NIL;
+        Node exec_tail = NODE_NIL;
+        n = line_start;
+        
+        while (n != line_end && !mem_is_nil(n))
+        {
+            Node elem = mem_car(n);
+            
+            // Skip newline markers
+            if (mem_is_word(elem) && proc_is_newline_marker(mem_word_ptr(elem)))
+            {
+                n = mem_cdr(n);
+                continue;
+            }
+            
+            Node new_node = mem_cons(elem, NODE_NIL);
+            if (mem_is_nil(exec_list))
+            {
+                exec_list = new_node;
+                exec_tail = new_node;
+            }
+            else
+            {
+                mem_set_cdr(exec_tail, new_node);
+                exec_tail = new_node;
+            }
+            n = mem_cdr(n);
+        }
+        
+        // Determine if this is the last line (for TCO)
+        bool is_last_line = mem_is_nil(curr);
+        
+        // Execute the line
+        r = eval_run_list_with_tco(eval, exec_list, enable_tco && is_last_line);
+        
+        // Handle result - propagate stop/output/error/throw immediately
+        if (r.status != RESULT_NONE && r.status != RESULT_OK)
+        {
+            return r;
+        }
+        
+        // If we got a value at top level of list, it's an error
+        if (r.status == RESULT_OK)
+        {
+            return result_error_arg(ERR_DONT_KNOW_WHAT, NULL, value_to_string(r.value));
+        }
+    }
+    
+    return r;
 }
 
 void procedures_init(void)
