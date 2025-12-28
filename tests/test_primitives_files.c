@@ -436,6 +436,7 @@ void test_open_already_open_file_error(void)
     // Second open should fail
     Result r2 = run_string("open \"alreadyopen.txt");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r2.status);
+    TEST_ASSERT_EQUAL(ERR_FILE_ALREADY_OPEN, r2.error_code);
 }
 
 void test_close_file(void)
