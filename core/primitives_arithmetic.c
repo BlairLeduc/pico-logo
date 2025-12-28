@@ -92,7 +92,7 @@ static Result prim_random(Evaluator *eval, int argc, Value *args)
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error(ERR_UNDEFINED);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "random", NULL);
     }
 
     int result = logo_io_random(io) % limit;

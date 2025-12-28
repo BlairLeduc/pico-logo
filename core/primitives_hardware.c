@@ -70,7 +70,7 @@ static Result prim_poweroff(Evaluator *eval, int argc, Value *args)
             }
         }
     }
-    return result_error_arg(ERR_DONT_KNOW_HOW, ".poweroff", "");
+    return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, ".poweroff", NULL);
 }
 
 // toot duration frequency

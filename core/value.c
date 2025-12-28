@@ -488,7 +488,23 @@ Result result_pause(const char *proc_name)
         .error_proc = NULL,
         .error_arg = NULL,
         .error_caller = NULL,
-        .throw_tag = NULL
+        .throw_tag = NULL,
+        .goto_label = NULL
+    };
+}
+
+Result result_goto(const char *label)
+{
+    return (Result){
+        .status = RESULT_GOTO,
+        .goto_label = label,
+        .value = value_none(),
+        .error_code = 0,
+        .error_proc = NULL,
+        .error_arg = NULL,
+        .error_caller = NULL,
+        .throw_tag = NULL,
+        .pause_proc = NULL
     };
 }
 

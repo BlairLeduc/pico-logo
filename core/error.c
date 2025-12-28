@@ -54,6 +54,7 @@ static const char *error_templates[] = {
     [ERR_DISK_PROTECTED] = "Disk is write-protected",
     [ERR_DOESNT_LIKE_INPUT] = "%s doesn't like %s as input",
     [ERR_DIDNT_OUTPUT] = "%s didn't output",
+    [ERR_UNSUPPORTED_ON_DEVICE] = "I can't run %s on this device"
 };
 
 #define NUM_ERRORS (sizeof(error_templates) / sizeof(error_templates[0]))
@@ -144,6 +145,12 @@ const char *error_format(Result r)
     case ERR_DONT_KNOW_WHAT:
     case ERR_ALREADY_DEFINED:
     case ERR_NO_CATCH:
+    case ERR_CANT_FIND_LABEL:
+    case ERR_CANT_USE_TOPLEVEL:
+    case ERR_CANT_USE_PROCEDURE:
+    case ERR_CANT_FROM_EDITOR:
+    case ERR_NOT_FOUND:
+    case ERR_UNSUPPORTED_ON_DEVICE:
         // Single %s placeholder - use error_proc or error_arg
         if (r.error_proc)
         {

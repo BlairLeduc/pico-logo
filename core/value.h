@@ -53,6 +53,7 @@ extern "C"
         RESULT_ERROR,  // Error occurred
         RESULT_THROW,  // throw command, propagate to catch
         RESULT_PAUSE,  // pause command, enter nested REPL
+        RESULT_GOTO,   // go command, jump to label
         RESULT_EOF     // End of input, exit REPL
     } ResultStatus;
 
@@ -67,6 +68,7 @@ extern "C"
         const char *error_caller; // User procedure where error occurred (e.g., "add")
         const char *throw_tag;   // Tag for RESULT_THROW (e.g., "error", "toplevel")
         const char *pause_proc;  // Procedure name for RESULT_PAUSE
+        const char *goto_label;  // Label name for RESULT_GOTO
     } Result;
 
     //==========================================================================
@@ -122,6 +124,7 @@ extern "C"
     Result result_error(int code);
     Result result_throw(const char *tag);
     Result result_pause(const char *proc_name);
+    Result result_goto(const char *label);
     Result result_eof(void);
 
     // Error with context: "proc doesn't like arg as input"

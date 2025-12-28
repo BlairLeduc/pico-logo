@@ -298,7 +298,7 @@ static Result prim_wait(Evaluator *eval, int argc, Value *args)
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error(ERR_UNDEFINED);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "wait", NULL);
     }
     
     // Wait for tenths of a second (each tenth is 100 milliseconds)
@@ -484,12 +484,11 @@ static Result prim_error(Evaluator *eval, int argc, Value *args)
 }
 
 //==========================================================================
-// Control Transfer (stubs for now)
+// Control Transfer
 //==========================================================================
 
 static Result prim_go(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
     (void)argc;
     
     if (!value_is_word(args[0]))
@@ -497,9 +496,16 @@ static Result prim_go(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, "go", value_to_string(args[0]));
     }
     
-    // TODO: Implement go functionality
-    // For now, just return an error
-    return result_error(ERR_CANT_FIND_LABEL);
+    // go can only be used inside a procedure
+    if (eval->proc_depth == 0)
+    {
+        return result_error(ERR_ONLY_IN_PROCEDURE);
+    }
+    
+    // Return RESULT_GOTO with the label name
+    // The label will be found and jumped to by eval_run_list_with_tco
+    const char *label = mem_word_ptr(args[0].as.node);
+    return result_goto(label);
 }
 
 static Result prim_label(Evaluator *eval, int argc, Value *args)
