@@ -228,11 +228,24 @@ static bool picocalc_file_set_write_pos(LogoStream *stream, long pos)
         return false;
     }
 
+    // Validate lower bound
     if (pos < 0)
     {
         return false;
     }
-    
+
+    // Validate upper bound against current file length
+    {
+        uint32_t file_size = fat32_size(ctx->file);
+        long max_pos = (long)file_size;
+
+        // Allow positioning at most at end-of-file (for appending),
+        // but not beyond the current file length.
+        if (pos > max_pos)
+        {
+            return false;
+        }
+    }
     ctx->write_pos = pos;
     return true;
 }
