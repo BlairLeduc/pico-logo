@@ -43,7 +43,7 @@
 |40|Disk is write-protected
 |41|(procedure) doesn't like (symbol) as input
 |42|(procedure) didn't output
-|43|I can't run (proceedure) on this device
+|43|I can't run (procedure) on this device
 ||!!! LOGO SYSTEM BUG !!! _Should not occur. Please let me know._
 
 
