@@ -133,7 +133,22 @@ static int input_read_line(LogoStream *stream, char *buffer, size_t size)
 static bool input_can_read(LogoStream *stream)
 {
     (void)stream;
-    return keyboard_key_available();
+    
+    // Consume and handle any mode-switching keys (F1/F2/F3)
+    // so key? only returns true for keys that readchar will actually return
+    while (keyboard_key_available())
+    {
+        char ch = keyboard_peek_key();
+        if (screen_handle_mode_key(ch))
+        {
+            // Consume the mode-switching key
+            keyboard_get_key();
+            continue;
+        }
+        // Found a non-mode-switching key
+        return true;
+    }
+    return false;
 }
 
 //
