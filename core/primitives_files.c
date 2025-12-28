@@ -269,10 +269,10 @@ static Result prim_readpos(Evaluator *eval, int argc, Value *args)
         return result_error(ERR_NO_FILE_SELECTED);
     }
 
-    // Error if reader is keyboard
+    // Error if reader is keyboard (no file selected)
     if (logo_io_reader_is_keyboard(io))
     {
-        return result_error(ERR_DEVICE_UNAVAILABLE);
+        return result_error(ERR_NO_FILE_SELECTED);
     }
 
     long pos = logo_stream_get_read_pos(io->reader);
@@ -307,10 +307,10 @@ static Result prim_setreadpos(Evaluator *eval, int argc, Value *args)
         return result_error(ERR_NO_FILE_SELECTED);
     }
 
-    // Error if reader is keyboard
+    // Error if reader is keyboard (no file selected)
     if (logo_io_reader_is_keyboard(io))
     {
-        return result_error(ERR_DEVICE_UNAVAILABLE);
+        return result_error(ERR_NO_FILE_SELECTED);
     }
 
     if (!logo_stream_set_read_pos(io->reader, pos))
@@ -334,10 +334,10 @@ static Result prim_writepos(Evaluator *eval, int argc, Value *args)
         return result_error(ERR_NO_FILE_SELECTED);
     }
 
-    // Error if writer is screen
+    // Error if writer is screen (no file selected)
     if (logo_io_writer_is_screen(io))
     {
-        return result_error(ERR_DEVICE_UNAVAILABLE);
+        return result_error(ERR_NO_FILE_SELECTED);
     }
 
     long pos = logo_stream_get_write_pos(io->writer);
@@ -372,10 +372,10 @@ static Result prim_setwritepos(Evaluator *eval, int argc, Value *args)
         return result_error(ERR_NO_FILE_SELECTED);
     }
 
-    // Error if writer is screen
+    // Error if writer is screen (no file selected)
     if (logo_io_writer_is_screen(io))
     {
-        return result_error(ERR_DEVICE_UNAVAILABLE);
+        return result_error(ERR_NO_FILE_SELECTED);
     }
 
     if (!logo_stream_set_write_pos(io->writer, pos))

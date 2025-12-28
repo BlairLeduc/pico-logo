@@ -869,6 +869,42 @@ void test_setreadpos_negative(void)
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
+void test_readpos_no_file_selected(void)
+{
+    // When reader is keyboard (no file selected), should return ERR_NO_FILE_SELECTED
+    run_string("setread []");
+    Result r = eval_string("readpos");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NO_FILE_SELECTED, r.error_code);
+}
+
+void test_setreadpos_no_file_selected(void)
+{
+    // When reader is keyboard (no file selected), should return ERR_NO_FILE_SELECTED
+    run_string("setread []");
+    Result r = run_string("setreadpos 2");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NO_FILE_SELECTED, r.error_code);
+}
+
+void test_writepos_no_file_selected(void)
+{
+    // When writer is screen (no file selected), should return ERR_NO_FILE_SELECTED
+    run_string("setwrite []");
+    Result r = eval_string("writepos");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NO_FILE_SELECTED, r.error_code);
+}
+
+void test_setwritepos_no_file_selected(void)
+{
+    // When writer is screen (no file selected), should return ERR_NO_FILE_SELECTED
+    run_string("setwrite []");
+    Result r = run_string("setwritepos 2");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NO_FILE_SELECTED, r.error_code);
+}
+
 void test_setwritepos_invalid_input(void)
 {
     run_string("open \"pos.txt");
@@ -1707,6 +1743,10 @@ int main(void)
     RUN_TEST(test_filelen_invalid_input);
     RUN_TEST(test_setreadpos_invalid_input);
     RUN_TEST(test_setreadpos_negative);
+    RUN_TEST(test_readpos_no_file_selected);
+    RUN_TEST(test_setreadpos_no_file_selected);
+    RUN_TEST(test_writepos_no_file_selected);
+    RUN_TEST(test_setwritepos_no_file_selected);
     RUN_TEST(test_setwritepos_invalid_input);
     RUN_TEST(test_setwritepos_negative);
     
