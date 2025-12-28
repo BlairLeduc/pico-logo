@@ -692,7 +692,8 @@ Result proc_call(Evaluator *eval, UserProcedure *proc, int argc, Value *args)
         }
         if (result.status == RESULT_ERROR)
         {
-            return result;
+            // Add procedure name context to error message if not already set
+            return result_error_in(result, proc->name);
         }
         if (result.status == RESULT_THROW)
         {

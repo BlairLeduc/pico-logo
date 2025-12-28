@@ -144,6 +144,68 @@ void test_error_paren_mismatch(void)
     TEST_ASSERT_EQUAL_STRING(") without (", msg);
 }
 
+void test_error_in_procedure_includes_proc_name(void)
+{
+    // Define a procedure that causes an error (sum with non-numeric input)
+    const char *params[] = {};
+    define_proc("badproc", params, 0, "print sum \"hello 1");
+    
+    Result r = run_string("badproc");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL_STRING("badproc", r.error_caller);
+    
+    const char *msg = error_format(r);
+    TEST_ASSERT_EQUAL_STRING("sum doesn't like hello as input in badproc", msg);
+}
+
+void test_error_in_nested_procedure_includes_innermost_proc_name(void)
+{
+    // Define inner procedure that causes error
+    const char *params[] = {};
+    define_proc("inner", params, 0, "print sum \"hello 1");
+    define_proc("outer", params, 0, "inner");
+    
+    Result r = run_string("outer");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    // Error should report innermost procedure where error occurred
+    TEST_ASSERT_EQUAL_STRING("inner", r.error_caller);
+    
+    const char *msg = error_format(r);
+    TEST_ASSERT_EQUAL_STRING("sum doesn't like hello as input in inner", msg);
+}
+
+void test_error_divide_by_zero_in_procedure(void)
+{
+    // Define a procedure that divides by zero
+    const char *params[] = {};
+    define_proc("divzero", params, 0, "print 1 / 0");
+    
+    Result r = run_string("divzero");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DIVIDE_BY_ZERO, r.error_code);
+    TEST_ASSERT_EQUAL_STRING("divzero", r.error_caller);
+    
+    const char *msg = error_format(r);
+    TEST_ASSERT_EQUAL_STRING("Can't divide by zero in divzero", msg);
+}
+
+void test_error_no_value_in_procedure(void)
+{
+    // Define a procedure that accesses undefined variable
+    const char *params[] = {};
+    define_proc("usevar", params, 0, "print :undefined");
+    
+    Result r = run_string("usevar");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NO_VALUE, r.error_code);
+    TEST_ASSERT_EQUAL_STRING("usevar", r.error_caller);
+    
+    const char *msg = error_format(r);
+    TEST_ASSERT_EQUAL_STRING("undefined has no value in usevar", msg);
+}
+
 //==========================================================================
 // Infix Equality Tests
 //==========================================================================
@@ -328,6 +390,12 @@ int main(void)
     RUN_TEST(test_error_infix_doesnt_like);
     RUN_TEST(test_error_bracket_mismatch);
     RUN_TEST(test_error_paren_mismatch);
+    
+    // Error messages in procedures tests
+    RUN_TEST(test_error_in_procedure_includes_proc_name);
+    RUN_TEST(test_error_in_nested_procedure_includes_innermost_proc_name);
+    RUN_TEST(test_error_divide_by_zero_in_procedure);
+    RUN_TEST(test_error_no_value_in_procedure);
 
     // Infix equality tests
     RUN_TEST(test_infix_equal_words);
