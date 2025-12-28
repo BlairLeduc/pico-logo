@@ -66,47 +66,64 @@ static void print_node_element(Node elem)
 }
 
 // Helper to serialize a node element to buffer (for step display)
+// Returns number of characters written, or 0 if buffer too small
 static int serialize_step_node(Node elem, char *buf, int max_len, bool need_space)
 {
     int pos = 0;
+    
+    // Need at least 1 char for null terminator
+    if (max_len < 1)
+        return 0;
     
     if (mem_is_word(elem))
     {
         const char *str = mem_word_ptr(elem);
         size_t len = mem_word_len(elem);
+        int space_needed = (need_space ? 1 : 0) + (int)len;
         
-        if (pos + (int)len + 1 < max_len)
+        if (pos + space_needed < max_len)
         {
             if (need_space)
                 buf[pos++] = ' ';
             memcpy(buf + pos, str, len);
-            pos += len;
+            pos += (int)len;
         }
     }
     else if (mem_is_nil(elem))
     {
-        // Empty list
-        if (need_space)
-            buf[pos++] = ' ';
-        buf[pos++] = '[';
-        buf[pos++] = ']';
+        // Empty list: need space for " []" (up to 3 chars)
+        int space_needed = (need_space ? 1 : 0) + 2;
+        if (pos + space_needed < max_len)
+        {
+            if (need_space)
+                buf[pos++] = ' ';
+            buf[pos++] = '[';
+            buf[pos++] = ']';
+        }
     }
     else if (mem_is_list(elem))
     {
+        // Need at least " []" (up to 3 chars minimum)
+        int space_needed = (need_space ? 1 : 0) + 2;
+        if (pos + space_needed >= max_len)
+            return pos;
+        
         if (need_space)
             buf[pos++] = ' ';
         buf[pos++] = '[';
         
         Node inner = elem;
         bool first = true;
-        while (!mem_is_nil(inner) && pos < max_len - 3)
+        while (!mem_is_nil(inner) && pos < max_len - 2)  // Reserve space for ']'
         {
-            int written = serialize_step_node(mem_car(inner), buf + pos, max_len - pos, !first);
+            int written = serialize_step_node(mem_car(inner), buf + pos, max_len - pos - 1, !first);
             pos += written;
             first = false;
             inner = mem_cdr(inner);
         }
-        buf[pos++] = ']';
+        
+        if (pos < max_len)
+            buf[pos++] = ']';
     }
     
     return pos;
@@ -154,7 +171,7 @@ static Result execute_body_with_step(Evaluator *eval, Node body, bool enable_tco
         bool first = true;
         Node n = line_start;
         
-        while (n != line_end && !mem_is_nil(n))
+        while (n != line_end && !mem_is_nil(n) && pos < (int)sizeof(line_buf) - 1)
         {
             Node elem = mem_car(n);
             
@@ -165,7 +182,11 @@ static Result execute_body_with_step(Evaluator *eval, Node body, bool enable_tco
                 continue;
             }
             
-            int written = serialize_step_node(elem, line_buf + pos, sizeof(line_buf) - pos, !first);
+            int remaining = (int)sizeof(line_buf) - pos - 1;  // Reserve 1 for null terminator
+            if (remaining <= 0)
+                break;
+            
+            int written = serialize_step_node(elem, line_buf + pos, remaining, !first);
             pos += written;
             first = false;
             n = mem_cdr(n);
