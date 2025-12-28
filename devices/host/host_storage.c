@@ -143,8 +143,14 @@ static void host_file_write(LogoStream *stream, const char *text)
     fseek(ctx->file, ctx->write_pos, SEEK_SET);
     
     size_t len = strlen(text);
-    fputs(text, ctx->file);
-    ctx->write_pos += (long)len;
+    size_t written = fwrite(text, 1, len, ctx->file);
+    ctx->write_pos += (long)written;
+    
+    // Check for partial write (disk full or other error)
+    if (written < len)
+    {
+        stream->write_error = true;
+    }
 }
 
 static void host_file_flush(LogoStream *stream)

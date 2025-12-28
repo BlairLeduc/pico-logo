@@ -153,6 +153,12 @@ static void picocalc_file_write(LogoStream *stream, const char *text)
     size_t written;
     fat32_write(ctx->file, text, len, &written);
     ctx->write_pos += (long)written;
+    
+    // Check for partial write (disk full or other error)
+    if (written < len)
+    {
+        stream->write_error = true;
+    }
 }
 
 static void picocalc_file_flush(LogoStream *stream)

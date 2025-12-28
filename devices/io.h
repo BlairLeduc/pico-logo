@@ -230,6 +230,10 @@ extern "C"
     // Flush output
     void logo_io_flush(LogoIO *io);
 
+    // Check if a write error occurred on writer or dribble
+    // Returns true if error occurred, and clears the error flag
+    bool logo_io_check_write_error(LogoIO *io);
+
     //
     // Direct console access (for primitives that always use screen/keyboard)
     // Use these for po, pots, etc. which always print to screen

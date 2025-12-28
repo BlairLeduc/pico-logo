@@ -862,6 +862,32 @@ void logo_io_flush(LogoIO *io)
     }
 }
 
+bool logo_io_check_write_error(LogoIO *io)
+{
+    if (!io)
+    {
+        return false;
+    }
+
+    bool error = false;
+
+    // Check writer for errors
+    if (io->writer && logo_stream_has_write_error(io->writer))
+    {
+        logo_stream_clear_write_error(io->writer);
+        error = true;
+    }
+
+    // Check dribble for errors
+    if (io->dribble && logo_stream_has_write_error(io->dribble))
+    {
+        logo_stream_clear_write_error(io->dribble);
+        error = true;
+    }
+
+    return error;
+}
+
 //
 // Direct console access
 //
