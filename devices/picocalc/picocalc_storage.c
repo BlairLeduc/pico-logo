@@ -200,7 +200,24 @@ static bool picocalc_file_set_read_pos(LogoStream *stream, long pos)
     {
         return false;
     }
-    
+
+    // Get current file size to ensure the requested position is within bounds
+    FSIZE_t current_pos = f_tell(ctx->file);
+    if (f_lseek(ctx->file, f_size(ctx->file)) != FR_OK)
+    {
+        return false;
+    }
+
+    FSIZE_t file_size = f_tell(ctx->file);
+
+    // Restore original position
+    f_lseek(ctx->file, current_pos);
+
+    if ((FSIZE_t)pos > file_size)
+    {
+        return false;
+    }
+
     ctx->read_pos = pos;
     return true;
 }
