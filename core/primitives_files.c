@@ -1450,6 +1450,164 @@ static Result prim_save(Evaluator *eval, int argc, Value *args)
     return result_none();
 }
 
+// savel name pathname or savel [name1 name2 ...] pathname
+// Save specified procedure(s) and all unburied variables and properties
+static Result prim_savel(Evaluator *eval, int argc, Value *args)
+{
+    (void)eval;
+    (void)argc;
+
+    // Second argument must be the pathname (a word)
+    if (!value_is_word(args[1]))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "savel", value_to_string(args[1]));
+    }
+
+    const char *pathname = mem_word_ptr(args[1].as.node);
+
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "savel", NULL);
+    }
+
+    // Check if file already exists
+    if (logo_io_file_exists(io, pathname))
+    {
+        return result_error_arg(ERR_FILE_EXISTS, "", pathname);
+    }
+
+    // First argument is name or list of names - validate procedures exist first
+    if (value_is_word(args[0]))
+    {
+        const char *name = mem_word_ptr(args[0].as.node);
+        if (!proc_find(name))
+        {
+            return result_error_arg(ERR_DONT_KNOW_HOW, name, NULL);
+        }
+    }
+    else if (value_is_list(args[0]))
+    {
+        Node curr = args[0].as.node;
+        while (!mem_is_nil(curr))
+        {
+            Node elem = mem_car(curr);
+            if (mem_is_word(elem))
+            {
+                const char *name = mem_word_ptr(elem);
+                if (!proc_find(name))
+                {
+                    return result_error_arg(ERR_DONT_KNOW_HOW, name, NULL);
+                }
+            }
+            curr = mem_cdr(curr);
+        }
+    }
+    else
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "savel", value_to_string(args[0]));
+    }
+
+    // Open the file for writing
+    LogoStream *stream = logo_io_open(io, pathname);
+    if (!stream)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    // Save current writer and set to file
+    LogoStream *old_writer = io->writer;
+    logo_io_set_writer(io, stream);
+
+    // Save the specified procedure(s)
+    if (value_is_word(args[0]))
+    {
+        const char *name = mem_word_ptr(args[0].as.node);
+        UserProcedure *proc = proc_find(name);
+        if (proc)
+        {
+            save_procedure_definition(proc);
+            save_newline();
+        }
+    }
+    else if (value_is_list(args[0]))
+    {
+        Node curr = args[0].as.node;
+        while (!mem_is_nil(curr))
+        {
+            Node elem = mem_car(curr);
+            if (mem_is_word(elem))
+            {
+                const char *name = mem_word_ptr(elem);
+                UserProcedure *proc = proc_find(name);
+                if (proc)
+                {
+                    save_procedure_definition(proc);
+                    save_newline();
+                }
+            }
+            curr = mem_cdr(curr);
+        }
+    }
+
+    // Save all variables (not buried)
+    int var_cnt = var_global_count(false);
+    for (int i = 0; i < var_cnt; i++)
+    {
+        const char *name;
+        Value value;
+        if (var_get_global_by_index(i, false, &name, &value))
+        {
+            save_variable(name, value);
+        }
+    }
+
+    // Save all property lists
+    int prop_cnt = prop_name_count();
+    for (int i = 0; i < prop_cnt; i++)
+    {
+        const char *name;
+        if (prop_get_name_by_index(i, &name))
+        {
+            Node list = prop_get_list(name);
+            // Property list is [prop1 val1 prop2 val2 ...]
+            Node curr = list;
+            while (!mem_is_nil(curr) && !mem_is_nil(mem_cdr(curr)))
+            {
+                Node prop_node = mem_car(curr);
+                Node val_node = mem_car(mem_cdr(curr));
+
+                if (mem_is_word(prop_node))
+                {
+                    const char *prop = mem_word_ptr(prop_node);
+                    Value val;
+                    if (mem_is_word(val_node))
+                    {
+                        val = value_word(val_node);
+                    }
+                    else if (mem_is_list(val_node))
+                    {
+                        val = value_list(val_node);
+                    }
+                    else
+                    {
+                        val = value_list(NODE_NIL);
+                    }
+                    save_property(name, prop, val);
+                }
+
+                curr = mem_cdr(mem_cdr(curr));
+            }
+        }
+    }
+
+    // Restore writer and close file
+    logo_io_set_writer(io, old_writer == &io->console->output ? NULL : old_writer);
+    logo_io_close(io, pathname);
+
+    return result_none();
+}
+
 // savepic pathname - saves the graphics screen as a BMP file
 static Result prim_savepic(Evaluator *eval, int argc, Value *args)
 {
@@ -1660,6 +1818,7 @@ void primitives_files_init(void)
     // Load and save
     primitive_register("load", 1, prim_load);
     primitive_register("save", 1, prim_save);
+    primitive_register("savel", 2, prim_savel);
     primitive_register("savepic", 1, prim_savepic);
     primitive_register("loadpic", 1, prim_loadpic);
     primitive_register("pofile", 1, prim_pofile);
