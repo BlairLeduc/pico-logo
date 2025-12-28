@@ -15,6 +15,7 @@
 #include "value.h"
 #include "variables.h"
 #include "devices/io.h"
+#include <string.h>   // for strncpy
 #include <strings.h>  // for strcasecmp
 #include <unistd.h>   // for usleep
 #include <stdio.h>    // for snprintf
@@ -29,12 +30,12 @@ typedef struct
 {
     bool has_error;
     int error_code;
-    const char *error_message;
+    char error_message[256];  // Buffer to store formatted error message
     const char *error_proc;
     const char *error_caller;
 } ErrorInfo;
 
-static ErrorInfo last_error = {false, 0, NULL, NULL, NULL};
+static ErrorInfo last_error = {false, 0, "", NULL, NULL};
 
 // Function to reset test state (for testing purposes)
 void primitives_control_reset_test_state(void)
@@ -42,7 +43,7 @@ void primitives_control_reset_test_state(void)
     var_reset_test_state();
     last_error.has_error = false;
     last_error.error_code = 0;
-    last_error.error_message = NULL;
+    last_error.error_message[0] = '\0';
     last_error.error_proc = NULL;
     last_error.error_caller = NULL;
 }
@@ -54,7 +55,10 @@ static void set_last_error(Result r)
     {
         last_error.has_error = true;
         last_error.error_code = r.error_code;
-        last_error.error_message = error_message(r.error_code);
+        // Use error_format to get the fully formatted error message
+        const char *formatted = error_format(r);
+        strncpy(last_error.error_message, formatted, sizeof(last_error.error_message) - 1);
+        last_error.error_message[sizeof(last_error.error_message) - 1] = '\0';
         last_error.error_proc = r.error_proc;
         last_error.error_caller = r.error_caller;
     }
@@ -466,7 +470,7 @@ static Result prim_error(Evaluator *eval, int argc, Value *args)
     snprintf(error_num_buf, sizeof(error_num_buf), "%d", last_error.error_code);
     Node error_num_word = mem_atom_cstr(error_num_buf);
     
-    Node message_word = last_error.error_message ? mem_atom_cstr(last_error.error_message) : mem_atom_cstr("");
+    Node message_word = last_error.error_message[0] ? mem_atom_cstr(last_error.error_message) : mem_atom_cstr("");
     Node proc_word = last_error.error_proc ? mem_atom_cstr(last_error.error_proc) : mem_atom_cstr("");
     Node caller_word = last_error.error_caller ? mem_atom_cstr(last_error.error_caller) : NODE_NIL;
     
