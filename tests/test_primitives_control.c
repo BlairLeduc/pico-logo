@@ -801,6 +801,24 @@ void test_go_no_label(void)
     TEST_ASSERT_EQUAL(ERR_CANT_FIND_LABEL, r.error_code);
 }
 
+void test_go_with_label(void)
+{
+    Result def = proc_define_from_text(
+        "to countdown :n\n"
+        "label \"loop\n"
+        "if :n < 0 [stop]\n"
+        "print :n\n"
+        "make \"n :n - 1\n"
+        "go \"loop\n"
+        "end\n");
+    TEST_ASSERT_EQUAL(RESULT_OK, def.status);
+    reset_output();
+
+    Result r = run_string("countdown 3");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("3\n2\n1\n0\n", output_buffer);
+}
+
 //==========================================================================
 // Pause/Continue Tests
 //==========================================================================
@@ -994,6 +1012,7 @@ int main(void)
     // Go/label
     RUN_TEST(test_label_basic);
     RUN_TEST(test_go_no_label);
+    RUN_TEST(test_go_with_label);
     
     // Pause/continue
     RUN_TEST(test_pause_at_toplevel_error);

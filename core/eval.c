@@ -933,6 +933,83 @@ static bool skip_instruction(Evaluator *eval)
     return skip_expr_bp(eval, BP_NONE);
 }
 
+// Find position in buffer after a label instruction with given name
+// Returns -1 if not found
+// Scans for pattern: label "labelname or label "labelname (with any whitespace)
+static int find_label_position(const char *buffer, const char *label_name)
+{
+    const char *pos = buffer;
+    while (*pos)
+    {
+        // Skip whitespace
+        while (*pos && isspace((unsigned char)*pos))
+            pos++;
+        
+        if (!*pos)
+            break;
+        
+        // Check for "label" keyword (case-insensitive)
+        if (strncasecmp(pos, "label", 5) == 0 && 
+            (isspace((unsigned char)pos[5]) || pos[5] == '"'))
+        {
+            const char *after_label = pos + 5;
+            
+            // Skip whitespace between label and its argument
+            while (*after_label && isspace((unsigned char)*after_label))
+                after_label++;
+            
+            // Check for quoted word: "labelname
+            if (*after_label == '"')
+            {
+                after_label++; // skip quote
+                const char *name_start = after_label;
+                
+                // Find end of label name (word boundary)
+                while (*after_label && !isspace((unsigned char)*after_label) && 
+                       *after_label != '[' && *after_label != ']')
+                    after_label++;
+                
+                size_t name_len = after_label - name_start;
+                
+                // Compare label names (case-insensitive)
+                if (name_len == strlen(label_name) && 
+                    strncasecmp(name_start, label_name, name_len) == 0)
+                {
+                    // Found! Return position after the label instruction
+                    return (int)(after_label - buffer);
+                }
+            }
+            
+            // Move past this label instruction
+            pos = after_label;
+        }
+        else
+        {
+            // Skip to next whitespace or special char
+            while (*pos && !isspace((unsigned char)*pos))
+            {
+                if (*pos == '[')
+                {
+                    // Skip nested list
+                    int depth = 1;
+                    pos++;
+                    while (*pos && depth > 0)
+                    {
+                        if (*pos == '[') depth++;
+                        else if (*pos == ']') depth--;
+                        pos++;
+                    }
+                }
+                else
+                {
+                    pos++;
+                }
+            }
+        }
+    }
+    return -1; // Not found
+}
+
 // Evaluate a list as procedure body with tail call optimization
 // The last instruction in the list is evaluated in tail position
 Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
@@ -991,6 +1068,25 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
                 // This is a valid tail call - return to let proc_call handle it
                 break;
             }
+        }
+
+        // Handle RESULT_GOTO - find label and restart from there
+        if (r.status == RESULT_GOTO)
+        {
+            int label_pos = find_label_position(buffer, r.goto_label);
+            if (label_pos < 0)
+            {
+                // Label not found - convert to error
+                r = result_error(ERR_CANT_FIND_LABEL);
+                break;
+            }
+            
+            // Reinitialize lexer to start from after the label
+            lexer_init(&list_lexer, buffer + label_pos);
+            eval->lexer = &list_lexer;
+            eval->has_current = false;
+            r = result_none();
+            continue;  // Continue execution from the new position
         }
 
         // Propagate stop/output/error/throw immediately
