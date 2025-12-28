@@ -2536,7 +2536,7 @@ save _pathname_
 
 `command`
 
-The `save` command creates a file and saves in it all unburied procedures and variables and all properties in the workspace. An error occurs if the file you name already exists. In in this case, you should first either erase the existing file using [`erasefile`](#erasefile) or rename it using [`rename`](#rename).
+The `save` command creates a file and saves in it all unburied procedures and variables and all properties in the workspace. An error occurs if the file you name already exists. In this case, you should first either erase the existing file using [`erasefile`](#erasefile) or rename it using [`rename`](#rename).
 
 
 ## savel
