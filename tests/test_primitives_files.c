@@ -268,7 +268,7 @@ static LogoStream *mock_storage_open(const char *pathname)
     
     ctx->file = file;
     ctx->read_pos = 0;
-    ctx->write_pos = 0;
+    ctx->write_pos = file->size;  // Write position starts at end of file
     
     logo_stream_init(stream, LOGO_STREAM_FILE, &mock_file_ops, ctx, pathname);
     stream->is_open = true;
@@ -683,6 +683,26 @@ void test_writepos_screen_error(void)
     // Writer is screen by default
     Result r = eval_string("writepos");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_writepos_at_end_for_existing_file(void)
+{
+    // Create an existing file with content
+    mock_fs_create_file("existing.txt", "hello world");
+    run_string("open \"existing.txt");
+    run_string("setwrite \"existing.txt");
+    
+    // writepos should be at end of file (11 chars)
+    Result r = eval_string("writepos");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_number(r.value));
+    TEST_ASSERT_EQUAL_FLOAT(11.0, r.value.as.number);
+    
+    // readpos should be at start
+    run_string("setread \"existing.txt");
+    r = eval_string("readpos");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(0.0, r.value.as.number);
 }
 
 //==========================================================================
@@ -1718,6 +1738,7 @@ int main(void)
     RUN_TEST(test_writepos_after_write);
     RUN_TEST(test_setwritepos);
     RUN_TEST(test_writepos_screen_error);
+    RUN_TEST(test_writepos_at_end_for_existing_file);
     
     // Filelen tests
     RUN_TEST(test_filelen_returns_size);

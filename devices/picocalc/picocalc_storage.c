@@ -16,11 +16,13 @@
 #include <unistd.h>
 
 //
-// File stream context - wraps a FILE*
+// File stream context - wraps a fat32_file_t* with separate read/write positions
 //
 typedef struct FileContext
 {
     fat32_file_t *file;
+    long read_pos;   // Separate read position
+    long write_pos;  // Separate write position (starts at end of file)
 } FileContext;
 
 //
@@ -41,9 +43,13 @@ static int picocalc_file_read_char(LogoStream *stream)
         return -1;
     }
 
+    // Seek to read position
+    fat32_seek(ctx->file, (uint32_t)ctx->read_pos);
+    
     size_t read;
     if (fat32_read(ctx->file, buffer, 1, &read) == FAT32_OK && read == 1)
     {
+        ctx->read_pos++;
         return (unsigned char)buffer[0];
     }
     return -1;
@@ -62,10 +68,13 @@ static int picocalc_file_read_chars(LogoStream *stream, char *buffer, int count)
         return -1;
     }
 
-    size_t read;
+    // Seek to read position
+    fat32_seek(ctx->file, (uint32_t)ctx->read_pos);
     
+    size_t read;
     if (fat32_read(ctx->file, buffer, (size_t)count, &read) == FAT32_OK)
     {
+        ctx->read_pos += (long)read;
         return (int)read;
     }
 
@@ -85,14 +94,18 @@ static int picocalc_file_read_line(LogoStream *stream, char *buffer, size_t size
         return -1;
     }
 
+    // Seek to read position
+    fat32_seek(ctx->file, (uint32_t)ctx->read_pos);
+    
     size_t total_read = 0;
     while (total_read < size - 1) // Leave space for null terminator
     {
         size_t read;
         if (fat32_read(ctx->file, &buffer[total_read], 1, &read) != FAT32_OK || read == 0)
         {
-            return -1; // Read error or EOF
+            break; // Read error or EOF
         }
+        ctx->read_pos++;
         if (buffer[total_read] == '\n' || buffer[total_read] == '\r')
         {
             break; // End of line
@@ -100,7 +113,7 @@ static int picocalc_file_read_line(LogoStream *stream, char *buffer, size_t size
         total_read++;
     }
     buffer[total_read] = '\0';
-    return (int)total_read;
+    return total_read > 0 ? (int)total_read : -1;
 }
 
 static bool picocalc_file_can_read(LogoStream *stream)
@@ -116,7 +129,8 @@ static bool picocalc_file_can_read(LogoStream *stream)
         return false;
     }
 
-    return !fat32_eof(ctx->file);
+    // Check if read position is at or past end of file
+    return ctx->read_pos < (long)fat32_size(ctx->file);
 }
 
 static void picocalc_file_write(LogoStream *stream, const char *text)
@@ -132,9 +146,13 @@ static void picocalc_file_write(LogoStream *stream, const char *text)
         return;
     }
 
+    // Seek to write position
+    fat32_seek(ctx->file, (uint32_t)ctx->write_pos);
+    
     size_t len = strlen(text);
     size_t written;
     fat32_write(ctx->file, text, len, &written);
+    ctx->write_pos += (long)written;
 }
 
 static void picocalc_file_flush(LogoStream *stream)
@@ -156,7 +174,7 @@ static long picocalc_file_get_read_pos(LogoStream *stream)
         return -1;
     }
 
-    return (long)fat32_tell(ctx->file);
+    return ctx->read_pos;
 }
 
 static bool picocalc_file_set_read_pos(LogoStream *stream, long pos)
@@ -172,19 +190,51 @@ static bool picocalc_file_set_read_pos(LogoStream *stream, long pos)
         return false;
     }
 
-    return fat32_seek(ctx->file, (uint32_t)pos) == FAT32_OK;
+    if (pos < 0)
+    {
+        return false;
+    }
+    
+    ctx->read_pos = pos;
+    return true;
 }
 
 static long picocalc_file_get_write_pos(LogoStream *stream)
 {
-    // For simple files, read and write position are the same
-    return picocalc_file_get_read_pos(stream);
+    if (!stream || !stream->context)
+    {
+        return -1;
+    }
+
+    FileContext *ctx = (FileContext *)stream->context;
+    if (!ctx->file)
+    {
+        return -1;
+    }
+
+    return ctx->write_pos;
 }
 
 static bool picocalc_file_set_write_pos(LogoStream *stream, long pos)
 {
-    // For simple files, read and write position are the same
-    return picocalc_file_set_read_pos(stream, pos);
+    if (!stream || !stream->context)
+    {
+        return false;
+    }
+
+    FileContext *ctx = (FileContext *)stream->context;
+    if (!ctx->file)
+    {
+        return false;
+    }
+
+    if (pos < 0)
+    {
+        return false;
+    }
+    
+    ctx->write_pos = pos;
+    return true;
 }
 
 static long picocalc_file_get_length(LogoStream *stream)
@@ -289,6 +339,8 @@ static LogoStream *logo_picocalc_file_open(const char *pathname)
         return NULL;
     }
     ctx->file = file;
+    ctx->read_pos = 0;  // Read position starts at beginning of file
+    ctx->write_pos = (long)fat32_size(file);  // Write position starts at end of file
 
     // Allocate stream
     LogoStream *stream = (LogoStream *)malloc(sizeof(LogoStream));
