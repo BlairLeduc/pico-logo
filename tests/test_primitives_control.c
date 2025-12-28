@@ -711,7 +711,7 @@ void test_catch_error(void)
     TEST_ASSERT_TRUE(value_to_number(value_word(first), &error_code));
     TEST_ASSERT_EQUAL_FLOAT(ERR_DOESNT_LIKE_INPUT, error_code);
     
-    // Second element: error message template (word)
+    // Second element: formatted error message (word)
     list = mem_cdr(list);
     TEST_ASSERT_FALSE(mem_is_nil(list));
     Node second = mem_car(list);
