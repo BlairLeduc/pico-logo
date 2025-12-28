@@ -37,6 +37,11 @@ extern "C"
     // Registration helper for primitive modules
     void primitive_register(const char *name, int default_args, PrimitiveFunc func);
 
+    // Register an alias for an existing primitive
+    // The alias_name should be an interned string (from mem_word_ptr)
+    // Returns true on success, false if out of space or primitive not found
+    bool primitive_register_alias(const char *alias_name, const Primitive *source);
+
     // Initialize primitive categories
     void primitives_arithmetic_init(void);
     void primitives_control_init(void);

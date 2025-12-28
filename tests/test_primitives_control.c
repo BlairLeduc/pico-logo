@@ -857,7 +857,7 @@ void test_co_at_toplevel(void)
 void test_pause_in_procedure_with_co(void)
 {
     // Define a procedure that pauses using proc_define_from_text
-    Result def = proc_define_from_text("to testproc :x print :x pause print :x + 1 end");
+    Result def = proc_define_from_text("to testproc :x \\n print :x \\n pause \\n print :x + 1 \\n end");
     TEST_ASSERT_EQUAL(RESULT_OK, def.status);
     reset_output();
     
@@ -880,7 +880,7 @@ void test_pause_in_procedure_with_co(void)
 void test_pause_can_inspect_local_variables(void)
 {
     // Define a procedure that pauses
-    Result def = proc_define_from_text("to testproc :val pause end");
+    Result def = proc_define_from_text("to testproc :val \\n pause \\n end");
     TEST_ASSERT_EQUAL(RESULT_OK, def.status);
     reset_output();
     
@@ -900,7 +900,7 @@ void test_pause_can_inspect_local_variables(void)
 void test_pause_prompt_shows_procedure_name(void)
 {
     // Define a procedure that pauses
-    Result def = proc_define_from_text("to myproc pause end");
+    Result def = proc_define_from_text("to myproc \\n pause \\n end");
     TEST_ASSERT_EQUAL(RESULT_OK, def.status);
     reset_output();
     

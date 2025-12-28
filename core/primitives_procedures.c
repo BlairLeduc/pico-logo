@@ -199,19 +199,28 @@ Result proc_define_from_text(const char *text)
     
     // Now collect body until 'end'
     // Build body as a list
+    // Note: 'end' must be at the start of a line - either right after parsing params
+    // or right after a newline marker (\n) or an actual newline character
     Node body = NODE_NIL;
     Node body_tail = NODE_NIL;
+    bool at_line_start = true;  // Start of body is start of a line
+    const char *prev_token_end = t.start;  // Track where previous token ended
     
     while (t.type != TOKEN_EOF)
     {
-        // Check for 'end'
-        if (t.type == TOKEN_WORD && t.length == 3 &&
+        // Check for 'end' only at line start
+        if (at_line_start && t.type == TOKEN_WORD && t.length == 3 &&
             strncasecmp(t.start, "end", 3) == 0)
         {
             break;
         }
         
+        // Check for newline marker - next token will be at line start
+        bool is_newline_marker = (t.type == TOKEN_WORD && t.length == 2 &&
+                                   t.start[0] == '\\' && t.start[1] == 'n');
+        
         Node item = NODE_NIL;
+        at_line_start = is_newline_marker;  // Update for next iteration
         
         if (t.type == TOKEN_LEFT_BRACKET)
         {
@@ -285,7 +294,21 @@ Result proc_define_from_text(const char *text)
             }
         }
         
+        prev_token_end = t.start + t.length;
         t = lexer_next_token(&lexer);
+        
+        // Check if there was an actual newline between tokens
+        if (!at_line_start)
+        {
+            for (const char *p = prev_token_end; p < t.start; p++)
+            {
+                if (*p == '\n')
+                {
+                    at_line_start = true;
+                    break;
+                }
+            }
+        }
     }
     
     // Define the procedure
@@ -449,17 +472,30 @@ static Result prim_copydef(Evaluator *eval, int argc, Value *args)
     const char *source_name = mem_word_ptr(args[0].as.node);
     const char *dest_name = mem_word_ptr(args[1].as.node);
     
-    // Check source exists
+    // Check destination is not already a primitive
+    if (primitive_find(dest_name))
+    {
+        return result_error_arg(ERR_IS_PRIMITIVE, dest_name, NULL);
+    }
+    
+    // Check if source is a primitive
+    const Primitive *source_prim = primitive_find(source_name);
+    if (source_prim)
+    {
+        // Create alias to the primitive
+        // The dest_name is already interned (from mem_word_ptr)
+        if (!primitive_register_alias(dest_name, source_prim))
+        {
+            return result_error(ERR_OUT_OF_SPACE);
+        }
+        return result_none();
+    }
+    
+    // Check if source is a user-defined procedure
     UserProcedure *source = proc_find(source_name);
     if (!source)
     {
         return result_error_arg(ERR_DONT_KNOW_HOW, source_name, NULL);
-    }
-    
-    // Check destination is not a primitive
-    if (primitive_find(dest_name))
-    {
-        return result_error_arg(ERR_IS_PRIMITIVE, dest_name, NULL);
     }
     
     // Define new procedure with same params and body

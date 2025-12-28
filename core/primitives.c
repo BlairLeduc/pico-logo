@@ -70,3 +70,17 @@ const Primitive *primitive_find(const char *name)
     }
     return NULL;
 }
+
+bool primitive_register_alias(const char *alias_name, const Primitive *source)
+{
+    if (!alias_name || !source)
+        return false;
+    if (primitive_count >= MAX_PRIMITIVES)
+        return false;
+
+    primitives[primitive_count++] = (Primitive){
+        .name = alias_name,
+        .default_args = source->default_args,
+        .func = source->func};
+    return true;
+}
