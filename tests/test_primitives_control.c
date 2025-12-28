@@ -674,6 +674,18 @@ void test_throw_toplevel(void)
     TEST_ASSERT_EQUAL_STRING("toplevel", r.throw_tag);
 }
 
+void test_throw_toplevel_in_run_inside_catch(void)
+{
+    // throw "toplevel inside a catch should propagate to top level
+    // even if there's a catch with a different tag
+    run_string("define \"inner [[] [run [throw \"toplevel]]");
+    run_string("define \"outer [[] [catch \"error [inner]]");
+
+    Result r = run_string("outer");
+    TEST_ASSERT_EQUAL(RESULT_THROW, r.status);
+    TEST_ASSERT_EQUAL_STRING("toplevel", r.throw_tag);
+}
+
 void test_catch_error(void)
 {
     // catch "error should catch errors
@@ -695,6 +707,41 @@ void test_error_no_error(void)
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     TEST_ASSERT_TRUE(value_is_list(r.value));
     TEST_ASSERT_TRUE(mem_is_nil(r.value.as.node));
+}
+
+void test_catch_through_calls_good(void)
+{
+    // Test that catch works through nested procedure calls
+    run_string("define \"tc [[in] [catch \"oops [trythis :in]]]");
+    run_string("define \"trythis [[n] [pr check :n pr \"good]]");
+    run_string("define \"check [[num] [if :num = 0 [throw \"oops] op :num]]");
+
+    // Run catch around outerproc
+    Result r = run_string("tc 1");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "1\ngood\n"));
+    
+    // Clean up
+    run_string("erase \"tc");
+    run_string("erase \"trythis");
+    run_string("erase \"check");
+}
+
+void test_catch_through_calls_catch(void)
+{
+    // Test that catch works through nested procedure calls
+    run_string("define \"tc [[in] [catch \"oops [trythis :in]]]");
+    run_string("define \"trythis [[n] [pr check :n pr \"good]]");
+    run_string("define \"check [[num] [if :num = 0 [throw \"oops] op :num]]");
+
+    // Run catch around outerproc
+    Result r = run_string("tc 0");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Clean up
+    run_string("erase \"tc");
+    run_string("erase \"trythis");
+    run_string("erase \"check");
 }
 
 //==========================================================================
@@ -900,8 +947,11 @@ int main(void)
     RUN_TEST(test_catch_throw_nomatch);
     RUN_TEST(test_throw_no_catch);
     RUN_TEST(test_throw_toplevel);
+    RUN_TEST(test_throw_toplevel_in_run_inside_catch);
     RUN_TEST(test_catch_error);
     RUN_TEST(test_error_no_error);
+    RUN_TEST(test_catch_through_calls_good);
+    RUN_TEST(test_catch_through_calls_catch);
     
     // Go/label
     RUN_TEST(test_label_basic);

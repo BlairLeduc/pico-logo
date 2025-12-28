@@ -258,7 +258,7 @@ static ParseResult parse_line_to_list(const char *line)
         case TOKEN_NUMBER:
         case TOKEN_COLON:
         {
-            // Copy token text
+            // Copy token text - token already includes quote/colon prefix if present
             char buf[256];
             size_t len = tok.length;
             if (len >= sizeof(buf))
@@ -266,27 +266,8 @@ static ParseResult parse_line_to_list(const char *line)
             memcpy(buf, tok.start, len);
             buf[len] = '\0';
 
-            // For quoted words, include the quote
-            if (tok.type == TOKEN_QUOTED)
-            {
-                // Prepend quote mark
-                char quoted[258];
-                quoted[0] = '"';
-                memcpy(quoted + 1, buf, len + 1);
-                element = mem_atom_cstr(quoted);
-            }
-            else if (tok.type == TOKEN_COLON)
-            {
-                // Prepend colon
-                char with_colon[258];
-                with_colon[0] = ':';
-                memcpy(with_colon + 1, buf, len + 1);
-                element = mem_atom_cstr(with_colon);
-            }
-            else
-            {
-                element = mem_atom(buf, len);
-            }
+            // Token text already includes the prefix (", :), just use it directly
+            element = mem_atom(buf, len);
             break;
         }
 
