@@ -408,7 +408,9 @@ static Result eval_primary(Evaluator *eval)
                 Result arg = eval_expression(eval);
                 eval->in_tail_position = old_tail;
                 
-                if (arg.status == RESULT_ERROR)
+                // Propagate errors and control flow (throw, stop, output)
+                if (arg.status == RESULT_ERROR || arg.status == RESULT_THROW ||
+                    arg.status == RESULT_STOP || arg.status == RESULT_OUTPUT)
                     return arg;
                 if (arg.status != RESULT_OK)
                 {
@@ -450,7 +452,9 @@ static Result eval_primary(Evaluator *eval)
                 Result arg = eval_expression(eval);
                 eval->in_tail_position = old_tail;
                 
-                if (arg.status == RESULT_ERROR)
+                // Propagate errors and control flow (throw, stop, output)
+                if (arg.status == RESULT_ERROR || arg.status == RESULT_THROW ||
+                    arg.status == RESULT_STOP || arg.status == RESULT_OUTPUT)
                     return arg;
                 if (arg.status != RESULT_OK)
                 {

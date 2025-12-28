@@ -402,6 +402,13 @@ static Result prim_catch(Evaluator *eval, int argc, Value *args)
     // Check if a throw or error occurred
     if (r.status == RESULT_THROW)
     {
+        // Special case: throw "toplevel always propagates to top level
+        // and is never caught by any catch (per Logo reference)
+        if (strcasecmp(r.throw_tag, "toplevel") == 0)
+        {
+            return r;
+        }
+        
         // Check if the tag matches
         if (strcasecmp(r.throw_tag, tag) == 0)
         {
