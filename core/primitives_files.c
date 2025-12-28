@@ -40,7 +40,7 @@ static Result prim_open(Evaluator *eval, int argc, Value *args)
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "open", NULL);
     }
 
     LogoStream *stream = logo_io_open(io, pathname);
@@ -72,7 +72,7 @@ static Result prim_close(Evaluator *eval, int argc, Value *args)
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "close", NULL);
     }
 
     // Check if file is open
@@ -110,7 +110,7 @@ static Result prim_setread(Evaluator *eval, int argc, Value *args)
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "setread", NULL);
     }
 
     // Empty list means reset to keyboard
@@ -147,7 +147,7 @@ static Result prim_setwrite(Evaluator *eval, int argc, Value *args)
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "setwrite", NULL);
     }
 
     // Empty list means reset to screen
@@ -396,7 +396,7 @@ static Result prim_filelen(Evaluator *eval, int argc, Value *args)
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "filelen", NULL);
     }
 
     // Find the open stream
@@ -430,7 +430,7 @@ static Result prim_dribble(Evaluator *eval, int argc, Value *args)
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "dribble", NULL);
     }
 
     if (!logo_io_start_dribble(io, pathname))
@@ -684,7 +684,7 @@ static Result prim_setprefix(Evaluator *eval, int argc, Value *args)
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "setprefix", NULL);
     }
 
     // Set the prefix
@@ -725,7 +725,7 @@ static Result prim_erase_file(Evaluator *eval, int argc, Value *args)
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "erasefile", NULL);
     }
 
     if (!logo_io_file_delete(io, filename))
@@ -750,7 +750,7 @@ static Result prim_erase_directory(Evaluator *eval, int argc, Value *args)
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "erasedirectory", NULL);
     }
 
     if (!logo_io_dir_delete(io, dirname))
@@ -773,7 +773,7 @@ static Result prim_filep(Evaluator *eval, int argc, Value *args)
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "file?", NULL);
     }
 
     if (logo_io_file_exists(io, filename))
@@ -796,7 +796,7 @@ static Result prim_dirp(Evaluator *eval, int argc, Value *args)
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "dir?", NULL);
     }
 
     if (logo_io_dir_exists(io, dirname))
@@ -825,7 +825,7 @@ static Result prim_rename(Evaluator *eval, int argc, Value *args)
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "rename", NULL);
     }
 
     if (!logo_io_rename(io, old_name, new_name))
@@ -849,7 +849,7 @@ static Result prim_createdir(Evaluator *eval, int argc, Value *args)
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "createdir", NULL);
     }
 
     if (!logo_io_dir_create(io, filename))
@@ -915,7 +915,7 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "load", NULL);
     }
 
     // Check if file exists (logo_io_file_exists resolves path internally)
@@ -1354,7 +1354,7 @@ static Result prim_save(Evaluator *eval, int argc, Value *args)
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "save", NULL);
     }
 
     // Check if file already exists (logo_io_file_exists resolves path internally)
@@ -1460,13 +1460,13 @@ static Result prim_savepic(Evaluator *eval, int argc, Value *args)
     LogoIO *io = primitives_get_io();
     if (!io || !io->console || !io->console->turtle)
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "savepic", NULL);
     }
 
     const LogoConsoleTurtle *turtle = io->console->turtle;
     if (!turtle->gfx_save)
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "savepic", NULL);
     }
 
     // Check if file already exists (logo_io_file_exists resolves path internally)
@@ -1509,13 +1509,13 @@ static Result prim_loadpic(Evaluator *eval, int argc, Value *args)
     LogoIO *io = primitives_get_io();
     if (!io || !io->console || !io->console->turtle)
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "loadpic", NULL);
     }
 
     const LogoConsoleTurtle *turtle = io->console->turtle;
     if (!turtle->gfx_load)
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "loadpic", NULL);
     }
 
     // Check if file exists (logo_io_file_exists resolves path internally)
@@ -1568,7 +1568,7 @@ static Result prim_pofile(Evaluator *eval, int argc, Value *args)
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "pofile", NULL);
     }
 
     // Check if file is already open - this is an error per the spec

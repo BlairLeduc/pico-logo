@@ -298,7 +298,7 @@ static Result prim_wait(Evaluator *eval, int argc, Value *args)
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "wait", NULL);
     }
     
     // Wait for tenths of a second (each tenth is 100 milliseconds)

@@ -157,7 +157,7 @@ void test_poweroff_not_available(void)
     // Default: power_off is NULL, so .poweroff should return an error
     Result r = eval_string(".poweroff");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_UNSUPPORTED_ON_DEVICE, r.error_code);
 }
 
 void test_poweroff_available_but_fails(void)
@@ -167,7 +167,7 @@ void test_poweroff_available_but_fails(void)
     
     Result r = eval_string(".poweroff");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_UNSUPPORTED_ON_DEVICE, r.error_code);
     TEST_ASSERT_TRUE(was_mock_power_off_called());
 }
 
