@@ -69,6 +69,7 @@ extern "C"
         void *context;                      // Implementation-specific data
         char name[LOGO_STREAM_NAME_MAX];    // Pathname for files, device name for console
         bool is_open;
+        bool write_error;                   // Set if a write operation failed (partial write)
     };
 
     //
@@ -86,6 +87,10 @@ extern "C"
     void logo_stream_write(LogoStream *stream, const char *text);
     void logo_stream_write_line(LogoStream *stream, const char *text);
     void logo_stream_flush(LogoStream *stream);
+
+    // Write error checking
+    bool logo_stream_has_write_error(LogoStream *stream);
+    void logo_stream_clear_write_error(LogoStream *stream);
 
     // Position operations (return -1 or false if not seekable)
     long logo_stream_get_read_pos(LogoStream *stream);

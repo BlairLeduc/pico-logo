@@ -25,6 +25,7 @@ void logo_stream_init(LogoStream *stream, LogoStreamType type,
     stream->ops = ops;
     stream->context = context;
     stream->is_open = true;
+    stream->write_error = false;
 
     if (name)
     {
@@ -127,6 +128,27 @@ void logo_stream_flush(LogoStream *stream)
     }
 
     stream->ops->flush(stream);
+}
+
+//
+// Write error checking
+//
+
+bool logo_stream_has_write_error(LogoStream *stream)
+{
+    if (!stream)
+    {
+        return false;
+    }
+    return stream->write_error;
+}
+
+void logo_stream_clear_write_error(LogoStream *stream)
+{
+    if (stream)
+    {
+        stream->write_error = false;
+    }
 }
 
 //

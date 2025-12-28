@@ -473,6 +473,14 @@ static Result prim_print(Evaluator *eval, int argc, Value *args)
     }
     print_to_writer("\n");
     flush_writer();
+    
+    // Check for write errors (e.g., disk full)
+    LogoIO *io = primitives_get_io();
+    if (io && logo_io_check_write_error(io))
+    {
+        return result_error(ERR_DISK_FULL);
+    }
+    
     return result_none();
 }
 
@@ -485,6 +493,14 @@ static Result prim_show(Evaluator *eval, int argc, Value *args)
     show_value(args[0]);
     print_to_writer("\n");
     flush_writer();
+    
+    // Check for write errors (e.g., disk full)
+    LogoIO *io = primitives_get_io();
+    if (io && logo_io_check_write_error(io))
+    {
+        return result_error(ERR_DISK_FULL);
+    }
+    
     return result_none();
 }
 
@@ -500,6 +516,14 @@ static Result prim_type(Evaluator *eval, int argc, Value *args)
         print_value(args[i]);
     }
     flush_writer();
+    
+    // Check for write errors (e.g., disk full)
+    LogoIO *io = primitives_get_io();
+    if (io && logo_io_check_write_error(io))
+    {
+        return result_error(ERR_DISK_FULL);
+    }
+    
     return result_none();
 }
 

@@ -18,11 +18,13 @@
 #include <strings.h>  // for strcasecmp
 
 //
-// File stream context - wraps a FILE*
+// File stream context - wraps a FILE* with separate read/write positions
 //
 typedef struct FileContext
 {
     FILE *file;
+    long read_pos;   // Separate read position
+    long write_pos;  // Separate write position (starts at end of file)
 } FileContext;
 
 //
@@ -42,7 +44,14 @@ static int host_file_read_char(LogoStream *stream)
         return -1;
     }
 
+    // Seek to read position
+    fseek(ctx->file, ctx->read_pos, SEEK_SET);
+    
     int ch = fgetc(ctx->file);
+    if (ch != EOF)
+    {
+        ctx->read_pos++;
+    }
     return (ch == EOF) ? -1 : ch;
 }
 
@@ -59,7 +68,11 @@ static int host_file_read_chars(LogoStream *stream, char *buffer, int count)
         return -1;
     }
 
+    // Seek to read position
+    fseek(ctx->file, ctx->read_pos, SEEK_SET);
+    
     size_t read = fread(buffer, 1, (size_t)count, ctx->file);
+    ctx->read_pos += (long)read;
     return (int)read;
 }
 
@@ -76,12 +89,17 @@ static int host_file_read_line(LogoStream *stream, char *buffer, size_t size)
         return -1;
     }
 
+    // Seek to read position
+    fseek(ctx->file, ctx->read_pos, SEEK_SET);
+    
     if (fgets(buffer, (int)size, ctx->file) == NULL)
     {
         return -1; // EOF or error
     }
 
-    return (int)strlen(buffer);
+    int len = (int)strlen(buffer);
+    ctx->read_pos += len;
+    return len;
 }
 
 static bool host_file_can_read(LogoStream *stream)
@@ -97,13 +115,14 @@ static bool host_file_can_read(LogoStream *stream)
         return false;
     }
 
-    // Check if we're at EOF
+    // Seek to read position and check if we're at EOF
+    fseek(ctx->file, ctx->read_pos, SEEK_SET);
     int ch = fgetc(ctx->file);
     if (ch == EOF)
     {
         return false;
     }
-    ungetc(ch, ctx->file);
+    // Don't advance read_pos - just checking
     return true;
 }
 
@@ -120,7 +139,18 @@ static void host_file_write(LogoStream *stream, const char *text)
         return;
     }
 
-    fputs(text, ctx->file);
+    // Seek to write position
+    fseek(ctx->file, ctx->write_pos, SEEK_SET);
+    
+    size_t len = strlen(text);
+    size_t written = fwrite(text, 1, len, ctx->file);
+    ctx->write_pos += (long)written;
+    
+    // Check for partial write (disk full or other error)
+    if (written < len)
+    {
+        stream->write_error = true;
+    }
 }
 
 static void host_file_flush(LogoStream *stream)
@@ -150,7 +180,7 @@ static long host_file_get_read_pos(LogoStream *stream)
         return -1;
     }
 
-    return ftell(ctx->file);
+    return ctx->read_pos;
 }
 
 static bool host_file_set_read_pos(LogoStream *stream, long pos)
@@ -166,19 +196,79 @@ static bool host_file_set_read_pos(LogoStream *stream, long pos)
         return false;
     }
 
-    return fseek(ctx->file, pos, SEEK_SET) == 0;
+    if (pos < 0)
+    {
+        return false;
+    }
+
+    // Get current file size to ensure the requested position is within bounds
+    if (fseek(ctx->file, 0L, SEEK_END) != 0)
+    {
+        return false;
+    }
+
+    long file_size = ftell(ctx->file);
+    if (file_size < 0)
+    {
+        return false;
+    }
+
+    if (pos > file_size)
+    {
+        return false;
+    }
+    ctx->read_pos = pos;
+    return true;
 }
 
 static long host_file_get_write_pos(LogoStream *stream)
 {
-    // For simple files, read and write position are the same
-    return host_file_get_read_pos(stream);
+    if (!stream || !stream->context)
+    {
+        return -1;
+    }
+
+    FileContext *ctx = (FileContext *)stream->context;
+    if (!ctx->file)
+    {
+        return -1;
+    }
+
+    return ctx->write_pos;
 }
 
 static bool host_file_set_write_pos(LogoStream *stream, long pos)
 {
-    // For simple files, read and write position are the same
-    return host_file_set_read_pos(stream, pos);
+    if (!stream || !stream->context)
+    {
+        return false;
+    }
+
+    FileContext *ctx = (FileContext *)stream->context;
+    if (!ctx->file)
+    {
+        return false;
+    }
+
+    if (pos < 0)
+    {
+        return false;
+    }
+
+    // Ensure requested write position does not exceed current file length.
+    // We allow positioning at exactly the end of the file to support appending.
+    long length = host_file_get_length(stream);
+    if (length < 0)
+    {
+        // Failed to determine file length; reject the position.
+        return false;
+    }
+    if (pos > length)
+    {
+        return false;
+    }
+    ctx->write_pos = pos;
+    return true;
 }
 
 static long host_file_get_length(LogoStream *stream)
@@ -285,6 +375,11 @@ static LogoStream *logo_host_file_open(const char *pathname)
         return NULL;
     }
     ctx->file = file;
+    ctx->read_pos = 0;  // Read position starts at beginning of file
+    
+    // Get file length for write position
+    fseek(file, 0, SEEK_END);
+    ctx->write_pos = ftell(file);  // Write position starts at end of file
 
     // Allocate stream
     LogoStream *stream = (LogoStream *)malloc(sizeof(LogoStream));

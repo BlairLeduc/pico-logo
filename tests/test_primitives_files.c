@@ -268,7 +268,7 @@ static LogoStream *mock_storage_open(const char *pathname)
     
     ctx->file = file;
     ctx->read_pos = 0;
-    ctx->write_pos = 0;
+    ctx->write_pos = file->size;  // Write position starts at end of file
     
     logo_stream_init(stream, LOGO_STREAM_FILE, &mock_file_ops, ctx, pathname);
     stream->is_open = true;
@@ -423,6 +423,20 @@ void test_open_existing_file(void)
     
     Result r = run_string("open \"existing.txt");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+}
+
+void test_open_already_open_file_error(void)
+{
+    mock_fs_create_file("alreadyopen.txt", "content");
+    
+    // First open should succeed
+    Result r1 = run_string("open \"alreadyopen.txt");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r1.status);
+    
+    // Second open should fail
+    Result r2 = run_string("open \"alreadyopen.txt");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r2.status);
+    TEST_ASSERT_EQUAL(ERR_FILE_ALREADY_OPEN, r2.error_code);
 }
 
 void test_close_file(void)
@@ -672,6 +686,26 @@ void test_writepos_screen_error(void)
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
+void test_writepos_at_end_for_existing_file(void)
+{
+    // Create an existing file with content
+    mock_fs_create_file("existing.txt", "hello world");
+    run_string("open \"existing.txt");
+    run_string("setwrite \"existing.txt");
+    
+    // writepos should be at end of file (11 chars)
+    Result r = eval_string("writepos");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_number(r.value));
+    TEST_ASSERT_EQUAL_FLOAT(11.0, r.value.as.number);
+    
+    // readpos should be at start
+    run_string("setread \"existing.txt");
+    r = eval_string("readpos");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(0.0, r.value.as.number);
+}
+
 //==========================================================================
 // Filelen Tests
 //==========================================================================
@@ -854,6 +888,42 @@ void test_setreadpos_negative(void)
     
     Result r = run_string("setreadpos -1");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_readpos_no_file_selected(void)
+{
+    // When reader is keyboard (no file selected), should return ERR_NO_FILE_SELECTED
+    run_string("setread []");
+    Result r = eval_string("readpos");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NO_FILE_SELECTED, r.error_code);
+}
+
+void test_setreadpos_no_file_selected(void)
+{
+    // When reader is keyboard (no file selected), should return ERR_NO_FILE_SELECTED
+    run_string("setread []");
+    Result r = run_string("setreadpos 2");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NO_FILE_SELECTED, r.error_code);
+}
+
+void test_writepos_no_file_selected(void)
+{
+    // When writer is screen (no file selected), should return ERR_NO_FILE_SELECTED
+    run_string("setwrite []");
+    Result r = eval_string("writepos");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NO_FILE_SELECTED, r.error_code);
+}
+
+void test_setwritepos_no_file_selected(void)
+{
+    // When writer is screen (no file selected), should return ERR_NO_FILE_SELECTED
+    run_string("setwrite []");
+    Result r = run_string("setwritepos 2");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NO_FILE_SELECTED, r.error_code);
 }
 
 void test_setwritepos_invalid_input(void)
@@ -1640,6 +1710,7 @@ int main(void)
     // Open/Close tests
     RUN_TEST(test_open_creates_new_file);
     RUN_TEST(test_open_existing_file);
+    RUN_TEST(test_open_already_open_file_error);
     RUN_TEST(test_close_file);
     RUN_TEST(test_close_unopened_file_error);
     RUN_TEST(test_closeall);
@@ -1668,6 +1739,7 @@ int main(void)
     RUN_TEST(test_writepos_after_write);
     RUN_TEST(test_setwritepos);
     RUN_TEST(test_writepos_screen_error);
+    RUN_TEST(test_writepos_at_end_for_existing_file);
     
     // Filelen tests
     RUN_TEST(test_filelen_returns_size);
@@ -1693,6 +1765,10 @@ int main(void)
     RUN_TEST(test_filelen_invalid_input);
     RUN_TEST(test_setreadpos_invalid_input);
     RUN_TEST(test_setreadpos_negative);
+    RUN_TEST(test_readpos_no_file_selected);
+    RUN_TEST(test_setreadpos_no_file_selected);
+    RUN_TEST(test_writepos_no_file_selected);
+    RUN_TEST(test_setwritepos_no_file_selected);
     RUN_TEST(test_setwritepos_invalid_input);
     RUN_TEST(test_setwritepos_negative);
     

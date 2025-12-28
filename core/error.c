@@ -54,7 +54,17 @@ static const char *error_templates[] = {
     [ERR_DISK_PROTECTED] = "Disk is write-protected",
     [ERR_DOESNT_LIKE_INPUT] = "%s doesn't like %s as input",
     [ERR_DIDNT_OUTPUT] = "%s didn't output",
-    [ERR_UNSUPPORTED_ON_DEVICE] = "I can't run %s on this device"
+    [ERR_UNSUPPORTED_ON_DEVICE] = "I can't run %s on this device",
+    [ERR_NO_FILE_SELECTED] = "No file selected",
+    [ERR_FILE_NOT_OPEN] = "File %s is not open",
+    [ERR_FILE_ALREADY_OPEN] = "File %s is already open",
+    [ERR_FILE_POS_OUT_OF_RANGE] = "File position out of range",
+    [ERR_DEVICE_UNAVAILABLE] = "Device unavailable",
+    [ERR_ALREADY_DRIBBLING] = "Already dribbling",
+    [ERR_DEVICE_IN_USE] = "Device %s is already in use",
+    [ERR_FILE_TOO_BIG] = "File %s is too big",
+    [ERR_SUBDIR_NOT_FOUND] = "Subdirectory not found for %s",
+    [ERR_SUBDIR_NOT_EMPTY] = "Subdirectory %s is not empty",
 };
 
 #define NUM_ERRORS (sizeof(error_templates) / sizeof(error_templates[0]))
@@ -150,7 +160,13 @@ const char *error_format(Result r)
     case ERR_CANT_USE_PROCEDURE:
     case ERR_CANT_FROM_EDITOR:
     case ERR_NOT_FOUND:
+    case ERR_FILE_NOT_OPEN:
+    case ERR_FILE_ALREADY_OPEN:
+    case ERR_DEVICE_IN_USE:
     case ERR_UNSUPPORTED_ON_DEVICE:
+    case ERR_FILE_TOO_BIG:
+    case ERR_SUBDIR_NOT_FOUND:
+    case ERR_SUBDIR_NOT_EMPTY:
         // Single %s placeholder - use error_proc or error_arg
         if (r.error_proc)
         {

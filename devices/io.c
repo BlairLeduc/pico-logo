@@ -706,8 +706,11 @@ bool logo_io_start_dribble(LogoIO *io, const char *pathname)
         return false;
     }
 
-    // Stop any existing dribble first
-    logo_io_stop_dribble(io);
+    // Caller should check for already dribbling before calling
+    if (io->dribble)
+    {
+        return false;
+    }
 
     // Check if we have a file opener
     if (!io->storage || !io->storage->ops->open)
@@ -750,6 +753,17 @@ void logo_io_stop_dribble(LogoIO *io)
 bool logo_io_is_dribbling(const LogoIO *io)
 {
     return io && io->dribble != NULL;
+}
+
+void logo_io_dribble_input(LogoIO *io, const char *text)
+{
+    if (!io || !io->dribble || !text)
+    {
+        return;
+    }
+
+    logo_stream_write(io->dribble, text);
+    logo_stream_write(io->dribble, "\n");
 }
 
 //
@@ -846,6 +860,32 @@ void logo_io_flush(LogoIO *io)
     {
         logo_stream_flush(io->dribble);
     }
+}
+
+bool logo_io_check_write_error(LogoIO *io)
+{
+    if (!io)
+    {
+        return false;
+    }
+
+    bool error = false;
+
+    // Check writer for errors
+    if (io->writer && logo_stream_has_write_error(io->writer))
+    {
+        logo_stream_clear_write_error(io->writer);
+        error = true;
+    }
+
+    // Check dribble for errors
+    if (io->dribble && logo_stream_has_write_error(io->dribble))
+    {
+        logo_stream_clear_write_error(io->dribble);
+        error = true;
+    }
+
+    return error;
 }
 
 //

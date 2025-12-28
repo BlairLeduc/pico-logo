@@ -218,6 +218,9 @@ Result repl_run(ReplState *state)
             continue;
         }
 
+        // Dribble the input line (user's typed input appears on screen)
+        logo_io_dribble_input(state->io, state->line);
+
         // Skip empty lines
         if (state->line[0] == '\0')
         {

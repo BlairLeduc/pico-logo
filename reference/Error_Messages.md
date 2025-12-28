@@ -44,6 +44,16 @@
 |41|(procedure) doesn't like (symbol) as input
 |42|(procedure) didn't output
 |43|I can't run (procedure) on this device
+|44|No file selected
+|45|File (file) not open
+|46|File (file) already open
+|47|File position out of range
+|48|Device unavailable
+|50|Already dribbling
+|52|Device (device) in use
+|53|File (file) too big
+|55|Subdirectory not found for (directory)
+|56|Subdirectory (directory) not empty
 ||!!! LOGO SYSTEM BUG !!! _Should not occur. Please let me know._
 
 
