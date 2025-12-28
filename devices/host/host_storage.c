@@ -194,7 +194,23 @@ static bool host_file_set_read_pos(LogoStream *stream, long pos)
     {
         return false;
     }
-    
+
+    // Get current file size to ensure the requested position is within bounds
+    if (fseek(ctx->file, 0L, SEEK_END) != 0)
+    {
+        return false;
+    }
+
+    long file_size = ftell(ctx->file);
+    if (file_size < 0)
+    {
+        return false;
+    }
+
+    if (pos > file_size)
+    {
+        return false;
+    }
     ctx->read_pos = pos;
     return true;
 }
