@@ -134,6 +134,9 @@ static bool input_can_read(LogoStream *stream)
 {
     (void)stream;
     
+    // Set input_active so keyboard_poll buffers F1/F2/F3 instead of switching modes
+    input_active = true;
+    
     // Consume and handle any mode-switching keys (F1/F2/F3)
     // so key? only returns true for keys that readchar will actually return
     while (keyboard_key_available())
@@ -146,8 +149,10 @@ static bool input_can_read(LogoStream *stream)
             continue;
         }
         // Found a non-mode-switching key
+        input_active = false;
         return true;
     }
+    input_active = false;
     return false;
 }
 
