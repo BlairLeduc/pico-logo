@@ -252,12 +252,11 @@ void test_step_pauses_execution(void)
 
 void test_step_multiline_procedure(void)
 {
-    // Define procedure with multiple lines
+    // Define procedure with two lines
     Node p = mem_atom("word", 4);
     const char *params[] = {mem_word_ptr(p)};
     
-    // Use define to create a multi-line procedure
-    // Body: "if empty? :word [stop] \n pr :word \n triangle bl :word"
+    // Body: "if empty? :word [stop] \n pr :word"
     Node body = NODE_NIL;
     body = mem_cons(mem_atom("if", 2), body);
     body = mem_cons(mem_atom("empty?", 6), body);
