@@ -6,7 +6,7 @@
 |2|Number is too big
 |3|(symbol) isn't a procedure
 |4|(symbol) isn't a word
-|5|(procedure) can't be used in a procedure
+|5|(procedure) can't be used at toplevel
 |6|(symbol) is a primitive
 |7|Can't find label (symbol)
 |8|Can't (symbol) from the editor
@@ -43,6 +43,7 @@
 |40|Disk is write-protected
 |41|(procedure) doesn't like (symbol) as input
 |42|(procedure) didn't output
+|43|I can't run (proceedure) on this device
 ||!!! LOGO SYSTEM BUG !!! _Should not occur. Please let me know._
 
 

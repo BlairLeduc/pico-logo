@@ -795,10 +795,10 @@ void test_label_basic(void)
 
 void test_go_no_label(void)
 {
-    // go without matching label should return error
+    // go outside a procedure should return error
     Result r = run_string("go \"nowhere");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_CANT_FIND_LABEL, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_ONLY_IN_PROCEDURE, r.error_code);
 }
 
 void test_go_with_label(void)

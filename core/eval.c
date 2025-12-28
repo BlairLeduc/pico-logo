@@ -502,7 +502,11 @@ static Result eval_primary(Evaluator *eval)
         return result_error(ERR_NOT_ENOUGH_INPUTS);
 
     default:
-        return result_error(ERR_DONT_KNOW_WHAT);
+    {
+        // Intern the token text so the pointer persists
+        Node token_atom = mem_atom(t.start, t.length);
+        return result_error_arg(ERR_DONT_KNOW_WHAT, NULL, mem_word_ptr(token_atom));
+    }
     }
 }
 
@@ -583,7 +587,7 @@ static Result eval_expr_bp(Evaluator *eval, int min_bp)
             lhs = result_ok(value_word(mem_atom_cstr((left_n > right_n) ? "true" : "false")));
             continue;
         default:
-            return result_error(ERR_DONT_KNOW_WHAT);
+            return result_error_arg(ERR_DONT_KNOW_WHAT, NULL, op_name);
         }
 
         lhs = result_ok(value_number(result));

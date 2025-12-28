@@ -208,6 +208,46 @@ void test_error_format_divide_by_zero_with_caller(void)
     TEST_ASSERT_EQUAL_STRING("Can't divide by zero in average", error_format(r));
 }
 
+void test_error_format_cant_use_toplevel(void)
+{
+    Result r = {0};
+    r.status = RESULT_ERROR;
+    r.error_code = ERR_CANT_USE_TOPLEVEL;
+    r.error_proc = "stop";
+    
+    TEST_ASSERT_EQUAL_STRING("stop can't be used at toplevel", error_format(r));
+}
+
+void test_error_format_cant_use_procedure(void)
+{
+    Result r = {0};
+    r.status = RESULT_ERROR;
+    r.error_code = ERR_CANT_USE_PROCEDURE;
+    r.error_proc = "to";
+    
+    TEST_ASSERT_EQUAL_STRING("to can't be used in a procedure", error_format(r));
+}
+
+void test_error_format_cant_from_editor(void)
+{
+    Result r = {0};
+    r.status = RESULT_ERROR;
+    r.error_code = ERR_CANT_FROM_EDITOR;
+    r.error_proc = "edit";
+    
+    TEST_ASSERT_EQUAL_STRING("Can't edit from the editor", error_format(r));
+}
+
+void test_error_format_not_found(void)
+{
+    Result r = {0};
+    r.status = RESULT_ERROR;
+    r.error_code = ERR_NOT_FOUND;
+    r.error_arg = "startup";
+    
+    TEST_ASSERT_EQUAL_STRING("startup not found", error_format(r));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -231,5 +271,9 @@ int main(void)
     RUN_TEST(test_error_format_too_few_items_with_caller);
     RUN_TEST(test_error_format_no_value_with_caller);
     RUN_TEST(test_error_format_divide_by_zero_with_caller);
+    RUN_TEST(test_error_format_cant_use_toplevel);
+    RUN_TEST(test_error_format_cant_use_procedure);
+    RUN_TEST(test_error_format_cant_from_editor);
+    RUN_TEST(test_error_format_not_found);
     return UNITY_END();
 }
