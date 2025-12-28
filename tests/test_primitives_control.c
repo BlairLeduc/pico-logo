@@ -698,6 +698,44 @@ void test_catch_error(void)
     TEST_ASSERT_EQUAL(RESULT_OK, err.status);
     TEST_ASSERT_TRUE(value_is_list(err.value));
     TEST_ASSERT_FALSE(mem_is_nil(err.value.as.node));
+
+    // The error list should be:
+    // [41 <formatted-error-message> sum []]
+    // Where <formatted-error-message> is the error message with arguments filled in
+    Node list = err.value.as.node;
+    
+    // First element: error code (41 = ERR_DOESNT_LIKE_INPUT)
+    Node first = mem_car(list);
+    TEST_ASSERT_TRUE(mem_is_word(first));
+    float error_code;
+    TEST_ASSERT_TRUE(value_to_number(value_word(first), &error_code));
+    TEST_ASSERT_EQUAL_FLOAT(ERR_DOESNT_LIKE_INPUT, error_code);
+    
+    // Second element: formatted error message (word)
+    list = mem_cdr(list);
+    TEST_ASSERT_FALSE(mem_is_nil(list));
+    Node second = mem_car(list);
+    TEST_ASSERT_TRUE(mem_is_word(second));
+    const char *message = mem_word_ptr(second);
+    TEST_ASSERT_NOT_NULL(message);
+    // The message is a template like "%s doesn't like %s as input"
+    TEST_ASSERT_EQUAL_STRING("sum doesn't like notanumber as input", message);
+    
+    // Third element: primitive name ("sum")
+    list = mem_cdr(list);
+    TEST_ASSERT_FALSE(mem_is_nil(list));
+    Node third = mem_car(list);
+    TEST_ASSERT_TRUE(mem_is_word(third));
+    TEST_ASSERT_EQUAL_STRING("sum", mem_word_ptr(third));
+    
+    // Fourth element: caller procedure (empty list since at top level)
+    list = mem_cdr(list);
+    TEST_ASSERT_FALSE(mem_is_nil(list));
+    Node fourth = mem_car(list);
+    TEST_ASSERT_TRUE(mem_is_nil(fourth));  // Empty list (NODE_NIL)
+    
+    // Should be end of list
+    TEST_ASSERT_TRUE(mem_is_nil(mem_cdr(list)));
 }
 
 void test_error_no_error(void)
