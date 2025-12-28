@@ -268,9 +268,15 @@ static bool line_is_end(const char *line)
     if (strncasecmp(line, "end", 3) != 0)
         return false;
     
-    // Must be followed by whitespace, newline, or end of string
-    char c = line[3];
-    return c == '\0' || c == ' ' || c == '\t' || c == '\n';
+    // Must be followed by whitespace or end of string
+    line += 3;
+    
+    // Skip any trailing whitespace
+    while (*line && (*line == ' ' || *line == '\t' || *line == '\n'))
+        line++;
+    
+    // Line must be empty after "end" and whitespace
+    return *line == '\0';
 }
 
 // Run editor and process results

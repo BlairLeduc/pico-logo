@@ -78,6 +78,11 @@ void test_repl_line_is_end_false_cases(void)
     TEST_ASSERT_FALSE(repl_line_is_end("friend"));
     TEST_ASSERT_FALSE(repl_line_is_end("the end"));
     TEST_ASSERT_FALSE(repl_line_is_end(""));
+    // Bug: end must be alone on the line, not followed by more content
+    TEST_ASSERT_FALSE(repl_line_is_end("end [stop]"));
+    TEST_ASSERT_FALSE(repl_line_is_end("end something"));
+    TEST_ASSERT_FALSE(repl_line_is_end("  end [end]"));
+    TEST_ASSERT_FALSE(repl_line_is_end("end; comment"));
 }
 
 void test_repl_extract_proc_name_basic(void)

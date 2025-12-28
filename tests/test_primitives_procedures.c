@@ -314,6 +314,17 @@ void test_copydef_error_source_not_found(void)
     TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
 }
 
+void test_copydef_copies_primitive(void)
+{
+    // Copy a primitive to a new name
+    run_string("copydef \"forward \"f");
+    
+    // The alias should work
+    Result r = eval_string("primitive? \"f");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+}
+
 void test_copydef_error_dest_is_primitive(void)
 {
     const char *params[] = {};
@@ -502,8 +513,8 @@ void test_text_no_params(void)
 
 void test_proc_define_from_text_simple(void)
 {
-    // Define using text format: to name ... end
-    Result r = proc_define_from_text("to greetings print \"hello end");
+    // Define using text format with newline markers: to name \n body \n end
+    Result r = proc_define_from_text("to greetings \\n print \"hello \\n end");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
     // Verify the procedure was defined
@@ -517,8 +528,8 @@ void test_proc_define_from_text_simple(void)
 
 void test_proc_define_from_text_with_param(void)
 {
-    // Define a procedure with parameters
-    Result r = proc_define_from_text("to triple :n output :n * 3 end");
+    // Define a procedure with parameters and newline markers
+    Result r = proc_define_from_text("to triple :n \\n output :n * 3 \\n end");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
     Result r2 = eval_string("triple 4");
@@ -528,7 +539,7 @@ void test_proc_define_from_text_with_param(void)
 
 void test_proc_define_from_text_multiple_params(void)
 {
-    Result r = proc_define_from_text("to avg :a :b output (:a + :b) / 2 end");
+    Result r = proc_define_from_text("to avg :a :b \\n output (:a + :b) / 2 \\n end");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
     Result r2 = eval_string("avg 10 20");
@@ -538,8 +549,8 @@ void test_proc_define_from_text_multiple_params(void)
 
 void test_proc_define_from_text_with_brackets(void)
 {
-    // Test with brackets in the body
-    Result r = proc_define_from_text("to countdown :n if :n > 0 [print :n countdown :n - 1] end");
+    // Test with brackets in the body and newline markers
+    Result r = proc_define_from_text("to countdown :n \\n if :n > 0 [print :n countdown :n - 1] \\n end");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
     reset_output();
@@ -549,8 +560,8 @@ void test_proc_define_from_text_with_brackets(void)
 
 void test_proc_define_from_text_with_comparison(void)
 {
-    // Test with comparison operators
-    Result r = proc_define_from_text("to bigger :a :b if :a > :b [output :a] output :b end");
+    // Test with comparison operators and newline markers
+    Result r = proc_define_from_text("to bigger :a :b \\n if :a > :b [output :a] \\n output :b \\n end");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
     Result r2 = eval_string("bigger 5 3");
@@ -582,15 +593,15 @@ void test_proc_define_from_text_error_no_name(void)
 void test_proc_define_from_text_error_redefine_primitive(void)
 {
     // Cannot redefine primitives
-    Result r = proc_define_from_text("to print :x output :x end");
+    Result r = proc_define_from_text("to print :x \\n output :x \\n end");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
     TEST_ASSERT_EQUAL(ERR_IS_PRIMITIVE, r.error_code);
 }
 
 void test_proc_define_from_text_quoted_word(void)
 {
-    // Test with quoted words in body
-    Result r = proc_define_from_text("to sayhello print \"hello end");
+    // Test with quoted words in body and newline markers
+    Result r = proc_define_from_text("to sayhello \\n print \"hello \\n end");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
     reset_output();
@@ -600,8 +611,8 @@ void test_proc_define_from_text_quoted_word(void)
 
 void test_proc_define_from_text_all_operators(void)
 {
-    // Test all arithmetic and comparison operators
-    Result r = proc_define_from_text("to mathtest :x output :x + 1 - 1 * 2 / 2 end");
+    // Test all arithmetic and comparison operators with newline markers
+    Result r = proc_define_from_text("to mathtest :x \\n output :x + 1 - 1 * 2 / 2 \\n end");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
     Result r2 = eval_string("mathtest 10");
@@ -612,8 +623,8 @@ void test_proc_define_from_text_all_operators(void)
 
 void test_proc_define_from_text_equals_operator(void)
 {
-    // Test equals operator
-    Result r = proc_define_from_text("to iseq :a :b if :a = :b [output \"yes] output \"no end");
+    // Test equals operator with newline markers
+    Result r = proc_define_from_text("to iseq :a :b \\n if :a = :b [output \"yes] \\n output \"no \\n end");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
     Result r2 = eval_string("iseq 5 5");
@@ -624,11 +635,27 @@ void test_proc_define_from_text_equals_operator(void)
     TEST_ASSERT_EQUAL(RESULT_OK, r3.status);
     TEST_ASSERT_EQUAL_STRING("no", mem_word_ptr(r3.value.as.node));
 }
+void test_proc_define_from_text_end_in_list(void)
+{
+    // Bug: [end] in procedure body was incorrectly terminating the procedure
+    // Test that [end] as a list element doesn't end the procedure
+    Result r = proc_define_from_text("to checkend :x \\n if :x = [end] [output \"yes] \\n output \"no \\n end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    // Verify the procedure works correctly
+    Result r2 = eval_string("checkend [end]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_STRING("yes", mem_word_ptr(r2.value.as.node));
+    
+    Result r3 = eval_string("checkend [other]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r3.status);
+    TEST_ASSERT_EQUAL_STRING("no", mem_word_ptr(r3.value.as.node));
+}
 
 void test_proc_define_from_text_less_than_operator(void)
 {
-    // Test less than operator
-    Result r = proc_define_from_text("to isless :a :b if :a < :b [output \"yes] output \"no end");
+    // Test less than operator with newline markers
+    Result r = proc_define_from_text("to isless :a :b \\n if :a < :b [output \"yes] \\n output \"no \\n end");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
     Result r2 = eval_string("isless 3 5");
@@ -638,8 +665,8 @@ void test_proc_define_from_text_less_than_operator(void)
 
 void test_proc_define_from_text_with_parentheses(void)
 {
-    // Test with parentheses in body
-    Result r = proc_define_from_text("to sumall :a :b :c output (:a + :b + :c) end");
+    // Test with parentheses in body and newline markers
+    Result r = proc_define_from_text("to sumall :a :b :c \\n output (:a + :b + :c) \\n end");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
     Result r2 = eval_string("sumall 1 2 3");
@@ -654,9 +681,9 @@ void test_unconditional_tco_no_args(void)
     // We use a counter to stop after enough iterations
     run_string("make \"counter 0");
     
-    Result r = proc_define_from_text("to infloop make \"counter :counter + 1 "
-                                     "if :counter > 100 [stop] "
-                                     "infloop end");
+    Result r = proc_define_from_text("to infloop \\n make \"counter :counter + 1 \\n "
+                                     "if :counter > 100 [stop] \\n "
+                                     "infloop \\n end");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
     Result r2 = run_string("infloop");
@@ -674,9 +701,9 @@ void test_unconditional_tco_with_args(void)
     // We use a counter to stop after enough iterations
     run_string("make \"counter 0");
     
-    Result r = proc_define_from_text("to infloop2 :n make \"counter :counter + 1 "
-                                     "if :counter > 100 [stop] "
-                                     "infloop2 :n end");
+    Result r = proc_define_from_text("to infloop2 :n \\n make \"counter :counter + 1 \\n "
+                                     "if :counter > 100 [stop] \\n "
+                                     "infloop2 :n \\n end");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
     Result r2 = run_string("infloop2 42");
@@ -700,10 +727,10 @@ void test_tco_with_args_exact_failing_case(void)
     
     // Define procedure that uses its argument in recursive call
     Result r = proc_define_from_text(
-        "to foo2 :n "
-        "make \"loopcount :loopcount + 1 "
-        "if :loopcount > 100 [stop] "
-        "foo2 :n "
+        "to foo2 :n \\n "
+        "make \"loopcount :loopcount + 1 \\n "
+        "if :loopcount > 100 [stop] \\n "
+        "foo2 :n \\n "
         "end");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
@@ -728,11 +755,11 @@ void test_tco_with_print_and_args(void)
     reset_output();
     
     Result r = proc_define_from_text(
-        "to fooprint :n "
-        "make \"cnt :cnt + 1 "
-        "if :cnt > 50 [stop] "
-        "pr (se \"Hey :n) "
-        "fooprint :n "
+        "to fooprint :n \\n "
+        "make \"cnt :cnt + 1 \\n "
+        "if :cnt > 50 [stop] \\n "
+        "pr (se \"Hey :n) \\n "
+        "fooprint :n \\n "
         "end");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
@@ -751,10 +778,10 @@ void test_tco_scope_depth_stability(void)
     run_string("make \"cnt 0");
     
     Result r = proc_define_from_text(
-        "to checkdepth :n "
-        "make \"cnt :cnt + 1 "
-        "if :cnt > 100 [stop] "
-        "checkdepth :n "
+        "to checkdepth :n \\n "
+        "make \"cnt :cnt + 1 \\n "
+        "if :cnt > 100 [stop] \\n "
+        "checkdepth :n \\n "
         "end");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
@@ -792,6 +819,7 @@ int main(void)
     RUN_TEST(test_defined_question_alias);
     RUN_TEST(test_primitive_question_alias);
     RUN_TEST(test_copydef_copies_procedure);
+    RUN_TEST(test_copydef_copies_primitive);
     RUN_TEST(test_copydef_error_source_not_found);
     RUN_TEST(test_copydef_error_dest_is_primitive);
     RUN_TEST(test_text_outputs_procedure_definition);
@@ -830,6 +858,7 @@ int main(void)
     RUN_TEST(test_proc_define_from_text_all_operators);
     RUN_TEST(test_proc_define_from_text_equals_operator);
     RUN_TEST(test_proc_define_from_text_less_than_operator);
+    RUN_TEST(test_proc_define_from_text_end_in_list);
     RUN_TEST(test_proc_define_from_text_with_parentheses);
     RUN_TEST(test_unconditional_tco_no_args);
     RUN_TEST(test_unconditional_tco_with_args);
