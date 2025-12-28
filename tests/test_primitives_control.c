@@ -700,8 +700,8 @@ void test_catch_error(void)
     TEST_ASSERT_FALSE(mem_is_nil(err.value.as.node));
 
     // The error list should be:
-    // [41 <message-template> sum []]
-    // Where <message-template> is the error message template (with %s placeholders)
+    // [41 <formatted-error-message> sum []]
+    // Where <formatted-error-message> is the error message with arguments filled in
     Node list = err.value.as.node;
     
     // First element: error code (41 = ERR_DOESNT_LIKE_INPUT)
