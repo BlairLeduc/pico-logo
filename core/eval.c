@@ -1076,8 +1076,8 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
             int label_pos = find_label_position(buffer, r.goto_label);
             if (label_pos < 0)
             {
-                // Label not found - convert to error
-                r = result_error(ERR_CANT_FIND_LABEL);
+                // Label not found - convert to error with label name
+                r = result_error_arg(ERR_CANT_FIND_LABEL, NULL, r.goto_label);
                 break;
             }
             

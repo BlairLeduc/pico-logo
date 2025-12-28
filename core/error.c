@@ -144,6 +144,7 @@ const char *error_format(Result r)
     case ERR_DONT_KNOW_WHAT:
     case ERR_ALREADY_DEFINED:
     case ERR_NO_CATCH:
+    case ERR_CANT_FIND_LABEL:
         // Single %s placeholder - use error_proc or error_arg
         if (r.error_proc)
         {

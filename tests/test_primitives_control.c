@@ -819,6 +819,22 @@ void test_go_with_label(void)
     TEST_ASSERT_EQUAL_STRING("3\n2\n1\n0\n", output_buffer);
 }
 
+void test_go_label_not_found_in_procedure(void)
+{
+    // go to a label that doesn't exist inside a procedure
+    Result def = proc_define_from_text(
+        "to missinglabel\n"
+        "go \"nothere\n"
+        "end\n");
+    TEST_ASSERT_EQUAL(RESULT_OK, def.status);
+
+    Result r = run_string("missinglabel");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_CANT_FIND_LABEL, r.error_code);
+    // Verify the error message includes the label name
+    TEST_ASSERT_EQUAL_STRING("nothere", r.error_arg);
+}
+
 //==========================================================================
 // Pause/Continue Tests
 //==========================================================================
@@ -1013,6 +1029,7 @@ int main(void)
     RUN_TEST(test_label_basic);
     RUN_TEST(test_go_no_label);
     RUN_TEST(test_go_with_label);
+    RUN_TEST(test_go_label_not_found_in_procedure);
     
     // Pause/continue
     RUN_TEST(test_pause_at_toplevel_error);
