@@ -43,6 +43,12 @@ static Result prim_open(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "open", NULL);
     }
 
+    // Check if file is already open
+    if (logo_io_is_open(io, pathname))
+    {
+        return result_error_arg(ERR_FILE_ALREADY_OPEN, NULL, pathname);
+    }
+
     LogoStream *stream = logo_io_open(io, pathname);
     if (!stream)
     {

@@ -425,6 +425,19 @@ void test_open_existing_file(void)
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
 }
 
+void test_open_already_open_file_error(void)
+{
+    mock_fs_create_file("alreadyopen.txt", "content");
+    
+    // First open should succeed
+    Result r1 = run_string("open \"alreadyopen.txt");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r1.status);
+    
+    // Second open should fail
+    Result r2 = run_string("open \"alreadyopen.txt");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r2.status);
+}
+
 void test_close_file(void)
 {
     mock_fs_create_file("toclose.txt", "data");
@@ -1640,6 +1653,7 @@ int main(void)
     // Open/Close tests
     RUN_TEST(test_open_creates_new_file);
     RUN_TEST(test_open_existing_file);
+    RUN_TEST(test_open_already_open_file_error);
     RUN_TEST(test_close_file);
     RUN_TEST(test_close_unopened_file_error);
     RUN_TEST(test_closeall);
