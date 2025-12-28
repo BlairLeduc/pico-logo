@@ -2546,7 +2546,7 @@ savel _namelist_ _pathname_
 
 `command`
 
-The `savel` command saves the procedures named in _name_ or _namelist_, and all the unburied variables and properties in the workspace to _pathname_. This command is useful for saving a portion of your workspace onto a SD Card. Compare it with [`save`](#save).
+The `savel` command saves the procedures named in _name_ or _namelist_, and all the unburied variables and properties in the workspace to _pathname_. An error occurs if any of the procedures named in _name_ or _namelist_ do not exist in the workspace, or if the file you name already exists. In this case, you should first either erase the existing file using [`erasefile`](#erasefile) or rename it using [`rename`](#rename). This command is useful for saving a portion of your workspace onto a SD Card. Compare it with [`save`](#save).
 
 
 ## loadpic
