@@ -57,6 +57,16 @@ extern "C"
     #define ERR_DOESNT_LIKE_INPUT      41
     #define ERR_DIDNT_OUTPUT           42
     #define ERR_UNSUPPORTED_ON_DEVICE  43
+    #define ERR_NO_FILE_SELECTED       44
+    #define ERR_FILE_NOT_OPEN          45
+    #define ERR_FILE_ALREADY_OPEN      46
+    #define ERR_FILE_POS_OUT_OF_RANGE  47  
+    #define ERR_DEVICE_UNAVAILABLE     48
+    #define ERR_ALREADY_DRIBBLING      50
+    #define ERR_DEVICE_IN_USE          52
+    #define ERR_FILE_TOO_BIG           53
+    #define ERR_SUBDIR_NOT_FOUND       55
+    #define ERR_SUBDIR_NOT_EMPTY       56
 
     // Format an error message from a Result
     // Returns pointer to static buffer - do not free

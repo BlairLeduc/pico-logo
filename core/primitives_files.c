@@ -78,7 +78,7 @@ static Result prim_close(Evaluator *eval, int argc, Value *args)
     // Check if file is open
     if (!logo_io_is_open(io, pathname))
     {
-        return result_error_arg(ERR_FILE_NOT_FOUND, "", pathname);
+        return result_error_arg(ERR_FILE_NOT_OPEN, NULL, pathname);
     }
 
     logo_io_close(io, pathname);
@@ -131,7 +131,7 @@ static Result prim_setread(Evaluator *eval, int argc, Value *args)
     LogoStream *stream = logo_io_find_open(io, pathname);
     if (!stream)
     {
-        return result_error_arg(ERR_FILE_NOT_FOUND, "", pathname);
+        return result_error_arg(ERR_FILE_NOT_OPEN, NULL, pathname);
     }
 
     logo_io_set_reader(io, stream);
@@ -168,7 +168,7 @@ static Result prim_setwrite(Evaluator *eval, int argc, Value *args)
     LogoStream *stream = logo_io_find_open(io, pathname);
     if (!stream)
     {
-        return result_error_arg(ERR_FILE_NOT_FOUND, "", pathname);
+        return result_error_arg(ERR_FILE_NOT_OPEN, NULL, pathname);
     }
 
     logo_io_set_writer(io, stream);
@@ -260,13 +260,13 @@ static Result prim_readpos(Evaluator *eval, int argc, Value *args)
     LogoIO *io = primitives_get_io();
     if (!io || !io->reader)
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error(ERR_NO_FILE_SELECTED);
     }
 
     // Error if reader is keyboard
     if (logo_io_reader_is_keyboard(io))
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error(ERR_DEVICE_UNAVAILABLE);
     }
 
     long pos = logo_stream_get_read_pos(io->reader);
@@ -298,18 +298,18 @@ static Result prim_setreadpos(Evaluator *eval, int argc, Value *args)
     LogoIO *io = primitives_get_io();
     if (!io || !io->reader)
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error(ERR_NO_FILE_SELECTED);
     }
 
     // Error if reader is keyboard
     if (logo_io_reader_is_keyboard(io))
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error(ERR_DEVICE_UNAVAILABLE);
     }
 
     if (!logo_stream_set_read_pos(io->reader, pos))
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error(ERR_FILE_POS_OUT_OF_RANGE);
     }
 
     return result_none();
@@ -325,13 +325,13 @@ static Result prim_writepos(Evaluator *eval, int argc, Value *args)
     LogoIO *io = primitives_get_io();
     if (!io || !io->writer)
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error(ERR_NO_FILE_SELECTED);
     }
 
     // Error if writer is screen
     if (logo_io_writer_is_screen(io))
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error(ERR_DEVICE_UNAVAILABLE);
     }
 
     long pos = logo_stream_get_write_pos(io->writer);
@@ -363,18 +363,18 @@ static Result prim_setwritepos(Evaluator *eval, int argc, Value *args)
     LogoIO *io = primitives_get_io();
     if (!io || !io->writer)
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error(ERR_NO_FILE_SELECTED);
     }
 
     // Error if writer is screen
     if (logo_io_writer_is_screen(io))
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error(ERR_DEVICE_UNAVAILABLE);
     }
 
     if (!logo_stream_set_write_pos(io->writer, pos))
     {
-        return result_error(ERR_DISK_TROUBLE);
+        return result_error(ERR_FILE_POS_OUT_OF_RANGE);
     }
 
     return result_none();
@@ -403,7 +403,7 @@ static Result prim_filelen(Evaluator *eval, int argc, Value *args)
     LogoStream *stream = logo_io_find_open(io, pathname);
     if (!stream)
     {
-        return result_error_arg(ERR_FILE_NOT_FOUND, "", pathname);
+        return result_error_arg(ERR_FILE_NOT_OPEN, NULL, pathname);
     }
 
     long len = logo_stream_get_length(stream);
@@ -431,6 +431,12 @@ static Result prim_dribble(Evaluator *eval, int argc, Value *args)
     if (!io)
     {
         return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "dribble", NULL);
+    }
+
+    // Check if already dribbling
+    if (logo_io_is_dribbling(io))
+    {
+        return result_error(ERR_ALREADY_DRIBBLING);
     }
 
     if (!logo_io_start_dribble(io, pathname))
@@ -1739,8 +1745,7 @@ static Result prim_pofile(Evaluator *eval, int argc, Value *args)
     // (logo_io_is_open resolves path internally)
     if (logo_io_is_open(io, pathname))
     {
-        // Report a disk-related error instead of "file not found" to avoid confusion
-        return result_error_arg(ERR_DISK_TROUBLE, "", pathname);
+        return result_error_arg(ERR_FILE_ALREADY_OPEN, NULL, pathname);
     }
 
     // Check if file exists (logo_io_file_exists resolves path internally)

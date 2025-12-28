@@ -198,6 +198,9 @@ extern "C"
     // Check if dribbling is active
     bool logo_io_is_dribbling(const LogoIO *io);
 
+    // Write user input to dribble file (for capturing typed input)
+    void logo_io_dribble_input(LogoIO *io, const char *text);
+
     //
     // High-level I/O operations (use current reader/writer)
     // These handle dribbling automatically for output operations.

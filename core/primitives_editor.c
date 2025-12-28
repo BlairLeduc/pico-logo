@@ -739,7 +739,7 @@ static Result prim_editfile(Evaluator *eval, int argc, Value *args)
     // Check if file is already open - this is an error per the spec
     if (logo_io_is_open(io, pathname))
     {
-        return result_error_arg(ERR_DISK_TROUBLE, "", pathname);
+        return result_error_arg(ERR_FILE_ALREADY_OPEN, NULL, pathname);
     }
     
     // Initialize buffer
@@ -753,7 +753,7 @@ static Result prim_editfile(Evaluator *eval, int argc, Value *args)
         long file_size = logo_io_file_size(io, pathname);
         if (file_size > LOGO_EDITOR_BUFFER_SIZE - 1)
         {
-            return result_error_arg(ERR_OUT_OF_SPACE, "editfile", NULL);
+            return result_error_arg(ERR_FILE_TOO_BIG, NULL, pathname);
         }
         
         // Open and read file

@@ -306,6 +306,7 @@ void test_dribble(void)
     LogoStream *stream = malloc(sizeof(LogoStream));
     memset(stream, 0, sizeof(LogoStream));
     stream->ops = &dribble_ops;
+    stream->is_open = true;  // Mark stream as open
     mock_open_result = stream;
 
     TEST_ASSERT_FALSE(logo_io_is_dribbling(&io));
@@ -320,6 +321,38 @@ void test_dribble(void)
     logo_io_stop_dribble(&io);
     TEST_ASSERT_FALSE(logo_io_is_dribbling(&io));
     TEST_ASSERT_NULL(io.dribble);
+}
+
+void test_dribble_input(void)
+{
+    // Setup mock stream for dribble
+    LogoStream *stream = malloc(sizeof(LogoStream));
+    memset(stream, 0, sizeof(LogoStream));
+    stream->ops = &dribble_ops;
+    stream->is_open = true;  // Mark stream as open so writes work
+    mock_open_result = stream;
+
+    // Start dribble
+    bool result = logo_io_start_dribble(&io, "dribble.txt");
+    TEST_ASSERT_TRUE(result);
+    TEST_ASSERT_TRUE(logo_io_is_dribbling(&io));
+
+    // Clear the last written text
+    last_written_text[0] = '\0';
+
+    // Dribble input should write to dribble file (text + newline)
+    logo_io_dribble_input(&io, "repeat 5 [pr random 10]");
+    
+    // The last write is the newline (function writes text, then newline separately)
+    TEST_ASSERT_EQUAL_STRING("\n", last_written_text);
+
+    // Stop dribble
+    logo_io_stop_dribble(&io);
+
+    // Dribble input should do nothing when not dribbling
+    last_written_text[0] = '\0';
+    logo_io_dribble_input(&io, "should not write");
+    TEST_ASSERT_EQUAL_STRING("", last_written_text);
 }
 
 void test_file_operations(void)
@@ -394,6 +427,7 @@ int main(void)
     RUN_TEST(test_open_file);
     RUN_TEST(test_reader_writer_control);
     RUN_TEST(test_dribble);
+    RUN_TEST(test_dribble_input);
     RUN_TEST(test_file_operations);
     RUN_TEST(test_read_write_operations);
     RUN_TEST(test_hardware_wrappers);
