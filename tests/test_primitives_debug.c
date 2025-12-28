@@ -228,12 +228,19 @@ void test_step_pauses_execution(void)
     
     run_string("step \"myproc");
     
+    // Provide mock input (one keypress for the one line)
+    set_mock_input("x");
+    
     reset_output();
     Result r = run_string("myproc");
     
-    // Step is set but currently executes normally (TODO: implement proper stepping)
+    // Should complete successfully
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     TEST_ASSERT_TRUE(proc_is_stepped("myproc"));
+    
+    // Output should contain both the stepped line and the execution output
+    TEST_ASSERT_TRUE(strstr(output_buffer, "print \"line1") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "line1") != NULL);
     
     // After unstep, should still work
     run_string("unstep \"myproc");
@@ -241,6 +248,88 @@ void test_step_pauses_execution(void)
     r = run_string("myproc");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     TEST_ASSERT_FALSE(proc_is_stepped("myproc"));
+}
+
+void test_step_multiline_procedure(void)
+{
+    // Define procedure with two lines
+    Node p = mem_atom("word", 4);
+    const char *params[] = {mem_word_ptr(p)};
+    
+    // Body: "if empty? :word [stop] \n pr :word"
+    Node body = NODE_NIL;
+    body = mem_cons(mem_atom("if", 2), body);
+    body = mem_cons(mem_atom("empty?", 6), body);
+    body = mem_cons(mem_atom(":word", 5), body);
+    // Build the [stop] list
+    Node stop_list = mem_cons(mem_atom("stop", 4), NODE_NIL);
+    body = mem_cons(stop_list, body);
+    body = mem_cons(mem_atom("\\n", 2), body);  // Newline marker
+    body = mem_cons(mem_atom("pr", 2), body);
+    body = mem_cons(mem_atom(":word", 5), body);
+    
+    // Reverse to get correct order
+    Node reversed = NODE_NIL;
+    while (!mem_is_nil(body)) {
+        reversed = mem_cons(mem_car(body), reversed);
+        body = mem_cdr(body);
+    }
+    
+    proc_define("triangle", params, 1, reversed);
+    
+    run_string("step \"triangle");
+    
+    // Two lines need two keypresses
+    set_mock_input("xx");
+    
+    reset_output();
+    Result r = run_string("triangle \"ab");
+    
+    // Should complete successfully (will stop when :word becomes empty)
+    TEST_ASSERT_TRUE(r.status == RESULT_NONE || r.status == RESULT_STOP);
+    
+    // Output should show the stepped lines
+    TEST_ASSERT_TRUE(strstr(output_buffer, "if") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "pr") != NULL);
+}
+
+void test_step_shows_each_line_before_execution(void)
+{
+    const char *params[] = {};
+    
+    // Create a simple two-line procedure using define
+    Node body = NODE_NIL;
+    body = mem_cons(mem_atom("print", 5), body);
+    body = mem_cons(mem_atom("\"first", 6), body);
+    body = mem_cons(mem_atom("\\n", 2), body);  // Newline marker
+    body = mem_cons(mem_atom("print", 5), body);
+    body = mem_cons(mem_atom("\"second", 7), body);
+    
+    // Reverse to get correct order
+    Node reversed = NODE_NIL;
+    while (!mem_is_nil(body)) {
+        reversed = mem_cons(mem_car(body), reversed);
+        body = mem_cdr(body);
+    }
+    
+    proc_define("twolines", params, 0, reversed);
+    
+    run_string("step \"twolines");
+    
+    // Two lines need two keypresses
+    set_mock_input("ab");
+    
+    reset_output();
+    Result r = run_string("twolines");
+    
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Output should contain both stepped display and execution output
+    // The order should be: first line displayed, first line executed, second line displayed, second line executed
+    TEST_ASSERT_TRUE(strstr(output_buffer, "print \"first") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "first\n") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "print \"second") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "second\n") != NULL);
 }
 
 int main(void)
@@ -264,6 +353,8 @@ int main(void)
     RUN_TEST(test_trace_with_arguments);
     RUN_TEST(test_trace_shows_recursion_depth);
     RUN_TEST(test_step_pauses_execution);
+    RUN_TEST(test_step_multiline_procedure);
+    RUN_TEST(test_step_shows_each_line_before_execution);
 
     return UNITY_END();
 }
