@@ -57,12 +57,12 @@ void variables_init(void)
     global_test_value = false;
 }
 
-void var_push_scope(void)
+bool var_push_scope(void)
 {
     if (scope_depth >= MAX_SCOPE_DEPTH)
     {
-        // Out of scope space - could set an error flag
-        return;
+        // Out of scope space
+        return false;
     }
     ScopeFrame *frame = &scope_stack[scope_depth];
     frame->count = 0;
@@ -74,6 +74,7 @@ void var_push_scope(void)
         frame->variables[i].has_value = false;
     }
     scope_depth++;
+    return true;
 }
 
 void var_pop_scope(void)
@@ -461,6 +462,21 @@ bool var_get_local_by_index(int index, const char **name_out, Value *value_out)
                 }
                 current++;
             }
+        }
+    }
+    return false;
+}
+
+// Check if a variable name is shadowed by a local variable in the scope chain
+bool var_is_shadowed_by_local(const char *name)
+{
+    for (int s = 0; s < scope_depth; s++)
+    {
+        ScopeFrame *frame = &scope_stack[s];
+        int idx = find_in_frame(frame, name);
+        if (idx >= 0 && frame->variables[idx].has_value)
+        {
+            return true;
         }
     }
     return false;

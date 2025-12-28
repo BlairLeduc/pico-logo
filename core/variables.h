@@ -24,7 +24,8 @@ extern "C"
     void variables_init(void);
 
     // Push a new local scope (called when entering a procedure)
-    void var_push_scope(void);
+    // Returns true if successful, false if out of scope space
+    bool var_push_scope(void);
 
     // Pop the current local scope (called when leaving a procedure)
     void var_pop_scope(void);
@@ -79,6 +80,8 @@ extern "C"
     // Get local variable by index (0-based, newest scope first)
     // Returns false if index is out of range
     bool var_get_local_by_index(int index, const char **name_out, Value *value_out);
+    // Check if a variable name is shadowed by a local variable in the scope chain
+    bool var_is_shadowed_by_local(const char *name);
 
     // Mark all variable values as GC roots
     void var_gc_mark_all(void);

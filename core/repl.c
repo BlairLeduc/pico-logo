@@ -206,7 +206,7 @@ Result repl_run(ReplState *state)
             // EOF or error
             if (state->flags & REPL_FLAG_EXIT_ON_EOF)
             {
-                return result_eof();
+                return result_none();
             }
             logo_io_write_line(state->io, "");
             continue;

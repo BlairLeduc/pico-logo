@@ -350,7 +350,11 @@ Result proc_call(Evaluator *eval, UserProcedure *proc, int argc, Value *args)
         }
 
         // Push new scope for local variables
-        var_push_scope();
+        if (!var_push_scope())
+        {
+            // Out of scope space - this means TCO isn't working as expected
+            return result_error(ERR_OUT_OF_SPACE);
+        }
 
         // Bind arguments to parameter names as local variables
         for (int i = 0; i < proc->param_count; i++)
