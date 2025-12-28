@@ -234,8 +234,9 @@ bool screensaver_update(void)
 
 //
 // Handle key press - restore palette and reset state
+// Returns true if screensaver was active (display may need full refresh)
 //
-void screensaver_on_key_press(void)
+bool screensaver_on_key_press(void)
 {
     last_activity_us = time_us_64();
 
@@ -250,7 +251,11 @@ void screensaver_on_key_press(void)
         shade_offset = 0;
         shade_cycle_count = 0;
         hue_offset = 0;
+        
+        return true;  // Was active, display needs refresh
     }
+    
+    return false;  // Was not active
 }
 
 //

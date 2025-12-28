@@ -37,7 +37,8 @@ void screensaver_init(void);
 bool screensaver_update(void);
 
 // Notify that a key was pressed (resets idle timer and restores palette)
-void screensaver_on_key_press(void);
+// Returns true if screensaver was active and display needs full refresh
+bool screensaver_on_key_press(void);
 
 // Check if screen saver is currently active
 bool screensaver_is_active(void);

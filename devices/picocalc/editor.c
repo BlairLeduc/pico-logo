@@ -905,6 +905,17 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
         // Erase cursor before modifying screen
         screen_txt_erase_cursor();
         
+        // Check if screen saver was just dismissed - need full redraw
+        if (screensaver_dismissed) {
+            screensaver_dismissed = false;  // Clear the flag
+            lcd_clear_screen();
+            editor_draw_header();
+            editor_draw_footer();
+            editor_draw_content();
+            editor_position_cursor();
+            continue;  // Skip normal key processing for this keypress
+        }
+        
         // Track cursor line before operation for dirty tracking
         int cursor_line_before = editor_get_line_at_pos(editor.cursor_pos);
         int h_scroll_before = editor.h_scroll_offset;

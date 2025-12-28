@@ -31,6 +31,7 @@ volatile bool user_interrupt;
 volatile bool pause_requested = false;  // F9 key triggers pause during execution
 volatile bool freeze_requested = false; // F4 key triggers freeze during execution
 volatile bool input_active = false;  // When true, keyboard_poll skips F1/F2/F3 mode switching
+volatile bool screensaver_dismissed = false;  // Set when screen saver just dismissed, reader should clear
 
 // Forward declaration for the I/O setter
 extern void primitives_set_io(LogoIO *io);

@@ -187,7 +187,9 @@ char keyboard_get_key()
         if (user_interrupt)
         {
             user_interrupt = false;  // Clear the flag
-            screensaver_on_key_press();  // Restore palette if screensaver was active
+            if (screensaver_on_key_press()) {  // Returns true if screensaver was active
+                screensaver_dismissed = true;  // Reader should do full redraw
+            }
             return KEY_BREAK;
         }
         // Update screen saver (checks idle time, cycles palette if active)
@@ -196,7 +198,9 @@ char keyboard_get_key()
     }
 
     // Key is available - notify screen saver to restore palette if active
-    screensaver_on_key_press();
+    if (screensaver_on_key_press()) {  // Returns true if screensaver was active
+        screensaver_dismissed = true;  // Reader should do full redraw
+    }
 
     char ch = rx_buffer[rx_tail];
     rx_tail = (rx_tail + 1) & (KBD_BUFFER_SIZE - 1);
