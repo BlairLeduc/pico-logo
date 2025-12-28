@@ -254,7 +254,19 @@ static bool host_file_set_write_pos(LogoStream *stream, long pos)
     {
         return false;
     }
-    
+
+    // Ensure requested write position does not exceed current file length.
+    // We allow positioning at exactly the end of the file to support appending.
+    long length = host_file_get_length(stream);
+    if (length < 0)
+    {
+        // Failed to determine file length; reject the position.
+        return false;
+    }
+    if (pos > length)
+    {
+        return false;
+    }
     ctx->write_pos = pos;
     return true;
 }
