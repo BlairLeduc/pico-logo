@@ -178,6 +178,15 @@ bool keyboard_key_available()
     return rx_head != rx_tail;
 }
 
+char keyboard_peek_key()
+{
+    if (rx_head == rx_tail)
+    {
+        return 0;  // No key available
+    }
+    return rx_buffer[rx_tail];
+}
+
 char keyboard_get_key()
 {
     // Wait for a key, running the screen saver while idle

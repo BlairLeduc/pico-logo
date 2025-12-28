@@ -76,3 +76,4 @@ void keyboard_set_background_poll(bool enable);
 void keyboard_poll(void);
 bool keyboard_key_available(void);
 char keyboard_get_key(void);
+char keyboard_peek_key(void);  // Returns next key without consuming it, or 0 if none
