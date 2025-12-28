@@ -98,6 +98,7 @@ static int picocalc_file_read_line(LogoStream *stream, char *buffer, size_t size
     fat32_seek(ctx->file, (uint32_t)ctx->read_pos);
     
     size_t total_read = 0;
+    bool line_ended = false;
     while (total_read < size - 1) // Leave space for null terminator
     {
         size_t read;
@@ -108,12 +109,14 @@ static int picocalc_file_read_line(LogoStream *stream, char *buffer, size_t size
         ctx->read_pos++;
         if (buffer[total_read] == '\n' || buffer[total_read] == '\r')
         {
+            line_ended = true;
             break; // End of line
         }
         total_read++;
     }
     buffer[total_read] = '\0';
-    return total_read > 0 ? (int)total_read : -1;
+    // Return -1 only for EOF/error at start of line, not for empty lines
+    return (total_read > 0 || line_ended) ? (int)total_read : -1;
 }
 
 static bool picocalc_file_can_read(LogoStream *stream)
