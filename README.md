@@ -31,6 +31,7 @@ repeat 220 [ fd repcount rt 88 ]
 - 320×320 resolution turtle graphics with 256 colours (from a palette of 65K colours)
 - Three simultaneous display modes: full screen text for programs without graphics, full screen graphics for running graphical programs, and split screen for interactive use
 - Full line editing and history
+- Full screen editor (edit procedures, variables and files)
 - Saving and loading of programs to and from a SD card formatted as FAT32
 
 ## Recommended Requirements

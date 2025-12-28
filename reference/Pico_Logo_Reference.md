@@ -2539,6 +2539,16 @@ save _pathname_
 The `save` command creates a file and saves in it all unburied procedures and variables and all properties in the workspace. An error occurs if the file you name already exists. In in this case, you should first either erase the existing file using [`erasefile`](#erasefile) or rename it using [`rename`](#rename).
 
 
+## savel
+
+savel _name_ _pathname_
+savel _namelist_ _pathname_
+
+`command`
+
+The `savel` command saves the procedures named in _name_ or _namelist_, and all the unburied variables and properties in the workspace to _pathname_. This command is useful for saving a portion of your workspace onto a SD Card. Compare it with [`save`](#save).
+
+
 ## loadpic
 
 loadpic _pathname_  

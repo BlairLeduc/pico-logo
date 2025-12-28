@@ -1357,6 +1357,141 @@ void test_save_file_exists_error(void)
 }
 
 //==========================================================================
+// Savel Tests
+//==========================================================================
+
+void test_savel_saves_single_procedure(void)
+{
+    // Setup workspace with multiple procedures
+    run_string("define \"proc1 [[] [print \"one]]");
+    run_string("define \"proc2 [[] [print \"two]]");
+    run_string("make \"myvar 456");
+    
+    Result r = run_string("savel \"proc1 \"partial.logo");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Check file content - should contain proc1 but not proc2
+    MockFile *file = mock_fs_get_file("partial.logo", false);
+    TEST_ASSERT_NOT_NULL(file);
+    
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(file->data, "to proc1"),
+        "Should contain proc1");
+    TEST_ASSERT_NULL_MESSAGE(strstr(file->data, "to proc2"),
+        "Should NOT contain proc2");
+    // Should contain variables (all unburied)
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(file->data, "make \"myvar 456"),
+        "Should contain variable");
+}
+
+void test_savel_saves_multiple_procedures(void)
+{
+    // Setup workspace
+    run_string("define \"procA [[] [print \"a]]");
+    run_string("define \"procB [[] [print \"b]]");
+    run_string("define \"procC [[] [print \"c]]");
+    
+    Result r = run_string("savel [procA procC] \"multi.logo");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Check file content
+    MockFile *file = mock_fs_get_file("multi.logo", false);
+    TEST_ASSERT_NOT_NULL(file);
+    
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(file->data, "to procA"),
+        "Should contain procA");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(file->data, "to procC"),
+        "Should contain procC");
+    TEST_ASSERT_NULL_MESSAGE(strstr(file->data, "to procB"),
+        "Should NOT contain procB");
+}
+
+void test_savel_saves_variables_and_properties(void)
+{
+    // Setup workspace
+    run_string("define \"myproc [[] [print \"hi]]");
+    run_string("make \"var1 100");
+    run_string("make \"var2 200");
+    run_string("pprop \"thing \"color \"red");
+    
+    Result r = run_string("savel \"myproc \"withprops.logo");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Check file content
+    MockFile *file = mock_fs_get_file("withprops.logo", false);
+    TEST_ASSERT_NOT_NULL(file);
+    
+    // Should contain procedure
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(file->data, "to myproc"),
+        "Should contain myproc");
+    // Should contain all variables
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(file->data, "make \"var1 100"),
+        "Should contain var1");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(file->data, "make \"var2 200"),
+        "Should contain var2");
+    // Should contain property
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(file->data, "pprop \"thing \"color \"red"),
+        "Should contain property");
+}
+
+void test_savel_unknown_procedure_error(void)
+{
+    Result r = run_string("savel \"nonexistent \"test.logo");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_savel_unknown_procedure_in_list_error(void)
+{
+    run_string("define \"exists [[] [print 1]]");
+    
+    Result r = run_string("savel [exists unknown] \"test.logo");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    
+    // File should not be created
+    MockFile *file = mock_fs_get_file("test.logo", false);
+    TEST_ASSERT_NULL(file);
+}
+
+void test_savel_file_exists_error(void)
+{
+    mock_fs_create_file("exists.logo", "");
+    run_string("define \"proc [[] [print 1]]");
+    
+    Result r = run_string("savel \"proc \"exists.logo");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_savel_invalid_name_input_error(void)
+{
+    Result r = run_string("savel 123 \"test.logo");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_savel_invalid_pathname_input_error(void)
+{
+    run_string("define \"proc [[] [print 1]]");
+    
+    Result r = run_string("savel \"proc [not a word]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_savel_with_prefix(void)
+{
+    run_string("define \"myproc [[] [print \"test]]");
+    run_string("make \"testvar 42");
+    
+    run_string("setprefix \"mydir");
+    
+    Result r = run_string("savel \"myproc \"saved.logo");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Verify the file was created at the right path
+    MockFile *file = mock_fs_get_file("mydir/saved.logo", false);
+    TEST_ASSERT_NOT_NULL(file);
+    TEST_ASSERT_NOT_NULL(strstr(file->data, "to myproc"));
+    TEST_ASSERT_NOT_NULL(strstr(file->data, "make \"testvar 42"));
+}
+
+//==========================================================================
 // Prefix Handling Tests
 //==========================================================================
 
@@ -1601,6 +1736,17 @@ int main(void)
     RUN_TEST(test_save_writes_workspace);
     RUN_TEST(test_save_format_matches_poall);
     RUN_TEST(test_save_file_exists_error);
+
+    // Savel tests
+    RUN_TEST(test_savel_saves_single_procedure);
+    RUN_TEST(test_savel_saves_multiple_procedures);
+    RUN_TEST(test_savel_saves_variables_and_properties);
+    RUN_TEST(test_savel_unknown_procedure_error);
+    RUN_TEST(test_savel_unknown_procedure_in_list_error);
+    RUN_TEST(test_savel_file_exists_error);
+    RUN_TEST(test_savel_invalid_name_input_error);
+    RUN_TEST(test_savel_invalid_pathname_input_error);
+    RUN_TEST(test_savel_with_prefix);
 
     // Prefix handling tests
     RUN_TEST(test_open_close_with_prefix);
