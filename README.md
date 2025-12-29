@@ -7,11 +7,14 @@ Pico Logo is a lightweight, modular Logo interpreter written in C, designed for 
 ```
 repeat 220 [ fd repcount rt 88 ]
 ```
+
+
 ## Goals
 
 - Enable learning and experimentation with Logo using classic resources.
 - Provide a clear, maintainable codebase for future enhancements (graphics, sound, hardware integration).
 - Ensure efficient operation on resource-constrained hardware.
+
 
 ## Features
 
@@ -26,24 +29,26 @@ repeat 220 [ fd repcount rt 88 ]
 - **File I/O:** Manage files (`catalog`, `setprefix`, `erasefile`) and `load` and `save` Logo programs.
 - **Unit Testing:** Uses Unity and CMake for isolated, maintainable tests.
 
-## Features for the PicoCalc
+
+## Additional Features for the PicoCalc
 
 - 320×320 resolution turtle graphics with 256 colours (from a palette of 65K colours)
 - Three simultaneous display modes: full screen text for programs without graphics, full screen graphics for running graphical programs, and split screen for interactive use
 - Full line editing and history
-- Saving and loading of programs to and from a SD card formatted as FAT32
+- Full display text editor (edit procedures, variables and files)
+- Access to PicoCalc hardware (battery status, power control)
+
 
 ## Recommended Requirements
 
-- Raspberry Pi Pico 2 or compatible board (RP2350) for hardware supported floating-point
+- Raspberry Pi Pico 2 or compatible board (RP2350) for additional working memory and hardware supported floating-point
 - PicoCalc device with the latest firmware
-
 
 
 # Learn Logo
 Pico Logo follows the LCSI dialect, however, basic logo and turtle graphics from the follow books should work without or minor modifications. 
 
-The best place to start is the [Pico Logo Reference](/reference/Pico_Logo_Reference.md). Continue your learning journey with the following books.
+The best place to start is the included [Pico Logo Reference](/reference/Pico_Logo_Reference.md). Continue your learning journey with the following books.
 
 ## Beginning Logo
 - [Primarily Logo](https://archive.org/details/primarilylogo/page/n37/mode/2up) by Donna Bearden, Kathleen Martin, Brad Foster

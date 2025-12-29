@@ -9,7 +9,7 @@ Welcome to Pico Logo.
 ?_
 ```
 
-The question mark, `?` is the _prompt_. When the prompt is on the screen, you can type something. The flashing underscore, `_` is the cursor. It appears when Logo wants you to type something and shows where the next character you type will appear.
+The question mark, `?` is the _prompt_. When the prompt is on the screen, you can type something. The flashing underscore, `_` is the _cursor_. It appears when Logo wants you to type something and shows where the next character you type will appear.
 
 The following reference material is collected from:
 
@@ -328,193 +328,6 @@ _Parentheses_, `(` `)`, are necessary to group things in ways that Logo ordinari
 
 A _backslash_, `\`, tells Logo to interpret the character that follows it literally _as a character_, rather than keeping some special meaning it might have. For instance, suppose you wanted to use `3[a]b` as a single _word_. You need to type `3\[a\]b` in order to avoid Logo’s usual interpretation of the brackets as the envelope around a list. You have to backslash `[`,`(`,`]`,`)`,`+`,`-`,`*`,`/` and `\` itself. 
 
-# Parsing 
-
-When you type a line at Logo, it recognizes the characters as words and lists, and builds a list with is Logo’s internal representation of the line. This process is called _parsing_. The list is similar to the list that would be output by `readlist`. This section will help you understand how lines are parsed. 
-
-## Words
-
-A word is made up of characters. Here are some examples of words:
-
-- Hello
-- x
-- 314
-- 3.14
-- 1e4
-- R2D2
-- Piglatin
-- Pig.latin
-- Pig-latin (typed as `Pig\-Latin`)
-- Hi there (typed as `Hi\ there`)
-- Who?
-- !NOW!
-- St*rs (typed as `St\*rs`)
-
-Each character is an element of the word. The word `Hen3ry` contains six elements:
-
-```
-H   e   n   3   r   y
-```
-
-Words can contain any character and this includes alphanumeric characters, spaces, delimiters, tabs, and punctuation. Delimiters must be escaped by a backslash "`\`" character.
-
-## Delimiters and Spacing
-
-A word is usually _delimited_ only by spaces or tabs: That is, there is a space or tab before the word and a space or tab after the word; they set the word off from the rest of line. There are a few other delimiting characters:
-
-```
-[ ] ( ) + - * / = < > 
-```
-
-You need not type a space between a word and any of these characters. For example, to find out how this line is parsed: 
-
-```logo
-if 1<2[print(3+4)/5][print :x+6] 
-```
-type
-
-```logo
-?to testit 
->if 1<2[print(3+4)/5][print :x+6]
->end 
-?po "testit
-to testit
-if 1 < 2 [print (3 + 4) / 5] [print :x + 6]
-end
-```
-
-And if you define a procedure to contain a line in the first form, you will see that Logo has converted it into the second. 
-
-To treat any of the characters mentioned above as a normal alphabetic character, put a backslash "`\`" before it. For example: 
-
-```logo
-?print "Good\-bye
-Good-bye
-?print "San\ Francisco
-San Francisco
-```
-
-Note that the quotation mark character (") and the colon (:not word delimiters.
-
-You can also have an empty word, which is a word with elements. You type in the empty word by typing `"`.
-
-## Infix Procedures 
-
-The following characters are the names of infix procedures. You write the name between the two inputs, but Logo considers the procedures to have two inputs. 
-
-```
-+ - * / = < > 
-```
-
-## Brackets and Parentheses
-
-Left bracket ”`[`” and right bracket ”`]`” indicate the start and end of a list or sublist.
-
-```logo
-[Hello there, old chap]
-[x y z]
-[Hello]
-[[House Maison] [Window Fenetre] [Dog Chien]]
-[HAL [QRZ] [Belinda Moore]]
-[1 [1 2] [17 2]]
-```
-
-The list `[Hello there, old chap]` contains four elements:
-
-1. Hello
-2. there
-3. old
-4. chap
-
-Note that the list `[1 [1 2] [17 2]]` contains only three elements, not six. The second and third elements also are lists:
-
-1. 1
-2. [1 2]
-3. [17 2]
-
-The list `[]`, a list with no elements, is an _empty list_. There also exists an _empty word_, which is a word with no elements. You type in the empty word by typing a quotation mark followed by a space or a right bracket "`]`". See the `equal?` operation in for examples of both the empty list and the empty word.
-
-Parentheses group things in ways Logo ordinarily would not, and vary the number of inputs for certain primitives. 
-
-If the end of a Logo line is reached (that is, the `ENTER` key is pressed) and brackets are still open, Logo will ask for additional lines of input (prompted with "`~`") until the brackets are closed: 
-
-```logo
-?repeat 4 [print [This [is [a [test
-~]]]
-This [is [a [test]]] 
-This [is [a [test]]] 
-This [is [a [test]]] 
-This [is [a [test]]] 
-```
-
-If Logo finds a right bracket or parenthesis for which there was no corresponding left bracket or parenthesis, Logo returns an error: 
-
-```logo
-?]print "ABC
-Unexpected ']'
-?print 2 + 3)
-Unexpected ')'
-```
-
-## Quotation Marks and Delimiters 
-
-Normally, you have to put a backslash (\) before the characters `[`,`]`,`(`,`)`, and `\` itself. But the first character after a quotation mark (") does not need to have a backslash preceding it. For example: 
-
-```logo
-?print "*
-*
-```
-
-If a delimiter occupies any position but the first one after the quotation mark, it must have a backslash preceding it. For example: 
-
-```logo
-?print "****
-Not enough inputs to *
-```
-
-The only exception to the above general rule is brackets (`[` `]`). If you want to put a quotation mark before a bracket, you must always include a backslash between the quotation mark and the bracket. For example: 
-
-```logo
-?print "[ 
-You don't say what to do with [] 
-?print "\[
-[ 
-```
-
-```logo
-?repeat 4 [print "]
-
-
-
-
-```
-
-Four empty lines are produced since the `"]` is recognised as an emoty word followed by the closing bracket.
-
-
-## The Minus Sign 
-
-The way in which the minus sign "`-`” is parsed is also a little strange. The problem here is that one character is used to represent two different things:
-
-1. as part of a number to indicate that it is negative, as in `-3` 
-2. as a procedure of one input, called _unary minus_, which outputs the additive inverse of its input, as in `-XCOR` or `-:DISTANCE` 
-3. as a procedure of two inputs, which outputs the difference between its first input and its second,as in `7-3` and `XCOR-YCOR` 
-
-The parser tries to be clever about this potential ambiguity and figure out which one was meant by the following rules:
-
-1. If the ”`-`” immediately precedes a number, and follows any delimiter except right parenthesis ”`)`”, the number is parsed as a negative number. This allows the following behavior:
-  - `print sum 20-20` (parses as 20 minus 20)
-  - `print 3*-4` (parses as 3 times negative 4) 
-  - `print (3+4)-5` (parses as 3 plus 4 minus 5) 
-  - `first [-3 4]` (outputs —3) 
-2. If the ”`-`” immediately precedes a word or left parenthesis ”`(`”, and follows any delimiter except right parenthesis, it is parsed as the unary minus procedure:
-  - `setpos list :x -:y`
-  - `setpos list ycor -xcor`
-3. In all other cases, ”`-`” is parsed like the other infix characters—as a procedure with two inputs: 
-  - `print 3-4` (parses as 3 minus 4)
-  - `print 3 - 4` (parses exactly like the previous example) 
-  - `print - 3 4` (procedurally the same as the previous example) 
-
 
 
 
@@ -556,7 +369,7 @@ end
 
 The following lists the capabilities of the different supported processors.
 
-**RP2040** (Pico family of devices):
+**RP2040** (Pico 1 family of devices):
 
 - 8192 nodes for procedure and variable storage
 - 8192 characters of editor buffer
@@ -568,7 +381,7 @@ The following lists the capabilities of the different supported processors.
 - 32768 nodes for procedure and variable storage
 - 65536 characters of editor buffer
 - 8192 characters in the copy buffer
-- Hardware float-point operations
+- Hardware floating-point operations
 
 
 
@@ -621,11 +434,11 @@ The text that you edit is in an area of memory called a **buffer**. When you ent
 
 You can move the cursor anywhere in the text using the cursor control keys described later in this section. You can also delete and insert characters using the appropriate keys.
 
-Each key that you type makes the Editor take some action. Most typewriter characters (letters, numbers, punctuation, and `RETURN`) are simply inserted into the buffer at the place marked on the screen by the cursor.
+Each key that you type makes the Editor take some action. Most typewriter characters (letters, numbers, punctuation, and `Enter`) are simply inserted into the buffer at the place marked on the screen by the cursor.
 
-When you press `RETURN`, the cursor (and any text that comes after it) moves to the next line, ready for you to continue typing.
+When you press `Enter`, the cursor (and any text that comes after it) moves to the next line, ready for you to continue typing.
 
-You can have more characters on a line of text than fit across the screen. When you get to the end of the line on the screen, just continue typing without pressing `RETURN`. The screen will scroll horizontally to show the rest of the line.
+You can have more characters on a line of text than fit across the screen. When you get to the end of the line on the screen, just continue typing without pressing `Enter`. The screen will scroll horizontally to show the rest of the line.
 
 The Editor has an auxiliary line buffer called the copy buffer. You can use it to move text in a procedure or to repeat them in different places. The copy buffer can hold a [`limited number of characters`](#processor-limits). While this is true for the copy buffer, the length of a line is limited only by the [`length of the edit buffer`](#processor-limits).
 
@@ -635,23 +448,23 @@ When you are in the editor, you can use the following editing keys:
 
 ### Cursor motion
 
-- `LEFT` - moves the cursor one character to the left
-- `RIGHT` - moves the cursor one character to the right
-- `DOWN` - moves the cursor down to the next line at the same column
-- `UP` - moves the cursor up to the previous line at the same column
-- `HOME` - moves the cursor to the beginning of the line
-- `END` - moves the cursor to the end of the line
-- `PAGE_DOWN` - moves the cursor to the next page
-- `PAGE_UP` - moves the cursor to the previous page
+- `←` - moves the cursor one character to the left
+- `→` - moves the cursor one character to the right
+- `↑` - moves the cursor up to the previous line at the same column
+- `↓` - moves the cursor down to the next line at the same column
+- `Home` - moves the cursor to the beginning of the line
+- `End` - moves the cursor to the end of the line
+- `Shift` `↑` - moves the cursor to the previous page
+- `Shift` `↓` - moves the cursor to the next page
 
 The cursor will not move if that position is not valid.
 
 ### Inserting and deleting
 
-- `RETURN` - creates a new line at the current cursor position and moves the cursor (and any text that comes after it) to the new line
-- `BACKSPACE` - erases the character to the left of the cursor
-- `DEL` - erases the character at the cursor position
-- `TAB` - inserts spaces until the next tab stop (tab stops are every 2 columns)
+- `Enter` - creates a new line at the current cursor position and moves the cursor (and any text that comes after it) to the new line
+- `←Back` - erases the character to the left of the cursor
+- `Del` - erases the character at the cursor position
+- `Tab` - inserts spaces until the next tab stop (tab stops are every 2 columns)
 - `Ctrl` `X` or `Ctrl` `T` - erases (or takes) the current line and stores the text in the copy buffer, including the new line
 - `Ctrl` `C` or `Ctrl` `Y` - copies (or yanks) the current line and stores the text in the copy buffer, including the new line
 - `Ctrl` `V` or `Ctrl` `P` - inserts (or pastes) the text in the copy buffer at the cursor position
@@ -660,7 +473,7 @@ The cursor will not move if that position is not valid.
 
 Selected text is between the start anchor and the cursor and is shown in reverse video. The character at the cursor is not included in the selection. `Ctrl` `B` sets the start anchor at the cursor position. Pressing `Ctrl` `B` when the start anchor is set removes the start anchor and cancels the selection. The cursor motion keys are used to select text when the start anchor is set.
 
-- `DEL` or `BACKSPACE` - erases the selected text without storing the text in the copy buffer
+- `Del` or `←Back` - erases the selected text without storing the text in the copy buffer
 - `Ctrl` `X` or `Ctrl` `T` - erases (or takes) the selected text and stores the text in the copy buffer
 - `Ctrl` `C` or `Ctrl` `Y` - copies (or yanks) the selected text and stores the text in the copy buffer
 - `Ctrl` `V` or `Ctrl` `P` - replaces (or pastes over) the selected text with the text in the copy buffer.
@@ -703,7 +516,7 @@ If `edit` does not have an input the current contents of the buffer are used.
 
 ## edn
 
-edn _name_
+edn _name_  
 edn _namelist_
 
 
@@ -759,8 +572,8 @@ The screen limits are 320 turtle steps high and 320 steps wide. Hence, when usin
 
 ## back (bk)
 
-back `distance`  
-bk  
+back _distance_  
+bk _distance_   
 
 `command`
 
@@ -780,7 +593,7 @@ cs
 ## forward (fd)
 
 forward _distance_  
-fd
+fd _distance_
 
 `command`
 
@@ -830,7 +643,7 @@ setheading 0
 ## left (lt)
 
 left _degrees_  
-lt
+lt _degrees_
 
 `command`
 
@@ -855,8 +668,8 @@ See [`getsh`](#getsh) to learn about _shapespec_.
 
 ## right (rt)
 
-right `degrees`  
-rt
+right _degrees_  
+rt _degrees_
 
 `command`
 
@@ -866,7 +679,7 @@ The `right` command turns the turtle right (clockwise) the specified number of d
 ## setheading (seth)
 
 setheading _degrees_  
-seth
+seth _degrees_
 
 `command`
 
@@ -2112,7 +1925,7 @@ rw
 
 `operation`
 
-`readword` reads a line of information from the current file and outputs it as a word. Normally, the source is the keyboard and `readword` waits for you to type and press `ENTER`. What you type is echoed on the screen. If you press `ENTER` before typing a word, `readword` outputs an empty word.
+`readword` reads a line of information from the current file and outputs it as a word. Normally, the source is the keyboard and `readword` waits for you to type and press `Enter`. What you type is echoed on the screen. If you press `Enter` before typing a word, `readword` outputs an empty word.
 
 If you use `readword` from a file, `readword` reads characters until it reaches a carriage return, and outputs those characters as a word. The next character to be read is the one after the carriage return. When the end-of-file position is reached, `readword` outputs an empty list.
 
@@ -2802,6 +2615,8 @@ The procedures presented here are for your convenience when constructing your ow
 
 ## Graphics Tools
 
+These procedures are found in the file `graphics_tools`.
+
 ### arcr and arcl
 
 arcr _radius_ _degrees_  
@@ -2827,6 +2642,8 @@ circlel _radius_
 
 
 ## Math Tools
+
+These procedures are found in the file `math_tools`.
 
 ### abs
 
@@ -2884,6 +2701,8 @@ exp _number_
 
 ## Program Logic or Debugging Tools
 
+These procedures are found in the file `program_tools`.
+
 ### comment
 
 ; _list_
@@ -2933,5 +2752,194 @@ while _condition_ _instructionlist_
 `while` repeats a group of instructions until _condition_
 becomes `false`.
 
+
+
+
+# Parsing 
+
+When you type a line at Logo, it recognizes the characters as words and lists, and builds a list with is Logo’s internal representation of the line. This process is called _parsing_. The list is similar to the list that would be output by `readlist`. This section will help you understand how lines are parsed. 
+
+## Words
+
+A word is made up of characters. Here are some examples of words:
+
+- Hello
+- x
+- 314
+- 3.14
+- 1e4
+- R2D2
+- Piglatin
+- Pig.latin
+- Pig-latin (typed as `Pig\-Latin`)
+- Hi there (typed as `Hi\ there`)
+- Who?
+- !NOW!
+- St*rs (typed as `St\*rs`)
+
+Each character is an element of the word. The word `Hen3ry` contains six elements:
+
+```
+H   e   n   3   r   y
+```
+
+Words can contain any character and this includes alphanumeric characters, spaces, delimiters, tabs, and punctuation. Delimiters must be escaped by a backslash "`\`" character.
+
+## Delimiters and Spacing
+
+A word is usually _delimited_ only by spaces or tabs: That is, there is a space or tab before the word and a space or tab after the word; they set the word off from the rest of line. There are a few other delimiting characters:
+
+```
+[ ] ( ) + - * / = < > 
+```
+
+You need not type a space between a word and any of these characters. For example, to find out how this line is parsed: 
+
+```logo
+if 1<2[print(3+4)/5][print :x+6] 
+```
+type
+
+```logo
+?to testit 
+>if 1<2[print(3+4)/5][print :x+6]
+>end 
+?po "testit
+to testit
+if 1 < 2 [print (3 + 4) / 5] [print :x + 6]
+end
+```
+
+And if you define a procedure to contain a line in the first form, you will see that Logo has converted it into the second. 
+
+To treat any of the characters mentioned above as a normal alphabetic character, put a backslash "`\`" before it. For example: 
+
+```logo
+?print "Good\-bye
+Good-bye
+?print "San\ Francisco
+San Francisco
+```
+
+Note that the quotation mark character (") and the colon (:not word delimiters.
+
+You can also have an empty word, which is a word with elements. You type in the empty word by typing `"`.
+
+## Infix Procedures 
+
+The following characters are the names of infix procedures. You write the name between the two inputs, but Logo considers the procedures to have two inputs. 
+
+```
++ - * / = < > 
+```
+
+## Brackets and Parentheses
+
+Left bracket ”`[`” and right bracket ”`]`” indicate the start and end of a list or sublist.
+
+```logo
+[Hello there, old chap]
+[x y z]
+[Hello]
+[[House Maison] [Window Fenetre] [Dog Chien]]
+[HAL [QRZ] [Belinda Moore]]
+[1 [1 2] [17 2]]
+```
+
+The list `[Hello there, old chap]` contains four elements:
+
+1. Hello
+2. there
+3. old
+4. chap
+
+Note that the list `[1 [1 2] [17 2]]` contains only three elements, not six. The second and third elements also are lists:
+
+1. 1
+2. [1 2]
+3. [17 2]
+
+The list `[]`, a list with no elements, is an _empty list_. There also exists an _empty word_, which is a word with no elements. You type in the empty word by typing a quotation mark followed by a space or a right bracket "`]`". See the `equal?` operation in for examples of both the empty list and the empty word.
+
+Parentheses group things in ways Logo ordinarily would not, and vary the number of inputs for certain primitives. 
+
+If the end of a Logo line is reached (that is, the `Enter` key is pressed) and brackets are still open, Logo will ask for additional lines of input (prompted with "`~`") until the brackets are closed: 
+
+```logo
+?repeat 4 [print [This [is [a [test
+~]]]
+This [is [a [test]]] 
+This [is [a [test]]] 
+This [is [a [test]]] 
+This [is [a [test]]] 
+```
+
+If Logo finds a right bracket or parenthesis for which there was no corresponding left bracket or parenthesis, Logo returns an error: 
+
+```logo
+?]print "ABC
+Unexpected ']'
+?print 2 + 3)
+Unexpected ')'
+```
+
+## Quotation Marks and Delimiters 
+
+Normally, you have to put a backslash (\) before the characters `[`,`]`,`(`,`)`, and `\` itself. But the first character after a quotation mark (") does not need to have a backslash preceding it. For example: 
+
+```logo
+?print "*
+*
+```
+
+If a delimiter occupies any position but the first one after the quotation mark, it must have a backslash preceding it. For example: 
+
+```logo
+?print "****
+Not enough inputs to *
+```
+
+The only exception to the above general rule is brackets (`[` `]`). If you want to put a quotation mark before a bracket, you must always include a backslash between the quotation mark and the bracket. For example: 
+
+```logo
+?print "[ 
+You don't say what to do with [] 
+?print "\[
+[ 
+```
+
+```logo
+?repeat 4 [print "]
+
+
+
+
+```
+
+Four empty lines are produced since the `"]` is recognised as an emoty word followed by the closing bracket.
+
+
+## The Minus Sign 
+
+The way in which the minus sign "`-`” is parsed is also a little strange. The problem here is that one character is used to represent two different things:
+
+1. as part of a number to indicate that it is negative, as in `-3` 
+2. as a procedure of one input, called _unary minus_, which outputs the additive inverse of its input, as in `-XCOR` or `-:DISTANCE` 
+3. as a procedure of two inputs, which outputs the difference between its first input and its second,as in `7-3` and `XCOR-YCOR` 
+
+The parser tries to be clever about this potential ambiguity and figure out which one was meant by the following rules:
+
+1. If the ”`-`” immediately precedes a number, and follows any delimiter except right parenthesis ”`)`”, the number is parsed as a negative number. This allows the following behavior:
+  - `print sum 20-20` (parses as 20 minus 20)
+  - `print 3*-4` (parses as 3 times negative 4) 
+  - `print (3+4)-5` (parses as 3 plus 4 minus 5) 
+  - `first [-3 4]` (outputs —3) 
+2. If the ”`-`” immediately precedes a word or left parenthesis ”`(`”, and follows any delimiter except right parenthesis, it is parsed as the unary minus procedure:
+  - `setpos list :x -:y`
+  - `setpos list ycor -xcor`
+3. In all other cases, ”`-`” is parsed like the other infix characters—as a procedure with two inputs: 
+  - `print 3-4` (parses as 3 minus 4)
+  - `print 3 - 4` (parses exactly like the previous example) 
+  - `print - 3 4` (procedurally the same as the previous example) 
 
 
