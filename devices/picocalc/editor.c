@@ -690,10 +690,9 @@ static void editor_paste(void)
     }
     
     // Shift content to make room
-    for (size_t i = editor.content_length + editor.copy_length; 
-         i > editor.cursor_pos + editor.copy_length; i--) {
-        editor.buffer[i - 1] = editor.buffer[i - editor.copy_length - 1];
-    }
+    memmove(&editor.buffer[editor.cursor_pos + editor.copy_length],
+            &editor.buffer[editor.cursor_pos],
+            editor.content_length - editor.cursor_pos);
     
     // Insert copy buffer content
     memcpy(&editor.buffer[editor.cursor_pos], editor.copy_buffer, editor.copy_length);
@@ -839,9 +838,9 @@ static void editor_cut_line(void)
     editor.copy_length = line_len;
     
     // Delete the line
-    for (size_t i = line_start; i < editor.content_length - line_len; i++) {
-        editor.buffer[i] = editor.buffer[i + line_len];
-    }
+    memmove(&editor.buffer[line_start],
+            &editor.buffer[line_start + line_len],
+            editor.content_length - line_start - line_len + 1);  // +1 for null terminator
     
     editor.content_length -= line_len;
     editor.buffer[editor.content_length] = '\0';
