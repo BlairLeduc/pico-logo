@@ -127,7 +127,7 @@ int picocalc_read_line(char *buf, int size)
             {
                 uint8_t col, row;
                 screen_txt_get_cursor(&col, &row);
-                memmove(buf + index, buf + index + 1, length - index + 1);
+                memmove(buf + index, buf + index + 1, length - index);
                 length--;
                 screen_txt_puts(buf + index); // Redisplay the rest of the line
                 screen_txt_get_cursor(&end_col, &end_row);
