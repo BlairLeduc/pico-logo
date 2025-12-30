@@ -1,7 +1,8 @@
-Pico Logo
-=========
+# Pico Logo
 
-After flashing Pico Logo to your Pico, you should see:
+From the [Releases](https://github.com/BlairLeduc/pico-logo/releases) page, download the UF2 file for your device and the `logo.zip` file. On your SD Card, extract the `logo.zip` file to a subdirectory on the root named `Logo`.  Boot your pico into BOOTSEL mode, and copy the UF2 file to the Pico.
+
+After flashing Pico Logo, you should see:
 
 ```
 Copyright 2025 Blair Leduc
