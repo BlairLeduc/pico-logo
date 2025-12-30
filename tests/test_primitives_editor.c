@@ -239,16 +239,38 @@ void test_edns_formats_all_variables(void)
     TEST_ASSERT_NOT_NULL(strstr(editor_input, "make \"varb"));
 }
 
-void test_edit_no_args_uses_empty_buffer(void)
+void test_edit_no_args_preserves_buffer(void)
 {
-    mock_device_clear_editor();
+    // First, edit a procedure to populate the buffer
+    const char *params[] = {};
+    define_proc("spiral", params, 0, "print 1");
     
-    Result r = run_string("(edit)");
+    mock_device_clear_editor();
+    mock_device_set_editor_result(LOGO_EDITOR_CANCEL);  // Cancel to keep buffer
+    
+    Result r = run_string("edit \"spiral");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     TEST_ASSERT_TRUE(mock_device_was_editor_called());
     
+    // Verify the buffer had content from spiral
+    const char *first_input = mock_device_get_editor_input();
+    TEST_ASSERT_NOT_NULL(strstr(first_input, "to spiral"));
+    TEST_ASSERT_NOT_NULL(strstr(first_input, "print 1"));
+    TEST_ASSERT_NOT_NULL(strstr(first_input, "end"));
+    
+    // Now call (edit) with no args - should preserve the buffer
+    mock_device_clear_editor();
+    mock_device_set_editor_result(LOGO_EDITOR_CANCEL);
+    
+    r = run_string("(edit)");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(mock_device_was_editor_called());
+    
+    // Buffer should still have the spiral content
     const char *editor_input = mock_device_get_editor_input();
-    TEST_ASSERT_EQUAL_STRING("", editor_input);
+    TEST_ASSERT_NOT_NULL(strstr(editor_input, "to spiral"));
+    TEST_ASSERT_NOT_NULL(strstr(editor_input, "print 1"));
+    TEST_ASSERT_NOT_NULL(strstr(editor_input, "end"));
 }
 
 void test_edit_runs_regular_commands(void)
@@ -335,7 +357,7 @@ int main(void)
     RUN_TEST(test_edn_list_of_variables);
     RUN_TEST(test_edn_unknown_variable_error);
     RUN_TEST(test_edns_formats_all_variables);
-    RUN_TEST(test_edit_no_args_uses_empty_buffer);
+    RUN_TEST(test_edit_no_args_preserves_buffer);
     RUN_TEST(test_edit_runs_regular_commands);
     RUN_TEST(test_edit_runs_multiple_commands);
     RUN_TEST(test_edit_runs_mixed_content);

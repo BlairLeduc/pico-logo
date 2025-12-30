@@ -518,16 +518,16 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
 // Edit procedure definition(s)
 static Result prim_edit(Evaluator *eval, int argc, Value *args)
 {
+    if (argc == 0)
+    {
+        // (edit) with no args - use current buffer content as-is
+        return run_editor_and_process(eval, editor_buffer);
+    }
+    
+    // When we have arguments, start fresh
     size_t pos = 0;
     editor_buffer[0] = '\0';
     bool first_proc = true;
-    
-    if (argc == 0)
-    {
-        // (edit) with no args - use current buffer content
-        // For now, just open empty editor
-        return run_editor_and_process(eval, editor_buffer);
-    }
     
     if (value_is_word(args[0]))
     {
