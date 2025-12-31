@@ -5,6 +5,7 @@
 
 #include "test_scaffold.h"
 #include <stdlib.h>
+#include <string.h>
 
 void setUp(void)
 {

@@ -6,6 +6,7 @@
 #include "test_scaffold.h"
 #include "core/format.h"
 #include <stdlib.h>
+#include <string.h>
 
 void setUp(void)
 {

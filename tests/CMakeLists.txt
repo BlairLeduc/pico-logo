@@ -2,9 +2,10 @@
 # This file is included by the parent CMakeLists.txt when BUILD_TESTING=ON
 # The parent already defines logo_core_host and logo_devices_host
 
-# Test utilities library (includes mock device and unity)
+# Test utilities library (includes mock device, scaffold, and unity)
 add_library(test_utils
     mock_device.c
+    test_scaffold.c
     unity.c
 )
 
