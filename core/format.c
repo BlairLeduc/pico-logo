@@ -47,6 +47,41 @@ size_t format_buffer_pos(FormatBufferContext *ctx)
 }
 
 //==========================================================================
+// Simplified buffer-based formatting wrappers
+//==========================================================================
+
+bool format_procedure_to_buffer(FormatBufferContext *ctx, UserProcedure *proc)
+{
+    return format_procedure_definition(format_buffer_output, ctx, proc);
+}
+
+bool format_variable_to_buffer(FormatBufferContext *ctx, const char *name, Value value)
+{
+    return format_variable(format_buffer_output, ctx, name, value);
+}
+
+bool format_property_to_buffer(FormatBufferContext *ctx, const char *name,
+                               const char *property, Node val_node)
+{
+    return format_property(format_buffer_output, ctx, name, property, val_node);
+}
+
+bool format_property_list_to_buffer(FormatBufferContext *ctx, const char *name, Node list)
+{
+    return format_property_list(format_buffer_output, ctx, name, list);
+}
+
+bool format_value_to_buffer(FormatBufferContext *ctx, Value value)
+{
+    return format_value(format_buffer_output, ctx, value);
+}
+
+bool format_value_show_to_buffer(FormatBufferContext *ctx, Value value)
+{
+    return format_value_show(format_buffer_output, ctx, value);
+}
+
+//==========================================================================
 // Number formatting
 //==========================================================================
 

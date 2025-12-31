@@ -72,6 +72,36 @@ bool format_buffer_output(void *ctx, const char *str);
 size_t format_buffer_pos(FormatBufferContext *ctx);
 
 //==========================================================================
+// Simplified buffer-based formatting (for common cases)
+// These wrappers hide the callback pattern for convenience
+//==========================================================================
+
+// Format a procedure definition directly to a buffer
+// Returns true on success, false if buffer too small
+bool format_procedure_to_buffer(FormatBufferContext *ctx, UserProcedure *proc);
+
+// Format a variable directly to a buffer
+// Returns true on success, false if buffer too small
+bool format_variable_to_buffer(FormatBufferContext *ctx, const char *name, Value value);
+
+// Format a property directly to a buffer
+// Returns true on success, false if buffer too small
+bool format_property_to_buffer(FormatBufferContext *ctx, const char *name,
+                               const char *property, Node val_node);
+
+// Format a property list directly to a buffer
+// Returns true on success, false if buffer too small
+bool format_property_list_to_buffer(FormatBufferContext *ctx, const char *name, Node list);
+
+// Format a value directly to a buffer (for print/type)
+// Returns true on success, false if buffer too small
+bool format_value_to_buffer(FormatBufferContext *ctx, Value value);
+
+// Format a value with brackets around lists directly to a buffer (for show)
+// Returns true on success, false if buffer too small
+bool format_value_show_to_buffer(FormatBufferContext *ctx, Value value);
+
+//==========================================================================
 // Number formatting
 //==========================================================================
 

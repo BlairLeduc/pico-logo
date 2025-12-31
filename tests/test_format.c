@@ -443,6 +443,145 @@ void test_format_property_list_empty(void)
 }
 
 //==========================================================================
+// Simplified Buffer API Wrapper Tests
+//==========================================================================
+
+void test_format_procedure_to_buffer_simple(void)
+{
+    char buffer[512];
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    
+    const char *params[] = {};
+    define_proc("greet", params, 0, "print \"hello");
+    
+    UserProcedure *proc = proc_find("greet");
+    TEST_ASSERT_NOT_NULL(proc);
+    
+    TEST_ASSERT_TRUE(format_procedure_to_buffer(&ctx, proc));
+    TEST_ASSERT_TRUE(strstr(buffer, "to greet") != NULL);
+    TEST_ASSERT_TRUE(strstr(buffer, "end") != NULL);
+}
+
+void test_format_variable_to_buffer_number(void)
+{
+    char buffer[128];
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    
+    Value val = value_number(42);
+    
+    TEST_ASSERT_TRUE(format_variable_to_buffer(&ctx, "x", val));
+    TEST_ASSERT_EQUAL_STRING("make \"x 42\n", buffer);
+}
+
+void test_format_variable_to_buffer_word(void)
+{
+    char buffer[128];
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    
+    Node word = mem_atom("hello", 5);
+    Value val = value_word(word);
+    
+    TEST_ASSERT_TRUE(format_variable_to_buffer(&ctx, "greeting", val));
+    TEST_ASSERT_EQUAL_STRING("make \"greeting \"hello\n", buffer);
+}
+
+void test_format_property_to_buffer_word(void)
+{
+    char buffer[256];
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    
+    Node val = mem_atom("blue", 4);
+    
+    TEST_ASSERT_TRUE(format_property_to_buffer(&ctx, "car", "color", val));
+    TEST_ASSERT_EQUAL_STRING("pprop \"car \"color \"blue\n", buffer);
+}
+
+void test_format_property_list_to_buffer_single(void)
+{
+    char buffer[256];
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    
+    Node prop = mem_atom("color", 5);
+    Node val = mem_atom("red", 3);
+    Node plist = mem_cons(prop, mem_cons(val, NODE_NIL));
+    
+    TEST_ASSERT_TRUE(format_property_list_to_buffer(&ctx, "obj", plist));
+    TEST_ASSERT_EQUAL_STRING("pprop \"obj \"color \"red\n", buffer);
+}
+
+void test_format_value_to_buffer_number(void)
+{
+    char buffer[64];
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    
+    Value val = value_number(3.14f);
+    
+    TEST_ASSERT_TRUE(format_value_to_buffer(&ctx, val));
+    TEST_ASSERT_EQUAL_STRING("3.14", buffer);
+}
+
+void test_format_value_to_buffer_word(void)
+{
+    char buffer[64];
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    
+    Node word = mem_atom("hello", 5);
+    Value val = value_word(word);
+    
+    TEST_ASSERT_TRUE(format_value_to_buffer(&ctx, val));
+    TEST_ASSERT_EQUAL_STRING("hello", buffer);
+}
+
+void test_format_value_to_buffer_list(void)
+{
+    char buffer[128];
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    
+    Node a = mem_atom("a", 1);
+    Node b = mem_atom("b", 1);
+    Node list = mem_cons(a, mem_cons(b, NODE_NIL));
+    Value val = value_list(list);
+    
+    TEST_ASSERT_TRUE(format_value_to_buffer(&ctx, val));
+    TEST_ASSERT_EQUAL_STRING("a b", buffer);  // No outer brackets for print/type
+}
+
+void test_format_value_show_to_buffer_list(void)
+{
+    char buffer[128];
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    
+    Node a = mem_atom("a", 1);
+    Node b = mem_atom("b", 1);
+    Node list = mem_cons(a, mem_cons(b, NODE_NIL));
+    Value val = value_list(list);
+    
+    TEST_ASSERT_TRUE(format_value_show_to_buffer(&ctx, val));
+    TEST_ASSERT_EQUAL_STRING("[a b]", buffer);  // With outer brackets for show
+}
+
+void test_format_to_buffer_fails_on_overflow(void)
+{
+    char buffer[10];  // Too small
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    
+    Value val = value_number(42);
+    
+    // "make \"longname 42\n" won't fit in 10 bytes
+    TEST_ASSERT_FALSE(format_variable_to_buffer(&ctx, "longname", val));
+}
+
+//==========================================================================
 // Integration Tests - Custom Output Callback
 //==========================================================================
 
@@ -536,6 +675,18 @@ int main(void)
     RUN_TEST(test_format_property_list_single_property);
     RUN_TEST(test_format_property_list_multiple_properties);
     RUN_TEST(test_format_property_list_empty);
+    
+    // Simplified buffer API wrapper tests
+    RUN_TEST(test_format_procedure_to_buffer_simple);
+    RUN_TEST(test_format_variable_to_buffer_number);
+    RUN_TEST(test_format_variable_to_buffer_word);
+    RUN_TEST(test_format_property_to_buffer_word);
+    RUN_TEST(test_format_property_list_to_buffer_single);
+    RUN_TEST(test_format_value_to_buffer_number);
+    RUN_TEST(test_format_value_to_buffer_word);
+    RUN_TEST(test_format_value_to_buffer_list);
+    RUN_TEST(test_format_value_show_to_buffer_list);
+    RUN_TEST(test_format_to_buffer_fails_on_overflow);
     
     // Integration tests
     RUN_TEST(test_format_uses_callback);
