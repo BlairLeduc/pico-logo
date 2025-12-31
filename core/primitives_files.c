@@ -1818,6 +1818,7 @@ void primitives_files_init(void)
     primitive_register("setprefix", 1, prim_setprefix);
     primitive_register("prefix", 0, prim_getprefix);
     primitive_register("erasefile", 1, prim_erase_file);
+    primitive_register("erf", 1, prim_erase_file);
     primitive_register("createdir", 1, prim_createdir);
     primitive_register("erasedir", 1, prim_erase_directory);
     primitive_register("file?", 1, prim_filep);
