@@ -699,9 +699,74 @@ static Result prim_setprefix(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "setprefix", NULL);
     }
 
-    // Set the prefix
-    strncpy(io->prefix, prefix, LOGO_PREFIX_MAX - 1);
-    io->prefix[LOGO_PREFIX_MAX - 1] = '\0';
+    // Check if the directory exists
+    // For relative paths, resolve with the current prefix first
+    // For absolute paths (starting with "/"), check directly or skip if it's just "/"
+    bool is_absolute = (prefix[0] == '/');
+    bool exists = false;
+    char resolved[LOGO_STREAM_NAME_MAX];
+    const char *final_prefix = prefix;  // What we'll actually set
+    
+    if (is_absolute)
+    {
+        // Root directory "/" always exists
+        if (prefix[1] == '\0')
+        {
+            exists = true;
+        }
+        else if (io->storage && io->storage->ops->dir_exists)
+        {
+            exists = io->storage->ops->dir_exists(prefix);
+        }
+        else
+        {
+            exists = true; // No storage or no dir_exists, assume it exists
+        }
+        // For absolute paths, use as-is
+        final_prefix = prefix;
+    }
+    else
+    {
+        // Relative path - resolve with current prefix and check
+        char *resolved_path = logo_io_resolve_path(io, prefix, resolved, sizeof(resolved));
+        if (resolved_path)
+        {
+            if (io->storage && io->storage->ops->dir_exists)
+            {
+                exists = io->storage->ops->dir_exists(resolved_path);
+            }
+            else
+            {
+                exists = true; // No storage or no dir_exists, assume it exists
+            }
+            // For relative paths, set the resolved path as the new prefix
+            final_prefix = resolved_path;
+        }
+    }
+    
+    if (!exists)
+    {
+        return result_error_arg(ERR_SUBDIR_NOT_FOUND, prefix, NULL);
+    }
+
+    // Set the prefix to the resolved path
+    size_t len = strlen(final_prefix);
+    if (len >= LOGO_PREFIX_MAX - 1)
+    {
+        len = LOGO_PREFIX_MAX - 2;  // Leave room for trailing '/' and null
+    }
+    strncpy(io->prefix, final_prefix, len);
+    
+    // Ensure trailing slash (unless empty)
+    if (len > 0 && io->prefix[len - 1] != '/')
+    {
+        io->prefix[len] = '/';
+        io->prefix[len + 1] = '\0';
+    }
+    else
+    {
+        io->prefix[len] = '\0';
+    }
 
     return result_none();
 }
@@ -1818,6 +1883,7 @@ void primitives_files_init(void)
     primitive_register("setprefix", 1, prim_setprefix);
     primitive_register("prefix", 0, prim_getprefix);
     primitive_register("erasefile", 1, prim_erase_file);
+    primitive_register("erf", 1, prim_erase_file);
     primitive_register("createdir", 1, prim_createdir);
     primitive_register("erasedir", 1, prim_erase_directory);
     primitive_register("file?", 1, prim_filep);

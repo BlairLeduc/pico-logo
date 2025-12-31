@@ -405,9 +405,9 @@ static bool logo_picocalc_file_exists(const char *pathname)
     fat32_file_t file;
     if (fat32_open(&file, pathname) == FAT32_OK)
     {
-        
+        bool is_file = (file.attributes & FAT32_ATTR_DIRECTORY) == 0;
         fat32_close(&file);
-        return (file.attributes & FAT32_ATTR_DIRECTORY) == 0;
+        return is_file;
     }
     return false;
 }
@@ -422,8 +422,9 @@ static bool logo_picocalc_dir_exists(const char *pathname)
     fat32_file_t dir;
     if (fat32_open(&dir, pathname) == FAT32_OK)
     {
+        bool is_dir = (dir.attributes & FAT32_ATTR_DIRECTORY) != 0;
         fat32_close(&dir);
-        return (dir.attributes & FAT32_ATTR_DIRECTORY) != 0;
+        return is_dir;
     }
     return false;
 }

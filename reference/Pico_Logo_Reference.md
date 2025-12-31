@@ -2275,13 +2275,14 @@ If you exit the editor with `Brk`, the file remains unchanged.
 When exiting the editor, the contents of the buffer are not run.
 
 
-## erasefile
+## erasefile (erf)
 
 erasefile _pathname_  
+erf _pathname_  
 
 `command`
 
-Stands for erase file. Erases any type of file. The input must be the name of a file in the current directory or a full pathname.
+Stands for erase file. Erases any type of file. The input must be the name of a file in the current directory or a full _pathname_.
 
 
 ## erasedir

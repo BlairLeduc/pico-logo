@@ -233,6 +233,16 @@ static void mock_fs_create_file(const char *name, const char *content)
     }
 }
 
+// Create a mock directory
+static void mock_fs_create_dir(const char *name)
+{
+    MockFile *file = mock_fs_get_file(name, true);
+    if (file)
+    {
+        file->is_directory = true;
+    }
+}
+
 // Reset the mock file system
 static void mock_fs_reset(void)
 {
@@ -1149,8 +1159,9 @@ void test_savepic_with_prefix(void)
 {
     setUp_with_turtle();
     
-    // Set prefix after setUp_with_turtle
+    // Create directory and set prefix after setUp_with_turtle
     // Note: use prefix without trailing slash - resolve_path will add separator
+    mock_fs_create_dir("pics");
     Result pr = run_string("setprefix \"pics");
     TEST_ASSERT_EQUAL_MESSAGE(RESULT_NONE, pr.status, "setprefix should succeed");
     
@@ -1168,7 +1179,8 @@ void test_loadpic_with_prefix(void)
 {
     setUp_with_turtle();
     
-    // Create the file to load with prefix path
+    // Create directory and file to load with prefix path
+    mock_fs_create_dir("pics");
     mock_fs_create_file("pics/test.bmp", "BMP data");
     
     // Set prefix after setUp_with_turtle
@@ -1267,13 +1279,88 @@ void test_rename_file(void)
 
 void test_setprefix_and_prefix(void)
 {
+    // Create the directory first
+    mock_fs_create_dir("my/path");
     // Using \/ to escape the forward slash - should result in unescaped "my/path"
     Result r = run_string("setprefix \"my\\/path");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     
     Result r2 = eval_string("prefix");
     TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
-    TEST_ASSERT_EQUAL_STRING("my/path", mem_word_ptr(r2.value.as.node));
+    // Prefix should have trailing slash
+    TEST_ASSERT_EQUAL_STRING("my/path/", mem_word_ptr(r2.value.as.node));
+}
+
+void test_setprefix_nonexistent_directory(void)
+{
+    // Try to set prefix to a directory that doesn't exist
+    Result r = run_string("setprefix \"nonexistent");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_SUBDIR_NOT_FOUND, r.error_code);
+}
+
+void test_setprefix_root_directory(void)
+{
+    // Root directory "/" should always succeed without checking
+    Result r = run_string("setprefix \"/");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    Result r2 = eval_string("prefix");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_STRING("/", mem_word_ptr(r2.value.as.node));
+}
+
+void test_setprefix_relative_with_root_prefix(void)
+{
+    // Set prefix to root first
+    run_string("setprefix \"/");
+    
+    // Create a directory at /Logo (which is "Logo" relative to root prefix "/")
+    mock_fs_create_dir("/Logo");
+    
+    // Now setprefix to "Logo" should resolve to "/Logo" and succeed
+    // The prefix should be set to the resolved path "/Logo/"
+    Result r = run_string("setprefix \"Logo");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    Result r2 = eval_string("prefix");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_STRING("/Logo/", mem_word_ptr(r2.value.as.node));
+}
+
+void test_setprefix_absolute_path(void)
+{
+    // Create an absolute path directory
+    mock_fs_create_dir("/Logo");
+    
+    // Absolute paths should work regardless of current prefix
+    Result r = run_string("setprefix \"/Logo");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    Result r2 = eval_string("prefix");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_STRING("/Logo/", mem_word_ptr(r2.value.as.node));
+}
+
+void test_setprefix_relative_with_trailing_slash_prefix(void)
+{
+    // Create directory structure: /Logo/apple
+    mock_fs_create_dir("/Logo");
+    mock_fs_create_dir("/Logo/apple");
+    
+    // Set prefix to "/Logo/" by setting it programmatically
+    LogoIO *io = primitives_get_io();
+    TEST_ASSERT_NOT_NULL(io);
+    strcpy(io->prefix, "/Logo/");
+    
+    // Now setprefix to "apple" should resolve to "/Logo/apple" and succeed
+    // The prefix should be set to the resolved path "/Logo/apple/"
+    Result r2 = run_string("setprefix \"apple");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_NONE, r2.status, "setprefix to apple should succeed");
+    
+    Result r3 = eval_string("prefix");
+    TEST_ASSERT_EQUAL(RESULT_OK, r3.status);
+    TEST_ASSERT_EQUAL_STRING("/Logo/apple/", mem_word_ptr(r3.value.as.node));
 }
 
 //==========================================================================
@@ -1549,6 +1636,7 @@ void test_savel_with_prefix(void)
     run_string("define \"myproc [[] [print \"test]]");
     run_string("make \"testvar 42");
     
+    mock_fs_create_dir("mydir");
     run_string("setprefix \"mydir");
     
     Result r = run_string("savel \"myproc \"saved.logo");
@@ -1567,7 +1655,8 @@ void test_savel_with_prefix(void)
 
 void test_open_close_with_prefix(void)
 {
-    // Create a file in a subdirectory
+    // Create a directory and file in it
+    mock_fs_create_dir("subdir");
     mock_fs_create_file("subdir/file.txt", "content");
     
     // Set prefix
@@ -1585,7 +1674,8 @@ void test_open_close_with_prefix(void)
 
 void test_setread_setwrite_with_prefix(void)
 {
-    // Create a file in a subdirectory
+    // Create a directory and file in it
+    mock_fs_create_dir("mydir");
     mock_fs_create_file("mydir/data.txt", "test data");
     
     // Set prefix
@@ -1603,6 +1693,7 @@ void test_setread_setwrite_with_prefix(void)
 
 void test_load_with_prefix(void)
 {
+    mock_fs_create_dir("scripts");
     mock_fs_create_file("scripts/init.logo", "make \"loaded 42\n");
     
     run_string("setprefix \"scripts");
@@ -1621,6 +1712,7 @@ void test_save_with_prefix(void)
     // Set up
     run_string("make \"testvar 99");
     
+    mock_fs_create_dir("saves");
     run_string("setprefix \"saves");
     
     Result r = run_string("save \"test.logo");
@@ -1688,6 +1780,7 @@ void test_pofile_invalid_input(void)
 
 void test_pofile_with_prefix(void)
 {
+    mock_fs_create_dir("subdir");
     mock_fs_create_file("subdir/test.txt", "Prefixed content\n");
     
     run_string("setprefix \"subdir");
@@ -1802,6 +1895,11 @@ int main(void)
     RUN_TEST(test_dirp_false);
     RUN_TEST(test_rename_file);
     RUN_TEST(test_setprefix_and_prefix);
+    RUN_TEST(test_setprefix_nonexistent_directory);
+    RUN_TEST(test_setprefix_root_directory);
+    RUN_TEST(test_setprefix_relative_with_root_prefix);
+    RUN_TEST(test_setprefix_absolute_path);
+    RUN_TEST(test_setprefix_relative_with_trailing_slash_prefix);
 
     // Load/Save tests
     RUN_TEST(test_load_executes_file);

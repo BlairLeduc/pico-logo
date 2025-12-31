@@ -67,7 +67,23 @@ int main(void)
     // Initialize the I/O manager
     LogoIO io;
     logo_io_init(&io, console, storage, hardware);
-    strcpy(io.prefix, "/Logo/"); // Default prefix
+    
+    // Check if the default directory exists
+    bool default_dir_exists = false;
+    if (storage && storage->ops->dir_exists)
+    {
+        default_dir_exists = storage->ops->dir_exists("/Logo");
+    }
+    
+    // Set prefix based on whether default directory exists
+    if (default_dir_exists)
+    {
+        strcpy(io.prefix, "/Logo/");
+    }
+    else
+    {
+        strcpy(io.prefix, "/");
+    }
     
     // Initialize Logo subsystems
     mem_init();
@@ -76,8 +92,8 @@ int main(void)
     variables_init();
     primitives_set_io(&io);
 
-    // Load startup file if it exists (uses default prefix)
-    if (logo_io_file_exists(&io, "startup"))
+    // Load startup file if it exists (only if default directory exists)
+    if (default_dir_exists && logo_io_file_exists(&io, "startup"))
     {
         Lexer startup_lexer;
         Evaluator startup_eval;
@@ -93,6 +109,12 @@ int main(void)
     // Print welcome banner
     logo_io_write_line(&io, "Copyright 2025 Blair Leduc");
     logo_io_write_line(&io, "Welcome to Pico Logo.");
+    
+    // Warn user if default directory is missing
+    if (!default_dir_exists)
+    {
+        logo_io_write_line(&io, "I cannot find the default directory /Logo/");
+    }
 
     // Run the main REPL in a loop (empty prefix for top level)
     // throw "toplevel exits the current REPL, but on device we just restart
