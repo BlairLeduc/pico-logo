@@ -265,8 +265,6 @@ Result proc_define_from_text(const char *text)
                 continue;
             }
             
-            body_started = true;
-            
             // First newline finishes the current line
             Node line_to_add = mem_is_nil(current_line) ? NODE_NIL : 
                                NODE_MAKE_LIST(NODE_GET_INDEX(current_line));
