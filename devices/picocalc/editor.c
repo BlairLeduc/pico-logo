@@ -578,11 +578,27 @@ static void editor_insert_tab(void)
 }
 
 //
-// Insert a newline at cursor position
+// Insert a newline at cursor position with auto-indentation
 //
 static void editor_new_line(void)
 {
+    // Find the start of the current line
+    int current_line = editor_get_line_at_pos(editor.cursor_pos);
+    int line_start = editor_get_line_start(current_line);
+    
+    // Count leading spaces on the current line
+    int indent_spaces = 0;
+    for (int i = line_start; i < (int)editor.content_length && editor.buffer[i] == ' '; i++) {
+        indent_spaces++;
+    }
+    
+    // Insert the newline
     editor_insert_char('\n');
+    
+    // Insert the same number of leading spaces
+    for (int i = 0; i < indent_spaces; i++) {
+        editor_insert_char(' ');
+    }
 }
 
 //
@@ -610,6 +626,7 @@ static void editor_delete_char(void)
 
 //
 // Delete character before cursor (BACKSPACE key)
+// If only whitespace before cursor on current line, delete to previous tab stop
 //
 static void editor_backspace(void)
 {
@@ -622,8 +639,37 @@ static void editor_backspace(void)
         return;  // Nothing to delete
     }
     
-    editor.cursor_pos--;
-    editor_delete_char();
+    // Find the start of the current line
+    int current_line = editor_get_line_at_pos(editor.cursor_pos);
+    int line_start = editor_get_line_start(current_line);
+    
+    // Check if there's only whitespace between line start and cursor
+    bool only_whitespace = true;
+    for (int i = line_start; i < (int)editor.cursor_pos; i++) {
+        if (editor.buffer[i] != ' ') {
+            only_whitespace = false;
+            break;
+        }
+    }
+    
+    if (only_whitespace && editor.cursor_pos > (size_t)line_start) {
+        // Delete back to previous tab stop (tab stops every 2 columns)
+        int current_col = (int)editor.cursor_pos - line_start;
+        int prev_tab_stop = ((current_col - 1) / 2) * 2;
+        int chars_to_delete = current_col - prev_tab_stop;
+        
+        // Delete at least 1 character
+        if (chars_to_delete < 1) chars_to_delete = 1;
+        
+        for (int i = 0; i < chars_to_delete; i++) {
+            editor.cursor_pos--;
+            editor_delete_char();
+        }
+    } else {
+        // Normal backspace - delete one character
+        editor.cursor_pos--;
+        editor_delete_char();
+    }
 }
 
 //
