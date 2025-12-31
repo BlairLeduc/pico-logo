@@ -7,6 +7,7 @@
 #include "eval.h"
 #include "variables.h"
 #include "error.h"
+#include "format.h"
 #include "memory.h"
 #include "primitives.h"
 #include "devices/io.h"

@@ -13,6 +13,7 @@
 //
 
 #include "properties.h"
+#include "format.h"
 #include "memory.h"
 #include "value.h"
 #include <string.h>

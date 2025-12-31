@@ -39,6 +39,19 @@ bool format_property(FormatOutputFunc out, void *ctx, const char *name,
 bool format_property_list(FormatOutputFunc out, void *ctx, const char *name, Node list);
 
 //==========================================================================
+// Value output functions (for print/show/type primitives)
+//==========================================================================
+
+// Format a value without outer brackets on lists (for print/type)
+bool format_value(FormatOutputFunc out, void *ctx, Value value);
+
+// Format a value with brackets around lists (for show)
+bool format_value_show(FormatOutputFunc out, void *ctx, Value value);
+
+// Format list contents without outer brackets
+bool format_list_contents(FormatOutputFunc out, void *ctx, Node node);
+
+//==========================================================================
 // Pre-built output contexts for common use cases
 //==========================================================================
 
@@ -57,5 +70,15 @@ bool format_buffer_output(void *ctx, const char *str);
 
 // Get current position in buffer
 size_t format_buffer_pos(FormatBufferContext *ctx);
+
+//==========================================================================
+// Number formatting
+//==========================================================================
+
+// Format a number to a buffer, removing trailing zeros.
+// Uses 'e' for positive exponents (1e7), 'n' for negative exponents (1n6).
+// Uses up to 6 significant digits for single-precision floats.
+// Returns the number of characters written (excluding null terminator).
+int format_number(char *buf, size_t size, float n);
 
 #endif // LOGO_FORMAT_H

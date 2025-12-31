@@ -6,6 +6,7 @@
 //
 
 #include "primitives.h"
+#include "format.h"
 #include "error.h"
 #include "eval.h"
 #include "devices/io.h"

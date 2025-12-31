@@ -10,68 +10,22 @@
 #include "memory.h"
 #include "error.h"
 #include "eval.h"
+#include "format.h"
 #include "devices/io.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-static void prop_print(const char *str)
+// Output callback for property list printing (always succeeds)
+static bool prop_output(void *ctx, const char *str)
 {
+    (void)ctx;
     LogoIO *io = primitives_get_io();
     if (io)
     {
         logo_io_write(io, str);
     }
-}
-
-static void prop_newline(void)
-{
-    prop_print("\n");
-}
-
-// Print a value (word, list, or number)
-static void print_value(Value value)
-{
-    char buf[64];
-    
-    switch (value.type)
-    {
-    case VALUE_NUMBER:
-        format_number(buf, sizeof(buf), value.as.number);
-        prop_print(buf);
-        break;
-    case VALUE_WORD:
-        prop_print(mem_word_ptr(value.as.node));
-        break;
-    case VALUE_LIST:
-        prop_print("[");
-        {
-            bool first = true;
-            Node curr = value.as.node;
-            while (!mem_is_nil(curr))
-            {
-                if (!first)
-                    prop_print(" ");
-                first = false;
-                
-                Node elem = mem_car(curr);
-                if (mem_is_word(elem))
-                {
-                    prop_print(mem_word_ptr(elem));
-                }
-                else if (mem_is_list(elem))
-                {
-                    // Nested list - simplified printing
-                    prop_print("[...]");
-                }
-                curr = mem_cdr(curr);
-            }
-        }
-        prop_print("]");
-        break;
-    default:
-        break;
-    }
+    return true;
 }
 
 // pprop name property object
@@ -153,76 +107,8 @@ static Result prim_pps(Evaluator *eval, int argc, Value *args)
         const char *name;
         if (prop_get_name_by_index(i, &name))
         {
-            // Get property list: [prop1 val1 prop2 val2 ...]
             Node list = prop_get_list(name);
-            Node curr = list;
-            
-            // Iterate through pairs
-            while (!mem_is_nil(curr))
-            {
-                Node prop_node = mem_car(curr);
-                curr = mem_cdr(curr);
-                if (mem_is_nil(curr))
-                    break;
-                Node val_node = mem_car(curr);
-                curr = mem_cdr(curr);
-                
-                // Print: pprop "name "property value
-                prop_print("pprop \"");
-                prop_print(name);
-                prop_print(" \"");
-                if (mem_is_word(prop_node))
-                {
-                    prop_print(mem_word_ptr(prop_node));
-                }
-                prop_print(" ");
-                
-                // Print value (could be word, number, or list)
-                if (mem_is_word(val_node))
-                {
-                    // Check if it's a number
-                    const char *str = mem_word_ptr(val_node);
-                    char *endptr;
-                    strtof(str, &endptr);
-                    if (*endptr == '\0' && str[0] != '\0')
-                    {
-                        // It's a number, print without quote
-                        prop_print(str);
-                    }
-                    else
-                    {
-                        // It's a word, print with quote if needed
-                        prop_print(str);
-                    }
-                }
-                else if (mem_is_list(val_node))
-                {
-                    // Print list with brackets
-                    prop_print("[");
-                    bool first = true;
-                    Node inner = val_node;
-                    while (!mem_is_nil(inner))
-                    {
-                        if (!first)
-                            prop_print(" ");
-                        first = false;
-                        Node elem = mem_car(inner);
-                        if (mem_is_word(elem))
-                        {
-                            prop_print(mem_word_ptr(elem));
-                        }
-                        else if (mem_is_list(elem))
-                        {
-                            // Nested list - recursive print would be better
-                            // but keep it simple for now
-                            prop_print("[...]");
-                        }
-                        inner = mem_cdr(inner);
-                    }
-                    prop_print("]");
-                }
-                prop_newline();
-            }
+            format_property_list(prop_output, NULL, name, list);
         }
     }
     

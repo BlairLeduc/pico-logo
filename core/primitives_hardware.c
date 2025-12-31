@@ -8,6 +8,7 @@
 #include "primitives.h"
 #include "procedures.h"
 #include "memory.h"
+#include "format.h"
 #include "error.h"
 #include "eval.h"
 #include "devices/io.h"

@@ -7,6 +7,7 @@
 
 #include "unity.h"
 #include "core/value.h"
+#include "core/format.h"
 #include "core/memory.h"
 
 #include <string.h>
