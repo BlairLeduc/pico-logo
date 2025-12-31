@@ -525,7 +525,7 @@ edall
 
 `command`
 
-Starts the Pico Logo Editor with all procedures and variables. The content of the buffer is identical to the output of [`poall`](#poall).
+Starts the Pico Logo Editor with all procedures and variables. Procedures are formatted using [`to`](#to)/[`end`](#end) syntax, variables as [`make`](#make) commands, and property lists as [`pprop`](#pprop) commands. This differs from [`poall`](#poall), which displays property lists using [`plist`](#plist) output format. The `edall` format ensures that when you exit the editor, all definitions can be re-executed to recreate the workspace state.
 
 
 ## edn
