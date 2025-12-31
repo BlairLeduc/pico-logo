@@ -828,7 +828,25 @@ static void editor_move_cursor_down(void)
 static void editor_move_cursor_home(void)
 {
     int current_line = editor_get_line_at_pos(editor.cursor_pos);
-    editor.cursor_pos = editor_get_line_start(current_line);
+    int line_start = editor_get_line_start(current_line);
+    int line_end = editor_get_line_end(current_line);
+    
+    // Find first non-whitespace character on this line
+    int first_non_ws = line_start;
+    while (first_non_ws < line_end && 
+           (editor.buffer[first_non_ws] == ' ' || editor.buffer[first_non_ws] == '\t')) {
+        first_non_ws++;
+    }
+    
+    // Toggle between first non-whitespace and line start:
+    // - If cursor is at first non-whitespace (or line is all whitespace), go to line start
+    // - Otherwise, go to first non-whitespace
+    if (editor.cursor_pos == first_non_ws || first_non_ws == line_end) {
+        editor.cursor_pos = line_start;
+    } else {
+        editor.cursor_pos = first_non_ws;
+    }
+    
     editor.h_scroll_offset = 0;  // Reset horizontal scroll
 }
 

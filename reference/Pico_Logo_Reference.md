@@ -453,7 +453,7 @@ When you are in the editor, you can use the following editing keys:
 - `→` - moves the cursor one character to the right
 - `↑` - moves the cursor up to the previous line at the same column
 - `↓` - moves the cursor down to the next line at the same column
-- `Home` - moves the cursor to the beginning of the line
+- `Home` - toggles the cursor between the first non-whitespace character and the beginning of the line
 - `End` - moves the cursor to the end of the line
 - `Shift` `↑` - moves the cursor to the previous page
 - `Shift` `↓` - moves the cursor to the next page
@@ -514,6 +514,16 @@ ed _namelist_
 Starts the Pico Logo Editor. Starts the Logo Editor with the procedure named _name_ (or procedures in the list _namelist_) and their definitions in it. This is the same output as [`pops`](#pops). 
 
 If `edit` does not have an input the current contents of the buffer are used.
+
+
+## edall
+
+edall
+
+`command`
+
+Starts the Pico Logo Editor with all procedures and variables. The content of the buffer is identical to the output of [`poall`](#poall).
+
 
 ## edn
 
