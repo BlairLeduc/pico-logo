@@ -78,24 +78,10 @@ static void print_value(Value value)
 // Puts a property value on a name's property list
 static Result prim_pprop(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 3)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "pprop", NULL);
-    }
-    
-    // First argument must be a word (the name)
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "pprop", value_to_string(args[0]));
-    }
-    
-    // Second argument must be a word (the property name)
-    if (!value_is_word(args[1]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "pprop", value_to_string(args[1]));
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("pprop", 3);
+    REQUIRE_WORD("pprop", args[0]);
+    REQUIRE_WORD("pprop", args[1]);
     
     const char *name = mem_word_ptr(args[0].as.node);
     const char *property = mem_word_ptr(args[1].as.node);
@@ -110,24 +96,10 @@ static Result prim_pprop(Evaluator *eval, int argc, Value *args)
 // Returns empty list if not found
 static Result prim_gprop(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 2)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "gprop", NULL);
-    }
-    
-    // First argument must be a word (the name)
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "gprop", value_to_string(args[0]));
-    }
-    
-    // Second argument must be a word (the property name)
-    if (!value_is_word(args[1]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "gprop", value_to_string(args[1]));
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("gprop", 2);
+    REQUIRE_WORD("gprop", args[0]);
+    REQUIRE_WORD("gprop", args[1]);
     
     const char *name = mem_word_ptr(args[0].as.node);
     const char *property = mem_word_ptr(args[1].as.node);
@@ -142,18 +114,9 @@ static Result prim_gprop(Evaluator *eval, int argc, Value *args)
 // Returns the entire property list for a name as [prop1 val1 prop2 val2 ...]
 static Result prim_plist(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "plist", NULL);
-    }
-    
-    // Argument must be a word (the name)
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "plist", value_to_string(args[0]));
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("plist", 1);
+    REQUIRE_WORD("plist", args[0]);
     
     const char *name = mem_word_ptr(args[0].as.node);
     
@@ -166,24 +129,10 @@ static Result prim_plist(Evaluator *eval, int argc, Value *args)
 // Removes a property from a name's property list
 static Result prim_remprop(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 2)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "remprop", NULL);
-    }
-    
-    // First argument must be a word (the name)
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "remprop", value_to_string(args[0]));
-    }
-    
-    // Second argument must be a word (the property name)
-    if (!value_is_word(args[1]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "remprop", value_to_string(args[1]));
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("remprop", 2);
+    REQUIRE_WORD("remprop", args[0]);
+    REQUIRE_WORD("remprop", args[1]);
     
     const char *name = mem_word_ptr(args[0].as.node);
     const char *property = mem_word_ptr(args[1].as.node);
@@ -196,9 +145,7 @@ static Result prim_remprop(Evaluator *eval, int argc, Value *args)
 // pps - print all property lists as pprop commands
 static Result prim_pps(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     int count = prop_name_count();
     for (int i = 0; i < count; i++)
@@ -285,9 +232,7 @@ static Result prim_pps(Evaluator *eval, int argc, Value *args)
 // erprops - erase all properties
 static Result prim_erprops(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     prop_erase_all();
     

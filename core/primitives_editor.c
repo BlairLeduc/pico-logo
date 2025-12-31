@@ -65,7 +65,7 @@ static bool line_is_end(const char *line)
 // Processes buffer as if each line were typed at top level
 static Result run_editor_and_process(Evaluator *eval, char *buffer)
 {
-    (void)eval;  // Not used directly
+    UNUSED(eval);  // Not used directly
     
     LogoIO *io = primitives_get_io();
     if (!io || !io->console)
@@ -473,8 +473,7 @@ static Result prim_edn(Evaluator *eval, int argc, Value *args)
 // edns - edit all variable names and values (not buried)
 static Result prim_edns(Evaluator *eval, int argc, Value *args)
 {
-    (void)argc;
-    (void)args;
+    UNUSED(argc); UNUSED(args);
     
     FormatBufferContext ctx;
     format_buffer_init(&ctx, editor_buffer, LOGO_EDITOR_BUFFER_SIZE);
@@ -499,8 +498,7 @@ static Result prim_edns(Evaluator *eval, int argc, Value *args)
 // edall - edit all procedures and variables (not buried)
 static Result prim_edall(Evaluator *eval, int argc, Value *args)
 {
-    (void)argc;
-    (void)args;
+    UNUSED(argc); UNUSED(args);
     
     FormatBufferContext ctx;
     format_buffer_init(&ctx, editor_buffer, LOGO_EDITOR_BUFFER_SIZE);
@@ -569,13 +567,8 @@ static Result prim_edall(Evaluator *eval, int argc, Value *args)
 // editfile pathname - edit a file's contents (not run as Logo code)
 static Result prim_editfile(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "editfile", value_to_string(args[0]));
-    }
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD("editfile", args[0]);
     
     const char *pathname = mem_word_ptr(args[0].as.node);
     

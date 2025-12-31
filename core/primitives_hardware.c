@@ -17,9 +17,7 @@
 // batteryLevel
 static Result prim_battery_level(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     int level = -1;
     bool charging = false;
@@ -50,9 +48,7 @@ static Result prim_battery_level(Evaluator *eval, int argc, Value *args)
 
 static Result prim_poweroff(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     LogoIO *io = primitives_get_io();
     if (io && io->hardware && io->hardware->ops && io->hardware->ops->power_off)
@@ -80,7 +76,7 @@ static Result prim_poweroff(Evaluator *eval, int argc, Value *args)
 // Frequency is in Hz (131 to 1976).
 static Result prim_toot(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
+    UNUSED(eval);
 
     // Validate argument count (2 or 3)
     if (argc < 2 || argc > 3)

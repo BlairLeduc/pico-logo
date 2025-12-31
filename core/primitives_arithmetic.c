@@ -20,7 +20,7 @@
 
 static Result prim_sum(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
+    UNUSED(eval);
     float total = 0;
     for (int i = 0; i < argc; i++)
     {
@@ -36,8 +36,7 @@ static Result prim_sum(Evaluator *eval, int argc, Value *args)
 
 static Result prim_difference(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     float a, b;
     if (!value_to_number(args[0], &a))
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, "difference", value_to_string(args[0]));
@@ -48,7 +47,7 @@ static Result prim_difference(Evaluator *eval, int argc, Value *args)
 
 static Result prim_product(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
+    UNUSED(eval);
     float total = 1;
     for (int i = 0; i < argc; i++)
     {
@@ -64,8 +63,7 @@ static Result prim_product(Evaluator *eval, int argc, Value *args)
 
 static Result prim_quotient(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     float a, b;
     if (!value_to_number(args[0], &a))
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, "quotient", value_to_string(args[0]));
@@ -79,8 +77,7 @@ static Result prim_quotient(Evaluator *eval, int argc, Value *args)
 // random integer - outputs a random non-negative integer less than integer
 static Result prim_random(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     float n;
     if (!value_to_number(args[0], &n))
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, "random", value_to_string(args[0]));
@@ -102,11 +99,8 @@ static Result prim_random(Evaluator *eval, int argc, Value *args)
 // arctan - outputs arctangent of number in degrees
 static Result prim_arctan(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    float n;
-    if (!value_to_number(args[0], &n))
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "arctan", value_to_string(args[0]));
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_NUMBER("arctan", args[0], n);
     
     return result_ok(value_number(atanf(n) * RAD_TO_DEG));
 }
@@ -114,11 +108,8 @@ static Result prim_arctan(Evaluator *eval, int argc, Value *args)
 // cos - outputs cosine of number (in degrees)
 static Result prim_cos(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    float n;
-    if (!value_to_number(args[0], &n))
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "cos", value_to_string(args[0]));
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_NUMBER("cos", args[0], n);
     
     return result_ok(value_number(cosf(n * DEG_TO_RAD)));
 }
@@ -126,11 +117,8 @@ static Result prim_cos(Evaluator *eval, int argc, Value *args)
 // sin - outputs sine of number (in degrees)
 static Result prim_sin(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    float n;
-    if (!value_to_number(args[0], &n))
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "sin", value_to_string(args[0]));
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_NUMBER("sin", args[0], n);
     
     return result_ok(value_number(sinf(n * DEG_TO_RAD)));
 }
@@ -138,11 +126,8 @@ static Result prim_sin(Evaluator *eval, int argc, Value *args)
 // int - returns integer part of number (truncates toward zero)
 static Result prim_int(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    float n;
-    if (!value_to_number(args[0], &n))
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "int", value_to_string(args[0]));
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_NUMBER("int", args[0], n);
     
     return result_ok(value_number(truncf(n)));
 }
@@ -150,8 +135,7 @@ static Result prim_int(Evaluator *eval, int argc, Value *args)
 // intquotient - outputs integer1 / integer2, truncated to integer
 static Result prim_intquotient(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     float a, b;
     if (!value_to_number(args[0], &a))
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, "intquotient", value_to_string(args[0]));
@@ -169,8 +153,7 @@ static Result prim_intquotient(Evaluator *eval, int argc, Value *args)
 // remainder - outputs remainder of integer1 / integer2
 static Result prim_remainder(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     float a, b;
     if (!value_to_number(args[0], &a))
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, "remainder", value_to_string(args[0]));
@@ -188,11 +171,8 @@ static Result prim_remainder(Evaluator *eval, int argc, Value *args)
 // round - rounds number to nearest integer
 static Result prim_round(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    float n;
-    if (!value_to_number(args[0], &n))
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "round", value_to_string(args[0]));
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_NUMBER("round", args[0], n);
     
     return result_ok(value_number(roundf(n)));
 }
@@ -200,11 +180,8 @@ static Result prim_round(Evaluator *eval, int argc, Value *args)
 // sqrt - outputs square root of number
 static Result prim_sqrt(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    float n;
-    if (!value_to_number(args[0], &n))
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "sqrt", value_to_string(args[0]));
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_NUMBER("sqrt", args[0], n);
     
     if (n < 0)
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, "sqrt", value_to_string(args[0]));

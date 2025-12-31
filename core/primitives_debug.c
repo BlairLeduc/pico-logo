@@ -33,12 +33,8 @@
 // Set stepped flag on procedure(s)
 static Result prim_step(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "step", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("step", 1);
     
     if (value_is_word(args[0]))
     {
@@ -81,12 +77,8 @@ static Result prim_step(Evaluator *eval, int argc, Value *args)
 // Clear stepped flag on procedure(s)
 static Result prim_unstep(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "unstep", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("unstep", 1);
     
     if (value_is_word(args[0]))
     {
@@ -129,12 +121,8 @@ static Result prim_unstep(Evaluator *eval, int argc, Value *args)
 // Set traced flag on procedure(s)
 static Result prim_trace(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "trace", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("trace", 1);
     
     if (value_is_word(args[0]))
     {
@@ -177,12 +165,8 @@ static Result prim_trace(Evaluator *eval, int argc, Value *args)
 // Clear traced flag on procedure(s)
 static Result prim_untrace(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "untrace", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("untrace", 1);
     
     if (value_is_word(args[0]))
     {

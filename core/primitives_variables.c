@@ -12,26 +12,16 @@
 
 static Result prim_make(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "make", value_to_string(args[0]));
-    }
-    const char *name = mem_word_ptr(args[0].as.node);
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD_STR("make", args[0], name);
     var_set(name, args[1]);
     return result_none();
 }
 
 static Result prim_thing(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "thing", value_to_string(args[0]));
-    }
-    const char *name = mem_word_ptr(args[0].as.node);
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD_STR("thing", args[0], name);
     Value v;
     if (!var_get(name, &v))
     {
@@ -45,8 +35,7 @@ static Result prim_thing(Evaluator *eval, int argc, Value *args)
 // Declares variable(s) as local to the current procedure
 static Result prim_local(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     if (value_is_word(args[0]))
     {
@@ -80,13 +69,8 @@ static Result prim_local(Evaluator *eval, int argc, Value *args)
 // name "value "varname - same as make but with reversed arguments
 static Result prim_name(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    if (!value_is_word(args[1]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "name", value_to_string(args[1]));
-    }
-    const char *name = mem_word_ptr(args[1].as.node);
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD_STR("name", args[1], name);
     var_set(name, args[0]);
     return result_none();
 }
@@ -94,13 +78,8 @@ static Result prim_name(Evaluator *eval, int argc, Value *args)
 // namep "name - outputs true if name has a value
 static Result prim_namep(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "name?", value_to_string(args[0]));
-    }
-    const char *name = mem_word_ptr(args[0].as.node);
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD_STR("name?", args[0], name);
     
     if (var_exists(name))
     {

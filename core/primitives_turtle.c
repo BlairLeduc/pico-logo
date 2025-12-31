@@ -89,18 +89,9 @@ static Value make_position_list(float x, float y)
 // back (bk) - Move turtle backward
 static Result prim_back(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "back", NULL);
-    }
-
-    float distance;
-    if (!value_to_number(args[0], &distance))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "back", value_to_string(args[0]));
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("back", 1);
+    REQUIRE_NUMBER("back", args[0], distance);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->move)
@@ -117,18 +108,9 @@ static Result prim_back(Evaluator *eval, int argc, Value *args)
 // forward (fd) - Move turtle forward
 static Result prim_forward(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "forward", NULL);
-    }
-
-    float distance;
-    if (!value_to_number(args[0], &distance))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "forward", value_to_string(args[0]));
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("forward", 1);
+    REQUIRE_NUMBER("forward", args[0], distance);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->move)
@@ -145,9 +127,7 @@ static Result prim_forward(Evaluator *eval, int argc, Value *args)
 // home - Move turtle to center, heading north
 static Result prim_home(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->home)
@@ -161,12 +141,8 @@ static Result prim_home(Evaluator *eval, int argc, Value *args)
 // setpos [x y] - Move turtle to position
 static Result prim_setpos(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "setpos", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("setpos", 1);
 
     float x, y;
     Result error;
@@ -187,18 +163,9 @@ static Result prim_setpos(Evaluator *eval, int argc, Value *args)
 // setx - Set turtle x-coordinate
 static Result prim_setx(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "setx", NULL);
-    }
-
-    float x;
-    if (!value_to_number(args[0], &x))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setx", value_to_string(args[0]));
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("setx", 1);
+    REQUIRE_NUMBER("setx", args[0], x);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_position && turtle->get_position)
@@ -214,18 +181,9 @@ static Result prim_setx(Evaluator *eval, int argc, Value *args)
 // sety - Set turtle y-coordinate
 static Result prim_sety(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "sety", NULL);
-    }
-
-    float y;
-    if (!value_to_number(args[0], &y))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "sety", value_to_string(args[0]));
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("sety", 1);
+    REQUIRE_NUMBER("sety", args[0], y);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_position && turtle->get_position)
@@ -245,18 +203,9 @@ static Result prim_sety(Evaluator *eval, int argc, Value *args)
 // left (lt) - Turn turtle left
 static Result prim_left(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "left", NULL);
-    }
-
-    float degrees;
-    if (!value_to_number(args[0], &degrees))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "left", value_to_string(args[0]));
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("left", 1);
+    REQUIRE_NUMBER("left", args[0], degrees);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->get_heading && turtle->set_heading)
@@ -272,18 +221,9 @@ static Result prim_left(Evaluator *eval, int argc, Value *args)
 // right (rt) - Turn turtle right
 static Result prim_right(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "right", NULL);
-    }
-
-    float degrees;
-    if (!value_to_number(args[0], &degrees))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "right", value_to_string(args[0]));
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("right", 1);
+    REQUIRE_NUMBER("right", args[0], degrees);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->get_heading && turtle->set_heading)
@@ -299,18 +239,9 @@ static Result prim_right(Evaluator *eval, int argc, Value *args)
 // setheading (seth) - Set absolute heading
 static Result prim_setheading(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "setheading", NULL);
-    }
-
-    float degrees;
-    if (!value_to_number(args[0], &degrees))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setheading", value_to_string(args[0]));
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("setheading", 1);
+    REQUIRE_NUMBER("setheading", args[0], degrees);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_heading)
@@ -328,9 +259,7 @@ static Result prim_setheading(Evaluator *eval, int argc, Value *args)
 // heading - Output current heading
 static Result prim_heading(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     
@@ -346,9 +275,7 @@ static Result prim_heading(Evaluator *eval, int argc, Value *args)
 // pos - Output current position as [x y]
 static Result prim_pos(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     
@@ -364,9 +291,7 @@ static Result prim_pos(Evaluator *eval, int argc, Value *args)
 // xcor - Output x-coordinate
 static Result prim_xcor(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     
@@ -382,9 +307,7 @@ static Result prim_xcor(Evaluator *eval, int argc, Value *args)
 // ycor - Output y-coordinate
 static Result prim_ycor(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     
@@ -400,12 +323,8 @@ static Result prim_ycor(Evaluator *eval, int argc, Value *args)
 // towards [x y] - Output heading towards position
 static Result prim_towards(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "towards", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("towards", 1);
 
     float target_x, target_y;
     Result error;
@@ -445,9 +364,7 @@ static Result prim_towards(Evaluator *eval, int argc, Value *args)
 // pendown (pd) - Put pen down
 static Result prim_pendown(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_pen_state)
@@ -461,9 +378,7 @@ static Result prim_pendown(Evaluator *eval, int argc, Value *args)
 // penerase (pe) - Put eraser down
 static Result prim_penerase(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     // Note: penerase sets a special mode - the mock device tracks pen_mode
     // The actual implementation would need to set pen down in erase mode
@@ -480,9 +395,7 @@ static Result prim_penerase(Evaluator *eval, int argc, Value *args)
 // penreverse (px) - Put reversing pen down
 static Result prim_penreverse(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_pen_state)
@@ -497,9 +410,7 @@ static Result prim_penreverse(Evaluator *eval, int argc, Value *args)
 // penup (pu) - Lift pen up
 static Result prim_penup(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_pen_state)
@@ -513,9 +424,7 @@ static Result prim_penup(Evaluator *eval, int argc, Value *args)
 // pen - Output current pen state
 static Result prim_pen(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     
@@ -547,18 +456,9 @@ static Result prim_pen(Evaluator *eval, int argc, Value *args)
 // setpc (setpencolor) - Set pen color
 static Result prim_setpc(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "setpc", NULL);
-    }
-
-    float colour;
-    if (!value_to_number(args[0], &colour))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setpc", value_to_string(args[0]));
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("setpc", 1);
+    REQUIRE_NUMBER("setpc", args[0], colour);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_pen_colour)
@@ -572,9 +472,7 @@ static Result prim_setpc(Evaluator *eval, int argc, Value *args)
 // pencolor (pc) - Output pen color
 static Result prim_pencolor(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     
@@ -590,18 +488,9 @@ static Result prim_pencolor(Evaluator *eval, int argc, Value *args)
 // setbg - Set background color
 static Result prim_setbg(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "setbg", NULL);
-    }
-
-    float colour;
-    if (!value_to_number(args[0], &colour))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setbg", value_to_string(args[0]));
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("setbg", 1);
+    REQUIRE_NUMBER("setbg", args[0], colour);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_bg_colour)
@@ -615,9 +504,7 @@ static Result prim_setbg(Evaluator *eval, int argc, Value *args)
 // background (bg) - Output background color
 static Result prim_background(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     
@@ -637,9 +524,7 @@ static Result prim_background(Evaluator *eval, int argc, Value *args)
 // hideturtle (ht) - Hide the turtle
 static Result prim_hideturtle(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_visible)
@@ -653,9 +538,7 @@ static Result prim_hideturtle(Evaluator *eval, int argc, Value *args)
 // showturtle (st) - Show the turtle
 static Result prim_showturtle(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_visible)
@@ -669,9 +552,7 @@ static Result prim_showturtle(Evaluator *eval, int argc, Value *args)
 // shown? (shownp) - Output whether turtle is visible
 static Result prim_shownp(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     
@@ -691,9 +572,7 @@ static Result prim_shownp(Evaluator *eval, int argc, Value *args)
 // clearscreen (cs) - Clear screen and reset turtle
 static Result prim_clearscreen(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle)
@@ -732,9 +611,7 @@ static Result prim_clearscreen(Evaluator *eval, int argc, Value *args)
 // clean - Clear graphics without moving turtle
 static Result prim_clean(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->clear)
@@ -752,12 +629,8 @@ static Result prim_clean(Evaluator *eval, int argc, Value *args)
 // dot [x y] - Draw a dot at position
 static Result prim_dot(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "dot", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("dot", 1);
 
     float x, y;
     Result error;
@@ -778,12 +651,8 @@ static Result prim_dot(Evaluator *eval, int argc, Value *args)
 // dot? (dotp) - Check if dot at position
 static Result prim_dotp(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "dot?", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("dot?", 1);
 
     float x, y;
     Result error;
@@ -806,9 +675,7 @@ static Result prim_dotp(Evaluator *eval, int argc, Value *args)
 // fill - Fill enclosed area
 static Result prim_fill(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->fill)
@@ -826,9 +693,7 @@ static Result prim_fill(Evaluator *eval, int argc, Value *args)
 // fence - Turtle stops at boundary
 static Result prim_fence(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_fence)
@@ -842,9 +707,7 @@ static Result prim_fence(Evaluator *eval, int argc, Value *args)
 // window - Turtle can go off-screen
 static Result prim_window(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_window)
@@ -858,9 +721,7 @@ static Result prim_window(Evaluator *eval, int argc, Value *args)
 // wrap - Turtle wraps around edges
 static Result prim_wrap(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_wrap)
@@ -951,18 +812,9 @@ static Value make_rgb_list(uint8_t r, uint8_t g, uint8_t b)
 // setpalette slot [r g b] - Set palette slot to RGB color
 static Result prim_setpalette(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-
-    if (argc < 2)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "setpalette", NULL);
-    }
-
-    float slot_num;
-    if (!value_to_number(args[0], &slot_num))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setpalette", value_to_string(args[0]));
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("setpalette", 2);
+    REQUIRE_NUMBER("setpalette", args[0], slot_num);
 
     if (slot_num < 0 || slot_num > 255)
     {
@@ -990,18 +842,9 @@ static Result prim_setpalette(Evaluator *eval, int argc, Value *args)
 // palette slot - Output RGB list for palette slot
 static Result prim_palette(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "palette", NULL);
-    }
-
-    float slot_num;
-    if (!value_to_number(args[0], &slot_num))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "palette", value_to_string(args[0]));
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("palette", 1);
+    REQUIRE_NUMBER("palette", args[0], slot_num);
 
     if (slot_num < 0 || slot_num > 255)
     {
@@ -1023,9 +866,7 @@ static Result prim_palette(Evaluator *eval, int argc, Value *args)
 // restorepalette - Restore default palette (slots 0-127)
 static Result prim_restorepalette(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->restore_palette)
@@ -1043,18 +884,9 @@ static Result prim_restorepalette(Evaluator *eval, int argc, Value *args)
 // getsh shapenumber - Output list of 16 numbers representing shape (1-15)
 static Result prim_getsh(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "getsh", NULL);
-    }
-
-    float shape_num;
-    if (!value_to_number(args[0], &shape_num))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "getsh", value_to_string(args[0]));
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("getsh", 1);
+    REQUIRE_NUMBER("getsh", args[0], shape_num);
 
     // Shape must be 1-15 (shape 0 is the line-drawn turtle)
     if (shape_num < 1 || shape_num > 15)
@@ -1090,18 +922,9 @@ static Result prim_getsh(Evaluator *eval, int argc, Value *args)
 // putsh shapenumber shapespec - Set shape data for shapes 1-15
 static Result prim_putsh(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-
-    if (argc < 2)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "putsh", NULL);
-    }
-
-    float shape_num;
-    if (!value_to_number(args[0], &shape_num))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "putsh", value_to_string(args[0]));
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("putsh", 2);
+    REQUIRE_NUMBER("putsh", args[0], shape_num);
 
     // Shape must be 1-15 (shape 0 cannot be changed)
     if (shape_num < 1 || shape_num > 15)
@@ -1157,18 +980,9 @@ static Result prim_putsh(Evaluator *eval, int argc, Value *args)
 // setsh shapenumber - Set the current turtle shape (0-15)
 static Result prim_setsh(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "setsh", NULL);
-    }
-
-    float shape_num;
-    if (!value_to_number(args[0], &shape_num))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setsh", value_to_string(args[0]));
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("setsh", 1);
+    REQUIRE_NUMBER("setsh", args[0], shape_num);
 
     if (shape_num < 0 || shape_num > 15)
     {
@@ -1187,9 +1001,7 @@ static Result prim_setsh(Evaluator *eval, int argc, Value *args)
 // shape - Output the current turtle shape number
 static Result prim_shape(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (!turtle || !turtle->get_shape)

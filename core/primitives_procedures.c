@@ -16,20 +16,9 @@
 // Formal Logo procedure definition
 static Result prim_define(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    
-    // First arg must be word (procedure name)
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "define", value_to_string(args[0]));
-    }
-    
-    // Second arg must be list [[params] [line1] [line2] ...]
-    if (!value_is_list(args[1]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "define", value_to_string(args[1]));
-    }
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD("define", args[0]);
+    REQUIRE_LIST("define", args[1]);
     
     const char *name = mem_word_ptr(args[0].as.node);
     Node def_list = args[1].as.node;

@@ -41,9 +41,7 @@ static const LogoConsoleScreen *get_screen_ops(void)
 
 static Result prim_cleartext(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleText *text = get_text_ops();
     if (text && text->clear)
@@ -60,9 +58,7 @@ static Result prim_cleartext(Evaluator *eval, int argc, Value *args)
 
 static Result prim_cursor(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleText *text = get_text_ops();
     
@@ -91,9 +87,7 @@ static Result prim_cursor(Evaluator *eval, int argc, Value *args)
 
 static Result prim_fullscreen(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleScreen *screen = get_screen_ops();
     if (screen && screen->fullscreen)
@@ -110,12 +104,8 @@ static Result prim_fullscreen(Evaluator *eval, int argc, Value *args)
 
 static Result prim_setcursor(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "setcursor", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("setcursor", 1);
 
     Value pos = args[0];
     if (pos.type != VALUE_LIST)
@@ -175,9 +165,7 @@ static Result prim_setcursor(Evaluator *eval, int argc, Value *args)
 
 static Result prim_splitscreen(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleScreen *screen = get_screen_ops();
     if (screen && screen->splitscreen)
@@ -194,9 +182,7 @@ static Result prim_splitscreen(Evaluator *eval, int argc, Value *args)
 
 static Result prim_textscreen(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleScreen *screen = get_screen_ops();
     if (screen && screen->textscreen)

@@ -66,18 +66,15 @@ static void set_last_error(Result r)
 
 static Result prim_run(Evaluator *eval, int argc, Value *args)
 {
-    (void)argc;
-    if (!value_is_list(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "run", value_to_string(args[0]));
-    }
+    UNUSED(argc);
+    REQUIRE_LIST("run", args[0]);
     // Use eval_run_list_expr so run can act as an operation
     return eval_run_list_expr(eval, args[0].as.node);
 }
 
 static Result prim_repeat(Evaluator *eval, int argc, Value *args)
 {
-    (void)argc;
+    UNUSED(argc);
     float count_f;
     if (!value_to_number(args[0], &count_f))
     {
@@ -109,9 +106,7 @@ static Result prim_repeat(Evaluator *eval, int argc, Value *args)
 
 static Result prim_repcount(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(argc); UNUSED(args);
     
     // Return the innermost repeat count (1-based)
     return result_ok(value_number(eval->repcount));
@@ -119,16 +114,13 @@ static Result prim_repcount(Evaluator *eval, int argc, Value *args)
 
 static Result prim_stop(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     return result_stop();
 }
 
 static Result prim_output(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     return result_output(args[0]);
 }
 
@@ -187,18 +179,14 @@ static Result prim_if(Evaluator *eval, int argc, Value *args)
 
 static Result prim_true(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     Node true_word = mem_atom_cstr("true");
     return result_ok(value_word(true_word));
 }
 
 static Result prim_false(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     Node false_word = mem_atom_cstr("false");
     return result_ok(value_word(false_word));
 }
@@ -209,8 +197,7 @@ static Result prim_false(Evaluator *eval, int argc, Value *args)
 
 static Result prim_test(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     Value pred = args[0];
     
@@ -240,12 +227,8 @@ static Result prim_test(Evaluator *eval, int argc, Value *args)
 
 static Result prim_iftrue(Evaluator *eval, int argc, Value *args)
 {
-    (void)argc;
-    
-    if (!value_is_list(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "iftrue", value_to_string(args[0]));
-    }
+    UNUSED(argc);
+    REQUIRE_LIST("iftrue", args[0]);
     
     bool test_value;
     if (var_get_test(&test_value) && test_value)
@@ -258,12 +241,8 @@ static Result prim_iftrue(Evaluator *eval, int argc, Value *args)
 
 static Result prim_iffalse(Evaluator *eval, int argc, Value *args)
 {
-    (void)argc;
-    
-    if (!value_is_list(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "iffalse", value_to_string(args[0]));
-    }
+    UNUSED(argc);
+    REQUIRE_LIST("iffalse", args[0]);
     
     bool test_value;
     if (var_get_test(&test_value) && !test_value)
@@ -280,8 +259,7 @@ static Result prim_iffalse(Evaluator *eval, int argc, Value *args)
 
 static Result prim_wait(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     float tenths_f;
     if (!value_to_number(args[0], &tenths_f))
@@ -344,9 +322,7 @@ void pause_reset_state(void)
 
 static Result prim_pause(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     // Get the current procedure name
     const char *proc_name = proc_get_current();
@@ -372,9 +348,7 @@ static Result prim_pause(Evaluator *eval, int argc, Value *args)
 
 static Result prim_co(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     // Signal to exit the pause REPL
     pause_request_continue();
@@ -387,16 +361,9 @@ static Result prim_co(Evaluator *eval, int argc, Value *args)
 
 static Result prim_catch(Evaluator *eval, int argc, Value *args)
 {
-    (void)argc;
-    
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "catch", value_to_string(args[0]));
-    }
-    if (!value_is_list(args[1]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "catch", value_to_string(args[1]));
-    }
+    UNUSED(argc);
+    REQUIRE_WORD("catch", args[0]);
+    REQUIRE_LIST("catch", args[1]);
     
     const char *tag = value_to_string(args[0]);
     
@@ -437,13 +404,8 @@ static Result prim_catch(Evaluator *eval, int argc, Value *args)
 
 static Result prim_throw(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "throw", value_to_string(args[0]));
-    }
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD("throw", args[0]);
     
     const char *tag = value_to_string(args[0]);
     
@@ -454,9 +416,7 @@ static Result prim_throw(Evaluator *eval, int argc, Value *args)
 
 static Result prim_error(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     if (!last_error.has_error)
     {
@@ -489,12 +449,8 @@ static Result prim_error(Evaluator *eval, int argc, Value *args)
 
 static Result prim_go(Evaluator *eval, int argc, Value *args)
 {
-    (void)argc;
-    
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "go", value_to_string(args[0]));
-    }
+    UNUSED(argc);
+    REQUIRE_WORD("go", args[0]);
     
     // go can only be used inside a procedure
     if (eval->proc_depth == 0)
@@ -510,13 +466,8 @@ static Result prim_go(Evaluator *eval, int argc, Value *args)
 
 static Result prim_label(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "label", value_to_string(args[0]));
-    }
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD("label", args[0]);
     
     // label does nothing itself
     return result_none();

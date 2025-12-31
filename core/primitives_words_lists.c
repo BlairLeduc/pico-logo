@@ -30,8 +30,7 @@ static Node number_to_word(float n)
 // For a list: outputs the first element (word or list)
 static Result prim_first(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     Value obj = args[0];
     
@@ -85,8 +84,7 @@ static Result prim_first(Evaluator *eval, int argc, Value *args)
 // Outputs the last element of object.
 static Result prim_last(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     Value obj = args[0];
     
@@ -144,8 +142,7 @@ static Result prim_last(Evaluator *eval, int argc, Value *args)
 // Outputs object with its first element removed.
 static Result prim_butfirst(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     Value obj = args[0];
     
@@ -200,8 +197,7 @@ static Result prim_butfirst(Evaluator *eval, int argc, Value *args)
 // Outputs object with its last element removed.
 static Result prim_butlast(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     Value obj = args[0];
     
@@ -279,8 +275,7 @@ static Result prim_butlast(Evaluator *eval, int argc, Value *args)
 // Outputs the number of elements in object.
 static Result prim_count(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     Value obj = args[0];
     
@@ -312,8 +307,7 @@ static Result prim_count(Evaluator *eval, int argc, Value *args)
 // Outputs TRUE if object is empty word or empty list.
 static Result prim_emptyp(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     Value obj = args[0];
     Node true_word = mem_atom_cstr("true");
@@ -344,8 +338,7 @@ static Result prim_emptyp(Evaluator *eval, int argc, Value *args)
 // Outputs the element at position integer within object.
 static Result prim_item(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     float index_f;
     if (!value_to_number(args[0], &index_f))
@@ -412,8 +405,7 @@ static Result prim_item(Evaluator *eval, int argc, Value *args)
 // Outputs the part of object2 starting with object1.
 static Result prim_member(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     Value obj1 = args[0];
     Value obj2 = args[1];
@@ -496,8 +488,7 @@ static Result prim_member(Evaluator *eval, int argc, Value *args)
 // Outputs a new list with object at the beginning.
 static Result prim_fput(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     Value obj = args[0];
     Value list_val = args[1];
@@ -534,7 +525,7 @@ static Result prim_fput(Evaluator *eval, int argc, Value *args)
 // Outputs a list of the inputs.
 static Result prim_list(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
+    UNUSED(eval);
     
     // Build list in reverse, then reverse
     Node result = NODE_NIL;
@@ -566,8 +557,7 @@ static Result prim_list(Evaluator *eval, int argc, Value *args)
 // Outputs a new list with object at the end.
 static Result prim_lput(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     Value obj = args[0];
     Value list_val = args[1];
@@ -752,7 +742,7 @@ static Result prim_parse(Evaluator *eval, int argc, Value *args)
 // Outputs a flat list of the contents of its inputs.
 static Result prim_sentence(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
+    UNUSED(eval);
     
     Node result = NODE_NIL;
     Node tail = NODE_NIL;
@@ -817,7 +807,7 @@ static Result prim_sentence(Evaluator *eval, int argc, Value *args)
 // Outputs a word made by concatenating inputs.
 static Result prim_word(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
+    UNUSED(eval);
     
     // Calculate total length needed
     size_t total_len = 0;
@@ -880,8 +870,7 @@ static Result prim_word(Evaluator *eval, int argc, Value *args)
 // Outputs the ASCII code of character.
 static Result prim_ascii(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     Value obj = args[0];
     const char *str;
@@ -912,8 +901,7 @@ static Result prim_ascii(Evaluator *eval, int argc, Value *args)
 // Outputs true if word1 comes before word2 lexicographically.
 static Result prim_beforep(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     const char *str1;
     const char *str2;
@@ -957,14 +945,8 @@ static Result prim_beforep(Evaluator *eval, int argc, Value *args)
 // Outputs the character with ASCII code integer.
 static Result prim_char(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    
-    float n;
-    if (!value_to_number(args[0], &n))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "char", value_to_string(args[0]));
-    }
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_NUMBER("char", args[0], n);
     
     int code = (int)n;
     if (code < 0 || code > 255)
@@ -981,8 +963,7 @@ static Result prim_char(Evaluator *eval, int argc, Value *args)
 // Outputs true if objects are equal.
 static Result prim_equalp(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     bool equal = values_equal(args[0], args[1]);
     Node result = mem_atom_cstr(equal ? "true" : "false");
@@ -993,8 +974,7 @@ static Result prim_equalp(Evaluator *eval, int argc, Value *args)
 // Outputs true if object is a list.
 static Result prim_listp(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     bool is_list = value_is_list(args[0]);
     Node result = mem_atom_cstr(is_list ? "true" : "false");
@@ -1005,8 +985,7 @@ static Result prim_listp(Evaluator *eval, int argc, Value *args)
 // Outputs true if object1 is an element of object2.
 static Result prim_memberp(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     Value obj1 = args[0];
     Value obj2 = args[1];
@@ -1087,8 +1066,7 @@ static Result prim_memberp(Evaluator *eval, int argc, Value *args)
 // Outputs true if object is a number.
 static Result prim_numberp(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     bool is_number = value_is_number(args[0]);
     if (!is_number && value_is_word(args[0]))
@@ -1106,8 +1084,7 @@ static Result prim_numberp(Evaluator *eval, int argc, Value *args)
 // Outputs true if object is a word.
 static Result prim_wordp(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     // Numbers are also words (self-quoting)
     bool is_word = value_is_word(args[0]) || value_is_number(args[0]);
@@ -1119,8 +1096,7 @@ static Result prim_wordp(Evaluator *eval, int argc, Value *args)
 // Outputs word in all lowercase letters.
 static Result prim_lowercase(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     Value obj = args[0];
     const char *str;
@@ -1159,8 +1135,7 @@ static Result prim_lowercase(Evaluator *eval, int argc, Value *args)
 // Outputs word in all uppercase letters.
 static Result prim_uppercase(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     Value obj = args[0];
     const char *str;

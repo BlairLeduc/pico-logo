@@ -8,6 +8,7 @@
 #pragma once
 
 #include "value.h"
+#include "error.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -16,6 +17,47 @@ extern "C"
 
     // Forward declaration
     typedef struct Evaluator Evaluator;
+
+    //==========================================================================
+    // Argument Validation Macros
+    //==========================================================================
+    // These macros simplify common argument validation patterns in primitives.
+    // They return early with appropriate errors if validation fails.
+
+    // Suppress unused parameter warnings
+    #define UNUSED(x) (void)(x)
+
+    // Validate minimum argument count
+    #define REQUIRE_ARGC(name, required) \
+        do { if (argc < (required)) return result_error_arg(ERR_NOT_ENOUGH_INPUTS, name, NULL); } while(0)
+
+    // Extract a number from an argument, returning error if not a number
+    #define REQUIRE_NUMBER(name, arg, var) \
+        float var; \
+        do { if (!value_to_number(arg, &var)) \
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, name, value_to_string(arg)); } while(0)
+
+    // Validate that an argument is a word
+    #define REQUIRE_WORD(name, arg) \
+        do { if (!value_is_word(arg)) \
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, name, value_to_string(arg)); } while(0)
+
+    // Validate that an argument is a list
+    #define REQUIRE_LIST(name, arg) \
+        do { if (!value_is_list(arg)) \
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, name, value_to_string(arg)); } while(0)
+
+    // Validate that an argument is a word or list (object)
+    #define REQUIRE_OBJECT(name, arg) \
+        do { if (!value_is_word(arg) && !value_is_list(arg)) \
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, name, value_to_string(arg)); } while(0)
+
+    // Extract a non-empty word string from an argument
+    #define REQUIRE_WORD_STR(name, arg, var) \
+        const char *var; \
+        do { if (!value_is_word(arg)) \
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, name, value_to_string(arg)); \
+            var = mem_word_ptr((arg).as.node); } while(0)
 
     // Primitive function signature
     typedef Result (*PrimitiveFunc)(Evaluator *eval, int argc, Value *args);

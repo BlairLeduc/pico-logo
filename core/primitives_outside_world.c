@@ -122,9 +122,7 @@ static void show_value(Value v)
 // keyp - outputs true if a character is waiting to be read
 static Result prim_keyp(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     LogoIO *io = primitives_get_io();
     if (!io)
@@ -145,9 +143,7 @@ static Result prim_keyp(Evaluator *eval, int argc, Value *args)
 // Returns empty list if reading from file and at EOF.
 static Result prim_readchar(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     LogoIO *io = primitives_get_io();
     if (!io)
@@ -178,8 +174,7 @@ static Result prim_readchar(Evaluator *eval, int argc, Value *args)
 // Returns empty list if at EOF before reading any characters.
 static Result prim_readchars(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
 
     float count_f;
     if (!value_to_number(args[0], &count_f))
@@ -464,7 +459,7 @@ static Result prim_readword(Evaluator *eval, int argc, Value *args)
 // Outermost brackets of lists are not printed.
 static Result prim_print(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
+    UNUSED(eval);
     for (int i = 0; i < argc; i++)
     {
         if (i > 0)
@@ -488,8 +483,7 @@ static Result prim_print(Evaluator *eval, int argc, Value *args)
 // Lists keep their brackets.
 static Result prim_show(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     show_value(args[0]);
     print_to_writer("\n");
     flush_writer();
@@ -508,7 +502,7 @@ static Result prim_show(Evaluator *eval, int argc, Value *args)
 // Outermost brackets of lists are not printed.
 static Result prim_type(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
+    UNUSED(eval);
     for (int i = 0; i < argc; i++)
     {
         if (i > 0)

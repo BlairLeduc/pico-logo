@@ -39,12 +39,8 @@ static void ws_newline(void)
 // Print out procedure definition(s)
 static Result prim_po(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "po", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("po", 1);
     
     if (value_is_word(args[0]))
     {
@@ -88,9 +84,7 @@ static Result prim_po(Evaluator *eval, int argc, Value *args)
 // poall - print all procedures, variables, and properties (not buried)
 static Result prim_poall(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     // Print all procedures (not buried)
     int count = proc_count(true);  // Get ALL, filter by buried in loop
@@ -135,12 +129,8 @@ static Result prim_poall(Evaluator *eval, int argc, Value *args)
 // Print out variable name(s) and value(s)
 static Result prim_pon(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "pon", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("pon", 1);
     
     if (value_is_word(args[0]))
     {
@@ -185,9 +175,7 @@ static Result prim_pon(Evaluator *eval, int argc, Value *args)
 // Also prints local variables if in a procedure scope (e.g., during pause)
 static Result prim_pons(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     // Print local variables first (if any)
     int local_count = var_local_count();
@@ -226,9 +214,7 @@ static Result prim_pons(Evaluator *eval, int argc, Value *args)
 // pops - print out all procedure definitions (not buried)
 static Result prim_pops(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     int count = proc_count(true);  // Get ALL, filter by buried in loop
     for (int i = 0; i < count; i++)
@@ -248,12 +234,8 @@ static Result prim_pops(Evaluator *eval, int argc, Value *args)
 // Print out procedure title(s)
 static Result prim_pot(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "pot", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("pot", 1);
     
     if (value_is_word(args[0]))
     {
@@ -297,9 +279,7 @@ static Result prim_pot(Evaluator *eval, int argc, Value *args)
 // pots - print out all procedure titles (not buried)
 static Result prim_pots(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     int count = proc_count(true);  // Get ALL procedures, filter by buried in loop
     for (int i = 0; i < count; i++)
@@ -318,12 +298,8 @@ static Result prim_pots(Evaluator *eval, int argc, Value *args)
 // Bury procedure(s) - hidden from poall, pops, pots, erall, erps
 static Result prim_bury(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "bury", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("bury", 1);
     
     if (value_is_word(args[0]))
     {
@@ -363,9 +339,7 @@ static Result prim_bury(Evaluator *eval, int argc, Value *args)
 // buryall - bury all procedures and variable names
 static Result prim_buryall(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     proc_bury_all();
     var_bury_all();
@@ -377,12 +351,8 @@ static Result prim_buryall(Evaluator *eval, int argc, Value *args)
 // Bury variable name(s)
 static Result prim_buryname(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "buryname", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("buryname", 1);
     
     if (value_is_word(args[0]))
     {
@@ -423,12 +393,8 @@ static Result prim_buryname(Evaluator *eval, int argc, Value *args)
 // Unbury procedure(s)
 static Result prim_unbury(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "unbury", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("unbury", 1);
     
     if (value_is_word(args[0]))
     {
@@ -468,9 +434,7 @@ static Result prim_unbury(Evaluator *eval, int argc, Value *args)
 // unburyall - unbury all procedures and variable names
 static Result prim_unburyall(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     proc_unbury_all();
     var_unbury_all();
@@ -482,12 +446,8 @@ static Result prim_unburyall(Evaluator *eval, int argc, Value *args)
 // Unbury variable name(s)
 static Result prim_unburyname(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "unburyname", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("unburyname", 1);
     
     if (value_is_word(args[0]))
     {
@@ -527,9 +487,7 @@ static Result prim_unburyname(Evaluator *eval, int argc, Value *args)
 // erall - erase all procedures, variables, and properties (respects buried)
 static Result prim_erall(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     proc_erase_all(true);  // true = check buried flag
     var_erase_all_globals(true);
@@ -542,12 +500,8 @@ static Result prim_erall(Evaluator *eval, int argc, Value *args)
 // Erase procedure(s) from workspace
 static Result prim_erase(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "erase", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("erase", 1);
     
     if (value_is_word(args[0]))
     {
@@ -588,12 +542,8 @@ static Result prim_erase(Evaluator *eval, int argc, Value *args)
 // Erase variable name(s)
 static Result prim_ern(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "ern", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC("ern", 1);
     
     if (value_is_word(args[0]))
     {
@@ -633,9 +583,7 @@ static Result prim_ern(Evaluator *eval, int argc, Value *args)
 // erns - erase all variables (respects buried)
 static Result prim_erns(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     var_erase_all_globals(true);  // true = check buried flag
     
@@ -645,9 +593,7 @@ static Result prim_erns(Evaluator *eval, int argc, Value *args)
 // erps - erase all procedures (respects buried)
 static Result prim_erps(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     proc_erase_all(true);  // true = check buried flag
     
@@ -658,9 +604,7 @@ static Result prim_erps(Evaluator *eval, int argc, Value *args)
 // Outputs the number of free nodes available
 static Result prim_nodes(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     size_t free = mem_free_nodes();
     return result_ok(value_number((float)free));
@@ -670,9 +614,7 @@ static Result prim_nodes(Evaluator *eval, int argc, Value *args)
 // Runs garbage collection to free up as many nodes as possible
 static Result prim_recycle(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     // Mark all roots: variables, procedure bodies, and property lists
     var_gc_mark_all();
