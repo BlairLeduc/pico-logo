@@ -27,49 +27,6 @@ static const LogoConsoleTurtle *get_turtle_ops(void)
     return io->console->turtle;
 }
 
-// Helper to extract [x y] list into coordinates
-static bool extract_position(Value pos, float *x, float *y, const char *proc_name, Result *error)
-{
-    if (pos.type != VALUE_LIST)
-    {
-        *error = result_error_arg(ERR_DOESNT_LIKE_INPUT, proc_name, value_to_string(pos));
-        return false;
-    }
-
-    Node list = pos.as.node;
-    if (mem_is_nil(list))
-    {
-        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, proc_name, NULL);
-        return false;
-    }
-
-    Node x_node = mem_car(list);
-    list = mem_cdr(list);
-    
-    if (mem_is_nil(list))
-    {
-        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, proc_name, NULL);
-        return false;
-    }
-    
-    Node y_node = mem_car(list);
-
-    // Convert to numbers
-    Value x_val = mem_is_word(x_node) ? value_word(x_node) : value_list(x_node);
-    Value y_val = mem_is_word(y_node) ? value_word(y_node) : value_list(y_node);
-    
-    float x_num, y_num;
-    if (!value_to_number(x_val, &x_num) || !value_to_number(y_val, &y_num))
-    {
-        *error = result_error_arg(ERR_DOESNT_LIKE_INPUT, proc_name, value_to_string(pos));
-        return false;
-    }
-
-    *x = x_num;
-    *y = y_num;
-    return true;
-}
-
 // Helper to build [x y] list from coordinates
 static Value make_position_list(float x, float y)
 {
@@ -147,7 +104,7 @@ static Result prim_setpos(Evaluator *eval, int argc, Value *args)
 
     float x, y;
     Result error;
-    if (!extract_position(args[0], &x, &y, "setpos", &error))
+    if (!value_extract_xy(args[0], &x, &y, "setpos", &error))
     {
         return error;
     }
@@ -329,7 +286,7 @@ static Result prim_towards(Evaluator *eval, int argc, Value *args)
 
     float target_x, target_y;
     Result error;
-    if (!extract_position(args[0], &target_x, &target_y, "towards", &error))
+    if (!value_extract_xy(args[0], &target_x, &target_y, "towards", &error))
     {
         return error;
     }
@@ -635,7 +592,7 @@ static Result prim_dot(Evaluator *eval, int argc, Value *args)
 
     float x, y;
     Result error;
-    if (!extract_position(args[0], &x, &y, "dot", &error))
+    if (!value_extract_xy(args[0], &x, &y, "dot", &error))
     {
         return error;
     }
@@ -657,7 +614,7 @@ static Result prim_dotp(Evaluator *eval, int argc, Value *args)
 
     float x, y;
     Result error;
-    if (!extract_position(args[0], &x, &y, "dot?", &error))
+    if (!value_extract_xy(args[0], &x, &y, "dot?", &error))
     {
         return error;
     }
@@ -737,64 +694,6 @@ static Result prim_wrap(Evaluator *eval, int argc, Value *args)
 // Palette primitives
 //==========================================================================
 
-// Helper to extract [r g b] list into RGB components
-static bool extract_rgb(Value rgb, uint8_t *r, uint8_t *g, uint8_t *b, const char *proc_name, Result *error)
-{
-    if (rgb.type != VALUE_LIST)
-    {
-        *error = result_error_arg(ERR_DOESNT_LIKE_INPUT, proc_name, value_to_string(rgb));
-        return false;
-    }
-
-    Node list = rgb.as.node;
-    if (mem_is_nil(list))
-    {
-        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, proc_name, NULL);
-        return false;
-    }
-
-    Node r_node = mem_car(list);
-    list = mem_cdr(list);
-    
-    if (mem_is_nil(list))
-    {
-        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, proc_name, NULL);
-        return false;
-    }
-    
-    Node g_node = mem_car(list);
-    list = mem_cdr(list);
-    
-    if (mem_is_nil(list))
-    {
-        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, proc_name, NULL);
-        return false;
-    }
-    
-    Node b_node = mem_car(list);
-
-    // Convert to numbers
-    Value r_val = mem_is_word(r_node) ? value_word(r_node) : value_list(r_node);
-    Value g_val = mem_is_word(g_node) ? value_word(g_node) : value_list(g_node);
-    Value b_val = mem_is_word(b_node) ? value_word(b_node) : value_list(b_node);
-    
-    float r_num, g_num, b_num;
-    if (!value_to_number(r_val, &r_num) || 
-        !value_to_number(g_val, &g_num) || 
-        !value_to_number(b_val, &b_num))
-    {
-        *error = result_error_arg(ERR_DOESNT_LIKE_INPUT, proc_name, value_to_string(rgb));
-        return false;
-    }
-
-    // Clamp to 0-255 range
-    *r = (uint8_t)(r_num < 0 ? 0 : (r_num > 255 ? 255 : r_num));
-    *g = (uint8_t)(g_num < 0 ? 0 : (g_num > 255 ? 255 : g_num));
-    *b = (uint8_t)(b_num < 0 ? 0 : (b_num > 255 ? 255 : b_num));
-    
-    return true;
-}
-
 // Helper to build [r g b] list from RGB components
 static Value make_rgb_list(uint8_t r, uint8_t g, uint8_t b)
 {
@@ -826,7 +725,7 @@ static Result prim_setpalette(Evaluator *eval, int argc, Value *args)
     uint8_t r, g, b;
     Result error;
     
-    if (!extract_rgb(args[1], &r, &g, &b, "setpalette", &error))
+    if (!value_extract_rgb(args[1], &r, &g, &b, "setpalette", &error))
     {
         return error;
     }

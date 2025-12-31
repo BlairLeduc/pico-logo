@@ -9,6 +9,7 @@
 
 #include "memory.h"
 #include <stdbool.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C"
@@ -105,6 +106,14 @@ extern "C"
 
     // Get the node from a word or list value
     Node value_to_node(Value v);
+
+    // Extract [x y] position list into two floats
+    // Returns true on success, sets *error on failure
+    bool value_extract_xy(Value list, float *x, float *y, const char *proc_name, Result *error);
+
+    // Extract [r g b] RGB list into three uint8 values (clamped to 0-255)
+    // Returns true on success, sets *error on failure
+    bool value_extract_rgb(Value list, uint8_t *r, uint8_t *g, uint8_t *b, const char *proc_name, Result *error);
 
     // Convert value to string for error messages (returns static buffer)
     const char *value_to_string(Value v);

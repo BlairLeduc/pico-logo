@@ -107,37 +107,12 @@ static Result prim_setcursor(Evaluator *eval, int argc, Value *args)
     UNUSED(eval);
     REQUIRE_ARGC("setcursor", 1);
 
-    Value pos = args[0];
-    if (pos.type != VALUE_LIST)
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setcursor", value_to_string(pos));
-    }
-
-    // Extract column and row from list
-    Node list = pos.as.node;
-    if (mem_is_nil(list))
-    {
-        return result_error_arg(ERR_TOO_FEW_ITEMS_LIST, "setcursor", NULL);
-    }
-
-    Node col_node = mem_car(list);
-    list = mem_cdr(list);
-    
-    if (mem_is_nil(list))
-    {
-        return result_error_arg(ERR_TOO_FEW_ITEMS_LIST, "setcursor", NULL);
-    }
-    
-    Node row_node = mem_car(list);
-
-    // Convert to numbers
-    Value col_val = mem_is_word(col_node) ? value_word(col_node) : value_list(col_node);
-    Value row_val = mem_is_word(row_node) ? value_word(row_node) : value_list(row_node);
-    
+    // Extract column and row from [col row] list
     float col_num, row_num;
-    if (!value_to_number(col_val, &col_num) || !value_to_number(row_val, &row_num))
+    Result error;
+    if (!value_extract_xy(args[0], &col_num, &row_num, "setcursor", &error))
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setcursor", value_to_string(pos));
+        return error;
     }
 
     int column = (int)col_num;
@@ -146,7 +121,7 @@ static Result prim_setcursor(Evaluator *eval, int argc, Value *args)
     // Validate range
     if (column < 0 || row < 0)
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setcursor", value_to_string(pos));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setcursor", value_to_string(args[0]));
     }
 
     const LogoConsoleText *text = get_text_ops();

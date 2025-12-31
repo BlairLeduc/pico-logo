@@ -4,6 +4,7 @@
 //
 
 #include "value.h"
+#include "error.h"
 #include "format.h"
 #include <ctype.h>
 #include <stdlib.h>
@@ -159,6 +160,111 @@ Node value_to_node(Value v)
         return v.as.node;
     }
     return NODE_NIL;
+}
+
+bool value_extract_xy(Value list, float *x, float *y, const char *proc_name, Result *error)
+{
+    if (list.type != VALUE_LIST)
+    {
+        *error = result_error_arg(ERR_DOESNT_LIKE_INPUT, proc_name, value_to_string(list));
+        return false;
+    }
+
+    Node node = list.as.node;
+    if (mem_is_nil(node))
+    {
+        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, proc_name, NULL);
+        return false;
+    }
+
+    Node x_node = mem_car(node);
+    node = mem_cdr(node);
+    
+    if (mem_is_nil(node))
+    {
+        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, proc_name, NULL);
+        return false;
+    }
+    
+    Node y_node = mem_car(node);
+
+    // Convert to numbers
+    Value x_val = mem_is_word(x_node) ? value_word(x_node) : value_list(x_node);
+    Value y_val = mem_is_word(y_node) ? value_word(y_node) : value_list(y_node);
+    
+    float x_num, y_num;
+    if (!value_to_number(x_val, &x_num) || !value_to_number(y_val, &y_num))
+    {
+        *error = result_error_arg(ERR_DOESNT_LIKE_INPUT, proc_name, value_to_string(list));
+        return false;
+    }
+
+    *x = x_num;
+    *y = y_num;
+    return true;
+}
+
+bool value_extract_rgb(Value list, uint8_t *r, uint8_t *g, uint8_t *b, const char *proc_name, Result *error)
+{
+    if (list.type != VALUE_LIST)
+    {
+        *error = result_error_arg(ERR_DOESNT_LIKE_INPUT, proc_name, value_to_string(list));
+        return false;
+    }
+
+    Node node = list.as.node;
+    if (mem_is_nil(node))
+    {
+        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, proc_name, NULL);
+        return false;
+    }
+
+    Node r_node = mem_car(node);
+    node = mem_cdr(node);
+    
+    if (mem_is_nil(node))
+    {
+        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, proc_name, NULL);
+        return false;
+    }
+    
+    Node g_node = mem_car(node);
+    node = mem_cdr(node);
+    
+    if (mem_is_nil(node))
+    {
+        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, proc_name, NULL);
+        return false;
+    }
+    
+    Node b_node = mem_car(node);
+
+    // Convert to numbers
+    Value r_val = mem_is_word(r_node) ? value_word(r_node) : value_list(r_node);
+    Value g_val = mem_is_word(g_node) ? value_word(g_node) : value_list(g_node);
+    Value b_val = mem_is_word(b_node) ? value_word(b_node) : value_list(b_node);
+    
+    float r_num, g_num, b_num;
+    if (!value_to_number(r_val, &r_num) || 
+        !value_to_number(g_val, &g_num) || 
+        !value_to_number(b_val, &b_num))
+    {
+        *error = result_error_arg(ERR_DOESNT_LIKE_INPUT, proc_name, value_to_string(list));
+        return false;
+    }
+
+    // Clamp to 0-255 range
+    if (r_num < 0) r_num = 0;
+    if (r_num > 255) r_num = 255;
+    if (g_num < 0) g_num = 0;
+    if (g_num > 255) g_num = 255;
+    if (b_num < 0) b_num = 0;
+    if (b_num > 255) b_num = 255;
+
+    *r = (uint8_t)r_num;
+    *g = (uint8_t)g_num;
+    *b = (uint8_t)b_num;
+    return true;
 }
 
 // Helper: serialize list to string (recursive)
