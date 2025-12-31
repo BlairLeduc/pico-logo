@@ -195,3 +195,38 @@ const char *error_format(Result r)
     // Fallback: return template as-is (may have unsubstituted %s)
     return tmpl;
 }
+
+//==========================================================================
+// Caught Error Info (for 'error' primitive)
+//==========================================================================
+
+static CaughtError caught_error = {false, 0, "", NULL, NULL};
+
+void error_set_caught(const Result *r)
+{
+    if (r && r->status == RESULT_ERROR)
+    {
+        caught_error.valid = true;
+        caught_error.code = r->error_code;
+        // Use error_format to get the fully formatted error message
+        const char *formatted = error_format(*r);
+        strncpy(caught_error.message, formatted, sizeof(caught_error.message) - 1);
+        caught_error.message[sizeof(caught_error.message) - 1] = '\0';
+        caught_error.proc = r->error_proc;
+        caught_error.caller = r->error_caller;
+    }
+}
+
+void error_clear_caught(void)
+{
+    caught_error.valid = false;
+    caught_error.code = 0;
+    caught_error.message[0] = '\0';
+    caught_error.proc = NULL;
+    caught_error.caller = NULL;
+}
+
+const CaughtError *error_get_caught(void)
+{
+    return caught_error.valid ? &caught_error : NULL;
+}

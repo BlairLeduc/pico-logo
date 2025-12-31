@@ -6,12 +6,13 @@
 //
 
 #include "primitives.h"
+#include "error.h"
 #include "variables.h"
 
 // Combined reset function for testing purposes
-// Resets both test state (in variables) and exceptions state
+// Resets both test state (in variables) and caught error state
 void primitives_control_reset_test_state(void)
 {
     var_reset_test_state();
-    primitives_exceptions_reset_state();
+    error_clear_caught();
 }

@@ -116,9 +116,6 @@ extern "C"
     // Reset control flow test state (for testing purposes)
     void primitives_control_reset_test_state(void);
 
-    // Reset exceptions state (for testing purposes)
-    void primitives_exceptions_reset_state(void);
-
     // Pause/Continue support
     // Check if continue has been requested (and reset the flag)
     bool pause_check_continue(void);
