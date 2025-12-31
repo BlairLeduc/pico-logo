@@ -13,6 +13,7 @@
 #include "error.h"
 #include "eval.h"
 #include "lexer.h"
+#include "format.h"
 #include "devices/io.h"
 #include "devices/stream.h"
 #include <stdio.h>
@@ -24,13 +25,16 @@
 // Output helpers
 //==========================================================================
 
-static void print_to_writer(const char *str)
+// Output callback for print/show/type (always succeeds)
+static bool print_output(void *ctx, const char *str)
 {
+    (void)ctx;
     LogoIO *io = primitives_get_io();
     if (io)
     {
         logo_io_write(io, str);
     }
+    return true;
 }
 
 static void flush_writer(void)
@@ -42,79 +46,6 @@ static void flush_writer(void)
     }
 }
 
-static void print_list_contents(Node node)
-{
-    bool first = true;
-    while (!mem_is_nil(node))
-    {
-        if (!first)
-            print_to_writer(" ");
-        first = false;
-
-        Node element = mem_car(node);
-        if (mem_is_word(element))
-        {
-            print_to_writer(mem_word_ptr(element));
-        }
-        else if (mem_is_list(element))
-        {
-            print_to_writer("[");
-            print_list_contents(element);
-            print_to_writer("]");
-        }
-        else if (mem_is_nil(element))
-        {
-            // Empty list as element
-            print_to_writer("[]");
-        }
-        node = mem_cdr(node);
-    }
-}
-
-// Print value without outer brackets on lists
-static void print_value(Value v)
-{
-    char buf[32];
-    switch (v.type)
-    {
-    case VALUE_NONE:
-        break;
-    case VALUE_NUMBER:
-        format_number(buf, sizeof(buf), v.as.number);
-        print_to_writer(buf);
-        break;
-    case VALUE_WORD:
-        print_to_writer(mem_word_ptr(v.as.node));
-        break;
-    case VALUE_LIST:
-        print_list_contents(v.as.node);
-        break;
-    }
-}
-
-// Print value with brackets around lists (for show)
-static void show_value(Value v)
-{
-    char buf[32];
-    switch (v.type)
-    {
-    case VALUE_NONE:
-        break;
-    case VALUE_NUMBER:
-        format_number(buf, sizeof(buf), v.as.number);
-        print_to_writer(buf);
-        break;
-    case VALUE_WORD:
-        print_to_writer(mem_word_ptr(v.as.node));
-        break;
-    case VALUE_LIST:
-        print_to_writer("[");
-        print_list_contents(v.as.node);
-        print_to_writer("]");
-        break;
-    }
-}
-
 //==========================================================================
 // Input primitives
 //==========================================================================
@@ -122,9 +53,7 @@ static void show_value(Value v)
 // keyp - outputs true if a character is waiting to be read
 static Result prim_keyp(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     LogoIO *io = primitives_get_io();
     if (!io)
@@ -145,9 +74,7 @@ static Result prim_keyp(Evaluator *eval, int argc, Value *args)
 // Returns empty list if reading from file and at EOF.
 static Result prim_readchar(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     LogoIO *io = primitives_get_io();
     if (!io)
@@ -178,18 +105,17 @@ static Result prim_readchar(Evaluator *eval, int argc, Value *args)
 // Returns empty list if at EOF before reading any characters.
 static Result prim_readchars(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
 
     float count_f;
     if (!value_to_number(args[0], &count_f))
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "readchars", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     int count = (int)count_f;
     if (count <= 0)
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "readchars", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
 
     LogoIO *io = primitives_get_io();
@@ -464,14 +390,14 @@ static Result prim_readword(Evaluator *eval, int argc, Value *args)
 // Outermost brackets of lists are not printed.
 static Result prim_print(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
+    UNUSED(eval);
     for (int i = 0; i < argc; i++)
     {
         if (i > 0)
-            print_to_writer(" ");
-        print_value(args[i]);
+            print_output(NULL, " ");
+        format_value(print_output, NULL, args[i]);
     }
-    print_to_writer("\n");
+    print_output(NULL, "\n");
     flush_writer();
     
     // Check for write errors (e.g., disk full)
@@ -488,10 +414,9 @@ static Result prim_print(Evaluator *eval, int argc, Value *args)
 // Lists keep their brackets.
 static Result prim_show(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    show_value(args[0]);
-    print_to_writer("\n");
+    UNUSED(eval); UNUSED(argc);
+    format_value_show(print_output, NULL, args[0]);
+    print_output(NULL, "\n");
     flush_writer();
     
     // Check for write errors (e.g., disk full)
@@ -508,12 +433,12 @@ static Result prim_show(Evaluator *eval, int argc, Value *args)
 // Outermost brackets of lists are not printed.
 static Result prim_type(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
+    UNUSED(eval);
     for (int i = 0; i < argc; i++)
     {
         if (i > 0)
-            print_to_writer(" ");
-        print_value(args[i]);
+            print_output(NULL, " ");
+        format_value(print_output, NULL, args[i]);
     }
     flush_writer();
     

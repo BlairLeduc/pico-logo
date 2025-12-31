@@ -41,9 +41,7 @@ static const LogoConsoleScreen *get_screen_ops(void)
 
 static Result prim_cleartext(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleText *text = get_text_ops();
     if (text && text->clear)
@@ -60,9 +58,7 @@ static Result prim_cleartext(Evaluator *eval, int argc, Value *args)
 
 static Result prim_cursor(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleText *text = get_text_ops();
     
@@ -91,9 +87,7 @@ static Result prim_cursor(Evaluator *eval, int argc, Value *args)
 
 static Result prim_fullscreen(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleScreen *screen = get_screen_ops();
     if (screen && screen->fullscreen)
@@ -110,44 +104,15 @@ static Result prim_fullscreen(Evaluator *eval, int argc, Value *args)
 
 static Result prim_setcursor(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
 
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "setcursor", NULL);
-    }
-
-    Value pos = args[0];
-    if (pos.type != VALUE_LIST)
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setcursor", value_to_string(pos));
-    }
-
-    // Extract column and row from list
-    Node list = pos.as.node;
-    if (mem_is_nil(list))
-    {
-        return result_error_arg(ERR_TOO_FEW_ITEMS_LIST, "setcursor", NULL);
-    }
-
-    Node col_node = mem_car(list);
-    list = mem_cdr(list);
-    
-    if (mem_is_nil(list))
-    {
-        return result_error_arg(ERR_TOO_FEW_ITEMS_LIST, "setcursor", NULL);
-    }
-    
-    Node row_node = mem_car(list);
-
-    // Convert to numbers
-    Value col_val = mem_is_word(col_node) ? value_word(col_node) : value_list(col_node);
-    Value row_val = mem_is_word(row_node) ? value_word(row_node) : value_list(row_node);
-    
+    // Extract column and row from [col row] list
     float col_num, row_num;
-    if (!value_to_number(col_val, &col_num) || !value_to_number(row_val, &row_num))
+    Result error;
+    if (!value_extract_xy(args[0], &col_num, &row_num, &error))
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setcursor", value_to_string(pos));
+        return error;
     }
 
     int column = (int)col_num;
@@ -156,7 +121,7 @@ static Result prim_setcursor(Evaluator *eval, int argc, Value *args)
     // Validate range
     if (column < 0 || row < 0)
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setcursor", value_to_string(pos));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
 
     const LogoConsoleText *text = get_text_ops();
@@ -175,9 +140,7 @@ static Result prim_setcursor(Evaluator *eval, int argc, Value *args)
 
 static Result prim_splitscreen(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleScreen *screen = get_screen_ops();
     if (screen && screen->splitscreen)
@@ -194,9 +157,7 @@ static Result prim_splitscreen(Evaluator *eval, int argc, Value *args)
 
 static Result prim_textscreen(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     const LogoConsoleScreen *screen = get_screen_ops();
     if (screen && screen->textscreen)

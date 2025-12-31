@@ -33,7 +33,7 @@ static bool get_bool_arg(Value v, bool *out)
 // and - outputs true if all arguments are true, false otherwise
 static Result prim_and(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
+    UNUSED(eval);
     bool result = true;
     for (int i = 0; i < argc; i++)
     {
@@ -50,7 +50,7 @@ static Result prim_and(Evaluator *eval, int argc, Value *args)
 // or - outputs true if any argument is true, false otherwise
 static Result prim_or(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
+    UNUSED(eval);
     bool result = false;
     for (int i = 0; i < argc; i++)
     {
@@ -67,8 +67,7 @@ static Result prim_or(Evaluator *eval, int argc, Value *args)
 // not - outputs true if argument is false, false if argument is true
 static Result prim_not(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     bool b;
     if (!get_bool_arg(args[0], &b))
     {

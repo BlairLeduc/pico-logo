@@ -8,6 +8,7 @@
 //
 
 #include "primitives.h"
+#include "format.h"
 #include "error.h"
 #include "eval.h"
 #include "lexer.h"
@@ -30,8 +31,7 @@ static Node number_to_word(float n)
 // For a list: outputs the first element (word or list)
 static Result prim_first(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     Value obj = args[0];
     
@@ -42,7 +42,7 @@ static Result prim_first(Evaluator *eval, int argc, Value *args)
         const char *str = mem_word_ptr(word);
         if (str == NULL || str[0] == '\0')
         {
-            return result_error_arg(ERR_TOO_FEW_ITEMS, "first", value_to_string(obj));
+            return result_error_arg(ERR_TOO_FEW_ITEMS, NULL, value_to_string(obj));
         }
         // Return first character as a word
         Node first_char = mem_atom(str, 1);
@@ -53,7 +53,7 @@ static Result prim_first(Evaluator *eval, int argc, Value *args)
         const char *str = mem_word_ptr(obj.as.node);
         if (str == NULL || str[0] == '\0')
         {
-            return result_error_arg(ERR_TOO_FEW_ITEMS, "first", value_to_string(obj));
+            return result_error_arg(ERR_TOO_FEW_ITEMS, NULL, value_to_string(obj));
         }
         // Return first character as a word
         Node first_char = mem_atom(str, 1);
@@ -64,7 +64,7 @@ static Result prim_first(Evaluator *eval, int argc, Value *args)
         Node list = obj.as.node;
         if (mem_is_nil(list))
         {
-            return result_error_arg(ERR_TOO_FEW_ITEMS, "first", "[]");
+            return result_error_arg(ERR_TOO_FEW_ITEMS, NULL, "[]");
         }
         Node first = mem_car(list);
         // Determine if it's a word or list
@@ -78,15 +78,14 @@ static Result prim_first(Evaluator *eval, int argc, Value *args)
         }
     }
     
-    return result_error_arg(ERR_DOESNT_LIKE_INPUT, "first", value_to_string(obj));
+    return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
 }
 
 // last object
 // Outputs the last element of object.
 static Result prim_last(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     Value obj = args[0];
     
@@ -97,7 +96,7 @@ static Result prim_last(Evaluator *eval, int argc, Value *args)
         size_t len = strlen(str);
         if (len == 0)
         {
-            return result_error_arg(ERR_TOO_FEW_ITEMS, "last", value_to_string(obj));
+            return result_error_arg(ERR_TOO_FEW_ITEMS, NULL, value_to_string(obj));
         }
         Node last_char = mem_atom(str + len - 1, 1);
         return result_ok(value_word(last_char));
@@ -108,7 +107,7 @@ static Result prim_last(Evaluator *eval, int argc, Value *args)
         size_t len = mem_word_len(obj.as.node);
         if (len == 0)
         {
-            return result_error_arg(ERR_TOO_FEW_ITEMS, "last", value_to_string(obj));
+            return result_error_arg(ERR_TOO_FEW_ITEMS, NULL, value_to_string(obj));
         }
         Node last_char = mem_atom(str + len - 1, 1);
         return result_ok(value_word(last_char));
@@ -118,7 +117,7 @@ static Result prim_last(Evaluator *eval, int argc, Value *args)
         Node list = obj.as.node;
         if (mem_is_nil(list))
         {
-            return result_error_arg(ERR_TOO_FEW_ITEMS, "last", "[]");
+            return result_error_arg(ERR_TOO_FEW_ITEMS, NULL, "[]");
         }
         // Find last element
         Node last = mem_car(list);
@@ -137,15 +136,14 @@ static Result prim_last(Evaluator *eval, int argc, Value *args)
         }
     }
     
-    return result_error_arg(ERR_DOESNT_LIKE_INPUT, "last", value_to_string(obj));
+    return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
 }
 
 // butfirst object (bf)
 // Outputs object with its first element removed.
 static Result prim_butfirst(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     Value obj = args[0];
     
@@ -156,7 +154,7 @@ static Result prim_butfirst(Evaluator *eval, int argc, Value *args)
         size_t len = strlen(str);
         if (len == 0)
         {
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "butfirst", value_to_string(obj));
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
         }
         if (len == 1)
         {
@@ -173,7 +171,7 @@ static Result prim_butfirst(Evaluator *eval, int argc, Value *args)
         size_t len = mem_word_len(obj.as.node);
         if (len == 0)
         {
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "butfirst", value_to_string(obj));
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
         }
         if (len == 1)
         {
@@ -188,20 +186,19 @@ static Result prim_butfirst(Evaluator *eval, int argc, Value *args)
         Node list = obj.as.node;
         if (mem_is_nil(list))
         {
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "butfirst", "[]");
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, "[]");
         }
         return result_ok(value_list(mem_cdr(list)));
     }
     
-    return result_error_arg(ERR_DOESNT_LIKE_INPUT, "butfirst", value_to_string(obj));
+    return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
 }
 
 // butlast object (bl)
 // Outputs object with its last element removed.
 static Result prim_butlast(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     Value obj = args[0];
     
@@ -212,7 +209,7 @@ static Result prim_butlast(Evaluator *eval, int argc, Value *args)
         size_t len = strlen(str);
         if (len == 0)
         {
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "butlast", value_to_string(obj));
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
         }
         if (len == 1)
         {
@@ -228,7 +225,7 @@ static Result prim_butlast(Evaluator *eval, int argc, Value *args)
         size_t len = mem_word_len(obj.as.node);
         if (len == 0)
         {
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "butlast", value_to_string(obj));
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
         }
         if (len == 1)
         {
@@ -243,7 +240,7 @@ static Result prim_butlast(Evaluator *eval, int argc, Value *args)
         Node list = obj.as.node;
         if (mem_is_nil(list))
         {
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "butlast", "[]");
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, "[]");
         }
         // Build new list without last element
         if (mem_is_nil(mem_cdr(list)))
@@ -272,15 +269,14 @@ static Result prim_butlast(Evaluator *eval, int argc, Value *args)
         return result_ok(value_list(result));
     }
     
-    return result_error_arg(ERR_DOESNT_LIKE_INPUT, "butlast", value_to_string(obj));
+    return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
 }
 
 // count object
 // Outputs the number of elements in object.
 static Result prim_count(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     Value obj = args[0];
     
@@ -305,15 +301,14 @@ static Result prim_count(Evaluator *eval, int argc, Value *args)
         return result_ok(value_number((float)count));
     }
     
-    return result_error_arg(ERR_DOESNT_LIKE_INPUT, "count", value_to_string(obj));
+    return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
 }
 
 // emptyp object (empty?)
 // Outputs TRUE if object is empty word or empty list.
 static Result prim_emptyp(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     Value obj = args[0];
     Node true_word = mem_atom_cstr("true");
@@ -337,25 +332,24 @@ static Result prim_emptyp(Evaluator *eval, int argc, Value *args)
         return result_ok(value_word(false_word));
     }
     
-    return result_error_arg(ERR_DOESNT_LIKE_INPUT, "emptyp", value_to_string(obj));
+    return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
 }
 
 // item integer object
 // Outputs the element at position integer within object.
 static Result prim_item(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     float index_f;
     if (!value_to_number(args[0], &index_f))
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "item", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     int index = (int)index_f;
     if (index < 1)
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "item", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     Value obj = args[1];
@@ -367,7 +361,7 @@ static Result prim_item(Evaluator *eval, int argc, Value *args)
         size_t len = strlen(str);
         if ((size_t)index > len)
         {
-            return result_error_arg(ERR_TOO_FEW_ITEMS, "item", value_to_string(obj));
+            return result_error_arg(ERR_TOO_FEW_ITEMS, NULL, value_to_string(obj));
         }
         Node item_char = mem_atom(str + index - 1, 1);
         return result_ok(value_word(item_char));
@@ -378,7 +372,7 @@ static Result prim_item(Evaluator *eval, int argc, Value *args)
         size_t len = mem_word_len(obj.as.node);
         if ((size_t)index > len)
         {
-            return result_error_arg(ERR_TOO_FEW_ITEMS, "item", value_to_string(obj));
+            return result_error_arg(ERR_TOO_FEW_ITEMS, NULL, value_to_string(obj));
         }
         Node item_char = mem_atom(str + index - 1, 1);
         return result_ok(value_word(item_char));
@@ -392,7 +386,7 @@ static Result prim_item(Evaluator *eval, int argc, Value *args)
         }
         if (mem_is_nil(list))
         {
-            return result_error_arg(ERR_TOO_FEW_ITEMS, "item", "[]");
+            return result_error_arg(ERR_TOO_FEW_ITEMS, NULL, "[]");
         }
         Node item = mem_car(list);
         if (mem_is_word(item))
@@ -405,15 +399,14 @@ static Result prim_item(Evaluator *eval, int argc, Value *args)
         }
     }
     
-    return result_error_arg(ERR_DOESNT_LIKE_INPUT, "item", value_to_string(obj));
+    return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
 }
 
 // member object1 object2
 // Outputs the part of object2 starting with object1.
 static Result prim_member(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     Value obj1 = args[0];
     Value obj2 = args[1];
@@ -489,22 +482,21 @@ static Result prim_member(Evaluator *eval, int argc, Value *args)
         return result_ok(value_list(NODE_NIL));
     }
     
-    return result_error_arg(ERR_DOESNT_LIKE_INPUT, "member", value_to_string(obj2));
+    return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj2));
 }
 
 // fput object list
 // Outputs a new list with object at the beginning.
 static Result prim_fput(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     Value obj = args[0];
     Value list_val = args[1];
     
     if (!value_is_list(list_val))
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "fput", value_to_string(list_val));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(list_val));
     }
     
     Node obj_node;
@@ -523,7 +515,7 @@ static Result prim_fput(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "fput", value_to_string(obj));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
     }
     
     Node result = mem_cons(obj_node, list_val.as.node);
@@ -534,7 +526,7 @@ static Result prim_fput(Evaluator *eval, int argc, Value *args)
 // Outputs a list of the inputs.
 static Result prim_list(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
+    UNUSED(eval);
     
     // Build list in reverse, then reverse
     Node result = NODE_NIL;
@@ -566,15 +558,14 @@ static Result prim_list(Evaluator *eval, int argc, Value *args)
 // Outputs a new list with object at the end.
 static Result prim_lput(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     Value obj = args[0];
     Value list_val = args[1];
     
     if (!value_is_list(list_val))
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "lput", value_to_string(list_val));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(list_val));
     }
     
     Node obj_node;
@@ -592,7 +583,7 @@ static Result prim_lput(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "lput", value_to_string(obj));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
     }
     
     // If list is empty, just return single-element list
@@ -649,7 +640,7 @@ static Result prim_parse(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "parse", value_to_string(obj));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
     }
     
     // Use the evaluator to parse the string as a list
@@ -752,7 +743,7 @@ static Result prim_parse(Evaluator *eval, int argc, Value *args)
 // Outputs a flat list of the contents of its inputs.
 static Result prim_sentence(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
+    UNUSED(eval);
     
     Node result = NODE_NIL;
     Node tail = NODE_NIL;
@@ -817,7 +808,7 @@ static Result prim_sentence(Evaluator *eval, int argc, Value *args)
 // Outputs a word made by concatenating inputs.
 static Result prim_word(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
+    UNUSED(eval);
     
     // Calculate total length needed
     size_t total_len = 0;
@@ -834,7 +825,7 @@ static Result prim_word(Evaluator *eval, int argc, Value *args)
         }
         else
         {
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "word", value_to_string(args[i]));
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[i]));
         }
     }
     
@@ -880,8 +871,7 @@ static Result prim_word(Evaluator *eval, int argc, Value *args)
 // Outputs the ASCII code of character.
 static Result prim_ascii(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     Value obj = args[0];
     const char *str;
@@ -897,12 +887,12 @@ static Result prim_ascii(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "ascii", value_to_string(obj));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
     }
     
     if (str == NULL || str[0] == '\0')
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "ascii", "empty word");
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, "empty word");
     }
     
     return result_ok(value_number((float)(unsigned char)str[0]));
@@ -912,8 +902,7 @@ static Result prim_ascii(Evaluator *eval, int argc, Value *args)
 // Outputs true if word1 comes before word2 lexicographically.
 static Result prim_beforep(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     const char *str1;
     const char *str2;
@@ -929,7 +918,7 @@ static Result prim_beforep(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "before?", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     if (value_is_number(args[1]))
@@ -943,7 +932,7 @@ static Result prim_beforep(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "before?", value_to_string(args[1]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
     }
     
     // Case-sensitive comparison (uppercase comes before lowercase in ASCII)
@@ -957,19 +946,13 @@ static Result prim_beforep(Evaluator *eval, int argc, Value *args)
 // Outputs the character with ASCII code integer.
 static Result prim_char(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    
-    float n;
-    if (!value_to_number(args[0], &n))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "char", value_to_string(args[0]));
-    }
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_NUMBER(args[0], n);
     
     int code = (int)n;
     if (code < 0 || code > 255)
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "char", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     char buf[2] = { (char)code, '\0' };
@@ -981,8 +964,7 @@ static Result prim_char(Evaluator *eval, int argc, Value *args)
 // Outputs true if objects are equal.
 static Result prim_equalp(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     bool equal = values_equal(args[0], args[1]);
     Node result = mem_atom_cstr(equal ? "true" : "false");
@@ -993,8 +975,7 @@ static Result prim_equalp(Evaluator *eval, int argc, Value *args)
 // Outputs true if object is a list.
 static Result prim_listp(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     bool is_list = value_is_list(args[0]);
     Node result = mem_atom_cstr(is_list ? "true" : "false");
@@ -1005,8 +986,7 @@ static Result prim_listp(Evaluator *eval, int argc, Value *args)
 // Outputs true if object1 is an element of object2.
 static Result prim_memberp(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     Value obj1 = args[0];
     Value obj2 = args[1];
@@ -1080,15 +1060,14 @@ static Result prim_memberp(Evaluator *eval, int argc, Value *args)
         return result_ok(value_word(result));
     }
     
-    return result_error_arg(ERR_DOESNT_LIKE_INPUT, "member?", value_to_string(obj2));
+    return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj2));
 }
 
 // number? object
 // Outputs true if object is a number.
 static Result prim_numberp(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     bool is_number = value_is_number(args[0]);
     if (!is_number && value_is_word(args[0]))
@@ -1106,8 +1085,7 @@ static Result prim_numberp(Evaluator *eval, int argc, Value *args)
 // Outputs true if object is a word.
 static Result prim_wordp(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     // Numbers are also words (self-quoting)
     bool is_word = value_is_word(args[0]) || value_is_number(args[0]);
@@ -1119,8 +1097,7 @@ static Result prim_wordp(Evaluator *eval, int argc, Value *args)
 // Outputs word in all lowercase letters.
 static Result prim_lowercase(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     Value obj = args[0];
     const char *str;
@@ -1139,7 +1116,7 @@ static Result prim_lowercase(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "lowercase", value_to_string(obj));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
     }
     
     char buffer[256];
@@ -1159,8 +1136,7 @@ static Result prim_lowercase(Evaluator *eval, int argc, Value *args)
 // Outputs word in all uppercase letters.
 static Result prim_uppercase(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
     
     Value obj = args[0];
     const char *str;
@@ -1179,7 +1155,7 @@ static Result prim_uppercase(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "uppercase", value_to_string(obj));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
     }
     
     char buffer[256];

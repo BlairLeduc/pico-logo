@@ -13,195 +13,34 @@
 #include "memory.h"
 #include "error.h"
 #include "eval.h"
+#include "format.h"
 #include "devices/io.h"
 #include <stdio.h>
 #include <string.h>
 
-static void ws_print(const char *str)
+// Output callback for workspace printing (always succeeds)
+static bool ws_output(void *ctx, const char *str)
 {
+    (void)ctx;
     LogoIO *io = primitives_get_io();
     if (io)
     {
         logo_io_write(io, str);
     }
+    return true;
 }
 
 static void ws_newline(void)
 {
-    ws_print("\n");
-}
-
-// Print a procedure body element (handles quoted words, etc.)
-static void print_body_element(Node elem)
-{
-    if (mem_is_word(elem))
-    {
-        ws_print(mem_word_ptr(elem));
-    }
-    else if (mem_is_list(elem))
-    {
-        ws_print("[");
-        bool first = true;
-        Node curr = elem;
-        while (!mem_is_nil(curr))
-        {
-            if (!first)
-                ws_print(" ");
-            first = false;
-            print_body_element(mem_car(curr));
-            curr = mem_cdr(curr);
-        }
-        ws_print("]");
-    }
-}
-
-// Print procedure title line: to name :param1 :param2 ...
-static void print_procedure_title(UserProcedure *proc)
-{
-    ws_print("to ");
-    ws_print(proc->name);
-    for (int i = 0; i < proc->param_count; i++)
-    {
-        ws_print(" :");
-        ws_print(proc->params[i]);
-    }
-    ws_newline();
-}
-
-// Print full procedure definition
-static void print_procedure_definition(UserProcedure *proc)
-{
-    print_procedure_title(proc);
-    
-    // Body is now a list of line-lists: [[line1-tokens] [line2-tokens] ...]
-    Node curr_line = proc->body;
-    
-    // Track cumulative bracket depth across lines for indentation
-    int bracket_depth = 0;
-    
-    while (!mem_is_nil(curr_line))
-    {
-        Node line = mem_car(curr_line);
-        Node tokens = line;
-        
-        // Handle the list type marker
-        if (NODE_GET_TYPE(line) == NODE_TYPE_LIST)
-        {
-            tokens = NODE_MAKE_LIST(NODE_GET_INDEX(line));
-        }
-        
-        // Count leading closing brackets to reduce indent for this line
-        Node peek = tokens;
-        while (!mem_is_nil(peek))
-        {
-            Node elem = mem_car(peek);
-            if (mem_is_word(elem) && strcmp(mem_word_ptr(elem), "]") == 0 && bracket_depth > 0)
-            {
-                bracket_depth--;
-            }
-            else
-            {
-                break;  // Stop at first non-] token
-            }
-            peek = mem_cdr(peek);
-        }
-        
-        // Print base indent (2 spaces for procedure body)
-        ws_print("  ");
-        
-        // Add extra indentation based on cumulative bracket depth
-        for (int i = 0; i < bracket_depth; i++)
-        {
-            ws_print("  ");
-        }
-        
-        while (!mem_is_nil(tokens))
-        {
-            Node elem = mem_car(tokens);
-            
-            print_body_element(elem);
-            
-            // Track brackets
-            if (mem_is_word(elem))
-            {
-                const char *word = mem_word_ptr(elem);
-                if (strcmp(word, "[") == 0)
-                {
-                    bracket_depth++;
-                }
-                else if (strcmp(word, "]") == 0 && bracket_depth > 0)
-                {
-                    bracket_depth--;
-                }
-            }
-            
-            // Add space between elements on same line
-            Node next = mem_cdr(tokens);
-            if (!mem_is_nil(next))
-            {
-                ws_print(" ");
-            }
-            tokens = next;
-        }
-        
-        ws_newline();
-        curr_line = mem_cdr(curr_line);
-    }
-    
-    ws_print("end");
-    ws_newline();
-}
-
-// Print a variable and its value
-static void print_variable(const char *name, Value value)
-{
-    char buf[64];
-    ws_print("make \"");
-    ws_print(name);
-    ws_print(" ");
-    
-    switch (value.type)
-    {
-    case VALUE_NUMBER:
-        format_number(buf, sizeof(buf), value.as.number);
-        ws_print(buf);
-        break;
-    case VALUE_WORD:
-        ws_print("\"");
-        ws_print(mem_word_ptr(value.as.node));
-        break;
-    case VALUE_LIST:
-        ws_print("[");
-        {
-            bool first = true;
-            Node curr = value.as.node;
-            while (!mem_is_nil(curr))
-            {
-                if (!first)
-                    ws_print(" ");
-                first = false;
-                print_body_element(mem_car(curr));
-                curr = mem_cdr(curr);
-            }
-        }
-        ws_print("]");
-        break;
-    default:
-        break;
-    }
-    ws_newline();
+    ws_output(NULL, "\n");
 }
 
 // po "name or po [name1 name2 ...]
 // Print out procedure definition(s)
 static Result prim_po(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "po", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
     
     if (value_is_word(args[0]))
     {
@@ -212,7 +51,7 @@ static Result prim_po(Evaluator *eval, int argc, Value *args)
         {
             return result_error_arg(ERR_DONT_KNOW_HOW, name, NULL);
         }
-        print_procedure_definition(proc);
+        format_procedure_definition(ws_output, NULL, proc);
     }
     else if (value_is_list(args[0]))
     {
@@ -229,14 +68,14 @@ static Result prim_po(Evaluator *eval, int argc, Value *args)
                 {
                     return result_error_arg(ERR_DONT_KNOW_HOW, name, NULL);
                 }
-                print_procedure_definition(proc);
+                format_procedure_definition(ws_output, NULL, proc);
             }
             curr = mem_cdr(curr);
         }
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "po", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return result_none();
@@ -245,9 +84,7 @@ static Result prim_po(Evaluator *eval, int argc, Value *args)
 // poall - print all procedures, variables, and properties (not buried)
 static Result prim_poall(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     // Print all procedures (not buried)
     int count = proc_count(true);  // Get ALL, filter by buried in loop
@@ -256,7 +93,7 @@ static Result prim_poall(Evaluator *eval, int argc, Value *args)
         UserProcedure *proc = proc_get_by_index(i);
         if (proc && !proc->buried)
         {
-            print_procedure_definition(proc);
+            format_procedure_definition(ws_output, NULL, proc);
             ws_newline();
         }
     }
@@ -269,11 +106,11 @@ static Result prim_poall(Evaluator *eval, int argc, Value *args)
         Value value;
         if (var_get_global_by_index(i, false, &name, &value))
         {
-            print_variable(name, value);
+            format_variable(ws_output, NULL, name, value);
         }
     }
     
-    // Print all property lists
+    // Print all property lists (as pprop commands)
     int prop_count = prop_name_count();
     for (int i = 0; i < prop_count; i++)
     {
@@ -281,33 +118,7 @@ static Result prim_poall(Evaluator *eval, int argc, Value *args)
         if (prop_get_name_by_index(i, &name))
         {
             Node list = prop_get_list(name);
-            if (!mem_is_nil(list))
-            {
-                ws_print("plist \"");
-                ws_print(name);
-                ws_print(" [");
-                bool first = true;
-                Node curr = list;
-                while (!mem_is_nil(curr))
-                {
-                    if (!first)
-                        ws_print(" ");
-                    first = false;
-                    
-                    Node elem = mem_car(curr);
-                    if (mem_is_word(elem))
-                    {
-                        ws_print(mem_word_ptr(elem));
-                    }
-                    else if (mem_is_list(elem))
-                    {
-                        ws_print("[...]");
-                    }
-                    curr = mem_cdr(curr);
-                }
-                ws_print("]");
-                ws_newline();
-            }
+            format_property_list(ws_output, NULL, name, list);
         }
     }
     
@@ -318,12 +129,8 @@ static Result prim_poall(Evaluator *eval, int argc, Value *args)
 // Print out variable name(s) and value(s)
 static Result prim_pon(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "pon", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
     
     if (value_is_word(args[0]))
     {
@@ -334,7 +141,7 @@ static Result prim_pon(Evaluator *eval, int argc, Value *args)
         {
             return result_error_arg(ERR_NO_VALUE, name, NULL);
         }
-        print_variable(name, value);
+        format_variable(ws_output, NULL, name, value);
     }
     else if (value_is_list(args[0]))
     {
@@ -351,14 +158,14 @@ static Result prim_pon(Evaluator *eval, int argc, Value *args)
                 {
                     return result_error_arg(ERR_NO_VALUE, name, NULL);
                 }
-                print_variable(name, value);
+                format_variable(ws_output, NULL, name, value);
             }
             curr = mem_cdr(curr);
         }
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "pon", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return result_none();
@@ -368,9 +175,7 @@ static Result prim_pon(Evaluator *eval, int argc, Value *args)
 // Also prints local variables if in a procedure scope (e.g., during pause)
 static Result prim_pons(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     // Print local variables first (if any)
     int local_count = var_local_count();
@@ -382,7 +187,7 @@ static Result prim_pons(Evaluator *eval, int argc, Value *args)
             Value value;
             if (var_get_local_by_index(i, &name, &value))
             {
-                print_variable(name, value);
+                format_variable(ws_output, NULL, name, value);
             }
         }
     }
@@ -398,7 +203,7 @@ static Result prim_pons(Evaluator *eval, int argc, Value *args)
             // Skip if shadowed by a local variable
             if (!var_is_shadowed_by_local(name))
             {
-                print_variable(name, value);
+                format_variable(ws_output, NULL, name, value);
             }
         }
     }
@@ -409,9 +214,7 @@ static Result prim_pons(Evaluator *eval, int argc, Value *args)
 // pops - print out all procedure definitions (not buried)
 static Result prim_pops(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     int count = proc_count(true);  // Get ALL, filter by buried in loop
     for (int i = 0; i < count; i++)
@@ -419,7 +222,7 @@ static Result prim_pops(Evaluator *eval, int argc, Value *args)
         UserProcedure *proc = proc_get_by_index(i);
         if (proc && !proc->buried)
         {
-            print_procedure_definition(proc);
+            format_procedure_definition(ws_output, NULL, proc);
             ws_newline();
         }
     }
@@ -431,12 +234,8 @@ static Result prim_pops(Evaluator *eval, int argc, Value *args)
 // Print out procedure title(s)
 static Result prim_pot(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "pot", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
     
     if (value_is_word(args[0]))
     {
@@ -447,7 +246,7 @@ static Result prim_pot(Evaluator *eval, int argc, Value *args)
         {
             return result_error_arg(ERR_DONT_KNOW_HOW, name, NULL);
         }
-        print_procedure_title(proc);
+        format_procedure_title(ws_output, NULL, proc);
     }
     else if (value_is_list(args[0]))
     {
@@ -464,14 +263,14 @@ static Result prim_pot(Evaluator *eval, int argc, Value *args)
                 {
                     return result_error_arg(ERR_DONT_KNOW_HOW, name, NULL);
                 }
-                print_procedure_title(proc);
+                format_procedure_title(ws_output, NULL, proc);
             }
             curr = mem_cdr(curr);
         }
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "pot", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return result_none();
@@ -480,9 +279,7 @@ static Result prim_pot(Evaluator *eval, int argc, Value *args)
 // pots - print out all procedure titles (not buried)
 static Result prim_pots(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     int count = proc_count(true);  // Get ALL procedures, filter by buried in loop
     for (int i = 0; i < count; i++)
@@ -490,7 +287,7 @@ static Result prim_pots(Evaluator *eval, int argc, Value *args)
         UserProcedure *proc = proc_get_by_index(i);
         if (proc && !proc->buried)
         {
-            print_procedure_title(proc);
+            format_procedure_title(ws_output, NULL, proc);
         }
     }
     
@@ -501,12 +298,8 @@ static Result prim_pots(Evaluator *eval, int argc, Value *args)
 // Bury procedure(s) - hidden from poall, pops, pots, erall, erps
 static Result prim_bury(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "bury", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
     
     if (value_is_word(args[0]))
     {
@@ -537,7 +330,7 @@ static Result prim_bury(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "bury", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return result_none();
@@ -546,9 +339,7 @@ static Result prim_bury(Evaluator *eval, int argc, Value *args)
 // buryall - bury all procedures and variable names
 static Result prim_buryall(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     proc_bury_all();
     var_bury_all();
@@ -560,12 +351,8 @@ static Result prim_buryall(Evaluator *eval, int argc, Value *args)
 // Bury variable name(s)
 static Result prim_buryname(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "buryname", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
     
     if (value_is_word(args[0]))
     {
@@ -596,7 +383,7 @@ static Result prim_buryname(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "buryname", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return result_none();
@@ -606,12 +393,8 @@ static Result prim_buryname(Evaluator *eval, int argc, Value *args)
 // Unbury procedure(s)
 static Result prim_unbury(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "unbury", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
     
     if (value_is_word(args[0]))
     {
@@ -642,7 +425,7 @@ static Result prim_unbury(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "unbury", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return result_none();
@@ -651,9 +434,7 @@ static Result prim_unbury(Evaluator *eval, int argc, Value *args)
 // unburyall - unbury all procedures and variable names
 static Result prim_unburyall(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     proc_unbury_all();
     var_unbury_all();
@@ -665,12 +446,8 @@ static Result prim_unburyall(Evaluator *eval, int argc, Value *args)
 // Unbury variable name(s)
 static Result prim_unburyname(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "unburyname", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
     
     if (value_is_word(args[0]))
     {
@@ -701,7 +478,7 @@ static Result prim_unburyname(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "unburyname", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return result_none();
@@ -710,9 +487,7 @@ static Result prim_unburyname(Evaluator *eval, int argc, Value *args)
 // erall - erase all procedures, variables, and properties (respects buried)
 static Result prim_erall(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     proc_erase_all(true);  // true = check buried flag
     var_erase_all_globals(true);
@@ -725,12 +500,8 @@ static Result prim_erall(Evaluator *eval, int argc, Value *args)
 // Erase procedure(s) from workspace
 static Result prim_erase(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "erase", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
     
     if (value_is_word(args[0]))
     {
@@ -761,7 +532,7 @@ static Result prim_erase(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "erase", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return result_none();
@@ -771,12 +542,8 @@ static Result prim_erase(Evaluator *eval, int argc, Value *args)
 // Erase variable name(s)
 static Result prim_ern(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "ern", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
     
     if (value_is_word(args[0]))
     {
@@ -807,7 +574,7 @@ static Result prim_ern(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "ern", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return result_none();
@@ -816,9 +583,7 @@ static Result prim_ern(Evaluator *eval, int argc, Value *args)
 // erns - erase all variables (respects buried)
 static Result prim_erns(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     var_erase_all_globals(true);  // true = check buried flag
     
@@ -828,9 +593,7 @@ static Result prim_erns(Evaluator *eval, int argc, Value *args)
 // erps - erase all procedures (respects buried)
 static Result prim_erps(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     proc_erase_all(true);  // true = check buried flag
     
@@ -841,9 +604,7 @@ static Result prim_erps(Evaluator *eval, int argc, Value *args)
 // Outputs the number of free nodes available
 static Result prim_nodes(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     size_t free = mem_free_nodes();
     return result_ok(value_number((float)free));
@@ -853,9 +614,7 @@ static Result prim_nodes(Evaluator *eval, int argc, Value *args)
 // Runs garbage collection to free up as many nodes as possible
 static Result prim_recycle(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     // Mark all roots: variables, procedure bodies, and property lists
     var_gc_mark_all();

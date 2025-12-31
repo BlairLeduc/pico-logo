@@ -16,20 +16,9 @@
 // Formal Logo procedure definition
 static Result prim_define(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    
-    // First arg must be word (procedure name)
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "define", value_to_string(args[0]));
-    }
-    
-    // Second arg must be list [[params] [line1] [line2] ...]
-    if (!value_is_list(args[1]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "define", value_to_string(args[1]));
-    }
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD(args[0]);
+    REQUIRE_LIST(args[1]);
     
     const char *name = mem_word_ptr(args[0].as.node);
     Node def_list = args[1].as.node;
@@ -43,7 +32,7 @@ static Result prim_define(Evaluator *eval, int argc, Value *args)
     // First element should be parameter list
     if (mem_is_nil(def_list))
     {
-        return result_error_arg(ERR_TOO_FEW_ITEMS, "define", NULL);
+        return result_error_arg(ERR_TOO_FEW_ITEMS, NULL, NULL);
     }
     
     Node params_elem = mem_car(def_list);
@@ -109,14 +98,14 @@ Result proc_define_from_text(const char *text)
     Token t = lexer_next_token(&lexer);
     if (t.type != TOKEN_WORD)
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "to", "expected procedure name");
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, "expected procedure name");
     }
     
     // Get procedure name
     t = lexer_next_token(&lexer);
     if (t.type != TOKEN_WORD)
     {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "to", NULL);
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, NULL, NULL);
     }
     
     Node name_atom = mem_atom(t.start, t.length);
@@ -331,7 +320,7 @@ static Result prim_text(Evaluator *eval, int argc, Value *args)
     
     if (!value_is_word(args[0]))
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "text", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     const char *name = mem_word_ptr(args[0].as.node);
@@ -381,7 +370,7 @@ static Result prim_primitivep(Evaluator *eval, int argc, Value *args)
     
     if (!value_is_word(args[0]))
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "primitivep", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     const char *name = mem_word_ptr(args[0].as.node);
@@ -401,7 +390,7 @@ static Result prim_definedp(Evaluator *eval, int argc, Value *args)
     
     if (!value_is_word(args[0]))
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "definedp", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     const char *name = mem_word_ptr(args[0].as.node);
@@ -421,11 +410,11 @@ static Result prim_copydef(Evaluator *eval, int argc, Value *args)
     
     if (!value_is_word(args[0]))
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "copydef", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     if (!value_is_word(args[1]))
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "copydef", value_to_string(args[1]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
     }
     
     const char *source_name = mem_word_ptr(args[0].as.node);

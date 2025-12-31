@@ -7,6 +7,7 @@
 
 #include "unity.h"
 #include "core/value.h"
+#include "core/format.h"
 #include "core/memory.h"
 
 #include <string.h>
@@ -750,6 +751,225 @@ void test_result_is_returnable_false_for_throw(void)
 }
 
 //============================================================================
+// value_extract_xy Tests
+//============================================================================
+
+void test_value_extract_xy_success(void)
+{
+    // Create list [10 20]
+    Node x_atom = mem_atom("10", 2);
+    Node y_atom = mem_atom("20", 2);
+    Node list = mem_cons(x_atom, mem_cons(y_atom, NODE_NIL));
+    Value v = value_list(list);
+    
+    float x, y;
+    Result error;
+    TEST_ASSERT_TRUE(value_extract_xy(v, &x, &y, &error));
+    TEST_ASSERT_EQUAL_FLOAT(10.0f, x);
+    TEST_ASSERT_EQUAL_FLOAT(20.0f, y);
+}
+
+void test_value_extract_xy_negative_values(void)
+{
+    // Create list [-5 -15]
+    Node x_atom = mem_atom("-5", 2);
+    Node y_atom = mem_atom("-15", 3);
+    Node list = mem_cons(x_atom, mem_cons(y_atom, NODE_NIL));
+    Value v = value_list(list);
+    
+    float x, y;
+    Result error;
+    TEST_ASSERT_TRUE(value_extract_xy(v, &x, &y, &error));
+    TEST_ASSERT_EQUAL_FLOAT(-5.0f, x);
+    TEST_ASSERT_EQUAL_FLOAT(-15.0f, y);
+}
+
+void test_value_extract_xy_decimal_values(void)
+{
+    // Create list [3.14 2.71]
+    Node x_atom = mem_atom("3.14", 4);
+    Node y_atom = mem_atom("2.71", 4);
+    Node list = mem_cons(x_atom, mem_cons(y_atom, NODE_NIL));
+    Value v = value_list(list);
+    
+    float x, y;
+    Result error;
+    TEST_ASSERT_TRUE(value_extract_xy(v, &x, &y, &error));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 3.14f, x);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 2.71f, y);
+}
+
+void test_value_extract_xy_fails_on_word(void)
+{
+    Node atom = mem_atom("hello", 5);
+    Value v = value_word(atom);
+    
+    float x, y;
+    Result error;
+    TEST_ASSERT_FALSE(value_extract_xy(v, &x, &y, &error));
+    TEST_ASSERT_EQUAL(RESULT_ERROR, error.status);
+}
+
+void test_value_extract_xy_fails_on_empty_list(void)
+{
+    Value v = value_list(NODE_NIL);
+    
+    float x, y;
+    Result error;
+    TEST_ASSERT_FALSE(value_extract_xy(v, &x, &y, &error));
+    TEST_ASSERT_EQUAL(RESULT_ERROR, error.status);
+}
+
+void test_value_extract_xy_fails_on_single_element_list(void)
+{
+    // Create list [10] - only one element
+    Node x_atom = mem_atom("10", 2);
+    Node list = mem_cons(x_atom, NODE_NIL);
+    Value v = value_list(list);
+    
+    float x, y;
+    Result error;
+    TEST_ASSERT_FALSE(value_extract_xy(v, &x, &y, &error));
+    TEST_ASSERT_EQUAL(RESULT_ERROR, error.status);
+}
+
+void test_value_extract_xy_fails_on_non_numeric(void)
+{
+    // Create list [hello world]
+    Node x_atom = mem_atom("hello", 5);
+    Node y_atom = mem_atom("world", 5);
+    Node list = mem_cons(x_atom, mem_cons(y_atom, NODE_NIL));
+    Value v = value_list(list);
+    
+    float x, y;
+    Result error;
+    TEST_ASSERT_FALSE(value_extract_xy(v, &x, &y, &error));
+    TEST_ASSERT_EQUAL(RESULT_ERROR, error.status);
+}
+
+//============================================================================
+// value_extract_rgb Tests
+//============================================================================
+
+void test_value_extract_rgb_success(void)
+{
+    // Create list [128 64 255]
+    Node r_atom = mem_atom("128", 3);
+    Node g_atom = mem_atom("64", 2);
+    Node b_atom = mem_atom("255", 3);
+    Node list = mem_cons(r_atom, mem_cons(g_atom, mem_cons(b_atom, NODE_NIL)));
+    Value v = value_list(list);
+    
+    uint8_t r, g, b;
+    Result error;
+    TEST_ASSERT_TRUE(value_extract_rgb(v, &r, &g, &b, &error));
+    TEST_ASSERT_EQUAL_UINT8(128, r);
+    TEST_ASSERT_EQUAL_UINT8(64, g);
+    TEST_ASSERT_EQUAL_UINT8(255, b);
+}
+
+void test_value_extract_rgb_zero_values(void)
+{
+    // Create list [0 0 0]
+    Node r_atom = mem_atom("0", 1);
+    Node g_atom = mem_atom("0", 1);
+    Node b_atom = mem_atom("0", 1);
+    Node list = mem_cons(r_atom, mem_cons(g_atom, mem_cons(b_atom, NODE_NIL)));
+    Value v = value_list(list);
+    
+    uint8_t r, g, b;
+    Result error;
+    TEST_ASSERT_TRUE(value_extract_rgb(v, &r, &g, &b, &error));
+    TEST_ASSERT_EQUAL_UINT8(0, r);
+    TEST_ASSERT_EQUAL_UINT8(0, g);
+    TEST_ASSERT_EQUAL_UINT8(0, b);
+}
+
+void test_value_extract_rgb_clamps_negative(void)
+{
+    // Create list [-10 64 128]
+    Node r_atom = mem_atom("-10", 3);
+    Node g_atom = mem_atom("64", 2);
+    Node b_atom = mem_atom("128", 3);
+    Node list = mem_cons(r_atom, mem_cons(g_atom, mem_cons(b_atom, NODE_NIL)));
+    Value v = value_list(list);
+    
+    uint8_t r, g, b;
+    Result error;
+    TEST_ASSERT_TRUE(value_extract_rgb(v, &r, &g, &b, &error));
+    TEST_ASSERT_EQUAL_UINT8(0, r);  // Clamped from -10
+    TEST_ASSERT_EQUAL_UINT8(64, g);
+    TEST_ASSERT_EQUAL_UINT8(128, b);
+}
+
+void test_value_extract_rgb_clamps_above_255(void)
+{
+    // Create list [300 64 128]
+    Node r_atom = mem_atom("300", 3);
+    Node g_atom = mem_atom("64", 2);
+    Node b_atom = mem_atom("128", 3);
+    Node list = mem_cons(r_atom, mem_cons(g_atom, mem_cons(b_atom, NODE_NIL)));
+    Value v = value_list(list);
+    
+    uint8_t r, g, b;
+    Result error;
+    TEST_ASSERT_TRUE(value_extract_rgb(v, &r, &g, &b, &error));
+    TEST_ASSERT_EQUAL_UINT8(255, r);  // Clamped from 300
+    TEST_ASSERT_EQUAL_UINT8(64, g);
+    TEST_ASSERT_EQUAL_UINT8(128, b);
+}
+
+void test_value_extract_rgb_fails_on_word(void)
+{
+    Node atom = mem_atom("hello", 5);
+    Value v = value_word(atom);
+    
+    uint8_t r, g, b;
+    Result error;
+    TEST_ASSERT_FALSE(value_extract_rgb(v, &r, &g, &b, &error));
+    TEST_ASSERT_EQUAL(RESULT_ERROR, error.status);
+}
+
+void test_value_extract_rgb_fails_on_empty_list(void)
+{
+    Value v = value_list(NODE_NIL);
+    
+    uint8_t r, g, b;
+    Result error;
+    TEST_ASSERT_FALSE(value_extract_rgb(v, &r, &g, &b, &error));
+    TEST_ASSERT_EQUAL(RESULT_ERROR, error.status);
+}
+
+void test_value_extract_rgb_fails_on_two_element_list(void)
+{
+    // Create list [128 64] - only two elements
+    Node r_atom = mem_atom("128", 3);
+    Node g_atom = mem_atom("64", 2);
+    Node list = mem_cons(r_atom, mem_cons(g_atom, NODE_NIL));
+    Value v = value_list(list);
+    
+    uint8_t r, g, b;
+    Result error;
+    TEST_ASSERT_FALSE(value_extract_rgb(v, &r, &g, &b, &error));
+    TEST_ASSERT_EQUAL(RESULT_ERROR, error.status);
+}
+
+void test_value_extract_rgb_fails_on_non_numeric(void)
+{
+    // Create list [red green blue]
+    Node r_atom = mem_atom("red", 3);
+    Node g_atom = mem_atom("green", 5);
+    Node b_atom = mem_atom("blue", 4);
+    Node list = mem_cons(r_atom, mem_cons(g_atom, mem_cons(b_atom, NODE_NIL)));
+    Value v = value_list(list);
+    
+    uint8_t r, g, b;
+    Result error;
+    TEST_ASSERT_FALSE(value_extract_rgb(v, &r, &g, &b, &error));
+    TEST_ASSERT_EQUAL(RESULT_ERROR, error.status);
+}
+
+//============================================================================
 // Main
 //============================================================================
 
@@ -874,6 +1094,25 @@ int main(void)
     RUN_TEST(test_result_is_returnable_false_for_stop);
     RUN_TEST(test_result_is_returnable_false_for_error);
     RUN_TEST(test_result_is_returnable_false_for_throw);
+
+    // value_extract_xy Tests
+    RUN_TEST(test_value_extract_xy_success);
+    RUN_TEST(test_value_extract_xy_negative_values);
+    RUN_TEST(test_value_extract_xy_decimal_values);
+    RUN_TEST(test_value_extract_xy_fails_on_word);
+    RUN_TEST(test_value_extract_xy_fails_on_empty_list);
+    RUN_TEST(test_value_extract_xy_fails_on_single_element_list);
+    RUN_TEST(test_value_extract_xy_fails_on_non_numeric);
+
+    // value_extract_rgb Tests
+    RUN_TEST(test_value_extract_rgb_success);
+    RUN_TEST(test_value_extract_rgb_zero_values);
+    RUN_TEST(test_value_extract_rgb_clamps_negative);
+    RUN_TEST(test_value_extract_rgb_clamps_above_255);
+    RUN_TEST(test_value_extract_rgb_fails_on_word);
+    RUN_TEST(test_value_extract_rgb_fails_on_empty_list);
+    RUN_TEST(test_value_extract_rgb_fails_on_two_element_list);
+    RUN_TEST(test_value_extract_rgb_fails_on_non_numeric);
 
     return UNITY_END();
 }

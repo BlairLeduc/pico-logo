@@ -13,6 +13,7 @@
 #include "properties.h"
 #include "error.h"
 #include "eval.h"
+#include "format.h"
 #include "lexer.h"
 #include "devices/io.h"
 #include <stdio.h>
@@ -28,19 +29,14 @@
 // open file - opens file for read/write, creates if doesn't exist
 static Result prim_open(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-
-    if (args[0].type != VALUE_WORD)
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "open", value_to_string(args[0]));
-    }
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD(args[0]);
 
     const char *pathname = mem_word_ptr(args[0].as.node);
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "open", NULL);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
     }
 
     // Check if file is already open
@@ -66,19 +62,14 @@ static Result prim_open(Evaluator *eval, int argc, Value *args)
 // close file - closes the named file
 static Result prim_close(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-
-    if (args[0].type != VALUE_WORD)
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "close", value_to_string(args[0]));
-    }
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD(args[0]);
 
     const char *pathname = mem_word_ptr(args[0].as.node);
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "close", NULL);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
     }
 
     // Check if file is open
@@ -94,9 +85,7 @@ static Result prim_close(Evaluator *eval, int argc, Value *args)
 // closeall - closes all open files (not dribble)
 static Result prim_closeall(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     LogoIO *io = primitives_get_io();
     if (io)
@@ -110,13 +99,12 @@ static Result prim_closeall(Evaluator *eval, int argc, Value *args)
 // setread file - sets current reader to file (empty list for keyboard)
 static Result prim_setread(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
 
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "setread", NULL);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
     }
 
     // Empty list means reset to keyboard
@@ -128,7 +116,7 @@ static Result prim_setread(Evaluator *eval, int argc, Value *args)
 
     if (args[0].type != VALUE_WORD)
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setread", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
 
     const char *pathname = mem_word_ptr(args[0].as.node);
@@ -147,13 +135,12 @@ static Result prim_setread(Evaluator *eval, int argc, Value *args)
 // setwrite file - sets current writer to file (empty list for screen)
 static Result prim_setwrite(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
 
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "setwrite", NULL);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
     }
 
     // Empty list means reset to screen
@@ -165,7 +152,7 @@ static Result prim_setwrite(Evaluator *eval, int argc, Value *args)
 
     if (args[0].type != VALUE_WORD)
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setwrite", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
 
     const char *pathname = mem_word_ptr(args[0].as.node);
@@ -184,9 +171,7 @@ static Result prim_setwrite(Evaluator *eval, int argc, Value *args)
 // reader - outputs the current reader name (empty list for keyboard)
 static Result prim_reader(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     LogoIO *io = primitives_get_io();
     if (!io)
@@ -206,9 +191,7 @@ static Result prim_reader(Evaluator *eval, int argc, Value *args)
 // writer - outputs the current writer name (empty list for screen)
 static Result prim_writer(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     LogoIO *io = primitives_get_io();
     if (!io)
@@ -228,9 +211,7 @@ static Result prim_writer(Evaluator *eval, int argc, Value *args)
 // allopen - outputs a list of all open files
 static Result prim_allopen(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     LogoIO *io = primitives_get_io();
     if (!io)
@@ -259,9 +240,7 @@ static Result prim_allopen(Evaluator *eval, int argc, Value *args)
 // readpos - outputs the current read position in the current file
 static Result prim_readpos(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     LogoIO *io = primitives_get_io();
     if (!io || !io->reader)
@@ -287,18 +266,12 @@ static Result prim_readpos(Evaluator *eval, int argc, Value *args)
 // setreadpos integer - sets the read position in the current file
 static Result prim_setreadpos(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-
-    float pos_f;
-    if (!value_to_number(args[0], &pos_f))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setreadpos", value_to_string(args[0]));
-    }
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_NUMBER(args[0], pos_f);
     long pos = (long)pos_f;
     if (pos < 0)
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setreadpos", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
 
     LogoIO *io = primitives_get_io();
@@ -324,9 +297,7 @@ static Result prim_setreadpos(Evaluator *eval, int argc, Value *args)
 // writepos - outputs the current write position in the current file
 static Result prim_writepos(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     LogoIO *io = primitives_get_io();
     if (!io || !io->writer)
@@ -352,18 +323,12 @@ static Result prim_writepos(Evaluator *eval, int argc, Value *args)
 // setwritepos integer - sets the write position in the current file
 static Result prim_setwritepos(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-
-    float pos_f;
-    if (!value_to_number(args[0], &pos_f))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setwritepos", value_to_string(args[0]));
-    }
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_NUMBER(args[0], pos_f);
     long pos = (long)pos_f;
     if (pos < 0)
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setwritepos", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
 
     LogoIO *io = primitives_get_io();
@@ -390,19 +355,14 @@ static Result prim_setwritepos(Evaluator *eval, int argc, Value *args)
 // The file must be open
 static Result prim_filelen(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-
-    if (args[0].type != VALUE_WORD)
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "filelen", value_to_string(args[0]));
-    }
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD(args[0]);
 
     const char *pathname = mem_word_ptr(args[0].as.node);
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "filelen", NULL);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
     }
 
     // Find the open stream
@@ -424,19 +384,14 @@ static Result prim_filelen(Evaluator *eval, int argc, Value *args)
 // dribble file - starts dribbling output to file
 static Result prim_dribble(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-
-    if (args[0].type != VALUE_WORD)
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "dribble", value_to_string(args[0]));
-    }
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD(args[0]);
 
     const char *pathname = mem_word_ptr(args[0].as.node);
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "dribble", NULL);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
     }
 
     // Check if already dribbling
@@ -456,9 +411,7 @@ static Result prim_dribble(Evaluator *eval, int argc, Value *args)
 // nodribble - stops dribbling
 static Result prim_nodribble(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     LogoIO *io = primitives_get_io();
     if (io)
@@ -515,7 +468,7 @@ static Result prim_files(Evaluator *eval, int argc, Value *args)
     {
         if (!value_is_word(args[0]))
         {
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "files", value_to_string(args[0]));
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
         }
         filter = mem_word_ptr(args[0].as.node);
     }
@@ -546,9 +499,7 @@ static Result prim_files(Evaluator *eval, int argc, Value *args)
 // directories - outputs a list of directory names in the current directory
 static Result prim_directories(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     LogoIO *io = primitives_get_io();
     if (!io)
@@ -617,9 +568,7 @@ static int catalog_compare(const void *a, const void *b)
 // catalog - prints a list of files and directories, sorted alphabetically
 static Result prim_catalog(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     LogoIO *io = primitives_get_io();
     if (!io)
@@ -684,19 +633,14 @@ static Result prim_catalog(Evaluator *eval, int argc, Value *args)
 // Sets the file prefix
 static Result prim_setprefix(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-
-    if (args[0].type != VALUE_WORD)
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setprefix", value_to_string(args[0]));
-    }
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD(args[0]);
 
     const char *prefix = mem_word_ptr(args[0].as.node);
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "setprefix", NULL);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
     }
 
     // Check if the directory exists
@@ -774,9 +718,7 @@ static Result prim_setprefix(Evaluator *eval, int argc, Value *args)
 // Gets the file prefix
 static Result prim_getprefix(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     LogoIO *io = primitives_get_io();
     if (!io)
@@ -790,19 +732,14 @@ static Result prim_getprefix(Evaluator *eval, int argc, Value *args)
 // Erase the file
 static Result prim_erase_file(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-
-    if (args[0].type != VALUE_WORD)
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "erasefile", value_to_string(args[0]));
-    }
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD(args[0]);
 
     const char *filename = mem_word_ptr(args[0].as.node);
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "erasefile", NULL);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
     }
 
     if (!logo_io_file_delete(io, filename))
@@ -815,19 +752,14 @@ static Result prim_erase_file(Evaluator *eval, int argc, Value *args)
 // Erase the directory
 static Result prim_erase_directory(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-
-    if (args[0].type != VALUE_WORD)
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "erasedirectory", value_to_string(args[0]));
-    }
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD(args[0]);
 
     const char *dirname = mem_word_ptr(args[0].as.node);
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "erasedirectory", NULL);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
     }
 
     if (!logo_io_dir_delete(io, dirname))
@@ -840,17 +772,13 @@ static Result prim_erase_directory(Evaluator *eval, int argc, Value *args)
 // Check if files exists
 static Result prim_filep(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    if (args[0].type != VALUE_WORD)
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "file?", value_to_string(args[0]));
-    }
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD(args[0]);
     const char *filename = mem_word_ptr(args[0].as.node);
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "file?", NULL);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
     }
 
     if (logo_io_file_exists(io, filename))
@@ -863,17 +791,13 @@ static Result prim_filep(Evaluator *eval, int argc, Value *args)
 // Check if directory exists
 static Result prim_dirp(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    if (args[0].type != VALUE_WORD)
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "dir?", value_to_string(args[0]));
-    }
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD(args[0]);
     const char *dirname = mem_word_ptr(args[0].as.node);
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "dir?", NULL);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
     }
 
     if (logo_io_dir_exists(io, dirname))
@@ -886,23 +810,16 @@ static Result prim_dirp(Evaluator *eval, int argc, Value *args)
 // Rename a file or directory
 static Result prim_rename(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    if (args[0].type != VALUE_WORD)
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "rename", value_to_string(args[0]));
-    }
-    if (args[1].type != VALUE_WORD)
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "rename", value_to_string(args[1]));
-    }
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD(args[0]);
+    REQUIRE_WORD(args[1]);
 
     const char *old_name = mem_word_ptr(args[0].as.node);
     const char *new_name = mem_word_ptr(args[1].as.node);
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "rename", NULL);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
     }
 
     if (!logo_io_rename(io, old_name, new_name))
@@ -915,18 +832,14 @@ static Result prim_rename(Evaluator *eval, int argc, Value *args)
 // Create a new directory
 static Result prim_createdir(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    if (args[0].type != VALUE_WORD)
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "createdir", value_to_string(args[0]));
-    }
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD(args[0]);
 
     const char *filename = mem_word_ptr(args[0].as.node);
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "createdir", NULL);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
     }
 
     if (!logo_io_dir_create(io, filename))
@@ -986,19 +899,15 @@ static bool line_is_end(const char *line)
 // load pathname - loads and executes file contents
 static Result prim_load(Evaluator *eval, int argc, Value *args)
 {
-    (void)argc;
-
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "load", value_to_string(args[0]));
-    }
+    UNUSED(argc);
+    REQUIRE_WORD(args[0]);
 
     const char *pathname = mem_word_ptr(args[0].as.node);
 
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "load", NULL);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
     }
 
     // Check if file exists (logo_io_file_exists resolves path internally)
@@ -1178,242 +1087,30 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
 // Save helper functions
 //==========================================================================
 
-// Write a string to the current writer
-static void save_write(const char *str)
+// Output callback for file saving (always succeeds since logo_io_write handles errors)
+static bool save_output(void *ctx, const char *str)
 {
+    (void)ctx;
     LogoIO *io = primitives_get_io();
     if (io)
     {
         logo_io_write(io, str);
     }
-}
-
-// Write a newline
-static void save_newline(void)
-{
-    save_write("\n");
-}
-
-// Print a procedure body element (handles quoted words, etc.)
-static void save_body_element(Node elem)
-{
-    if (mem_is_word(elem))
-    {
-        save_write(mem_word_ptr(elem));
-    }
-    else if (mem_is_list(elem))
-    {
-        save_write("[");
-        bool first = true;
-        Node curr = elem;
-        while (!mem_is_nil(curr))
-        {
-            if (!first)
-                save_write(" ");
-            first = false;
-            save_body_element(mem_car(curr));
-            curr = mem_cdr(curr);
-        }
-        save_write("]");
-    }
-}
-
-// Save procedure title line: to name :param1 :param2 ...
-static void save_procedure_title(UserProcedure *proc)
-{
-    save_write("to ");
-    save_write(proc->name);
-    for (int i = 0; i < proc->param_count; i++)
-    {
-        save_write(" :");
-        save_write(proc->params[i]);
-    }
-    save_newline();
-}
-
-// Save full procedure definition
-static void save_procedure_definition(UserProcedure *proc)
-{
-    save_procedure_title(proc);
-
-    // Body is now a list of line-lists: [[line1-tokens] [line2-tokens] ...]
-    Node curr_line = proc->body;
-    
-    // Track cumulative bracket depth across lines for indentation
-    int bracket_depth = 0;
-    
-    while (!mem_is_nil(curr_line))
-    {
-        Node line = mem_car(curr_line);
-        Node tokens = line;
-        
-        // Handle the list type marker
-        if (NODE_GET_TYPE(line) == NODE_TYPE_LIST)
-        {
-            tokens = NODE_MAKE_LIST(NODE_GET_INDEX(line));
-        }
-        
-        // Count leading closing brackets to reduce indent for this line
-        Node peek = tokens;
-        while (!mem_is_nil(peek))
-        {
-            Node elem = mem_car(peek);
-            if (mem_is_word(elem) && strcmp(mem_word_ptr(elem), "]") == 0 && bracket_depth > 0)
-            {
-                bracket_depth--;
-            }
-            else
-            {
-                break;  // Stop at first non-] token
-            }
-            peek = mem_cdr(peek);
-        }
-        
-        // Print base indent (2 spaces for procedure body)
-        save_write("  ");
-        
-        // Add extra indentation based on cumulative bracket depth
-        for (int i = 0; i < bracket_depth; i++)
-        {
-            save_write("  ");
-        }
-        
-        while (!mem_is_nil(tokens))
-        {
-            Node elem = mem_car(tokens);
-            
-            save_body_element(elem);
-            
-            // Track brackets
-            if (mem_is_word(elem))
-            {
-                const char *word = mem_word_ptr(elem);
-                if (strcmp(word, "[") == 0)
-                {
-                    bracket_depth++;
-                }
-                else if (strcmp(word, "]") == 0 && bracket_depth > 0)
-                {
-                    bracket_depth--;
-                }
-            }
-            
-            // Add space between elements on same line
-            Node next = mem_cdr(tokens);
-            if (!mem_is_nil(next))
-            {
-                save_write(" ");
-            }
-            tokens = next;
-        }
-        
-        save_newline();
-        curr_line = mem_cdr(curr_line);
-    }
-    
-    save_write("end");
-    save_newline();
-}
-
-// Save a variable and its value
-static void save_variable(const char *name, Value value)
-{
-    char buf[64];
-    save_write("make \"");
-    save_write(name);
-    save_write(" ");
-
-    switch (value.type)
-    {
-    case VALUE_NUMBER:
-        format_number(buf, sizeof(buf), value.as.number);
-        save_write(buf);
-        break;
-    case VALUE_WORD:
-        save_write("\"");
-        save_write(mem_word_ptr(value.as.node));
-        break;
-    case VALUE_LIST:
-        save_write("[");
-        {
-            bool first = true;
-            Node curr = value.as.node;
-            while (!mem_is_nil(curr))
-            {
-                if (!first)
-                    save_write(" ");
-                first = false;
-                save_body_element(mem_car(curr));
-                curr = mem_cdr(curr);
-            }
-        }
-        save_write("]");
-        break;
-    default:
-        break;
-    }
-    save_newline();
-}
-
-// Save a property as pprop command
-static void save_property(const char *name, const char *property, Value value)
-{
-    char buf[64];
-    save_write("pprop \"");
-    save_write(name);
-    save_write(" \"");
-    save_write(property);
-    save_write(" ");
-
-    switch (value.type)
-    {
-    case VALUE_NUMBER:
-        format_number(buf, sizeof(buf), value.as.number);
-        save_write(buf);
-        break;
-    case VALUE_WORD:
-        save_write("\"");
-        save_write(mem_word_ptr(value.as.node));
-        break;
-    case VALUE_LIST:
-        save_write("[");
-        {
-            bool first = true;
-            Node curr = value.as.node;
-            while (!mem_is_nil(curr))
-            {
-                if (!first)
-                    save_write(" ");
-                first = false;
-                save_body_element(mem_car(curr));
-                curr = mem_cdr(curr);
-            }
-        }
-        save_write("]");
-        break;
-    default:
-        break;
-    }
-    save_newline();
+    return true;
 }
 
 // save pathname - saves all unburied procedures, variables, and properties
 static Result prim_save(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "save", value_to_string(args[0]));
-    }
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD(args[0]);
 
     const char *pathname = mem_word_ptr(args[0].as.node);
 
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "save", NULL);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
     }
 
     // Check if file already exists (logo_io_file_exists resolves path internally)
@@ -1440,8 +1137,8 @@ static Result prim_save(Evaluator *eval, int argc, Value *args)
         UserProcedure *proc = proc_get_by_index(i);
         if (proc && !proc->buried)
         {
-            save_procedure_definition(proc);
-            save_newline();
+            format_procedure_definition(save_output, NULL, proc);
+            save_output(NULL, "\n");
         }
     }
 
@@ -1453,7 +1150,7 @@ static Result prim_save(Evaluator *eval, int argc, Value *args)
         Value value;
         if (var_get_global_by_index(i, false, &name, &value))
         {
-            save_variable(name, value);
+            format_variable(save_output, NULL, name, value);
         }
     }
 
@@ -1465,34 +1162,7 @@ static Result prim_save(Evaluator *eval, int argc, Value *args)
         if (prop_get_name_by_index(i, &name))
         {
             Node list = prop_get_list(name);
-            // Property list is [prop1 val1 prop2 val2 ...]
-            Node curr = list;
-            while (!mem_is_nil(curr) && !mem_is_nil(mem_cdr(curr)))
-            {
-                Node prop_node = mem_car(curr);
-                Node val_node = mem_car(mem_cdr(curr));
-
-                if (mem_is_word(prop_node))
-                {
-                    const char *prop = mem_word_ptr(prop_node);
-                    Value val;
-                    if (mem_is_word(val_node))
-                    {
-                        val = value_word(val_node);
-                    }
-                    else if (mem_is_list(val_node))
-                    {
-                        val = value_list(val_node);
-                    }
-                    else
-                    {
-                        val = value_list(NODE_NIL);
-                    }
-                    save_property(name, prop, val);
-                }
-
-                curr = mem_cdr(mem_cdr(curr));
-            }
+            format_property_list(save_output, NULL, name, list);
         }
     }
 
@@ -1507,21 +1177,15 @@ static Result prim_save(Evaluator *eval, int argc, Value *args)
 // Save specified procedure(s) and all unburied variables and properties
 static Result prim_savel(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-
-    // Second argument must be the pathname (a word)
-    if (!value_is_word(args[1]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "savel", value_to_string(args[1]));
-    }
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD(args[1]);
 
     const char *pathname = mem_word_ptr(args[1].as.node);
 
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "savel", NULL);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
     }
 
     // Check if file already exists
@@ -1558,7 +1222,7 @@ static Result prim_savel(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "savel", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
 
     // Open the file for writing
@@ -1579,8 +1243,8 @@ static Result prim_savel(Evaluator *eval, int argc, Value *args)
         UserProcedure *proc = proc_find(name);
         if (proc)
         {
-            save_procedure_definition(proc);
-            save_newline();
+            format_procedure_definition(save_output, NULL, proc);
+            save_output(NULL, "\n");
         }
     }
     else if (value_is_list(args[0]))
@@ -1595,8 +1259,8 @@ static Result prim_savel(Evaluator *eval, int argc, Value *args)
                 UserProcedure *proc = proc_find(name);
                 if (proc)
                 {
-                    save_procedure_definition(proc);
-                    save_newline();
+                    format_procedure_definition(save_output, NULL, proc);
+                    save_output(NULL, "\n");
                 }
             }
             curr = mem_cdr(curr);
@@ -1611,7 +1275,7 @@ static Result prim_savel(Evaluator *eval, int argc, Value *args)
         Value value;
         if (var_get_global_by_index(i, false, &name, &value))
         {
-            save_variable(name, value);
+            format_variable(save_output, NULL, name, value);
         }
     }
 
@@ -1623,34 +1287,7 @@ static Result prim_savel(Evaluator *eval, int argc, Value *args)
         if (prop_get_name_by_index(i, &name))
         {
             Node list = prop_get_list(name);
-            // Property list is [prop1 val1 prop2 val2 ...]
-            Node curr = list;
-            while (!mem_is_nil(curr) && !mem_is_nil(mem_cdr(curr)))
-            {
-                Node prop_node = mem_car(curr);
-                Node val_node = mem_car(mem_cdr(curr));
-
-                if (mem_is_word(prop_node))
-                {
-                    const char *prop = mem_word_ptr(prop_node);
-                    Value val;
-                    if (mem_is_word(val_node))
-                    {
-                        val = value_word(val_node);
-                    }
-                    else if (mem_is_list(val_node))
-                    {
-                        val = value_list(val_node);
-                    }
-                    else
-                    {
-                        val = value_list(NODE_NIL);
-                    }
-                    save_property(name, prop, val);
-                }
-
-                curr = mem_cdr(mem_cdr(curr));
-            }
+            format_property_list(save_output, NULL, name, list);
         }
     }
 
@@ -1664,26 +1301,21 @@ static Result prim_savel(Evaluator *eval, int argc, Value *args)
 // savepic pathname - saves the graphics screen as a BMP file
 static Result prim_savepic(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "savepic", value_to_string(args[0]));
-    }
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD(args[0]);
 
     const char *pathname = mem_word_ptr(args[0].as.node);
 
     LogoIO *io = primitives_get_io();
     if (!io || !io->console || !io->console->turtle)
     {
-        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "savepic", NULL);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
     }
 
     const LogoConsoleTurtle *turtle = io->console->turtle;
     if (!turtle->gfx_save)
     {
-        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "savepic", NULL);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
     }
 
     // Check if file already exists (logo_io_file_exists resolves path internally)
@@ -1713,26 +1345,21 @@ static Result prim_savepic(Evaluator *eval, int argc, Value *args)
 // loadpic pathname - loads an 8-bit indexed color BMP file to the graphics screen
 static Result prim_loadpic(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "loadpic", value_to_string(args[0]));
-    }
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD(args[0]);
 
     const char *pathname = mem_word_ptr(args[0].as.node);
 
     LogoIO *io = primitives_get_io();
     if (!io || !io->console || !io->console->turtle)
     {
-        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "loadpic", NULL);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
     }
 
     const LogoConsoleTurtle *turtle = io->console->turtle;
     if (!turtle->gfx_load)
     {
-        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "loadpic", NULL);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
     }
 
     // Check if file exists (logo_io_file_exists resolves path internally)
@@ -1772,20 +1399,15 @@ static Result prim_loadpic(Evaluator *eval, int argc, Value *args)
 // Errors if the file is already open.
 static Result prim_pofile(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "pofile", value_to_string(args[0]));
-    }
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD(args[0]);
 
     const char *pathname = mem_word_ptr(args[0].as.node);
 
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "pofile", NULL);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
     }
 
     // Check if file is already open - this is an error per the spec

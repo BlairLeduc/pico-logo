@@ -9,6 +9,7 @@
 
 #include "memory.h"
 #include <stdbool.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C"
@@ -106,12 +107,16 @@ extern "C"
     // Get the node from a word or list value
     Node value_to_node(Value v);
 
+    // Extract [x y] position list into two floats
+    // Returns true on success, sets *error on failure
+    bool value_extract_xy(Value list, float *x, float *y, Result *error);
+
+    // Extract [r g b] RGB list into three uint8 values (clamped to 0-255)
+    // Returns true on success, sets *error on failure
+    bool value_extract_rgb(Value list, uint8_t *r, uint8_t *g, uint8_t *b, Result *error);
+
     // Convert value to string for error messages (returns static buffer)
     const char *value_to_string(Value v);
-
-    // Format a number to a buffer, removing trailing zeros
-    // Returns the number of characters written (excluding null terminator)
-    int format_number(char *buf, size_t size, float n);
 
     //==========================================================================
     // Result Constructors
@@ -132,6 +137,10 @@ extern "C"
 
     // Set caller context on an existing error result
     Result result_error_in(Result r, const char *caller);
+
+    // Set error_proc on an error result if not already set
+    // Returns the result (possibly modified) for chaining
+    Result result_set_error_proc(Result r, const char *proc);
 
     //==========================================================================
     // Result Predicates

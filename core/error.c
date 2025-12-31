@@ -142,10 +142,19 @@ const char *error_format(Result r)
         }
         break;
         
+    case ERR_NO_VALUE:
+        // For ERR_NO_VALUE, the variable name is in error_arg
+        if (r.error_arg)
+        {
+            snprintf(buf, sizeof(buf), tmpl, r.error_arg);
+            append_caller_suffix(buf, sizeof(buf), r.error_caller);
+            return buf;
+        }
+        break;
+        
     case ERR_DONT_KNOW_HOW:
     case ERR_NOT_PROCEDURE:
     case ERR_UNDEFINED:
-    case ERR_NO_VALUE:
     case ERR_NOT_WORD:
     case ERR_IS_PRIMITIVE:
     case ERR_NOT_ENOUGH_INPUTS:
@@ -194,4 +203,39 @@ const char *error_format(Result r)
     
     // Fallback: return template as-is (may have unsubstituted %s)
     return tmpl;
+}
+
+//==========================================================================
+// Caught Error Info (for 'error' primitive)
+//==========================================================================
+
+static CaughtError caught_error = {false, 0, "", NULL, NULL};
+
+void error_set_caught(const Result *r)
+{
+    if (r && r->status == RESULT_ERROR)
+    {
+        caught_error.valid = true;
+        caught_error.code = r->error_code;
+        // Use error_format to get the fully formatted error message
+        const char *formatted = error_format(*r);
+        strncpy(caught_error.message, formatted, sizeof(caught_error.message) - 1);
+        caught_error.message[sizeof(caught_error.message) - 1] = '\0';
+        caught_error.proc = r->error_proc;
+        caught_error.caller = r->error_caller;
+    }
+}
+
+void error_clear_caught(void)
+{
+    caught_error.valid = false;
+    caught_error.code = 0;
+    caught_error.message[0] = '\0';
+    caught_error.proc = NULL;
+    caught_error.caller = NULL;
+}
+
+const CaughtError *error_get_caught(void)
+{
+    return caught_error.valid ? &caught_error : NULL;
 }

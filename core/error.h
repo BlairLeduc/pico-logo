@@ -75,6 +75,28 @@ extern "C"
     // Get raw error message template by code
     const char *error_message(int code);
 
+    //==========================================================================
+    // Caught Error Info (for 'error' primitive)
+    //==========================================================================
+
+    // Structure to store information about the last caught error
+    typedef struct {
+        bool valid;           // true if there is a caught error
+        int code;             // error code
+        char message[256];    // formatted error message
+        const char *proc;     // primitive that caused the error
+        const char *caller;   // procedure that called the primitive
+    } CaughtError;
+
+    // Set caught error info from a Result (called by catch "error)
+    void error_set_caught(const Result *r);
+
+    // Clear caught error info (for testing/reset)
+    void error_clear_caught(void);
+
+    // Get pointer to caught error info (returns NULL if no error)
+    const CaughtError *error_get_caught(void);
+
 #ifdef __cplusplus
 }
 #endif

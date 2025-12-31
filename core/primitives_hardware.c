@@ -8,6 +8,7 @@
 #include "primitives.h"
 #include "procedures.h"
 #include "memory.h"
+#include "format.h"
 #include "error.h"
 #include "eval.h"
 #include "devices/io.h"
@@ -17,9 +18,7 @@
 // batteryLevel
 static Result prim_battery_level(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     int level = -1;
     bool charging = false;
@@ -50,9 +49,7 @@ static Result prim_battery_level(Evaluator *eval, int argc, Value *args)
 
 static Result prim_poweroff(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     LogoIO *io = primitives_get_io();
     if (io && io->hardware && io->hardware->ops && io->hardware->ops->power_off)
@@ -70,7 +67,7 @@ static Result prim_poweroff(Evaluator *eval, int argc, Value *args)
             }
         }
     }
-    return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, ".poweroff", NULL);
+    return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
 }
 
 // toot duration frequency
@@ -80,22 +77,22 @@ static Result prim_poweroff(Evaluator *eval, int argc, Value *args)
 // Frequency is in Hz (131 to 1976).
 static Result prim_toot(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
+    UNUSED(eval);
 
     // Validate argument count (2 or 3)
     if (argc < 2 || argc > 3)
     {
         if (argc < 2)
         {
-            return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "toot", NULL);
+            return result_error_arg(ERR_NOT_ENOUGH_INPUTS, NULL, NULL);
         }
-        return result_error_arg(ERR_TOO_MANY_INPUTS, "toot", NULL);
+        return result_error_arg(ERR_TOO_MANY_INPUTS, NULL, NULL);
     }
 
     // Get duration (first argument)
     if (args[0].type != VALUE_NUMBER)
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "toot", 
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, 
             args[0].type == VALUE_WORD ? mem_word_ptr(args[0].as.node) : "[]");
     }
     int duration_ms = (int)args[0].as.number;
@@ -103,7 +100,7 @@ static Result prim_toot(Evaluator *eval, int argc, Value *args)
     {
         char buf[32];
         snprintf(buf, sizeof(buf), "%d", duration_ms);
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "toot", buf);
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, buf);
     }
 
     // Get frequency/frequencies
@@ -114,7 +111,7 @@ static Result prim_toot(Evaluator *eval, int argc, Value *args)
         // Single frequency for both channels
         if (args[1].type != VALUE_NUMBER)
         {
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "toot", 
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, 
                 args[1].type == VALUE_WORD ? mem_word_ptr(args[1].as.node) : "[]");
         }
         int freq = (int)args[1].as.number;
@@ -122,7 +119,7 @@ static Result prim_toot(Evaluator *eval, int argc, Value *args)
         {
             char buf[32];
             snprintf(buf, sizeof(buf), "%d", freq);
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "toot", buf);
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, buf);
         }
         left_freq = right_freq = (uint32_t)freq;
     }
@@ -131,12 +128,12 @@ static Result prim_toot(Evaluator *eval, int argc, Value *args)
         // Separate frequencies for left and right channels
         if (args[1].type != VALUE_NUMBER)
         {
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "toot", 
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, 
                 args[1].type == VALUE_WORD ? mem_word_ptr(args[1].as.node) : "[]");
         }
         if (args[2].type != VALUE_NUMBER)
         {
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "toot", 
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, 
                 args[2].type == VALUE_WORD ? mem_word_ptr(args[2].as.node) : "[]");
         }
         int lfreq = (int)args[1].as.number;
@@ -145,13 +142,13 @@ static Result prim_toot(Evaluator *eval, int argc, Value *args)
         {
             char buf[32];
             snprintf(buf, sizeof(buf), "%d", lfreq);
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "toot", buf);
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, buf);
         }
         if (rfreq < 0)
         {
             char buf[32];
             snprintf(buf, sizeof(buf), "%d", rfreq);
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "toot", buf);
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, buf);
         }
         left_freq = (uint32_t)lfreq;
         right_freq = (uint32_t)rfreq;

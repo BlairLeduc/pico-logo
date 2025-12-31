@@ -293,6 +293,10 @@ static Result eval_primary(Evaluator *eval)
             const Primitive *prim = primitive_find(name_buf);
             if (prim)
             {
+                // Intern the user's name for error messages
+                Node user_name_atom = mem_atom(next.start, next.length);
+                const char *user_name = mem_word_ptr(user_name_atom);
+                
                 advance(eval); // consume procedure name
                 
                 // Greedily collect all arguments until )
@@ -314,7 +318,7 @@ static Result eval_primary(Evaluator *eval)
                     if (arg.status == RESULT_ERROR)
                     {
                         eval->paren_depth--;
-                        return arg;
+                        return result_set_error_proc(arg, user_name);
                     }
                     if (arg.status != RESULT_OK)
                         break;
@@ -329,7 +333,9 @@ static Result eval_primary(Evaluator *eval)
                 }
                 eval->paren_depth--;
                 
-                return prim->func(eval, argc, args);
+                // Call primitive and set error_proc if needed
+                Result r = prim->func(eval, argc, args);
+                return result_set_error_proc(r, user_name);
             }
         }
         
@@ -388,6 +394,10 @@ static Result eval_primary(Evaluator *eval)
         const Primitive *prim = primitive_find(name_buf);
         if (prim)
         {
+            // Intern the user's name for error messages
+            Node user_name_atom = mem_atom(t.start, t.length);
+            const char *user_name = mem_word_ptr(user_name_atom);
+            
             advance(eval);
             // Collect default number of arguments
             Value args[16]; // Max args
@@ -411,21 +421,22 @@ static Result eval_primary(Evaluator *eval)
                 // Propagate errors and control flow (throw, stop, output)
                 if (arg.status == RESULT_ERROR || arg.status == RESULT_THROW ||
                     arg.status == RESULT_STOP || arg.status == RESULT_OUTPUT)
-                    return arg;
+                    return result_set_error_proc(arg, user_name);
                 if (arg.status != RESULT_OK)
                 {
-                    // Use prim->name since it's a static string
-                    return result_error_arg(ERR_NOT_ENOUGH_INPUTS, prim->name, NULL);
+                    return result_error_arg(ERR_NOT_ENOUGH_INPUTS, user_name, NULL);
                 }
                 args[argc++] = arg.value;
             }
 
             if (argc < prim->default_args)
             {
-                return result_error_arg(ERR_NOT_ENOUGH_INPUTS, prim->name, NULL);
+                return result_error_arg(ERR_NOT_ENOUGH_INPUTS, user_name, NULL);
             }
 
-            return prim->func(eval, argc, args);
+            // Call primitive and set error_proc if needed
+            Result r = prim->func(eval, argc, args);
+            return result_set_error_proc(r, user_name);
         }
 
         // Check for user-defined procedure

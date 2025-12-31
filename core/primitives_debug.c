@@ -33,12 +33,8 @@
 // Set stepped flag on procedure(s)
 static Result prim_step(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "step", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
     
     if (value_is_word(args[0]))
     {
@@ -71,7 +67,7 @@ static Result prim_step(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "step", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return result_none();
@@ -81,12 +77,8 @@ static Result prim_step(Evaluator *eval, int argc, Value *args)
 // Clear stepped flag on procedure(s)
 static Result prim_unstep(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "unstep", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
     
     if (value_is_word(args[0]))
     {
@@ -119,7 +111,7 @@ static Result prim_unstep(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "unstep", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return result_none();
@@ -129,12 +121,8 @@ static Result prim_unstep(Evaluator *eval, int argc, Value *args)
 // Set traced flag on procedure(s)
 static Result prim_trace(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "trace", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
     
     if (value_is_word(args[0]))
     {
@@ -167,7 +155,7 @@ static Result prim_trace(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "trace", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return result_none();
@@ -177,12 +165,8 @@ static Result prim_trace(Evaluator *eval, int argc, Value *args)
 // Clear traced flag on procedure(s)
 static Result prim_untrace(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "untrace", NULL);
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
     
     if (value_is_word(args[0]))
     {
@@ -215,7 +199,7 @@ static Result prim_untrace(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "untrace", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return result_none();

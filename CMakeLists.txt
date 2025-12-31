@@ -57,12 +57,17 @@ if(NOT BUILD_TESTING AND NOT BUILD_FOR_HOST)
 add_library(logo_core
     core/error.c
     core/eval.c
+    core/format.c
     core/lexer.c
     core/memory.c
     core/primitives_arithmetic.c
-    core/primitives_control.c
+    core/primitives_conditionals.c
+    core/primitives_control_flow.c
+    core/primitives_control_reset.c
+    core/primitives_debug_control.c
     core/primitives_debug.c
     core/primitives_editor.c
+    core/primitives_exceptions.c
     core/primitives_files.c
     core/primitives_hardware.c
     core/primitives_logical.c
@@ -186,12 +191,17 @@ if(BUILD_FOR_HOST)
     add_library(logo_core
         core/error.c
         core/eval.c
+        core/format.c
         core/lexer.c
         core/memory.c
         core/primitives_arithmetic.c
-        core/primitives_control.c
+        core/primitives_conditionals.c
+        core/primitives_control_flow.c
+        core/primitives_control_reset.c
+        core/primitives_debug_control.c
         core/primitives_debug.c
         core/primitives_editor.c
+        core/primitives_exceptions.c
         core/primitives_files.c
         core/primitives_hardware.c
         core/primitives_logical.c
@@ -285,12 +295,17 @@ if(BUILD_TESTING)
     add_library(logo_core
         ${CMAKE_CURRENT_SOURCE_DIR}/core/error.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/eval.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/format.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/lexer.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/memory.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_arithmetic.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_control.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_conditionals.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_control_flow.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_control_reset.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_debug_control.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_debug.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_editor.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_exceptions.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_files.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_hardware.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_logical.c

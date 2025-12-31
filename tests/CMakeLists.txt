@@ -2,9 +2,10 @@
 # This file is included by the parent CMakeLists.txt when BUILD_TESTING=ON
 # The parent already defines logo_core_host and logo_devices_host
 
-# Test utilities library (includes mock device and unity)
+# Test utilities library (includes mock device, scaffold, and unity)
 add_library(test_utils
     mock_device.c
+    test_scaffold.c
     unity.c
 )
 
@@ -31,10 +32,14 @@ add_logo_test(test_value)
 add_logo_test(test_eval)
 add_logo_test(test_error)
 add_logo_test(test_mock_device)
+add_logo_test(test_format)
 
 # Primitive tests
 add_logo_test(test_primitives_arithmetic)
-add_logo_test(test_primitives_control)
+add_logo_test(test_primitives_conditionals)
+add_logo_test(test_primitives_control_flow)
+add_logo_test(test_primitives_debug_control)
+add_logo_test(test_primitives_exceptions)
 add_logo_test(test_primitives_editor)
 add_logo_test(test_primitives_logical)
 add_logo_test(test_primitives_variables)

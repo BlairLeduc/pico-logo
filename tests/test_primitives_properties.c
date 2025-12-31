@@ -6,6 +6,7 @@
 #include "test_scaffold.h"
 #include "core/properties.h"
 #include <stdlib.h>
+#include <string.h>
 
 void setUp(void)
 {

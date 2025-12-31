@@ -10,92 +10,32 @@
 #include "memory.h"
 #include "error.h"
 #include "eval.h"
+#include "format.h"
 #include "devices/io.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-static void prop_print(const char *str)
+// Output callback for property list printing (always succeeds)
+static bool prop_output(void *ctx, const char *str)
 {
+    (void)ctx;
     LogoIO *io = primitives_get_io();
     if (io)
     {
         logo_io_write(io, str);
     }
-}
-
-static void prop_newline(void)
-{
-    prop_print("\n");
-}
-
-// Print a value (word, list, or number)
-static void print_value(Value value)
-{
-    char buf[64];
-    
-    switch (value.type)
-    {
-    case VALUE_NUMBER:
-        format_number(buf, sizeof(buf), value.as.number);
-        prop_print(buf);
-        break;
-    case VALUE_WORD:
-        prop_print(mem_word_ptr(value.as.node));
-        break;
-    case VALUE_LIST:
-        prop_print("[");
-        {
-            bool first = true;
-            Node curr = value.as.node;
-            while (!mem_is_nil(curr))
-            {
-                if (!first)
-                    prop_print(" ");
-                first = false;
-                
-                Node elem = mem_car(curr);
-                if (mem_is_word(elem))
-                {
-                    prop_print(mem_word_ptr(elem));
-                }
-                else if (mem_is_list(elem))
-                {
-                    // Nested list - simplified printing
-                    prop_print("[...]");
-                }
-                curr = mem_cdr(curr);
-            }
-        }
-        prop_print("]");
-        break;
-    default:
-        break;
-    }
+    return true;
 }
 
 // pprop name property object
 // Puts a property value on a name's property list
 static Result prim_pprop(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 3)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "pprop", NULL);
-    }
-    
-    // First argument must be a word (the name)
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "pprop", value_to_string(args[0]));
-    }
-    
-    // Second argument must be a word (the property name)
-    if (!value_is_word(args[1]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "pprop", value_to_string(args[1]));
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC(3);
+    REQUIRE_WORD(args[0]);
+    REQUIRE_WORD(args[1]);
     
     const char *name = mem_word_ptr(args[0].as.node);
     const char *property = mem_word_ptr(args[1].as.node);
@@ -110,24 +50,10 @@ static Result prim_pprop(Evaluator *eval, int argc, Value *args)
 // Returns empty list if not found
 static Result prim_gprop(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 2)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "gprop", NULL);
-    }
-    
-    // First argument must be a word (the name)
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "gprop", value_to_string(args[0]));
-    }
-    
-    // Second argument must be a word (the property name)
-    if (!value_is_word(args[1]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "gprop", value_to_string(args[1]));
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC(2);
+    REQUIRE_WORD(args[0]);
+    REQUIRE_WORD(args[1]);
     
     const char *name = mem_word_ptr(args[0].as.node);
     const char *property = mem_word_ptr(args[1].as.node);
@@ -142,18 +68,9 @@ static Result prim_gprop(Evaluator *eval, int argc, Value *args)
 // Returns the entire property list for a name as [prop1 val1 prop2 val2 ...]
 static Result prim_plist(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 1)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "plist", NULL);
-    }
-    
-    // Argument must be a word (the name)
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "plist", value_to_string(args[0]));
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
+    REQUIRE_WORD(args[0]);
     
     const char *name = mem_word_ptr(args[0].as.node);
     
@@ -166,24 +83,10 @@ static Result prim_plist(Evaluator *eval, int argc, Value *args)
 // Removes a property from a name's property list
 static Result prim_remprop(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    
-    if (argc < 2)
-    {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "remprop", NULL);
-    }
-    
-    // First argument must be a word (the name)
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "remprop", value_to_string(args[0]));
-    }
-    
-    // Second argument must be a word (the property name)
-    if (!value_is_word(args[1]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "remprop", value_to_string(args[1]));
-    }
+    UNUSED(eval);
+    REQUIRE_ARGC(2);
+    REQUIRE_WORD(args[0]);
+    REQUIRE_WORD(args[1]);
     
     const char *name = mem_word_ptr(args[0].as.node);
     const char *property = mem_word_ptr(args[1].as.node);
@@ -196,9 +99,7 @@ static Result prim_remprop(Evaluator *eval, int argc, Value *args)
 // pps - print all property lists as pprop commands
 static Result prim_pps(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     int count = prop_name_count();
     for (int i = 0; i < count; i++)
@@ -206,76 +107,8 @@ static Result prim_pps(Evaluator *eval, int argc, Value *args)
         const char *name;
         if (prop_get_name_by_index(i, &name))
         {
-            // Get property list: [prop1 val1 prop2 val2 ...]
             Node list = prop_get_list(name);
-            Node curr = list;
-            
-            // Iterate through pairs
-            while (!mem_is_nil(curr))
-            {
-                Node prop_node = mem_car(curr);
-                curr = mem_cdr(curr);
-                if (mem_is_nil(curr))
-                    break;
-                Node val_node = mem_car(curr);
-                curr = mem_cdr(curr);
-                
-                // Print: pprop "name "property value
-                prop_print("pprop \"");
-                prop_print(name);
-                prop_print(" \"");
-                if (mem_is_word(prop_node))
-                {
-                    prop_print(mem_word_ptr(prop_node));
-                }
-                prop_print(" ");
-                
-                // Print value (could be word, number, or list)
-                if (mem_is_word(val_node))
-                {
-                    // Check if it's a number
-                    const char *str = mem_word_ptr(val_node);
-                    char *endptr;
-                    strtof(str, &endptr);
-                    if (*endptr == '\0' && str[0] != '\0')
-                    {
-                        // It's a number, print without quote
-                        prop_print(str);
-                    }
-                    else
-                    {
-                        // It's a word, print with quote if needed
-                        prop_print(str);
-                    }
-                }
-                else if (mem_is_list(val_node))
-                {
-                    // Print list with brackets
-                    prop_print("[");
-                    bool first = true;
-                    Node inner = val_node;
-                    while (!mem_is_nil(inner))
-                    {
-                        if (!first)
-                            prop_print(" ");
-                        first = false;
-                        Node elem = mem_car(inner);
-                        if (mem_is_word(elem))
-                        {
-                            prop_print(mem_word_ptr(elem));
-                        }
-                        else if (mem_is_list(elem))
-                        {
-                            // Nested list - recursive print would be better
-                            // but keep it simple for now
-                            prop_print("[...]");
-                        }
-                        inner = mem_cdr(inner);
-                    }
-                    prop_print("]");
-                }
-                prop_newline();
-            }
+            format_property_list(prop_output, NULL, name, list);
         }
     }
     
@@ -285,9 +118,7 @@ static Result prim_pps(Evaluator *eval, int argc, Value *args)
 // erprops - erase all properties
 static Result prim_erprops(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
     
     prop_erase_all();
     

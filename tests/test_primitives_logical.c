@@ -80,7 +80,7 @@ void test_and_error_not_bool(void)
     Result r = eval_string("and \"true \"hello");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
     TEST_ASSERT_EQUAL(ERR_NOT_BOOL, r.error_code);
-    TEST_ASSERT_EQUAL_STRING(NULL, r.error_proc);
+    TEST_ASSERT_EQUAL_STRING("and", r.error_proc);
     TEST_ASSERT_EQUAL_STRING("hello", r.error_arg);
 }
 
@@ -142,7 +142,7 @@ void test_or_error_not_bool(void)
     Result r = eval_string("or \"false 42");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
     TEST_ASSERT_EQUAL(ERR_NOT_BOOL, r.error_code);
-    TEST_ASSERT_EQUAL_STRING(NULL, r.error_proc);
+    TEST_ASSERT_EQUAL_STRING("or", r.error_proc);
     TEST_ASSERT_EQUAL_STRING("42", r.error_arg);
 }
 
@@ -183,7 +183,7 @@ void test_not_error_not_bool(void)
     Result r = eval_string("not \"hello");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
     TEST_ASSERT_EQUAL(ERR_NOT_BOOL, r.error_code);
-    TEST_ASSERT_EQUAL_STRING(NULL, r.error_proc);
+    TEST_ASSERT_EQUAL_STRING("not", r.error_proc);
     TEST_ASSERT_EQUAL_STRING("hello", r.error_arg);
 }
 
