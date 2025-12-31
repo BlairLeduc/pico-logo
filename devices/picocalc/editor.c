@@ -1207,6 +1207,14 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                 if (key >= 0x20 && key <= 0x7E) {
                     if (!editor.selecting) {
                         editor_insert_char(key);
+                        // Auto-close brackets and parentheses
+                        if (key == '[') {
+                            editor_insert_char(']');
+                            editor.cursor_pos--;  // Move cursor between the pair
+                        } else if (key == '(') {
+                            editor_insert_char(')');
+                            editor.cursor_pos--;  // Move cursor between the pair
+                        }
                         editor_mark_line_dirty(editor_get_line_at_pos(editor.cursor_pos));
                     }
                 }
