@@ -239,16 +239,38 @@ void test_edns_formats_all_variables(void)
     TEST_ASSERT_NOT_NULL(strstr(editor_input, "make \"varb"));
 }
 
-void test_edit_no_args_uses_empty_buffer(void)
+void test_edit_no_args_preserves_buffer(void)
 {
-    mock_device_clear_editor();
+    // First, edit a procedure to populate the buffer
+    const char *params[] = {};
+    define_proc("spiral", params, 0, "print 1");
     
-    Result r = run_string("(edit)");
+    mock_device_clear_editor();
+    mock_device_set_editor_result(LOGO_EDITOR_CANCEL);  // Cancel to keep buffer
+    
+    Result r = run_string("edit \"spiral");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     TEST_ASSERT_TRUE(mock_device_was_editor_called());
     
+    // Verify the buffer had content from spiral
+    const char *first_input = mock_device_get_editor_input();
+    TEST_ASSERT_NOT_NULL(strstr(first_input, "to spiral"));
+    TEST_ASSERT_NOT_NULL(strstr(first_input, "print 1"));
+    TEST_ASSERT_NOT_NULL(strstr(first_input, "end"));
+    
+    // Now call (edit) with no args - should preserve the buffer
+    mock_device_clear_editor();
+    mock_device_set_editor_result(LOGO_EDITOR_CANCEL);
+    
+    r = run_string("(edit)");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(mock_device_was_editor_called());
+    
+    // Buffer should still have the spiral content
     const char *editor_input = mock_device_get_editor_input();
-    TEST_ASSERT_EQUAL_STRING("", editor_input);
+    TEST_ASSERT_NOT_NULL(strstr(editor_input, "to spiral"));
+    TEST_ASSERT_NOT_NULL(strstr(editor_input, "print 1"));
+    TEST_ASSERT_NOT_NULL(strstr(editor_input, "end"));
 }
 
 void test_edit_runs_regular_commands(void)
@@ -311,6 +333,123 @@ void test_edit_runs_mixed_content(void)
     TEST_ASSERT_TRUE(proc_exists("myproc"));
 }
 
+void test_edall_formats_all_procedures(void)
+{
+    const char *params[] = {};
+    define_proc("proca", params, 0, "print 1");
+    define_proc("procb", params, 0, "print 2");
+    
+    mock_device_clear_editor();
+    
+    run_string("edall");
+    
+    const char *editor_input = mock_device_get_editor_input();
+    TEST_ASSERT_NOT_NULL(strstr(editor_input, "to proca"));
+    TEST_ASSERT_NOT_NULL(strstr(editor_input, "to procb"));
+}
+
+void test_edall_formats_all_variables(void)
+{
+    run_string("make \"vara 1");
+    run_string("make \"varb 2");
+    
+    mock_device_clear_editor();
+    
+    run_string("edall");
+    
+    const char *editor_input = mock_device_get_editor_input();
+    TEST_ASSERT_NOT_NULL(strstr(editor_input, "make \"vara"));
+    TEST_ASSERT_NOT_NULL(strstr(editor_input, "make \"varb"));
+}
+
+void test_edall_formats_procedures_and_variables(void)
+{
+    const char *params[] = {};
+    define_proc("myproc", params, 0, "print 1");
+    run_string("make \"myvar 42");
+    
+    mock_device_clear_editor();
+    
+    run_string("edall");
+    
+    const char *editor_input = mock_device_get_editor_input();
+    TEST_ASSERT_NOT_NULL(strstr(editor_input, "to myproc"));
+    TEST_ASSERT_NOT_NULL(strstr(editor_input, "make \"myvar 42"));
+}
+
+void test_edall_excludes_buried_procedures(void)
+{
+    const char *params[] = {};
+    define_proc("visible", params, 0, "print 1");
+    define_proc("hidden", params, 0, "print 2");
+    run_string("bury \"hidden");
+    
+    mock_device_clear_editor();
+    
+    run_string("edall");
+    
+    const char *editor_input = mock_device_get_editor_input();
+    TEST_ASSERT_NOT_NULL(strstr(editor_input, "to visible"));
+    TEST_ASSERT_NULL(strstr(editor_input, "to hidden"));
+}
+
+void test_edall_excludes_buried_variables(void)
+{
+    run_string("make \"visible 1");
+    run_string("make \"hidden 2");
+    run_string("buryname \"hidden");
+    
+    mock_device_clear_editor();
+    
+    run_string("edall");
+    
+    const char *editor_input = mock_device_get_editor_input();
+    TEST_ASSERT_NOT_NULL(strstr(editor_input, "make \"visible"));
+    TEST_ASSERT_NULL(strstr(editor_input, "make \"hidden"));
+}
+
+void test_edall_formats_property_lists(void)
+{
+    run_string("pprop \"myobj \"color \"red");
+    
+    mock_device_clear_editor();
+    
+    run_string("edall");
+    
+    const char *editor_input = mock_device_get_editor_input();
+    TEST_ASSERT_NOT_NULL(strstr(editor_input, "pprop \"myobj \"color \"red"));
+}
+
+void test_edall_formats_numeric_property_values(void)
+{
+    // Numeric property values should be output without quotes
+    run_string("pprop \"item \"count 42");
+    run_string("pprop \"item \"price 3.14");
+    
+    mock_device_clear_editor();
+    
+    run_string("edall");
+    
+    const char *editor_input = mock_device_get_editor_input();
+    // Numbers should NOT have quotes
+    TEST_ASSERT_NOT_NULL(strstr(editor_input, "pprop \"item \"count 42"));
+    TEST_ASSERT_NOT_NULL(strstr(editor_input, "pprop \"item \"price 3.14"));
+    // Make sure they don't have quotes around the value
+    TEST_ASSERT_NULL(strstr(editor_input, "\"count \"42"));
+    TEST_ASSERT_NULL(strstr(editor_input, "\"price \"3.14"));
+}
+
+void test_edall_empty_workspace(void)
+{
+    mock_device_clear_editor();
+    
+    run_string("edall");
+    
+    TEST_ASSERT_TRUE(mock_device_was_editor_called());
+    const char *editor_input = mock_device_get_editor_input();
+    TEST_ASSERT_EQUAL_STRING("", editor_input);
+}
+
 //==========================================================================
 // Main
 //==========================================================================
@@ -335,7 +474,15 @@ int main(void)
     RUN_TEST(test_edn_list_of_variables);
     RUN_TEST(test_edn_unknown_variable_error);
     RUN_TEST(test_edns_formats_all_variables);
-    RUN_TEST(test_edit_no_args_uses_empty_buffer);
+    RUN_TEST(test_edall_formats_all_procedures);
+    RUN_TEST(test_edall_formats_all_variables);
+    RUN_TEST(test_edall_formats_procedures_and_variables);
+    RUN_TEST(test_edall_excludes_buried_procedures);
+    RUN_TEST(test_edall_excludes_buried_variables);
+    RUN_TEST(test_edall_formats_property_lists);
+    RUN_TEST(test_edall_formats_numeric_property_values);
+    RUN_TEST(test_edall_empty_workspace);
+    RUN_TEST(test_edit_no_args_preserves_buffer);
     RUN_TEST(test_edit_runs_regular_commands);
     RUN_TEST(test_edit_runs_multiple_commands);
     RUN_TEST(test_edit_runs_mixed_content);

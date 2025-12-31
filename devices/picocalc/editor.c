@@ -31,6 +31,9 @@
 #define EDITOR_LEFT_ARROW     30     // Left arrow glyph (content scrolled left)
 #define EDITOR_RIGHT_ARROW    31     // Right arrow glyph (content continues right)
 
+// Tab width for indentation (2 spaces per tab stop)
+#define TAB_WIDTH             2
+
 // Copy buffer size (default 1024 for RP2040, 8192 for RP2350)
 #ifndef LOGO_COPY_BUFFER_SIZE
 #define LOGO_COPY_BUFFER_SIZE 1024
@@ -108,6 +111,8 @@ static void editor_mark_line_dirty(int line_index);
 static void editor_mark_from_line_dirty(int line_index);
 static void editor_mark_all_dirty(void);
 static void editor_update_dirty(void);
+static void editor_decrease_indent(void);
+static void editor_increase_indent(void);
 
 //
 // Draw a string in reverse video at the specified row
@@ -534,6 +539,17 @@ static void editor_position_cursor(void)
     if (screen_row < EDITOR_FIRST_ROW) screen_row = EDITOR_FIRST_ROW;
     if (screen_row > EDITOR_LAST_ROW) screen_row = EDITOR_LAST_ROW;
     
+    // Update cursor character for block cursor style
+    // Get the character at cursor position (or space if at end of content)
+    uint8_t cursor_char = ' ';
+    if (editor.cursor_pos < editor.content_length) {
+        cursor_char = (uint8_t)editor.buffer[editor.cursor_pos];
+        if (cursor_char == '\n') {
+            cursor_char = ' ';  // Show space for newline
+        }
+    }
+    lcd_set_cursor_char(cursor_char);
+    
     screen_txt_set_cursor(screen_col, screen_row);
 }
 
@@ -565,12 +581,12 @@ static void editor_insert_char(char c)
 }
 
 //
-// Insert spaces until the next tab stop (tab stops every 2 columns)
+// Insert spaces until the next tab stop (tab stops every TAB_WIDTH columns)
 //
 static void editor_insert_tab(void)
 {
     int current_col = editor_get_col_at_pos(editor.cursor_pos);
-    int spaces_to_insert = 2 - (current_col % 2);
+    int spaces_to_insert = TAB_WIDTH - (current_col % TAB_WIDTH);
     
     for (int i = 0; i < spaces_to_insert; i++) {
         editor_insert_char(' ');
@@ -578,11 +594,42 @@ static void editor_insert_tab(void)
 }
 
 //
-// Insert a newline at cursor position
+// Insert a newline at cursor position with auto-indentation
+// Also adds extra indentation for unmatched open brackets '[' on current line
 //
 static void editor_new_line(void)
 {
+    // Find the start of the current line
+    int current_line = editor_get_line_at_pos(editor.cursor_pos);
+    int line_start = editor_get_line_start(current_line);
+    
+    // Count leading spaces on the current line
+    int indent_spaces = 0;
+    for (int i = line_start; i < (int)editor.content_length && editor.buffer[i] == ' '; i++) {
+        indent_spaces++;
+    }
+    
+    // Count unmatched open brackets '[' on current line (from line start to cursor)
+    int unmatched_brackets = 0;
+    for (int i = line_start; i < (int)editor.cursor_pos; i++) {
+        if (editor.buffer[i] == '[') {
+            unmatched_brackets++;
+        } else if (editor.buffer[i] == ']') {
+            if (unmatched_brackets > 0) {
+                unmatched_brackets--;
+            }
+        }
+    }
+    
+    // Insert the newline
     editor_insert_char('\n');
+    
+    // Insert the same number of leading spaces plus extra indentation for brackets
+    // Each unmatched bracket adds one tab (TAB_WIDTH spaces)
+    int total_indent = indent_spaces + (unmatched_brackets * TAB_WIDTH);
+    for (int i = 0; i < total_indent; i++) {
+        editor_insert_char(' ');
+    }
 }
 
 //
@@ -610,6 +657,7 @@ static void editor_delete_char(void)
 
 //
 // Delete character before cursor (BACKSPACE key)
+// If only whitespace before cursor on current line, delete to previous tab stop
 //
 static void editor_backspace(void)
 {
@@ -622,8 +670,37 @@ static void editor_backspace(void)
         return;  // Nothing to delete
     }
     
-    editor.cursor_pos--;
-    editor_delete_char();
+    // Find the start of the current line
+    int current_line = editor_get_line_at_pos(editor.cursor_pos);
+    int line_start = editor_get_line_start(current_line);
+    
+    // Check if there's only whitespace between line start and cursor
+    bool only_whitespace = true;
+    for (int i = line_start; i < (int)editor.cursor_pos; i++) {
+        if (editor.buffer[i] != ' ') {
+            only_whitespace = false;
+            break;
+        }
+    }
+    
+    if (only_whitespace && editor.cursor_pos > (size_t)line_start) {
+        // Delete back to previous tab stop (tab stops every TAB_WIDTH columns)
+        int current_col = (int)editor.cursor_pos - line_start;
+        int prev_tab_stop = ((current_col - 1) / TAB_WIDTH) * TAB_WIDTH;
+        int chars_to_delete = current_col - prev_tab_stop;
+        
+        // Delete at least 1 character
+        if (chars_to_delete < 1) chars_to_delete = 1;
+        
+        for (int i = 0; i < chars_to_delete; i++) {
+            editor.cursor_pos--;
+            editor_delete_char();
+        }
+    } else {
+        // Normal backspace - delete one character
+        editor.cursor_pos--;
+        editor_delete_char();
+    }
 }
 
 //
@@ -648,6 +725,7 @@ static void editor_delete_selection(void)
     editor.buffer[editor.content_length] = '\0';
     editor.cursor_pos = sel_start;
     editor.selecting = false;
+    lcd_set_cursor_style(LCD_CURSOR_UNDERLINE);
 }
 
 //
@@ -764,7 +842,25 @@ static void editor_move_cursor_down(void)
 static void editor_move_cursor_home(void)
 {
     int current_line = editor_get_line_at_pos(editor.cursor_pos);
-    editor.cursor_pos = editor_get_line_start(current_line);
+    int line_start = editor_get_line_start(current_line);
+    int line_end = editor_get_line_end(current_line);
+    
+    // Find first non-whitespace character on this line
+    int first_non_ws = line_start;
+    while (first_non_ws < line_end && 
+           (editor.buffer[first_non_ws] == ' ' || editor.buffer[first_non_ws] == '\t')) {
+        first_non_ws++;
+    }
+    
+    // Toggle between first non-whitespace and line start:
+    // - If cursor is at first non-whitespace (or line is all whitespace), go to line start
+    // - Otherwise, go to first non-whitespace
+    if (editor.cursor_pos == first_non_ws || first_non_ws == line_end) {
+        editor.cursor_pos = line_start;
+    } else {
+        editor.cursor_pos = first_non_ws;
+    }
+    
     editor.h_scroll_offset = 0;  // Reset horizontal scroll
 }
 
@@ -811,6 +907,135 @@ static void editor_copy_line(void)
     memcpy(editor.copy_buffer, &editor.buffer[line_start], line_len);
     editor.copy_buffer[line_len] = '\0';
     editor.copy_length = line_len;
+}
+
+//
+// Decrease indent of selected block by one tab stop (Ctrl+,)
+// Removes up to TAB_WIDTH spaces from the beginning of each line in selection
+//
+static void editor_decrease_indent(void)
+{
+    if (!editor.selecting) return;
+    
+    // Get selection bounds
+    size_t sel_start = editor.select_anchor < editor.cursor_pos ? 
+                       editor.select_anchor : editor.cursor_pos;
+    size_t sel_end = editor.select_anchor > editor.cursor_pos ?
+                     editor.select_anchor : editor.cursor_pos;
+    
+    // Find the first and last lines in the selection
+    int first_line = editor_get_line_at_pos(sel_start);
+    int last_line = editor_get_line_at_pos(sel_end > 0 ? sel_end - 1 : 0);
+    
+    // If selection ends exactly at start of a line (not including any content),
+    // don't include that line
+    if (sel_end > 0 && sel_end <= editor.content_length) {
+        int line_start = editor_get_line_start(last_line);
+        if ((size_t)line_start == sel_end) {
+            last_line--;
+        }
+    }
+    
+    // Process each line from last to first (to preserve line numbers)
+    for (int line = last_line; line >= first_line; line--) {
+        int line_start = editor_get_line_start(line);
+        int line_end = editor_get_line_end(line);
+        int line_len = line_end - line_start;
+        
+        // Count leading spaces on this line
+        int leading_spaces = 0;
+        for (int i = 0; i < line_len && editor.buffer[line_start + i] == ' '; i++) {
+            leading_spaces++;
+        }
+        
+        // Calculate how many spaces to remove (up to TAB_WIDTH)
+        int spaces_to_remove = leading_spaces < TAB_WIDTH ? leading_spaces : TAB_WIDTH;
+        
+        if (spaces_to_remove > 0) {
+            // Shift content left to remove spaces
+            memmove(&editor.buffer[line_start],
+                    &editor.buffer[line_start + spaces_to_remove],
+                    editor.content_length - line_start - spaces_to_remove + 1);  // +1 for null
+            
+            editor.content_length -= spaces_to_remove;
+            
+            // Adjust cursor and anchor positions if they're after the removed spaces
+            if (editor.cursor_pos >= (size_t)(line_start + spaces_to_remove)) {
+                editor.cursor_pos -= spaces_to_remove;
+            } else if (editor.cursor_pos > (size_t)line_start) {
+                editor.cursor_pos = line_start;
+            }
+            
+            if (editor.select_anchor >= (size_t)(line_start + spaces_to_remove)) {
+                editor.select_anchor -= spaces_to_remove;
+            } else if (editor.select_anchor > (size_t)line_start) {
+                editor.select_anchor = line_start;
+            }
+        }
+    }
+}
+
+//
+// Increase indent of selected block by one tab stop (Ctrl+.)
+// Adds TAB_WIDTH spaces to the beginning of each line in selection
+//
+static void editor_increase_indent(void)
+{
+    if (!editor.selecting) return;
+    
+    // Get selection bounds
+    size_t sel_start = editor.select_anchor < editor.cursor_pos ? 
+                       editor.select_anchor : editor.cursor_pos;
+    size_t sel_end = editor.select_anchor > editor.cursor_pos ?
+                     editor.select_anchor : editor.cursor_pos;
+    
+    // Find the first and last lines in the selection
+    int first_line = editor_get_line_at_pos(sel_start);
+    int last_line = editor_get_line_at_pos(sel_end > 0 ? sel_end - 1 : 0);
+    
+    // If selection ends exactly at start of a line (not including any content),
+    // don't include that line
+    if (sel_end > 0 && sel_end <= editor.content_length) {
+        int line_start = editor_get_line_start(last_line);
+        if ((size_t)line_start == sel_end) {
+            last_line--;
+        }
+    }
+    
+    // Calculate total spaces needed
+    int lines_to_indent = last_line - first_line + 1;
+    size_t total_spaces = lines_to_indent * TAB_WIDTH;
+    
+    // Check buffer space
+    if (editor.content_length + total_spaces >= editor.buffer_size) {
+        return;  // Not enough space
+    }
+    
+    // Process each line from last to first (to preserve line numbers)
+    for (int line = last_line; line >= first_line; line--) {
+        int line_start = editor_get_line_start(line);
+        
+        // Shift content right to make room for spaces
+        memmove(&editor.buffer[line_start + TAB_WIDTH],
+                &editor.buffer[line_start],
+                editor.content_length - line_start + 1);  // +1 for null
+        
+        // Insert spaces
+        for (int i = 0; i < TAB_WIDTH; i++) {
+            editor.buffer[line_start + i] = ' ';
+        }
+        
+        editor.content_length += TAB_WIDTH;
+        
+        // Adjust cursor and anchor positions if they're at or after the line start
+        if (editor.cursor_pos >= (size_t)line_start) {
+            editor.cursor_pos += TAB_WIDTH;
+        }
+        
+        if (editor.select_anchor >= (size_t)line_start) {
+            editor.select_anchor += TAB_WIDTH;
+        }
+    }
 }
 
 //
@@ -870,6 +1095,9 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
     editor.copy_length = 0;
     editor.in_graphics_preview = false;
     editor.dirty_flags = DIRTY_NONE;
+    
+    // Start with underline cursor (normal editing mode)
+    lcd_set_cursor_style(LCD_CURSOR_UNDERLINE);
     
     // Ensure cursor is on second line if we have "to name\n" template
     // (currently we start at beginning; template-specific positioning can be added here)
@@ -1070,9 +1298,11 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
             case 0x02:  // Ctrl+B - toggle block selection
                 if (editor.selecting) {
                     editor.selecting = false;
+                    lcd_set_cursor_style(LCD_CURSOR_UNDERLINE);
                 } else {
                     editor.selecting = true;
                     editor.select_anchor = editor.cursor_pos;
+                    lcd_set_cursor_style(LCD_CURSOR_BLOCK);
                 }
                 // Selection visual needs redraw - mark the lines involved
                 editor_mark_all_dirty();  // Selection can span multiple lines
@@ -1083,6 +1313,7 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                 if (editor.selecting) {
                     editor_copy_selection();
                     editor.selecting = false;
+                    lcd_set_cursor_style(LCD_CURSOR_UNDERLINE);
                     editor_mark_all_dirty();  // Clear selection highlighting
                 } else {
                     editor_copy_line();
@@ -1123,6 +1354,20 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                     editor_mark_from_line_dirty(editor_get_line_at_pos(editor.cursor_pos));
                 }
                 break;
+            
+            case KEY_CTRL_COMMA:  // Ctrl+, - decrease indent
+                if (editor.selecting) {
+                    editor_decrease_indent();
+                    editor_mark_all_dirty();  // Multiple lines may change
+                }
+                break;
+            
+            case KEY_CTRL_PERIOD:  // Ctrl+. - increase indent
+                if (editor.selecting) {
+                    editor_increase_indent();
+                    editor_mark_all_dirty();  // Multiple lines may change
+                }
+                break;
                 
             case KEY_F1:
                 // Restore editor from graphics preview
@@ -1161,6 +1406,14 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                 if (key >= 0x20 && key <= 0x7E) {
                     if (!editor.selecting) {
                         editor_insert_char(key);
+                        // Auto-close brackets and parentheses
+                        if (key == '[') {
+                            editor_insert_char(']');
+                            editor.cursor_pos--;  // Move cursor between the pair
+                        } else if (key == '(') {
+                            editor_insert_char(')');
+                            editor.cursor_pos--;  // Move cursor between the pair
+                        }
                         editor_mark_line_dirty(editor_get_line_at_pos(editor.cursor_pos));
                     }
                 }

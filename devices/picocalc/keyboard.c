@@ -116,7 +116,7 @@ void keyboard_poll()
                 // If a key is released, we return the key code
                 // This allows us to handle the key release in the main loop
                 uint8_t ch = key_code;
-                if (ch >= 'a' && ch <= 'z') // Ctrl and Shift handling
+                if ((ch >= 'a' && ch <= 'z') || ch == ',' || ch == '.') // Ctrl and Shift handling
                 {
                     if (key_control)
                     {

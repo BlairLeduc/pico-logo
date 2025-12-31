@@ -2,11 +2,12 @@
 //  Pico Logo
 //  Copyright 2025 Blair Leduc. See LICENSE for details.
 //
-//  Editor primitives: edit, edn, edns, editfile
+//  Editor primitives: edit, edall, edn, edns, editfile
 //
 
 #include "primitives.h"
 #include "procedures.h"
+#include "properties.h"
 #include "variables.h"
 #include "memory.h"
 #include "error.h"
@@ -518,16 +519,16 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
 // Edit procedure definition(s)
 static Result prim_edit(Evaluator *eval, int argc, Value *args)
 {
+    if (argc == 0)
+    {
+        // (edit) with no args - use current buffer content as-is
+        return run_editor_and_process(eval, editor_buffer);
+    }
+    
+    // When we have arguments, start fresh
     size_t pos = 0;
     editor_buffer[0] = '\0';
     bool first_proc = true;
-    
-    if (argc == 0)
-    {
-        // (edit) with no args - use current buffer content
-        // For now, just open empty editor
-        return run_editor_and_process(eval, editor_buffer);
-    }
     
     if (value_is_word(args[0]))
     {
@@ -710,6 +711,170 @@ static Result prim_edns(Evaluator *eval, int argc, Value *args)
     return run_editor_and_process(eval, editor_buffer);
 }
 
+// Helper to format a property list element recursively
+static bool format_property_element(char *buffer, size_t buffer_size, size_t *pos, Node elem)
+{
+    if (mem_is_word(elem))
+    {
+        return buffer_append(buffer, buffer_size, pos, mem_word_ptr(elem));
+    }
+    else if (mem_is_list(elem))
+    {
+        if (!buffer_append(buffer, buffer_size, pos, "["))
+            return false;
+        bool first = true;
+        Node curr = elem;
+        while (!mem_is_nil(curr))
+        {
+            if (!first)
+            {
+                if (!buffer_append(buffer, buffer_size, pos, " "))
+                    return false;
+            }
+            first = false;
+            if (!format_property_element(buffer, buffer_size, pos, mem_car(curr)))
+                return false;
+            curr = mem_cdr(curr);
+        }
+        return buffer_append(buffer, buffer_size, pos, "]");
+    }
+    return true;
+}
+
+// Format a property list to buffer (pprop format)
+static bool format_property_list(char *buffer, size_t buffer_size, size_t *pos,
+                                  const char *name, Node list)
+{
+    // Property lists are stored as [prop1 val1 prop2 val2 ...]
+    // We need to output pprop "name "prop1 val1, pprop "name "prop2 val2, etc.
+    Node curr = list;
+    while (!mem_is_nil(curr))
+    {
+        Node prop_node = mem_car(curr);
+        curr = mem_cdr(curr);
+        if (mem_is_nil(curr))
+            break;  // Shouldn't happen - property lists have pairs
+        Node val_node = mem_car(curr);
+        curr = mem_cdr(curr);
+        
+        if (!buffer_append(buffer, buffer_size, pos, "pprop \""))
+            return false;
+        if (!buffer_append(buffer, buffer_size, pos, name))
+            return false;
+        if (!buffer_append(buffer, buffer_size, pos, " \""))
+            return false;
+        if (mem_is_word(prop_node))
+        {
+            if (!buffer_append(buffer, buffer_size, pos, mem_word_ptr(prop_node)))
+                return false;
+        }
+        if (!buffer_append(buffer, buffer_size, pos, " "))
+            return false;
+        
+        // Format the value
+        if (mem_is_word(val_node))
+        {
+            // Check if it's a number (stored as word by prop_value_to_node)
+            const char *str = mem_word_ptr(val_node);
+            char *endptr;
+            strtof(str, &endptr);
+            if (*endptr == '\0' && str[0] != '\0')
+            {
+                // It's a number, output without quote
+                if (!buffer_append(buffer, buffer_size, pos, str))
+                    return false;
+            }
+            else
+            {
+                // It's a word, output with quote
+                if (!buffer_append(buffer, buffer_size, pos, "\""))
+                    return false;
+                if (!buffer_append(buffer, buffer_size, pos, str))
+                    return false;
+            }
+        }
+        else if (mem_is_list(val_node))
+        {
+            if (!format_property_element(buffer, buffer_size, pos, val_node))
+                return false;
+        }
+        
+        if (!buffer_append(buffer, buffer_size, pos, "\n"))
+            return false;
+    }
+    return true;
+}
+
+// edall - edit all procedures and variables (not buried)
+static Result prim_edall(Evaluator *eval, int argc, Value *args)
+{
+    (void)argc;
+    (void)args;
+    
+    size_t pos = 0;
+    editor_buffer[0] = '\0';
+    
+    // Format all procedures (not buried)
+    int proc_cnt = proc_count(true);  // Get ALL, filter by buried in loop
+    bool first_proc = true;
+    for (int i = 0; i < proc_cnt; i++)
+    {
+        UserProcedure *proc = proc_get_by_index(i);
+        if (proc && !proc->buried)
+        {
+            // Add blank line between definitions
+            if (!first_proc)
+            {
+                if (!buffer_append(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, "\n"))
+                {
+                    return result_error_arg(ERR_OUT_OF_SPACE, "edall", NULL);
+                }
+            }
+            first_proc = false;
+            
+            if (!format_procedure_definition(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, proc))
+            {
+                return result_error_arg(ERR_OUT_OF_SPACE, "edall", NULL);
+            }
+        }
+    }
+    
+    // Format all variables (not buried)
+    int var_cnt = var_global_count(false);
+    for (int i = 0; i < var_cnt; i++)
+    {
+        const char *name;
+        Value value;
+        if (var_get_global_by_index(i, false, &name, &value))
+        {
+            if (!format_variable(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, name, value))
+            {
+                return result_error_arg(ERR_OUT_OF_SPACE, "edall", NULL);
+            }
+        }
+    }
+    
+    // Format all property lists
+    int prop_cnt = prop_name_count();
+    for (int i = 0; i < prop_cnt; i++)
+    {
+        const char *name;
+        if (prop_get_name_by_index(i, &name))
+        {
+            Node list = prop_get_list(name);
+            if (!mem_is_nil(list))
+            {
+                if (!format_property_list(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, name, list))
+                {
+                    return result_error_arg(ERR_OUT_OF_SPACE, "edall", NULL);
+                }
+            }
+        }
+    }
+    
+    return run_editor_and_process(eval, editor_buffer);
+}
+
 // editfile pathname - edit a file's contents (not run as Logo code)
 static Result prim_editfile(Evaluator *eval, int argc, Value *args)
 {
@@ -838,6 +1003,7 @@ void primitives_editor_init(void)
 {
     primitive_register("edit", 1, prim_edit);  // 1 argument, (edit) for none
     primitive_register("ed", 1, prim_edit);    // Abbreviation
+    primitive_register("edall", 0, prim_edall);
     primitive_register("edn", 1, prim_edn);
     primitive_register("edns", 0, prim_edns);
     primitive_register("editfile", 1, prim_editfile);

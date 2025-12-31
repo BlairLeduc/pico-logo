@@ -27,6 +27,9 @@
 #define KEY_RETURN          (0x0D)
 #define KEY_SPACE           (0x20)
 
+#define KEY_CTRL_COMMA      (0x0C) // Ctrl + ,
+#define KEY_CTRL_PERIOD     (0x0E) // Ctrl + .
+
 #define KEY_ESC             (0xB1)
 #define KEY_UP              (0xB5)
 #define KEY_DOWN            (0xB6)

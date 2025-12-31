@@ -453,7 +453,7 @@ When you are in the editor, you can use the following editing keys:
 - `→` - moves the cursor one character to the right
 - `↑` - moves the cursor up to the previous line at the same column
 - `↓` - moves the cursor down to the next line at the same column
-- `Home` - moves the cursor to the beginning of the line
+- `Home` - toggles the cursor between the first non-whitespace character and the beginning of the line
 - `End` - moves the cursor to the end of the line
 - `Shift` `↑` - moves the cursor to the previous page
 - `Shift` `↓` - moves the cursor to the next page
@@ -478,6 +478,9 @@ Selected text is between the start anchor and the cursor and is shown in reverse
 - `Ctrl` `X` or `Ctrl` `T` - erases (or takes) the selected text and stores the text in the copy buffer
 - `Ctrl` `C` or `Ctrl` `Y` - copies (or yanks) the selected text and stores the text in the copy buffer
 - `Ctrl` `V` or `Ctrl` `P` - replaces (or pastes over) the selected text with the text in the copy buffer.
+- `Ctrl` `,` - decreases the indent of the block by one tab stop
+- `Ctrl` `.` - increases the indent of the block by one tab stop
+
 
 Typing any other key (except `Esc` or `Brk`) is ignored while the selection of text is active.
 
@@ -514,6 +517,16 @@ ed _namelist_
 Starts the Pico Logo Editor. Starts the Logo Editor with the procedure named _name_ (or procedures in the list _namelist_) and their definitions in it. This is the same output as [`pops`](#pops). 
 
 If `edit` does not have an input the current contents of the buffer are used.
+
+
+## edall
+
+edall
+
+`command`
+
+Starts the Pico Logo Editor with all procedures and variables. Procedures are formatted using [`to`](#to)/[`end`](#end) syntax, variables as [`make`](#make) commands, and property lists as [`pprop`](#pprop) commands. This differs from [`poall`](#poall), which displays property lists using [`plist`](#plist) output format. The `edall` format ensures that when you exit the editor, all definitions can be re-executed to recreate the workspace state.
+
 
 ## edn
 

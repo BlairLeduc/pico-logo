@@ -68,6 +68,7 @@
 - Tests should run quickly to facilitate rapid development.
 - Tests should use the mock device and the mock device should be updated as needed to support testing
 - We aim for high test coverage of core interpreter logic and primitives.
+- After you complete a feature or fix a bug, **run all tests** to ensure nothing is broken.
 
 ## Development and testing
 - Use the command line and cmake presets to build and run tests. Do not use tasks.

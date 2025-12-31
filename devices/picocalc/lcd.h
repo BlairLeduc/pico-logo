@@ -115,10 +115,19 @@ void lcd_scroll_clear();
 void lcd_scroll_up(void);
 void lcd_scroll_down(void);
 
+// Cursor style
+typedef enum {
+    LCD_CURSOR_UNDERLINE = 0,  // Normal editing: underline at bottom of cell
+    LCD_CURSOR_BLOCK = 1       // Block selection: reverse video of character
+} LcdCursorStyle;
+
 // Character and cursor functions
 void lcd_putc(uint8_t column, uint8_t row, uint8_t c);
 void lcd_putstr(uint8_t column, uint8_t row, const char *str);
 void lcd_move_cursor(uint8_t x, uint8_t y);
+void lcd_set_cursor_style(LcdCursorStyle style);
+LcdCursorStyle lcd_get_cursor_style(void);
+void lcd_set_cursor_char(uint8_t c);
 void lcd_draw_cursor(void);
 void lcd_erase_cursor(void);
 void lcd_enable_cursor(bool cursor_on);
