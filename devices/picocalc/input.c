@@ -218,6 +218,14 @@ int picocalc_read_line(char *buf, int size)
         case KEY_DOWN:
             if (!history_is_empty() && !history_is_end_index(history_index)) // history is not empty and not at the end
             {
+                // If starting a new search, save the current input as the prefix
+                if (!in_history_search)
+                {
+                    strncpy(search_prefix, buf, sizeof(search_prefix) - 1);
+                    search_prefix[sizeof(search_prefix) - 1] = '\0';
+                    search_prefix_len = length;
+                    in_history_search = true;
+                }
                 // Move to the next matching entry
                 uint new_index = history_next_matching(history_index, search_prefix, search_prefix_len);
                 history_index = new_index;
