@@ -420,6 +420,25 @@ void test_edall_formats_property_lists(void)
     TEST_ASSERT_NOT_NULL(strstr(editor_input, "pprop \"myobj \"color \"red"));
 }
 
+void test_edall_formats_numeric_property_values(void)
+{
+    // Numeric property values should be output without quotes
+    run_string("pprop \"item \"count 42");
+    run_string("pprop \"item \"price 3.14");
+    
+    mock_device_clear_editor();
+    
+    run_string("edall");
+    
+    const char *editor_input = mock_device_get_editor_input();
+    // Numbers should NOT have quotes
+    TEST_ASSERT_NOT_NULL(strstr(editor_input, "pprop \"item \"count 42"));
+    TEST_ASSERT_NOT_NULL(strstr(editor_input, "pprop \"item \"price 3.14"));
+    // Make sure they don't have quotes around the value
+    TEST_ASSERT_NULL(strstr(editor_input, "\"count \"42"));
+    TEST_ASSERT_NULL(strstr(editor_input, "\"price \"3.14"));
+}
+
 void test_edall_empty_workspace(void)
 {
     mock_device_clear_editor();
@@ -461,6 +480,7 @@ int main(void)
     RUN_TEST(test_edall_excludes_buried_procedures);
     RUN_TEST(test_edall_excludes_buried_variables);
     RUN_TEST(test_edall_formats_property_lists);
+    RUN_TEST(test_edall_formats_numeric_property_values);
     RUN_TEST(test_edall_empty_workspace);
     RUN_TEST(test_edit_no_args_preserves_buffer);
     RUN_TEST(test_edit_runs_regular_commands);

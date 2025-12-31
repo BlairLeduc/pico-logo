@@ -774,10 +774,24 @@ static bool format_property_list(char *buffer, size_t buffer_size, size_t *pos,
         // Format the value
         if (mem_is_word(val_node))
         {
-            if (!buffer_append(buffer, buffer_size, pos, "\""))
-                return false;
-            if (!buffer_append(buffer, buffer_size, pos, mem_word_ptr(val_node)))
-                return false;
+            // Check if it's a number (stored as word by prop_value_to_node)
+            const char *str = mem_word_ptr(val_node);
+            char *endptr;
+            strtof(str, &endptr);
+            if (*endptr == '\0' && str[0] != '\0')
+            {
+                // It's a number, output without quote
+                if (!buffer_append(buffer, buffer_size, pos, str))
+                    return false;
+            }
+            else
+            {
+                // It's a word, output with quote
+                if (!buffer_append(buffer, buffer_size, pos, "\""))
+                    return false;
+                if (!buffer_append(buffer, buffer_size, pos, str))
+                    return false;
+            }
         }
         else if (mem_is_list(val_node))
         {
