@@ -31,6 +31,9 @@
 #define EDITOR_LEFT_ARROW     30     // Left arrow glyph (content scrolled left)
 #define EDITOR_RIGHT_ARROW    31     // Right arrow glyph (content continues right)
 
+// Tab width for indentation (2 spaces per tab stop)
+#define TAB_WIDTH             2
+
 // Copy buffer size (default 1024 for RP2040, 8192 for RP2350)
 #ifndef LOGO_COPY_BUFFER_SIZE
 #define LOGO_COPY_BUFFER_SIZE 1024
@@ -565,12 +568,12 @@ static void editor_insert_char(char c)
 }
 
 //
-// Insert spaces until the next tab stop (tab stops every 2 columns)
+// Insert spaces until the next tab stop (tab stops every TAB_WIDTH columns)
 //
 static void editor_insert_tab(void)
 {
     int current_col = editor_get_col_at_pos(editor.cursor_pos);
-    int spaces_to_insert = 2 - (current_col % 2);
+    int spaces_to_insert = TAB_WIDTH - (current_col % TAB_WIDTH);
     
     for (int i = 0; i < spaces_to_insert; i++) {
         editor_insert_char(' ');
@@ -579,6 +582,7 @@ static void editor_insert_tab(void)
 
 //
 // Insert a newline at cursor position with auto-indentation
+// Also adds extra indentation for unmatched open brackets '[' on current line
 //
 static void editor_new_line(void)
 {
@@ -592,11 +596,25 @@ static void editor_new_line(void)
         indent_spaces++;
     }
     
+    // Count unmatched open brackets '[' on current line (from line start to cursor)
+    int unmatched_brackets = 0;
+    for (int i = line_start; i < (int)editor.cursor_pos; i++) {
+        if (editor.buffer[i] == '[') {
+            unmatched_brackets++;
+        } else if (editor.buffer[i] == ']') {
+            if (unmatched_brackets > 0) {
+                unmatched_brackets--;
+            }
+        }
+    }
+    
     // Insert the newline
     editor_insert_char('\n');
     
-    // Insert the same number of leading spaces
-    for (int i = 0; i < indent_spaces; i++) {
+    // Insert the same number of leading spaces plus extra indentation for brackets
+    // Each unmatched bracket adds one tab (TAB_WIDTH spaces)
+    int total_indent = indent_spaces + (unmatched_brackets * TAB_WIDTH);
+    for (int i = 0; i < total_indent; i++) {
         editor_insert_char(' ');
     }
 }
@@ -653,9 +671,9 @@ static void editor_backspace(void)
     }
     
     if (only_whitespace && editor.cursor_pos > (size_t)line_start) {
-        // Delete back to previous tab stop (tab stops every 2 columns)
+        // Delete back to previous tab stop (tab stops every TAB_WIDTH columns)
         int current_col = (int)editor.cursor_pos - line_start;
-        int prev_tab_stop = ((current_col - 1) / 2) * 2;
+        int prev_tab_stop = ((current_col - 1) / TAB_WIDTH) * TAB_WIDTH;
         int chars_to_delete = current_col - prev_tab_stop;
         
         // Delete at least 1 character
