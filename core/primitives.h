@@ -86,8 +86,11 @@ extern "C"
 
     // Initialize primitive categories
     void primitives_arithmetic_init(void);
-    void primitives_control_init(void);
+    void primitives_conditionals_init(void);
+    void primitives_control_flow_init(void);
+    void primitives_debug_control_init(void);
     void primitives_debug_init(void);
+    void primitives_exceptions_init(void);
     void primitives_editor_init(void);
     void primitives_files_init(void);
     void primitives_hardware_init(void);
@@ -112,6 +115,9 @@ extern "C"
 
     // Reset control flow test state (for testing purposes)
     void primitives_control_reset_test_state(void);
+
+    // Reset exceptions state (for testing purposes)
+    void primitives_exceptions_reset_state(void);
 
     // Pause/Continue support
     // Check if continue has been requested (and reset the flag)
