@@ -1303,6 +1303,7 @@ numberp _object_
 
 ## word? (wordp)
 
+word? _object_  
 wordp _object_  
 
 `operation`
