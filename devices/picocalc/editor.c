@@ -111,6 +111,8 @@ static void editor_mark_line_dirty(int line_index);
 static void editor_mark_from_line_dirty(int line_index);
 static void editor_mark_all_dirty(void);
 static void editor_update_dirty(void);
+static void editor_decrease_indent(void);
+static void editor_increase_indent(void);
 
 //
 // Draw a string in reverse video at the specified row
@@ -896,6 +898,135 @@ static void editor_copy_line(void)
 }
 
 //
+// Decrease indent of selected block by one tab stop (Ctrl+,)
+// Removes up to TAB_WIDTH spaces from the beginning of each line in selection
+//
+static void editor_decrease_indent(void)
+{
+    if (!editor.selecting) return;
+    
+    // Get selection bounds
+    size_t sel_start = editor.select_anchor < editor.cursor_pos ? 
+                       editor.select_anchor : editor.cursor_pos;
+    size_t sel_end = editor.select_anchor > editor.cursor_pos ?
+                     editor.select_anchor : editor.cursor_pos;
+    
+    // Find the first and last lines in the selection
+    int first_line = editor_get_line_at_pos(sel_start);
+    int last_line = editor_get_line_at_pos(sel_end > 0 ? sel_end - 1 : 0);
+    
+    // If selection ends exactly at start of a line (not including any content),
+    // don't include that line
+    if (sel_end > 0 && sel_end <= editor.content_length) {
+        int line_start = editor_get_line_start(last_line);
+        if ((size_t)line_start == sel_end) {
+            last_line--;
+        }
+    }
+    
+    // Process each line from last to first (to preserve line numbers)
+    for (int line = last_line; line >= first_line; line--) {
+        int line_start = editor_get_line_start(line);
+        int line_end = editor_get_line_end(line);
+        int line_len = line_end - line_start;
+        
+        // Count leading spaces on this line
+        int leading_spaces = 0;
+        for (int i = 0; i < line_len && editor.buffer[line_start + i] == ' '; i++) {
+            leading_spaces++;
+        }
+        
+        // Calculate how many spaces to remove (up to TAB_WIDTH)
+        int spaces_to_remove = leading_spaces < TAB_WIDTH ? leading_spaces : TAB_WIDTH;
+        
+        if (spaces_to_remove > 0) {
+            // Shift content left to remove spaces
+            memmove(&editor.buffer[line_start],
+                    &editor.buffer[line_start + spaces_to_remove],
+                    editor.content_length - line_start - spaces_to_remove + 1);  // +1 for null
+            
+            editor.content_length -= spaces_to_remove;
+            
+            // Adjust cursor and anchor positions if they're after the removed spaces
+            if (editor.cursor_pos >= (size_t)(line_start + spaces_to_remove)) {
+                editor.cursor_pos -= spaces_to_remove;
+            } else if (editor.cursor_pos > (size_t)line_start) {
+                editor.cursor_pos = line_start;
+            }
+            
+            if (editor.select_anchor >= (size_t)(line_start + spaces_to_remove)) {
+                editor.select_anchor -= spaces_to_remove;
+            } else if (editor.select_anchor > (size_t)line_start) {
+                editor.select_anchor = line_start;
+            }
+        }
+    }
+}
+
+//
+// Increase indent of selected block by one tab stop (Ctrl+.)
+// Adds TAB_WIDTH spaces to the beginning of each line in selection
+//
+static void editor_increase_indent(void)
+{
+    if (!editor.selecting) return;
+    
+    // Get selection bounds
+    size_t sel_start = editor.select_anchor < editor.cursor_pos ? 
+                       editor.select_anchor : editor.cursor_pos;
+    size_t sel_end = editor.select_anchor > editor.cursor_pos ?
+                     editor.select_anchor : editor.cursor_pos;
+    
+    // Find the first and last lines in the selection
+    int first_line = editor_get_line_at_pos(sel_start);
+    int last_line = editor_get_line_at_pos(sel_end > 0 ? sel_end - 1 : 0);
+    
+    // If selection ends exactly at start of a line (not including any content),
+    // don't include that line
+    if (sel_end > 0 && sel_end <= editor.content_length) {
+        int line_start = editor_get_line_start(last_line);
+        if ((size_t)line_start == sel_end) {
+            last_line--;
+        }
+    }
+    
+    // Calculate total spaces needed
+    int lines_to_indent = last_line - first_line + 1;
+    size_t total_spaces = lines_to_indent * TAB_WIDTH;
+    
+    // Check buffer space
+    if (editor.content_length + total_spaces >= editor.buffer_size) {
+        return;  // Not enough space
+    }
+    
+    // Process each line from last to first (to preserve line numbers)
+    for (int line = last_line; line >= first_line; line--) {
+        int line_start = editor_get_line_start(line);
+        
+        // Shift content right to make room for spaces
+        memmove(&editor.buffer[line_start + TAB_WIDTH],
+                &editor.buffer[line_start],
+                editor.content_length - line_start + 1);  // +1 for null
+        
+        // Insert spaces
+        for (int i = 0; i < TAB_WIDTH; i++) {
+            editor.buffer[line_start + i] = ' ';
+        }
+        
+        editor.content_length += TAB_WIDTH;
+        
+        // Adjust cursor and anchor positions if they're at or after the line start
+        if (editor.cursor_pos >= (size_t)line_start) {
+            editor.cursor_pos += TAB_WIDTH;
+        }
+        
+        if (editor.select_anchor >= (size_t)line_start) {
+            editor.select_anchor += TAB_WIDTH;
+        }
+    }
+}
+
+//
 // Cut current line (Ctrl+X without selection)
 //
 static void editor_cut_line(void)
@@ -1203,6 +1334,20 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                     editor_cut_line();
                     // Cut line affects everything below
                     editor_mark_from_line_dirty(editor_get_line_at_pos(editor.cursor_pos));
+                }
+                break;
+            
+            case KEY_CTRL_COMMA:  // Ctrl+, - decrease indent
+                if (editor.selecting) {
+                    editor_decrease_indent();
+                    editor_mark_all_dirty();  // Multiple lines may change
+                }
+                break;
+            
+            case KEY_CTRL_PERIOD:  // Ctrl+. - increase indent
+                if (editor.selecting) {
+                    editor_increase_indent();
+                    editor_mark_all_dirty();  // Multiple lines may change
                 }
                 break;
                 

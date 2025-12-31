@@ -478,6 +478,9 @@ Selected text is between the start anchor and the cursor and is shown in reverse
 - `Ctrl` `X` or `Ctrl` `T` - erases (or takes) the selected text and stores the text in the copy buffer
 - `Ctrl` `C` or `Ctrl` `Y` - copies (or yanks) the selected text and stores the text in the copy buffer
 - `Ctrl` `V` or `Ctrl` `P` - replaces (or pastes over) the selected text with the text in the copy buffer.
+- `Ctrl` `,` - decreases the indent of the block by one tab stop
+- `Ctrl` `.` - increases the indent of the block by one tab stop
+
 
 Typing any other key (except `Esc` or `Brk`) is ignored while the selection of text is active.
 
