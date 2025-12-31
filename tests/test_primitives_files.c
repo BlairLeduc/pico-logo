@@ -1479,8 +1479,8 @@ void test_save_writes_workspace(void)
 
 void test_save_format_matches_poall(void)
 {
-    // Setup workspace with a simple procedure using define (no newlines)
-    // Note: define creates a flat body list, so all instructions are on one line
+    // Setup workspace with a simple procedure using define
+    // Note: define with list-of-lists creates multi-line procedures
     run_string("define \"testproc [[x y] [print :x] [print :y]]");
     run_string("make \"myvar [hello world]");
     
@@ -1492,11 +1492,13 @@ void test_save_format_matches_poall(void)
     TEST_ASSERT_NOT_NULL(file);
     
     // Procedure should have proper formatting with indentation
-    // With define, the body is flattened to one line with base indent
+    // With list-of-lists format, each line is on its own line with 2-space indent
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(file->data, "to testproc :x :y\n"),
         "Title line should be formatted correctly");
-    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(file->data, "  print :x print :y\n"),
-        "Body should have 2-space indent and be on one line");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(file->data, "  print :x\n"),
+        "First body line should have 2-space indent");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(file->data, "  print :y\n"),
+        "Second body line should have 2-space indent");
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(file->data, "end\n"),
         "End should be present");
     

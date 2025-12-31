@@ -624,6 +624,18 @@ static void editor_new_line(void)
     // Insert the newline
     editor_insert_char('\n');
     
+    // Strip leading whitespace from content that is now on the new line
+    // (the content that was after the cursor before the newline was inserted)
+    while (editor.cursor_pos < editor.content_length && 
+           editor.buffer[editor.cursor_pos] == ' ') {
+        // Delete the space at cursor position
+        for (size_t i = editor.cursor_pos; i < editor.content_length - 1; i++) {
+            editor.buffer[i] = editor.buffer[i + 1];
+        }
+        editor.content_length--;
+        editor.buffer[editor.content_length] = '\0';
+    }
+    
     // Insert the same number of leading spaces plus extra indentation for brackets
     // Each unmatched bracket adds one tab (TAB_WIDTH spaces)
     int total_indent = indent_spaces + (unmatched_brackets * TAB_WIDTH);

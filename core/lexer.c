@@ -108,14 +108,23 @@ void lexer_init(Lexer *lexer, const char *source)
     lexer->previous.start = NULL;
     lexer->previous.length = 0;
     lexer->had_whitespace = true; // Start of input acts like whitespace
+    lexer->had_newline = true;    // Start of input acts like start of line
+    lexer->newline_count = 1;     // Start of input counts as one newline
 }
 
 // Skip whitespace and track if any was found
 static void skip_whitespace(Lexer *lexer)
 {
     lexer->had_whitespace = false;
+    lexer->had_newline = false;
+    lexer->newline_count = 0;
     while (*lexer->current && is_space(*lexer->current))
     {
+        if (*lexer->current == '\n')
+        {
+            lexer->had_newline = true;
+            lexer->newline_count++;
+        }
         lexer->had_whitespace = true;
         lexer->current++;
     }

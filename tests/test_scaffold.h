@@ -384,8 +384,10 @@ static void define_proc(const char *name, const char **params, int param_count, 
     Lexer lexer;
     lexer_init(&lexer, body_str);
     
-    Node body = NODE_NIL;
-    Node body_tail = NODE_NIL;
+    // Build body as list-of-lists: [[line1-tokens]]
+    // For test helper, we put all tokens on a single line
+    Node line = NODE_NIL;
+    Node line_tail = NODE_NIL;
     
     while (true)
     {
@@ -443,24 +445,35 @@ static void define_proc(const char *name, const char **params, int param_count, 
         {
             item = mem_atom("]", 1);
         }
+        else if (t.type == TOKEN_LEFT_PAREN)
+        {
+            item = mem_atom("(", 1);
+        }
+        else if (t.type == TOKEN_RIGHT_PAREN)
+        {
+            item = mem_atom(")", 1);
+        }
         
         if (!mem_is_nil(item))
         {
             Node new_cons = mem_cons(item, NODE_NIL);
-            if (mem_is_nil(body))
+            if (mem_is_nil(line))
             {
-                body = new_cons;
-                body_tail = new_cons;
+                line = new_cons;
+                line_tail = new_cons;
             }
             else
             {
-                mem_set_cdr(body_tail, new_cons);
-                body_tail = new_cons;
+                mem_set_cdr(line_tail, new_cons);
+                line_tail = new_cons;
             }
         }
     }
     
-    // Intern the name
+    // Wrap line in outer list to create [[line-tokens]]
+    // Mark line as a list type
+    Node line_marked = mem_is_nil(line) ? NODE_NIL : NODE_MAKE_LIST(NODE_GET_INDEX(line));
+    Node body = mem_cons(line_marked, NODE_NIL);
     Node name_atom = mem_atom(name, strlen(name));
     const char *interned_name = mem_word_ptr(name_atom);
     

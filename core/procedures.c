@@ -130,129 +130,136 @@ static int serialize_step_node(Node elem, char *buf, int max_len, bool need_spac
 }
 
 // Helper to execute procedure body with step support
+// Body is a list of line-lists: [[line1-tokens] [line2-tokens] ...]
 // Returns Result from execution
 static Result execute_body_with_step(Evaluator *eval, Node body, bool enable_tco, bool stepped)
 {
-    if (!stepped)
-    {
-        // Normal execution without stepping
-        return eval_run_list_with_tco(eval, body, enable_tco);
-    }
-    
-    // Stepped execution: print each line, wait for key, then execute
-    LogoIO *io = primitives_get_io();
-    Node curr = body;
+    LogoIO *io = stepped ? primitives_get_io() : NULL;
     Result r = result_none();
     
+    // Iterate through body - each element is a line (a list of tokens)
+    Node curr = body;
     while (!mem_is_nil(curr))
     {
-        // Collect tokens for this line (until newline marker or end)
-        Node line_start = curr;
-        Node line_end = NODE_NIL;  // NODE_NIL means "end of body"
+        Node line = mem_car(curr);
+        Node next = mem_cdr(curr);
+        bool is_last_line = mem_is_nil(next);
         
-        // Find the end of this line (newline marker or end of body)
-        while (!mem_is_nil(curr))
+        // Handle line - it could be marked as LIST type or be a direct cons cell
+        Node line_tokens = line;
+        if (NODE_GET_TYPE(line) == NODE_TYPE_LIST)
         {
-            Node elem = mem_car(curr);
-            
-            // Check for newline marker
-            if (mem_is_word(elem) && proc_is_newline_marker(mem_word_ptr(elem)))
-            {
-                line_end = curr;  // End before the newline marker
-                curr = mem_cdr(curr);  // Skip past the marker
-                break;
-            }
-            curr = mem_cdr(curr);
+            // It's marked as a list reference
+            line_tokens = NODE_MAKE_LIST(NODE_GET_INDEX(line));
         }
-        // If no newline marker found, line_end remains NODE_NIL,
-        // which means this line extends to the end of the body
         
-        // Build the line string for display and execution
-        char line_buf[512];
-        int pos = 0;
-        bool first = true;
-        Node n = line_start;
-        
-        while (n != line_end && !mem_is_nil(n) && pos < (int)sizeof(line_buf) - 1)
+        // Skip empty lines during execution
+        if (mem_is_nil(line_tokens))
         {
-            Node elem = mem_car(n);
-            
-            // Skip newline markers (shouldn't happen here, but be safe)
-            if (mem_is_word(elem) && proc_is_newline_marker(mem_word_ptr(elem)))
-            {
-                n = mem_cdr(n);
-                continue;
-            }
-            
-            int remaining = (int)sizeof(line_buf) - pos - 1;  // Reserve 1 for null terminator
-            if (remaining <= 0)
-                break;
-            
-            int written = serialize_step_node(elem, line_buf + pos, remaining, !first);
-            pos += written;
-            first = false;
-            n = mem_cdr(n);
-        }
-        line_buf[pos] = '\0';
-        
-        // Skip empty lines
-        if (pos == 0)
+            curr = next;
             continue;
-        
-        // Print the line
-        if (io)
-        {
-            logo_io_write(io, line_buf);
-            logo_io_write(io, "\n");
-            logo_io_flush(io);
         }
         
-        // Wait for a key press
-        if (io)
+        if (stepped)
         {
-            int ch = logo_io_read_char(io);
-            if (ch == LOGO_STREAM_INTERRUPTED)
+            // Stepped execution: print line, wait for key, then execute
+            char line_buf[512];
+            int pos = 0;
+            bool first = true;
+            Node n = line_tokens;
+            
+            while (!mem_is_nil(n) && pos < (int)sizeof(line_buf) - 1)
             {
-                return result_error(ERR_STOPPED);
+                Node elem = mem_car(n);
+                int remaining = (int)sizeof(line_buf) - pos - 1;
+                if (remaining <= 0)
+                    break;
+                
+                int written = serialize_step_node(elem, line_buf + pos, remaining, !first);
+                pos += written;
+                first = false;
+                n = mem_cdr(n);
+            }
+            line_buf[pos] = '\0';
+            
+            // Print the line
+            if (io && pos > 0)
+            {
+                logo_io_write(io, line_buf);
+                logo_io_write(io, "\n");
+                logo_io_flush(io);
+                
+                // Wait for a key press
+                int ch = logo_io_read_char(io);
+                if (ch == LOGO_STREAM_INTERRUPTED)
+                {
+                    return result_error(ERR_STOPPED);
+                }
             }
         }
         
         // Execute this line
-        // Build a temporary list node for just this line
-        Node exec_list = NODE_NIL;
-        Node exec_tail = NODE_NIL;
-        n = line_start;
+        r = eval_run_list_with_tco(eval, line_tokens, enable_tco && is_last_line);
         
-        while (n != line_end && !mem_is_nil(n))
+        // Handle RESULT_GOTO - search for label in body and restart from there
+        if (r.status == RESULT_GOTO)
         {
-            Node elem = mem_car(n);
+            const char *label_name = r.goto_label;
+            bool found = false;
             
-            // Skip newline markers
-            if (mem_is_word(elem) && proc_is_newline_marker(mem_word_ptr(elem)))
+            // Search all lines for the label
+            Node search = body;
+            while (!mem_is_nil(search))
             {
-                n = mem_cdr(n);
-                continue;
+                Node search_line = mem_car(search);
+                Node search_tokens = search_line;
+                if (NODE_GET_TYPE(search_line) == NODE_TYPE_LIST)
+                {
+                    search_tokens = NODE_MAKE_LIST(NODE_GET_INDEX(search_line));
+                }
+                
+                // Check if this line starts with "label" followed by matching label name
+                if (!mem_is_nil(search_tokens))
+                {
+                    Node first = mem_car(search_tokens);
+                    if (mem_is_word(first))
+                    {
+                        const char *word = mem_word_ptr(first);
+                        if (strcasecmp(word, "label") == 0)
+                        {
+                            // Check the next element for the label name
+                            Node rest = mem_cdr(search_tokens);
+                            if (!mem_is_nil(rest))
+                            {
+                                Node label_arg = mem_car(rest);
+                                if (mem_is_word(label_arg))
+                                {
+                                    const char *arg = mem_word_ptr(label_arg);
+                                    // Skip leading quote if present
+                                    if (arg[0] == '"')
+                                        arg++;
+                                    if (strcasecmp(arg, label_name) == 0)
+                                    {
+                                        // Found the label! Continue from the line AFTER this one
+                                        curr = mem_cdr(search);
+                                        found = true;
+                                        r = result_none();
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                search = mem_cdr(search);
             }
             
-            Node new_node = mem_cons(elem, NODE_NIL);
-            if (mem_is_nil(exec_list))
+            if (!found)
             {
-                exec_list = new_node;
-                exec_tail = new_node;
+                return result_error_arg(ERR_CANT_FIND_LABEL, NULL, label_name);
             }
-            else
-            {
-                mem_set_cdr(exec_tail, new_node);
-                exec_tail = new_node;
-            }
-            n = mem_cdr(n);
+            continue;  // Continue from the line after the label
         }
-        
-        // Determine if this is the last line (for TCO)
-        bool is_last_line = mem_is_nil(curr);
-        
-        // Execute the line
-        r = eval_run_list_with_tco(eval, exec_list, enable_tco && is_last_line);
         
         // Handle result - propagate stop/output/error/throw immediately
         if (r.status != RESULT_NONE && r.status != RESULT_OK)
@@ -265,6 +272,8 @@ static Result execute_body_with_step(Evaluator *eval, Node body, bool enable_tco
         {
             return result_error_arg(ERR_DONT_KNOW_WHAT, NULL, value_to_string(r.value));
         }
+        
+        curr = next;
     }
     
     return r;

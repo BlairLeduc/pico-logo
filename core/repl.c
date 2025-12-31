@@ -245,15 +245,13 @@ Result repl_run(ReplState *state)
             state->in_procedure_def = true;
             state->proc_len = 0;
             
-            // Copy the "to" line to buffer
+            // Copy the "to" line to buffer with newline
             size_t line_len = strlen(state->line);
-            if (line_len + 1 + NEWLINE_MARKER_LENGTH + 1 <= REPL_MAX_PROC_BUFFER - 10)
+            if (line_len + 2 <= REPL_MAX_PROC_BUFFER - 10)
             {
                 memcpy(state->proc_buffer, state->line, line_len);
-                state->proc_buffer[line_len] = ' ';
-                memcpy(state->proc_buffer + line_len + 1, NEWLINE_MARKER, NEWLINE_MARKER_LENGTH);
-                state->proc_buffer[line_len + 1 + NEWLINE_MARKER_LENGTH] = ' ';
-                state->proc_len = line_len + 1 + NEWLINE_MARKER_LENGTH + 1;
+                state->proc_buffer[line_len] = '\n';
+                state->proc_len = line_len + 1;
             }
             else
             {
@@ -296,15 +294,13 @@ Result repl_run(ReplState *state)
             }
             else
             {
-                // Append line to procedure buffer
+                // Append line to procedure buffer with newline
                 size_t line_len = strlen(state->line);
-                if (state->proc_len + line_len + 1 + NEWLINE_MARKER_LENGTH + 1 <= REPL_MAX_PROC_BUFFER - 10)
+                if (state->proc_len + line_len + 2 <= REPL_MAX_PROC_BUFFER - 10)
                 {
                     memcpy(state->proc_buffer + state->proc_len, state->line, line_len);
-                    state->proc_buffer[state->proc_len + line_len] = ' ';
-                    memcpy(state->proc_buffer + state->proc_len + line_len + 1, NEWLINE_MARKER, NEWLINE_MARKER_LENGTH);
-                    state->proc_buffer[state->proc_len + line_len + 1 + NEWLINE_MARKER_LENGTH] = ' ';
-                    state->proc_len += line_len + 1 + NEWLINE_MARKER_LENGTH + 1;
+                    state->proc_buffer[state->proc_len + line_len] = '\n';
+                    state->proc_len += line_len + 1;
                 }
                 else
                 {

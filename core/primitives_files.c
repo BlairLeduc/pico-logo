@@ -1052,16 +1052,12 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
             in_procedure_def = true;
             proc_len = 0;
 
-            // Copy the "to" line to buffer
-            // Need space for line + " \n " (space + newline marker + space) + room for "end" and null terminator
-            if (len + 1 + NEWLINE_MARKER_LENGTH + 1 <= LOAD_MAX_PROC - 10)
+            // Copy the "to" line to buffer with newline
+            if (len + 2 <= LOAD_MAX_PROC - 10)
             {
                 memcpy(proc_buffer, line, len);
-                // Use a special newline marker: space + NEWLINE_MARKER + space
-                proc_buffer[len] = ' ';
-                memcpy(proc_buffer + len + 1, NEWLINE_MARKER, NEWLINE_MARKER_LENGTH);
-                proc_buffer[len + 1 + NEWLINE_MARKER_LENGTH] = ' ';
-                proc_len = len + 1 + NEWLINE_MARKER_LENGTH + 1;
+                proc_buffer[len] = '\n';
+                proc_len = len + 1;
             }
             else
             {
@@ -1099,16 +1095,12 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
             }
             else
             {
-                // Append line to procedure buffer with newline marker
-                // Need space for line + " \n " (space + newline marker + space) + room for "end" and null terminator
-                if (proc_len + len + 1 + NEWLINE_MARKER_LENGTH + 1 <= LOAD_MAX_PROC - 10)
+                // Append line to procedure buffer with newline
+                if (proc_len + len + 2 <= LOAD_MAX_PROC - 10)
                 {
                     memcpy(proc_buffer + proc_len, line, len);
-                    // Use a special newline marker: space + NEWLINE_MARKER + space
-                    proc_buffer[proc_len + len] = ' ';
-                    memcpy(proc_buffer + proc_len + len + 1, NEWLINE_MARKER, NEWLINE_MARKER_LENGTH);
-                    proc_buffer[proc_len + len + 1 + NEWLINE_MARKER_LENGTH] = ' ';
-                    proc_len += len + 1 + NEWLINE_MARKER_LENGTH + 1;
+                    proc_buffer[proc_len + len] = '\n';
+                    proc_len += len + 1;
                 }
                 else
                 {
@@ -1244,97 +1236,81 @@ static void save_procedure_definition(UserProcedure *proc)
 {
     save_procedure_title(proc);
 
-    // Save body with newline detection and indentation
+    // Body is now a list of line-lists: [[line1-tokens] [line2-tokens] ...]
+    Node curr_line = proc->body;
+    
+    // Track cumulative bracket depth across lines for indentation
     int bracket_depth = 0;
-    Node curr = proc->body;
-    bool need_indent = true;
     
-    // Skip leading newline marker (title already provides the first newline)
-    if (!mem_is_nil(curr))
+    while (!mem_is_nil(curr_line))
     {
-        Node first_elem = mem_car(curr);
-        if (mem_is_word(first_elem) && proc_is_newline_marker(mem_word_ptr(first_elem)))
-        {
-            curr = mem_cdr(curr);
-        }
-    }
-    
-    while (!mem_is_nil(curr))
-    {
-        Node elem = mem_car(curr);
+        Node line = mem_car(curr_line);
+        Node tokens = line;
         
-        // Check if this is a newline marker
-        if (mem_is_word(elem))
+        // Handle the list type marker
+        if (NODE_GET_TYPE(line) == NODE_TYPE_LIST)
         {
-            const char *word = mem_word_ptr(elem);
-            if (proc_is_newline_marker(word))
-            {
-                // Output newline and set flag to indent next line
-                save_newline();
-                need_indent = true;
-                curr = mem_cdr(curr);
-                continue;
-            }
+            tokens = NODE_MAKE_LIST(NODE_GET_INDEX(line));
         }
         
-        // Check if this is a closing bracket - decrease depth before indenting
-        if (mem_is_word(elem))
+        // Count leading closing brackets to reduce indent for this line
+        Node peek = tokens;
+        while (!mem_is_nil(peek))
         {
-            const char *word = mem_word_ptr(elem);
-            if (strcmp(word, "]") == 0 && bracket_depth > 0)
+            Node elem = mem_car(peek);
+            if (mem_is_word(elem) && strcmp(mem_word_ptr(elem), "]") == 0 && bracket_depth > 0)
             {
                 bracket_depth--;
             }
-        }
-        
-        // Output indentation if needed (base indent of 1 for procedure body)
-        if (need_indent)
-        {
-            for (int i = 0; i < bracket_depth + 1; i++)
+            else
             {
-                save_write("  ");  // 2 spaces per indent level
+                break;  // Stop at first non-] token
             }
-            need_indent = false;
+            peek = mem_cdr(peek);
         }
         
-        save_body_element(elem);
+        // Print base indent (2 spaces for procedure body)
+        save_write("  ");
         
-        // Track bracket depth after printing (for opening brackets)
-        if (mem_is_word(elem))
+        // Add extra indentation based on cumulative bracket depth
+        for (int i = 0; i < bracket_depth; i++)
         {
-            const char *word = mem_word_ptr(elem);
-            if (strcmp(word, "[") == 0)
-            {
-                bracket_depth++;
-            }
+            save_write("  ");
         }
-
-        // Add space between elements
-        Node next = mem_cdr(curr);
-        if (!mem_is_nil(next))
+        
+        while (!mem_is_nil(tokens))
         {
-            // Don't add space before newline marker
-            Node next_elem = mem_car(next);
-            if (mem_is_word(next_elem))
+            Node elem = mem_car(tokens);
+            
+            save_body_element(elem);
+            
+            // Track brackets
+            if (mem_is_word(elem))
             {
-                const char *next_word = mem_word_ptr(next_elem);
-                if (!proc_is_newline_marker(next_word))
+                const char *word = mem_word_ptr(elem);
+                if (strcmp(word, "[") == 0)
                 {
-                    save_write(" ");
+                    bracket_depth++;
+                }
+                else if (strcmp(word, "]") == 0 && bracket_depth > 0)
+                {
+                    bracket_depth--;
                 }
             }
-            else
+            
+            // Add space between elements on same line
+            Node next = mem_cdr(tokens);
+            if (!mem_is_nil(next))
             {
                 save_write(" ");
             }
+            tokens = next;
         }
-        curr = next;
-    }
-    // Add newline before 'end' if body was printed
-    if (!need_indent)
-    {
+        
         save_newline();
+        curr_line = mem_cdr(curr_line);
     }
+    
     save_write("end");
     save_newline();
 }

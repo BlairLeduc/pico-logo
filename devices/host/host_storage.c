@@ -27,6 +27,9 @@ typedef struct FileContext
     long write_pos;  // Separate write position (starts at end of file)
 } FileContext;
 
+// Forward declarations
+static long host_file_get_length(LogoStream *stream);
+
 //
 // Stream operation implementations
 //
