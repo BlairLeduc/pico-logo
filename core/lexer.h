@@ -53,10 +53,15 @@ extern "C"
         const char *current; // Current position in source
         Token previous;      // Previous token (for context)
         bool had_whitespace; // Whitespace before current token
+        bool data_mode;      // If true, only brackets/whitespace are delimiters
     } Lexer;
 
-    // Initialize the lexer with source input
+    // Initialize the lexer with source input (code mode - all delimiters active)
     void lexer_init(Lexer *lexer, const char *source);
+
+    // Initialize the lexer in data mode (only brackets and whitespace are delimiters)
+    // Use this for parsing list literals where [Bob 555-1212] should be 2 items
+    void lexer_init_data(Lexer *lexer, const char *source);
 
     // Get the next token from the input
     // Tokens are produced on demand (pull-based)

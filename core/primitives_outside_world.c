@@ -229,17 +229,17 @@ typedef struct {
     bool success;
 } ParseResult;
 
-// Helper: Parse a line into a list of words
-// This is similar to what the lexer does but returns a list structure
+// Helper: Parse a line into a list of words using data mode
+// In data mode, operators like + - * / are part of words, not separate tokens
+// This means "Bob 555-1212" becomes 2 elements, not 4
 // Returns success=false if memory allocation fails
 static ParseResult parse_line_to_list(const char *line)
 {
     Lexer lexer;
-    lexer_init(&lexer, line);
+    lexer_init_data(&lexer, line);  // Use data mode!
 
-    // Build list in reverse, then reverse it at the end
     Node result = NODE_NIL;
-    Node *tail = &result;
+    Node tail = NODE_NIL;
 
     for (;;)
     {
@@ -288,7 +288,6 @@ static ParseResult parse_line_to_list(const char *line)
                     break;
             }
             // list_start to current position (minus the ] we just consumed) forms the inner list
-            // For simplicity, recursively parse
             size_t inner_len = lexer.current - list_start - 1; // Exclude the ]
             if (inner_len > 0)
             {
@@ -313,45 +312,12 @@ static ParseResult parse_line_to_list(const char *line)
             {
                 element = NODE_NIL; // Empty list
             }
-            // Mark as list value
-            Node new_cell = mem_cons(element, NODE_NIL);
-            *tail = new_cell;
-            tail = &((Node *)&new_cell)[0]; // This won't work directly, need different approach
-            continue; // Skip the normal append below
+            break;
         }
 
         case TOKEN_RIGHT_BRACKET:
             // Shouldn't happen at top level, ignore
             continue;
-
-        case TOKEN_PLUS:
-            element = mem_atom_cstr("+");
-            break;
-        case TOKEN_MINUS:
-        case TOKEN_UNARY_MINUS:
-            element = mem_atom_cstr("-");
-            break;
-        case TOKEN_MULTIPLY:
-            element = mem_atom_cstr("*");
-            break;
-        case TOKEN_DIVIDE:
-            element = mem_atom_cstr("/");
-            break;
-        case TOKEN_EQUALS:
-            element = mem_atom_cstr("=");
-            break;
-        case TOKEN_LESS_THAN:
-            element = mem_atom_cstr("<");
-            break;
-        case TOKEN_GREATER_THAN:
-            element = mem_atom_cstr(">");
-            break;
-        case TOKEN_LEFT_PAREN:
-            element = mem_atom_cstr("(");
-            break;
-        case TOKEN_RIGHT_PAREN:
-            element = mem_atom_cstr(")");
-            break;
 
         default:
             continue;
@@ -362,16 +328,12 @@ static ParseResult parse_line_to_list(const char *line)
         if (mem_is_nil(result))
         {
             result = new_cell;
+            tail = new_cell;
         }
         else
         {
-            // Find end of list and append
-            Node current = result;
-            while (!mem_is_nil(mem_cdr(current)))
-            {
-                current = mem_cdr(current);
-            }
-            mem_set_cdr(current, new_cell);
+            mem_set_cdr(tail, new_cell);
+            tail = new_cell;
         }
     }
 

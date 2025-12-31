@@ -14,6 +14,7 @@
 #include <string.h>
 #include <strings.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <ctype.h>
 
 // Helper: convert a number value to its word representation
@@ -629,10 +630,14 @@ static Result prim_lput(Evaluator *eval, int argc, Value *args)
     return result_ok(value_list(result));
 }
 
+// Helper to parse a string into a list using data mode (for parse primitive)
+static Node parse_string_to_list(const char *str);
+
 // parse word
 // Outputs a list parsed from word.
 static Result prim_parse(Evaluator *eval, int argc, Value *args)
 {
+    (void)eval;
     (void)argc;
     
     Value obj = args[0];
@@ -652,20 +657,17 @@ static Result prim_parse(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, "parse", value_to_string(obj));
     }
     
-    // Use the evaluator to parse the string as a list
+    Node result = parse_string_to_list(str);
+    return result_ok(value_list(result));
+}
+
+// Helper: Parse a string into a list using data mode
+// In data mode, operators are part of words
+static Node parse_string_to_list(const char *str)
+{
     Lexer lexer;
-    lexer_init(&lexer, str);
+    lexer_init_data(&lexer, str);  // Use data mode!
     
-    // Save old lexer state
-    Lexer *old_lexer = eval->lexer;
-    Token old_current = eval->current;
-    bool old_has_current = eval->has_current;
-    
-    // Set up for parsing
-    eval->lexer = &lexer;
-    eval->has_current = false;
-    
-    // Parse tokens into a list
     Node result = NODE_NIL;
     Node tail = NODE_NIL;
     
@@ -679,18 +681,32 @@ static Result prim_parse(Evaluator *eval, int argc, Value *args)
         
         if (t.type == TOKEN_LEFT_BRACKET)
         {
-            // Parse nested list - this is complex, so for now just store the bracket
-            // In a full implementation, we'd recursively parse
+            // Parse nested list recursively
             int depth = 1;
-            const char *start = t.start;
+            const char *list_start = lexer.current;
             while (depth > 0 && !lexer_is_at_end(&lexer))
             {
-                t = lexer_next_token(&lexer);
-                if (t.type == TOKEN_LEFT_BRACKET) depth++;
-                else if (t.type == TOKEN_RIGHT_BRACKET) depth--;
+                Token inner = lexer_next_token(&lexer);
+                if (inner.type == TOKEN_LEFT_BRACKET) depth++;
+                else if (inner.type == TOKEN_RIGHT_BRACKET) depth--;
+                else if (inner.type == TOKEN_EOF) break;
             }
-            // For simplicity, just skip list content in parse
-            continue;
+            size_t inner_len = lexer.current - list_start - 1;
+            if (inner_len > 0)
+            {
+                char *inner_str = (char *)malloc(inner_len + 1);
+                if (!inner_str) continue;
+                memcpy(inner_str, list_start, inner_len);
+                inner_str[inner_len] = '\0';
+                item = parse_string_to_list(inner_str);
+                free(inner_str);
+                item = NODE_MAKE_LIST(NODE_GET_INDEX(item));
+            }
+            else
+            {
+                item = NODE_NIL;
+                item = NODE_MAKE_LIST(NODE_GET_INDEX(item));
+            }
         }
         else if (t.type == TOKEN_RIGHT_BRACKET)
         {
@@ -708,18 +724,6 @@ static Result prim_parse(Evaluator *eval, int argc, Value *args)
         else if (t.type == TOKEN_COLON)
         {
             // Include the colon
-            item = mem_atom(t.start, t.length);
-        }
-        else if (t.type == TOKEN_PLUS || t.type == TOKEN_MINUS ||
-                 t.type == TOKEN_UNARY_MINUS ||
-                 t.type == TOKEN_MULTIPLY || t.type == TOKEN_DIVIDE ||
-                 t.type == TOKEN_EQUALS || t.type == TOKEN_LESS_THAN ||
-                 t.type == TOKEN_GREATER_THAN)
-        {
-            item = mem_atom(t.start, t.length);
-        }
-        else if (t.type == TOKEN_LEFT_PAREN || t.type == TOKEN_RIGHT_PAREN)
-        {
             item = mem_atom(t.start, t.length);
         }
         else
@@ -740,12 +744,7 @@ static Result prim_parse(Evaluator *eval, int argc, Value *args)
         }
     }
     
-    // Restore old lexer state
-    eval->lexer = old_lexer;
-    eval->current = old_current;
-    eval->has_current = old_has_current;
-    
-    return result_ok(value_list(result));
+    return result;
 }
 
 // sentence object1 object2 ...

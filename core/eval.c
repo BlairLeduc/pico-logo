@@ -147,19 +147,31 @@ static float parse_number(const char *str, size_t len)
     return strtof(buf, NULL);
 }
 
-// Parse a list from tokens until ]
-static Node parse_list(Evaluator *eval)
+// Parse a list from tokens until ] using data mode lexer
+// In data mode, operators like + - * / are part of words, not separate tokens
+// This means [Bob 555-1212] becomes 2 elements, not 4
+static Node parse_list_data(const char *start, const char *end)
 {
+    // Create a temporary buffer for the list content
+    size_t len = end - start;
+    char *buffer = (char *)malloc(len + 1);
+    if (!buffer)
+        return NODE_NIL;
+    memcpy(buffer, start, len);
+    buffer[len] = '\0';
+
+    // Create a data-mode lexer
+    Lexer data_lexer;
+    lexer_init_data(&data_lexer, buffer);
+
     Node list = NODE_NIL;
     Node tail = NODE_NIL;
 
     while (true)
     {
-        Token t = peek(eval);
+        Token t = lexer_next_token(&data_lexer);
         if (t.type == TOKEN_EOF || t.type == TOKEN_RIGHT_BRACKET)
         {
-            if (t.type == TOKEN_RIGHT_BRACKET)
-                advance(eval);
             break;
         }
 
@@ -167,48 +179,39 @@ static Node parse_list(Evaluator *eval)
 
         if (t.type == TOKEN_LEFT_BRACKET)
         {
-            advance(eval);
-            item = parse_list(eval);
-            // Wrap in list marker for later
+            // Find matching bracket for nested list
+            int depth = 1;
+            const char *nested_start = data_lexer.current;
+            while (depth > 0 && !lexer_is_at_end(&data_lexer))
+            {
+                Token inner = lexer_next_token(&data_lexer);
+                if (inner.type == TOKEN_LEFT_BRACKET) depth++;
+                else if (inner.type == TOKEN_RIGHT_BRACKET) depth--;
+                else if (inner.type == TOKEN_EOF) break;
+            }
+            const char *nested_end = data_lexer.current - 1; // Before the ]
+            
+            // Recursively parse nested list
+            item = parse_list_data(nested_start, nested_end);
+            // Wrap in list marker
             item = NODE_MAKE_LIST(NODE_GET_INDEX(item));
         }
         else if (t.type == TOKEN_WORD || t.type == TOKEN_NUMBER)
         {
             item = mem_atom(t.start, t.length);
-            advance(eval);
         }
         else if (t.type == TOKEN_QUOTED)
         {
             // Keep the quote - it's needed when the list is run
             item = mem_atom(t.start, t.length);
-            advance(eval);
         }
         else if (t.type == TOKEN_COLON)
         {
             // Store :var as-is in list (will be evaluated when run)
-            // Create a word with the colon
             item = mem_atom(t.start, t.length);
-            advance(eval);
-        }
-        else if (t.type == TOKEN_PLUS || t.type == TOKEN_MINUS || 
-                 t.type == TOKEN_UNARY_MINUS ||
-                 t.type == TOKEN_MULTIPLY || t.type == TOKEN_DIVIDE ||
-                 t.type == TOKEN_EQUALS || t.type == TOKEN_LESS_THAN ||
-                 t.type == TOKEN_GREATER_THAN)
-        {
-            // Store operator tokens as words in lists
-            item = mem_atom(t.start, t.length);
-            advance(eval);
-        }
-        else if (t.type == TOKEN_LEFT_PAREN || t.type == TOKEN_RIGHT_PAREN)
-        {
-            // Store parentheses as words in lists  
-            item = mem_atom(t.start, t.length);
-            advance(eval);
         }
         else
         {
-            advance(eval);
             continue;
         }
 
@@ -224,7 +227,48 @@ static Node parse_list(Evaluator *eval)
             tail = new_cons;
         }
     }
+    
+    free(buffer);
     return list;
+}
+
+// Parse a list from tokens until ] 
+// This finds the matching ] and delegates to parse_list_data
+static Node parse_list(Evaluator *eval)
+{
+    // Find the start position (right after the [)
+    const char *start = eval->lexer->current;
+    
+    // Find matching ] by scanning through source directly
+    // We need to track bracket depth to handle nested lists
+    int depth = 1;
+    const char *p = start;
+    while (*p && depth > 0)
+    {
+        if (*p == '[') depth++;
+        else if (*p == ']') depth--;
+        if (depth > 0) p++;
+    }
+    
+    // p now points at the final ], so content is [start, p)
+    const char *end = p;
+    
+    // Advance the main lexer past the content we just parsed
+    // We need to consume all tokens up to and including the final ]
+    while (eval->lexer->current < p)
+    {
+        Token t = peek(eval);
+        advance(eval);
+        if (t.type == TOKEN_EOF) break;
+    }
+    // Consume the final ]
+    Token t = peek(eval);
+    if (t.type == TOKEN_RIGHT_BRACKET)
+    {
+        advance(eval);
+    }
+    
+    return parse_list_data(start, end);
 }
 
 // Evaluate a primary expression

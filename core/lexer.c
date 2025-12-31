@@ -10,13 +10,29 @@
 #include <ctype.h>
 #include <string.h>
 
-// Delimiter characters that separate tokens
+// Delimiter characters that separate tokens in code mode
 // [ ] ( ) + - * / = < >
-static bool is_delimiter(char c)
+static bool is_code_delimiter(char c)
 {
     return c == '[' || c == ']' || c == '(' || c == ')' ||
            c == '+' || c == '-' || c == '*' || c == '/' ||
            c == '=' || c == '<' || c == '>';
+}
+
+// In data mode, only brackets are delimiters (for list structure)
+static bool is_data_delimiter(char c)
+{
+    return c == '[' || c == ']';
+}
+
+// Check if character is a delimiter based on lexer mode
+static bool is_delimiter(const Lexer *lexer, char c)
+{
+    if (lexer->data_mode)
+    {
+        return is_data_delimiter(c);
+    }
+    return is_code_delimiter(c);
 }
 
 // Check if character is whitespace (space or tab)
@@ -108,6 +124,13 @@ void lexer_init(Lexer *lexer, const char *source)
     lexer->previous.start = NULL;
     lexer->previous.length = 0;
     lexer->had_whitespace = true; // Start of input acts like whitespace
+    lexer->data_mode = false;     // Code mode by default
+}
+
+void lexer_init_data(Lexer *lexer, const char *source)
+{
+    lexer_init(lexer, source);
+    lexer->data_mode = true;      // Data mode - only brackets/whitespace delimit
 }
 
 // Skip whitespace and track if any was found
@@ -154,7 +177,7 @@ static Token read_word(Lexer *lexer)
                 lexer->current++;
             }
         }
-        else if (is_space(*lexer->current) || is_delimiter(*lexer->current))
+        else if (is_space(*lexer->current) || is_delimiter(lexer, *lexer->current))
         {
             break;
         }
@@ -208,7 +231,7 @@ static Token read_quoted(Lexer *lexer)
             // Space ends the quoted word
             break;
         }
-        else if (!first_char && is_delimiter(*lexer->current))
+        else if (!first_char && is_delimiter(lexer, *lexer->current))
         {
             // Non-first delimiter ends the word
             break;
@@ -241,7 +264,7 @@ static Token read_colon(Lexer *lexer)
                 lexer->current++;
             }
         }
-        else if (is_space(*lexer->current) || is_delimiter(*lexer->current))
+        else if (is_space(*lexer->current) || is_delimiter(lexer, *lexer->current))
         {
             break;
         }
@@ -311,7 +334,7 @@ static bool looks_like_number(const char *p)
             // Escape sequence - not a pure number
             return false;
         }
-        if (is_space(*p) || is_delimiter(*p))
+        if (is_space(*p) || is_code_delimiter(*p))
         {
             // Hit a delimiter - it's a number
             return true;
@@ -402,7 +425,7 @@ Token lexer_next_token(Lexer *lexer)
     char c = *lexer->current;
     const char *start = lexer->current;
 
-    // Single-character tokens
+    // Brackets are always delimiters in both modes
     switch (c)
     {
     case '[':
@@ -413,6 +436,25 @@ Token lexer_next_token(Lexer *lexer)
         lexer->current++;
         return make_token(lexer, TOKEN_RIGHT_BRACKET, start, 1);
 
+    case '"':
+        return read_quoted(lexer);
+
+    case ':':
+        return read_colon(lexer);
+    
+    default:
+        break;
+    }
+
+    // In data mode, everything else (except brackets) is part of words
+    if (lexer->data_mode)
+    {
+        return read_word(lexer);
+    }
+
+    // Code mode: operators and parens are separate tokens
+    switch (c)
+    {
     case '(':
         lexer->current++;
         return make_token(lexer, TOKEN_LEFT_PAREN, start, 1);
@@ -461,12 +503,6 @@ Token lexer_next_token(Lexer *lexer)
         // Binary minus
         lexer->current++;
         return make_token(lexer, TOKEN_MINUS, start, 1);
-
-    case '"':
-        return read_quoted(lexer);
-
-    case ':':
-        return read_colon(lexer);
 
     default:
         // Check for number - but only if it looks like a pure number

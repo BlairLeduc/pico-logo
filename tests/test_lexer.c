@@ -825,6 +825,66 @@ void test_quoted_empty_before_bracket(void)
 }
 
 //============================================================================
+// Data Mode Tests
+//============================================================================
+
+void test_data_mode_phone_number(void)
+{
+    // In data mode, [Bob 555-1212] should be 2 tokens, not 4
+    Lexer lexer;
+    lexer_init_data(&lexer, "Bob 555-1212");
+    assert_token(&lexer, TOKEN_WORD, "Bob");
+    assert_token(&lexer, TOKEN_WORD, "555-1212");
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+void test_data_mode_operators_in_words(void)
+{
+    // In data mode, operators are part of words
+    Lexer lexer;
+    lexer_init_data(&lexer, "a+b c*d e/f x=y");
+    assert_token(&lexer, TOKEN_WORD, "a+b");
+    assert_token(&lexer, TOKEN_WORD, "c*d");
+    assert_token(&lexer, TOKEN_WORD, "e/f");
+    assert_token(&lexer, TOKEN_WORD, "x=y");
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+void test_data_mode_brackets_still_delimit(void)
+{
+    // Brackets should still work as delimiters in data mode
+    Lexer lexer;
+    lexer_init_data(&lexer, "hello [world] there");
+    assert_token(&lexer, TOKEN_WORD, "hello");
+    assert_token(&lexer, TOKEN_LEFT_BRACKET, "[");
+    assert_token(&lexer, TOKEN_WORD, "world");
+    assert_token(&lexer, TOKEN_RIGHT_BRACKET, "]");
+    assert_token(&lexer, TOKEN_WORD, "there");
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+void test_data_mode_parens_in_words(void)
+{
+    // In data mode, parentheses are part of words
+    Lexer lexer;
+    lexer_init_data(&lexer, "hello(world) foo(bar)baz");
+    assert_token(&lexer, TOKEN_WORD, "hello(world)");
+    assert_token(&lexer, TOKEN_WORD, "foo(bar)baz");
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+void test_code_mode_still_splits_operators(void)
+{
+    // Verify code mode still works as before
+    Lexer lexer;
+    lexer_init(&lexer, "100-20");
+    assert_token(&lexer, TOKEN_NUMBER, "100");
+    assert_token(&lexer, TOKEN_MINUS, "-");
+    assert_token(&lexer, TOKEN_NUMBER, "20");
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+//============================================================================
 // Main
 //============================================================================
 
@@ -927,6 +987,13 @@ int main(void)
     RUN_TEST(test_word_with_dot);
     RUN_TEST(test_true_false_words);
     RUN_TEST(test_quoted_empty_before_bracket);
+
+    // Data mode tests
+    RUN_TEST(test_data_mode_phone_number);
+    RUN_TEST(test_data_mode_operators_in_words);
+    RUN_TEST(test_data_mode_brackets_still_delimit);
+    RUN_TEST(test_data_mode_parens_in_words);
+    RUN_TEST(test_code_mode_still_splits_operators);
 
     return UNITY_END();
 }

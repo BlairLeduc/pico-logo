@@ -367,6 +367,64 @@ void test_variable_escape_in_name(void)
     TEST_ASSERT_EQUAL_FLOAT(42.0f, r.value.as.number);
 }
 
+//==========================================================================
+// Data Mode List Parsing Tests
+//==========================================================================
+
+void test_list_data_mode_phone_number(void)
+{
+    // [Bob 555-1212] should be 2 elements, not 4
+    Result r = eval_string("count [Bob 555-1212]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(2.0f, r.value.as.number);
+}
+
+void test_list_data_mode_first(void)
+{
+    // first [Bob 555-1212] should be "Bob"
+    Result r = eval_string("first [Bob 555-1212]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("Bob", mem_word_ptr(r.value.as.node));
+}
+
+void test_list_data_mode_last(void)
+{
+    // last [Bob 555-1212] should be "555-1212"
+    Result r = eval_string("last [Bob 555-1212]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("555-1212", mem_word_ptr(r.value.as.node));
+}
+
+void test_list_data_mode_operators_in_words(void)
+{
+    // [a+b c*d] should be 2 elements
+    Result r = eval_string("count [a+b c*d]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(2.0f, r.value.as.number);
+}
+
+void test_list_code_execution_splits_operators(void)
+{
+    // repeat 4 [fd 100-20 rt 90] should work (100-20 = 80)
+    // The list is stored as [fd 100-20 rt 90] (4 elements)
+    // but when run, it's re-lexed as code where - is an operator
+    run_string("repeat 4 [fd 100-20 rt 90]");
+    // Check turtle moved - should have moved forward 80 * 4 = 320 total
+    Result r = eval_string("pos");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    // Should end up back at home after 4 right angles
+}
+
+void test_run_with_arithmetic(void)
+{
+    // run [sum 100-20 5] should compute 100-20+5 = 85
+    Result r = eval_string("run [sum 100-20 5]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(85.0f, r.value.as.number);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -417,6 +475,14 @@ int main(void)
     RUN_TEST(test_quoted_word_escape_space);
     RUN_TEST(test_quoted_word_escape_bracket);
     RUN_TEST(test_variable_escape_in_name);
+
+    // Data mode list parsing tests
+    RUN_TEST(test_list_data_mode_phone_number);
+    RUN_TEST(test_list_data_mode_first);
+    RUN_TEST(test_list_data_mode_last);
+    RUN_TEST(test_list_data_mode_operators_in_words);
+    RUN_TEST(test_list_code_execution_splits_operators);
+    RUN_TEST(test_run_with_arithmetic);
 
     return UNITY_END();
 }
