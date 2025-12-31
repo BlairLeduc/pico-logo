@@ -497,22 +497,40 @@ void lcd_putstr(uint8_t column, uint8_t row, const char *str)
 // cursor when printing these if you want to see the box drawing glyphs
 // uncorrupted.
 
-static uint8_t cursor_column = 0;  // cursor x position for drawing
-static uint8_t cursor_row = 0;     // cursor y position for drawing
-static bool cursor_enabled = true; // cursor visibility state
+static uint8_t cursor_column = 0;          // cursor x position for drawing
+static uint8_t cursor_row = 0;             // cursor y position for drawing
+static bool cursor_enabled = true;         // cursor visibility state
+static LcdCursorStyle cursor_style = LCD_CURSOR_UNDERLINE;  // cursor style
+static uint8_t cursor_char = ' ';          // character under cursor (for block style)
 
 // Enable or disable the cursor
 void lcd_enable_cursor(bool cursor_on)
 {
-    // Cursor visibility is not implemented, but we can toggle the state
     cursor_enabled = cursor_on;
 }
 
 // Check if the cursor is enabled
 bool lcd_cursor_enabled()
 {
-    // Return the current cursor visibility state
     return cursor_enabled;
+}
+
+// Set the cursor style
+void lcd_set_cursor_style(LcdCursorStyle style)
+{
+    cursor_style = style;
+}
+
+// Get the cursor style
+LcdCursorStyle lcd_get_cursor_style(void)
+{
+    return cursor_style;
+}
+
+// Set the character under the cursor (used for block cursor style)
+void lcd_set_cursor_char(uint8_t c)
+{
+    cursor_char = c;
 }
 
 // Move the cursor to the specified position
@@ -533,8 +551,17 @@ void lcd_move_cursor(uint8_t column, uint8_t row)
 // Draw the cursor at the current position
 void lcd_draw_cursor()
 {
-    if (cursor_enabled)
+    if (!cursor_enabled)
+        return;
+
+    if (cursor_style == LCD_CURSOR_BLOCK)
     {
+        // Block cursor: draw character in reverse video
+        lcd_putc(cursor_column, cursor_row, cursor_char | 0x80);
+    }
+    else
+    {
+        // Underline cursor: draw a line at the bottom of the character cell
         lcd_solid_rectangle(foreground, cursor_column * GLYPH_WIDTH, ((cursor_row + 1) * GLYPH_HEIGHT) - 1, GLYPH_WIDTH, 1);
     }
 }
@@ -542,8 +569,17 @@ void lcd_draw_cursor()
 // Erase the cursor at the current position
 void lcd_erase_cursor()
 {
-    if (cursor_enabled)
+    if (!cursor_enabled)
+        return;
+
+    if (cursor_style == LCD_CURSOR_BLOCK)
     {
+        // Block cursor: redraw character in normal video
+        lcd_putc(cursor_column, cursor_row, cursor_char);
+    }
+    else
+    {
+        // Underline cursor: erase the line at the bottom of the character cell
         lcd_solid_rectangle(background, cursor_column * GLYPH_WIDTH, ((cursor_row + 1) * GLYPH_HEIGHT) - 1, GLYPH_WIDTH, 1);
     }
 }

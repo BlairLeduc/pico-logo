@@ -539,6 +539,17 @@ static void editor_position_cursor(void)
     if (screen_row < EDITOR_FIRST_ROW) screen_row = EDITOR_FIRST_ROW;
     if (screen_row > EDITOR_LAST_ROW) screen_row = EDITOR_LAST_ROW;
     
+    // Update cursor character for block cursor style
+    // Get the character at cursor position (or space if at end of content)
+    uint8_t cursor_char = ' ';
+    if (editor.cursor_pos < editor.content_length) {
+        cursor_char = (uint8_t)editor.buffer[editor.cursor_pos];
+        if (cursor_char == '\n') {
+            cursor_char = ' ';  // Show space for newline
+        }
+    }
+    lcd_set_cursor_char(cursor_char);
+    
     screen_txt_set_cursor(screen_col, screen_row);
 }
 
@@ -714,6 +725,7 @@ static void editor_delete_selection(void)
     editor.buffer[editor.content_length] = '\0';
     editor.cursor_pos = sel_start;
     editor.selecting = false;
+    lcd_set_cursor_style(LCD_CURSOR_UNDERLINE);
 }
 
 //
@@ -1084,6 +1096,9 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
     editor.in_graphics_preview = false;
     editor.dirty_flags = DIRTY_NONE;
     
+    // Start with underline cursor (normal editing mode)
+    lcd_set_cursor_style(LCD_CURSOR_UNDERLINE);
+    
     // Ensure cursor is on second line if we have "to name\n" template
     // (currently we start at beginning; template-specific positioning can be added here)
     
@@ -1283,9 +1298,11 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
             case 0x02:  // Ctrl+B - toggle block selection
                 if (editor.selecting) {
                     editor.selecting = false;
+                    lcd_set_cursor_style(LCD_CURSOR_UNDERLINE);
                 } else {
                     editor.selecting = true;
                     editor.select_anchor = editor.cursor_pos;
+                    lcd_set_cursor_style(LCD_CURSOR_BLOCK);
                 }
                 // Selection visual needs redraw - mark the lines involved
                 editor_mark_all_dirty();  // Selection can span multiple lines
@@ -1296,6 +1313,7 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                 if (editor.selecting) {
                     editor_copy_selection();
                     editor.selecting = false;
+                    lcd_set_cursor_style(LCD_CURSOR_UNDERLINE);
                     editor_mark_all_dirty();  // Clear selection highlighting
                 } else {
                     editor_copy_line();
