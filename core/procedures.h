@@ -7,7 +7,11 @@
 //  Logo procedures are defined with 'to' and consist of:
 //  - A name
 //  - Zero or more input parameter names
-//  - A body (list of instructions)
+//  - A body (list of line-lists, where each line is a list of tokens)
+//
+//  Body structure: [[line1-tokens...] [line2-tokens...] ...]
+//  Empty lines are stored as empty lists [].
+//  This matches the formal Logo semantics for DEFINE and TEXT.
 //
 //  Tail recursion optimization:
 //  When a procedure's last action is to call itself (or another procedure),
@@ -29,10 +33,6 @@ extern "C"
 
     // Maximum parameters per procedure
     #define MAX_PROC_PARAMS 16
-    
-    // Newline marker for preserving line breaks in procedure definitions
-    #define NEWLINE_MARKER "\\n"
-    #define NEWLINE_MARKER_LENGTH 2
 
     // User-defined procedure
     typedef struct UserProcedure
@@ -40,7 +40,7 @@ extern "C"
         const char *name;           // Procedure name (interned)
         const char *params[MAX_PROC_PARAMS];  // Parameter names (interned)
         int param_count;            // Number of parameters
-        Node body;                  // Body as a list of instructions
+        Node body;                  // Body as list of line-lists [[line1] [line2]...]
         bool buried;                // If true, hidden from poall/erall/etc
         bool stepped;               // If true, pause at each instruction
         bool traced;                // If true, print trace info on call/return
@@ -113,10 +113,6 @@ extern "C"
 
     // Mark all procedure bodies as GC roots
     void proc_gc_mark_all(void);
-    
-    // Helper to check if a word is a newline marker
-    #define proc_is_newline_marker(word) \
-        ((word) != NULL && (word)[0] == '\\' && (word)[1] == 'n' && (word)[2] == '\0')
 
 #ifdef __cplusplus
 }

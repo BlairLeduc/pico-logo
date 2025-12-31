@@ -53,6 +53,8 @@ extern "C"
         const char *current; // Current position in source
         Token previous;      // Previous token (for context)
         bool had_whitespace; // Whitespace before current token
+        bool had_newline;    // Newline in whitespace before current token
+        int newline_count;   // Number of newlines in whitespace (for empty line detection)
     } Lexer;
 
     // Initialize the lexer with source input

@@ -25,7 +25,7 @@ static Result prim_define(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, "define", value_to_string(args[0]));
     }
     
-    // Second arg must be list [[params] [body...]]
+    // Second arg must be list [[params] [line1] [line2] ...]
     if (!value_is_list(args[1]))
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, "define", value_to_string(args[1]));
@@ -83,57 +83,9 @@ static Result prim_define(Evaluator *eval, int argc, Value *args)
         }
     }
     
-    // Build body list from remaining elements
-    // Each element after params should be a line (list) of the body
-    // We need to flatten these into a single body list
-    Node body = NODE_NIL;
-    Node body_tail = NODE_NIL;
-    
-    Node line = body_start;
-    while (!mem_is_nil(line))
-    {
-        Node line_content = mem_car(line);
-        
-        // If line_content is a list, unwrap and add each element to body
-        Node inner = line_content;
-        if (NODE_GET_TYPE(inner) == NODE_TYPE_LIST)
-        {
-            // Marked as list - it's a nested list, iterate through it
-            while (!mem_is_nil(inner))
-            {
-                Node elem = mem_car(inner);
-                Node new_cons = mem_cons(elem, NODE_NIL);
-                if (mem_is_nil(body))
-                {
-                    body = new_cons;
-                    body_tail = new_cons;
-                }
-                else
-                {
-                    mem_set_cdr(body_tail, new_cons);
-                    body_tail = new_cons;
-                }
-                inner = mem_cdr(inner);
-            }
-        }
-        else if (mem_is_word(line_content))
-        {
-            // Add word as-is
-            Node new_cons = mem_cons(line_content, NODE_NIL);
-            if (mem_is_nil(body))
-            {
-                body = new_cons;
-                body_tail = new_cons;
-            }
-            else
-            {
-                mem_set_cdr(body_tail, new_cons);
-                body_tail = new_cons;
-            }
-        }
-        
-        line = mem_cdr(line);
-    }
+    // Body is the remaining elements (list of line-lists)
+    // Store body_start directly as list-of-lists
+    Node body = body_start;
     
     // Define the procedure
     if (!proc_define(name, params, param_count, body))
@@ -147,6 +99,7 @@ static Result prim_define(Evaluator *eval, int argc, Value *args)
 // Simple text-based procedure definition for testing
 // This parses: to name :param1 :param2 ... body... end
 // Used when we have the full definition as a string
+// Body is stored as list-of-lists: [[line1-tokens] [line2-tokens] ...]
 Result proc_define_from_text(const char *text)
 {
     Lexer lexer;
@@ -198,13 +151,15 @@ Result proc_define_from_text(const char *text)
     }
     
     // Now collect body until 'end'
-    // Build body as a list
+    // Build body as list-of-lists: [[line1] [line2] ...]
     // Note: 'end' must be at the start of a line - either right after parsing params
     // or right after a newline marker (\n) or an actual newline character
-    Node body = NODE_NIL;
+    Node body = NODE_NIL;           // Outer list of lines
     Node body_tail = NODE_NIL;
-    bool at_line_start = true;  // Start of body is start of a line
-    const char *prev_token_end = t.start;  // Track where previous token ended
+    Node current_line = NODE_NIL;   // Current line being built
+    Node current_line_tail = NODE_NIL;
+    bool at_line_start = lexer.had_newline;  // Check if we crossed a newline to get here
+    bool body_started = false;      // Have we added any content to body?
     
     while (t.type != TOKEN_EOF)
     {
@@ -215,12 +170,10 @@ Result proc_define_from_text(const char *text)
             break;
         }
         
-        // Check for newline marker - next token will be at line start
-        bool is_newline_marker = (t.type == TOKEN_WORD && t.length == 2 &&
-                                   t.start[0] == '\\' && t.start[1] == 'n');
+        at_line_start = false;
         
+        // Build token node
         Node item = NODE_NIL;
-        at_line_start = is_newline_marker;  // Update for next iteration
         
         if (t.type == TOKEN_LEFT_BRACKET)
         {
@@ -279,35 +232,87 @@ Result proc_define_from_text(const char *text)
             item = mem_atom(">", 1);
         }
         
+        // Add item to current line
         if (!mem_is_nil(item))
         {
+            body_started = true;  // We have actual content
             Node new_cons = mem_cons(item, NODE_NIL);
-            if (mem_is_nil(body))
+            if (mem_is_nil(current_line))
             {
-                body = new_cons;
-                body_tail = new_cons;
+                current_line = new_cons;
+                current_line_tail = new_cons;
             }
             else
             {
-                mem_set_cdr(body_tail, new_cons);
-                body_tail = new_cons;
+                mem_set_cdr(current_line_tail, new_cons);
+                current_line_tail = new_cons;
             }
         }
         
-        prev_token_end = t.start + t.length;
         t = lexer_next_token(&lexer);
         
-        // Check if there was an actual newline between tokens
-        if (!at_line_start)
+        // Check if the lexer crossed newline(s) to get the next token
+        if (lexer.had_newline)
         {
-            for (const char *p = prev_token_end; p < t.start; p++)
+            int newline_count = lexer.newline_count;
+            lexer.had_newline = false;
+            lexer.newline_count = 0;
+            
+            // Skip leading newlines before body starts
+            if (!body_started && mem_is_nil(current_line))
             {
-                if (*p == '\n')
-                {
-                    at_line_start = true;
-                    break;
-                }
+                at_line_start = true;
+                continue;
             }
+            
+            body_started = true;
+            
+            // First newline finishes the current line
+            Node line_to_add = mem_is_nil(current_line) ? NODE_NIL : 
+                               NODE_MAKE_LIST(NODE_GET_INDEX(current_line));
+            Node line_cons = mem_cons(line_to_add, NODE_NIL);
+            
+            if (mem_is_nil(body))
+            {
+                body = line_cons;
+                body_tail = line_cons;
+            }
+            else
+            {
+                mem_set_cdr(body_tail, line_cons);
+                body_tail = line_cons;
+            }
+            
+            // Additional newlines (newline_count > 1) create empty lines
+            for (int i = 1; i < newline_count; i++)
+            {
+                Node empty_line = mem_cons(NODE_NIL, NODE_NIL);
+                mem_set_cdr(body_tail, empty_line);
+                body_tail = empty_line;
+            }
+            
+            // Start new line
+            current_line = NODE_NIL;
+            current_line_tail = NODE_NIL;
+            at_line_start = true;
+        }
+    }
+    
+    // Don't forget the last line if it wasn't terminated by newline
+    if (!mem_is_nil(current_line))
+    {
+        Node line_to_add = NODE_MAKE_LIST(NODE_GET_INDEX(current_line));
+        Node line_cons = mem_cons(line_to_add, NODE_NIL);
+        
+        if (mem_is_nil(body))
+        {
+            body = line_cons;
+            body_tail = line_cons;
+        }
+        else
+        {
+            mem_set_cdr(body_tail, line_cons);
+            body_tail = line_cons;
         }
     }
     
@@ -339,7 +344,7 @@ static Result prim_text(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_DONT_KNOW_HOW, name, NULL);
     }
     
-    // Build [[params] [body]]
+    // Build [[params] [line1] [line2] ...]
     // First build params list
     Node params = NODE_NIL;
     Node params_tail = NODE_NIL;
@@ -360,56 +365,12 @@ static Result prim_text(Evaluator *eval, int argc, Value *args)
         }
     }
     
-    // Filter out newline markers from body
-    Node filtered_body = NODE_NIL;
-    Node filtered_tail = NODE_NIL;
-    Node curr = proc->body;
-    
-    while (!mem_is_nil(curr))
-    {
-        Node elem = mem_car(curr);
-        
-        // Skip newline markers
-        bool skip = false;
-        if (mem_is_word(elem))
-        {
-            const char *word = mem_word_ptr(elem);
-            if (proc_is_newline_marker(word))
-            {
-                skip = true;
-            }
-        }
-        
-        if (!skip)
-        {
-            Node new_cons = mem_cons(elem, NODE_NIL);
-            if (mem_is_nil(filtered_body))
-            {
-                filtered_body = new_cons;
-                filtered_tail = new_cons;
-            }
-            else
-            {
-                mem_set_cdr(filtered_tail, new_cons);
-                filtered_tail = new_cons;
-            }
-        }
-        
-        curr = mem_cdr(curr);
-    }
-    
-    // Build result: [[params] body...]
-    // Mark params as a list
+    // Mark params as a list for proper nesting
     Node params_list = mem_is_nil(params) ? params : NODE_MAKE_LIST(NODE_GET_INDEX(params));
     
-    // Create outer list starting with params
-    Node result = mem_cons(params_list, NODE_NIL);
-    Node result_tail = result;
-    
-    // Add body as second element (as a list)
-    Node body_list = mem_is_nil(filtered_body) ? filtered_body : NODE_MAKE_LIST(NODE_GET_INDEX(filtered_body));
-    Node body_cons = mem_cons(body_list, NODE_NIL);
-    mem_set_cdr(result_tail, body_cons);
+    // Body is already stored as list-of-lists [[line1] [line2] ...]
+    // Prepend params to create [[params] [line1] [line2] ...]
+    Node result = mem_cons(params_list, proc->body);
     
     return result_ok(value_list(result));
 }

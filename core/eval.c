@@ -715,17 +715,6 @@ static int serialize_list_to_buffer(Node list, char *buffer, int max_len)
     {
         Node element = mem_car(node);
         
-        // Skip newline markers during execution
-        if (mem_is_word(element))
-        {
-            const char *str = mem_word_ptr(element);
-            if (proc_is_newline_marker(str))
-            {
-                node = mem_cdr(node);
-                continue;
-            }
-        }
-        
         int written = serialize_node_to_buffer(element, buffer + pos, max_len - pos, pos > 0);
         pos += written;
         
@@ -1074,23 +1063,11 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
             }
         }
 
-        // Handle RESULT_GOTO - find label and restart from there
+        // Handle RESULT_GOTO - let it bubble up to execute_body_with_step
+        // which has access to the full procedure body with all lines
         if (r.status == RESULT_GOTO)
         {
-            int label_pos = find_label_position(buffer, r.goto_label);
-            if (label_pos < 0)
-            {
-                // Label not found - convert to error with label name
-                r = result_error_arg(ERR_CANT_FIND_LABEL, NULL, r.goto_label);
-                break;
-            }
-            
-            // Reinitialize lexer to start from after the label
-            lexer_init(&list_lexer, buffer + label_pos);
-            eval->lexer = &list_lexer;
-            eval->has_current = false;
-            r = result_none();
-            continue;  // Continue execution from the new position
+            break;  // Propagate to caller
         }
 
         // Propagate stop/output/error/throw immediately

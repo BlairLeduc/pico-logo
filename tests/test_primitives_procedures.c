@@ -104,8 +104,8 @@ void test_recursive_procedure(void)
     
     run_string("make \"result 0");
     
-    // Build body: make "result :result + :n if :n > 0 [sumto difference :n 1]
-    Node body = NODE_NIL;
+    // Build body line: make "result :result + :n if :n > 0 [sumto difference :n 1]
+    Node body_line = NODE_NIL;
     Node tail = NODE_NIL;
     
     // Build: make "result :result + :n
@@ -113,7 +113,7 @@ void test_recursive_procedure(void)
     for (int i = 0; i < 5; i++) {
         Node w = mem_atom(words1[i], strlen(words1[i]));
         Node c = mem_cons(w, NODE_NIL);
-        if (mem_is_nil(body)) { body = c; tail = c; }
+        if (mem_is_nil(body_line)) { body_line = c; tail = c; }
         else { mem_set_cdr(tail, c); tail = c; }
     }
     
@@ -135,9 +135,13 @@ void test_recursive_procedure(void)
         if (mem_is_nil(inner)) { inner = c; inner_tail = c; }
         else { mem_set_cdr(inner_tail, c); inner_tail = c; }
     }
-    // Add nested list to body - inner is already a NODE_TYPE_LIST from mem_cons
+    // Add nested list to body_line - inner is already a NODE_TYPE_LIST from mem_cons
     Node c = mem_cons(inner, NODE_NIL);
     mem_set_cdr(tail, c);
+    
+    // Wrap body_line into list-of-lists: [[body_line]]
+    Node line_marked = NODE_MAKE_LIST(NODE_GET_INDEX(body_line));
+    Node body = mem_cons(line_marked, NODE_NIL);
     
     // Define the procedure
     Node name = mem_atom("sumto", 5);
@@ -157,8 +161,8 @@ void test_tail_recursive_countdown(void)
     Node p = mem_atom("n", 1);
     const char *params[] = {mem_word_ptr(p)};
     
-    // Build body: if :n > 0 [print :n countdown difference :n 1]
-    Node body = NODE_NIL;
+    // Build body line: if :n > 0 [print :n countdown difference :n 1]
+    Node body_line = NODE_NIL;
     Node tail = NODE_NIL;
     
     // if :n > 0
@@ -166,7 +170,7 @@ void test_tail_recursive_countdown(void)
     for (int i = 0; i < 4; i++) {
         Node w = mem_atom(words[i], strlen(words[i]));
         Node c = mem_cons(w, NODE_NIL);
-        if (mem_is_nil(body)) { body = c; tail = c; }
+        if (mem_is_nil(body_line)) { body_line = c; tail = c; }
         else { mem_set_cdr(tail, c); tail = c; }
     }
     
@@ -184,6 +188,10 @@ void test_tail_recursive_countdown(void)
     Node c = mem_cons(inner, NODE_NIL);
     mem_set_cdr(tail, c);
     
+    // Wrap body_line into list-of-lists: [[body_line]]
+    Node line_marked = NODE_MAKE_LIST(NODE_GET_INDEX(body_line));
+    Node body = mem_cons(line_marked, NODE_NIL);
+    
     Node name = mem_atom("countdown", 9);
     proc_define(mem_word_ptr(name), params, 1, body);
     
@@ -199,7 +207,7 @@ void test_deep_tail_recursion(void)
     Node p = mem_atom("n", 1);
     const char *params[] = {mem_word_ptr(p)};
     
-    Node body = NODE_NIL;
+    Node body_line = NODE_NIL;
     Node tail = NODE_NIL;
     
     // if :n > 0
@@ -207,7 +215,7 @@ void test_deep_tail_recursion(void)
     for (int i = 0; i < 4; i++) {
         Node w = mem_atom(words[i], strlen(words[i]));
         Node c = mem_cons(w, NODE_NIL);
-        if (mem_is_nil(body)) { body = c; tail = c; }
+        if (mem_is_nil(body_line)) { body_line = c; tail = c; }
         else { mem_set_cdr(tail, c); tail = c; }
     }
     
@@ -224,6 +232,10 @@ void test_deep_tail_recursion(void)
     // inner is already a NODE_TYPE_LIST from mem_cons
     Node c = mem_cons(inner, NODE_NIL);
     mem_set_cdr(tail, c);
+    
+    // Wrap body_line into list-of-lists: [[body_line]]
+    Node line_marked = NODE_MAKE_LIST(NODE_GET_INDEX(body_line));
+    Node body = mem_cons(line_marked, NODE_NIL);
     
     Node name = mem_atom("tailcount", 9);
     proc_define(mem_word_ptr(name), params, 1, body);
@@ -513,8 +525,8 @@ void test_text_no_params(void)
 
 void test_proc_define_from_text_simple(void)
 {
-    // Define using text format with newline markers: to name \n body \n end
-    Result r = proc_define_from_text("to greetings \\n print \"hello \\n end");
+    // Define using text format with real newlines: to name\nbody\nend
+    Result r = proc_define_from_text("to greetings\nprint \"hello\nend");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
     // Verify the procedure was defined
@@ -528,8 +540,8 @@ void test_proc_define_from_text_simple(void)
 
 void test_proc_define_from_text_with_param(void)
 {
-    // Define a procedure with parameters and newline markers
-    Result r = proc_define_from_text("to triple :n \\n output :n * 3 \\n end");
+    // Define a procedure with parameters and real newlines
+    Result r = proc_define_from_text("to triple :n\noutput :n * 3\nend");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
     Result r2 = eval_string("triple 4");
@@ -539,7 +551,7 @@ void test_proc_define_from_text_with_param(void)
 
 void test_proc_define_from_text_multiple_params(void)
 {
-    Result r = proc_define_from_text("to avg :a :b \\n output (:a + :b) / 2 \\n end");
+    Result r = proc_define_from_text("to avg :a :b\noutput (:a + :b) / 2\nend");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
     Result r2 = eval_string("avg 10 20");
@@ -549,8 +561,8 @@ void test_proc_define_from_text_multiple_params(void)
 
 void test_proc_define_from_text_with_brackets(void)
 {
-    // Test with brackets in the body and newline markers
-    Result r = proc_define_from_text("to countdown :n \\n if :n > 0 [print :n countdown :n - 1] \\n end");
+    // Test with brackets in the body and real newlines
+    Result r = proc_define_from_text("to countdown :n\nif :n > 0 [print :n countdown :n - 1]\nend");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
     reset_output();
@@ -560,8 +572,8 @@ void test_proc_define_from_text_with_brackets(void)
 
 void test_proc_define_from_text_with_comparison(void)
 {
-    // Test with comparison operators and newline markers
-    Result r = proc_define_from_text("to bigger :a :b \\n if :a > :b [output :a] \\n output :b \\n end");
+    // Test with comparison operators and real newlines
+    Result r = proc_define_from_text("to bigger :a :b\nif :a > :b [output :a]\noutput :b\nend");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
     Result r2 = eval_string("bigger 5 3");
@@ -593,15 +605,15 @@ void test_proc_define_from_text_error_no_name(void)
 void test_proc_define_from_text_error_redefine_primitive(void)
 {
     // Cannot redefine primitives
-    Result r = proc_define_from_text("to print :x \\n output :x \\n end");
+    Result r = proc_define_from_text("to print :x\noutput :x\nend");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
     TEST_ASSERT_EQUAL(ERR_IS_PRIMITIVE, r.error_code);
 }
 
 void test_proc_define_from_text_quoted_word(void)
 {
-    // Test with quoted words in body and newline markers
-    Result r = proc_define_from_text("to sayhello \\n print \"hello \\n end");
+    // Test with quoted words in body and real newlines
+    Result r = proc_define_from_text("to sayhello\nprint \"hello\nend");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
     reset_output();
@@ -611,8 +623,8 @@ void test_proc_define_from_text_quoted_word(void)
 
 void test_proc_define_from_text_all_operators(void)
 {
-    // Test all arithmetic and comparison operators with newline markers
-    Result r = proc_define_from_text("to mathtest :x \\n output :x + 1 - 1 * 2 / 2 \\n end");
+    // Test all arithmetic and comparison operators with real newlines
+    Result r = proc_define_from_text("to mathtest :x\noutput :x + 1 - 1 * 2 / 2\nend");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
     Result r2 = eval_string("mathtest 10");
@@ -623,8 +635,8 @@ void test_proc_define_from_text_all_operators(void)
 
 void test_proc_define_from_text_equals_operator(void)
 {
-    // Test equals operator with newline markers
-    Result r = proc_define_from_text("to iseq :a :b \\n if :a = :b [output \"yes] \\n output \"no \\n end");
+    // Test equals operator with real newlines
+    Result r = proc_define_from_text("to iseq :a :b\nif :a = :b [output \"yes]\noutput \"no\nend");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
     Result r2 = eval_string("iseq 5 5");
@@ -639,7 +651,7 @@ void test_proc_define_from_text_end_in_list(void)
 {
     // Bug: [end] in procedure body was incorrectly terminating the procedure
     // Test that [end] as a list element doesn't end the procedure
-    Result r = proc_define_from_text("to checkend :x \\n if :x = [end] [output \"yes] \\n output \"no \\n end");
+    Result r = proc_define_from_text("to checkend :x\nif :x = [end] [output \"yes]\noutput \"no\nend");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
     // Verify the procedure works correctly
@@ -654,8 +666,8 @@ void test_proc_define_from_text_end_in_list(void)
 
 void test_proc_define_from_text_less_than_operator(void)
 {
-    // Test less than operator with newline markers
-    Result r = proc_define_from_text("to isless :a :b \\n if :a < :b [output \"yes] \\n output \"no \\n end");
+    // Test less than operator with real newlines
+    Result r = proc_define_from_text("to isless :a :b\nif :a < :b [output \"yes]\noutput \"no\nend");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
     Result r2 = eval_string("isless 3 5");
@@ -665,8 +677,8 @@ void test_proc_define_from_text_less_than_operator(void)
 
 void test_proc_define_from_text_with_parentheses(void)
 {
-    // Test with parentheses in body and newline markers
-    Result r = proc_define_from_text("to sumall :a :b :c \\n output (:a + :b + :c) \\n end");
+    // Test with parentheses in body and real newlines
+    Result r = proc_define_from_text("to sumall :a :b :c\noutput (:a + :b + :c)\nend");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
     Result r2 = eval_string("sumall 1 2 3");
@@ -681,9 +693,9 @@ void test_unconditional_tco_no_args(void)
     // We use a counter to stop after enough iterations
     run_string("make \"counter 0");
     
-    Result r = proc_define_from_text("to infloop \\n make \"counter :counter + 1 \\n "
-                                     "if :counter > 100 [stop] \\n "
-                                     "infloop \\n end");
+    Result r = proc_define_from_text("to infloop\nmake \"counter :counter + 1\n"
+                                     "if :counter > 100 [stop]\n"
+                                     "infloop\nend");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
     Result r2 = run_string("infloop");
@@ -701,9 +713,9 @@ void test_unconditional_tco_with_args(void)
     // We use a counter to stop after enough iterations
     run_string("make \"counter 0");
     
-    Result r = proc_define_from_text("to infloop2 :n \\n make \"counter :counter + 1 \\n "
-                                     "if :counter > 100 [stop] \\n "
-                                     "infloop2 :n \\n end");
+    Result r = proc_define_from_text("to infloop2 :n\nmake \"counter :counter + 1\n"
+                                     "if :counter > 100 [stop]\n"
+                                     "infloop2 :n\nend");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
     Result r2 = run_string("infloop2 42");
@@ -727,10 +739,10 @@ void test_tco_with_args_exact_failing_case(void)
     
     // Define procedure that uses its argument in recursive call
     Result r = proc_define_from_text(
-        "to foo2 :n \\n "
-        "make \"loopcount :loopcount + 1 \\n "
-        "if :loopcount > 100 [stop] \\n "
-        "foo2 :n \\n "
+        "to foo2 :n\n"
+        "make \"loopcount :loopcount + 1\n"
+        "if :loopcount > 100 [stop]\n"
+        "foo2 :n\n"
         "end");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
@@ -755,11 +767,11 @@ void test_tco_with_print_and_args(void)
     reset_output();
     
     Result r = proc_define_from_text(
-        "to fooprint :n \\n "
-        "make \"cnt :cnt + 1 \\n "
-        "if :cnt > 50 [stop] \\n "
-        "pr (se \"Hey :n) \\n "
-        "fooprint :n \\n "
+        "to fooprint :n\n"
+        "make \"cnt :cnt + 1\n"
+        "if :cnt > 50 [stop]\n"
+        "pr (se \"Hey :n)\n"
+        "fooprint :n\n"
         "end");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
@@ -778,10 +790,10 @@ void test_tco_scope_depth_stability(void)
     run_string("make \"cnt 0");
     
     Result r = proc_define_from_text(
-        "to checkdepth :n \\n "
-        "make \"cnt :cnt + 1 \\n "
-        "if :cnt > 100 [stop] \\n "
-        "checkdepth :n \\n "
+        "to checkdepth :n\n"
+        "make \"cnt :cnt + 1\n"
+        "if :cnt > 100 [stop]\n"
+        "checkdepth :n\n"
         "end");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
@@ -798,6 +810,227 @@ void test_tco_scope_depth_stability(void)
     // Should have completed 101 iterations without overflow
     Result r3 = eval_string(":cnt");
     TEST_ASSERT_EQUAL_FLOAT(101.0f, r3.value.as.number);
+}
+
+//==========================================================================
+// List-of-Lists Body Structure Tests
+// These tests verify the new body storage format where each line is a list
+//==========================================================================
+
+void test_text_returns_list_of_lists_structure(void)
+{
+    // Define a simple procedure: to test print 42 end
+    // Expected text output: [[] [print 42]]
+    // (params list is empty, one body line)
+    Result r = proc_define_from_text("to test1\nprint 42\nend");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    Result r2 = eval_string("text \"test1");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_TRUE(value_is_list(r2.value));
+    
+    Node list = r2.value.as.node;
+    
+    // First element should be empty params list []
+    // NIL represents an empty list
+    Node params = mem_car(list);
+    TEST_ASSERT_TRUE(mem_is_nil(params));
+    
+    // Second element should be the body line [print 42]
+    Node rest = mem_cdr(list);
+    TEST_ASSERT_FALSE(mem_is_nil(rest));
+    Node body_line1 = mem_car(rest);
+    TEST_ASSERT_EQUAL(NODE_TYPE_LIST, NODE_GET_TYPE(body_line1));
+}
+
+void test_text_multiline_procedure(void)
+{
+    // Define: to test2 :n\nprint :n\noutput :n * 2\nend
+    // Expected text output: [[n] [print :n] [output :n * 2]]
+    Result r = proc_define_from_text("to test2 :n\nprint :n\noutput :n * 2\nend");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    Result r2 = eval_string("text \"test2");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_TRUE(value_is_list(r2.value));
+    
+    Node list = r2.value.as.node;
+    
+    // First element: params list [n]
+    Node params = mem_car(list);
+    TEST_ASSERT_EQUAL(NODE_TYPE_LIST, NODE_GET_TYPE(params));
+    
+    // Second element: [print :n]
+    Node rest1 = mem_cdr(list);
+    TEST_ASSERT_FALSE(mem_is_nil(rest1));
+    Node line1 = mem_car(rest1);
+    TEST_ASSERT_EQUAL(NODE_TYPE_LIST, NODE_GET_TYPE(line1));
+    
+    // Third element: [output :n * 2]
+    Node rest2 = mem_cdr(rest1);
+    TEST_ASSERT_FALSE(mem_is_nil(rest2));
+    Node line2 = mem_car(rest2);
+    TEST_ASSERT_EQUAL(NODE_TYPE_LIST, NODE_GET_TYPE(line2));
+    
+    // No more elements
+    Node rest3 = mem_cdr(rest2);
+    TEST_ASSERT_TRUE(mem_is_nil(rest3));
+}
+
+void test_define_from_list_of_lists(void)
+{
+    // Test that define accepts list-of-lists format
+    // define "myproc [[x] [output :x * 2]]
+    Result r = run_string("define \"dbltest [[x] [output :x * 2]]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Call it
+    Result r2 = eval_string("dbltest 7");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_FLOAT(14.0f, r2.value.as.number);
+}
+
+void test_define_multiline_list_of_lists(void)
+{
+    // Test multi-line procedure via define
+    // define "multitest [[] [print 1] [print 2] [print 3]]
+    Result r = run_string("define \"multitest [[] [print 1] [print 2] [print 3]]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    reset_output();
+    run_string("multitest");
+    TEST_ASSERT_EQUAL_STRING("1\n2\n3\n", output_buffer);
+}
+
+void test_lput_adds_line_to_procedure(void)
+{
+    // Define a procedure, then use lput to add a line
+    // to square print 1 end
+    // define "square2 lput [print 2] text "square
+    // square2 should print 1 then 2
+    Result r = proc_define_from_text("to sqbase\nprint 1\nend");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    Result r2 = run_string("define \"sqextend lput [print 2] text \"sqbase");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+    
+    reset_output();
+    run_string("sqextend");
+    TEST_ASSERT_EQUAL_STRING("1\n2\n", output_buffer);
+}
+
+void test_fput_adds_line_at_start(void)
+{
+    // Use fput to add a line at the start (after params)
+    // This is trickier: fput [newline] text "proc puts line before params
+    // We need: fput params fput [newline] bf text "proc
+    Result r = proc_define_from_text("to fbase\nprint 2\nend");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    // Get text, which is [[] [print 2]]
+    // We want [[] [print 1] [print 2]]
+    // That's: fput first text "fbase fput [print 1] bf text "fbase
+    Result r2 = run_string("define \"fextend fput first text \"fbase fput [print 1] bf text \"fbase");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+    
+    reset_output();
+    run_string("fextend");
+    TEST_ASSERT_EQUAL_STRING("1\n2\n", output_buffer);
+}
+
+void test_butlast_removes_last_line(void)
+{
+    // Use butlast to remove the last line of a procedure
+    Result r = proc_define_from_text("to blbase\nprint 1\nprint 2\nend");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    Result r2 = run_string("define \"blshort butlast text \"blbase");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+    
+    reset_output();
+    run_string("blshort");
+    TEST_ASSERT_EQUAL_STRING("1\n", output_buffer);
+}
+
+void test_empty_lines_preserved(void)
+{
+    // Test that empty lines are stored as empty lists when using real newlines
+    // to emptytest\nprint 1\n\nprint 2\nend has an empty line between print 1 and print 2
+    Result r = proc_define_from_text("to emptytest\nprint 1\n\nprint 2\nend");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    // Get text - should have: [[] [print 1] [] [print 2]]
+    Result r2 = eval_string("text \"emptytest");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    
+    Node list = r2.value.as.node;
+    // Count elements: params + 3 body lines (including empty)
+    int count = 0;
+    while (!mem_is_nil(list)) {
+        count++;
+        list = mem_cdr(list);
+    }
+    // Should be 4: [params] [print 1] [] [print 2]
+    TEST_ASSERT_EQUAL(4, count);
+    
+    // Procedure should still work (empty lines are skipped during execution)
+    reset_output();
+    run_string("emptytest");
+    TEST_ASSERT_EQUAL_STRING("1\n2\n", output_buffer);
+}
+
+void test_item_extracts_procedure_line(void)
+{
+    // Use item to extract a specific line from a procedure
+    Result r = proc_define_from_text("to itemtest :x\nprint :x\noutput :x * 2\nend");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    // item 1 text "itemtest should be [x] (params)
+    Result r1 = eval_string("item 1 text \"itemtest");
+    TEST_ASSERT_EQUAL(RESULT_OK, r1.status);
+    TEST_ASSERT_TRUE(value_is_list(r1.value));
+    
+    // item 2 text "itemtest should be [print :x]
+    Result r2 = eval_string("item 2 text \"itemtest");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_TRUE(value_is_list(r2.value));
+    
+    // item 3 text "itemtest should be [output :x * 2]
+    Result r3 = eval_string("item 3 text \"itemtest");
+    TEST_ASSERT_EQUAL(RESULT_OK, r3.status);
+    TEST_ASSERT_TRUE(value_is_list(r3.value));
+}
+
+void test_multiline_with_real_newlines(void)
+{
+    // Test that proc_define_from_text correctly handles real newlines (not \n markers)
+    Result r = proc_define_from_text(
+        "to realtest :n\n"
+        "print :n\n"
+        "output :n * 2\n"
+        "end\n");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_OK, r.status, "Definition should succeed");
+    
+    // Get text and check structure
+    Result r2 = eval_string("text \"realtest");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_TRUE(value_is_list(r2.value));
+    
+    // Count lines - should be 3: [params] [print :n] [output :n * 2]
+    Node list = r2.value.as.node;
+    int count = 0;
+    while (!mem_is_nil(list)) {
+        count++;
+        list = mem_cdr(list);
+    }
+    TEST_ASSERT_EQUAL_MESSAGE(3, count, "Should have 3 elements: params + 2 body lines");
+    
+    // Test that it runs correctly
+    reset_output();
+    Result r3 = eval_string("realtest 5");
+    TEST_ASSERT_EQUAL(RESULT_OK, r3.status);
+    TEST_ASSERT_EQUAL_STRING("5\n", output_buffer);
+    TEST_ASSERT_EQUAL_FLOAT(10.0f, r3.value.as.number);
 }
 
 int main(void)
@@ -865,6 +1098,18 @@ int main(void)
     RUN_TEST(test_tco_with_args_exact_failing_case);
     RUN_TEST(test_tco_with_print_and_args);
     RUN_TEST(test_tco_scope_depth_stability);
+    
+    // List-of-lists body structure tests
+    RUN_TEST(test_text_returns_list_of_lists_structure);
+    RUN_TEST(test_text_multiline_procedure);
+    RUN_TEST(test_define_from_list_of_lists);
+    RUN_TEST(test_define_multiline_list_of_lists);
+    RUN_TEST(test_lput_adds_line_to_procedure);
+    RUN_TEST(test_fput_adds_line_at_start);
+    RUN_TEST(test_butlast_removes_last_line);
+    RUN_TEST(test_empty_lines_preserved);
+    RUN_TEST(test_item_extracts_procedure_line);
+    RUN_TEST(test_multiline_with_real_newlines);
 
     return UNITY_END();
 }

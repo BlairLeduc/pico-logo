@@ -252,30 +252,13 @@ void test_step_pauses_execution(void)
 
 void test_step_multiline_procedure(void)
 {
-    // Define procedure with two lines
-    Node p = mem_atom("word", 4);
-    const char *params[] = {mem_word_ptr(p)};
-    
-    // Body: "if empty? :word [stop] \n pr :word"
-    Node body = NODE_NIL;
-    body = mem_cons(mem_atom("if", 2), body);
-    body = mem_cons(mem_atom("empty?", 6), body);
-    body = mem_cons(mem_atom(":word", 5), body);
-    // Build the [stop] list
-    Node stop_list = mem_cons(mem_atom("stop", 4), NODE_NIL);
-    body = mem_cons(stop_list, body);
-    body = mem_cons(mem_atom("\\n", 2), body);  // Newline marker
-    body = mem_cons(mem_atom("pr", 2), body);
-    body = mem_cons(mem_atom(":word", 5), body);
-    
-    // Reverse to get correct order
-    Node reversed = NODE_NIL;
-    while (!mem_is_nil(body)) {
-        reversed = mem_cons(mem_car(body), reversed);
-        body = mem_cdr(body);
-    }
-    
-    proc_define("triangle", params, 1, reversed);
+    // Define procedure with two lines using proc_define_from_text
+    Result def = proc_define_from_text(
+        "to triangle :word\n"
+        "if empty? :word [stop]\n"
+        "pr :word\n"
+        "end\n");
+    TEST_ASSERT_EQUAL(RESULT_OK, def.status);
     
     run_string("step \"triangle");
     
@@ -295,24 +278,13 @@ void test_step_multiline_procedure(void)
 
 void test_step_shows_each_line_before_execution(void)
 {
-    const char *params[] = {};
-    
-    // Create a simple two-line procedure using define
-    Node body = NODE_NIL;
-    body = mem_cons(mem_atom("print", 5), body);
-    body = mem_cons(mem_atom("\"first", 6), body);
-    body = mem_cons(mem_atom("\\n", 2), body);  // Newline marker
-    body = mem_cons(mem_atom("print", 5), body);
-    body = mem_cons(mem_atom("\"second", 7), body);
-    
-    // Reverse to get correct order
-    Node reversed = NODE_NIL;
-    while (!mem_is_nil(body)) {
-        reversed = mem_cons(mem_car(body), reversed);
-        body = mem_cdr(body);
-    }
-    
-    proc_define("twolines", params, 0, reversed);
+    // Create a simple two-line procedure using proc_define_from_text
+    Result def = proc_define_from_text(
+        "to twolines\n"
+        "print \"first\n"
+        "print \"second\n"
+        "end\n");
+    TEST_ASSERT_EQUAL(RESULT_OK, def.status);
     
     run_string("step \"twolines");
     

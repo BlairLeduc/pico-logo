@@ -812,10 +812,18 @@ void test_go_with_label(void)
         "go \"loop\n"
         "end\n");
     TEST_ASSERT_EQUAL(RESULT_OK, def.status);
+    
     reset_output();
 
     Result r = run_string("countdown 3");
-    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    if (r.status == RESULT_ERROR) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Error %d: proc=%s arg=%s", r.error_code, 
+                 r.error_proc ? r.error_proc : "(null)",
+                 r.error_arg ? r.error_arg : "(null)");
+        TEST_FAIL_MESSAGE(msg);
+    }
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_NONE, r.status, "Should complete without error");
     TEST_ASSERT_EQUAL_STRING("3\n2\n1\n0\n", output_buffer);
 }
 
@@ -857,7 +865,7 @@ void test_co_at_toplevel(void)
 void test_pause_in_procedure_with_co(void)
 {
     // Define a procedure that pauses using proc_define_from_text
-    Result def = proc_define_from_text("to testproc :x \\n print :x \\n pause \\n print :x + 1 \\n end");
+    Result def = proc_define_from_text("to testproc :x\nprint :x\npause\nprint :x + 1\nend");
     TEST_ASSERT_EQUAL(RESULT_OK, def.status);
     reset_output();
     
@@ -880,7 +888,7 @@ void test_pause_in_procedure_with_co(void)
 void test_pause_can_inspect_local_variables(void)
 {
     // Define a procedure that pauses
-    Result def = proc_define_from_text("to testproc :val \\n pause \\n end");
+    Result def = proc_define_from_text("to testproc :val\npause\nend");
     TEST_ASSERT_EQUAL(RESULT_OK, def.status);
     reset_output();
     
@@ -900,7 +908,7 @@ void test_pause_can_inspect_local_variables(void)
 void test_pause_prompt_shows_procedure_name(void)
 {
     // Define a procedure that pauses
-    Result def = proc_define_from_text("to myproc \\n pause \\n end");
+    Result def = proc_define_from_text("to myproc\npause\nend");
     TEST_ASSERT_EQUAL(RESULT_OK, def.status);
     reset_output();
     
