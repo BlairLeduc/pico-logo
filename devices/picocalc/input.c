@@ -63,6 +63,11 @@ int picocalc_read_line(char *buf, int size)
     uint8_t index = 0;
     uint8_t length = 0;
     uint history_index = history_get_start_index();
+    
+    // For prefix-based history search
+    char search_prefix[HISTORY_LINE_LENGTH] = {0};
+    size_t search_prefix_len = 0;
+    bool in_history_search = false;
 
     screen_txt_get_cursor(&start_col, &start_row);
     end_row = start_row;
@@ -92,6 +97,10 @@ int picocalc_read_line(char *buf, int size)
         case KEY_BACKSPACE:
             if (index > 0)
             {
+                // Reset history search when editing
+                in_history_search = false;
+                history_index = history_get_start_index();
+                
                 index--;
                 length--;
 
@@ -125,6 +134,10 @@ int picocalc_read_line(char *buf, int size)
         case KEY_DEL: // DEL key
             if (index < length)
             {
+                // Reset history search when editing
+                in_history_search = false;
+                history_index = history_get_start_index();
+                
                 uint8_t col, row;
                 screen_txt_get_cursor(&col, &row);
                 memmove(buf + index, buf + index + 1, length - index);
@@ -138,6 +151,10 @@ int picocalc_read_line(char *buf, int size)
         case KEY_ESC: // delete to beginning of line
             if (index > 0)
             {
+                // Reset history search when editing
+                in_history_search = false;
+                history_index = history_get_start_index();
+                
                 screen_txt_set_cursor(start_col, start_row);
                 for (int i = index; i < length - 1; i++)
                 {
@@ -168,32 +185,57 @@ int picocalc_read_line(char *buf, int size)
         case KEY_UP:
             if (!history_is_empty()) // history is not empty
             {
-                history_index = history_prev_index(history_index);
-                history_get(buf, size - 1, history_index);
-
-                index = strlen(buf);
-                screen_txt_set_cursor(start_col, start_row);
-                screen_txt_puts(buf);
-                screen_txt_get_cursor(&end_col, &end_row);
-                for (int i = index; i < length; i++)
+                // If starting a new search, save the current input as the prefix
+                if (!in_history_search)
                 {
-                    screen_txt_putc(' '); // Clear the rest of the line
+                    strncpy(search_prefix, buf, sizeof(search_prefix) - 1);
+                    search_prefix[sizeof(search_prefix) - 1] = '\0';
+                    search_prefix_len = length;
+                    in_history_search = true;
                 }
-                length = index;
-                // Recalculate start_row based on where we ended up after potential scrolling
-                calc_start_row(start_col, end_col, end_row, length, &start_row);
-                screen_txt_set_cursor(end_col, end_row);
+                
+                uint new_index = history_prev_matching(history_index, search_prefix, search_prefix_len);
+                if (new_index != history_index)
+                {
+                    history_index = new_index;
+                    history_get(buf, size - 1, history_index);
+
+                    index = strlen(buf);
+                    screen_txt_set_cursor(start_col, start_row);
+                    screen_txt_puts(buf);
+                    screen_txt_get_cursor(&end_col, &end_row);
+                    for (int i = index; i < length; i++)
+                    {
+                        screen_txt_putc(' '); // Clear the rest of the line
+                    }
+                    length = index;
+                    // Recalculate start_row based on where we ended up after potential scrolling
+                    calc_start_row(start_col, end_col, end_row, length, &start_row);
+                    screen_txt_set_cursor(end_col, end_row);
+                }
             }
             break;
         case KEY_DOWN:
             if (!history_is_empty() && !history_is_end_index(history_index)) // history is not empty and not at the end
             {
-                // Move to the next entry, wrapping if needed
-                history_index = history_next_index(history_index);
+                // If starting a new search, save the current input as the prefix
+                if (!in_history_search)
+                {
+                    strncpy(search_prefix, buf, sizeof(search_prefix) - 1);
+                    search_prefix[sizeof(search_prefix) - 1] = '\0';
+                    search_prefix_len = length;
+                    in_history_search = true;
+                }
+                // Move to the next matching entry
+                uint new_index = history_next_matching(history_index, search_prefix, search_prefix_len);
+                history_index = new_index;
+                
                 if (history_is_end_index(history_index))
                 {
-                    // At the newest entry (blank line)
-                    buf[0] = 0;
+                    // At the newest entry, restore the original prefix
+                    strncpy(buf, search_prefix, size - 1);
+                    buf[size - 1] = '\0';
+                    in_history_search = false;
                 }
                 else
                 {
@@ -248,6 +290,10 @@ int picocalc_read_line(char *buf, int size)
             {
                 if (length < size - 1)
                 {
+                    // Reset history search when typing
+                    in_history_search = false;
+                    history_index = history_get_start_index();
+                    
                     if (index == length)
                     {
                         buf[index++] = key;

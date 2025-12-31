@@ -98,3 +98,49 @@ bool history_is_end_index(uint index)
 {
     return index == history_head; // Check if the index is at the end of the history
 }
+
+uint history_prev_matching(uint index, const char *prefix, size_t prefix_len)
+{
+    // If no prefix, behave like history_prev_index
+    if (prefix_len == 0)
+    {
+        return history_prev_index(index);
+    }
+
+    uint search_index = index;
+    // Search backwards through history for a matching entry
+    while (search_index != history_tail)
+    {
+        search_index = (search_index + HISTORY_SIZE - 1) % HISTORY_SIZE;
+        if (strncmp(history_buffer[search_index], prefix, prefix_len) == 0)
+        {
+            return search_index; // Found a match
+        }
+    }
+    return index; // No match found, return original index
+}
+
+uint history_next_matching(uint index, const char *prefix, size_t prefix_len)
+{
+    // If no prefix, behave like history_next_index
+    if (prefix_len == 0)
+    {
+        return history_next_index(index);
+    }
+
+    uint search_index = index;
+    // Search forwards through history for a matching entry
+    while (search_index != history_head)
+    {
+        search_index = (search_index + 1) % HISTORY_SIZE;
+        if (search_index == history_head)
+        {
+            return search_index; // Reached the end (current input)
+        }
+        if (strncmp(history_buffer[search_index], prefix, prefix_len) == 0)
+        {
+            return search_index; // Found a match
+        }
+    }
+    return index; // No match found, return original index
+}
