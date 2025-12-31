@@ -15,6 +15,7 @@
 #include "eval.h"
 #include "devices/io.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static void ws_print(const char *str)
@@ -273,7 +274,7 @@ static Result prim_poall(Evaluator *eval, int argc, Value *args)
         }
     }
     
-    // Print all property lists
+    // Print all property lists (as pprop commands, matching edall/save format)
     int prop_count = prop_name_count();
     for (int i = 0; i < prop_count; i++)
     {
@@ -281,32 +282,49 @@ static Result prim_poall(Evaluator *eval, int argc, Value *args)
         if (prop_get_name_by_index(i, &name))
         {
             Node list = prop_get_list(name);
-            if (!mem_is_nil(list))
+            // Property lists are stored as [prop1 val1 prop2 val2 ...]
+            // Output each property as a separate pprop command
+            Node curr = list;
+            while (!mem_is_nil(curr) && !mem_is_nil(mem_cdr(curr)))
             {
-                ws_print("plist \"");
-                ws_print(name);
-                ws_print(" [");
-                bool first = true;
-                Node curr = list;
-                while (!mem_is_nil(curr))
+                Node prop_node = mem_car(curr);
+                Node val_node = mem_car(mem_cdr(curr));
+                
+                if (mem_is_word(prop_node))
                 {
-                    if (!first)
-                        ws_print(" ");
-                    first = false;
+                    ws_print("pprop \"");
+                    ws_print(name);
+                    ws_print(" \"");
+                    ws_print(mem_word_ptr(prop_node));
+                    ws_print(" ");
                     
-                    Node elem = mem_car(curr);
-                    if (mem_is_word(elem))
+                    // Format the value
+                    if (mem_is_word(val_node))
                     {
-                        ws_print(mem_word_ptr(elem));
+                        // Check if it's a number
+                        const char *str = mem_word_ptr(val_node);
+                        char *endptr;
+                        strtof(str, &endptr);
+                        if (*endptr == '\0' && str[0] != '\0')
+                        {
+                            // It's a number, output without quote
+                            ws_print(str);
+                        }
+                        else
+                        {
+                            // It's a word, output with quote
+                            ws_print("\"");
+                            ws_print(str);
+                        }
                     }
-                    else if (mem_is_list(elem))
+                    else if (mem_is_list(val_node))
                     {
-                        ws_print("[...]");
+                        print_body_element(val_node);
                     }
-                    curr = mem_cdr(curr);
+                    ws_newline();
                 }
-                ws_print("]");
-                ws_newline();
+                
+                curr = mem_cdr(mem_cdr(curr));
             }
         }
     }
