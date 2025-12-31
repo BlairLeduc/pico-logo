@@ -1,0 +1,61 @@
+//
+//  Pico Logo
+//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//
+//  Unified formatting functions for procedures, variables, and properties.
+//  Used by po*, ed*, and save commands.
+//
+
+#ifndef LOGO_FORMAT_H
+#define LOGO_FORMAT_H
+
+#include "memory.h"
+#include "procedures.h"
+#include "value.h"
+#include <stdbool.h>
+#include <stddef.h>
+
+// Output callback function type
+// Returns true on success, false on error (e.g., buffer overflow)
+typedef bool (*FormatOutputFunc)(void *ctx, const char *str);
+
+// Format a procedure body element (handles nested lists)
+bool format_body_element(FormatOutputFunc out, void *ctx, Node elem);
+
+// Format a complete procedure definition (to...end)
+bool format_procedure_definition(FormatOutputFunc out, void *ctx, UserProcedure *proc);
+
+// Format a procedure title line only (to name :param1 :param2 ...)
+bool format_procedure_title(FormatOutputFunc out, void *ctx, UserProcedure *proc);
+
+// Format a variable as a make command
+bool format_variable(FormatOutputFunc out, void *ctx, const char *name, Value value);
+
+// Format a single property as a pprop command
+bool format_property(FormatOutputFunc out, void *ctx, const char *name, 
+                     const char *property, Node val_node);
+
+// Format an entire property list (outputs multiple pprop commands)
+bool format_property_list(FormatOutputFunc out, void *ctx, const char *name, Node list);
+
+//==========================================================================
+// Pre-built output contexts for common use cases
+//==========================================================================
+
+// Context for buffered output (used by editor)
+typedef struct {
+    char *buffer;
+    size_t buffer_size;
+    size_t pos;
+} FormatBufferContext;
+
+// Initialize a buffer context
+void format_buffer_init(FormatBufferContext *ctx, char *buffer, size_t buffer_size);
+
+// Buffer output callback
+bool format_buffer_output(void *ctx, const char *str);
+
+// Get current position in buffer
+size_t format_buffer_pos(FormatBufferContext *ctx);
+
+#endif // LOGO_FORMAT_H

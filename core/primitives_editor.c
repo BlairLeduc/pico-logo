@@ -12,6 +12,7 @@
 #include "memory.h"
 #include "error.h"
 #include "eval.h"
+#include "format.h"
 #include "devices/io.h"
 #include "devices/stream.h"
 #include <stdio.h>
@@ -23,215 +24,6 @@
 #define LOGO_EDITOR_BUFFER_SIZE 8192
 #endif
 static char editor_buffer[LOGO_EDITOR_BUFFER_SIZE];
-
-// Helper to append string to buffer with bounds checking
-static bool buffer_append(char *buffer, size_t buffer_size, size_t *pos, const char *str)
-{
-    size_t len = strlen(str);
-    if (*pos + len >= buffer_size - 1)
-    {
-        return false;
-    }
-    memcpy(buffer + *pos, str, len);
-    *pos += len;
-    buffer[*pos] = '\0';
-    return true;
-}
-
-// Format a procedure body element to buffer (handles quoted words, etc.)
-static bool format_body_element(char *buffer, size_t buffer_size, size_t *pos, Node elem)
-{
-    if (mem_is_word(elem))
-    {
-        return buffer_append(buffer, buffer_size, pos, mem_word_ptr(elem));
-    }
-    else if (mem_is_list(elem))
-    {
-        if (!buffer_append(buffer, buffer_size, pos, "["))
-            return false;
-        bool first = true;
-        Node curr = elem;
-        while (!mem_is_nil(curr))
-        {
-            if (!first)
-            {
-                if (!buffer_append(buffer, buffer_size, pos, " "))
-                    return false;
-            }
-            first = false;
-            if (!format_body_element(buffer, buffer_size, pos, mem_car(curr)))
-                return false;
-            curr = mem_cdr(curr);
-        }
-        return buffer_append(buffer, buffer_size, pos, "]");
-    }
-    return true;
-}
-
-// Format procedure definition to buffer (po format)
-static bool format_procedure_definition(char *buffer, size_t buffer_size, size_t *pos, 
-                                        UserProcedure *proc)
-{
-    // Print "to name"
-    if (!buffer_append(buffer, buffer_size, pos, "to "))
-        return false;
-    if (!buffer_append(buffer, buffer_size, pos, proc->name))
-        return false;
-    
-    // Print parameters
-    for (int i = 0; i < proc->param_count; i++)
-    {
-        if (!buffer_append(buffer, buffer_size, pos, " :"))
-            return false;
-        if (!buffer_append(buffer, buffer_size, pos, proc->params[i]))
-            return false;
-    }
-    if (!buffer_append(buffer, buffer_size, pos, "\n"))
-        return false;
-    
-    // Body is now a list of line-lists: [[line1-tokens] [line2-tokens] ...]
-    Node curr_line = proc->body;
-    
-    // Track cumulative bracket depth across lines for indentation
-    int bracket_depth = 0;
-    
-    while (!mem_is_nil(curr_line))
-    {
-        Node line = mem_car(curr_line);
-        Node tokens = line;
-        
-        // Handle the list type marker
-        if (NODE_GET_TYPE(line) == NODE_TYPE_LIST)
-        {
-            tokens = NODE_MAKE_LIST(NODE_GET_INDEX(line));
-        }
-        
-        // Count leading closing brackets to reduce indent for this line
-        Node peek = tokens;
-        while (!mem_is_nil(peek))
-        {
-            Node elem = mem_car(peek);
-            if (mem_is_word(elem) && strcmp(mem_word_ptr(elem), "]") == 0 && bracket_depth > 0)
-            {
-                bracket_depth--;
-            }
-            else
-            {
-                break;  // Stop at first non-] token
-            }
-            peek = mem_cdr(peek);
-        }
-        
-        // Print base indent (2 spaces for procedure body)
-        if (!buffer_append(buffer, buffer_size, pos, "  "))
-            return false;
-        
-        // Add extra indentation based on cumulative bracket depth
-        for (int i = 0; i < bracket_depth; i++)
-        {
-            if (!buffer_append(buffer, buffer_size, pos, "  "))
-                return false;
-        }
-        
-        while (!mem_is_nil(tokens))
-        {
-            Node elem = mem_car(tokens);
-            
-            if (!format_body_element(buffer, buffer_size, pos, elem))
-                return false;
-            
-            // Track brackets
-            if (mem_is_word(elem))
-            {
-                const char *word = mem_word_ptr(elem);
-                if (strcmp(word, "[") == 0)
-                {
-                    bracket_depth++;
-                }
-                else if (strcmp(word, "]") == 0 && bracket_depth > 0)
-                {
-                    bracket_depth--;
-                }
-            }
-            
-            // Add space between elements on same line
-            Node next = mem_cdr(tokens);
-            if (!mem_is_nil(next))
-            {
-                if (!buffer_append(buffer, buffer_size, pos, " "))
-                    return false;
-            }
-            tokens = next;
-        }
-        
-        if (!buffer_append(buffer, buffer_size, pos, "\n"))
-            return false;
-        curr_line = mem_cdr(curr_line);
-    }
-    
-    if (!buffer_append(buffer, buffer_size, pos, "end\n"))
-        return false;
-    
-    return true;
-}
-
-// Format a variable and its value to buffer
-static bool format_variable(char *buffer, size_t buffer_size, size_t *pos,
-                           const char *name, Value value)
-{
-    char num_buf[64];
-    
-    if (!buffer_append(buffer, buffer_size, pos, "make \""))
-        return false;
-    if (!buffer_append(buffer, buffer_size, pos, name))
-        return false;
-    if (!buffer_append(buffer, buffer_size, pos, " "))
-        return false;
-    
-    switch (value.type)
-    {
-    case VALUE_NUMBER:
-        format_number(num_buf, sizeof(num_buf), value.as.number);
-        if (!buffer_append(buffer, buffer_size, pos, num_buf))
-            return false;
-        break;
-    case VALUE_WORD:
-        if (!buffer_append(buffer, buffer_size, pos, "\""))
-            return false;
-        if (!buffer_append(buffer, buffer_size, pos, mem_word_ptr(value.as.node)))
-            return false;
-        break;
-    case VALUE_LIST:
-        if (!buffer_append(buffer, buffer_size, pos, "["))
-            return false;
-        {
-            bool first = true;
-            Node curr = value.as.node;
-            while (!mem_is_nil(curr))
-            {
-                if (!first)
-                {
-                    if (!buffer_append(buffer, buffer_size, pos, " "))
-                        return false;
-                }
-                first = false;
-                if (!format_body_element(buffer, buffer_size, pos, mem_car(curr)))
-                    return false;
-                curr = mem_cdr(curr);
-            }
-        }
-        if (!buffer_append(buffer, buffer_size, pos, "]"))
-            return false;
-        break;
-    default:
-        break;
-    }
-    
-    if (!buffer_append(buffer, buffer_size, pos, "\n"))
-        return false;
-    
-    return true;
-}
 
 // Helper to check if a line starts with "to " (case-insensitive)
 static bool line_starts_with_to(const char *line)
@@ -519,8 +311,8 @@ static Result prim_edit(Evaluator *eval, int argc, Value *args)
     }
     
     // When we have arguments, start fresh
-    size_t pos = 0;
-    editor_buffer[0] = '\0';
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, editor_buffer, LOGO_EDITOR_BUFFER_SIZE);
     bool first_proc = true;
     
     if (value_is_word(args[0]))
@@ -539,16 +331,16 @@ static Result prim_edit(Evaluator *eval, int argc, Value *args)
         {
             // Procedure doesn't exist - create template: "to name\n"
             // Cursor will be on line below, ready for user to define body
-            if (!buffer_append(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, "to "))
+            if (!format_buffer_output(&ctx, "to "))
                 return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
-            if (!buffer_append(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, name))
+            if (!format_buffer_output(&ctx, name))
                 return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
-            if (!buffer_append(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, "\n"))
+            if (!format_buffer_output(&ctx, "\n"))
                 return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
         }
         else
         {
-            if (!format_procedure_definition(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, proc))
+            if (!format_procedure_definition(format_buffer_output, &ctx, proc))
             {
                 return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
             }
@@ -577,18 +369,18 @@ static Result prim_edit(Evaluator *eval, int argc, Value *args)
                     // Procedure doesn't exist - create template: "to name\n"
                     if (!first_proc)
                     {
-                        if (!buffer_append(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, "\n"))
+                        if (!format_buffer_output(&ctx, "\n"))
                         {
                             return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
                         }
                     }
                     first_proc = false;
                     
-                    if (!buffer_append(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, "to "))
+                    if (!format_buffer_output(&ctx, "to "))
                         return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
-                    if (!buffer_append(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, name))
+                    if (!format_buffer_output(&ctx, name))
                         return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
-                    if (!buffer_append(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, "\n"))
+                    if (!format_buffer_output(&ctx, "\n"))
                         return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
                 }
                 else
@@ -596,14 +388,14 @@ static Result prim_edit(Evaluator *eval, int argc, Value *args)
                     // Add blank line between definitions
                     if (!first_proc)
                     {
-                        if (!buffer_append(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, "\n"))
+                        if (!format_buffer_output(&ctx, "\n"))
                         {
                             return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
                         }
                     }
                     first_proc = false;
                     
-                    if (!format_procedure_definition(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, proc))
+                    if (!format_procedure_definition(format_buffer_output, &ctx, proc))
                     {
                         return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
                     }
@@ -624,8 +416,8 @@ static Result prim_edit(Evaluator *eval, int argc, Value *args)
 // Edit variable name(s) and value(s)
 static Result prim_edn(Evaluator *eval, int argc, Value *args)
 {
-    size_t pos = 0;
-    editor_buffer[0] = '\0';
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, editor_buffer, LOGO_EDITOR_BUFFER_SIZE);
     
     if (argc < 1)
     {
@@ -641,7 +433,7 @@ static Result prim_edn(Evaluator *eval, int argc, Value *args)
         {
             return result_error_arg(ERR_NO_VALUE, name, NULL);
         }
-        if (!format_variable(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, name, value))
+        if (!format_variable(format_buffer_output, &ctx, name, value))
         {
             return result_error_arg(ERR_OUT_OF_SPACE, "edn", NULL);
         }
@@ -662,7 +454,7 @@ static Result prim_edn(Evaluator *eval, int argc, Value *args)
                     return result_error_arg(ERR_NO_VALUE, name, NULL);
                 }
                 
-                if (!format_variable(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, name, value))
+                if (!format_variable(format_buffer_output, &ctx, name, value))
                 {
                     return result_error_arg(ERR_OUT_OF_SPACE, "edn", NULL);
                 }
@@ -684,8 +476,8 @@ static Result prim_edns(Evaluator *eval, int argc, Value *args)
     (void)argc;
     (void)args;
     
-    size_t pos = 0;
-    editor_buffer[0] = '\0';
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, editor_buffer, LOGO_EDITOR_BUFFER_SIZE);
     
     int count = var_global_count(false);  // Exclude buried
     for (int i = 0; i < count; i++)
@@ -694,7 +486,7 @@ static Result prim_edns(Evaluator *eval, int argc, Value *args)
         Value value;
         if (var_get_global_by_index(i, false, &name, &value))
         {
-            if (!format_variable(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, name, value))
+            if (!format_variable(format_buffer_output, &ctx, name, value))
             {
                 return result_error_arg(ERR_OUT_OF_SPACE, "edns", NULL);
             }
@@ -704,108 +496,14 @@ static Result prim_edns(Evaluator *eval, int argc, Value *args)
     return run_editor_and_process(eval, editor_buffer);
 }
 
-// Helper to format a property list element recursively
-static bool format_property_element(char *buffer, size_t buffer_size, size_t *pos, Node elem)
-{
-    if (mem_is_word(elem))
-    {
-        return buffer_append(buffer, buffer_size, pos, mem_word_ptr(elem));
-    }
-    else if (mem_is_list(elem))
-    {
-        if (!buffer_append(buffer, buffer_size, pos, "["))
-            return false;
-        bool first = true;
-        Node curr = elem;
-        while (!mem_is_nil(curr))
-        {
-            if (!first)
-            {
-                if (!buffer_append(buffer, buffer_size, pos, " "))
-                    return false;
-            }
-            first = false;
-            if (!format_property_element(buffer, buffer_size, pos, mem_car(curr)))
-                return false;
-            curr = mem_cdr(curr);
-        }
-        return buffer_append(buffer, buffer_size, pos, "]");
-    }
-    return true;
-}
-
-// Format a property list to buffer (pprop format)
-static bool format_property_list(char *buffer, size_t buffer_size, size_t *pos,
-                                  const char *name, Node list)
-{
-    // Property lists are stored as [prop1 val1 prop2 val2 ...]
-    // We need to output pprop "name "prop1 val1, pprop "name "prop2 val2, etc.
-    Node curr = list;
-    while (!mem_is_nil(curr))
-    {
-        Node prop_node = mem_car(curr);
-        curr = mem_cdr(curr);
-        if (mem_is_nil(curr))
-            break;  // Shouldn't happen - property lists have pairs
-        Node val_node = mem_car(curr);
-        curr = mem_cdr(curr);
-        
-        if (!buffer_append(buffer, buffer_size, pos, "pprop \""))
-            return false;
-        if (!buffer_append(buffer, buffer_size, pos, name))
-            return false;
-        if (!buffer_append(buffer, buffer_size, pos, " \""))
-            return false;
-        if (mem_is_word(prop_node))
-        {
-            if (!buffer_append(buffer, buffer_size, pos, mem_word_ptr(prop_node)))
-                return false;
-        }
-        if (!buffer_append(buffer, buffer_size, pos, " "))
-            return false;
-        
-        // Format the value
-        if (mem_is_word(val_node))
-        {
-            // Check if it's a number (stored as word by prop_value_to_node)
-            const char *str = mem_word_ptr(val_node);
-            char *endptr;
-            strtof(str, &endptr);
-            if (*endptr == '\0' && str[0] != '\0')
-            {
-                // It's a number, output without quote
-                if (!buffer_append(buffer, buffer_size, pos, str))
-                    return false;
-            }
-            else
-            {
-                // It's a word, output with quote
-                if (!buffer_append(buffer, buffer_size, pos, "\""))
-                    return false;
-                if (!buffer_append(buffer, buffer_size, pos, str))
-                    return false;
-            }
-        }
-        else if (mem_is_list(val_node))
-        {
-            if (!format_property_element(buffer, buffer_size, pos, val_node))
-                return false;
-        }
-        
-        if (!buffer_append(buffer, buffer_size, pos, "\n"))
-            return false;
-    }
-    return true;
-}
-
 // edall - edit all procedures and variables (not buried)
 static Result prim_edall(Evaluator *eval, int argc, Value *args)
 {
     (void)argc;
     (void)args;
     
-    size_t pos = 0;
-    editor_buffer[0] = '\0';
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, editor_buffer, LOGO_EDITOR_BUFFER_SIZE);
     
     // Format all procedures (not buried)
     int proc_cnt = proc_count(true);  // Get ALL, filter by buried in loop
@@ -818,14 +516,14 @@ static Result prim_edall(Evaluator *eval, int argc, Value *args)
             // Add blank line between definitions
             if (!first_proc)
             {
-                if (!buffer_append(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, "\n"))
+                if (!format_buffer_output(&ctx, "\n"))
                 {
                     return result_error_arg(ERR_OUT_OF_SPACE, "edall", NULL);
                 }
             }
             first_proc = false;
             
-            if (!format_procedure_definition(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, proc))
+            if (!format_procedure_definition(format_buffer_output, &ctx, proc))
             {
                 return result_error_arg(ERR_OUT_OF_SPACE, "edall", NULL);
             }
@@ -840,7 +538,7 @@ static Result prim_edall(Evaluator *eval, int argc, Value *args)
         Value value;
         if (var_get_global_by_index(i, false, &name, &value))
         {
-            if (!format_variable(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, name, value))
+            if (!format_variable(format_buffer_output, &ctx, name, value))
             {
                 return result_error_arg(ERR_OUT_OF_SPACE, "edall", NULL);
             }
@@ -857,7 +555,7 @@ static Result prim_edall(Evaluator *eval, int argc, Value *args)
             Node list = prop_get_list(name);
             if (!mem_is_nil(list))
             {
-                if (!format_property_list(editor_buffer, LOGO_EDITOR_BUFFER_SIZE, &pos, name, list))
+                if (!format_property_list(format_buffer_output, &ctx, name, list))
                 {
                     return result_error_arg(ERR_OUT_OF_SPACE, "edall", NULL);
                 }

@@ -13,6 +13,7 @@
 #include "properties.h"
 #include "error.h"
 #include "eval.h"
+#include "format.h"
 #include "lexer.h"
 #include "devices/io.h"
 #include <stdio.h>
@@ -1178,223 +1179,16 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
 // Save helper functions
 //==========================================================================
 
-// Write a string to the current writer
-static void save_write(const char *str)
+// Output callback for file saving (always succeeds since logo_io_write handles errors)
+static bool save_output(void *ctx, const char *str)
 {
+    (void)ctx;
     LogoIO *io = primitives_get_io();
     if (io)
     {
         logo_io_write(io, str);
     }
-}
-
-// Write a newline
-static void save_newline(void)
-{
-    save_write("\n");
-}
-
-// Print a procedure body element (handles quoted words, etc.)
-static void save_body_element(Node elem)
-{
-    if (mem_is_word(elem))
-    {
-        save_write(mem_word_ptr(elem));
-    }
-    else if (mem_is_list(elem))
-    {
-        save_write("[");
-        bool first = true;
-        Node curr = elem;
-        while (!mem_is_nil(curr))
-        {
-            if (!first)
-                save_write(" ");
-            first = false;
-            save_body_element(mem_car(curr));
-            curr = mem_cdr(curr);
-        }
-        save_write("]");
-    }
-}
-
-// Save procedure title line: to name :param1 :param2 ...
-static void save_procedure_title(UserProcedure *proc)
-{
-    save_write("to ");
-    save_write(proc->name);
-    for (int i = 0; i < proc->param_count; i++)
-    {
-        save_write(" :");
-        save_write(proc->params[i]);
-    }
-    save_newline();
-}
-
-// Save full procedure definition
-static void save_procedure_definition(UserProcedure *proc)
-{
-    save_procedure_title(proc);
-
-    // Body is now a list of line-lists: [[line1-tokens] [line2-tokens] ...]
-    Node curr_line = proc->body;
-    
-    // Track cumulative bracket depth across lines for indentation
-    int bracket_depth = 0;
-    
-    while (!mem_is_nil(curr_line))
-    {
-        Node line = mem_car(curr_line);
-        Node tokens = line;
-        
-        // Handle the list type marker
-        if (NODE_GET_TYPE(line) == NODE_TYPE_LIST)
-        {
-            tokens = NODE_MAKE_LIST(NODE_GET_INDEX(line));
-        }
-        
-        // Count leading closing brackets to reduce indent for this line
-        Node peek = tokens;
-        while (!mem_is_nil(peek))
-        {
-            Node elem = mem_car(peek);
-            if (mem_is_word(elem) && strcmp(mem_word_ptr(elem), "]") == 0 && bracket_depth > 0)
-            {
-                bracket_depth--;
-            }
-            else
-            {
-                break;  // Stop at first non-] token
-            }
-            peek = mem_cdr(peek);
-        }
-        
-        // Print base indent (2 spaces for procedure body)
-        save_write("  ");
-        
-        // Add extra indentation based on cumulative bracket depth
-        for (int i = 0; i < bracket_depth; i++)
-        {
-            save_write("  ");
-        }
-        
-        while (!mem_is_nil(tokens))
-        {
-            Node elem = mem_car(tokens);
-            
-            save_body_element(elem);
-            
-            // Track brackets
-            if (mem_is_word(elem))
-            {
-                const char *word = mem_word_ptr(elem);
-                if (strcmp(word, "[") == 0)
-                {
-                    bracket_depth++;
-                }
-                else if (strcmp(word, "]") == 0 && bracket_depth > 0)
-                {
-                    bracket_depth--;
-                }
-            }
-            
-            // Add space between elements on same line
-            Node next = mem_cdr(tokens);
-            if (!mem_is_nil(next))
-            {
-                save_write(" ");
-            }
-            tokens = next;
-        }
-        
-        save_newline();
-        curr_line = mem_cdr(curr_line);
-    }
-    
-    save_write("end");
-    save_newline();
-}
-
-// Save a variable and its value
-static void save_variable(const char *name, Value value)
-{
-    char buf[64];
-    save_write("make \"");
-    save_write(name);
-    save_write(" ");
-
-    switch (value.type)
-    {
-    case VALUE_NUMBER:
-        format_number(buf, sizeof(buf), value.as.number);
-        save_write(buf);
-        break;
-    case VALUE_WORD:
-        save_write("\"");
-        save_write(mem_word_ptr(value.as.node));
-        break;
-    case VALUE_LIST:
-        save_write("[");
-        {
-            bool first = true;
-            Node curr = value.as.node;
-            while (!mem_is_nil(curr))
-            {
-                if (!first)
-                    save_write(" ");
-                first = false;
-                save_body_element(mem_car(curr));
-                curr = mem_cdr(curr);
-            }
-        }
-        save_write("]");
-        break;
-    default:
-        break;
-    }
-    save_newline();
-}
-
-// Save a property as pprop command
-static void save_property(const char *name, const char *property, Value value)
-{
-    char buf[64];
-    save_write("pprop \"");
-    save_write(name);
-    save_write(" \"");
-    save_write(property);
-    save_write(" ");
-
-    switch (value.type)
-    {
-    case VALUE_NUMBER:
-        format_number(buf, sizeof(buf), value.as.number);
-        save_write(buf);
-        break;
-    case VALUE_WORD:
-        save_write("\"");
-        save_write(mem_word_ptr(value.as.node));
-        break;
-    case VALUE_LIST:
-        save_write("[");
-        {
-            bool first = true;
-            Node curr = value.as.node;
-            while (!mem_is_nil(curr))
-            {
-                if (!first)
-                    save_write(" ");
-                first = false;
-                save_body_element(mem_car(curr));
-                curr = mem_cdr(curr);
-            }
-        }
-        save_write("]");
-        break;
-    default:
-        break;
-    }
-    save_newline();
+    return true;
 }
 
 // save pathname - saves all unburied procedures, variables, and properties
@@ -1440,8 +1234,8 @@ static Result prim_save(Evaluator *eval, int argc, Value *args)
         UserProcedure *proc = proc_get_by_index(i);
         if (proc && !proc->buried)
         {
-            save_procedure_definition(proc);
-            save_newline();
+            format_procedure_definition(save_output, NULL, proc);
+            save_output(NULL, "\n");
         }
     }
 
@@ -1453,7 +1247,7 @@ static Result prim_save(Evaluator *eval, int argc, Value *args)
         Value value;
         if (var_get_global_by_index(i, false, &name, &value))
         {
-            save_variable(name, value);
+            format_variable(save_output, NULL, name, value);
         }
     }
 
@@ -1465,34 +1259,7 @@ static Result prim_save(Evaluator *eval, int argc, Value *args)
         if (prop_get_name_by_index(i, &name))
         {
             Node list = prop_get_list(name);
-            // Property list is [prop1 val1 prop2 val2 ...]
-            Node curr = list;
-            while (!mem_is_nil(curr) && !mem_is_nil(mem_cdr(curr)))
-            {
-                Node prop_node = mem_car(curr);
-                Node val_node = mem_car(mem_cdr(curr));
-
-                if (mem_is_word(prop_node))
-                {
-                    const char *prop = mem_word_ptr(prop_node);
-                    Value val;
-                    if (mem_is_word(val_node))
-                    {
-                        val = value_word(val_node);
-                    }
-                    else if (mem_is_list(val_node))
-                    {
-                        val = value_list(val_node);
-                    }
-                    else
-                    {
-                        val = value_list(NODE_NIL);
-                    }
-                    save_property(name, prop, val);
-                }
-
-                curr = mem_cdr(mem_cdr(curr));
-            }
+            format_property_list(save_output, NULL, name, list);
         }
     }
 
@@ -1579,8 +1346,8 @@ static Result prim_savel(Evaluator *eval, int argc, Value *args)
         UserProcedure *proc = proc_find(name);
         if (proc)
         {
-            save_procedure_definition(proc);
-            save_newline();
+            format_procedure_definition(save_output, NULL, proc);
+            save_output(NULL, "\n");
         }
     }
     else if (value_is_list(args[0]))
@@ -1595,8 +1362,8 @@ static Result prim_savel(Evaluator *eval, int argc, Value *args)
                 UserProcedure *proc = proc_find(name);
                 if (proc)
                 {
-                    save_procedure_definition(proc);
-                    save_newline();
+                    format_procedure_definition(save_output, NULL, proc);
+                    save_output(NULL, "\n");
                 }
             }
             curr = mem_cdr(curr);
@@ -1611,7 +1378,7 @@ static Result prim_savel(Evaluator *eval, int argc, Value *args)
         Value value;
         if (var_get_global_by_index(i, false, &name, &value))
         {
-            save_variable(name, value);
+            format_variable(save_output, NULL, name, value);
         }
     }
 
@@ -1623,34 +1390,7 @@ static Result prim_savel(Evaluator *eval, int argc, Value *args)
         if (prop_get_name_by_index(i, &name))
         {
             Node list = prop_get_list(name);
-            // Property list is [prop1 val1 prop2 val2 ...]
-            Node curr = list;
-            while (!mem_is_nil(curr) && !mem_is_nil(mem_cdr(curr)))
-            {
-                Node prop_node = mem_car(curr);
-                Node val_node = mem_car(mem_cdr(curr));
-
-                if (mem_is_word(prop_node))
-                {
-                    const char *prop = mem_word_ptr(prop_node);
-                    Value val;
-                    if (mem_is_word(val_node))
-                    {
-                        val = value_word(val_node);
-                    }
-                    else if (mem_is_list(val_node))
-                    {
-                        val = value_list(val_node);
-                    }
-                    else
-                    {
-                        val = value_list(NODE_NIL);
-                    }
-                    save_property(name, prop, val);
-                }
-
-                curr = mem_cdr(mem_cdr(curr));
-            }
+            format_property_list(save_output, NULL, name, list);
         }
     }
 

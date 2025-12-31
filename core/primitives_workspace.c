@@ -13,184 +13,26 @@
 #include "memory.h"
 #include "error.h"
 #include "eval.h"
+#include "format.h"
 #include "devices/io.h"
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
-static void ws_print(const char *str)
+// Output callback for workspace printing (always succeeds)
+static bool ws_output(void *ctx, const char *str)
 {
+    (void)ctx;
     LogoIO *io = primitives_get_io();
     if (io)
     {
         logo_io_write(io, str);
     }
+    return true;
 }
 
 static void ws_newline(void)
 {
-    ws_print("\n");
-}
-
-// Print a procedure body element (handles quoted words, etc.)
-static void print_body_element(Node elem)
-{
-    if (mem_is_word(elem))
-    {
-        ws_print(mem_word_ptr(elem));
-    }
-    else if (mem_is_list(elem))
-    {
-        ws_print("[");
-        bool first = true;
-        Node curr = elem;
-        while (!mem_is_nil(curr))
-        {
-            if (!first)
-                ws_print(" ");
-            first = false;
-            print_body_element(mem_car(curr));
-            curr = mem_cdr(curr);
-        }
-        ws_print("]");
-    }
-}
-
-// Print procedure title line: to name :param1 :param2 ...
-static void print_procedure_title(UserProcedure *proc)
-{
-    ws_print("to ");
-    ws_print(proc->name);
-    for (int i = 0; i < proc->param_count; i++)
-    {
-        ws_print(" :");
-        ws_print(proc->params[i]);
-    }
-    ws_newline();
-}
-
-// Print full procedure definition
-static void print_procedure_definition(UserProcedure *proc)
-{
-    print_procedure_title(proc);
-    
-    // Body is now a list of line-lists: [[line1-tokens] [line2-tokens] ...]
-    Node curr_line = proc->body;
-    
-    // Track cumulative bracket depth across lines for indentation
-    int bracket_depth = 0;
-    
-    while (!mem_is_nil(curr_line))
-    {
-        Node line = mem_car(curr_line);
-        Node tokens = line;
-        
-        // Handle the list type marker
-        if (NODE_GET_TYPE(line) == NODE_TYPE_LIST)
-        {
-            tokens = NODE_MAKE_LIST(NODE_GET_INDEX(line));
-        }
-        
-        // Count leading closing brackets to reduce indent for this line
-        Node peek = tokens;
-        while (!mem_is_nil(peek))
-        {
-            Node elem = mem_car(peek);
-            if (mem_is_word(elem) && strcmp(mem_word_ptr(elem), "]") == 0 && bracket_depth > 0)
-            {
-                bracket_depth--;
-            }
-            else
-            {
-                break;  // Stop at first non-] token
-            }
-            peek = mem_cdr(peek);
-        }
-        
-        // Print base indent (2 spaces for procedure body)
-        ws_print("  ");
-        
-        // Add extra indentation based on cumulative bracket depth
-        for (int i = 0; i < bracket_depth; i++)
-        {
-            ws_print("  ");
-        }
-        
-        while (!mem_is_nil(tokens))
-        {
-            Node elem = mem_car(tokens);
-            
-            print_body_element(elem);
-            
-            // Track brackets
-            if (mem_is_word(elem))
-            {
-                const char *word = mem_word_ptr(elem);
-                if (strcmp(word, "[") == 0)
-                {
-                    bracket_depth++;
-                }
-                else if (strcmp(word, "]") == 0 && bracket_depth > 0)
-                {
-                    bracket_depth--;
-                }
-            }
-            
-            // Add space between elements on same line
-            Node next = mem_cdr(tokens);
-            if (!mem_is_nil(next))
-            {
-                ws_print(" ");
-            }
-            tokens = next;
-        }
-        
-        ws_newline();
-        curr_line = mem_cdr(curr_line);
-    }
-    
-    ws_print("end");
-    ws_newline();
-}
-
-// Print a variable and its value
-static void print_variable(const char *name, Value value)
-{
-    char buf[64];
-    ws_print("make \"");
-    ws_print(name);
-    ws_print(" ");
-    
-    switch (value.type)
-    {
-    case VALUE_NUMBER:
-        format_number(buf, sizeof(buf), value.as.number);
-        ws_print(buf);
-        break;
-    case VALUE_WORD:
-        ws_print("\"");
-        ws_print(mem_word_ptr(value.as.node));
-        break;
-    case VALUE_LIST:
-        ws_print("[");
-        {
-            bool first = true;
-            Node curr = value.as.node;
-            while (!mem_is_nil(curr))
-            {
-                if (!first)
-                    ws_print(" ");
-                first = false;
-                print_body_element(mem_car(curr));
-                curr = mem_cdr(curr);
-            }
-        }
-        ws_print("]");
-        break;
-    default:
-        break;
-    }
-    ws_newline();
+    ws_output(NULL, "\n");
 }
 
 // po "name or po [name1 name2 ...]
@@ -213,7 +55,7 @@ static Result prim_po(Evaluator *eval, int argc, Value *args)
         {
             return result_error_arg(ERR_DONT_KNOW_HOW, name, NULL);
         }
-        print_procedure_definition(proc);
+        format_procedure_definition(ws_output, NULL, proc);
     }
     else if (value_is_list(args[0]))
     {
@@ -230,7 +72,7 @@ static Result prim_po(Evaluator *eval, int argc, Value *args)
                 {
                     return result_error_arg(ERR_DONT_KNOW_HOW, name, NULL);
                 }
-                print_procedure_definition(proc);
+                format_procedure_definition(ws_output, NULL, proc);
             }
             curr = mem_cdr(curr);
         }
@@ -257,7 +99,7 @@ static Result prim_poall(Evaluator *eval, int argc, Value *args)
         UserProcedure *proc = proc_get_by_index(i);
         if (proc && !proc->buried)
         {
-            print_procedure_definition(proc);
+            format_procedure_definition(ws_output, NULL, proc);
             ws_newline();
         }
     }
@@ -270,11 +112,11 @@ static Result prim_poall(Evaluator *eval, int argc, Value *args)
         Value value;
         if (var_get_global_by_index(i, false, &name, &value))
         {
-            print_variable(name, value);
+            format_variable(ws_output, NULL, name, value);
         }
     }
     
-    // Print all property lists (as pprop commands, matching edall/save format)
+    // Print all property lists (as pprop commands)
     int prop_count = prop_name_count();
     for (int i = 0; i < prop_count; i++)
     {
@@ -282,50 +124,7 @@ static Result prim_poall(Evaluator *eval, int argc, Value *args)
         if (prop_get_name_by_index(i, &name))
         {
             Node list = prop_get_list(name);
-            // Property lists are stored as [prop1 val1 prop2 val2 ...]
-            // Output each property as a separate pprop command
-            Node curr = list;
-            while (!mem_is_nil(curr) && !mem_is_nil(mem_cdr(curr)))
-            {
-                Node prop_node = mem_car(curr);
-                Node val_node = mem_car(mem_cdr(curr));
-                
-                if (mem_is_word(prop_node))
-                {
-                    ws_print("pprop \"");
-                    ws_print(name);
-                    ws_print(" \"");
-                    ws_print(mem_word_ptr(prop_node));
-                    ws_print(" ");
-                    
-                    // Format the value
-                    if (mem_is_word(val_node))
-                    {
-                        // Check if it's a number
-                        const char *str = mem_word_ptr(val_node);
-                        char *endptr;
-                        strtof(str, &endptr);
-                        if (*endptr == '\0' && str[0] != '\0')
-                        {
-                            // It's a number, output without quote
-                            ws_print(str);
-                        }
-                        else
-                        {
-                            // It's a word, output with quote
-                            ws_print("\"");
-                            ws_print(str);
-                        }
-                    }
-                    else if (mem_is_list(val_node))
-                    {
-                        print_body_element(val_node);
-                    }
-                    ws_newline();
-                }
-                
-                curr = mem_cdr(mem_cdr(curr));
-            }
+            format_property_list(ws_output, NULL, name, list);
         }
     }
     
@@ -352,7 +151,7 @@ static Result prim_pon(Evaluator *eval, int argc, Value *args)
         {
             return result_error_arg(ERR_NO_VALUE, name, NULL);
         }
-        print_variable(name, value);
+        format_variable(ws_output, NULL, name, value);
     }
     else if (value_is_list(args[0]))
     {
@@ -369,7 +168,7 @@ static Result prim_pon(Evaluator *eval, int argc, Value *args)
                 {
                     return result_error_arg(ERR_NO_VALUE, name, NULL);
                 }
-                print_variable(name, value);
+                format_variable(ws_output, NULL, name, value);
             }
             curr = mem_cdr(curr);
         }
@@ -400,7 +199,7 @@ static Result prim_pons(Evaluator *eval, int argc, Value *args)
             Value value;
             if (var_get_local_by_index(i, &name, &value))
             {
-                print_variable(name, value);
+                format_variable(ws_output, NULL, name, value);
             }
         }
     }
@@ -416,7 +215,7 @@ static Result prim_pons(Evaluator *eval, int argc, Value *args)
             // Skip if shadowed by a local variable
             if (!var_is_shadowed_by_local(name))
             {
-                print_variable(name, value);
+                format_variable(ws_output, NULL, name, value);
             }
         }
     }
@@ -437,7 +236,7 @@ static Result prim_pops(Evaluator *eval, int argc, Value *args)
         UserProcedure *proc = proc_get_by_index(i);
         if (proc && !proc->buried)
         {
-            print_procedure_definition(proc);
+            format_procedure_definition(ws_output, NULL, proc);
             ws_newline();
         }
     }
@@ -465,7 +264,7 @@ static Result prim_pot(Evaluator *eval, int argc, Value *args)
         {
             return result_error_arg(ERR_DONT_KNOW_HOW, name, NULL);
         }
-        print_procedure_title(proc);
+        format_procedure_title(ws_output, NULL, proc);
     }
     else if (value_is_list(args[0]))
     {
@@ -482,7 +281,7 @@ static Result prim_pot(Evaluator *eval, int argc, Value *args)
                 {
                     return result_error_arg(ERR_DONT_KNOW_HOW, name, NULL);
                 }
-                print_procedure_title(proc);
+                format_procedure_title(ws_output, NULL, proc);
             }
             curr = mem_cdr(curr);
         }
@@ -508,7 +307,7 @@ static Result prim_pots(Evaluator *eval, int argc, Value *args)
         UserProcedure *proc = proc_get_by_index(i);
         if (proc && !proc->buried)
         {
-            print_procedure_title(proc);
+            format_procedure_title(ws_output, NULL, proc);
         }
     }
     
