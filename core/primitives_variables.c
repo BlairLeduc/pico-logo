@@ -13,7 +13,7 @@
 static Result prim_make(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
-    REQUIRE_WORD_STR("make", args[0], name);
+    REQUIRE_WORD_STR(args[0], name);
     var_set(name, args[1]);
     return result_none();
 }
@@ -21,7 +21,7 @@ static Result prim_make(Evaluator *eval, int argc, Value *args)
 static Result prim_thing(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
-    REQUIRE_WORD_STR("thing", args[0], name);
+    REQUIRE_WORD_STR(args[0], name);
     Value v;
     if (!var_get(name, &v))
     {
@@ -60,7 +60,7 @@ static Result prim_local(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "local", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return result_none();
@@ -70,7 +70,7 @@ static Result prim_local(Evaluator *eval, int argc, Value *args)
 static Result prim_name(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
-    REQUIRE_WORD_STR("name", args[1], name);
+    REQUIRE_WORD_STR(args[1], name);
     var_set(name, args[0]);
     return result_none();
 }
@@ -79,7 +79,7 @@ static Result prim_name(Evaluator *eval, int argc, Value *args)
 static Result prim_namep(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
-    REQUIRE_WORD_STR("name?", args[0], name);
+    REQUIRE_WORD_STR(args[0], name);
     
     if (var_exists(name))
     {

@@ -110,12 +110,12 @@ static Result prim_readchars(Evaluator *eval, int argc, Value *args)
     float count_f;
     if (!value_to_number(args[0], &count_f))
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "readchars", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     int count = (int)count_f;
     if (count <= 0)
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "readchars", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
 
     LogoIO *io = primitives_get_io();

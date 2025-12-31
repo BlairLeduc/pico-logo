@@ -43,7 +43,7 @@ static Result prim_if(Evaluator *eval, int argc, Value *args)
     // Check that list1 is a list
     if (!value_is_list(args[1]))
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "if", value_to_string(args[1]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
     }
     
     if (condition)
@@ -56,7 +56,7 @@ static Result prim_if(Evaluator *eval, int argc, Value *args)
         // Check that list2 is a list
         if (!value_is_list(args[2]))
         {
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "if", value_to_string(args[2]));
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[2]));
         }
         // Use eval_run_list_expr so if can act as an operation
         return eval_run_list_expr(eval, args[2].as.node);
@@ -120,7 +120,7 @@ static Result prim_test(Evaluator *eval, int argc, Value *args)
 static Result prim_iftrue(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(argc);
-    REQUIRE_LIST("iftrue", args[0]);
+    REQUIRE_LIST(args[0]);
     
     bool test_value;
     if (var_get_test(&test_value) && test_value)
@@ -134,7 +134,7 @@ static Result prim_iftrue(Evaluator *eval, int argc, Value *args)
 static Result prim_iffalse(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(argc);
-    REQUIRE_LIST("iffalse", args[0]);
+    REQUIRE_LIST(args[0]);
     
     bool test_value;
     if (var_get_test(&test_value) && !test_value)

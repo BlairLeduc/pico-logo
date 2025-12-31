@@ -21,8 +21,8 @@
 static Result prim_catch(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(argc);
-    REQUIRE_WORD("catch", args[0]);
-    REQUIRE_LIST("catch", args[1]);
+    REQUIRE_WORD(args[0]);
+    REQUIRE_LIST(args[1]);
     
     const char *tag = value_to_string(args[0]);
     
@@ -64,7 +64,7 @@ static Result prim_catch(Evaluator *eval, int argc, Value *args)
 static Result prim_throw(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
-    REQUIRE_WORD("throw", args[0]);
+    REQUIRE_WORD(args[0]);
     
     const char *tag = value_to_string(args[0]);
     

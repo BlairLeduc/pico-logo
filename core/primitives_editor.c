@@ -70,7 +70,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
     LogoIO *io = primitives_get_io();
     if (!io || !io->console)
     {
-        return result_error_arg(ERR_UNDEFINED, "edit", NULL);
+        return result_error_arg(ERR_UNDEFINED, NULL, NULL);
     }
     
     // Check if editor is available
@@ -92,7 +92,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
     
     if (editor_result == LOGO_EDITOR_ERROR)
     {
-        return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
+        return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
     }
     
     // Process the buffer content - each line is executed as if typed at top level
@@ -332,17 +332,17 @@ static Result prim_edit(Evaluator *eval, int argc, Value *args)
             // Procedure doesn't exist - create template: "to name\n"
             // Cursor will be on line below, ready for user to define body
             if (!format_buffer_output(&ctx, "to "))
-                return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
+                return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
             if (!format_buffer_output(&ctx, name))
-                return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
+                return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
             if (!format_buffer_output(&ctx, "\n"))
-                return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
+                return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
         }
         else
         {
             if (!format_procedure_definition(format_buffer_output, &ctx, proc))
             {
-                return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
+                return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
             }
         }
     }
@@ -371,17 +371,17 @@ static Result prim_edit(Evaluator *eval, int argc, Value *args)
                     {
                         if (!format_buffer_output(&ctx, "\n"))
                         {
-                            return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
+                            return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
                         }
                     }
                     first_proc = false;
                     
                     if (!format_buffer_output(&ctx, "to "))
-                        return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
+                        return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
                     if (!format_buffer_output(&ctx, name))
-                        return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
+                        return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
                     if (!format_buffer_output(&ctx, "\n"))
-                        return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
+                        return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
                 }
                 else
                 {
@@ -390,14 +390,14 @@ static Result prim_edit(Evaluator *eval, int argc, Value *args)
                     {
                         if (!format_buffer_output(&ctx, "\n"))
                         {
-                            return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
+                            return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
                         }
                     }
                     first_proc = false;
                     
                     if (!format_procedure_definition(format_buffer_output, &ctx, proc))
                     {
-                        return result_error_arg(ERR_OUT_OF_SPACE, "edit", NULL);
+                        return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
                     }
                 }
             }
@@ -406,7 +406,7 @@ static Result prim_edit(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "edit", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return run_editor_and_process(eval, editor_buffer);
@@ -421,7 +421,7 @@ static Result prim_edn(Evaluator *eval, int argc, Value *args)
     
     if (argc < 1)
     {
-        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, "edn", NULL);
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, NULL, NULL);
     }
     
     if (value_is_word(args[0]))
@@ -435,7 +435,7 @@ static Result prim_edn(Evaluator *eval, int argc, Value *args)
         }
         if (!format_variable(format_buffer_output, &ctx, name, value))
         {
-            return result_error_arg(ERR_OUT_OF_SPACE, "edn", NULL);
+            return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
         }
     }
     else if (value_is_list(args[0]))
@@ -456,7 +456,7 @@ static Result prim_edn(Evaluator *eval, int argc, Value *args)
                 
                 if (!format_variable(format_buffer_output, &ctx, name, value))
                 {
-                    return result_error_arg(ERR_OUT_OF_SPACE, "edn", NULL);
+                    return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
                 }
             }
             curr = mem_cdr(curr);
@@ -464,7 +464,7 @@ static Result prim_edn(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "edn", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return run_editor_and_process(eval, editor_buffer);
@@ -487,7 +487,7 @@ static Result prim_edns(Evaluator *eval, int argc, Value *args)
         {
             if (!format_variable(format_buffer_output, &ctx, name, value))
             {
-                return result_error_arg(ERR_OUT_OF_SPACE, "edns", NULL);
+                return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
             }
         }
     }
@@ -516,14 +516,14 @@ static Result prim_edall(Evaluator *eval, int argc, Value *args)
             {
                 if (!format_buffer_output(&ctx, "\n"))
                 {
-                    return result_error_arg(ERR_OUT_OF_SPACE, "edall", NULL);
+                    return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
                 }
             }
             first_proc = false;
             
             if (!format_procedure_definition(format_buffer_output, &ctx, proc))
             {
-                return result_error_arg(ERR_OUT_OF_SPACE, "edall", NULL);
+                return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
             }
         }
     }
@@ -538,7 +538,7 @@ static Result prim_edall(Evaluator *eval, int argc, Value *args)
         {
             if (!format_variable(format_buffer_output, &ctx, name, value))
             {
-                return result_error_arg(ERR_OUT_OF_SPACE, "edall", NULL);
+                return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
             }
         }
     }
@@ -555,7 +555,7 @@ static Result prim_edall(Evaluator *eval, int argc, Value *args)
             {
                 if (!format_property_list(format_buffer_output, &ctx, name, list))
                 {
-                    return result_error_arg(ERR_OUT_OF_SPACE, "edall", NULL);
+                    return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
                 }
             }
         }
@@ -568,14 +568,14 @@ static Result prim_edall(Evaluator *eval, int argc, Value *args)
 static Result prim_editfile(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
-    REQUIRE_WORD("editfile", args[0]);
+    REQUIRE_WORD(args[0]);
     
     const char *pathname = mem_word_ptr(args[0].as.node);
     
     LogoIO *io = primitives_get_io();
     if (!io || !io->console)
     {
-        return result_error_arg(ERR_UNDEFINED, "editfile", NULL);
+        return result_error_arg(ERR_UNDEFINED, NULL, NULL);
     }
     
     // Check if editor is available
@@ -622,7 +622,7 @@ static Result prim_editfile(Evaluator *eval, int argc, Value *args)
             if (content_len + line_len + 1 >= LOGO_EDITOR_BUFFER_SIZE)
             {
                 logo_io_close(io, pathname);
-                return result_error_arg(ERR_OUT_OF_SPACE, "editfile", NULL);
+                return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
             }
             
             // Append line to buffer (without stripping newlines - keep as-is)
@@ -635,7 +635,7 @@ static Result prim_editfile(Evaluator *eval, int argc, Value *args)
                 if (content_len + 1 >= LOGO_EDITOR_BUFFER_SIZE)
                 {
                     logo_io_close(io, pathname);
-                    return result_error_arg(ERR_OUT_OF_SPACE, "editfile", NULL);
+                    return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
                 }
                 editor_buffer[content_len++] = '\n';
             }
@@ -657,7 +657,7 @@ static Result prim_editfile(Evaluator *eval, int argc, Value *args)
     
     if (editor_result == LOGO_EDITOR_ERROR)
     {
-        return result_error_arg(ERR_OUT_OF_SPACE, "editfile", NULL);
+        return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
     }
     
     // Save the buffer to the file

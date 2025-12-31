@@ -105,12 +105,12 @@ static Result prim_fullscreen(Evaluator *eval, int argc, Value *args)
 static Result prim_setcursor(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
-    REQUIRE_ARGC("setcursor", 1);
+    REQUIRE_ARGC(1);
 
     // Extract column and row from [col row] list
     float col_num, row_num;
     Result error;
-    if (!value_extract_xy(args[0], &col_num, &row_num, "setcursor", &error))
+    if (!value_extract_xy(args[0], &col_num, &row_num, &error))
     {
         return error;
     }
@@ -121,7 +121,7 @@ static Result prim_setcursor(Evaluator *eval, int argc, Value *args)
     // Validate range
     if (column < 0 || row < 0)
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "setcursor", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
 
     const LogoConsoleText *text = get_text_ops();

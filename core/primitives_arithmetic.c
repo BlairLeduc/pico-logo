@@ -27,7 +27,7 @@ static Result prim_sum(Evaluator *eval, int argc, Value *args)
         float n;
         if (!value_to_number(args[i], &n))
         {
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "sum", value_to_string(args[i]));
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[i]));
         }
         total += n;
     }
@@ -39,9 +39,9 @@ static Result prim_difference(Evaluator *eval, int argc, Value *args)
     UNUSED(eval); UNUSED(argc);
     float a, b;
     if (!value_to_number(args[0], &a))
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "difference", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     if (!value_to_number(args[1], &b))
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "difference", value_to_string(args[1]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
     return result_ok(value_number(a - b));
 }
 
@@ -54,7 +54,7 @@ static Result prim_product(Evaluator *eval, int argc, Value *args)
         float n;
         if (!value_to_number(args[i], &n))
         {
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, "product", value_to_string(args[i]));
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[i]));
         }
         total *= n;
     }
@@ -66,11 +66,11 @@ static Result prim_quotient(Evaluator *eval, int argc, Value *args)
     UNUSED(eval); UNUSED(argc);
     float a, b;
     if (!value_to_number(args[0], &a))
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "quotient", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     if (!value_to_number(args[1], &b))
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "quotient", value_to_string(args[1]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
     if (b == 0)
-        return result_error_arg(ERR_DIVIDE_BY_ZERO, "quotient", NULL);
+        return result_error_arg(ERR_DIVIDE_BY_ZERO, NULL, NULL);
     return result_ok(value_number(a / b));
 }
 
@@ -80,16 +80,16 @@ static Result prim_random(Evaluator *eval, int argc, Value *args)
     UNUSED(eval); UNUSED(argc);
     float n;
     if (!value_to_number(args[0], &n))
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "random", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     
     int limit = (int)n;
     if (limit <= 0)
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "random", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "random", NULL);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
     }
 
     int result = logo_io_random(io) % limit;
@@ -100,7 +100,7 @@ static Result prim_random(Evaluator *eval, int argc, Value *args)
 static Result prim_arctan(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
-    REQUIRE_NUMBER("arctan", args[0], n);
+    REQUIRE_NUMBER(args[0], n);
     
     return result_ok(value_number(atanf(n) * RAD_TO_DEG));
 }
@@ -109,7 +109,7 @@ static Result prim_arctan(Evaluator *eval, int argc, Value *args)
 static Result prim_cos(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
-    REQUIRE_NUMBER("cos", args[0], n);
+    REQUIRE_NUMBER(args[0], n);
     
     return result_ok(value_number(cosf(n * DEG_TO_RAD)));
 }
@@ -118,7 +118,7 @@ static Result prim_cos(Evaluator *eval, int argc, Value *args)
 static Result prim_sin(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
-    REQUIRE_NUMBER("sin", args[0], n);
+    REQUIRE_NUMBER(args[0], n);
     
     return result_ok(value_number(sinf(n * DEG_TO_RAD)));
 }
@@ -127,7 +127,7 @@ static Result prim_sin(Evaluator *eval, int argc, Value *args)
 static Result prim_int(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
-    REQUIRE_NUMBER("int", args[0], n);
+    REQUIRE_NUMBER(args[0], n);
     
     return result_ok(value_number(truncf(n)));
 }
@@ -138,14 +138,14 @@ static Result prim_intquotient(Evaluator *eval, int argc, Value *args)
     UNUSED(eval); UNUSED(argc);
     float a, b;
     if (!value_to_number(args[0], &a))
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "intquotient", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     if (!value_to_number(args[1], &b))
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "intquotient", value_to_string(args[1]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
     
     int ia = (int)a;
     int ib = (int)b;
     if (ib == 0)
-        return result_error_arg(ERR_DIVIDE_BY_ZERO, "intquotient", NULL);
+        return result_error_arg(ERR_DIVIDE_BY_ZERO, NULL, NULL);
     
     return result_ok(value_number((float)(ia / ib)));
 }
@@ -156,14 +156,14 @@ static Result prim_remainder(Evaluator *eval, int argc, Value *args)
     UNUSED(eval); UNUSED(argc);
     float a, b;
     if (!value_to_number(args[0], &a))
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "remainder", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     if (!value_to_number(args[1], &b))
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "remainder", value_to_string(args[1]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
     
     int ia = (int)a;
     int ib = (int)b;
     if (ib == 0)
-        return result_error_arg(ERR_DIVIDE_BY_ZERO, "remainder", NULL);
+        return result_error_arg(ERR_DIVIDE_BY_ZERO, NULL, NULL);
     
     return result_ok(value_number((float)(ia % ib)));
 }
@@ -172,7 +172,7 @@ static Result prim_remainder(Evaluator *eval, int argc, Value *args)
 static Result prim_round(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
-    REQUIRE_NUMBER("round", args[0], n);
+    REQUIRE_NUMBER(args[0], n);
     
     return result_ok(value_number(roundf(n)));
 }
@@ -181,10 +181,10 @@ static Result prim_round(Evaluator *eval, int argc, Value *args)
 static Result prim_sqrt(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
-    REQUIRE_NUMBER("sqrt", args[0], n);
+    REQUIRE_NUMBER(args[0], n);
     
     if (n < 0)
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "sqrt", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     
     return result_ok(value_number(sqrtf(n)));
 }

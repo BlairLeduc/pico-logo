@@ -23,40 +23,42 @@ extern "C"
     //==========================================================================
     // These macros simplify common argument validation patterns in primitives.
     // They return early with appropriate errors if validation fails.
+    // The error_proc field is left NULL and will be filled in by the evaluator
+    // using the name the user actually typed (handles aliases like fd vs forward).
 
     // Suppress unused parameter warnings
     #define UNUSED(x) (void)(x)
 
     // Validate minimum argument count
-    #define REQUIRE_ARGC(name, required) \
-        do { if (argc < (required)) return result_error_arg(ERR_NOT_ENOUGH_INPUTS, name, NULL); } while(0)
+    #define REQUIRE_ARGC(required) \
+        do { if (argc < (required)) return result_error_arg(ERR_NOT_ENOUGH_INPUTS, NULL, NULL); } while(0)
 
     // Extract a number from an argument, returning error if not a number
-    #define REQUIRE_NUMBER(name, arg, var) \
+    #define REQUIRE_NUMBER(arg, var) \
         float var; \
         do { if (!value_to_number(arg, &var)) \
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, name, value_to_string(arg)); } while(0)
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(arg)); } while(0)
 
     // Validate that an argument is a word
-    #define REQUIRE_WORD(name, arg) \
+    #define REQUIRE_WORD(arg) \
         do { if (!value_is_word(arg)) \
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, name, value_to_string(arg)); } while(0)
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(arg)); } while(0)
 
     // Validate that an argument is a list
-    #define REQUIRE_LIST(name, arg) \
+    #define REQUIRE_LIST(arg) \
         do { if (!value_is_list(arg)) \
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, name, value_to_string(arg)); } while(0)
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(arg)); } while(0)
 
     // Validate that an argument is a word or list (object)
-    #define REQUIRE_OBJECT(name, arg) \
+    #define REQUIRE_OBJECT(arg) \
         do { if (!value_is_word(arg) && !value_is_list(arg)) \
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, name, value_to_string(arg)); } while(0)
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(arg)); } while(0)
 
     // Extract a non-empty word string from an argument
-    #define REQUIRE_WORD_STR(name, arg, var) \
+    #define REQUIRE_WORD_STR(arg, var) \
         const char *var; \
         do { if (!value_is_word(arg)) \
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, name, value_to_string(arg)); \
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(arg)); \
             var = mem_word_ptr((arg).as.node); } while(0)
 
     // Primitive function signature

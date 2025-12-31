@@ -33,9 +33,9 @@ static bool prop_output(void *ctx, const char *str)
 static Result prim_pprop(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
-    REQUIRE_ARGC("pprop", 3);
-    REQUIRE_WORD("pprop", args[0]);
-    REQUIRE_WORD("pprop", args[1]);
+    REQUIRE_ARGC(3);
+    REQUIRE_WORD(args[0]);
+    REQUIRE_WORD(args[1]);
     
     const char *name = mem_word_ptr(args[0].as.node);
     const char *property = mem_word_ptr(args[1].as.node);
@@ -51,9 +51,9 @@ static Result prim_pprop(Evaluator *eval, int argc, Value *args)
 static Result prim_gprop(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
-    REQUIRE_ARGC("gprop", 2);
-    REQUIRE_WORD("gprop", args[0]);
-    REQUIRE_WORD("gprop", args[1]);
+    REQUIRE_ARGC(2);
+    REQUIRE_WORD(args[0]);
+    REQUIRE_WORD(args[1]);
     
     const char *name = mem_word_ptr(args[0].as.node);
     const char *property = mem_word_ptr(args[1].as.node);
@@ -69,8 +69,8 @@ static Result prim_gprop(Evaluator *eval, int argc, Value *args)
 static Result prim_plist(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
-    REQUIRE_ARGC("plist", 1);
-    REQUIRE_WORD("plist", args[0]);
+    REQUIRE_ARGC(1);
+    REQUIRE_WORD(args[0]);
     
     const char *name = mem_word_ptr(args[0].as.node);
     
@@ -84,9 +84,9 @@ static Result prim_plist(Evaluator *eval, int argc, Value *args)
 static Result prim_remprop(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
-    REQUIRE_ARGC("remprop", 2);
-    REQUIRE_WORD("remprop", args[0]);
-    REQUIRE_WORD("remprop", args[1]);
+    REQUIRE_ARGC(2);
+    REQUIRE_WORD(args[0]);
+    REQUIRE_WORD(args[1]);
     
     const char *name = mem_word_ptr(args[0].as.node);
     const char *property = mem_word_ptr(args[1].as.node);

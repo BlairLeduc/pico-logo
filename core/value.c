@@ -162,18 +162,18 @@ Node value_to_node(Value v)
     return NODE_NIL;
 }
 
-bool value_extract_xy(Value list, float *x, float *y, const char *proc_name, Result *error)
+bool value_extract_xy(Value list, float *x, float *y, Result *error)
 {
     if (list.type != VALUE_LIST)
     {
-        *error = result_error_arg(ERR_DOESNT_LIKE_INPUT, proc_name, value_to_string(list));
+        *error = result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(list));
         return false;
     }
 
     Node node = list.as.node;
     if (mem_is_nil(node))
     {
-        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, proc_name, NULL);
+        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, NULL, NULL);
         return false;
     }
 
@@ -182,7 +182,7 @@ bool value_extract_xy(Value list, float *x, float *y, const char *proc_name, Res
     
     if (mem_is_nil(node))
     {
-        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, proc_name, NULL);
+        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, NULL, NULL);
         return false;
     }
     
@@ -195,7 +195,7 @@ bool value_extract_xy(Value list, float *x, float *y, const char *proc_name, Res
     float x_num, y_num;
     if (!value_to_number(x_val, &x_num) || !value_to_number(y_val, &y_num))
     {
-        *error = result_error_arg(ERR_DOESNT_LIKE_INPUT, proc_name, value_to_string(list));
+        *error = result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(list));
         return false;
     }
 
@@ -204,18 +204,18 @@ bool value_extract_xy(Value list, float *x, float *y, const char *proc_name, Res
     return true;
 }
 
-bool value_extract_rgb(Value list, uint8_t *r, uint8_t *g, uint8_t *b, const char *proc_name, Result *error)
+bool value_extract_rgb(Value list, uint8_t *r, uint8_t *g, uint8_t *b, Result *error)
 {
     if (list.type != VALUE_LIST)
     {
-        *error = result_error_arg(ERR_DOESNT_LIKE_INPUT, proc_name, value_to_string(list));
+        *error = result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(list));
         return false;
     }
 
     Node node = list.as.node;
     if (mem_is_nil(node))
     {
-        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, proc_name, NULL);
+        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, NULL, NULL);
         return false;
     }
 
@@ -224,7 +224,7 @@ bool value_extract_rgb(Value list, uint8_t *r, uint8_t *g, uint8_t *b, const cha
     
     if (mem_is_nil(node))
     {
-        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, proc_name, NULL);
+        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, NULL, NULL);
         return false;
     }
     
@@ -233,7 +233,7 @@ bool value_extract_rgb(Value list, uint8_t *r, uint8_t *g, uint8_t *b, const cha
     
     if (mem_is_nil(node))
     {
-        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, proc_name, NULL);
+        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, NULL, NULL);
         return false;
     }
     
@@ -249,7 +249,7 @@ bool value_extract_rgb(Value list, uint8_t *r, uint8_t *g, uint8_t *b, const cha
         !value_to_number(g_val, &g_num) || 
         !value_to_number(b_val, &b_num))
     {
-        *error = result_error_arg(ERR_DOESNT_LIKE_INPUT, proc_name, value_to_string(list));
+        *error = result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(list));
         return false;
     }
 
@@ -433,6 +433,15 @@ Result result_error_in(Result r, const char *caller)
     if (r.status == RESULT_ERROR && r.error_caller == NULL)
     {
         r.error_caller = caller;
+    }
+    return r;
+}
+
+Result result_set_error_proc(Result r, const char *proc)
+{
+    if (r.status == RESULT_ERROR && r.error_proc == NULL)
+    {
+        r.error_proc = proc;
     }
     return r;
 }

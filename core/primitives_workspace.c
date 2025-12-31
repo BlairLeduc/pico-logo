@@ -40,7 +40,7 @@ static void ws_newline(void)
 static Result prim_po(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
-    REQUIRE_ARGC("po", 1);
+    REQUIRE_ARGC(1);
     
     if (value_is_word(args[0]))
     {
@@ -75,7 +75,7 @@ static Result prim_po(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "po", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return result_none();
@@ -130,7 +130,7 @@ static Result prim_poall(Evaluator *eval, int argc, Value *args)
 static Result prim_pon(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
-    REQUIRE_ARGC("pon", 1);
+    REQUIRE_ARGC(1);
     
     if (value_is_word(args[0]))
     {
@@ -165,7 +165,7 @@ static Result prim_pon(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "pon", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return result_none();
@@ -235,7 +235,7 @@ static Result prim_pops(Evaluator *eval, int argc, Value *args)
 static Result prim_pot(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
-    REQUIRE_ARGC("pot", 1);
+    REQUIRE_ARGC(1);
     
     if (value_is_word(args[0]))
     {
@@ -270,7 +270,7 @@ static Result prim_pot(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "pot", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return result_none();
@@ -299,7 +299,7 @@ static Result prim_pots(Evaluator *eval, int argc, Value *args)
 static Result prim_bury(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
-    REQUIRE_ARGC("bury", 1);
+    REQUIRE_ARGC(1);
     
     if (value_is_word(args[0]))
     {
@@ -330,7 +330,7 @@ static Result prim_bury(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "bury", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return result_none();
@@ -352,7 +352,7 @@ static Result prim_buryall(Evaluator *eval, int argc, Value *args)
 static Result prim_buryname(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
-    REQUIRE_ARGC("buryname", 1);
+    REQUIRE_ARGC(1);
     
     if (value_is_word(args[0]))
     {
@@ -383,7 +383,7 @@ static Result prim_buryname(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "buryname", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return result_none();
@@ -394,7 +394,7 @@ static Result prim_buryname(Evaluator *eval, int argc, Value *args)
 static Result prim_unbury(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
-    REQUIRE_ARGC("unbury", 1);
+    REQUIRE_ARGC(1);
     
     if (value_is_word(args[0]))
     {
@@ -425,7 +425,7 @@ static Result prim_unbury(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "unbury", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return result_none();
@@ -447,7 +447,7 @@ static Result prim_unburyall(Evaluator *eval, int argc, Value *args)
 static Result prim_unburyname(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
-    REQUIRE_ARGC("unburyname", 1);
+    REQUIRE_ARGC(1);
     
     if (value_is_word(args[0]))
     {
@@ -478,7 +478,7 @@ static Result prim_unburyname(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "unburyname", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return result_none();
@@ -501,7 +501,7 @@ static Result prim_erall(Evaluator *eval, int argc, Value *args)
 static Result prim_erase(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
-    REQUIRE_ARGC("erase", 1);
+    REQUIRE_ARGC(1);
     
     if (value_is_word(args[0]))
     {
@@ -532,7 +532,7 @@ static Result prim_erase(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "erase", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return result_none();
@@ -543,7 +543,7 @@ static Result prim_erase(Evaluator *eval, int argc, Value *args)
 static Result prim_ern(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
-    REQUIRE_ARGC("ern", 1);
+    REQUIRE_ARGC(1);
     
     if (value_is_word(args[0]))
     {
@@ -574,7 +574,7 @@ static Result prim_ern(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "ern", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return result_none();

@@ -764,7 +764,7 @@ void test_value_extract_xy_success(void)
     
     float x, y;
     Result error;
-    TEST_ASSERT_TRUE(value_extract_xy(v, &x, &y, "test", &error));
+    TEST_ASSERT_TRUE(value_extract_xy(v, &x, &y, &error));
     TEST_ASSERT_EQUAL_FLOAT(10.0f, x);
     TEST_ASSERT_EQUAL_FLOAT(20.0f, y);
 }
@@ -779,7 +779,7 @@ void test_value_extract_xy_negative_values(void)
     
     float x, y;
     Result error;
-    TEST_ASSERT_TRUE(value_extract_xy(v, &x, &y, "test", &error));
+    TEST_ASSERT_TRUE(value_extract_xy(v, &x, &y, &error));
     TEST_ASSERT_EQUAL_FLOAT(-5.0f, x);
     TEST_ASSERT_EQUAL_FLOAT(-15.0f, y);
 }
@@ -794,7 +794,7 @@ void test_value_extract_xy_decimal_values(void)
     
     float x, y;
     Result error;
-    TEST_ASSERT_TRUE(value_extract_xy(v, &x, &y, "test", &error));
+    TEST_ASSERT_TRUE(value_extract_xy(v, &x, &y, &error));
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 3.14f, x);
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 2.71f, y);
 }
@@ -806,7 +806,7 @@ void test_value_extract_xy_fails_on_word(void)
     
     float x, y;
     Result error;
-    TEST_ASSERT_FALSE(value_extract_xy(v, &x, &y, "test", &error));
+    TEST_ASSERT_FALSE(value_extract_xy(v, &x, &y, &error));
     TEST_ASSERT_EQUAL(RESULT_ERROR, error.status);
 }
 
@@ -816,7 +816,7 @@ void test_value_extract_xy_fails_on_empty_list(void)
     
     float x, y;
     Result error;
-    TEST_ASSERT_FALSE(value_extract_xy(v, &x, &y, "test", &error));
+    TEST_ASSERT_FALSE(value_extract_xy(v, &x, &y, &error));
     TEST_ASSERT_EQUAL(RESULT_ERROR, error.status);
 }
 
@@ -829,7 +829,7 @@ void test_value_extract_xy_fails_on_single_element_list(void)
     
     float x, y;
     Result error;
-    TEST_ASSERT_FALSE(value_extract_xy(v, &x, &y, "test", &error));
+    TEST_ASSERT_FALSE(value_extract_xy(v, &x, &y, &error));
     TEST_ASSERT_EQUAL(RESULT_ERROR, error.status);
 }
 
@@ -843,7 +843,7 @@ void test_value_extract_xy_fails_on_non_numeric(void)
     
     float x, y;
     Result error;
-    TEST_ASSERT_FALSE(value_extract_xy(v, &x, &y, "test", &error));
+    TEST_ASSERT_FALSE(value_extract_xy(v, &x, &y, &error));
     TEST_ASSERT_EQUAL(RESULT_ERROR, error.status);
 }
 
@@ -862,7 +862,7 @@ void test_value_extract_rgb_success(void)
     
     uint8_t r, g, b;
     Result error;
-    TEST_ASSERT_TRUE(value_extract_rgb(v, &r, &g, &b, "test", &error));
+    TEST_ASSERT_TRUE(value_extract_rgb(v, &r, &g, &b, &error));
     TEST_ASSERT_EQUAL_UINT8(128, r);
     TEST_ASSERT_EQUAL_UINT8(64, g);
     TEST_ASSERT_EQUAL_UINT8(255, b);
@@ -879,7 +879,7 @@ void test_value_extract_rgb_zero_values(void)
     
     uint8_t r, g, b;
     Result error;
-    TEST_ASSERT_TRUE(value_extract_rgb(v, &r, &g, &b, "test", &error));
+    TEST_ASSERT_TRUE(value_extract_rgb(v, &r, &g, &b, &error));
     TEST_ASSERT_EQUAL_UINT8(0, r);
     TEST_ASSERT_EQUAL_UINT8(0, g);
     TEST_ASSERT_EQUAL_UINT8(0, b);
@@ -896,7 +896,7 @@ void test_value_extract_rgb_clamps_negative(void)
     
     uint8_t r, g, b;
     Result error;
-    TEST_ASSERT_TRUE(value_extract_rgb(v, &r, &g, &b, "test", &error));
+    TEST_ASSERT_TRUE(value_extract_rgb(v, &r, &g, &b, &error));
     TEST_ASSERT_EQUAL_UINT8(0, r);  // Clamped from -10
     TEST_ASSERT_EQUAL_UINT8(64, g);
     TEST_ASSERT_EQUAL_UINT8(128, b);
@@ -913,7 +913,7 @@ void test_value_extract_rgb_clamps_above_255(void)
     
     uint8_t r, g, b;
     Result error;
-    TEST_ASSERT_TRUE(value_extract_rgb(v, &r, &g, &b, "test", &error));
+    TEST_ASSERT_TRUE(value_extract_rgb(v, &r, &g, &b, &error));
     TEST_ASSERT_EQUAL_UINT8(255, r);  // Clamped from 300
     TEST_ASSERT_EQUAL_UINT8(64, g);
     TEST_ASSERT_EQUAL_UINT8(128, b);
@@ -926,7 +926,7 @@ void test_value_extract_rgb_fails_on_word(void)
     
     uint8_t r, g, b;
     Result error;
-    TEST_ASSERT_FALSE(value_extract_rgb(v, &r, &g, &b, "test", &error));
+    TEST_ASSERT_FALSE(value_extract_rgb(v, &r, &g, &b, &error));
     TEST_ASSERT_EQUAL(RESULT_ERROR, error.status);
 }
 
@@ -936,7 +936,7 @@ void test_value_extract_rgb_fails_on_empty_list(void)
     
     uint8_t r, g, b;
     Result error;
-    TEST_ASSERT_FALSE(value_extract_rgb(v, &r, &g, &b, "test", &error));
+    TEST_ASSERT_FALSE(value_extract_rgb(v, &r, &g, &b, &error));
     TEST_ASSERT_EQUAL(RESULT_ERROR, error.status);
 }
 
@@ -950,7 +950,7 @@ void test_value_extract_rgb_fails_on_two_element_list(void)
     
     uint8_t r, g, b;
     Result error;
-    TEST_ASSERT_FALSE(value_extract_rgb(v, &r, &g, &b, "test", &error));
+    TEST_ASSERT_FALSE(value_extract_rgb(v, &r, &g, &b, &error));
     TEST_ASSERT_EQUAL(RESULT_ERROR, error.status);
 }
 
@@ -965,7 +965,7 @@ void test_value_extract_rgb_fails_on_non_numeric(void)
     
     uint8_t r, g, b;
     Result error;
-    TEST_ASSERT_FALSE(value_extract_rgb(v, &r, &g, &b, "test", &error));
+    TEST_ASSERT_FALSE(value_extract_rgb(v, &r, &g, &b, &error));
     TEST_ASSERT_EQUAL(RESULT_ERROR, error.status);
 }
 

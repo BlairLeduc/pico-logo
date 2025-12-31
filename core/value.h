@@ -109,11 +109,11 @@ extern "C"
 
     // Extract [x y] position list into two floats
     // Returns true on success, sets *error on failure
-    bool value_extract_xy(Value list, float *x, float *y, const char *proc_name, Result *error);
+    bool value_extract_xy(Value list, float *x, float *y, Result *error);
 
     // Extract [r g b] RGB list into three uint8 values (clamped to 0-255)
     // Returns true on success, sets *error on failure
-    bool value_extract_rgb(Value list, uint8_t *r, uint8_t *g, uint8_t *b, const char *proc_name, Result *error);
+    bool value_extract_rgb(Value list, uint8_t *r, uint8_t *g, uint8_t *b, Result *error);
 
     // Convert value to string for error messages (returns static buffer)
     const char *value_to_string(Value v);
@@ -137,6 +137,10 @@ extern "C"
 
     // Set caller context on an existing error result
     Result result_error_in(Result r, const char *caller);
+
+    // Set error_proc on an error result if not already set
+    // Returns the result (possibly modified) for chaining
+    Result result_set_error_proc(Result r, const char *proc);
 
     //==========================================================================
     // Result Predicates

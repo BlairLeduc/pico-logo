@@ -142,10 +142,19 @@ const char *error_format(Result r)
         }
         break;
         
+    case ERR_NO_VALUE:
+        // For ERR_NO_VALUE, the variable name is in error_arg
+        if (r.error_arg)
+        {
+            snprintf(buf, sizeof(buf), tmpl, r.error_arg);
+            append_caller_suffix(buf, sizeof(buf), r.error_caller);
+            return buf;
+        }
+        break;
+        
     case ERR_DONT_KNOW_HOW:
     case ERR_NOT_PROCEDURE:
     case ERR_UNDEFINED:
-    case ERR_NO_VALUE:
     case ERR_NOT_WORD:
     case ERR_IS_PRIMITIVE:
     case ERR_NOT_ENOUGH_INPUTS:

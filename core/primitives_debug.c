@@ -34,7 +34,7 @@
 static Result prim_step(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
-    REQUIRE_ARGC("step", 1);
+    REQUIRE_ARGC(1);
     
     if (value_is_word(args[0]))
     {
@@ -67,7 +67,7 @@ static Result prim_step(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "step", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return result_none();
@@ -78,7 +78,7 @@ static Result prim_step(Evaluator *eval, int argc, Value *args)
 static Result prim_unstep(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
-    REQUIRE_ARGC("unstep", 1);
+    REQUIRE_ARGC(1);
     
     if (value_is_word(args[0]))
     {
@@ -111,7 +111,7 @@ static Result prim_unstep(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "unstep", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return result_none();
@@ -122,7 +122,7 @@ static Result prim_unstep(Evaluator *eval, int argc, Value *args)
 static Result prim_trace(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
-    REQUIRE_ARGC("trace", 1);
+    REQUIRE_ARGC(1);
     
     if (value_is_word(args[0]))
     {
@@ -155,7 +155,7 @@ static Result prim_trace(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "trace", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return result_none();
@@ -166,7 +166,7 @@ static Result prim_trace(Evaluator *eval, int argc, Value *args)
 static Result prim_untrace(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
-    REQUIRE_ARGC("untrace", 1);
+    REQUIRE_ARGC(1);
     
     if (value_is_word(args[0]))
     {
@@ -199,7 +199,7 @@ static Result prim_untrace(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "untrace", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     return result_none();

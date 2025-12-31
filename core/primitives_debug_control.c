@@ -24,19 +24,19 @@ static Result prim_wait(Evaluator *eval, int argc, Value *args)
     float tenths_f;
     if (!value_to_number(args[0], &tenths_f))
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "wait", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
     
     int tenths = (int)tenths_f;
     if (tenths < 0)
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, "wait", value_to_string(args[0]));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
 
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "wait", NULL);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
     }
     
     // Wait for tenths of a second (each tenth is 100 milliseconds)
@@ -122,7 +122,7 @@ static Result prim_co(Evaluator *eval, int argc, Value *args)
 static Result prim_go(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(argc);
-    REQUIRE_WORD("go", args[0]);
+    REQUIRE_WORD(args[0]);
     
     // go can only be used inside a procedure
     if (eval->proc_depth == 0)
@@ -139,7 +139,7 @@ static Result prim_go(Evaluator *eval, int argc, Value *args)
 static Result prim_label(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
-    REQUIRE_WORD("label", args[0]);
+    REQUIRE_WORD(args[0]);
     
     // label does nothing itself
     return result_none();

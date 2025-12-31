@@ -111,6 +111,39 @@ void test_error_not_enough_inputs(void)
     TEST_ASSERT_EQUAL_STRING("Not enough inputs to sum", msg);
 }
 
+void test_error_uses_alias_name_fd(void)
+{
+    // When using alias "fd" instead of "forward", error should say "fd"
+    Result r = eval_string("fd \"hello");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    
+    const char *msg = error_format(r);
+    TEST_ASSERT_EQUAL_STRING("fd doesn't like hello as input", msg);
+}
+
+void test_error_uses_full_name_forward(void)
+{
+    // When using full name "forward", error should say "forward"
+    Result r = eval_string("forward \"hello");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    
+    const char *msg = error_format(r);
+    TEST_ASSERT_EQUAL_STRING("forward doesn't like hello as input", msg);
+}
+
+void test_error_uses_alias_name_bk(void)
+{
+    // When using alias "bk" instead of "back", error should say "bk"
+    Result r = eval_string("bk \"hello");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    
+    const char *msg = error_format(r);
+    TEST_ASSERT_EQUAL_STRING("bk doesn't like hello as input", msg);
+}
+
 void test_error_infix_doesnt_like(void)
 {
     // + doesn't like hello as input
@@ -387,6 +420,9 @@ int main(void)
     // Error message tests
     RUN_TEST(test_error_dont_know_how);
     RUN_TEST(test_error_not_enough_inputs);
+    RUN_TEST(test_error_uses_alias_name_fd);
+    RUN_TEST(test_error_uses_full_name_forward);
+    RUN_TEST(test_error_uses_alias_name_bk);
     RUN_TEST(test_error_infix_doesnt_like);
     RUN_TEST(test_error_bracket_mismatch);
     RUN_TEST(test_error_paren_mismatch);
