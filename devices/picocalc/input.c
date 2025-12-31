@@ -72,8 +72,6 @@ int picocalc_read_line(char *buf, int size)
     screen_txt_get_cursor(&start_col, &start_row);
     end_row = start_row;
     end_col = start_col;
-    end_row = start_row;
-    end_col = start_col;
     screen_txt_enable_cursor(true);
     buf[0] = 0; // Null-terminate the string
     
