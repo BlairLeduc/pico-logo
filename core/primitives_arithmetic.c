@@ -250,4 +250,5 @@ void primitives_arithmetic_init(void)
     primitive_register("log", 1, prim_log);
     primitive_register("ln", 1, prim_ln);
     primitive_register("pwr", 2, prim_pwr);
+    primitive_register("exp", 1, prim_exp);
 }

@@ -1647,6 +1647,15 @@ test _predicate_
 `test` remembers whether _predicate_ is `true` or `false` for subsequent use by [`iftrue`](#iftrue-ift) or [`iffalse`](#iffalse-iff). Each `test` is local to the procedure in which it occurs.
 
 
+## ignore
+
+ignore _object_
+
+`command`
+
+The `ignore` command does nothing. It is useful when you want to call a procedure for its side effects only.
+
+
 ## co
 
 co  
@@ -1742,13 +1751,58 @@ label _word_
 The `label` command itself does nothing. However, a [`go`](#go) _word_ passes control to the instruction following it. Note that _word_ must always be a literal word (that is, it must be preceded by a quotation mark).
 
 
+## do.while
+
+do.while _list_ _predicatelist_
+
+`command`
+
+`do.while` runs _list_ repeatedly as long as _predicatelist_ is `true`. An error occurs if _predicatelist_ is not `true` or `false`. A `do.while` loop can be exited early by a [`throw`](#throw) or [`stop`](#stop) command. _list_ is always run at least once.
+
+
+## while
+
+while _predicatelist_ _list_
+
+`command`
+
+`while` tests _predicatelist_ and, if it is `true`, runs _list_. It then repeats this process until _predicatelist_ is `false`. An error occurs if _predicatelist_ is not `true` or `false`. A `while` loop can be exited early by a [`throw`](#throw) or [`stop`](#stop) command. _list_ may not be run at all if _predicatelist_ is initially `false`.
+
+
+## do.until
+
+do.until _list_ _predicatelist_
+
+`command`
+
+`do.until` runs _list_ repeatedly until _predicatelist_ is `true`. An error occurs if _predicatelist_ is not `true` or `false`. A `do.until` loop can be exited early by a [`throw`](#throw) or [`stop`](#stop) command. _list_ is always run at least once.
+
+
+## until
+
+until _predicatelist_ _list_
+
+`command`
+
+`until` tests _predicatelist_ and, if it is `false`, runs _list_. It then repeats this process until _predicatelist_ is `true`. An error occurs if _predicatelist_ is not `true` or `false`. An `until` loop can be exited early by a [`throw`](#throw) or [`stop`](#stop) command. _list_ may not be run at all if _predicatelist_ is initially `true`.
+
+
+## forever
+
+forever _list_
+
+`command`
+
+`forever` runs _list_ repeatedly until interrupted by `Brk`, `F4` or `F9`. A `forever` loop can also be exited by a [`throw`](#throw) or [`stop`](#stop) command.
+
+
 ## repeat
 
 repeat _integer_ _list_  
 
 `command`
 
-`repeat` runs _list_ _integer_ times. An error occurs if _integer_ is negative.
+`repeat` runs _list_ _integer_ times. An error occurs if _integer_ is negative can can be interrupted by `Brk`, `F4` or `F9`. A `repeat` loop can be exited early by a [`throw`](#throw) or [`stop`](#stop) command.
 
 
 ## repcount
@@ -1757,7 +1811,8 @@ repcount
 
 `operation`
 
-`recount` outputs the repetition count of the innermost current [`repeat`](#repeat), starting from 1. If no [`repeat`](#repeat) is active, outputs –1.
+`recount` outputs the repetition count of the innermost current [`repeat`](#repeat) or [`forever`](#forever), starting from 1. If no [`repeat`](#repeat) or [`forever`](#forever) is active, outputs –1.
+
 
 ## run
 

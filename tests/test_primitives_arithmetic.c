@@ -316,6 +316,218 @@ void test_sqrt_negative_error(void)
     TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
 }
 
+//==========================================================================
+// abs Tests
+//==========================================================================
+
+void test_abs_positive(void)
+{
+    // abs 5 should be 5
+    Result r = eval_string("abs 5");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(5.0f, r.value.as.number);
+}
+
+void test_abs_negative(void)
+{
+    // abs -5 should be 5
+    Result r = eval_string("abs -5");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(5.0f, r.value.as.number);
+}
+
+void test_abs_zero(void)
+{
+    // abs 0 should be 0
+    Result r = eval_string("abs 0");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, r.value.as.number);
+}
+
+void test_abs_decimal(void)
+{
+    // abs -3.14 should be 3.14
+    Result r = eval_string("abs -3.14");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 3.14f, r.value.as.number);
+}
+
+//==========================================================================
+// ln Tests (natural logarithm)
+//==========================================================================
+
+void test_ln_e(void)
+{
+    // ln of e should be 1
+    Result r = eval_string("ln 2.718281828");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 1.0f, r.value.as.number);
+}
+
+void test_ln_one(void)
+{
+    // ln 1 should be 0
+    Result r = eval_string("ln 1");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, r.value.as.number);
+}
+
+void test_ln_positive(void)
+{
+    // ln 10 should be approximately 2.3026
+    Result r = eval_string("ln 10");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 2.302585f, r.value.as.number);
+}
+
+void test_ln_zero_error(void)
+{
+    // ln 0 should error
+    Result r = eval_string("ln 0");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_ln_negative_error(void)
+{
+    // ln of negative number should error
+    Result r = eval_string("ln -5");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+//==========================================================================
+// log Tests (base-10 logarithm)
+//==========================================================================
+
+void test_log_ten(void)
+{
+    // log 10 should be 1
+    Result r = eval_string("log 10");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 1.0f, r.value.as.number);
+}
+
+void test_log_hundred(void)
+{
+    // log 100 should be 2
+    Result r = eval_string("log 100");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 2.0f, r.value.as.number);
+}
+
+void test_log_one(void)
+{
+    // log 1 should be 0
+    Result r = eval_string("log 1");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, r.value.as.number);
+}
+
+void test_log_zero_error(void)
+{
+    // log 0 should error
+    Result r = eval_string("log 0");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_log_negative_error(void)
+{
+    // log of negative number should error
+    Result r = eval_string("log -5");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+//==========================================================================
+// pwr Tests (power function)
+//==========================================================================
+
+void test_pwr_basic(void)
+{
+    // pwr 2 3 should be 8
+    Result r = eval_string("pwr 2 3");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(8.0f, r.value.as.number);
+}
+
+void test_pwr_square(void)
+{
+    // pwr 5 2 should be 25
+    Result r = eval_string("pwr 5 2");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(25.0f, r.value.as.number);
+}
+
+void test_pwr_zero_exponent(void)
+{
+    // pwr 5 0 should be 1
+    Result r = eval_string("pwr 5 0");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(1.0f, r.value.as.number);
+}
+
+void test_pwr_one_exponent(void)
+{
+    // pwr 7 1 should be 7
+    Result r = eval_string("pwr 7 1");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(7.0f, r.value.as.number);
+}
+
+void test_pwr_fractional_exponent(void)
+{
+    // pwr 9 0.5 should be 3 (square root)
+    Result r = eval_string("pwr 9 0.5");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 3.0f, r.value.as.number);
+}
+
+void test_pwr_negative_exponent(void)
+{
+    // pwr 2 -1 should be 0.5
+    Result r = eval_string("pwr 2 -1");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.5f, r.value.as.number);
+}
+
+//==========================================================================
+// exp Tests (e^x)
+//==========================================================================
+
+void test_exp_zero(void)
+{
+    // exp 0 should be 1
+    Result r = eval_string("exp 0");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 1.0f, r.value.as.number);
+}
+
+void test_exp_one(void)
+{
+    // exp 1 should be e (approximately 2.718)
+    Result r = eval_string("exp 1");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 2.718281828f, r.value.as.number);
+}
+
+void test_exp_two(void)
+{
+    // exp 2 should be e^2 (approximately 7.389)
+    Result r = eval_string("exp 2");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 7.389056f, r.value.as.number);
+}
+
+void test_exp_negative(void)
+{
+    // exp -1 should be 1/e (approximately 0.368)
+    Result r = eval_string("exp -1");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.367879f, r.value.as.number);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -357,6 +569,30 @@ int main(void)
     RUN_TEST(test_sqrt_decimal);
     RUN_TEST(test_sqrt_zero);
     RUN_TEST(test_sqrt_negative_error);
+    RUN_TEST(test_abs_positive);
+    RUN_TEST(test_abs_negative);
+    RUN_TEST(test_abs_zero);
+    RUN_TEST(test_abs_decimal);
+    RUN_TEST(test_ln_e);
+    RUN_TEST(test_ln_one);
+    RUN_TEST(test_ln_positive);
+    RUN_TEST(test_ln_zero_error);
+    RUN_TEST(test_ln_negative_error);
+    RUN_TEST(test_log_ten);
+    RUN_TEST(test_log_hundred);
+    RUN_TEST(test_log_one);
+    RUN_TEST(test_log_zero_error);
+    RUN_TEST(test_log_negative_error);
+    RUN_TEST(test_pwr_basic);
+    RUN_TEST(test_pwr_square);
+    RUN_TEST(test_pwr_zero_exponent);
+    RUN_TEST(test_pwr_one_exponent);
+    RUN_TEST(test_pwr_fractional_exponent);
+    RUN_TEST(test_pwr_negative_exponent);
+    RUN_TEST(test_exp_zero);
+    RUN_TEST(test_exp_one);
+    RUN_TEST(test_exp_two);
+    RUN_TEST(test_exp_negative);
 
     return UNITY_END();
 }
