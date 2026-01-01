@@ -17,22 +17,13 @@
 static Result prim_define(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
-    REQUIRE_WORD(args[0]);
-    REQUIRE_LIST(args[1]);
-    
-    const char *name = mem_word_ptr(args[0].as.node);
-    Node def_list = args[1].as.node;
+    REQUIRE_WORD_STR(args[0], name);
+    REQUIRE_LIST_NONEMPTY(args[1], def_list);
     
     // Check not redefining a primitive
     if (primitive_find(name))
     {
         return result_error_arg(ERR_IS_PRIMITIVE, name, NULL);
-    }
-    
-    // First element should be parameter list
-    if (mem_is_nil(def_list))
-    {
-        return result_error_arg(ERR_TOO_FEW_ITEMS, NULL, NULL);
     }
     
     Node params_elem = mem_car(def_list);
@@ -315,15 +306,10 @@ Result proc_define_from_text(const char *text)
 // text "name - outputs the text (definition) of a procedure as a list
 static Result prim_text(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
+
+    REQUIRE_WORD_STR(args[0], name);
     
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
-    }
-    
-    const char *name = mem_word_ptr(args[0].as.node);
     UserProcedure *proc = proc_find(name);
     
     if (!proc)
@@ -365,15 +351,8 @@ static Result prim_text(Evaluator *eval, int argc, Value *args)
 // primitivep "name - outputs true if name is a primitive
 static Result prim_primitivep(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
-    }
-    
-    const char *name = mem_word_ptr(args[0].as.node);
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD_STR(args[0], name);
     
     if (primitive_find(name))
     {
@@ -385,15 +364,8 @@ static Result prim_primitivep(Evaluator *eval, int argc, Value *args)
 // definedp "name - outputs true if name is a user-defined procedure
 static Result prim_definedp(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
-    }
-    
-    const char *name = mem_word_ptr(args[0].as.node);
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD_STR(args[0], name);
     
     if (proc_exists(name))
     {
@@ -405,20 +377,9 @@ static Result prim_definedp(Evaluator *eval, int argc, Value *args)
 // copydef "name "newname - copies the definition of name to newname
 static Result prim_copydef(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
-    }
-    if (!value_is_word(args[1]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
-    }
-    
-    const char *source_name = mem_word_ptr(args[0].as.node);
-    const char *dest_name = mem_word_ptr(args[1].as.node);
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD_STR(args[0], source_name);
+    REQUIRE_WORD_STR(args[1], dest_name);
     
     // Check destination is not already a primitive
     if (primitive_find(dest_name))

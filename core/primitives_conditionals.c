@@ -21,30 +21,8 @@
 // If predicate is false and list2 provided, run list2
 static Result prim_if(Evaluator *eval, int argc, Value *args)
 {
-    // Check predicate is a boolean word
-    Value pred = args[0];
-    bool condition;
-    
-    if (value_is_word(pred))
-    {
-        const char *str = value_to_string(pred);
-        if (strcasecmp(str, "true") == 0)
-            condition = true;
-        else if (strcasecmp(str, "false") == 0)
-            condition = false;
-        else
-            return result_error_arg(ERR_NOT_BOOL, NULL, str);
-    }
-    else
-    {
-        return result_error_arg(ERR_NOT_BOOL, NULL, value_to_string(pred));
-    }
-    
-    // Check that list1 is a list
-    if (!value_is_list(args[1]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
-    }
+    REQUIRE_BOOL(args[0], condition);
+    REQUIRE_LIST(args[1]);
     
     if (condition)
     {
@@ -53,11 +31,8 @@ static Result prim_if(Evaluator *eval, int argc, Value *args)
     }
     else if (argc >= 3)
     {
-        // Check that list2 is a list
-        if (!value_is_list(args[2]))
-        {
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[2]));
-        }
+        REQUIRE_LIST(args[2]);
+
         // Use eval_run_list_expr so if can act as an operation
         return eval_run_list_expr(eval, args[2].as.node);
     }
@@ -72,6 +47,7 @@ static Result prim_if(Evaluator *eval, int argc, Value *args)
 static Result prim_true(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc); UNUSED(args);
+
     Node true_word = mem_atom_cstr("true");
     return result_ok(value_word(true_word));
 }
@@ -79,6 +55,7 @@ static Result prim_true(Evaluator *eval, int argc, Value *args)
 static Result prim_false(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc); UNUSED(args);
+    
     Node false_word = mem_atom_cstr("false");
     return result_ok(value_word(false_word));
 }
@@ -90,29 +67,9 @@ static Result prim_false(Evaluator *eval, int argc, Value *args)
 static Result prim_test(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
-    
-    Value pred = args[0];
-    
-    if (value_is_word(pred))
-    {
-        const char *str = value_to_string(pred);
-        if (strcasecmp(str, "true") == 0)
-        {
-            var_set_test(true);
-        }
-        else if (strcasecmp(str, "false") == 0)
-        {
-            var_set_test(false);
-        }
-        else
-        {
-            return result_error_arg(ERR_NOT_BOOL, NULL, str);
-        }
-    }
-    else
-    {
-        return result_error_arg(ERR_NOT_BOOL, NULL, value_to_string(pred));
-    }
+    REQUIRE_BOOL(args[0], condition);
+
+    var_set_test(condition);
     
     return result_none();
 }

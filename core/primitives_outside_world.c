@@ -106,12 +106,8 @@ static Result prim_readchar(Evaluator *eval, int argc, Value *args)
 static Result prim_readchars(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
+    REQUIRE_NUMBER(args[0], count_f);
 
-    float count_f;
-    if (!value_to_number(args[0], &count_f))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
-    }
     int count = (int)count_f;
     if (count <= 0)
     {
@@ -308,9 +304,7 @@ static ParseResult parse_line_to_list(const char *line)
 // Echoes the input. Returns empty word if at EOF.
 static Result prim_readlist(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     LogoIO *io = primitives_get_io();
     if (!io)
@@ -343,9 +337,7 @@ static Result prim_readlist(Evaluator *eval, int argc, Value *args)
 // Echoes the input. Returns empty word if press Enter without typing, empty list at EOF.
 static Result prim_readword(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     LogoIO *io = primitives_get_io();
     if (!io)
@@ -391,6 +383,7 @@ static Result prim_readword(Evaluator *eval, int argc, Value *args)
 static Result prim_print(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
+
     for (int i = 0; i < argc; i++)
     {
         if (i > 0)
@@ -415,6 +408,7 @@ static Result prim_print(Evaluator *eval, int argc, Value *args)
 static Result prim_show(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
+
     format_value_show(print_output, NULL, args[0]);
     print_output(NULL, "\n");
     flush_writer();
@@ -434,6 +428,7 @@ static Result prim_show(Evaluator *eval, int argc, Value *args)
 static Result prim_type(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
+
     for (int i = 0; i < argc; i++)
     {
         if (i > 0)

@@ -64,6 +64,7 @@ static Result prim_poweroff(Evaluator *eval, int argc, Value *args)
             while (1)
             {
                 io->hardware->ops->sleep(1000);
+                logo_io_write(io, ".");
             }
         }
     }

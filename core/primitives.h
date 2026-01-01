@@ -61,6 +61,36 @@ extern "C"
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(arg)); \
             var = mem_word_ptr((arg).as.node); } while(0)
 
+    // Extract a non-empty list from an argument
+    #define REQUIRE_LIST_NONEMPTY(arg, var) \
+        Node var; \
+        do { if (!value_is_list(arg)) \
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(arg)); \
+            var = (arg).as.node; \
+            if (mem_is_nil(var)) \
+                return result_error_arg(ERR_TOO_FEW_ITEMS, NULL, NULL); } while(0)
+
+    // Extract a boolean from an argument, returning error if not a boolean word
+    #define REQUIRE_BOOL(arg, var) \
+        bool var; \
+        do { \
+            if (value_is_word(arg)) \
+            { \
+                const char *str = value_to_string(arg); \
+                if (strcasecmp(str, "true") == 0) \
+                    var = true; \
+                else if (strcasecmp(str, "false") == 0) \
+                    var = false; \
+                else \
+                    return result_error_arg(ERR_NOT_BOOL, NULL, str); \
+            } \
+            else \
+            { \
+                return result_error_arg(ERR_NOT_BOOL, NULL, value_to_string(arg)); \
+            } \
+        } while(0)
+
+
     // Primitive function signature
     typedef Result (*PrimitiveFunc)(Evaluator *eval, int argc, Value *args);
 

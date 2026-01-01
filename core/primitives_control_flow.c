@@ -13,6 +13,7 @@ static Result prim_run(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(argc);
     REQUIRE_LIST(args[0]);
+
     // Use eval_run_list_expr so run can act as an operation
     return eval_run_list_expr(eval, args[0].as.node);
 }
@@ -20,15 +21,8 @@ static Result prim_run(Evaluator *eval, int argc, Value *args)
 static Result prim_repeat(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(argc);
-    float count_f;
-    if (!value_to_number(args[0], &count_f))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
-    }
-    if (!value_is_list(args[1]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
-    }
+    REQUIRE_NUMBER(args[0], count_f);
+    REQUIRE_LIST(args[1]);
 
     int count = (int)count_f;
     Node body = args[1].as.node;
