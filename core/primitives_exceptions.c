@@ -73,6 +73,13 @@ static Result prim_throw(Evaluator *eval, int argc, Value *args)
     return result_throw(tag);
 }
 
+static Result prim_toplevel(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
+
+    return result_ok(value_word(mem_atom_cstr("toplevel")));
+}
+
 static Result prim_error(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc); UNUSED(args);
@@ -107,5 +114,6 @@ void primitives_exceptions_init(void)
 {
     primitive_register("catch", 2, prim_catch);
     primitive_register("throw", 1, prim_throw);
+    primitive_register("toplevel", 0, prim_toplevel);
     primitive_register("error", 0, prim_error);
 }
