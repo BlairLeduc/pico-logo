@@ -8,7 +8,7 @@
 #include <string.h>
 #include <strings.h>
 
-#define MAX_PRIMITIVES 256
+#define MAX_PRIMITIVES 512
 
 static Primitive primitives[MAX_PRIMITIVES];
 static int primitive_count = 0;

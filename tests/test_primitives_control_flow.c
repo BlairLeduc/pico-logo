@@ -278,6 +278,41 @@ void test_do_until_invalid_predicate(void)
     TEST_ASSERT_EQUAL_STRING("1\n", output_buffer);
 }
 
+//==========================================================================
+// Comment (;) Tests
+//==========================================================================
+
+void test_comment_with_list(void)
+{
+    // ; with a list should be ignored
+    Result r = eval_string("; [This is a comment]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+}
+
+void test_comment_with_word(void)
+{
+    // ; with a word should be ignored
+    Result r = eval_string("; \"comment");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+}
+
+void test_comment_in_procedure(void)
+{
+    // ; should work inside procedures
+    // Use define primitive to create a procedure with a comment
+    run_string("define \"test.comment [[] [; [comment] print 42]]");
+    reset_output();
+    run_string("test.comment");
+    TEST_ASSERT_EQUAL_STRING("42\n", output_buffer);
+}
+
+void test_comment_inline(void)
+{
+    // ; can be used inline with other commands
+    run_string("print 1 ; [comment after print]");
+    TEST_ASSERT_EQUAL_STRING("1\n", output_buffer);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -310,6 +345,10 @@ int main(void)
     RUN_TEST(test_do_until_runs_once);
     RUN_TEST(test_do_until_with_stop);
     RUN_TEST(test_do_until_invalid_predicate);
+    RUN_TEST(test_comment_with_list);
+    RUN_TEST(test_comment_with_word);
+    RUN_TEST(test_comment_in_procedure);
+    RUN_TEST(test_comment_inline);
 
     return UNITY_END();
 }

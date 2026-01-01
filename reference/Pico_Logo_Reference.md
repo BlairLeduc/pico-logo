@@ -342,22 +342,6 @@ A _backslash_, `\`, tells Logo to interpret the character that follows it litera
 
 # Difference from other Logo interpreters
 
-Comments are not supported in Pico Logo. A comment procedure can be defined to support comments:
-
-```logo
-to ; :comment
-end
-```
-
-This can be used:
-
-```logo
-?; [This is a comment]
-?to increment :var
->make :var (thing :var)+1 ; [Increement by one]
->end
-```
-
 Line continuation characters are not supported.
 
 Words with internal spaces are created using the "`\`" character, not using the veritcal bar notation.
@@ -1571,6 +1555,7 @@ Outputs the sum of its inputs. `sum` is equivalent t o the `+` infix-form operat
 
 In Logo, the boolean value of true is represented by `"true` and false is represented by `"false`.
 
+
 ## true
 
 true  
@@ -1587,6 +1572,25 @@ false
 `operation`
 
 Outputs `"false`. In Logo, boolean false is represented by the word `false`.
+
+
+## ;
+
+; _comment_
+
+`command`
+
+The semicolon (`;`) indicates that the rest of the line is a comment. Logo ignores everything on the line after the semicolon. You can use comments to explain what your procedures do.
+
+Example:
+
+```logo
+to square :number
+  ; [This procedure outputs the square of :number]
+  output :number * :number
+end
+```
+
 
 ## if
 
@@ -2102,6 +2106,15 @@ type _object_
 The `type` command prints its inputs without a carriage return on the screen, unless the destination has been changed by [`setwrite`](#setwrite). The outermost brackets of lists are not printed.
 
 Compare with [`print`](#print-pr) and [`show`](#show).
+
+
+## standout
+
+standout _object_
+
+`operation`
+
+outputs _object_ in standout mode. In standout mode, text is displayed in reverse video. If the display does not support reverse video, the text is displayed normally. The outermost brackets of lists are not printed.
 
 
 ## toot

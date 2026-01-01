@@ -3,11 +3,12 @@
 //  Copyright 2025 Blair Leduc. See LICENSE for details.
 //
 //  Tests for Outside World primitives: keyp, readchar, readchars, readlist,
-//  readword, print, show, type
+//  readword, print, show, type, standout
 //
 
 #include "test_scaffold.h"
 #include <stdlib.h>
+#include <string.h>
 
 void setUp(void)
 {
@@ -137,6 +138,106 @@ void test_type_then_print(void)
     reset_output();
     run_string("print \"World");
     TEST_ASSERT_EQUAL_STRING("World\n", output_buffer);
+}
+
+//==========================================================================
+// Standout Tests
+//==========================================================================
+
+void test_standout_word(void)
+{
+    Result r = eval_string("standout \"ABC");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_word(r.value));
+    
+    // Each character should have MSB set
+    const char *str = mem_word_ptr(r.value.as.node);
+    TEST_ASSERT_EQUAL(3, strlen(str));
+    TEST_ASSERT_EQUAL((char)('A' | 0x80), str[0]);
+    TEST_ASSERT_EQUAL((char)('B' | 0x80), str[1]);
+    TEST_ASSERT_EQUAL((char)('C' | 0x80), str[2]);
+}
+
+void test_standout_number(void)
+{
+    Result r = eval_string("standout 42");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_word(r.value));
+    
+    // "42" with MSB set on each character
+    const char *str = mem_word_ptr(r.value.as.node);
+    TEST_ASSERT_EQUAL(2, strlen(str));
+    TEST_ASSERT_EQUAL((char)('4' | 0x80), str[0]);
+    TEST_ASSERT_EQUAL((char)('2' | 0x80), str[1]);
+}
+
+void test_standout_list_no_outer_brackets(void)
+{
+    Result r = eval_string("standout [a b c]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_word(r.value));
+    
+    // "a b c" with MSB set, using inverse space (0xA0) between items
+    const char *str = mem_word_ptr(r.value.as.node);
+    TEST_ASSERT_EQUAL(5, strlen(str));
+    TEST_ASSERT_EQUAL((char)('a' | 0x80), str[0]);
+    TEST_ASSERT_EQUAL((char)(' ' | 0x80), str[1]);  // Inverse space
+    TEST_ASSERT_EQUAL((char)('b' | 0x80), str[2]);
+    TEST_ASSERT_EQUAL((char)(' ' | 0x80), str[3]);  // Inverse space
+    TEST_ASSERT_EQUAL((char)('c' | 0x80), str[4]);
+}
+
+void test_standout_nested_list(void)
+{
+    Result r = eval_string("standout [a [b c] d]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_word(r.value));
+    
+    // "a [b c] d" with MSB set
+    const char *str = mem_word_ptr(r.value.as.node);
+    // Expected: a<sp>[b<sp>c]<sp>d = 9 chars
+    TEST_ASSERT_EQUAL(9, strlen(str));
+    TEST_ASSERT_EQUAL((char)('a' | 0x80), str[0]);
+    TEST_ASSERT_EQUAL((char)(' ' | 0x80), str[1]);
+    TEST_ASSERT_EQUAL((char)('[' | 0x80), str[2]);
+    TEST_ASSERT_EQUAL((char)('b' | 0x80), str[3]);
+    TEST_ASSERT_EQUAL((char)(' ' | 0x80), str[4]);
+    TEST_ASSERT_EQUAL((char)('c' | 0x80), str[5]);
+    TEST_ASSERT_EQUAL((char)(']' | 0x80), str[6]);
+    TEST_ASSERT_EQUAL((char)(' ' | 0x80), str[7]);
+    TEST_ASSERT_EQUAL((char)('d' | 0x80), str[8]);
+}
+
+void test_standout_empty_list(void)
+{
+    Result r = eval_string("standout []");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_word(r.value));
+    
+    // Empty list should produce empty word
+    const char *str = mem_word_ptr(r.value.as.node);
+    TEST_ASSERT_EQUAL(0, strlen(str));
+}
+
+void test_standout_empty_word(void)
+{
+    Result r = eval_string("standout \"");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_word(r.value));
+    
+    // Empty word
+    const char *str = mem_word_ptr(r.value.as.node);
+    TEST_ASSERT_EQUAL(0, strlen(str));
+}
+
+void test_standout_can_be_printed(void)
+{
+    // standout returns a word that can be printed
+    run_string("type standout \"Hi");
+    // Output should contain characters with MSB set
+    TEST_ASSERT_EQUAL(2, strlen(output_buffer));
+    TEST_ASSERT_EQUAL((char)('H' | 0x80), output_buffer[0]);
+    TEST_ASSERT_EQUAL((char)('i' | 0x80), output_buffer[1]);
 }
 
 //==========================================================================
@@ -384,6 +485,15 @@ int main(void)
     RUN_TEST(test_type_multiple_args);
     RUN_TEST(test_type_then_print);
     RUN_TEST(test_type_empty_list);
+    
+    // Standout tests
+    RUN_TEST(test_standout_word);
+    RUN_TEST(test_standout_number);
+    RUN_TEST(test_standout_list_no_outer_brackets);
+    RUN_TEST(test_standout_nested_list);
+    RUN_TEST(test_standout_empty_list);
+    RUN_TEST(test_standout_empty_word);
+    RUN_TEST(test_standout_can_be_printed);
     
     // Input tests
     RUN_TEST(test_keyp_no_input_returns_false);
