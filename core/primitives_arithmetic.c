@@ -18,6 +18,14 @@
 // Conversion factor from radians to degrees
 #define RAD_TO_DEG (180.0f / 3.14159265358979323846f)
 
+static Result prim_abs(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
+    REQUIRE_NUMBER(args[0], n);
+
+    return result_ok(value_number(fabsf(n)));
+}
+
 static Result prim_sum(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
@@ -181,6 +189,7 @@ static Result prim_sqrt(Evaluator *eval, int argc, Value *args)
 
 void primitives_arithmetic_init(void)
 {
+    primitive_register("abs", 1, prim_abs);
     primitive_register("sum", 2, prim_sum);
     primitive_register("difference", 2, prim_difference);
     primitive_register("product", 2, prim_product);
