@@ -18,6 +18,7 @@
 // Conversion factor from radians to degrees
 #define RAD_TO_DEG (180.0f / 3.14159265358979323846f)
 
+// abs - outputs absolute value of number
 static Result prim_abs(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc); UNUSED(args);
@@ -187,6 +188,49 @@ static Result prim_sqrt(Evaluator *eval, int argc, Value *args)
     return result_ok(value_number(sqrtf(n)));
 }
 
+// log - Outputs base-10 logarithm of number
+static Result prim_log(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_NUMBER(args[0], n);
+
+    if (n <= 0)
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+
+    return result_ok(value_number(log10f(n)));
+}
+
+// ln - Outputs natural logarithm of number
+static Result prim_ln(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_NUMBER(args[0], n);
+
+    if (n <= 0)
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+
+    return result_ok(value_number(logf(n)));
+}
+
+// pwr - outputs number1 raised to the power of number2
+static Result prim_pwr(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_NUMBER(args[0], base);
+    REQUIRE_NUMBER(args[1], exponent);
+
+    return result_ok(value_number(powf(base, exponent)));
+}
+
+// exp - outputs e raised to the power of number
+static Result prim_exp(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_NUMBER(args[0], exponent);
+
+    return result_ok(value_number(expf(exponent)));
+}
+
 void primitives_arithmetic_init(void)
 {
     primitive_register("abs", 1, prim_abs);
@@ -203,4 +247,7 @@ void primitives_arithmetic_init(void)
     primitive_register("remainder", 2, prim_remainder);
     primitive_register("round", 1, prim_round);
     primitive_register("sqrt", 1, prim_sqrt);
+    primitive_register("log", 1, prim_log);
+    primitive_register("ln", 1, prim_ln);
+    primitive_register("pwr", 2, prim_pwr);
 }

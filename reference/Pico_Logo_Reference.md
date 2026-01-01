@@ -1403,6 +1403,16 @@ This chapter contains
 - descriptions of the prefix-form operations
 - descriptions of the infix-form operations.
 
+
+## abs
+
+abs _number_
+
+`operation`
+
+Outputs the absolute _number_. If _number_ less than zero the negative of _number is returned.
+
+
 ## arctan
 
 arctan _number_  
@@ -1430,6 +1440,15 @@ difference _number1_ _number2_
 Outputs _number2_ subtracted from _number1_.
 
 
+## exp
+
+exp _exponent_
+
+`operation`
+
+Outputs _e_ raised to the power of _exponent_.
+
+
 ## int
 
 int _number_  
@@ -1448,6 +1467,23 @@ intquotient _integer1_ _integer2_
 `intquotient` outputs the result of dividing _integer1_ by _integer2_, truncated to an integer. An error occurs if _integer2_ is zero. If either input is a decimal number, it is truncated.
 
 
+## ln
+
+ln _number_
+
+`operation`
+
+Outputs natural logarithm of _number_. An error is returned if _number_ is less than or equal to zero.
+
+
+## log
+
+log _number_
+
+`operation`
+
+Outputs the base-10 logarithm of _number_. An error is returned if _number_ is less than or equal to zero.
+
 ## product
 
 product _number1_ _number2_  
@@ -1456,6 +1492,15 @@ product _number1_ _number2_
 `operation`
 
 Outputs the product of its inputs. It is equivalent to the `*` infix-form operation. With one input, `product` outputs its input.
+
+
+## pwr
+
+pwr _base_ _exponent_
+
+`operation`
+
+Outputs _base_ raised to the power of _exponent_.
 
 
 ## quotient
