@@ -8,7 +8,7 @@
 #pragma once
 
 #include "value.h"
-#include "lexer.h"
+#include "token_source.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -18,9 +18,7 @@ extern "C"
     // Evaluator state
     typedef struct Evaluator
     {
-        Lexer *lexer;
-        Token current;
-        bool has_current;
+        TokenSource token_source;  // Current token source (lexer or node iterator)
         int paren_depth;           // Track nested parentheses for greedy args
         int error_code;
         const char *error_context; // For error messages

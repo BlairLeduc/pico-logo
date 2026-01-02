@@ -27,6 +27,7 @@ endmacro()
 
 # Core tests
 add_logo_test(test_lexer)
+add_logo_test(test_token_source)
 add_logo_test(test_memory)
 add_logo_test(test_value)
 add_logo_test(test_eval)
@@ -54,4 +55,5 @@ add_logo_test(test_primitives_text)
 add_logo_test(test_primitives_turtle)
 add_logo_test(test_primitives_hardware)
 add_logo_test(test_io)
+add_logo_test(test_stream)
 add_logo_test(test_repl)

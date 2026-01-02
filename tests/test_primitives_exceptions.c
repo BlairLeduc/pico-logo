@@ -62,6 +62,23 @@ void test_throw_toplevel(void)
     TEST_ASSERT_EQUAL_STRING("toplevel", r.throw_tag);
 }
 
+void test_toplevel_outputs_word(void)
+{
+    // toplevel should output the word "toplevel"
+    Result r = eval_string("toplevel");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_word(r.value));
+    TEST_ASSERT_EQUAL_STRING("toplevel", value_to_string(r.value));
+}
+
+void test_throw_toplevel_operation(void)
+{
+    // throw toplevel (using the operation) should work like throw "toplevel
+    Result r = run_string("throw toplevel");
+    TEST_ASSERT_EQUAL(RESULT_THROW, r.status);
+    TEST_ASSERT_EQUAL_STRING("toplevel", r.throw_tag);
+}
+
 void test_throw_toplevel_in_run_inside_catch(void)
 {
     // throw "toplevel inside a catch should propagate to top level
@@ -179,6 +196,8 @@ int main(void)
     RUN_TEST(test_catch_throw_nomatch);
     RUN_TEST(test_throw_no_catch);
     RUN_TEST(test_throw_toplevel);
+    RUN_TEST(test_toplevel_outputs_word);
+    RUN_TEST(test_throw_toplevel_operation);
     RUN_TEST(test_throw_toplevel_in_run_inside_catch);
     RUN_TEST(test_catch_error);
     RUN_TEST(test_error_no_error);

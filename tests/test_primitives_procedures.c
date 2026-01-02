@@ -243,7 +243,7 @@ void test_deep_tail_recursion(void)
     
     // With TCO, 100 recursive calls should work (without it, would overflow 32 scope levels)
     Result r = run_string("tailcount 100");
-    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);  // No error = TCO is working
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
 }
 
 void test_definedp_true(void)

@@ -321,6 +321,171 @@ void test_buried_variable_still_accessible(void)
     TEST_ASSERT_EQUAL_STRING("42\n", output_buffer);
 }
 
+void test_poall_shows_procedures_and_variables(void)
+{
+    const char *params[] = {};
+    define_proc("myproc", params, 0, "print 1");
+    run_string("make \"myvar 42");
+    
+    reset_output();
+    
+    run_string("poall");
+    TEST_ASSERT_TRUE(strstr(output_buffer, "to myproc") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "end") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "make \"myvar 42") != NULL);
+}
+
+void test_poall_respects_buried_procedures(void)
+{
+    const char *params[] = {};
+    define_proc("visible", params, 0, "print 1");
+    define_proc("hidden", params, 0, "print 2");
+    
+    run_string("bury \"hidden");
+    
+    reset_output();
+    
+    run_string("poall");
+    TEST_ASSERT_TRUE(strstr(output_buffer, "to visible") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "to hidden") == NULL);
+}
+
+void test_poall_respects_buried_variables(void)
+{
+    run_string("make \"visible 1");
+    run_string("make \"hidden 2");
+    run_string("buryname \"hidden");
+    
+    reset_output();
+    
+    run_string("poall");
+    TEST_ASSERT_TRUE(strstr(output_buffer, "make \"visible 1") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "hidden") == NULL);
+}
+
+void test_poall_empty_workspace(void)
+{
+    // Ensure workspace is empty
+    run_string("erall");
+    
+    reset_output();
+    
+    run_string("poall");
+    // Should produce no output for empty workspace
+    TEST_ASSERT_EQUAL_STRING("", output_buffer);
+}
+
+void test_pops_shows_all_procedures(void)
+{
+    const char *params[] = {};
+    define_proc("proca", params, 0, "print 1");
+    define_proc("procb", params, 0, "print 2");
+    
+    reset_output();
+    
+    run_string("pops");
+    TEST_ASSERT_TRUE(strstr(output_buffer, "to proca") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "to procb") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "end") != NULL);
+}
+
+void test_pops_respects_buried(void)
+{
+    const char *params[] = {};
+    define_proc("visible", params, 0, "print 1");
+    define_proc("hidden", params, 0, "print 2");
+    
+    run_string("bury \"hidden");
+    
+    reset_output();
+    
+    run_string("pops");
+    TEST_ASSERT_TRUE(strstr(output_buffer, "to visible") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "to hidden") == NULL);
+}
+
+void test_pops_empty_workspace(void)
+{
+    // Ensure no procedures
+    run_string("erall");
+    
+    reset_output();
+    
+    run_string("pops");
+    TEST_ASSERT_EQUAL_STRING("", output_buffer);
+}
+
+void test_pops_with_params(void)
+{
+    Node p = mem_atom("x", 1);
+    const char *params[] = {mem_word_ptr(p)};
+    define_proc("double", params, 1, "output :x * 2");
+    
+    reset_output();
+    
+    run_string("pops");
+    TEST_ASSERT_TRUE(strstr(output_buffer, "to double :x") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "output") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "end") != NULL);
+}
+
+void test_unbury_with_list(void)
+{
+    const char *params[] = {};
+    define_proc("a", params, 0, "print 1");
+    define_proc("b", params, 0, "print 2");
+    define_proc("c", params, 0, "print 3");
+    
+    // Bury all three
+    run_string("bury [a b c]");
+    
+    // Unbury only a and b
+    run_string("unbury [a b]");
+    
+    reset_output();
+    
+    run_string("pots");
+    TEST_ASSERT_TRUE(strstr(output_buffer, "to a") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "to b") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "to c") == NULL);  // Still buried
+}
+
+void test_unburyname_with_list(void)
+{
+    run_string("make \"a 1");
+    run_string("make \"b 2");
+    run_string("make \"c 3");
+    
+    // Bury all three
+    run_string("buryname [a b c]");
+    
+    // Unbury only a and b
+    run_string("unburyname [a b]");
+    
+    reset_output();
+    
+    run_string("pons");
+    TEST_ASSERT_TRUE(strstr(output_buffer, "make \"a 1") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "make \"b 2") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "make \"c 3") == NULL);  // Still buried
+}
+
+void test_buryname_with_list(void)
+{
+    run_string("make \"a 1");
+    run_string("make \"b 2");
+    run_string("make \"c 3");
+    
+    run_string("buryname [a b]");
+    
+    reset_output();
+    
+    run_string("pons");
+    TEST_ASSERT_TRUE(strstr(output_buffer, "make \"a 1") == NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "make \"b 2") == NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "make \"c 3") != NULL);
+}
+
 //==========================================================================
 // Memory Management Tests (nodes, recycle)
 //==========================================================================
@@ -586,6 +751,17 @@ int main(void)
     RUN_TEST(test_pon_with_list);
     RUN_TEST(test_buried_procedure_still_callable);
     RUN_TEST(test_buried_variable_still_accessible);
+    RUN_TEST(test_poall_shows_procedures_and_variables);
+    RUN_TEST(test_poall_respects_buried_procedures);
+    RUN_TEST(test_poall_respects_buried_variables);
+    RUN_TEST(test_poall_empty_workspace);
+    RUN_TEST(test_pops_shows_all_procedures);
+    RUN_TEST(test_pops_respects_buried);
+    RUN_TEST(test_pops_empty_workspace);
+    RUN_TEST(test_pops_with_params);
+    RUN_TEST(test_unbury_with_list);
+    RUN_TEST(test_unburyname_with_list);
+    RUN_TEST(test_buryname_with_list);
     
     // Memory management tests
     RUN_TEST(test_nodes_returns_number);

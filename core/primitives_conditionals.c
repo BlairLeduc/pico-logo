@@ -55,7 +55,7 @@ static Result prim_true(Evaluator *eval, int argc, Value *args)
 static Result prim_false(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc); UNUSED(args);
-    
+
     Node false_word = mem_atom_cstr("false");
     return result_ok(value_word(false_word));
 }

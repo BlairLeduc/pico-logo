@@ -26,8 +26,7 @@ static Result eval_primary(Evaluator *eval);
 
 void eval_init(Evaluator *eval, Lexer *lexer)
 {
-    eval->lexer = lexer;
-    eval->has_current = false;
+    token_source_init_lexer(&eval->token_source, lexer);
     eval->paren_depth = 0;
     eval->error_code = 0;
     eval->error_context = NULL;
@@ -39,18 +38,14 @@ void eval_init(Evaluator *eval, Lexer *lexer)
 // Get current token, fetching if needed
 static Token peek(Evaluator *eval)
 {
-    if (!eval->has_current)
-    {
-        eval->current = lexer_next_token(eval->lexer);
-        eval->has_current = true;
-    }
-    return eval->current;
+    return token_source_peek(&eval->token_source);
 }
 
 // Consume current token
 static void advance(Evaluator *eval)
 {
-    eval->has_current = false;
+    // Consume the peeked token by getting next
+    token_source_next(&eval->token_source);
 }
 
 // Check if at end of input
@@ -269,6 +264,23 @@ static Result eval_primary(Evaluator *eval)
     case TOKEN_LEFT_BRACKET:
     {
         advance(eval);
+        
+        // Check if this is a pre-parsed sublist from NodeIterator
+        // This happens when the source list has nested list nodes, not flat [ ] tokens
+        Node sublist = token_source_get_sublist(&eval->token_source);
+        if (!mem_is_nil(sublist))
+        {
+            // For NodeIterator with nested list: sublist is already parsed, just use it
+            token_source_consume_sublist(&eval->token_source);
+            // Handle the list marker wrapping
+            if (NODE_GET_TYPE(sublist) == NODE_TYPE_LIST)
+            {
+                sublist = NODE_MAKE_LIST(NODE_GET_INDEX(sublist));
+            }
+            return result_ok(value_list(sublist));
+        }
+        
+        // For Lexer OR NodeIterator with flat [ ] tokens: parse tokens until ]
         Node list = parse_list(eval);
         return result_ok(value_list(list));
     }
@@ -864,7 +876,17 @@ static bool skip_primary(Evaluator *eval)
     }
 
     case TOKEN_LEFT_BRACKET:
+    {
         advance(eval);
+        // For NodeIterator, nested lists are atomic - check for pending sublist
+        Node sublist = token_source_get_sublist(&eval->token_source);
+        if (!mem_is_nil(sublist))
+        {
+            // This was a nested list node, consume it and we're done
+            token_source_consume_sublist(&eval->token_source);
+            return true;
+        }
+        // For Lexer (flat brackets), scan through contents
         while (true)
         {
             Token inner = peek(eval);
@@ -879,8 +901,7 @@ static bool skip_primary(Evaluator *eval)
                 return false;
         }
         return true;
-
-    case TOKEN_LEFT_PAREN:
+    }    case TOKEN_LEFT_PAREN:
         advance(eval);
         // Skip contents of parens - could be grouped expr or varargs call
         while (true)
@@ -1018,21 +1039,12 @@ static int find_label_position(const char *buffer, const char *label_name)
 // The last instruction in the list is evaluated in tail position
 Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
 {
-    // Save current lexer state
-    Lexer *old_lexer = eval->lexer;
-    Token old_current = eval->current;
-    bool old_has_current = eval->has_current;
+    // Save current token source state
+    TokenSource old_source = eval->token_source;
     bool old_tail = eval->in_tail_position;
 
-    // Build string from list for lexing
-    char buffer[512];
-    serialize_list_to_buffer(list, buffer, sizeof(buffer));
-
-    // Create new lexer for list content
-    Lexer list_lexer;
-    lexer_init(&list_lexer, buffer);
-    eval->lexer = &list_lexer;
-    eval->has_current = false;
+    // Create new token source from the Node list
+    token_source_init_list(&eval->token_source, list);
 
     Result r = result_none();
 
@@ -1042,15 +1054,13 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
         bool last_instruction = false;
         if (enable_tco)
         {
+            // Create lookahead copy
             Evaluator lookahead = *eval;
-            Lexer lookahead_lexer = *eval->lexer;
-            lookahead.lexer = &lookahead_lexer;
-            lookahead.has_current = eval->has_current;
-            lookahead.current = eval->current;
+            token_source_copy(&lookahead.token_source, &eval->token_source);
             last_instruction = skip_instruction(&lookahead) && eval_at_end(&lookahead);
         }
 
-        // Set tail position for this instruction (don't redeclare old_tail)
+        // Set tail position for this instruction
         eval->in_tail_position = enable_tco && last_instruction;
 
         // Execute instruction
@@ -1097,9 +1107,7 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
 
     // Restore state
     eval->in_tail_position = old_tail;
-    eval->lexer = old_lexer;
-    eval->current = old_current;
-    eval->has_current = old_has_current;
+    eval->token_source = old_source;
 
     return r;
 }
@@ -1120,21 +1128,12 @@ Result eval_run_list_expr(Evaluator *eval, Node list)
     //   if :n > 0 [recurse :n - 1]
     bool enable_tco = eval->in_tail_position && eval->proc_depth > 0;
     
-    // Save current lexer state
-    Lexer *old_lexer = eval->lexer;
-    Token old_current = eval->current;
-    bool old_has_current = eval->has_current;
+    // Save current token source state
+    TokenSource old_source = eval->token_source;
     bool old_tail = eval->in_tail_position;
 
-    // Build string from list for lexing
-    char buffer[512];
-    serialize_list_to_buffer(list, buffer, sizeof(buffer));
-
-    // Create new lexer for list content
-    Lexer list_lexer;
-    lexer_init(&list_lexer, buffer);
-    eval->lexer = &list_lexer;
-    eval->has_current = false;
+    // Create new token source from the Node list
+    token_source_init_list(&eval->token_source, list);
 
     Result r = result_none();
 
@@ -1144,11 +1143,9 @@ Result eval_run_list_expr(Evaluator *eval, Node list)
         bool last_instruction = false;
         if (enable_tco)
         {
+            // Create lookahead copy
             Evaluator lookahead = *eval;
-            Lexer lookahead_lexer = *eval->lexer;
-            lookahead.lexer = &lookahead_lexer;
-            lookahead.has_current = eval->has_current;
-            lookahead.current = eval->current;
+            token_source_copy(&lookahead.token_source, &eval->token_source);
             last_instruction = skip_instruction(&lookahead) && eval_at_end(&lookahead);
         }
 
@@ -1196,9 +1193,7 @@ Result eval_run_list_expr(Evaluator *eval, Node list)
 
     // Restore state
     eval->in_tail_position = old_tail;
-    eval->lexer = old_lexer;
-    eval->current = old_current;
-    eval->has_current = old_has_current;
+    eval->token_source = old_source;
 
     return r;
 }

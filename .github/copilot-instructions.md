@@ -4,10 +4,6 @@
 - **Simplicity and clarity** of the implementation are prioritized over performance and advanced features. The codebase should be modular and well-documented to facilitate future enhancements and maintenance.
 - The code should be written in standard C (C11 or later) to ensure compatibility with the Pico SDK and ease of cross-compilation.
 - The interpreter aims to be strictly compatible with the semantics described in [Pico_Language_reference](../reference/Pico_Logo_Reference.md).
-- This interpreter is inspired by and based on the **LCSI Logo** implementation written in C by LCSI in the 1980s and 1990s.
-- All information about LCSI Logo is available in public domain books and manuals.
-  - “Apple Logo: The Language and Its Implementation (Harvey & Wright, 1985)” does not exist as a real, published book. It looks like a Franken-citation that mashed a few real things together.
-- The main goal of this project is to allow me to use this interpreter to learn Logo using the library of Logo books that were written in the 1980s and 1990s.
 - Interactions happen via a simple **REPL** (read-eval-print loop) in the terminal.
   - Error messages should be friendly and informative, similar to classic Logo implementation, see [Error Messages](../reference/Error_Messages.md).
 - The interpreter should be efficient and lightweight, suitable for running on resource-constrained hardware like the Raspberry Pi Pico.
@@ -81,9 +77,9 @@
   - Show the **exact code edits** (or patches) needed, not just high-level descriptions.
 - When adding new features or fixing bugs:
   - Propose or update **unit tests first or alongside** the code changes.
-- Work incrementally toward the larger goal of LCSI semantics, focusing on small, testable changes.
+- Work incrementally toward the larger goal of Logo semantics, focusing on small, testable changes.
 - When I ask for new features or bug fixes, clarify any ambiguities by asking questions before proceeding.
-- Prioritize code **clarity**, **maintainability**, **simplicity of implementation**, and adherence to classic Logo semantics.
+- Prioritize code **clarity**, **maintainability**, **simplicity of implementation**, and adherence to Logo semantics.
 - When I ask for explanations, provide concise and clear answers focused on the Logo interpreter context.
 - Remember that the target platform is the Raspberry Pi Pico.
 - When I ask for help with specific files, functions, or modules, focus your responses on those areas.

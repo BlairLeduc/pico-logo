@@ -229,6 +229,29 @@ void test_co_at_toplevel(void)
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
 }
 
+void test_pause_reset_state(void)
+{
+    // Verify pause_reset_state clears the continue flag
+    
+    // First, set the continue flag by requesting continue
+    pause_request_continue();
+    
+    // Verify flag is set (pause_check_continue returns true and clears it)
+    TEST_ASSERT_TRUE(pause_check_continue());
+    
+    // Flag should now be false after check
+    TEST_ASSERT_FALSE(pause_check_continue());
+    
+    // Set it again
+    pause_request_continue();
+    
+    // Now reset the state
+    pause_reset_state();
+    
+    // Flag should be cleared
+    TEST_ASSERT_FALSE(pause_check_continue());
+}
+
 void test_pause_in_procedure_with_co(void)
 {
     // Define a procedure that pauses using proc_define_from_text
@@ -342,6 +365,7 @@ int main(void)
     // Pause/continue
     RUN_TEST(test_pause_at_toplevel_error);
     RUN_TEST(test_co_at_toplevel);
+    RUN_TEST(test_pause_reset_state);
     RUN_TEST(test_pause_in_procedure_with_co);
     RUN_TEST(test_pause_can_inspect_local_variables);
     RUN_TEST(test_pause_prompt_shows_procedure_name);
