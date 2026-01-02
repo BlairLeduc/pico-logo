@@ -843,13 +843,13 @@ void test_tco_scope_depth_stability(void)
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
     // Track scope depth before
-    int depth_before = var_scope_depth();
+    int depth_before = test_scope_depth();
     
     Result r2 = run_string("checkdepth 5");
     TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
     
     // Scope depth should be back to same level after
-    int depth_after = var_scope_depth();
+    int depth_after = test_scope_depth();
     TEST_ASSERT_EQUAL(depth_before, depth_after);
     
     // Should have completed 101 iterations without overflow

@@ -99,10 +99,10 @@ void test_pons_shows_local_variables(void)
     run_string("make \"global 100");
     
     // Push a scope to simulate being inside a procedure
-    var_push_scope();
+    test_push_scope();
     
     // Create a local variable
-    var_set_local("local", value_number(42));
+    test_set_local("local", value_number(42));
     
     reset_output();
     
@@ -112,7 +112,7 @@ void test_pons_shows_local_variables(void)
     TEST_ASSERT_TRUE(strstr(output_buffer, "make \"global 100") != NULL);
     
     // Clean up
-    var_pop_scope();
+    test_pop_scope();
 }
 
 void test_pons_hides_shadowed_globals(void)
@@ -121,10 +121,10 @@ void test_pons_hides_shadowed_globals(void)
     run_string("make \"c 555");
     
     // Push a scope to simulate being inside a procedure
-    var_push_scope();
+    test_push_scope();
     
     // Create a local variable with same name, shadowing the global
-    var_set_local("c", value_number(2));
+    test_set_local("c", value_number(2));
     
     reset_output();
     
@@ -138,7 +138,7 @@ void test_pons_hides_shadowed_globals(void)
     TEST_ASSERT_TRUE(strstr(output_buffer, "make \"c 555") == NULL);
     
     // Clean up
-    var_pop_scope();
+    test_pop_scope();
 }
 
 void test_pon_shows_single_variable(void)

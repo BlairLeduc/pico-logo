@@ -46,8 +46,9 @@
 //  - var_set_test/var_get_test use frame TEST state when in procedure
 //  - LOCAL primitive uses frame_declare_local
 //
-//  An old scope system (var_push_scope/var_pop_scope) is kept as fallback
-//  for backward compatibility with direct API usage in tests.
+//  The frame system is now the sole mechanism for procedure scoping.
+//  Test code uses test_push_scope()/test_pop_scope() helpers which also
+//  use the frame system.
 //
 
 #pragma once
@@ -208,6 +209,10 @@ extern "C"
     // Returns NULL if stack is empty
     FrameHeader *frame_current(FrameStack *stack);
 
+    // Get frame at a specific depth (0 = oldest/root, depth-1 = current)
+    // Returns NULL if depth is out of range
+    FrameHeader *frame_at_depth(FrameStack *stack, int depth);
+
     // Get the current frame offset
     word_offset_t frame_current_offset(FrameStack *stack);
 
@@ -217,6 +222,9 @@ extern "C"
 
     // Get all bindings for a frame (params followed by locals)
     Binding *frame_bindings(FrameStack *stack, FrameHeader *frame);
+
+    // Alias for frame_bindings (for clarity)
+    Binding *frame_get_bindings(FrameHeader *frame);
 
     // Get total number of bindings (params + locals)
     int frame_binding_count(FrameHeader *frame);

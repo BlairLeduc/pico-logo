@@ -10,6 +10,10 @@
 //  - Local variables are created by the 'local' command or as procedure inputs.
 //    They are accessible only to that procedure and procedures it calls.
 //
+//  Local variable scoping is now handled by the frame system (see frame.h).
+//  The frame_push/frame_pop functions manage procedure call frames which
+//  contain local variable bindings.
+//
 
 #pragma once
 
@@ -22,16 +26,6 @@ extern "C"
 
     // Initialize variable storage
     void variables_init(void);
-
-    // Push a new local scope (called when entering a procedure)
-    // Returns true if successful, false if out of scope space
-    bool var_push_scope(void);
-
-    // Pop the current local scope (called when leaving a procedure)
-    void var_pop_scope(void);
-
-    // Get current scope depth (0 = global/top level)
-    int var_scope_depth(void);
 
     // Declare a variable as local in the current scope
     // This creates the variable with no value (unbound)

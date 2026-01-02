@@ -257,6 +257,27 @@ FrameHeader *frame_current(FrameStack *stack)
     return frame_at(stack, stack->current);
 }
 
+FrameHeader *frame_at_depth(FrameStack *stack, int depth)
+{
+    if (depth < 0 || depth >= stack->depth)
+    {
+        return NULL;
+    }
+    
+    // Walk from current frame backwards to find the one at the given depth
+    // depth 0 = oldest (root), depth-1 = current
+    int target_depth_from_top = stack->depth - 1 - depth;
+    
+    word_offset_t offset = stack->current;
+    for (int i = 0; i < target_depth_from_top && offset != OFFSET_NONE; i++)
+    {
+        FrameHeader *frame = frame_at(stack, offset);
+        offset = frame->prev_offset;
+    }
+    
+    return frame_at(stack, offset);
+}
+
 word_offset_t frame_current_offset(FrameStack *stack)
 {
     return stack->current;
@@ -273,6 +294,16 @@ Binding *frame_bindings(FrameStack *stack, FrameHeader *frame)
         return NULL;
     }
     return get_bindings_ptr(stack, frame);
+}
+
+Binding *frame_get_bindings(FrameHeader *frame)
+{
+    if (frame == NULL)
+    {
+        return NULL;
+    }
+    // Bindings are stored immediately after the FrameHeader
+    return (Binding *)((uint8_t *)frame + sizeof(FrameHeader));
 }
 
 int frame_binding_count(FrameHeader *frame)

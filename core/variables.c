@@ -59,7 +59,13 @@ void variables_init(void)
     global_test_value = false;
 }
 
-bool var_push_scope(void)
+//==========================================================================
+// LEGACY SCOPE SYSTEM (kept as fallback in iteration functions)
+// These functions are no longer part of the public API.
+// The frame system (frame.h) is now the primary scoping mechanism.
+//==========================================================================
+
+static bool var_push_scope(void)
 {
     if (scope_depth >= MAX_SCOPE_DEPTH)
     {
@@ -79,7 +85,7 @@ bool var_push_scope(void)
     return true;
 }
 
-void var_pop_scope(void)
+static void var_pop_scope(void)
 {
     if (scope_depth > 0)
     {
@@ -87,10 +93,8 @@ void var_pop_scope(void)
     }
 }
 
-int var_scope_depth(void)
-{
-    return scope_depth;
-}
+// Note: var_scope_depth is no longer needed externally
+// Use test_scope_depth() or frame_stack_depth() instead
 
 // Find variable in a specific scope frame, returns index or -1
 static int find_in_frame(ScopeFrame *frame, const char *name)
@@ -452,6 +456,33 @@ bool var_get_global_by_index(int index, bool include_buried,
 // Count local variables visible in the current scope chain
 int var_local_count(void)
 {
+    // Use frame system if active
+    FrameStack *frames = proc_get_frame_stack();
+    if (frames && frame_stack_depth(frames) > 0)
+    {
+        int count = 0;
+        // Iterate through all frames and count bindings with values
+        for (int d = frame_stack_depth(frames) - 1; d >= 0; d--)
+        {
+            FrameHeader *frame = frame_at_depth(frames, d);
+            if (frame)
+            {
+                Binding *bindings = frame_get_bindings(frame);
+                int binding_count = frame_binding_count(frame);
+                for (int i = 0; i < binding_count; i++)
+                {
+                    // Only count bindings that have actual values
+                    if (bindings[i].value.type != VALUE_NONE)
+                    {
+                        count++;
+                    }
+                }
+            }
+        }
+        return count;
+    }
+    
+    // Fallback to old scope system
     int count = 0;
     for (int s = 0; s < scope_depth; s++)
     {
@@ -471,6 +502,39 @@ int var_local_count(void)
 // Iterates from newest scope to oldest (most recent first)
 bool var_get_local_by_index(int index, const char **name_out, Value *value_out)
 {
+    // Use frame system if active
+    FrameStack *frames = proc_get_frame_stack();
+    if (frames && frame_stack_depth(frames) > 0)
+    {
+        int current = 0;
+        // Iterate from newest frame to oldest
+        for (int d = frame_stack_depth(frames) - 1; d >= 0; d--)
+        {
+            FrameHeader *frame = frame_at_depth(frames, d);
+            if (!frame) continue;
+            
+            Binding *bindings = frame_get_bindings(frame);
+            int count = frame_binding_count(frame);
+            
+            for (int i = 0; i < count; i++)
+            {
+                // In frame system, VALUE_NONE means declared but not set
+                if (bindings[i].value.type != VALUE_NONE)
+                {
+                    if (current == index)
+                    {
+                        if (name_out) *name_out = bindings[i].name;
+                        if (value_out) *value_out = bindings[i].value;
+                        return true;
+                    }
+                    current++;
+                }
+            }
+        }
+        return false;
+    }
+    
+    // Fallback to old scope system
     int current = 0;
     // Iterate from newest scope to oldest
     for (int s = scope_depth - 1; s >= 0; s--)
@@ -496,6 +560,18 @@ bool var_get_local_by_index(int index, const char **name_out, Value *value_out)
 // Check if a variable name is shadowed by a local variable in the scope chain
 bool var_is_shadowed_by_local(const char *name)
 {
+    // Use frame system if active
+    FrameStack *frames = proc_get_frame_stack();
+    if (frames && frame_stack_depth(frames) > 0)
+    {
+        FrameHeader *found_frame = NULL;
+        Binding *binding = frame_find_binding_in_chain(frames, name, &found_frame);
+        // In frame system, binding exists means variable is local
+        // VALUE_NONE means declared but not yet assigned, still counts as shadowing
+        return binding != NULL;
+    }
+    
+    // Fallback to old scope system
     for (int s = 0; s < scope_depth; s++)
     {
         ScopeFrame *frame = &scope_stack[s];
