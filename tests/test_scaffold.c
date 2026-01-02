@@ -353,6 +353,7 @@ Result eval_string(const char *input)
     Evaluator eval;
     lexer_init(&lexer, input);
     eval_init(&eval, &lexer);
+    eval_set_frames(&eval, proc_get_frame_stack());
     return eval_expression(&eval);
 }
 
@@ -362,6 +363,7 @@ Result run_string(const char *input)
     Evaluator eval;
     lexer_init(&lexer, input);
     eval_init(&eval, &lexer);
+    eval_set_frames(&eval, proc_get_frame_stack());
 
     Result r = result_none();
     while (!eval_at_end(&eval))

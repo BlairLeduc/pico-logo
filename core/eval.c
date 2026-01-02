@@ -9,6 +9,7 @@
 #include "procedures.h"
 #include "repl.h"
 #include "variables.h"
+#include "frame.h"
 #include "devices/io.h"
 #include <string.h>
 #include <stdlib.h>
@@ -27,12 +28,28 @@ static Result eval_primary(Evaluator *eval);
 void eval_init(Evaluator *eval, Lexer *lexer)
 {
     token_source_init_lexer(&eval->token_source, lexer);
+    eval->frames = NULL;  // Caller sets this if needed
     eval->paren_depth = 0;
     eval->error_code = 0;
     eval->error_context = NULL;
     eval->in_tail_position = false;
     eval->proc_depth = 0;
     eval->repcount = -1;
+}
+
+void eval_set_frames(Evaluator *eval, FrameStack *frames)
+{
+    eval->frames = frames;
+}
+
+FrameStack *eval_get_frames(Evaluator *eval)
+{
+    return eval->frames;
+}
+
+bool eval_in_procedure(Evaluator *eval)
+{
+    return eval->frames != NULL && !frame_stack_is_empty(eval->frames);
 }
 
 // Get current token, fetching if needed

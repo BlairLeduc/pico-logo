@@ -22,6 +22,7 @@
 #pragma once
 
 #include "value.h"
+#include "frame.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -113,6 +114,9 @@ extern "C"
 
     // Mark all procedure bodies as GC roots
     void proc_gc_mark_all(void);
+
+    // Get the global frame stack (for passing to evaluator)
+    FrameStack *proc_get_frame_stack(void);
 
 #ifdef __cplusplus
 }

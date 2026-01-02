@@ -9,6 +9,7 @@
 
 #include "value.h"
 #include "token_source.h"
+#include "frame.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -19,6 +20,7 @@ extern "C"
     typedef struct Evaluator
     {
         TokenSource token_source;  // Current token source (lexer or node iterator)
+        FrameStack *frames;        // Procedure call frame stack (NULL at top-level)
         int paren_depth;           // Track nested parentheses for greedy args
         int error_code;
         const char *error_context; // For error messages
@@ -29,6 +31,15 @@ extern "C"
 
     // Initialize evaluator with a lexer
     void eval_init(Evaluator *eval, Lexer *lexer);
+
+    // Set the frame stack for procedure calls
+    void eval_set_frames(Evaluator *eval, FrameStack *frames);
+
+    // Get the frame stack (may be NULL)
+    FrameStack *eval_get_frames(Evaluator *eval);
+
+    // Check if evaluator is currently inside a procedure
+    bool eval_in_procedure(Evaluator *eval);
 
     // Evaluate a single instruction (command with args)
     Result eval_instruction(Evaluator *eval);

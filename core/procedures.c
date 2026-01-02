@@ -10,6 +10,7 @@
 #include "format.h"
 #include "memory.h"
 #include "primitives.h"
+#include "frame.h"
 #include "devices/io.h"
 #include <string.h>
 #include <strings.h>
@@ -21,6 +22,12 @@
 // Maximum procedure call stack depth (for current proc tracking)
 #define MAX_CURRENT_PROC_DEPTH 32
 
+// Frame stack arena size (configurable per platform)
+// Default: 32KB for host/testing, can be adjusted via cmake
+#ifndef FRAME_STACK_SIZE
+#define FRAME_STACK_SIZE (32 * 1024)
+#endif
+
 // Procedure storage
 static UserProcedure procedures[MAX_PROCEDURES];
 static int procedure_count = 0;
@@ -31,6 +38,10 @@ static TailCall tail_call_state;
 // Current procedure stack (for pause prompt)
 static const char *current_proc_stack[MAX_CURRENT_PROC_DEPTH];
 static int current_proc_depth = 0;
+
+// Global frame stack for procedure calls
+static uint8_t frame_stack_memory[FRAME_STACK_SIZE];
+static FrameStack global_frame_stack;
 
 // Helper to write output for trace/step
 static void trace_write(const char *str)
@@ -294,6 +305,9 @@ void procedures_init(void)
     }
     proc_clear_tail_call();
     current_proc_depth = 0;
+    
+    // Initialize the global frame stack
+    frame_stack_init(&global_frame_stack, frame_stack_memory, sizeof(frame_stack_memory));
 }
 
 // Find procedure index, returns -1 if not found
@@ -534,6 +548,8 @@ bool proc_is_traced(const char *name)
 // Execute procedure body and handle tail calls via trampoline
 Result proc_call(Evaluator *eval, UserProcedure *proc, int argc, Value *args)
 {
+    FrameStack *frames = eval->frames;
+    
     // Trampoline loop for tail call optimization
     while (true)
     {
@@ -547,17 +563,13 @@ Result proc_call(Evaluator *eval, UserProcedure *proc, int argc, Value *args)
             return result_error_arg(ERR_TOO_MANY_INPUTS, proc->name, NULL);
         }
 
-        // Push new scope for local variables
-        if (!var_push_scope())
+        // Push a new frame for this procedure call
+        // The frame binds parameters to argument values
+        word_offset_t frame_offset = frame_push(frames, proc, args, argc);
+        if (frame_offset == OFFSET_NONE)
         {
-            // Out of scope space - this means TCO isn't working as expected
+            // Out of frame space
             return result_error(ERR_OUT_OF_SPACE);
-        }
-
-        // Bind arguments to parameter names as local variables
-        for (int i = 0; i < proc->param_count; i++)
-        {
-            var_set_local(proc->params[i], args[i]);
         }
 
         // Clear any pending tail call
@@ -663,8 +675,8 @@ Result proc_call(Evaluator *eval, UserProcedure *proc, int argc, Value *args)
         // Pop current procedure name
         proc_pop_current();
 
-        // Pop scope before handling tail call
-        var_pop_scope();
+        // Pop frame before handling tail call
+        frame_pop(frames);
 
         // Check for tail call
         TailCall *tc = proc_get_tail_call();
@@ -763,4 +775,10 @@ void proc_gc_mark_all(void)
             mem_gc_mark(procedures[i].body);
         }
     }
+}
+
+// Get the global frame stack
+FrameStack *proc_get_frame_stack(void)
+{
+    return &global_frame_stack;
 }

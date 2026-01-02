@@ -5,6 +5,8 @@
 
 #include "variables.h"
 #include "memory.h"
+#include "procedures.h"  // For proc_get_frame_stack()
+#include "frame.h"
 #include <string.h>
 #include <strings.h>
 
@@ -118,52 +120,33 @@ static int find_global(const char *name)
 
 void var_declare_local(const char *name)
 {
-    if (scope_depth == 0)
+    // Check if we're inside a procedure (frame stack not empty)
+    FrameStack *frames = proc_get_frame_stack();
+    if (frames && !frame_stack_is_empty(frames))
     {
-        // At top level, local behaves like global but unbound
-        int idx = find_global(name);
-        if (idx < 0)
-        {
-            // Create new unbound global
-            for (int i = 0; i < MAX_GLOBAL_VARIABLES; i++)
-            {
-                if (!global_variables[i].active)
-                {
-                    global_variables[i].name = name;
-                    global_variables[i].active = true;
-                    global_variables[i].has_value = false;
-                    if (i >= global_count)
-                        global_count = i + 1;
-                    return;
-                }
-            }
-        }
+        // Declare local in current frame
+        frame_declare_local(frames, name);
         return;
     }
 
-    ScopeFrame *frame = &scope_stack[scope_depth - 1];
-    
-    // Check if already declared in this scope
-    int idx = find_in_frame(frame, name);
-    if (idx >= 0)
+    // At top level, local behaves like global but unbound
+    int idx = find_global(name);
+    if (idx < 0)
     {
-        return;  // Already declared
-    }
-
-    // Find a free slot
-    for (int i = 0; i < MAX_LOCAL_VARIABLES; i++)
-    {
-        if (!frame->variables[i].active)
+        // Create new unbound global
+        for (int i = 0; i < MAX_GLOBAL_VARIABLES; i++)
         {
-            frame->variables[i].name = name;
-            frame->variables[i].active = true;
-            frame->variables[i].has_value = false;
-            if (i >= frame->count)
-                frame->count = i + 1;
-            return;
+            if (!global_variables[i].active)
+            {
+                global_variables[i].name = name;
+                global_variables[i].active = true;
+                global_variables[i].has_value = false;
+                if (i >= global_count)
+                    global_count = i + 1;
+                return;
+            }
         }
     }
-    // Out of local variable space - silently fail
 }
 
 void var_set_local(const char *name, Value value)
@@ -205,21 +188,37 @@ void var_set_local(const char *name, Value value)
 
 void var_set(const char *name, Value value)
 {
-    // First, search scope chain from innermost to outermost
-    for (int d = scope_depth - 1; d >= 0; d--)
+    // First, search frame stack for existing local binding (if in a procedure)
+    FrameStack *frames = proc_get_frame_stack();
+    if (frames && !frame_stack_is_empty(frames))
     {
-        ScopeFrame *frame = &scope_stack[d];
-        int idx = find_in_frame(frame, name);
-        if (idx >= 0)
+        FrameHeader *found_frame = NULL;
+        Binding *binding = frame_find_binding_in_chain(frames, name, &found_frame);
+        if (binding)
         {
-            // Found in scope chain - update it
-            frame->variables[idx].value = value;
-            frame->variables[idx].has_value = true;
+            // Found in frame chain - update it
+            binding->value = value;
             return;
         }
     }
+    else
+    {
+        // Fallback: search old scope stack (for backward compatibility)
+        for (int d = scope_depth - 1; d >= 0; d--)
+        {
+            ScopeFrame *frame = &scope_stack[d];
+            int idx = find_in_frame(frame, name);
+            if (idx >= 0)
+            {
+                // Found in scope chain - update it
+                frame->variables[idx].value = value;
+                frame->variables[idx].has_value = true;
+                return;
+            }
+        }
+    }
 
-    // Not in any local scope, check/create global
+    // Not in any local frame/scope, check/create global
     int idx = find_global(name);
     if (idx >= 0)
     {
@@ -247,19 +246,33 @@ void var_set(const char *name, Value value)
 
 bool var_get(const char *name, Value *out)
 {
-    // Search scope chain from innermost to outermost
-    for (int d = scope_depth - 1; d >= 0; d--)
+    // First, search frame stack for local bindings (if in a procedure)
+    FrameStack *frames = proc_get_frame_stack();
+    if (frames && !frame_stack_is_empty(frames))
     {
-        ScopeFrame *frame = &scope_stack[d];
-        int idx = find_in_frame(frame, name);
-        if (idx >= 0)
+        Binding *binding = frame_find_binding_in_chain(frames, name, NULL);
+        if (binding)
         {
-            if (!frame->variables[idx].has_value)
-            {
-                return false;  // Declared but no value
-            }
-            *out = frame->variables[idx].value;
+            *out = binding->value;
             return true;
+        }
+    }
+    else
+    {
+        // Fallback: search old scope stack (for backward compatibility with tests)
+        for (int d = scope_depth - 1; d >= 0; d--)
+        {
+            ScopeFrame *frame = &scope_stack[d];
+            int idx = find_in_frame(frame, name);
+            if (idx >= 0)
+            {
+                if (!frame->variables[idx].has_value)
+                {
+                    return false;  // Declared but no value
+                }
+                *out = frame->variables[idx].value;
+                return true;
+            }
         }
     }
 
@@ -279,14 +292,27 @@ bool var_get(const char *name, Value *out)
 
 bool var_exists(const char *name)
 {
-    // Search scope chain
-    for (int d = scope_depth - 1; d >= 0; d--)
+    // Search frame stack first (if in a procedure)
+    FrameStack *frames = proc_get_frame_stack();
+    if (frames && !frame_stack_is_empty(frames))
     {
-        ScopeFrame *frame = &scope_stack[d];
-        int idx = find_in_frame(frame, name);
-        if (idx >= 0 && frame->variables[idx].has_value)
+        Binding *binding = frame_find_binding_in_chain(frames, name, NULL);
+        if (binding)
         {
             return true;
+        }
+    }
+    else
+    {
+        // Fallback: search old scope stack (for backward compatibility)
+        for (int d = scope_depth - 1; d >= 0; d--)
+        {
+            ScopeFrame *frame = &scope_stack[d];
+            int idx = find_in_frame(frame, name);
+            if (idx >= 0 && frame->variables[idx].has_value)
+            {
+                return true;
+            }
         }
     }
 
@@ -522,6 +548,15 @@ void var_gc_mark_all(void)
 
 void var_set_test(bool value)
 {
+    // First, try to use frame system if frames are active
+    FrameStack *frames = proc_get_frame_stack();
+    if (frames && !frame_stack_is_empty(frames))
+    {
+        frame_set_test(frames, value);
+        return;
+    }
+
+    // Fallback to old scope system
     if (scope_depth == 0)
     {
         // At top level, set global test state
@@ -539,18 +574,32 @@ void var_set_test(bool value)
 
 bool var_get_test(bool *out)
 {
-    // Search scope chain from innermost to outermost
-    for (int d = scope_depth - 1; d >= 0; d--)
+    // First, try to use frame system if frames are active
+    FrameStack *frames = proc_get_frame_stack();
+    if (frames && !frame_stack_is_empty(frames))
     {
-        ScopeFrame *frame = &scope_stack[d];
-        if (frame->test_valid)
+        // Check frame chain first
+        if (frame_get_test(frames, out))
         {
-            if (out) *out = frame->test_value;
             return true;
+        }
+        // Fall through to check global test state
+    }
+    else
+    {
+        // Fallback: Search old scope chain from innermost to outermost
+        for (int d = scope_depth - 1; d >= 0; d--)
+        {
+            ScopeFrame *frame = &scope_stack[d];
+            if (frame->test_valid)
+            {
+                if (out) *out = frame->test_value;
+                return true;
+            }
         }
     }
     
-    // Check global test state
+    // Check global test state (applies whether using frames or old scopes)
     if (global_test_valid)
     {
         if (out) *out = global_test_value;

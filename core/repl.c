@@ -117,6 +117,7 @@ static Result repl_evaluate_line(ReplState *state, const char *input)
     Evaluator eval;
     lexer_init(&lexer, input);
     eval_init(&eval, &lexer);
+    eval_set_frames(&eval, proc_get_frame_stack());
 
     while (!eval_at_end(&eval))
     {
