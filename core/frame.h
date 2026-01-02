@@ -221,9 +221,6 @@ extern "C"
     //==========================================================================
 
     // Get all bindings for a frame (params followed by locals)
-    Binding *frame_bindings(FrameStack *stack, FrameHeader *frame);
-
-    // Alias for frame_bindings (for clarity)
     Binding *frame_get_bindings(FrameHeader *frame);
 
     // Get total number of bindings (params + locals)
@@ -231,7 +228,7 @@ extern "C"
 
     // Find a binding by name in a single frame
     // Returns pointer to binding, or NULL if not found
-    Binding *frame_find_binding(FrameStack *stack, FrameHeader *frame, const char *name);
+    Binding *frame_find_binding(FrameHeader *frame, const char *name);
 
     // Find a binding by name, searching from current frame up to root
     // Sets *found_frame to the frame containing the binding (if found)
@@ -253,15 +250,14 @@ extern "C"
 
     // Set a binding's value (parameter or local)
     // Returns true if binding was found and updated
-    bool frame_set_binding(FrameStack *stack, FrameHeader *frame,
-                           const char *name, Value value);
+    bool frame_set_binding(FrameHeader *frame, const char *name, Value value);
 
     //==========================================================================
     // Expression Value Stack Operations
     //==========================================================================
 
     // Get the expression value stack for a frame
-    Value *frame_values(FrameStack *stack, FrameHeader *frame);
+    Value *frame_values(FrameHeader *frame);
 
     // Push a value onto the current frame's expression stack
     // Returns true if successful, false if out of space

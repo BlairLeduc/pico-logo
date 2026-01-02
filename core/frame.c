@@ -21,16 +21,16 @@ static uint16_t calc_frame_size(int param_count, int value_capacity)
 }
 
 // Get pointer to bindings array (immediately after header)
-static Binding *get_bindings_ptr(FrameStack *stack, FrameHeader *frame)
+static Binding *get_bindings_ptr(FrameHeader *frame)
 {
     uint32_t *base = (uint32_t *)frame;
     return (Binding *)(base + FRAME_HEADER_WORDS);
 }
 
 // Get pointer to values array (after all bindings)
-static Value *get_values_ptr(FrameStack *stack, FrameHeader *frame)
+static Value *get_values_ptr(FrameHeader *frame)
 {
-    Binding *bindings = get_bindings_ptr(stack, frame);
+    Binding *bindings = get_bindings_ptr(frame);
     int total_bindings = frame->param_count + frame->local_count;
     return (Value *)(bindings + total_bindings);
 }
@@ -136,7 +136,7 @@ word_offset_t frame_push(FrameStack *stack, UserProcedure *proc,
     // Bind parameters
     if (param_count > 0 && args != NULL)
     {
-        Binding *bindings = get_bindings_ptr(stack, frame);
+        Binding *bindings = get_bindings_ptr(frame);
         for (int i = 0; i < param_count; i++)
         {
             bindings[i].name = proc->params[i];
@@ -210,7 +210,7 @@ bool frame_reuse(FrameStack *stack, UserProcedure *proc,
     // Rebind parameters with new values
     if (param_count > 0 && args != NULL)
     {
-        Binding *bindings = get_bindings_ptr(stack, frame);
+        Binding *bindings = get_bindings_ptr(frame);
         for (int i = 0; i < param_count; i++)
         {
             bindings[i].name = proc->params[i];
@@ -287,15 +287,6 @@ word_offset_t frame_current_offset(FrameStack *stack)
 // Binding Operations
 //==========================================================================
 
-Binding *frame_bindings(FrameStack *stack, FrameHeader *frame)
-{
-    if (frame == NULL)
-    {
-        return NULL;
-    }
-    return get_bindings_ptr(stack, frame);
-}
-
 Binding *frame_get_bindings(FrameHeader *frame)
 {
     if (frame == NULL)
@@ -315,14 +306,14 @@ int frame_binding_count(FrameHeader *frame)
     return frame->param_count + frame->local_count;
 }
 
-Binding *frame_find_binding(FrameStack *stack, FrameHeader *frame, const char *name)
+Binding *frame_find_binding(FrameHeader *frame, const char *name)
 {
     if (frame == NULL || name == NULL)
     {
         return NULL;
     }
 
-    Binding *bindings = get_bindings_ptr(stack, frame);
+    Binding *bindings = get_bindings_ptr(frame);
     int count = frame->param_count + frame->local_count;
 
     for (int i = 0; i < count; i++)
@@ -348,7 +339,7 @@ Binding *frame_find_binding_in_chain(FrameStack *stack, const char *name,
     while (offset != OFFSET_NONE)
     {
         FrameHeader *frame = frame_at(stack, offset);
-        Binding *binding = frame_find_binding(stack, frame, name);
+        Binding *binding = frame_find_binding(frame, name);
         if (binding != NULL)
         {
             if (found_frame != NULL)
@@ -408,7 +399,7 @@ bool frame_add_local(FrameStack *stack, const char *name, Value value)
     // Move values if there are any on the stack
     if (frame->value_count > 0)
     {
-        Value *old_values = get_values_ptr(stack, frame);
+        Value *old_values = get_values_ptr(frame);
         // After adding local, values will be BINDING_WORDS further
         Value *new_values = (Value *)((uint32_t *)old_values + BINDING_WORDS);
         // Move backwards to avoid overlap issues
@@ -419,7 +410,7 @@ bool frame_add_local(FrameStack *stack, const char *name, Value value)
     }
 
     // Add the local binding
-    Binding *bindings = get_bindings_ptr(stack, frame);
+    Binding *bindings = get_bindings_ptr(frame);
     int local_index = frame->param_count + frame->local_count;
     bindings[local_index].name = name;
     bindings[local_index].value = value;
@@ -438,10 +429,9 @@ bool frame_declare_local(FrameStack *stack, const char *name)
     return frame_add_local(stack, name, value_none());
 }
 
-bool frame_set_binding(FrameStack *stack, FrameHeader *frame,
-                       const char *name, Value value)
+bool frame_set_binding(FrameHeader *frame, const char *name, Value value)
 {
-    Binding *binding = frame_find_binding(stack, frame, name);
+    Binding *binding = frame_find_binding(frame, name);
     if (binding == NULL)
     {
         return false;
@@ -454,13 +444,13 @@ bool frame_set_binding(FrameStack *stack, FrameHeader *frame,
 // Expression Value Stack Operations
 //==========================================================================
 
-Value *frame_values(FrameStack *stack, FrameHeader *frame)
+Value *frame_values(FrameHeader *frame)
 {
     if (frame == NULL)
     {
         return NULL;
     }
-    return get_values_ptr(stack, frame);
+    return get_values_ptr(frame);
 }
 
 bool frame_push_value(FrameStack *stack, Value value)
@@ -492,7 +482,7 @@ bool frame_push_value(FrameStack *stack, Value value)
     }
 
     // Push the value
-    Value *values = get_values_ptr(stack, frame);
+    Value *values = get_values_ptr(frame);
     values[frame->value_count++] = value;
 
     return true;
@@ -506,7 +496,7 @@ Value frame_pop_value(FrameStack *stack)
         return value_none();
     }
 
-    Value *values = get_values_ptr(stack, frame);
+    Value *values = get_values_ptr(frame);
     return values[--frame->value_count];
 }
 
@@ -518,7 +508,7 @@ Value frame_peek_value(FrameStack *stack)
         return value_none();
     }
 
-    Value *values = get_values_ptr(stack, frame);
+    Value *values = get_values_ptr(frame);
     return values[frame->value_count - 1];
 }
 
@@ -653,7 +643,7 @@ void frame_gc_mark_all(FrameStack *stack)
         FrameHeader *frame = frame_at(stack, offset);
 
         // Mark all binding values
-        Binding *bindings = get_bindings_ptr(stack, frame);
+        Binding *bindings = get_bindings_ptr(frame);
         int binding_count = frame->param_count + frame->local_count;
         for (int i = 0; i < binding_count; i++)
         {
@@ -665,7 +655,7 @@ void frame_gc_mark_all(FrameStack *stack)
         }
 
         // Mark all values on expression stack
-        Value *values = get_values_ptr(stack, frame);
+        Value *values = get_values_ptr(frame);
         for (int i = 0; i < frame->value_count; i++)
         {
             Value *val = &values[i];

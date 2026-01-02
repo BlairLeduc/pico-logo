@@ -238,7 +238,7 @@ void test_bindings_have_correct_names(void)
     frame_push(&stack, &test_proc, args, 3);
 
     FrameHeader *frame = frame_current(&stack);
-    Binding *bindings = frame_bindings(&stack, frame);
+    Binding *bindings = frame_get_bindings(frame);
 
     TEST_ASSERT_EQUAL_STRING("x", bindings[0].name);
     TEST_ASSERT_EQUAL_STRING("y", bindings[1].name);
@@ -251,7 +251,7 @@ void test_bindings_have_correct_values(void)
     frame_push(&stack, &test_proc, args, 3);
 
     FrameHeader *frame = frame_current(&stack);
-    Binding *bindings = frame_bindings(&stack, frame);
+    Binding *bindings = frame_get_bindings(frame);
 
     TEST_ASSERT_EQUAL_FLOAT(10.0f, bindings[0].value.as.number);
     TEST_ASSERT_EQUAL_FLOAT(20.0f, bindings[1].value.as.number);
@@ -264,7 +264,7 @@ void test_find_binding_exists(void)
     frame_push(&stack, &test_proc, args, 3);
 
     FrameHeader *frame = frame_current(&stack);
-    Binding *binding = frame_find_binding(&stack, frame, "y");
+    Binding *binding = frame_find_binding(frame, "y");
 
     TEST_ASSERT_NOT_NULL(binding);
     TEST_ASSERT_EQUAL_FLOAT(20.0f, binding->value.as.number);
@@ -276,7 +276,7 @@ void test_find_binding_case_insensitive(void)
     frame_push(&stack, &test_proc, args, 3);
 
     FrameHeader *frame = frame_current(&stack);
-    Binding *binding = frame_find_binding(&stack, frame, "Y");
+    Binding *binding = frame_find_binding(frame, "Y");
 
     TEST_ASSERT_NOT_NULL(binding);
     TEST_ASSERT_EQUAL_FLOAT(20.0f, binding->value.as.number);
@@ -288,7 +288,7 @@ void test_find_binding_not_found(void)
     frame_push(&stack, &test_proc, args, 3);
 
     FrameHeader *frame = frame_current(&stack);
-    Binding *binding = frame_find_binding(&stack, frame, "w");
+    Binding *binding = frame_find_binding(frame, "w");
 
     TEST_ASSERT_NULL(binding);
 }
@@ -327,11 +327,11 @@ void test_set_binding(void)
     frame_push(&stack, &test_proc, args, 3);
 
     FrameHeader *frame = frame_current(&stack);
-    bool result = frame_set_binding(&stack, frame, "y", value_number(999));
+    bool result = frame_set_binding(frame, "y", value_number(999));
 
     TEST_ASSERT_TRUE(result);
 
-    Binding *binding = frame_find_binding(&stack, frame, "y");
+    Binding *binding = frame_find_binding(frame, "y");
     TEST_ASSERT_EQUAL_FLOAT(999.0f, binding->value.as.number);
 }
 
@@ -356,7 +356,7 @@ void test_add_local_find(void)
     frame_add_local(&stack, "myvar", value_number(42));
 
     FrameHeader *frame = frame_current(&stack);
-    Binding *binding = frame_find_binding(&stack, frame, "myvar");
+    Binding *binding = frame_find_binding(frame, "myvar");
 
     TEST_ASSERT_NOT_NULL(binding);
     TEST_ASSERT_EQUAL_FLOAT(42.0f, binding->value.as.number);
@@ -373,7 +373,7 @@ void test_add_multiple_locals(void)
     FrameHeader *frame = frame_current(&stack);
     TEST_ASSERT_EQUAL(3, frame->local_count);
 
-    Binding *b = frame_find_binding(&stack, frame, "b");
+    Binding *b = frame_find_binding(frame, "b");
     TEST_ASSERT_NOT_NULL(b);
     TEST_ASSERT_EQUAL_FLOAT(2.0f, b->value.as.number);
 }
@@ -385,7 +385,7 @@ void test_declare_local_unbound(void)
     frame_declare_local(&stack, "unbound");
 
     FrameHeader *frame = frame_current(&stack);
-    Binding *binding = frame_find_binding(&stack, frame, "unbound");
+    Binding *binding = frame_find_binding(frame, "unbound");
 
     TEST_ASSERT_NOT_NULL(binding);
     TEST_ASSERT_EQUAL(VALUE_NONE, binding->value.type);
@@ -405,8 +405,8 @@ void test_add_local_with_params(void)
     TEST_ASSERT_EQUAL(5, frame_binding_count(frame));
 
     // Verify all bindings
-    Binding *x = frame_find_binding(&stack, frame, "x");
-    Binding *local2 = frame_find_binding(&stack, frame, "local2");
+    Binding *x = frame_find_binding(frame, "x");
+    Binding *local2 = frame_find_binding(frame, "local2");
 
     TEST_ASSERT_EQUAL_FLOAT(10.0f, x->value.as.number);
     TEST_ASSERT_EQUAL_FLOAT(200.0f, local2->value.as.number);
@@ -522,7 +522,7 @@ void test_values_with_locals(void)
 
     // Local should be intact
     FrameHeader *frame = frame_current(&stack);
-    Binding *binding = frame_find_binding(&stack, frame, "x");
+    Binding *binding = frame_find_binding(frame, "x");
     TEST_ASSERT_EQUAL_FLOAT(100.0f, binding->value.as.number);
 }
 
@@ -793,7 +793,7 @@ void test_reuse_same_params(void)
 
     // Verify new bindings
     FrameHeader *frame = frame_current(&stack);
-    Binding *bindings = frame_bindings(&stack, frame);
+    Binding *bindings = frame_get_bindings(frame);
     TEST_ASSERT_EQUAL(10, bindings[0].value.as.number);
     TEST_ASSERT_EQUAL(20, bindings[1].value.as.number);
 }
@@ -816,7 +816,7 @@ void test_reuse_fewer_params(void)
     FrameHeader *frame = frame_current(&stack);
     TEST_ASSERT_EQUAL_STRING("proc1", frame->proc->name);
     TEST_ASSERT_EQUAL(1, frame->param_count);
-    Binding *bindings = frame_bindings(&stack, frame);
+    Binding *bindings = frame_get_bindings(frame);
     TEST_ASSERT_EQUAL(99, bindings[0].value.as.number);
 }
 
@@ -911,7 +911,7 @@ void test_reuse_many_times_no_memory_growth(void)
 
     // Verify final values
     FrameHeader *frame = frame_current(&stack);
-    Binding *bindings = frame_bindings(&stack, frame);
+    Binding *bindings = frame_get_bindings(frame);
     TEST_ASSERT_EQUAL(999, bindings[0].value.as.number);
     TEST_ASSERT_EQUAL(1998, bindings[1].value.as.number);
 }
