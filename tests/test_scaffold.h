@@ -125,6 +125,7 @@ bool was_mock_power_off_called(void);
 
 // ============================================================================
 // Test Scope Helpers (for simulating procedure calls in tests)
+// These use the frame system to create proper scoping for local variables
 // ============================================================================
 
 // Push a test scope frame (simulates entering a procedure)
