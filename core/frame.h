@@ -155,6 +155,13 @@ extern "C"
     word_offset_t frame_push(FrameStack *stack, UserProcedure *proc,
                              Value *args, int argc);
 
+    // Reuse the current frame for a tail call (TCO)
+    // Replaces procedure reference and rebinds parameters without deallocating
+    // Clears local variables, test state, and expression stack
+    // Returns true if successful, false if argument count mismatch or no frame
+    bool frame_reuse(FrameStack *stack, UserProcedure *proc,
+                     Value *args, int argc);
+
     // Pop the current frame
     // Returns the previous frame's offset (which becomes the new current)
     word_offset_t frame_pop(FrameStack *stack);

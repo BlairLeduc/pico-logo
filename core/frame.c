@@ -151,6 +151,77 @@ word_offset_t frame_push(FrameStack *stack, UserProcedure *proc,
     return offset;
 }
 
+bool frame_reuse(FrameStack *stack, UserProcedure *proc,
+                 Value *args, int argc)
+{
+    if (stack->current == OFFSET_NONE)
+    {
+        return false;  // No frame to reuse
+    }
+
+    // Determine parameter count for new procedure
+    int param_count = proc ? proc->param_count : 0;
+
+    // Validate argument count matches parameters
+    if (argc != param_count)
+    {
+        return false;  // Argument count mismatch
+    }
+
+    FrameHeader *frame = (FrameHeader *)arena_offset_to_ptr(&stack->arena, stack->current);
+
+    // Check if we have enough space for the new parameters
+    // If the new procedure has more parameters than the old frame had capacity for,
+    // we need to fall back to pop+push (but this is rare in practice)
+    // For now, we'll handle the common case where param counts are similar
+    
+    // Calculate space available for bindings (header + existing bindings + values)
+    // The frame's size was calculated for its original param_count
+    // We need to ensure we have room for the new param_count
+    
+    // Simple approach: if new param_count > old param_count, we can't reuse
+    // (A more sophisticated implementation could resize the frame)
+    if (param_count > frame->param_count)
+    {
+        return false;  // Need more parameter slots than available
+    }
+
+    // Reuse the frame: update procedure and rebind parameters
+    frame->proc = proc;
+    frame->body_cursor = proc ? proc->body : NODE_NIL;
+    frame->line_cursor = NODE_NIL;
+    frame->param_count = (uint8_t)param_count;
+    
+    // Clear local variables
+    frame->local_count = 0;
+    
+    // Clear expression stack
+    frame->value_count = 0;
+    
+    // Reset TEST state (each procedure call starts with no TEST)
+    frame->test_valid = false;
+    frame->test_value = false;
+    
+    // Clear continuation state
+    frame->pending_op = 0;
+    frame->pending_bp = 0;
+    frame->cont_flags = CONT_FLAG_NONE;
+
+    // Rebind parameters with new values
+    if (param_count > 0 && args != NULL)
+    {
+        Binding *bindings = get_bindings_ptr(stack, frame);
+        for (int i = 0; i < param_count; i++)
+        {
+            bindings[i].name = proc->params[i];
+            bindings[i].value = args[i];
+        }
+    }
+
+    // Note: depth doesn't change since we're reusing the same logical frame
+    return true;
+}
+
 word_offset_t frame_pop(FrameStack *stack)
 {
     if (stack->current == OFFSET_NONE)

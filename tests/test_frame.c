@@ -726,6 +726,197 @@ void test_reuse_after_pop(void)
 }
 
 //============================================================================
+// Frame Reuse Tests (TCO)
+//============================================================================
+
+// Mock procedure with different param counts for reuse tests
+static UserProcedure reuse_proc_1;  // 1 param
+static UserProcedure reuse_proc_2;  // 2 params
+static UserProcedure reuse_proc_3;  // 3 params
+static const char *reuse_param_names[3] = {"a", "b", "c"};
+
+static void init_reuse_procs(void)
+{
+    reuse_proc_1.name = "proc1";
+    reuse_proc_1.params[0] = reuse_param_names[0];
+    reuse_proc_1.param_count = 1;
+    reuse_proc_1.body = NODE_NIL;
+    reuse_proc_1.buried = false;
+    reuse_proc_1.stepped = false;
+    reuse_proc_1.traced = false;
+
+    reuse_proc_2.name = "proc2";
+    reuse_proc_2.params[0] = reuse_param_names[0];
+    reuse_proc_2.params[1] = reuse_param_names[1];
+    reuse_proc_2.param_count = 2;
+    reuse_proc_2.body = NODE_NIL;
+    reuse_proc_2.buried = false;
+    reuse_proc_2.stepped = false;
+    reuse_proc_2.traced = false;
+
+    reuse_proc_3.name = "proc3";
+    reuse_proc_3.params[0] = reuse_param_names[0];
+    reuse_proc_3.params[1] = reuse_param_names[1];
+    reuse_proc_3.params[2] = reuse_param_names[2];
+    reuse_proc_3.param_count = 3;
+    reuse_proc_3.body = NODE_NIL;
+    reuse_proc_3.buried = false;
+    reuse_proc_3.stepped = false;
+    reuse_proc_3.traced = false;
+}
+
+void test_reuse_empty_stack_fails(void)
+{
+    init_reuse_procs();
+    Value args[1] = {value_number(42)};
+    
+    // Try to reuse when stack is empty
+    TEST_ASSERT_FALSE(frame_reuse(&stack, &reuse_proc_1, args, 1));
+}
+
+void test_reuse_same_params(void)
+{
+    init_reuse_procs();
+    Value args1[2] = {value_number(1), value_number(2)};
+    Value args2[2] = {value_number(10), value_number(20)};
+
+    // Push initial frame
+    word_offset_t off1 = frame_push(&stack, &reuse_proc_2, args1, 2);
+    TEST_ASSERT_NOT_EQUAL(OFFSET_NONE, off1);
+    TEST_ASSERT_EQUAL(1, frame_stack_depth(&stack));
+    size_t used1 = frame_stack_used_bytes(&stack);
+
+    // Reuse with same param count
+    TEST_ASSERT_TRUE(frame_reuse(&stack, &reuse_proc_2, args2, 2));
+    TEST_ASSERT_EQUAL(1, frame_stack_depth(&stack));  // Depth unchanged
+    TEST_ASSERT_EQUAL(used1, frame_stack_used_bytes(&stack));  // Memory unchanged
+
+    // Verify new bindings
+    FrameHeader *frame = frame_current(&stack);
+    Binding *bindings = frame_bindings(&stack, frame);
+    TEST_ASSERT_EQUAL(10, bindings[0].value.as.number);
+    TEST_ASSERT_EQUAL(20, bindings[1].value.as.number);
+}
+
+void test_reuse_fewer_params(void)
+{
+    init_reuse_procs();
+    Value args3[3] = {value_number(1), value_number(2), value_number(3)};
+    Value args1[1] = {value_number(99)};
+
+    // Push frame with 3 params
+    word_offset_t off = frame_push(&stack, &reuse_proc_3, args3, 3);
+    TEST_ASSERT_NOT_EQUAL(OFFSET_NONE, off);
+
+    // Reuse with 1 param (fewer than original)
+    TEST_ASSERT_TRUE(frame_reuse(&stack, &reuse_proc_1, args1, 1));
+    TEST_ASSERT_EQUAL(1, frame_stack_depth(&stack));
+
+    // Verify procedure and binding
+    FrameHeader *frame = frame_current(&stack);
+    TEST_ASSERT_EQUAL_STRING("proc1", frame->proc->name);
+    TEST_ASSERT_EQUAL(1, frame->param_count);
+    Binding *bindings = frame_bindings(&stack, frame);
+    TEST_ASSERT_EQUAL(99, bindings[0].value.as.number);
+}
+
+void test_reuse_more_params_fails(void)
+{
+    init_reuse_procs();
+    Value args1[1] = {value_number(1)};
+    Value args3[3] = {value_number(10), value_number(20), value_number(30)};
+
+    // Push frame with 1 param
+    word_offset_t off = frame_push(&stack, &reuse_proc_1, args1, 1);
+    TEST_ASSERT_NOT_EQUAL(OFFSET_NONE, off);
+
+    // Try to reuse with 3 params (more than original) - should fail
+    TEST_ASSERT_FALSE(frame_reuse(&stack, &reuse_proc_3, args3, 3));
+}
+
+void test_reuse_clears_locals(void)
+{
+    init_reuse_procs();
+    Value args[2] = {value_number(1), value_number(2)};
+
+    // Push frame and add local
+    frame_push(&stack, &reuse_proc_2, args, 2);
+    frame_add_local(&stack, "local_var", value_number(999));
+    
+    FrameHeader *frame = frame_current(&stack);
+    TEST_ASSERT_EQUAL(1, frame->local_count);
+
+    // Reuse should clear locals
+    Value args2[2] = {value_number(10), value_number(20)};
+    TEST_ASSERT_TRUE(frame_reuse(&stack, &reuse_proc_2, args2, 2));
+    
+    frame = frame_current(&stack);
+    TEST_ASSERT_EQUAL(0, frame->local_count);
+}
+
+void test_reuse_clears_test_state(void)
+{
+    init_reuse_procs();
+    Value args[2] = {value_number(1), value_number(2)};
+
+    // Push frame and set test state
+    frame_push(&stack, &reuse_proc_2, args, 2);
+    frame_set_test(&stack, true);
+    
+    bool test_val;
+    TEST_ASSERT_TRUE(frame_get_test(&stack, &test_val));
+    TEST_ASSERT_TRUE(test_val);
+
+    // Reuse should clear test state
+    Value args2[2] = {value_number(10), value_number(20)};
+    TEST_ASSERT_TRUE(frame_reuse(&stack, &reuse_proc_2, args2, 2));
+    
+    TEST_ASSERT_FALSE(frame_get_test(&stack, &test_val));  // No longer valid
+}
+
+void test_reuse_clears_value_stack(void)
+{
+    init_reuse_procs();
+    Value args[2] = {value_number(1), value_number(2)};
+
+    // Push frame and push values
+    frame_push(&stack, &reuse_proc_2, args, 2);
+    frame_push_value(&stack, value_number(100));
+    frame_push_value(&stack, value_number(200));
+    TEST_ASSERT_EQUAL(2, frame_value_count(&stack));
+
+    // Reuse should clear value stack
+    Value args2[2] = {value_number(10), value_number(20)};
+    TEST_ASSERT_TRUE(frame_reuse(&stack, &reuse_proc_2, args2, 2));
+    TEST_ASSERT_EQUAL(0, frame_value_count(&stack));
+}
+
+void test_reuse_many_times_no_memory_growth(void)
+{
+    init_reuse_procs();
+    Value args[2] = {value_number(1), value_number(2)};
+
+    // Push initial frame
+    frame_push(&stack, &reuse_proc_2, args, 2);
+    size_t used_after_push = frame_stack_used_bytes(&stack);
+
+    // Reuse many times - memory should stay constant
+    for (int i = 0; i < 1000; i++)
+    {
+        Value new_args[2] = {value_number(i), value_number(i * 2)};
+        TEST_ASSERT_TRUE(frame_reuse(&stack, &reuse_proc_2, new_args, 2));
+        TEST_ASSERT_EQUAL(used_after_push, frame_stack_used_bytes(&stack));
+        TEST_ASSERT_EQUAL(1, frame_stack_depth(&stack));
+    }
+
+    // Verify final values
+    FrameHeader *frame = frame_current(&stack);
+    Binding *bindings = frame_bindings(&stack, frame);
+    TEST_ASSERT_EQUAL(999, bindings[0].value.as.number);
+    TEST_ASSERT_EQUAL(1998, bindings[1].value.as.number);
+}
+
+//============================================================================
 // Test Runner
 //============================================================================
 
@@ -804,6 +995,16 @@ int main(void)
     // Memory pressure tests
     RUN_TEST(test_push_until_full);
     RUN_TEST(test_reuse_after_pop);
+
+    // Frame reuse tests (TCO)
+    RUN_TEST(test_reuse_empty_stack_fails);
+    RUN_TEST(test_reuse_same_params);
+    RUN_TEST(test_reuse_fewer_params);
+    RUN_TEST(test_reuse_more_params_fails);
+    RUN_TEST(test_reuse_clears_locals);
+    RUN_TEST(test_reuse_clears_test_state);
+    RUN_TEST(test_reuse_clears_value_stack);
+    RUN_TEST(test_reuse_many_times_no_memory_growth);
 
     return UNITY_END();
 }

@@ -549,6 +549,7 @@ bool proc_is_traced(const char *name)
 Result proc_call(Evaluator *eval, UserProcedure *proc, int argc, Value *args)
 {
     FrameStack *frames = eval->frames;
+    bool is_tail_call = false;  // Track if this is a tail call iteration
     
     // Trampoline loop for tail call optimization
     while (true)
@@ -563,23 +564,43 @@ Result proc_call(Evaluator *eval, UserProcedure *proc, int argc, Value *args)
             return result_error_arg(ERR_TOO_MANY_INPUTS, proc->name, NULL);
         }
 
-        // Push a new frame for this procedure call
-        // The frame binds parameters to argument values
-        word_offset_t frame_offset = frame_push(frames, proc, args, argc);
-        if (frame_offset == OFFSET_NONE)
+        if (!is_tail_call)
         {
-            // Out of frame space
-            return result_error(ERR_OUT_OF_SPACE);
+            // First call: push a new frame and increment depth
+            word_offset_t frame_offset = frame_push(frames, proc, args, argc);
+            if (frame_offset == OFFSET_NONE)
+            {
+                return result_error(ERR_OUT_OF_SPACE);
+            }
+            
+            // Track procedure depth for TCO detection
+            eval->proc_depth++;
+            
+            // Track current procedure name (for pause prompt)
+            proc_push_current(proc->name);
+        }
+        else
+        {
+            // Tail call: try to reuse the current frame (avoids pop+push overhead)
+            // Update procedure name in tracking stack
+            proc_pop_current();
+            proc_push_current(proc->name);
+            
+            if (!frame_reuse(frames, proc, args, argc))
+            {
+                // Reuse failed (e.g., new proc has more params) - fall back to pop+push
+                frame_pop(frames);
+                word_offset_t frame_offset = frame_push(frames, proc, args, argc);
+                if (frame_offset == OFFSET_NONE)
+                {
+                    return result_error(ERR_OUT_OF_SPACE);
+                }
+            }
+            // Note: proc_depth stays the same for tail calls (no stack growth)
         }
 
         // Clear any pending tail call
         proc_clear_tail_call();
-
-        // Track procedure depth for TCO detection
-        eval->proc_depth++;
-
-        // Track current procedure name (for pause prompt)
-        proc_push_current(proc->name);
 
         // Trace entry if traced
         if (proc->traced)
@@ -669,16 +690,7 @@ Result proc_call(Evaluator *eval, UserProcedure *proc, int argc, Value *args)
             }
         }
 
-        // Restore depth
-        eval->proc_depth--;
-
-        // Pop current procedure name
-        proc_pop_current();
-
-        // Pop frame before handling tail call
-        frame_pop(frames);
-
-        // Check for tail call
+        // Check for tail call BEFORE cleanup
         TailCall *tc = proc_get_tail_call();
         if (tc->is_tail_call)
         {
@@ -687,6 +699,7 @@ Result proc_call(Evaluator *eval, UserProcedure *proc, int argc, Value *args)
             if (target)
             {
                 // Set up for next iteration (tail call)
+                // DON'T pop frame or decrement depth - frame_reuse will handle it
                 proc = target;
                 argc = tc->arg_count;
                 // Copy args from tail call state
@@ -695,11 +708,17 @@ Result proc_call(Evaluator *eval, UserProcedure *proc, int argc, Value *args)
                     args[i] = tc->args[i];
                 }
                 proc_clear_tail_call();
-                continue; // Trampoline: restart loop instead of recursing
+                is_tail_call = true;
+                continue; // Trampoline: restart loop with frame reuse
             }
             // Target not found - this would be caught during normal eval
             proc_clear_tail_call();
         }
+
+        // Normal return (no tail call) - clean up
+        eval->proc_depth--;
+        proc_pop_current();
+        frame_pop(frames);
 
         // Handle result
         if (result.status == RESULT_STOP)
