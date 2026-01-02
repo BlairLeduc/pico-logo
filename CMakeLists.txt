@@ -58,6 +58,7 @@ add_library(logo_core
     core/error.c
     core/eval.c
     core/format.c
+    core/frame_arena.c
     core/lexer.c
     core/memory.c
     core/primitives_arithmetic.c
@@ -193,6 +194,7 @@ if(BUILD_FOR_HOST)
         core/error.c
         core/eval.c
         core/format.c
+        core/frame_arena.c
         core/lexer.c
         core/memory.c
         core/primitives_arithmetic.c
@@ -298,6 +300,7 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/core/error.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/eval.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/format.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/frame_arena.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/lexer.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/memory.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_arithmetic.c
