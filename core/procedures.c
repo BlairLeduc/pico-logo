@@ -545,7 +545,40 @@ bool proc_is_traced(const char *name)
     return false;
 }
 
-// Execute procedure body and handle tail calls via trampoline
+//==========================================================================
+// PROCEDURE EXECUTION WITH TAIL-CALL OPTIMIZATION
+//==========================================================================
+//
+// The trampoline loop implements tail-call optimization (TCO) for Logo
+// procedures. When a procedure's last action is to call another procedure
+// (a tail call), instead of growing the call stack, we reuse the current
+// frame and restart the loop.
+//
+// ALGORITHM:
+// 1. First call: frame_push() creates a new frame, increment proc_depth
+// 2. Execute procedure body
+// 3. Check for pending tail call (set by primitive via proc_set_tail_call)
+// 4. If tail call: frame_reuse() replaces frame contents, restart loop
+// 5. If normal return: frame_pop(), decrement proc_depth, return result
+//
+// TCO DETECTION:
+// The evaluator marks a call as a tail call when:
+// - It's the last instruction in a procedure body, OR
+// - It's inside a control structure (IF, REPEAT) as the last action
+// The primitive then calls proc_set_tail_call() instead of making the call.
+//
+// BENEFITS:
+// - Recursive procedures can run indefinitely (no stack overflow)
+// - Memory usage stays constant for tail-recursive algorithms
+// - proc_depth tracks logical depth (for tracing) but not physical frames
+//
+// FRAME REUSE VS POP+PUSH:
+// frame_reuse() is more efficient than frame_pop() + frame_push() because
+// it can reuse the same memory region when the new procedure has equal or
+// fewer parameters. If reuse fails (more params needed), we fall back to
+// pop+push.
+//
+
 Result proc_call(Evaluator *eval, UserProcedure *proc, int argc, Value *args)
 {
     FrameStack *frames = eval->frames;

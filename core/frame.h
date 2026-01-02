@@ -2,18 +2,52 @@
 //  Pico Logo
 //  Copyright 2025 Blair Leduc. See LICENSE for details.
 //
-//  Frame - Procedure call frames stored in a FrameArena.
+//  Frame System - Procedure call frames for the Logo interpreter.
+//
+//  ARCHITECTURE OVERVIEW
+//  =====================
+//
+//  The frame system provides efficient procedure call management using a
+//  custom LIFO allocator (FrameArena). This replaces the C call stack for
+//  Logo procedure execution, enabling:
+//
+//  1. TAIL-CALL OPTIMIZATION (TCO)
+//     Recursive procedures can run indefinitely without stack overflow.
+//     When a tail call is detected, frame_reuse() replaces the current
+//     frame's contents instead of pushing a new frame.
+//
+//  2. MEMORY EFFICIENCY
+//     Frames are variable-sized and grow dynamically. The arena uses
+//     word-based offsets (uint16_t) instead of pointers, reducing memory
+//     overhead on 32-bit systems.
+//
+//  3. PAUSE/CONTINUE SUPPORT
+//     Continuation state is stored in frames, allowing execution to be
+//     suspended and resumed.
+//
+//  FRAME CONTENTS
+//  ==============
 //
 //  Each frame represents an active procedure call and contains:
 //  - Link to previous frame (for stack traversal)
 //  - Procedure being executed
 //  - Continuation state (where to resume after a call returns)
-//  - Parameter bindings
-//  - Local variable bindings (dynamically added via LOCAL command)
+//  - Parameter bindings (set during frame_push)
+//  - Local variable bindings (added via LOCAL command)
 //  - Expression value stack (for evaluating expressions)
+//  - TEST state (per Logo spec, local to procedure)
 //
-//  Frames are variable-sized: they grow dynamically when locals are
-//  added or when the expression stack needs more space.
+//  INTEGRATION
+//  ===========
+//
+//  The frame system integrates with the interpreter via:
+//  - proc_call() uses frame_push/frame_pop/frame_reuse
+//  - var_get/var_set check frame bindings before globals
+//  - var_set_test/var_get_test use frame TEST state when in procedure
+//  - LOCAL primitive uses frame_declare_local
+//
+//  An old scope system (var_push_scope/var_pop_scope) is kept as fallback
+//  for backward compatibility with direct API usage in tests.
 //
 
 #pragma once
