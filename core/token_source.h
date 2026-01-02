@@ -81,6 +81,13 @@ extern "C"
     // For NodeIterator: consume the pending sublist (call after get_sublist)
     void token_source_consume_sublist(TokenSource *ts);
 
+    // For CPS continuation: get current position as a Node (for NodeIterator)
+    // Returns NODE_NIL for Lexer sources (not supported for continuation)
+    Node token_source_get_position(TokenSource *ts);
+
+    // For CPS continuation: restore position from saved Node
+    void token_source_set_position(TokenSource *ts, Node position);
+
 #ifdef __cplusplus
 }
 #endif

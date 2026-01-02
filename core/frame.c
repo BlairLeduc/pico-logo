@@ -123,7 +123,7 @@ word_offset_t frame_push(FrameStack *stack, UserProcedure *proc,
     frame->value_count = 0;
     frame->value_capacity = FRAME_INITIAL_VALUE_CAPACITY;
     frame->proc = proc;
-    frame->body_cursor = proc ? proc->body : NODE_NIL;
+    frame->body_cursor = NODE_NIL;  // Set when saving continuation, not on fresh call
     frame->line_cursor = NODE_NIL;
     frame->pending_op = 0;
     frame->pending_bp = 0;
@@ -188,7 +188,7 @@ bool frame_reuse(FrameStack *stack, UserProcedure *proc,
 
     // Reuse the frame: update procedure and rebind parameters
     frame->proc = proc;
-    frame->body_cursor = proc ? proc->body : NODE_NIL;
+    frame->body_cursor = NODE_NIL;  // Fresh execution, not continuation
     frame->line_cursor = NODE_NIL;
     frame->param_count = (uint8_t)param_count;
     

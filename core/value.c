@@ -399,8 +399,32 @@ Result result_goto(const char *label)
         .error_arg = NULL,
         .error_caller = NULL,
         .throw_tag = NULL,
-        .pause_proc = NULL
+        .pause_proc = NULL,
+        .call_proc = NULL,
+        .call_argc = 0
     };
+}
+
+Result result_call(UserProcedure *proc, int argc, Value *args)
+{
+    Result r = {
+        .status = RESULT_CALL,
+        .call_proc = proc,
+        .call_argc = argc,
+        .value = value_none(),
+        .error_code = 0,
+        .error_proc = NULL,
+        .error_arg = NULL,
+        .error_caller = NULL,
+        .throw_tag = NULL,
+        .pause_proc = NULL,
+        .goto_label = NULL
+    };
+    for (int i = 0; i < argc && i < RESULT_CALL_MAX_ARGS; i++)
+    {
+        r.call_args[i] = args[i];
+    }
+    return r;
 }
 
 Result result_eof(void)

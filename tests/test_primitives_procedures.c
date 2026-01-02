@@ -290,6 +290,53 @@ void test_very_deep_tail_recursion(void)
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
 }
 
+void test_deep_non_tail_recursion_limit(void)
+{
+    // Test that non-tail recursion works for reasonable depths
+    // Note: With CPS disabled inside primitives (like 'if'), deep non-tail
+    // recursion uses C stack. The actual limit is platform-dependent.
+    // This test verifies reasonable depths work correctly.
+    // 
+    // deeprec n: if :n > 0 [deeprec difference :n 1 print :n]
+    Node p = mem_atom("n", 1);
+    const char *params[] = {mem_word_ptr(p)};
+    
+    Node body_line = NODE_NIL;
+    Node tail = NODE_NIL;
+    
+    // if :n > 0
+    const char *words[] = {"if", ":n", ">", "0"};
+    for (int i = 0; i < 4; i++) {
+        Node w = mem_atom(words[i], strlen(words[i]));
+        Node c = mem_cons(w, NODE_NIL);
+        if (mem_is_nil(body_line)) { body_line = c; tail = c; }
+        else { mem_set_cdr(tail, c); tail = c; }
+    }
+    
+    // [deeprec difference :n 1 print :n] - recursive call followed by print (not tail position)
+    const char *inner_words[] = {"deeprec", "difference", ":n", "1", "print", ":n"};
+    Node inner = NODE_NIL;
+    Node inner_tail = NODE_NIL;
+    for (int i = 0; i < 6; i++) {
+        Node w = mem_atom(inner_words[i], strlen(inner_words[i]));
+        Node c = mem_cons(w, NODE_NIL);
+        if (mem_is_nil(inner)) { inner = c; inner_tail = c; }
+        else { mem_set_cdr(inner_tail, c); inner_tail = c; }
+    }
+    Node c = mem_cons(inner, NODE_NIL);
+    mem_set_cdr(tail, c);
+    
+    Node line_marked = NODE_MAKE_LIST(NODE_GET_INDEX(body_line));
+    Node body = mem_cons(line_marked, NODE_NIL);
+    
+    Node name = mem_atom("deeprec", 7);
+    proc_define(mem_word_ptr(name), params, 1, body);
+    
+    // Test with a reasonable depth that should work on all platforms
+    Result r = run_string("deeprec 50");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+}
+
 void test_definedp_true(void)
 {
     const char *params[] = {};
@@ -1091,6 +1138,7 @@ int main(void)
     RUN_TEST(test_tail_recursive_countdown);
     RUN_TEST(test_deep_tail_recursion);
     RUN_TEST(test_very_deep_tail_recursion);
+    RUN_TEST(test_deep_non_tail_recursion_limit);
     RUN_TEST(test_definedp_true);
     RUN_TEST(test_definedp_false);
     RUN_TEST(test_primitivep_true);

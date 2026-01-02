@@ -35,6 +35,7 @@ void eval_init(Evaluator *eval, Lexer *lexer)
     eval->in_tail_position = false;
     eval->proc_depth = 0;
     eval->repcount = -1;
+    eval->primitive_arg_depth = 0;
 }
 
 void eval_set_frames(Evaluator *eval, FrameStack *frames)
@@ -332,6 +333,9 @@ static Result eval_primary(Evaluator *eval)
                 Value args[16];
                 int argc = 0;
                 
+                // Track that we're collecting primitive args (CPS fallback zone)
+                eval->primitive_arg_depth++;
+                
                 while (argc < 16)
                 {
                     Token t = peek(eval);
@@ -344,8 +348,9 @@ static Result eval_primary(Evaluator *eval)
                     Result arg = eval_expression(eval);
                     eval->in_tail_position = old_tail;
                     
-                    if (arg.status == RESULT_ERROR)
+                    if (arg.status == RESULT_ERROR || arg.status == RESULT_CALL)
                     {
+                        eval->primitive_arg_depth--;
                         eval->paren_depth--;
                         return result_set_error_proc(arg, user_name);
                     }
@@ -353,6 +358,8 @@ static Result eval_primary(Evaluator *eval)
                         break;
                     args[argc++] = arg.value;
                 }
+                
+                eval->primitive_arg_depth--;
                 
                 // Consume closing paren
                 Token closing = peek(eval);
@@ -432,6 +439,9 @@ static Result eval_primary(Evaluator *eval)
             Value args[16]; // Max args
             int argc = 0;
 
+            // Track that we're collecting primitive args (CPS fallback zone)
+            eval->primitive_arg_depth++;
+
             for (int i = 0; i < prim->default_args && !eval_at_end(eval); i++)
             {
                 // Check for tokens that would end args
@@ -447,16 +457,23 @@ static Result eval_primary(Evaluator *eval)
                 Result arg = eval_expression(eval);
                 eval->in_tail_position = old_tail;
                 
-                // Propagate errors and control flow (throw, stop, output)
+                // Propagate errors and control flow (throw, stop, output, call)
                 if (arg.status == RESULT_ERROR || arg.status == RESULT_THROW ||
-                    arg.status == RESULT_STOP || arg.status == RESULT_OUTPUT)
+                    arg.status == RESULT_STOP || arg.status == RESULT_OUTPUT ||
+                    arg.status == RESULT_CALL)
+                {
+                    eval->primitive_arg_depth--;
                     return result_set_error_proc(arg, user_name);
+                }
                 if (arg.status != RESULT_OK)
                 {
+                    eval->primitive_arg_depth--;
                     return result_error_arg(ERR_NOT_ENOUGH_INPUTS, user_name, NULL);
                 }
                 args[argc++] = arg.value;
             }
+
+            eval->primitive_arg_depth--;
 
             if (argc < prim->default_args)
             {
@@ -492,9 +509,10 @@ static Result eval_primary(Evaluator *eval)
                 Result arg = eval_expression(eval);
                 eval->in_tail_position = old_tail;
                 
-                // Propagate errors and control flow (throw, stop, output)
+                // Propagate errors and control flow (throw, stop, output, call)
                 if (arg.status == RESULT_ERROR || arg.status == RESULT_THROW ||
-                    arg.status == RESULT_STOP || arg.status == RESULT_OUTPUT)
+                    arg.status == RESULT_STOP || arg.status == RESULT_OUTPUT ||
+                    arg.status == RESULT_CALL)
                     return arg;
                 if (arg.status != RESULT_OK)
                 {
@@ -524,6 +542,14 @@ static Result eval_primary(Evaluator *eval)
                 return result_stop();
             }
 
+            // CPS: if we're inside a procedure and NOT collecting primitive args,
+            // return RESULT_CALL to let proc_call handle the call iteratively
+            if (eval->proc_depth > 0 && eval->primitive_arg_depth == 0)
+            {
+                return result_call(user_proc, argc, args);
+            }
+
+            // Otherwise use direct call (at top-level or inside primitive args)
             return proc_call(eval, user_proc, argc, args);
         }
 
@@ -1101,6 +1127,24 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
             }
         }
 
+        // Handle RESULT_CALL - save token position for continuation and propagate
+        if (r.status == RESULT_CALL)
+        {
+            // Save current token position in frame for later resumption
+            // The caller (execute_body_with_step) will save body_cursor
+            FrameStack *frames = eval->frames;
+            if (frames && !frame_stack_is_empty(frames))
+            {
+                FrameHeader *frame = frame_current(frames);
+                if (frame)
+                {
+                    // Save position within this line (token source current node)
+                    frame->line_cursor = token_source_get_position(&eval->token_source);
+                }
+            }
+            break;  // Propagate to caller
+        }
+
         // Handle RESULT_GOTO - let it bubble up to execute_body_with_step
         // which has access to the full procedure body with all lines
         if (r.status == RESULT_GOTO)
@@ -1131,8 +1175,13 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
 
 Result eval_run_list(Evaluator *eval, Node list)
 {
-    // Regular run_list without TCO
-    return eval_run_list_with_tco(eval, list, false);
+    // Increment primitive_arg_depth to disable CPS during this call
+    // This ensures nested procedure calls complete before returning to caller
+    // (CPS would return RESULT_CALL which primitives don't handle)
+    eval->primitive_arg_depth++;
+    Result r = eval_run_list_with_tco(eval, list, false);
+    eval->primitive_arg_depth--;
+    return r;
 }
 
 // Run a list as an expression - allows the list to output a value
@@ -1144,6 +1193,11 @@ Result eval_run_list_expr(Evaluator *eval, Node list)
     // in this list is also in tail position - enables TCO for:
     //   if :n > 0 [recurse :n - 1]
     bool enable_tco = eval->in_tail_position && eval->proc_depth > 0;
+    
+    // Increment primitive_arg_depth to disable CPS during this call
+    // This ensures nested procedure calls complete before returning to caller
+    // (TCO still works via the tail call mechanism)
+    eval->primitive_arg_depth++;
     
     // Save current token source state
     TokenSource old_source = eval->token_source;
@@ -1211,6 +1265,7 @@ Result eval_run_list_expr(Evaluator *eval, Node list)
     // Restore state
     eval->in_tail_position = old_tail;
     eval->token_source = old_source;
+    eval->primitive_arg_depth--;
 
     return r;
 }

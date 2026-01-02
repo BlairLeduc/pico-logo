@@ -29,17 +29,20 @@ extern "C"
 
     // Declare a variable as local in the current scope
     // This creates the variable with no value (unbound)
-    void var_declare_local(const char *name);
+    // Returns false if out of frame arena space
+    bool var_declare_local(const char *name);
 
     // Set a variable's value
     // If variable exists in scope chain, updates it there
     // If variable is declared local in current scope, updates it
     // Otherwise creates/updates a global variable
-    void var_set(const char *name, Value value);
+    // Returns false if out of space (frame arena or global table)
+    bool var_set(const char *name, Value value);
 
     // Set a local variable in current scope (for procedure inputs)
     // This both declares and sets in one operation
-    void var_set_local(const char *name, Value value);
+    // Returns false if out of frame arena space
+    bool var_set_local(const char *name, Value value);
 
     // Get a variable's value, searching scope chain then globals
     // Returns false if not found

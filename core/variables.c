@@ -56,53 +56,57 @@ static int find_global(const char *name)
     return -1;
 }
 
-void var_declare_local(const char *name)
+bool var_declare_local(const char *name)
 {
     // Check if we're inside a procedure (frame stack not empty)
     FrameStack *frames = proc_get_frame_stack();
     if (frames && !frame_stack_is_empty(frames))
     {
         // Declare local in current frame
-        frame_declare_local(frames, name);
-        return;
+        return frame_declare_local(frames, name);
     }
 
     // At top level, local behaves like global but unbound
     int idx = find_global(name);
-    if (idx < 0)
+    if (idx >= 0)
     {
-        // Create new unbound global
-        for (int i = 0; i < MAX_GLOBAL_VARIABLES; i++)
+        // Already exists
+        return true;
+    }
+    
+    // Create new unbound global
+    for (int i = 0; i < MAX_GLOBAL_VARIABLES; i++)
+    {
+        if (!global_variables[i].active)
         {
-            if (!global_variables[i].active)
-            {
-                global_variables[i].name = name;
-                global_variables[i].active = true;
-                global_variables[i].has_value = false;
-                if (i >= global_count)
-                    global_count = i + 1;
-                return;
-            }
+            global_variables[i].name = name;
+            global_variables[i].active = true;
+            global_variables[i].has_value = false;
+            if (i >= global_count)
+                global_count = i + 1;
+            return true;
         }
     }
+    
+    // Global table full
+    return false;
 }
 
-void var_set_local(const char *name, Value value)
+bool var_set_local(const char *name, Value value)
 {
     // Use frame system if inside a procedure
     FrameStack *frames = proc_get_frame_stack();
     if (frames && !frame_stack_is_empty(frames))
     {
         // Add or update local in current frame
-        frame_add_local(frames, name, value);
-        return;
+        return frame_add_local(frames, name, value);
     }
 
     // At top level, set as global
-    var_set(name, value);
+    return var_set(name, value);
 }
 
-void var_set(const char *name, Value value)
+bool var_set(const char *name, Value value)
 {
     // First, search frame stack for existing local binding (if in a procedure)
     FrameStack *frames = proc_get_frame_stack();
@@ -114,7 +118,7 @@ void var_set(const char *name, Value value)
         {
             // Found in frame chain - update it
             binding->value = value;
-            return;
+            return true;
         }
     }
 
@@ -124,7 +128,7 @@ void var_set(const char *name, Value value)
     {
         global_variables[idx].value = value;
         global_variables[idx].has_value = true;
-        return;
+        return true;
     }
 
     // Create new global
@@ -138,10 +142,11 @@ void var_set(const char *name, Value value)
             global_variables[i].has_value = true;
             if (i >= global_count)
                 global_count = i + 1;
-            return;
+            return true;
         }
     }
-    // Out of space - silently fail
+    // Out of space
+    return false;
 }
 
 bool var_get(const char *name, Value *out)

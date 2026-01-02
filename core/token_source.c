@@ -311,3 +311,26 @@ void token_source_consume_sublist(TokenSource *ts)
         ts->has_current = false;
     }
 }
+
+// Get current position for CPS continuation (NodeIterator only)
+Node token_source_get_position(TokenSource *ts)
+{
+    if (ts->type == TOKEN_SOURCE_NODE_ITERATOR)
+    {
+        return ts->node_iter.current;
+    }
+    return NODE_NIL;
+}
+
+// Restore position from saved Node (for CPS continuation)
+void token_source_set_position(TokenSource *ts, Node position)
+{
+    if (ts->type == TOKEN_SOURCE_NODE_ITERATOR)
+    {
+        ts->node_iter.current = position;
+        ts->node_iter.pending_sublist = NODE_NIL;
+        ts->node_iter.has_peeked = false;
+        ts->node_iter.previous_was_delimiter = true;
+        ts->has_current = false;
+    }
+}
