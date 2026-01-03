@@ -1125,6 +1125,37 @@ void test_multiline_with_real_newlines(void)
     TEST_ASSERT_EQUAL_FLOAT(10.0f, r3.value.as.number);
 }
 
+void test_multiline_brackets_repeat(void)
+{
+    // Bug: When brackets span multiple lines in a procedure, the body
+    // is stored with flat tokens [ and ] rather than nested lists.
+    // This caused "] without [" errors when repcount expressions were used.
+    
+    // trifwr: calls a procedure inside a repeat loop with brackets spanning lines
+    Result r = proc_define_from_text(
+        "to trifwr :size :n\n"
+        "repeat :n [\n"
+        "  print :size\n"
+        "  rt 360 / :n\n"
+        "]\n"
+        "end\n");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_OK, r.status, "trifwr definition should succeed");
+    
+    // web: outer repeat calls trifwr using repcount in expression
+    Result r2 = proc_define_from_text(
+        "to web\n"
+        "repeat 3 [ trifwr repcount * 10 2 ]\n"
+        "end\n");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_OK, r2.status, "web definition should succeed");
+    
+    // This should work without "] without [" error
+    reset_output();
+    Result r3 = run_string("web");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_NONE, r3.status, "web should complete without error");
+    // Expected output: trifwr is called 3 times with sizes 10, 20, 30, each printing twice
+    TEST_ASSERT_EQUAL_STRING("10\n10\n20\n20\n30\n30\n", output_buffer);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -1204,6 +1235,7 @@ int main(void)
     RUN_TEST(test_empty_lines_preserved);
     RUN_TEST(test_item_extracts_procedure_line);
     RUN_TEST(test_multiline_with_real_newlines);
+    RUN_TEST(test_multiline_brackets_repeat);
 
     return UNITY_END();
 }
