@@ -125,6 +125,8 @@ static Result repl_evaluate_line(ReplState *state, const char *input)
         
         if (r.status == RESULT_ERROR)
         {
+            // Reset all execution state to clean up any stale frames from the error
+            proc_reset_execution_state();
             logo_io_write_line(state->io, error_format(r));
             return result_none();  // Error handled, continue REPL
         }
@@ -132,12 +134,14 @@ static Result repl_evaluate_line(ReplState *state, const char *input)
         {
             if (strcasecmp(r.throw_tag, "toplevel") == 0)
             {
-                // throw "toplevel exits the REPL
+                // throw "toplevel exits the REPL - reset execution state first
+                proc_reset_execution_state();
                 return r;
             }
             else
             {
-                // Other uncaught throws are errors
+                // Other uncaught throws are errors - reset execution state first
+                proc_reset_execution_state();
                 char msg[128];
                 snprintf(msg, sizeof(msg), "Can't find a catch for %s", r.throw_tag);
                 logo_io_write_line(state->io, msg);
@@ -203,7 +207,8 @@ Result repl_run(ReplState *state)
         
         if (len == LOGO_STREAM_INTERRUPTED)
         {
-            // User pressed BRK at the prompt
+            // User pressed BRK at the prompt - reset any stale execution state
+            proc_reset_execution_state();
             logo_io_write_line(state->io, "Stopped!");
             continue;
         }

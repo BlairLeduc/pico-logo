@@ -4,6 +4,7 @@
 //
 
 #include "test_scaffold.h"
+#include "core/frame.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -726,6 +727,125 @@ void test_erall_respects_buried(void)
     TEST_ASSERT_TRUE(var_exists("hiddenvar"));
 }
 
+// Regression test: erasing a procedure while it's on the call stack shouldn't crash
+void test_erase_caller_during_execution(void)
+{
+    // Define a helper procedure that erases its caller
+    const char *helper_params[] = {};
+    define_proc("helper", helper_params, 0, "erase \"caller print \"done");
+    
+    // Define a caller procedure that calls the helper
+    const char *caller_params[] = {};
+    define_proc("caller", caller_params, 0, "helper print \"after");
+    
+    reset_output();
+    
+    // Run caller - it calls helper which erases caller
+    // The procedure should detect the caller was erased and handle it gracefully
+    Result r = run_string("caller");
+    
+    // Should get an error or graceful handling, not a crash
+    // The helper should complete, but resuming "caller" should fail gracefully
+    // since the procedure was erased
+    TEST_ASSERT_TRUE(r.status == RESULT_ERROR || r.status == RESULT_NONE);
+    
+    // Verify caller was actually erased
+    TEST_ASSERT_NULL(proc_find("caller"));
+    
+    // Verify helper still exists
+    TEST_ASSERT_NOT_NULL(proc_find("helper"));
+}
+
+// Regression test: erall then new procedure shouldn't reference old procedure names
+void test_erall_then_new_procedure_no_stale_references(void)
+{
+    // Define an old procedure that triggers an error on purpose
+    const char *old_params[] = {};
+    define_proc("oldproc", old_params, 0, "nonexistent");
+    
+    reset_output();
+    
+    // Run it to get an error - this might leave stale state
+    Result r = run_string("oldproc");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
+    
+    // Erase everything
+    run_string("erall");
+    TEST_ASSERT_NULL(proc_find("oldproc"));
+    
+    // Define a completely new procedure with different name and code
+    const char *new_params[] = {};
+    define_proc("newproc", new_params, 0, "repeat 4 [print \"test]");
+    
+    reset_output();
+    
+    // Run the new procedure
+    r = run_string("newproc");
+    
+    // The new procedure should succeed
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // If there's an error, it should NOT mention the old procedure name
+    if (r.status == RESULT_ERROR)
+    {
+        TEST_ASSERT_NULL(strstr(error_format(r), "oldproc"));
+    }
+}
+
+// Regression test: BRK during procedure, erall, then new procedure
+// This is the exact scenario reported by the user
+void test_brk_erall_new_procedure_no_stale_frames(void)
+{
+    // Define a procedure that will be interrupted
+    const char *maze_params[] = {};
+    define_proc("maze", maze_params, 0, "repeat 1000000 [fd 1 rt 1]");
+    
+    // Simulate BRK interrupt by calling proc_reset_execution_state
+    // (In real usage, BRK would be pressed during maze execution)
+    // First, we need to set up as if maze started running
+    proc_push_current("maze");
+    FrameStack *frames = proc_get_frame_stack();
+    
+    // Push a frame for maze (simulating it started)
+    UserProcedure *maze = proc_find("maze");
+    TEST_ASSERT_NOT_NULL(maze);
+    Value args[1];
+    frame_push(frames, maze, args, 0);
+    
+    // Now simulate BRK - this should reset everything
+    proc_reset_execution_state();
+    
+    // Verify frame stack is empty
+    TEST_ASSERT_TRUE(frame_stack_is_empty(frames));
+    
+    // Now erase everything
+    run_string("erall");
+    TEST_ASSERT_NULL(proc_find("maze"));
+    
+    // Define a new procedure (like brownian)
+    const char *brownian_params[] = {};
+    define_proc("brownian", brownian_params, 0, "repeat 10 [print \"test]");
+    
+    reset_output();
+    
+    // Run the new procedure
+    Result r = run_string("brownian");
+    
+    // Should complete successfully without mentioning maze
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Verify output is correct
+    TEST_ASSERT_TRUE(strstr(output_buffer, "test") != NULL);
+    
+    // If there was an error, it should NOT mention maze
+    if (r.status == RESULT_ERROR)
+    {
+        const char *err = error_format(r);
+        TEST_ASSERT_NULL(strstr(err, "maze"));
+    }
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -784,6 +904,9 @@ int main(void)
     RUN_TEST(test_erps_respects_buried);
     RUN_TEST(test_erall_removes_procedures_and_variables);
     RUN_TEST(test_erall_respects_buried);
+    RUN_TEST(test_erase_caller_during_execution);
+    RUN_TEST(test_erall_then_new_procedure_no_stale_references);
+    RUN_TEST(test_brk_erall_new_procedure_no_stale_frames);
 
     return UNITY_END();
 }

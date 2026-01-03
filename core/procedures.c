@@ -931,6 +931,15 @@ void proc_pop_current(void)
     }
 }
 
+// Reset all procedure execution state
+// Call this after errors or when returning to top level unexpectedly
+void proc_reset_execution_state(void)
+{
+    proc_clear_tail_call();
+    current_proc_depth = 0;
+    frame_stack_reset(&global_frame_stack);
+}
+
 // Mark all procedure bodies as GC roots
 void proc_gc_mark_all(void)
 {
