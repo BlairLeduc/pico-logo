@@ -20,12 +20,7 @@
 static Result prim_wait(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
-    
-    float tenths_f;
-    if (!value_to_number(args[0], &tenths_f))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
-    }
+    REQUIRE_NUMBER(args[0], tenths_f);
     
     int tenths = (int)tenths_f;
     if (tenths < 0)

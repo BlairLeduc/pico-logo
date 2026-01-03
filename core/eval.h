@@ -8,7 +8,8 @@
 #pragma once
 
 #include "value.h"
-#include "lexer.h"
+#include "token_source.h"
+#include "frame.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -18,19 +19,28 @@ extern "C"
     // Evaluator state
     typedef struct Evaluator
     {
-        Lexer *lexer;
-        Token current;
-        bool has_current;
+        TokenSource token_source;  // Current token source (lexer or node iterator)
+        FrameStack *frames;        // Procedure call frame stack (NULL at top-level)
         int paren_depth;           // Track nested parentheses for greedy args
         int error_code;
         const char *error_context; // For error messages
         bool in_tail_position;     // True if evaluating last instruction of procedure body
         int proc_depth;            // Depth of user procedure calls (for TCO)
-        int repcount;             // Current repeat count (for REPCOUNT)
+        int repcount;              // Current repeat count (for REPCOUNT)
+        int primitive_arg_depth;   // > 0 when collecting args for primitives (CPS fallback)
     } Evaluator;
 
     // Initialize evaluator with a lexer
     void eval_init(Evaluator *eval, Lexer *lexer);
+
+    // Set the frame stack for procedure calls
+    void eval_set_frames(Evaluator *eval, FrameStack *frames);
+
+    // Get the frame stack (may be NULL)
+    FrameStack *eval_get_frames(Evaluator *eval);
+
+    // Check if evaluator is currently inside a procedure
+    bool eval_in_procedure(Evaluator *eval);
 
     // Evaluate a single instruction (command with args)
     Result eval_instruction(Evaluator *eval);

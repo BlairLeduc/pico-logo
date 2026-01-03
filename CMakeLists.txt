@@ -58,6 +58,8 @@ add_library(logo_core
     core/error.c
     core/eval.c
     core/format.c
+    core/frame.c
+    core/frame_arena.c
     core/lexer.c
     core/memory.c
     core/primitives_arithmetic.c
@@ -83,6 +85,7 @@ add_library(logo_core
     core/procedures.c
     core/properties.c
     core/repl.c
+    core/token_source.c
     core/value.c
     core/variables.c
     devices/console.c
@@ -192,6 +195,8 @@ if(BUILD_FOR_HOST)
         core/error.c
         core/eval.c
         core/format.c
+        core/frame.c
+        core/frame_arena.c
         core/lexer.c
         core/memory.c
         core/primitives_arithmetic.c
@@ -217,6 +222,7 @@ if(BUILD_FOR_HOST)
         core/procedures.c
         core/properties.c
         core/repl.c
+        core/token_source.c
         core/value.c
         core/variables.c
     )
@@ -296,6 +302,8 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/core/error.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/eval.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/format.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/frame.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/frame_arena.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/lexer.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/memory.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_arithmetic.c
@@ -321,6 +329,7 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/core/procedures.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/properties.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/repl.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/token_source.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/value.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/variables.c
     )

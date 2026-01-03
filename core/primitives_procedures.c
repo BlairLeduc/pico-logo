@@ -12,27 +12,108 @@
 #include "lexer.h"
 #include <string.h>
 
+// Forward declaration for recursive bracket parsing
+static Node parse_bracket_contents(Lexer *lexer, Token *t);
+
+// Helper to create a token atom from a token
+static Node token_to_atom(Token *t)
+{
+    switch (t->type)
+    {
+        case TOKEN_LEFT_PAREN:
+            return mem_atom("(", 1);
+        case TOKEN_RIGHT_PAREN:
+            return mem_atom(")", 1);
+        case TOKEN_WORD:
+        case TOKEN_NUMBER:
+            return mem_atom(t->start, t->length);
+        case TOKEN_QUOTED:
+            return mem_atom(t->start, t->length);  // Keep the quote
+        case TOKEN_COLON:
+            return mem_atom(t->start, t->length);  // Keep the colon
+        case TOKEN_PLUS:
+            return mem_atom("+", 1);
+        case TOKEN_MINUS:
+        case TOKEN_UNARY_MINUS:
+            return mem_atom("-", 1);
+        case TOKEN_MULTIPLY:
+            return mem_atom("*", 1);
+        case TOKEN_DIVIDE:
+            return mem_atom("/", 1);
+        case TOKEN_EQUALS:
+            return mem_atom("=", 1);
+        case TOKEN_LESS_THAN:
+            return mem_atom("<", 1);
+        case TOKEN_GREATER_THAN:
+            return mem_atom(">", 1);
+        default:
+            return NODE_NIL;
+    }
+}
+
+// Parse bracket contents recursively until matching ]
+// Returns a list of items, with nested brackets as sublists
+// Updates *t to the token after ]
+static Node parse_bracket_contents(Lexer *lexer, Token *t)
+{
+    Node list = NODE_NIL;
+    Node tail = NODE_NIL;
+    
+    while (t->type != TOKEN_EOF && t->type != TOKEN_RIGHT_BRACKET)
+    {
+        Node item = NODE_NIL;
+        
+        if (t->type == TOKEN_LEFT_BRACKET)
+        {
+            // Recursively parse nested brackets
+            *t = lexer_next_token(lexer);
+            item = parse_bracket_contents(lexer, t);
+            // Mark as nested list
+            item = NODE_MAKE_LIST(NODE_GET_INDEX(item));
+        }
+        else
+        {
+            item = token_to_atom(t);
+            *t = lexer_next_token(lexer);
+        }
+        
+        if (!mem_is_nil(item))
+        {
+            Node new_cons = mem_cons(item, NODE_NIL);
+            if (mem_is_nil(list))
+            {
+                list = new_cons;
+                tail = new_cons;
+            }
+            else
+            {
+                mem_set_cdr(tail, new_cons);
+                tail = new_cons;
+            }
+        }
+    }
+    
+    // Skip the closing ]
+    if (t->type == TOKEN_RIGHT_BRACKET)
+    {
+        *t = lexer_next_token(lexer);
+    }
+    
+    return list;
+}
+
 // define "name [[params] [body line 1] [body line 2] ...]
 // Formal Logo procedure definition
 static Result prim_define(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
-    REQUIRE_WORD(args[0]);
-    REQUIRE_LIST(args[1]);
-    
-    const char *name = mem_word_ptr(args[0].as.node);
-    Node def_list = args[1].as.node;
+    REQUIRE_WORD_STR(args[0], name);
+    REQUIRE_LIST_NONEMPTY(args[1], def_list);
     
     // Check not redefining a primitive
     if (primitive_find(name))
     {
         return result_error_arg(ERR_IS_PRIMITIVE, name, NULL);
-    }
-    
-    // First element should be parameter list
-    if (mem_is_nil(def_list))
-    {
-        return result_error_arg(ERR_TOO_FEW_ITEMS, NULL, NULL);
     }
     
     Node params_elem = mem_car(def_list);
@@ -166,59 +247,75 @@ Result proc_define_from_text(const char *text)
         
         if (t.type == TOKEN_LEFT_BRACKET)
         {
-            item = mem_atom("[", 1);
+            // Recursively parse bracket contents to create a nested list
+            // This handles brackets spanning multiple lines
+            t = lexer_next_token(&lexer);
+            item = parse_bracket_contents(&lexer, &t);
+            // Mark as nested list
+            item = NODE_MAKE_LIST(NODE_GET_INDEX(item));
+            
+            // Don't advance token - parse_bracket_contents already did
+            // Add to current line and continue (skip the normal lexer_next_token)
+            body_started = true;
+            Node new_cons = mem_cons(item, NODE_NIL);
+            if (mem_is_nil(current_line))
+            {
+                current_line = new_cons;
+                current_line_tail = new_cons;
+            }
+            else
+            {
+                mem_set_cdr(current_line_tail, new_cons);
+                current_line_tail = new_cons;
+            }
+            
+            // Check if we crossed newlines while parsing bracket contents
+            if (lexer.had_newline)
+            {
+                int newline_count = lexer.newline_count;
+                lexer.had_newline = false;
+                lexer.newline_count = 0;
+                
+                // Finish current line
+                Node line_to_add = mem_is_nil(current_line) ? NODE_NIL : 
+                                   NODE_MAKE_LIST(NODE_GET_INDEX(current_line));
+                Node line_cons = mem_cons(line_to_add, NODE_NIL);
+                
+                if (mem_is_nil(body))
+                {
+                    body = line_cons;
+                    body_tail = line_cons;
+                }
+                else
+                {
+                    mem_set_cdr(body_tail, line_cons);
+                    body_tail = line_cons;
+                }
+                
+                // Additional newlines create empty lines
+                for (int i = 1; i < newline_count; i++)
+                {
+                    Node empty_line = mem_cons(NODE_NIL, NODE_NIL);
+                    mem_set_cdr(body_tail, empty_line);
+                    body_tail = empty_line;
+                }
+                
+                // Start new line
+                current_line = NODE_NIL;
+                current_line_tail = NODE_NIL;
+                at_line_start = true;
+            }
+            continue;  // Skip the normal token handling below
         }
         else if (t.type == TOKEN_RIGHT_BRACKET)
         {
+            // Stray ] without matching [ - store as atom for error handling
             item = mem_atom("]", 1);
         }
-        else if (t.type == TOKEN_LEFT_PAREN)
+        else
         {
-            item = mem_atom("(", 1);
-        }
-        else if (t.type == TOKEN_RIGHT_PAREN)
-        {
-            item = mem_atom(")", 1);
-        }
-        else if (t.type == TOKEN_WORD || t.type == TOKEN_NUMBER)
-        {
-            item = mem_atom(t.start, t.length);
-        }
-        else if (t.type == TOKEN_QUOTED)
-        {
-            item = mem_atom(t.start, t.length);  // Keep the quote
-        }
-        else if (t.type == TOKEN_COLON)
-        {
-            item = mem_atom(t.start, t.length);  // Keep the colon
-        }
-        else if (t.type == TOKEN_PLUS)
-        {
-            item = mem_atom("+", 1);
-        }
-        else if (t.type == TOKEN_MINUS || t.type == TOKEN_UNARY_MINUS)
-        {
-            item = mem_atom("-", 1);
-        }
-        else if (t.type == TOKEN_MULTIPLY)
-        {
-            item = mem_atom("*", 1);
-        }
-        else if (t.type == TOKEN_DIVIDE)
-        {
-            item = mem_atom("/", 1);
-        }
-        else if (t.type == TOKEN_EQUALS)
-        {
-            item = mem_atom("=", 1);
-        }
-        else if (t.type == TOKEN_LESS_THAN)
-        {
-            item = mem_atom("<", 1);
-        }
-        else if (t.type == TOKEN_GREATER_THAN)
-        {
-            item = mem_atom(">", 1);
+            // Use helper for all other token types
+            item = token_to_atom(&t);
         }
         
         // Add item to current line
@@ -315,15 +412,10 @@ Result proc_define_from_text(const char *text)
 // text "name - outputs the text (definition) of a procedure as a list
 static Result prim_text(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
+    UNUSED(eval); UNUSED(argc);
+
+    REQUIRE_WORD_STR(args[0], name);
     
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
-    }
-    
-    const char *name = mem_word_ptr(args[0].as.node);
     UserProcedure *proc = proc_find(name);
     
     if (!proc)
@@ -365,15 +457,8 @@ static Result prim_text(Evaluator *eval, int argc, Value *args)
 // primitivep "name - outputs true if name is a primitive
 static Result prim_primitivep(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
-    }
-    
-    const char *name = mem_word_ptr(args[0].as.node);
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD_STR(args[0], name);
     
     if (primitive_find(name))
     {
@@ -385,15 +470,8 @@ static Result prim_primitivep(Evaluator *eval, int argc, Value *args)
 // definedp "name - outputs true if name is a user-defined procedure
 static Result prim_definedp(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
-    }
-    
-    const char *name = mem_word_ptr(args[0].as.node);
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD_STR(args[0], name);
     
     if (proc_exists(name))
     {
@@ -405,20 +483,9 @@ static Result prim_definedp(Evaluator *eval, int argc, Value *args)
 // copydef "name "newname - copies the definition of name to newname
 static Result prim_copydef(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    
-    if (!value_is_word(args[0]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
-    }
-    if (!value_is_word(args[1]))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
-    }
-    
-    const char *source_name = mem_word_ptr(args[0].as.node);
-    const char *dest_name = mem_word_ptr(args[1].as.node);
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD_STR(args[0], source_name);
+    REQUIRE_WORD_STR(args[1], dest_name);
     
     // Check destination is not already a primitive
     if (primitive_find(dest_name))

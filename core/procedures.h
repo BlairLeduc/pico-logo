@@ -22,6 +22,7 @@
 #pragma once
 
 #include "value.h"
+#include "frame.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -107,12 +108,19 @@ extern "C"
     void proc_push_current(const char *name);
     void proc_pop_current(void);
 
+    // Reset all procedure execution state (frame stack, current proc tracking, tail call)
+    // Call this after errors or when returning to top level unexpectedly
+    void proc_reset_execution_state(void);
+
     // Parse and define a procedure from text: "to name :param ... body ... end"
     // Returns a Result - RESULT_NONE on success, RESULT_ERROR on failure
     Result proc_define_from_text(const char *text);
 
     // Mark all procedure bodies as GC roots
     void proc_gc_mark_all(void);
+
+    // Get the global frame stack (for passing to evaluator)
+    FrameStack *proc_get_frame_stack(void);
 
 #ifdef __cplusplus
 }

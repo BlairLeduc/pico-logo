@@ -3,7 +3,7 @@
 //  Copyright 2025 Blair Leduc. See LICENSE for details.
 //
 //  Outside World primitives: keyp, readchar, readchars, readlist, readword,
-//                            print, show, type
+//                            print, show, type, standout
 //
 
 #include "primitives.h"
@@ -106,12 +106,8 @@ static Result prim_readchar(Evaluator *eval, int argc, Value *args)
 static Result prim_readchars(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
+    REQUIRE_NUMBER(args[0], count_f);
 
-    float count_f;
-    if (!value_to_number(args[0], &count_f))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
-    }
     int count = (int)count_f;
     if (count <= 0)
     {
@@ -308,9 +304,7 @@ static ParseResult parse_line_to_list(const char *line)
 // Echoes the input. Returns empty word if at EOF.
 static Result prim_readlist(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     LogoIO *io = primitives_get_io();
     if (!io)
@@ -343,9 +337,7 @@ static Result prim_readlist(Evaluator *eval, int argc, Value *args)
 // Echoes the input. Returns empty word if press Enter without typing, empty list at EOF.
 static Result prim_readword(Evaluator *eval, int argc, Value *args)
 {
-    (void)eval;
-    (void)argc;
-    (void)args;
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
 
     LogoIO *io = primitives_get_io();
     if (!io)
@@ -391,6 +383,7 @@ static Result prim_readword(Evaluator *eval, int argc, Value *args)
 static Result prim_print(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
+
     for (int i = 0; i < argc; i++)
     {
         if (i > 0)
@@ -415,6 +408,7 @@ static Result prim_print(Evaluator *eval, int argc, Value *args)
 static Result prim_show(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
+
     format_value_show(print_output, NULL, args[0]);
     print_output(NULL, "\n");
     flush_writer();
@@ -434,6 +428,7 @@ static Result prim_show(Evaluator *eval, int argc, Value *args)
 static Result prim_type(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
+
     for (int i = 0; i < argc; i++)
     {
         if (i > 0)
@@ -450,6 +445,108 @@ static Result prim_type(Evaluator *eval, int argc, Value *args)
     }
     
     return result_none();
+}
+
+//==========================================================================
+// Standout formatting helpers
+//==========================================================================
+
+// Set MSB on each character in a string, appending to buffer
+// Returns new position in buffer, or SIZE_MAX on overflow
+static size_t standout_string(char *buffer, size_t bufsize, size_t pos, const char *str)
+{
+    while (*str && pos < bufsize - 1)
+    {
+        buffer[pos++] = *str | 0x80;  // Set MSB for standout
+        str++;
+    }
+    return pos;
+}
+
+// Format list contents to buffer with standout (MSB set on all chars)
+// Uses inverse space (0xA0) between elements
+static size_t standout_list_contents(char *buffer, size_t bufsize, size_t pos, Node node);
+
+// Format a value to buffer with standout
+static size_t standout_value(char *buffer, size_t bufsize, size_t pos, Value value)
+{
+    char numbuf[32];
+    switch (value.type)
+    {
+    case VALUE_NONE:
+        break;
+    case VALUE_NUMBER:
+        format_number(numbuf, sizeof(numbuf), value.as.number);
+        pos = standout_string(buffer, bufsize, pos, numbuf);
+        break;
+    case VALUE_WORD:
+        pos = standout_string(buffer, bufsize, pos, mem_word_ptr(value.as.node));
+        break;
+    case VALUE_LIST:
+        pos = standout_list_contents(buffer, bufsize, pos, value.as.node);
+        break;
+    }
+    return pos;
+}
+
+// Format list contents to buffer with standout (MSB set on all chars)
+// Uses inverse space (0xA0) between elements
+static size_t standout_list_contents(char *buffer, size_t bufsize, size_t pos, Node node)
+{
+    bool first = true;
+    while (!mem_is_nil(node) && pos < bufsize - 1)
+    {
+        if (!first)
+        {
+            buffer[pos++] = (char)(' ' | 0x80);  // Inverse space between items
+        }
+        first = false;
+
+        Node element = mem_car(node);
+        if (mem_is_word(element))
+        {
+            pos = standout_string(buffer, bufsize, pos, mem_word_ptr(element));
+        }
+        else if (mem_is_list(element))
+        {
+            // Nested lists get brackets (also with MSB set)
+            if (pos < bufsize - 1)
+                buffer[pos++] = (char)('[' | 0x80);
+            pos = standout_list_contents(buffer, bufsize, pos, element);
+            if (pos < bufsize - 1)
+                buffer[pos++] = (char)(']' | 0x80);
+        }
+        else if (mem_is_nil(element))
+        {
+            // Empty list as element
+            if (pos < bufsize - 2)
+            {
+                buffer[pos++] = (char)('[' | 0x80);
+                buffer[pos++] = (char)(']' | 0x80);
+            }
+        }
+        node = mem_cdr(node);
+    }
+    return pos;
+}
+
+// standout object
+// Outputs object in standout mode (MSB set on each character).
+// Outermost brackets of lists are not printed.
+static Result prim_standout(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+
+    char buffer[256];
+    size_t pos = standout_value(buffer, sizeof(buffer), 0, args[0]);
+    buffer[pos] = '\0';
+
+    Node result = mem_atom(buffer, pos);
+    if (mem_is_nil(result))
+    {
+        return result_error(ERR_OUT_OF_SPACE);
+    }
+    return result_ok(value_word(result));
 }
 
 //==========================================================================
@@ -475,4 +572,5 @@ void primitives_outside_world_init(void)
     primitive_register("pr", 1, prim_print);
     primitive_register("show", 1, prim_show);
     primitive_register("type", 1, prim_type);
+    primitive_register("standout", 1, prim_standout);
 }

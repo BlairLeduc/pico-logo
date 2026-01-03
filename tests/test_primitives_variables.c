@@ -57,16 +57,16 @@ void test_local_declaration(void)
 
 void test_scope_push_pop(void)
 {
-    // Test that scope management works
-    TEST_ASSERT_EQUAL(0, var_scope_depth());
-    var_push_scope();
-    TEST_ASSERT_EQUAL(1, var_scope_depth());
-    var_push_scope();
-    TEST_ASSERT_EQUAL(2, var_scope_depth());
-    var_pop_scope();
-    TEST_ASSERT_EQUAL(1, var_scope_depth());
-    var_pop_scope();
-    TEST_ASSERT_EQUAL(0, var_scope_depth());
+    // Test that frame-based scope management works
+    TEST_ASSERT_EQUAL(0, test_scope_depth());
+    test_push_scope();
+    TEST_ASSERT_EQUAL(1, test_scope_depth());
+    test_push_scope();
+    TEST_ASSERT_EQUAL(2, test_scope_depth());
+    test_pop_scope();
+    TEST_ASSERT_EQUAL(1, test_scope_depth());
+    test_pop_scope();
+    TEST_ASSERT_EQUAL(0, test_scope_depth());
 }
 
 void test_local_variable_shadowing(void)
@@ -78,8 +78,8 @@ void test_local_variable_shadowing(void)
     TEST_ASSERT_EQUAL_STRING("crash", mem_word_ptr(r1.value.as.node));
     
     // Push a scope and create local with same name
-    var_push_scope();
-    var_set_local("sound", value_word(mem_atom("woof", 4)));
+    test_push_scope();
+    test_set_local("sound", value_word(mem_atom("woof", 4)));
     
     // Local should shadow global
     Result r2 = eval_string(":sound");
@@ -87,7 +87,7 @@ void test_local_variable_shadowing(void)
     TEST_ASSERT_EQUAL_STRING("woof", mem_word_ptr(r2.value.as.node));
     
     // Pop scope
-    var_pop_scope();
+    test_pop_scope();
     
     // Global should be restored
     Result r3 = eval_string(":sound");
@@ -98,8 +98,8 @@ void test_local_variable_shadowing(void)
 void test_local_variable_not_visible_after_scope(void)
 {
     // Push scope and create a local-only variable
-    var_push_scope();
-    var_set_local("tempvar", value_number(999));
+    test_push_scope();
+    test_set_local("tempvar", value_number(999));
     
     // Should be accessible
     Result r1 = eval_string(":tempvar");
@@ -107,7 +107,7 @@ void test_local_variable_not_visible_after_scope(void)
     TEST_ASSERT_EQUAL_FLOAT(999.0f, r1.value.as.number);
     
     // Pop scope
-    var_pop_scope();
+    test_pop_scope();
     
     // Should no longer be accessible
     Result r2 = eval_string(":tempvar");
@@ -121,8 +121,8 @@ void test_make_updates_local_in_scope(void)
     run_string("make \"x 10");
     
     // Push scope and create local
-    var_push_scope();
-    var_set_local("x", value_number(20));
+    test_push_scope();
+    test_set_local("x", value_number(20));
     
     // Make should update the local, not global
     run_string("make \"x 30");
@@ -131,7 +131,7 @@ void test_make_updates_local_in_scope(void)
     TEST_ASSERT_EQUAL_FLOAT(30.0f, r1.value.as.number);
     
     // Pop scope
-    var_pop_scope();
+    test_pop_scope();
     
     // Global should still be 10
     Result r2 = eval_string(":x");
@@ -142,13 +142,13 @@ void test_make_updates_local_in_scope(void)
 void test_make_creates_global_when_no_local(void)
 {
     // Push scope
-    var_push_scope();
+    test_push_scope();
     
     // Make creates global since no local declared
     run_string("make \"newglobal 42");
     
     // Pop scope
-    var_pop_scope();
+    test_pop_scope();
     
     // Should still be accessible as global
     Result r = eval_string(":newglobal");
@@ -220,21 +220,21 @@ void test_nested_scopes(void)
     // Test multiple levels of nesting
     run_string("make \"level \"global");
     
-    var_push_scope();
-    var_set_local("level", value_word(mem_atom("scope1", 6)));
+    test_push_scope();
+    test_set_local("level", value_word(mem_atom("scope1", 6)));
     Result r1 = eval_string(":level");
     TEST_ASSERT_EQUAL_STRING("scope1", mem_word_ptr(r1.value.as.node));
     
-    var_push_scope();
-    var_set_local("level", value_word(mem_atom("scope2", 6)));
+    test_push_scope();
+    test_set_local("level", value_word(mem_atom("scope2", 6)));
     Result r2 = eval_string(":level");
     TEST_ASSERT_EQUAL_STRING("scope2", mem_word_ptr(r2.value.as.node));
     
-    var_pop_scope();
+    test_pop_scope();
     Result r3 = eval_string(":level");
     TEST_ASSERT_EQUAL_STRING("scope1", mem_word_ptr(r3.value.as.node));
     
-    var_pop_scope();
+    test_pop_scope();
     Result r4 = eval_string(":level");
     TEST_ASSERT_EQUAL_STRING("global", mem_word_ptr(r4.value.as.node));
 }

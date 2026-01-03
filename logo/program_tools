@@ -1,11 +1,6 @@
 to ; :comment
 end
 
-to forever :instructionlist
-  run :instructionlist
-  forever :instructionlist
-end
-
 to map :cmd :list
   if empty? :list [ stop ]
   run list :cmd word "" first :list
@@ -22,11 +17,4 @@ to insert :a :l
   if empty? :l [ op ( list :a ) ]
   if before? :a first :l [op fput :a :l ]
   op fput first :l insert :a bf :l
-end
-
-to while :condition :instructionlist
-  test run :condition
-  iffalse [ stop ] 
-  run :instructionlist
-  while :condition :instructionlist
 end

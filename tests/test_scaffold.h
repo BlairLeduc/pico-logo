@@ -122,3 +122,20 @@ void set_mock_power_off(bool available, bool result);
 
 // Check if mock_power_off was called
 bool was_mock_power_off_called(void);
+
+// ============================================================================
+// Test Scope Helpers (for simulating procedure calls in tests)
+// These use the frame system to create proper scoping for local variables
+// ============================================================================
+
+// Push a test scope frame (simulates entering a procedure)
+bool test_push_scope(void);
+
+// Pop a test scope frame (simulates exiting a procedure)
+void test_pop_scope(void);
+
+// Get current test scope depth
+int test_scope_depth(void);
+
+// Set a local variable in the current test scope
+void test_set_local(const char *name, Value value);

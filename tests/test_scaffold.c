@@ -4,6 +4,7 @@
 //
 
 #include "test_scaffold.h"
+#include "core/frame.h"
 #include <string.h>
 
 // ============================================================================
@@ -353,6 +354,7 @@ Result eval_string(const char *input)
     Evaluator eval;
     lexer_init(&lexer, input);
     eval_init(&eval, &lexer);
+    eval_set_frames(&eval, proc_get_frame_stack());
     return eval_expression(&eval);
 }
 
@@ -362,6 +364,7 @@ Result run_string(const char *input)
     Evaluator eval;
     lexer_init(&lexer, input);
     eval_init(&eval, &lexer);
+    eval_set_frames(&eval, proc_get_frame_stack());
 
     Result r = result_none();
     while (!eval_at_end(&eval))
@@ -477,4 +480,51 @@ void define_proc(const char *name, const char **params, int param_count, const c
     const char *interned_name = mem_word_ptr(name_atom);
     
     proc_define(interned_name, params, param_count, body);
+}
+
+// ============================================================================
+// Test Scope Helpers (for simulating procedure calls in tests)
+// ============================================================================
+
+// Dummy procedure for creating test frames
+static UserProcedure test_dummy_proc = {
+    .name = "__test__",
+    .params = NULL,
+    .param_count = 0,
+    .body = NODE_NIL,
+    .traced = false,
+    .stepped = false
+};
+
+bool test_push_scope(void)
+{
+    FrameStack *frames = proc_get_frame_stack();
+    if (!frames) return false;
+    
+    word_offset_t offset = frame_push(frames, &test_dummy_proc, NULL, 0);
+    return offset != OFFSET_NONE;
+}
+
+void test_pop_scope(void)
+{
+    FrameStack *frames = proc_get_frame_stack();
+    if (frames && frame_stack_depth(frames) > 0)
+    {
+        frame_pop(frames);
+    }
+}
+
+int test_scope_depth(void)
+{
+    FrameStack *frames = proc_get_frame_stack();
+    return frames ? frame_stack_depth(frames) : 0;
+}
+
+void test_set_local(const char *name, Value value)
+{
+    FrameStack *frames = proc_get_frame_stack();
+    if (frames && frame_stack_depth(frames) > 0)
+    {
+        frame_add_local(frames, name, value);
+    }
 }

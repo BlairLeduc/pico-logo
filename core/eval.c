@@ -9,6 +9,7 @@
 #include "procedures.h"
 #include "repl.h"
 #include "variables.h"
+#include "frame.h"
 #include "devices/io.h"
 #include <string.h>
 #include <stdlib.h>
@@ -26,31 +27,43 @@ static Result eval_primary(Evaluator *eval);
 
 void eval_init(Evaluator *eval, Lexer *lexer)
 {
-    eval->lexer = lexer;
-    eval->has_current = false;
+    token_source_init_lexer(&eval->token_source, lexer);
+    eval->frames = NULL;  // Caller sets this if needed
     eval->paren_depth = 0;
     eval->error_code = 0;
     eval->error_context = NULL;
     eval->in_tail_position = false;
     eval->proc_depth = 0;
     eval->repcount = -1;
+    eval->primitive_arg_depth = 0;
+}
+
+void eval_set_frames(Evaluator *eval, FrameStack *frames)
+{
+    eval->frames = frames;
+}
+
+FrameStack *eval_get_frames(Evaluator *eval)
+{
+    return eval->frames;
+}
+
+bool eval_in_procedure(Evaluator *eval)
+{
+    return eval->frames != NULL && !frame_stack_is_empty(eval->frames);
 }
 
 // Get current token, fetching if needed
 static Token peek(Evaluator *eval)
 {
-    if (!eval->has_current)
-    {
-        eval->current = lexer_next_token(eval->lexer);
-        eval->has_current = true;
-    }
-    return eval->current;
+    return token_source_peek(&eval->token_source);
 }
 
 // Consume current token
 static void advance(Evaluator *eval)
 {
-    eval->has_current = false;
+    // Consume the peeked token by getting next
+    token_source_next(&eval->token_source);
 }
 
 // Check if at end of input
@@ -269,6 +282,23 @@ static Result eval_primary(Evaluator *eval)
     case TOKEN_LEFT_BRACKET:
     {
         advance(eval);
+        
+        // Check if this is a pre-parsed sublist from NodeIterator
+        // This happens when the source list has nested list nodes, not flat [ ] tokens
+        Node sublist = token_source_get_sublist(&eval->token_source);
+        if (!mem_is_nil(sublist))
+        {
+            // For NodeIterator with nested list: sublist is already parsed, just use it
+            token_source_consume_sublist(&eval->token_source);
+            // Handle the list marker wrapping
+            if (NODE_GET_TYPE(sublist) == NODE_TYPE_LIST)
+            {
+                sublist = NODE_MAKE_LIST(NODE_GET_INDEX(sublist));
+            }
+            return result_ok(value_list(sublist));
+        }
+        
+        // For Lexer OR NodeIterator with flat [ ] tokens: parse tokens until ]
         Node list = parse_list(eval);
         return result_ok(value_list(list));
     }
@@ -303,6 +333,9 @@ static Result eval_primary(Evaluator *eval)
                 Value args[16];
                 int argc = 0;
                 
+                // Track that we're collecting primitive args (CPS fallback zone)
+                eval->primitive_arg_depth++;
+                
                 while (argc < 16)
                 {
                     Token t = peek(eval);
@@ -315,8 +348,9 @@ static Result eval_primary(Evaluator *eval)
                     Result arg = eval_expression(eval);
                     eval->in_tail_position = old_tail;
                     
-                    if (arg.status == RESULT_ERROR)
+                    if (arg.status == RESULT_ERROR || arg.status == RESULT_CALL)
                     {
+                        eval->primitive_arg_depth--;
                         eval->paren_depth--;
                         return result_set_error_proc(arg, user_name);
                     }
@@ -324,6 +358,8 @@ static Result eval_primary(Evaluator *eval)
                         break;
                     args[argc++] = arg.value;
                 }
+                
+                eval->primitive_arg_depth--;
                 
                 // Consume closing paren
                 Token closing = peek(eval);
@@ -403,6 +439,9 @@ static Result eval_primary(Evaluator *eval)
             Value args[16]; // Max args
             int argc = 0;
 
+            // Track that we're collecting primitive args (CPS fallback zone)
+            eval->primitive_arg_depth++;
+
             for (int i = 0; i < prim->default_args && !eval_at_end(eval); i++)
             {
                 // Check for tokens that would end args
@@ -418,16 +457,23 @@ static Result eval_primary(Evaluator *eval)
                 Result arg = eval_expression(eval);
                 eval->in_tail_position = old_tail;
                 
-                // Propagate errors and control flow (throw, stop, output)
+                // Propagate errors and control flow (throw, stop, output, call)
                 if (arg.status == RESULT_ERROR || arg.status == RESULT_THROW ||
-                    arg.status == RESULT_STOP || arg.status == RESULT_OUTPUT)
+                    arg.status == RESULT_STOP || arg.status == RESULT_OUTPUT ||
+                    arg.status == RESULT_CALL)
+                {
+                    eval->primitive_arg_depth--;
                     return result_set_error_proc(arg, user_name);
+                }
                 if (arg.status != RESULT_OK)
                 {
+                    eval->primitive_arg_depth--;
                     return result_error_arg(ERR_NOT_ENOUGH_INPUTS, user_name, NULL);
                 }
                 args[argc++] = arg.value;
             }
+
+            eval->primitive_arg_depth--;
 
             if (argc < prim->default_args)
             {
@@ -463,9 +509,10 @@ static Result eval_primary(Evaluator *eval)
                 Result arg = eval_expression(eval);
                 eval->in_tail_position = old_tail;
                 
-                // Propagate errors and control flow (throw, stop, output)
+                // Propagate errors and control flow (throw, stop, output, call)
                 if (arg.status == RESULT_ERROR || arg.status == RESULT_THROW ||
-                    arg.status == RESULT_STOP || arg.status == RESULT_OUTPUT)
+                    arg.status == RESULT_STOP || arg.status == RESULT_OUTPUT ||
+                    arg.status == RESULT_CALL)
                     return arg;
                 if (arg.status != RESULT_OK)
                 {
@@ -495,6 +542,14 @@ static Result eval_primary(Evaluator *eval)
                 return result_stop();
             }
 
+            // CPS: if we're inside a procedure and NOT collecting primitive args,
+            // return RESULT_CALL to let proc_call handle the call iteratively
+            if (eval->proc_depth > 0 && eval->primitive_arg_depth == 0)
+            {
+                return result_call(user_proc, argc, args);
+            }
+
+            // Otherwise use direct call (at top-level or inside primitive args)
             return proc_call(eval, user_proc, argc, args);
         }
 
@@ -864,7 +919,17 @@ static bool skip_primary(Evaluator *eval)
     }
 
     case TOKEN_LEFT_BRACKET:
+    {
         advance(eval);
+        // For NodeIterator, nested lists are atomic - check for pending sublist
+        Node sublist = token_source_get_sublist(&eval->token_source);
+        if (!mem_is_nil(sublist))
+        {
+            // This was a nested list node, consume it and we're done
+            token_source_consume_sublist(&eval->token_source);
+            return true;
+        }
+        // For Lexer (flat brackets), scan through contents
         while (true)
         {
             Token inner = peek(eval);
@@ -879,8 +944,7 @@ static bool skip_primary(Evaluator *eval)
                 return false;
         }
         return true;
-
-    case TOKEN_LEFT_PAREN:
+    }    case TOKEN_LEFT_PAREN:
         advance(eval);
         // Skip contents of parens - could be grouped expr or varargs call
         while (true)
@@ -1018,21 +1082,12 @@ static int find_label_position(const char *buffer, const char *label_name)
 // The last instruction in the list is evaluated in tail position
 Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
 {
-    // Save current lexer state
-    Lexer *old_lexer = eval->lexer;
-    Token old_current = eval->current;
-    bool old_has_current = eval->has_current;
+    // Save current token source state
+    TokenSource old_source = eval->token_source;
     bool old_tail = eval->in_tail_position;
 
-    // Build string from list for lexing
-    char buffer[512];
-    serialize_list_to_buffer(list, buffer, sizeof(buffer));
-
-    // Create new lexer for list content
-    Lexer list_lexer;
-    lexer_init(&list_lexer, buffer);
-    eval->lexer = &list_lexer;
-    eval->has_current = false;
+    // Create new token source from the Node list
+    token_source_init_list(&eval->token_source, list);
 
     Result r = result_none();
 
@@ -1042,15 +1097,13 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
         bool last_instruction = false;
         if (enable_tco)
         {
+            // Create lookahead copy
             Evaluator lookahead = *eval;
-            Lexer lookahead_lexer = *eval->lexer;
-            lookahead.lexer = &lookahead_lexer;
-            lookahead.has_current = eval->has_current;
-            lookahead.current = eval->current;
+            token_source_copy(&lookahead.token_source, &eval->token_source);
             last_instruction = skip_instruction(&lookahead) && eval_at_end(&lookahead);
         }
 
-        // Set tail position for this instruction (don't redeclare old_tail)
+        // Set tail position for this instruction
         eval->in_tail_position = enable_tco && last_instruction;
 
         // Execute instruction
@@ -1072,6 +1125,24 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
                 // This is a valid tail call - return to let proc_call handle it
                 break;
             }
+        }
+
+        // Handle RESULT_CALL - save token position for continuation and propagate
+        if (r.status == RESULT_CALL)
+        {
+            // Save current token position in frame for later resumption
+            // The caller (execute_body_with_step) will save body_cursor
+            FrameStack *frames = eval->frames;
+            if (frames && !frame_stack_is_empty(frames))
+            {
+                FrameHeader *frame = frame_current(frames);
+                if (frame)
+                {
+                    // Save position within this line (token source current node)
+                    frame->line_cursor = token_source_get_position(&eval->token_source);
+                }
+            }
+            break;  // Propagate to caller
         }
 
         // Handle RESULT_GOTO - let it bubble up to execute_body_with_step
@@ -1097,17 +1168,20 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
 
     // Restore state
     eval->in_tail_position = old_tail;
-    eval->lexer = old_lexer;
-    eval->current = old_current;
-    eval->has_current = old_has_current;
+    eval->token_source = old_source;
 
     return r;
 }
 
 Result eval_run_list(Evaluator *eval, Node list)
 {
-    // Regular run_list without TCO
-    return eval_run_list_with_tco(eval, list, false);
+    // Increment primitive_arg_depth to disable CPS during this call
+    // This ensures nested procedure calls complete before returning to caller
+    // (CPS would return RESULT_CALL which primitives don't handle)
+    eval->primitive_arg_depth++;
+    Result r = eval_run_list_with_tco(eval, list, false);
+    eval->primitive_arg_depth--;
+    return r;
 }
 
 // Run a list as an expression - allows the list to output a value
@@ -1120,21 +1194,17 @@ Result eval_run_list_expr(Evaluator *eval, Node list)
     //   if :n > 0 [recurse :n - 1]
     bool enable_tco = eval->in_tail_position && eval->proc_depth > 0;
     
-    // Save current lexer state
-    Lexer *old_lexer = eval->lexer;
-    Token old_current = eval->current;
-    bool old_has_current = eval->has_current;
+    // Increment primitive_arg_depth to disable CPS during this call
+    // This ensures nested procedure calls complete before returning to caller
+    // (TCO still works via the tail call mechanism)
+    eval->primitive_arg_depth++;
+    
+    // Save current token source state
+    TokenSource old_source = eval->token_source;
     bool old_tail = eval->in_tail_position;
 
-    // Build string from list for lexing
-    char buffer[512];
-    serialize_list_to_buffer(list, buffer, sizeof(buffer));
-
-    // Create new lexer for list content
-    Lexer list_lexer;
-    lexer_init(&list_lexer, buffer);
-    eval->lexer = &list_lexer;
-    eval->has_current = false;
+    // Create new token source from the Node list
+    token_source_init_list(&eval->token_source, list);
 
     Result r = result_none();
 
@@ -1144,11 +1214,9 @@ Result eval_run_list_expr(Evaluator *eval, Node list)
         bool last_instruction = false;
         if (enable_tco)
         {
+            // Create lookahead copy
             Evaluator lookahead = *eval;
-            Lexer lookahead_lexer = *eval->lexer;
-            lookahead.lexer = &lookahead_lexer;
-            lookahead.has_current = eval->has_current;
-            lookahead.current = eval->current;
+            token_source_copy(&lookahead.token_source, &eval->token_source);
             last_instruction = skip_instruction(&lookahead) && eval_at_end(&lookahead);
         }
 
@@ -1196,9 +1264,8 @@ Result eval_run_list_expr(Evaluator *eval, Node list)
 
     // Restore state
     eval->in_tail_position = old_tail;
-    eval->lexer = old_lexer;
-    eval->current = old_current;
-    eval->has_current = old_has_current;
+    eval->token_source = old_source;
+    eval->primitive_arg_depth--;
 
     return r;
 }

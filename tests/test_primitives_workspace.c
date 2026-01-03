@@ -4,6 +4,7 @@
 //
 
 #include "test_scaffold.h"
+#include "core/frame.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -99,10 +100,10 @@ void test_pons_shows_local_variables(void)
     run_string("make \"global 100");
     
     // Push a scope to simulate being inside a procedure
-    var_push_scope();
+    test_push_scope();
     
     // Create a local variable
-    var_set_local("local", value_number(42));
+    test_set_local("local", value_number(42));
     
     reset_output();
     
@@ -112,7 +113,7 @@ void test_pons_shows_local_variables(void)
     TEST_ASSERT_TRUE(strstr(output_buffer, "make \"global 100") != NULL);
     
     // Clean up
-    var_pop_scope();
+    test_pop_scope();
 }
 
 void test_pons_hides_shadowed_globals(void)
@@ -121,10 +122,10 @@ void test_pons_hides_shadowed_globals(void)
     run_string("make \"c 555");
     
     // Push a scope to simulate being inside a procedure
-    var_push_scope();
+    test_push_scope();
     
     // Create a local variable with same name, shadowing the global
-    var_set_local("c", value_number(2));
+    test_set_local("c", value_number(2));
     
     reset_output();
     
@@ -138,7 +139,7 @@ void test_pons_hides_shadowed_globals(void)
     TEST_ASSERT_TRUE(strstr(output_buffer, "make \"c 555") == NULL);
     
     // Clean up
-    var_pop_scope();
+    test_pop_scope();
 }
 
 void test_pon_shows_single_variable(void)
@@ -319,6 +320,171 @@ void test_buried_variable_still_accessible(void)
     
     run_string("print :secret");
     TEST_ASSERT_EQUAL_STRING("42\n", output_buffer);
+}
+
+void test_poall_shows_procedures_and_variables(void)
+{
+    const char *params[] = {};
+    define_proc("myproc", params, 0, "print 1");
+    run_string("make \"myvar 42");
+    
+    reset_output();
+    
+    run_string("poall");
+    TEST_ASSERT_TRUE(strstr(output_buffer, "to myproc") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "end") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "make \"myvar 42") != NULL);
+}
+
+void test_poall_respects_buried_procedures(void)
+{
+    const char *params[] = {};
+    define_proc("visible", params, 0, "print 1");
+    define_proc("hidden", params, 0, "print 2");
+    
+    run_string("bury \"hidden");
+    
+    reset_output();
+    
+    run_string("poall");
+    TEST_ASSERT_TRUE(strstr(output_buffer, "to visible") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "to hidden") == NULL);
+}
+
+void test_poall_respects_buried_variables(void)
+{
+    run_string("make \"visible 1");
+    run_string("make \"hidden 2");
+    run_string("buryname \"hidden");
+    
+    reset_output();
+    
+    run_string("poall");
+    TEST_ASSERT_TRUE(strstr(output_buffer, "make \"visible 1") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "hidden") == NULL);
+}
+
+void test_poall_empty_workspace(void)
+{
+    // Ensure workspace is empty
+    run_string("erall");
+    
+    reset_output();
+    
+    run_string("poall");
+    // Should produce no output for empty workspace
+    TEST_ASSERT_EQUAL_STRING("", output_buffer);
+}
+
+void test_pops_shows_all_procedures(void)
+{
+    const char *params[] = {};
+    define_proc("proca", params, 0, "print 1");
+    define_proc("procb", params, 0, "print 2");
+    
+    reset_output();
+    
+    run_string("pops");
+    TEST_ASSERT_TRUE(strstr(output_buffer, "to proca") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "to procb") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "end") != NULL);
+}
+
+void test_pops_respects_buried(void)
+{
+    const char *params[] = {};
+    define_proc("visible", params, 0, "print 1");
+    define_proc("hidden", params, 0, "print 2");
+    
+    run_string("bury \"hidden");
+    
+    reset_output();
+    
+    run_string("pops");
+    TEST_ASSERT_TRUE(strstr(output_buffer, "to visible") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "to hidden") == NULL);
+}
+
+void test_pops_empty_workspace(void)
+{
+    // Ensure no procedures
+    run_string("erall");
+    
+    reset_output();
+    
+    run_string("pops");
+    TEST_ASSERT_EQUAL_STRING("", output_buffer);
+}
+
+void test_pops_with_params(void)
+{
+    Node p = mem_atom("x", 1);
+    const char *params[] = {mem_word_ptr(p)};
+    define_proc("double", params, 1, "output :x * 2");
+    
+    reset_output();
+    
+    run_string("pops");
+    TEST_ASSERT_TRUE(strstr(output_buffer, "to double :x") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "output") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "end") != NULL);
+}
+
+void test_unbury_with_list(void)
+{
+    const char *params[] = {};
+    define_proc("a", params, 0, "print 1");
+    define_proc("b", params, 0, "print 2");
+    define_proc("c", params, 0, "print 3");
+    
+    // Bury all three
+    run_string("bury [a b c]");
+    
+    // Unbury only a and b
+    run_string("unbury [a b]");
+    
+    reset_output();
+    
+    run_string("pots");
+    TEST_ASSERT_TRUE(strstr(output_buffer, "to a") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "to b") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "to c") == NULL);  // Still buried
+}
+
+void test_unburyname_with_list(void)
+{
+    run_string("make \"a 1");
+    run_string("make \"b 2");
+    run_string("make \"c 3");
+    
+    // Bury all three
+    run_string("buryname [a b c]");
+    
+    // Unbury only a and b
+    run_string("unburyname [a b]");
+    
+    reset_output();
+    
+    run_string("pons");
+    TEST_ASSERT_TRUE(strstr(output_buffer, "make \"a 1") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "make \"b 2") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "make \"c 3") == NULL);  // Still buried
+}
+
+void test_buryname_with_list(void)
+{
+    run_string("make \"a 1");
+    run_string("make \"b 2");
+    run_string("make \"c 3");
+    
+    run_string("buryname [a b]");
+    
+    reset_output();
+    
+    run_string("pons");
+    TEST_ASSERT_TRUE(strstr(output_buffer, "make \"a 1") == NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "make \"b 2") == NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "make \"c 3") != NULL);
 }
 
 //==========================================================================
@@ -561,6 +727,125 @@ void test_erall_respects_buried(void)
     TEST_ASSERT_TRUE(var_exists("hiddenvar"));
 }
 
+// Regression test: erasing a procedure while it's on the call stack shouldn't crash
+void test_erase_caller_during_execution(void)
+{
+    // Define a helper procedure that erases its caller
+    const char *helper_params[] = {};
+    define_proc("helper", helper_params, 0, "erase \"caller print \"done");
+    
+    // Define a caller procedure that calls the helper
+    const char *caller_params[] = {};
+    define_proc("caller", caller_params, 0, "helper print \"after");
+    
+    reset_output();
+    
+    // Run caller - it calls helper which erases caller
+    // The procedure should detect the caller was erased and handle it gracefully
+    Result r = run_string("caller");
+    
+    // Should get an error or graceful handling, not a crash
+    // The helper should complete, but resuming "caller" should fail gracefully
+    // since the procedure was erased
+    TEST_ASSERT_TRUE(r.status == RESULT_ERROR || r.status == RESULT_NONE);
+    
+    // Verify caller was actually erased
+    TEST_ASSERT_NULL(proc_find("caller"));
+    
+    // Verify helper still exists
+    TEST_ASSERT_NOT_NULL(proc_find("helper"));
+}
+
+// Regression test: erall then new procedure shouldn't reference old procedure names
+void test_erall_then_new_procedure_no_stale_references(void)
+{
+    // Define an old procedure that triggers an error on purpose
+    const char *old_params[] = {};
+    define_proc("oldproc", old_params, 0, "nonexistent");
+    
+    reset_output();
+    
+    // Run it to get an error - this might leave stale state
+    Result r = run_string("oldproc");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
+    
+    // Erase everything
+    run_string("erall");
+    TEST_ASSERT_NULL(proc_find("oldproc"));
+    
+    // Define a completely new procedure with different name and code
+    const char *new_params[] = {};
+    define_proc("newproc", new_params, 0, "repeat 4 [print \"test]");
+    
+    reset_output();
+    
+    // Run the new procedure
+    r = run_string("newproc");
+    
+    // The new procedure should succeed
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // If there's an error, it should NOT mention the old procedure name
+    if (r.status == RESULT_ERROR)
+    {
+        TEST_ASSERT_NULL(strstr(error_format(r), "oldproc"));
+    }
+}
+
+// Regression test: BRK during procedure, erall, then new procedure
+// This is the exact scenario reported by the user
+void test_brk_erall_new_procedure_no_stale_frames(void)
+{
+    // Define a procedure that will be interrupted
+    const char *maze_params[] = {};
+    define_proc("maze", maze_params, 0, "repeat 1000000 [fd 1 rt 1]");
+    
+    // Simulate BRK interrupt by calling proc_reset_execution_state
+    // (In real usage, BRK would be pressed during maze execution)
+    // First, we need to set up as if maze started running
+    proc_push_current("maze");
+    FrameStack *frames = proc_get_frame_stack();
+    
+    // Push a frame for maze (simulating it started)
+    UserProcedure *maze = proc_find("maze");
+    TEST_ASSERT_NOT_NULL(maze);
+    Value args[1];
+    frame_push(frames, maze, args, 0);
+    
+    // Now simulate BRK - this should reset everything
+    proc_reset_execution_state();
+    
+    // Verify frame stack is empty
+    TEST_ASSERT_TRUE(frame_stack_is_empty(frames));
+    
+    // Now erase everything
+    run_string("erall");
+    TEST_ASSERT_NULL(proc_find("maze"));
+    
+    // Define a new procedure (like brownian)
+    const char *brownian_params[] = {};
+    define_proc("brownian", brownian_params, 0, "repeat 10 [print \"test]");
+    
+    reset_output();
+    
+    // Run the new procedure
+    Result r = run_string("brownian");
+    
+    // Should complete successfully without mentioning maze
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Verify output is correct
+    TEST_ASSERT_TRUE(strstr(output_buffer, "test") != NULL);
+    
+    // If there was an error, it should NOT mention maze
+    if (r.status == RESULT_ERROR)
+    {
+        const char *err = error_format(r);
+        TEST_ASSERT_NULL(strstr(err, "maze"));
+    }
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -586,6 +871,17 @@ int main(void)
     RUN_TEST(test_pon_with_list);
     RUN_TEST(test_buried_procedure_still_callable);
     RUN_TEST(test_buried_variable_still_accessible);
+    RUN_TEST(test_poall_shows_procedures_and_variables);
+    RUN_TEST(test_poall_respects_buried_procedures);
+    RUN_TEST(test_poall_respects_buried_variables);
+    RUN_TEST(test_poall_empty_workspace);
+    RUN_TEST(test_pops_shows_all_procedures);
+    RUN_TEST(test_pops_respects_buried);
+    RUN_TEST(test_pops_empty_workspace);
+    RUN_TEST(test_pops_with_params);
+    RUN_TEST(test_unbury_with_list);
+    RUN_TEST(test_unburyname_with_list);
+    RUN_TEST(test_buryname_with_list);
     
     // Memory management tests
     RUN_TEST(test_nodes_returns_number);
@@ -608,6 +904,9 @@ int main(void)
     RUN_TEST(test_erps_respects_buried);
     RUN_TEST(test_erall_removes_procedures_and_variables);
     RUN_TEST(test_erall_respects_buried);
+    RUN_TEST(test_erase_caller_during_execution);
+    RUN_TEST(test_erall_then_new_procedure_no_stale_references);
+    RUN_TEST(test_brk_erall_new_procedure_no_stale_frames);
 
     return UNITY_END();
 }

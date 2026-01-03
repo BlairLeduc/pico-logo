@@ -643,18 +643,10 @@ static Result prim_parse(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
     }
     
-    // Use the evaluator to parse the string as a list
+    // Use a lexer to parse the string as a list
+    // (We don't need to modify eval's token source - just use a local lexer)
     Lexer lexer;
     lexer_init(&lexer, str);
-    
-    // Save old lexer state
-    Lexer *old_lexer = eval->lexer;
-    Token old_current = eval->current;
-    bool old_has_current = eval->has_current;
-    
-    // Set up for parsing
-    eval->lexer = &lexer;
-    eval->has_current = false;
     
     // Parse tokens into a list
     Node result = NODE_NIL;
@@ -673,7 +665,6 @@ static Result prim_parse(Evaluator *eval, int argc, Value *args)
             // Parse nested list - this is complex, so for now just store the bracket
             // In a full implementation, we'd recursively parse
             int depth = 1;
-            const char *start = t.start;
             while (depth > 0 && !lexer_is_at_end(&lexer))
             {
                 t = lexer_next_token(&lexer);
@@ -730,11 +721,6 @@ static Result prim_parse(Evaluator *eval, int argc, Value *args)
             tail = new_cons;
         }
     }
-    
-    // Restore old lexer state
-    eval->lexer = old_lexer;
-    eval->current = old_current;
-    eval->has_current = old_has_current;
     
     return result_ok(value_list(result));
 }

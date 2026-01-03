@@ -19,6 +19,14 @@ The following reference material is collected from:
 - [Atari Logo Reference Manual](https://archive.org/details/AtariLOGOReferenceManual)
 - [Berkeley Logo](https://people.eecs.berkeley.edu/~bh/downloads/ucblogo.pdf)
 
+===
+
+# Contents
+
+{{TOC}}
+
+===
+
 # Introduction
 
 ## Logo Programs
@@ -29,18 +37,18 @@ For example, a program to draw a house consists of these procedures: `house`, `b
 
 ```logo
 to house
-box 
-forward 50
-right 30
-tri 50 
+  box 
+  forward 50
+  right 30
+  tri 50 
 end 
 
 to box 
-repeat 4 [forward 50 right 90] 
+  repeat 4 [ forward 50 right 90 ] 
 end
 
 to tri :size
-repeat 3 [forward :size right 120] 
+  repeat 3 [ forward :size right 120 ] 
 end 
 ```
 
@@ -163,7 +171,7 @@ Should the addition be done first, producing `9`, or should the division be done
 **The command `to`:** In formal Logo, you define a procedure with the command `define`; it takes two inputs, a word (the procedure name) and a list (the definition). All the usual rules about quotes and brackets apply without exception:
 
 ```logo
-define "square [[ ] [repeat 4 [fd 100 rt 90]]] 
+define "square [ [ ] [ repeat 4 [ fd 100 rt 90 ] ] ] 
 ```
 
 In relaxed Logo, you can define a procedure with `edit` and `to`. The command `to` is unusual in two ways. It automatically quotes its inputs, and it allows you to type in the lines of the procedure interactively: 
@@ -199,11 +207,11 @@ Normally a variable created by `make` is a global variable. The `local` command 
 
 ```logo
 to yesno: question
-local "answer
-pr :question
-make "answer first readlist
-(if equal? :answer "yes [output "true])
-output "false
+  local "answer
+  pr :question
+  make "answer first readlist
+  if equal? :answer "yes [ output true ]
+  output false
 end
 ```
 
@@ -271,9 +279,9 @@ Procedures you define can have inputs. When you define a procedure, its title li
 
 ```logo
 to poly :step :angle
-forward :step 
-right :angle 
-poly :step :angle 
+  forward :step 
+  right :angle 
+  poly :step :angle 
 end 
 ```
 
@@ -293,9 +301,9 @@ Now we run a procedure called `animal`; its input variable is `sound`.
 
 ```logo
 to animal :sound 
-if :sound = "meow [pr "Cat stop] 
-if :sound = "woof [pr "Dog stop] 
-pr [I don't know] 
+  if :sound = "meow [ pr "Cat stop ] 
+  if :sound = "woof [ pr "Dog stop ] 
+  pr [ I don't know ] 
 end
 ```
 
@@ -330,25 +338,9 @@ _Parentheses_, `(` `)`, are necessary to group things in ways that Logo ordinari
 A _backslash_, `\`, tells Logo to interpret the character that follows it literally _as a character_, rather than keeping some special meaning it might have. For instance, suppose you wanted to use `3[a]b` as a single _word_. You need to type `3\[a\]b` in order to avoid Logo’s usual interpretation of the brackets as the envelope around a list. You have to backslash `[`,`(`,`]`,`)`,`+`,`-`,`*`,`/` and `\` itself. 
 
 
-
+===
 
 # Difference from other Logo interpreters
-
-Comments are not supported in Pico Logo. A comment procedure can be defined to support comments:
-
-```logo
-to ; :comment
-end
-```
-
-This can be used:
-
-```logo
-?; [This is a comment]
-?to increment :var
->make :var (thing :var)+1 ; [Increement by one]
->end
-```
 
 Line continuation characters are not supported.
 
@@ -360,12 +352,12 @@ Words with internal spaces are created using the "`\`" character, not using the 
 
 ```logo
 to ifelse :predicate :list1 :list2
-(if :predicate :list1 :list2)
+  (if :predicate :list1 :list2)
 end
 ```
 
 
-
+===
 # Processor Limits
 
 The following lists the capabilities of the different supported processors.
@@ -386,7 +378,7 @@ The following lists the capabilities of the different supported processors.
 
 
 
-
+===
 # Startup
 
 This section describes the feature of Logo that lets you automatically load a file into your workspace when you start up Logo. You must call the file `startup`. There can be only one file with the name `startup`, although it can include commands to load other files.
@@ -414,7 +406,7 @@ You also erase procedures and variables that are only needed for startup process
 
 
 
-
+===
 # Using the Logo Editor
 
 The Logo Editor is an interactive screen-oriented text editor, which provides a flexible way to define and change Logo instructions. The main command for starting up the Logo Editor is [`edit`](#edit).
@@ -576,7 +568,7 @@ end
 
 
 
-
+===
 # Turtle Graphics
 
 Pico Logo has two kinds of screens: the graphics screen and the text screen. When you use any primitive or procedure that renders to the turtle, Logo shows you the graphics screen. The commands [`fullscreen`](#fullscreen-fs), [`splitscreen`](#splitscreen-ss), and [`textscreen`](#textscreen-ts) allow you to switch between the two kinds of screens.
@@ -1011,7 +1003,7 @@ See [Colours](Colours.md) for the default palette.
 
 
 
-
+===
 # Text and Screen Commands
 
 Your PicoCalc has 32 lines of text on the screen, with 40 characters on each line. You can use the screen entirely for text or entirely for graphics. The PicoCalc also lets you use the top 24 lines for graphics and the bottom eight for text at the same time. When you start up Logo, the entire screen is available for text. 
@@ -1088,7 +1080,7 @@ ts
 
 
 
-
+===
 # Words and Lists
 
 This section describes the primitives that work on two types of objects in Logo: words and lists. With the primitives described in this section, you can
@@ -1330,7 +1322,7 @@ uppercase _word_
 
 
 
-
+===
 # Variables
 
 This section gives you some general information about how Logo uses variables and then provides descriptions of the primitives that you use with variables. 
@@ -1385,7 +1377,7 @@ thing _name_
 
 
 
-
+===
 # Arithmetic Operations
 
 This section presents all the Logo operations that manipulate numbers. Logo has two kinds of notation for expressing arithmetic operations: prefix notation and infix notation. Prefix notation means that the name of the procedure comes betore its inputs. With infix notation, the name of the procedure goes between its inputs, not before them.
@@ -1394,6 +1386,16 @@ This chapter contains
 - a general introduction to Logo's arithmetic operations
 - descriptions of the prefix-form operations
 - descriptions of the infix-form operations.
+
+
+## abs
+
+abs _number_
+
+`operation`
+
+Outputs the absolute _number_. If _number_ less than zero the negative of _number is returned.
+
 
 ## arctan
 
@@ -1422,6 +1424,15 @@ difference _number1_ _number2_
 Outputs _number2_ subtracted from _number1_.
 
 
+## exp
+
+exp _exponent_
+
+`operation`
+
+Outputs _e_ raised to the power of _exponent_.
+
+
 ## int
 
 int _number_  
@@ -1440,6 +1451,23 @@ intquotient _integer1_ _integer2_
 `intquotient` outputs the result of dividing _integer1_ by _integer2_, truncated to an integer. An error occurs if _integer2_ is zero. If either input is a decimal number, it is truncated.
 
 
+## ln
+
+ln _number_
+
+`operation`
+
+Outputs natural logarithm of _number_. An error is returned if _number_ is less than or equal to zero.
+
+
+## log
+
+log _number_
+
+`operation`
+
+Outputs the base-10 logarithm of _number_. An error is returned if _number_ is less than or equal to zero.
+
 ## product
 
 product _number1_ _number2_  
@@ -1448,6 +1476,15 @@ product _number1_ _number2_
 `operation`
 
 Outputs the product of its inputs. It is equivalent to the `*` infix-form operation. With one input, `product` outputs its input.
+
+
+## pwr
+
+pwr _base_ _exponent_
+
+`operation`
+
+Outputs _base_ raised to the power of _exponent_.
 
 
 ## quotient
@@ -1513,10 +1550,11 @@ sum _number1_ _number2_
 Outputs the sum of its inputs. `sum` is equivalent t o the `+` infix-form operation. With one input, `sum` outputs its input.
 
 
-
+===
 # Conditionals and Control of Flow
 
 In Logo, the boolean value of true is represented by `"true` and false is represented by `"false`.
+
 
 ## true
 
@@ -1534,6 +1572,25 @@ false
 `operation`
 
 Outputs `"false`. In Logo, boolean false is represented by the word `false`.
+
+
+## ;
+
+; _comment_
+
+`command`
+
+The semicolon (`;`) indicates that the rest of the line is a comment. Logo ignores everything on the line after the semicolon. You can use comments to explain what your procedures do.
+
+Example:
+
+```logo
+to square :number
+  ; [This procedure outputs the square of :number]
+  output :number * :number
+end
+```
+
 
 ## if
 
@@ -1594,6 +1651,15 @@ test _predicate_
 `test` remembers whether _predicate_ is `true` or `false` for subsequent use by [`iftrue`](#iftrue-ift) or [`iffalse`](#iffalse-iff). Each `test` is local to the procedure in which it occurs.
 
 
+## ignore
+
+ignore _object_
+
+`command`
+
+The `ignore` command does nothing. It is useful when you want to call a procedure for its side effects only.
+
+
 ## co
 
 co  
@@ -1619,7 +1685,7 @@ pause
 
 `command` or `operation`
 
-The `pause` command is meaningful only when it is within a procedure, not at top level. It suspends running of the procedure and tells you that you are pausing; you can then type instructions interactively. To indicate that you are in a pause and not a t top level, the prompt character changes to the name of the procedure you were in, followed by a question mark. During a pause, `BRK` does not work; the only way to return to top level during a pause is to run `throw "toplevel`.
+The `pause` command is meaningful only when it is within a procedure, not at top level. It suspends running of the procedure and tells you that you are pausing; you can then type instructions interactively. To indicate that you are in a pause and not a t top level, the prompt character changes to the name of the procedure you were in, followed by a question mark. During a pause, `BRK` does not work; the only way to return to top level during a pause is to run `throw toplevel`.
 
 The procedure may be resumed by typing [`co`](#co).
 
@@ -1689,13 +1755,58 @@ label _word_
 The `label` command itself does nothing. However, a [`go`](#go) _word_ passes control to the instruction following it. Note that _word_ must always be a literal word (that is, it must be preceded by a quotation mark).
 
 
+## do.while
+
+do.while _list_ _predicatelist_
+
+`command`
+
+`do.while` runs _list_ repeatedly as long as _predicatelist_ is `true`. An error occurs if _predicatelist_ is not `true` or `false`. A `do.while` loop can be exited early by a [`throw`](#throw) or [`stop`](#stop) command. _list_ is always run at least once.
+
+
+## while
+
+while _predicatelist_ _list_
+
+`command`
+
+`while` tests _predicatelist_ and, if it is `true`, runs _list_. It then repeats this process until _predicatelist_ is `false`. An error occurs if _predicatelist_ is not `true` or `false`. A `while` loop can be exited early by a [`throw`](#throw) or [`stop`](#stop) command. _list_ may not be run at all if _predicatelist_ is initially `false`.
+
+
+## do.until
+
+do.until _list_ _predicatelist_
+
+`command`
+
+`do.until` runs _list_ repeatedly until _predicatelist_ is `true`. An error occurs if _predicatelist_ is not `true` or `false`. A `do.until` loop can be exited early by a [`throw`](#throw) or [`stop`](#stop) command. _list_ is always run at least once.
+
+
+## until
+
+until _predicatelist_ _list_
+
+`command`
+
+`until` tests _predicatelist_ and, if it is `false`, runs _list_. It then repeats this process until _predicatelist_ is `true`. An error occurs if _predicatelist_ is not `true` or `false`. An `until` loop can be exited early by a [`throw`](#throw) or [`stop`](#stop) command. _list_ may not be run at all if _predicatelist_ is initially `true`.
+
+
+## forever
+
+forever _list_
+
+`command`
+
+`forever` runs _list_ repeatedly until interrupted by `Brk`, `F4` or `F9`. A `forever` loop can also be exited by a [`throw`](#throw) or [`stop`](#stop) command.
+
+
 ## repeat
 
 repeat _integer_ _list_  
 
 `command`
 
-`repeat` runs _list_ _integer_ times. An error occurs if _integer_ is negative.
+`repeat` runs _list_ _integer_ times. An error occurs if _integer_ is negative can can be interrupted by `Brk`, `F4` or `F9`. A `repeat` loop can be exited early by a [`throw`](#throw) or [`stop`](#stop) command.
 
 
 ## repcount
@@ -1704,7 +1815,8 @@ repcount
 
 `operation`
 
-`recount` outputs the repetition count of the innermost current [`repeat`](#repeat), starting from 1. If no [`repeat`](#repeat) is active, outputs –1.
+`recount` outputs the repetition count of the innermost current [`repeat`](#repeat) or [`forever`](#forever), starting from 1. If no [`repeat`](#repeat) or [`forever`](#forever) is active, outputs –1.
+
 
 ## run
 
@@ -1721,9 +1833,17 @@ throw _name_
 
 `command`
 
-The `throw` command is meaningful only within the range of the [`catch`](#catch) command. An error occurs if no corresponding [`catch`](#catch) name is found. `throw "toplevel` returns control to top level. Contrast with [`stop`](#stop).
+The `throw` command is meaningful only within the range of the [`catch`](#catch) command. An error occurs if no corresponding [`catch`](#catch) name is found. `throw toplevel` returns control to top level. Contrast with [`stop`](#stop).
 
 See [`catch`](#catch). 
+
+## toplevel
+
+toplevel
+
+`operation`
+
+Ouputs `"toplevel`. [`throw`](#throw) `toplevel` to return control to the top level.
 
 
 ## step
@@ -1766,6 +1886,8 @@ untrace _list_
 `untrace` stops the tracing of procedure _name_ and causes it to execute normally again.
 
 
+
+===
 # Special Control Characters
 
 ## Break
@@ -1788,6 +1910,8 @@ Pressing `F4` interrupts whatever is running. Typing any character resumes norma
 Pressing `F9` interrupts whatever is running, causing a pause. `F9` is equivalent in effect to [`pause`](#pause), but different in its use: you press `F9` at the keyboard during the running of a procedure, while [`pause`](#pause) is part of the definition of a procedure.
 
 
+
+===
 # Modifying Procedures Under Program Control
 
 ## copydef
@@ -1842,7 +1966,7 @@ The `text` primitive outputs the definition of _name_ as a list of lists, suitab
 
 
 
-
+===
 # Logical Operations
 
 ## and
@@ -1876,7 +2000,7 @@ Outputs `true` if any of its inputs are `true`. All inputs are evaluated.
 
 
 
-
+===
 # The Outside World
 
 ## key? (keyp)
@@ -1984,6 +2108,15 @@ The `type` command prints its inputs without a carriage return on the screen, un
 Compare with [`print`](#print-pr) and [`show`](#show).
 
 
+## standout
+
+standout _object_
+
+`operation`
+
+outputs _object_ in standout mode. In standout mode, text is displayed in reverse video. If the display does not support reverse video, the text is displayed normally. The outermost brackets of lists are not printed.
+
+
 ## toot
 
 toot _duration_ _frequency_  
@@ -2002,6 +2135,7 @@ If one frequency is provided the same tone is produced on both left and right ch
 
 
 
+===
 # Managing your Workspace
 
 ## nodes
@@ -2211,6 +2345,7 @@ unburyname _list_
 
 
 
+===
 # File Management
 
 ## files
@@ -2346,6 +2481,8 @@ pofile _pathname_
 `pofile` prints to the screen but not to the current writer.
 
 
+
+===
 # Managing Various Files
 
 ## load
@@ -2541,6 +2678,8 @@ writer
 `writer` outputs the current file or device that is open for writing. Compare this with the [`allopen`](#allopen) operation.
 
 
+
+===
 # Property Lists
 
 ## erprops
@@ -2601,6 +2740,7 @@ See [`pprop`](#pprop) and [`gprop`](#gprop).
 
 
 
+===
 # Device Specific
 
 ## battery
@@ -2625,6 +2765,7 @@ The `battery` operation returns a list where the first value is the percent rema
 
 
 
+===
 # Useful Tools
 
 The procedures presented here are for your convenience when constructing your own procedures. Some of them were defined as examples for primitives and others appear here for the first time. These procedures are in the logo archive in the release. You can extract the contents of the archive into the `/Logo` directory on your SD Card. A sample `startup` file is also included to load these tools.
@@ -2770,7 +2911,7 @@ becomes `false`.
 
 
 
-
+===
 # Parsing 
 
 When you type a line at Logo, it recognizes the characters as words and lists, and builds a list with is Logo’s internal representation of the line. This process is called _parsing_. The list is similar to the list that would be output by `readlist`. This section will help you understand how lines are parsed. 

@@ -55,8 +55,15 @@ extern "C"
         RESULT_THROW,  // throw command, propagate to catch
         RESULT_PAUSE,  // pause command, enter nested REPL
         RESULT_GOTO,   // go command, jump to label
+        RESULT_CALL,   // CPS: need to call a user procedure
         RESULT_EOF     // End of input, exit REPL
     } ResultStatus;
+
+    // Forward declaration for RESULT_CALL
+    typedef struct UserProcedure UserProcedure;
+
+    // Maximum args for RESULT_CALL (must match MAX_PROC_PARAMS)
+    #define RESULT_CALL_MAX_ARGS 16
 
     // Evaluation result (FP-style)
     typedef struct
@@ -70,6 +77,10 @@ extern "C"
         const char *throw_tag;   // Tag for RESULT_THROW (e.g., "error", "toplevel")
         const char *pause_proc;  // Procedure name for RESULT_PAUSE
         const char *goto_label;  // Label name for RESULT_GOTO
+        // For RESULT_CALL (CPS user procedure calls)
+        UserProcedure *call_proc; // Procedure to call
+        Value call_args[RESULT_CALL_MAX_ARGS];  // Arguments for the call
+        int call_argc;           // Number of arguments
     } Result;
 
     //==========================================================================
@@ -130,6 +141,7 @@ extern "C"
     Result result_throw(const char *tag);
     Result result_pause(const char *proc_name);
     Result result_goto(const char *label);
+    Result result_call(UserProcedure *proc, int argc, Value *args);
     Result result_eof(void);
 
     // Error with context: "proc doesn't like arg as input"

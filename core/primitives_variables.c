@@ -14,7 +14,10 @@ static Result prim_make(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
     REQUIRE_WORD_STR(args[0], name);
-    var_set(name, args[1]);
+    if (!var_set(name, args[1]))
+    {
+        return result_error(ERR_OUT_OF_SPACE);
+    }
     return result_none();
 }
 
@@ -41,7 +44,10 @@ static Result prim_local(Evaluator *eval, int argc, Value *args)
     {
         // Single name
         const char *name = mem_word_ptr(args[0].as.node);
-        var_declare_local(name);
+        if (!var_declare_local(name))
+        {
+            return result_error(ERR_OUT_OF_SPACE);
+        }
     }
     else if (value_is_list(args[0]))
     {
@@ -53,7 +59,10 @@ static Result prim_local(Evaluator *eval, int argc, Value *args)
             if (mem_is_word(element))
             {
                 const char *name = mem_word_ptr(element);
-                var_declare_local(name);
+                if (!var_declare_local(name))
+                {
+                    return result_error(ERR_OUT_OF_SPACE);
+                }
             }
             node = mem_cdr(node);
         }
@@ -71,7 +80,10 @@ static Result prim_name(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
     REQUIRE_WORD_STR(args[1], name);
-    var_set(name, args[0]);
+    if (!var_set(name, args[0]))
+    {
+        return result_error(ERR_OUT_OF_SPACE);
+    }
     return result_none();
 }
 

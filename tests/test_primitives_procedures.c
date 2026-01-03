@@ -243,7 +243,98 @@ void test_deep_tail_recursion(void)
     
     // With TCO, 100 recursive calls should work (without it, would overflow 32 scope levels)
     Result r = run_string("tailcount 100");
-    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);  // No error = TCO is working
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+}
+
+void test_very_deep_tail_recursion(void)
+{
+    // Test very deep tail recursion - 10000 calls
+    // This validates that TCO with frame_reuse truly prevents stack/memory growth
+    // tailcount10k n: if :n > 0 [tailcount10k difference :n 1]
+    Node p = mem_atom("n", 1);
+    const char *params[] = {mem_word_ptr(p)};
+    
+    Node body_line = NODE_NIL;
+    Node tail = NODE_NIL;
+    
+    // if :n > 0
+    const char *words[] = {"if", ":n", ">", "0"};
+    for (int i = 0; i < 4; i++) {
+        Node w = mem_atom(words[i], strlen(words[i]));
+        Node c = mem_cons(w, NODE_NIL);
+        if (mem_is_nil(body_line)) { body_line = c; tail = c; }
+        else { mem_set_cdr(tail, c); tail = c; }
+    }
+    
+    // [tailcount10k difference :n 1]
+    const char *inner_words[] = {"tailcount10k", "difference", ":n", "1"};
+    Node inner = NODE_NIL;
+    Node inner_tail = NODE_NIL;
+    for (int i = 0; i < 4; i++) {
+        Node w = mem_atom(inner_words[i], strlen(inner_words[i]));
+        Node c = mem_cons(w, NODE_NIL);
+        if (mem_is_nil(inner)) { inner = c; inner_tail = c; }
+        else { mem_set_cdr(inner_tail, c); inner_tail = c; }
+    }
+    Node c = mem_cons(inner, NODE_NIL);
+    mem_set_cdr(tail, c);
+    
+    Node line_marked = NODE_MAKE_LIST(NODE_GET_INDEX(body_line));
+    Node body = mem_cons(line_marked, NODE_NIL);
+    
+    Node name = mem_atom("tailcount10k", 12);
+    proc_define(mem_word_ptr(name), params, 1, body);
+    
+    // With TCO and frame_reuse, 10000 recursive calls should work efficiently
+    Result r = run_string("tailcount10k 10000");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+}
+
+void test_deep_non_tail_recursion_limit(void)
+{
+    // Test that non-tail recursion works for reasonable depths
+    // Note: With CPS disabled inside primitives (like 'if'), deep non-tail
+    // recursion uses C stack. The actual limit is platform-dependent.
+    // This test verifies reasonable depths work correctly.
+    // 
+    // deeprec n: if :n > 0 [deeprec difference :n 1 print :n]
+    Node p = mem_atom("n", 1);
+    const char *params[] = {mem_word_ptr(p)};
+    
+    Node body_line = NODE_NIL;
+    Node tail = NODE_NIL;
+    
+    // if :n > 0
+    const char *words[] = {"if", ":n", ">", "0"};
+    for (int i = 0; i < 4; i++) {
+        Node w = mem_atom(words[i], strlen(words[i]));
+        Node c = mem_cons(w, NODE_NIL);
+        if (mem_is_nil(body_line)) { body_line = c; tail = c; }
+        else { mem_set_cdr(tail, c); tail = c; }
+    }
+    
+    // [deeprec difference :n 1 print :n] - recursive call followed by print (not tail position)
+    const char *inner_words[] = {"deeprec", "difference", ":n", "1", "print", ":n"};
+    Node inner = NODE_NIL;
+    Node inner_tail = NODE_NIL;
+    for (int i = 0; i < 6; i++) {
+        Node w = mem_atom(inner_words[i], strlen(inner_words[i]));
+        Node c = mem_cons(w, NODE_NIL);
+        if (mem_is_nil(inner)) { inner = c; inner_tail = c; }
+        else { mem_set_cdr(inner_tail, c); inner_tail = c; }
+    }
+    Node c = mem_cons(inner, NODE_NIL);
+    mem_set_cdr(tail, c);
+    
+    Node line_marked = NODE_MAKE_LIST(NODE_GET_INDEX(body_line));
+    Node body = mem_cons(line_marked, NODE_NIL);
+    
+    Node name = mem_atom("deeprec", 7);
+    proc_define(mem_word_ptr(name), params, 1, body);
+    
+    // Test with a reasonable depth that should work on all platforms
+    Result r = run_string("deeprec 50");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
 }
 
 void test_definedp_true(void)
@@ -799,13 +890,13 @@ void test_tco_scope_depth_stability(void)
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     
     // Track scope depth before
-    int depth_before = var_scope_depth();
+    int depth_before = test_scope_depth();
     
     Result r2 = run_string("checkdepth 5");
     TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
     
     // Scope depth should be back to same level after
-    int depth_after = var_scope_depth();
+    int depth_after = test_scope_depth();
     TEST_ASSERT_EQUAL(depth_before, depth_after);
     
     // Should have completed 101 iterations without overflow
@@ -1034,6 +1125,37 @@ void test_multiline_with_real_newlines(void)
     TEST_ASSERT_EQUAL_FLOAT(10.0f, r3.value.as.number);
 }
 
+void test_multiline_brackets_repeat(void)
+{
+    // Bug: When brackets span multiple lines in a procedure, the body
+    // is stored with flat tokens [ and ] rather than nested lists.
+    // This caused "] without [" errors when repcount expressions were used.
+    
+    // trifwr: calls a procedure inside a repeat loop with brackets spanning lines
+    Result r = proc_define_from_text(
+        "to trifwr :size :n\n"
+        "repeat :n [\n"
+        "  print :size\n"
+        "  rt 360 / :n\n"
+        "]\n"
+        "end\n");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_OK, r.status, "trifwr definition should succeed");
+    
+    // web: outer repeat calls trifwr using repcount in expression
+    Result r2 = proc_define_from_text(
+        "to web\n"
+        "repeat 3 [ trifwr repcount * 10 2 ]\n"
+        "end\n");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_OK, r2.status, "web definition should succeed");
+    
+    // This should work without "] without [" error
+    reset_output();
+    Result r3 = run_string("web");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_NONE, r3.status, "web should complete without error");
+    // Expected output: trifwr is called 3 times with sizes 10, 20, 30, each printing twice
+    TEST_ASSERT_EQUAL_STRING("10\n10\n20\n20\n30\n30\n", output_buffer);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -1046,6 +1168,8 @@ int main(void)
     RUN_TEST(test_recursive_procedure);
     RUN_TEST(test_tail_recursive_countdown);
     RUN_TEST(test_deep_tail_recursion);
+    RUN_TEST(test_very_deep_tail_recursion);
+    RUN_TEST(test_deep_non_tail_recursion_limit);
     RUN_TEST(test_definedp_true);
     RUN_TEST(test_definedp_false);
     RUN_TEST(test_primitivep_true);
@@ -1111,6 +1235,7 @@ int main(void)
     RUN_TEST(test_empty_lines_preserved);
     RUN_TEST(test_item_extracts_procedure_line);
     RUN_TEST(test_multiline_with_real_newlines);
+    RUN_TEST(test_multiline_brackets_repeat);
 
     return UNITY_END();
 }
