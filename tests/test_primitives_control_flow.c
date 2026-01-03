@@ -313,6 +313,126 @@ void test_comment_inline(void)
     TEST_ASSERT_EQUAL_STRING("1\n", output_buffer);
 }
 
+//==========================================================================
+// for Tests
+//==========================================================================
+
+void test_for_basic(void)
+{
+    // Basic for loop with default step (ascending)
+    run_string("for [i 1 3] [print :i]");
+    TEST_ASSERT_EQUAL_STRING("1\n2\n3\n", output_buffer);
+}
+
+void test_for_descending(void)
+{
+    // for loop with descending range (default step -1)
+    run_string("for [i 3 1] [print :i]");
+    TEST_ASSERT_EQUAL_STRING("3\n2\n1\n", output_buffer);
+}
+
+void test_for_explicit_step(void)
+{
+    // for loop with explicit step
+    run_string("for [i 2 7 1.5] [print :i]");
+    TEST_ASSERT_EQUAL_STRING("2\n3.5\n5\n6.5\n", output_buffer);
+}
+
+void test_for_negative_step(void)
+{
+    // for loop with explicit negative step
+    run_string("for [i 10 1 -3] [print :i]");
+    TEST_ASSERT_EQUAL_STRING("10\n7\n4\n1\n", output_buffer);
+}
+
+void test_for_zero_trip(void)
+{
+    // Zero-trip for (explicit step leads to immediate termination)
+    // for [i 1 0 1] should not run because 1-0=1 has same sign as step=1
+    run_string("for [i 1 0 1] [print :i]");
+    TEST_ASSERT_EQUAL_STRING("", output_buffer);
+}
+
+void test_for_no_explicit_step_runs_once(void)
+{
+    // Without explicit step, the loop should run at least once
+    // for [i 1 1] should run once with i=1
+    run_string("for [i 1 1] [print :i]");
+    TEST_ASSERT_EQUAL_STRING("1\n", output_buffer);
+}
+
+void test_for_with_stop(void)
+{
+    // stop should exit the for loop
+    run_string("for [i 1 10] [print :i if :i = 3 [stop]]");
+    TEST_ASSERT_EQUAL_STRING("1\n2\n3\n", output_buffer);
+}
+
+void test_for_with_output(void)
+{
+    // output should exit the for loop and return a value
+    // This test uses a procedure context - procedure calls return RESULT_OK
+    run_string("define \"testfor [[] [for [i 1 10] [if :i = 5 [output :i * 2]]]]");
+    Result r = eval_string("testfor");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(10.0f, r.value.as.number);
+}
+
+void test_for_local_variable(void)
+{
+    // The loop variable should be local (not pollute global scope)
+    run_string("make \"i 999");
+    reset_output();
+    run_string("for [i 1 3] [print :i]");
+    TEST_ASSERT_EQUAL_STRING("1\n2\n3\n", output_buffer);
+    reset_output();
+    // Check that :i is still 999 after the loop
+    run_string("print :i");
+    TEST_ASSERT_EQUAL_STRING("999\n", output_buffer);
+}
+
+void test_for_evaluated_start(void)
+{
+    // Start value can be an expression (list to be run)
+    run_string("for [i [1 + 1] 4] [print :i]");
+    TEST_ASSERT_EQUAL_STRING("2\n3\n4\n", output_buffer);
+}
+
+void test_for_evaluated_limit(void)
+{
+    // Limit value can be an expression (list to be run)
+    run_string("for [i 1 [2 + 3]] [print :i]");
+    TEST_ASSERT_EQUAL_STRING("1\n2\n3\n4\n5\n", output_buffer);
+}
+
+void test_for_evaluated_step(void)
+{
+    // Step value can be an expression (list to be run)
+    run_string("for [i 0 10 [1 + 2]] [print :i]");
+    TEST_ASSERT_EQUAL_STRING("0\n3\n6\n9\n", output_buffer);
+}
+
+void test_for_too_few_items(void)
+{
+    // for with less than 3 items should error
+    Result r = eval_string("for [i 1] [print :i]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_for_too_many_items(void)
+{
+    // for with more than 4 items should error
+    Result r = eval_string("for [i 1 10 1 extra] [print :i]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_for_non_word_varname(void)
+{
+    // Variable name must be a word, not a list
+    Result r = eval_string("for [[i] 1 10] [print 1]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -349,6 +469,21 @@ int main(void)
     RUN_TEST(test_comment_with_word);
     RUN_TEST(test_comment_in_procedure);
     RUN_TEST(test_comment_inline);
+    RUN_TEST(test_for_basic);
+    RUN_TEST(test_for_descending);
+    RUN_TEST(test_for_explicit_step);
+    RUN_TEST(test_for_negative_step);
+    RUN_TEST(test_for_zero_trip);
+    RUN_TEST(test_for_no_explicit_step_runs_once);
+    RUN_TEST(test_for_with_stop);
+    RUN_TEST(test_for_with_output);
+    RUN_TEST(test_for_local_variable);
+    RUN_TEST(test_for_evaluated_start);
+    RUN_TEST(test_for_evaluated_limit);
+    RUN_TEST(test_for_evaluated_step);
+    RUN_TEST(test_for_too_few_items);
+    RUN_TEST(test_for_too_many_items);
+    RUN_TEST(test_for_non_word_varname);
 
     return UNITY_END();
 }

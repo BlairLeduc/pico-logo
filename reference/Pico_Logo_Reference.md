@@ -1755,6 +1755,26 @@ label _word_
 The `label` command itself does nothing. However, a [`go`](#go) _word_ passes control to the instruction following it. Note that _word_ must always be a literal word (that is, it must be preceded by a quotation mark).
 
 
+## for
+
+for _forcontrol_ _instructionlist_  
+
+`command`
+
+The first input must be a list containing three or four members: (1) a word, which will be used as the name of a local variable; (2) a word or list that will be evaluated as by RUN to determine a number, the starting value of the variable; (3) a word or list that will be evaluated to determine a number, the limit value of the variable; (4) an optional word or list that will be evaluated to determine the step size. If the fourth member is missing, the step size will be 1 or –1 depending on whether the limit value is greater than or less than the starting value, respectively.
+
+The second input is an _instructionlist_. The effect of `for` is to run that _instructionlist_ repeatedly, assigning a new value to the control variable (the one named by the first member of the _forcontrol_ list) each time. First the starting value is assigned to the control variable. Then the value is compared to the limit value. `for` is complete when the sign of (current - limit) is the same as the sign of the step size. (If no explicit step size is provided, the _instructionlist_ is always run at least once. An explicit step size can lead to a zero-trip `for`, e.g., `for [i 1 0 1] ...`). Otherwise, the _instructionlist_ is run, then the step is added to the current value of the control variable and `for` returns to the comparison step.
+
+```logo
+? for [i 2 7 1.5] [print :i]
+2
+3.5
+5
+6.5
+?
+```
+
+
 ## do.while
 
 do.while _list_ _predicatelist_
@@ -1790,6 +1810,40 @@ until _predicatelist_ _list_
 
 `until` tests _predicatelist_ and, if it is `false`, runs _list_. It then repeats this process until _predicatelist_ is `true`. An error occurs if _predicatelist_ is not `true` or `false`. An `until` loop can be exited early by a [`throw`](#throw) or [`stop`](#stop) command. _list_ may not be run at all if _predicatelist_ is initially `true`.
 
+
+## case
+
+case _value_ _clauses_
+
+`command` or `operation`
+
+The second input is a list of lists (_clauses_); each clause is a list whose first element is either a list of values or the word `else` and whose butfirst is a Logo expression or instruction. `case` examines the _clauses_ in order. If a clause begins with the word `else` (upper or lower case), then the butfirst of that clause is evaluated and `case` outputs its value, if any. If the first input to `case` is a member of the first element of a clause, then the butfirst of that clause is evaluated and `case` outputs its value, if any. If
+neither of these conditions is met, then `case` goes on to the next clause. If no clause is satisfied, `case` does nothing. Example:
+
+```logo
+to vowelp :letter
+  output case :letter [ [[a e i o u] "true] [else "false] ]
+end
+```
+
+
+## cond
+
+cond _clauses_
+
+`command` or `operation`
+
+The input is a list of lists (_clauses_); each clause is a list whose first element is either an expression whose value is `true` or `false`, or the word `else`, and whose butfirst is a Logo expression or instruction. `cond` examines the clauses in order. If a clause begins with the word `else` (upper or lower case), then the butfirst of that clause is evaluated and `cond` outputs its value, if any. Otherwise, the first element of the clause is evaluated; the resulting value must be `true` or `false`. If it’s `true`, then the butfirst of that clause is evaluated and `cond` outputs its value, if any. If the value is `false`, then `cond` goes on to the next clause. If no clause is satisfied, `cond` does nothing. Example:
+
+```logo
+to evens :numbers
+  ; select even numbers from a list
+  op cond [ [[empty? :numbers] []]
+            [[even? first :numbers] ; assuming even? is defined
+             fput first :numbers evens butfirst :numbers]
+          [else evens butfirst :numbers] ]
+end
+```
 
 ## forever
 
