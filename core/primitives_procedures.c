@@ -13,7 +13,22 @@
 #include <string.h>
 
 // Forward declaration for recursive bracket parsing
-static Node parse_bracket_contents(Lexer *lexer, Token *t);
+static Node parse_bracket_contents(Lexer *lexer, Token *t, int pending_newline_count);
+
+// Helper to append a node to a list, returning updated tail
+static Node append_to_list(Node *list, Node *tail, Node item)
+{
+    Node new_cons = mem_cons(item, NODE_NIL);
+    if (mem_is_nil(*list))
+    {
+        *list = new_cons;
+    }
+    else
+    {
+        mem_set_cdr(*tail, new_cons);
+    }
+    return new_cons;
+}
 
 // Helper to create a token atom from a token
 static Node token_to_atom(Token *t)
@@ -54,22 +69,39 @@ static Node token_to_atom(Token *t)
 // Parse bracket contents recursively until matching ]
 // Returns a list of items, with nested brackets as sublists
 // Updates *t to the token after ]
-static Node parse_bracket_contents(Lexer *lexer, Token *t)
+// pending_newline_count tracks newlines that occurred before the next token
+static Node parse_bracket_contents(Lexer *lexer, Token *t, int pending_newline_count)
 {
     Node list = NODE_NIL;
     Node tail = NODE_NIL;
     
     while (t->type != TOKEN_EOF && t->type != TOKEN_RIGHT_BRACKET)
     {
+        // Add any pending newlines that preceded this token
+        // The lexer tracks newlines in had_newline/newline_count
+        if (lexer->had_newline)
+        {
+            pending_newline_count += lexer->newline_count;
+            lexer->had_newline = false;  // Consume the newline flag
+        }
+        
+        // Insert newline markers BEFORE the current token
+        while (pending_newline_count > 0)
+        {
+            tail = append_to_list(&list, &tail, mem_newline_marker);
+            pending_newline_count--;
+        }
+        
         Node item = NODE_NIL;
         
         if (t->type == TOKEN_LEFT_BRACKET)
         {
             // Recursively parse nested brackets
             *t = lexer_next_token(lexer);
-            item = parse_bracket_contents(lexer, t);
+            item = parse_bracket_contents(lexer, t, 0);
             // Mark as nested list
             item = NODE_MAKE_LIST(NODE_GET_INDEX(item));
+            // Don't advance token - recursive call already positioned past ]
         }
         else
         {
@@ -79,17 +111,20 @@ static Node parse_bracket_contents(Lexer *lexer, Token *t)
         
         if (!mem_is_nil(item))
         {
-            Node new_cons = mem_cons(item, NODE_NIL);
-            if (mem_is_nil(list))
-            {
-                list = new_cons;
-                tail = new_cons;
-            }
-            else
-            {
-                mem_set_cdr(tail, new_cons);
-                tail = new_cons;
-            }
+            tail = append_to_list(&list, &tail, item);
+        }
+    }
+    
+    // Capture any newlines that preceded the closing ]
+    // These newlines mean the ] should appear on its own line
+    if (t->type == TOKEN_RIGHT_BRACKET && lexer->had_newline)
+    {
+        pending_newline_count += lexer->newline_count;
+        lexer->had_newline = false;
+        while (pending_newline_count > 0)
+        {
+            tail = append_to_list(&list, &tail, mem_newline_marker);
+            pending_newline_count--;
         }
     }
     
@@ -250,7 +285,7 @@ Result proc_define_from_text(const char *text)
             // Recursively parse bracket contents to create a nested list
             // This handles brackets spanning multiple lines
             t = lexer_next_token(&lexer);
-            item = parse_bracket_contents(&lexer, &t);
+            item = parse_bracket_contents(&lexer, &t, 0);
             // Mark as nested list
             item = NODE_MAKE_LIST(NODE_GET_INDEX(item));
             

@@ -474,6 +474,7 @@ static size_t standout_value(char *buffer, size_t bufsize, size_t pos, Value val
     switch (value.type)
     {
     case VALUE_NONE:
+    case VALUE_NEWLINE:
         break;
     case VALUE_NUMBER:
         format_number(numbuf, sizeof(numbuf), value.as.number);

@@ -33,6 +33,11 @@ Value value_list(Node node)
     return (Value){.type = VALUE_LIST, .as.node = node};
 }
 
+Value value_newline(void)
+{
+    return (Value){.type = VALUE_NEWLINE, .as.node = mem_newline_marker};
+}
+
 //==========================================================================
 // Value Predicates
 //==========================================================================
@@ -55,6 +60,11 @@ bool value_is_word(Value v)
 bool value_is_list(Value v)
 {
     return v.type == VALUE_LIST;
+}
+
+bool value_is_newline(Value v)
+{
+    return v.type == VALUE_NEWLINE;
 }
 
 //==========================================================================
@@ -307,6 +317,7 @@ const char *value_to_string(Value v)
     switch (v.type)
     {
     case VALUE_NONE:
+    case VALUE_NEWLINE:
         return "";
     case VALUE_NUMBER:
         format_number(buf, sizeof(buf), v.as.number);

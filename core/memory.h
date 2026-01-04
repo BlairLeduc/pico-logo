@@ -148,6 +148,17 @@ extern "C"
     // Check if a node is a word.
     bool mem_is_word(Node n);
 
+    //==========================================================================
+    // Newline Marker
+    //==========================================================================
+
+    // Special marker node used to represent newlines in procedure definitions.
+    // This allows preserving line breaks inside brackets for pretty-printing.
+    extern Node mem_newline_marker;
+
+    // Check if a node is the newline marker.
+    bool mem_is_newline(Node n);
+
     // Get the string content of a word node.
     // Returns NULL if node is not a word.
     // The returned pointer is valid until the next GC.

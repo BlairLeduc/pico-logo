@@ -298,13 +298,182 @@ int format_number(char *buf, size_t size, float n)
 }
 
 //==========================================================================
+// Newline-aware list formatting helpers
+//==========================================================================
+
+// Check if a list contains any newline markers
+static bool list_has_newlines(Node list)
+{
+    Node curr = list;
+    while (!mem_is_nil(curr))
+    {
+        Node elem = mem_car(curr);
+        if (mem_is_newline(elem))
+        {
+            return true;
+        }
+        // Check nested lists too
+        if (mem_is_list(elem) && list_has_newlines(elem))
+        {
+            return true;
+        }
+        curr = mem_cdr(curr);
+    }
+    return false;
+}
+
+// Check if only newline markers remain in the list (for closing bracket indent)
+static bool only_newlines_remain(Node list)
+{
+    Node curr = list;
+    while (!mem_is_nil(curr))
+    {
+        Node elem = mem_car(curr);
+        if (!mem_is_newline(elem))
+        {
+            return false;
+        }
+        curr = mem_cdr(curr);
+    }
+    return true;
+}
+
+// Forward declaration for mutual recursion
+static bool format_list_with_newlines(FormatOutputFunc out, void *ctx, Node list, int depth);
+
+// Format a body element, handling nested lists with newlines
+static bool format_body_element_multiline(FormatOutputFunc out, void *ctx, Node elem, int depth)
+{
+    if (mem_is_newline(elem))
+    {
+        return true;  // Skip newline markers - handled at list level
+    }
+    else if (mem_is_word(elem))
+    {
+        return out(ctx, mem_word_ptr(elem));
+    }
+    else if (mem_is_list(elem))
+    {
+        // Check if this nested list has newlines
+        if (list_has_newlines(elem))
+        {
+            return format_list_with_newlines(out, ctx, elem, depth);
+        }
+        else
+        {
+            // Format without newlines (compact form)
+            if (!out(ctx, "["))
+                return false;
+            bool first = true;
+            Node curr = elem;
+            while (!mem_is_nil(curr))
+            {
+                Node e = mem_car(curr);
+                if (!mem_is_newline(e))
+                {
+                    if (!first)
+                    {
+                        if (!out(ctx, " "))
+                            return false;
+                    }
+                    first = false;
+                    if (!format_body_element_multiline(out, ctx, e, depth))
+                        return false;
+                }
+                curr = mem_cdr(curr);
+            }
+            return out(ctx, "]");
+        }
+    }
+    return true;
+}
+
+// Format a list that contains newline markers, with proper indentation
+static bool format_list_with_newlines(FormatOutputFunc out, void *ctx, Node list, int depth)
+{
+    if (!out(ctx, "["))
+        return false;
+    
+    bool first = true;
+    bool at_line_start = false;
+    Node curr = list;
+    
+    while (!mem_is_nil(curr))
+    {
+        Node elem = mem_car(curr);
+        Node next = mem_cdr(curr);
+        
+        if (mem_is_newline(elem))
+        {
+            if (!out(ctx, "\n"))
+                return false;
+            at_line_start = true;
+            first = true;
+        }
+        else
+        {
+            if (at_line_start)
+            {
+                // Indent: 2 spaces base + 2 spaces per depth level
+                // But reduce by 1 level if only newlines remain (for closing bracket)
+                int indent_depth = depth + 1;
+                if (only_newlines_remain(next))
+                {
+                    indent_depth = depth;
+                }
+                for (int i = 0; i < indent_depth; i++)
+                {
+                    if (!out(ctx, "  "))
+                        return false;
+                }
+                at_line_start = false;
+            }
+            else if (!first)
+            {
+                if (!out(ctx, " "))
+                    return false;
+            }
+            first = false;
+            
+            if (!format_body_element_multiline(out, ctx, elem, depth + 1))
+                return false;
+        }
+        
+        curr = next;
+    }
+    
+    // If we ended with a newline, indent the closing bracket to match the opening
+    if (at_line_start)
+    {
+        for (int i = 0; i < depth; i++)
+        {
+            if (!out(ctx, "  "))
+                return false;
+        }
+    }
+    
+    return out(ctx, "]");
+}
+
+//==========================================================================
 // Core formatting functions
 //==========================================================================
 
 // Format a procedure body element (handles nested lists)
 bool format_body_element(FormatOutputFunc out, void *ctx, Node elem)
 {
-    if (mem_is_word(elem))
+    // Check for newlines in lists and use appropriate formatter
+    if (mem_is_list(elem) && list_has_newlines(elem))
+    {
+        // Use depth 1 since we're at procedure body level
+        return format_list_with_newlines(out, ctx, elem, 1);
+    }
+    
+    if (mem_is_newline(elem))
+    {
+        return true;  // Skip newline markers
+    }
+    else if (mem_is_word(elem))
     {
         return out(ctx, mem_word_ptr(elem));
     }
@@ -572,6 +741,15 @@ bool format_list_contents(FormatOutputFunc out, void *ctx, Node node)
     bool first = true;
     while (!mem_is_nil(node))
     {
+        Node element = mem_car(node);
+        
+        // Skip newline markers - they are for formatting only
+        if (mem_is_newline(element))
+        {
+            node = mem_cdr(node);
+            continue;
+        }
+        
         if (!first)
         {
             if (!out(ctx, " "))
@@ -579,7 +757,6 @@ bool format_list_contents(FormatOutputFunc out, void *ctx, Node node)
         }
         first = false;
 
-        Node element = mem_car(node);
         if (mem_is_word(element))
         {
             if (!out(ctx, mem_word_ptr(element)))
@@ -612,6 +789,7 @@ bool format_value(FormatOutputFunc out, void *ctx, Value value)
     switch (value.type)
     {
     case VALUE_NONE:
+    case VALUE_NEWLINE:
         break;
     case VALUE_NUMBER:
         format_number(buf, sizeof(buf), value.as.number);
@@ -637,6 +815,7 @@ bool format_value_show(FormatOutputFunc out, void *ctx, Value value)
     switch (value.type)
     {
     case VALUE_NONE:
+    case VALUE_NEWLINE:
         break;
     case VALUE_NUMBER:
         format_number(buf, sizeof(buf), value.as.number);

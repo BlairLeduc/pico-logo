@@ -211,6 +211,17 @@ static Token node_iter_next(NodeIterator *iter)
         return t;
     }
     
+    // Skip newline markers - they are for formatting only
+    while (!mem_is_nil(iter->current))
+    {
+        Node element = mem_car(iter->current);
+        if (!mem_is_newline(element))
+        {
+            break;
+        }
+        iter->current = mem_cdr(iter->current);
+    }
+    
     // Check for end of list
     if (mem_is_nil(iter->current))
     {

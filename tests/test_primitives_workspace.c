@@ -846,6 +846,58 @@ void test_brk_erall_new_procedure_no_stale_frames(void)
     }
 }
 
+// Test that multiline lists in procedures preserve newlines for po/edit/save
+void test_po_multiline_list(void)
+{
+    // Define a procedure with a list spanning multiple lines
+    Result r = proc_define_from_text(
+        "to demo\n"
+        "repeat 2 [\n"
+        "  print \"hello\n"
+        "  print \"world\n"
+        "]\n"
+        "end\n");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    reset_output();
+    run_string("po \"demo");
+    
+    // The output should show the list contents on separate lines with proper indentation
+    // The exact format is:
+    // to demo
+    //   repeat 2 [
+    //     print "hello
+    //     print "world
+    //   ]
+    // end
+    TEST_ASSERT_TRUE(strstr(output_buffer, "to demo") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "repeat 2 [") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "print \"hello") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "print \"world") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "end") != NULL);
+}
+
+// Test that multiline list followed by more code parses correctly
+void test_multiline_list_followed_by_more_code(void)
+{
+    // This was a bug: code after a multiline list was incorrectly included in the list
+    Result r = proc_define_from_text(
+        "to test2\n"
+        "print [\n"
+        "  hello\n"
+        "]\n"
+        "print \"after\n"
+        "end\n");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_OK, r.status, "Definition should succeed");
+    
+    reset_output();
+    Result r2 = run_string("test2");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+    
+    // Should print "hello" from the list, then "after" from the second print
+    TEST_ASSERT_EQUAL_STRING("hello\nafter\n", output_buffer);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -907,6 +959,10 @@ int main(void)
     RUN_TEST(test_erase_caller_during_execution);
     RUN_TEST(test_erall_then_new_procedure_no_stale_references);
     RUN_TEST(test_brk_erall_new_procedure_no_stale_frames);
+
+    // Multiline list tests
+    RUN_TEST(test_po_multiline_list);
+    RUN_TEST(test_multiline_list_followed_by_more_code);
 
     return UNITY_END();
 }
