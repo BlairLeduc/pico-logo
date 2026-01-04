@@ -1908,6 +1908,224 @@ untrace _list_
 
 
 ===
+# List Processing
+
+The primitives in this section let you process lists. Each primitive takes either name of the procedure, a lambda expression or procedure text to apply to each element of the list.
+
+For example, if you wanted to concatenate corresponding elements of two lists, you could use the following `map` command with a named procedure:
+
+```logo
+?show (map "word [a b c] [d e f])
+[ad be cf]
+```
+
+A lambda expression is an anonymous procedure. It is written as a list whose first element is a list of input names (with no colons) and whose remaining elements are the expression for the output. For example, the lambda expression that adds 1 to its input would be written as follows:
+
+```logo
+[[x] :x + 1]
+```
+
+We could use this lambda expression with `map` to add 1 to each element of a list:
+
+```logo
+?show map [[x] :x + 1] [1 2 3]
+[2 3 4]
+```
+
+An anonymous procedure is a list whose first element is a list of input names (with no colons) and whose remaining elements are the body of the procedure. This is the list text that is used with [`define`](#define) and output by[`text`](#text). For example, the anonymous procedure that adds two numbers would be written as follows:
+
+```logo
+[[x y] [output :x + :y ]]
+```
+
+To add the corresponding elements of two lists, we could use this anonymous procedure with `map`:
+
+```logo
+?show map [[x y] [ output :x + :y ]] [1 2 3] [4 5 6]
+[5 7 9]
+```
+
+The anonymous procedure, while not recommended for complex procedures, can be used, when multiple lines are needed:
+
+```logo
+[[x y] [(print [x+y=] :x + :y)] [output :x + :y]]
+```
+
+## apply
+
+apply _procedure_ _inputlist_
+
+`command` or `operation`
+
+Runs _procedure_, providing its inputs with the members of _inputlist_. The number of members in _inputlist_ must be an acceptable number of inputs for _procedure_. `apply` outputs what _procedure_ outputs, if anything.
+
+Examples:
+
+```logo
+?show apply [[a b c] :a + :b + :c] [1 2 3]
+6
+```
+
+```logo
+?show apply "sum [1 2 3 4]
+10
+```
+
+## foreach
+
+foreach _data_ _procedure_  
+(foreach _data1_ _data2_ ... _procedure_)
+
+`command`
+
+Evaluates _procedure_ repeatedly, once for each member of the _data_ list. If more than one data list are given, each of them must be the same length. (The data inputs can be words, in which case the template is evaluated once for each character.)
+
+Each data list provides one input to _procedure_ at each evaluation. Thus, if there are two data lists, _procedure_ must have two inputs; if there are three data lists, _procedure_ must have three inputs; and so on.
+
+Examples:
+
+```logo
+?foreach [1 2 3] [[i] print :item]
+1
+2
+3
+?
+```
+
+```
+?(foreach [1 2 3] [4 5 6] [[a b] print :a + :b])
+5
+7
+9
+?
+```
+
+
+## map
+
+map _procedure_ _data_  
+(map _procedure_ _data1_ _data2_ ...)
+
+`operation`
+
+`map` evaluates _procedure_ once for each member of the _data_ list and outputs a list of the results. If more than one data list are given, each of them must be the same length. (The data inputs can be words, in which case the template is evaluated once for each character.)
+
+Each data list provides one input to _procedure_ at each evaluation. Thus, if there are two data lists, _procedure_ must have two inputs; if there are three data lists, _procedure_ must have three inputs; and so on.
+
+Examples:
+
+```logo
+?show map [[x] :x * :x] [1 2 3 4]
+[1 4 9 16]
+?
+```
+
+```
+?show (map "sum [1 2 3] [4 5 6])
+[5 7 9]
+?
+```
+
+
+## filter
+
+filter _procedure_ _data_
+
+`operation`
+
+`filter` evaluates _procedure_ once for each member of the _data_ list and outputs a list of those members for which _procedure_ outputs `true`. _Procedure_ must have one input.
+
+_Procedure_ must output either `true` or `false` for each member of _data_.
+
+Examples:
+
+```logo
+? show filter [[x] :x > 2] [1 2 3 4 5]
+[3 4 5]
+?
+```
+
+
+## find
+
+find _procedure_ _data_
+
+`operation`
+
+`find` evaluates _procedure_ once for each member of the _data_ list and outputs the first member for which _procedure_ outputs `true`. _Procedure_ must have one input.
+
+_Procedure_ must output either `true` or `false` for each member of _data_.
+
+Example:
+
+```logo
+?show find [[x] 0 = remainder :x 2] [1 3 4 5 6]
+4
+?
+```
+
+
+## reduce
+
+reduce _procedure_ _data_
+
+`operation`
+
+`reduce` evaluates _procedure_ repeatedly to combine the members of _data_ into a single output. _Procedure_ must have two inputs. 
+
+If _data_ has only one member, that member is output. If _data_ is empty, an error occurs. Otherwise, the last two members of _data_ are provided as inputs to _procedure_, and the output of _procedure_ is then combined with the previous member of _data_ by calling _procedure_ again. This process continues until all members of _data_ have been combined.
+
+Examples:
+
+```logo
+?show reduce [[a b] :a + :b] [1 2 3 4]
+10
+?
+```
+
+```
+?show reduce [[x y] word :x :y] [a b c d e]
+abcde
+?
+```
+
+```
+?show reduce [[x y] [(print :x ", :y)] [output :x + :y]] [1 2 3]
+2 , 3
+5 , 1
+6
+?
+```
+
+
+## crossmap
+
+crossmap _procedure_ _listlist_  
+(crossmap _procedure_ _data1_ _data2_ ...)
+
+`operation`
+
+`crossmap` evaluates _procedure_ for every combination of members from the input lists and outputs a list of the results. If more than one data list are given, each of them can be of different lengths. (The data inputs can be words, in which case the template is evaluated once for each character.)
+
+Each data list provides one input to _procedure_ at each evaluation. Thus, if there are two data lists, _procedure_ must have two inputs; if there are three data lists, _procedure_ must have three inputs; and so on.
+
+As a special case, if only one data list input is given, that _listlist_ is taken as a list of data lists, and each of its members contributes values to a input of _procedure_.
+
+Examples:
+
+```logo
+? show crossmap [[x y] :x + :y] [[1 2] [10 20 30]]
+[11 21 31 12 22 32]
+?
+```
+
+```logo
+?show (crossmap "word [a b c] [1 2 3 4])
+[a1 a2 a3 a4 b1 b2 b3 b4 c1 c2 c3 c4]
+?
+```
+
+===
 # Special Control Characters
 
 ## Break
@@ -1928,7 +2146,6 @@ Pressing `F4` interrupts whatever is running. Typing any character resumes norma
 `F9`
 
 Pressing `F9` interrupts whatever is running, causing a pause. `F9` is equivalent in effect to [`pause`](#pause), but different in its use: you press `F9` at the keyboard during the running of a procedure, while [`pause`](#pause) is part of the definition of a procedure.
-
 
 
 ===
