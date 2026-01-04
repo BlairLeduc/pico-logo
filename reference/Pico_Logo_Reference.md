@@ -1951,6 +1951,13 @@ The anonymous procedure, while not recommended for complex procedures, can be us
 [[x y] [(print [x+y=] :x + :y)] [output :x + :y]]
 ```
 
+For a more complex example, to calculate the distance between two points _in any number of dimensions_, we can use `map` and `apply` together with lambda expressions:
+
+```logo
+? show sqrt apply "sum map [[x] pwr :x 2] (map [[a b] :a - :b] [1 2 3] [4 5 6])
+5.19615
+```
+
 ## apply
 
 apply _procedure_ _inputlist_
@@ -1985,7 +1992,7 @@ Each data list provides one input to _procedure_ at each evaluation. Thus, if th
 Examples:
 
 ```logo
-?foreach [1 2 3] [[i] print :item]
+?foreach [1 2 3] [[i] print :i]
 1
 2
 3
@@ -2090,9 +2097,9 @@ abcde
 ```
 
 ```
-?show reduce [[x y] [(print :x ", :y)] [output :x + :y]] [1 2 3]
-2 , 3
-5 , 1
+?show reduce [[x y] [(pr "; :x ", :y)] [op :x + :y]] [1 2 3]
+; 2 , 3
+; 1 , 5
 6
 ?
 ```
