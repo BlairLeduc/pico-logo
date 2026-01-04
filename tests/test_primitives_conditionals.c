@@ -427,6 +427,108 @@ void test_test_nested_procedures(void)
     run_string("erase \"inner");
 }
 
+//==========================================================================
+// CASE Tests
+//==========================================================================
+
+void test_case_matches_word(void)
+{
+    Result r = eval_string("case \"a [ [[a b c] \"found] [else \"not-found] ]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("found", value_to_string(r.value));
+}
+
+void test_case_else(void)
+{
+    Result r = eval_string("case \"z [ [[a b c] \"found] [else \"notfound] ]");
+    if (r.status != RESULT_OK) {
+        printf("test_case_else failed: status=%d, error_code=%d, output='%s'\n", 
+               r.status, r.error_code, output_buffer);
+    }
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("notfound", value_to_string(r.value));
+}
+
+void test_case_no_match(void)
+{
+    Result r = eval_string("case \"z [ [[a b c] \"found] ]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+}
+
+void test_case_vowelp_example(void)
+{
+    // From the reference manual
+    Result def = proc_define_from_text("to vowelp :letter\n"
+               "output case :letter [ [[a e i o u] \"true] [else \"false] ]\n"
+               "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, def.status);
+    
+    Result r = eval_string("vowelp \"a");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("true", value_to_string(r.value));
+    
+    r = eval_string("vowelp \"b");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("false", value_to_string(r.value));
+    
+    run_string("erase \"vowelp");
+}
+
+//==========================================================================
+// COND Tests
+//==========================================================================
+
+void test_cond_first_clause_true(void)
+{
+    Result r = eval_string("cond [ [[\"true = \"true] \"first] [[\"true = \"false] \"second] ]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("first", value_to_string(r.value));
+}
+
+void test_cond_else_clause(void)
+{
+    Result r = eval_string("cond [ [[\"true = \"false] \"first] [else \"fallback] ]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("fallback", value_to_string(r.value));
+}
+
+void test_cond_no_match(void)
+{
+    Result r = eval_string("cond [ [[\"true = \"false] \"first] ]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+}
+
+void test_cond_as_operation(void)
+{
+    Result r = eval_string("print cond [ [[1 = 1] \"matched] ]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("matched\n", output_buffer);
+}
+
+void test_cond_evens_example(void)
+{
+    // From the reference manual - evens procedure using cond
+    Result def1 = proc_define_from_text("to even? :n\n"
+               "op 0 = remainder :n 2\n"
+               "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, def1.status);
+    
+    Result def2 = proc_define_from_text("to evens :numbers\n"
+               "op cond [ [[empty? :numbers] []] [[even? first :numbers] fput first :numbers evens butfirst :numbers] [else evens butfirst :numbers] ]\n"
+               "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, def2.status);
+    
+    Result r = eval_string("evens [1 2 3 4 5 6]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_list(r.value));
+    // Should return [2 4 6]
+    const char *str = value_to_string(r.value);
+    TEST_ASSERT_EQUAL_STRING("[2 4 6]", str);
+    
+    run_string("erase \"evens");
+    run_string("erase \"even?");
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -475,6 +577,19 @@ int main(void)
     RUN_TEST(test_test_local_to_procedure);
     RUN_TEST(test_test_inherited_by_subprocedure);
     RUN_TEST(test_test_nested_procedures);
+    
+    // CASE tests
+    RUN_TEST(test_case_matches_word);
+    RUN_TEST(test_case_else);
+    RUN_TEST(test_case_no_match);
+    RUN_TEST(test_case_vowelp_example);
+    
+    // COND tests
+    RUN_TEST(test_cond_first_clause_true);
+    RUN_TEST(test_cond_else_clause);
+    RUN_TEST(test_cond_no_match);
+    RUN_TEST(test_cond_as_operation);
+    RUN_TEST(test_cond_evens_example);
 
     return UNITY_END();
 }
