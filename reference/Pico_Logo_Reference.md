@@ -2772,16 +2772,13 @@ battery
 The `battery` operation returns a list where the first value is the percent remaining in the battery and the second value is `true` if the battery is currently charging.
 
 
-## .poweroff
+## goodbye
 
-.poweroff
+goodbye
 
 `operation`
 
-`.poweroff` closes all open files and powers off the device. If the device does not support this capability, an error is displayed.
-
-> [!WARNING]
-> Primitives whose names start with a period are **dangerous**. You may lose work if used incorrectly.
+`goodbye` closes all open files and powers off the device. If the device does not support this capability, an error is displayed.
 
 
 
@@ -2822,14 +2819,6 @@ circlel _radius_
 
 These procedures are found in the file `math_tools`.
 
-### abs
-
-abs _number_
-
-`operation`
-
-`abs` outputs the absolute value of its input.
-
 
 ### divisor?
 
@@ -2840,66 +2829,9 @@ divisor? _number1_ _number2_
 `divisor?` indicates (`true` or `false`) whether _number1_ divides evenly into _number2_.
 
 
-### log
-
-log _number_
-
-`operation`
-
-`log` returns the logarithm to the base 10 of _number_. It uses the `ln` procedure, which follows.
-
-
-### ln
-
-ln _number_
-
-`operation`
-
-`ln` calculates the natural logarithm of _number_.
-
-
-### pwr
-
-pwr _number1_ _number2_
-
-`operation`
-
-`pwr` returns the value of _number1_ to the _number2_ power. If _number2_ is a fraction and _number1_ is not equal to one, `pwr` uses the natural functions `exp` and `ln`. If _number1_ is less then 0 and _number2_ is a fraction, the result should be a complex number.
-
-
-### exp
-
-exp _number_
-
-`operation`
-
-`exp` is the natural exponential function, calculated using a Taylor series. `e` is declared a local variable to ensure that it always contains the correct value.
-
-
 ## Program Logic or Debugging Tools
 
 These procedures are found in the file `program_tools`.
-
-### comment
-
-; _list_
-
-`command`
-
-';' allows you to embed comments in your programs in the form:
-
-```logo
-; [This is a comment]
-```
-
-### forever
-
-forever _instructionlist_
-
-`command`
-
-`forever` repeats a group of instructions until you press
-`BRK` or turn off the power.
 
 
 ### map
@@ -2918,16 +2850,6 @@ sort _arg_ _list_
 `operation`
 
 `sort` takes _list_ of words and outputs them alphabetically.
-
-
-### while
-
-while _condition_ _instructionlist_
-
-`command`
-
-`while` repeats a group of instructions until _condition_
-becomes `false`.
 
 
 
