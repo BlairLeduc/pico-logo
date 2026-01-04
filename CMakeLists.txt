@@ -166,6 +166,16 @@ if(DEFINED LOGO_COPY_BUFFER_SIZE)
     target_compile_definitions(pico-logo PRIVATE LOGO_COPY_BUFFER_SIZE=${LOGO_COPY_BUFFER_SIZE})
 endif()
 
+# Set C stack size (default Pico SDK is 0x800 = 2KB)
+# Default to 4KB - constrained by SCRATCH_Y region size (4KB max)
+# RP2040: SCRATCH_Y is 4KB
+# RP2350: SCRATCH_Y is 4KB
+if(DEFINED PICO_STACK_SIZE)
+    target_compile_definitions(pico-logo PRIVATE PICO_STACK_SIZE=${PICO_STACK_SIZE})
+else()
+    target_compile_definitions(pico-logo PRIVATE PICO_STACK_SIZE=0x1000)
+endif()
+
 pico_add_extra_outputs(pico-logo)
 
 endif() # NOT BUILD_TESTING AND NOT BUILD_FOR_HOST
