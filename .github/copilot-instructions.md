@@ -65,6 +65,7 @@
 - Tests should use the mock device and the mock device should be updated as needed to support testing
 - We aim for high test coverage of core interpreter logic and primitives.
 - After you complete a feature or fix a bug, **run all tests** to ensure nothing is broken.
+- **Tests run natively on the host system**; you cannot test memory safety or hardware-specific features on the target device.
 
 ## Development and testing
 - Use the command line and cmake presets to build and run tests. Do not use tasks.
