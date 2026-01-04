@@ -5,7 +5,7 @@ From the [Releases](https://github.com/BlairLeduc/pico-logo/releases) page, down
 After flashing Pico Logo, you should see:
 
 ```
-Copyright 2025 Blair Leduc
+Copyright 2025-2026 Blair Leduc
 Welcome to Pico Logo.
 ?_
 ```
