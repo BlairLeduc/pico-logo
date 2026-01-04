@@ -1,3 +1,0 @@
-to divisor? :a :b
-  op 0 = remainder :b :a
-end
