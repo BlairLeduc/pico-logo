@@ -1,12 +1,3 @@
-to ; :comment
-end
-
-to map :cmd :list
-  if empty? :list [ stop ]
-  run list :cmd word "" first :list
-  map :cmd bf :list
-end
-
 to sort :arg :list
   if empty? :arg [ op :list ]
   make "list insert first :arg :list

@@ -16,6 +16,7 @@
 #include "format.h"
 #include "value.h"
 #include "variables.h"
+#include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 
@@ -763,7 +764,7 @@ static Result prim_filter(Evaluator *eval, int argc, Value *args)
     
     Value proc_args[1];
     
-    while (input_is_word ? (word_idx < word_len) : input_is_word ? (word_idx < word_len) : !mem_is_nil(data))
+    while (input_is_word ? (word_idx < word_len) : !mem_is_nil(data))
     {
         Node elem;
         
@@ -1268,17 +1269,30 @@ static Result prim_crossmap(Evaluator *eval, int argc, Value *args)
         all_elements[i] = NULL;
     }
     
-    // Allocate and fill element arrays
-    // Using static storage for simplicity (limited by MAX_PROC_PARAMS and reasonable list sizes)
-    static Value element_storage[MAX_PROC_PARAMS][256];
+    // Calculate total storage needed and allocate dynamically
+    // This avoids the 32KB static allocation and fixes reentrancy for nested crossmap calls
+    int total_elements = 0;
+    for (int i = 0; i < data_count; i++)
+    {
+        total_elements += lengths[i];
+    }
+    
+    Value *element_storage = (Value *)malloc(total_elements * sizeof(Value));
+    if (!element_storage)
+    {
+        return result_error(ERR_OUT_OF_SPACE);
+    }
+    
+    // Set up pointers into the contiguous storage
+    Value *storage_ptr = element_storage;
+    for (int i = 0; i < data_count; i++)
+    {
+        all_elements[i] = storage_ptr;
+        storage_ptr += lengths[i];
+    }
     
     for (int i = 0; i < data_count; i++)
     {
-        if (lengths[i] > 256)
-        {
-            return result_error(ERR_OUT_OF_SPACE);
-        }
-        all_elements[i] = element_storage[i];
         
         if (is_word[i])
         {
@@ -1331,6 +1345,7 @@ static Result prim_crossmap(Evaluator *eval, int argc, Value *args)
         if (r.status == RESULT_ERROR || r.status == RESULT_THROW ||
             r.status == RESULT_STOP)
         {
+            free(element_storage);
             return r;
         }
         
@@ -1401,6 +1416,7 @@ static Result prim_crossmap(Evaluator *eval, int argc, Value *args)
         }
     }
     
+    free(element_storage);
     return result_ok(value_list(result_head));
 }
 

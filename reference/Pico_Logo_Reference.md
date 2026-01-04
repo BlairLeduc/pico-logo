@@ -44,15 +44,15 @@ to house
 end 
 
 to box 
-  repeat 4 [ forward 50 right 90 ] 
+  repeat 4 [forward 50 right 90] 
 end
 
 to tri :size
-  repeat 3 [ forward :size right 120 ] 
+  repeat 3 [forward :size right 120] 
 end 
 ```
 
-We are assuming that you have had some experience with Logo and have built up an intuitive model of what Logo is about. Here we give a more formal model. This model is just another way to think about Logo. It is not meant to replace vour current way of thinking, but rather to enhance it. 
+We are assuming that you have had some experience with Logo and have built up an intuitive model of what Logo is about. Here we give a more formal model. This model is just another way to think about Logo. It is not meant to replace your current way of thinking, but rather to enhance it. 
 
 ## Formal Logo
 
@@ -417,7 +417,7 @@ When you call the Editor, Logo changes the screen. The editor uses for all text 
 
 `PICO LOGO EDITOR`
 
-centred on the top row (the top row is reverse video). The bottom line has centered in reverse video
+centred on the top row (the top row is reverse video). The bottom line has centred in reverse video
 
 `ESC - ACCEPT    BRK - CANCEL`
 
@@ -608,7 +608,7 @@ fd _distance_
 
 ## getsh
 
-getsh _shapenumber_
+getsh _shapenumber_  
 
 `operation`
 
@@ -762,7 +762,7 @@ pos
 
 `operation`
 
-`pos` (for position) outputs the coordinates of the current position of the turtle in the form of a list [xcor ycor]. When you start up Logo, the turtle is at [0 0], the centre of the turtle field.
+`pos` (for position) outputs the coordinates of the current position of the turtle in the form of a list `[xcor ycor]`. When you start up Logo, the turtle is at `[0 0]`, the centre of the turtle field.
 
 
 ## shown? (shownp)
@@ -781,7 +781,7 @@ towards [_xcor_ _ycor_]
 
 `operation`
 
-`towards` outputs a heading that would make the turtle face in the direction indicated by [_xcor_ _ycor_].
+`towards` outputs a heading that would make the turtle face in the direction indicated by `[_xcor_ _ycor_]`.
 
 
 ## xcor
@@ -943,9 +943,9 @@ window
 
 `command`
 
-The `window` command makes the turtle field unbounded; what you see is a portion of the turtle field as if looking through a small window around the center of the screen. When the turtle moves beyond the visible bounds of the screen, it continues to move but can't be seen: The screen is 320 turtle steps high and 320 steps wide. The entire turtle field is 32,768 steps high and 32,768 steps wide.
+The `window` command makes the turtle field unbounded; what you see is a portion of the turtle field as if looking through a small window around the centre of the screen. When the turtle moves beyond the visible bounds of the screen, it continues to move but can't be seen: The screen is 320 turtle steps high and 320 steps wide. The entire turtle field is 32,768 steps high and 32,768 steps wide.
 
-Changing `window` to [`fence`](#fence) or [`wrap`](#wrap) when the turtle is off the screen sends the turtle to its home position [0 0].
+Changing `window` to [`fence`](#fence) or [`wrap`](#wrap) when the turtle is off the screen sends the turtle to its home position `[0 0]`.
 
 See [`fence`](#fence) and [`wrap`](#wrap).
 
@@ -968,7 +968,7 @@ bg
 
 `operation`
 
-`background` outputs a number representing the color of the background and is a value between 0 and 255. 
+`background` outputs a number representing the colour of the background and is a value between 0 and 255. 
 
 See [Colours](Colours.md) for the default palette.
 
@@ -1030,8 +1030,7 @@ cursor
 
 `operation`
 
-`cursor` outputs a list of the column and line numbers of the cursor position. The upper-left corner of the screen is [0 0]. The upper-right is [39 0] if the screen width is 40, and [63 0] if the
-screen width is 64.
+`cursor` outputs a list of the column and line numbers of the cursor position. The upper-left corner of the screen is `[0 0]`. The upper-right is `[39 0]`.
 
 See [`setcursor`](#setcursor).
 
@@ -1143,7 +1142,7 @@ member _object1_ _object2_
 
 `operation`
 
-`member` outputs the part of _object2_ in which _object1_ is the first element. If _object1_ is not an element of _object2_, `member` outputs the empty list or the empty word. This operation is useful for accessing information i n a file or for sorting long lists.
+`member` outputs the part of _object2_ in which _object1_ is the first element. If _object1_ is not an element of _object2_, `member` outputs the empty list or the empty word. This operation is useful for accessing information in a file or for sorting long lists.
 
 
 ## fput
@@ -1162,8 +1161,7 @@ list _object1_ _object2_
 
 `operation`
 
-The `list` operation outputs a list whose elements are _object1_,
-_object2_, and so on.
+The `list` operation outputs a list whose elements are _object1_, _object2_, and so on.
 
 
 ## lput
@@ -1172,8 +1170,7 @@ lput _object_ _list_
 
 `operation`
 
-The `lput` (for last put) operation outputs a new list formed by
-putting _object_ at the end of _list_.
+The `lput` (for last put) operation outputs a new list formed by putting _object_ at the end of _list_.
 
 
 ## parse
@@ -1246,11 +1243,12 @@ count _object_
 
 ## empty? (emptyp)
 
+empty? _object_  
 emptyp _object_  
 
 `operation`
 
-`emptyp` outputs `true` if _object_ is the empty word or the empty list; otherwise it outputs `false`.
+`empty?` outputs `true` if _object_ is the empty word or the empty list; otherwise it outputs `false`.
 
 
 ## equal? (equalp)
@@ -1380,7 +1378,7 @@ thing _name_
 ===
 # Arithmetic Operations
 
-This section presents all the Logo operations that manipulate numbers. Logo has two kinds of notation for expressing arithmetic operations: prefix notation and infix notation. Prefix notation means that the name of the procedure comes betore its inputs. With infix notation, the name of the procedure goes between its inputs, not before them.
+This section presents all the Logo operations that manipulate numbers. Logo has two kinds of notation for expressing arithmetic operations: prefix notation and infix notation. Prefix notation means that the name of the procedure comes before its inputs. With infix notation, the name of the procedure goes between its inputs, not before them.
 
 This chapter contains
 - a general introduction to Logo's arithmetic operations
@@ -1863,7 +1861,7 @@ toplevel
 
 `operation`
 
-Ouputs `"toplevel`. [`throw`](#throw) `toplevel` to return control to the top level.
+Outputs `"toplevel`. [`throw`](#throw) `toplevel` to return control to the top level.
 
 
 ## step
@@ -1985,7 +1983,7 @@ foreach _data_ _procedure_
 
 `command`
 
-Evaluates _procedure_ repeatedly, once for each member of the _data_ list. If more than one data list are given, each of them must be the same length. (The data inputs can be words, in which case the template is evaluated once for each character.)
+Evaluates _procedure_ repeatedly, once for each member of the _data_ list. If more than one data list are given, each of them must be the same length. (The data inputs can be words, in which case _procedure_ is evaluated once for each character.)
 
 Each data list provides one input to _procedure_ at each evaluation. Thus, if there are two data lists, _procedure_ must have two inputs; if there are three data lists, _procedure_ must have three inputs; and so on.
 
@@ -2015,7 +2013,7 @@ map _procedure_ _data_
 
 `operation`
 
-`map` evaluates _procedure_ once for each member of the _data_ list and outputs a list of the results. If more than one data list are given, each of them must be the same length. (The data inputs can be words, in which case the template is evaluated once for each character.)
+`map` evaluates _procedure_ once for each member of the _data_ list and outputs a list of the results. If more than one data list are given, each of them must be the same length. (The data inputs can be words, in which case _procedure_ is evaluated once for each character.)
 
 Each data list provides one input to _procedure_ at each evaluation. Thus, if there are two data lists, _procedure_ must have two inputs; if there are three data lists, _procedure_ must have three inputs; and so on.
 
@@ -2112,11 +2110,11 @@ crossmap _procedure_ _listlist_
 
 `operation`
 
-`crossmap` evaluates _procedure_ for every combination of members from the input lists and outputs a list of the results. If more than one data list are given, each of them can be of different lengths. (The data inputs can be words, in which case the template is evaluated once for each character.)
+`crossmap` evaluates _procedure_ for every combination of members from the input lists and outputs a list of the results. If more than one data list are given, each of them can be of different lengths. (The data inputs can be words, in which case _procedure_ is evaluated once for each character.)
 
 Each data list provides one input to _procedure_ at each evaluation. Thus, if there are two data lists, _procedure_ must have two inputs; if there are three data lists, _procedure_ must have three inputs; and so on.
 
-As a special case, if only one data list input is given, that _listlist_ is taken as a list of data lists, and each of its members contributes values to a input of _procedure_.
+As a special case, if only one data list input is given, that _listlist_ is taken as a list of data lists, and each of its members contributes values to an input of _procedure_.
 
 Examples:
 
@@ -3058,15 +3056,6 @@ divisor? _number1_ _number2_
 These procedures are found in the file `program_tools`.
 
 
-### map
-
-map _command_ _list_
-
-`command`
-
-`map` applies _command_ to every element of _list_.
-
-
 ### sort
 
 sort _arg_ _list_
@@ -3248,11 +3237,11 @@ The way in which the minus sign "`-`” is parsed is also a little strange. The 
 
 1. as part of a number to indicate that it is negative, as in `-3` 
 2. as a procedure of one input, called _unary minus_, which outputs the additive inverse of its input, as in `-XCOR` or `-:DISTANCE` 
-3. as a procedure of two inputs, which outputs the difference between its first input and its second,as in `7-3` and `XCOR-YCOR` 
+3. as a procedure of two inputs, which outputs the difference between its first input and its second, as in `7-3` and `XCOR-YCOR` 
 
 The parser tries to be clever about this potential ambiguity and figure out which one was meant by the following rules:
 
-1. If the ”`-`” immediately precedes a number, and follows any delimiter except right parenthesis ”`)`”, the number is parsed as a negative number. This allows the following behavior:
+1. If the ”`-`” immediately precedes a number, and follows any delimiter except right parenthesis ”`)`”, the number is parsed as a negative number. This allows the following behaviour:
   - `print sum 20-20` (parses as 20 minus 20)
   - `print 3*-4` (parses as 3 times negative 4) 
   - `print (3+4)-5` (parses as 3 plus 4 minus 5) 
