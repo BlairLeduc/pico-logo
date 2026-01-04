@@ -135,6 +135,7 @@ extern "C"
     void primitives_variables_init(void);
     void primitives_words_lists_init(void);
     void primitives_workspace_init(void);
+    void primitives_list_processing_init(void);
 
     // Forward declarations for I/O
     struct LogoIO;

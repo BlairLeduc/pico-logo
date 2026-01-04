@@ -81,6 +81,7 @@ add_library(logo_core
     core/primitives_variables.c
     core/primitives_words_lists.c
     core/primitives_workspace.c
+    core/primitives_list_processing.c
     core/primitives.c
     core/procedures.c
     core/properties.c
@@ -166,6 +167,16 @@ if(DEFINED LOGO_COPY_BUFFER_SIZE)
     target_compile_definitions(pico-logo PRIVATE LOGO_COPY_BUFFER_SIZE=${LOGO_COPY_BUFFER_SIZE})
 endif()
 
+# Set C stack size (default Pico SDK is 0x800 = 2KB)
+# Default to 4KB - constrained by SCRATCH_Y region size (4KB max)
+# RP2040: SCRATCH_Y is 4KB
+# RP2350: SCRATCH_Y is 4KB
+if(DEFINED PICO_STACK_SIZE)
+    target_compile_definitions(pico-logo PRIVATE PICO_STACK_SIZE=${PICO_STACK_SIZE})
+else()
+    target_compile_definitions(pico-logo PRIVATE PICO_STACK_SIZE=0x1000)
+endif()
+
 pico_add_extra_outputs(pico-logo)
 
 endif() # NOT BUILD_TESTING AND NOT BUILD_FOR_HOST
@@ -218,6 +229,7 @@ if(BUILD_FOR_HOST)
         core/primitives_variables.c
         core/primitives_words_lists.c
         core/primitives_workspace.c
+        core/primitives_list_processing.c
         core/primitives.c
         core/procedures.c
         core/properties.c
@@ -325,6 +337,7 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_variables.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_words_lists.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_workspace.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_list_processing.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/procedures.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/properties.c

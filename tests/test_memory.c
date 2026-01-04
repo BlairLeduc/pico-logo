@@ -33,8 +33,9 @@ void test_init_free_nodes(void)
 
 void test_init_free_atoms(void)
 {
-    // After init, atom table should be empty
-    TEST_ASSERT_EQUAL(mem_total_atoms(), mem_free_atoms());
+    // After init, atom table has the newline marker allocated (4 bytes: 1 char + null + 2 header)
+    // So free atoms should be total - 4
+    TEST_ASSERT_EQUAL(mem_total_atoms() - 4, mem_free_atoms());
 }
 
 void test_total_nodes(void)
@@ -415,17 +416,27 @@ void test_atoms_not_freed_by_gc(void)
 
 void test_free_nodes_accurate(void)
 {
+    // Get initial count - this is after mem_init which allocates the newline marker atom
     size_t initial = mem_free_nodes();
     
+    // Create an atom - this uses atom space but not node space
     Node word = mem_atom("x", 1);
+    // Note: atom allocation reduces potential_nodes by 1 (4 bytes = 1 node)
+    
+    // Create two cons cells
     mem_cons(word, NODE_NIL);
     mem_cons(word, NODE_NIL);
     
-    TEST_ASSERT_EQUAL(initial - 2, mem_free_nodes());
+    // After creating 2 nodes and 1 atom (4 bytes), we should have:
+    // - 2 fewer nodes (from cons cells)
+    // - 1 fewer potential node (from atom taking 4 bytes)
+    TEST_ASSERT_EQUAL(initial - 3, mem_free_nodes());
     
+    // After GC with no roots, both cons cells should be freed
+    // But the atom still takes space, so we get back 2 nodes, not 3
     mem_gc(NULL, 0);
     
-    TEST_ASSERT_EQUAL(initial, mem_free_nodes());
+    TEST_ASSERT_EQUAL(initial - 1, mem_free_nodes());
 }
 
 //============================================================================

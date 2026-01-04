@@ -120,6 +120,9 @@ static inline uint16_t get_max_node_index(void)
 // Initialization
 //==========================================================================
 
+// Newline marker - initialized in mem_init()
+Node mem_newline_marker = NODE_NIL;
+
 // Initialize the memory system.
 // Must be called before any other memory functions.
 void mem_init(void)
@@ -136,6 +139,9 @@ void mem_init(void)
     // Initialize free list as empty
     free_list = 0;
     free_count = 0;
+    
+    // Create the newline marker atom (SOH character, non-printable)
+    mem_newline_marker = mem_atom("\x01", 1);
 }
 
 //==========================================================================
@@ -570,6 +576,12 @@ bool mem_is_list(Node n)
 bool mem_is_word(Node n)
 {
     return NODE_GET_TYPE(n) == NODE_TYPE_WORD;
+}
+
+// Check if a node is the newline marker.
+bool mem_is_newline(Node n)
+{
+    return n == mem_newline_marker;
 }
 
 //==========================================================================

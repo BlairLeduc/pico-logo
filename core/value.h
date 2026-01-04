@@ -23,10 +23,11 @@ extern "C"
     // Logo value types
     typedef enum
     {
-        VALUE_NONE,   // No value (for commands)
-        VALUE_NUMBER, // Numeric value (float)
-        VALUE_WORD,   // Word (atom node)
-        VALUE_LIST    // List (cons or nil node)
+        VALUE_NONE,    // No value (for commands)
+        VALUE_NUMBER,  // Numeric value (float)
+        VALUE_WORD,    // Word (atom node)
+        VALUE_LIST,    // List (cons or nil node)
+        VALUE_NEWLINE  // Newline marker (for procedure formatting)
     } ValueType;
 
     // A Logo object
@@ -91,6 +92,7 @@ extern "C"
     Value value_number(float n);
     Value value_word(Node node);
     Value value_list(Node node);
+    Value value_newline(void);
 
     //==========================================================================
     // Value Predicates
@@ -100,6 +102,7 @@ extern "C"
     bool value_is_number(Value v);
     bool value_is_word(Value v);
     bool value_is_list(Value v);
+    bool value_is_newline(Value v);
 
     //==========================================================================
     // Value Comparisons

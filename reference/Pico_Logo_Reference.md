@@ -5,7 +5,7 @@ From the [Releases](https://github.com/BlairLeduc/pico-logo/releases) page, down
 After flashing Pico Logo, you should see:
 
 ```
-Copyright 2025 Blair Leduc
+Copyright 2025-2026 Blair Leduc
 Welcome to Pico Logo.
 ?_
 ```
@@ -44,15 +44,15 @@ to house
 end 
 
 to box 
-  repeat 4 [ forward 50 right 90 ] 
+  repeat 4 [forward 50 right 90] 
 end
 
 to tri :size
-  repeat 3 [ forward :size right 120 ] 
+  repeat 3 [forward :size right 120] 
 end 
 ```
 
-We are assuming that you have had some experience with Logo and have built up an intuitive model of what Logo is about. Here we give a more formal model. This model is just another way to think about Logo. It is not meant to replace vour current way of thinking, but rather to enhance it. 
+We are assuming that you have had some experience with Logo and have built up an intuitive model of what Logo is about. Here we give a more formal model. This model is just another way to think about Logo. It is not meant to replace your current way of thinking, but rather to enhance it. 
 
 ## Formal Logo
 
@@ -417,7 +417,7 @@ When you call the Editor, Logo changes the screen. The editor uses for all text 
 
 `PICO LOGO EDITOR`
 
-centred on the top row (the top row is reverse video). The bottom line has centered in reverse video
+centred on the top row (the top row is reverse video). The bottom line has centred in reverse video
 
 `ESC - ACCEPT    BRK - CANCEL`
 
@@ -608,7 +608,7 @@ fd _distance_
 
 ## getsh
 
-getsh _shapenumber_
+getsh _shapenumber_  
 
 `operation`
 
@@ -762,7 +762,7 @@ pos
 
 `operation`
 
-`pos` (for position) outputs the coordinates of the current position of the turtle in the form of a list [xcor ycor]. When you start up Logo, the turtle is at [0 0], the centre of the turtle field.
+`pos` (for position) outputs the coordinates of the current position of the turtle in the form of a list `[xcor ycor]`. When you start up Logo, the turtle is at `[0 0]`, the centre of the turtle field.
 
 
 ## shown? (shownp)
@@ -781,7 +781,7 @@ towards [_xcor_ _ycor_]
 
 `operation`
 
-`towards` outputs a heading that would make the turtle face in the direction indicated by [_xcor_ _ycor_].
+`towards` outputs a heading that would make the turtle face in the direction indicated by `[_xcor_ _ycor_]`.
 
 
 ## xcor
@@ -943,9 +943,9 @@ window
 
 `command`
 
-The `window` command makes the turtle field unbounded; what you see is a portion of the turtle field as if looking through a small window around the center of the screen. When the turtle moves beyond the visible bounds of the screen, it continues to move but can't be seen: The screen is 320 turtle steps high and 320 steps wide. The entire turtle field is 32,768 steps high and 32,768 steps wide.
+The `window` command makes the turtle field unbounded; what you see is a portion of the turtle field as if looking through a small window around the centre of the screen. When the turtle moves beyond the visible bounds of the screen, it continues to move but can't be seen: The screen is 320 turtle steps high and 320 steps wide. The entire turtle field is 32,768 steps high and 32,768 steps wide.
 
-Changing `window` to [`fence`](#fence) or [`wrap`](#wrap) when the turtle is off the screen sends the turtle to its home position [0 0].
+Changing `window` to [`fence`](#fence) or [`wrap`](#wrap) when the turtle is off the screen sends the turtle to its home position `[0 0]`.
 
 See [`fence`](#fence) and [`wrap`](#wrap).
 
@@ -968,7 +968,7 @@ bg
 
 `operation`
 
-`background` outputs a number representing the color of the background and is a value between 0 and 255. 
+`background` outputs a number representing the colour of the background and is a value between 0 and 255. 
 
 See [Colours](Colours.md) for the default palette.
 
@@ -1030,8 +1030,7 @@ cursor
 
 `operation`
 
-`cursor` outputs a list of the column and line numbers of the cursor position. The upper-left corner of the screen is [0 0]. The upper-right is [39 0] if the screen width is 40, and [63 0] if the
-screen width is 64.
+`cursor` outputs a list of the column and line numbers of the cursor position. The upper-left corner of the screen is `[0 0]`. The upper-right is `[39 0]`.
 
 See [`setcursor`](#setcursor).
 
@@ -1143,7 +1142,7 @@ member _object1_ _object2_
 
 `operation`
 
-`member` outputs the part of _object2_ in which _object1_ is the first element. If _object1_ is not an element of _object2_, `member` outputs the empty list or the empty word. This operation is useful for accessing information i n a file or for sorting long lists.
+`member` outputs the part of _object2_ in which _object1_ is the first element. If _object1_ is not an element of _object2_, `member` outputs the empty list or the empty word. This operation is useful for accessing information in a file or for sorting long lists.
 
 
 ## fput
@@ -1162,8 +1161,7 @@ list _object1_ _object2_
 
 `operation`
 
-The `list` operation outputs a list whose elements are _object1_,
-_object2_, and so on.
+The `list` operation outputs a list whose elements are _object1_, _object2_, and so on.
 
 
 ## lput
@@ -1172,8 +1170,7 @@ lput _object_ _list_
 
 `operation`
 
-The `lput` (for last put) operation outputs a new list formed by
-putting _object_ at the end of _list_.
+The `lput` (for last put) operation outputs a new list formed by putting _object_ at the end of _list_.
 
 
 ## parse
@@ -1246,11 +1243,12 @@ count _object_
 
 ## empty? (emptyp)
 
+empty? _object_  
 emptyp _object_  
 
 `operation`
 
-`emptyp` outputs `true` if _object_ is the empty word or the empty list; otherwise it outputs `false`.
+`empty?` outputs `true` if _object_ is the empty word or the empty list; otherwise it outputs `false`.
 
 
 ## equal? (equalp)
@@ -1380,7 +1378,7 @@ thing _name_
 ===
 # Arithmetic Operations
 
-This section presents all the Logo operations that manipulate numbers. Logo has two kinds of notation for expressing arithmetic operations: prefix notation and infix notation. Prefix notation means that the name of the procedure comes betore its inputs. With infix notation, the name of the procedure goes between its inputs, not before them.
+This section presents all the Logo operations that manipulate numbers. Logo has two kinds of notation for expressing arithmetic operations: prefix notation and infix notation. Prefix notation means that the name of the procedure comes before its inputs. With infix notation, the name of the procedure goes between its inputs, not before them.
 
 This chapter contains
 - a general introduction to Logo's arithmetic operations
@@ -1755,6 +1753,26 @@ label _word_
 The `label` command itself does nothing. However, a [`go`](#go) _word_ passes control to the instruction following it. Note that _word_ must always be a literal word (that is, it must be preceded by a quotation mark).
 
 
+## for
+
+for _forcontrol_ _instructionlist_  
+
+`command`
+
+The first input must be a list containing three or four members: (1) a word, which will be used as the name of a local variable; (2) a word or list that will be evaluated as by RUN to determine a number, the starting value of the variable; (3) a word or list that will be evaluated to determine a number, the limit value of the variable; (4) an optional word or list that will be evaluated to determine the step size. If the fourth member is missing, the step size will be 1 or –1 depending on whether the limit value is greater than or less than the starting value, respectively.
+
+The second input is an _instructionlist_. The effect of `for` is to run that _instructionlist_ repeatedly, assigning a new value to the control variable (the one named by the first member of the _forcontrol_ list) each time. First the starting value is assigned to the control variable. Then the value is compared to the limit value. `for` is complete when the sign of (current - limit) is the same as the sign of the step size. (If no explicit step size is provided, the _instructionlist_ is always run at least once. An explicit step size can lead to a zero-trip `for`, e.g., `for [i 1 0 1] ...`). Otherwise, the _instructionlist_ is run, then the step is added to the current value of the control variable and `for` returns to the comparison step.
+
+```logo
+? for [i 2 7 1.5] [print :i]
+2
+3.5
+5
+6.5
+?
+```
+
+
 ## do.while
 
 do.while _list_ _predicatelist_
@@ -1843,7 +1861,7 @@ toplevel
 
 `operation`
 
-Ouputs `"toplevel`. [`throw`](#throw) `toplevel` to return control to the top level.
+Outputs `"toplevel`. [`throw`](#throw) `toplevel` to return control to the top level.
 
 
 ## step
@@ -1888,6 +1906,231 @@ untrace _list_
 
 
 ===
+# List Processing
+
+The primitives in this section let you process lists. Each primitive takes either name of the procedure, a lambda expression or procedure text to apply to each element of the list.
+
+For example, if you wanted to concatenate corresponding elements of two lists, you could use the following `map` command with a named procedure:
+
+```logo
+?show (map "word [a b c] [d e f])
+[ad be cf]
+```
+
+A lambda expression is an anonymous procedure. It is written as a list whose first element is a list of input names (with no colons) and whose remaining elements are the expression for the output. For example, the lambda expression that adds 1 to its input would be written as follows:
+
+```logo
+[[x] :x + 1]
+```
+
+We could use this lambda expression with `map` to add 1 to each element of a list:
+
+```logo
+?show map [[x] :x + 1] [1 2 3]
+[2 3 4]
+```
+
+An anonymous procedure is a list whose first element is a list of input names (with no colons) and whose remaining elements are the body of the procedure. This is the list text that is used with [`define`](#define) and output by[`text`](#text). For example, the anonymous procedure that adds two numbers would be written as follows:
+
+```logo
+[[x y] [output :x + :y ]]
+```
+
+To add the corresponding elements of two lists, we could use this anonymous procedure with `map`:
+
+```logo
+?show map [[x y] [ output :x + :y ]] [1 2 3] [4 5 6]
+[5 7 9]
+```
+
+The anonymous procedure, while not recommended for complex procedures, can be used, when multiple lines are needed:
+
+```logo
+[[x y] [(print [x+y=] :x + :y)] [output :x + :y]]
+```
+
+For a more complex example, to calculate the distance between two points _in any number of dimensions_, we can use `map` and `apply` together with lambda expressions:
+
+```logo
+? show sqrt apply "sum map [[x] pwr :x 2] (map [[a b] :a - :b] [1 2 3] [4 5 6])
+5.19615
+```
+
+## apply
+
+apply _procedure_ _inputlist_
+
+`command` or `operation`
+
+Runs _procedure_, providing its inputs with the members of _inputlist_. The number of members in _inputlist_ must be an acceptable number of inputs for _procedure_. `apply` outputs what _procedure_ outputs, if anything.
+
+Examples:
+
+```logo
+?show apply [[a b c] :a + :b + :c] [1 2 3]
+6
+```
+
+```logo
+?show apply "sum [1 2 3 4]
+10
+```
+
+## foreach
+
+foreach _data_ _procedure_  
+(foreach _data1_ _data2_ ... _procedure_)
+
+`command`
+
+Evaluates _procedure_ repeatedly, once for each member of the _data_ list. If more than one data list are given, each of them must be the same length. (The data inputs can be words, in which case _procedure_ is evaluated once for each character.)
+
+Each data list provides one input to _procedure_ at each evaluation. Thus, if there are two data lists, _procedure_ must have two inputs; if there are three data lists, _procedure_ must have three inputs; and so on.
+
+Examples:
+
+```logo
+?foreach [1 2 3] [[i] print :i]
+1
+2
+3
+?
+```
+
+```
+?(foreach [1 2 3] [4 5 6] [[a b] print :a + :b])
+5
+7
+9
+?
+```
+
+
+## map
+
+map _procedure_ _data_  
+(map _procedure_ _data1_ _data2_ ...)
+
+`operation`
+
+`map` evaluates _procedure_ once for each member of the _data_ list and outputs a list of the results. If more than one data list are given, each of them must be the same length. (The data inputs can be words, in which case _procedure_ is evaluated once for each character.)
+
+Each data list provides one input to _procedure_ at each evaluation. Thus, if there are two data lists, _procedure_ must have two inputs; if there are three data lists, _procedure_ must have three inputs; and so on.
+
+Examples:
+
+```logo
+?show map [[x] :x * :x] [1 2 3 4]
+[1 4 9 16]
+?
+```
+
+```
+?show (map "sum [1 2 3] [4 5 6])
+[5 7 9]
+?
+```
+
+
+## filter
+
+filter _procedure_ _data_
+
+`operation`
+
+`filter` evaluates _procedure_ once for each member of the _data_ list and outputs a list of those members for which _procedure_ outputs `true`. _Procedure_ must have one input.
+
+_Procedure_ must output either `true` or `false` for each member of _data_.
+
+Examples:
+
+```logo
+? show filter [[x] :x > 2] [1 2 3 4 5]
+[3 4 5]
+?
+```
+
+
+## find
+
+find _procedure_ _data_
+
+`operation`
+
+`find` evaluates _procedure_ once for each member of the _data_ list and outputs the first member for which _procedure_ outputs `true`. _Procedure_ must have one input.
+
+_Procedure_ must output either `true` or `false` for each member of _data_.
+
+Example:
+
+```logo
+?show find [[x] 0 = remainder :x 2] [1 3 4 5 6]
+4
+?
+```
+
+
+## reduce
+
+reduce _procedure_ _data_
+
+`operation`
+
+`reduce` evaluates _procedure_ repeatedly to combine the members of _data_ into a single output. _Procedure_ must have two inputs. 
+
+If _data_ has only one member, that member is output. If _data_ is empty, an error occurs. Otherwise, the last two members of _data_ are provided as inputs to _procedure_, and the output of _procedure_ is then combined with the previous member of _data_ by calling _procedure_ again. This process continues until all members of _data_ have been combined.
+
+Examples:
+
+```logo
+?show reduce [[a b] :a + :b] [1 2 3 4]
+10
+?
+```
+
+```
+?show reduce [[x y] word :x :y] [a b c d e]
+abcde
+?
+```
+
+```
+?show reduce [[x y] [(pr "; :x ", :y)] [op :x + :y]] [1 2 3]
+; 2 , 3
+; 1 , 5
+6
+?
+```
+
+
+## crossmap
+
+crossmap _procedure_ _listlist_  
+(crossmap _procedure_ _data1_ _data2_ ...)
+
+`operation`
+
+`crossmap` evaluates _procedure_ for every combination of members from the input lists and outputs a list of the results. If more than one data list are given, each of them can be of different lengths. (The data inputs can be words, in which case _procedure_ is evaluated once for each character.)
+
+Each data list provides one input to _procedure_ at each evaluation. Thus, if there are two data lists, _procedure_ must have two inputs; if there are three data lists, _procedure_ must have three inputs; and so on.
+
+As a special case, if only one data list input is given, that _listlist_ is taken as a list of data lists, and each of its members contributes values to an input of _procedure_.
+
+Examples:
+
+```logo
+? show crossmap [[x y] :x + :y] [[1 2] [10 20 30]]
+[11 21 31 12 22 32]
+?
+```
+
+```logo
+?show (crossmap "word [a b c] [1 2 3 4])
+[a1 a2 a3 a4 b1 b2 b3 b4 c1 c2 c3 c4]
+?
+```
+
+===
 # Special Control Characters
 
 ## Break
@@ -1908,7 +2151,6 @@ Pressing `F4` interrupts whatever is running. Typing any character resumes norma
 `F9`
 
 Pressing `F9` interrupts whatever is running, causing a pause. `F9` is equivalent in effect to [`pause`](#pause), but different in its use: you press `F9` at the keyboard during the running of a procedure, while [`pause`](#pause) is part of the definition of a procedure.
-
 
 
 ===
@@ -2752,16 +2994,13 @@ battery
 The `battery` operation returns a list where the first value is the percent remaining in the battery and the second value is `true` if the battery is currently charging.
 
 
-## .poweroff
+## goodbye
 
-.poweroff
+goodbye
 
 `operation`
 
-`.poweroff` closes all open files and powers off the device. If the device does not support this capability, an error is displayed.
-
-> [!WARNING]
-> Primitives whose names start with a period are **dangerous**. You may lose work if used incorrectly.
+`goodbye` closes all open files and powers off the device. If the device does not support this capability, an error is displayed.
 
 
 
@@ -2802,14 +3041,6 @@ circlel _radius_
 
 These procedures are found in the file `math_tools`.
 
-### abs
-
-abs _number_
-
-`operation`
-
-`abs` outputs the absolute value of its input.
-
 
 ### divisor?
 
@@ -2820,75 +3051,9 @@ divisor? _number1_ _number2_
 `divisor?` indicates (`true` or `false`) whether _number1_ divides evenly into _number2_.
 
 
-### log
-
-log _number_
-
-`operation`
-
-`log` returns the logarithm to the base 10 of _number_. It uses the `ln` procedure, which follows.
-
-
-### ln
-
-ln _number_
-
-`operation`
-
-`ln` calculates the natural logarithm of _number_.
-
-
-### pwr
-
-pwr _number1_ _number2_
-
-`operation`
-
-`pwr` returns the value of _number1_ to the _number2_ power. If _number2_ is a fraction and _number1_ is not equal to one, `pwr` uses the natural functions `exp` and `ln`. If _number1_ is less then 0 and _number2_ is a fraction, the result should be a complex number.
-
-
-### exp
-
-exp _number_
-
-`operation`
-
-`exp` is the natural exponential function, calculated using a Taylor series. `e` is declared a local variable to ensure that it always contains the correct value.
-
-
 ## Program Logic or Debugging Tools
 
 These procedures are found in the file `program_tools`.
-
-### comment
-
-; _list_
-
-`command`
-
-';' allows you to embed comments in your programs in the form:
-
-```logo
-; [This is a comment]
-```
-
-### forever
-
-forever _instructionlist_
-
-`command`
-
-`forever` repeats a group of instructions until you press
-`BRK` or turn off the power.
-
-
-### map
-
-map _command_ _list_
-
-`command`
-
-`map` applies _command_ to every element of _list_.
 
 
 ### sort
@@ -2898,16 +3063,6 @@ sort _arg_ _list_
 `operation`
 
 `sort` takes _list_ of words and outputs them alphabetically.
-
-
-### while
-
-while _condition_ _instructionlist_
-
-`command`
-
-`while` repeats a group of instructions until _condition_
-becomes `false`.
 
 
 
@@ -3082,11 +3237,11 @@ The way in which the minus sign "`-`” is parsed is also a little strange. The 
 
 1. as part of a number to indicate that it is negative, as in `-3` 
 2. as a procedure of one input, called _unary minus_, which outputs the additive inverse of its input, as in `-XCOR` or `-:DISTANCE` 
-3. as a procedure of two inputs, which outputs the difference between its first input and its second,as in `7-3` and `XCOR-YCOR` 
+3. as a procedure of two inputs, which outputs the difference between its first input and its second, as in `7-3` and `XCOR-YCOR` 
 
 The parser tries to be clever about this potential ambiguity and figure out which one was meant by the following rules:
 
-1. If the ”`-`” immediately precedes a number, and follows any delimiter except right parenthesis ”`)`”, the number is parsed as a negative number. This allows the following behavior:
+1. If the ”`-`” immediately precedes a number, and follows any delimiter except right parenthesis ”`)`”, the number is parsed as a negative number. This allows the following behaviour:
   - `print sum 20-20` (parses as 20 minus 20)
   - `print 3*-4` (parses as 3 times negative 4) 
   - `print (3+4)-5` (parses as 3 plus 4 minus 5) 

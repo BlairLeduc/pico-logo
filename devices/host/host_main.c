@@ -82,7 +82,7 @@ int main(void)
     }
 
     // Print welcome banner
-    logo_io_write_line(&io, "Copyright 2025 Blair Leduc");
+    logo_io_write_line(&io, "Copyright 2025-2026 Blair Leduc");
     logo_io_write_line(&io, "Welcome to Pico Logo.");
 
     // Run the main REPL in a loop (empty prefix for top level)

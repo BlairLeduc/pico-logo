@@ -47,7 +47,7 @@ static Result prim_battery_level(Evaluator *eval, int argc, Value *args)
     return result_ok(value_list(list));
 }
 
-static Result prim_poweroff(Evaluator *eval, int argc, Value *args)
+static Result prim_goodbye(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc); UNUSED(args);
 
@@ -169,6 +169,6 @@ static Result prim_toot(Evaluator *eval, int argc, Value *args)
 void primitives_hardware_init(void)
 {
     primitive_register("battery", 0, prim_battery_level);
-    primitive_register(".poweroff", 0, prim_poweroff);
+    primitive_register("goodbye", 0, prim_goodbye);
     primitive_register("toot", 2, prim_toot);
 }

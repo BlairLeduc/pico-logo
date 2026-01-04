@@ -1,6 +1,45 @@
-make "startup [
-    load "graphics_tools
-    load "math_tools
-    load "program_tools
-    buryall
-]
+to arcr :radius :degrees
+  local "step local "rem
+  make "step 2 * :radius * 3.1416 / 36
+  make "rem remainder :degrees 10
+  repeat :degrees / 10 [ rt 5 fd :step rt 5 ]
+  if :rem > 0 [ fd :step * :rem / 10 rt :rem ]
+end
+
+to arcl :radius :degrees
+  local "step local "rem
+  make "step 2 * :radius * 3.1416 / 36
+  make "rem remainder :degrees 10
+  repeat :degrees / 10 [ lt 5 fd :step lt 5 ]
+  if :rem > 0 [ fd :step * :rem / 10 lt :rem ]
+end
+
+to circler :radius
+  local "step
+  make "step 2 * :radius * 3.1416 / 36
+  repeat 36 [ rt 5 fd :step rt 5 ]
+end
+
+to circlel :radius
+  local "step
+  make "step 2 * :radius * 3.1416 / 36
+  repeat 36 [ lt 5 fd :step lt 5 ]
+end
+
+to divisor? :a :b
+  op 0 = remainder :b :a
+end
+
+to sort :arg :list
+  if empty? :arg [ op :list ]
+  make "list insert first :arg :list
+  op sort bf :arg :list
+end
+
+to insert :a :l
+  if empty? :l [ op ( list :a ) ]
+  if before? :a first :l [op fput :a :l ]
+  op fput first :l insert :a bf :l
+end
+
+make "startup [buryall]
