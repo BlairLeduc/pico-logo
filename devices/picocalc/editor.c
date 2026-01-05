@@ -1094,6 +1094,11 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
     screen_txt_get_cursor(&saved_cursor_col, &saved_cursor_row);
     uint8_t saved_screen_mode = screen_get_mode();
     
+    // Clear any pending screensaver dismissed flag - we're about to redraw anyway
+    // This prevents a spurious redraw on the first keypress if the screensaver
+    // was dismissed while typing the command that launched the editor
+    screensaver_dismissed = false;
+    
     // Initialize editor state
     editor.buffer = buffer;
     editor.buffer_size = buffer_size;
