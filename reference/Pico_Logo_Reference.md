@@ -1676,6 +1676,19 @@ exp _exponent_
 Outputs _e_ raised to the power of _exponent_.
 
 
+## form
+
+form _number_ _width_ _decimalplaces_
+
+`operation`
+
+`form` outputs a word representing _number_ formatted to fit in a field of _width_ characters with _decimalplaces_ digits to the right of the decimal point. If _decimalplaces_ is zero, no decimal point is included. The number is rounded to the specified number of decimal places.
+
+If _number_ is negative, the minus sign takes up one position in the field. If _number_ is too large to fit in the specified width, `form` outputs a string using the minimum length required for _number_ with _decimalplaces_.
+
+If _width_ is less than or equal to zero, or if _decimalplaces_ is less than zero, an error occurs.
+
+
 ## int
 
 int _number_  

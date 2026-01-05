@@ -3,7 +3,7 @@
 //  Copyright 2025 Blair Leduc. See LICENSE for details.
 //
 //  Arithmetic primitives: sum, difference, product, quotient, random,
-//                         arctan, cos, sin, int, intquotient, remainder, round, sqrt
+//                         arctan, cos, sin, int, intquotient, remainder, round, sqrt, form
 //
 
 #include "primitives.h"
@@ -12,6 +12,8 @@
 #include "devices/io.h"
 #include <stdlib.h>
 #include <math.h>
+#include <stdio.h>
+#include <string.h>
 
 // Conversion factor from degrees to radians
 #define DEG_TO_RAD (3.14159265358979323846f / 180.0f)
@@ -231,6 +233,75 @@ static Result prim_exp(Evaluator *eval, int argc, Value *args)
     return result_ok(value_number(expf(exponent)));
 }
 
+// form - outputs a word representing number formatted to fit in a field of
+// width characters with decimalplaces digits to the right of the decimal point.
+// If decimalplaces is zero, no decimal point is included. The number is rounded
+// to the specified number of decimal places.
+// If number is too large to fit in the specified width, form outputs a string
+// using the minimum length required for number with decimalplaces.
+// Error if width <= 0 or decimalplaces < 0.
+static Result prim_form(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_NUMBER(args[0], number);
+    REQUIRE_NUMBER(args[1], width_f);
+    REQUIRE_NUMBER(args[2], decimalplaces_f);
+
+    int width = (int)width_f;
+    int decimalplaces = (int)decimalplaces_f;
+
+    // Validate inputs
+    if (width <= 0)
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
+    if (decimalplaces < 0)
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[2]));
+
+    // Buffer for formatting - enough for any reasonable number
+    char buf[64];
+
+    // Round the number to the specified decimal places
+    float multiplier = 1.0f;
+    for (int i = 0; i < decimalplaces; i++)
+        multiplier *= 10.0f;
+    float rounded = roundf(number * multiplier) / multiplier;
+
+    // Format the number with the specified decimal places
+    char fmt_buf[48];
+    int fmt_len;
+
+    if (decimalplaces == 0)
+    {
+        // No decimal point - format as integer
+        int int_val = (int)roundf(rounded);
+        fmt_len = snprintf(fmt_buf, sizeof(fmt_buf), "%d", int_val);
+    }
+    else
+    {
+        // Format with specified decimal places
+        fmt_len = snprintf(fmt_buf, sizeof(fmt_buf), "%.*f", decimalplaces, (double)rounded);
+    }
+
+    // If the formatted number fits in width, pad with leading spaces
+    // If it doesn't fit, just use the formatted number as-is
+    if (fmt_len < width)
+    {
+        // Pad with leading spaces
+        int padding = width - fmt_len;
+        for (int i = 0; i < padding; i++)
+            buf[i] = ' ';
+        memcpy(buf + padding, fmt_buf, fmt_len + 1);  // +1 for null terminator
+    }
+    else
+    {
+        // Number doesn't fit, use as-is
+        memcpy(buf, fmt_buf, fmt_len + 1);
+    }
+
+    // Create a word from the formatted string
+    Node result = mem_atom_cstr(buf);
+    return result_ok(value_word(result));
+}
+
 void primitives_arithmetic_init(void)
 {
     primitive_register("abs", 1, prim_abs);
@@ -251,4 +322,5 @@ void primitives_arithmetic_init(void)
     primitive_register("ln", 1, prim_ln);
     primitive_register("pwr", 2, prim_pwr);
     primitive_register("exp", 1, prim_exp);
+    primitive_register("form", 3, prim_form);
 }
