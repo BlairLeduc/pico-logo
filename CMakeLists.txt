@@ -73,6 +73,7 @@ add_library(logo_core
     core/primitives_files.c
     core/primitives_hardware.c
     core/primitives_logical.c
+    core/primitives_bitwise.c
     core/primitives_outside_world.c
     core/primitives_procedures.c
     core/primitives_properties.c
@@ -221,6 +222,7 @@ if(BUILD_FOR_HOST)
         core/primitives_files.c
         core/primitives_hardware.c
         core/primitives_logical.c
+        core/primitives_bitwise.c
         core/primitives_outside_world.c
         core/primitives_procedures.c
         core/primitives_properties.c
@@ -329,6 +331,7 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_files.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_hardware.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_logical.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_bitwise.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_outside_world.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_procedures.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_properties.c

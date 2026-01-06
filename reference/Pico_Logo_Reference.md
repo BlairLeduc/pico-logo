@@ -2501,6 +2501,55 @@ Outputs `true` if any of its inputs are `true`. All inputs are evaluated.
 
 
 ===
+# Bitwise Operations
+
+## bitand
+
+bitand _num1_ _num2_  
+(bitand _num1_ _num2_ _num3_ ...)
+
+Outputs the bitwise AND of its inputs, which must be integers.
+
+
+## bitor
+
+bitor _num1_ _num2_  
+(bitor _num1_ _num2_ _num3_ ...)
+
+Outputs the bitwise OR of its inputs, which must be integers.
+
+
+## bitxor
+
+bitxor _num1_ _num2_  
+(bitxor _num1_ _num2_ _num3_ ...)
+
+Outputs the bitwise exclusive OR of its inputs, which must be integers.
+
+
+## bitnot
+
+bitnot _num_  
+
+Outputs the bitwise NOT of its input, which must be an integer.
+
+
+## ashift
+
+ashift _num1_ _num2_  
+
+Outputs _num1_ arithmetic-shifted to the left by _num2_ bits. If _num2_ is negative, the shift is to the right with sign extension. The inputs must be integers.
+
+
+## lshift
+
+lshift _num1_ _num2_  
+
+Outputs _num1_ logical-shifted to the left by _num2_ bits. If _num2_ is negative, the shift is to the right with zero fill. The inputs must be integers.
+
+
+
+===
 # The Outside World
 
 ## key? (keyp)
