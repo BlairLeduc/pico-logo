@@ -2290,6 +2290,18 @@ Examples:
 ```
 
 
+## map.se
+
+map.se _procedure_ _data_
+(map.se _procedure_ _data1_ _data2_ ...)
+
+`operation`
+
+Outputs a list formed by evaluating the _procedure_ repeatedly and concatenating the results using [`sentence`](#sentence). That is, the members of the output are the members of the results of the evaluations. The output list might, therefore, be of a different length from that of the data input(s). (If the result of an evaluation is the empty list, it contributes nothing to the final output.) The data inputs may be words or lists.
+
+Each data list provides one input to _procedure_ at each evaluation. Thus, if there are two data lists, _procedure_ must have two inputs; if there are three data lists, _procedure_ must have three inputs; and so on.
+
+
 ## filter
 
 filter _procedure_ _data_

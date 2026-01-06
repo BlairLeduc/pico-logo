@@ -444,6 +444,114 @@ void test_map_with_word(void)
     TEST_ASSERT_EQUAL_STRING("L", mem_word_ptr(mem_car(list)));
 }
 
+//==========================================================================
+// map.se tests
+//==========================================================================
+
+void test_map_se_basic(void)
+{
+    // map.se [[x] list :x :x] [1 2 3] -> [1 1 2 2 3 3]
+    Result r = eval_string("map.se [[x] list :x :x] [1 2 3]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_list(r.value));
+    
+    Node list = r.value.as.node;
+    TEST_ASSERT_EQUAL_STRING("1", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_EQUAL_STRING("1", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_EQUAL_STRING("2", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_EQUAL_STRING("2", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_EQUAL_STRING("3", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_EQUAL_STRING("3", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_TRUE(mem_is_nil(list));
+}
+
+void test_map_se_with_empty_result(void)
+{
+    // Empty list results contribute nothing
+    // When procedure outputs empty list [], nothing is added to result
+    // map.se [[x] if :x > 2 [(list :x)] [[]]] [1 2 3 4] -> [3 4]
+    Result r = eval_string("map.se [[x] (if :x > 2 [(list :x)] [[]])] [1 2 3 4]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_list(r.value));
+    
+    Node list = r.value.as.node;
+    TEST_ASSERT_EQUAL_STRING("3", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_EQUAL_STRING("4", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_TRUE(mem_is_nil(list));
+}
+
+void test_map_se_with_word_result(void)
+{
+    // Words are added as single elements
+    // map.se [[x] :x] [a b c] -> [a b c]
+    Result r = eval_string("map.se [[x] :x] [a b c]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_list(r.value));
+    
+    Node list = r.value.as.node;
+    TEST_ASSERT_EQUAL_STRING("a", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_EQUAL_STRING("b", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_EQUAL_STRING("c", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_TRUE(mem_is_nil(list));
+}
+
+void test_map_se_empty_list(void)
+{
+    Result r = eval_string("map.se [[x] list :x] []");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_list(r.value));
+    TEST_ASSERT_TRUE(mem_is_nil(r.value.as.node));
+}
+
+void test_map_se_with_word_data(void)
+{
+    // map.se [[x] list :x :x] "ab -> [a a b b]
+    Result r = eval_string("map.se [[x] list :x :x] \"ab");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_list(r.value));
+    
+    Node list = r.value.as.node;
+    TEST_ASSERT_EQUAL_STRING("a", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_EQUAL_STRING("a", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_EQUAL_STRING("b", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_EQUAL_STRING("b", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_TRUE(mem_is_nil(list));
+}
+
+void test_map_se_multi_list(void)
+{
+    // (map.se [[a b] list :a :b] [1 2] [x y]) -> [1 x 2 y]
+    Result r = eval_string("(map.se [[a b] list :a :b] [1 2] [x y])");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_list(r.value));
+    
+    Node list = r.value.as.node;
+    TEST_ASSERT_EQUAL_STRING("1", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_EQUAL_STRING("x", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_EQUAL_STRING("2", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_EQUAL_STRING("y", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_TRUE(mem_is_nil(list));
+}
+
 void test_filter_with_word(void)
 {
     // Filter vowels from a word
@@ -539,6 +647,14 @@ int main(void)
     RUN_TEST(test_map_empty_list);
     RUN_TEST(test_map_with_user_procedure);
     RUN_TEST(test_map_with_word);
+    
+    // map.se tests
+    RUN_TEST(test_map_se_basic);
+    RUN_TEST(test_map_se_with_empty_result);
+    RUN_TEST(test_map_se_with_word_result);
+    RUN_TEST(test_map_se_empty_list);
+    RUN_TEST(test_map_se_with_word_data);
+    RUN_TEST(test_map_se_multi_list);
     
     // filter tests
     RUN_TEST(test_filter_basic);

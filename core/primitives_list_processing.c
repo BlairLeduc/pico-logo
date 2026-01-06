@@ -731,6 +731,232 @@ static Result prim_map(Evaluator *eval, int argc, Value *args)
 }
 
 //==========================================================================
+// map.se procedure data
+// (map.se procedure data1 data2 ...)
+//==========================================================================
+
+static Result prim_map_se(Evaluator *eval, int argc, Value *args)
+{
+    if (argc < 2)
+    {
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, NULL, NULL);
+    }
+    
+    // First argument is the procedure
+    ProcSpec spec;
+    Result r = parse_proc_spec(args[0], &spec);
+    if (r.status == RESULT_ERROR)
+    {
+        return r;
+    }
+    
+    // Determine expected parameter count
+    int expected_params;
+    if (spec.type == PROC_SPEC_NAME)
+    {
+        if (spec.as.named.primitive)
+        {
+            expected_params = spec.as.named.primitive->default_args;
+        }
+        else
+        {
+            expected_params = spec.as.named.user_proc->param_count;
+        }
+    }
+    else
+    {
+        expected_params = spec.as.lambda.param_count;
+    }
+    
+    // Number of data lists
+    int data_count = argc - 1;
+    
+    // Validate that we have the right number of data lists
+    if (data_count != expected_params)
+    {
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, NULL, NULL);
+    }
+    
+    // Validate all data arguments are lists or words
+    for (int i = 1; i < argc; i++)
+    {
+        if (!value_is_list(args[i]) && !value_is_word(args[i]))
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[i]));
+        }
+    }
+    
+    // Get length of first data list/word (all must be same length for multi-list)
+    int length = 0;
+    if (value_is_list(args[1]))
+    {
+        Node list = args[1].as.node;
+        while (!mem_is_nil(list))
+        {
+            length++;
+            list = mem_cdr(list);
+        }
+    }
+    else
+    {
+        length = (int)mem_word_len(args[1].as.node);
+    }
+    
+    // For multi-list, verify all lists have same length
+    if (data_count > 1)
+    {
+        for (int i = 2; i < argc; i++)
+        {
+            int other_length = 0;
+            if (value_is_list(args[i]))
+            {
+                Node list = args[i].as.node;
+                while (!mem_is_nil(list))
+                {
+                    other_length++;
+                    list = mem_cdr(list);
+                }
+            }
+            else
+            {
+                other_length = (int)mem_word_len(args[i].as.node);
+            }
+            
+            if (other_length != length)
+            {
+                return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[i]));
+            }
+        }
+    }
+    
+    // Set up iterators for each data list
+    Node cursors[MAX_PROC_PARAMS];
+    const char *word_ptrs[MAX_PROC_PARAMS];
+    bool is_word[MAX_PROC_PARAMS];
+    
+    for (int i = 0; i < data_count; i++)
+    {
+        if (value_is_list(args[i + 1]))
+        {
+            cursors[i] = args[i + 1].as.node;
+            is_word[i] = false;
+        }
+        else
+        {
+            word_ptrs[i] = mem_word_ptr(args[i + 1].as.node);
+            is_word[i] = true;
+        }
+    }
+    
+    // Build result list using sentence semantics
+    Node result_head = NODE_NIL;
+    Node result_tail = NODE_NIL;
+    
+    Value proc_args[MAX_PROC_PARAMS];
+    
+    for (int idx = 0; idx < length; idx++)
+    {
+        // Collect current element from each data source
+        for (int i = 0; i < data_count; i++)
+        {
+            if (is_word[i])
+            {
+                Node char_atom = mem_atom(&word_ptrs[i][idx], 1);
+                proc_args[i] = value_word(char_atom);
+            }
+            else
+            {
+                Node elem = mem_car(cursors[i]);
+                if (mem_is_word(elem))
+                {
+                    proc_args[i] = value_word(elem);
+                }
+                else if (mem_is_nil(elem))
+                {
+                    proc_args[i] = value_list(NODE_NIL);
+                }
+                else
+                {
+                    proc_args[i] = value_list(elem);
+                }
+                cursors[i] = mem_cdr(cursors[i]);
+            }
+        }
+        
+        // Invoke the procedure
+        r = invoke_proc_spec(eval, &spec, data_count, proc_args);
+        
+        // Propagate errors, stop, throw
+        if (r.status == RESULT_ERROR || r.status == RESULT_THROW ||
+            r.status == RESULT_STOP)
+        {
+            return r;
+        }
+        
+        // Handle output from procedure text
+        if (r.status == RESULT_OUTPUT)
+        {
+            r = result_ok(r.value);
+        }
+        
+        // Collect result using sentence semantics
+        if (r.status == RESULT_OK)
+        {
+            if (value_is_list(r.value))
+            {
+                // Append all elements of the list (sentence semantics)
+                Node list = r.value.as.node;
+                while (!mem_is_nil(list))
+                {
+                    Node new_cell = mem_cons(mem_car(list), NODE_NIL);
+                    if (mem_is_nil(result_head))
+                    {
+                        result_head = new_cell;
+                        result_tail = new_cell;
+                    }
+                    else
+                    {
+                        mem_set_cdr(result_tail, new_cell);
+                        result_tail = new_cell;
+                    }
+                    list = mem_cdr(list);
+                }
+            }
+            else if (value_is_word(r.value) || value_is_number(r.value))
+            {
+                // Add word or number as single element
+                Node result_node;
+                if (value_is_number(r.value))
+                {
+                    char buf[32];
+                    format_number(buf, sizeof(buf), r.value.as.number);
+                    result_node = mem_atom_cstr(buf);
+                }
+                else
+                {
+                    result_node = r.value.as.node;
+                }
+                
+                Node new_cell = mem_cons(result_node, NODE_NIL);
+                if (mem_is_nil(result_head))
+                {
+                    result_head = new_cell;
+                    result_tail = new_cell;
+                }
+                else
+                {
+                    mem_set_cdr(result_tail, new_cell);
+                    result_tail = new_cell;
+                }
+            }
+            // None values and empty lists contribute nothing
+        }
+    }
+    
+    return result_ok(value_list(result_head));
+}
+
+//==========================================================================
 // filter procedure data
 //==========================================================================
 
@@ -1429,6 +1655,7 @@ void primitives_list_processing_init(void)
     primitive_register("apply", 2, prim_apply);
     primitive_register("foreach", 2, prim_foreach);
     primitive_register("map", 2, prim_map);
+    primitive_register("map.se", 2, prim_map_se);
     primitive_register("filter", 2, prim_filter);
     primitive_register("find", 2, prim_find);
     primitive_register("reduce", 2, prim_reduce);
