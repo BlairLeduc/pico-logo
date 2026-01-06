@@ -2945,6 +2945,25 @@ setprefix _pathname_
 
 Sets a prefix that will be used as the implicit beginning of filenames in [`open`](#open), [`load`](#load), and [`save`](#save) commands. The input to `setprefix` must be a word, unless it is the empty list, to indicate that there should be no prefix.
 
+The _pathname_ can include parent directory references ("`..`") to navigate up the directory tree. For example, if the current prefix is `/Logo/apple/`, then `setprefix ".."` will change the prefix to `/Logo/`, and `setprefix "..\\/banana"` will change it to `/Logo/banana/`.
+
+**Examples**:
+
+```logo
+?setprefix "/Logo
+?pr prefix
+/Logo/
+?setprefix "apple
+?pr prefix
+/Logo/apple/
+?setprefix "..
+?pr prefix
+/Logo/
+?setprefix "..\/banana
+?pr prefix
+/Logo/banana/
+```
+
 
 ## prefix
 

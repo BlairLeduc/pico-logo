@@ -200,6 +200,49 @@ void test_prefix_management(void)
     TEST_ASSERT_EQUAL_STRING("file.txt", buffer);
 }
 
+void test_resolve_path_with_parent_dir(void)
+{
+    char buffer[256];
+    
+    // Test ".." with prefix
+    logo_io_set_prefix(&io, "/Logo/apple/");
+    TEST_ASSERT_NOT_NULL(logo_io_resolve_path(&io, "..", buffer, sizeof(buffer)));
+    TEST_ASSERT_EQUAL_STRING("/Logo", buffer);
+    
+    // Test "../banana" with prefix
+    logo_io_set_prefix(&io, "/Logo/apple/");
+    TEST_ASSERT_NOT_NULL(logo_io_resolve_path(&io, "../banana", buffer, sizeof(buffer)));
+    TEST_ASSERT_EQUAL_STRING("/Logo/banana", buffer);
+    
+    // Test multiple ".." segments
+    logo_io_set_prefix(&io, "/Logo/apple/banana/");
+    TEST_ASSERT_NOT_NULL(logo_io_resolve_path(&io, "../../..", buffer, sizeof(buffer)));
+    TEST_ASSERT_EQUAL_STRING("/", buffer);
+    
+    // Test ".." at root (should stay at root)
+    logo_io_set_prefix(&io, "/Logo/");
+    TEST_ASSERT_NOT_NULL(logo_io_resolve_path(&io, "..", buffer, sizeof(buffer)));
+    TEST_ASSERT_EQUAL_STRING("/", buffer);
+    
+    // Test ".." going past root (should clamp to root)
+    logo_io_set_prefix(&io, "/");
+    TEST_ASSERT_NOT_NULL(logo_io_resolve_path(&io, "..", buffer, sizeof(buffer)));
+    TEST_ASSERT_EQUAL_STRING("/", buffer);
+    
+    // Test "." (current directory) should be normalized out
+    logo_io_set_prefix(&io, "/Logo/");
+    TEST_ASSERT_NOT_NULL(logo_io_resolve_path(&io, "./apple", buffer, sizeof(buffer)));
+    TEST_ASSERT_EQUAL_STRING("/Logo/apple", buffer);
+    
+    // Test combined "." and ".."
+    logo_io_set_prefix(&io, "/Logo/apple/");
+    TEST_ASSERT_NOT_NULL(logo_io_resolve_path(&io, "./../banana/./cherry", buffer, sizeof(buffer)));
+    TEST_ASSERT_EQUAL_STRING("/Logo/banana/cherry", buffer);
+    
+    // Clear prefix
+    logo_io_set_prefix(&io, "");
+}
+
 void test_file_exists(void)
 {
     mock_file_exists_result = true;
@@ -423,6 +466,7 @@ int main(void)
     UNITY_BEGIN();
     RUN_TEST(test_init_defaults);
     RUN_TEST(test_prefix_management);
+    RUN_TEST(test_resolve_path_with_parent_dir);
     RUN_TEST(test_file_exists);
     RUN_TEST(test_open_file);
     RUN_TEST(test_reader_writer_control);

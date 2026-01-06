@@ -675,7 +675,12 @@ static Result prim_setprefix(Evaluator *eval, int argc, Value *args)
         char *resolved_path = logo_io_resolve_path(io, prefix, resolved, sizeof(resolved));
         if (resolved_path)
         {
-            if (io->storage && io->storage->ops->dir_exists)
+            // Root directory "/" always exists (can happen with ".." navigation)
+            if (resolved_path[0] == '/' && resolved_path[1] == '\0')
+            {
+                exists = true;
+            }
+            else if (io->storage && io->storage->ops->dir_exists)
             {
                 exists = io->storage->ops->dir_exists(resolved_path);
             }

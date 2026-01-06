@@ -1363,6 +1363,87 @@ void test_setprefix_relative_with_trailing_slash_prefix(void)
     TEST_ASSERT_EQUAL_STRING("/Logo/apple/", mem_word_ptr(r3.value.as.node));
 }
 
+void test_setprefix_parent_directory(void)
+{
+    // Create directory structure: /Logo/apple
+    mock_fs_create_dir("/Logo");
+    mock_fs_create_dir("/Logo/apple");
+    
+    // Set prefix to "/Logo/apple/"
+    LogoIO *io = primitives_get_io();
+    TEST_ASSERT_NOT_NULL(io);
+    strcpy(io->prefix, "/Logo/apple/");
+    
+    // setprefix ".." should go up to /Logo
+    Result r = run_string("setprefix \"..");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_NONE, r.status, "setprefix to .. should succeed");
+    
+    Result r2 = eval_string("prefix");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_STRING("/Logo/", mem_word_ptr(r2.value.as.node));
+}
+
+void test_setprefix_parent_directory_with_subdir(void)
+{
+    // Create directory structure: /Logo/apple and /Logo/banana
+    mock_fs_create_dir("/Logo");
+    mock_fs_create_dir("/Logo/apple");
+    mock_fs_create_dir("/Logo/banana");
+    
+    // Set prefix to "/Logo/apple/"
+    LogoIO *io = primitives_get_io();
+    TEST_ASSERT_NOT_NULL(io);
+    strcpy(io->prefix, "/Logo/apple/");
+    
+    // setprefix "..\\/banana" should go up to /Logo then into banana
+    Result r = run_string("setprefix \"..\\/banana");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_NONE, r.status, "setprefix to ../banana should succeed");
+    
+    Result r2 = eval_string("prefix");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_STRING("/Logo/banana/", mem_word_ptr(r2.value.as.node));
+}
+
+void test_setprefix_parent_at_root(void)
+{
+    // Create directory structure: /Logo
+    mock_fs_create_dir("/Logo");
+    
+    // Set prefix to "/Logo/"
+    LogoIO *io = primitives_get_io();
+    TEST_ASSERT_NOT_NULL(io);
+    strcpy(io->prefix, "/Logo/");
+    
+    // setprefix ".." should go to root /
+    Result r = run_string("setprefix \"..");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_NONE, r.status, "setprefix to .. from /Logo should go to root");
+    
+    Result r2 = eval_string("prefix");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_STRING("/", mem_word_ptr(r2.value.as.node));
+}
+
+void test_setprefix_multiple_parent_dirs(void)
+{
+    // Create directory structure: /Logo/apple/banana
+    mock_fs_create_dir("/Logo");
+    mock_fs_create_dir("/Logo/apple");
+    mock_fs_create_dir("/Logo/apple/banana");
+    
+    // Set prefix to "/Logo/apple/banana/"
+    LogoIO *io = primitives_get_io();
+    TEST_ASSERT_NOT_NULL(io);
+    strcpy(io->prefix, "/Logo/apple/banana/");
+    
+    // setprefix "..\\/..\\/.." should go up three levels to root
+    Result r = run_string("setprefix \"..\\/..\\/..");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_NONE, r.status, "setprefix with multiple .. should succeed");
+    
+    Result r2 = eval_string("prefix");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_STRING("/", mem_word_ptr(r2.value.as.node));
+}
+
 //==========================================================================
 // Load/Save Tests
 //==========================================================================
@@ -1902,6 +1983,10 @@ int main(void)
     RUN_TEST(test_setprefix_relative_with_root_prefix);
     RUN_TEST(test_setprefix_absolute_path);
     RUN_TEST(test_setprefix_relative_with_trailing_slash_prefix);
+    RUN_TEST(test_setprefix_parent_directory);
+    RUN_TEST(test_setprefix_parent_directory_with_subdir);
+    RUN_TEST(test_setprefix_parent_at_root);
+    RUN_TEST(test_setprefix_multiple_parent_dirs);
 
     // Load/Save tests
     RUN_TEST(test_load_executes_file);

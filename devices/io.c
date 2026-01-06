@@ -199,6 +199,124 @@ const char *logo_io_get_prefix(const LogoIO *io)
     return io->prefix;
 }
 
+// Normalize a path in-place, resolving "." and ".." segments
+// Returns the buffer on success, NULL if the path tries to go above root
+static char *normalize_path(char *buffer)
+{
+    if (!buffer || buffer[0] == '\0')
+    {
+        return buffer;
+    }
+
+    bool is_absolute = (buffer[0] == '/');
+    
+    // We'll use an array of pointers to track the start of each path component
+    // and a write pointer to build the normalized path
+    char *read = buffer;
+    char *write = buffer;
+    
+    // Preserve leading slash for absolute paths
+    if (is_absolute)
+    {
+        read++;
+        write++;
+    }
+    
+    while (*read != '\0')
+    {
+        // Skip consecutive slashes
+        while (*read == '/')
+        {
+            read++;
+        }
+        
+        if (*read == '\0')
+        {
+            break;
+        }
+        
+        // Find the end of this component
+        char *component_start = read;
+        while (*read != '\0' && *read != '/')
+        {
+            read++;
+        }
+        size_t component_len = read - component_start;
+        
+        // Check for "." (current directory) - skip it
+        if (component_len == 1 && component_start[0] == '.')
+        {
+            continue;
+        }
+        
+        // Check for ".." (parent directory)
+        if (component_len == 2 && component_start[0] == '.' && component_start[1] == '.')
+        {
+            // Go back to previous component
+            if (write > buffer + (is_absolute ? 1 : 0))
+            {
+                // Remove trailing slash if present
+                if (write > buffer && *(write - 1) == '/')
+                {
+                    write--;
+                }
+                // Back up to the previous slash or start
+                while (write > buffer + (is_absolute ? 1 : 0) && *(write - 1) != '/')
+                {
+                    write--;
+                }
+                // Remove the trailing slash we stopped at (unless we're at root)
+                if (write > buffer + (is_absolute ? 1 : 0) && *(write - 1) == '/')
+                {
+                    write--;
+                }
+            }
+            else if (!is_absolute)
+            {
+                // For relative paths, we can't go above the starting point
+                // So we need to keep the ".." in the result
+                if (write > buffer && *(write - 1) != '/')
+                {
+                    *write++ = '/';
+                }
+                *write++ = '.';
+                *write++ = '.';
+            }
+            // For absolute paths at root, just ignore the ".."
+            continue;
+        }
+        
+        // Regular component - add it
+        if (write > buffer + (is_absolute ? 1 : 0))
+        {
+            // Add separator before component (unless we're at the start)
+            if (*(write - 1) != '/')
+            {
+                *write++ = '/';
+            }
+        }
+        
+        // Copy the component
+        memmove(write, component_start, component_len);
+        write += component_len;
+    }
+    
+    // Handle edge cases
+    if (is_absolute && write == buffer + 1)
+    {
+        // Result is just "/" for absolute path
+        // write is already pointing past the /
+    }
+    else if (!is_absolute && write == buffer)
+    {
+        // Result is empty for relative path - use "."
+        *write++ = '.';
+    }
+    
+    *write = '\0';
+    return buffer;
+}
+
 char *logo_io_resolve_path(const LogoIO *io, const char *pathname,
                            char *buffer, size_t buffer_size)
 {
@@ -216,7 +334,7 @@ char *logo_io_resolve_path(const LogoIO *io, const char *pathname,
             return NULL;
         }
         strcpy(buffer, pathname);
-        return buffer;
+        return normalize_path(buffer);
     }
 
     // Combine prefix and pathname
@@ -244,7 +362,7 @@ char *logo_io_resolve_path(const LogoIO *io, const char *pathname,
         strcpy(buffer + prefix_len, pathname);
     }
 
-    return buffer;
+    return normalize_path(buffer);
 }
 
 //
