@@ -1152,6 +1152,27 @@ a
 ```
 
 
+## replace
+
+replace _integer_ _object_ _value_
+
+`operation`
+
+`replace` returns a new list with the element of _object_ whose position within _object_ corresponds to _integer_ replaced with _value_. For example, if _integer_ is 3, `replace` returns a list with the third element in the object replaced with _value_. _Object_ is a word or a list. An error occurs if _integer_ is greater than the length of _object_ or if _object_ is the empty word or list.
+
+**Examples**:
+
+```logo
+?pr replace 2 "dig "u
+dug
+?show replace 4 [a b c d] "x
+[a b c x]
+?make "greet "hello
+?pr replace 1 :greet uppercase item 1 :greet
+Hello
+```
+
+
 ## item
 
 item _integer_ _object_

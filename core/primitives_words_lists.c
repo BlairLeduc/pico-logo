@@ -402,6 +402,166 @@ static Result prim_item(Evaluator *eval, int argc, Value *args)
     return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
 }
 
+// replace integer object value
+// Returns a new list/word with element at position integer replaced with value.
+static Result prim_replace(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+    
+    float index_f;
+    if (!value_to_number(args[0], &index_f))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
+    int index = (int)index_f;
+    if (index < 1)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
+    
+    Value obj = args[1];
+    Value replacement = args[2];
+    
+    if (value_is_number(obj))
+    {
+        // Convert number to word first
+        Node word = number_to_word(obj.as.number);
+        const char *str = mem_word_ptr(word);
+        size_t len = strlen(str);
+        if ((size_t)index > len || len == 0)
+        {
+            return result_error_arg(ERR_TOO_FEW_ITEMS, NULL, value_to_string(obj));
+        }
+        
+        // Get replacement as a single character
+        const char *repl_str;
+        if (value_is_number(replacement))
+        {
+            Node repl_word = number_to_word(replacement.as.number);
+            repl_str = mem_word_ptr(repl_word);
+        }
+        else if (value_is_word(replacement))
+        {
+            repl_str = mem_word_ptr(replacement.as.node);
+        }
+        else
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(replacement));
+        }
+        
+        if (repl_str[0] == '\0')
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(replacement));
+        }
+        
+        // Build new word with replacement character
+        char buffer[256];
+        if (len >= sizeof(buffer)) len = sizeof(buffer) - 1;
+        memcpy(buffer, str, len);
+        buffer[index - 1] = repl_str[0];
+        buffer[len] = '\0';
+        
+        Node result = mem_atom_cstr(buffer);
+        return result_ok(value_word(result));
+    }
+    else if (value_is_word(obj))
+    {
+        const char *str = mem_word_ptr(obj.as.node);
+        size_t len = mem_word_len(obj.as.node);
+        if ((size_t)index > len || len == 0)
+        {
+            return result_error_arg(ERR_TOO_FEW_ITEMS, NULL, value_to_string(obj));
+        }
+        
+        // Get replacement as a single character
+        const char *repl_str;
+        if (value_is_number(replacement))
+        {
+            Node repl_word = number_to_word(replacement.as.number);
+            repl_str = mem_word_ptr(repl_word);
+        }
+        else if (value_is_word(replacement))
+        {
+            repl_str = mem_word_ptr(replacement.as.node);
+        }
+        else
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(replacement));
+        }
+        
+        if (repl_str[0] == '\0')
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(replacement));
+        }
+        
+        // Build new word with replacement character
+        char buffer[256];
+        if (len >= sizeof(buffer)) len = sizeof(buffer) - 1;
+        memcpy(buffer, str, len);
+        buffer[index - 1] = repl_str[0];
+        buffer[len] = '\0';
+        
+        Node result = mem_atom_cstr(buffer);
+        return result_ok(value_word(result));
+    }
+    else if (value_is_list(obj))
+    {
+        Node list = obj.as.node;
+        if (mem_is_nil(list))
+        {
+            return result_error_arg(ERR_TOO_FEW_ITEMS, NULL, "[]");
+        }
+        
+        // Count elements to verify index is valid
+        int count = 0;
+        Node temp = list;
+        while (!mem_is_nil(temp))
+        {
+            count++;
+            temp = mem_cdr(temp);
+        }
+        if (index > count)
+        {
+            return result_error_arg(ERR_TOO_FEW_ITEMS, NULL, "[]");
+        }
+        
+        // Build new list with replacement at index
+        Node result = NODE_NIL;
+        Node tail = NODE_NIL;
+        int pos = 1;
+        while (!mem_is_nil(list))
+        {
+            Node element;
+            if (pos == index)
+            {
+                // Use replacement value
+                element = replacement.as.node;
+            }
+            else
+            {
+                element = mem_car(list);
+            }
+            
+            Node new_cons = mem_cons(element, NODE_NIL);
+            if (mem_is_nil(result))
+            {
+                result = new_cons;
+                tail = new_cons;
+            }
+            else
+            {
+                mem_set_cdr(tail, new_cons);
+                tail = new_cons;
+            }
+            list = mem_cdr(list);
+            pos++;
+        }
+        return result_ok(value_list(result));
+    }
+    
+    return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
+}
+
 // member object1 object2
 // Outputs the part of object2 starting with object1.
 static Result prim_member(Evaluator *eval, int argc, Value *args)
@@ -1167,6 +1327,7 @@ void primitives_words_lists_init(void)
     primitive_register("butlast", 1, prim_butlast);
     primitive_register("bl", 1, prim_butlast);
     primitive_register("item", 2, prim_item);
+    primitive_register("replace", 3, prim_replace);
     primitive_register("member", 2, prim_member);
     
     // List construction
