@@ -79,6 +79,70 @@ void test_procedure_local_scope(void)
     TEST_ASSERT_EQUAL_FLOAT(100.0f, r.value.as.number);
 }
 
+// Helper to check frame stack during execution
+static int debug_frame_depth = 0;
+static const char *debug_frame_binding_names[32];
+static int debug_frame_binding_count = 0;
+
+void test_subprocedure_sees_superprocedure_inputs(void)
+{
+    // Simplest possible test: outer takes :x, inner reads :x
+    // inner should see :x in outer's frame (dynamic scoping)
+    
+    run_string("define \"outer [[x] [inner]]");
+    run_string("define \"inner [[] [print :x]]");
+    
+    // Verify both procedures exist
+    Result r_outer_def = eval_string("defined? \"outer");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_OK, r_outer_def.status, "outer should be defined");
+    TEST_ASSERT_TRUE_MESSAGE(r_outer_def.value.type == VALUE_WORD, "defined? should return word");
+    
+    Result r_inner_def = eval_string("defined? \"inner");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_OK, r_inner_def.status, "inner should be defined");
+    
+    // Check text of outer
+    reset_output();
+    run_string("show text \"outer");
+    printf("outer text: %s\n", output_buffer);
+    
+    reset_output();
+    run_string("show text \"inner");
+    printf("inner text: %s\n", output_buffer);
+    
+    reset_output();
+    Result r = run_string("outer 42");
+    
+    if (r.status == RESULT_ERROR) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "outer failed with error %d: %s %s", 
+                 r.error_code, 
+                 r.error_proc ? r.error_proc : "(nil)",
+                 r.error_arg ? r.error_arg : "(nil)");
+        TEST_FAIL_MESSAGE(msg);
+    }
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_NONE, r.status, "outer should complete without error");
+    TEST_ASSERT_EQUAL_STRING("42\n", output_buffer);
+}
+
+void test_subprocedure_sees_superprocedure_locals(void)
+{
+    // Define a helper procedure that accesses a local variable from caller's scope
+    // inner2: print :y
+    const char *inner_params[] = {};
+    define_proc("inner2", inner_params, 0, "print :y");
+    
+    // Define outer2 procedure that declares local :y and calls inner2
+    // outer2: local "y make "y 99 inner2
+    const char *outer_params[] = {};
+    define_proc("outer2", outer_params, 0, "local \"y make \"y 99 inner2");
+    
+    // Call outer2 - inner2 should see :y from outer2's scope
+    reset_output();
+    Result r = run_string("outer2");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_NONE, r.status, "outer2 should complete without error");
+    TEST_ASSERT_EQUAL_STRING("99\n", output_buffer);
+}
+
 void test_procedure_modifies_global(void)
 {
     // Procedure can modify global variables
@@ -1164,6 +1228,8 @@ int main(void)
     RUN_TEST(test_procedure_with_one_arg);
     RUN_TEST(test_procedure_with_two_args);
     RUN_TEST(test_procedure_local_scope);
+    RUN_TEST(test_subprocedure_sees_superprocedure_inputs);
+    RUN_TEST(test_subprocedure_sees_superprocedure_locals);
     RUN_TEST(test_procedure_modifies_global);
     RUN_TEST(test_recursive_procedure);
     RUN_TEST(test_tail_recursive_countdown);

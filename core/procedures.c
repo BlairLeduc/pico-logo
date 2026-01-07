@@ -808,13 +808,17 @@ Result proc_call(Evaluator *eval, UserProcedure *proc, int argc, Value *args)
         }
 
         // Check for tail call BEFORE cleanup
+        // IMPORTANT: Only apply TCO (frame reuse) for SELF-RECURSIVE tail calls.
+        // Non-self-recursive tail calls must use the CPS path instead to preserve
+        // dynamic scoping - callee needs access to caller's local variables.
         TailCall *tc = proc_get_tail_call();
         if (tc->is_tail_call)
         {
             UserProcedure *target = proc_find(tc->proc_name);
-            if (target)
+            if (target && target == proc)
             {
-                proc = target;
+                // Self-recursive tail call - safe to reuse frame
+                // (callee is same procedure, so it has same parameters)
                 argc = tc->arg_count;
                 for (int i = 0; i < argc; i++)
                 {
@@ -824,6 +828,8 @@ Result proc_call(Evaluator *eval, UserProcedure *proc, int argc, Value *args)
                 is_tail_call = true;
                 continue; // Trampoline: restart loop with frame reuse
             }
+            // Non-self-recursive tail call - fall through to normal return
+            // The tail call will be handled via CPS on the next iteration
             proc_clear_tail_call();
         }
 

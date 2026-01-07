@@ -566,9 +566,10 @@ static int catalog_compare(const void *a, const void *b)
 }
 
 // catalog - prints a list of files and directories, sorted alphabetically
+// (catalog pathname) - prints listing for the specified directory
 static Result prim_catalog(Evaluator *eval, int argc, Value *args)
 {
-    UNUSED(eval); UNUSED(argc); UNUSED(args);
+    UNUSED(eval);
 
     LogoIO *io = primitives_get_io();
     if (!io)
@@ -576,11 +577,43 @@ static Result prim_catalog(Evaluator *eval, int argc, Value *args)
         return result_none();
     }
 
-    // Get current directory (use prefix if set, otherwise ".")
-    const char *dir = logo_io_get_prefix(io);
-    if (!dir || dir[0] == '\0')
+    const char *dir = NULL;
+    char resolved_path[256];
+
+    // Check for optional pathname argument
+    if (argc >= 1)
     {
-        dir = ".";
+        REQUIRE_WORD(args[0]);
+        const char *pathname = mem_word_ptr(args[0].as.node);
+        
+        // Resolve pathname - if absolute, use directly; otherwise resolve against prefix
+        if (pathname[0] == '/')
+        {
+            dir = pathname;
+        }
+        else
+        {
+            // Resolve relative pathname against current prefix
+            const char *prefix = logo_io_get_prefix(io);
+            if (prefix && prefix[0] != '\0')
+            {
+                snprintf(resolved_path, sizeof(resolved_path), "%s%s", prefix, pathname);
+                dir = resolved_path;
+            }
+            else
+            {
+                dir = pathname;
+            }
+        }
+    }
+    else
+    {
+        // No argument - use current directory (prefix if set, otherwise ".")
+        dir = logo_io_get_prefix(io);
+        if (!dir || dir[0] == '\0')
+        {
+            dir = ".";
+        }
     }
 
     CatalogContext ctx = {{{{0}}}, 0};

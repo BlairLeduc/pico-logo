@@ -9,6 +9,7 @@
 #include "frame.h"
 #include <string.h>
 #include <strings.h>
+#include <stdio.h>
 
 // Configuration for memory constraints
 #define MAX_GLOBAL_VARIABLES 128
@@ -153,6 +154,7 @@ bool var_get(const char *name, Value *out)
 {
     // First, search frame stack for local bindings (if in a procedure)
     FrameStack *frames = proc_get_frame_stack();
+    
     if (frames && !frame_stack_is_empty(frames))
     {
         Binding *binding = frame_find_binding_in_chain(frames, name, NULL);

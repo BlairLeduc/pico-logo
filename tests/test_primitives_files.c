@@ -1009,6 +1009,56 @@ void test_catalog_runs_without_error(void)
     // We just verify it doesn't crash
 }
 
+void test_catalog_with_pathname_runs_without_error(void)
+{
+    // (catalog pathname) should run without error
+    output_pos = 0;
+    output_buffer[0] = '\0';
+    Result r = run_string("(catalog \".)");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    // We just verify it doesn't crash
+}
+
+void test_catalog_with_absolute_pathname(void)
+{
+    // Create a directory with some files to catalog
+    mock_fs_reset();
+    mock_fs_create_file("/testdir/file1.txt", "content1");
+    mock_fs_create_file("/testdir/file2.txt", "content2");
+    
+    output_pos = 0;
+    output_buffer[0] = '\0';
+    Result r = run_string("(catalog \"/testdir)");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    // Check that the output contains the files
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "file1.txt"));
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "file2.txt"));
+}
+
+void test_catalog_with_relative_pathname(void)
+{
+    // Create files in a subdirectory
+    mock_fs_reset();
+    mock_fs_create_file("/Logo/subdir/test.txt", "content");
+    
+    // Set prefix to /Logo/
+    output_pos = 0;
+    output_buffer[0] = '\0';
+    run_string("setprefix \"/Logo");
+    
+    Result r = run_string("(catalog \"subdir)");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    // Check that the output contains the file
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "test.txt"));
+}
+
+void test_catalog_with_invalid_input_error(void)
+{
+    // (catalog [not a word]) should error
+    Result r = run_string("(catalog [not a word])");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
 //==========================================================================
 // Savepic/Loadpic Tests
 //==========================================================================
@@ -1955,6 +2005,10 @@ int main(void)
     RUN_TEST(test_files_invalid_input_error);
     RUN_TEST(test_directories_returns_list);
     RUN_TEST(test_catalog_runs_without_error);
+    RUN_TEST(test_catalog_with_pathname_runs_without_error);
+    RUN_TEST(test_catalog_with_absolute_pathname);
+    RUN_TEST(test_catalog_with_relative_pathname);
+    RUN_TEST(test_catalog_with_invalid_input_error);
 
     // Savepic/Loadpic tests
     RUN_TEST(test_savepic_creates_file);

@@ -3029,11 +3029,12 @@ Stands for erase directory. Erases a directory. The directory must be empty or t
 
 ## catalog
 
-catalog  
+catalog
+(catalog _pathname_)  
 
 `command`
 
-Prints a list of files and directories in the current directory. Directories have the slash "`/`" character appended to their pathname.
+Prints a list of files and directories in the current directory. Directories have the slash "`/`" character appended to their pathname. If _pathname_ is present, it specifies the directory to be listed.
 
 `catalog` prints to the screen but not to the current writer.
 
