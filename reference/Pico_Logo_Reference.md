@@ -2292,7 +2292,7 @@ map _procedure_ _data_
 
 `operation`
 
-`map` evaluates _procedure_ once for each member of the _data_ list and outputs a list of the results. If more than one data list are given, each of them must be the same length. (The data inputs can be words, in which case _procedure_ is evaluated once for each character.)
+`map` evaluates _procedure_ once for each member of the _data_ list and outputs a object of the results. If more than one data object are given, each of them must be the same length. (The data inputs can be words, in which case _procedure_ is evaluated once for each character.) The output object will be a word if the first _data_ input is a word; otherwise, the output will be a list.
 
 Each data list provides one input to _procedure_ at each evaluation. Thus, if there are two data lists, _procedure_ must have two inputs; if there are three data lists, _procedure_ must have three inputs; and so on.
 

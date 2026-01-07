@@ -431,33 +431,20 @@ void test_reduce_with_word(void)
 
 void test_map_with_word(void)
 {
-    // map [[x] uppercase :x] "hello -> [H E L L O]
+    // map [[x] uppercase :x] "hello -> "HELLO (word input returns word output)
     Result r = eval_string("map [[x] uppercase :x] \"hello");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
-    TEST_ASSERT_TRUE(value_is_list(r.value));
-    
-    Node list = r.value.as.node;
-    TEST_ASSERT_EQUAL_STRING("H", mem_word_ptr(mem_car(list)));
-    list = mem_cdr(list);
-    TEST_ASSERT_EQUAL_STRING("E", mem_word_ptr(mem_car(list)));
-    list = mem_cdr(list);
-    TEST_ASSERT_EQUAL_STRING("L", mem_word_ptr(mem_car(list)));
+    TEST_ASSERT_TRUE(value_is_word(r.value));
+    TEST_ASSERT_EQUAL_STRING("HELLO", mem_word_ptr(r.value.as.node));
 }
 
 void test_map_with_number(void)
 {
-    // map [[x] :x] 123 -> [1 2 3] (iterates over digits)
+    // map [[x] :x] 123 -> "123" (number treated as word, returns word)
     Result r = eval_string("map [[x] :x] 123");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
-    TEST_ASSERT_TRUE(value_is_list(r.value));
-    
-    Node list = r.value.as.node;
-    TEST_ASSERT_EQUAL_STRING("1", mem_word_ptr(mem_car(list)));
-    list = mem_cdr(list);
-    TEST_ASSERT_EQUAL_STRING("2", mem_word_ptr(mem_car(list)));
-    list = mem_cdr(list);
-    TEST_ASSERT_EQUAL_STRING("3", mem_word_ptr(mem_car(list)));
-    TEST_ASSERT_TRUE(mem_is_nil(mem_cdr(list)));
+    TEST_ASSERT_TRUE(value_is_word(r.value));
+    TEST_ASSERT_EQUAL_STRING("123", mem_word_ptr(r.value.as.node));
 }
 
 //==========================================================================

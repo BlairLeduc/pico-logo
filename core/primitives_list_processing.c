@@ -667,9 +667,27 @@ static Result prim_map(Evaluator *eval, int argc, Value *args)
         }
     }
     
-    // Build result list
+    // Determine output type based on first data input
+    bool output_word = is_word[0];
+    
+    // Build result list or word
     Node result_head = NODE_NIL;
     Node result_tail = NODE_NIL;
+    char *result_word = NULL;
+    size_t result_word_len = 0;
+    size_t result_word_cap = 0;
+    
+    if (output_word)
+    {
+        // Pre-allocate buffer for word result
+        result_word_cap = (size_t)length + 1;
+        result_word = malloc(result_word_cap);
+        if (result_word == NULL)
+        {
+            return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
+        }
+        result_word_len = 0;
+    }
     
     Value proc_args[MAX_PROC_PARAMS];
     
@@ -709,6 +727,10 @@ static Result prim_map(Evaluator *eval, int argc, Value *args)
         if (r.status == RESULT_ERROR || r.status == RESULT_THROW ||
             r.status == RESULT_STOP)
         {
+            if (result_word != NULL)
+            {
+                free(result_word);
+            }
             return r;
         }
         
@@ -721,46 +743,107 @@ static Result prim_map(Evaluator *eval, int argc, Value *args)
         // Collect result if we got one
         if (r.status == RESULT_OK)
         {
-            Node result_node;
-            if (value_is_word(r.value) || value_is_number(r.value))
+            if (output_word)
             {
-                if (value_is_number(r.value))
+                // Build word result - concatenate characters/words
+                const char *str = NULL;
+                size_t str_len = 0;
+                char num_buf[32];
+                
+                if (value_is_word(r.value))
                 {
-                    // Convert number to word for list
-                    char buf[32];
-                    format_number(buf, sizeof(buf), r.value.as.number);
-                    result_node = mem_atom_cstr(buf);
+                    str = mem_word_ptr(r.value.as.node);
+                    str_len = mem_word_len(r.value.as.node);
+                }
+                else if (value_is_number(r.value))
+                {
+                    format_number(num_buf, sizeof(num_buf), r.value.as.number);
+                    str = num_buf;
+                    str_len = strlen(num_buf);
                 }
                 else
                 {
+                    // Lists cannot be concatenated into a word - error
+                    free(result_word);
+                    return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(r.value));
+                }
+                
+                // Grow buffer if needed
+                if (result_word_len + str_len + 1 > result_word_cap)
+                {
+                    size_t new_cap = result_word_cap * 2;
+                    if (new_cap < result_word_len + str_len + 1)
+                    {
+                        new_cap = result_word_len + str_len + 1;
+                    }
+                    char *new_buf = realloc(result_word, new_cap);
+                    if (new_buf == NULL)
+                    {
+                        free(result_word);
+                        return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
+                    }
+                    result_word = new_buf;
+                    result_word_cap = new_cap;
+                }
+                
+                memcpy(result_word + result_word_len, str, str_len);
+                result_word_len += str_len;
+            }
+            else
+            {
+                // Build list result
+                Node result_node;
+                if (value_is_word(r.value) || value_is_number(r.value))
+                {
+                    if (value_is_number(r.value))
+                    {
+                        // Convert number to word for list
+                        char buf[32];
+                        format_number(buf, sizeof(buf), r.value.as.number);
+                        result_node = mem_atom_cstr(buf);
+                    }
+                    else
+                    {
+                        result_node = r.value.as.node;
+                    }
+                }
+                else if (value_is_list(r.value))
+                {
                     result_node = r.value.as.node;
                 }
-            }
-            else if (value_is_list(r.value))
-            {
-                result_node = r.value.as.node;
-            }
-            else
-            {
-                continue;  // Skip none values
-            }
-            
-            // Append to result list
-            Node new_cell = mem_cons(result_node, NODE_NIL);
-            if (mem_is_nil(result_head))
-            {
-                result_head = new_cell;
-                result_tail = new_cell;
-            }
-            else
-            {
-                mem_set_cdr(result_tail, new_cell);
-                result_tail = new_cell;
+                else
+                {
+                    continue;  // Skip none values
+                }
+                
+                // Append to result list
+                Node new_cell = mem_cons(result_node, NODE_NIL);
+                if (mem_is_nil(result_head))
+                {
+                    result_head = new_cell;
+                    result_tail = new_cell;
+                }
+                else
+                {
+                    mem_set_cdr(result_tail, new_cell);
+                    result_tail = new_cell;
+                }
             }
         }
     }
     
-    return result_ok(value_list(result_head));
+    if (output_word)
+    {
+        // Create result word from buffer
+        result_word[result_word_len] = '\0';
+        Node result_node = mem_atom(result_word, result_word_len);
+        free(result_word);
+        return result_ok(value_word(result_node));
+    }
+    else
+    {
+        return result_ok(value_list(result_head));
+    }
 }
 
 //==========================================================================
