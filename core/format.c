@@ -298,6 +298,17 @@ int format_number(char *buf, size_t size, float n)
 }
 
 //==========================================================================
+// Convert a number to its word (atom) representation
+//==========================================================================
+
+Node number_to_word(float n)
+{
+    char buf[32];
+    format_number(buf, sizeof(buf), n);
+    return mem_atom_cstr(buf);
+}
+
+//==========================================================================
 // Newline-aware list formatting helpers
 //==========================================================================
 

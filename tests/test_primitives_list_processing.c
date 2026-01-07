@@ -444,6 +444,22 @@ void test_map_with_word(void)
     TEST_ASSERT_EQUAL_STRING("L", mem_word_ptr(mem_car(list)));
 }
 
+void test_map_with_number(void)
+{
+    // map [[x] :x] 123 -> [1 2 3] (iterates over digits)
+    Result r = eval_string("map [[x] :x] 123");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_list(r.value));
+    
+    Node list = r.value.as.node;
+    TEST_ASSERT_EQUAL_STRING("1", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_EQUAL_STRING("2", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_EQUAL_STRING("3", mem_word_ptr(mem_car(list)));
+    TEST_ASSERT_TRUE(mem_is_nil(mem_cdr(list)));
+}
+
 //==========================================================================
 // map.se tests
 //==========================================================================
@@ -647,6 +663,7 @@ int main(void)
     RUN_TEST(test_map_empty_list);
     RUN_TEST(test_map_with_user_procedure);
     RUN_TEST(test_map_with_word);
+    RUN_TEST(test_map_with_number);
     
     // map.se tests
     RUN_TEST(test_map_se_basic);

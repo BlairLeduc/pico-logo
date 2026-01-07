@@ -111,4 +111,8 @@ bool format_value_show_to_buffer(FormatBufferContext *ctx, Value value);
 // Returns the number of characters written (excluding null terminator).
 int format_number(char *buf, size_t size, float n);
 
+// Convert a number to its word (atom) representation.
+// Returns a Node containing the formatted number as a word.
+Node number_to_word(float n);
+
 #endif // LOGO_FORMAT_H

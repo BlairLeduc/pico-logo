@@ -17,14 +17,6 @@
 #include <stdio.h>
 #include <ctype.h>
 
-// Helper: convert a number value to its word representation
-static Node number_to_word(float n)
-{
-    char buf[32];
-    format_number(buf, sizeof(buf), n);
-    return mem_atom_cstr(buf);
-}
-
 // first object
 // Outputs the first element of object.
 // For a word: outputs the first character as a word

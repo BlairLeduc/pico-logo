@@ -396,12 +396,26 @@ static Result prim_foreach(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_NOT_ENOUGH_INPUTS, NULL, NULL);
     }
     
-    // Validate all data arguments are lists or words
+    // Validate all data arguments are lists, words, or numbers
+    // Convert numbers to words (numbers are self-quoting words in Logo)
+    Node word_nodes[MAX_PROC_PARAMS];  // Store converted number nodes
     for (int i = 0; i < data_count; i++)
     {
-        if (!value_is_list(args[i]) && !value_is_word(args[i]))
+        if (value_is_number(args[i]))
+        {
+            word_nodes[i] = number_to_word(args[i].as.number);
+        }
+        else if (value_is_word(args[i]))
+        {
+            word_nodes[i] = args[i].as.node;
+        }
+        else if (!value_is_list(args[i]))
         {
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[i]));
+        }
+        else
+        {
+            word_nodes[i] = NODE_NIL;  // Mark as list
         }
     }
     
@@ -418,8 +432,8 @@ static Result prim_foreach(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        // Word - length is character count
-        length = (int)mem_word_len(args[0].as.node);
+        // Word or number - length is character count
+        length = (int)mem_word_len(word_nodes[0]);
     }
     
     // For multi-list, verify all lists have same length
@@ -439,7 +453,8 @@ static Result prim_foreach(Evaluator *eval, int argc, Value *args)
             }
             else
             {
-                other_length = (int)mem_word_len(args[i].as.node);
+                // Use word_nodes which has already converted numbers
+                other_length = (int)mem_word_len(word_nodes[i]);
             }
             
             if (other_length != length)
@@ -463,7 +478,8 @@ static Result prim_foreach(Evaluator *eval, int argc, Value *args)
         }
         else
         {
-            word_ptrs[i] = mem_word_ptr(args[i].as.node);
+            // Use word_nodes which has already converted numbers
+            word_ptrs[i] = mem_word_ptr(word_nodes[i]);
             is_word[i] = true;
         }
     }
@@ -563,12 +579,26 @@ static Result prim_map(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_NOT_ENOUGH_INPUTS, NULL, NULL);
     }
     
-    // Validate all data arguments are lists or words
+    // Validate all data arguments are lists, words, or numbers
+    // Convert numbers to words (numbers are self-quoting words in Logo)
+    Node word_nodes[MAX_PROC_PARAMS];  // Store converted number nodes
     for (int i = 1; i < argc; i++)
     {
-        if (!value_is_list(args[i]) && !value_is_word(args[i]))
+        if (value_is_number(args[i]))
+        {
+            word_nodes[i - 1] = number_to_word(args[i].as.number);
+        }
+        else if (value_is_word(args[i]))
+        {
+            word_nodes[i - 1] = args[i].as.node;
+        }
+        else if (!value_is_list(args[i]))
         {
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[i]));
+        }
+        else
+        {
+            word_nodes[i - 1] = NODE_NIL;  // Mark as list
         }
     }
     
@@ -585,7 +615,8 @@ static Result prim_map(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        length = (int)mem_word_len(args[1].as.node);
+        // Word or number - use word_nodes which has converted numbers
+        length = (int)mem_word_len(word_nodes[0]);
     }
     
     // For multi-list, verify all lists have same length
@@ -605,7 +636,8 @@ static Result prim_map(Evaluator *eval, int argc, Value *args)
             }
             else
             {
-                other_length = (int)mem_word_len(args[i].as.node);
+                // Use word_nodes which has already converted numbers
+                other_length = (int)mem_word_len(word_nodes[i - 1]);
             }
             
             if (other_length != length)
@@ -629,7 +661,8 @@ static Result prim_map(Evaluator *eval, int argc, Value *args)
         }
         else
         {
-            word_ptrs[i] = mem_word_ptr(args[i + 1].as.node);
+            // Use word_nodes which has already converted numbers
+            word_ptrs[i] = mem_word_ptr(word_nodes[i]);
             is_word[i] = true;
         }
     }
@@ -777,12 +810,26 @@ static Result prim_map_se(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_NOT_ENOUGH_INPUTS, NULL, NULL);
     }
     
-    // Validate all data arguments are lists or words
+    // Validate all data arguments are lists, words, or numbers
+    // Convert numbers to words (numbers are self-quoting words in Logo)
+    Node word_nodes[MAX_PROC_PARAMS];  // Store converted number nodes
     for (int i = 1; i < argc; i++)
     {
-        if (!value_is_list(args[i]) && !value_is_word(args[i]))
+        if (value_is_number(args[i]))
+        {
+            word_nodes[i - 1] = number_to_word(args[i].as.number);
+        }
+        else if (value_is_word(args[i]))
+        {
+            word_nodes[i - 1] = args[i].as.node;
+        }
+        else if (!value_is_list(args[i]))
         {
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[i]));
+        }
+        else
+        {
+            word_nodes[i - 1] = NODE_NIL;  // Mark as list
         }
     }
     
@@ -799,7 +846,8 @@ static Result prim_map_se(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        length = (int)mem_word_len(args[1].as.node);
+        // Word or number - use word_nodes which has converted numbers
+        length = (int)mem_word_len(word_nodes[0]);
     }
     
     // For multi-list, verify all lists have same length
@@ -819,7 +867,8 @@ static Result prim_map_se(Evaluator *eval, int argc, Value *args)
             }
             else
             {
-                other_length = (int)mem_word_len(args[i].as.node);
+                // Use word_nodes which has already converted numbers
+                other_length = (int)mem_word_len(word_nodes[i - 1]);
             }
             
             if (other_length != length)
@@ -843,7 +892,8 @@ static Result prim_map_se(Evaluator *eval, int argc, Value *args)
         }
         else
         {
-            word_ptrs[i] = mem_word_ptr(args[i + 1].as.node);
+            // Use word_nodes which has already converted numbers
+            word_ptrs[i] = mem_word_ptr(word_nodes[i]);
             is_word[i] = true;
         }
     }
@@ -972,16 +1022,26 @@ static Result prim_filter(Evaluator *eval, int argc, Value *args)
         return r;
     }
     
-    // Second argument is the data list or word
-    if (!value_is_list(args[1]) && !value_is_word(args[1]))
+    // Second argument is the data list, word, or number
+    // Convert numbers to words (numbers are self-quoting words in Logo)
+    Node word_node = NODE_NIL;
+    if (value_is_number(args[1]))
+    {
+        word_node = number_to_word(args[1].as.number);
+    }
+    else if (value_is_word(args[1]))
+    {
+        word_node = args[1].as.node;
+    }
+    else if (!value_is_list(args[1]))
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
     }
     
-    bool input_is_word = value_is_word(args[1]);
+    bool input_is_word = !value_is_list(args[1]);
     Node data = input_is_word ? NODE_NIL : args[1].as.node;
-    const char *word_ptr = input_is_word ? mem_word_ptr(args[1].as.node) : NULL;
-    int word_len = input_is_word ? (int)mem_word_len(args[1].as.node) : 0;
+    const char *word_ptr = input_is_word ? mem_word_ptr(word_node) : NULL;
+    int word_len = input_is_word ? (int)mem_word_len(word_node) : 0;
     int word_idx = 0;
     
     // Build result list
@@ -1094,16 +1154,26 @@ static Result prim_find(Evaluator *eval, int argc, Value *args)
         return r;
     }
     
-    // Second argument is the data list or word
-    if (!value_is_list(args[1]) && !value_is_word(args[1]))
+    // Second argument is the data list, word, or number
+    // Convert numbers to words (numbers are self-quoting words in Logo)
+    Node word_node = NODE_NIL;
+    if (value_is_number(args[1]))
+    {
+        word_node = number_to_word(args[1].as.number);
+    }
+    else if (value_is_word(args[1]))
+    {
+        word_node = args[1].as.node;
+    }
+    else if (!value_is_list(args[1]))
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
     }
     
-    bool input_is_word = value_is_word(args[1]);
+    bool input_is_word = !value_is_list(args[1]);
     Node data = input_is_word ? NODE_NIL : args[1].as.node;
-    const char *word_ptr = input_is_word ? mem_word_ptr(args[1].as.node) : NULL;
-    int word_len = input_is_word ? (int)mem_word_len(args[1].as.node) : 0;
+    const char *word_ptr = input_is_word ? mem_word_ptr(word_node) : NULL;
+    int word_len = input_is_word ? (int)mem_word_len(word_node) : 0;
     int word_idx = 0;
     
     Value proc_args[1];
@@ -1201,20 +1271,30 @@ static Result prim_reduce(Evaluator *eval, int argc, Value *args)
         return r;
     }
     
-    // Second argument is the data list or word
-    if (!value_is_list(args[1]) && !value_is_word(args[1]))
+    // Second argument is the data list, word, or number
+    // Convert numbers to words (numbers are self-quoting words in Logo)
+    Node word_node = NODE_NIL;
+    if (value_is_number(args[1]))
+    {
+        word_node = number_to_word(args[1].as.number);
+    }
+    else if (value_is_word(args[1]))
+    {
+        word_node = args[1].as.node;
+    }
+    else if (!value_is_list(args[1]))
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
     }
     
-    bool input_is_word = value_is_word(args[1]);
+    bool input_is_word = !value_is_list(args[1]);
     
     // Count elements and collect them
     int count = 0;
     
     if (input_is_word)
     {
-        count = (int)mem_word_len(args[1].as.node);
+        count = (int)mem_word_len(word_node);
     }
     else
     {
@@ -1237,7 +1317,7 @@ static Result prim_reduce(Evaluator *eval, int argc, Value *args)
         // Single element - return it
         if (input_is_word)
         {
-            const char *word_ptr = mem_word_ptr(args[1].as.node);
+            const char *word_ptr = mem_word_ptr(word_node);
             Node char_atom = mem_atom(&word_ptr[0], 1);
             return result_ok(value_word(char_atom));
         }
@@ -1265,7 +1345,7 @@ static Result prim_reduce(Evaluator *eval, int argc, Value *args)
     
     if (input_is_word)
     {
-        const char *word_ptr = mem_word_ptr(args[1].as.node);
+        const char *word_ptr = mem_word_ptr(word_node);
         for (int i = 0; i < count; i++)
         {
             Node char_atom = mem_atom(&word_ptr[i], 1);
