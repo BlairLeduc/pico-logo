@@ -557,18 +557,13 @@ void test_map_se_multi_list(void)
 
 void test_filter_with_word(void)
 {
-    // Filter vowels from a word
+    // Filter vowels from a word - output should be a word since input is a word
     Result r = eval_string("filter [[x] member? :x \"aeiou] \"hello");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
-    TEST_ASSERT_TRUE(value_is_list(r.value));
+    TEST_ASSERT_TRUE(value_is_word(r.value));
     
-    // Should be [e o]
-    Node list = r.value.as.node;
-    TEST_ASSERT_EQUAL_STRING("e", mem_word_ptr(mem_car(list)));
-    list = mem_cdr(list);
-    TEST_ASSERT_EQUAL_STRING("o", mem_word_ptr(mem_car(list)));
-    list = mem_cdr(list);
-    TEST_ASSERT_TRUE(mem_is_nil(list));
+    // Should be "eo"
+    TEST_ASSERT_EQUAL_STRING("eo", mem_word_ptr(r.value.as.node));
 }
 
 void test_find_with_word(void)

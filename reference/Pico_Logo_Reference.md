@@ -2303,6 +2303,8 @@ Examples:
 [1 4 9 16]
 ?show (map "sum [1 2 3] [4 5 6])
 [5 7 9]
+?show map [[x] ascii :x] "hello"
+104101108108111
 ?
 ```
 
@@ -2325,15 +2327,18 @@ filter _procedure_ _data_
 
 `operation`
 
-`filter` evaluates _procedure_ once for each member of the _data_ list and outputs a list of those members for which _procedure_ outputs `true`. _Procedure_ must have one input.
+`filter` evaluates _procedure_ once for each member of the _data_ list and outputs a list of those members for which _procedure_ outputs `true`. _Procedure_ must have one input.  The output object will be a word if _data_ is a word; otherwise, the output will be a list.
+
 
 _Procedure_ must output either `true` or `false` for each member of _data_.
 
 Examples:
 
 ```logo
-? show filter [[x] :x > 2] [1 2 3 4 5]
+?show filter [[x] :x > 2] [1 2 3 4 5]
 [3 4 5]
+?show filter [[x] 105 < ascii :x] "hello
+llo
 ?
 ```
 

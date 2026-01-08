@@ -1127,19 +1127,36 @@ static Result prim_filter(Evaluator *eval, int argc, Value *args)
     int word_len = input_is_word ? (int)mem_word_len(word_node) : 0;
     int word_idx = 0;
     
-    // Build result list
+    // Build result list or word
     Node result_head = NODE_NIL;
     Node result_tail = NODE_NIL;
+    char *result_word = NULL;
+    size_t result_word_len = 0;
+    size_t result_word_cap = 0;
+    
+    if (input_is_word)
+    {
+        // Pre-allocate buffer for word result
+        result_word_cap = (size_t)word_len + 1;
+        result_word = malloc(result_word_cap);
+        if (result_word == NULL)
+        {
+            return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
+        }
+        result_word_len = 0;
+    }
     
     Value proc_args[1];
     
     while (input_is_word ? (word_idx < word_len) : !mem_is_nil(data))
     {
         Node elem;
+        char current_char = '\0';
         
         // Get current element
         if (input_is_word)
         {
+            current_char = word_ptr[word_idx];
             elem = mem_atom(&word_ptr[word_idx], 1);
             proc_args[0] = value_word(elem);
         }
@@ -1168,6 +1185,10 @@ static Result prim_filter(Evaluator *eval, int argc, Value *args)
         if (r.status == RESULT_ERROR || r.status == RESULT_THROW ||
             r.status == RESULT_STOP)
         {
+            if (result_word != NULL)
+            {
+                free(result_word);
+            }
             return r;
         }
         
@@ -1184,26 +1205,43 @@ static Result prim_filter(Evaluator *eval, int argc, Value *args)
             if (strcasecmp(str, "true") == 0)
             {
                 // Include this element
-                Node new_cell = mem_cons(elem, NODE_NIL);
-                if (mem_is_nil(result_head))
+                if (input_is_word)
                 {
-                    result_head = new_cell;
-                    result_tail = new_cell;
+                    // Append character to result word
+                    result_word[result_word_len++] = current_char;
                 }
                 else
                 {
-                    mem_set_cdr(result_tail, new_cell);
-                    result_tail = new_cell;
+                    // Append element to result list
+                    Node new_cell = mem_cons(elem, NODE_NIL);
+                    if (mem_is_nil(result_head))
+                    {
+                        result_head = new_cell;
+                        result_tail = new_cell;
+                    }
+                    else
+                    {
+                        mem_set_cdr(result_tail, new_cell);
+                        result_tail = new_cell;
+                    }
                 }
             }
             else if (strcasecmp(str, "false") != 0)
             {
                 // Not a boolean
+                if (result_word != NULL)
+                {
+                    free(result_word);
+                }
                 return result_error_arg(ERR_NOT_BOOL, NULL, str);
             }
         }
         else if (r.status == RESULT_OK)
         {
+            if (result_word != NULL)
+            {
+                free(result_word);
+            }
             return result_error_arg(ERR_NOT_BOOL, NULL, value_to_string(r.value));
         }
         
@@ -1218,7 +1256,18 @@ static Result prim_filter(Evaluator *eval, int argc, Value *args)
         }
     }
     
-    return result_ok(value_list(result_head));
+    if (input_is_word)
+    {
+        // Create result word from buffer
+        result_word[result_word_len] = '\0';
+        Node result_node = mem_atom(result_word, result_word_len);
+        free(result_word);
+        return result_ok(value_word(result_node));
+    }
+    else
+    {
+        return result_ok(value_list(result_head));
+    }
 }
 
 //==========================================================================
