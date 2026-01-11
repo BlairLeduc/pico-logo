@@ -1030,6 +1030,74 @@ void test_editfile_already_open_error(void)
     TEST_ASSERT_FALSE(mock_device_was_editor_called());
 }
 
+void test_editfile_edit_save_edit_again(void)
+{
+    // Bug report: Edit a file, save changes, edit again - content should persist
+    setUp_with_storage();
+    
+    // Create original file
+    mock_fs_create_file("persist.txt", "Original content\n");
+    
+    // First edit - modify content
+    mock_device_clear_editor();
+    mock_device_set_editor_result(LOGO_EDITOR_ACCEPT);
+    mock_device_set_editor_content("Modified content\n");
+    
+    Result r = run_string("editfile \"persist.txt");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Verify file has modified content after first edit
+    const char *content = mock_fs_get_content("persist.txt");
+    TEST_ASSERT_NOT_NULL_MESSAGE(content, "File should exist after first edit");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Modified content\n", content, "File content should be modified after first edit");
+    
+    // Second edit - cancel to just check loading
+    mock_device_clear_editor();
+    mock_device_set_editor_result(LOGO_EDITOR_CANCEL);
+    
+    r = run_string("editfile \"persist.txt");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Editor should have received the modified content, not empty
+    const char *editor_input = mock_device_get_editor_input();
+    TEST_ASSERT_NOT_NULL_MESSAGE(editor_input, "Editor should have received input");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Modified content\n", editor_input, "Editor should receive previously saved content");
+}
+
+void test_editfile_new_file_persists(void)
+{
+    // Test creating a new file and reading it back
+    setUp_with_storage();
+    
+    // File doesn't exist yet
+    TEST_ASSERT_NULL(mock_fs_get_file("newpersist.txt", false));
+    
+    // First edit - create file with content
+    mock_device_clear_editor();
+    mock_device_set_editor_result(LOGO_EDITOR_ACCEPT);
+    mock_device_set_editor_content("Brand new content\n");
+    
+    Result r = run_string("editfile \"newpersist.txt");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Verify file exists with content
+    const char *content = mock_fs_get_content("newpersist.txt");
+    TEST_ASSERT_NOT_NULL_MESSAGE(content, "New file should exist after creation");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Brand new content\n", content, "New file should have written content");
+    
+    // Second edit - verify content is loaded
+    mock_device_clear_editor();
+    mock_device_set_editor_result(LOGO_EDITOR_CANCEL);
+    
+    r = run_string("editfile \"newpersist.txt");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Editor should have received the content
+    const char *editor_input = mock_device_get_editor_input();
+    TEST_ASSERT_NOT_NULL_MESSAGE(editor_input, "Editor should have received input for new file");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Brand new content\n", editor_input, "Editor should receive content from new file");
+}
+
 //==========================================================================
 // Main
 //==========================================================================
@@ -1079,6 +1147,8 @@ int main(void)
     RUN_TEST(test_editfile_empty_file);
     RUN_TEST(test_editfile_preserves_non_logo_content);
     RUN_TEST(test_editfile_already_open_error);
+    RUN_TEST(test_editfile_edit_save_edit_again);
+    RUN_TEST(test_editfile_new_file_persists);
     
     return UNITY_END();
 }

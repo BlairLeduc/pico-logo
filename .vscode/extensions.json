@@ -1,9 +1,12 @@
 {
     "recommendations": [
         "github.copilot-chat",
-        "raspberry-pi.raspberry-pi-pico",
         "ms-vscode.cpptools",
         "ms-vscode.cpptools-extension-pack",
-        "ryanluker.vscode-coverage-gutters"
+        "marus25.cortex-debug",
+        "ms-vscode.hexeditor",
+        "ryanluker.vscode-coverage-gutters",
+        "bierner.markdown-preview-github-styles",
+        "kejun.markdown-alert"
     ]
 }

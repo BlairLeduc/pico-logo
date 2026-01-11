@@ -1009,6 +1009,56 @@ void test_catalog_runs_without_error(void)
     // We just verify it doesn't crash
 }
 
+void test_catalog_with_pathname_runs_without_error(void)
+{
+    // (catalog pathname) should run without error
+    output_pos = 0;
+    output_buffer[0] = '\0';
+    Result r = run_string("(catalog \".)");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    // We just verify it doesn't crash
+}
+
+void test_catalog_with_absolute_pathname(void)
+{
+    // Create a directory with some files to catalog
+    mock_fs_reset();
+    mock_fs_create_file("/testdir/file1.txt", "content1");
+    mock_fs_create_file("/testdir/file2.txt", "content2");
+    
+    output_pos = 0;
+    output_buffer[0] = '\0';
+    Result r = run_string("(catalog \"/testdir)");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    // Check that the output contains the files
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "file1.txt"));
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "file2.txt"));
+}
+
+void test_catalog_with_relative_pathname(void)
+{
+    // Create files in a subdirectory
+    mock_fs_reset();
+    mock_fs_create_file("/Logo/subdir/test.txt", "content");
+    
+    // Set prefix to /Logo/
+    output_pos = 0;
+    output_buffer[0] = '\0';
+    run_string("setprefix \"/Logo");
+    
+    Result r = run_string("(catalog \"subdir)");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    // Check that the output contains the file
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "test.txt"));
+}
+
+void test_catalog_with_invalid_input_error(void)
+{
+    // (catalog [not a word]) should error
+    Result r = run_string("(catalog [not a word])");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
 //==========================================================================
 // Savepic/Loadpic Tests
 //==========================================================================
@@ -1361,6 +1411,87 @@ void test_setprefix_relative_with_trailing_slash_prefix(void)
     Result r3 = eval_string("prefix");
     TEST_ASSERT_EQUAL(RESULT_OK, r3.status);
     TEST_ASSERT_EQUAL_STRING("/Logo/apple/", mem_word_ptr(r3.value.as.node));
+}
+
+void test_setprefix_parent_directory(void)
+{
+    // Create directory structure: /Logo/apple
+    mock_fs_create_dir("/Logo");
+    mock_fs_create_dir("/Logo/apple");
+    
+    // Set prefix to "/Logo/apple/"
+    LogoIO *io = primitives_get_io();
+    TEST_ASSERT_NOT_NULL(io);
+    strcpy(io->prefix, "/Logo/apple/");
+    
+    // setprefix ".." should go up to /Logo
+    Result r = run_string("setprefix \"..");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_NONE, r.status, "setprefix to .. should succeed");
+    
+    Result r2 = eval_string("prefix");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_STRING("/Logo/", mem_word_ptr(r2.value.as.node));
+}
+
+void test_setprefix_parent_directory_with_subdir(void)
+{
+    // Create directory structure: /Logo/apple and /Logo/banana
+    mock_fs_create_dir("/Logo");
+    mock_fs_create_dir("/Logo/apple");
+    mock_fs_create_dir("/Logo/banana");
+    
+    // Set prefix to "/Logo/apple/"
+    LogoIO *io = primitives_get_io();
+    TEST_ASSERT_NOT_NULL(io);
+    strcpy(io->prefix, "/Logo/apple/");
+    
+    // setprefix "..\\/banana" should go up to /Logo then into banana
+    Result r = run_string("setprefix \"..\\/banana");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_NONE, r.status, "setprefix to ../banana should succeed");
+    
+    Result r2 = eval_string("prefix");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_STRING("/Logo/banana/", mem_word_ptr(r2.value.as.node));
+}
+
+void test_setprefix_parent_at_root(void)
+{
+    // Create directory structure: /Logo
+    mock_fs_create_dir("/Logo");
+    
+    // Set prefix to "/Logo/"
+    LogoIO *io = primitives_get_io();
+    TEST_ASSERT_NOT_NULL(io);
+    strcpy(io->prefix, "/Logo/");
+    
+    // setprefix ".." should go to root /
+    Result r = run_string("setprefix \"..");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_NONE, r.status, "setprefix to .. from /Logo should go to root");
+    
+    Result r2 = eval_string("prefix");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_STRING("/", mem_word_ptr(r2.value.as.node));
+}
+
+void test_setprefix_multiple_parent_dirs(void)
+{
+    // Create directory structure: /Logo/apple/banana
+    mock_fs_create_dir("/Logo");
+    mock_fs_create_dir("/Logo/apple");
+    mock_fs_create_dir("/Logo/apple/banana");
+    
+    // Set prefix to "/Logo/apple/banana/"
+    LogoIO *io = primitives_get_io();
+    TEST_ASSERT_NOT_NULL(io);
+    strcpy(io->prefix, "/Logo/apple/banana/");
+    
+    // setprefix "..\\/..\\/.." should go up three levels to root
+    Result r = run_string("setprefix \"..\\/..\\/..");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_NONE, r.status, "setprefix with multiple .. should succeed");
+    
+    Result r2 = eval_string("prefix");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_STRING("/", mem_word_ptr(r2.value.as.node));
 }
 
 //==========================================================================
@@ -1874,6 +2005,10 @@ int main(void)
     RUN_TEST(test_files_invalid_input_error);
     RUN_TEST(test_directories_returns_list);
     RUN_TEST(test_catalog_runs_without_error);
+    RUN_TEST(test_catalog_with_pathname_runs_without_error);
+    RUN_TEST(test_catalog_with_absolute_pathname);
+    RUN_TEST(test_catalog_with_relative_pathname);
+    RUN_TEST(test_catalog_with_invalid_input_error);
 
     // Savepic/Loadpic tests
     RUN_TEST(test_savepic_creates_file);
@@ -1902,6 +2037,10 @@ int main(void)
     RUN_TEST(test_setprefix_relative_with_root_prefix);
     RUN_TEST(test_setprefix_absolute_path);
     RUN_TEST(test_setprefix_relative_with_trailing_slash_prefix);
+    RUN_TEST(test_setprefix_parent_directory);
+    RUN_TEST(test_setprefix_parent_directory_with_subdir);
+    RUN_TEST(test_setprefix_parent_at_root);
+    RUN_TEST(test_setprefix_multiple_parent_dirs);
 
     // Load/Save tests
     RUN_TEST(test_load_executes_file);

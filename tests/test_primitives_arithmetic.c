@@ -528,6 +528,97 @@ void test_exp_negative(void)
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.367879f, r.value.as.number);
 }
 
+//==========================================================================
+// form tests
+//==========================================================================
+
+void test_form_basic(void)
+{
+    // form 3.14159 10 2 should output "      3.14"
+    Result r = eval_string("form 3.14159 10 2");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("      3.14", mem_word_ptr(r.value.as.node));
+}
+
+void test_form_zero_decimal_places(void)
+{
+    // form 3.7 5 0 should output "    4" (rounded, no decimal)
+    Result r = eval_string("form 3.7 5 0");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("    4", mem_word_ptr(r.value.as.node));
+}
+
+void test_form_negative_number(void)
+{
+    // form -12.345 8 2 should output "  -12.35" (minus sign takes one position)
+    Result r = eval_string("form -12.345 8 2");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("  -12.35", mem_word_ptr(r.value.as.node));
+}
+
+void test_form_number_too_large_for_width(void)
+{
+    // form 12345.67 5 2 outputs "12345.67" (doesn't fit, use minimum length)
+    Result r = eval_string("form 12345.67 5 2");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("12345.67", mem_word_ptr(r.value.as.node));
+}
+
+void test_form_exact_fit(void)
+{
+    // form 1.5 3 1 should output "1.5" (exact fit, no padding)
+    Result r = eval_string("form 1.5 3 1");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("1.5", mem_word_ptr(r.value.as.node));
+}
+
+void test_form_rounding_up(void)
+{
+    // form 2.999 6 2 should round to "  3.00"
+    Result r = eval_string("form 2.999 6 2");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("  3.00", mem_word_ptr(r.value.as.node));
+}
+
+void test_form_many_decimal_places(void)
+{
+    // form 1 8 5 should output " 1.00000"
+    Result r = eval_string("form 1 8 5");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING(" 1.00000", mem_word_ptr(r.value.as.node));
+}
+
+void test_form_width_zero_error(void)
+{
+    // form 1 0 2 should error (width <= 0)
+    Result r = eval_string("form 1 0 2");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_form_width_negative_error(void)
+{
+    // form 1 -5 2 should error (width <= 0)
+    Result r = eval_string("form 1 -5 2");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_form_decimal_places_negative_error(void)
+{
+    // form 1 10 -1 should error (decimalplaces < 0)
+    Result r = eval_string("form 1 10 -1");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -593,6 +684,16 @@ int main(void)
     RUN_TEST(test_exp_one);
     RUN_TEST(test_exp_two);
     RUN_TEST(test_exp_negative);
+    RUN_TEST(test_form_basic);
+    RUN_TEST(test_form_zero_decimal_places);
+    RUN_TEST(test_form_negative_number);
+    RUN_TEST(test_form_number_too_large_for_width);
+    RUN_TEST(test_form_exact_fit);
+    RUN_TEST(test_form_rounding_up);
+    RUN_TEST(test_form_many_decimal_places);
+    RUN_TEST(test_form_width_zero_error);
+    RUN_TEST(test_form_width_negative_error);
+    RUN_TEST(test_form_decimal_places_negative_error);
 
     return UNITY_END();
 }

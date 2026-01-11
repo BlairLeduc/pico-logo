@@ -557,6 +557,13 @@ word [`end`](#end) must be used alone on the last line.
 If you change your mind while defining a procedure with `to`,
 press `Brk` to stop the definition. 
 
+**Example**:
+
+```logo
+?to square :size
+>repeat 4 [fd :size rt 90]
+>end
+```
 
 ## end
 
@@ -1098,6 +1105,15 @@ bf _object_
 
 `butfirst` outputs all but the first element of _object_. `butfirst` of the empty word or the empty list is an error.
 
+**Examples**:
+
+```logo
+?pr butfirst "hello
+ello
+?show butfirst [a b c d]
+[b c d]
+```
+
 
 ## butlast (bl)
 
@@ -1108,6 +1124,15 @@ bl _object_
 
 `butlast` outputs all but the last element of _object_.
 
+**Examples**:
+
+```logo
+?pr butlast "windmills
+windmill
+?show butlast [a b c d]
+[a b c]
+```
+
 
 ## first
 
@@ -1116,6 +1141,36 @@ first _object_
 `operation`
 
 `first` outputs the first element of _object_. `first` of the empty word or the empty list is an error. Note that `first` of a word is a single character; `first` of a list can be a word or a list.
+
+**Examples**:
+
+```logo
+?pr first "hello
+h
+?show first [a b c d]
+a
+```
+
+
+## replace
+
+replace _integer_ _object_ _value_
+
+`operation`
+
+`replace` returns a new list with the element of _object_ whose position within _object_ corresponds to _integer_ replaced with _value_. For example, if _integer_ is 3, `replace` returns a list with the third element in the object replaced with _value_. _Object_ is a word or a list. An error occurs if _integer_ is greater than the length of _object_ or if _object_ is the empty word or list.
+
+**Examples**:
+
+```logo
+?pr replace 2 "dig "u
+dug
+?show replace 4 [a b c d] "x
+[a b c x]
+?make "greet "hello
+?pr replace 1 :greet uppercase item 1 :greet
+Hello
+```
 
 
 ## item
@@ -1126,6 +1181,15 @@ item _integer_ _object_
 
 `item` outputs the element of _object_ whose position within _object_ corresponds to _integer_. For example, if _integer_ is 3, `item` outputs the third element in the object. _Object_ is a word or a list. An error occurs if _integer_ is greater than the length of _object_ or if _object_ is the empty word or list.
 
+**Examples**:
+
+```logo
+?pr item 4 "windmills
+d
+?show item 2 [a b c d]
+b
+```
+
 
 ## last
 
@@ -1134,6 +1198,15 @@ last _object_
 `operation`
 
 `last` outputs the last element of _object_. `last` of the empty word or the empty list is an error.
+
+**Examples**:
+
+```logo
+?pr last "Maple
+e
+?show last [a b c d]
+d
+```
 
 
 ## member
@@ -1144,6 +1217,19 @@ member _object1_ _object2_
 
 `member` outputs the part of _object2_ in which _object1_ is the first element. If _object1_ is not an element of _object2_, `member` outputs the empty list or the empty word. This operation is useful for accessing information in a file or for sorting long lists.
 
+**Examples**:
+
+```logo
+?show member "b [a b c d]
+[b c d]
+?pr member "x "example
+xample
+?show member "x [a b c d]
+[]
+?pr member ". 3.14159
+.14159
+```
+
 
 ## fput
 
@@ -1152,6 +1238,13 @@ fput _object_ _list_
 `operation`
 
 The `fput` (for first put) operation outputs a new list formed by putting _object_ at the beginning of _list_.
+
+**Example**:
+
+```logo
+?show fput "a [b c d]
+[a b c d]
+```
 
 
 ## list
@@ -1163,6 +1256,15 @@ list _object1_ _object2_
 
 The `list` operation outputs a list whose elements are _object1_, _object2_, and so on.
 
+**Examples**:
+
+```logo
+?show (list "d "o "g)
+[d o g]
+? show list "Hello "there
+[Hello there]
+```
+
 
 ## lput
 
@@ -1172,6 +1274,13 @@ lput _object_ _list_
 
 The `lput` (for last put) operation outputs a new list formed by putting _object_ at the end of _list_.
 
+**Example**:
+
+```logo
+?show lput "d [a b c]
+[a b c d]
+```
+
 
 ## parse
 
@@ -1180,6 +1289,13 @@ parse _word_
 `operation`
 
 `parse` outputs a list that is obtained from parsing _word_. `parse` is useful for converting the output of [`readword`](#readword-rw) into a list.
+
+**Example**:
+
+```logo
+?show parse "a\ b\ c\ d
+[a b c d]
+```
 
 
 ## sentence (se)
@@ -1193,6 +1309,15 @@ se _object1_ _object2_
 
 `sentence` outputs a list made up of the contents in its inputs.
 
+**Examples**:
+
+```logo
+?show (sentence "a [b c] "d)
+[a b c d]
+?show se "hello "world
+[hello world]
+```
+
 
 ## word
 
@@ -1203,6 +1328,17 @@ word _word1_ _word2_
 
 `word` outputs a word made up of its inputs.
 
+**Examples**:
+
+```logo
+?pr (word "Hello, char 32  "world!)
+Hello, world!
+?pr word "123 "456
+123456
+?pr word 10 0 + 1
+101
+```
+
 
 ## ascii
 
@@ -1211,6 +1347,16 @@ ascii _character_
 `operation`
 
 `ascii` outputs the American Standard Code for Information Interchange (ASCII) code for _character_. If the input word contains more than one character, `ascii` uses only its first character. Also see [`char`](#char).
+
+
+**Examples**:
+
+```logo
+?pr ascii "A
+65
+?pr ascii "z
+122
+```
 
 
 ## before? (beforep)
@@ -1223,6 +1369,18 @@ beforep _word1_ _word2_
 `before?` outputs `true` if _word1_ comes before _word2_. To make the comparison, Logo uses the ASCII codes of the characters in the words. Note that all uppercase letters come before all lowercase letters.
 
 
+**Examples**:
+
+```logo
+?pr before? "Apple "Banana
+true
+?pr before? "apple "Banana
+false
+?pr before? "Cat "cat
+true
+```
+
+
 ## char
 
 char _integer_  
@@ -1230,6 +1388,15 @@ char _integer_
 `operation`
 
 The `char` operation outputs the character whose ASCII code is _integer_. An error occurs if _integer_ is not the ASCIl code for any character.
+
+**Examples**:
+
+```logo
+?pr char 65
+A
+?pr char 122
+z
+```
 
 
 ## count
@@ -1239,6 +1406,15 @@ count _object_
 `operation`
 
 `count` outputs the number of elements in _object_, which is a word or a list.
+
+**Examples**:
+
+```logo
+?pr count "hello
+5
+?pr count [a b c d]
+4
+```
 
 
 ## empty? (emptyp)
@@ -1250,6 +1426,19 @@ emptyp _object_
 
 `empty?` outputs `true` if _object_ is the empty word or the empty list; otherwise it outputs `false`.
 
+**Examples**:
+
+```logo
+?pr empty? "
+true
+?pr empty? []
+true
+?pr empty? "abc
+false
+?pr empty? [a b c]
+false
+```
+
 
 ## equal? (equalp)
 
@@ -1259,6 +1448,23 @@ equalp _object1_ _object2_
 `operation`
 
 `equal?` outputs `true` if _object1_ and _object2_ are equal numbers, identical words, or identical lists; otherwise `equal?` outputs `false`. This operation is equivalent to the equal sign (`=`).
+
+**Examples**:
+
+```logo
+?pr equal? "hello "hello
+true
+?pr equal? [a b c] [a b c]
+true
+?pr equal? 10 10
+true
+?pr equal? "hello "world
+false
+?pr equal? [a b c] [a b d]
+false
+?pr equal? 10 20
+false
+```
 
 
 ## list? (listp)
@@ -1270,6 +1476,17 @@ listp _object_
 
 `list?` outputs `true` if _object_ is a list; otherwise it outputs `false`.
 
+**Examples**:
+
+```logo
+?pr list? [a b c]
+true
+?pr list? "hello
+false
+?pr list? 123
+false
+```
+
 
 ## member? (memberp)
 
@@ -1280,6 +1497,16 @@ memberp _object1_ _object2_
 
 `member?` outputs `true` if _object1_ is an element of _object2_; otherwise it outputs `false`.
 
+**Examples**:
+
+```logo
+?pr member? "b [a b c d]
+true
+?pr member? "b "example
+false
+?pr member? ". 3.14159
+true
+```
 
 ## number? (numberp)
 
@@ -1289,6 +1516,17 @@ numberp _object_
 `operation`
 
 `number?` outputs `true` if _object_ is a number; otherwise it outputs `false`.
+
+**Examples**:
+
+```logo
+?pr number? 123
+true
+?pr number? "hello
+false
+?pr number? [a b c]
+false
+```
 
 
 ## word? (wordp)
@@ -1300,6 +1538,17 @@ wordp _object_
 
 `word?` outputs `true` if _object_ is a word; otherwise it outputs `false`. A self-quoted number is word.
 
+**Examples**:
+
+```logo
+?pr word? "hello
+true
+?pr word? 123
+true
+?pr word? [a b c]
+false
+```
+
 
 ## lowercase
 
@@ -1308,6 +1557,15 @@ lowercase _word_
 `operation`
 
 `lowercase` outputs _word_ in all lowercase letters.
+
+**Examples**:
+
+```logo
+?pr lowercase "HelloWorld
+helloworld
+?pr lowercase "AB123
+ab123
+```
 
 
 ## uppercase
@@ -1318,6 +1576,14 @@ uppercase _word_
 
 `uppercase` outputs _word_ in all uppercase letters.
 
+**Examples**:
+
+```logo
+?pr uppercase "HelloWorld
+HELLOWORLD
+?pr uppercase "ab123
+AB123
+```
 
 
 ===
@@ -1429,6 +1695,19 @@ exp _exponent_
 `operation`
 
 Outputs _e_ raised to the power of _exponent_.
+
+
+## form
+
+form _number_ _width_ _decimalplaces_
+
+`operation`
+
+`form` outputs a word representing _number_ formatted to fit in a field of _width_ characters with _decimalplaces_ digits to the right of the decimal point. If _decimalplaces_ is zero, no decimal point is included. The number is rounded to the specified number of decimal places.
+
+If _number_ is negative, the minus sign takes up one position in the field. If _number_ is too large to fit in the specified width, `form` outputs a string using the minimum length required for _number_ with _decimalplaces_.
+
+If _width_ is less than or equal to zero, or if _decimalplaces_ is less than zero, an error occurs.
 
 
 ## int
@@ -2013,7 +2292,7 @@ map _procedure_ _data_
 
 `operation`
 
-`map` evaluates _procedure_ once for each member of the _data_ list and outputs a list of the results. If more than one data list are given, each of them must be the same length. (The data inputs can be words, in which case _procedure_ is evaluated once for each character.)
+`map` evaluates _procedure_ once for each member of the _data_ list and outputs a object of the results. If more than one data object are given, each of them must be the same length. (The data inputs can be words, in which case _procedure_ is evaluated once for each character.) The output object will be a word if the first _data_ input is a word; otherwise, the output will be a list.
 
 Each data list provides one input to _procedure_ at each evaluation. Thus, if there are two data lists, _procedure_ must have two inputs; if there are three data lists, _procedure_ must have three inputs; and so on.
 
@@ -2022,14 +2301,24 @@ Examples:
 ```logo
 ?show map [[x] :x * :x] [1 2 3 4]
 [1 4 9 16]
+?show (map "sum [1 2 3] [4 5 6])
+[5 7 9]
+?show map [[x] ascii :x] "hello"
+104101108108111
 ?
 ```
 
-```
-?show (map "sum [1 2 3] [4 5 6])
-[5 7 9]
-?
-```
+
+## map.se
+
+map.se _procedure_ _data_
+(map.se _procedure_ _data1_ _data2_ ...)
+
+`operation`
+
+Outputs a list formed by evaluating the _procedure_ repeatedly and concatenating the results using [`sentence`](#sentence). That is, the members of the output are the members of the results of the evaluations. The output list might, therefore, be of a different length from that of the data input(s). (If the result of an evaluation is the empty list, it contributes nothing to the final output.) The data inputs may be words or lists.
+
+Each data list provides one input to _procedure_ at each evaluation. Thus, if there are two data lists, _procedure_ must have two inputs; if there are three data lists, _procedure_ must have three inputs; and so on.
 
 
 ## filter
@@ -2038,15 +2327,18 @@ filter _procedure_ _data_
 
 `operation`
 
-`filter` evaluates _procedure_ once for each member of the _data_ list and outputs a list of those members for which _procedure_ outputs `true`. _Procedure_ must have one input.
+`filter` evaluates _procedure_ once for each member of the _data_ list and outputs a list of those members for which _procedure_ outputs `true`. _Procedure_ must have one input.  The output object will be a word if _data_ is a word; otherwise, the output will be a list.
+
 
 _Procedure_ must output either `true` or `false` for each member of _data_.
 
 Examples:
 
 ```logo
-? show filter [[x] :x > 2] [1 2 3 4 5]
+?show filter [[x] :x > 2] [1 2 3 4 5]
 [3 4 5]
+?show filter [[x] 105 < ascii :x] "hello
+llo
 ?
 ```
 
@@ -2239,6 +2531,55 @@ or _predicate1_ _predicate2_
 `operation`
 
 Outputs `true` if any of its inputs are `true`. All inputs are evaluated.
+
+
+
+===
+# Bitwise Operations
+
+## bitand
+
+bitand _num1_ _num2_  
+(bitand _num1_ _num2_ _num3_ ...)
+
+Outputs the bitwise AND of its inputs, which must be integers.
+
+
+## bitor
+
+bitor _num1_ _num2_  
+(bitor _num1_ _num2_ _num3_ ...)
+
+Outputs the bitwise OR of its inputs, which must be integers.
+
+
+## bitxor
+
+bitxor _num1_ _num2_  
+(bitxor _num1_ _num2_ _num3_ ...)
+
+Outputs the bitwise exclusive OR of its inputs, which must be integers.
+
+
+## bitnot
+
+bitnot _num_  
+
+Outputs the bitwise NOT of its input, which must be an integer.
+
+
+## ashift
+
+ashift _num1_ _num2_  
+
+Outputs _num1_ arithmetic-shifted to the left by _num2_ bits. If _num2_ is negative, the shift is to the right with sign extension. The inputs must be integers.
+
+
+## lshift
+
+lshift _num1_ _num2_  
+
+Outputs _num1_ logical-shifted to the left by _num2_ bits. If _num2_ is negative, the shift is to the right with zero fill. The inputs must be integers.
 
 
 
@@ -2626,6 +2967,25 @@ setprefix _pathname_
 
 Sets a prefix that will be used as the implicit beginning of filenames in [`open`](#open), [`load`](#load), and [`save`](#save) commands. The input to `setprefix` must be a word, unless it is the empty list, to indicate that there should be no prefix.
 
+The _pathname_ can include parent directory references ("`..`") to navigate up the directory tree. For example, if the current prefix is `/Logo/apple/`, then `setprefix ".."` will change the prefix to `/Logo/`, and `setprefix "..\/banana"` will change it to `/Logo/banana/`.
+
+**Examples**:
+
+```logo
+?setprefix "/Logo
+?pr prefix
+/Logo/
+?setprefix "apple
+?pr prefix
+/Logo/apple/
+?setprefix "..
+?pr prefix
+/Logo/
+?setprefix "..\/banana
+?pr prefix
+/Logo/banana/
+```
+
 
 ## prefix
 
@@ -2674,11 +3034,12 @@ Stands for erase directory. Erases a directory. The directory must be empty or t
 
 ## catalog
 
-catalog  
+catalog
+(catalog _pathname_)  
 
 `command`
 
-Prints a list of files and directories in the current directory. Directories have the slash "`/`" character appended to their pathname.
+Prints a list of files and directories in the current directory. Directories have the slash "`/`" character appended to their pathname. If _pathname_ is present, it specifies the directory to be listed.
 
 `catalog` prints to the screen but not to the current writer.
 

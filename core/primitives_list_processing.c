@@ -396,12 +396,26 @@ static Result prim_foreach(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_NOT_ENOUGH_INPUTS, NULL, NULL);
     }
     
-    // Validate all data arguments are lists or words
+    // Validate all data arguments are lists, words, or numbers
+    // Convert numbers to words (numbers are self-quoting words in Logo)
+    Node word_nodes[MAX_PROC_PARAMS];  // Store converted number nodes
     for (int i = 0; i < data_count; i++)
     {
-        if (!value_is_list(args[i]) && !value_is_word(args[i]))
+        if (value_is_number(args[i]))
+        {
+            word_nodes[i] = number_to_word(args[i].as.number);
+        }
+        else if (value_is_word(args[i]))
+        {
+            word_nodes[i] = args[i].as.node;
+        }
+        else if (!value_is_list(args[i]))
         {
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[i]));
+        }
+        else
+        {
+            word_nodes[i] = NODE_NIL;  // Mark as list
         }
     }
     
@@ -418,8 +432,8 @@ static Result prim_foreach(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        // Word - length is character count
-        length = (int)mem_word_len(args[0].as.node);
+        // Word or number - length is character count
+        length = (int)mem_word_len(word_nodes[0]);
     }
     
     // For multi-list, verify all lists have same length
@@ -439,7 +453,8 @@ static Result prim_foreach(Evaluator *eval, int argc, Value *args)
             }
             else
             {
-                other_length = (int)mem_word_len(args[i].as.node);
+                // Use word_nodes which has already converted numbers
+                other_length = (int)mem_word_len(word_nodes[i]);
             }
             
             if (other_length != length)
@@ -463,7 +478,8 @@ static Result prim_foreach(Evaluator *eval, int argc, Value *args)
         }
         else
         {
-            word_ptrs[i] = mem_word_ptr(args[i].as.node);
+            // Use word_nodes which has already converted numbers
+            word_ptrs[i] = mem_word_ptr(word_nodes[i]);
             is_word[i] = true;
         }
     }
@@ -563,12 +579,26 @@ static Result prim_map(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_NOT_ENOUGH_INPUTS, NULL, NULL);
     }
     
-    // Validate all data arguments are lists or words
+    // Validate all data arguments are lists, words, or numbers
+    // Convert numbers to words (numbers are self-quoting words in Logo)
+    Node word_nodes[MAX_PROC_PARAMS];  // Store converted number nodes
     for (int i = 1; i < argc; i++)
     {
-        if (!value_is_list(args[i]) && !value_is_word(args[i]))
+        if (value_is_number(args[i]))
+        {
+            word_nodes[i - 1] = number_to_word(args[i].as.number);
+        }
+        else if (value_is_word(args[i]))
+        {
+            word_nodes[i - 1] = args[i].as.node;
+        }
+        else if (!value_is_list(args[i]))
         {
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[i]));
+        }
+        else
+        {
+            word_nodes[i - 1] = NODE_NIL;  // Mark as list
         }
     }
     
@@ -585,7 +615,8 @@ static Result prim_map(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        length = (int)mem_word_len(args[1].as.node);
+        // Word or number - use word_nodes which has converted numbers
+        length = (int)mem_word_len(word_nodes[0]);
     }
     
     // For multi-list, verify all lists have same length
@@ -605,7 +636,8 @@ static Result prim_map(Evaluator *eval, int argc, Value *args)
             }
             else
             {
-                other_length = (int)mem_word_len(args[i].as.node);
+                // Use word_nodes which has already converted numbers
+                other_length = (int)mem_word_len(word_nodes[i - 1]);
             }
             
             if (other_length != length)
@@ -629,12 +661,327 @@ static Result prim_map(Evaluator *eval, int argc, Value *args)
         }
         else
         {
-            word_ptrs[i] = mem_word_ptr(args[i + 1].as.node);
+            // Use word_nodes which has already converted numbers
+            word_ptrs[i] = mem_word_ptr(word_nodes[i]);
             is_word[i] = true;
         }
     }
     
-    // Build result list
+    // Determine output type based on first data input
+    bool output_word = is_word[0];
+    
+    // Build result list or word
+    Node result_head = NODE_NIL;
+    Node result_tail = NODE_NIL;
+    char *result_word = NULL;
+    size_t result_word_len = 0;
+    size_t result_word_cap = 0;
+    
+    if (output_word)
+    {
+        // Pre-allocate buffer for word result
+        result_word_cap = (size_t)length + 1;
+        result_word = malloc(result_word_cap);
+        if (result_word == NULL)
+        {
+            return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
+        }
+        result_word_len = 0;
+    }
+    
+    Value proc_args[MAX_PROC_PARAMS];
+    
+    for (int idx = 0; idx < length; idx++)
+    {
+        // Collect current element from each data source
+        for (int i = 0; i < data_count; i++)
+        {
+            if (is_word[i])
+            {
+                Node char_atom = mem_atom(&word_ptrs[i][idx], 1);
+                proc_args[i] = value_word(char_atom);
+            }
+            else
+            {
+                Node elem = mem_car(cursors[i]);
+                if (mem_is_word(elem))
+                {
+                    proc_args[i] = value_word(elem);
+                }
+                else if (mem_is_nil(elem))
+                {
+                    proc_args[i] = value_list(NODE_NIL);
+                }
+                else
+                {
+                    proc_args[i] = value_list(elem);
+                }
+                cursors[i] = mem_cdr(cursors[i]);
+            }
+        }
+        
+        // Invoke the procedure
+        r = invoke_proc_spec(eval, &spec, data_count, proc_args);
+        
+        // Propagate errors, stop, throw
+        if (r.status == RESULT_ERROR || r.status == RESULT_THROW ||
+            r.status == RESULT_STOP)
+        {
+            if (result_word != NULL)
+            {
+                free(result_word);
+            }
+            return r;
+        }
+        
+        // Handle output from procedure text
+        if (r.status == RESULT_OUTPUT)
+        {
+            r = result_ok(r.value);
+        }
+        
+        // Collect result if we got one
+        if (r.status == RESULT_OK)
+        {
+            if (output_word)
+            {
+                // Build word result - concatenate characters/words
+                const char *str = NULL;
+                size_t str_len = 0;
+                char num_buf[32];
+                
+                if (value_is_word(r.value))
+                {
+                    str = mem_word_ptr(r.value.as.node);
+                    str_len = mem_word_len(r.value.as.node);
+                }
+                else if (value_is_number(r.value))
+                {
+                    format_number(num_buf, sizeof(num_buf), r.value.as.number);
+                    str = num_buf;
+                    str_len = strlen(num_buf);
+                }
+                else
+                {
+                    // Lists cannot be concatenated into a word - error
+                    free(result_word);
+                    return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(r.value));
+                }
+                
+                // Grow buffer if needed
+                if (result_word_len + str_len + 1 > result_word_cap)
+                {
+                    size_t new_cap = result_word_cap * 2;
+                    if (new_cap < result_word_len + str_len + 1)
+                    {
+                        new_cap = result_word_len + str_len + 1;
+                    }
+                    char *new_buf = realloc(result_word, new_cap);
+                    if (new_buf == NULL)
+                    {
+                        free(result_word);
+                        return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
+                    }
+                    result_word = new_buf;
+                    result_word_cap = new_cap;
+                }
+                
+                memcpy(result_word + result_word_len, str, str_len);
+                result_word_len += str_len;
+            }
+            else
+            {
+                // Build list result
+                Node result_node;
+                if (value_is_word(r.value) || value_is_number(r.value))
+                {
+                    if (value_is_number(r.value))
+                    {
+                        // Convert number to word for list
+                        char buf[32];
+                        format_number(buf, sizeof(buf), r.value.as.number);
+                        result_node = mem_atom_cstr(buf);
+                    }
+                    else
+                    {
+                        result_node = r.value.as.node;
+                    }
+                }
+                else if (value_is_list(r.value))
+                {
+                    result_node = r.value.as.node;
+                }
+                else
+                {
+                    continue;  // Skip none values
+                }
+                
+                // Append to result list
+                Node new_cell = mem_cons(result_node, NODE_NIL);
+                if (mem_is_nil(result_head))
+                {
+                    result_head = new_cell;
+                    result_tail = new_cell;
+                }
+                else
+                {
+                    mem_set_cdr(result_tail, new_cell);
+                    result_tail = new_cell;
+                }
+            }
+        }
+    }
+    
+    if (output_word)
+    {
+        // Create result word from buffer
+        result_word[result_word_len] = '\0';
+        Node result_node = mem_atom(result_word, result_word_len);
+        free(result_word);
+        return result_ok(value_word(result_node));
+    }
+    else
+    {
+        return result_ok(value_list(result_head));
+    }
+}
+
+//==========================================================================
+// map.se procedure data
+// (map.se procedure data1 data2 ...)
+//==========================================================================
+
+static Result prim_map_se(Evaluator *eval, int argc, Value *args)
+{
+    if (argc < 2)
+    {
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, NULL, NULL);
+    }
+    
+    // First argument is the procedure
+    ProcSpec spec;
+    Result r = parse_proc_spec(args[0], &spec);
+    if (r.status == RESULT_ERROR)
+    {
+        return r;
+    }
+    
+    // Determine expected parameter count
+    int expected_params;
+    if (spec.type == PROC_SPEC_NAME)
+    {
+        if (spec.as.named.primitive)
+        {
+            expected_params = spec.as.named.primitive->default_args;
+        }
+        else
+        {
+            expected_params = spec.as.named.user_proc->param_count;
+        }
+    }
+    else
+    {
+        expected_params = spec.as.lambda.param_count;
+    }
+    
+    // Number of data lists
+    int data_count = argc - 1;
+    
+    // Validate that we have the right number of data lists
+    if (data_count != expected_params)
+    {
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, NULL, NULL);
+    }
+    
+    // Validate all data arguments are lists, words, or numbers
+    // Convert numbers to words (numbers are self-quoting words in Logo)
+    Node word_nodes[MAX_PROC_PARAMS];  // Store converted number nodes
+    for (int i = 1; i < argc; i++)
+    {
+        if (value_is_number(args[i]))
+        {
+            word_nodes[i - 1] = number_to_word(args[i].as.number);
+        }
+        else if (value_is_word(args[i]))
+        {
+            word_nodes[i - 1] = args[i].as.node;
+        }
+        else if (!value_is_list(args[i]))
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[i]));
+        }
+        else
+        {
+            word_nodes[i - 1] = NODE_NIL;  // Mark as list
+        }
+    }
+    
+    // Get length of first data list/word (all must be same length for multi-list)
+    int length = 0;
+    if (value_is_list(args[1]))
+    {
+        Node list = args[1].as.node;
+        while (!mem_is_nil(list))
+        {
+            length++;
+            list = mem_cdr(list);
+        }
+    }
+    else
+    {
+        // Word or number - use word_nodes which has converted numbers
+        length = (int)mem_word_len(word_nodes[0]);
+    }
+    
+    // For multi-list, verify all lists have same length
+    if (data_count > 1)
+    {
+        for (int i = 2; i < argc; i++)
+        {
+            int other_length = 0;
+            if (value_is_list(args[i]))
+            {
+                Node list = args[i].as.node;
+                while (!mem_is_nil(list))
+                {
+                    other_length++;
+                    list = mem_cdr(list);
+                }
+            }
+            else
+            {
+                // Use word_nodes which has already converted numbers
+                other_length = (int)mem_word_len(word_nodes[i - 1]);
+            }
+            
+            if (other_length != length)
+            {
+                return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[i]));
+            }
+        }
+    }
+    
+    // Set up iterators for each data list
+    Node cursors[MAX_PROC_PARAMS];
+    const char *word_ptrs[MAX_PROC_PARAMS];
+    bool is_word[MAX_PROC_PARAMS];
+    
+    for (int i = 0; i < data_count; i++)
+    {
+        if (value_is_list(args[i + 1]))
+        {
+            cursors[i] = args[i + 1].as.node;
+            is_word[i] = false;
+        }
+        else
+        {
+            // Use word_nodes which has already converted numbers
+            word_ptrs[i] = mem_word_ptr(word_nodes[i]);
+            is_word[i] = true;
+        }
+    }
+    
+    // Build result list using sentence semantics
     Node result_head = NODE_NIL;
     Node result_tail = NODE_NIL;
     
@@ -685,15 +1032,35 @@ static Result prim_map(Evaluator *eval, int argc, Value *args)
             r = result_ok(r.value);
         }
         
-        // Collect result if we got one
+        // Collect result using sentence semantics
         if (r.status == RESULT_OK)
         {
-            Node result_node;
-            if (value_is_word(r.value) || value_is_number(r.value))
+            if (value_is_list(r.value))
             {
+                // Append all elements of the list (sentence semantics)
+                Node list = r.value.as.node;
+                while (!mem_is_nil(list))
+                {
+                    Node new_cell = mem_cons(mem_car(list), NODE_NIL);
+                    if (mem_is_nil(result_head))
+                    {
+                        result_head = new_cell;
+                        result_tail = new_cell;
+                    }
+                    else
+                    {
+                        mem_set_cdr(result_tail, new_cell);
+                        result_tail = new_cell;
+                    }
+                    list = mem_cdr(list);
+                }
+            }
+            else if (value_is_word(r.value) || value_is_number(r.value))
+            {
+                // Add word or number as single element
+                Node result_node;
                 if (value_is_number(r.value))
                 {
-                    // Convert number to word for list
                     char buf[32];
                     format_number(buf, sizeof(buf), r.value.as.number);
                     result_node = mem_atom_cstr(buf);
@@ -702,28 +1069,20 @@ static Result prim_map(Evaluator *eval, int argc, Value *args)
                 {
                     result_node = r.value.as.node;
                 }
+                
+                Node new_cell = mem_cons(result_node, NODE_NIL);
+                if (mem_is_nil(result_head))
+                {
+                    result_head = new_cell;
+                    result_tail = new_cell;
+                }
+                else
+                {
+                    mem_set_cdr(result_tail, new_cell);
+                    result_tail = new_cell;
+                }
             }
-            else if (value_is_list(r.value))
-            {
-                result_node = r.value.as.node;
-            }
-            else
-            {
-                continue;  // Skip none values
-            }
-            
-            // Append to result list
-            Node new_cell = mem_cons(result_node, NODE_NIL);
-            if (mem_is_nil(result_head))
-            {
-                result_head = new_cell;
-                result_tail = new_cell;
-            }
-            else
-            {
-                mem_set_cdr(result_tail, new_cell);
-                result_tail = new_cell;
-            }
+            // None values and empty lists contribute nothing
         }
     }
     
@@ -746,31 +1105,58 @@ static Result prim_filter(Evaluator *eval, int argc, Value *args)
         return r;
     }
     
-    // Second argument is the data list or word
-    if (!value_is_list(args[1]) && !value_is_word(args[1]))
+    // Second argument is the data list, word, or number
+    // Convert numbers to words (numbers are self-quoting words in Logo)
+    Node word_node = NODE_NIL;
+    if (value_is_number(args[1]))
+    {
+        word_node = number_to_word(args[1].as.number);
+    }
+    else if (value_is_word(args[1]))
+    {
+        word_node = args[1].as.node;
+    }
+    else if (!value_is_list(args[1]))
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
     }
     
-    bool input_is_word = value_is_word(args[1]);
+    bool input_is_word = !value_is_list(args[1]);
     Node data = input_is_word ? NODE_NIL : args[1].as.node;
-    const char *word_ptr = input_is_word ? mem_word_ptr(args[1].as.node) : NULL;
-    int word_len = input_is_word ? (int)mem_word_len(args[1].as.node) : 0;
+    const char *word_ptr = input_is_word ? mem_word_ptr(word_node) : NULL;
+    int word_len = input_is_word ? (int)mem_word_len(word_node) : 0;
     int word_idx = 0;
     
-    // Build result list
+    // Build result list or word
     Node result_head = NODE_NIL;
     Node result_tail = NODE_NIL;
+    char *result_word = NULL;
+    size_t result_word_len = 0;
+    size_t result_word_cap = 0;
+    
+    if (input_is_word)
+    {
+        // Pre-allocate buffer for word result
+        result_word_cap = (size_t)word_len + 1;
+        result_word = malloc(result_word_cap);
+        if (result_word == NULL)
+        {
+            return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
+        }
+        result_word_len = 0;
+    }
     
     Value proc_args[1];
     
     while (input_is_word ? (word_idx < word_len) : !mem_is_nil(data))
     {
         Node elem;
+        char current_char = '\0';
         
         // Get current element
         if (input_is_word)
         {
+            current_char = word_ptr[word_idx];
             elem = mem_atom(&word_ptr[word_idx], 1);
             proc_args[0] = value_word(elem);
         }
@@ -799,6 +1185,10 @@ static Result prim_filter(Evaluator *eval, int argc, Value *args)
         if (r.status == RESULT_ERROR || r.status == RESULT_THROW ||
             r.status == RESULT_STOP)
         {
+            if (result_word != NULL)
+            {
+                free(result_word);
+            }
             return r;
         }
         
@@ -815,26 +1205,43 @@ static Result prim_filter(Evaluator *eval, int argc, Value *args)
             if (strcasecmp(str, "true") == 0)
             {
                 // Include this element
-                Node new_cell = mem_cons(elem, NODE_NIL);
-                if (mem_is_nil(result_head))
+                if (input_is_word)
                 {
-                    result_head = new_cell;
-                    result_tail = new_cell;
+                    // Append character to result word
+                    result_word[result_word_len++] = current_char;
                 }
                 else
                 {
-                    mem_set_cdr(result_tail, new_cell);
-                    result_tail = new_cell;
+                    // Append element to result list
+                    Node new_cell = mem_cons(elem, NODE_NIL);
+                    if (mem_is_nil(result_head))
+                    {
+                        result_head = new_cell;
+                        result_tail = new_cell;
+                    }
+                    else
+                    {
+                        mem_set_cdr(result_tail, new_cell);
+                        result_tail = new_cell;
+                    }
                 }
             }
             else if (strcasecmp(str, "false") != 0)
             {
                 // Not a boolean
+                if (result_word != NULL)
+                {
+                    free(result_word);
+                }
                 return result_error_arg(ERR_NOT_BOOL, NULL, str);
             }
         }
         else if (r.status == RESULT_OK)
         {
+            if (result_word != NULL)
+            {
+                free(result_word);
+            }
             return result_error_arg(ERR_NOT_BOOL, NULL, value_to_string(r.value));
         }
         
@@ -849,7 +1256,18 @@ static Result prim_filter(Evaluator *eval, int argc, Value *args)
         }
     }
     
-    return result_ok(value_list(result_head));
+    if (input_is_word)
+    {
+        // Create result word from buffer
+        result_word[result_word_len] = '\0';
+        Node result_node = mem_atom(result_word, result_word_len);
+        free(result_word);
+        return result_ok(value_word(result_node));
+    }
+    else
+    {
+        return result_ok(value_list(result_head));
+    }
 }
 
 //==========================================================================
@@ -868,16 +1286,26 @@ static Result prim_find(Evaluator *eval, int argc, Value *args)
         return r;
     }
     
-    // Second argument is the data list or word
-    if (!value_is_list(args[1]) && !value_is_word(args[1]))
+    // Second argument is the data list, word, or number
+    // Convert numbers to words (numbers are self-quoting words in Logo)
+    Node word_node = NODE_NIL;
+    if (value_is_number(args[1]))
+    {
+        word_node = number_to_word(args[1].as.number);
+    }
+    else if (value_is_word(args[1]))
+    {
+        word_node = args[1].as.node;
+    }
+    else if (!value_is_list(args[1]))
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
     }
     
-    bool input_is_word = value_is_word(args[1]);
+    bool input_is_word = !value_is_list(args[1]);
     Node data = input_is_word ? NODE_NIL : args[1].as.node;
-    const char *word_ptr = input_is_word ? mem_word_ptr(args[1].as.node) : NULL;
-    int word_len = input_is_word ? (int)mem_word_len(args[1].as.node) : 0;
+    const char *word_ptr = input_is_word ? mem_word_ptr(word_node) : NULL;
+    int word_len = input_is_word ? (int)mem_word_len(word_node) : 0;
     int word_idx = 0;
     
     Value proc_args[1];
@@ -975,20 +1403,30 @@ static Result prim_reduce(Evaluator *eval, int argc, Value *args)
         return r;
     }
     
-    // Second argument is the data list or word
-    if (!value_is_list(args[1]) && !value_is_word(args[1]))
+    // Second argument is the data list, word, or number
+    // Convert numbers to words (numbers are self-quoting words in Logo)
+    Node word_node = NODE_NIL;
+    if (value_is_number(args[1]))
+    {
+        word_node = number_to_word(args[1].as.number);
+    }
+    else if (value_is_word(args[1]))
+    {
+        word_node = args[1].as.node;
+    }
+    else if (!value_is_list(args[1]))
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
     }
     
-    bool input_is_word = value_is_word(args[1]);
+    bool input_is_word = !value_is_list(args[1]);
     
     // Count elements and collect them
     int count = 0;
     
     if (input_is_word)
     {
-        count = (int)mem_word_len(args[1].as.node);
+        count = (int)mem_word_len(word_node);
     }
     else
     {
@@ -1011,7 +1449,7 @@ static Result prim_reduce(Evaluator *eval, int argc, Value *args)
         // Single element - return it
         if (input_is_word)
         {
-            const char *word_ptr = mem_word_ptr(args[1].as.node);
+            const char *word_ptr = mem_word_ptr(word_node);
             Node char_atom = mem_atom(&word_ptr[0], 1);
             return result_ok(value_word(char_atom));
         }
@@ -1039,7 +1477,7 @@ static Result prim_reduce(Evaluator *eval, int argc, Value *args)
     
     if (input_is_word)
     {
-        const char *word_ptr = mem_word_ptr(args[1].as.node);
+        const char *word_ptr = mem_word_ptr(word_node);
         for (int i = 0; i < count; i++)
         {
             Node char_atom = mem_atom(&word_ptr[i], 1);
@@ -1429,6 +1867,7 @@ void primitives_list_processing_init(void)
     primitive_register("apply", 2, prim_apply);
     primitive_register("foreach", 2, prim_foreach);
     primitive_register("map", 2, prim_map);
+    primitive_register("map.se", 2, prim_map_se);
     primitive_register("filter", 2, prim_filter);
     primitive_register("find", 2, prim_find);
     primitive_register("reduce", 2, prim_reduce);

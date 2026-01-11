@@ -1384,11 +1384,27 @@ fat32_error_t fat32_create(fat32_file_t *file, const char *path)
 
 fat32_error_t fat32_close(fat32_file_t *file)
 {
-    if (file && file->is_open)
+    if (!file || !file->is_open)
     {
-        memset(file, 0, sizeof(fat32_file_t));
+        return FAT32_OK;
     }
 
+    // Sync the directory entry with the current file size and start cluster
+    // This ensures any modifications made during the file's lifetime are persisted
+    if (file->dir_entry_sector && file->dir_entry_offset < FAT32_SECTOR_SIZE)
+    {
+        fat32_error_t result = read_sector(file->dir_entry_sector, sector_buffer);
+        if (result == FAT32_OK)
+        {
+            fat32_dir_entry_t *dir_entry = (fat32_dir_entry_t *)(sector_buffer + file->dir_entry_offset);
+            dir_entry->file_size = file->file_size;
+            dir_entry->fst_clus_hi = file->start_cluster >> 16;
+            dir_entry->fst_clus_lo = file->start_cluster & 0xFFFF;
+            write_sector(file->dir_entry_sector, sector_buffer);
+        }
+    }
+
+    memset(file, 0, sizeof(fat32_file_t));
     return FAT32_OK;
 }
 

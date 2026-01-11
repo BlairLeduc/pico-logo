@@ -219,6 +219,7 @@ bool frame_reuse(FrameStack *stack, UserProcedure *proc,
     }
 
     // Note: depth doesn't change since we're reusing the same logical frame
+
     return true;
 }
 

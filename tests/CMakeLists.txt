@@ -39,6 +39,7 @@ add_logo_test(test_format)
 
 # Primitive tests
 add_logo_test(test_primitives_arithmetic)
+add_logo_test(test_primitives_bitwise)
 add_logo_test(test_primitives_conditionals)
 add_logo_test(test_primitives_control_flow)
 add_logo_test(test_primitives_debug_control)

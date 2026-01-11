@@ -127,6 +127,7 @@ extern "C"
     void primitives_files_init(void);
     void primitives_hardware_init(void);
     void primitives_logical_init(void);
+    void primitives_bitwise_init(void);
     void primitives_outside_world_init(void);
     void primitives_procedures_init(void);
     void primitives_properties_init(void);

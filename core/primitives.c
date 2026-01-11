@@ -37,6 +37,7 @@ void primitives_init(void)
     primitives_debug_control_init();
     primitives_exceptions_init();
     primitives_logical_init();
+    primitives_bitwise_init();
     primitives_variables_init();
     primitives_words_lists_init();
     primitives_procedures_init();

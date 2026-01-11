@@ -527,19 +527,31 @@ static Result eval_primary(Evaluator *eval)
             }
 
             // Tail call optimization: if we're in tail position inside a procedure,
-            // set up a tail call instead of actually calling
+            // and this is a SELF-RECURSIVE call, set up a tail call for frame reuse.
+            // Non-self-recursive tail calls use CPS instead to preserve dynamic scoping.
             if (eval->in_tail_position && eval->proc_depth > 0)
             {
-                TailCall *tc = proc_get_tail_call();
-                tc->is_tail_call = true;
-                tc->proc_name = user_proc->name;
-                tc->arg_count = argc;
-                for (int i = 0; i < argc; i++)
+                // Check if this is a self-recursive call
+                FrameStack *frames = eval->frames;
+                if (frames && !frame_stack_is_empty(frames))
                 {
-                    tc->args[i] = args[i];
+                    FrameHeader *current_frame = frame_current(frames);
+                    if (current_frame && current_frame->proc == user_proc)
+                    {
+                        // Self-recursive tail call - set up TCO
+                        TailCall *tc = proc_get_tail_call();
+                        tc->is_tail_call = true;
+                        tc->proc_name = user_proc->name;
+                        tc->arg_count = argc;
+                        for (int i = 0; i < argc; i++)
+                        {
+                            tc->args[i] = args[i];
+                        }
+                        // Return a special marker - proc_call will check tail_call
+                        return result_stop();
+                    }
                 }
-                // Return a special marker - use RESULT_STOP but proc_call will check tail_call
-                return result_stop();
+                // Non-self-recursive tail call - fall through to CPS
             }
 
             // CPS: if we're inside a procedure and NOT collecting primitive args,

@@ -530,12 +530,23 @@ static Result prim_edall(Evaluator *eval, int argc, Value *args)
     
     // Format all variables (not buried)
     int var_cnt = var_global_count(false);
+    bool first_var = true;
     for (int i = 0; i < var_cnt; i++)
     {
         const char *name;
         Value value;
         if (var_get_global_by_index(i, false, &name, &value))
         {
+            // Add blank line before first variable (if there were procedures)
+            if (first_var && !first_proc)
+            {
+                if (!format_buffer_output(&ctx, "\n"))
+                {
+                    return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
+                }
+            }
+            first_var = false;
+            
             if (!format_variable(format_buffer_output, &ctx, name, value))
             {
                 return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
@@ -545,6 +556,7 @@ static Result prim_edall(Evaluator *eval, int argc, Value *args)
     
     // Format all property lists
     int prop_cnt = prop_name_count();
+    bool first_prop = true;
     for (int i = 0; i < prop_cnt; i++)
     {
         const char *name;
@@ -553,6 +565,16 @@ static Result prim_edall(Evaluator *eval, int argc, Value *args)
             Node list = prop_get_list(name);
             if (!mem_is_nil(list))
             {
+                // Add blank line before first property (if there were procs or vars)
+                if (first_prop && (!first_proc || !first_var))
+                {
+                    if (!format_buffer_output(&ctx, "\n"))
+                    {
+                        return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
+                    }
+                }
+                first_prop = false;
+                
                 if (!format_property_list(format_buffer_output, &ctx, name, list))
                 {
                     return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);

@@ -123,6 +123,86 @@ void test_item_number(void)
 }
 
 //==========================================================================
+// Replace Tests
+//==========================================================================
+
+void test_replace_word(void)
+{
+    // pr replace 2 "dig "u outputs "dug"
+    run_string("print replace 2 \"dig \"u");
+    TEST_ASSERT_EQUAL_STRING("dug\n", output_buffer);
+}
+
+void test_replace_list(void)
+{
+    // show replace 4 [a b c d] "x outputs [a b c x]
+    Result r = eval_string("replace 4 [a b c d] \"x");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
+    // Verify [a b c x]
+    Node list = r.value.as.node;
+    TEST_ASSERT_EQUAL_STRING("a", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_EQUAL_STRING("b", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_EQUAL_STRING("c", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_EQUAL_STRING("x", mem_word_ptr(mem_car(list)));
+    TEST_ASSERT_TRUE(mem_is_nil(mem_cdr(list)));
+}
+
+void test_replace_capitalize_first_char(void)
+{
+    // make "greet "hello
+    // pr replace 1 :greet uppercase item 1 :greet outputs "Hello"
+    run_string("make \"greet \"hello\nprint replace 1 :greet uppercase item 1 :greet");
+    TEST_ASSERT_EQUAL_STRING("Hello\n", output_buffer);
+}
+
+void test_replace_number(void)
+{
+    // replace 2 123 "x outputs "1x3"
+    run_string("print replace 2 123 \"x");
+    TEST_ASSERT_EQUAL_STRING("1x3\n", output_buffer);
+}
+
+void test_replace_index_out_of_bounds(void)
+{
+    // Index greater than length
+    Result r = eval_string("replace 5 \"abc \"x");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_TOO_FEW_ITEMS, r.error_code);
+}
+
+void test_replace_empty_word_error(void)
+{
+    Result r = eval_string("replace 1 \" \"x");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_TOO_FEW_ITEMS, r.error_code);
+}
+
+void test_replace_empty_list_error(void)
+{
+    Result r = eval_string("replace 1 [] \"x");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_TOO_FEW_ITEMS, r.error_code);
+}
+
+void test_replace_invalid_index_zero(void)
+{
+    Result r = eval_string("replace 0 \"abc \"x");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_replace_invalid_index_negative(void)
+{
+    Result r = eval_string("replace -1 \"abc \"x");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+//==========================================================================
 // Count and Empty Tests
 //==========================================================================
 
@@ -494,6 +574,17 @@ int main(void)
     RUN_TEST(test_item_word);
     RUN_TEST(test_item_list);
     RUN_TEST(test_item_number);
+    
+    // Replace
+    RUN_TEST(test_replace_word);
+    RUN_TEST(test_replace_list);
+    RUN_TEST(test_replace_capitalize_first_char);
+    RUN_TEST(test_replace_number);
+    RUN_TEST(test_replace_index_out_of_bounds);
+    RUN_TEST(test_replace_empty_word_error);
+    RUN_TEST(test_replace_empty_list_error);
+    RUN_TEST(test_replace_invalid_index_zero);
+    RUN_TEST(test_replace_invalid_index_negative);
     
     // Count and empty
     RUN_TEST(test_count_word);
