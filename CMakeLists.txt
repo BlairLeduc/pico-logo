@@ -169,13 +169,23 @@ if(DEFINED LOGO_COPY_BUFFER_SIZE)
 endif()
 
 # Set C stack size (default Pico SDK is 0x800 = 2KB)
-# Default to 4KB - constrained by SCRATCH_Y region size (4KB max)
-# RP2040: SCRATCH_Y is 4KB
-# RP2350: SCRATCH_Y is 4KB
+# Default to 4KB.
+# Note: this project uses a custom linker script that places the core 0 stack in main RAM,
+# so the stack size is no longer constrained by the 4KB SCRATCH_Y region.
 if(DEFINED PICO_STACK_SIZE)
     target_compile_definitions(pico-logo PRIVATE PICO_STACK_SIZE=${PICO_STACK_SIZE})
 else()
     target_compile_definitions(pico-logo PRIVATE PICO_STACK_SIZE=0x1000)
+endif()
+
+target_link_options(pico-logo PRIVATE -Wl,--print-memory-usage)
+
+# Use project-local memmap to place the core 0 stack in main RAM (not SCRATCH_Y).
+# This frees SCRATCH_Y for other uses while keeping the default stack size policy.
+if(PICO_RP2040)
+    pico_set_linker_script(pico-logo ${CMAKE_CURRENT_LIST_DIR}/linker/rp2040/memmap_default_stack_in_ram.ld)
+elseif(PICO_RP2350)
+    pico_set_linker_script(pico-logo ${CMAKE_CURRENT_LIST_DIR}/linker/rp2350/memmap_default_stack_in_ram.ld)
 endif()
 
 pico_add_extra_outputs(pico-logo)

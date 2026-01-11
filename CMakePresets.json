@@ -1,156 +1,202 @@
 {
-  "version": 3,
-  "cmakeMinimumRequired": {
-    "major": 3,
-    "minor": 13,
-    "patch": 0
-  },
-  "configurePresets": [
-    {
-      "name": "pico",
-      "displayName": "Raspberry Pi Pico",
-      "description": "Cross-compile for Raspberry Pi Pico (RP2040)",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build-pico",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_MAKE_PROGRAM": "$env{HOME}/.pico-sdk/ninja/v1.12.1/ninja",
-        "PICO_BOARD": "pico",
-        "PICO_STACK_SIZE": "4096",
-        "LOGO_MEMORY_SIZE": "32768",
-        "LOGO_EDITOR_BUFFER_SIZE": "8192",
-        "LOGO_COPY_BUFFER_SIZE": "1024",
-        "BUILD_TESTING": "OFF"
-      }
+    "version": 3,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 13,
+        "patch": 0
     },
-    {
-      "name": "pico-debug",
-      "inherits": "pico",
-      "displayName": "Raspberry Pi Pico (Debug)",
-      "description": "Cross-compile for Pico with debug symbols",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
-      }
-    },
+    "configurePresets": [
         {
-      "name": "pico2",
-      "displayName": "Raspberry Pi Pico 2",
-      "description": "Cross-compile for Raspberry Pi Pico 2 (RP2350)",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_MAKE_PROGRAM": "$env{HOME}/.pico-sdk/ninja/v1.12.1/ninja",
-        "PICO_BOARD": "pico2",
-        "PICO_STACK_SIZE": "4096",
-        "LOGO_MEMORY_SIZE": "131072",
-        "LOGO_EDITOR_BUFFER_SIZE": "65536",
-        "LOGO_COPY_BUFFER_SIZE": "8192",
-        "BUILD_TESTING": "OFF"
-      }
-    },
-    {
-      "name": "pico2-debug",
-      "inherits": "pico2",
-      "displayName": "Raspberry Pi Pico 2 (Debug)",
-      "description": "Cross-compile for Pico 2 with debug symbols",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
-      }
-    },
-    {
-      "name": "host",
-      "displayName": "Native Host",
-      "description": "Build for native host platform",
-      "generator": "Unix Makefiles",
-      "binaryDir": "${sourceDir}/build-host",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "BUILD_FOR_HOST": "ON",
-        "BUILD_TESTING": "OFF"
-      }
-    },
-    {
-      "name": "host-debug",
-      "inherits": "host",
-      "displayName": "Native Host (Debug)",
-      "description": "Build for native host platform with debug symbols",
-      "binaryDir": "${sourceDir}/build-host-debug",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
-      }
-    },
-    {
-      "name": "tests",
-      "displayName": "Native Tests",
-      "description": "Build unit tests for native host platform",
-      "binaryDir": "${sourceDir}/build-tests",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "BUILD_TESTING": "ON"
-      }
-    },
-    {
-      "name": "tests-coverage",
-      "inherits": "tests",
-      "displayName": "Native Tests with Coverage",
-      "description": "Build tests with code coverage enabled",
-      "binaryDir": "${sourceDir}/build-tests-coverage",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "ENABLE_COVERAGE": "ON",
-        "BUILD_TESTING": "ON"
-      }
-    }
-  ],
-  "buildPresets": [
-    {
-      "name": "pico",
-      "configurePreset": "pico"
-    },
-    {
-      "name": "pico-debug",
-      "configurePreset": "pico-debug"
-    },
-    {
-      "name": "pico2",
-      "configurePreset": "pico2"
-    },
-    {
-      "name": "pico2-debug",
-      "configurePreset": "pico2-debug"
-    },
-    {
-      "name": "host",
-      "configurePreset": "host"
-    },
-    {
-      "name": "host-debug",
-      "configurePreset": "host-debug"
-    },
-    {
-      "name": "tests",
-      "configurePreset": "tests"
-    },
-    {
-      "name": "tests-coverage",
-      "configurePreset": "tests-coverage"
-    }
-  ],
-  "testPresets": [
-    {
-      "name": "tests",
-      "configurePreset": "tests",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "name": "tests-coverage",
-      "configurePreset": "tests-coverage",
-      "output": {
-        "outputOnFailure": true
-      }
-    }
-  ]
+            "name": "pico",
+            "displayName": "Raspberry Pi Pico",
+            "description": "Cross-compile for Raspberry Pi Pico (RP2040)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-pico",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_MAKE_PROGRAM": "$env{HOME}/.pico-sdk/ninja/v1.12.1/ninja",
+                "PICO_BOARD": "pico",
+                "PICO_STACK_SIZE": "4096",
+                "LOGO_MEMORY_SIZE": "32768",
+                "LOGO_EDITOR_BUFFER_SIZE": "8192",
+                "LOGO_COPY_BUFFER_SIZE": "1024",
+                "BUILD_TESTING": "OFF"
+            }
+        },
+        {
+            "name": "pico-debug",
+            "inherits": "pico",
+            "displayName": "Raspberry Pi Pico (Debug)",
+            "description": "Cross-compile for Pico with debug symbols",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "pico2",
+            "displayName": "Raspberry Pi Pico 2",
+            "description": "Cross-compile for Raspberry Pi Pico 2 (RP2350)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-pico2",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_MAKE_PROGRAM": "$env{HOME}/.pico-sdk/ninja/v1.12.1/ninja",
+                "PICO_BOARD": "pico2",
+                "PICO_STACK_SIZE": "4096",
+                "LOGO_MEMORY_SIZE": "131072",
+                "LOGO_EDITOR_BUFFER_SIZE": "65536",
+                "LOGO_COPY_BUFFER_SIZE": "8192",
+                "BUILD_TESTING": "OFF"
+            }
+        },
+        {
+            "name": "pico2-debug",
+            "inherits": "pico2",
+            "displayName": "Raspberry Pi Pico 2 (Debug)",
+            "description": "Cross-compile for Pico 2 with debug symbols",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "pico+2w",
+            "displayName": "Pimoroni Pico Plus 2W",
+            "description": "Cross-compile for Pimoroni Pico Plus 2W (RP2350)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-pico+2w",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_MAKE_PROGRAM": "$env{HOME}/.pico-sdk/ninja/v1.12.1/ninja",
+                "PICO_BOARD": "pimoroni_pico_plus2_w_rp2350",
+                "PICO_STACK_SIZE": "4096",
+                "LOGO_MEMORY_SIZE": "131072",
+                "LOGO_EDITOR_BUFFER_SIZE": "65536",
+                "LOGO_COPY_BUFFER_SIZE": "8192",
+                "BUILD_TESTING": "OFF"
+            }
+        },
+        {
+            "name": "pico+2w-debug",
+            "inherits": "pico+2w",
+            "displayName": "Pimoroni Pico Plus 2W (Debug)",
+            "description": "Cross-compile for Pimoroni Pico Plus 2W with debug symbols",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "host",
+            "displayName": "Native Host",
+            "description": "Build for native host platform",
+            "generator": "Unix Makefiles",
+            "binaryDir": "${sourceDir}/build-host",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "BUILD_FOR_HOST": "ON",
+                "BUILD_TESTING": "OFF"
+            }
+        },
+        {
+            "name": "host-debug",
+            "inherits": "host",
+            "displayName": "Native Host (Debug)",
+            "description": "Build for native host platform with debug symbols",
+            "binaryDir": "${sourceDir}/build-host-debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "tests",
+            "displayName": "Native Tests",
+            "description": "Build unit tests for native host platform",
+            "binaryDir": "${sourceDir}/build-tests",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "BUILD_TESTING": "ON"
+            }
+        },
+        {
+            "name": "tests-coverage",
+            "inherits": "tests",
+            "displayName": "Native Tests with Coverage",
+            "description": "Build tests with code coverage enabled",
+            "binaryDir": "${sourceDir}/build-tests-coverage",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "ENABLE_COVERAGE": "ON",
+                "BUILD_TESTING": "ON"
+            }
+        },
+        {
+            "name": "Configure preset using toolchain file",
+            "displayName": "Configure preset using toolchain file",
+            "description": "Sets Ninja generator, build and install directory",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/out/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_TOOLCHAIN_FILE": "",
+                "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "pico",
+            "configurePreset": "pico"
+        },
+        {
+            "name": "pico-debug",
+            "configurePreset": "pico-debug"
+        },
+        {
+            "name": "pico2",
+            "configurePreset": "pico2"
+        },
+        {
+            "name": "pico2-debug",
+            "configurePreset": "pico2-debug"
+        },
+        {
+            "name": "pico+2w",
+            "configurePreset": "pico+2w"
+        },
+        {
+            "name": "pico+2w-debug",
+            "configurePreset": "pico+2w-debug"
+        },
+        {
+            "name": "host",
+            "configurePreset": "host"
+        },
+        {
+            "name": "host-debug",
+            "configurePreset": "host-debug"
+        },
+        {
+            "name": "tests",
+            "configurePreset": "tests"
+        },
+        {
+            "name": "tests-coverage",
+            "configurePreset": "tests-coverage"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "tests",
+            "configurePreset": "tests",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "tests-coverage",
+            "configurePreset": "tests-coverage",
+            "output": {
+                "outputOnFailure": true
+            }
+        }
+    ]
 }

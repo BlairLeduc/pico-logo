@@ -1,15 +1,10 @@
 # All artefacts and build products
 build/
-build-debug/
-build-pico/
-build-pico-debug/
-build-host/
-build-host-debug/
-build-tests/
-build-tests-coverage/
+build-*/
 _codeql_build_dir/
 _codeql*
 Testing/
 *.log
+*.o
 # MacOS specific files
 .DS_Store
