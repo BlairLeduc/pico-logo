@@ -112,6 +112,13 @@ if(DEFINED LOGO_EDITOR_BUFFER_SIZE)
     target_compile_definitions(logo_core PUBLIC LOGO_EDITOR_BUFFER_SIZE=${LOGO_EDITOR_BUFFER_SIZE})
 endif()
 
+# WiFi support (only for Pico W boards)
+option(LOGO_HAS_WIFI "Enable WiFi support for Pico W boards" OFF)
+if(LOGO_HAS_WIFI)
+    message(STATUS "WiFi support enabled")
+    target_compile_definitions(logo_core PUBLIC LOGO_HAS_WIFI=1)
+endif()
+
 add_executable(pico-logo
     devices/picocalc/clib.c
     devices/picocalc/audio.c
@@ -158,6 +165,17 @@ target_link_libraries(pico-logo
         hardware_pio
         hardware_spi
 )
+
+# Link WiFi libraries if WiFi support is enabled
+if(LOGO_HAS_WIFI)
+    # Add the directory containing lwipopts.h to include path
+    target_include_directories(pico-logo PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/devices/picocalc
+    )
+    target_link_libraries(pico-logo
+        pico_cyw43_arch_lwip_threadsafe_background
+    )
+endif()
 
 target_include_directories(pico-logo PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}

@@ -13,7 +13,7 @@
 
 void setUp(void)
 {
-    mem_init();
+    logo_mem_init();
 }
 
 void tearDown(void)
@@ -416,7 +416,7 @@ void test_atoms_not_freed_by_gc(void)
 
 void test_free_nodes_accurate(void)
 {
-    // Get initial count - this is after mem_init which allocates the newline marker atom
+    // Get initial count - this is after logo_mem_init which allocates the newline marker atom
     size_t initial = mem_free_nodes();
     
     // Create an atom - this uses atom space but not node space

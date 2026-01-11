@@ -260,7 +260,7 @@ bool was_mock_power_off_called(void)
 
 void test_scaffold_setUp(void)
 {
-    mem_init();
+    logo_mem_init();
     primitives_init();
     procedures_init();
     variables_init();
@@ -297,7 +297,7 @@ void test_scaffold_setUp(void)
 
 void test_scaffold_setUp_with_device(void)
 {
-    mem_init();
+    logo_mem_init();
     primitives_init();
     procedures_init();
     variables_init();

@@ -3282,6 +3282,65 @@ writer
 
 
 
+
+===
+# WiFi Management
+
+These procedures allow you to manage the WiFi connection of the device.
+
+## wifi?
+
+wifi?
+
+`operation`
+
+`wifi?` outputs `true` if the WiFi is connected, otherwise it outputs `false`.
+
+
+## wifi.connect
+
+wifi.connect _ssid_ _password_
+
+`command`
+
+The `wifi.connect` command connects to the WiFi network with the given _ssid_ and _password_. If the connection is successful, `wifi?` will output `true`. If the connection fails, an error message is displayed.
+
+## wifi.ip
+
+wifi.ip
+
+`operation`
+
+`wifi.ip` outputs the current IP address assigned to the device by the WiFi network. If the device is not connected to a WiFi network, `wifi.ip` outputs the empty list.
+
+
+## wifi.ssid
+
+wifi.ssid
+
+`operation`
+
+`wifi.ssid` outputs the SSID of the WiFi network to which the device is currently connected. If the device is not connected to a WiFi network, `wifi.ssid` outputs the empty list.
+
+## wifi.disconnect
+
+wifi.disconnect
+
+`command`
+
+The `wifi.disconnect` command disconnects the device from the current WiFi network. After executing this command, `wifi?` will output `false`.
+
+
+## wifi.scan
+
+wifi.scan
+
+`operation`
+
+`wifi.scan` outputs a list of available WiFi networks. Each network is represented as a sublist containing the SSID and signal strength.
+
+
+
 ===
 # Property Lists
 

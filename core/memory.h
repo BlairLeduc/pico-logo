@@ -104,7 +104,7 @@ extern "C"
 
     // Initialize the memory system.
     // Must be called before any other memory functions.
-    void mem_init(void);
+    void logo_mem_init(void);
 
     // Create a cons cell (list node) with car and cdr.
     // Returns NODE_NIL if out of memory.

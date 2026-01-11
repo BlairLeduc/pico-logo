@@ -120,12 +120,12 @@ static inline uint16_t get_max_node_index(void)
 // Initialization
 //==========================================================================
 
-// Newline marker - initialized in mem_init()
+// Newline marker - initialized in logo_mem_init()
 Node mem_newline_marker = NODE_NIL;
 
 // Initialize the memory system.
 // Must be called before any other memory functions.
-void mem_init(void)
+void logo_mem_init(void)
 {
     // Initialize atom table (grows upward from 0)
     atom_next = 0;
