@@ -788,6 +788,15 @@ void mock_device_reset(void)
     mock_editor_content[0] = '\0';
     mock_editor_result = LOGO_EDITOR_ACCEPT;
     mock_editor_called = false;
+
+    // Clear WiFi state
+    mock_state.wifi.connected = false;
+    mock_state.wifi.ssid[0] = '\0';
+    mock_state.wifi.ip_address[0] = '\0';
+    mock_state.wifi.connect_result = 0;      // Default to success
+    mock_state.wifi.disconnect_result = 0;   // Default to success
+    mock_state.wifi.scan_result_count = 0;
+    mock_state.wifi.scan_return_value = 0;   // Default to success
 }
 
 const MockDeviceState *mock_device_get_state(void)
@@ -1022,4 +1031,153 @@ void mock_device_clear_editor(void)
     mock_editor_content[0] = '\0';
     mock_editor_result = LOGO_EDITOR_ACCEPT;
     mock_editor_called = false;
+}
+
+//
+// Mock WiFi operations (exposed for test_scaffold.c to use in mock_hardware_ops)
+//
+
+bool mock_wifi_is_connected(void)
+{
+    return mock_state.wifi.connected;
+}
+
+bool mock_wifi_connect(const char *ssid, const char *password)
+{
+    (void)password;  // Not stored in mock
+    if (mock_state.wifi.connect_result == 0)
+    {
+        mock_state.wifi.connected = true;
+        strncpy(mock_state.wifi.ssid, ssid, sizeof(mock_state.wifi.ssid) - 1);
+        mock_state.wifi.ssid[sizeof(mock_state.wifi.ssid) - 1] = '\0';
+        // Set a default IP when connected
+        if (mock_state.wifi.ip_address[0] == '\0')
+        {
+            strncpy(mock_state.wifi.ip_address, "192.168.1.100", sizeof(mock_state.wifi.ip_address));
+        }
+        return true;
+    }
+    return false;
+}
+
+void mock_wifi_disconnect(void)
+{
+    if (mock_state.wifi.disconnect_result == 0)
+    {
+        mock_state.wifi.connected = false;
+        mock_state.wifi.ssid[0] = '\0';
+        mock_state.wifi.ip_address[0] = '\0';
+    }
+}
+
+bool mock_wifi_get_ip(char *ip_buffer, size_t buffer_size)
+{
+    if (!mock_state.wifi.connected || mock_state.wifi.ip_address[0] == '\0')
+    {
+        return false;
+    }
+    strncpy(ip_buffer, mock_state.wifi.ip_address, buffer_size - 1);
+    ip_buffer[buffer_size - 1] = '\0';
+    return true;
+}
+
+bool mock_wifi_get_ssid(char *ssid_buffer, size_t buffer_size)
+{
+    if (!mock_state.wifi.connected || mock_state.wifi.ssid[0] == '\0')
+    {
+        return false;
+    }
+    strncpy(ssid_buffer, mock_state.wifi.ssid, buffer_size - 1);
+    ssid_buffer[buffer_size - 1] = '\0';
+    return true;
+}
+
+int mock_wifi_scan(char ssids[][33], int8_t strengths[], int max_networks)
+{
+    if (mock_state.wifi.scan_return_value != 0)
+    {
+        return -1;  // Error
+    }
+    
+    int count = mock_state.wifi.scan_result_count;
+    if (count > max_networks)
+    {
+        count = max_networks;
+    }
+    
+    for (int i = 0; i < count; i++)
+    {
+        strncpy(ssids[i], mock_state.wifi.scan_results[i].ssid, 32);
+        ssids[i][32] = '\0';
+        strengths[i] = mock_state.wifi.scan_results[i].rssi;
+    }
+    return count;
+}
+
+//
+// WiFi test helpers
+//
+
+void mock_device_set_wifi_connected(bool connected)
+{
+    mock_state.wifi.connected = connected;
+}
+
+void mock_device_set_wifi_ssid(const char *ssid)
+{
+    if (ssid)
+    {
+        strncpy(mock_state.wifi.ssid, ssid, sizeof(mock_state.wifi.ssid) - 1);
+        mock_state.wifi.ssid[sizeof(mock_state.wifi.ssid) - 1] = '\0';
+    }
+    else
+    {
+        mock_state.wifi.ssid[0] = '\0';
+    }
+}
+
+void mock_device_set_wifi_ip(const char *ip)
+{
+    if (ip)
+    {
+        strncpy(mock_state.wifi.ip_address, ip, sizeof(mock_state.wifi.ip_address) - 1);
+        mock_state.wifi.ip_address[sizeof(mock_state.wifi.ip_address) - 1] = '\0';
+    }
+    else
+    {
+        mock_state.wifi.ip_address[0] = '\0';
+    }
+}
+
+void mock_device_set_wifi_connect_result(int result)
+{
+    mock_state.wifi.connect_result = result;
+}
+
+void mock_device_set_wifi_disconnect_result(int result)
+{
+    mock_state.wifi.disconnect_result = result;
+}
+
+void mock_device_add_wifi_scan_result(const char *ssid, int8_t rssi)
+{
+    if (mock_state.wifi.scan_result_count >= 16)
+    {
+        return;  // Full
+    }
+    int idx = mock_state.wifi.scan_result_count++;
+    strncpy(mock_state.wifi.scan_results[idx].ssid, ssid,
+            sizeof(mock_state.wifi.scan_results[idx].ssid) - 1);
+    mock_state.wifi.scan_results[idx].ssid[sizeof(mock_state.wifi.scan_results[idx].ssid) - 1] = '\0';
+    mock_state.wifi.scan_results[idx].rssi = rssi;
+}
+
+void mock_device_clear_wifi_scan_results(void)
+{
+    mock_state.wifi.scan_result_count = 0;
+}
+
+void mock_device_set_wifi_scan_result(int result)
+{
+    mock_state.wifi.scan_return_value = result;
 }

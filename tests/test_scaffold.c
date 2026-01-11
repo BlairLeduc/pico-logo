@@ -4,6 +4,7 @@
 //
 
 #include "test_scaffold.h"
+#include "mock_device.h"
 #include "core/frame.h"
 #include <string.h>
 
@@ -229,6 +230,13 @@ LogoHardwareOps mock_hardware_ops = {
     .check_freeze_request = mock_check_freeze_request,
     .clear_freeze_request = mock_clear_freeze_request,
     .toot = NULL,  // Mock: no audio
+    // WiFi operations (always available in tests)
+    .wifi_is_connected = mock_wifi_is_connected,
+    .wifi_connect = mock_wifi_connect,
+    .wifi_disconnect = mock_wifi_disconnect,
+    .wifi_get_ip = mock_wifi_get_ip,
+    .wifi_get_ssid = mock_wifi_get_ssid,
+    .wifi_scan = mock_wifi_scan,
 };
 
 // ============================================================================

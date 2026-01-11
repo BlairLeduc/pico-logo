@@ -83,6 +83,7 @@ add_library(logo_core
     core/primitives_words_lists.c
     core/primitives_workspace.c
     core/primitives_list_processing.c
+    core/primitives_wifi.c
     core/primitives.c
     core/procedures.c
     core/properties.c
@@ -369,6 +370,7 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_words_lists.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_workspace.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_list_processing.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_wifi.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/procedures.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/properties.c

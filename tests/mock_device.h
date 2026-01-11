@@ -209,6 +209,23 @@ extern "C"
             uint8_t current_shape;           // Current shape number (0-15)
             uint8_t shapes[15][16];          // Shape data for shapes 1-15 (8 columns x 16 rows)
         } shape;
+
+        // WiFi state tracking
+        struct
+        {
+            bool connected;                  // Is WiFi connected?
+            char ssid[33];                   // Connected SSID (max 32 chars + null)
+            char ip_address[16];             // IP address as string (e.g., "192.168.1.100")
+            int connect_result;              // Result to return from wifi_connect (0 = success)
+            int disconnect_result;           // Result to return from wifi_disconnect (0 = success)
+            // Scan results
+            struct {
+                char ssid[33];
+                int8_t rssi;
+            } scan_results[16];
+            int scan_result_count;
+            int scan_return_value;           // Result to return from wifi_scan (0 = success)
+        } wifi;
     } MockDeviceState;
 
     //
@@ -272,6 +289,24 @@ extern "C"
     bool mock_device_was_editor_called(void);
     // Clear editor state
     void mock_device_clear_editor(void);
+
+    // WiFi helpers for testing
+    void mock_device_set_wifi_connected(bool connected);
+    void mock_device_set_wifi_ssid(const char *ssid);
+    void mock_device_set_wifi_ip(const char *ip);
+    void mock_device_set_wifi_connect_result(int result);
+    void mock_device_set_wifi_disconnect_result(int result);
+    void mock_device_add_wifi_scan_result(const char *ssid, int8_t rssi);
+    void mock_device_clear_wifi_scan_results(void);
+    void mock_device_set_wifi_scan_result(int result);
+
+    // Mock WiFi operations (for use by test_scaffold in mock_hardware_ops)
+    bool mock_wifi_is_connected(void);
+    bool mock_wifi_connect(const char *ssid, const char *password);
+    void mock_wifi_disconnect(void);
+    bool mock_wifi_get_ip(char *ip_buffer, size_t buffer_size);
+    bool mock_wifi_get_ssid(char *ssid_buffer, size_t buffer_size);
+    int mock_wifi_scan(char ssids[][33], int8_t strengths[], int max_networks);
 
 #ifdef __cplusplus
 }

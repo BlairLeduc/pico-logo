@@ -61,6 +61,37 @@ extern "C"
         // duration is in milliseconds, frequencies are in Hz
         // If the device is already playing a tone, block until it finishes
         void (*toot)(uint32_t duration_ms, uint32_t left_freq, uint32_t right_freq);
+
+        //
+        // WiFi operations (only available on Pico W boards with LOGO_HAS_WIFI)
+        //
+
+        // Check if WiFi is connected
+        // Returns true if connected to a network
+        bool (*wifi_is_connected)(void);
+
+        // Connect to a WiFi network
+        // Returns true on success, false on failure
+        bool (*wifi_connect)(const char *ssid, const char *password);
+
+        // Disconnect from the current WiFi network
+        void (*wifi_disconnect)(void);
+
+        // Get the current IP address
+        // Returns true if connected and IP is valid, false otherwise
+        // ip_buffer should be at least 16 bytes
+        bool (*wifi_get_ip)(char *ip_buffer, size_t buffer_size);
+
+        // Get the SSID of the connected network
+        // Returns true if connected, false otherwise
+        // ssid_buffer should be at least 33 bytes (32 chars + null)
+        bool (*wifi_get_ssid)(char *ssid_buffer, size_t buffer_size);
+
+        // Scan for available WiFi networks
+        // Returns number of networks found (up to max_networks), -1 on error
+        // Each network's SSID is stored in ssids[i] (max 32 chars + null)
+        // Signal strength (RSSI in dBm, typically -30 to -90) stored in strengths[i]
+        int (*wifi_scan)(char ssids[][33], int8_t strengths[], int max_networks);
     } LogoHardwareOps;
 
     typedef struct LogoHardware

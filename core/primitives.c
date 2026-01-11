@@ -51,6 +51,7 @@ void primitives_init(void)
     primitives_turtle_init();
     primitives_hardware_init();
     primitives_list_processing_init();
+    primitives_wifi_init();
 }
 
 void primitive_register(const char *name, int default_args, PrimitiveFunc func)
