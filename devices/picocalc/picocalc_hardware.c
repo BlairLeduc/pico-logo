@@ -33,6 +33,9 @@
 #include <lwip/inet_chksum.h>
 #include <lwip/timeouts.h>
 #include <lwip/dns.h>
+#include <lwip/pbuf.h>
+#include <lwip/udp.h>
+#include <time.h>
 
 // WiFi state tracking
 static bool wifi_initialized = false;
@@ -839,6 +842,190 @@ static bool picocalc_network_resolve(const char *hostname, char *ip_buffer, size
     return false;
 }
 
+// ============================================================================
+// Network NTP implementation using raw UDP (following pico-examples approach)
+// ============================================================================
+
+// NTP constants
+#define NTP_MSG_LEN 48
+#define NTP_PORT 123
+#define NTP_DELTA 2208988800UL  // Seconds between 1 Jan 1900 and 1 Jan 1970
+#define NTP_TIMEOUT_MS 10000
+#define NTP_RESEND_MS 3000
+
+// NTP state
+static struct udp_pcb *ntp_pcb = NULL;
+static ip_addr_t ntp_server_address;
+static volatile bool ntp_complete = false;
+static volatile bool ntp_success = false;
+static volatile uint32_t ntp_received_sec = 0;
+
+// NTP receive callback
+static void ntp_recv_callback(void *arg, struct udp_pcb *pcb, struct pbuf *p,
+                              const ip_addr_t *addr, u16_t port)
+{
+    (void)arg;
+    (void)pcb;
+
+    uint8_t mode = pbuf_get_at(p, 0) & 0x7;
+    uint8_t stratum = pbuf_get_at(p, 1);
+
+    // Validate response: correct source, correct port, correct length, mode=4 (server), stratum!=0
+    if (ip_addr_cmp(addr, &ntp_server_address) && port == NTP_PORT &&
+        p->tot_len == NTP_MSG_LEN && mode == 0x4 && stratum != 0)
+    {
+        // Extract transmit timestamp (bytes 40-43)
+        uint8_t seconds_buf[4] = {0};
+        pbuf_copy_partial(p, seconds_buf, sizeof(seconds_buf), 40);
+        uint32_t seconds_since_1900 = 
+            (uint32_t)seconds_buf[0] << 24 |
+            (uint32_t)seconds_buf[1] << 16 |
+            (uint32_t)seconds_buf[2] << 8 |
+            (uint32_t)seconds_buf[3];
+
+        ntp_received_sec = seconds_since_1900;
+        ntp_success = true;
+    }
+
+    ntp_complete = true;
+    pbuf_free(p);
+}
+
+// Send NTP request
+static void ntp_send_request(void)
+{
+    cyw43_arch_lwip_begin();
+
+    struct pbuf *p = pbuf_alloc(PBUF_TRANSPORT, NTP_MSG_LEN, PBUF_RAM);
+    if (p)
+    {
+        uint8_t *req = (uint8_t *)p->payload;
+        memset(req, 0, NTP_MSG_LEN);
+        req[0] = 0x1b;  // LI=0, VN=3, Mode=3 (client)
+        udp_sendto(ntp_pcb, p, &ntp_server_address, NTP_PORT);
+        pbuf_free(p);
+    }
+
+    cyw43_arch_lwip_end();
+}
+
+// DNS callback for NTP server resolution
+static void ntp_dns_callback(const char *name, const ip_addr_t *ipaddr, void *callback_arg)
+{
+    (void)name;
+    (void)callback_arg;
+
+    if (ipaddr)
+    {
+        ip_addr_copy(ntp_server_address, *ipaddr);
+        ntp_send_request();
+    }
+    else
+    {
+        // DNS failed
+        ntp_complete = true;
+        ntp_success = false;
+    }
+}
+
+static bool picocalc_network_ntp(const char *server)
+{
+    if (!ensure_wifi_initialized() || !picocalc_wifi_is_connected())
+    {
+        return false;
+    }
+
+    if (!server || server[0] == '\0')
+    {
+        return false;
+    }
+
+    // Reset NTP state
+    ntp_complete = false;
+    ntp_success = false;
+    ntp_received_sec = 0;
+    ip_addr_set_zero(&ntp_server_address);
+
+    // Create UDP PCB for NTP
+    cyw43_arch_lwip_begin();
+    ntp_pcb = udp_new_ip_type(IPADDR_TYPE_ANY);
+    cyw43_arch_lwip_end();
+
+    if (!ntp_pcb)
+    {
+        return false;
+    }
+
+    // Set up receive callback
+    udp_recv(ntp_pcb, ntp_recv_callback, NULL);
+
+    // Resolve NTP server hostname
+    cyw43_arch_lwip_begin();
+    err_t dns_err = dns_gethostbyname(server, &ntp_server_address, ntp_dns_callback, NULL);
+    cyw43_arch_lwip_end();
+
+    if (dns_err == ERR_OK)
+    {
+        // Address was cached, send request immediately
+        ntp_send_request();
+    }
+    else if (dns_err != ERR_INPROGRESS)
+    {
+        // DNS lookup failed
+        udp_remove(ntp_pcb);
+        ntp_pcb = NULL;
+        return false;
+    }
+    // else ERR_INPROGRESS: callback will be called when DNS completes
+
+    // Wait for NTP response with timeout and resend logic
+    absolute_time_t overall_timeout = make_timeout_time_ms(NTP_TIMEOUT_MS);
+    absolute_time_t resend_timeout = make_timeout_time_ms(NTP_RESEND_MS);
+
+    while (!ntp_complete)
+    {
+        if (time_reached(overall_timeout))
+        {
+            break;
+        }
+
+        // Resend request if no response received within resend timeout
+        if (time_reached(resend_timeout) && !ip_addr_isany(&ntp_server_address))
+        {
+            ntp_send_request();
+            resend_timeout = make_timeout_time_ms(NTP_RESEND_MS);
+        }
+
+        cyw43_arch_poll();
+        sys_check_timeouts();
+        sleep_ms(10);
+    }
+
+    // Clean up UDP PCB
+    cyw43_arch_lwip_begin();
+    udp_remove(ntp_pcb);
+    ntp_pcb = NULL;
+    cyw43_arch_lwip_end();
+
+    // Set device time if successful
+    if (ntp_success && ntp_received_sec > 0)
+    {
+        // Convert NTP timestamp to Unix timestamp
+        time_t unix_time = (time_t)(ntp_received_sec - NTP_DELTA);
+
+        // Convert to broken-down time (UTC)
+        struct tm *tm_info = gmtime(&unix_time);
+        if (tm_info)
+        {
+            picocalc_set_date(tm_info->tm_year + 1900, tm_info->tm_mon + 1, tm_info->tm_mday);
+            picocalc_set_time(tm_info->tm_hour, tm_info->tm_min, tm_info->tm_sec);
+            return true;
+        }
+    }
+
+    return false;
+}
+
 #endif // LOGO_HAS_WIFI
 
 // ============================================================================
@@ -866,6 +1053,7 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .wifi_scan = picocalc_wifi_scan,
     .network_ping = picocalc_network_ping,
     .network_resolve = picocalc_network_resolve,
+    .network_ntp = picocalc_network_ntp,
 #else
     .wifi_is_connected = NULL,
     .wifi_connect = NULL,
@@ -875,6 +1063,7 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .wifi_scan = NULL,
     .network_ping = NULL,
     .network_resolve = NULL,
+    .network_ntp = NULL,
 #endif
     .get_date = picocalc_get_date,
     .get_time = picocalc_get_time,

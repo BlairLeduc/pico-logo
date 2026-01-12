@@ -191,6 +191,72 @@ void test_network_resolve_with_localhost(void)
 }
 
 // ============================================================================
+// network.ntp tests
+// ============================================================================
+
+void test_ntp_returns_true_on_success(void)
+{
+    mock_device_set_ntp_result(true);
+    
+    Result r = eval_string("network.ntp");
+    
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+    
+    // Verify the default server was used
+    TEST_ASSERT_EQUAL_STRING("pool.ntp.org", mock_device_get_last_ntp_server());
+}
+
+void test_ntp_returns_false_on_failure(void)
+{
+    mock_device_set_ntp_result(false);
+    
+    Result r = eval_string("network.ntp");
+    
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
+}
+
+void test_ntp_with_custom_server(void)
+{
+    mock_device_set_ntp_result(true);
+    
+    Result r = eval_string("(network.ntp \"time.google.com)");
+    
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+    
+    // Verify the custom server was used
+    TEST_ASSERT_EQUAL_STRING("time.google.com", mock_device_get_last_ntp_server());
+}
+
+void test_ntp_with_custom_server_failure(void)
+{
+    mock_device_set_ntp_result(false);
+    
+    Result r = eval_string("(network.ntp \"invalid.server.com)");
+    
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
+    
+    // Verify the server was passed correctly
+    TEST_ASSERT_EQUAL_STRING("invalid.server.com", mock_device_get_last_ntp_server());
+}
+
+void test_ntp_requires_word_argument_if_provided(void)
+{
+    mock_device_set_ntp_result(true);
+    
+    Result r = eval_string("(network.ntp [time.google.com])");
+    
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+// ============================================================================
 // Test runner
 // ============================================================================
 
@@ -215,6 +281,13 @@ int main(void)
     RUN_TEST(test_network_resolve_requires_word_argument);
     RUN_TEST(test_network_resolve_with_ip_address);
     RUN_TEST(test_network_resolve_with_localhost);
+    
+    // ntp tests
+    RUN_TEST(test_ntp_returns_true_on_success);
+    RUN_TEST(test_ntp_returns_false_on_failure);
+    RUN_TEST(test_ntp_with_custom_server);
+    RUN_TEST(test_ntp_with_custom_server_failure);
+    RUN_TEST(test_ntp_requires_word_argument_if_provided);
     
     return UNITY_END();
 }

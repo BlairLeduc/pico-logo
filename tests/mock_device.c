@@ -1210,6 +1210,37 @@ bool mock_network_resolve(const char *hostname, char *ip_buffer, size_t buffer_s
 }
 
 //
+// NTP test helpers
+//
+
+void mock_device_set_ntp_result(bool success)
+{
+    mock_state.network.ntp_success = success;
+}
+
+const char *mock_device_get_last_ntp_server(void)
+{
+    return mock_state.network.last_ntp_server;
+}
+
+bool mock_network_ntp(const char *server)
+{
+    // Store the server for verification
+    if (server)
+    {
+        strncpy(mock_state.network.last_ntp_server, server,
+                sizeof(mock_state.network.last_ntp_server) - 1);
+        mock_state.network.last_ntp_server[sizeof(mock_state.network.last_ntp_server) - 1] = '\0';
+    }
+    else
+    {
+        mock_state.network.last_ntp_server[0] = '\0';
+    }
+
+    return mock_state.network.ntp_success;
+}
+
+//
 // WiFi test helpers
 //
 

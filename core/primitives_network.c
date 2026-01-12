@@ -81,8 +81,41 @@ static Result prim_network_resolve(Evaluator *eval, int argc, Value *args)
     return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
 }
 
+// ntp
+// (ntp serveraddress)
+// Synchronizes with an NTP server, updates the device's date and time
+// Returns true if successful, false otherwise
+// Default server is "pool.ntp.org"
+static Result prim_ntp(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+
+    const char *server = "pool.ntp.org";
+
+    // Check for optional server argument
+    if (argc >= 1)
+    {
+        if (!value_is_word(args[0]))
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+        }
+        server = mem_word_ptr(args[0].as.node);
+    }
+
+    LogoIO *io = primitives_get_io();
+    if (io && io->hardware && io->hardware->ops && io->hardware->ops->network_ntp)
+    {
+        bool success = io->hardware->ops->network_ntp(server);
+        return result_ok(value_word(mem_atom_cstr(success ? "true" : "false")));
+    }
+
+    // NTP not available on this device
+    return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
+}
+
 void primitives_network_init(void)
 {
     primitive_register("network.ping", 1, prim_network_ping);
     primitive_register("network.resolve", 1, prim_network_resolve);
+    primitive_register("network.ntp", 0, prim_ntp);
 }

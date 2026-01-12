@@ -240,6 +240,7 @@ LogoHardwareOps mock_hardware_ops = {
     // Network operations (always available in tests)
     .network_ping = mock_network_ping,
     .network_resolve = mock_network_resolve,
+    .network_ntp = mock_network_ntp,
     // Time operations (always available in tests)
     .get_date = mock_get_date,
     .get_time = mock_get_time,

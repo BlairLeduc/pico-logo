@@ -235,6 +235,8 @@ extern "C"
             char resolve_result_ip[16];      // IP address to return from network_resolve
             bool resolve_success;            // Whether network_resolve should succeed
             char last_resolve_hostname[256]; // Last hostname passed to network_resolve
+            bool ntp_success;                // Whether network_ntp should succeed
+            char last_ntp_server[256];       // Last NTP server passed to network_ntp
         } network;
 
         // Time state tracking
@@ -338,10 +340,13 @@ extern "C"
     const char *mock_device_get_last_ping_ip(void);
     void mock_device_set_resolve_result(const char *ip, bool success);
     const char *mock_device_get_last_resolve_hostname(void);
+    void mock_device_set_ntp_result(bool success);
+    const char *mock_device_get_last_ntp_server(void);
 
     // Mock network operations (for use by test_scaffold in mock_hardware_ops)
     float mock_network_ping(const char *ip_address);
     bool mock_network_resolve(const char *hostname, char *ip_buffer, size_t buffer_size);
+    bool mock_network_ntp(const char *server);
 
     // Time helpers for testing
     void mock_device_set_time(int year, int month, int day, int hour, int minute, int second);

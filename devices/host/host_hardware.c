@@ -185,6 +185,7 @@ static LogoHardwareOps host_hardware_ops = {
     .wifi_scan = NULL,
     .network_ping = NULL,
     .network_resolve = NULL,
+    .network_ntp = NULL,
     .get_date = host_hardware_get_date,
     .get_time = host_hardware_get_time,
     .set_date = host_hardware_set_date,

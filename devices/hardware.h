@@ -108,6 +108,12 @@ extern "C"
         // ip_buffer should be at least 16 bytes to hold the IP address in dotted-decimal notation
         bool (*network_resolve)(const char *hostname, char *ip_buffer, size_t buffer_size);
 
+        // Synchronize with an NTP server
+        // Returns true if synchronization was successful, false otherwise
+        // server is the NTP server hostname (e.g., "pool.ntp.org")
+        // If successful, the device's date and time should be updated
+        bool (*network_ntp)(const char *server);
+
         //
         // Time management operations
         //
