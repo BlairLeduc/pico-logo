@@ -54,7 +54,35 @@ static Result prim_network_ping(Evaluator *eval, int argc, Value *args)
     return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
 }
 
+// network.resolve hostname
+// Resolves a hostname to an IP address
+// Returns the IP address in dotted-decimal notation, or the empty list on failure
+static Result prim_network_resolve(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
+    REQUIRE_WORD(args[0]);
+
+    const char *hostname = mem_word_ptr(args[0].as.node);
+
+    LogoIO *io = primitives_get_io();
+    if (io && io->hardware && io->hardware->ops && io->hardware->ops->network_resolve)
+    {
+        char ip_buffer[16];
+        if (io->hardware->ops->network_resolve(hostname, ip_buffer, sizeof(ip_buffer)))
+        {
+            return result_ok(value_word(mem_atom_cstr(ip_buffer)));
+        }
+        // Resolution failed - return empty list
+        return result_ok(value_list(NODE_NIL));
+    }
+
+    // Network resolve not available on this device
+    return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
+}
+
 void primitives_network_init(void)
 {
     primitive_register("network.ping", 1, prim_network_ping);
+    primitive_register("network.resolve", 1, prim_network_resolve);
 }

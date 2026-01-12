@@ -32,6 +32,7 @@
 #include <lwip/raw.h>
 #include <lwip/inet_chksum.h>
 #include <lwip/timeouts.h>
+#include <lwip/dns.h>
 
 // WiFi state tracking
 static bool wifi_initialized = false;
@@ -734,6 +735,110 @@ static float picocalc_network_ping(const char *ip_address)
     return -1.0f;
 }
 
+// ============================================================================
+// Network DNS resolve implementation using lwIP DNS API
+// ============================================================================
+
+// DNS resolve state
+static volatile bool dns_complete = false;
+static volatile bool dns_success = false;
+static ip_addr_t dns_resolved_addr;
+
+// DNS callback
+static void picocalc_dns_callback(const char *name, const ip_addr_t *ipaddr, void *callback_arg)
+{
+    (void)name;
+    (void)callback_arg;
+
+    if (ipaddr != NULL)
+    {
+        ip_addr_copy(dns_resolved_addr, *ipaddr);
+        dns_success = true;
+    }
+    else
+    {
+        dns_success = false;
+    }
+    dns_complete = true;
+}
+
+static bool picocalc_network_resolve(const char *hostname, char *ip_buffer, size_t buffer_size)
+{
+    if (!ensure_wifi_initialized() || !picocalc_wifi_is_connected())
+    {
+        return false;
+    }
+
+    if (!hostname || !ip_buffer || buffer_size < 16)
+    {
+        return false;
+    }
+
+    // First, check if the hostname is already an IP address
+    ip4_addr_t test_addr;
+    if (ip4addr_aton(hostname, &test_addr))
+    {
+        // It's already an IP address, just copy it
+        snprintf(ip_buffer, buffer_size, "%s", ip4addr_ntoa(&test_addr));
+        return true;
+    }
+
+    // Reset DNS state
+    dns_complete = false;
+    dns_success = false;
+    ip_addr_set_zero(&dns_resolved_addr);
+
+    // Attempt DNS lookup
+    ip_addr_t addr;
+    err_t err = dns_gethostbyname(hostname, &addr, picocalc_dns_callback, NULL);
+
+    if (err == ERR_OK)
+    {
+        // Address was cached and returned immediately
+        if (IP_IS_V4(&addr))
+        {
+            snprintf(ip_buffer, buffer_size, "%s", ip4addr_ntoa(ip_2_ip4(&addr)));
+        }
+        else
+        {
+            // IPv6 not supported for now
+            return false;
+        }
+        return true;
+    }
+    else if (err == ERR_INPROGRESS)
+    {
+        // Wait for DNS callback with timeout (10 seconds)
+        absolute_time_t timeout = make_timeout_time_ms(10000);
+        while (!dns_complete)
+        {
+            if (time_reached(timeout))
+            {
+                return false;
+            }
+            cyw43_arch_poll();
+            sys_check_timeouts();  // Process lwIP timeouts including DNS
+            sleep_ms(10);
+        }
+
+        if (dns_success)
+        {
+            if (IP_IS_V4(&dns_resolved_addr))
+            {
+                snprintf(ip_buffer, buffer_size, "%s", ip4addr_ntoa(ip_2_ip4(&dns_resolved_addr)));
+            }
+            else
+            {
+                // IPv6 not supported for now
+                return false;
+            }
+            return true;
+        }
+    }
+
+    return false;
+}
+
 #endif // LOGO_HAS_WIFI
 
 // ============================================================================
@@ -760,6 +865,7 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .wifi_get_ssid = picocalc_wifi_get_ssid,
     .wifi_scan = picocalc_wifi_scan,
     .network_ping = picocalc_network_ping,
+    .network_resolve = picocalc_network_resolve,
 #else
     .wifi_is_connected = NULL,
     .wifi_connect = NULL,
@@ -768,6 +874,7 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .wifi_get_ssid = NULL,
     .wifi_scan = NULL,
     .network_ping = NULL,
+    .network_resolve = NULL,
 #endif
     .get_date = picocalc_get_date,
     .get_time = picocalc_get_time,

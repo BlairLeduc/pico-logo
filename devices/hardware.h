@@ -102,6 +102,12 @@ extern "C"
         // ip_address should be in dotted-decimal notation (e.g., "192.168.1.1")
         float (*network_ping)(const char *ip_address);
 
+        // Resolve a hostname to an IP address
+        // Returns true if resolution was successful, false otherwise
+        // hostname is the domain name to resolve (e.g., "www.example.com")
+        // ip_buffer should be at least 16 bytes to hold the IP address in dotted-decimal notation
+        bool (*network_resolve)(const char *hostname, char *ip_buffer, size_t buffer_size);
+
         //
         // Time management operations
         //

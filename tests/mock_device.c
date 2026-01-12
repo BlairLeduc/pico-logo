@@ -1165,6 +1165,50 @@ const char *mock_device_get_last_ping_ip(void)
     return mock_state.network.last_ping_ip;
 }
 
+void mock_device_set_resolve_result(const char *ip, bool success)
+{
+    mock_state.network.resolve_success = success;
+    if (ip)
+    {
+        strncpy(mock_state.network.resolve_result_ip, ip,
+                sizeof(mock_state.network.resolve_result_ip) - 1);
+        mock_state.network.resolve_result_ip[sizeof(mock_state.network.resolve_result_ip) - 1] = '\0';
+    }
+    else
+    {
+        mock_state.network.resolve_result_ip[0] = '\0';
+    }
+}
+
+const char *mock_device_get_last_resolve_hostname(void)
+{
+    return mock_state.network.last_resolve_hostname;
+}
+
+bool mock_network_resolve(const char *hostname, char *ip_buffer, size_t buffer_size)
+{
+    // Store the hostname for verification
+    if (hostname)
+    {
+        strncpy(mock_state.network.last_resolve_hostname, hostname,
+                sizeof(mock_state.network.last_resolve_hostname) - 1);
+        mock_state.network.last_resolve_hostname[sizeof(mock_state.network.last_resolve_hostname) - 1] = '\0';
+    }
+    else
+    {
+        mock_state.network.last_resolve_hostname[0] = '\0';
+    }
+
+    if (mock_state.network.resolve_success && ip_buffer && buffer_size > 0)
+    {
+        strncpy(ip_buffer, mock_state.network.resolve_result_ip, buffer_size - 1);
+        ip_buffer[buffer_size - 1] = '\0';
+        return true;
+    }
+
+    return false;
+}
+
 //
 // WiFi test helpers
 //

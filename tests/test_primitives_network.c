@@ -2,7 +2,7 @@
 //  Pico Logo
 //  Copyright 2025 Blair Leduc. See LICENSE for details.
 //
-//  Tests for network primitives: network.ping
+//  Tests for network primitives: network.ping, network.resolve
 //
 
 #include "test_scaffold.h"
@@ -118,6 +118,79 @@ void test_network_ping_with_whole_milliseconds(void)
 }
 
 // ============================================================================
+// network.resolve tests
+// ============================================================================
+
+void test_network_resolve_returns_ip_on_success(void)
+{
+    mock_device_set_resolve_result("93.184.216.34", true);
+    
+    Result r = eval_string("network.resolve \"www.example.com");
+    
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("93.184.216.34", mem_word_ptr(r.value.as.node));
+    
+    // Verify the hostname was passed correctly
+    TEST_ASSERT_EQUAL_STRING("www.example.com", mock_device_get_last_resolve_hostname());
+}
+
+void test_network_resolve_returns_empty_list_on_failure(void)
+{
+    mock_device_set_resolve_result(NULL, false);
+    
+    Result r = eval_string("network.resolve \"nonexistent.invalid");
+    
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
+    TEST_ASSERT_EQUAL(NODE_NIL, r.value.as.node);  // Empty list is NIL
+    
+    // Verify the hostname was passed correctly
+    TEST_ASSERT_EQUAL_STRING("nonexistent.invalid", mock_device_get_last_resolve_hostname());
+}
+
+void test_network_resolve_requires_one_argument(void)
+{
+    Result r = eval_string("network.resolve");
+    
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_network_resolve_requires_word_argument(void)
+{
+    mock_device_set_resolve_result("8.8.8.8", true);
+    
+    Result r = eval_string("network.resolve [google.com]");
+    
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_network_resolve_with_ip_address(void)
+{
+    // Some resolve implementations may accept IP addresses directly
+    mock_device_set_resolve_result("8.8.8.8", true);
+    
+    Result r = eval_string("network.resolve \"8.8.8.8");
+    
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("8.8.8.8", mem_word_ptr(r.value.as.node));
+    TEST_ASSERT_EQUAL_STRING("8.8.8.8", mock_device_get_last_resolve_hostname());
+}
+
+void test_network_resolve_with_localhost(void)
+{
+    mock_device_set_resolve_result("127.0.0.1", true);
+    
+    Result r = eval_string("network.resolve \"localhost");
+    
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("127.0.0.1", mem_word_ptr(r.value.as.node));
+    TEST_ASSERT_EQUAL_STRING("localhost", mock_device_get_last_resolve_hostname());
+}
+
+// ============================================================================
 // Test runner
 // ============================================================================
 
@@ -134,6 +207,14 @@ int main(void)
     RUN_TEST(test_network_ping_with_zero_latency);
     RUN_TEST(test_network_ping_with_various_ip_formats);
     RUN_TEST(test_network_ping_with_whole_milliseconds);
+    
+    // network.resolve tests
+    RUN_TEST(test_network_resolve_returns_ip_on_success);
+    RUN_TEST(test_network_resolve_returns_empty_list_on_failure);
+    RUN_TEST(test_network_resolve_requires_one_argument);
+    RUN_TEST(test_network_resolve_requires_word_argument);
+    RUN_TEST(test_network_resolve_with_ip_address);
+    RUN_TEST(test_network_resolve_with_localhost);
     
     return UNITY_END();
 }
