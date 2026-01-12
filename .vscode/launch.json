@@ -19,7 +19,7 @@
             "runToEntryPoint": "main",
             "overrideLaunchCommands": [
                 "monitor reset init",
-                "load \"${workspaceFolder}/build-pico+2w/pico-logo.elf\" 0x10002000"
+                "load \"${workspaceFolder}/build-pico+2w/pico-logo.elf\""
             ],
             "openOCDLaunchCommands": [
                 "adapter speed 5000"
@@ -44,7 +44,7 @@
             "runToEntryPoint": "main",
             "overrideLaunchCommands": [
                 "monitor reset init",
-                "load \"${workspaceFolder}/build-pico2/pico-logo.elf\" 0x10002000"
+                "load \"${workspaceFolder}/build-pico2/pico-logo.elf\""
             ],
             "openOCDLaunchCommands": [
                 "adapter speed 5000"
@@ -71,7 +71,7 @@
             // Also works fine for flash binaries
             "overrideLaunchCommands": [
                 "monitor reset init",
-                "load \"${workspaceFolder}/build-pico/pico-logo.elf\" 0x10002000"
+                "load \"${workspaceFolder}/build-pico/pico-logo.elf\""
             ],
             "openOCDLaunchCommands": [
                 "adapter speed 5000"
