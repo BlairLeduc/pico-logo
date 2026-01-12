@@ -94,6 +94,15 @@ extern "C"
         int (*wifi_scan)(char ssids[][33], int8_t strengths[], int max_networks);
 
         //
+        // Network operations (require WiFi to be connected)
+        //
+
+        // Ping an IP address
+        // Returns the round-trip time in milliseconds (e.g., 22.413) if successful, -1 on failure
+        // ip_address should be in dotted-decimal notation (e.g., "192.168.1.1")
+        float (*network_ping)(const char *ip_address);
+
+        //
         // Time management operations
         //
 

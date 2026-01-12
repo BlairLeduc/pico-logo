@@ -138,6 +138,7 @@ extern "C"
     void primitives_workspace_init(void);
     void primitives_list_processing_init(void);
     void primitives_wifi_init(void);
+    void primitives_network_init(void);
     void primitives_time_init(void);
 
     // Forward declarations for I/O

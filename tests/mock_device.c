@@ -798,6 +798,10 @@ void mock_device_reset(void)
     mock_state.wifi.scan_result_count = 0;
     mock_state.wifi.scan_return_value = 0;   // Default to success
 
+    // Initialize network state
+    mock_state.network.ping_result_ms = -1;  // Default to ping failure
+    mock_state.network.last_ping_ip[0] = '\0';
+
     // Initialize time state to defaults
     mock_state.time.year = 2025;
     mock_state.time.month = 1;
@@ -1124,6 +1128,41 @@ int mock_wifi_scan(char ssids[][33], int8_t strengths[], int max_networks)
         strengths[i] = mock_state.wifi.scan_results[i].rssi;
     }
     return count;
+}
+
+//
+// Mock network operations (exposed for test_scaffold.c to use in mock_hardware_ops)
+//
+
+float mock_network_ping(const char *ip_address)
+{
+    // Store the IP address for verification
+    if (ip_address)
+    {
+        strncpy(mock_state.network.last_ping_ip, ip_address, 
+                sizeof(mock_state.network.last_ping_ip) - 1);
+        mock_state.network.last_ping_ip[sizeof(mock_state.network.last_ping_ip) - 1] = '\0';
+    }
+    else
+    {
+        mock_state.network.last_ping_ip[0] = '\0';
+    }
+    
+    return mock_state.network.ping_result_ms;
+}
+
+//
+// Network test helpers
+//
+
+void mock_device_set_ping_result(float result_ms)
+{
+    mock_state.network.ping_result_ms = result_ms;
+}
+
+const char *mock_device_get_last_ping_ip(void)
+{
+    return mock_state.network.last_ping_ip;
 }
 
 //

@@ -227,6 +227,13 @@ extern "C"
             int scan_return_value;           // Result to return from wifi_scan (0 = success)
         } wifi;
 
+        // Network state tracking
+        struct
+        {
+            float ping_result_ms;            // Result to return from network_ping (ms or -1)
+            char last_ping_ip[16];           // Last IP address passed to network_ping
+        } network;
+
         // Time state tracking
         struct
         {
@@ -322,6 +329,13 @@ extern "C"
     bool mock_wifi_get_ip(char *ip_buffer, size_t buffer_size);
     bool mock_wifi_get_ssid(char *ssid_buffer, size_t buffer_size);
     int mock_wifi_scan(char ssids[][33], int8_t strengths[], int max_networks);
+
+    // Network helpers for testing
+    void mock_device_set_ping_result(float result_ms);
+    const char *mock_device_get_last_ping_ip(void);
+
+    // Mock network operations (for use by test_scaffold in mock_hardware_ops)
+    float mock_network_ping(const char *ip_address);
 
     // Time helpers for testing
     void mock_device_set_time(int year, int month, int day, int hour, int minute, int second);

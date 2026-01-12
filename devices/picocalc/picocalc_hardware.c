@@ -28,6 +28,10 @@
 #ifdef LOGO_HAS_WIFI
 #include <pico/cyw43_arch.h>
 #include <lwip/ip4_addr.h>
+#include <lwip/icmp.h>
+#include <lwip/raw.h>
+#include <lwip/inet_chksum.h>
+#include <lwip/timeouts.h>
 
 // WiFi state tracking
 static bool wifi_initialized = false;
@@ -602,6 +606,134 @@ static int picocalc_wifi_scan(char ssids[][33], int8_t strengths[], int max_netw
     return count;
 }
 
+// ============================================================================
+// Network ping implementation using lwIP raw API
+// ============================================================================
+
+// Ping state
+static volatile bool ping_complete = false;
+static volatile bool ping_success = false;
+static volatile uint64_t ping_recv_time_us = 0;
+static struct raw_pcb *ping_pcb = NULL;
+static uint16_t ping_seq_num = 0;
+
+// ICMP echo request/reply
+#define ICMP_ECHO_REQUEST 8
+#define ICMP_ECHO_REPLY   0
+#define PING_ID           0x4C4F  // 'LO' for Logo
+
+// Ping receive callback
+static uint8_t ping_recv_callback(void *arg, struct raw_pcb *pcb, struct pbuf *p, const ip_addr_t *addr)
+{
+    (void)arg;
+    (void)pcb;
+    (void)addr;
+
+    // Check if this is an ICMP echo reply
+    if (p->tot_len >= (PBUF_IP_HLEN + sizeof(struct icmp_echo_hdr)))
+    {
+        // Skip IP header (assume 20 bytes for IPv4)
+        struct icmp_echo_hdr *icmp_hdr = (struct icmp_echo_hdr *)((uint8_t *)p->payload + PBUF_IP_HLEN);
+
+        if (icmp_hdr->type == ICMP_ECHO_REPLY && 
+            icmp_hdr->id == PP_HTONS(PING_ID) &&
+            icmp_hdr->seqno == PP_HTONS(ping_seq_num))
+        {
+            ping_recv_time_us = to_us_since_boot(get_absolute_time());
+            ping_success = true;
+            ping_complete = true;
+            pbuf_free(p);
+            return 1;  // Packet consumed
+        }
+    }
+
+    return 0;  // Not consumed, pass to next handler
+}
+
+static float picocalc_network_ping(const char *ip_address)
+{
+    if (!ensure_wifi_initialized() || !picocalc_wifi_is_connected())
+    {
+        return -1.0f;
+    }
+
+    // Parse IP address
+    ip4_addr_t target_addr;
+    if (!ip4addr_aton(ip_address, &target_addr))
+    {
+        return -1.0f;  // Invalid IP address format
+    }
+
+    // Reset ping state
+    ping_complete = false;
+    ping_success = false;
+    ping_recv_time_us = 0;
+    ping_seq_num++;
+
+    // Create raw PCB for ICMP if not already created
+    if (ping_pcb == NULL)
+    {
+        ping_pcb = raw_new(IP_PROTO_ICMP);
+        if (ping_pcb == NULL)
+        {
+            return -1.0f;
+        }
+        raw_recv(ping_pcb, ping_recv_callback, NULL);
+        raw_bind(ping_pcb, IP_ADDR_ANY);
+    }
+
+    // Build ICMP echo request packet
+    struct pbuf *p = pbuf_alloc(PBUF_IP, sizeof(struct icmp_echo_hdr), PBUF_RAM);
+    if (p == NULL)
+    {
+        return -1.0f;
+    }
+
+    struct icmp_echo_hdr *icmp_hdr = (struct icmp_echo_hdr *)p->payload;
+    icmp_hdr->type = ICMP_ECHO_REQUEST;
+    icmp_hdr->code = 0;
+    icmp_hdr->chksum = 0;
+    icmp_hdr->id = PP_HTONS(PING_ID);
+    icmp_hdr->seqno = PP_HTONS(ping_seq_num);
+
+    // Calculate checksum
+    icmp_hdr->chksum = inet_chksum(icmp_hdr, sizeof(struct icmp_echo_hdr));
+
+    // Record send time in microseconds
+    uint64_t send_time_us = to_us_since_boot(get_absolute_time());
+
+    // Send the ping
+    ip_addr_t target;
+    ip_addr_copy_from_ip4(target, target_addr);
+    err_t err = raw_sendto(ping_pcb, p, &target);
+    pbuf_free(p);
+
+    if (err != ERR_OK)
+    {
+        return -1.0f;
+    }
+
+    // Wait for response with timeout (3 seconds)
+    absolute_time_t timeout = make_timeout_time_ms(3000);
+    while (!ping_complete)
+    {
+        if (time_reached(timeout))
+        {
+            break;
+        }
+        cyw43_arch_poll();
+        sys_check_timeouts();  // Process lwIP timeouts
+        sleep_ms(1);
+    }
+
+    if (ping_success)
+    {
+        // Convert microseconds to milliseconds as float
+        return (float)(ping_recv_time_us - send_time_us) / 1000.0f;
+    }
+    return -1.0f;
+}
+
 #endif // LOGO_HAS_WIFI
 
 // ============================================================================
@@ -627,6 +759,7 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .wifi_get_ip = picocalc_wifi_get_ip,
     .wifi_get_ssid = picocalc_wifi_get_ssid,
     .wifi_scan = picocalc_wifi_scan,
+    .network_ping = picocalc_network_ping,
 #else
     .wifi_is_connected = NULL,
     .wifi_connect = NULL,
@@ -634,6 +767,7 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .wifi_get_ip = NULL,
     .wifi_get_ssid = NULL,
     .wifi_scan = NULL,
+    .network_ping = NULL,
 #endif
     .get_date = picocalc_get_date,
     .get_time = picocalc_get_time,
