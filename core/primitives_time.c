@@ -246,6 +246,274 @@ static Result prim_settime(Evaluator *eval, int argc, Value *args)
 }
 
 //
+// Helper: Parse a 3-element list into three integers
+// Returns true on success, false if the list doesn't have exactly 3 numeric elements
+//
+static bool parse_three_element_list(Node list, int *a, int *b, int *c)
+{
+    if (mem_is_nil(list)) return false;
+    
+    Node first = mem_car(list);
+    list = mem_cdr(list);
+    if (mem_is_nil(list)) return false;
+    
+    Node second = mem_car(list);
+    list = mem_cdr(list);
+    if (mem_is_nil(list)) return false;
+    
+    Node third = mem_car(list);
+    list = mem_cdr(list);
+    if (!mem_is_nil(list)) return false;  // Too many elements
+    
+    Value v1 = value_word(first);
+    Value v2 = value_word(second);
+    Value v3 = value_word(third);
+    
+    float f1, f2, f3;
+    if (!value_to_number(v1, &f1) ||
+        !value_to_number(v2, &f2) ||
+        !value_to_number(v3, &f3))
+    {
+        return false;
+    }
+    
+    *a = (int)f1;
+    *b = (int)f2;
+    *c = (int)f3;
+    return true;
+}
+
+//
+// Helper: Build a time/date list from three integers
+//
+static Node build_three_element_list(int a, int b, int c)
+{
+    char buf1[16], buf2[16], buf3[16];
+    snprintf(buf1, sizeof(buf1), "%d", a);
+    snprintf(buf2, sizeof(buf2), "%d", b);
+    snprintf(buf3, sizeof(buf3), "%d", c);
+    
+    Node atom3 = mem_atom_cstr(buf3);
+    Node atom2 = mem_atom_cstr(buf2);
+    Node atom1 = mem_atom_cstr(buf1);
+    
+    return mem_cons(atom1, mem_cons(atom2, mem_cons(atom3, NODE_NIL)));
+}
+
+//
+// Helper: Get days in a month, accounting for leap years
+//
+static int days_in_month(int year, int month)
+{
+    static const int days[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    
+    if (month < 1 || month > 12) return 30;  // Fallback
+    
+    int d = days[month];
+    
+    // February leap year check
+    if (month == 2)
+    {
+        bool is_leap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+        if (is_leap) d = 29;
+    }
+    
+    return d;
+}
+
+//
+// addtime [h1 m1 s1] [h2 m2 s2] - adds two times together
+// The first time must be valid (positive). The second can be positive or negative offset.
+//
+static Result prim_addtime(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(2);
+    REQUIRE_LIST(args[0]);
+    REQUIRE_LIST(args[1]);
+    
+    int h1, m1, s1;
+    if (!parse_three_element_list(args[0].as.node, &h1, &m1, &s1))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
+    
+    // First time must be valid positive integers
+    if (h1 < 0 || m1 < 0 || s1 < 0)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
+    
+    int h2, m2, s2;
+    if (!parse_three_element_list(args[1].as.node, &h2, &m2, &s2))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
+    }
+    
+    // Add the times
+    int total_seconds = s1 + s2;
+    int total_minutes = m1 + m2;
+    int total_hours = h1 + h2;
+    
+    // Handle second overflow/underflow
+    while (total_seconds >= 60)
+    {
+        total_seconds -= 60;
+        total_minutes++;
+    }
+    while (total_seconds < 0)
+    {
+        total_seconds += 60;
+        total_minutes--;
+    }
+    
+    // Handle minute overflow/underflow
+    while (total_minutes >= 60)
+    {
+        total_minutes -= 60;
+        total_hours++;
+    }
+    while (total_minutes < 0)
+    {
+        total_minutes += 60;
+        total_hours--;
+    }
+    
+    Node result = build_three_element_list(total_hours, total_minutes, total_seconds);
+    return result_ok(value_list(result));
+}
+
+//
+// adddate [y1 m1 d1] [y2 m2 d2] - adds two dates together
+// The first date must be valid (positive). The second can be positive or negative offset.
+//
+static Result prim_adddate(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(2);
+    REQUIRE_LIST(args[0]);
+    REQUIRE_LIST(args[1]);
+    
+    int y1, m1, d1;
+    if (!parse_three_element_list(args[0].as.node, &y1, &m1, &d1))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
+    
+    // First date must be valid positive integers
+    if (y1 < 0 || m1 < 1 || d1 < 1)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
+    
+    int y2, m2, d2;
+    if (!parse_three_element_list(args[1].as.node, &y2, &m2, &d2))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
+    }
+    
+    // Add the dates
+    int total_days = d1 + d2;
+    int total_months = m1 + m2;
+    int total_years = y1 + y2;
+    
+    // Handle month overflow/underflow first (affects days calculation)
+    while (total_months > 12)
+    {
+        total_months -= 12;
+        total_years++;
+    }
+    while (total_months < 1)
+    {
+        total_months += 12;
+        total_years--;
+    }
+    
+    // Handle day overflow
+    while (total_days > days_in_month(total_years, total_months))
+    {
+        total_days -= days_in_month(total_years, total_months);
+        total_months++;
+        if (total_months > 12)
+        {
+            total_months = 1;
+            total_years++;
+        }
+    }
+    
+    // Handle day underflow
+    while (total_days < 1)
+    {
+        total_months--;
+        if (total_months < 1)
+        {
+            total_months = 12;
+            total_years--;
+        }
+        total_days += days_in_month(total_years, total_months);
+    }
+    
+    Node result = build_three_element_list(total_years, total_months, total_days);
+    return result_ok(value_list(result));
+}
+
+//
+// difftime [h1 m1 s1] [h2 m2 s2] - calculates the difference between two times
+// Both times must be valid positive integers.
+// Outputs time1 - time2 (can be negative hours if time2 > time1)
+//
+static Result prim_difftime(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(2);
+    REQUIRE_LIST(args[0]);
+    REQUIRE_LIST(args[1]);
+    
+    int h1, m1, s1;
+    if (!parse_three_element_list(args[0].as.node, &h1, &m1, &s1))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
+    
+    // First time must be valid positive integers
+    if (h1 < 0 || m1 < 0 || s1 < 0)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
+    
+    int h2, m2, s2;
+    if (!parse_three_element_list(args[1].as.node, &h2, &m2, &s2))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
+    }
+    
+    // Second time must also be valid positive integers
+    if (h2 < 0 || m2 < 0 || s2 < 0)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
+    }
+    
+    // Convert to total seconds for easy calculation
+    int total1 = h1 * 3600 + m1 * 60 + s1;
+    int total2 = h2 * 3600 + m2 * 60 + s2;
+    int diff = total1 - total2;
+    
+    // Determine sign
+    bool negative = diff < 0;
+    if (negative) diff = -diff;
+    
+    int diff_hours = diff / 3600;
+    diff %= 3600;
+    int diff_minutes = diff / 60;
+    int diff_seconds = diff % 60;
+    
+    if (negative) diff_hours = -diff_hours;
+    
+    Node result = build_three_element_list(diff_hours, diff_minutes, diff_seconds);
+    return result_ok(value_list(result));
+}
+
+//
 // Register time management primitives
 //
 void primitives_time_init(void)
@@ -254,4 +522,7 @@ void primitives_time_init(void)
     primitive_register("time", 0, prim_time);
     primitive_register("setdate", 1, prim_setdate);
     primitive_register("settime", 1, prim_settime);
+    primitive_register("addtime", 2, prim_addtime);
+    primitive_register("adddate", 2, prim_adddate);
+    primitive_register("difftime", 2, prim_difftime);
 }
