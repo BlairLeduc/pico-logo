@@ -3326,32 +3326,6 @@ settime [_hour_ _minute_ _second_]
 The `settime` command sets the current time to the specified _hour_, _minute_, and _second_. An error occurs if the time is not valid.
 
 
-## addtime
-
-addtime [_hours1_ _minutes1_ _seconds1_] [_hours2_ _minutes2_ _seconds2_]
-
-`operation`
-
-The `addtime` operation adds two times together. Each time is specified as a list of three numbers: hours, minutes, and seconds. The output is also a list of three numbers representing the total time. If the total seconds exceed 59, they are converted into minutes, and if the total minutes exceed 59, they are converted into hours. _Hours1_, _minutes1_, and _seconds1_ must be valid positive integers. _Hours2_, _minutes2_, and _seconds2_ can be positive or negative integers and represent a time offset.
-
-
-## adddate
-
-adddate [_year1_ _month1_ _day1_] [_year2_ _month2_ _day2_]
-
-`operation`
-
-The `adddate` operation adds two dates together. Each date is specified as a list of three numbers: year, month, and day. The output is also a list of three numbers representing the resulting date. If the total days exceed the number of days in the month, they are converted into months, and if the total months exceed 12, they are converted into years. _Year1_, _month1_, and _day1_ must be valid positive integers. _Year2_, _month2_, and _day2_ can be positive or negative integers and represent a date offset.
-
-
-## difftime
-
-difftime [_hours1_ _minutes1_ _seconds1_] [_hours2_ _minutes2_ _seconds2_]
-
-`operation`
-
-The `difftime` operation calculates the difference between two times. Each time is specified as a list of three numbers: hours, minutes, and seconds. The output is a list of three numbers representing the difference in time. If the second time is later than the first, the output will be negative. _Hours1_, _minutes1_, and _seconds1_ must be valid positive integers. _Hours2_, _minutes2_, and _seconds2_ must also be valid positive integers.
-
 
 ===
 # WiFi Management
