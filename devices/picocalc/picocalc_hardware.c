@@ -35,6 +35,7 @@
 #include <lwip/dns.h>
 #include <lwip/pbuf.h>
 #include <lwip/udp.h>
+#include <lwip/tcp.h>
 #include <time.h>
 
 // WiFi state tracking
@@ -1028,6 +1029,481 @@ static bool picocalc_network_ntp(const char *server, float timezone_offset)
     return false;
 }
 
+// ============================================================================
+// TCP Client implementation using lwIP
+// ============================================================================
+
+// TCP connection buffer size
+#define TCP_RECV_BUFFER_SIZE 2048
+
+// TCP connection state structure
+typedef struct {
+    struct tcp_pcb *pcb;             // lwIP protocol control block
+    uint8_t recv_buffer[TCP_RECV_BUFFER_SIZE];  // Circular receive buffer
+    volatile int recv_head;          // Write position in buffer
+    volatile int recv_tail;          // Read position in buffer
+    volatile bool connected;         // Connection established
+    volatile bool connect_pending;   // Connection in progress
+    volatile err_t connect_error;    // Error from connect callback
+    volatile bool closed;            // Connection closed by remote
+    volatile err_t last_error;       // Last error code
+} TcpClientState;
+
+// Forward declarations for callbacks
+static err_t tcp_client_connected_cb(void *arg, struct tcp_pcb *tpcb, err_t err);
+static err_t tcp_client_recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
+static void tcp_client_err_cb(void *arg, err_t err);
+static err_t tcp_client_poll_cb(void *arg, struct tcp_pcb *tpcb);
+
+// Poll for lwIP events with user interrupt checking
+static void poll_lwip_with_timeout(int timeout_ms, volatile bool *completion_flag)
+{
+    absolute_time_t timeout = make_timeout_time_ms(timeout_ms);
+    
+    while (!*completion_flag)
+    {
+        if (time_reached(timeout))
+        {
+            break;
+        }
+        
+        // Check for user interrupt
+        if (user_interrupt)
+        {
+            break;
+        }
+        
+        cyw43_arch_poll();
+        sys_check_timeouts();
+        sleep_ms(1);
+    }
+}
+
+// Connected callback - called when TCP connection is established
+static err_t tcp_client_connected_cb(void *arg, struct tcp_pcb *tpcb, err_t err)
+{
+    TcpClientState *state = (TcpClientState *)arg;
+    (void)tpcb;
+    
+    if (err == ERR_OK)
+    {
+        state->connected = true;
+    }
+    else
+    {
+        state->connect_error = err;
+    }
+    state->connect_pending = false;
+    
+    return ERR_OK;
+}
+
+// Receive callback - called when data arrives
+static err_t tcp_client_recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
+{
+    TcpClientState *state = (TcpClientState *)arg;
+    
+    if (p == NULL)
+    {
+        // Connection closed by remote peer
+        state->closed = true;
+        return ERR_OK;
+    }
+    
+    if (err != ERR_OK)
+    {
+        state->last_error = err;
+        pbuf_free(p);
+        return err;
+    }
+    
+    // Copy data to circular buffer
+    cyw43_arch_lwip_check();
+    
+    for (struct pbuf *q = p; q != NULL; q = q->next)
+    {
+        uint8_t *data = (uint8_t *)q->payload;
+        for (u16_t i = 0; i < q->len; i++)
+        {
+            int next_head = (state->recv_head + 1) % TCP_RECV_BUFFER_SIZE;
+            if (next_head != state->recv_tail)
+            {
+                state->recv_buffer[state->recv_head] = data[i];
+                state->recv_head = next_head;
+            }
+            // else: buffer full, discard data
+        }
+    }
+    
+    // Acknowledge received data
+    tcp_recved(tpcb, p->tot_len);
+    pbuf_free(p);
+    
+    return ERR_OK;
+}
+
+// Error callback - called on connection errors
+static void tcp_client_err_cb(void *arg, err_t err)
+{
+    TcpClientState *state = (TcpClientState *)arg;
+    
+    state->last_error = err;
+    state->closed = true;
+    state->connect_pending = false;
+    state->pcb = NULL;  // PCB is already freed by lwIP when this is called
+}
+
+// Poll callback - called periodically by lwIP
+static err_t tcp_client_poll_cb(void *arg, struct tcp_pcb *tpcb)
+{
+    (void)arg;
+    (void)tpcb;
+    // We don't need to do anything here, just keep the connection alive
+    return ERR_OK;
+}
+
+// DNS resolution state for TCP connect
+static volatile bool tcp_dns_complete = false;
+static volatile bool tcp_dns_success = false;
+static ip_addr_t tcp_dns_resolved_addr;
+
+static void tcp_dns_callback(const char *name, const ip_addr_t *ipaddr, void *callback_arg)
+{
+    (void)name;
+    (void)callback_arg;
+    
+    if (ipaddr != NULL)
+    {
+        ip_addr_copy(tcp_dns_resolved_addr, *ipaddr);
+        tcp_dns_success = true;
+    }
+    else
+    {
+        tcp_dns_success = false;
+    }
+    tcp_dns_complete = true;
+}
+
+static void *picocalc_network_tcp_connect(const char *ip_address, uint16_t port, int timeout_ms)
+{
+    if (!ensure_wifi_initialized() || !picocalc_wifi_is_connected())
+    {
+        return NULL;
+    }
+    
+    if (!ip_address || port == 0)
+    {
+        return NULL;
+    }
+    
+    // Allocate connection state
+    TcpClientState *state = (TcpClientState *)calloc(1, sizeof(TcpClientState));
+    if (!state)
+    {
+        return NULL;
+    }
+    
+    state->recv_head = 0;
+    state->recv_tail = 0;
+    state->connected = false;
+    state->connect_pending = true;
+    state->connect_error = ERR_OK;
+    state->closed = false;
+    state->last_error = ERR_OK;
+    
+    // Resolve hostname/IP address
+    ip_addr_t target_addr;
+    
+    // First try to parse as IP address
+    ip4_addr_t test_addr;
+    if (ip4addr_aton(ip_address, &test_addr))
+    {
+        // It's already an IP address
+        ip_addr_copy_from_ip4(target_addr, test_addr);
+    }
+    else
+    {
+        // Need to resolve hostname
+        tcp_dns_complete = false;
+        tcp_dns_success = false;
+        ip_addr_set_zero(&tcp_dns_resolved_addr);
+        
+        cyw43_arch_lwip_begin();
+        err_t dns_err = dns_gethostbyname(ip_address, &target_addr, tcp_dns_callback, NULL);
+        cyw43_arch_lwip_end();
+        
+        if (dns_err == ERR_OK)
+        {
+            // Address was cached
+        }
+        else if (dns_err == ERR_INPROGRESS)
+        {
+            // Wait for DNS resolution
+            poll_lwip_with_timeout(timeout_ms > 0 ? timeout_ms : 10000, &tcp_dns_complete);
+            
+            if (!tcp_dns_success)
+            {
+                free(state);
+                return NULL;
+            }
+            ip_addr_copy(target_addr, tcp_dns_resolved_addr);
+        }
+        else
+        {
+            free(state);
+            return NULL;
+        }
+    }
+    
+    // Create TCP PCB
+    cyw43_arch_lwip_begin();
+    state->pcb = tcp_new_ip_type(IPADDR_TYPE_V4);
+    cyw43_arch_lwip_end();
+    
+    if (!state->pcb)
+    {
+        free(state);
+        return NULL;
+    }
+    
+    // Set up callbacks
+    cyw43_arch_lwip_begin();
+    tcp_arg(state->pcb, state);
+    tcp_recv(state->pcb, tcp_client_recv_cb);
+    tcp_err(state->pcb, tcp_client_err_cb);
+    tcp_poll(state->pcb, tcp_client_poll_cb, 10);  // Poll every 5 seconds (10 * 500ms)
+    
+    // Initiate connection
+    err_t err = tcp_connect(state->pcb, &target_addr, port, tcp_client_connected_cb);
+    cyw43_arch_lwip_end();
+    
+    if (err != ERR_OK)
+    {
+        cyw43_arch_lwip_begin();
+        tcp_abort(state->pcb);
+        cyw43_arch_lwip_end();
+        free(state);
+        return NULL;
+    }
+    
+    // Wait for connection with timeout
+    poll_lwip_with_timeout(timeout_ms > 0 ? timeout_ms : 30000, &state->connect_pending);
+    
+    // Invert the flag check - connect_pending becomes false when connection completes
+    if (state->connect_pending || !state->connected)
+    {
+        // Connection timed out or failed
+        if (state->pcb)
+        {
+            cyw43_arch_lwip_begin();
+            tcp_arg(state->pcb, NULL);
+            tcp_recv(state->pcb, NULL);
+            tcp_err(state->pcb, NULL);
+            tcp_poll(state->pcb, NULL, 0);
+            tcp_abort(state->pcb);
+            cyw43_arch_lwip_end();
+        }
+        free(state);
+        return NULL;
+    }
+    
+    return state;
+}
+
+static void picocalc_network_tcp_close(void *connection)
+{
+    if (!connection)
+    {
+        return;
+    }
+    
+    TcpClientState *state = (TcpClientState *)connection;
+    
+    if (state->pcb)
+    {
+        cyw43_arch_lwip_begin();
+        
+        // Clear callbacks first
+        tcp_arg(state->pcb, NULL);
+        tcp_recv(state->pcb, NULL);
+        tcp_err(state->pcb, NULL);
+        tcp_poll(state->pcb, NULL, 0);
+        tcp_sent(state->pcb, NULL);
+        
+        // Attempt graceful close
+        err_t err = tcp_close(state->pcb);
+        if (err != ERR_OK)
+        {
+            // If close fails, abort the connection
+            tcp_abort(state->pcb);
+        }
+        
+        cyw43_arch_lwip_end();
+    }
+    
+    free(state);
+}
+
+static int picocalc_network_tcp_read(void *connection, char *buffer, int count, int timeout_ms)
+{
+    if (!connection || !buffer || count <= 0)
+    {
+        return -1;
+    }
+    
+    TcpClientState *state = (TcpClientState *)connection;
+    
+    // Check if connection is closed
+    if (state->closed && state->recv_head == state->recv_tail)
+    {
+        return -1;  // Connection closed and no more data
+    }
+    
+    // Wait for data with timeout
+    if (timeout_ms > 0)
+    {
+        absolute_time_t timeout = make_timeout_time_ms(timeout_ms);
+        
+        while (state->recv_head == state->recv_tail)
+        {
+            if (time_reached(timeout))
+            {
+                return 0;  // Timeout, no data available
+            }
+            
+            if (state->closed)
+            {
+                return -1;  // Connection closed
+            }
+            
+            if (user_interrupt)
+            {
+                return -1;  // User interrupt
+            }
+            
+            cyw43_arch_poll();
+            sys_check_timeouts();
+            sleep_ms(1);
+        }
+    }
+    else if (timeout_ms == 0)
+    {
+        // Non-blocking: just check once
+        cyw43_arch_poll();
+        sys_check_timeouts();
+        
+        if (state->recv_head == state->recv_tail)
+        {
+            return 0;  // No data available
+        }
+    }
+    
+    // Read data from circular buffer
+    int bytes_read = 0;
+    while (bytes_read < count && state->recv_head != state->recv_tail)
+    {
+        buffer[bytes_read++] = state->recv_buffer[state->recv_tail];
+        state->recv_tail = (state->recv_tail + 1) % TCP_RECV_BUFFER_SIZE;
+    }
+    
+    return bytes_read;
+}
+
+static int picocalc_network_tcp_write(void *connection, const char *data, int count)
+{
+    if (!connection || !data || count <= 0)
+    {
+        return -1;
+    }
+    
+    TcpClientState *state = (TcpClientState *)connection;
+    
+    if (!state->pcb || state->closed)
+    {
+        return -1;  // Connection closed
+    }
+    
+    // Write data in chunks that fit the TCP send buffer
+    int total_written = 0;
+    
+    while (total_written < count)
+    {
+        cyw43_arch_lwip_begin();
+        
+        // Check available space in send buffer
+        u16_t available = tcp_sndbuf(state->pcb);
+        if (available == 0)
+        {
+            cyw43_arch_lwip_end();
+            
+            // Wait for buffer space with timeout
+            absolute_time_t timeout = make_timeout_time_ms(5000);
+            while (tcp_sndbuf(state->pcb) == 0)
+            {
+                if (time_reached(timeout))
+                {
+                    // Timeout waiting for buffer space
+                    return total_written > 0 ? total_written : -1;
+                }
+                
+                if (state->closed || user_interrupt)
+                {
+                    return total_written > 0 ? total_written : -1;
+                }
+                
+                cyw43_arch_poll();
+                sys_check_timeouts();
+                sleep_ms(1);
+            }
+            
+            continue;  // Retry with new buffer space
+        }
+        
+        // Calculate how much to write
+        int remaining = count - total_written;
+        u16_t to_write = (remaining < available) ? (u16_t)remaining : available;
+        
+        // Write to TCP
+        err_t err = tcp_write(state->pcb, data + total_written, to_write, TCP_WRITE_FLAG_COPY);
+        
+        if (err != ERR_OK)
+        {
+            cyw43_arch_lwip_end();
+            return total_written > 0 ? total_written : -1;
+        }
+        
+        // Flush the output
+        err = tcp_output(state->pcb);
+        cyw43_arch_lwip_end();
+        
+        if (err != ERR_OK)
+        {
+            return total_written > 0 ? total_written : -1;
+        }
+        
+        total_written += to_write;
+    }
+    
+    return total_written;
+}
+
+static bool picocalc_network_tcp_can_read(void *connection)
+{
+    if (!connection)
+    {
+        return false;
+    }
+    
+    TcpClientState *state = (TcpClientState *)connection;
+    
+    // Poll to process any pending data
+    cyw43_arch_poll();
+    sys_check_timeouts();
+    
+    // Check if data is available in the buffer
+    return state->recv_head != state->recv_tail;
+}
+
 #endif // LOGO_HAS_WIFI
 
 // ============================================================================
@@ -1056,12 +1532,11 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .network_ping = picocalc_network_ping,
     .network_resolve = picocalc_network_resolve,
     .network_ntp = picocalc_network_ntp,
-    // TODO: Implement TCP operations using lwIP
-    .network_tcp_connect = NULL,
-    .network_tcp_close = NULL,
-    .network_tcp_read = NULL,
-    .network_tcp_write = NULL,
-    .network_tcp_can_read = NULL,
+    .network_tcp_connect = picocalc_network_tcp_connect,
+    .network_tcp_close = picocalc_network_tcp_close,
+    .network_tcp_read = picocalc_network_tcp_read,
+    .network_tcp_write = picocalc_network_tcp_write,
+    .network_tcp_can_read = picocalc_network_tcp_can_read,
 #else
     .wifi_is_connected = NULL,
     .wifi_connect = NULL,
