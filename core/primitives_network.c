@@ -81,31 +81,42 @@ static Result prim_network_resolve(Evaluator *eval, int argc, Value *args)
     return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
 }
 
-// ntp
-// (ntp serveraddress)
+// network.ntp
+// (network.ntp timezone)
+// (network.ntp timezone serveraddress)
 // Synchronizes with an NTP server, updates the device's date and time
 // Returns true if successful, false otherwise
-// Default server is "pool.ntp.org"
+// Default server is "pool.ntp.org", default timezone is UTC (0)
 static Result prim_ntp(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
 
     const char *server = "pool.ntp.org";
+    float timezone_offset = 0.0f;
 
-    // Check for optional server argument
+    // Check for optional timezone argument (can be number or word)
     if (argc >= 1)
     {
-        if (!value_is_word(args[0]))
+        if (!value_to_number(args[0], &timezone_offset))
         {
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
         }
-        server = mem_word_ptr(args[0].as.node);
+    }
+
+    // Check for optional server argument
+    if (argc >= 2)
+    {
+        if (!value_is_word(args[1]))
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
+        }
+        server = mem_word_ptr(args[1].as.node);
     }
 
     LogoIO *io = primitives_get_io();
     if (io && io->hardware && io->hardware->ops && io->hardware->ops->network_ntp)
     {
-        bool success = io->hardware->ops->network_ntp(server);
+        bool success = io->hardware->ops->network_ntp(server, timezone_offset);
         return result_ok(value_word(mem_atom_cstr(success ? "true" : "false")));
     }
 

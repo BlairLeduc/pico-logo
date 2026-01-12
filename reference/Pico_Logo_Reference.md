@@ -3196,7 +3196,7 @@ open _file_
 
 `command`
 
-The `open` command opens file so it can send or receive characters. You must open a data file before you can access it. Note that you can open only one device at a time. You can open a maximum of six disk files at once. If the file named by _file_ does not exist, then `open` creates the file. When you finish using Logo, you must close all devices or files that are open.
+The `open` command opens file so it can send or receive characters. You must open a data file before you can access it. You can open a maximum of eight disk files at once. If the file named by _file_ does not exist, then `open` creates the file. When you finish using Logo, you must close all devices or files that are open.
 
 See the [`close`](#close) and [`closeall`](#closeall) commands.
 
@@ -3207,14 +3207,15 @@ reader
 
 `operation`
 
-`reader` outputs the current file that is open for reading. You can change the current read file with the [`setread`](#setread) primitive. `reader` returns the name of the file or the empty list if the current reader is the keyboard.
+`reader` outputs the current file or network connection that is open for reading. You can change the current read file with the [`setread`](#setread) primitive. `reader` returns the name of the file or the empty list if the current reader is the keyboard.
 
 
 ## readpos
 
 READPOS (operation)
 
-`readpos` (for `read` `pos`ition) outputs the position in the current reader. An error occurs if the current reader is the keyboard or a device. To set the position in the read file, see the [`setreadpos`](#setreadpos) command.
+`readpos` (for `read` `pos`ition) outputs the position in the current reader. An error occurs if the current reader is the keyboard, a network connection, or a device. To set the position in the read file, see the [`setreadpos`](#setreadpos) command.
+
 
 ## setread
 
@@ -3224,7 +3225,9 @@ setread _file_
 
 `setread` sets the current reader to _file_. After you give this command, [`readlist`](#readlist-rl), [`readword`](#readword-rw), [`readchar`](#readchar-rc), and [`readchars`](#readchars-rcs) read information from this file.
 
-Before you use `setread`, you must open the file with the [`open`](#open) command. An error occurs if the file is not open. To set the current reader back to the keyboard, give `setread` the empty list as input.
+Before you use `setread`, you must open the file with the [`open`](#open) command or a network connection with the [`network.open`](#networkopen) command. An error occurs if the file or network connection is not open.
+
+To set the current reader back to the keyboard, give `setread` the empty list as input.
 
 
 ## setreadpos
@@ -3233,7 +3236,7 @@ setreadpos _integer_
 
 `command`
 
-`setreadpos` sets the read position in the current reader. The _integer_ should be a number between 0 and the current length of the file. An error occurs if it is not in this range. An error also occurs if the current reader is the keyboard or a device.
+`setreadpos` sets the read position in the current reader. The _integer_ should be a number between 0 and the current length of the file. An error occurs if it is not in this range. An error also occurs if the current reader is the keyboard, a network connection, or a device.
 
 See [`readpos`](#readpos) for more information about the `setreadpos` command.
 
@@ -3245,6 +3248,8 @@ setwrite _file_
 `command`
 
 `setwrite` sets the current writer to the file you name. The primitives [`print`](#print), [`type`](#type), and [`show`](#show) all print to the current writer. You cannot use `setwrite` unless the file has previously been opened.
+
+Before you use `setwrite`, you must open the file with the [`open`](#open) command or a network connection with the [`network.open`](#networkopen) command. An error occurs if the file or network connection is not open.
 
 To restore the screen as the current writer, use the `setwrite` command with the empty list as input.
 
@@ -3258,7 +3263,7 @@ setwritepos _integer_
 
 `command`
 
-`setwritepos` sets the write position in the current file. This command is useful when modifying information in a file. You must set the write position to a number that is between 0 and the end-of-file position. If you try to set it somewhere out of this range, an error occurs. An error also occurs if you try to set the write position when the current writer is the screen or a device.
+`setwritepos` sets the write position in the current file. This command is useful when modifying information in a file. You must set the write position to a number that is between 0 and the end-of-file position. If you try to set it somewhere out of this range, an error occurs. An error also occurs if you try to set the write position when the current writer is the screen, a network connection, or a device.
 
 To check the current position, use the [`writepos`](#writepos) command.
 
@@ -3269,7 +3274,7 @@ writepos
 
 `operation`
 
-`writepos` (for write position) outputs where in the current write file the the next character will be written. An error occurs if the current writer is the screen or a device.
+`writepos` (for write position) outputs where in the current write file the the next character will be written. An error occurs if the current writer is the screen, a network connection, or a device.
 
 
 ## writer
@@ -3278,9 +3283,74 @@ writer
 
 `operation`
 
-`writer` outputs the current file or device that is open for writing. Compare this with the [`allopen`](#allopen) operation.
+`writer` outputs the current file, network connection, or device that is open for writing. Compare this with the [`allopen`](#allopen) operation.
 
 
+
+===
+# Time Management
+
+## date
+
+date
+
+`operation`
+
+`date` outputs the current date as a list in the form `[year month day]`, where year is the full year (e.g., 2026), month is a number from 1 to 12, and day is a number from 1 to 31.
+
+
+## time
+
+time
+
+`operation`
+
+`time` outputs the current time as a list in the form `[hour minute second]`, where hour is a number from 0 to 23, minute is a number from 0 to 59, and second is a number from 0 to 59.
+
+
+## setdate
+
+setdate [_year_ _month_ _day_]
+
+`command`
+
+The `setdate` command sets the current date to the specified _year_, _month_, and _day_. An error occurs if the date is not valid.
+
+
+## settime
+
+settime [_hour_ _minute_ _second_]
+
+`command`
+
+The `settime` command sets the current time to the specified _hour_, _minute_, and _second_. An error occurs if the time is not valid.
+
+
+## addtime
+
+addtime [_hours1_ _minutes1_ _seconds1_] [_hours2_ _minutes2_ _seconds2_]
+
+`operation`
+
+The `addtime` operation adds two times together. Each time is specified as a list of three numbers: hours, minutes, and seconds. The output is also a list of three numbers representing the total time. If the total seconds exceed 59, they are converted into minutes, and if the total minutes exceed 59, they are converted into hours. _Hours1_, _minutes1_, and _seconds1_ must be valid positive integers. _Hours2_, _minutes2_, and _seconds2_ can be positive or negative integers and represent a time offset.
+
+
+## adddate
+
+adddate [_year1_ _month1_ _day1_] [_year2_ _month2_ _day2_]
+
+`operation`
+
+The `adddate` operation adds two dates together. Each date is specified as a list of three numbers: year, month, and day. The output is also a list of three numbers representing the resulting date. If the total days exceed the number of days in the month, they are converted into months, and if the total months exceed 12, they are converted into years. _Year1_, _month1_, and _day1_ must be valid positive integers. _Year2_, _month2_, and _day2_ can be positive or negative integers and represent a date offset.
+
+
+## difftime
+
+difftime [_hours1_ _minutes1_ _seconds1_] [_hours2_ _minutes2_ _seconds2_]
+
+`operation`
+
+The `difftime` operation calculates the difference between two times. Each time is specified as a list of three numbers: hours, minutes, and seconds. The output is a list of three numbers representing the difference in time. If the second time is later than the first, the output will be negative. _Hours1_, _minutes1_, and _seconds1_ must be valid positive integers. _Hours2_, _minutes2_, and _seconds2_ must also be valid positive integers.
 
 
 ===
@@ -3338,6 +3408,59 @@ wifi.scan
 `operation`
 
 `wifi.scan` outputs a list of available WiFi networks. Each network is represented as a sublist containing the SSID and signal strength.
+
+
+
+
+===
+# Network Operations
+
+## network.ping
+
+network.ping _ipaddress_
+
+`operation`
+
+The `network.ping` operation sends a ping request to the specified _ipaddress_. It outputs the number of milliseconds it took for the response if a response is received, otherwise it outputs -1. The _ipaddress_ should be in standard dotted-decimal notation (e.g., "192.168.1.1").
+
+
+## network.resolve
+
+network.resolve _hostname_
+
+`operation`
+
+The `network.resolve` operation takes a _hostname_ (e.g., "www.example.com") and outputs its corresponding IP address in dotted-decimal notation. If the hostname cannot be resolved, it outputs the empty list.
+
+
+## network.open
+
+network.open _ipaddress_port_
+
+`command`
+
+The `network.open` command is similar to [`open`](#open) and establishes a TCP connection to the specified _ipaddress_port_. The _ipaddress_port_ is a four element list containing the IP address and port number. You can open up to eight network connections at once. An error occurs if the connection cannot be established.
+
+The [`openall`](#openall) command can be used to view all open files and connections. The network connection will be in the list as the _ipaddress_port_ you specified.
+
+Once a connection is open, you use [`setread`](#setread) and [`setwrite`](#setwrite) to set the read and write positions for the connection. Then you can use the standard reading and writing commands to communicate over the network.
+
+The connection can later be closed using the [`close`](#close) or [`closeall`](#closeall) command.
+
+
+## network.ntp
+
+network.ntp  
+(network.ntp _timezone_)
+(network.ntp _timezone_ _serveraddress_)
+
+`operation`
+
+The `network.ntp` operation synchronizes the device's internal clock with a Network Time Protocol (NTP) server. It outputs `true` if the synchronization is successful, otherwise it outputs `false`. Ensure that the device is connected to a WiFi network before using this command.
+
+If the synchronization succeeds, the device's date and time are updated to match the NTP server. If _timezone_ is provided, the time is adjusted accordingly; otherwise, it defaults to UTC. _timezone_ is specified in hours relative to UTC (e.g., -5 for EST, 1 for CET), and can include fractional hours (e.g., 5.5 for IST).
+
+The default NTP server is "pool.ntp.org". You can specify a different server by providing its _serveraddress_ as an argument.
 
 
 

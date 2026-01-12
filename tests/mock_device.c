@@ -1223,7 +1223,12 @@ const char *mock_device_get_last_ntp_server(void)
     return mock_state.network.last_ntp_server;
 }
 
-bool mock_network_ntp(const char *server)
+float mock_device_get_last_ntp_timezone(void)
+{
+    return mock_state.network.last_ntp_timezone;
+}
+
+bool mock_network_ntp(const char *server, float timezone_offset)
 {
     // Store the server for verification
     if (server)
@@ -1236,6 +1241,9 @@ bool mock_network_ntp(const char *server)
     {
         mock_state.network.last_ntp_server[0] = '\0';
     }
+
+    // Store the timezone offset for verification
+    mock_state.network.last_ntp_timezone = timezone_offset;
 
     return mock_state.network.ntp_success;
 }

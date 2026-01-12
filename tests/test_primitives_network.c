@@ -223,7 +223,7 @@ void test_ntp_with_custom_server(void)
 {
     mock_device_set_ntp_result(true);
     
-    Result r = eval_string("(network.ntp \"time.google.com)");
+    Result r = eval_string("(network.ntp 0 \"time.google.com)");
     
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
@@ -237,7 +237,7 @@ void test_ntp_with_custom_server_failure(void)
 {
     mock_device_set_ntp_result(false);
     
-    Result r = eval_string("(network.ntp \"invalid.server.com)");
+    Result r = eval_string("(network.ntp 0 \"invalid.server.com)");
     
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
@@ -247,11 +247,74 @@ void test_ntp_with_custom_server_failure(void)
     TEST_ASSERT_EQUAL_STRING("invalid.server.com", mock_device_get_last_ntp_server());
 }
 
-void test_ntp_requires_word_argument_if_provided(void)
+void test_ntp_requires_number_argument_if_provided(void)
 {
     mock_device_set_ntp_result(true);
     
-    Result r = eval_string("(network.ntp [time.google.com])");
+    Result r = eval_string("(network.ntp [5])");
+    
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_ntp_with_timezone_offset(void)
+{
+    mock_device_set_ntp_result(true);
+    
+    Result r = eval_string("(network.ntp -5 \"time.google.com)");
+    
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+    
+    // Verify the server and timezone were passed correctly
+    TEST_ASSERT_EQUAL_STRING("time.google.com", mock_device_get_last_ntp_server());
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, -5.0f, mock_device_get_last_ntp_timezone());
+}
+
+void test_ntp_with_fractional_timezone(void)
+{
+    mock_device_set_ntp_result(true);
+    
+    Result r = eval_string("(network.ntp 5.5 \"pool.ntp.org)");
+    
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+    
+    // Verify fractional timezone (e.g., IST is UTC+5:30)
+    TEST_ASSERT_EQUAL_STRING("pool.ntp.org", mock_device_get_last_ntp_server());
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 5.5f, mock_device_get_last_ntp_timezone());
+}
+
+void test_ntp_with_timezone_only(void)
+{
+    mock_device_set_ntp_result(true);
+    
+    // With timezone only, should use default server
+    Result r = eval_string("(network.ntp -5)");
+    
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("pool.ntp.org", mock_device_get_last_ntp_server());
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, -5.0f, mock_device_get_last_ntp_timezone());
+}
+
+void test_ntp_no_args_default_timezone_is_zero(void)
+{
+    mock_device_set_ntp_result(true);
+    
+    // With no arguments, should default to UTC (0)
+    Result r = eval_string("network.ntp");
+    
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, mock_device_get_last_ntp_timezone());
+}
+
+void test_ntp_server_requires_word(void)
+{
+    mock_device_set_ntp_result(true);
+    
+    // Server as list should fail
+    Result r = eval_string("(network.ntp -5 [pool.ntp.org])");
     
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
@@ -287,7 +350,12 @@ int main(void)
     RUN_TEST(test_ntp_returns_false_on_failure);
     RUN_TEST(test_ntp_with_custom_server);
     RUN_TEST(test_ntp_with_custom_server_failure);
-    RUN_TEST(test_ntp_requires_word_argument_if_provided);
+    RUN_TEST(test_ntp_requires_number_argument_if_provided);
+    RUN_TEST(test_ntp_with_timezone_offset);
+    RUN_TEST(test_ntp_with_fractional_timezone);
+    RUN_TEST(test_ntp_with_timezone_only);
+    RUN_TEST(test_ntp_no_args_default_timezone_is_zero);
+    RUN_TEST(test_ntp_server_requires_word);
     
     return UNITY_END();
 }

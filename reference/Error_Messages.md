@@ -54,6 +54,7 @@
 |53|File (file) too big
 |55|Subdirectory not found for (directory)
 |56|Subdirectory (directory) not empty
+|57|Can't open ip address and port (ip address and port)
 ||!!! LOGO SYSTEM BUG !!! _Should not occur. Please let me know._
 
 

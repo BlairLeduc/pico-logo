@@ -111,8 +111,9 @@ extern "C"
         // Synchronize with an NTP server
         // Returns true if synchronization was successful, false otherwise
         // server is the NTP server hostname (e.g., "pool.ntp.org")
+        // timezone_offset is the offset from UTC in hours (e.g., -5 for EST, 5.5 for IST)
         // If successful, the device's date and time should be updated
-        bool (*network_ntp)(const char *server);
+        bool (*network_ntp)(const char *server, float timezone_offset);
 
         //
         // Time management operations

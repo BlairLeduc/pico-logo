@@ -928,7 +928,7 @@ static void ntp_dns_callback(const char *name, const ip_addr_t *ipaddr, void *ca
     }
 }
 
-static bool picocalc_network_ntp(const char *server)
+static bool picocalc_network_ntp(const char *server, float timezone_offset)
 {
     if (!ensure_wifi_initialized() || !picocalc_wifi_is_connected())
     {
@@ -1010,10 +1010,12 @@ static bool picocalc_network_ntp(const char *server)
     // Set device time if successful
     if (ntp_success && ntp_received_sec > 0)
     {
-        // Convert NTP timestamp to Unix timestamp
+        // Convert NTP timestamp to Unix timestamp and apply timezone offset
+        // timezone_offset is in hours (e.g., -5 for EST, 5.5 for IST)
         time_t unix_time = (time_t)(ntp_received_sec - NTP_DELTA);
+        unix_time += (time_t)(timezone_offset * 3600.0f);
 
-        // Convert to broken-down time (UTC)
+        // Convert to broken-down time
         struct tm *tm_info = gmtime(&unix_time);
         if (tm_info)
         {
