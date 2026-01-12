@@ -797,6 +797,18 @@ void mock_device_reset(void)
     mock_state.wifi.disconnect_result = 0;   // Default to success
     mock_state.wifi.scan_result_count = 0;
     mock_state.wifi.scan_return_value = 0;   // Default to success
+
+    // Initialize time state to defaults
+    mock_state.time.year = 2025;
+    mock_state.time.month = 1;
+    mock_state.time.day = 1;
+    mock_state.time.hour = 0;
+    mock_state.time.minute = 0;
+    mock_state.time.second = 0;
+    mock_state.time.get_date_enabled = true;
+    mock_state.time.get_time_enabled = true;
+    mock_state.time.set_date_enabled = true;
+    mock_state.time.set_time_enabled = true;
 }
 
 const MockDeviceState *mock_device_get_state(void)
@@ -1180,4 +1192,88 @@ void mock_device_clear_wifi_scan_results(void)
 void mock_device_set_wifi_scan_result(int result)
 {
     mock_state.wifi.scan_return_value = result;
+}
+
+// ============================================================================
+// Mock time helpers
+// ============================================================================
+
+void mock_device_set_time(int year, int month, int day, int hour, int minute, int second)
+{
+    mock_state.time.year = year;
+    mock_state.time.month = month;
+    mock_state.time.day = day;
+    mock_state.time.hour = hour;
+    mock_state.time.minute = minute;
+    mock_state.time.second = second;
+}
+
+void mock_device_set_time_enabled(bool get_date, bool get_time, bool set_date, bool set_time_flag)
+{
+    mock_state.time.get_date_enabled = get_date;
+    mock_state.time.get_time_enabled = get_time;
+    mock_state.time.set_date_enabled = set_date;
+    mock_state.time.set_time_enabled = set_time_flag;
+}
+
+// ============================================================================
+// Mock time operations (for use by test_scaffold in mock_hardware_ops)
+// ============================================================================
+
+bool mock_get_date(int *year, int *month, int *day)
+{
+    if (!mock_state.time.get_date_enabled)
+    {
+        return false;
+    }
+    if (year) *year = mock_state.time.year;
+    if (month) *month = mock_state.time.month;
+    if (day) *day = mock_state.time.day;
+    return true;
+}
+
+bool mock_get_time(int *hour, int *minute, int *second)
+{
+    if (!mock_state.time.get_time_enabled)
+    {
+        return false;
+    }
+    if (hour) *hour = mock_state.time.hour;
+    if (minute) *minute = mock_state.time.minute;
+    if (second) *second = mock_state.time.second;
+    return true;
+}
+
+bool mock_set_date(int year, int month, int day)
+{
+    if (!mock_state.time.set_date_enabled)
+    {
+        return false;
+    }
+    // Validate inputs
+    if (month < 1 || month > 12 || day < 1 || day > 31)
+    {
+        return false;
+    }
+    mock_state.time.year = year;
+    mock_state.time.month = month;
+    mock_state.time.day = day;
+    return true;
+}
+
+bool mock_set_time(int hour, int minute, int second)
+{
+    if (!mock_state.time.set_time_enabled)
+    {
+        return false;
+    }
+    // Validate inputs
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59)
+    {
+        return false;
+    }
+    mock_state.time.hour = hour;
+    mock_state.time.minute = minute;
+    mock_state.time.second = second;
+    return true;
 }

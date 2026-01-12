@@ -237,6 +237,11 @@ LogoHardwareOps mock_hardware_ops = {
     .wifi_get_ip = mock_wifi_get_ip,
     .wifi_get_ssid = mock_wifi_get_ssid,
     .wifi_scan = mock_wifi_scan,
+    // Time operations (always available in tests)
+    .get_date = mock_get_date,
+    .get_time = mock_get_time,
+    .set_date = mock_set_date,
+    .set_time = mock_set_time,
 };
 
 // ============================================================================
@@ -289,6 +294,9 @@ void test_scaffold_setUp(void)
     mock_power_off_result = false;
     mock_power_off_called = false;
     mock_hardware_ops.power_off = NULL;
+
+    // Reset mock device state (initializes time, wifi, etc.)
+    mock_device_reset();
 
     // Set up mock console (embeds streams internally)
     logo_console_init(&mock_console, &mock_input_stream_ops, &mock_output_stream_ops, NULL);

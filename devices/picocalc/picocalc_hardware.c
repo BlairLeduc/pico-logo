@@ -20,6 +20,11 @@
 #include <pico/stdlib.h>
 #include <pico/rand.h>
 
+// Include RTC support for RP2040, use software clock for RP2350
+#if PICO_RP2040
+#include <hardware/rtc.h>
+#endif
+
 #ifdef LOGO_HAS_WIFI
 #include <pico/cyw43_arch.h>
 #include <lwip/ip4_addr.h>
@@ -150,6 +155,300 @@ static void picocalc_toot(uint32_t duration_ms, uint32_t left_freq, uint32_t rig
     // Play the tone (non-blocking with automatic stop after duration)
     audio_play_sound_timed(left_freq, right_freq, duration_ms);
 }
+
+// ============================================================================
+// Time management operations
+// ============================================================================
+
+#if PICO_RP2040
+// RP2040 has hardware RTC
+static bool rtc_initialized = false;
+
+static bool ensure_rtc_initialized(void)
+{
+    if (!rtc_initialized)
+    {
+        rtc_init();
+        // Set a default date/time if not already set
+        datetime_t t = {
+            .year = 2025,
+            .month = 1,
+            .day = 1,
+            .dotw = 3,  // Wednesday
+            .hour = 0,
+            .min = 0,
+            .sec = 0
+        };
+        rtc_set_datetime(&t);
+        rtc_initialized = true;
+    }
+    return true;
+}
+
+static bool picocalc_get_date(int *year, int *month, int *day)
+{
+    if (!ensure_rtc_initialized())
+    {
+        return false;
+    }
+
+    datetime_t t;
+    if (!rtc_get_datetime(&t))
+    {
+        return false;
+    }
+
+    if (year) *year = t.year;
+    if (month) *month = t.month;
+    if (day) *day = t.day;
+    return true;
+}
+
+static bool picocalc_get_time(int *hour, int *minute, int *second)
+{
+    if (!ensure_rtc_initialized())
+    {
+        return false;
+    }
+
+    datetime_t t;
+    if (!rtc_get_datetime(&t))
+    {
+        return false;
+    }
+
+    if (hour) *hour = t.hour;
+    if (minute) *minute = t.min;
+    if (second) *second = t.sec;
+    return true;
+}
+
+// Helper to calculate day of week (Zeller's congruence, Sunday = 0)
+static int calculate_dotw(int year, int month, int day)
+{
+    if (month < 3)
+    {
+        month += 12;
+        year--;
+    }
+    int k = year % 100;
+    int j = year / 100;
+    int h = (day + (13 * (month + 1)) / 5 + k + k / 4 + j / 4 - 2 * j) % 7;
+    // Convert from Zeller (Sat=0, Sun=1, ..., Fri=6) to (Sun=0, Mon=1, ..., Sat=6)
+    return ((h + 6) % 7);
+}
+
+static bool picocalc_set_date(int year, int month, int day)
+{
+    if (!ensure_rtc_initialized())
+    {
+        return false;
+    }
+
+    // Validate inputs
+    if (year < 2000 || year > 4095) return false;  // RTC year range
+    if (month < 1 || month > 12) return false;
+    if (day < 1 || day > 31) return false;
+
+    // Get current time to preserve it
+    datetime_t t;
+    if (!rtc_get_datetime(&t))
+    {
+        return false;
+    }
+
+    t.year = (int16_t)year;
+    t.month = (int8_t)month;
+    t.day = (int8_t)day;
+    t.dotw = (int8_t)calculate_dotw(year, month, day);
+
+    return rtc_set_datetime(&t);
+}
+
+static bool picocalc_set_time(int hour, int minute, int second)
+{
+    if (!ensure_rtc_initialized())
+    {
+        return false;
+    }
+
+    // Validate inputs
+    if (hour < 0 || hour > 23) return false;
+    if (minute < 0 || minute > 59) return false;
+    if (second < 0 || second > 59) return false;
+
+    // Get current date to preserve it
+    datetime_t t;
+    if (!rtc_get_datetime(&t))
+    {
+        return false;
+    }
+
+    t.hour = (int8_t)hour;
+    t.min = (int8_t)minute;
+    t.sec = (int8_t)second;
+
+    return rtc_set_datetime(&t);
+}
+
+#else
+// RP2350 does not have hardware RTC - use software clock
+// Store time as milliseconds since epoch (Jan 1, 2025)
+static bool software_clock_initialized = false;
+static absolute_time_t clock_base_time;
+static int64_t clock_epoch_offset_ms = 0;  // Offset from base_time to epoch
+
+// Days in each month (non-leap year)
+static const int days_in_month[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+
+static bool is_leap_year(int year)
+{
+    return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+}
+
+static int days_in_month_of_year(int month, int year)
+{
+    if (month == 2 && is_leap_year(year))
+    {
+        return 29;
+    }
+    return days_in_month[month - 1];
+}
+
+// Convert year/month/day/hour/min/sec to milliseconds since Jan 1, 2025 00:00:00
+static int64_t datetime_to_ms(int year, int month, int day, int hour, int min, int sec)
+{
+    int64_t total_days = 0;
+    
+    // Add days for years from 2025 to year-1
+    for (int y = 2025; y < year; y++)
+    {
+        total_days += is_leap_year(y) ? 366 : 365;
+    }
+    
+    // Add days for months in current year
+    for (int m = 1; m < month; m++)
+    {
+        total_days += days_in_month_of_year(m, year);
+    }
+    
+    // Add days in current month
+    total_days += day - 1;
+    
+    // Convert to milliseconds
+    int64_t total_seconds = total_days * 24LL * 60 * 60 + hour * 3600LL + min * 60 + sec;
+    return total_seconds * 1000LL;
+}
+
+// Convert milliseconds since Jan 1, 2025 to date/time components
+static void ms_to_datetime(int64_t ms, int *year, int *month, int *day, int *hour, int *min, int *sec)
+{
+    int64_t total_seconds = ms / 1000;
+    int64_t remaining_seconds = total_seconds;
+    
+    // Calculate time of day
+    int time_of_day = (int)(remaining_seconds % (24 * 60 * 60));
+    if (sec) *sec = time_of_day % 60;
+    time_of_day /= 60;
+    if (min) *min = time_of_day % 60;
+    if (hour) *hour = time_of_day / 60;
+    
+    // Calculate date
+    int64_t total_days = remaining_seconds / (24 * 60 * 60);
+    
+    int y = 2025;
+    while (total_days >= (is_leap_year(y) ? 366 : 365))
+    {
+        total_days -= is_leap_year(y) ? 366 : 365;
+        y++;
+    }
+    if (year) *year = y;
+    
+    int m = 1;
+    while (total_days >= days_in_month_of_year(m, y))
+    {
+        total_days -= days_in_month_of_year(m, y);
+        m++;
+    }
+    if (month) *month = m;
+    if (day) *day = (int)(total_days + 1);
+}
+
+static void ensure_software_clock_initialized(void)
+{
+    if (!software_clock_initialized)
+    {
+        clock_base_time = get_absolute_time();
+        // Default to Jan 1, 2025 00:00:00
+        clock_epoch_offset_ms = 0;
+        software_clock_initialized = true;
+    }
+}
+
+static int64_t get_current_epoch_ms(void)
+{
+    ensure_software_clock_initialized();
+    int64_t elapsed_ms = absolute_time_diff_us(clock_base_time, get_absolute_time()) / 1000;
+    return clock_epoch_offset_ms + elapsed_ms;
+}
+
+static bool picocalc_get_date(int *year, int *month, int *day)
+{
+    int64_t ms = get_current_epoch_ms();
+    ms_to_datetime(ms, year, month, day, NULL, NULL, NULL);
+    return true;
+}
+
+static bool picocalc_get_time(int *hour, int *minute, int *second)
+{
+    int64_t ms = get_current_epoch_ms();
+    ms_to_datetime(ms, NULL, NULL, NULL, hour, minute, second);
+    return true;
+}
+
+static bool picocalc_set_date(int year, int month, int day)
+{
+    ensure_software_clock_initialized();
+    
+    // Validate inputs
+    if (year < 2025 || year > 4095) return false;
+    if (month < 1 || month > 12) return false;
+    if (day < 1 || day > 31) return false;
+    
+    // Get current time to preserve it
+    int hour, min, sec;
+    int64_t current_ms = get_current_epoch_ms();
+    ms_to_datetime(current_ms, NULL, NULL, NULL, &hour, &min, &sec);
+    
+    // Reset the clock with new date but same time
+    clock_base_time = get_absolute_time();
+    clock_epoch_offset_ms = datetime_to_ms(year, month, day, hour, min, sec);
+    
+    return true;
+}
+
+static bool picocalc_set_time(int hour, int minute, int second)
+{
+    ensure_software_clock_initialized();
+    
+    // Validate inputs
+    if (hour < 0 || hour > 23) return false;
+    if (minute < 0 || minute > 59) return false;
+    if (second < 0 || second > 59) return false;
+    
+    // Get current date to preserve it
+    int year, month, day;
+    int64_t current_ms = get_current_epoch_ms();
+    ms_to_datetime(current_ms, &year, &month, &day, NULL, NULL, NULL);
+    
+    // Reset the clock with same date but new time
+    clock_base_time = get_absolute_time();
+    clock_epoch_offset_ms = datetime_to_ms(year, month, day, hour, minute, second);
+    
+    return true;
+}
+
+#endif // PICO_RP2040
 
 // ============================================================================
 // WiFi operations (only available when LOGO_HAS_WIFI is defined)
@@ -336,6 +635,10 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .wifi_get_ssid = NULL,
     .wifi_scan = NULL,
 #endif
+    .get_date = picocalc_get_date,
+    .get_time = picocalc_get_time,
+    .set_date = picocalc_set_date,
+    .set_time = picocalc_set_time,
 }; 
 
 

@@ -92,6 +92,32 @@ extern "C"
         // Each network's SSID is stored in ssids[i] (max 32 chars + null)
         // Signal strength (RSSI in dBm, typically -30 to -90) stored in strengths[i]
         int (*wifi_scan)(char ssids[][33], int8_t strengths[], int max_networks);
+
+        //
+        // Time management operations
+        //
+
+        // Get the current date
+        // Returns true if successful, false otherwise
+        // year: full year (e.g., 2024)
+        // month: 1-12
+        // day: 1-31
+        bool (*get_date)(int *year, int *month, int *day);
+
+        // Get the current time
+        // Returns true if successful, false otherwise
+        // hour: 0-23
+        // minute: 0-59
+        // second: 0-59
+        bool (*get_time)(int *hour, int *minute, int *second);
+
+        // Set the current date
+        // Returns true if successful, false otherwise
+        bool (*set_date)(int year, int month, int day);
+
+        // Set the current time
+        // Returns true if successful, false otherwise
+        bool (*set_time)(int hour, int minute, int second);
     } LogoHardwareOps;
 
     typedef struct LogoHardware

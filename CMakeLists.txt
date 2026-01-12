@@ -78,6 +78,7 @@ add_library(logo_core
     core/primitives_procedures.c
     core/primitives_properties.c
     core/primitives_text.c
+    core/primitives_time.c
     core/primitives_turtle.c
     core/primitives_variables.c
     core/primitives_words_lists.c
@@ -166,6 +167,11 @@ target_link_libraries(pico-logo
         hardware_pio
         hardware_spi
 )
+
+# Link hardware_rtc for RP2040 (RTC support)
+if(PICO_RP2040)
+    target_link_libraries(pico-logo hardware_rtc)
+endif()
 
 # Link WiFi libraries if WiFi support is enabled
 if(LOGO_HAS_WIFI)
@@ -256,11 +262,13 @@ if(BUILD_FOR_HOST)
         core/primitives_procedures.c
         core/primitives_properties.c
         core/primitives_text.c
+        core/primitives_time.c
         core/primitives_turtle.c
         core/primitives_variables.c
         core/primitives_words_lists.c
         core/primitives_workspace.c
         core/primitives_list_processing.c
+        core/primitives_wifi.c
         core/primitives.c
         core/procedures.c
         core/properties.c
@@ -365,6 +373,7 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_procedures.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_properties.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_text.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_time.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_turtle.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_variables.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_words_lists.c

@@ -93,6 +93,78 @@ static void host_hardware_clear_freeze_request(void)
     host_freeze_requested = false;
 }
 
+//
+// Time management functions
+//
+
+static bool host_hardware_get_date(int *year, int *month, int *day)
+{
+    time_t now = time(NULL);
+    struct tm *tm_info = localtime(&now);
+    if (!tm_info)
+    {
+        return false;
+    }
+
+    if (year)
+    {
+        *year = tm_info->tm_year + 1900;
+    }
+    if (month)
+    {
+        *month = tm_info->tm_mon + 1;
+    }
+    if (day)
+    {
+        *day = tm_info->tm_mday;
+    }
+    return true;
+}
+
+static bool host_hardware_get_time(int *hour, int *minute, int *second)
+{
+    time_t now = time(NULL);
+    struct tm *tm_info = localtime(&now);
+    if (!tm_info)
+    {
+        return false;
+    }
+
+    if (hour)
+    {
+        *hour = tm_info->tm_hour;
+    }
+    if (minute)
+    {
+        *minute = tm_info->tm_min;
+    }
+    if (second)
+    {
+        *second = tm_info->tm_sec;
+    }
+    return true;
+}
+
+static bool host_hardware_set_date(int year, int month, int day)
+{
+    // Host device cannot set system date (would require root privileges)
+    // Just return false to indicate the operation is not supported
+    (void)year;
+    (void)month;
+    (void)day;
+    return false;
+}
+
+static bool host_hardware_set_time(int hour, int minute, int second)
+{
+    // Host device cannot set system time (would require root privileges)
+    // Just return false to indicate the operation is not supported
+    (void)hour;
+    (void)minute;
+    (void)second;
+    return false;
+}
+
 static LogoHardwareOps host_hardware_ops = {
     .sleep = host_hardware_sleep,
     .random = host_hardware_random,
@@ -105,6 +177,16 @@ static LogoHardwareOps host_hardware_ops = {
     .check_freeze_request = host_hardware_check_freeze_request,
     .clear_freeze_request = host_hardware_clear_freeze_request,
     .toot = NULL,  // Host device has no audio
+    .wifi_is_connected = NULL,
+    .wifi_connect = NULL,
+    .wifi_disconnect = NULL,
+    .wifi_get_ip = NULL,
+    .wifi_get_ssid = NULL,
+    .wifi_scan = NULL,
+    .get_date = host_hardware_get_date,
+    .get_time = host_hardware_get_time,
+    .set_date = host_hardware_set_date,
+    .set_time = host_hardware_set_time,
 };
 
 LogoHardware *logo_host_hardware_create(void)

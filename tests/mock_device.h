@@ -226,6 +226,21 @@ extern "C"
             int scan_result_count;
             int scan_return_value;           // Result to return from wifi_scan (0 = success)
         } wifi;
+
+        // Time state tracking
+        struct
+        {
+            int year;                        // Current year (e.g., 2025)
+            int month;                       // Current month (1-12)
+            int day;                         // Current day (1-31)
+            int hour;                        // Current hour (0-23)
+            int minute;                      // Current minute (0-59)
+            int second;                      // Current second (0-59)
+            bool get_date_enabled;           // Whether get_date is supported
+            bool get_time_enabled;           // Whether get_time is supported
+            bool set_date_enabled;           // Whether set_date is supported
+            bool set_time_enabled;           // Whether set_time is supported
+        } time;
     } MockDeviceState;
 
     //
@@ -307,6 +322,16 @@ extern "C"
     bool mock_wifi_get_ip(char *ip_buffer, size_t buffer_size);
     bool mock_wifi_get_ssid(char *ssid_buffer, size_t buffer_size);
     int mock_wifi_scan(char ssids[][33], int8_t strengths[], int max_networks);
+
+    // Time helpers for testing
+    void mock_device_set_time(int year, int month, int day, int hour, int minute, int second);
+    void mock_device_set_time_enabled(bool get_date, bool get_time, bool set_date, bool set_time);
+
+    // Mock time operations (for use by test_scaffold in mock_hardware_ops)
+    bool mock_get_date(int *year, int *month, int *day);
+    bool mock_get_time(int *hour, int *minute, int *second);
+    bool mock_set_date(int year, int month, int day);
+    bool mock_set_time(int hour, int minute, int second);
 
 #ifdef __cplusplus
 }
