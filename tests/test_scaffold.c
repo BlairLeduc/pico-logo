@@ -241,6 +241,12 @@ LogoHardwareOps mock_hardware_ops = {
     .network_ping = mock_network_ping,
     .network_resolve = mock_network_resolve,
     .network_ntp = mock_network_ntp,
+    // TCP operations (not available in mock by default)
+    .network_tcp_connect = NULL,
+    .network_tcp_close = NULL,
+    .network_tcp_read = NULL,
+    .network_tcp_write = NULL,
+    .network_tcp_can_read = NULL,
     // Time operations (always available in tests)
     .get_date = mock_get_date,
     .get_time = mock_get_time,

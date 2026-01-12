@@ -1056,6 +1056,12 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .network_ping = picocalc_network_ping,
     .network_resolve = picocalc_network_resolve,
     .network_ntp = picocalc_network_ntp,
+    // TODO: Implement TCP operations using lwIP
+    .network_tcp_connect = NULL,
+    .network_tcp_close = NULL,
+    .network_tcp_read = NULL,
+    .network_tcp_write = NULL,
+    .network_tcp_can_read = NULL,
 #else
     .wifi_is_connected = NULL,
     .wifi_connect = NULL,
@@ -1066,6 +1072,11 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .network_ping = NULL,
     .network_resolve = NULL,
     .network_ntp = NULL,
+    .network_tcp_connect = NULL,
+    .network_tcp_close = NULL,
+    .network_tcp_read = NULL,
+    .network_tcp_write = NULL,
+    .network_tcp_can_read = NULL,
 #endif
     .get_date = picocalc_get_date,
     .get_time = picocalc_get_time,

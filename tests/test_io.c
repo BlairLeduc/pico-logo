@@ -136,6 +136,11 @@ static LogoHardwareOps mock_hardware_ops = {
     .check_user_interrupt = mock_check_user_interrupt,
     .clear_user_interrupt = mock_clear_user_interrupt,
     .toot = NULL,  // Mock: no audio
+    .network_tcp_connect = NULL,
+    .network_tcp_close = NULL,
+    .network_tcp_read = NULL,
+    .network_tcp_write = NULL,
+    .network_tcp_can_read = NULL,
 };
 
 static LogoHardware mock_hardware = {
@@ -461,6 +466,101 @@ void test_hardware_wrappers(void)
     TEST_ASSERT_FALSE(logo_io_check_user_interrupt(&io));
 }
 
+//
+// Network address parsing tests
+//
+
+void test_parse_network_address_valid(void)
+{
+    char host[256];
+    uint16_t port;
+    
+    // Simple hostname:port
+    TEST_ASSERT_TRUE(logo_io_parse_network_address("localhost:8080", host, sizeof(host), &port));
+    TEST_ASSERT_EQUAL_STRING("localhost", host);
+    TEST_ASSERT_EQUAL_UINT16(8080, port);
+    
+    // Domain name:port
+    TEST_ASSERT_TRUE(logo_io_parse_network_address("example.com:80", host, sizeof(host), &port));
+    TEST_ASSERT_EQUAL_STRING("example.com", host);
+    TEST_ASSERT_EQUAL_UINT16(80, port);
+    
+    // IPv4 address:port
+    TEST_ASSERT_TRUE(logo_io_parse_network_address("192.168.1.100:8080", host, sizeof(host), &port));
+    TEST_ASSERT_EQUAL_STRING("192.168.1.100", host);
+    TEST_ASSERT_EQUAL_UINT16(8080, port);
+    
+    // Port boundaries
+    TEST_ASSERT_TRUE(logo_io_parse_network_address("host:1", host, sizeof(host), &port));
+    TEST_ASSERT_EQUAL_UINT16(1, port);
+    
+    TEST_ASSERT_TRUE(logo_io_parse_network_address("host:65535", host, sizeof(host), &port));
+    TEST_ASSERT_EQUAL_UINT16(65535, port);
+}
+
+void test_parse_network_address_invalid(void)
+{
+    char host[256];
+    uint16_t port;
+    
+    // No colon
+    TEST_ASSERT_FALSE(logo_io_parse_network_address("localhost", host, sizeof(host), &port));
+    
+    // No port number
+    TEST_ASSERT_FALSE(logo_io_parse_network_address("localhost:", host, sizeof(host), &port));
+    
+    // No host
+    TEST_ASSERT_FALSE(logo_io_parse_network_address(":8080", host, sizeof(host), &port));
+    
+    // Port out of range (too large)
+    TEST_ASSERT_FALSE(logo_io_parse_network_address("host:65536", host, sizeof(host), &port));
+    
+    // Port out of range (0)
+    TEST_ASSERT_FALSE(logo_io_parse_network_address("host:0", host, sizeof(host), &port));
+    
+    // Port with non-numeric characters
+    TEST_ASSERT_FALSE(logo_io_parse_network_address("host:abc", host, sizeof(host), &port));
+    
+    // Port with mixed characters
+    TEST_ASSERT_FALSE(logo_io_parse_network_address("host:123abc", host, sizeof(host), &port));
+}
+
+void test_is_network_address(void)
+{
+    // Valid network addresses
+    TEST_ASSERT_TRUE(logo_io_is_network_address("localhost:8080"));
+    TEST_ASSERT_TRUE(logo_io_is_network_address("example.com:80"));
+    TEST_ASSERT_TRUE(logo_io_is_network_address("192.168.1.100:8080"));
+    TEST_ASSERT_TRUE(logo_io_is_network_address("host:1"));
+    TEST_ASSERT_TRUE(logo_io_is_network_address("host:65535"));
+    
+    // Invalid (not network addresses)
+    TEST_ASSERT_FALSE(logo_io_is_network_address("startup"));
+    TEST_ASSERT_FALSE(logo_io_is_network_address("/path/to/file"));
+    TEST_ASSERT_FALSE(logo_io_is_network_address("file.txt"));
+    TEST_ASSERT_FALSE(logo_io_is_network_address("localhost:"));
+    TEST_ASSERT_FALSE(logo_io_is_network_address(":8080"));
+    TEST_ASSERT_FALSE(logo_io_is_network_address("host:0"));
+    TEST_ASSERT_FALSE(logo_io_is_network_address("host:65536"));
+}
+
+void test_network_timeout(void)
+{
+    // Default timeout
+    TEST_ASSERT_EQUAL(LOGO_DEFAULT_NETWORK_TIMEOUT, logo_io_get_timeout(&io));
+    
+    // Set new timeout
+    logo_io_set_timeout(&io, 200);
+    TEST_ASSERT_EQUAL(200, logo_io_get_timeout(&io));
+    
+    // Set timeout to 0 (no timeout)
+    logo_io_set_timeout(&io, 0);
+    TEST_ASSERT_EQUAL(0, logo_io_get_timeout(&io));
+    
+    // Restore default for other tests
+    logo_io_set_timeout(&io, LOGO_DEFAULT_NETWORK_TIMEOUT);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -475,5 +575,9 @@ int main(void)
     RUN_TEST(test_file_operations);
     RUN_TEST(test_read_write_operations);
     RUN_TEST(test_hardware_wrappers);
+    RUN_TEST(test_parse_network_address_valid);
+    RUN_TEST(test_parse_network_address_invalid);
+    RUN_TEST(test_is_network_address);
+    RUN_TEST(test_network_timeout);
     return UNITY_END();
 }

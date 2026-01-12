@@ -116,6 +116,30 @@ extern "C"
         bool (*network_ntp)(const char *server, float timezone_offset);
 
         //
+        // TCP network connection operations (require WiFi to be connected)
+        //
+
+        // Open a TCP connection to the specified IP address and port
+        // Returns an opaque connection handle on success, NULL on failure
+        // timeout_ms is the connection timeout in milliseconds
+        void *(*network_tcp_connect)(const char *ip_address, uint16_t port, int timeout_ms);
+
+        // Close a TCP connection
+        void (*network_tcp_close)(void *connection);
+
+        // Read from a TCP connection
+        // Returns number of bytes read, 0 on timeout, -1 on error/closed
+        // timeout_ms is the read timeout in milliseconds (0 = non-blocking)
+        int (*network_tcp_read)(void *connection, char *buffer, int count, int timeout_ms);
+
+        // Write to a TCP connection
+        // Returns number of bytes written, -1 on error
+        int (*network_tcp_write)(void *connection, const char *data, int count);
+
+        // Check if data is available to read without blocking
+        bool (*network_tcp_can_read)(void *connection);
+
+        //
         // Time management operations
         //
 

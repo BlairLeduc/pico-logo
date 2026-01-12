@@ -24,6 +24,7 @@ extern "C"
     // Special return values for read operations
     #define LOGO_STREAM_EOF        (-1)   // End of file or error
     #define LOGO_STREAM_INTERRUPTED (-2)  // User pressed BRK key
+    #define LOGO_STREAM_TIMEOUT    (-3)   // Network read timeout
 
     typedef enum LogoStreamType
     {
@@ -31,6 +32,7 @@ extern "C"
         LOGO_STREAM_CONSOLE_OUTPUT, // Screen or serial output
         LOGO_STREAM_FILE,           // Disk file (seekable)
         LOGO_STREAM_SERIAL,         // Serial port (future)
+        LOGO_STREAM_NETWORK,        // TCP network connection
     } LogoStreamType;
 
     typedef struct LogoStream LogoStream;

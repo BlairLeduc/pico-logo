@@ -1926,6 +1926,53 @@ void test_pofile_with_prefix(void)
 }
 
 //==========================================================================
+// Network timeout primitive tests
+//==========================================================================
+
+void test_timeout_returns_default(void)
+{
+    reset_output();
+    Result r = run_string("print .timeout");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    // Default is 100 (10 seconds in tenths)
+    TEST_ASSERT_EQUAL_STRING("100\n", output_buffer);
+}
+
+void test_settimeout_changes_timeout(void)
+{
+    reset_output();
+    Result r = run_string(".settimeout 200 print .timeout");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("200\n", output_buffer);
+    
+    // Restore default
+    run_string(".settimeout 100");
+}
+
+void test_settimeout_zero_allowed(void)
+{
+    reset_output();
+    Result r = run_string(".settimeout 0 print .timeout");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("0\n", output_buffer);
+    
+    // Restore default
+    run_string(".settimeout 100");
+}
+
+void test_settimeout_negative_error(void)
+{
+    Result r = run_string(".settimeout -1");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_settimeout_non_number_error(void)
+{
+    Result r = run_string(".settimeout \"abc");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+//==========================================================================
 // Main
 //==========================================================================
 
@@ -2076,6 +2123,13 @@ int main(void)
     RUN_TEST(test_pofile_already_open_error);
     RUN_TEST(test_pofile_invalid_input);
     RUN_TEST(test_pofile_with_prefix);
+
+    // Network timeout tests
+    RUN_TEST(test_timeout_returns_default);
+    RUN_TEST(test_settimeout_changes_timeout);
+    RUN_TEST(test_settimeout_zero_allowed);
+    RUN_TEST(test_settimeout_negative_error);
+    RUN_TEST(test_settimeout_non_number_error);
 
     return UNITY_END();
 }

@@ -2603,9 +2603,11 @@ rc
 
 `operation`
 
-`readchar` outputs the first character typed at the keyboard or read from the current file. If you are reading from the keyboard and no character is waiting to be read, `readchar` waits until you type something.
+`readchar` outputs the first character typed at the keyboard or read from the current file or network connection. If you are reading from the keyboard and no character is waiting to be read, `readchar` waits until you type something.
 
 `readchar` does not output a character if you are reading from a file and the end-of-file position is reached. In this case, `readchar` outputs an empty list. Note that `readchar` from the keyboard does not echo what you type on the screen.
+
+If reading from a network connection and the read times out before a character is available, `readchar` outputs an empty list.  `readchar` will also output an empty list if the network connection is closed before a character is available.
 
 If you are reading from the keyboard, you can set the high bit of the character being read by holding down either `Alt` key a you type the character. Setting the high bit adds 128 to the character.
 
@@ -2617,9 +2619,11 @@ rcs _integer_
 
 `operation`
 
-The `readchars` operation outputs the first _integer_ number of characters typed at the keyboard or read from the current file. If you are reading from the keyboard and no characters are waiting to be read, `readchars` waits for you to type something.
+The `readchars` operation outputs the first _integer_ number of characters typed at the keyboard or read from the current file or network connection. If you are reading from the keyboard and no characters are waiting to be read, `readchars` waits for you to type something.
 
 If you are reading from a file and the end-of-file position reached before _integer_ characters are read, `readchars` outputs the characters read up to that point. If the end-of-file was reached before `readchars` was called, `readchars` outputs an empty list.
+
+If reading from a network connection and the read times out before the requested number of characters are available, `readchars` outputs the characters read up to that point. If the network connection was closed before `readchars` was called, `readchars` outputs an empty list.
 
 Note that `readchars` from the keyboard does not echo what you type on the screen.
 
@@ -2635,9 +2639,11 @@ rl
 
 `operation`
 
-The `readlist` operation reads a line of information from the current file and outputs the information in the form of a list. Normally, the source is the keyboard, where you type in information followed by a carriage return. This information is echoed on the screen. The command [`setread`](#setread) allows you to read from other files.
+The `readlist` operation reads a line of information from the current file or network connection and outputs the information in the form of a list. Normally, the source is the keyboard, where you type in information followed by a carriage return. This information is echoed on the screen. The command [`setread`](#setread) allows you to read from other files or network connections.
 
 If you are reading from a file where the end-of-file position has already been reached, `readlist` outputs the empty word.
+
+If you are reading from a network connection and the read times out before a line is available, `readlist` outputs the characters read up to that point. If the network connection was closed before `readlist` was called, `readlist` outputs an empty list.
 
 
 ## readword (rw)
@@ -2647,9 +2653,11 @@ rw
 
 `operation`
 
-`readword` reads a line of information from the current file and outputs it as a word. Normally, the source is the keyboard and `readword` waits for you to type and press `Enter`. What you type is echoed on the screen. If you press `Enter` before typing a word, `readword` outputs an empty word.
+`readword` reads a line of information from the current file or network connection and outputs it as a word. Normally, the source is the keyboard and `readword` waits for you to type and press `Enter`. What you type is echoed on the screen. If you press `Enter` before typing a word, `readword` outputs an empty word.
 
 If you use `readword` from a file, `readword` reads characters until it reaches a carriage return, and outputs those characters as a word. The next character to be read is the one after the carriage return. When the end-of-file position is reached, `readword` outputs an empty list.
+
+If you are reading from a network connection and the read times out before a line is available, `readword` outputs the characters read up to that point. If the network connection was closed before `readword` was called, `readword` outputs an empty list.
 
 See [`readlist`](#readlist-rl), [`readchar`](#readchar-rc), [`readchars`](#readchars-rcs), and [`setread`](#setread).
 
@@ -3152,22 +3160,34 @@ nodribble
 `nodribble` turns off the dribble feature so a copy of the characters from the screen will no longer be sent to the file or device named previously by the [`dribble`](#dribble) command.
 
 
+
+===
+# Input and Output to Files, Network Connections and Devices
+
+These commands and operations allow you to open files and network connections, read from and write to them, and close them when you are finished.
+
+A network connection is specified as a word in this format: _host:port_. For example, to open a connection to the host `myserver.com` on port `8080`, you would use the word `"myserver.com:8080`. The _host_ can be a domain name or an IP address in dotted decimal format (for example, `"192.168.1.100:8080`). The _port_ must be a number between 1 and 65535. If this pattern is not matched, Logo assumes you are referring to a file.
+
+The screen and keyboard are devices and are special. You cannot [`open`](#open) or [`close`](#close) them. To select the keyboard as the current reader, use the [`setread`](#setread) command with the empty list as input. To select the screen as the current writer, use the [`setwrite`](#setwrite) command with the empty list as input.
+
+
 ## allopen
 
 allopen  
 
 `operation`
 
-`allopen` outputs a list of all files and devices currently open. The [`open`](#open) command opens a file or a device.
+`allopen` outputs a list of all files and network connections currently open. The [`open`](#open) command opens a file or a network connection.
 
 
 ## close
 
-close _file_  
+close _target_  
+
 
 `command`
 
-The `close` command closes the named file or device that is currently [`open`](#open). See [`open`](#open) to open a file or device. An error occurs if you try to use [`close`](#close) with a file or device that is not open. An error also occurs if you try to use [`close`](#close) with a file that is opened by the [`dribble`](#dribble) command.
+The `close` command closes the named file or network connection that is currently [`open`](#open). See [`open`](#open) to open a file or network connection. An error occurs if you try to use [`close`](#close) with a file or network connection that is not open. An error also occurs if you try to use [`close`](#close) with a file or network connection that is opened by the [`dribble`](#dribble) command.
 
 
 ## closeall
@@ -3176,29 +3196,38 @@ closeall
 
 `command`
 
-The `closeall` command closes all files and devices that are currently open. Dribble files are not closed with `closeall`. Use the [`open`](#open) and [`close`](#close) commands to open and close one file at a time. If you try to use `closeall` when no files or device are open, it is ignored.
+The `closeall` command closes all files and network connections that are currently open. Dribble files are not closed with `closeall`. Use the [`open`](#open) and [`close`](#close) commands to open and close one file at a time. If you try to use `closeall` when no files or network connections are open, it is ignored.
 
 See [`nodribble`](#nodribble) for closing dribble files.
 
 
 ## filelen
 
-filelen _pathname_  
+filelen _file_  
 
 `operation`
 
-`filelen` outputs the length in bytes of the contents of the file indicated by pathname. The file must be open to use this primitive. An error occurs if the file is not open.
+`filelen` outputs the length in bytes of the contents of the file indicated by _file_. The file must be open to use this primitive. An error occurs if the file is not open.
+
+This procedure returns an error if the file is a network connection.
 
 
 ## open
 
-open _file_  
+open _target_  
 
 `command`
 
-The `open` command opens file so it can send or receive characters. You must open a data file before you can access it. You can open a maximum of eight disk files at once. If the file named by _file_ does not exist, then `open` creates the file. When you finish using Logo, you must close all devices or files that are open.
+The `open` command opens _target_ so it can send or receive characters. You must open a file or network connection before you can access it. You can open a maximum of eight files or network connections at once. 
 
-See the [`close`](#close) and [`closeall`](#closeall) commands.
+If the file named by _target_ does not exist, then `open` creates the file. 
+
+If _target_ is a _host:port_, `open` establishes a TCP connection to the specified _host:port_. An error occurs if the connection cannot be established.
+
+Once a file or network connection is open, you use [`setread`](#setread) and [`setwrite`](#setwrite) to set the read and write for the file or network connection. Then you can use the standard reading and writing commands access the file or to communicate over the network.
+
+When you finish using Logo, you must close all files and network connections that are open, see the [`close`](#close), [`closeall`](#closeall) and [`goodbye`](#goodbye) commands.
+
 
 
 ## reader
@@ -3207,25 +3236,28 @@ reader
 
 `operation`
 
-`reader` outputs the current file or network connection that is open for reading. You can change the current read file with the [`setread`](#setread) primitive. `reader` returns the name of the file or the empty list if the current reader is the keyboard.
+`reader` outputs the current file or network connection that is open for reading. You can change the current read file with the [`setread`](#setread) primitive. `reader` returns the name of the file, the network connection or the empty list if the current reader is the keyboard.
 
 
 ## readpos
 
-READPOS (operation)
+readpos
 
-`readpos` (for `read` `pos`ition) outputs the position in the current reader. An error occurs if the current reader is the keyboard, a network connection, or a device. To set the position in the read file, see the [`setreadpos`](#setreadpos) command.
+`operation`
+
+`readpos` (for `read` `pos`ition) outputs the position in the current reader. An error occurs if the current reader is a network connection or the keyboard. To set the position in the read file, see the [`setreadpos`](#setreadpos) command.
 
 
 ## setread
 
-setread _file_  
+setread _target_
+
 
 `command`
 
-`setread` sets the current reader to _file_. After you give this command, [`readlist`](#readlist-rl), [`readword`](#readword-rw), [`readchar`](#readchar-rc), and [`readchars`](#readchars-rcs) read information from this file.
+`setread` sets the current reader to _target_. After you give this command, [`readlist`](#readlist-rl), [`readword`](#readword-rw), [`readchar`](#readchar-rc), and [`readchars`](#readchars-rcs) read information from this file or network connection.
 
-Before you use `setread`, you must open the file with the [`open`](#open) command or a network connection with the [`network.open`](#networkopen) command. An error occurs if the file or network connection is not open.
+Before you use `setread`, you must open the file or network connection with the [`open`](#open) command. An error occurs if the file or network connection is not open.
 
 To set the current reader back to the keyboard, give `setread` the empty list as input.
 
@@ -3236,20 +3268,20 @@ setreadpos _integer_
 
 `command`
 
-`setreadpos` sets the read position in the current reader. The _integer_ should be a number between 0 and the current length of the file. An error occurs if it is not in this range. An error also occurs if the current reader is the keyboard, a network connection, or a device.
+`setreadpos` sets the read position in the current reader. The _integer_ should be a number between 0 and the current length of the file. An error occurs if it is not in this range. An error also occurs if the current reader is a network connection or the keyboard.
 
 See [`readpos`](#readpos) for more information about the `setreadpos` command.
 
 
 ## setwrite
 
-setwrite _file_  
+setwrite _target_  
 
 `command`
 
-`setwrite` sets the current writer to the file you name. The primitives [`print`](#print), [`type`](#type), and [`show`](#show) all print to the current writer. You cannot use `setwrite` unless the file has previously been opened.
+`setwrite` sets the current writer to the file, network connection or the screen you name. The primitives [`print`](#print), [`type`](#type), and [`show`](#show) all print to the current writer. You cannot use `setwrite` unless the file or network connection has previously been opened.
 
-Before you use `setwrite`, you must open the file with the [`open`](#open) command or a network connection with the [`network.open`](#networkopen) command. An error occurs if the file or network connection is not open.
+Before you use `setwrite`, you must open the file or network connection with the [`open`](#open) command. An error occurs if the file or network connection is not open.
 
 To restore the screen as the current writer, use the `setwrite` command with the empty list as input.
 
@@ -3263,7 +3295,7 @@ setwritepos _integer_
 
 `command`
 
-`setwritepos` sets the write position in the current file. This command is useful when modifying information in a file. You must set the write position to a number that is between 0 and the end-of-file position. If you try to set it somewhere out of this range, an error occurs. An error also occurs if you try to set the write position when the current writer is the screen, a network connection, or a device.
+`setwritepos` sets the write position in the current file. This command is useful when modifying information in a file. You must set the write position to a number that is between 0 and the end-of-file position. If you try to set it somewhere out of this range, an error occurs. An error also occurs if you try to set the write position when the current writer is the screen or a network connection.
 
 To check the current position, use the [`writepos`](#writepos) command.
 
@@ -3274,7 +3306,7 @@ writepos
 
 `operation`
 
-`writepos` (for write position) outputs where in the current write file the the next character will be written. An error occurs if the current writer is the screen, a network connection, or a device.
+`writepos` (for write position) outputs where in the current write file the the next character will be written. An error occurs if the current writer is the screen or a network connection.
 
 
 ## writer
@@ -3283,7 +3315,25 @@ writer
 
 `operation`
 
-`writer` outputs the current file, network connection, or device that is open for writing. Compare this with the [`allopen`](#allopen) operation.
+`writer` outputs the current file, network connection, or the empty list if the current writer is the screen. Compare this with the [`allopen`](#allopen) operation.
+
+
+## .timeout
+
+.timeout
+
+`operation`
+
+`timeout` outputs the current timeout value in 10ths of a second for network operations. A timeout value of 0 indicates that there is no timeout.
+
+
+## .settimeout
+
+.settimeout _integer_
+
+`command`
+
+The `settimeout` command sets the timeout value for network operations to _integer_ 10ths of a second. A timeout value of 0 indicates that there is no timeout. If a network operation does not complete within the specified time, it fails with an error.
 
 
 
@@ -3405,21 +3455,6 @@ network.resolve _hostname_
 `operation`
 
 The `network.resolve` operation takes a _hostname_ (e.g., "www.example.com") and outputs its corresponding IP address in dotted-decimal notation. If the hostname cannot be resolved, it outputs the empty list.
-
-
-## network.open
-
-network.open _ipaddress_port_
-
-`command`
-
-The `network.open` command is similar to [`open`](#open) and establishes a TCP connection to the specified _ipaddress_port_. The _ipaddress_port_ is a four element list containing the IP address and port number. You can open up to eight network connections at once. An error occurs if the connection cannot be established.
-
-The [`openall`](#openall) command can be used to view all open files and connections. The network connection will be in the list as the _ipaddress_port_ you specified.
-
-Once a connection is open, you use [`setread`](#setread) and [`setwrite`](#setwrite) to set the read and write positions for the connection. Then you can use the standard reading and writing commands to communicate over the network.
-
-The connection can later be closed using the [`close`](#close) or [`closeall`](#closeall) command.
 
 
 ## network.ntp

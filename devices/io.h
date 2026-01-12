@@ -18,11 +18,14 @@ extern "C"
 {
 #endif
 
-    // Maximum number of simultaneously open files
-    #define LOGO_MAX_OPEN_FILES 6
+    // Maximum number of simultaneously open files and network connections
+    #define LOGO_MAX_OPEN_FILES 8
 
     // File prefix maximum length
     #define LOGO_PREFIX_MAX 64
+
+    // Default network timeout in tenths of a second (0 = no timeout)
+    #define LOGO_DEFAULT_NETWORK_TIMEOUT 100  // 10 seconds
 
     //
     // LogoIO manages the I/O state for the Logo interpreter
@@ -48,12 +51,15 @@ extern "C"
         // When active, output goes to both writer AND dribble
         LogoStream *dribble;
 
-        // Open file/device streams
+        // Open file/device/network streams
         LogoStream *open_streams[LOGO_MAX_OPEN_FILES];
         int open_count;
 
         // Current file prefix (for relative pathnames)
         char prefix[LOGO_PREFIX_MAX];
+
+        // Network timeout in tenths of a second (0 = no timeout)
+        int network_timeout;
     } LogoIO;
 
     //
@@ -114,29 +120,61 @@ extern "C"
                                char *buffer, size_t buffer_size);
 
     //
-    // File/device management
+    // Network address parsing
     //
 
-    // Open a file for read/write (Logo "open" primitive)
-    // Creates file if it doesn't exist
-    LogoStream *logo_io_open(LogoIO *io, const char *pathname);
+    // Parse a host:port string into hostname and port
+    // Returns true if the string is a valid network address (host:port with valid port 1-65535)
+    // If true, writes hostname to host_out and port to port_out
+    // host_out buffer should be at least LOGO_STREAM_NAME_MAX bytes
+    bool logo_io_parse_network_address(const char *target, char *host_out, size_t host_size, uint16_t *port_out);
 
-    // Close a specific file by name
-    void logo_io_close(LogoIO *io, const char *pathname);
+    // Check if a target string is a network address (host:port format)
+    bool logo_io_is_network_address(const char *target);
 
-    // Close all open files (not dribble)
+    //
+    // Network timeout management
+    //
+
+    // Set network timeout in tenths of a second (0 = no timeout)
+    void logo_io_set_timeout(LogoIO *io, int timeout_tenths);
+
+    // Get network timeout in tenths of a second
+    int logo_io_get_timeout(const LogoIO *io);
+
+    //
+    // File/device/network management
+    //
+
+    // Open a file or network connection for read/write (Logo "open" primitive)
+    // For files: creates file if it doesn't exist
+    // For network (host:port format): establishes TCP connection
+    LogoStream *logo_io_open(LogoIO *io, const char *target);
+
+    // Open a network connection explicitly
+    // ip_address should be in dotted decimal format
+    // Returns stream on success, NULL on failure
+    LogoStream *logo_io_open_network(LogoIO *io, const char *host, uint16_t port);
+
+    // Close a specific file or network connection by name
+    void logo_io_close(LogoIO *io, const char *name);
+
+    // Close all open files and network connections (not dribble)
     void logo_io_close_all(LogoIO *io);
 
     // Find an open stream by name, returns NULL if not found
-    LogoStream *logo_io_find_open(LogoIO *io, const char *pathname);
+    LogoStream *logo_io_find_open(LogoIO *io, const char *name);
 
-    // Check if a file is currently open
-    bool logo_io_is_open(const LogoIO *io, const char *pathname);
+    // Check if a file or network connection is currently open
+    bool logo_io_is_open(const LogoIO *io, const char *name);
 
-    // Get count of open files
+    // Check if a stream is a network connection
+    bool logo_io_is_network_stream(const LogoStream *stream);
+
+    // Get count of open files and network connections
     int logo_io_open_count(const LogoIO *io);
 
-    // Get open file by index (for allopen primitive)
+    // Get open file/network by index (for allopen primitive)
     LogoStream *logo_io_get_open(const LogoIO *io, int index);
 
     // Check if a file exists
