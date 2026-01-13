@@ -22,8 +22,9 @@
 #include <ctype.h>
 #include <errno.h>
 
-//==========================================================================
-// File and network connection management primitives
+// Flag to prevent recursive loading
+static bool loading_in_progress = false;
+
 //==========================================================================
 
 // open file or network connection - opens for read/write
@@ -998,6 +999,12 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
     UNUSED(argc);
     REQUIRE_WORD(args[0]);
 
+    // Prevent recursive loading
+    if (loading_in_progress)
+    {
+        return result_error(ERR_NO_FILE_BUFFERS);
+    }
+
     const char *pathname = mem_word_ptr(args[0].as.node);
 
     LogoIO *io = primitives_get_io();
@@ -1013,13 +1020,9 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
     }
 
     // Remember startup variable state before loading
-    // We only run startup if the loaded file sets it (changes the value)
-    bool startup_existed_before = var_exists("startup");
+    // We run startup if the loaded file sets it (changes the value or creates it)
     Value startup_before = {0};
-    if (startup_existed_before)
-    {
-        var_get("startup", &startup_before);
-    }
+    bool startup_existed_before = var_get("startup", &startup_before);
 
     // Open the file for reading (logo_io_open resolves path internally)
     LogoStream *stream = logo_io_open(io, pathname);
@@ -1027,6 +1030,9 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
     {
         return result_error_arg(ERR_FILE_NOT_FOUND, "", pathname);
     }
+
+    // Set the loading flag to prevent recursive loads
+    loading_in_progress = true;
 
     // Read and execute the file line by line
     char line[LOAD_MAX_LINE];
@@ -1155,8 +1161,11 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
     // Close the file (logo_io_close resolves path internally)
     logo_io_close(io, pathname);
 
+    // Clear the loading flag
+    loading_in_progress = false;
+
     // If load was successful, check if the file set the startup variable
-    // Run startup only if the loaded file set it (value changed or newly created)
+    // Run startup only if the loaded file sets it (value changed or newly created)
     if (result.status == RESULT_NONE)
     {
         Value startup_after;

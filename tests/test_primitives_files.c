@@ -1590,6 +1590,38 @@ void test_load_runs_startup_when_file_overwrites(void)
     TEST_ASSERT_EQUAL_FLOAT(1.0, val.as.number);
 }
 
+void test_load_recursive_loading_prevented(void)
+{
+    // Create a file that tries to load another file directly
+    mock_fs_create_file("outer.logo", "load \"inner.logo\nmake \"outer_ran 1\n");
+    mock_fs_create_file("inner.logo", "make \"inner_ran 1\n");
+    
+    Result r = run_string("load \"outer.logo");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NO_FILE_BUFFERS, r.error_code);
+    
+    // The inner file should not have been loaded
+    TEST_ASSERT_FALSE(var_exists("inner_ran"));
+    // outer_ran should also not be set since load was interrupted
+    TEST_ASSERT_FALSE(var_exists("outer_ran"));
+}
+
+void test_load_startup_can_call_load(void)
+{
+    // Create a file that sets startup to load another file
+    // This is NOT recursive - startup runs AFTER the file is fully loaded
+    mock_fs_create_file("main.logo", "make \"startup [load \"extra.logo]\n");
+    mock_fs_create_file("extra.logo", "make \"extra_loaded 1\n");
+    
+    Result r = run_string("load \"main.logo");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // The extra file should have been loaded via startup
+    Value val;
+    TEST_ASSERT_TRUE(var_get("extra_loaded", &val));
+    TEST_ASSERT_EQUAL_FLOAT(1.0, val.as.number);
+}
+
 void test_save_writes_workspace(void)
 {
     // Setup workspace
@@ -2140,6 +2172,8 @@ int main(void)
     RUN_TEST(test_load_runs_startup_from_file);
     RUN_TEST(test_load_does_not_run_preexisting_startup);
     RUN_TEST(test_load_runs_startup_when_file_overwrites);
+    RUN_TEST(test_load_recursive_loading_prevented);
+    RUN_TEST(test_load_startup_can_call_load);
     RUN_TEST(test_save_writes_workspace);
     RUN_TEST(test_save_format_matches_poall);
     RUN_TEST(test_save_file_exists_error);
