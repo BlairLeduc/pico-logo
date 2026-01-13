@@ -186,9 +186,6 @@ const char *error_format(Result r)
     case ERR_FILE_TOO_BIG:
     case ERR_SUBDIR_NOT_FOUND:
     case ERR_SUBDIR_NOT_EMPTY:
-    case ERR_CANT_OPEN_NETWORK:
-    case ERR_NOT_FILE_OR_NETWORK:
-    case ERR_INVALID_IP_PORT:
     case ERR_CANT_ON_NETWORK:
         // Single %s placeholder - use error_proc or error_arg
         if (r.error_proc)
@@ -198,6 +195,19 @@ const char *error_format(Result r)
             return buf;
         }
         else if (r.error_arg)
+        {
+            snprintf(buf, sizeof(buf), tmpl, r.error_arg);
+            append_caller_suffix(buf, sizeof(buf), r.error_caller);
+            return buf;
+        }
+        break;
+
+    case ERR_CANT_OPEN_NETWORK:
+    case ERR_NOT_FILE_OR_NETWORK:
+    case ERR_INVALID_IP_PORT:
+    case ERR_NETWORK_ALREADY_OPEN:
+        // Network errors - always use error_arg (the target address)
+        if (r.error_arg)
         {
             snprintf(buf, sizeof(buf), tmpl, r.error_arg);
             append_caller_suffix(buf, sizeof(buf), r.error_caller);

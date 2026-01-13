@@ -1043,7 +1043,7 @@ typedef struct {
     volatile int recv_head;          // Write position in buffer
     volatile int recv_tail;          // Read position in buffer
     volatile bool connected;         // Connection established
-    volatile bool connect_pending;   // Connection in progress
+    volatile bool connect_complete;  // Connection attempt finished (for polling)
     volatile err_t connect_error;    // Error from connect callback
     volatile bool closed;            // Connection closed by remote
     volatile err_t last_error;       // Last error code
@@ -1093,7 +1093,7 @@ static err_t tcp_client_connected_cb(void *arg, struct tcp_pcb *tpcb, err_t err)
     {
         state->connect_error = err;
     }
-    state->connect_pending = false;
+    state->connect_complete = true;
     
     return ERR_OK;
 }
@@ -1149,7 +1149,7 @@ static void tcp_client_err_cb(void *arg, err_t err)
     
     state->last_error = err;
     state->closed = true;
-    state->connect_pending = false;
+    state->connect_complete = true;  // Signal connection attempt is done (failed)
     state->pcb = NULL;  // PCB is already freed by lwIP when this is called
 }
 
@@ -1206,7 +1206,7 @@ static void *picocalc_network_tcp_connect(const char *ip_address, uint16_t port,
     state->recv_head = 0;
     state->recv_tail = 0;
     state->connected = false;
-    state->connect_pending = true;
+    state->connect_complete = false;
     state->connect_error = ERR_OK;
     state->closed = false;
     state->last_error = ERR_OK;
@@ -1287,10 +1287,10 @@ static void *picocalc_network_tcp_connect(const char *ip_address, uint16_t port,
     }
     
     // Wait for connection with timeout
-    poll_lwip_with_timeout(timeout_ms > 0 ? timeout_ms : 30000, &state->connect_pending);
+    poll_lwip_with_timeout(timeout_ms > 0 ? timeout_ms : 30000, &state->connect_complete);
     
-    // Invert the flag check - connect_pending becomes false when connection completes
-    if (state->connect_pending || !state->connected)
+    // Check if connection succeeded
+    if (!state->connect_complete || !state->connected)
     {
         // Connection timed out or failed
         if (state->pcb)

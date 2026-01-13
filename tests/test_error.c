@@ -248,6 +248,30 @@ void test_error_format_not_found(void)
     TEST_ASSERT_EQUAL_STRING("startup not found", error_format(r));
 }
 
+// Test that network errors always use error_arg, even if error_proc is set
+// This is important because the evaluator sets error_proc to the primitive name
+void test_error_format_cant_open_network(void)
+{
+    Result r = {0};
+    r.status = RESULT_ERROR;
+    r.error_code = ERR_CANT_OPEN_NETWORK;
+    r.error_proc = "open";  // Set by evaluator
+    r.error_arg = "192.168.1.100:12345";
+    
+    TEST_ASSERT_EQUAL_STRING("Can't open 192.168.1.100:12345", error_format(r));
+}
+
+void test_error_format_invalid_ip_port(void)
+{
+    Result r = {0};
+    r.status = RESULT_ERROR;
+    r.error_code = ERR_INVALID_IP_PORT;
+    r.error_proc = "open";  // Set by evaluator
+    r.error_arg = "badhost:notaport";
+    
+    TEST_ASSERT_EQUAL_STRING("Invalid IP address or port badhost:notaport", error_format(r));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -275,5 +299,7 @@ int main(void)
     RUN_TEST(test_error_format_cant_use_procedure);
     RUN_TEST(test_error_format_cant_from_editor);
     RUN_TEST(test_error_format_not_found);
+    RUN_TEST(test_error_format_cant_open_network);
+    RUN_TEST(test_error_format_invalid_ip_port);
     return UNITY_END();
 }
