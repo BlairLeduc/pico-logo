@@ -1857,6 +1857,51 @@ void test_save_with_prefix(void)
     TEST_ASSERT_NOT_NULL(strstr(file->data, "make \"testvar 99"));
 }
 
+void test_save_load_preserves_empty_list(void)
+{
+    // Bug: Empty list [] was being lost when saving and loading procedures.
+    // This test verifies the fix works for the save/load roundtrip.
+    
+    // Define a procedure with an empty list using proc_define_from_text
+    Result r = proc_define_from_text(
+        "to test_empty\n"
+        "  setwrite []\n"
+        "end\n");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    // Save to file
+    Result r2 = run_string("save \"empty_test.logo");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+    
+    // Verify file contains []
+    MockFile *file = mock_fs_get_file("empty_test.logo", false);
+    TEST_ASSERT_NOT_NULL(file);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(file->data, "[]"),
+        "Saved file should contain []");
+    
+    // Erase the procedure
+    proc_erase("test_empty");
+    TEST_ASSERT_NULL(proc_find("test_empty"));
+    
+    // Load the file
+    Result r3 = run_string("load \"empty_test.logo");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r3.status);
+    
+    // Verify procedure was loaded with [] intact
+    Result text_r = eval_string("text \"test_empty");
+    TEST_ASSERT_EQUAL(RESULT_OK, text_r.status);
+    TEST_ASSERT_EQUAL(VALUE_LIST, text_r.value.type);
+    
+    Node body = text_r.value.as.node;
+    body = mem_cdr(body);  // Skip params
+    Node first_line = mem_car(body);
+    Node tokens = mem_cdr(first_line);  // Skip "setwrite"
+    Node second_token = mem_car(tokens);
+    
+    TEST_ASSERT_TRUE_MESSAGE(mem_is_list(second_token),
+        "Empty list should be preserved through save/load roundtrip");
+}
+
 //==========================================================================
 // Pofile Tests
 //==========================================================================
@@ -2115,6 +2160,7 @@ int main(void)
     RUN_TEST(test_setread_setwrite_with_prefix);
     RUN_TEST(test_load_with_prefix);
     RUN_TEST(test_save_with_prefix);
+    RUN_TEST(test_save_load_preserves_empty_list);
 
     // Pofile tests
     RUN_TEST(test_pofile_prints_file_contents);

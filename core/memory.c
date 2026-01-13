@@ -201,6 +201,9 @@ static uint16_t alloc_cell(void)
 // Convert a Node value to an index for storage in a cell's car/cdr.
 // Words use high bit (0x8000) + atom offset.
 // Lists use the pool index directly.
+// Empty list (NODE_MAKE_LIST(0)) uses special marker 0x7FFF.
+#define CELL_EMPTY_LIST_MARKER 0x7FFF
+
 static uint16_t node_to_index(Node n)
 {
     if (n == NODE_NIL)
@@ -213,7 +216,13 @@ static uint16_t node_to_index(Node n)
     if (type == NODE_TYPE_LIST)
     {
         // List - use pool index directly
-        return (uint16_t)NODE_GET_INDEX(n);
+        uint32_t index = NODE_GET_INDEX(n);
+        // Empty list (index 0) needs special marker to distinguish from NODE_NIL
+        if (index == 0)
+        {
+            return CELL_EMPTY_LIST_MARKER;
+        }
+        return (uint16_t)index;
     }
     else if (type == NODE_TYPE_WORD)
     {
@@ -236,6 +245,12 @@ static Node index_to_node(uint16_t index)
     if (index == 0)
     {
         return NODE_NIL;
+    }
+
+    // Check for empty list marker
+    if (index == CELL_EMPTY_LIST_MARKER)
+    {
+        return NODE_MAKE_LIST(0);
     }
 
     // Check if this is a word reference (high bit set)
@@ -560,16 +575,36 @@ bool mem_set_cdr(Node n, Node value)
 // Node Type Checks
 //==========================================================================
 
-// Check if a node is the empty list.
+// Check if a node is the empty list (nil).
+// Returns true for both NODE_NIL (0) and empty list markers (NODE_MAKE_LIST(0)).
+// The distinction between these only matters when storing in cons cells.
 bool mem_is_nil(Node n)
 {
-    return n == NODE_NIL;
+    // NODE_NIL (0) is the traditional nil value
+    if (n == NODE_NIL)
+    {
+        return true;
+    }
+    // Empty list marker: type is LIST but index is 0
+    if (NODE_GET_TYPE(n) == NODE_TYPE_LIST && NODE_GET_INDEX(n) == 0)
+    {
+        return true;
+    }
+    return false;
 }
 
 // Check if a node is a list (cons cell).
+// Note: Empty lists (NODE_MAKE_LIST(0)) return true because they ARE lists,
+// but they have no elements. Use mem_is_nil to check for empty.
 bool mem_is_list(Node n)
 {
-    return n != NODE_NIL && NODE_GET_TYPE(n) == NODE_TYPE_LIST;
+    // NODE_NIL is not a list (it's the absence of a list)
+    if (n == NODE_NIL)
+    {
+        return false;
+    }
+    // Any node with LIST type is a list, including empty lists
+    return NODE_GET_TYPE(n) == NODE_TYPE_LIST;
 }
 
 // Check if a node is a word.
