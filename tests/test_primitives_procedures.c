@@ -1327,6 +1327,55 @@ void test_empty_list_roundtrip(void)
         "second token should be an empty list - roundtrip failed!");
 }
 
+void test_empty_list_inside_brackets_roundtrip(void)
+{
+    // Bug reported: Empty list [] inside brackets is lost after loading/editing.
+    // Example: "if not equal? reader [] [ setread [] stop ]"
+    // Becomes: "if not equal? reader [] [ setread stop ]" - the [] after setread is lost!
+    
+    // Step 1: Define a procedure with empty list inside brackets
+    Result r = proc_define_from_text(
+        "to reset\n"
+        "  if not equal? reader [] [ setread [] stop ]\n"
+        "end\n");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_OK, r.status, "reset definition should succeed");
+    
+    // Step 2: Format the procedure to text (like the editor does)
+    UserProcedure *proc = proc_find("reset");
+    TEST_ASSERT_NOT_NULL_MESSAGE(proc, "procedure should exist");
+    
+    char buffer[512];
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    format_procedure_definition(format_buffer_output, &ctx, proc);
+    
+    // Both empty lists should be present
+    char *first_empty = strstr(buffer, "[]");
+    TEST_ASSERT_NOT_NULL_MESSAGE(first_empty, "first [] should be in output");
+    char *second_empty = strstr(first_empty + 2, "[]");
+    TEST_ASSERT_NOT_NULL_MESSAGE(second_empty, "second [] should be in output");
+    
+    // Step 3: Erase and re-define from the formatted text
+    proc_erase("reset");
+    TEST_ASSERT_NULL_MESSAGE(proc_find("reset"), "procedure should be erased");
+    
+    Result r2 = proc_define_from_text(buffer);
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_OK, r2.status, "re-definition should succeed");
+    
+    // Step 4: Format again and verify both [] are still there
+    proc = proc_find("reset");
+    TEST_ASSERT_NOT_NULL_MESSAGE(proc, "procedure should exist after re-define");
+    
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    format_procedure_definition(format_buffer_output, &ctx, proc);
+    
+    first_empty = strstr(buffer, "[]");
+    TEST_ASSERT_NOT_NULL_MESSAGE(first_empty, "first [] should be in output after roundtrip");
+    second_empty = strstr(first_empty + 2, "[]");
+    TEST_ASSERT_NOT_NULL_MESSAGE(second_empty, 
+        "second [] inside brackets should be preserved after roundtrip!");
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -1411,6 +1460,7 @@ int main(void)
     RUN_TEST(test_empty_list_in_procedure_body);
     RUN_TEST(test_multiline_brackets_repeat);
     RUN_TEST(test_empty_list_roundtrip);
+    RUN_TEST(test_empty_list_inside_brackets_roundtrip);
 
     return UNITY_END();
 }
