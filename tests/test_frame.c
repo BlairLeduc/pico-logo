@@ -26,7 +26,7 @@ void setUp(void)
 {
     memset(test_memory, 0, sizeof(test_memory));
     frame_stack_init(&stack, test_memory, sizeof(test_memory));
-    mem_init();
+    logo_mem_init();
 
     // Initialize mock procedure
     test_proc.name = "testproc";

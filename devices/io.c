@@ -10,6 +10,7 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 //
 // Lifecycle
@@ -33,6 +34,7 @@ void logo_io_init(LogoIO *io, LogoConsole *console, LogoStorage *storage, LogoHa
     io->dribble = NULL;
     io->open_count = 0;
     io->prefix[0] = '\0';
+    io->network_timeout = LOGO_DEFAULT_NETWORK_TIMEOUT;
 
     for (int i = 0; i < LOGO_MAX_OPEN_FILES; i++)
     {
@@ -197,6 +199,95 @@ const char *logo_io_get_prefix(const LogoIO *io)
         return "";
     }
     return io->prefix;
+}
+
+//
+// Network address parsing
+//
+
+bool logo_io_parse_network_address(const char *target, char *host_out, size_t host_size, uint16_t *port_out)
+{
+    if (!target || !host_out || host_size == 0 || !port_out)
+    {
+        return false;
+    }
+
+    // Find the last colon in the string
+    const char *last_colon = strrchr(target, ':');
+    if (!last_colon || last_colon == target)
+    {
+        // No colon found or colon is at the start (empty hostname)
+        return false;
+    }
+
+    // Check that there's something after the colon
+    const char *port_str = last_colon + 1;
+    if (*port_str == '\0')
+    {
+        return false;
+    }
+
+    // Parse the port number - must be all digits
+    char *end;
+    long port = strtol(port_str, &end, 10);
+    
+    // Check that we consumed the entire port string and it's a valid port
+    if (*end != '\0' || port < 1 || port > 65535)
+    {
+        return false;
+    }
+
+    // Calculate hostname length
+    size_t host_len = last_colon - target;
+    if (host_len == 0 || host_len >= host_size)
+    {
+        return false;
+    }
+
+    // Copy hostname
+    memcpy(host_out, target, host_len);
+    host_out[host_len] = '\0';
+    *port_out = (uint16_t)port;
+
+    return true;
+}
+
+bool logo_io_is_network_address(const char *target)
+{
+    char host[LOGO_STREAM_NAME_MAX];
+    uint16_t port;
+    return logo_io_parse_network_address(target, host, sizeof(host), &port);
+}
+
+//
+// Network timeout management
+//
+
+void logo_io_set_timeout(LogoIO *io, int timeout_tenths)
+{
+    if (!io)
+    {
+        return;
+    }
+    io->network_timeout = timeout_tenths >= 0 ? timeout_tenths : 0;
+}
+
+int logo_io_get_timeout(const LogoIO *io)
+{
+    if (!io)
+    {
+        return 0;
+    }
+    return io->network_timeout;
+}
+
+//
+// Network stream helper
+//
+
+bool logo_io_is_network_stream(const LogoStream *stream)
+{
+    return stream && stream->type == LOGO_STREAM_NETWORK;
 }
 
 // Normalize a path in-place, resolving "." and ".." segments
@@ -366,19 +457,44 @@ char *logo_io_resolve_path(const LogoIO *io, const char *pathname,
 }
 
 //
-// File/device management
+// File/device/network management
 //
 
-LogoStream *logo_io_open(LogoIO *io, const char *pathname)
+// Forward declaration for network stream creation
+static LogoStream *create_network_stream(LogoIO *io, const char *host, uint16_t port, const char *name);
+
+LogoStream *logo_io_open(LogoIO *io, const char *target)
 {
-    if (!io || !pathname)
+    if (!io || !target)
     {
         return NULL;
     }
 
-    // Resolve the pathname with prefix
+    // Check if we have room
+    if (io->open_count >= LOGO_MAX_OPEN_FILES)
+    {
+        return NULL;
+    }
+
+    // Check if this is a network address (host:port format)
+    char host[LOGO_STREAM_NAME_MAX];
+    uint16_t port;
+    if (logo_io_parse_network_address(target, host, sizeof(host), &port))
+    {
+        // It's a network address - check if already open using the original target as name
+        LogoStream *existing = logo_io_find_open(io, target);
+        if (existing)
+        {
+            return existing;
+        }
+
+        // Open network connection
+        return logo_io_open_network(io, host, port);
+    }
+
+    // It's a file - resolve the pathname with prefix
     char resolved[LOGO_STREAM_NAME_MAX];
-    char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
+    char *full_path = logo_io_resolve_path(io, target, resolved, sizeof(resolved));
     if (!full_path)
     {
         return NULL;
@@ -391,14 +507,8 @@ LogoStream *logo_io_open(LogoIO *io, const char *pathname)
         return existing;
     }
 
-    // Check if we have room
-    if (io->open_count >= LOGO_MAX_OPEN_FILES)
-    {
-        return NULL;
-    }
-
     // Check if we have a file opener
-    if (!io->storage->ops->open)
+    if (!io->storage || !io->storage->ops || !io->storage->ops->open)
     {
         return NULL;
     }
@@ -433,25 +543,102 @@ LogoStream *logo_io_open(LogoIO *io, const char *pathname)
     return NULL;
 }
 
-void logo_io_close(LogoIO *io, const char *pathname)
+LogoStream *logo_io_open_network(LogoIO *io, const char *host, uint16_t port)
 {
-    if (!io || !pathname)
+    if (!io || !host)
+    {
+        return NULL;
+    }
+
+    // Check if we have room
+    if (io->open_count >= LOGO_MAX_OPEN_FILES)
+    {
+        return NULL;
+    }
+
+    // Format the connection name as host:port (using original host, not resolved IP)
+    char name[LOGO_STREAM_NAME_MAX];
+    snprintf(name, sizeof(name), "%s:%u", host, port);
+
+    // Check if already open
+    LogoStream *existing = logo_io_find_open(io, name);
+    if (existing)
+    {
+        return existing;
+    }
+
+    // Resolve hostname to IP if needed
+    char ip_address[16];
+    if (io->hardware && io->hardware->ops && io->hardware->ops->network_resolve)
+    {
+        if (!io->hardware->ops->network_resolve(host, ip_address, sizeof(ip_address)))
+        {
+            // Resolution failed
+            return NULL;
+        }
+    }
+    else
+    {
+        // No resolver available - assume host is already an IP address
+        strncpy(ip_address, host, sizeof(ip_address) - 1);
+        ip_address[sizeof(ip_address) - 1] = '\0';
+    }
+
+    // Create the network stream
+    LogoStream *stream = create_network_stream(io, ip_address, port, name);
+    if (!stream)
+    {
+        return NULL;
+    }
+
+    // Find an empty slot
+    for (int i = 0; i < LOGO_MAX_OPEN_FILES; i++)
+    {
+        if (io->open_streams[i] == NULL)
+        {
+            io->open_streams[i] = stream;
+            io->open_count++;
+            return stream;
+        }
+    }
+
+    // No slot found (shouldn't happen since we checked count above)
+    logo_stream_close(stream);
+    free(stream);
+    return NULL;
+}
+
+void logo_io_close(LogoIO *io, const char *name)
+{
+    if (!io || !name)
     {
         return;
     }
 
-    // Resolve the pathname with prefix
+    // Determine if this is a network address or file path
+    const char *lookup_name;
     char resolved[LOGO_STREAM_NAME_MAX];
-    char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
-    if (!full_path)
+    
+    if (logo_io_is_network_address(name))
     {
-        return;
+        // Network addresses are stored with their original name
+        lookup_name = name;
+    }
+    else
+    {
+        // File paths need to be resolved with prefix
+        char *full_path = logo_io_resolve_path(io, name, resolved, sizeof(resolved));
+        if (!full_path)
+        {
+            return;
+        }
+        lookup_name = full_path;
     }
 
     for (int i = 0; i < LOGO_MAX_OPEN_FILES; i++)
     {
         LogoStream *stream = io->open_streams[i];
-        if (stream && strcmp(stream->name, full_path) == 0)
+        if (stream && strcmp(stream->name, lookup_name) == 0)
         {
             // If this stream is the current reader or writer, reset to console
             if (io->reader == stream)
@@ -498,25 +685,37 @@ void logo_io_close_all(LogoIO *io)
     }
 }
 
-LogoStream *logo_io_find_open(LogoIO *io, const char *pathname)
+LogoStream *logo_io_find_open(LogoIO *io, const char *name)
 {
-    if (!io || !pathname)
+    if (!io || !name)
     {
         return NULL;
     }
 
-    // Resolve the pathname with prefix
+    // Determine if this is a network address or file path
+    const char *lookup_name;
     char resolved[LOGO_STREAM_NAME_MAX];
-    char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
-    if (!full_path)
+    
+    if (logo_io_is_network_address(name))
     {
-        return NULL;
+        // Network addresses are stored with their original name
+        lookup_name = name;
+    }
+    else
+    {
+        // File paths need to be resolved with prefix
+        char *full_path = logo_io_resolve_path(io, name, resolved, sizeof(resolved));
+        if (!full_path)
+        {
+            return NULL;
+        }
+        lookup_name = full_path;
     }
 
     for (int i = 0; i < LOGO_MAX_OPEN_FILES; i++)
     {
         LogoStream *stream = io->open_streams[i];
-        if (stream && strcmp(stream->name, full_path) == 0)
+        if (stream && strcmp(stream->name, lookup_name) == 0)
         {
             return stream;
         }
@@ -525,25 +724,37 @@ LogoStream *logo_io_find_open(LogoIO *io, const char *pathname)
     return NULL;
 }
 
-bool logo_io_is_open(const LogoIO *io, const char *pathname)
+bool logo_io_is_open(const LogoIO *io, const char *name)
 {
-    if (!io || !pathname)
+    if (!io || !name)
     {
         return false;
     }
 
-    // Resolve the pathname with prefix
+    // Determine if this is a network address or file path
+    const char *lookup_name;
     char resolved[LOGO_STREAM_NAME_MAX];
-    char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
-    if (!full_path)
+    
+    if (logo_io_is_network_address(name))
     {
-        return false;
+        // Network addresses are stored with their original name
+        lookup_name = name;
+    }
+    else
+    {
+        // File paths need to be resolved with prefix
+        char *full_path = logo_io_resolve_path(io, name, resolved, sizeof(resolved));
+        if (!full_path)
+        {
+            return false;
+        }
+        lookup_name = full_path;
     }
 
     for (int i = 0; i < LOGO_MAX_OPEN_FILES; i++)
     {
         LogoStream *stream = io->open_streams[i];
-        if (stream && strcmp(stream->name, full_path) == 0)
+        if (stream && strcmp(stream->name, lookup_name) == 0)
         {
             return true;
         }
@@ -1038,4 +1249,246 @@ void logo_io_console_write_line(LogoIO *io, const char *text)
         logo_io_console_write(io, text);
     }
     logo_io_console_write(io, "\n");
+}
+
+//
+// Network stream implementation
+//
+
+typedef struct NetworkStreamContext
+{
+    LogoIO *io;           // Back-reference to LogoIO for timeout and hardware access
+    void *connection;     // Opaque connection handle from hardware layer
+} NetworkStreamContext;
+
+static int network_stream_read_char(LogoStream *stream)
+{
+    if (!stream || !stream->context)
+    {
+        return LOGO_STREAM_EOF;
+    }
+
+    NetworkStreamContext *ctx = (NetworkStreamContext *)stream->context;
+    if (!ctx->io || !ctx->io->hardware || !ctx->io->hardware->ops || !ctx->io->hardware->ops->network_tcp_read)
+    {
+        return LOGO_STREAM_EOF;
+    }
+
+    // Convert timeout from tenths of a second to milliseconds
+    int timeout_ms = ctx->io->network_timeout * 100;
+    
+    char c;
+    int result = ctx->io->hardware->ops->network_tcp_read(ctx->connection, &c, 1, timeout_ms);
+    
+    if (result > 0)
+    {
+        return (unsigned char)c;
+    }
+    else if (result == 0)
+    {
+        return LOGO_STREAM_TIMEOUT;
+    }
+    else
+    {
+        return LOGO_STREAM_EOF;
+    }
+}
+
+static int network_stream_read_chars(LogoStream *stream, char *buffer, int count)
+{
+    if (!stream || !stream->context || !buffer || count <= 0)
+    {
+        return -1;
+    }
+
+    NetworkStreamContext *ctx = (NetworkStreamContext *)stream->context;
+    if (!ctx->io || !ctx->io->hardware || !ctx->io->hardware->ops || !ctx->io->hardware->ops->network_tcp_read)
+    {
+        return -1;
+    }
+
+    // Convert timeout from tenths of a second to milliseconds
+    int timeout_ms = ctx->io->network_timeout * 100;
+    
+    return ctx->io->hardware->ops->network_tcp_read(ctx->connection, buffer, count, timeout_ms);
+}
+
+static int network_stream_read_line(LogoStream *stream, char *buffer, size_t size)
+{
+    if (!stream || !stream->context || !buffer || size == 0)
+    {
+        return -1;
+    }
+
+    NetworkStreamContext *ctx = (NetworkStreamContext *)stream->context;
+    if (!ctx->io || !ctx->io->hardware || !ctx->io->hardware->ops || !ctx->io->hardware->ops->network_tcp_read)
+    {
+        return -1;
+    }
+
+    // Convert timeout from tenths of a second to milliseconds
+    int timeout_ms = ctx->io->network_timeout * 100;
+    
+    // Read one character at a time until newline or timeout
+    size_t pos = 0;
+    while (pos < size - 1)
+    {
+        char c;
+        int result = ctx->io->hardware->ops->network_tcp_read(ctx->connection, &c, 1, timeout_ms);
+        
+        if (result > 0)
+        {
+            if (c == '\n')
+            {
+                break;
+            }
+            if (c != '\r')  // Skip carriage return
+            {
+                buffer[pos++] = c;
+            }
+        }
+        else if (result == 0)
+        {
+            // Timeout - return what we have (may be partial line)
+            break;
+        }
+        else
+        {
+            // Error or connection closed
+            if (pos == 0)
+            {
+                return -1;
+            }
+            break;
+        }
+    }
+
+    buffer[pos] = '\0';
+    return (int)pos;
+}
+
+static bool network_stream_can_read(LogoStream *stream)
+{
+    if (!stream || !stream->context)
+    {
+        return false;
+    }
+
+    NetworkStreamContext *ctx = (NetworkStreamContext *)stream->context;
+    if (!ctx->io || !ctx->io->hardware || !ctx->io->hardware->ops || !ctx->io->hardware->ops->network_tcp_can_read)
+    {
+        return false;
+    }
+
+    return ctx->io->hardware->ops->network_tcp_can_read(ctx->connection);
+}
+
+static void network_stream_write(LogoStream *stream, const char *text)
+{
+    if (!stream || !stream->context || !text)
+    {
+        return;
+    }
+
+    NetworkStreamContext *ctx = (NetworkStreamContext *)stream->context;
+    if (!ctx->io || !ctx->io->hardware || !ctx->io->hardware->ops || !ctx->io->hardware->ops->network_tcp_write)
+    {
+        stream->write_error = true;
+        return;
+    }
+
+    int len = (int)strlen(text);
+    int result = ctx->io->hardware->ops->network_tcp_write(ctx->connection, text, len);
+    if (result < 0 || result != len)
+    {
+        stream->write_error = true;
+    }
+}
+
+static void network_stream_flush(LogoStream *stream)
+{
+    // TCP doesn't need explicit flushing - writes are sent immediately
+    (void)stream;
+}
+
+static void network_stream_close(LogoStream *stream)
+{
+    if (!stream || !stream->context)
+    {
+        return;
+    }
+
+    NetworkStreamContext *ctx = (NetworkStreamContext *)stream->context;
+    if (ctx->io && ctx->io->hardware && ctx->io->hardware->ops && ctx->io->hardware->ops->network_tcp_close)
+    {
+        ctx->io->hardware->ops->network_tcp_close(ctx->connection);
+    }
+
+    free(ctx);
+    stream->context = NULL;
+    stream->is_open = false;
+}
+
+static const LogoStreamOps network_stream_ops = {
+    .read_char = network_stream_read_char,
+    .read_chars = network_stream_read_chars,
+    .read_line = network_stream_read_line,
+    .can_read = network_stream_can_read,
+    .write = network_stream_write,
+    .flush = network_stream_flush,
+    .get_read_pos = NULL,   // Network streams are not seekable
+    .set_read_pos = NULL,
+    .get_write_pos = NULL,
+    .set_write_pos = NULL,
+    .get_length = NULL,
+    .close = network_stream_close,
+};
+
+static LogoStream *create_network_stream(LogoIO *io, const char *ip_address, uint16_t port, const char *name)
+{
+    if (!io || !ip_address || !name)
+    {
+        return NULL;
+    }
+
+    // Check if hardware supports TCP connections
+    if (!io->hardware || !io->hardware->ops || !io->hardware->ops->network_tcp_connect)
+    {
+        return NULL;
+    }
+
+    // Convert timeout from tenths of a second to milliseconds
+    int timeout_ms = io->network_timeout * 100;
+
+    // Establish connection
+    void *connection = io->hardware->ops->network_tcp_connect(ip_address, port, timeout_ms);
+    if (!connection)
+    {
+        return NULL;
+    }
+
+    // Allocate stream
+    LogoStream *stream = (LogoStream *)malloc(sizeof(LogoStream));
+    if (!stream)
+    {
+        io->hardware->ops->network_tcp_close(connection);
+        return NULL;
+    }
+
+    // Allocate context
+    NetworkStreamContext *ctx = (NetworkStreamContext *)malloc(sizeof(NetworkStreamContext));
+    if (!ctx)
+    {
+        io->hardware->ops->network_tcp_close(connection);
+        free(stream);
+        return NULL;
+    }
+
+    ctx->io = io;
+    ctx->connection = connection;
+
+    // Initialize the stream
+    logo_stream_init(stream, LOGO_STREAM_NETWORK, &network_stream_ops, ctx, name);
+
+    return stream;
 }

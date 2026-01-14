@@ -4,6 +4,7 @@
 //
 
 #include "test_scaffold.h"
+#include "mock_device.h"
 #include "core/frame.h"
 #include <string.h>
 
@@ -229,6 +230,28 @@ LogoHardwareOps mock_hardware_ops = {
     .check_freeze_request = mock_check_freeze_request,
     .clear_freeze_request = mock_clear_freeze_request,
     .toot = NULL,  // Mock: no audio
+    // WiFi operations (always available in tests)
+    .wifi_is_connected = mock_wifi_is_connected,
+    .wifi_connect = mock_wifi_connect,
+    .wifi_disconnect = mock_wifi_disconnect,
+    .wifi_get_ip = mock_wifi_get_ip,
+    .wifi_get_ssid = mock_wifi_get_ssid,
+    .wifi_scan = mock_wifi_scan,
+    // Network operations (always available in tests)
+    .network_ping = mock_network_ping,
+    .network_resolve = mock_network_resolve,
+    .network_ntp = mock_network_ntp,
+    // TCP operations (not available in mock by default)
+    .network_tcp_connect = NULL,
+    .network_tcp_close = NULL,
+    .network_tcp_read = NULL,
+    .network_tcp_write = NULL,
+    .network_tcp_can_read = NULL,
+    // Time operations (always available in tests)
+    .get_date = mock_get_date,
+    .get_time = mock_get_time,
+    .set_date = mock_set_date,
+    .set_time = mock_set_time,
 };
 
 // ============================================================================
@@ -260,7 +283,7 @@ bool was_mock_power_off_called(void)
 
 void test_scaffold_setUp(void)
 {
-    mem_init();
+    logo_mem_init();
     primitives_init();
     procedures_init();
     variables_init();
@@ -282,6 +305,9 @@ void test_scaffold_setUp(void)
     mock_power_off_called = false;
     mock_hardware_ops.power_off = NULL;
 
+    // Reset mock device state (initializes time, wifi, etc.)
+    mock_device_reset();
+
     // Set up mock console (embeds streams internally)
     logo_console_init(&mock_console, &mock_input_stream_ops, &mock_output_stream_ops, NULL);
     
@@ -297,7 +323,7 @@ void test_scaffold_setUp(void)
 
 void test_scaffold_setUp_with_device(void)
 {
-    mem_init();
+    logo_mem_init();
     primitives_init();
     procedures_init();
     variables_init();

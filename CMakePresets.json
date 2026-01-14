@@ -72,6 +72,7 @@
                 "LOGO_MEMORY_SIZE": "131072",
                 "LOGO_EDITOR_BUFFER_SIZE": "65536",
                 "LOGO_COPY_BUFFER_SIZE": "8192",
+                "LOGO_HAS_WIFI": "ON",
                 "BUILD_TESTING": "OFF"
             }
         },

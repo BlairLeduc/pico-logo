@@ -1590,6 +1590,38 @@ void test_load_runs_startup_when_file_overwrites(void)
     TEST_ASSERT_EQUAL_FLOAT(1.0, val.as.number);
 }
 
+void test_load_recursive_loading_prevented(void)
+{
+    // Create a file that tries to load another file directly
+    mock_fs_create_file("outer.logo", "load \"inner.logo\nmake \"outer_ran 1\n");
+    mock_fs_create_file("inner.logo", "make \"inner_ran 1\n");
+    
+    Result r = run_string("load \"outer.logo");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NO_FILE_BUFFERS, r.error_code);
+    
+    // The inner file should not have been loaded
+    TEST_ASSERT_FALSE(var_exists("inner_ran"));
+    // outer_ran should also not be set since load was interrupted
+    TEST_ASSERT_FALSE(var_exists("outer_ran"));
+}
+
+void test_load_startup_can_call_load(void)
+{
+    // Create a file that sets startup to load another file
+    // This is NOT recursive - startup runs AFTER the file is fully loaded
+    mock_fs_create_file("main.logo", "make \"startup [load \"extra.logo]\n");
+    mock_fs_create_file("extra.logo", "make \"extra_loaded 1\n");
+    
+    Result r = run_string("load \"main.logo");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // The extra file should have been loaded via startup
+    Value val;
+    TEST_ASSERT_TRUE(var_get("extra_loaded", &val));
+    TEST_ASSERT_EQUAL_FLOAT(1.0, val.as.number);
+}
+
 void test_save_writes_workspace(void)
 {
     // Setup workspace
@@ -1857,6 +1889,51 @@ void test_save_with_prefix(void)
     TEST_ASSERT_NOT_NULL(strstr(file->data, "make \"testvar 99"));
 }
 
+void test_save_load_preserves_empty_list(void)
+{
+    // Bug: Empty list [] was being lost when saving and loading procedures.
+    // This test verifies the fix works for the save/load roundtrip.
+    
+    // Define a procedure with an empty list using proc_define_from_text
+    Result r = proc_define_from_text(
+        "to test_empty\n"
+        "  setwrite []\n"
+        "end\n");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    // Save to file
+    Result r2 = run_string("save \"empty_test.logo");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+    
+    // Verify file contains []
+    MockFile *file = mock_fs_get_file("empty_test.logo", false);
+    TEST_ASSERT_NOT_NULL(file);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(file->data, "[]"),
+        "Saved file should contain []");
+    
+    // Erase the procedure
+    proc_erase("test_empty");
+    TEST_ASSERT_NULL(proc_find("test_empty"));
+    
+    // Load the file
+    Result r3 = run_string("load \"empty_test.logo");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r3.status);
+    
+    // Verify procedure was loaded with [] intact
+    Result text_r = eval_string("text \"test_empty");
+    TEST_ASSERT_EQUAL(RESULT_OK, text_r.status);
+    TEST_ASSERT_EQUAL(VALUE_LIST, text_r.value.type);
+    
+    Node body = text_r.value.as.node;
+    body = mem_cdr(body);  // Skip params
+    Node first_line = mem_car(body);
+    Node tokens = mem_cdr(first_line);  // Skip "setwrite"
+    Node second_token = mem_car(tokens);
+    
+    TEST_ASSERT_TRUE_MESSAGE(mem_is_list(second_token),
+        "Empty list should be preserved through save/load roundtrip");
+}
+
 //==========================================================================
 // Pofile Tests
 //==========================================================================
@@ -1923,6 +2000,53 @@ void test_pofile_with_prefix(void)
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     
     TEST_ASSERT_TRUE(strstr(output_buffer, "Prefixed content") != NULL);
+}
+
+//==========================================================================
+// Network timeout primitive tests
+//==========================================================================
+
+void test_timeout_returns_default(void)
+{
+    reset_output();
+    Result r = run_string("print .timeout");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    // Default is 100 (10 seconds in tenths)
+    TEST_ASSERT_EQUAL_STRING("100\n", output_buffer);
+}
+
+void test_settimeout_changes_timeout(void)
+{
+    reset_output();
+    Result r = run_string(".settimeout 200 print .timeout");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("200\n", output_buffer);
+    
+    // Restore default
+    run_string(".settimeout 100");
+}
+
+void test_settimeout_zero_allowed(void)
+{
+    reset_output();
+    Result r = run_string(".settimeout 0 print .timeout");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("0\n", output_buffer);
+    
+    // Restore default
+    run_string(".settimeout 100");
+}
+
+void test_settimeout_negative_error(void)
+{
+    Result r = run_string(".settimeout -1");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_settimeout_non_number_error(void)
+{
+    Result r = run_string(".settimeout \"abc");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
 //==========================================================================
@@ -2048,6 +2172,8 @@ int main(void)
     RUN_TEST(test_load_runs_startup_from_file);
     RUN_TEST(test_load_does_not_run_preexisting_startup);
     RUN_TEST(test_load_runs_startup_when_file_overwrites);
+    RUN_TEST(test_load_recursive_loading_prevented);
+    RUN_TEST(test_load_startup_can_call_load);
     RUN_TEST(test_save_writes_workspace);
     RUN_TEST(test_save_format_matches_poall);
     RUN_TEST(test_save_file_exists_error);
@@ -2068,6 +2194,7 @@ int main(void)
     RUN_TEST(test_setread_setwrite_with_prefix);
     RUN_TEST(test_load_with_prefix);
     RUN_TEST(test_save_with_prefix);
+    RUN_TEST(test_save_load_preserves_empty_list);
 
     // Pofile tests
     RUN_TEST(test_pofile_prints_file_contents);
@@ -2076,6 +2203,13 @@ int main(void)
     RUN_TEST(test_pofile_already_open_error);
     RUN_TEST(test_pofile_invalid_input);
     RUN_TEST(test_pofile_with_prefix);
+
+    // Network timeout tests
+    RUN_TEST(test_timeout_returns_default);
+    RUN_TEST(test_settimeout_changes_timeout);
+    RUN_TEST(test_settimeout_zero_allowed);
+    RUN_TEST(test_settimeout_negative_error);
+    RUN_TEST(test_settimeout_non_number_error);
 
     return UNITY_END();
 }

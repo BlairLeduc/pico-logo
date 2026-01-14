@@ -54,6 +54,16 @@
 |53|File (file) too big
 |55|Subdirectory not found for (directory)
 |56|Subdirectory (directory) not empty
+|57|Can't open ip address and port (ip address and port)
+|58|I lost the network connection
+|59|Network connection not open
+|60|Network error occurred
+|61|Can't use (symbol) as a file or network connection
+|62|Invalid IP address or port (ip address and port)
+|63|Network connection already open
+|64|Can't (symbol) on a network connection
+|65|Network timeout occurred
+|66|Invalid network operation
 ||!!! LOGO SYSTEM BUG !!! _Should not occur. Please let me know._
 
 

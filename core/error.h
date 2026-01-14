@@ -67,6 +67,16 @@ extern "C"
     #define ERR_FILE_TOO_BIG           53
     #define ERR_SUBDIR_NOT_FOUND       55
     #define ERR_SUBDIR_NOT_EMPTY       56
+    #define ERR_CANT_OPEN_NETWORK      57
+    #define ERR_LOST_CONNECTION        58
+    #define ERR_NETWORK_NOT_OPEN       59
+    #define ERR_NETWORK_ERROR          60
+    #define ERR_NOT_FILE_OR_NETWORK    61
+    #define ERR_INVALID_IP_PORT        62
+    #define ERR_NETWORK_ALREADY_OPEN   63
+    #define ERR_CANT_ON_NETWORK        64
+    #define ERR_NETWORK_TIMEOUT        65
+    #define ERR_INVALID_NETWORK_OP     66
 
     // Format an error message from a Result
     // Returns pointer to static buffer - do not free

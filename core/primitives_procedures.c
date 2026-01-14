@@ -93,14 +93,16 @@ static Node parse_bracket_contents(Lexer *lexer, Token *t, int pending_newline_c
         }
         
         Node item = NODE_NIL;
+        bool is_nested_list = false;
         
         if (t->type == TOKEN_LEFT_BRACKET)
         {
             // Recursively parse nested brackets
             *t = lexer_next_token(lexer);
             item = parse_bracket_contents(lexer, t, 0);
-            // Mark as nested list
+            // Mark as nested list - even empty lists should be stored!
             item = NODE_MAKE_LIST(NODE_GET_INDEX(item));
+            is_nested_list = true;
             // Don't advance token - recursive call already positioned past ]
         }
         else
@@ -109,7 +111,9 @@ static Node parse_bracket_contents(Lexer *lexer, Token *t, int pending_newline_c
             *t = lexer_next_token(lexer);
         }
         
-        if (!mem_is_nil(item))
+        // Always append nested lists (including empty ones [])
+        // Only skip nil items from token_to_atom (unexpected tokens)
+        if (is_nested_list || !mem_is_nil(item))
         {
             tail = append_to_list(&list, &tail, item);
         }

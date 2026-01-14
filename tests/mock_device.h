@@ -209,6 +209,51 @@ extern "C"
             uint8_t current_shape;           // Current shape number (0-15)
             uint8_t shapes[15][16];          // Shape data for shapes 1-15 (8 columns x 16 rows)
         } shape;
+
+        // WiFi state tracking
+        struct
+        {
+            bool connected;                  // Is WiFi connected?
+            char ssid[33];                   // Connected SSID (max 32 chars + null)
+            char ip_address[16];             // IP address as string (e.g., "192.168.1.100")
+            int connect_result;              // Result to return from wifi_connect (0 = success)
+            int disconnect_result;           // Result to return from wifi_disconnect (0 = success)
+            // Scan results
+            struct {
+                char ssid[33];
+                int8_t rssi;
+            } scan_results[16];
+            int scan_result_count;
+            int scan_return_value;           // Result to return from wifi_scan (0 = success)
+        } wifi;
+
+        // Network state tracking
+        struct
+        {
+            float ping_result_ms;            // Result to return from network_ping (ms or -1)
+            char last_ping_ip[16];           // Last IP address passed to network_ping
+            char resolve_result_ip[16];      // IP address to return from network_resolve
+            bool resolve_success;            // Whether network_resolve should succeed
+            char last_resolve_hostname[256]; // Last hostname passed to network_resolve
+            bool ntp_success;                // Whether network_ntp should succeed
+            char last_ntp_server[256];       // Last NTP server passed to network_ntp
+            float last_ntp_timezone;         // Last timezone offset passed to network_ntp
+        } network;
+
+        // Time state tracking
+        struct
+        {
+            int year;                        // Current year (e.g., 2025)
+            int month;                       // Current month (1-12)
+            int day;                         // Current day (1-31)
+            int hour;                        // Current hour (0-23)
+            int minute;                      // Current minute (0-59)
+            int second;                      // Current second (0-59)
+            bool get_date_enabled;           // Whether get_date is supported
+            bool get_time_enabled;           // Whether get_time is supported
+            bool set_date_enabled;           // Whether set_date is supported
+            bool set_time_enabled;           // Whether set_time is supported
+        } time;
     } MockDeviceState;
 
     //
@@ -272,6 +317,48 @@ extern "C"
     bool mock_device_was_editor_called(void);
     // Clear editor state
     void mock_device_clear_editor(void);
+
+    // WiFi helpers for testing
+    void mock_device_set_wifi_connected(bool connected);
+    void mock_device_set_wifi_ssid(const char *ssid);
+    void mock_device_set_wifi_ip(const char *ip);
+    void mock_device_set_wifi_connect_result(int result);
+    void mock_device_set_wifi_disconnect_result(int result);
+    void mock_device_add_wifi_scan_result(const char *ssid, int8_t rssi);
+    void mock_device_clear_wifi_scan_results(void);
+    void mock_device_set_wifi_scan_result(int result);
+
+    // Mock WiFi operations (for use by test_scaffold in mock_hardware_ops)
+    bool mock_wifi_is_connected(void);
+    bool mock_wifi_connect(const char *ssid, const char *password);
+    void mock_wifi_disconnect(void);
+    bool mock_wifi_get_ip(char *ip_buffer, size_t buffer_size);
+    bool mock_wifi_get_ssid(char *ssid_buffer, size_t buffer_size);
+    int mock_wifi_scan(char ssids[][33], int8_t strengths[], int max_networks);
+
+    // Network helpers for testing
+    void mock_device_set_ping_result(float result_ms);
+    const char *mock_device_get_last_ping_ip(void);
+    void mock_device_set_resolve_result(const char *ip, bool success);
+    const char *mock_device_get_last_resolve_hostname(void);
+    void mock_device_set_ntp_result(bool success);
+    const char *mock_device_get_last_ntp_server(void);
+    float mock_device_get_last_ntp_timezone(void);
+
+    // Mock network operations (for use by test_scaffold in mock_hardware_ops)
+    float mock_network_ping(const char *ip_address);
+    bool mock_network_resolve(const char *hostname, char *ip_buffer, size_t buffer_size);
+    bool mock_network_ntp(const char *server, float timezone_offset);
+
+    // Time helpers for testing
+    void mock_device_set_time(int year, int month, int day, int hour, int minute, int second);
+    void mock_device_set_time_enabled(bool get_date, bool get_time, bool set_date, bool set_time);
+
+    // Mock time operations (for use by test_scaffold in mock_hardware_ops)
+    bool mock_get_date(int *year, int *month, int *day);
+    bool mock_get_time(int *hour, int *minute, int *second);
+    bool mock_set_date(int year, int month, int day);
+    bool mock_set_time(int hour, int minute, int second);
 
 #ifdef __cplusplus
 }

@@ -65,6 +65,16 @@ static const char *error_templates[] = {
     [ERR_FILE_TOO_BIG] = "File %s is too big",
     [ERR_SUBDIR_NOT_FOUND] = "Subdirectory not found for %s",
     [ERR_SUBDIR_NOT_EMPTY] = "Subdirectory %s is not empty",
+    [ERR_CANT_OPEN_NETWORK] = "Can't open %s",
+    [ERR_LOST_CONNECTION] = "I lost the network connection",
+    [ERR_NETWORK_NOT_OPEN] = "Network connection not open",
+    [ERR_NETWORK_ERROR] = "Network error occurred",
+    [ERR_NOT_FILE_OR_NETWORK] = "Can't use %s as a file or network connection",
+    [ERR_INVALID_IP_PORT] = "Invalid IP address or port %s",
+    [ERR_NETWORK_ALREADY_OPEN] = "Network connection already open",
+    [ERR_CANT_ON_NETWORK] = "Can't %s on a network connection",
+    [ERR_NETWORK_TIMEOUT] = "Network timeout occurred",
+    [ERR_INVALID_NETWORK_OP] = "Invalid network operation",
 };
 
 #define NUM_ERRORS (sizeof(error_templates) / sizeof(error_templates[0]))
@@ -176,6 +186,7 @@ const char *error_format(Result r)
     case ERR_FILE_TOO_BIG:
     case ERR_SUBDIR_NOT_FOUND:
     case ERR_SUBDIR_NOT_EMPTY:
+    case ERR_CANT_ON_NETWORK:
         // Single %s placeholder - use error_proc or error_arg
         if (r.error_proc)
         {
@@ -184,6 +195,19 @@ const char *error_format(Result r)
             return buf;
         }
         else if (r.error_arg)
+        {
+            snprintf(buf, sizeof(buf), tmpl, r.error_arg);
+            append_caller_suffix(buf, sizeof(buf), r.error_caller);
+            return buf;
+        }
+        break;
+
+    case ERR_CANT_OPEN_NETWORK:
+    case ERR_NOT_FILE_OR_NETWORK:
+    case ERR_INVALID_IP_PORT:
+    case ERR_NETWORK_ALREADY_OPEN:
+        // Network errors - always use error_arg (the target address)
+        if (r.error_arg)
         {
             snprintf(buf, sizeof(buf), tmpl, r.error_arg);
             append_caller_suffix(buf, sizeof(buf), r.error_caller);

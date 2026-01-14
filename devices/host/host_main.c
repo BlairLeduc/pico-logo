@@ -61,7 +61,7 @@ int main(void)
     snprintf(io.prefix, sizeof io.prefix, "/Logo/"); // Default prefix
     
     // Initialise Logo subsystems
-    mem_init();
+    logo_mem_init();
     primitives_init();
     procedures_init();
     variables_init();

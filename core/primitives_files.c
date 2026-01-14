@@ -22,30 +22,37 @@
 #include <ctype.h>
 #include <errno.h>
 
-//==========================================================================
-// File management primitives
+// Flag to prevent recursive loading
+static bool loading_in_progress = false;
+
 //==========================================================================
 
-// open file - opens file for read/write, creates if doesn't exist
+// open file or network connection - opens for read/write
+// For files: creates if doesn't exist
+// For network: connects to host:port
 static Result prim_open(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
     REQUIRE_WORD(args[0]);
 
-    const char *pathname = mem_word_ptr(args[0].as.node);
+    const char *target = mem_word_ptr(args[0].as.node);
     LogoIO *io = primitives_get_io();
     if (!io)
     {
         return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
     }
 
-    // Check if file is already open
-    if (logo_io_is_open(io, pathname))
+    // Check if already open
+    if (logo_io_is_open(io, target))
     {
-        return result_error_arg(ERR_FILE_ALREADY_OPEN, NULL, pathname);
+        if (logo_io_is_network_address(target))
+        {
+            return result_error_arg(ERR_NETWORK_ALREADY_OPEN, NULL, target);
+        }
+        return result_error_arg(ERR_FILE_ALREADY_OPEN, NULL, target);
     }
 
-    LogoStream *stream = logo_io_open(io, pathname);
+    LogoStream *stream = logo_io_open(io, target);
     if (!stream)
     {
         // Check if we hit the file limit
@@ -53,32 +60,42 @@ static Result prim_open(Evaluator *eval, int argc, Value *args)
         {
             return result_error(ERR_NO_FILE_BUFFERS);
         }
+        
+        // Different error for network vs file
+        if (logo_io_is_network_address(target))
+        {
+            return result_error_arg(ERR_CANT_OPEN_NETWORK, NULL, target);
+        }
         return result_error(ERR_DISK_TROUBLE);
     }
 
     return result_none();
 }
 
-// close file - closes the named file
+// close file or network connection - closes the named target
 static Result prim_close(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
     REQUIRE_WORD(args[0]);
 
-    const char *pathname = mem_word_ptr(args[0].as.node);
+    const char *target = mem_word_ptr(args[0].as.node);
     LogoIO *io = primitives_get_io();
     if (!io)
     {
         return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
     }
 
-    // Check if file is open
-    if (!logo_io_is_open(io, pathname))
+    // Check if open
+    if (!logo_io_is_open(io, target))
     {
-        return result_error_arg(ERR_FILE_NOT_OPEN, NULL, pathname);
+        if (logo_io_is_network_address(target))
+        {
+            return result_error_arg(ERR_NETWORK_NOT_OPEN, NULL, target);
+        }
+        return result_error_arg(ERR_FILE_NOT_OPEN, NULL, target);
     }
 
-    logo_io_close(io, pathname);
+    logo_io_close(io, target);
     return result_none();
 }
 
@@ -119,13 +136,17 @@ static Result prim_setread(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
 
-    const char *pathname = mem_word_ptr(args[0].as.node);
+    const char *target = mem_word_ptr(args[0].as.node);
     
     // Find the open stream
-    LogoStream *stream = logo_io_find_open(io, pathname);
+    LogoStream *stream = logo_io_find_open(io, target);
     if (!stream)
     {
-        return result_error_arg(ERR_FILE_NOT_OPEN, NULL, pathname);
+        if (logo_io_is_network_address(target))
+        {
+            return result_error_arg(ERR_NETWORK_NOT_OPEN, NULL, target);
+        }
+        return result_error_arg(ERR_FILE_NOT_OPEN, NULL, target);
     }
 
     logo_io_set_reader(io, stream);
@@ -155,13 +176,17 @@ static Result prim_setwrite(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
 
-    const char *pathname = mem_word_ptr(args[0].as.node);
+    const char *target = mem_word_ptr(args[0].as.node);
     
     // Find the open stream
-    LogoStream *stream = logo_io_find_open(io, pathname);
+    LogoStream *stream = logo_io_find_open(io, target);
     if (!stream)
     {
-        return result_error_arg(ERR_FILE_NOT_OPEN, NULL, pathname);
+        if (logo_io_is_network_address(target))
+        {
+            return result_error_arg(ERR_NETWORK_NOT_OPEN, NULL, target);
+        }
+        return result_error_arg(ERR_FILE_NOT_OPEN, NULL, target);
     }
 
     logo_io_set_writer(io, stream);
@@ -254,6 +279,12 @@ static Result prim_readpos(Evaluator *eval, int argc, Value *args)
         return result_error(ERR_NO_FILE_SELECTED);
     }
 
+    // Error if reader is a network connection
+    if (logo_io_is_network_stream(io->reader))
+    {
+        return result_error_arg(ERR_CANT_ON_NETWORK, "readpos", NULL);
+    }
+
     long pos = logo_stream_get_read_pos(io->reader);
     if (pos < 0)
     {
@@ -286,6 +317,12 @@ static Result prim_setreadpos(Evaluator *eval, int argc, Value *args)
         return result_error(ERR_NO_FILE_SELECTED);
     }
 
+    // Error if reader is a network connection
+    if (logo_io_is_network_stream(io->reader))
+    {
+        return result_error_arg(ERR_CANT_ON_NETWORK, "setreadpos", NULL);
+    }
+
     if (!logo_stream_set_read_pos(io->reader, pos))
     {
         return result_error(ERR_FILE_POS_OUT_OF_RANGE);
@@ -309,6 +346,12 @@ static Result prim_writepos(Evaluator *eval, int argc, Value *args)
     if (logo_io_writer_is_screen(io))
     {
         return result_error(ERR_NO_FILE_SELECTED);
+    }
+
+    // Error if writer is a network connection
+    if (logo_io_is_network_stream(io->writer))
+    {
+        return result_error_arg(ERR_CANT_ON_NETWORK, "writepos", NULL);
     }
 
     long pos = logo_stream_get_write_pos(io->writer);
@@ -343,6 +386,12 @@ static Result prim_setwritepos(Evaluator *eval, int argc, Value *args)
         return result_error(ERR_NO_FILE_SELECTED);
     }
 
+    // Error if writer is a network connection
+    if (logo_io_is_network_stream(io->writer))
+    {
+        return result_error_arg(ERR_CANT_ON_NETWORK, "setwritepos", NULL);
+    }
+
     if (!logo_stream_set_write_pos(io->writer, pos))
     {
         return result_error(ERR_FILE_POS_OUT_OF_RANGE);
@@ -352,13 +401,13 @@ static Result prim_setwritepos(Evaluator *eval, int argc, Value *args)
 }
 
 // filelen pathname - outputs the length in bytes of the file
-// The file must be open
+// The file must be open. Returns error for network connections.
 static Result prim_filelen(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
     REQUIRE_WORD(args[0]);
 
-    const char *pathname = mem_word_ptr(args[0].as.node);
+    const char *target = mem_word_ptr(args[0].as.node);
     LogoIO *io = primitives_get_io();
     if (!io)
     {
@@ -366,10 +415,20 @@ static Result prim_filelen(Evaluator *eval, int argc, Value *args)
     }
 
     // Find the open stream
-    LogoStream *stream = logo_io_find_open(io, pathname);
+    LogoStream *stream = logo_io_find_open(io, target);
     if (!stream)
     {
-        return result_error_arg(ERR_FILE_NOT_OPEN, NULL, pathname);
+        if (logo_io_is_network_address(target))
+        {
+            return result_error_arg(ERR_NETWORK_NOT_OPEN, NULL, target);
+        }
+        return result_error_arg(ERR_FILE_NOT_OPEN, NULL, target);
+    }
+
+    // Error if stream is a network connection
+    if (logo_io_is_network_stream(stream))
+    {
+        return result_error_arg(ERR_CANT_ON_NETWORK, "filelen", NULL);
     }
 
     long len = logo_stream_get_length(stream);
@@ -940,6 +999,12 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
     UNUSED(argc);
     REQUIRE_WORD(args[0]);
 
+    // Prevent recursive loading
+    if (loading_in_progress)
+    {
+        return result_error(ERR_NO_FILE_BUFFERS);
+    }
+
     const char *pathname = mem_word_ptr(args[0].as.node);
 
     LogoIO *io = primitives_get_io();
@@ -955,13 +1020,9 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
     }
 
     // Remember startup variable state before loading
-    // We only run startup if the loaded file sets it (changes the value)
-    bool startup_existed_before = var_exists("startup");
+    // We run startup if the loaded file sets it (changes the value or creates it)
     Value startup_before = {0};
-    if (startup_existed_before)
-    {
-        var_get("startup", &startup_before);
-    }
+    bool startup_existed_before = var_get("startup", &startup_before);
 
     // Open the file for reading (logo_io_open resolves path internally)
     LogoStream *stream = logo_io_open(io, pathname);
@@ -969,6 +1030,9 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
     {
         return result_error_arg(ERR_FILE_NOT_FOUND, "", pathname);
     }
+
+    // Set the loading flag to prevent recursive loads
+    loading_in_progress = true;
 
     // Read and execute the file line by line
     char line[LOAD_MAX_LINE];
@@ -1097,8 +1161,11 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
     // Close the file (logo_io_close resolves path internally)
     logo_io_close(io, pathname);
 
+    // Clear the loading flag
+    loading_in_progress = false;
+
     // If load was successful, check if the file set the startup variable
-    // Run startup only if the loaded file set it (value changed or newly created)
+    // Run startup only if the loaded file sets it (value changed or newly created)
     if (result.status == RESULT_NONE)
     {
         Value startup_after;
@@ -1490,6 +1557,48 @@ static Result prim_pofile(Evaluator *eval, int argc, Value *args)
 }
 
 //==========================================================================
+// Network timeout primitives
+//==========================================================================
+
+// .timeout - outputs the current network timeout value (in tenths of a second)
+static Result prim_timeout(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
+
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_ok(value_number(0));
+    }
+
+    int timeout = logo_io_get_timeout(io);
+    return result_ok(value_number((float)timeout));
+}
+
+// .settimeout integer - sets the network timeout value (in tenths of a second)
+// A timeout value of 0 indicates no timeout
+static Result prim_settimeout(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_NUMBER(args[0], timeout_f);
+    
+    int timeout = (int)timeout_f;
+    if (timeout < 0)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
+
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
+    }
+
+    logo_io_set_timeout(io, timeout);
+    return result_none();
+}
+
+//==========================================================================
 // Registration
 //==========================================================================
 
@@ -1511,6 +1620,10 @@ void primitives_files_init(void)
     primitive_register("filelen", 1, prim_filelen);
     primitive_register("dribble", 1, prim_dribble);
     primitive_register("nodribble", 0, prim_nodribble);
+    
+    // Network timeout
+    primitive_register(".timeout", 0, prim_timeout);
+    primitive_register(".settimeout", 1, prim_settimeout);
 
     // Directory listing
     primitive_register("files", 0, prim_files);

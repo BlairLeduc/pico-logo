@@ -14,7 +14,7 @@
 
 void setUp(void)
 {
-    mem_init();
+    logo_mem_init();
 }
 
 void tearDown(void)

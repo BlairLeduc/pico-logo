@@ -4,6 +4,7 @@
 //
 
 #include "test_scaffold.h"
+#include "core/format.h"
 #include <string.h>
 
 void setUp(void)
@@ -1189,6 +1190,53 @@ void test_multiline_with_real_newlines(void)
     TEST_ASSERT_EQUAL_FLOAT(10.0f, r3.value.as.number);
 }
 
+void test_empty_list_in_procedure_body(void)
+{
+    // Bug: Empty list [] was being removed from procedure definitions.
+    // The issue was that parse_bracket_contents returned NODE_NIL for [],
+    // and the condition !mem_is_nil(item) was skipping empty lists.
+    
+    Result r = proc_define_from_text(
+        "to test1\n"
+        "  setwrite []\n"
+        "end\n");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_OK, r.status, "test1 definition should succeed");
+    
+    // Use text to get the procedure body and verify [] is present
+    Result text_r = eval_string("text \"test1");
+    TEST_ASSERT_EQUAL(RESULT_OK, text_r.status);
+    TEST_ASSERT_EQUAL(VALUE_LIST, text_r.value.type);
+    
+    // The body should be [[] [[setwrite []]]]
+    // First element is params (empty), second is the line with setwrite []
+    Node body = text_r.value.as.node;
+    TEST_ASSERT_FALSE_MESSAGE(mem_is_nil(body), "body should not be nil");
+    
+    // Skip params (first element)
+    body = mem_cdr(body);
+    TEST_ASSERT_FALSE_MESSAGE(mem_is_nil(body), "body should have at least one line");
+    
+    // Get first line
+    Node first_line = mem_car(body);
+    TEST_ASSERT_TRUE_MESSAGE(mem_is_list(first_line), "first line should be a list");
+    
+    // First token should be "setwrite"
+    Node tokens = first_line;
+    Node first_token = mem_car(tokens);
+    TEST_ASSERT_TRUE_MESSAGE(mem_is_word(first_token), "first token should be a word");
+    TEST_ASSERT_EQUAL_STRING("setwrite", mem_word_ptr(first_token));
+    
+    // Second token should be an empty list []
+    tokens = mem_cdr(tokens);
+    TEST_ASSERT_FALSE_MESSAGE(mem_is_nil(tokens), "should have second token");
+    Node second_token = mem_car(tokens);
+    // Empty list should be marked as LIST type with nil contents
+    TEST_ASSERT_TRUE_MESSAGE(mem_is_list(second_token), "second token should be a list");
+    // And it should be empty - when we iterate it, there's nothing
+    TEST_ASSERT_TRUE_MESSAGE(mem_is_nil(second_token) || NODE_GET_INDEX(second_token) == 0, 
+                             "empty list should have nil contents");
+}
+
 void test_multiline_brackets_repeat(void)
 {
     // Bug: When brackets span multiple lines in a procedure, the body
@@ -1218,6 +1266,114 @@ void test_multiline_brackets_repeat(void)
     TEST_ASSERT_EQUAL_MESSAGE(RESULT_NONE, r3.status, "web should complete without error");
     // Expected output: trifwr is called 3 times with sizes 10, 20, 30, each printing twice
     TEST_ASSERT_EQUAL_STRING("10\n10\n20\n20\n30\n30\n", output_buffer);
+}
+
+void test_empty_list_roundtrip(void)
+{
+    // Bug: When a procedure with an empty list is formatted (for editor)
+    // and then re-defined from the formatted text, the empty list is lost.
+    // This simulates what happens when you edit a procedure and save it.
+    
+    // Step 1: Define a procedure with an empty list
+    Result r = proc_define_from_text(
+        "to test_rt\n"
+        "  setwrite []\n"
+        "end\n");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_OK, r.status, "test_rt definition should succeed");
+    
+    // Step 2: Format the procedure to text (like the editor does)
+    UserProcedure *proc = proc_find("test_rt");
+    TEST_ASSERT_NOT_NULL_MESSAGE(proc, "procedure should exist");
+    
+    char buffer[512];
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    format_procedure_definition(format_buffer_output, &ctx, proc);
+    
+    // Verify the formatted text contains []
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(buffer, "[]"), 
+        "formatted output should contain [] - got: '%s'");
+    
+    // Step 3: Erase the procedure
+    proc_erase("test_rt");
+    TEST_ASSERT_NULL_MESSAGE(proc_find("test_rt"), "procedure should be erased");
+    
+    // Step 4: Re-define from the formatted text
+    Result r2 = proc_define_from_text(buffer);
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_OK, r2.status, "re-definition should succeed");
+    
+    // Step 5: Verify the empty list is still present
+    Result text_r = eval_string("text \"test_rt");
+    TEST_ASSERT_EQUAL(RESULT_OK, text_r.status);
+    TEST_ASSERT_EQUAL(VALUE_LIST, text_r.value.type);
+    
+    Node body = text_r.value.as.node;
+    TEST_ASSERT_FALSE_MESSAGE(mem_is_nil(body), "body should not be nil");
+    
+    // Skip params (first element)
+    body = mem_cdr(body);
+    TEST_ASSERT_FALSE_MESSAGE(mem_is_nil(body), "body should have at least one line");
+    
+    // Get first line
+    Node first_line = mem_car(body);
+    TEST_ASSERT_TRUE_MESSAGE(mem_is_list(first_line), "first line should be a list");
+    
+    // Get second token (should be the empty list)
+    Node tokens = first_line;
+    tokens = mem_cdr(tokens);  // skip "setwrite"
+    TEST_ASSERT_FALSE_MESSAGE(mem_is_nil(tokens), "should have second token");
+    Node second_token = mem_car(tokens);
+    TEST_ASSERT_TRUE_MESSAGE(mem_is_list(second_token), 
+        "second token should be an empty list - roundtrip failed!");
+}
+
+void test_empty_list_inside_brackets_roundtrip(void)
+{
+    // Bug reported: Empty list [] inside brackets is lost after loading/editing.
+    // Example: "if not equal? reader [] [ setread [] stop ]"
+    // Becomes: "if not equal? reader [] [ setread stop ]" - the [] after setread is lost!
+    
+    // Step 1: Define a procedure with empty list inside brackets
+    Result r = proc_define_from_text(
+        "to reset\n"
+        "  if not equal? reader [] [ setread [] stop ]\n"
+        "end\n");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_OK, r.status, "reset definition should succeed");
+    
+    // Step 2: Format the procedure to text (like the editor does)
+    UserProcedure *proc = proc_find("reset");
+    TEST_ASSERT_NOT_NULL_MESSAGE(proc, "procedure should exist");
+    
+    char buffer[512];
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    format_procedure_definition(format_buffer_output, &ctx, proc);
+    
+    // Both empty lists should be present
+    char *first_empty = strstr(buffer, "[]");
+    TEST_ASSERT_NOT_NULL_MESSAGE(first_empty, "first [] should be in output");
+    char *second_empty = strstr(first_empty + 2, "[]");
+    TEST_ASSERT_NOT_NULL_MESSAGE(second_empty, "second [] should be in output");
+    
+    // Step 3: Erase and re-define from the formatted text
+    proc_erase("reset");
+    TEST_ASSERT_NULL_MESSAGE(proc_find("reset"), "procedure should be erased");
+    
+    Result r2 = proc_define_from_text(buffer);
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_OK, r2.status, "re-definition should succeed");
+    
+    // Step 4: Format again and verify both [] are still there
+    proc = proc_find("reset");
+    TEST_ASSERT_NOT_NULL_MESSAGE(proc, "procedure should exist after re-define");
+    
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    format_procedure_definition(format_buffer_output, &ctx, proc);
+    
+    first_empty = strstr(buffer, "[]");
+    TEST_ASSERT_NOT_NULL_MESSAGE(first_empty, "first [] should be in output after roundtrip");
+    second_empty = strstr(first_empty + 2, "[]");
+    TEST_ASSERT_NOT_NULL_MESSAGE(second_empty, 
+        "second [] inside brackets should be preserved after roundtrip!");
 }
 
 int main(void)
@@ -1301,7 +1457,10 @@ int main(void)
     RUN_TEST(test_empty_lines_preserved);
     RUN_TEST(test_item_extracts_procedure_line);
     RUN_TEST(test_multiline_with_real_newlines);
+    RUN_TEST(test_empty_list_in_procedure_body);
     RUN_TEST(test_multiline_brackets_repeat);
+    RUN_TEST(test_empty_list_roundtrip);
+    RUN_TEST(test_empty_list_inside_brackets_roundtrip);
 
     return UNITY_END();
 }

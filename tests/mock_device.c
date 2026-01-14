@@ -788,6 +788,31 @@ void mock_device_reset(void)
     mock_editor_content[0] = '\0';
     mock_editor_result = LOGO_EDITOR_ACCEPT;
     mock_editor_called = false;
+
+    // Clear WiFi state
+    mock_state.wifi.connected = false;
+    mock_state.wifi.ssid[0] = '\0';
+    mock_state.wifi.ip_address[0] = '\0';
+    mock_state.wifi.connect_result = 0;      // Default to success
+    mock_state.wifi.disconnect_result = 0;   // Default to success
+    mock_state.wifi.scan_result_count = 0;
+    mock_state.wifi.scan_return_value = 0;   // Default to success
+
+    // Initialize network state
+    mock_state.network.ping_result_ms = -1;  // Default to ping failure
+    mock_state.network.last_ping_ip[0] = '\0';
+
+    // Initialize time state to defaults
+    mock_state.time.year = 2025;
+    mock_state.time.month = 1;
+    mock_state.time.day = 1;
+    mock_state.time.hour = 0;
+    mock_state.time.minute = 0;
+    mock_state.time.second = 0;
+    mock_state.time.get_date_enabled = true;
+    mock_state.time.get_time_enabled = true;
+    mock_state.time.set_date_enabled = true;
+    mock_state.time.set_time_enabled = true;
 }
 
 const MockDeviceState *mock_device_get_state(void)
@@ -1022,4 +1047,355 @@ void mock_device_clear_editor(void)
     mock_editor_content[0] = '\0';
     mock_editor_result = LOGO_EDITOR_ACCEPT;
     mock_editor_called = false;
+}
+
+//
+// Mock WiFi operations (exposed for test_scaffold.c to use in mock_hardware_ops)
+//
+
+bool mock_wifi_is_connected(void)
+{
+    return mock_state.wifi.connected;
+}
+
+bool mock_wifi_connect(const char *ssid, const char *password)
+{
+    (void)password;  // Not stored in mock
+    if (mock_state.wifi.connect_result == 0)
+    {
+        mock_state.wifi.connected = true;
+        strncpy(mock_state.wifi.ssid, ssid, sizeof(mock_state.wifi.ssid) - 1);
+        mock_state.wifi.ssid[sizeof(mock_state.wifi.ssid) - 1] = '\0';
+        // Set a default IP when connected
+        if (mock_state.wifi.ip_address[0] == '\0')
+        {
+            strncpy(mock_state.wifi.ip_address, "192.168.1.100", sizeof(mock_state.wifi.ip_address));
+        }
+        return true;
+    }
+    return false;
+}
+
+void mock_wifi_disconnect(void)
+{
+    if (mock_state.wifi.disconnect_result == 0)
+    {
+        mock_state.wifi.connected = false;
+        mock_state.wifi.ssid[0] = '\0';
+        mock_state.wifi.ip_address[0] = '\0';
+    }
+}
+
+bool mock_wifi_get_ip(char *ip_buffer, size_t buffer_size)
+{
+    if (!mock_state.wifi.connected || mock_state.wifi.ip_address[0] == '\0')
+    {
+        return false;
+    }
+    strncpy(ip_buffer, mock_state.wifi.ip_address, buffer_size - 1);
+    ip_buffer[buffer_size - 1] = '\0';
+    return true;
+}
+
+bool mock_wifi_get_ssid(char *ssid_buffer, size_t buffer_size)
+{
+    if (!mock_state.wifi.connected || mock_state.wifi.ssid[0] == '\0')
+    {
+        return false;
+    }
+    strncpy(ssid_buffer, mock_state.wifi.ssid, buffer_size - 1);
+    ssid_buffer[buffer_size - 1] = '\0';
+    return true;
+}
+
+int mock_wifi_scan(char ssids[][33], int8_t strengths[], int max_networks)
+{
+    if (mock_state.wifi.scan_return_value != 0)
+    {
+        return -1;  // Error
+    }
+    
+    int count = mock_state.wifi.scan_result_count;
+    if (count > max_networks)
+    {
+        count = max_networks;
+    }
+    
+    for (int i = 0; i < count; i++)
+    {
+        strncpy(ssids[i], mock_state.wifi.scan_results[i].ssid, 32);
+        ssids[i][32] = '\0';
+        strengths[i] = mock_state.wifi.scan_results[i].rssi;
+    }
+    return count;
+}
+
+//
+// Mock network operations (exposed for test_scaffold.c to use in mock_hardware_ops)
+//
+
+float mock_network_ping(const char *ip_address)
+{
+    // Store the IP address for verification
+    if (ip_address)
+    {
+        strncpy(mock_state.network.last_ping_ip, ip_address, 
+                sizeof(mock_state.network.last_ping_ip) - 1);
+        mock_state.network.last_ping_ip[sizeof(mock_state.network.last_ping_ip) - 1] = '\0';
+    }
+    else
+    {
+        mock_state.network.last_ping_ip[0] = '\0';
+    }
+    
+    return mock_state.network.ping_result_ms;
+}
+
+//
+// Network test helpers
+//
+
+void mock_device_set_ping_result(float result_ms)
+{
+    mock_state.network.ping_result_ms = result_ms;
+}
+
+const char *mock_device_get_last_ping_ip(void)
+{
+    return mock_state.network.last_ping_ip;
+}
+
+void mock_device_set_resolve_result(const char *ip, bool success)
+{
+    mock_state.network.resolve_success = success;
+    if (ip)
+    {
+        strncpy(mock_state.network.resolve_result_ip, ip,
+                sizeof(mock_state.network.resolve_result_ip) - 1);
+        mock_state.network.resolve_result_ip[sizeof(mock_state.network.resolve_result_ip) - 1] = '\0';
+    }
+    else
+    {
+        mock_state.network.resolve_result_ip[0] = '\0';
+    }
+}
+
+const char *mock_device_get_last_resolve_hostname(void)
+{
+    return mock_state.network.last_resolve_hostname;
+}
+
+bool mock_network_resolve(const char *hostname, char *ip_buffer, size_t buffer_size)
+{
+    // Store the hostname for verification
+    if (hostname)
+    {
+        strncpy(mock_state.network.last_resolve_hostname, hostname,
+                sizeof(mock_state.network.last_resolve_hostname) - 1);
+        mock_state.network.last_resolve_hostname[sizeof(mock_state.network.last_resolve_hostname) - 1] = '\0';
+    }
+    else
+    {
+        mock_state.network.last_resolve_hostname[0] = '\0';
+    }
+
+    if (mock_state.network.resolve_success && ip_buffer && buffer_size > 0)
+    {
+        strncpy(ip_buffer, mock_state.network.resolve_result_ip, buffer_size - 1);
+        ip_buffer[buffer_size - 1] = '\0';
+        return true;
+    }
+
+    return false;
+}
+
+//
+// NTP test helpers
+//
+
+void mock_device_set_ntp_result(bool success)
+{
+    mock_state.network.ntp_success = success;
+}
+
+const char *mock_device_get_last_ntp_server(void)
+{
+    return mock_state.network.last_ntp_server;
+}
+
+float mock_device_get_last_ntp_timezone(void)
+{
+    return mock_state.network.last_ntp_timezone;
+}
+
+bool mock_network_ntp(const char *server, float timezone_offset)
+{
+    // Store the server for verification
+    if (server)
+    {
+        strncpy(mock_state.network.last_ntp_server, server,
+                sizeof(mock_state.network.last_ntp_server) - 1);
+        mock_state.network.last_ntp_server[sizeof(mock_state.network.last_ntp_server) - 1] = '\0';
+    }
+    else
+    {
+        mock_state.network.last_ntp_server[0] = '\0';
+    }
+
+    // Store the timezone offset for verification
+    mock_state.network.last_ntp_timezone = timezone_offset;
+
+    return mock_state.network.ntp_success;
+}
+
+//
+// WiFi test helpers
+//
+
+void mock_device_set_wifi_connected(bool connected)
+{
+    mock_state.wifi.connected = connected;
+}
+
+void mock_device_set_wifi_ssid(const char *ssid)
+{
+    if (ssid)
+    {
+        strncpy(mock_state.wifi.ssid, ssid, sizeof(mock_state.wifi.ssid) - 1);
+        mock_state.wifi.ssid[sizeof(mock_state.wifi.ssid) - 1] = '\0';
+    }
+    else
+    {
+        mock_state.wifi.ssid[0] = '\0';
+    }
+}
+
+void mock_device_set_wifi_ip(const char *ip)
+{
+    if (ip)
+    {
+        strncpy(mock_state.wifi.ip_address, ip, sizeof(mock_state.wifi.ip_address) - 1);
+        mock_state.wifi.ip_address[sizeof(mock_state.wifi.ip_address) - 1] = '\0';
+    }
+    else
+    {
+        mock_state.wifi.ip_address[0] = '\0';
+    }
+}
+
+void mock_device_set_wifi_connect_result(int result)
+{
+    mock_state.wifi.connect_result = result;
+}
+
+void mock_device_set_wifi_disconnect_result(int result)
+{
+    mock_state.wifi.disconnect_result = result;
+}
+
+void mock_device_add_wifi_scan_result(const char *ssid, int8_t rssi)
+{
+    if (mock_state.wifi.scan_result_count >= 16)
+    {
+        return;  // Full
+    }
+    int idx = mock_state.wifi.scan_result_count++;
+    strncpy(mock_state.wifi.scan_results[idx].ssid, ssid,
+            sizeof(mock_state.wifi.scan_results[idx].ssid) - 1);
+    mock_state.wifi.scan_results[idx].ssid[sizeof(mock_state.wifi.scan_results[idx].ssid) - 1] = '\0';
+    mock_state.wifi.scan_results[idx].rssi = rssi;
+}
+
+void mock_device_clear_wifi_scan_results(void)
+{
+    mock_state.wifi.scan_result_count = 0;
+}
+
+void mock_device_set_wifi_scan_result(int result)
+{
+    mock_state.wifi.scan_return_value = result;
+}
+
+// ============================================================================
+// Mock time helpers
+// ============================================================================
+
+void mock_device_set_time(int year, int month, int day, int hour, int minute, int second)
+{
+    mock_state.time.year = year;
+    mock_state.time.month = month;
+    mock_state.time.day = day;
+    mock_state.time.hour = hour;
+    mock_state.time.minute = minute;
+    mock_state.time.second = second;
+}
+
+void mock_device_set_time_enabled(bool get_date, bool get_time, bool set_date, bool set_time_flag)
+{
+    mock_state.time.get_date_enabled = get_date;
+    mock_state.time.get_time_enabled = get_time;
+    mock_state.time.set_date_enabled = set_date;
+    mock_state.time.set_time_enabled = set_time_flag;
+}
+
+// ============================================================================
+// Mock time operations (for use by test_scaffold in mock_hardware_ops)
+// ============================================================================
+
+bool mock_get_date(int *year, int *month, int *day)
+{
+    if (!mock_state.time.get_date_enabled)
+    {
+        return false;
+    }
+    if (year) *year = mock_state.time.year;
+    if (month) *month = mock_state.time.month;
+    if (day) *day = mock_state.time.day;
+    return true;
+}
+
+bool mock_get_time(int *hour, int *minute, int *second)
+{
+    if (!mock_state.time.get_time_enabled)
+    {
+        return false;
+    }
+    if (hour) *hour = mock_state.time.hour;
+    if (minute) *minute = mock_state.time.minute;
+    if (second) *second = mock_state.time.second;
+    return true;
+}
+
+bool mock_set_date(int year, int month, int day)
+{
+    if (!mock_state.time.set_date_enabled)
+    {
+        return false;
+    }
+    // Validate inputs
+    if (month < 1 || month > 12 || day < 1 || day > 31)
+    {
+        return false;
+    }
+    mock_state.time.year = year;
+    mock_state.time.month = month;
+    mock_state.time.day = day;
+    return true;
+}
+
+bool mock_set_time(int hour, int minute, int second)
+{
+    if (!mock_state.time.set_time_enabled)
+    {
+        return false;
+    }
+    // Validate inputs
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59)
+    {
+        return false;
+    }
+    mock_state.time.hour = hour;
+    mock_state.time.minute = minute;
+    mock_state.time.second = second;
+    return true;
 }

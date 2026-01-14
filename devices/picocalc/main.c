@@ -86,7 +86,7 @@ int main(void)
     }
     
     // Initialize Logo subsystems
-    mem_init();
+    logo_mem_init();
     primitives_init();
     procedures_init();
     variables_init();

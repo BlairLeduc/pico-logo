@@ -78,11 +78,14 @@ add_library(logo_core
     core/primitives_procedures.c
     core/primitives_properties.c
     core/primitives_text.c
+    core/primitives_time.c
     core/primitives_turtle.c
     core/primitives_variables.c
     core/primitives_words_lists.c
     core/primitives_workspace.c
     core/primitives_list_processing.c
+    core/primitives_wifi.c
+    core/primitives_network.c
     core/primitives.c
     core/procedures.c
     core/properties.c
@@ -110,6 +113,13 @@ endif()
 # Allow LOGO_EDITOR_BUFFER_SIZE to be set via CMake cache variable
 if(DEFINED LOGO_EDITOR_BUFFER_SIZE)
     target_compile_definitions(logo_core PUBLIC LOGO_EDITOR_BUFFER_SIZE=${LOGO_EDITOR_BUFFER_SIZE})
+endif()
+
+# WiFi support (only for Pico W boards)
+option(LOGO_HAS_WIFI "Enable WiFi support for Pico W boards" OFF)
+if(LOGO_HAS_WIFI)
+    message(STATUS "WiFi support enabled")
+    target_compile_definitions(logo_core PUBLIC LOGO_HAS_WIFI=1)
 endif()
 
 add_executable(pico-logo
@@ -158,6 +168,22 @@ target_link_libraries(pico-logo
         hardware_pio
         hardware_spi
 )
+
+# Link hardware_rtc for RP2040 (RTC support)
+if(PICO_RP2040)
+    target_link_libraries(pico-logo hardware_rtc)
+endif()
+
+# Link WiFi libraries if WiFi support is enabled
+if(LOGO_HAS_WIFI)
+    # Add the directory containing lwipopts.h to include path
+    target_include_directories(pico-logo PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/devices/picocalc
+    )
+    target_link_libraries(pico-logo
+        pico_cyw43_arch_lwip_threadsafe_background
+    )
+endif()
 
 target_include_directories(pico-logo PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -237,11 +263,14 @@ if(BUILD_FOR_HOST)
         core/primitives_procedures.c
         core/primitives_properties.c
         core/primitives_text.c
+        core/primitives_time.c
         core/primitives_turtle.c
         core/primitives_variables.c
         core/primitives_words_lists.c
         core/primitives_workspace.c
         core/primitives_list_processing.c
+        core/primitives_wifi.c
+        core/primitives_network.c
         core/primitives.c
         core/procedures.c
         core/properties.c
@@ -346,11 +375,14 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_procedures.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_properties.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_text.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_time.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_turtle.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_variables.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_words_lists.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_workspace.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_list_processing.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_wifi.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_network.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/procedures.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/properties.c

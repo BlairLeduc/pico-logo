@@ -61,6 +61,109 @@ extern "C"
         // duration is in milliseconds, frequencies are in Hz
         // If the device is already playing a tone, block until it finishes
         void (*toot)(uint32_t duration_ms, uint32_t left_freq, uint32_t right_freq);
+
+        //
+        // WiFi operations (only available on Pico W boards with LOGO_HAS_WIFI)
+        //
+
+        // Check if WiFi is connected
+        // Returns true if connected to a network
+        bool (*wifi_is_connected)(void);
+
+        // Connect to a WiFi network
+        // Returns true on success, false on failure
+        bool (*wifi_connect)(const char *ssid, const char *password);
+
+        // Disconnect from the current WiFi network
+        void (*wifi_disconnect)(void);
+
+        // Get the current IP address
+        // Returns true if connected and IP is valid, false otherwise
+        // ip_buffer should be at least 16 bytes
+        bool (*wifi_get_ip)(char *ip_buffer, size_t buffer_size);
+
+        // Get the SSID of the connected network
+        // Returns true if connected, false otherwise
+        // ssid_buffer should be at least 33 bytes (32 chars + null)
+        bool (*wifi_get_ssid)(char *ssid_buffer, size_t buffer_size);
+
+        // Scan for available WiFi networks
+        // Returns number of networks found (up to max_networks), -1 on error
+        // Each network's SSID is stored in ssids[i] (max 32 chars + null)
+        // Signal strength (RSSI in dBm, typically -30 to -90) stored in strengths[i]
+        int (*wifi_scan)(char ssids[][33], int8_t strengths[], int max_networks);
+
+        //
+        // Network operations (require WiFi to be connected)
+        //
+
+        // Ping an IP address
+        // Returns the round-trip time in milliseconds (e.g., 22.413) if successful, -1 on failure
+        // ip_address should be in dotted-decimal notation (e.g., "192.168.1.1")
+        float (*network_ping)(const char *ip_address);
+
+        // Resolve a hostname to an IP address
+        // Returns true if resolution was successful, false otherwise
+        // hostname is the domain name to resolve (e.g., "www.example.com")
+        // ip_buffer should be at least 16 bytes to hold the IP address in dotted-decimal notation
+        bool (*network_resolve)(const char *hostname, char *ip_buffer, size_t buffer_size);
+
+        // Synchronize with an NTP server
+        // Returns true if synchronization was successful, false otherwise
+        // server is the NTP server hostname (e.g., "pool.ntp.org")
+        // timezone_offset is the offset from UTC in hours (e.g., -5 for EST, 5.5 for IST)
+        // If successful, the device's date and time should be updated
+        bool (*network_ntp)(const char *server, float timezone_offset);
+
+        //
+        // TCP network connection operations (require WiFi to be connected)
+        //
+
+        // Open a TCP connection to the specified IP address and port
+        // Returns an opaque connection handle on success, NULL on failure
+        // timeout_ms is the connection timeout in milliseconds
+        void *(*network_tcp_connect)(const char *ip_address, uint16_t port, int timeout_ms);
+
+        // Close a TCP connection
+        void (*network_tcp_close)(void *connection);
+
+        // Read from a TCP connection
+        // Returns number of bytes read, 0 on timeout, -1 on error/closed
+        // timeout_ms is the read timeout in milliseconds (0 = non-blocking)
+        int (*network_tcp_read)(void *connection, char *buffer, int count, int timeout_ms);
+
+        // Write to a TCP connection
+        // Returns number of bytes written, -1 on error
+        int (*network_tcp_write)(void *connection, const char *data, int count);
+
+        // Check if data is available to read without blocking
+        bool (*network_tcp_can_read)(void *connection);
+
+        //
+        // Time management operations
+        //
+
+        // Get the current date
+        // Returns true if successful, false otherwise
+        // year: full year (e.g., 2024)
+        // month: 1-12
+        // day: 1-31
+        bool (*get_date)(int *year, int *month, int *day);
+
+        // Get the current time
+        // Returns true if successful, false otherwise
+        // hour: 0-23
+        // minute: 0-59
+        // second: 0-59
+        bool (*get_time)(int *hour, int *minute, int *second);
+
+        // Set the current date
+        // Returns true if successful, false otherwise
+        bool (*set_date)(int year, int month, int day);
+
+        // Set the current time
+        // Returns true if successful, false otherwise
+        bool (*set_time)(int hour, int minute, int second);
     } LogoHardwareOps;
 
     typedef struct LogoHardware
