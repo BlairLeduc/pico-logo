@@ -329,6 +329,125 @@ static Result eval_primary(Evaluator *eval)
                 
                 advance(eval); // consume procedure name
                 
+                // For 0-arg primitives, check if followed by infix operator or )
+                // This allows (xcor+3) to work like xcor+3, while (files "ext") still works
+                if (prim->default_args == 0)
+                {
+                    Token after = peek(eval);
+                    
+                    // Check if next token is an infix operator
+                    int bp = get_infix_bp(after.type);
+                    if (bp != BP_NONE)
+                    {
+                        // Call the primitive with no args first
+                        Result r = prim->func(eval, 0, NULL);
+                        if (r.status != RESULT_OK)
+                        {
+                            eval->paren_depth--;
+                            return result_set_error_proc(r, user_name);
+                        }
+                        
+                        // Continue with infix expression parsing
+                        Result lhs = r;
+                        while (true)
+                        {
+                            Token op = peek(eval);
+                            int op_bp = get_infix_bp(op.type);
+                            
+                            if (op_bp == BP_NONE)
+                                break;
+                            
+                            advance(eval);
+                            
+                            Result rhs = eval_expr_bp(eval, op_bp + 1);
+                            if (rhs.status != RESULT_OK)
+                            {
+                                eval->paren_depth--;
+                                return rhs;
+                            }
+                            
+                            // Handle = separately since it works with all value types
+                            if (op.type == TOKEN_EQUALS)
+                            {
+                                bool equal = values_equal(lhs.value, rhs.value);
+                                lhs = result_ok(value_word(mem_atom_cstr(equal ? "true" : "false")));
+                                continue;
+                            }
+                            
+                            float left_n, right_n;
+                            bool left_ok = value_to_number(lhs.value, &left_n);
+                            bool right_ok = value_to_number(rhs.value, &right_n);
+                            
+                            // Get operator name for error messages
+                            const char *op_name;
+                            switch (op.type)
+                            {
+                            case TOKEN_PLUS: op_name = "+"; break;
+                            case TOKEN_MINUS: op_name = "-"; break;
+                            case TOKEN_MULTIPLY: op_name = "*"; break;
+                            case TOKEN_DIVIDE: op_name = "/"; break;
+                            case TOKEN_LESS_THAN: op_name = "<"; break;
+                            case TOKEN_GREATER_THAN: op_name = ">"; break;
+                            default: op_name = "?"; break;
+                            }
+                            
+                            if (!left_ok)
+                            {
+                                eval->paren_depth--;
+                                return result_error_arg(ERR_DOESNT_LIKE_INPUT, op_name, value_to_string(lhs.value));
+                            }
+                            if (!right_ok)
+                            {
+                                eval->paren_depth--;
+                                return result_error_arg(ERR_DOESNT_LIKE_INPUT, op_name, value_to_string(rhs.value));
+                            }
+                            
+                            float result;
+                            switch (op.type)
+                            {
+                            case TOKEN_PLUS:
+                                result = left_n + right_n;
+                                break;
+                            case TOKEN_MINUS:
+                                result = left_n - right_n;
+                                break;
+                            case TOKEN_MULTIPLY:
+                                result = left_n * right_n;
+                                break;
+                            case TOKEN_DIVIDE:
+                                if (right_n == 0)
+                                {
+                                    eval->paren_depth--;
+                                    return result_error(ERR_DIVIDE_BY_ZERO);
+                                }
+                                result = left_n / right_n;
+                                break;
+                            case TOKEN_LESS_THAN:
+                                lhs = result_ok(value_word(mem_atom_cstr((left_n < right_n) ? "true" : "false")));
+                                continue;
+                            case TOKEN_GREATER_THAN:
+                                lhs = result_ok(value_word(mem_atom_cstr((left_n > right_n) ? "true" : "false")));
+                                continue;
+                            default:
+                                eval->paren_depth--;
+                                return result_error_arg(ERR_DONT_KNOW_WHAT, NULL, op_name);
+                            }
+                            
+                            lhs = result_ok(value_number(result));
+                        }
+                        
+                        // Consume closing paren
+                        Token closing = peek(eval);
+                        if (closing.type == TOKEN_RIGHT_PAREN)
+                        {
+                            advance(eval);
+                        }
+                        eval->paren_depth--;
+                        return lhs;
+                    }
+                    // Otherwise fall through to normal greedy arg collection
+                }
+                
                 // Greedily collect all arguments until )
                 Value args[16];
                 int argc = 0;

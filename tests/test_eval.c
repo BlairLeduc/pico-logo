@@ -55,6 +55,15 @@ void test_eval_parentheses(void)
     TEST_ASSERT_EQUAL_FLOAT(14.0f, r.value.as.number);
 }
 
+void test_eval_parentheses_zero_arg_primitive_with_infix(void)
+{
+    // Bug: (xcor+3) should work like xcor+3
+    // xcor at home is 0, so xcor+3 = 3
+    Result r = eval_string("(xcor+3)");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(3.0f, r.value.as.number);
+}
+
 void test_eval_quoted_word(void)
 {
     Result r = eval_string("\"hello");
@@ -410,6 +419,7 @@ int main(void)
     RUN_TEST(test_eval_infix_add);
     RUN_TEST(test_eval_infix_precedence);
     RUN_TEST(test_eval_parentheses);
+    RUN_TEST(test_eval_parentheses_zero_arg_primitive_with_infix);
     RUN_TEST(test_eval_quoted_word);
 
     // Print tests

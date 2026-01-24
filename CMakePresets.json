@@ -104,7 +104,7 @@
             }
         },
         {
-            "name": "pico2-debug",
+            "name": "pico2w-debug",
             "inherits": "pico2w",
             "displayName": "Raspberry Pi Pico 2W (Debug)",
             "description": "Cross-compile for Pico 2W with debug symbols",
