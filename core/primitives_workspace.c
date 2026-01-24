@@ -492,6 +492,7 @@ static Result prim_erall(Evaluator *eval, int argc, Value *args)
     proc_erase_all(true);  // true = check buried flag
     var_erase_all_globals(true);
     prop_erase_all();
+    proc_reset_execution_state();
     
     return result_none();
 }

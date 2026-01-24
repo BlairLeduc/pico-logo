@@ -27,7 +27,18 @@ extern "C"
 
     typedef enum
     {
-        OP_NOP = 0
+        OP_NOP = 0,
+        OP_PUSH_CONST,
+        OP_LOAD_VAR,
+        OP_CALL_PRIM,
+        OP_NEG,
+        OP_ADD,
+        OP_SUB,
+        OP_MUL,
+        OP_DIV,
+        OP_EQ,
+        OP_LT,
+        OP_GT
     } Op;
 
     typedef struct

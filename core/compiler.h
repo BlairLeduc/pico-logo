@@ -19,6 +19,7 @@ extern "C"
     typedef struct Compiler
     {
         Evaluator *eval;
+        Bytecode *bc;
     } Compiler;
 
     Result compile_expression(Compiler *c, Bytecode *bc);

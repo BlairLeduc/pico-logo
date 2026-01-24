@@ -15,9 +15,15 @@ extern "C"
 {
 #endif
 
+    typedef struct Evaluator Evaluator;
+
     typedef struct VM
     {
         Bytecode *bc;
+        Evaluator *eval;
+        Value *stack;
+        size_t stack_cap;
+        size_t sp;
     } VM;
 
     void vm_init(VM *vm);
