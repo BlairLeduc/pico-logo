@@ -1284,8 +1284,17 @@ static int find_label_position(const char *buffer, const char *label_name)
 Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
 {
 #if EVAL_USE_VM
-    if (!enable_tco)
     {
+        LogoIO *io = primitives_get_io();
+        if (io && (logo_io_check_user_interrupt(io) ||
+                   logo_io_check_freeze_request(io) ||
+                   logo_io_check_pause_request(io)))
+        {
+            goto legacy_list_eval;
+        }
+
+        bool saved_tail = eval->in_tail_position;
+
         Instruction code_buf[256];
         Value const_buf[64];
         Bytecode bc = {
@@ -1302,19 +1311,25 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
         Compiler c = {
             .eval = eval,
             .bc = &bc,
-            .instruction_mode = true
+            .instruction_mode = true,
+            .tail_position = false,
+            .tail_depth = 0
         };
 
-        Result cr = compile_list_instructions(&c, list, &bc);
+        Result cr = compile_list_instructions(&c, list, &bc, enable_tco);
         if (cr.status == RESULT_NONE || cr.status == RESULT_OK)
         {
             VM vm;
             vm_init(&vm);
             vm.eval = eval;
-            return vm_exec(&vm, &bc);
+            Result r = vm_exec(&vm, &bc);
+            eval->in_tail_position = saved_tail;
+            return r;
         }
+        eval->in_tail_position = saved_tail;
     }
 #endif
+legacy_list_eval:
     // Save current token source state
     TokenSource old_source = eval->token_source;
     bool old_tail = eval->in_tail_position;
@@ -1442,6 +1457,7 @@ Result eval_run_list_expr(Evaluator *eval, Node list)
         .instruction_mode = false
     };
 
+    bool saved_tail = eval->in_tail_position;
     eval->primitive_arg_depth++;
     Result cr = compile_list(&c, list, &bc);
     if (cr.status == RESULT_OK)
@@ -1451,9 +1467,11 @@ Result eval_run_list_expr(Evaluator *eval, Node list)
         vm.eval = eval;
         Result r = vm_exec(&vm, &bc);
         eval->primitive_arg_depth--;
+        eval->in_tail_position = saved_tail;
         return r;
     }
     eval->primitive_arg_depth--;
+    eval->in_tail_position = saved_tail;
 #endif
     // If we're in tail position inside a procedure, the last instruction 
     // in this list is also in tail position - enables TCO for:

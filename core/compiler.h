@@ -21,12 +21,14 @@ extern "C"
         Evaluator *eval;
         Bytecode *bc;
         bool instruction_mode;
+        bool tail_position;
+        int tail_depth;
     } Compiler;
 
     Result compile_expression(Compiler *c, Bytecode *bc);
     Result compile_instruction(Compiler *c, Bytecode *bc);
     Result compile_list(Compiler *c, Node list, Bytecode *bc);
-    Result compile_list_instructions(Compiler *c, Node list, Bytecode *bc);
+    Result compile_list_instructions(Compiler *c, Node list, Bytecode *bc, bool enable_tco);
 
 #ifdef __cplusplus
 }

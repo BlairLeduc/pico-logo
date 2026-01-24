@@ -186,6 +186,140 @@ static uint16_t bc_add_const(Bytecode *bc, Value v)
 
 static Result compile_expr_bp(Compiler *c, int min_bp);
 
+static bool compiler_skip_expr_bp(TokenSource *ts, int min_bp);
+static bool compiler_skip_primary(TokenSource *ts);
+
+static bool compiler_skip_instruction(TokenSource *ts)
+{
+    if (token_source_at_end(ts))
+        return false;
+    return compiler_skip_expr_bp(ts, BP_NONE);
+}
+
+static bool compiler_skip_primary(TokenSource *ts)
+{
+    Token t = token_source_peek(ts);
+    switch (t.type)
+    {
+    case TOKEN_NUMBER:
+    case TOKEN_QUOTED:
+    case TOKEN_COLON:
+        token_source_next(ts);
+        return true;
+    case TOKEN_WORD:
+    {
+        if (is_number_string(t.start, t.length))
+        {
+            token_source_next(ts);
+            return true;
+        }
+
+        char name_buf[64];
+        size_t name_len = t.length;
+        if (name_len >= sizeof(name_buf))
+            name_len = sizeof(name_buf) - 1;
+        memcpy(name_buf, t.start, name_len);
+        name_buf[name_len] = '\0';
+
+        const Primitive *prim = primitive_find(name_buf);
+        if (prim)
+        {
+            token_source_next(ts);
+            for (int i = 0; i < prim->default_args && !token_source_at_end(ts); i++)
+            {
+                Token next = token_source_peek(ts);
+                if (next.type == TOKEN_RIGHT_PAREN || next.type == TOKEN_RIGHT_BRACKET)
+                    break;
+                if (!compiler_skip_expr_bp(ts, BP_NONE))
+                    return false;
+            }
+            return true;
+        }
+
+        UserProcedure *user_proc = proc_find(name_buf);
+        if (user_proc)
+        {
+            token_source_next(ts);
+            for (int i = 0; i < user_proc->param_count && !token_source_at_end(ts); i++)
+            {
+                Token next = token_source_peek(ts);
+                if (next.type == TOKEN_RIGHT_PAREN || next.type == TOKEN_RIGHT_BRACKET)
+                    break;
+                if (!compiler_skip_expr_bp(ts, BP_NONE))
+                    return false;
+            }
+            return true;
+        }
+
+        token_source_next(ts);
+        return true;
+    }
+    case TOKEN_LEFT_BRACKET:
+    {
+        token_source_next(ts);
+        if (ts->type == TOKEN_SOURCE_NODE_ITERATOR)
+        {
+            Node sublist = token_source_get_sublist(ts);
+            if (!mem_is_nil(sublist))
+            {
+                token_source_consume_sublist(ts);
+                return true;
+            }
+        }
+
+        int depth = 1;
+        while (!token_source_at_end(ts) && depth > 0)
+        {
+            Token t2 = token_source_next(ts);
+            if (t2.type == TOKEN_LEFT_BRACKET)
+                depth++;
+            else if (t2.type == TOKEN_RIGHT_BRACKET)
+                depth--;
+        }
+        return true;
+    }
+    case TOKEN_LEFT_PAREN:
+    {
+        token_source_next(ts);
+        if (!compiler_skip_expr_bp(ts, BP_NONE))
+            return false;
+        Token closing = token_source_peek(ts);
+        if (closing.type == TOKEN_RIGHT_PAREN)
+            token_source_next(ts);
+        return true;
+    }
+    case TOKEN_MINUS:
+    case TOKEN_UNARY_MINUS:
+        token_source_next(ts);
+        return compiler_skip_primary(ts);
+    case TOKEN_RIGHT_PAREN:
+    case TOKEN_RIGHT_BRACKET:
+    case TOKEN_EOF:
+        return false;
+    default:
+        token_source_next(ts);
+        return true;
+    }
+}
+
+static bool compiler_skip_expr_bp(TokenSource *ts, int min_bp)
+{
+    if (!compiler_skip_primary(ts))
+        return false;
+
+    while (true)
+    {
+        Token op = token_source_peek(ts);
+        int bp = get_infix_bp(op.type);
+        if (bp == BP_NONE || bp < min_bp)
+            break;
+        token_source_next(ts);
+        if (!compiler_skip_expr_bp(ts, bp + 1))
+            return false;
+    }
+    return true;
+}
+
 static Result compile_infix_tail(Compiler *c, int min_bp)
 {
     while (true)
@@ -435,8 +569,43 @@ static Result compile_primary(Compiler *c)
             return result_ok(value_none());
         }
 
-        if (proc_find(name_buf))
+        UserProcedure *user_proc = proc_find(name_buf);
+        if (user_proc)
+        {
+            if (c->instruction_mode && c->tail_position && c->tail_depth == 1)
+            {
+                Node user_name_atom = mem_atom(t.start, t.length);
+                advance(c);
+
+                int argc = 0;
+                for (int i = 0; i < user_proc->param_count && !token_source_at_end(&c->eval->token_source); i++)
+                {
+                    Token next = peek(c);
+                    if (next.type == TOKEN_RIGHT_PAREN || next.type == TOKEN_RIGHT_BRACKET || next.type == TOKEN_EOF)
+                    {
+                        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, user_proc->name, NULL);
+                    }
+
+                    Result arg = compile_expr_bp(c, BP_NONE);
+                    if (arg.status != RESULT_OK)
+                    {
+                        return result_set_error_proc(arg, user_proc->name);
+                    }
+                    argc++;
+                }
+
+                if (argc < user_proc->param_count)
+                {
+                    return result_error_arg(ERR_NOT_ENOUGH_INPUTS, user_proc->name, NULL);
+                }
+
+                uint16_t name_idx = bc_add_const(c->bc, value_word(user_name_atom));
+                if (name_idx == UINT16_MAX || !bc_emit(c->bc, OP_CALL_USER_TAIL, name_idx, (uint16_t)argc))
+                    return result_error(ERR_OUT_OF_SPACE);
+                return result_ok(value_none());
+            }
             return result_error(ERR_UNSUPPORTED_ON_DEVICE);
+        }
 
         Node name_atom = mem_atom(t.start, t.length);
         return result_error_arg(ERR_DONT_KNOW_HOW, mem_word_ptr(name_atom), NULL);
@@ -457,10 +626,16 @@ static Result compile_primary(Compiler *c)
 
 static Result compile_expr_bp(Compiler *c, int min_bp)
 {
+    c->tail_depth++;
     Result lhs = compile_primary(c);
     if (lhs.status != RESULT_OK)
+    {
+        c->tail_depth--;
         return lhs;
-    return compile_infix_tail(c, min_bp);
+    }
+    Result r = compile_infix_tail(c, min_bp);
+    c->tail_depth--;
+    return r;
 }
 
 Result compile_expression(Compiler *c, Bytecode *bc)
@@ -469,6 +644,8 @@ Result compile_expression(Compiler *c, Bytecode *bc)
         return result_error(ERR_UNSUPPORTED_ON_DEVICE);
     c->bc = bc;
     c->instruction_mode = false;
+    c->tail_position = false;
+    c->tail_depth = 0;
     return compile_expr_bp(c, BP_NONE);
 }
 
@@ -489,6 +666,8 @@ Result compile_list(Compiler *c, Node list, Bytecode *bc)
 
     c->bc = bc;
     c->instruction_mode = false;
+    c->tail_position = false;
+    c->tail_depth = 0;
     Result r = compile_expr_bp(c, BP_NONE);
 
     if (r.status == RESULT_OK && !token_source_at_end(&c->eval->token_source))
@@ -500,7 +679,7 @@ Result compile_list(Compiler *c, Node list, Bytecode *bc)
     return r;
 }
 
-Result compile_list_instructions(Compiler *c, Node list, Bytecode *bc)
+Result compile_list_instructions(Compiler *c, Node list, Bytecode *bc, bool enable_tco)
 {
     if (!c || !c->eval || !bc)
         return result_error(ERR_UNSUPPORTED_ON_DEVICE);
@@ -510,10 +689,29 @@ Result compile_list_instructions(Compiler *c, Node list, Bytecode *bc)
 
     c->bc = bc;
     c->instruction_mode = true;
+    c->tail_position = false;
+    c->tail_depth = 0;
 
     Result r = result_none();
     while (!token_source_at_end(&c->eval->token_source))
     {
+        if (enable_tco)
+        {
+            TokenSource lookahead = c->eval->token_source;
+            bool last_instruction = compiler_skip_instruction(&lookahead) && token_source_at_end(&lookahead);
+            c->tail_position = last_instruction;
+        }
+        else
+        {
+            c->tail_position = false;
+        }
+
+        if (!bc_emit(c->bc, OP_BEGIN_INSTR, (uint16_t)(c->tail_position ? 1 : 0), 0))
+        {
+            r = result_error(ERR_OUT_OF_SPACE);
+            break;
+        }
+
         r = compile_expr_bp(c, BP_NONE);
         if (r.status != RESULT_OK)
             break;

@@ -32,6 +32,7 @@ extern "C"
         OP_LOAD_VAR,
         OP_CALL_PRIM,
         OP_CALL_PRIM_INSTR,
+        OP_CALL_USER_TAIL,
         OP_NEG,
         OP_ADD,
         OP_SUB,
@@ -40,6 +41,7 @@ extern "C"
         OP_EQ,
         OP_LT,
         OP_GT,
+        OP_BEGIN_INSTR,
         OP_END_INSTR
     } Op;
 

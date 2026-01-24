@@ -8,8 +8,10 @@
 #include "vm.h"
 #include "error.h"
 #include "primitives.h"
+#include "procedures.h"
 #include "variables.h"
 #include "eval.h"
+#include "frame.h"
 
 enum
 {
@@ -156,13 +158,65 @@ Result vm_exec(VM *vm, Bytecode *bc)
                         return vm_error_stack();
                     break;
                 }
-                if (instr_mode && r.status == RESULT_NONE)
+                if (instr_mode)
                 {
-                    break;
+                    if (r.status == RESULT_NONE)
+                        break;
+                    if (r.status == RESULT_ERROR)
+                        return result_set_error_proc(r, user_name);
+                    return r;
                 }
                 if (r.status != RESULT_OK)
                     return result_set_error_proc(r, user_name);
                 break;
+            }
+            case OP_CALL_USER_TAIL:
+            {
+                if (ins.a >= bc->const_len)
+                    return result_error(ERR_OUT_OF_SPACE);
+                Value name_val = bc->const_pool[ins.a];
+                const char *user_name = value_to_string(name_val);
+                UserProcedure *proc = proc_find(user_name);
+                if (!proc)
+                    return result_error_arg(ERR_DONT_KNOW_HOW, user_name, NULL);
+
+                uint16_t argc = ins.b;
+                Value args[16];
+                if (argc > 16)
+                    return result_error(ERR_TOO_MANY_INPUTS);
+                for (int i = (int)argc - 1; i >= 0; i--)
+                {
+                    if (!vm_pop(vm, &args[i]))
+                        return vm_error_stack();
+                }
+
+                if (vm->eval && vm->eval->proc_depth > 0)
+                {
+                    FrameStack *frames = vm->eval->frames;
+                    if (frames && !frame_stack_is_empty(frames))
+                    {
+                        FrameHeader *current = frame_current(frames);
+                        if (current && current->proc == proc)
+                        {
+                            TailCall *tc = proc_get_tail_call();
+                            tc->is_tail_call = true;
+                            tc->proc_name = proc->name;
+                            tc->arg_count = argc;
+                            for (int i = 0; i < argc; i++)
+                            {
+                                tc->args[i] = args[i];
+                            }
+                            return result_stop();
+                        }
+                    }
+
+                    if (vm->eval->primitive_arg_depth == 0)
+                    {
+                        return result_call(proc, (int)argc, args);
+                    }
+                }
+
+                return proc_call(vm->eval, proc, (int)argc, args);
             }
         case OP_NEG:
         {
@@ -243,6 +297,8 @@ Result vm_exec(VM *vm, Bytecode *bc)
         }
         case OP_END_INSTR:
         {
+            if (vm->eval)
+                vm->eval->in_tail_position = false;
             if (vm->sp > 0)
             {
                 Value v;
@@ -250,6 +306,12 @@ Result vm_exec(VM *vm, Bytecode *bc)
                     return vm_error_stack();
                 return result_error_arg(ERR_DONT_KNOW_WHAT, NULL, value_to_string(v));
             }
+            break;
+        }
+        case OP_BEGIN_INSTR:
+        {
+            if (vm->eval)
+                vm->eval->in_tail_position = (ins.a != 0);
             break;
         }
         default:
