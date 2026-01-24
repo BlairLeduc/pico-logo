@@ -842,7 +842,8 @@ Result eval_expression(Evaluator *eval)
 
     Compiler c = {
         .eval = eval,
-        .bc = &bc
+        .bc = &bc,
+        .instruction_mode = false
     };
 
     Result cr = compile_expression(&c, &bc);
@@ -1282,6 +1283,38 @@ static int find_label_position(const char *buffer, const char *label_name)
 // The last instruction in the list is evaluated in tail position
 Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
 {
+#if EVAL_USE_VM
+    if (!enable_tco)
+    {
+        Instruction code_buf[256];
+        Value const_buf[64];
+        Bytecode bc = {
+            .code = code_buf,
+            .code_len = 0,
+            .code_cap = sizeof(code_buf) / sizeof(code_buf[0]),
+            .const_pool = const_buf,
+            .const_len = 0,
+            .const_cap = sizeof(const_buf) / sizeof(const_buf[0]),
+            .arena = NULL
+        };
+        bc_init(&bc, NULL);
+
+        Compiler c = {
+            .eval = eval,
+            .bc = &bc,
+            .instruction_mode = true
+        };
+
+        Result cr = compile_list_instructions(&c, list, &bc);
+        if (cr.status == RESULT_NONE || cr.status == RESULT_OK)
+        {
+            VM vm;
+            vm_init(&vm);
+            vm.eval = eval;
+            return vm_exec(&vm, &bc);
+        }
+    }
+#endif
     // Save current token source state
     TokenSource old_source = eval->token_source;
     bool old_tail = eval->in_tail_position;
@@ -1405,7 +1438,8 @@ Result eval_run_list_expr(Evaluator *eval, Node list)
 
     Compiler c = {
         .eval = eval,
-        .bc = &bc
+        .bc = &bc,
+        .instruction_mode = false
     };
 
     eval->primitive_arg_depth++;

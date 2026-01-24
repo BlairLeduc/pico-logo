@@ -20,11 +20,13 @@ extern "C"
     {
         Evaluator *eval;
         Bytecode *bc;
+        bool instruction_mode;
     } Compiler;
 
     Result compile_expression(Compiler *c, Bytecode *bc);
     Result compile_instruction(Compiler *c, Bytecode *bc);
     Result compile_list(Compiler *c, Node list, Bytecode *bc);
+    Result compile_list_instructions(Compiler *c, Node list, Bytecode *bc);
 
 #ifdef __cplusplus
 }

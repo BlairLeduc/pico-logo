@@ -28,6 +28,12 @@ void test_repeat(void)
     TEST_ASSERT_EQUAL_STRING("1\n1\n1\n", output_buffer);
 }
 
+void test_repeat_multiple_instructions(void)
+{
+    run_string("repeat 2 [print \"a print \"b]");
+    TEST_ASSERT_EQUAL_STRING("a\nb\na\nb\n", output_buffer);
+}
+
 void test_repcount_basic(void)
 {
     // repcount should output current repeat iteration (1-based)

@@ -14,6 +14,7 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
+#include "procedures.h"
 
 // Binding powers for Pratt parser
 enum
@@ -304,7 +305,8 @@ static Result compile_primary(Compiler *c)
                     if (bp != BP_NONE)
                     {
                         uint16_t name_idx = bc_add_const(c->bc, value_word(user_name_atom));
-                        if (name_idx == UINT16_MAX || !bc_emit(c->bc, OP_CALL_PRIM, name_idx, 0))
+                        Op call_op = c->instruction_mode ? OP_CALL_PRIM_INSTR : OP_CALL_PRIM;
+                        if (name_idx == UINT16_MAX || !bc_emit(c->bc, call_op, name_idx, 0))
                             return result_error(ERR_OUT_OF_SPACE);
 
                         Result tail = compile_infix_tail(c, BP_NONE);
@@ -346,7 +348,8 @@ static Result compile_primary(Compiler *c)
                 c->eval->paren_depth--;
 
                 uint16_t name_idx = bc_add_const(c->bc, value_word(user_name_atom));
-                if (name_idx == UINT16_MAX || !bc_emit(c->bc, OP_CALL_PRIM, name_idx, (uint16_t)argc))
+                Op call_op = c->instruction_mode ? OP_CALL_PRIM_INSTR : OP_CALL_PRIM;
+                if (name_idx == UINT16_MAX || !bc_emit(c->bc, call_op, name_idx, (uint16_t)argc))
                     return result_error(ERR_OUT_OF_SPACE);
 
                 return result_ok(value_none());
@@ -426,10 +429,14 @@ static Result compile_primary(Compiler *c)
             c->eval->primitive_arg_depth--;
 
             uint16_t name_idx = bc_add_const(c->bc, value_word(user_name_atom));
-            if (name_idx == UINT16_MAX || !bc_emit(c->bc, OP_CALL_PRIM, name_idx, (uint16_t)argc))
+            Op call_op = c->instruction_mode ? OP_CALL_PRIM_INSTR : OP_CALL_PRIM;
+            if (name_idx == UINT16_MAX || !bc_emit(c->bc, call_op, name_idx, (uint16_t)argc))
                 return result_error(ERR_OUT_OF_SPACE);
             return result_ok(value_none());
         }
+
+        if (proc_find(name_buf))
+            return result_error(ERR_UNSUPPORTED_ON_DEVICE);
 
         Node name_atom = mem_atom(t.start, t.length);
         return result_error_arg(ERR_DONT_KNOW_HOW, mem_word_ptr(name_atom), NULL);
@@ -461,6 +468,7 @@ Result compile_expression(Compiler *c, Bytecode *bc)
     if (!c || !c->eval || !bc)
         return result_error(ERR_UNSUPPORTED_ON_DEVICE);
     c->bc = bc;
+    c->instruction_mode = false;
     return compile_expr_bp(c, BP_NONE);
 }
 
@@ -480,6 +488,7 @@ Result compile_list(Compiler *c, Node list, Bytecode *bc)
     token_source_init_list(&c->eval->token_source, list);
 
     c->bc = bc;
+    c->instruction_mode = false;
     Result r = compile_expr_bp(c, BP_NONE);
 
     if (r.status == RESULT_OK && !token_source_at_end(&c->eval->token_source))
@@ -489,4 +498,32 @@ Result compile_list(Compiler *c, Node list, Bytecode *bc)
 
     c->eval->token_source = old_source;
     return r;
+}
+
+Result compile_list_instructions(Compiler *c, Node list, Bytecode *bc)
+{
+    if (!c || !c->eval || !bc)
+        return result_error(ERR_UNSUPPORTED_ON_DEVICE);
+
+    TokenSource old_source = c->eval->token_source;
+    token_source_init_list(&c->eval->token_source, list);
+
+    c->bc = bc;
+    c->instruction_mode = true;
+
+    Result r = result_none();
+    while (!token_source_at_end(&c->eval->token_source))
+    {
+        r = compile_expr_bp(c, BP_NONE);
+        if (r.status != RESULT_OK)
+            break;
+        if (!bc_emit(c->bc, OP_END_INSTR, 0, 0))
+        {
+            r = result_error(ERR_OUT_OF_SPACE);
+            break;
+        }
+    }
+
+    c->eval->token_source = old_source;
+    return r.status == RESULT_OK ? result_none() : r;
 }

@@ -122,6 +122,48 @@ Result vm_exec(VM *vm, Bytecode *bc)
                 return vm_error_stack();
             break;
         }
+            case OP_CALL_PRIM_INSTR:
+            {
+                bool instr_mode = (ins.op == OP_CALL_PRIM_INSTR);
+                if (ins.a >= bc->const_len)
+                    return result_error(ERR_OUT_OF_SPACE);
+                Value name_val = bc->const_pool[ins.a];
+                const char *user_name = value_to_string(name_val);
+                const Primitive *prim = primitive_find(user_name);
+                if (!prim)
+                    return result_error_arg(ERR_DONT_KNOW_HOW, user_name, NULL);
+
+                uint16_t argc = ins.b;
+                Value args[16];
+                if (argc > 16)
+                    return result_error(ERR_TOO_MANY_INPUTS);
+                for (int i = (int)argc - 1; i >= 0; i--)
+                {
+                    if (!vm_pop(vm, &args[i]))
+                        return vm_error_stack();
+                }
+
+                int old_depth = vm->eval ? vm->eval->primitive_arg_depth : 0;
+                if (vm->eval)
+                    vm->eval->primitive_arg_depth++;
+                Result r = prim->func(vm->eval, (int)argc, args);
+                if (vm->eval)
+                    vm->eval->primitive_arg_depth = old_depth;
+
+                if (r.status == RESULT_OK)
+                {
+                    if (!vm_push(vm, r.value))
+                        return vm_error_stack();
+                    break;
+                }
+                if (instr_mode && r.status == RESULT_NONE)
+                {
+                    break;
+                }
+                if (r.status != RESULT_OK)
+                    return result_set_error_proc(r, user_name);
+                break;
+            }
         case OP_NEG:
         {
             Value v;
@@ -197,6 +239,17 @@ Result vm_exec(VM *vm, Bytecode *bc)
             }
             if (!vm_push(vm, value_number(result)))
                 return vm_error_stack();
+            break;
+        }
+        case OP_END_INSTR:
+        {
+            if (vm->sp > 0)
+            {
+                Value v;
+                if (!vm_pop(vm, &v))
+                    return vm_error_stack();
+                return result_error_arg(ERR_DONT_KNOW_WHAT, NULL, value_to_string(v));
+            }
             break;
         }
         default:

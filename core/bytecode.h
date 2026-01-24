@@ -31,6 +31,7 @@ extern "C"
         OP_PUSH_CONST,
         OP_LOAD_VAR,
         OP_CALL_PRIM,
+        OP_CALL_PRIM_INSTR,
         OP_NEG,
         OP_ADD,
         OP_SUB,
@@ -38,7 +39,8 @@ extern "C"
         OP_DIV,
         OP_EQ,
         OP_LT,
-        OP_GT
+        OP_GT,
+        OP_END_INSTR
     } Op;
 
     typedef struct
