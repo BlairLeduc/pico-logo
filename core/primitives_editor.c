@@ -431,7 +431,7 @@ static Result prim_edn(Evaluator *eval, int argc, Value *args)
         Value value;
         if (!var_get(name, &value))
         {
-            return result_error_arg(ERR_NO_VALUE, name, NULL);
+            return result_error_arg(ERR_NO_VALUE, NULL, name);
         }
         if (!format_variable(format_buffer_output, &ctx, name, value))
         {
@@ -451,7 +451,7 @@ static Result prim_edn(Evaluator *eval, int argc, Value *args)
                 Value value;
                 if (!var_get(name, &value))
                 {
-                    return result_error_arg(ERR_NO_VALUE, name, NULL);
+                    return result_error_arg(ERR_NO_VALUE, NULL, name);
                 }
                 
                 if (!format_variable(format_buffer_output, &ctx, name, value))

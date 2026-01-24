@@ -139,7 +139,7 @@ static Result prim_pon(Evaluator *eval, int argc, Value *args)
         Value value;
         if (!var_get(name, &value))
         {
-            return result_error_arg(ERR_NO_VALUE, name, NULL);
+            return result_error_arg(ERR_NO_VALUE, NULL, name);
         }
         format_variable(ws_output, NULL, name, value);
     }
@@ -156,7 +156,7 @@ static Result prim_pon(Evaluator *eval, int argc, Value *args)
                 Value value;
                 if (!var_get(name, &value))
                 {
-                    return result_error_arg(ERR_NO_VALUE, name, NULL);
+                    return result_error_arg(ERR_NO_VALUE, NULL, name);
                 }
                 format_variable(ws_output, NULL, name, value);
             }
@@ -359,7 +359,7 @@ static Result prim_buryname(Evaluator *eval, int argc, Value *args)
         const char *name = mem_word_ptr(args[0].as.node);
         if (!var_exists(name))
         {
-            return result_error_arg(ERR_NO_VALUE, name, NULL);
+            return result_error_arg(ERR_NO_VALUE, NULL, name);
         }
         var_bury(name);
     }
@@ -374,7 +374,7 @@ static Result prim_buryname(Evaluator *eval, int argc, Value *args)
                 const char *name = mem_word_ptr(elem);
                 if (!var_exists(name))
                 {
-                    return result_error_arg(ERR_NO_VALUE, name, NULL);
+                    return result_error_arg(ERR_NO_VALUE, NULL, name);
                 }
                 var_bury(name);
             }
@@ -454,7 +454,7 @@ static Result prim_unburyname(Evaluator *eval, int argc, Value *args)
         const char *name = mem_word_ptr(args[0].as.node);
         if (!var_exists(name))
         {
-            return result_error_arg(ERR_NO_VALUE, name, NULL);
+            return result_error_arg(ERR_NO_VALUE, NULL, name);
         }
         var_unbury(name);
     }
@@ -469,7 +469,7 @@ static Result prim_unburyname(Evaluator *eval, int argc, Value *args)
                 const char *name = mem_word_ptr(elem);
                 if (!var_exists(name))
                 {
-                    return result_error_arg(ERR_NO_VALUE, name, NULL);
+                    return result_error_arg(ERR_NO_VALUE, NULL, name);
                 }
                 var_unbury(name);
             }
@@ -550,7 +550,7 @@ static Result prim_ern(Evaluator *eval, int argc, Value *args)
         const char *name = mem_word_ptr(args[0].as.node);
         if (!var_exists(name))
         {
-            return result_error_arg(ERR_NO_VALUE, name, NULL);
+            return result_error_arg(ERR_NO_VALUE, NULL, name);
         }
         var_erase(name);
     }
@@ -565,7 +565,7 @@ static Result prim_ern(Evaluator *eval, int argc, Value *args)
                 const char *name = mem_word_ptr(elem);
                 if (!var_exists(name))
                 {
-                    return result_error_arg(ERR_NO_VALUE, name, NULL);
+                    return result_error_arg(ERR_NO_VALUE, NULL, name);
                 }
                 var_erase(name);
             }
