@@ -800,6 +800,10 @@ Result eval_expression(Evaluator *eval)
 
 Result eval_instruction(Evaluator *eval)
 {
+#if EVAL_USE_VM
+    UNUSED(eval);
+    return result_error(ERR_UNSUPPORTED_ON_DEVICE);
+#else
     // Check for user interrupt at the start of each instruction
     LogoIO *io = primitives_get_io();
     if (io && logo_io_check_user_interrupt(io))
@@ -896,6 +900,7 @@ Result eval_instruction(Evaluator *eval)
     // If we got a value but this was at top level, it's an error
     // (unless it's from inside a run/repeat which handles this)
     return r;
+#endif
 }
 
 // Serialize a list to a string buffer for evaluation

@@ -11,6 +11,10 @@
 #include "token_source.h"
 #include "frame.h"
 
+#ifndef EVAL_USE_VM
+#define EVAL_USE_VM 0
+#endif
+
 #ifdef __cplusplus
 extern "C"
 {

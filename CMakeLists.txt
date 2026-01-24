@@ -55,6 +55,8 @@ if(NOT BUILD_TESTING AND NOT BUILD_FOR_HOST)
 
 # Core Logo interpreter library
 add_library(logo_core
+    core/bytecode.c
+    core/compiler.c
     core/error.c
     core/eval.c
     core/format.c
@@ -93,6 +95,7 @@ add_library(logo_core
     core/token_source.c
     core/value.c
     core/variables.c
+    core/vm.c
     devices/console.c
     devices/hardware.c
     devices/io.c
@@ -240,6 +243,8 @@ if(BUILD_FOR_HOST)
 
     # Core Logo interpreter library for host (with host device implementations)
     add_library(logo_core
+        core/bytecode.c
+        core/compiler.c
         core/error.c
         core/eval.c
         core/format.c
@@ -278,6 +283,7 @@ if(BUILD_FOR_HOST)
         core/token_source.c
         core/value.c
         core/variables.c
+        core/vm.c
     )
 
     target_include_directories(logo_core PUBLIC
@@ -352,6 +358,8 @@ if(BUILD_TESTING)
 
     # Core library without device-specific code
     add_library(logo_core
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/bytecode.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/compiler.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/error.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/eval.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/format.c
@@ -390,6 +398,7 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/core/token_source.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/value.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/variables.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/vm.c
     )
 
     target_include_directories(logo_core PUBLIC
