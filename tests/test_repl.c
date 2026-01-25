@@ -282,6 +282,19 @@ void test_repl_run_empty_lines_skipped(void)
     TEST_ASSERT_TRUE(strstr(output_buffer, "99") != NULL);
 }
 
+void test_repl_run_comment_only_line(void)
+{
+    ReplState state;
+
+    set_mock_input("; [comment]\nprint 7\n");
+
+    repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
+    Result r = repl_run(&state);
+
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "7") != NULL);
+}
+
 void test_repl_run_with_proc_prefix(void)
 {
     ReplState state;
@@ -543,6 +556,7 @@ int main(void)
     RUN_TEST(test_repl_run_simple_print);
     RUN_TEST(test_repl_run_multiple_lines);
     RUN_TEST(test_repl_run_empty_lines_skipped);
+    RUN_TEST(test_repl_run_comment_only_line);
     RUN_TEST(test_repl_run_with_proc_prefix);
     RUN_TEST(test_repl_run_throw_toplevel);
     RUN_TEST(test_repl_run_error_handling);
