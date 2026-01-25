@@ -189,7 +189,7 @@ static Result compile_expr_bp(Compiler *c, int min_bp);
 static bool compiler_skip_expr_bp(TokenSource *ts, int min_bp);
 static bool compiler_skip_primary(TokenSource *ts);
 
-static bool compiler_skip_instruction(TokenSource *ts)
+bool compiler_skip_instruction(TokenSource *ts)
 {
     if (token_source_at_end(ts))
         return false;

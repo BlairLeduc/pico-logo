@@ -402,6 +402,21 @@ void test_deep_non_tail_recursion_limit(void)
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
 }
 
+void test_mid_line_cps_continuation_in_expression(void)
+{
+    const char *no_params[] = {};
+
+    define_proc("inner", no_params, 0, "output 5");
+    define_proc("outer", no_params, 0, "make \"x inner + 1");
+
+    Result r = run_string("outer");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    Result r2 = eval_string(":x");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_FLOAT(6.0f, r2.value.as.number);
+}
+
 void test_definedp_true(void)
 {
     const char *params[] = {};
@@ -1417,6 +1432,7 @@ int main(void)
     RUN_TEST(test_deep_tail_recursion);
     RUN_TEST(test_very_deep_tail_recursion);
     RUN_TEST(test_deep_non_tail_recursion_limit);
+    RUN_TEST(test_mid_line_cps_continuation_in_expression);
     RUN_TEST(test_definedp_true);
     RUN_TEST(test_definedp_false);
     RUN_TEST(test_primitivep_true);

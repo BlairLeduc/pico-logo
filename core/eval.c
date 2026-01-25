@@ -352,41 +352,57 @@ Result eval_instruction(Evaluator *eval)
 // The last instruction in the list is evaluated in tail position
 Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
 {
+    TokenSource saved_source;
+    token_source_copy(&saved_source, &eval->token_source);
+    int saved_paren_depth = eval->paren_depth;
     bool saved_tail = eval->in_tail_position;
 
-    Instruction code_buf[256];
-    Value const_buf[64];
-    Bytecode bc = {
-        .code = code_buf,
-        .code_len = 0,
-        .code_cap = sizeof(code_buf) / sizeof(code_buf[0]),
-        .const_pool = const_buf,
-        .const_len = 0,
-        .const_cap = sizeof(const_buf) / sizeof(const_buf[0]),
-        .arena = NULL
-    };
-    bc_init(&bc, NULL);
+    token_source_init_list(&eval->token_source, list);
 
-    Compiler c = {
-        .eval = eval,
-        .bc = &bc,
-        .instruction_mode = true,
-        .tail_position = false,
-        .tail_depth = 0
-    };
-
-    Result cr = compile_list_instructions(&c, list, &bc, enable_tco);
-    if (cr.status == RESULT_NONE || cr.status == RESULT_OK)
+    Result r = result_none();
+    while (!token_source_at_end(&eval->token_source))
     {
-        VM vm;
-        vm_init(&vm);
-        vm.eval = eval;
-        Result r = vm_exec(&vm, &bc);
-        eval->in_tail_position = saved_tail;
-        return r;
+        if (enable_tco)
+        {
+            TokenSource lookahead = eval->token_source;
+            bool last_instruction = compiler_skip_instruction(&lookahead) && token_source_at_end(&lookahead);
+            eval->in_tail_position = last_instruction;
+        }
+        else
+        {
+            eval->in_tail_position = false;
+        }
+
+        r = eval_instruction(eval);
+
+        if (r.status == RESULT_CALL)
+        {
+            FrameStack *frames = eval->frames;
+            if (frames && !frame_stack_is_empty(frames))
+            {
+                FrameHeader *frame = frame_current(frames);
+                if (frame)
+                {
+                    frame->line_cursor = token_source_get_position(&eval->token_source);
+                }
+            }
+            break;
+        }
+
+        if (r.status == RESULT_GOTO)
+            break;
+
+        if (r.status != RESULT_NONE && r.status != RESULT_OK)
+            break;
+
+        if (r.status == RESULT_OK)
+            break;
     }
+
+    token_source_copy(&eval->token_source, &saved_source);
+    eval->paren_depth = saved_paren_depth;
     eval->in_tail_position = saved_tail;
-    return cr;
+    return r;
 }
 
 Result eval_run_list(Evaluator *eval, Node list)

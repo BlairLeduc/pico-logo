@@ -161,7 +161,18 @@ static bool line_has_user_calls_or_labels(Node line_tokens)
         if (mem_is_word(elem))
         {
             const char *word = mem_word_ptr(elem);
-            (void)word;
+            if (word != NULL && word[0] != '"' && word[0] != ':')
+            {
+                if (strcasecmp(word, "go") == 0 || strcasecmp(word, "label") == 0)
+                    return true;
+                if (proc_find(word) != NULL)
+                    return true;
+            }
+        }
+        else if (mem_is_list(elem))
+        {
+            if (line_has_user_calls_or_labels(elem))
+                return true;
         }
         curr = mem_cdr(curr);
     }
@@ -409,28 +420,7 @@ static Result execute_body_with_step(Evaluator *eval, Node body, bool enable_tco
             is_continuation = true;
             // Resuming from a continuation - start from saved position
             // The body_cursor points to the line that had the call
-            // We need to resume from the NEXT line (call already completed)
-            curr = mem_cdr(frame->body_cursor);
-            
-            // Also check if there's a saved line_cursor for mid-line resumption
-            if (!mem_is_nil(frame->line_cursor))
-            {
-                // Resume mid-line - execute remaining tokens on the saved line
-                Node saved_line = mem_car(frame->body_cursor);
-                Node line_tokens = saved_line;
-                if (NODE_GET_TYPE(saved_line) == NODE_TYPE_LIST)
-                {
-                    line_tokens = NODE_MAKE_LIST(NODE_GET_INDEX(saved_line));
-                }
-                
-                // We need to resume from line_cursor position
-                // For now, just continue to the next line
-                // (Full mid-line resumption would need eval changes)
-            }
-            
-            // Clear the continuation state since we're now resuming
-            frame->body_cursor = NODE_NIL;
-            frame->line_cursor = NODE_NIL;
+            curr = frame->body_cursor;
         }
         else
         {
@@ -458,6 +448,51 @@ static Result execute_body_with_step(Evaluator *eval, Node body, bool enable_tco
         else
         {
             return r;
+        }
+    }
+
+    if (is_continuation)
+    {
+        FrameHeader *frame = frame_current(frames);
+        Node resume_line = frame ? frame->body_cursor : NODE_NIL;
+        if (!mem_is_nil(resume_line))
+        {
+            Node next = mem_cdr(resume_line);
+            bool is_last_line = mem_is_nil(next);
+
+            if (frame && !mem_is_nil(frame->line_cursor))
+            {
+                Node remainder = frame->line_cursor;
+                frame->line_cursor = NODE_NIL;
+
+                r = eval_run_list_with_tco(eval, remainder, enable_tco && is_last_line);
+                if (r.status == RESULT_CALL)
+                {
+                    return r;
+                }
+                if (r.status == RESULT_GOTO)
+                {
+                    Node after = find_label_after(body, r.goto_label);
+                    if (mem_is_nil(after))
+                        return result_error_arg(ERR_CANT_FIND_LABEL, NULL, r.goto_label);
+                    frame->body_cursor = NODE_NIL;
+                    curr = after;
+                }
+                else if (r.status != RESULT_NONE && r.status != RESULT_OK)
+                {
+                    return r;
+                }
+                else if (r.status == RESULT_OK)
+                {
+                    return result_error_arg(ERR_DONT_KNOW_WHAT, NULL, value_to_string(r.value));
+                }
+            }
+
+            if (frame)
+                frame->body_cursor = NODE_NIL;
+
+            if (curr == resume_line)
+                curr = next;
         }
     }
 
