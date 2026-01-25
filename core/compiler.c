@@ -281,11 +281,19 @@ static bool compiler_skip_primary(TokenSource *ts)
     case TOKEN_LEFT_PAREN:
     {
         token_source_next(ts);
-        if (!compiler_skip_expr_bp(ts, BP_NONE))
-            return false;
-        Token closing = token_source_peek(ts);
-        if (closing.type == TOKEN_RIGHT_PAREN)
-            token_source_next(ts);
+        while (true)
+        {
+            Token inner = token_source_peek(ts);
+            if (inner.type == TOKEN_EOF)
+                return false;
+            if (inner.type == TOKEN_RIGHT_PAREN)
+            {
+                token_source_next(ts);
+                break;
+            }
+            if (!compiler_skip_expr_bp(ts, BP_NONE))
+                return false;
+        }
         return true;
     }
     case TOKEN_MINUS:
@@ -728,6 +736,58 @@ Result compile_list_instructions(Compiler *c, Node list, Bytecode *bc, bool enab
         if (r.status != RESULT_OK)
             break;
         if (!bc_emit(c->bc, OP_END_INSTR, 0, 0))
+        {
+            r = result_error(ERR_OUT_OF_SPACE);
+            break;
+        }
+    }
+
+    c->eval->token_source = old_source;
+    return r.status == RESULT_OK ? result_none() : r;
+}
+
+Result compile_list_instructions_expr(Compiler *c, Node list, Bytecode *bc, bool enable_tco)
+{
+    if (!c || !c->eval || !bc)
+        return result_error(ERR_UNSUPPORTED_ON_DEVICE);
+
+    TokenSource old_source = c->eval->token_source;
+    token_source_init_list(&c->eval->token_source, list);
+
+    c->bc = bc;
+    c->instruction_mode = true;
+    c->tail_position = false;
+    c->tail_depth = 0;
+
+    Result r = result_none();
+    while (!token_source_at_end(&c->eval->token_source))
+    {
+        bool last_instruction = false;
+        if (enable_tco)
+        {
+            TokenSource lookahead = c->eval->token_source;
+            last_instruction = compiler_skip_instruction(&lookahead) && token_source_at_end(&lookahead);
+            c->tail_position = last_instruction;
+        }
+        else
+        {
+            TokenSource lookahead = c->eval->token_source;
+            last_instruction = compiler_skip_instruction(&lookahead) && token_source_at_end(&lookahead);
+            c->tail_position = false;
+        }
+
+        if (!bc_emit(c->bc, OP_BEGIN_INSTR, (uint16_t)(c->tail_position ? 1 : 0), 0))
+        {
+            r = result_error(ERR_OUT_OF_SPACE);
+            break;
+        }
+
+        r = compile_expr_bp(c, BP_NONE);
+        if (r.status != RESULT_OK)
+            break;
+
+        Op end_op = last_instruction ? OP_END_LIST_EXPR : OP_END_INSTR;
+        if (!bc_emit(c->bc, end_op, 0, 0))
         {
             r = result_error(ERR_OUT_OF_SPACE);
             break;

@@ -29,6 +29,7 @@ extern "C"
     Result compile_instruction(Compiler *c, Bytecode *bc);
     Result compile_list(Compiler *c, Node list, Bytecode *bc);
     Result compile_list_instructions(Compiler *c, Node list, Bytecode *bc, bool enable_tco);
+    Result compile_list_instructions_expr(Compiler *c, Node list, Bytecode *bc, bool enable_tco);
 
 #ifdef __cplusplus
 }

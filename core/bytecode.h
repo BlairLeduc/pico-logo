@@ -46,7 +46,8 @@ extern "C"
         OP_LT,
         OP_GT,
         OP_BEGIN_INSTR,
-        OP_END_INSTR
+        OP_END_INSTR,
+        OP_END_LIST_EXPR
     } Op;
 
     typedef struct

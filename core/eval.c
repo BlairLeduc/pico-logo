@@ -1320,10 +1320,6 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
     bool old_tail = false;
 #if EVAL_USE_VM
     {
-        if (eval->proc_depth > 0 && !EVAL_USE_VM_BODY)
-        {
-            goto legacy_list_eval;
-        }
         LogoIO *io = primitives_get_io();
         if (io && (logo_io_check_user_interrupt(io) ||
                    logo_io_check_freeze_request(io) ||
@@ -1478,10 +1474,6 @@ Result eval_run_list_expr(Evaluator *eval, Node list)
 {
     bool enable_tco = eval->in_tail_position && eval->proc_depth > 0;
 #if EVAL_USE_VM
-    if (eval->proc_depth > 0 && !EVAL_USE_VM_BODY)
-    {
-        goto legacy_list_expr;
-    }
     LogoIO *io = primitives_get_io();
     if (io && (logo_io_check_user_interrupt(io) ||
                logo_io_check_freeze_request(io) ||
@@ -1510,8 +1502,8 @@ Result eval_run_list_expr(Evaluator *eval, Node list)
 
     bool saved_tail = eval->in_tail_position;
     eval->primitive_arg_depth++;
-    Result cr = compile_list(&c, list, &bc);
-    if (cr.status == RESULT_OK)
+    Result cr = compile_list_instructions_expr(&c, list, &bc, enable_tco);
+    if (cr.status == RESULT_NONE || cr.status == RESULT_OK)
     {
         VM vm;
         vm_init(&vm);

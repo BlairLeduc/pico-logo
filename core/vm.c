@@ -385,6 +385,19 @@ Result vm_exec(VM *vm, Bytecode *bc)
             }
             break;
         }
+        case OP_END_LIST_EXPR:
+        {
+            if (vm->eval)
+                vm->eval->in_tail_position = false;
+            if (vm->sp > 0)
+            {
+                Value v;
+                if (!vm_pop(vm, &v))
+                    return vm_error_stack();
+                return result_ok(v);
+            }
+            return result_none();
+        }
         case OP_BEGIN_INSTR:
         {
             if (vm->eval)
