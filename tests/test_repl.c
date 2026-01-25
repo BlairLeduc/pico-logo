@@ -536,6 +536,25 @@ void test_repl_pause_throw_toplevel_vm_path(void)
     TEST_ASSERT_TRUE(strstr(output_buffer, "vm_pause?") != NULL);
 }
 
+void test_repl_pause_allows_commands_then_continue(void)
+{
+    ReplState state;
+
+    set_mock_input("to vm_pause2\nprint \"before\npause\nprint \"after\nend\n"
+                   "vm_pause2\n"
+                   "print 99\n"
+                   "co\n");
+    reset_output();
+
+    repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
+    Result r = repl_run(&state);
+
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "before") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "99") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "after") != NULL);
+}
+
 //==========================================================================
 // Main
 //==========================================================================
@@ -593,6 +612,7 @@ int main(void)
     // throw "toplevel from nested pause
     RUN_TEST(test_repl_throw_toplevel_from_pause_in_procedure);
     RUN_TEST(test_repl_pause_throw_toplevel_vm_path);
+    RUN_TEST(test_repl_pause_allows_commands_then_continue);
 
     return UNITY_END();
 }
