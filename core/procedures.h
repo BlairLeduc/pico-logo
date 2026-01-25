@@ -45,6 +45,8 @@ extern "C"
         bool buried;                // If true, hidden from poall/erall/etc
         bool stepped;               // If true, pause at each instruction
         bool traced;                // If true, print trace info on call/return
+        struct ProcLineCache *line_cache; // Cached bytecode per line (lazy)
+        int line_cache_count;       // Number of cached lines
     } UserProcedure;
 
     // Tail call information for optimization

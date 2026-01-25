@@ -18,6 +18,7 @@
 #include <string.h>
 #include <strings.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 // Maximum number of user-defined procedures
 #define MAX_PROCEDURES 128
@@ -38,6 +39,151 @@
 #ifndef FRAME_STACK_SIZE
 #define FRAME_STACK_SIZE (32 * 1024)
 #endif
+
+typedef struct ProcLineCache
+{
+    Node line;
+    Bytecode bc_normal;
+    Bytecode bc_tail;
+    bool has_normal;
+    bool has_tail;
+} ProcLineCache;
+
+static void proc_cache_clear(UserProcedure *proc)
+{
+    if (!proc || !proc->line_cache)
+        return;
+    for (int i = 0; i < proc->line_cache_count; i++)
+    {
+        ProcLineCache *entry = &proc->line_cache[i];
+        if (entry->has_normal)
+        {
+            free(entry->bc_normal.code);
+            free(entry->bc_normal.const_pool);
+            entry->bc_normal.code = NULL;
+            entry->bc_normal.const_pool = NULL;
+            entry->has_normal = false;
+        }
+        if (entry->has_tail)
+        {
+            free(entry->bc_tail.code);
+            free(entry->bc_tail.const_pool);
+            entry->bc_tail.code = NULL;
+            entry->bc_tail.const_pool = NULL;
+            entry->has_tail = false;
+        }
+    }
+    free(proc->line_cache);
+    proc->line_cache = NULL;
+    proc->line_cache_count = 0;
+}
+
+static int proc_body_line_count(Node body)
+{
+    int count = 0;
+    Node curr = body;
+    while (!mem_is_nil(curr))
+    {
+        count++;
+        curr = mem_cdr(curr);
+    }
+    return count;
+}
+
+static bool proc_cache_prepare(UserProcedure *proc)
+{
+    if (!proc)
+        return false;
+    if (proc->line_cache)
+        return true;
+
+    int count = proc_body_line_count(proc->body);
+    if (count <= 0)
+    {
+        proc->line_cache_count = 0;
+        return false;
+    }
+
+    ProcLineCache *cache = (ProcLineCache *)malloc(sizeof(ProcLineCache) * (size_t)count);
+    if (!cache)
+        return false;
+    memset(cache, 0, sizeof(ProcLineCache) * (size_t)count);
+
+    Node curr = proc->body;
+    for (int i = 0; i < count; i++)
+    {
+        Node line = mem_car(curr);
+        Node line_tokens = line;
+        if (NODE_GET_TYPE(line) == NODE_TYPE_LIST)
+        {
+            line_tokens = NODE_MAKE_LIST(NODE_GET_INDEX(line));
+        }
+        cache[i].line = line_tokens;
+        curr = mem_cdr(curr);
+    }
+
+    proc->line_cache = cache;
+    proc->line_cache_count = count;
+    return true;
+}
+
+static Result proc_cache_compile_line(Evaluator *eval, Node line_tokens, bool enable_tco, Bytecode *out_bc)
+{
+    size_t code_cap = 64;
+    size_t const_cap = 32;
+
+    for (int attempt = 0; attempt < 4; attempt++)
+    {
+        Instruction *code = (Instruction *)malloc(sizeof(Instruction) * code_cap);
+        Value *const_pool = (Value *)malloc(sizeof(Value) * const_cap);
+        if (!code || !const_pool)
+        {
+            free(code);
+            free(const_pool);
+            return result_error(ERR_OUT_OF_SPACE);
+        }
+
+        Bytecode bc = {
+            .code = code,
+            .code_len = 0,
+            .code_cap = code_cap,
+            .const_pool = const_pool,
+            .const_len = 0,
+            .const_cap = const_cap,
+            .arena = NULL
+        };
+        bc_init(&bc, NULL);
+
+        Compiler c = {
+            .eval = eval,
+            .bc = &bc,
+            .instruction_mode = true,
+            .tail_position = false,
+            .tail_depth = 0
+        };
+
+        Result cr = compile_list_instructions(&c, line_tokens, &bc, enable_tco);
+        if (cr.status == RESULT_OK || cr.status == RESULT_NONE)
+        {
+            *out_bc = bc;
+            return cr;
+        }
+
+        free(code);
+        free(const_pool);
+
+        if (cr.status == RESULT_ERROR && cr.error_code == ERR_OUT_OF_SPACE)
+        {
+            code_cap *= 2;
+            const_cap *= 2;
+            continue;
+        }
+
+        return cr;
+    }
+
+    return result_error(ERR_OUT_OF_SPACE);
+}
 
 // Procedure storage
 static UserProcedure procedures[MAX_PROCEDURES];
@@ -239,10 +385,19 @@ static bool body_can_use_vm(Node body)
     return true;
 }
 
-static Result execute_body_vm(Evaluator *eval, Node body, bool enable_tco)
+static Result execute_body_vm(Evaluator *eval, UserProcedure *proc, Node body, bool enable_tco)
 {
     Node curr = body;
     Result r = result_none();
+    int line_index = 0;
+
+    if (proc)
+    {
+        if (!proc_cache_prepare(proc))
+        {
+            proc_cache_clear(proc);
+        }
+    }
 
     while (!mem_is_nil(curr))
     {
@@ -259,6 +414,7 @@ static Result execute_body_vm(Evaluator *eval, Node body, bool enable_tco)
         if (mem_is_nil(line_tokens))
         {
             curr = next;
+            line_index++;
             continue;
         }
 
@@ -337,36 +493,98 @@ static Result execute_body_vm(Evaluator *eval, Node body, bool enable_tco)
             }
         }
 
-        Instruction code_buf[256];
-        Value const_buf[64];
-        Bytecode bc = {
-            .code = code_buf,
-            .code_len = 0,
-            .code_cap = sizeof(code_buf) / sizeof(code_buf[0]),
-            .const_pool = const_buf,
-            .const_len = 0,
-            .const_cap = sizeof(const_buf) / sizeof(const_buf[0]),
-            .arena = NULL
-        };
-        bc_init(&bc, NULL);
+        Bytecode *bc = NULL;
+        ProcLineCache *entry = NULL;
+        bool want_tail = enable_tco && is_last_line;
 
-        Compiler c = {
-            .eval = eval,
-            .bc = &bc,
-            .instruction_mode = true,
-            .tail_position = false,
-            .tail_depth = 0
-        };
+        if (proc && proc->line_cache && line_index < proc->line_cache_count)
+        {
+            entry = &proc->line_cache[line_index];
+            if (entry->line != line_tokens)
+            {
+                proc_cache_clear(proc);
+                proc_cache_prepare(proc);
+                entry = (proc && proc->line_cache && line_index < proc->line_cache_count)
+                            ? &proc->line_cache[line_index]
+                            : NULL;
+            }
+        }
 
-        Result cr = compile_list_instructions(&c, line_tokens, &bc, enable_tco && is_last_line);
-        if (cr.status != RESULT_NONE && cr.status != RESULT_OK)
-            return cr;
+        if (entry)
+        {
+            if (want_tail)
+            {
+                if (!entry->has_tail)
+                {
+                    Result cr = proc_cache_compile_line(eval, line_tokens, true, &entry->bc_tail);
+                    if (cr.status != RESULT_NONE && cr.status != RESULT_OK)
+                        return cr;
+                    entry->has_tail = true;
+                }
+                bc = &entry->bc_tail;
+            }
+            else
+            {
+                if (!entry->has_normal)
+                {
+                    Result cr = proc_cache_compile_line(eval, line_tokens, false, &entry->bc_normal);
+                    if (cr.status != RESULT_NONE && cr.status != RESULT_OK)
+                        return cr;
+                    entry->has_normal = true;
+                }
+                bc = &entry->bc_normal;
+            }
+        }
+        else
+        {
+            Bytecode temp_bc = {0};
+            Result cr = proc_cache_compile_line(eval, line_tokens, want_tail, &temp_bc);
+            if (cr.status != RESULT_NONE && cr.status != RESULT_OK)
+                return cr;
+            bc = &temp_bc;
+
+            VM temp_vm;
+            vm_init(&temp_vm);
+            temp_vm.eval = eval;
+            r = vm_exec(&temp_vm, bc);
+
+            free(temp_bc.code);
+            free(temp_bc.const_pool);
+
+            if (r.status == RESULT_CALL)
+            {
+                FrameStack *frames = eval->frames;
+                if (frames && !frame_stack_is_empty(frames))
+                {
+                    FrameHeader *frame = frame_current(frames);
+                    if (frame)
+                    {
+                        frame->body_cursor = curr;
+                        frame->line_cursor = NODE_NIL;
+                    }
+                }
+                return r;
+            }
+
+            if (r.status == RESULT_GOTO)
+                return r;
+
+            if (r.status != RESULT_NONE && r.status != RESULT_OK)
+                return r;
+
+            if (r.status == RESULT_OK)
+                return result_error_arg(ERR_DONT_KNOW_WHAT, NULL, value_to_string(r.value));
+
+            curr = next;
+            line_index++;
+            continue;
+        }
 
         bool saved_tail = eval->in_tail_position;
         VM vm;
         vm_init(&vm);
         vm.eval = eval;
-        r = vm_exec(&vm, &bc);
+        r = vm_exec(&vm, bc);
         eval->in_tail_position = saved_tail;
 
         if (r.status == RESULT_CALL)
@@ -394,6 +612,7 @@ static Result execute_body_vm(Evaluator *eval, Node body, bool enable_tco)
             return result_error_arg(ERR_DONT_KNOW_WHAT, NULL, value_to_string(r.value));
 
         curr = next;
+        line_index++;
     }
 
     return r;
@@ -437,7 +656,14 @@ static Result execute_body_with_step(Evaluator *eval, Node body, bool enable_tco
     // Use VM for full body execution when safe (no stepping, no continuation, no control-flow)
     if (!stepped && !is_continuation && body_can_use_vm(body))
     {
-        r = execute_body_vm(eval, body, enable_tco);
+        UserProcedure *current_proc = NULL;
+        if (frames && !frame_stack_is_empty(frames))
+        {
+            FrameHeader *frame = frame_current(frames);
+            if (frame)
+                current_proc = frame->proc;
+        }
+        r = execute_body_vm(eval, current_proc, body, enable_tco);
         if (r.status == RESULT_GOTO)
         {
             Node after = find_label_after(body, r.goto_label);
@@ -617,6 +843,8 @@ void procedures_init(void)
         procedures[i].buried = false;
         procedures[i].stepped = false;
         procedures[i].traced = false;
+        procedures[i].line_cache = NULL;
+        procedures[i].line_cache_count = 0;
     }
     proc_clear_tail_call();
     current_proc_depth = 0;
@@ -645,6 +873,7 @@ bool proc_define(const char *name, const char **params, int param_count, Node bo
     if (idx >= 0)
     {
         // Redefine existing procedure
+        proc_cache_clear(&procedures[idx]);
         procedures[idx].param_count = param_count;
         for (int i = 0; i < param_count && i < MAX_PROC_PARAMS; i++)
         {
@@ -669,6 +898,8 @@ bool proc_define(const char *name, const char **params, int param_count, Node bo
             procedures[i].buried = false;
             procedures[i].stepped = false;
             procedures[i].traced = false;
+            procedures[i].line_cache = NULL;
+            procedures[i].line_cache_count = 0;
             if (i >= procedure_count)
                 procedure_count = i + 1;
             return true;
@@ -697,6 +928,7 @@ void proc_erase(const char *name)
     int idx = find_procedure_index(name);
     if (idx >= 0)
     {
+        proc_cache_clear(&procedures[idx]);
         procedures[idx].name = NULL;
         procedures[idx].param_count = 0;
         procedures[idx].body = NODE_NIL;
@@ -711,6 +943,7 @@ void proc_erase_all(bool check_buried)
         {
             if (!check_buried || !procedures[i].buried)
             {
+                proc_cache_clear(&procedures[i]);
                 procedures[i].name = NULL;
                 procedures[i].param_count = 0;
                 procedures[i].body = NODE_NIL;
@@ -1198,6 +1431,31 @@ void proc_gc_mark_all(void)
         if (procedures[i].name != NULL && !mem_is_nil(procedures[i].body))
         {
             mem_gc_mark(procedures[i].body);
+            if (procedures[i].line_cache && procedures[i].line_cache_count > 0)
+            {
+                for (int j = 0; j < procedures[i].line_cache_count; j++)
+                {
+                    ProcLineCache *entry = &procedures[i].line_cache[j];
+                    if (entry->has_normal)
+                    {
+                        for (size_t k = 0; k < entry->bc_normal.const_len; k++)
+                        {
+                            Value v = entry->bc_normal.const_pool[k];
+                            if (v.type == VALUE_WORD || v.type == VALUE_LIST)
+                                mem_gc_mark(v.as.node);
+                        }
+                    }
+                    if (entry->has_tail)
+                    {
+                        for (size_t k = 0; k < entry->bc_tail.const_len; k++)
+                        {
+                            Value v = entry->bc_tail.const_pool[k];
+                            if (v.type == VALUE_WORD || v.type == VALUE_LIST)
+                                mem_gc_mark(v.as.node);
+                        }
+                    }
+                }
+            }
         }
     }
 }
