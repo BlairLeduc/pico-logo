@@ -219,6 +219,8 @@ Result eval_expression(Evaluator *eval)
     }
 #else
     return result_error(ERR_UNSUPPORTED_ON_DEVICE);
+}
+}
 #endif
 
     return result_error(ERR_UNSUPPORTED_ON_DEVICE);
@@ -705,19 +707,9 @@ static int find_label_position(const char *buffer, const char *label_name)
 // The last instruction in the list is evaluated in tail position
 Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
 {
-    TokenSource old_source;
-    bool old_tail = false;
 #if EVAL_USE_VM
     if (eval->allow_vm)
     {
-        LogoIO *io = primitives_get_io();
-        if (io && (logo_io_check_user_interrupt(io) ||
-                   logo_io_check_freeze_request(io) ||
-                   logo_io_check_pause_request(io)))
-        {
-            goto legacy_list_eval;
-        }
-
         bool saved_tail = eval->in_tail_position;
 
         Instruction code_buf[256];
@@ -752,98 +744,10 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
             return r;
         }
         eval->in_tail_position = saved_tail;
+        return cr;
     }
 #endif
-legacy_list_eval:
-    // Save current token source state
-    old_source = eval->token_source;
-    old_tail = eval->in_tail_position;
-
-    // Create new token source from the Node list
-    token_source_init_list(&eval->token_source, list);
-
-    Result r = result_none();
-
-    while (!eval_at_end(eval))
-    {
-        // Determine if this instruction is the last one
-        bool last_instruction = false;
-        if (enable_tco)
-        {
-            // Create lookahead copy
-            Evaluator lookahead = *eval;
-            token_source_copy(&lookahead.token_source, &eval->token_source);
-            last_instruction = skip_instruction(&lookahead) && eval_at_end(&lookahead);
-        }
-
-        // Set tail position for this instruction
-        eval->in_tail_position = enable_tco && last_instruction;
-
-        // Execute instruction
-        r = eval_instruction(eval);
-
-        // Restore tail flag
-        eval->in_tail_position = old_tail;
-
-        // Check if there's more to execute
-        bool at_end = eval_at_end(eval);
-        
-        // If TCO is enabled and this was the last instruction and we got RESULT_STOP
-        // from a tail call setup, that's correct - return it
-        if (enable_tco && at_end && r.status == RESULT_STOP)
-        {
-            TailCall *tc = proc_get_tail_call();
-            if (tc->is_tail_call)
-            {
-                // This is a valid tail call - return to let proc_call handle it
-                break;
-            }
-        }
-
-        // Handle RESULT_CALL - save token position for continuation and propagate
-        if (r.status == RESULT_CALL)
-        {
-            // Save current token position in frame for later resumption
-            // The caller (execute_body_with_step) will save body_cursor
-            FrameStack *frames = eval->frames;
-            if (frames && !frame_stack_is_empty(frames))
-            {
-                FrameHeader *frame = frame_current(frames);
-                if (frame)
-                {
-                    // Save position within this line (token source current node)
-                    frame->line_cursor = token_source_get_position(&eval->token_source);
-                }
-            }
-            break;  // Propagate to caller
-        }
-
-        // Handle RESULT_GOTO - let it bubble up to execute_body_with_step
-        // which has access to the full procedure body with all lines
-        if (r.status == RESULT_GOTO)
-        {
-            break;  // Propagate to caller
-        }
-
-        // Propagate stop/output/error/throw immediately
-        if (r.status != RESULT_NONE && r.status != RESULT_OK)
-        {
-            break;
-        }
-
-        // If we got a value at top level of list, it's an error
-        if (r.status == RESULT_OK)
-        {
-            r = result_error_arg(ERR_DONT_KNOW_WHAT, NULL, value_to_string(r.value));
-            break;
-        }
-    }
-
-    // Restore state
-    eval->in_tail_position = old_tail;
-    eval->token_source = old_source;
-
-    return r;
+    return result_error(ERR_UNSUPPORTED_ON_DEVICE);
 }
 
 Result eval_run_list(Evaluator *eval, Node list)
@@ -864,13 +768,6 @@ Result eval_run_list_expr(Evaluator *eval, Node list)
 {
     bool enable_tco = eval->in_tail_position && eval->proc_depth > 0;
 #if EVAL_USE_VM
-    LogoIO *io = primitives_get_io();
-    if (io && (logo_io_check_user_interrupt(io) ||
-               logo_io_check_freeze_request(io) ||
-               logo_io_check_pause_request(io)))
-    {
-        goto legacy_list_expr;
-    }
     Instruction code_buf[256];
     Value const_buf[64];
     Bytecode bc = {
@@ -905,85 +802,7 @@ Result eval_run_list_expr(Evaluator *eval, Node list)
     }
     eval->primitive_arg_depth--;
     eval->in_tail_position = saved_tail;
+    return cr;
 #endif
-legacy_list_expr:
-    // If we're in tail position inside a procedure, the last instruction 
-    // in this list is also in tail position - enables TCO for:
-    //   if :n > 0 [recurse :n - 1]
-    enable_tco = eval->in_tail_position && eval->proc_depth > 0;
-    
-    // Increment primitive_arg_depth to disable CPS during this call
-    // This ensures nested procedure calls complete before returning to caller
-    // (TCO still works via the tail call mechanism)
-    eval->primitive_arg_depth++;
-    
-    // Save current token source state
-    TokenSource old_source = eval->token_source;
-    bool old_tail = eval->in_tail_position;
-
-    // Create new token source from the Node list
-    token_source_init_list(&eval->token_source, list);
-
-    Result r = result_none();
-
-    while (!eval_at_end(eval))
-    {
-        // Determine if this instruction is the last one (for TCO)
-        bool last_instruction = false;
-        if (enable_tco)
-        {
-            // Create lookahead copy
-            Evaluator lookahead = *eval;
-            token_source_copy(&lookahead.token_source, &eval->token_source);
-            last_instruction = skip_instruction(&lookahead) && eval_at_end(&lookahead);
-        }
-
-        // Set tail position for this instruction
-        eval->in_tail_position = enable_tco && last_instruction;
-        
-        r = eval_instruction(eval);
-        
-        // Restore tail flag
-        eval->in_tail_position = old_tail;
-        
-        // Check if there's more to execute
-        bool at_end = eval_at_end(eval);
-        
-        // If TCO is enabled and this was the last instruction and we got RESULT_STOP
-        // from a tail call setup, return it to let proc_call handle it
-        if (enable_tco && at_end && r.status == RESULT_STOP)
-        {
-            TailCall *tc = proc_get_tail_call();
-            if (tc->is_tail_call)
-            {
-                break;
-            }
-        }
-        
-        // Propagate stop/output/error/throw immediately
-        if (r.status != RESULT_NONE && r.status != RESULT_OK)
-        {
-            break;
-        }
-
-        // If we got a value and there's more to execute, that's an error
-        if (r.status == RESULT_OK && !at_end)
-        {
-            r = result_error_arg(ERR_DONT_KNOW_WHAT, NULL, value_to_string(r.value));
-            break;
-        }
-        
-        // If we got a value and we're at the end, return it (operation case)
-        if (r.status == RESULT_OK)
-        {
-            break;
-        }
-    }
-
-    // Restore state
-    eval->in_tail_position = old_tail;
-    eval->token_source = old_source;
-    eval->primitive_arg_depth--;
-
-    return r;
+    return result_error(ERR_UNSUPPORTED_ON_DEVICE);
 }

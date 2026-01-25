@@ -14,6 +14,7 @@
 #include "vm.h"
 #include "frame.h"
 #include "devices/io.h"
+#include "repl.h"
 #include <string.h>
 #include <strings.h>
 #include <stdio.h>
@@ -251,46 +252,111 @@ static Result execute_body_vm(Evaluator *eval, Node body, bool enable_tco)
         }
 
         LogoIO *io = primitives_get_io();
-        if (io && (logo_io_check_user_interrupt(io) ||
-                   logo_io_check_freeze_request(io) ||
-                   logo_io_check_pause_request(io)))
+        if (io)
         {
-            r = eval_run_list_with_tco(eval, line_tokens, enable_tco && is_last_line);
+            if (logo_io_check_user_interrupt(io))
+                return result_error(ERR_STOPPED);
+
+            if (logo_io_check_freeze_request(io))
+            {
+                bool freeze_done = false;
+                while (!freeze_done)
+                {
+                    if (logo_io_check_user_interrupt(io))
+                        return result_error(ERR_STOPPED);
+
+                    if (logo_io_check_pause_request(io))
+                    {
+                        const char *proc_name = proc_get_current();
+                        if (proc_name == NULL && eval && eval->frames && !frame_stack_is_empty(eval->frames))
+                        {
+                            FrameHeader *frame = frame_current(eval->frames);
+                            if (frame && frame->proc)
+                                proc_name = frame->proc->name;
+                        }
+                        if (proc_name != NULL)
+                        {
+                            logo_io_clear_pause_request(io);
+                            logo_io_write_line(io, "Pausing...");
+
+                            ReplState state;
+                            repl_init(&state, io, REPL_FLAGS_PAUSE, proc_name);
+                            Result pr = repl_run(&state);
+                            if (pr.status != RESULT_OK && pr.status != RESULT_NONE)
+                                return pr;
+                        }
+                        freeze_done = true;
+                    }
+                    else if (logo_io_check_freeze_request(io))
+                    {
+                        // Consume additional freeze requests
+                    }
+                    else if (logo_io_key_available(io))
+                    {
+                        logo_io_read_char(io);
+                        freeze_done = true;
+                    }
+                    else
+                    {
+                        logo_io_sleep(io, 10);
+                    }
+                }
+            }
+
+            if (logo_io_check_pause_request(io))
+            {
+                const char *proc_name = proc_get_current();
+                if (proc_name == NULL && eval && eval->frames && !frame_stack_is_empty(eval->frames))
+                {
+                    FrameHeader *frame = frame_current(eval->frames);
+                    if (frame && frame->proc)
+                        proc_name = frame->proc->name;
+                }
+                if (proc_name != NULL)
+                {
+                    logo_io_clear_pause_request(io);
+                    logo_io_write_line(io, "Pausing...");
+
+                    ReplState state;
+                    repl_init(&state, io, REPL_FLAGS_PAUSE, proc_name);
+                    Result pr = repl_run(&state);
+                    if (pr.status != RESULT_OK && pr.status != RESULT_NONE)
+                        return pr;
+                }
+            }
         }
-        else
-        {
-            Instruction code_buf[256];
-            Value const_buf[64];
-            Bytecode bc = {
-                .code = code_buf,
-                .code_len = 0,
-                .code_cap = sizeof(code_buf) / sizeof(code_buf[0]),
-                .const_pool = const_buf,
-                .const_len = 0,
-                .const_cap = sizeof(const_buf) / sizeof(const_buf[0]),
-                .arena = NULL
-            };
-            bc_init(&bc, NULL);
 
-            Compiler c = {
-                .eval = eval,
-                .bc = &bc,
-                .instruction_mode = true,
-                .tail_position = false,
-                .tail_depth = 0
-            };
+        Instruction code_buf[256];
+        Value const_buf[64];
+        Bytecode bc = {
+            .code = code_buf,
+            .code_len = 0,
+            .code_cap = sizeof(code_buf) / sizeof(code_buf[0]),
+            .const_pool = const_buf,
+            .const_len = 0,
+            .const_cap = sizeof(const_buf) / sizeof(const_buf[0]),
+            .arena = NULL
+        };
+        bc_init(&bc, NULL);
 
-            Result cr = compile_list_instructions(&c, line_tokens, &bc, enable_tco && is_last_line);
-            if (cr.status != RESULT_NONE && cr.status != RESULT_OK)
-                return cr;
+        Compiler c = {
+            .eval = eval,
+            .bc = &bc,
+            .instruction_mode = true,
+            .tail_position = false,
+            .tail_depth = 0
+        };
 
-            bool saved_tail = eval->in_tail_position;
-            VM vm;
-            vm_init(&vm);
-            vm.eval = eval;
-            r = vm_exec(&vm, &bc);
-            eval->in_tail_position = saved_tail;
-        }
+        Result cr = compile_list_instructions(&c, line_tokens, &bc, enable_tco && is_last_line);
+        if (cr.status != RESULT_NONE && cr.status != RESULT_OK)
+            return cr;
+
+        bool saved_tail = eval->in_tail_position;
+        VM vm;
+        vm_init(&vm);
+        vm.eval = eval;
+        r = vm_exec(&vm, &bc);
+        eval->in_tail_position = saved_tail;
 
         if (r.status == RESULT_CALL)
         {
