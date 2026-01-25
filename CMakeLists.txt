@@ -290,7 +290,7 @@ if(BUILD_FOR_HOST)
         ${CMAKE_CURRENT_SOURCE_DIR}
     )
 
-    target_compile_definitions(logo_core PUBLIC EVAL_USE_VM=1)
+    target_compile_definitions(logo_core PUBLIC EVAL_USE_VM=1 EVAL_USE_VM_BODY=1)
 
     add_executable(logo
         devices/host/host_console.c
@@ -407,7 +407,7 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}
     )
 
-    target_compile_definitions(logo_core PUBLIC EVAL_USE_VM=1)
+    target_compile_definitions(logo_core PUBLIC EVAL_USE_VM=1 EVAL_USE_VM_BODY=1)
 
     target_link_libraries(logo_core logo_devices m)
 
