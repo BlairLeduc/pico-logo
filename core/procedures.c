@@ -10,6 +10,8 @@
 #include "format.h"
 #include "memory.h"
 #include "primitives.h"
+#include "compiler.h"
+#include "vm.h"
 #include "frame.h"
 #include "devices/io.h"
 #include <string.h>
@@ -149,6 +151,121 @@ static int serialize_step_node(Node elem, char *buf, int max_len, bool need_spac
     return pos;
 }
 
+static bool line_has_user_calls_or_labels(Node line_tokens)
+{
+    Node curr = line_tokens;
+    while (!mem_is_nil(curr))
+    {
+        Node elem = mem_car(curr);
+        if (mem_is_word(elem))
+        {
+            const char *word = mem_word_ptr(elem);
+            if (word && word[0] != '"' && word[0] != ':')
+            {
+                if (strcasecmp(word, "label") == 0 ||
+                    strcasecmp(word, "go") == 0 ||
+                    strcasecmp(word, "if") == 0 ||
+                    strcasecmp(word, "run") == 0 ||
+                    strcasecmp(word, "catch") == 0 ||
+                    strcasecmp(word, "throw") == 0 ||
+                    strcasecmp(word, "output") == 0 ||
+                    strcasecmp(word, "op") == 0 ||
+                    strcasecmp(word, "stop") == 0 ||
+                    strcasecmp(word, "pause") == 0 ||
+                    strcasecmp(word, "co") == 0 ||
+                    strcasecmp(word, "wait") == 0 ||
+                    strcasecmp(word, "repeat") == 0 ||
+                    strcasecmp(word, "forever") == 0 ||
+                    strcasecmp(word, "while") == 0 ||
+                    strcasecmp(word, "do.while") == 0 ||
+                    strcasecmp(word, "until") == 0 ||
+                    strcasecmp(word, "do.until") == 0 ||
+                    strcasecmp(word, "for") == 0 ||
+                    strcasecmp(word, "step") == 0 ||
+                    strcasecmp(word, "trace") == 0 ||
+                    strcasecmp(word, "unstep") == 0 ||
+                    strcasecmp(word, "untrace") == 0)
+                    return true;
+                if (proc_find(word))
+                    return true;
+            }
+        }
+        curr = mem_cdr(curr);
+    }
+    return false;
+}
+
+static bool body_can_use_vm(Node body)
+{
+    Node curr = body;
+    while (!mem_is_nil(curr))
+    {
+        Node line = mem_car(curr);
+        Node line_tokens = line;
+        if (NODE_GET_TYPE(line) == NODE_TYPE_LIST)
+        {
+            line_tokens = NODE_MAKE_LIST(NODE_GET_INDEX(line));
+        }
+        if (!mem_is_nil(line_tokens) && line_has_user_calls_or_labels(line_tokens))
+            return false;
+        curr = mem_cdr(curr);
+    }
+    return true;
+}
+
+static Result execute_body_vm(Evaluator *eval, Node body, bool enable_tco)
+{
+    Instruction code_buf[512];
+    Value const_buf[128];
+    Bytecode bc = {
+        .code = code_buf,
+        .code_len = 0,
+        .code_cap = sizeof(code_buf) / sizeof(code_buf[0]),
+        .const_pool = const_buf,
+        .const_len = 0,
+        .const_cap = sizeof(const_buf) / sizeof(const_buf[0]),
+        .arena = NULL
+    };
+    bc_init(&bc, NULL);
+
+    Compiler c = {
+        .eval = eval,
+        .bc = &bc,
+        .instruction_mode = true,
+        .tail_position = false,
+        .tail_depth = 0
+    };
+
+    Node curr = body;
+    while (!mem_is_nil(curr))
+    {
+        Node line = mem_car(curr);
+        Node next = mem_cdr(curr);
+        bool is_last_line = mem_is_nil(next);
+
+        Node line_tokens = line;
+        if (NODE_GET_TYPE(line) == NODE_TYPE_LIST)
+        {
+            line_tokens = NODE_MAKE_LIST(NODE_GET_INDEX(line));
+        }
+        if (!mem_is_nil(line_tokens))
+        {
+            Result cr = compile_list_instructions(&c, line_tokens, &bc, enable_tco && is_last_line);
+            if (cr.status != RESULT_NONE && cr.status != RESULT_OK)
+                return cr;
+        }
+        curr = next;
+    }
+
+    bool saved_tail = eval->in_tail_position;
+    VM vm;
+    vm_init(&vm);
+    vm.eval = eval;
+    Result r = vm_exec(&vm, &bc);
+    eval->in_tail_position = saved_tail;
+    return r;
+}
+
 // Helper to execute procedure body with step support
 // Body is a list of line-lists: [[line1-tokens] [line2-tokens] ...]
 // Returns Result from execution
@@ -160,12 +277,14 @@ static Result execute_body_with_step(Evaluator *eval, Node body, bool enable_tco
     // Check if we're resuming from a saved continuation
     FrameStack *frames = eval->frames;
     Node curr;
+    bool is_continuation = false;
     
     if (frames && !frame_stack_is_empty(frames))
     {
         FrameHeader *frame = frame_current(frames);
         if (frame && !mem_is_nil(frame->body_cursor))
         {
+            is_continuation = true;
             // Resuming from a continuation - start from saved position
             // The body_cursor points to the line that had the call
             // We need to resume from the NEXT line (call already completed)
@@ -203,6 +322,24 @@ static Result execute_body_with_step(Evaluator *eval, Node body, bool enable_tco
         curr = body;
     }
     
+    // Use VM for full body execution when safe (no stepping, no continuation, no control-flow)
+#if EVAL_USE_VM_BODY
+    if (!stepped && !is_continuation && body_can_use_vm(body))
+    {
+        LogoIO *io_check = primitives_get_io();
+        if (io_check && (logo_io_check_user_interrupt(io_check) ||
+                         logo_io_check_freeze_request(io_check) ||
+                         logo_io_check_pause_request(io_check)))
+        {
+            // Fall back to legacy to preserve debug-control behavior.
+        }
+        else
+        {
+            return execute_body_vm(eval, body, enable_tco);
+        }
+    }
+#endif
+
     // Iterate through body - each element is a line (a list of tokens)
     while (!mem_is_nil(curr))
     {

@@ -883,6 +883,20 @@ void test_unconditional_tco_with_args(void)
     TEST_ASSERT_EQUAL_FLOAT(101.0f, r3.value.as.number);
 }
 
+void test_multiline_tco_tail_call(void)
+{
+    // Multi-line procedure with tail call on last line
+    Result r = proc_define_from_text(
+        "to tco_lines :n\n"
+        "if :n = 0 [stop]\n"
+        "tco_lines :n - 1\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    Result r2 = run_string("tco_lines 10000");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+}
+
 void test_tco_with_args_exact_failing_case(void)
 {
     // This is the EXACT failing case from the user:
@@ -1442,6 +1456,7 @@ int main(void)
     RUN_TEST(test_proc_define_from_text_with_parentheses);
     RUN_TEST(test_unconditional_tco_no_args);
     RUN_TEST(test_unconditional_tco_with_args);
+    RUN_TEST(test_multiline_tco_tail_call);
     RUN_TEST(test_tco_with_args_exact_failing_case);
     RUN_TEST(test_tco_with_print_and_args);
     RUN_TEST(test_tco_scope_depth_stability);

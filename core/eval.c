@@ -1266,6 +1266,8 @@ static int find_label_position(const char *buffer, const char *label_name)
 // The last instruction in the list is evaluated in tail position
 Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
 {
+    TokenSource old_source;
+    bool old_tail = false;
 #if EVAL_USE_VM
     {
         LogoIO *io = primitives_get_io();
@@ -1314,8 +1316,8 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
 #endif
 legacy_list_eval:
     // Save current token source state
-    TokenSource old_source = eval->token_source;
-    bool old_tail = eval->in_tail_position;
+    old_source = eval->token_source;
+    old_tail = eval->in_tail_position;
 
     // Create new token source from the Node list
     token_source_init_list(&eval->token_source, list);

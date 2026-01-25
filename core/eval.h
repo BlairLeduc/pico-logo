@@ -15,6 +15,10 @@
 #define EVAL_USE_VM 0
 #endif
 
+#ifndef EVAL_USE_VM_BODY
+#define EVAL_USE_VM_BODY 0
+#endif
+
 #ifdef __cplusplus
 extern "C"
 {
