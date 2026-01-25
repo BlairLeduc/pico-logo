@@ -17,11 +17,6 @@
 #include <stdlib.h>
 #include <ctype.h>
 
-// Binding powers for Pratt parser
-#define BP_NONE 0
-#define BP_COMPARISON 10      // = < >
-#define BP_ADDITIVE 20        // + -
-#define BP_MULTIPLICATIVE 30  // * /
 
 void eval_init(Evaluator *eval, Lexer *lexer)
 {
@@ -72,25 +67,6 @@ bool eval_at_end(Evaluator *eval)
     return t.type == TOKEN_EOF;
 }
 
-// Check if token is an infix operator
-static int get_infix_bp(TokenType type)
-{
-    switch (type)
-    {
-    case TOKEN_PLUS:
-    case TOKEN_MINUS:
-        return BP_ADDITIVE;
-    case TOKEN_MULTIPLY:
-    case TOKEN_DIVIDE:
-        return BP_MULTIPLICATIVE;
-    case TOKEN_EQUALS:
-    case TOKEN_LESS_THAN:
-    case TOKEN_GREATER_THAN:
-        return BP_COMPARISON;
-    default:
-        return BP_NONE;
-    }
-}
 
 // Try to parse a number from a string
 static bool is_number_string(const char *str, size_t len)
@@ -390,167 +366,6 @@ Result eval_instruction(Evaluator *eval)
 #endif
 
     return result_error(ERR_UNSUPPORTED_ON_DEVICE);
-}
-
-// Skip/peek helpers for tail-call lookahead (no execution)
-// Forward declarations
-static bool skip_primary(Evaluator *eval);
-static bool skip_expr_bp(Evaluator *eval, int min_bp);
-static bool skip_instruction(Evaluator *eval);
-
-// Skip a single primary expression (literal, variable, list, or parens)
-static bool skip_primary(Evaluator *eval)
-{
-    Token t = peek(eval);
-
-    switch (t.type)
-    {
-    case TOKEN_NUMBER:
-    case TOKEN_QUOTED:
-    case TOKEN_COLON:
-        advance(eval);
-        return true;
-
-    case TOKEN_WORD:
-    {
-        // For words, we need to check if it's a procedure and skip its args
-        // But this is called from skip_expr_bp for arguments, where the word
-        // might be a variable reference or just a literal in context.
-        // For primitive args, we just need to skip one expression.
-        
-        // Check if it's a number (self-quoting)
-        if (is_number_string(t.start, t.length))
-        {
-            advance(eval);
-            return true;
-        }
-        
-        // Look up as primitive or user proc
-        char name_buf[64];
-        size_t name_len = t.length;
-        if (name_len >= sizeof(name_buf))
-            name_len = sizeof(name_buf) - 1;
-        memcpy(name_buf, t.start, name_len);
-        name_buf[name_len] = '\0';
-        
-        const Primitive *prim = primitive_find(name_buf);
-        if (prim)
-        {
-            advance(eval);
-            // Skip the expected number of arguments
-            for (int i = 0; i < prim->default_args && !eval_at_end(eval); i++)
-            {
-                Token next = peek(eval);
-                if (next.type == TOKEN_RIGHT_PAREN || next.type == TOKEN_RIGHT_BRACKET)
-                    break;
-                if (!skip_expr_bp(eval, BP_NONE))
-                    return false;
-            }
-            return true;
-        }
-        
-        UserProcedure *user_proc = proc_find(name_buf);
-        if (user_proc)
-        {
-            advance(eval);
-            // Skip the expected number of arguments
-            for (int i = 0; i < user_proc->param_count && !eval_at_end(eval); i++)
-            {
-                Token next = peek(eval);
-                if (next.type == TOKEN_RIGHT_PAREN || next.type == TOKEN_RIGHT_BRACKET)
-                    break;
-                if (!skip_expr_bp(eval, BP_NONE))
-                    return false;
-            }
-            return true;
-        }
-        
-        // Unknown word - just skip it (might be undefined procedure)
-        advance(eval);
-        return true;
-    }
-
-    case TOKEN_LEFT_BRACKET:
-    {
-        advance(eval);
-        // For NodeIterator, nested lists are atomic - check for pending sublist
-        Node sublist = token_source_get_sublist(&eval->token_source);
-        if (!mem_is_nil(sublist))
-        {
-            // This was a nested list node, consume it and we're done
-            token_source_consume_sublist(&eval->token_source);
-            return true;
-        }
-        // For Lexer (flat brackets), scan through contents
-        while (true)
-        {
-            Token inner = peek(eval);
-            if (inner.type == TOKEN_EOF)
-                return false;
-            if (inner.type == TOKEN_RIGHT_BRACKET)
-            {
-                advance(eval);
-                break;
-            }
-            if (!skip_primary(eval))
-                return false;
-        }
-        return true;
-    }    case TOKEN_LEFT_PAREN:
-        advance(eval);
-        // Skip contents of parens - could be grouped expr or varargs call
-        while (true)
-        {
-            Token inner = peek(eval);
-            if (inner.type == TOKEN_EOF)
-                return false;
-            if (inner.type == TOKEN_RIGHT_PAREN)
-            {
-                advance(eval);
-                break;
-            }
-            if (!skip_expr_bp(eval, BP_NONE))
-                return false;
-        }
-        return true;
-
-    case TOKEN_MINUS:
-    case TOKEN_UNARY_MINUS:
-        advance(eval);
-        return skip_primary(eval);
-
-    default:
-        return false;
-    }
-}
-
-static bool skip_expr_bp(Evaluator *eval, int min_bp)
-{
-    if (!skip_primary(eval))
-        return false;
-
-    while (true)
-    {
-        Token op = peek(eval);
-        int bp = get_infix_bp(op.type);
-        if (bp == BP_NONE || bp < min_bp)
-            break;
-
-        advance(eval);
-        if (!skip_expr_bp(eval, bp + 1))
-            return false;
-    }
-    return true;
-}
-
-// Skip a complete instruction (used for TCO lookahead)
-// This mirrors eval_instruction/eval_expression logic
-static bool skip_instruction(Evaluator *eval)
-{
-    if (eval_at_end(eval))
-        return false;
-    
-    return skip_expr_bp(eval, BP_NONE);
 }
 
 // Find position in buffer after a label instruction with given name
