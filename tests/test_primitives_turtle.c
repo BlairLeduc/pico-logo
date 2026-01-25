@@ -1241,6 +1241,52 @@ void test_shape_primitives_registered(void)
     TEST_ASSERT_NOT_EQUAL(RESULT_ERROR, r.status);
 }
 
+void test_spin_row_square_dashed_repro(void)
+{
+    mock_device_clear_graphics();
+
+    Result def_movex = proc_define_from_text(
+        "to movex :space\n"
+        "  pu\n"
+        "  setpos se xcor + :space ycor\n"
+        "  pd\n"
+        "end\n");
+    TEST_ASSERT_EQUAL(RESULT_OK, def_movex.status);
+
+    Result def_row = proc_define_from_text(
+        "to row :times :space :commands\n"
+        "  repeat :times [run :commands movex :space]\n"
+        "end\n");
+    TEST_ASSERT_EQUAL(RESULT_OK, def_row.status);
+
+    Result def_spin = proc_define_from_text(
+        "to spin :times :commands\n"
+        "  repeat :times [run :commands right 360 / :times]\n"
+        "end\n");
+    TEST_ASSERT_EQUAL(RESULT_OK, def_spin.status);
+
+    Result def_square = proc_define_from_text(
+        "to square :side\n"
+        "  repeat 4 [fd :side / 2 dashed.forward :side / 2 rt 90]\n"
+        "end\n");
+    TEST_ASSERT_EQUAL(RESULT_OK, def_square.status);
+
+    Result def_dashed = proc_define_from_text(
+        "to dashed.forward :side\n"
+        "  repeat :side / 10 [pu fd 5 pd fd 5]\n"
+        "  fd remainder :side 10\n"
+        "end\n");
+    TEST_ASSERT_EQUAL(RESULT_OK, def_dashed.status);
+
+    Result r = run_string("spin 8 [row 5 5 [square 30]]");
+    if (r.status == RESULT_ERROR)
+    {
+        TEST_FAIL_MESSAGE(error_format(r));
+    }
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE_MESSAGE(mock_device_line_count() > 0, "expected some drawn lines");
+}
+
 //==========================================================================
 // Main
 //==========================================================================
@@ -1394,6 +1440,7 @@ int main(void)
     RUN_TEST(test_getsh_requires_input);
     RUN_TEST(test_putsh_getsh_roundtrip);
     RUN_TEST(test_shape_primitives_registered);
+    RUN_TEST(test_spin_row_square_dashed_repro);
 
     return UNITY_END();
 }

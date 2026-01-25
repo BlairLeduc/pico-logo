@@ -108,6 +108,20 @@ void test_run_list(void)
     TEST_ASSERT_EQUAL_STRING("42\n", output_buffer);
 }
 
+void test_repeat_run_nested_procedure_calls(void)
+{
+    run_string("make \"count 0");
+    run_string("define \"bump [[] [make \"count :count + 1]]");
+    run_string("define \"row [[times space commands] [repeat :times [run :commands]]]");
+    run_string("define \"spin [[times commands] [repeat :times [run :commands]]]");
+
+    run_string("spin 3 [row 4 0 [bump]]");
+
+    Result r = eval_string(":count");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(12.0f, r.value.as.number);
+}
+
 // Test infix subtraction inside lists - Logo evaluates infix operators when list is run
 void test_infix_minus_in_list(void)
 {
@@ -454,6 +468,7 @@ int main(void)
     RUN_TEST(test_stop);
     RUN_TEST(test_output);
     RUN_TEST(test_run_list);
+    RUN_TEST(test_repeat_run_nested_procedure_calls);
     RUN_TEST(test_infix_minus_in_list);
     RUN_TEST(test_while_basic);
     RUN_TEST(test_while_never_runs);

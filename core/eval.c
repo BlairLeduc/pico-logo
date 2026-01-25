@@ -405,15 +405,13 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
 
         if (r.status == RESULT_CALL)
         {
-            FrameStack *frames = eval->frames;
-            if (frames && !frame_stack_is_empty(frames))
+            Result call_r = proc_call(eval, r.call_proc, r.call_argc, r.call_args);
+            if (call_r.status == RESULT_NONE)
             {
-                FrameHeader *frame = frame_current(frames);
-                if (frame)
-                {
-                    frame->line_cursor = token_source_get_position(&eval->token_source);
-                }
+                r = result_none();
+                continue;
             }
+            r = call_r;
             break;
         }
 
@@ -436,12 +434,10 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
 
 Result eval_run_list(Evaluator *eval, Node list)
 {
-    // Increment primitive_arg_depth to disable CPS during this call
-    // This ensures nested procedure calls complete before returning to caller
-    // (CPS would return RESULT_CALL which primitives don't handle)
-    eval->primitive_arg_depth++;
+    int saved_primitive_depth = eval->primitive_arg_depth;
+    eval->primitive_arg_depth = 0;
     Result r = eval_run_list_with_tco(eval, list, false);
-    eval->primitive_arg_depth--;
+    eval->primitive_arg_depth = saved_primitive_depth;
     return r;
 }
 
@@ -451,43 +447,64 @@ Result eval_run_list(Evaluator *eval, Node list)
 Result eval_run_list_expr(Evaluator *eval, Node list)
 {
     bool enable_tco = eval->in_tail_position && eval->proc_depth > 0;
-    uint8_t arena_buf[BYTECODE_ARENA_SIZE];
-    Arena arena = {
-        .base = arena_buf,
-        .capacity = sizeof(arena_buf),
-        .used = 0
-    };
-    Bytecode bc = {
-        .code = NULL,
-        .code_len = 0,
-        .code_cap = 0,
-        .const_pool = NULL,
-        .const_len = 0,
-        .const_cap = 0,
-        .arena = &arena
-    };
-    bc_init(&bc, &arena);
-
-    Compiler c = {
-        .eval = eval,
-        .bc = &bc,
-        .instruction_mode = false
-    };
-
+    bool saved_suppress = eval->suppress_token_source_save;
+    TokenSource saved_source;
+    token_source_copy(&saved_source, &eval->token_source);
+    int saved_paren_depth = eval->paren_depth;
     bool saved_tail = eval->in_tail_position;
-    eval->primitive_arg_depth++;
-    Result cr = compile_list_instructions_expr(&c, list, &bc, enable_tco);
-    if (cr.status == RESULT_NONE || cr.status == RESULT_OK)
+    int saved_primitive_depth = eval->primitive_arg_depth;
+
+    token_source_init_list(&eval->token_source, list);
+    eval->suppress_token_source_save = true;
+    eval->primitive_arg_depth = 0;
+
+    Result r = result_none();
+    while (!token_source_at_end(&eval->token_source))
     {
-        VM vm;
-        vm_init(&vm);
-        vm.eval = eval;
-        Result r = vm_exec(&vm, &bc);
-        eval->primitive_arg_depth--;
-        eval->in_tail_position = saved_tail;
-        return r;
+        bool last_instruction = false;
+        TokenSource lookahead = eval->token_source;
+        last_instruction = compiler_skip_instruction(&lookahead) && token_source_at_end(&lookahead);
+        if (enable_tco)
+        {
+            eval->in_tail_position = last_instruction;
+        }
+        else
+        {
+            eval->in_tail_position = false;
+        }
+
+        r = eval_instruction(eval);
+
+        if (r.status == RESULT_CALL)
+        {
+            Result call_r = proc_call(eval, r.call_proc, r.call_argc, r.call_args);
+            if (call_r.status == RESULT_NONE)
+            {
+                r = result_none();
+                continue;
+            }
+            r = call_r;
+            break;
+        }
+
+        if (r.status == RESULT_OK)
+        {
+            if (!last_instruction)
+            {
+                r = result_error_arg(ERR_DONT_KNOW_WHAT, NULL, value_to_string(r.value));
+                break;
+            }
+            break;
+        }
+
+        if (r.status != RESULT_NONE)
+            break;
     }
-    eval->primitive_arg_depth--;
+
+    token_source_copy(&eval->token_source, &saved_source);
+    eval->paren_depth = saved_paren_depth;
     eval->in_tail_position = saved_tail;
-    return cr;
+    eval->primitive_arg_depth = saved_primitive_depth;
+    eval->suppress_token_source_save = saved_suppress;
+    return r;
 }
