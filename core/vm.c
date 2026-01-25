@@ -118,11 +118,17 @@ Result vm_exec(VM *vm, Bytecode *bc)
             Result r = prim->func(vm->eval, (int)argc, args);
             if (vm->eval)
                 vm->eval->primitive_arg_depth = old_depth;
-            if (r.status != RESULT_OK)
+            if (r.status == RESULT_OK)
+            {
+                if (!vm_push(vm, r.value))
+                    return vm_error_stack();
+                break;
+            }
+            if (r.status == RESULT_NONE)
+                return r;
+            if (r.status == RESULT_ERROR)
                 return result_set_error_proc(r, user_name);
-            if (!vm_push(vm, r.value))
-                return vm_error_stack();
-            break;
+            return r;
         }
             case OP_CALL_PRIM_INSTR:
             {

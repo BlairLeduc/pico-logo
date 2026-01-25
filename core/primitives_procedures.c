@@ -438,6 +438,60 @@ Result proc_define_from_text(const char *text)
             body_tail = line_cons;
         }
     }
+
+    // Allow trailing "end" token on the final line (test helper convenience)
+    if (!mem_is_nil(body))
+    {
+        Node tail_line_cons = body;
+        while (!mem_is_nil(mem_cdr(tail_line_cons)))
+        {
+            tail_line_cons = mem_cdr(tail_line_cons);
+        }
+
+        Node tail_line = mem_car(tail_line_cons);
+        Node tail_tokens = tail_line;
+        bool tail_marked = false;
+        if (NODE_GET_TYPE(tail_line) == NODE_TYPE_LIST)
+        {
+            tail_tokens = NODE_MAKE_LIST(NODE_GET_INDEX(tail_line));
+            tail_marked = true;
+        }
+
+        if (!mem_is_nil(tail_tokens))
+        {
+            Node prev_token = NODE_NIL;
+            Node curr_token = tail_tokens;
+            while (!mem_is_nil(mem_cdr(curr_token)))
+            {
+                prev_token = curr_token;
+                curr_token = mem_cdr(curr_token);
+            }
+
+            Node last_token = mem_car(curr_token);
+            if (mem_is_word(last_token))
+            {
+                const char *word = mem_word_ptr(last_token);
+                if (strcasecmp(word, "end") == 0)
+                {
+                    if (mem_is_nil(prev_token))
+                    {
+                        tail_tokens = NODE_NIL;
+                    }
+                    else
+                    {
+                        mem_set_cdr(prev_token, NODE_NIL);
+                    }
+
+                    Node new_line = tail_tokens;
+                    if (tail_marked && !mem_is_nil(tail_tokens))
+                    {
+                        new_line = NODE_MAKE_LIST(NODE_GET_INDEX(tail_tokens));
+                    }
+                    mem_set_car(tail_line_cons, new_line);
+                }
+            }
+        }
+    }
     
     // Define the procedure
     if (!proc_define(name, params, param_count, body))
