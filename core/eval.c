@@ -944,7 +944,57 @@ Result eval_instruction(Evaluator *eval)
         return result_none();
     }
 
-    Result r = eval_expression(eval);
+#if EVAL_USE_VM
+    TokenSource saved_source;
+    token_source_copy(&saved_source, &eval->token_source);
+    Lexer saved_lexer;
+    bool saved_lexer_valid = false;
+    if (eval->token_source.type == TOKEN_SOURCE_LEXER && eval->token_source.lexer)
+    {
+        saved_lexer = *eval->token_source.lexer;
+        saved_lexer_valid = true;
+    }
+    int saved_paren_depth = eval->paren_depth;
+    int saved_primitive_depth = eval->primitive_arg_depth;
+
+    Instruction code_buf[256];
+    Value const_buf[64];
+    Bytecode bc = {
+        .code = code_buf,
+        .code_len = 0,
+        .code_cap = sizeof(code_buf) / sizeof(code_buf[0]),
+        .const_pool = const_buf,
+        .const_len = 0,
+        .const_cap = sizeof(const_buf) / sizeof(const_buf[0]),
+        .arena = NULL
+    };
+    bc_init(&bc, NULL);
+
+    Compiler c = {
+        .eval = eval,
+        .bc = &bc,
+        .instruction_mode = true
+    };
+
+    Result cr = compile_instruction(&c, &bc);
+    if (cr.status == RESULT_OK)
+    {
+        VM vm;
+        vm_init(&vm);
+        vm.eval = eval;
+        return vm_exec(&vm, &bc);
+    }
+
+    token_source_copy(&eval->token_source, &saved_source);
+    if (saved_lexer_valid && eval->token_source.type == TOKEN_SOURCE_LEXER && eval->token_source.lexer)
+    {
+        *eval->token_source.lexer = saved_lexer;
+    }
+    eval->paren_depth = saved_paren_depth;
+    eval->primitive_arg_depth = saved_primitive_depth;
+#endif
+
+    Result r = eval_expr_bp(eval, BP_NONE);
 
     // If we got a value but this was at top level, it's an error
     // (unless it's from inside a run/repeat which handles this)
@@ -1270,6 +1320,10 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
     bool old_tail = false;
 #if EVAL_USE_VM
     {
+        if (eval->proc_depth > 0 && !EVAL_USE_VM_BODY)
+        {
+            goto legacy_list_eval;
+        }
         LogoIO *io = primitives_get_io();
         if (io && (logo_io_check_user_interrupt(io) ||
                    logo_io_check_freeze_request(io) ||
@@ -1422,7 +1476,19 @@ Result eval_run_list(Evaluator *eval, Node list)
 // Propagates tail position for TCO
 Result eval_run_list_expr(Evaluator *eval, Node list)
 {
+    bool enable_tco = eval->in_tail_position && eval->proc_depth > 0;
 #if EVAL_USE_VM
+    if (eval->proc_depth > 0 && !EVAL_USE_VM_BODY)
+    {
+        goto legacy_list_expr;
+    }
+    LogoIO *io = primitives_get_io();
+    if (io && (logo_io_check_user_interrupt(io) ||
+               logo_io_check_freeze_request(io) ||
+               logo_io_check_pause_request(io)))
+    {
+        goto legacy_list_expr;
+    }
     Instruction code_buf[256];
     Value const_buf[64];
     Bytecode bc = {
@@ -1458,10 +1524,11 @@ Result eval_run_list_expr(Evaluator *eval, Node list)
     eval->primitive_arg_depth--;
     eval->in_tail_position = saved_tail;
 #endif
+legacy_list_expr:
     // If we're in tail position inside a procedure, the last instruction 
     // in this list is also in tail position - enables TCO for:
     //   if :n > 0 [recurse :n - 1]
-    bool enable_tco = eval->in_tail_position && eval->proc_depth > 0;
+    enable_tco = eval->in_tail_position && eval->proc_depth > 0;
     
     // Increment primitive_arg_depth to disable CPS during this call
     // This ensures nested procedure calls complete before returning to caller

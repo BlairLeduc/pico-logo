@@ -659,9 +659,13 @@ Result compile_expression(Compiler *c, Bytecode *bc)
 
 Result compile_instruction(Compiler *c, Bytecode *bc)
 {
-    (void)c;
-    (void)bc;
-    return result_error(ERR_UNSUPPORTED_ON_DEVICE);
+    if (!c || !c->eval || !bc)
+        return result_error(ERR_UNSUPPORTED_ON_DEVICE);
+    c->bc = bc;
+    c->instruction_mode = true;
+    c->tail_position = c->eval->in_tail_position;
+    c->tail_depth = 0;
+    return compile_expr_bp(c, BP_NONE);
 }
 
 Result compile_list(Compiler *c, Node list, Bytecode *bc)
