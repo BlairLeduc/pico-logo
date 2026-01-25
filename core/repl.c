@@ -97,6 +97,65 @@ int repl_count_bracket_balance(const char *line)
     return balance;
 }
 
+// Parse a list from a lexer stream, consuming up to matching ] or EOF.
+static Node repl_parse_list(Lexer *lexer)
+{
+    Node list = NODE_NIL;
+    Node tail = NODE_NIL;
+
+    while (true)
+    {
+        Token t = lexer_next_token(lexer);
+        if (t.type == TOKEN_EOF || t.type == TOKEN_RIGHT_BRACKET)
+        {
+            break;
+        }
+
+        Node item = NODE_NIL;
+
+        if (t.type == TOKEN_LEFT_BRACKET)
+        {
+            item = repl_parse_list(lexer);
+            item = NODE_MAKE_LIST(NODE_GET_INDEX(item));
+        }
+        else if (t.type == TOKEN_WORD || t.type == TOKEN_NUMBER ||
+                 t.type == TOKEN_QUOTED || t.type == TOKEN_COLON)
+        {
+            item = mem_atom(t.start, t.length);
+        }
+        else if (t.type == TOKEN_PLUS || t.type == TOKEN_MINUS ||
+                 t.type == TOKEN_UNARY_MINUS ||
+                 t.type == TOKEN_MULTIPLY || t.type == TOKEN_DIVIDE ||
+                 t.type == TOKEN_EQUALS || t.type == TOKEN_LESS_THAN ||
+                 t.type == TOKEN_GREATER_THAN)
+        {
+            item = mem_atom(t.start, t.length);
+        }
+        else if (t.type == TOKEN_LEFT_PAREN || t.type == TOKEN_RIGHT_PAREN)
+        {
+            item = mem_atom(t.start, t.length);
+        }
+        else
+        {
+            continue;
+        }
+
+        Node new_cons = mem_cons(item, NODE_NIL);
+        if (mem_is_nil(list))
+        {
+            list = new_cons;
+            tail = new_cons;
+        }
+        else
+        {
+            mem_set_cdr(tail, new_cons);
+            tail = new_cons;
+        }
+    }
+
+    return list;
+}
+
 // Initialize REPL state
 void repl_init(ReplState *state, LogoIO *io, ReplFlags flags, const char *proc_prefix)
 {
@@ -117,74 +176,70 @@ static Result repl_evaluate_line(ReplState *state, const char *input)
     Evaluator eval;
     lexer_init(&lexer, input);
     eval_init(&eval, &lexer);
-    eval.allow_vm = false;
     eval_set_frames(&eval, proc_get_frame_stack());
 
-    while (!eval_at_end(&eval))
+    Node list = repl_parse_list(&lexer);
+    Result r = eval_run_list_with_tco(&eval, list, false);
+
+    if (r.status == RESULT_ERROR)
     {
-        Result r = eval_instruction(&eval);
-        
-        if (r.status == RESULT_ERROR)
+        // Reset all execution state to clean up any stale frames from the error
+        if (!(state->flags & REPL_FLAG_EXIT_ON_CO))
         {
-            // Reset all execution state to clean up any stale frames from the error
+            proc_reset_execution_state();
+        }
+        logo_io_write_line(state->io, error_format(r));
+        return result_none();  // Error handled, continue REPL
+    }
+    else if (r.status == RESULT_THROW)
+    {
+        if (strcasecmp(r.throw_tag, "toplevel") == 0)
+        {
+            // throw "toplevel exits the REPL - reset execution state first
             if (!(state->flags & REPL_FLAG_EXIT_ON_CO))
             {
                 proc_reset_execution_state();
             }
-            logo_io_write_line(state->io, error_format(r));
-            return result_none();  // Error handled, continue REPL
+            return r;
         }
-        else if (r.status == RESULT_THROW)
+        else
         {
-            if (strcasecmp(r.throw_tag, "toplevel") == 0)
+            // Other uncaught throws are errors - reset execution state first
+            if (!(state->flags & REPL_FLAG_EXIT_ON_CO))
             {
-                // throw "toplevel exits the REPL - reset execution state first
-                if (!(state->flags & REPL_FLAG_EXIT_ON_CO))
-                {
-                    proc_reset_execution_state();
-                }
-                return r;
+                proc_reset_execution_state();
             }
-            else
-            {
-                // Other uncaught throws are errors - reset execution state first
-                if (!(state->flags & REPL_FLAG_EXIT_ON_CO))
-                {
-                    proc_reset_execution_state();
-                }
-                char msg[128];
-                snprintf(msg, sizeof(msg), "Can't find a catch for %s", r.throw_tag);
-                logo_io_write_line(state->io, msg);
-                return result_none();  // Error handled, continue REPL
-            }
-        }
-        else if (r.status == RESULT_PAUSE)
-        {
-            // Nested pause - recursively run pause REPL
-            ReplState pause_state;
-            repl_init(&pause_state, state->io, REPL_FLAGS_PAUSE, r.pause_proc);
-            
-            logo_io_write_line(state->io, "Pausing...");
-            
-            Result pr = repl_run(&pause_state);
-            if (pr.status == RESULT_THROW)
-            {
-                // Propagate throw
-                return pr;
-            }
-        }
-        else if (r.status == RESULT_OK)
-        {
-            // Expression returned a value - show "I don't know what to do with" error
             char msg[128];
-            snprintf(msg, sizeof(msg), "I don't know what to do with %s", 
-                     value_to_string(r.value));
+            snprintf(msg, sizeof(msg), "Can't find a catch for %s", r.throw_tag);
             logo_io_write_line(state->io, msg);
             return result_none();  // Error handled, continue REPL
         }
-        // RESULT_NONE, RESULT_STOP, RESULT_OUTPUT - continue evaluation
     }
-    
+    else if (r.status == RESULT_PAUSE)
+    {
+        // Nested pause - recursively run pause REPL
+        ReplState pause_state;
+        repl_init(&pause_state, state->io, REPL_FLAGS_PAUSE, r.pause_proc);
+
+        logo_io_write_line(state->io, "Pausing...");
+
+        Result pr = repl_run(&pause_state);
+        if (pr.status == RESULT_THROW)
+        {
+            // Propagate throw
+            return pr;
+        }
+    }
+    else if (r.status == RESULT_OK)
+    {
+        // Expression returned a value - show "I don't know what to do with" error
+        char msg[128];
+        snprintf(msg, sizeof(msg), "I don't know what to do with %s",
+                 value_to_string(r.value));
+        logo_io_write_line(state->io, msg);
+        return result_none();  // Error handled, continue REPL
+    }
+
     return result_none();
 }
 
