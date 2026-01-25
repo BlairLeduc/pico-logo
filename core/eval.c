@@ -798,23 +798,6 @@ static Result eval_expr_bp(Evaluator *eval, int min_bp)
 Result eval_expression(Evaluator *eval)
 {
 #if EVAL_USE_VM
-    // If the next token is a user procedure call, fall back to legacy
-    Token head = peek(eval);
-    if (head.type == TOKEN_WORD && !is_number_string(head.start, head.length))
-    {
-        char name_buf[64];
-        size_t name_len = head.length;
-        if (name_len >= sizeof(name_buf))
-            name_len = sizeof(name_buf) - 1;
-        memcpy(name_buf, head.start, name_len);
-        name_buf[name_len] = '\0';
-
-        if (!primitive_find(name_buf) && proc_find(name_buf))
-        {
-            return eval_expr_bp(eval, BP_NONE);
-        }
-    }
-
     TokenSource saved_source;
     token_source_copy(&saved_source, &eval->token_source);
     Lexer saved_lexer;

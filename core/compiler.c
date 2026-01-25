@@ -580,71 +580,39 @@ static Result compile_primary(Compiler *c)
         UserProcedure *user_proc = proc_find(name_buf);
         if (user_proc)
         {
-            if (c->instruction_mode && c->tail_position && c->tail_depth == 1)
+            Node user_name_atom = mem_atom(t.start, t.length);
+            advance(c);
+
+            int argc = 0;
+            for (int i = 0; i < user_proc->param_count && !token_source_at_end(&c->eval->token_source); i++)
             {
-                Node user_name_atom = mem_atom(t.start, t.length);
-                advance(c);
-
-                int argc = 0;
-                for (int i = 0; i < user_proc->param_count && !token_source_at_end(&c->eval->token_source); i++)
-                {
-                    Token next = peek(c);
-                    if (next.type == TOKEN_RIGHT_PAREN || next.type == TOKEN_RIGHT_BRACKET || next.type == TOKEN_EOF)
-                    {
-                        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, user_proc->name, NULL);
-                    }
-
-                    Result arg = compile_expr_bp(c, BP_NONE);
-                    if (arg.status != RESULT_OK)
-                    {
-                        return result_set_error_proc(arg, user_proc->name);
-                    }
-                    argc++;
-                }
-
-                if (argc < user_proc->param_count)
+                Token next = peek(c);
+                if (next.type == TOKEN_RIGHT_PAREN || next.type == TOKEN_RIGHT_BRACKET || next.type == TOKEN_EOF)
                 {
                     return result_error_arg(ERR_NOT_ENOUGH_INPUTS, user_proc->name, NULL);
                 }
 
-                uint16_t name_idx = bc_add_const(c->bc, value_word(user_name_atom));
-                if (name_idx == UINT16_MAX || !bc_emit(c->bc, OP_CALL_USER_TAIL, name_idx, (uint16_t)argc))
-                    return result_error(ERR_OUT_OF_SPACE);
-                return result_ok(value_none());
+                Result arg = compile_expr_bp(c, BP_NONE);
+                if (arg.status != RESULT_OK)
+                {
+                    return result_set_error_proc(arg, user_proc->name);
+                }
+                argc++;
             }
+
+            if (argc < user_proc->param_count)
+            {
+                return result_error_arg(ERR_NOT_ENOUGH_INPUTS, user_proc->name, NULL);
+            }
+
+            uint16_t name_idx = bc_add_const(c->bc, value_word(user_name_atom));
+            Op call_op = OP_CALL_USER_EXPR;
             if (c->instruction_mode)
-            {
-                Node user_name_atom = mem_atom(t.start, t.length);
-                advance(c);
+                call_op = (c->tail_position && c->tail_depth == 1) ? OP_CALL_USER_TAIL : OP_CALL_USER;
 
-                int argc = 0;
-                for (int i = 0; i < user_proc->param_count && !token_source_at_end(&c->eval->token_source); i++)
-                {
-                    Token next = peek(c);
-                    if (next.type == TOKEN_RIGHT_PAREN || next.type == TOKEN_RIGHT_BRACKET || next.type == TOKEN_EOF)
-                    {
-                        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, user_proc->name, NULL);
-                    }
-
-                    Result arg = compile_expr_bp(c, BP_NONE);
-                    if (arg.status != RESULT_OK)
-                    {
-                        return result_set_error_proc(arg, user_proc->name);
-                    }
-                    argc++;
-                }
-
-                if (argc < user_proc->param_count)
-                {
-                    return result_error_arg(ERR_NOT_ENOUGH_INPUTS, user_proc->name, NULL);
-                }
-
-                uint16_t name_idx = bc_add_const(c->bc, value_word(user_name_atom));
-                if (name_idx == UINT16_MAX || !bc_emit(c->bc, OP_CALL_USER, name_idx, (uint16_t)argc))
-                    return result_error(ERR_OUT_OF_SPACE);
-                return result_ok(value_none());
-            }
-            return result_error(ERR_UNSUPPORTED_ON_DEVICE);
+            if (name_idx == UINT16_MAX || !bc_emit(c->bc, call_op, name_idx, (uint16_t)argc))
+                return result_error(ERR_OUT_OF_SPACE);
+            return result_ok(value_none());
         }
 
         Node name_atom = mem_atom(t.start, t.length);

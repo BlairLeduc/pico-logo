@@ -33,6 +33,7 @@ extern "C"
         OP_CALL_PRIM,
         OP_CALL_PRIM_INSTR,
         OP_CALL_USER,
+        OP_CALL_USER_EXPR,
         OP_CALL_USER_TAIL,
         OP_PRIM_ARGS_BEGIN,
         OP_PRIM_ARGS_END,
