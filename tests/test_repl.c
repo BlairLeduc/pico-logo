@@ -519,6 +519,23 @@ void test_repl_throw_toplevel_from_pause_in_procedure(void)
     TEST_ASSERT_NULL(strstr(output_buffer, "after\n"));
 }
 
+void test_repl_pause_throw_toplevel_vm_path(void)
+{
+    ReplState state;
+
+    // Define a procedure that pauses via REPL input, then invoke it and throw toplevel
+    set_mock_input("to vm_pause\npause\nend\nvm_pause\nthrow \"toplevel\n");
+    reset_output();
+
+    repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
+    Result r = repl_run(&state);
+
+    TEST_ASSERT_EQUAL(RESULT_THROW, r.status);
+    TEST_ASSERT_EQUAL_STRING("toplevel", r.throw_tag);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "Pausing") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "vm_pause?") != NULL);
+}
+
 //==========================================================================
 // Main
 //==========================================================================
@@ -575,6 +592,7 @@ int main(void)
     
     // throw "toplevel from nested pause
     RUN_TEST(test_repl_throw_toplevel_from_pause_in_procedure);
-    
+    RUN_TEST(test_repl_pause_throw_toplevel_vm_path);
+
     return UNITY_END();
 }
