@@ -15,7 +15,11 @@
 
 enum
 {
+#ifndef VM_STACK_CAP
     VM_DEFAULT_STACK_CAP = 64
+#else
+    VM_DEFAULT_STACK_CAP = VM_STACK_CAP
+#endif
 };
 
 void vm_init(VM *vm)

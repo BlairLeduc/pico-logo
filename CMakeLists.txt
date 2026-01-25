@@ -118,6 +118,12 @@ if(DEFINED LOGO_EDITOR_BUFFER_SIZE)
     target_compile_definitions(logo_core PUBLIC LOGO_EDITOR_BUFFER_SIZE=${LOGO_EDITOR_BUFFER_SIZE})
 endif()
 
+# Allow VM_STACK_CAP to be set via CMake cache variable
+if(NOT DEFINED VM_STACK_CAP)
+    set(VM_STACK_CAP 64)
+endif()
+target_compile_definitions(logo_core PUBLIC VM_STACK_CAP=${VM_STACK_CAP})
+
 # WiFi support (only for Pico W boards)
 option(LOGO_HAS_WIFI "Enable WiFi support for Pico W boards" OFF)
 if(LOGO_HAS_WIFI)
