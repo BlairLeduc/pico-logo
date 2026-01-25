@@ -842,7 +842,7 @@ Result eval_expression(Evaluator *eval)
             }
             eval->paren_depth = saved_paren_depth;
             eval->primitive_arg_depth = saved_primitive_depth;
-            return eval_expr_bp(eval, BP_NONE);
+            return cr;
         }
 
         VM vm;
@@ -1016,6 +1016,7 @@ Result eval_instruction(Evaluator *eval)
         }
         eval->paren_depth = saved_paren_depth;
         eval->primitive_arg_depth = saved_primitive_depth;
+        return cr;
     }
 #endif
 
