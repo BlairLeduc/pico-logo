@@ -821,6 +821,17 @@ void test_proc_define_from_text_end_in_list(void)
     TEST_ASSERT_EQUAL_STRING("no", mem_word_ptr(r3.value.as.node));
 }
 
+void test_proc_define_from_text_trailing_end_trim(void)
+{
+    Result r = proc_define_from_text("to endtrim print \"before end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    reset_output();
+    Result r2 = run_string("endtrim");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "before"));
+}
+
 void test_proc_define_from_text_less_than_operator(void)
 {
     // Test less than operator with real newlines
@@ -1453,6 +1464,7 @@ int main(void)
     RUN_TEST(test_proc_define_from_text_equals_operator);
     RUN_TEST(test_proc_define_from_text_less_than_operator);
     RUN_TEST(test_proc_define_from_text_end_in_list);
+    RUN_TEST(test_proc_define_from_text_trailing_end_trim);
     RUN_TEST(test_proc_define_from_text_with_parentheses);
     RUN_TEST(test_unconditional_tco_no_args);
     RUN_TEST(test_unconditional_tco_with_args);
