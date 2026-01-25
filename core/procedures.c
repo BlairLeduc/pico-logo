@@ -164,35 +164,56 @@ static bool line_has_user_calls_or_labels(Node line_tokens)
             {
                 if (strcasecmp(word, "label") == 0 ||
                     strcasecmp(word, "go") == 0 ||
-                    strcasecmp(word, "if") == 0 ||
-                    strcasecmp(word, "run") == 0 ||
-                    strcasecmp(word, "catch") == 0 ||
-                    strcasecmp(word, "throw") == 0 ||
-                    strcasecmp(word, "output") == 0 ||
-                    strcasecmp(word, "op") == 0 ||
-                    strcasecmp(word, "stop") == 0 ||
                     strcasecmp(word, "pause") == 0 ||
-                    strcasecmp(word, "co") == 0 ||
-                    strcasecmp(word, "wait") == 0 ||
-                    strcasecmp(word, "repeat") == 0 ||
-                    strcasecmp(word, "forever") == 0 ||
-                    strcasecmp(word, "while") == 0 ||
-                    strcasecmp(word, "do.while") == 0 ||
-                    strcasecmp(word, "until") == 0 ||
-                    strcasecmp(word, "do.until") == 0 ||
-                    strcasecmp(word, "for") == 0 ||
-                    strcasecmp(word, "step") == 0 ||
-                    strcasecmp(word, "trace") == 0 ||
-                    strcasecmp(word, "unstep") == 0 ||
-                    strcasecmp(word, "untrace") == 0)
-                    return true;
-                if (proc_find(word))
+                    strcasecmp(word, "co") == 0)
                     return true;
             }
         }
         curr = mem_cdr(curr);
     }
     return false;
+}
+
+static Node find_label_after(Node body, const char *label_name)
+{
+    Node search = body;
+    while (!mem_is_nil(search))
+    {
+        Node search_line = mem_car(search);
+        Node search_tokens = search_line;
+        if (NODE_GET_TYPE(search_line) == NODE_TYPE_LIST)
+        {
+            search_tokens = NODE_MAKE_LIST(NODE_GET_INDEX(search_line));
+        }
+
+        if (!mem_is_nil(search_tokens))
+        {
+            Node first = mem_car(search_tokens);
+            if (mem_is_word(first))
+            {
+                const char *word = mem_word_ptr(first);
+                if (strcasecmp(word, "label") == 0)
+                {
+                    Node rest = mem_cdr(search_tokens);
+                    if (!mem_is_nil(rest))
+                    {
+                        Node label_arg = mem_car(rest);
+                        if (mem_is_word(label_arg))
+                        {
+                            const char *arg = mem_word_ptr(label_arg);
+                            if (arg[0] == '"')
+                                arg++;
+                            if (strcasecmp(arg, label_name) == 0)
+                                return mem_cdr(search);
+                        }
+                    }
+                }
+            }
+        }
+        search = mem_cdr(search);
+    }
+
+    return NODE_NIL;
 }
 
 static bool body_can_use_vm(Node body)
@@ -215,28 +236,9 @@ static bool body_can_use_vm(Node body)
 
 static Result execute_body_vm(Evaluator *eval, Node body, bool enable_tco)
 {
-    Instruction code_buf[512];
-    Value const_buf[128];
-    Bytecode bc = {
-        .code = code_buf,
-        .code_len = 0,
-        .code_cap = sizeof(code_buf) / sizeof(code_buf[0]),
-        .const_pool = const_buf,
-        .const_len = 0,
-        .const_cap = sizeof(const_buf) / sizeof(const_buf[0]),
-        .arena = NULL
-    };
-    bc_init(&bc, NULL);
-
-    Compiler c = {
-        .eval = eval,
-        .bc = &bc,
-        .instruction_mode = true,
-        .tail_position = false,
-        .tail_depth = 0
-    };
-
     Node curr = body;
+    Result r = result_none();
+
     while (!mem_is_nil(curr))
     {
         Node line = mem_car(curr);
@@ -248,21 +250,72 @@ static Result execute_body_vm(Evaluator *eval, Node body, bool enable_tco)
         {
             line_tokens = NODE_MAKE_LIST(NODE_GET_INDEX(line));
         }
-        if (!mem_is_nil(line_tokens))
+
+        if (mem_is_nil(line_tokens))
         {
-            Result cr = compile_list_instructions(&c, line_tokens, &bc, enable_tco && is_last_line);
-            if (cr.status != RESULT_NONE && cr.status != RESULT_OK)
-                return cr;
+            curr = next;
+            continue;
         }
+
+        Instruction code_buf[256];
+        Value const_buf[64];
+        Bytecode bc = {
+            .code = code_buf,
+            .code_len = 0,
+            .code_cap = sizeof(code_buf) / sizeof(code_buf[0]),
+            .const_pool = const_buf,
+            .const_len = 0,
+            .const_cap = sizeof(const_buf) / sizeof(const_buf[0]),
+            .arena = NULL
+        };
+        bc_init(&bc, NULL);
+
+        Compiler c = {
+            .eval = eval,
+            .bc = &bc,
+            .instruction_mode = true,
+            .tail_position = false,
+            .tail_depth = 0
+        };
+
+        Result cr = compile_list_instructions(&c, line_tokens, &bc, enable_tco && is_last_line);
+        if (cr.status != RESULT_NONE && cr.status != RESULT_OK)
+            return cr;
+
+        bool saved_tail = eval->in_tail_position;
+        VM vm;
+        vm_init(&vm);
+        vm.eval = eval;
+        r = vm_exec(&vm, &bc);
+        eval->in_tail_position = saved_tail;
+
+        if (r.status == RESULT_CALL)
+        {
+            FrameStack *frames = eval->frames;
+            if (frames && !frame_stack_is_empty(frames))
+            {
+                FrameHeader *frame = frame_current(frames);
+                if (frame)
+                {
+                    frame->body_cursor = curr;
+                    frame->line_cursor = NODE_NIL;
+                }
+            }
+            return r;
+        }
+
+        if (r.status == RESULT_GOTO)
+            return r;
+
+        if (r.status != RESULT_NONE && r.status != RESULT_OK)
+            return r;
+
+        if (r.status == RESULT_OK)
+            return result_error_arg(ERR_DONT_KNOW_WHAT, NULL, value_to_string(r.value));
+
         curr = next;
     }
 
-    bool saved_tail = eval->in_tail_position;
-    VM vm;
-    vm_init(&vm);
-    vm.eval = eval;
-    Result r = vm_exec(&vm, &bc);
-    eval->in_tail_position = saved_tail;
     return r;
 }
 
@@ -335,7 +388,18 @@ static Result execute_body_with_step(Evaluator *eval, Node body, bool enable_tco
         }
         else
         {
-            return execute_body_vm(eval, body, enable_tco);
+            r = execute_body_vm(eval, body, enable_tco);
+            if (r.status == RESULT_GOTO)
+            {
+                Node after = find_label_after(body, r.goto_label);
+                if (mem_is_nil(after))
+                    return result_error_arg(ERR_CANT_FIND_LABEL, NULL, r.goto_label);
+                curr = after;
+            }
+            else
+            {
+                return r;
+            }
         }
     }
 #endif
@@ -424,60 +488,11 @@ static Result execute_body_with_step(Evaluator *eval, Node body, bool enable_tco
         // Handle RESULT_GOTO - search for label in body and restart from there
         if (r.status == RESULT_GOTO)
         {
-            const char *label_name = r.goto_label;
-            bool found = false;
-            
-            // Search all lines for the label
-            Node search = body;
-            while (!mem_is_nil(search))
-            {
-                Node search_line = mem_car(search);
-                Node search_tokens = search_line;
-                if (NODE_GET_TYPE(search_line) == NODE_TYPE_LIST)
-                {
-                    search_tokens = NODE_MAKE_LIST(NODE_GET_INDEX(search_line));
-                }
-                
-                // Check if this line starts with "label" followed by matching label name
-                if (!mem_is_nil(search_tokens))
-                {
-                    Node first = mem_car(search_tokens);
-                    if (mem_is_word(first))
-                    {
-                        const char *word = mem_word_ptr(first);
-                        if (strcasecmp(word, "label") == 0)
-                        {
-                            // Check the next element for the label name
-                            Node rest = mem_cdr(search_tokens);
-                            if (!mem_is_nil(rest))
-                            {
-                                Node label_arg = mem_car(rest);
-                                if (mem_is_word(label_arg))
-                                {
-                                    const char *arg = mem_word_ptr(label_arg);
-                                    // Skip leading quote if present
-                                    if (arg[0] == '"')
-                                        arg++;
-                                    if (strcasecmp(arg, label_name) == 0)
-                                    {
-                                        // Found the label! Continue from the line AFTER this one
-                                        curr = mem_cdr(search);
-                                        found = true;
-                                        r = result_none();
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                search = mem_cdr(search);
-            }
-            
-            if (!found)
-            {
-                return result_error_arg(ERR_CANT_FIND_LABEL, NULL, label_name);
-            }
+            Node after = find_label_after(body, r.goto_label);
+            if (mem_is_nil(after))
+                return result_error_arg(ERR_CANT_FIND_LABEL, NULL, r.goto_label);
+            curr = after;
+            r = result_none();
             continue;  // Continue from the line after the label
         }
         
