@@ -163,8 +163,27 @@ static bool line_has_user_calls_or_labels(Node line_tokens)
             if (word && word[0] != '"' && word[0] != ':')
             {
                 if (strcasecmp(word, "label") == 0 ||
-                    strcasecmp(word, "go") == 0 ||
-                    strcasecmp(word, "pause") == 0 ||
+                    strcasecmp(word, "go") == 0)
+                    return true;
+            }
+        }
+        curr = mem_cdr(curr);
+    }
+    return false;
+}
+
+static bool line_has_pause_or_co(Node line_tokens)
+{
+    Node curr = line_tokens;
+    while (!mem_is_nil(curr))
+    {
+        Node elem = mem_car(curr);
+        if (mem_is_word(elem))
+        {
+            const char *word = mem_word_ptr(elem);
+            if (word && word[0] != '"' && word[0] != ':')
+            {
+                if (strcasecmp(word, "pause") == 0 ||
                     strcasecmp(word, "co") == 0)
                     return true;
             }
@@ -257,37 +276,47 @@ static Result execute_body_vm(Evaluator *eval, Node body, bool enable_tco)
             continue;
         }
 
-        Instruction code_buf[256];
-        Value const_buf[64];
-        Bytecode bc = {
-            .code = code_buf,
-            .code_len = 0,
-            .code_cap = sizeof(code_buf) / sizeof(code_buf[0]),
-            .const_pool = const_buf,
-            .const_len = 0,
-            .const_cap = sizeof(const_buf) / sizeof(const_buf[0]),
-            .arena = NULL
-        };
-        bc_init(&bc, NULL);
+        if (line_has_pause_or_co(line_tokens))
+        {
+            bool saved_allow_vm = eval->allow_vm;
+            eval->allow_vm = false;
+            r = eval_run_list_with_tco(eval, line_tokens, enable_tco && is_last_line);
+            eval->allow_vm = saved_allow_vm;
+        }
+        else
+        {
+            Instruction code_buf[256];
+            Value const_buf[64];
+            Bytecode bc = {
+                .code = code_buf,
+                .code_len = 0,
+                .code_cap = sizeof(code_buf) / sizeof(code_buf[0]),
+                .const_pool = const_buf,
+                .const_len = 0,
+                .const_cap = sizeof(const_buf) / sizeof(const_buf[0]),
+                .arena = NULL
+            };
+            bc_init(&bc, NULL);
 
-        Compiler c = {
-            .eval = eval,
-            .bc = &bc,
-            .instruction_mode = true,
-            .tail_position = false,
-            .tail_depth = 0
-        };
+            Compiler c = {
+                .eval = eval,
+                .bc = &bc,
+                .instruction_mode = true,
+                .tail_position = false,
+                .tail_depth = 0
+            };
 
-        Result cr = compile_list_instructions(&c, line_tokens, &bc, enable_tco && is_last_line);
-        if (cr.status != RESULT_NONE && cr.status != RESULT_OK)
-            return cr;
+            Result cr = compile_list_instructions(&c, line_tokens, &bc, enable_tco && is_last_line);
+            if (cr.status != RESULT_NONE && cr.status != RESULT_OK)
+                return cr;
 
-        bool saved_tail = eval->in_tail_position;
-        VM vm;
-        vm_init(&vm);
-        vm.eval = eval;
-        r = vm_exec(&vm, &bc);
-        eval->in_tail_position = saved_tail;
+            bool saved_tail = eval->in_tail_position;
+            VM vm;
+            vm_init(&vm);
+            vm.eval = eval;
+            r = vm_exec(&vm, &bc);
+            eval->in_tail_position = saved_tail;
+        }
 
         if (r.status == RESULT_CALL)
         {

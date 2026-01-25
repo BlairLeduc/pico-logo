@@ -117,6 +117,10 @@ static Result repl_evaluate_line(ReplState *state, const char *input)
     Evaluator eval;
     lexer_init(&lexer, input);
     eval_init(&eval, &lexer);
+    if (state->flags & REPL_FLAG_EXIT_ON_CO)
+    {
+        eval.allow_vm = false;
+    }
     eval_set_frames(&eval, proc_get_frame_stack());
 
     while (!eval_at_end(&eval))
@@ -126,7 +130,10 @@ static Result repl_evaluate_line(ReplState *state, const char *input)
         if (r.status == RESULT_ERROR)
         {
             // Reset all execution state to clean up any stale frames from the error
-            proc_reset_execution_state();
+            if (!(state->flags & REPL_FLAG_EXIT_ON_CO))
+            {
+                proc_reset_execution_state();
+            }
             logo_io_write_line(state->io, error_format(r));
             return result_none();  // Error handled, continue REPL
         }
@@ -135,13 +142,19 @@ static Result repl_evaluate_line(ReplState *state, const char *input)
             if (strcasecmp(r.throw_tag, "toplevel") == 0)
             {
                 // throw "toplevel exits the REPL - reset execution state first
-                proc_reset_execution_state();
+                if (!(state->flags & REPL_FLAG_EXIT_ON_CO))
+                {
+                    proc_reset_execution_state();
+                }
                 return r;
             }
             else
             {
                 // Other uncaught throws are errors - reset execution state first
-                proc_reset_execution_state();
+                if (!(state->flags & REPL_FLAG_EXIT_ON_CO))
+                {
+                    proc_reset_execution_state();
+                }
                 char msg[128];
                 snprintf(msg, sizeof(msg), "Can't find a catch for %s", r.throw_tag);
                 logo_io_write_line(state->io, msg);

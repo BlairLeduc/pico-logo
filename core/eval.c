@@ -35,6 +35,7 @@ void eval_init(Evaluator *eval, Lexer *lexer)
     eval->error_code = 0;
     eval->error_context = NULL;
     eval->in_tail_position = false;
+    eval->allow_vm = true;
     eval->proc_depth = 0;
     eval->repcount = -1;
     eval->primitive_arg_depth = 0;
@@ -798,57 +799,62 @@ static Result eval_expr_bp(Evaluator *eval, int min_bp)
 Result eval_expression(Evaluator *eval)
 {
 #if EVAL_USE_VM
-    TokenSource saved_source;
-    token_source_copy(&saved_source, &eval->token_source);
-    Lexer saved_lexer;
-    bool saved_lexer_valid = false;
-    if (eval->token_source.type == TOKEN_SOURCE_LEXER && eval->token_source.lexer)
+    if (eval->allow_vm)
     {
-        saved_lexer = *eval->token_source.lexer;
-        saved_lexer_valid = true;
-    }
-    int saved_paren_depth = eval->paren_depth;
-    int saved_primitive_depth = eval->primitive_arg_depth;
-
-    Instruction code_buf[256];
-    Value const_buf[64];
-    Bytecode bc = {
-        .code = code_buf,
-        .code_len = 0,
-        .code_cap = sizeof(code_buf) / sizeof(code_buf[0]),
-        .const_pool = const_buf,
-        .const_len = 0,
-        .const_cap = sizeof(const_buf) / sizeof(const_buf[0]),
-        .arena = NULL
-    };
-    bc_init(&bc, NULL);
-
-    Compiler c = {
-        .eval = eval,
-        .bc = &bc,
-        .instruction_mode = false
-    };
-
-    Result cr = compile_expression(&c, &bc);
-    if (cr.status != RESULT_OK)
-    {
-        token_source_copy(&eval->token_source, &saved_source);
-        if (saved_lexer_valid && eval->token_source.type == TOKEN_SOURCE_LEXER && eval->token_source.lexer)
+        TokenSource saved_source;
+        token_source_copy(&saved_source, &eval->token_source);
+        Lexer saved_lexer;
+        bool saved_lexer_valid = false;
+        if (eval->token_source.type == TOKEN_SOURCE_LEXER && eval->token_source.lexer)
         {
-            *eval->token_source.lexer = saved_lexer;
+            saved_lexer = *eval->token_source.lexer;
+            saved_lexer_valid = true;
         }
-        eval->paren_depth = saved_paren_depth;
-        eval->primitive_arg_depth = saved_primitive_depth;
-        return eval_expr_bp(eval, BP_NONE);
-    }
+        int saved_paren_depth = eval->paren_depth;
+        int saved_primitive_depth = eval->primitive_arg_depth;
 
-    VM vm;
-    vm_init(&vm);
-    vm.eval = eval;
-    return vm_exec(&vm, &bc);
+        Instruction code_buf[256];
+        Value const_buf[64];
+        Bytecode bc = {
+            .code = code_buf,
+            .code_len = 0,
+            .code_cap = sizeof(code_buf) / sizeof(code_buf[0]),
+            .const_pool = const_buf,
+            .const_len = 0,
+            .const_cap = sizeof(const_buf) / sizeof(const_buf[0]),
+            .arena = NULL
+        };
+        bc_init(&bc, NULL);
+
+        Compiler c = {
+            .eval = eval,
+            .bc = &bc,
+            .instruction_mode = false
+        };
+
+        Result cr = compile_expression(&c, &bc);
+        if (cr.status != RESULT_OK)
+        {
+            token_source_copy(&eval->token_source, &saved_source);
+            if (saved_lexer_valid && eval->token_source.type == TOKEN_SOURCE_LEXER && eval->token_source.lexer)
+            {
+                *eval->token_source.lexer = saved_lexer;
+            }
+            eval->paren_depth = saved_paren_depth;
+            eval->primitive_arg_depth = saved_primitive_depth;
+            return eval_expr_bp(eval, BP_NONE);
+        }
+
+        VM vm;
+        vm_init(&vm);
+        vm.eval = eval;
+        return vm_exec(&vm, &bc);
+    }
 #else
     return eval_expr_bp(eval, BP_NONE);
 #endif
+
+    return eval_expr_bp(eval, BP_NONE);
 }
 
 Result eval_instruction(Evaluator *eval)
@@ -877,6 +883,14 @@ Result eval_instruction(Evaluator *eval)
             if (logo_io_check_pause_request(io))
             {
                 const char *proc_name = proc_get_current();
+                if (proc_name == NULL && eval->frames && !frame_stack_is_empty(eval->frames))
+                {
+                    FrameHeader *frame = frame_current(eval->frames);
+                    if (frame && frame->proc)
+                    {
+                        proc_name = frame->proc->name;
+                    }
+                }
                 if (proc_name != NULL)
                 {
                     logo_io_clear_pause_request(io);
@@ -917,6 +931,14 @@ Result eval_instruction(Evaluator *eval)
     if (io && logo_io_check_pause_request(io))
     {
         const char *proc_name = proc_get_current();
+        if (proc_name == NULL && eval->frames && !frame_stack_is_empty(eval->frames))
+        {
+            FrameHeader *frame = frame_current(eval->frames);
+            if (frame && frame->proc)
+            {
+                proc_name = frame->proc->name;
+            }
+        }
         if (proc_name != NULL)
         {
             // Clear the flag now that we're actually pausing
@@ -945,53 +967,56 @@ Result eval_instruction(Evaluator *eval)
     }
 
 #if EVAL_USE_VM
-    TokenSource saved_source;
-    token_source_copy(&saved_source, &eval->token_source);
-    Lexer saved_lexer;
-    bool saved_lexer_valid = false;
-    if (eval->token_source.type == TOKEN_SOURCE_LEXER && eval->token_source.lexer)
+    if (eval->allow_vm)
     {
-        saved_lexer = *eval->token_source.lexer;
-        saved_lexer_valid = true;
+        TokenSource saved_source;
+        token_source_copy(&saved_source, &eval->token_source);
+        Lexer saved_lexer;
+        bool saved_lexer_valid = false;
+        if (eval->token_source.type == TOKEN_SOURCE_LEXER && eval->token_source.lexer)
+        {
+            saved_lexer = *eval->token_source.lexer;
+            saved_lexer_valid = true;
+        }
+        int saved_paren_depth = eval->paren_depth;
+        int saved_primitive_depth = eval->primitive_arg_depth;
+
+        Instruction code_buf[256];
+        Value const_buf[64];
+        Bytecode bc = {
+            .code = code_buf,
+            .code_len = 0,
+            .code_cap = sizeof(code_buf) / sizeof(code_buf[0]),
+            .const_pool = const_buf,
+            .const_len = 0,
+            .const_cap = sizeof(const_buf) / sizeof(const_buf[0]),
+            .arena = NULL
+        };
+        bc_init(&bc, NULL);
+
+        Compiler c = {
+            .eval = eval,
+            .bc = &bc,
+            .instruction_mode = true
+        };
+
+        Result cr = compile_instruction(&c, &bc);
+        if (cr.status == RESULT_OK)
+        {
+            VM vm;
+            vm_init(&vm);
+            vm.eval = eval;
+            return vm_exec(&vm, &bc);
+        }
+
+        token_source_copy(&eval->token_source, &saved_source);
+        if (saved_lexer_valid && eval->token_source.type == TOKEN_SOURCE_LEXER && eval->token_source.lexer)
+        {
+            *eval->token_source.lexer = saved_lexer;
+        }
+        eval->paren_depth = saved_paren_depth;
+        eval->primitive_arg_depth = saved_primitive_depth;
     }
-    int saved_paren_depth = eval->paren_depth;
-    int saved_primitive_depth = eval->primitive_arg_depth;
-
-    Instruction code_buf[256];
-    Value const_buf[64];
-    Bytecode bc = {
-        .code = code_buf,
-        .code_len = 0,
-        .code_cap = sizeof(code_buf) / sizeof(code_buf[0]),
-        .const_pool = const_buf,
-        .const_len = 0,
-        .const_cap = sizeof(const_buf) / sizeof(const_buf[0]),
-        .arena = NULL
-    };
-    bc_init(&bc, NULL);
-
-    Compiler c = {
-        .eval = eval,
-        .bc = &bc,
-        .instruction_mode = true
-    };
-
-    Result cr = compile_instruction(&c, &bc);
-    if (cr.status == RESULT_OK)
-    {
-        VM vm;
-        vm_init(&vm);
-        vm.eval = eval;
-        return vm_exec(&vm, &bc);
-    }
-
-    token_source_copy(&eval->token_source, &saved_source);
-    if (saved_lexer_valid && eval->token_source.type == TOKEN_SOURCE_LEXER && eval->token_source.lexer)
-    {
-        *eval->token_source.lexer = saved_lexer;
-    }
-    eval->paren_depth = saved_paren_depth;
-    eval->primitive_arg_depth = saved_primitive_depth;
 #endif
 
     Result r = eval_expr_bp(eval, BP_NONE);
@@ -1319,6 +1344,7 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
     TokenSource old_source;
     bool old_tail = false;
 #if EVAL_USE_VM
+    if (eval->allow_vm)
     {
         LogoIO *io = primitives_get_io();
         if (io && (logo_io_check_user_interrupt(io) ||

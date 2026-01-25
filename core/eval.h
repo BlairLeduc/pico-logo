@@ -33,6 +33,7 @@ extern "C"
         int error_code;
         const char *error_context; // For error messages
         bool in_tail_position;     // True if evaluating last instruction of procedure body
+        bool allow_vm;             // Allow VM execution in eval_instruction/expr
         int proc_depth;            // Depth of user procedure calls (for TCO)
         int repcount;              // Current repeat count (for REPCOUNT)
         int primitive_arg_depth;   // > 0 when collecting args for primitives (CPS fallback)

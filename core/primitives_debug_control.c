@@ -12,6 +12,7 @@
 #include "repl.h"
 #include "value.h"
 #include "devices/io.h"
+#include "frame.h"
 
 //==========================================================================
 // Timing
@@ -81,6 +82,14 @@ static Result prim_pause(Evaluator *eval, int argc, Value *args)
     
     // Get the current procedure name
     const char *proc_name = proc_get_current();
+    if (proc_name == NULL && eval && eval->frames && !frame_stack_is_empty(eval->frames))
+    {
+        FrameHeader *frame = frame_current(eval->frames);
+        if (frame && frame->proc)
+        {
+            proc_name = frame->proc->name;
+        }
+    }
     if (proc_name == NULL)
     {
         // pause at top level is an error
