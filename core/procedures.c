@@ -445,7 +445,6 @@ static Result execute_body_with_step(Evaluator *eval, Node body, bool enable_tco
     }
     
     // Use VM for full body execution when safe (no stepping, no continuation, no control-flow)
-#if EVAL_USE_VM_BODY
     if (!stepped && !is_continuation && body_can_use_vm(body))
     {
         r = execute_body_vm(eval, body, enable_tco);
@@ -461,7 +460,6 @@ static Result execute_body_with_step(Evaluator *eval, Node body, bool enable_tco
             return r;
         }
     }
-#endif
 
     // Iterate through body - each element is a line (a list of tokens)
     while (!mem_is_nil(curr))

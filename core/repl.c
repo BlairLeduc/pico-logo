@@ -176,7 +176,6 @@ static Result repl_evaluate_line(ReplState *state, const char *input)
     Evaluator eval;
     lexer_init(&lexer, input);
     eval_init(&eval, &lexer);
-    eval.allow_vm = true;
     eval_set_frames(&eval, proc_get_frame_stack());
 
     Node list = repl_parse_list(&lexer);
