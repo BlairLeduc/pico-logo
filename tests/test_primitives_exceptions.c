@@ -180,6 +180,10 @@ void test_catch_through_calls_catch(void)
     // Run catch around outerproc
     Result r = run_string("tc 0");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    if (r.status == RESULT_ERROR)
+    {
+        printf("tc 0 error: %s\n", error_format(r));
+    }
     
     // Clean up
     run_string("erase \"tc");

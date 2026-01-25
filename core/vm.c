@@ -218,6 +218,52 @@ Result vm_exec(VM *vm, Bytecode *bc)
 
                 return proc_call(vm->eval, proc, (int)argc, args);
             }
+            case OP_CALL_USER:
+            {
+                if (ins.a >= bc->const_len)
+                    return result_error(ERR_OUT_OF_SPACE);
+                Value name_val = bc->const_pool[ins.a];
+                const char *user_name = value_to_string(name_val);
+                UserProcedure *proc = proc_find(user_name);
+                if (!proc)
+                    return result_error_arg(ERR_DONT_KNOW_HOW, user_name, NULL);
+
+                uint16_t argc = ins.b;
+                Value args[16];
+                if (argc > 16)
+                    return result_error(ERR_TOO_MANY_INPUTS);
+                for (int i = (int)argc - 1; i >= 0; i--)
+                {
+                    if (!vm_pop(vm, &args[i]))
+                        return vm_error_stack();
+                }
+
+                if (vm->eval && vm->eval->proc_depth > 0 && vm->eval->primitive_arg_depth == 0)
+                    return result_call(proc, (int)argc, args);
+
+                Result r = proc_call(vm->eval, proc, (int)argc, args);
+                if (r.status == RESULT_OK)
+                {
+                    if (!vm_push(vm, r.value))
+                        return vm_error_stack();
+                    break;
+                }
+                if (r.status == RESULT_NONE)
+                    break;
+                return r;
+            }
+            case OP_PRIM_ARGS_BEGIN:
+            {
+                if (vm->eval)
+                    vm->eval->primitive_arg_depth++;
+                break;
+            }
+            case OP_PRIM_ARGS_END:
+            {
+                if (vm->eval && vm->eval->primitive_arg_depth > 0)
+                    vm->eval->primitive_arg_depth--;
+                break;
+            }
         case OP_NEG:
         {
             Value v;
