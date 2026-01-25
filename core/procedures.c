@@ -280,37 +280,50 @@ static Result execute_body_vm(Evaluator *eval, Node body, bool enable_tco)
         }
         else
         {
-            Instruction code_buf[256];
-            Value const_buf[64];
-            Bytecode bc = {
-                .code = code_buf,
-                .code_len = 0,
-                .code_cap = sizeof(code_buf) / sizeof(code_buf[0]),
-                .const_pool = const_buf,
-                .const_len = 0,
-                .const_cap = sizeof(const_buf) / sizeof(const_buf[0]),
-                .arena = NULL
-            };
-            bc_init(&bc, NULL);
+            LogoIO *io = primitives_get_io();
+            if (io && (logo_io_check_user_interrupt(io) ||
+                       logo_io_check_freeze_request(io) ||
+                       logo_io_check_pause_request(io)))
+            {
+                bool saved_allow_vm = eval->allow_vm;
+                eval->allow_vm = false;
+                r = eval_run_list_with_tco(eval, line_tokens, enable_tco && is_last_line);
+                eval->allow_vm = saved_allow_vm;
+            }
+            else
+            {
+                Instruction code_buf[256];
+                Value const_buf[64];
+                Bytecode bc = {
+                    .code = code_buf,
+                    .code_len = 0,
+                    .code_cap = sizeof(code_buf) / sizeof(code_buf[0]),
+                    .const_pool = const_buf,
+                    .const_len = 0,
+                    .const_cap = sizeof(const_buf) / sizeof(const_buf[0]),
+                    .arena = NULL
+                };
+                bc_init(&bc, NULL);
 
-            Compiler c = {
-                .eval = eval,
-                .bc = &bc,
-                .instruction_mode = true,
-                .tail_position = false,
-                .tail_depth = 0
-            };
+                Compiler c = {
+                    .eval = eval,
+                    .bc = &bc,
+                    .instruction_mode = true,
+                    .tail_position = false,
+                    .tail_depth = 0
+                };
 
-            Result cr = compile_list_instructions(&c, line_tokens, &bc, enable_tco && is_last_line);
-            if (cr.status != RESULT_NONE && cr.status != RESULT_OK)
-                return cr;
+                Result cr = compile_list_instructions(&c, line_tokens, &bc, enable_tco && is_last_line);
+                if (cr.status != RESULT_NONE && cr.status != RESULT_OK)
+                    return cr;
 
-            bool saved_tail = eval->in_tail_position;
-            VM vm;
-            vm_init(&vm);
-            vm.eval = eval;
-            r = vm_exec(&vm, &bc);
-            eval->in_tail_position = saved_tail;
+                bool saved_tail = eval->in_tail_position;
+                VM vm;
+                vm_init(&vm);
+                vm.eval = eval;
+                r = vm_exec(&vm, &bc);
+                eval->in_tail_position = saved_tail;
+            }
         }
 
         if (r.status == RESULT_CALL)
@@ -403,27 +416,17 @@ static Result execute_body_with_step(Evaluator *eval, Node body, bool enable_tco
 #if EVAL_USE_VM_BODY
     if (!stepped && !is_continuation && body_can_use_vm(body))
     {
-        LogoIO *io_check = primitives_get_io();
-        if (io_check && (logo_io_check_user_interrupt(io_check) ||
-                         logo_io_check_freeze_request(io_check) ||
-                         logo_io_check_pause_request(io_check)))
+        r = execute_body_vm(eval, body, enable_tco);
+        if (r.status == RESULT_GOTO)
         {
-            // Fall back to legacy to preserve debug-control behavior.
+            Node after = find_label_after(body, r.goto_label);
+            if (mem_is_nil(after))
+                return result_error_arg(ERR_CANT_FIND_LABEL, NULL, r.goto_label);
+            curr = after;
         }
         else
         {
-            r = execute_body_vm(eval, body, enable_tco);
-            if (r.status == RESULT_GOTO)
-            {
-                Node after = find_label_after(body, r.goto_label);
-                if (mem_is_nil(after))
-                    return result_error_arg(ERR_CANT_FIND_LABEL, NULL, r.goto_label);
-                curr = after;
-            }
-            else
-            {
-                return r;
-            }
+            return r;
         }
     }
 #endif
