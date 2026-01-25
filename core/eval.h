@@ -28,6 +28,7 @@ extern "C"
         int proc_depth;            // Depth of user procedure calls (for TCO)
         int repcount;              // Current repeat count (for REPCOUNT)
         int primitive_arg_depth;   // > 0 when collecting args for primitives (CPS fallback)
+        bool suppress_token_source_save; // Skip token_source snapshots for nested evals
     } Evaluator;
 
     // Initialize evaluator with a lexer

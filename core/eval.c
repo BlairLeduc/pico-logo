@@ -29,6 +29,7 @@ void eval_init(Evaluator *eval, Lexer *lexer)
     eval->proc_depth = 0;
     eval->repcount = -1;
     eval->primitive_arg_depth = 0;
+    eval->suppress_token_source_save = false;
 }
 
 void eval_set_frames(Evaluator *eval, FrameStack *frames)
@@ -141,16 +142,20 @@ Result eval_expression(Evaluator *eval)
         return result_none();
     }
     TokenSource saved_source;
-    token_source_copy(&saved_source, &eval->token_source);
     Lexer saved_lexer;
     bool saved_lexer_valid = false;
-    if (eval->token_source.type == TOKEN_SOURCE_LEXER && eval->token_source.lexer)
-    {
-        saved_lexer = *eval->token_source.lexer;
-        saved_lexer_valid = true;
-    }
     int saved_paren_depth = eval->paren_depth;
     int saved_primitive_depth = eval->primitive_arg_depth;
+    bool do_restore = !eval->suppress_token_source_save;
+    if (do_restore)
+    {
+        token_source_copy(&saved_source, &eval->token_source);
+        if (eval->token_source.type == TOKEN_SOURCE_LEXER && eval->token_source.lexer)
+        {
+            saved_lexer = *eval->token_source.lexer;
+            saved_lexer_valid = true;
+        }
+    }
 
     Instruction code_buf[256];
     Value const_buf[64];
@@ -174,13 +179,16 @@ Result eval_expression(Evaluator *eval)
     Result cr = compile_expression(&c, &bc);
     if (cr.status != RESULT_OK)
     {
-        token_source_copy(&eval->token_source, &saved_source);
-        if (saved_lexer_valid && eval->token_source.type == TOKEN_SOURCE_LEXER && eval->token_source.lexer)
+        if (do_restore)
         {
-            *eval->token_source.lexer = saved_lexer;
+            token_source_copy(&eval->token_source, &saved_source);
+            if (saved_lexer_valid && eval->token_source.type == TOKEN_SOURCE_LEXER && eval->token_source.lexer)
+            {
+                *eval->token_source.lexer = saved_lexer;
+            }
+            eval->paren_depth = saved_paren_depth;
+            eval->primitive_arg_depth = saved_primitive_depth;
         }
-        eval->paren_depth = saved_paren_depth;
-        eval->primitive_arg_depth = saved_primitive_depth;
         return cr;
     }
 
@@ -299,16 +307,20 @@ Result eval_instruction(Evaluator *eval)
         return result_none();
     }
     TokenSource saved_source;
-    token_source_copy(&saved_source, &eval->token_source);
     Lexer saved_lexer;
     bool saved_lexer_valid = false;
-    if (eval->token_source.type == TOKEN_SOURCE_LEXER && eval->token_source.lexer)
-    {
-        saved_lexer = *eval->token_source.lexer;
-        saved_lexer_valid = true;
-    }
     int saved_paren_depth = eval->paren_depth;
     int saved_primitive_depth = eval->primitive_arg_depth;
+    bool do_restore = !eval->suppress_token_source_save;
+    if (do_restore)
+    {
+        token_source_copy(&saved_source, &eval->token_source);
+        if (eval->token_source.type == TOKEN_SOURCE_LEXER && eval->token_source.lexer)
+        {
+            saved_lexer = *eval->token_source.lexer;
+            saved_lexer_valid = true;
+        }
+    }
 
     Instruction code_buf[256];
     Value const_buf[64];
@@ -337,14 +349,16 @@ Result eval_instruction(Evaluator *eval)
         vm.eval = eval;
         return vm_exec(&vm, &bc);
     }
-
-    token_source_copy(&eval->token_source, &saved_source);
-    if (saved_lexer_valid && eval->token_source.type == TOKEN_SOURCE_LEXER && eval->token_source.lexer)
+    if (do_restore)
     {
-        *eval->token_source.lexer = saved_lexer;
+        token_source_copy(&eval->token_source, &saved_source);
+        if (saved_lexer_valid && eval->token_source.type == TOKEN_SOURCE_LEXER && eval->token_source.lexer)
+        {
+            *eval->token_source.lexer = saved_lexer;
+        }
+        eval->paren_depth = saved_paren_depth;
+        eval->primitive_arg_depth = saved_primitive_depth;
     }
-    eval->paren_depth = saved_paren_depth;
-    eval->primitive_arg_depth = saved_primitive_depth;
     return cr;
 }
 
@@ -352,12 +366,14 @@ Result eval_instruction(Evaluator *eval)
 // The last instruction in the list is evaluated in tail position
 Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
 {
+    bool saved_suppress = eval->suppress_token_source_save;
     TokenSource saved_source;
     token_source_copy(&saved_source, &eval->token_source);
     int saved_paren_depth = eval->paren_depth;
     bool saved_tail = eval->in_tail_position;
 
     token_source_init_list(&eval->token_source, list);
+    eval->suppress_token_source_save = true;
 
     Result r = result_none();
     while (!token_source_at_end(&eval->token_source))
@@ -402,6 +418,7 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
     token_source_copy(&eval->token_source, &saved_source);
     eval->paren_depth = saved_paren_depth;
     eval->in_tail_position = saved_tail;
+    eval->suppress_token_source_save = saved_suppress;
     return r;
 }
 
