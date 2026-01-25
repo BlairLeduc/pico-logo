@@ -160,12 +160,7 @@ static bool line_has_user_calls_or_labels(Node line_tokens)
         if (mem_is_word(elem))
         {
             const char *word = mem_word_ptr(elem);
-            if (word && word[0] != '"' && word[0] != ':')
-            {
-                if (strcasecmp(word, "label") == 0 ||
-                    strcasecmp(word, "go") == 0)
-                    return true;
-            }
+            (void)word;
         }
         curr = mem_cdr(curr);
     }
