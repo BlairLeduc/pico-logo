@@ -21,6 +21,7 @@
                 "LOGO_EDITOR_BUFFER_SIZE": "8192",
                 "LOGO_COPY_BUFFER_SIZE": "1024",
                 "VM_STACK_CAP": "64",
+                "BYTECODE_ARENA_SIZE": "4096",
                 "BUILD_TESTING": "OFF"
             }
         },
@@ -48,6 +49,7 @@
                 "LOGO_EDITOR_BUFFER_SIZE": "8192",
                 "LOGO_COPY_BUFFER_SIZE": "1024",
                 "VM_STACK_CAP": "64",
+                "BYTECODE_ARENA_SIZE": "4096",
                 "LOGO_HAS_WIFI": "ON",
                 "BUILD_TESTING": "OFF"
             }
@@ -76,6 +78,7 @@
                 "LOGO_EDITOR_BUFFER_SIZE": "65536",
                 "LOGO_COPY_BUFFER_SIZE": "8192",
                 "VM_STACK_CAP": "64",
+                "BYTECODE_ARENA_SIZE": "4096",
                 "BUILD_TESTING": "OFF"
             }
         },
@@ -103,6 +106,7 @@
                 "LOGO_EDITOR_BUFFER_SIZE": "65536",
                 "LOGO_COPY_BUFFER_SIZE": "8192",
                 "VM_STACK_CAP": "64",
+                "BYTECODE_ARENA_SIZE": "4096",
                 "LOGO_HAS_WIFI": "ON",
                 "BUILD_TESTING": "OFF"
             }
@@ -131,6 +135,7 @@
                 "LOGO_EDITOR_BUFFER_SIZE": "65536",
                 "LOGO_COPY_BUFFER_SIZE": "8192",
                 "VM_STACK_CAP": "64",
+                "BYTECODE_ARENA_SIZE": "4096",
                 "LOGO_HAS_WIFI": "ON",
                 "BUILD_TESTING": "OFF"
             }
@@ -154,6 +159,7 @@
                 "CMAKE_BUILD_TYPE": "Release",
                 "BUILD_FOR_HOST": "ON",
                 "VM_STACK_CAP": "64",
+                "BYTECODE_ARENA_SIZE": "4096",
                 "BUILD_TESTING": "OFF"
             }
         },
@@ -175,6 +181,7 @@
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug",
                 "VM_STACK_CAP": "64",
+                "BYTECODE_ARENA_SIZE": "4096",
                 "BUILD_TESTING": "ON"
             }
         },
@@ -188,6 +195,7 @@
                 "CMAKE_BUILD_TYPE": "Debug",
                 "ENABLE_COVERAGE": "ON",
                 "VM_STACK_CAP": "64",
+                "BYTECODE_ARENA_SIZE": "4096",
                 "BUILD_TESTING": "ON"
             }
         }

@@ -17,6 +17,10 @@
 #include <stdlib.h>
 #include <ctype.h>
 
+#ifndef BYTECODE_ARENA_SIZE
+#define BYTECODE_ARENA_SIZE 4096
+#endif
+
 
 void eval_init(Evaluator *eval, Lexer *lexer)
 {
@@ -157,18 +161,22 @@ Result eval_expression(Evaluator *eval)
         }
     }
 
-    Instruction code_buf[256];
-    Value const_buf[64];
-    Bytecode bc = {
-        .code = code_buf,
-        .code_len = 0,
-        .code_cap = sizeof(code_buf) / sizeof(code_buf[0]),
-        .const_pool = const_buf,
-        .const_len = 0,
-        .const_cap = sizeof(const_buf) / sizeof(const_buf[0]),
-        .arena = NULL
+    uint8_t arena_buf[BYTECODE_ARENA_SIZE];
+    Arena arena = {
+        .base = arena_buf,
+        .capacity = sizeof(arena_buf),
+        .used = 0
     };
-    bc_init(&bc, NULL);
+    Bytecode bc = {
+        .code = NULL,
+        .code_len = 0,
+        .code_cap = 0,
+        .const_pool = NULL,
+        .const_len = 0,
+        .const_cap = 0,
+        .arena = &arena
+    };
+    bc_init(&bc, &arena);
 
     Compiler c = {
         .eval = eval,
@@ -322,18 +330,22 @@ Result eval_instruction(Evaluator *eval)
         }
     }
 
-    Instruction code_buf[256];
-    Value const_buf[64];
-    Bytecode bc = {
-        .code = code_buf,
-        .code_len = 0,
-        .code_cap = sizeof(code_buf) / sizeof(code_buf[0]),
-        .const_pool = const_buf,
-        .const_len = 0,
-        .const_cap = sizeof(const_buf) / sizeof(const_buf[0]),
-        .arena = NULL
+    uint8_t arena_buf[BYTECODE_ARENA_SIZE];
+    Arena arena = {
+        .base = arena_buf,
+        .capacity = sizeof(arena_buf),
+        .used = 0
     };
-    bc_init(&bc, NULL);
+    Bytecode bc = {
+        .code = NULL,
+        .code_len = 0,
+        .code_cap = 0,
+        .const_pool = NULL,
+        .const_len = 0,
+        .const_cap = 0,
+        .arena = &arena
+    };
+    bc_init(&bc, &arena);
 
     Compiler c = {
         .eval = eval,
@@ -439,18 +451,22 @@ Result eval_run_list(Evaluator *eval, Node list)
 Result eval_run_list_expr(Evaluator *eval, Node list)
 {
     bool enable_tco = eval->in_tail_position && eval->proc_depth > 0;
-    Instruction code_buf[256];
-    Value const_buf[64];
-    Bytecode bc = {
-        .code = code_buf,
-        .code_len = 0,
-        .code_cap = sizeof(code_buf) / sizeof(code_buf[0]),
-        .const_pool = const_buf,
-        .const_len = 0,
-        .const_cap = sizeof(const_buf) / sizeof(const_buf[0]),
-        .arena = NULL
+    uint8_t arena_buf[BYTECODE_ARENA_SIZE];
+    Arena arena = {
+        .base = arena_buf,
+        .capacity = sizeof(arena_buf),
+        .used = 0
     };
-    bc_init(&bc, NULL);
+    Bytecode bc = {
+        .code = NULL,
+        .code_len = 0,
+        .code_cap = 0,
+        .const_pool = NULL,
+        .const_len = 0,
+        .const_cap = 0,
+        .arena = &arena
+    };
+    bc_init(&bc, &arena);
 
     Compiler c = {
         .eval = eval,

@@ -124,6 +124,12 @@ if(NOT DEFINED VM_STACK_CAP)
 endif()
 target_compile_definitions(logo_core PUBLIC VM_STACK_CAP=${VM_STACK_CAP})
 
+# Allow BYTECODE_ARENA_SIZE to be set via CMake cache variable
+if(NOT DEFINED BYTECODE_ARENA_SIZE)
+    set(BYTECODE_ARENA_SIZE 4096)
+endif()
+target_compile_definitions(logo_core PUBLIC BYTECODE_ARENA_SIZE=${BYTECODE_ARENA_SIZE})
+
 # WiFi support (only for Pico W boards)
 option(LOGO_HAS_WIFI "Enable WiFi support for Pico W boards" OFF)
 if(LOGO_HAS_WIFI)
