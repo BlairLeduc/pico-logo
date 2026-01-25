@@ -117,10 +117,7 @@ static Result repl_evaluate_line(ReplState *state, const char *input)
     Evaluator eval;
     lexer_init(&lexer, input);
     eval_init(&eval, &lexer);
-    if (state->flags & REPL_FLAG_EXIT_ON_CO)
-    {
-        eval.allow_vm = false;
-    }
+    eval.allow_vm = false;
     eval_set_frames(&eval, proc_get_frame_stack());
 
     while (!eval_at_end(&eval))
