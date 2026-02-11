@@ -191,6 +191,22 @@ static Result repl_evaluate_line(ReplState *state, const char *input)
         logo_io_write_line(state->io, error_format(r));
         return result_none();  // Error handled, continue REPL
     }
+    else if (r.status == RESULT_CALL)
+    {
+        Result call_r = proc_call(&eval, r.call_proc, r.call_argc, r.call_args);
+        if (call_r.status == RESULT_ERROR)
+        {
+            if (!(state->flags & REPL_FLAG_EXIT_ON_CO))
+            {
+                proc_reset_execution_state();
+            }
+            logo_io_write_line(state->io, error_format(call_r));
+            return result_none();
+        }
+        if (call_r.status == RESULT_THROW)
+            return call_r;
+        return result_none();
+    }
     else if (r.status == RESULT_THROW)
     {
         if (strcasecmp(r.throw_tag, "toplevel") == 0)

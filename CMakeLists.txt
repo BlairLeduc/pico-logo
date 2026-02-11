@@ -302,6 +302,18 @@ if(BUILD_FOR_HOST)
         ${CMAKE_CURRENT_SOURCE_DIR}
     )
 
+    # Allow VM_STACK_CAP to be set via CMake cache variable
+    if(NOT DEFINED VM_STACK_CAP)
+        set(VM_STACK_CAP 64)
+    endif()
+    target_compile_definitions(logo_core PUBLIC VM_STACK_CAP=${VM_STACK_CAP})
+
+    # Allow BYTECODE_ARENA_SIZE to be set via CMake cache variable
+    if(NOT DEFINED BYTECODE_ARENA_SIZE)
+        set(BYTECODE_ARENA_SIZE 4096)
+    endif()
+    target_compile_definitions(logo_core PUBLIC BYTECODE_ARENA_SIZE=${BYTECODE_ARENA_SIZE})
+
     add_executable(logo
         devices/host/host_console.c
         devices/host/host_hardware.c
@@ -418,6 +430,18 @@ if(BUILD_TESTING)
     )
 
     target_link_libraries(logo_core logo_devices m)
+
+    # Allow VM_STACK_CAP to be set via CMake cache variable
+    if(NOT DEFINED VM_STACK_CAP)
+        set(VM_STACK_CAP 64)
+    endif()
+    target_compile_definitions(logo_core PUBLIC VM_STACK_CAP=${VM_STACK_CAP})
+
+    # Allow BYTECODE_ARENA_SIZE to be set via CMake cache variable
+    if(NOT DEFINED BYTECODE_ARENA_SIZE)
+        set(BYTECODE_ARENA_SIZE 4096)
+    endif()
+    target_compile_definitions(logo_core PUBLIC BYTECODE_ARENA_SIZE=${BYTECODE_ARENA_SIZE})
 
     # Include the tests subdirectory
     add_subdirectory(tests)

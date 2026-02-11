@@ -186,6 +186,18 @@ static uint16_t bc_add_const(Bytecode *bc, Value v)
 
 static Result compile_expr_bp(Compiler *c, int min_bp);
 
+static Result compile_arg_expr(Compiler *c, int min_bp)
+{
+    bool saved_instruction_mode = c->instruction_mode;
+    bool saved_tail_position = c->tail_position;
+    c->instruction_mode = false;
+    c->tail_position = false;
+    Result r = compile_expr_bp(c, min_bp);
+    c->instruction_mode = saved_instruction_mode;
+    c->tail_position = saved_tail_position;
+    return r;
+}
+
 static bool compiler_skip_expr_bp(TokenSource *ts, int min_bp);
 static bool compiler_skip_primary(TokenSource *ts);
 
@@ -474,7 +486,7 @@ static Result compile_primary(Compiler *c)
                     if (t2.type == TOKEN_RIGHT_PAREN || t2.type == TOKEN_EOF)
                         break;
 
-                    Result arg = compile_expr_bp(c, BP_NONE);
+                    Result arg = compile_arg_expr(c, BP_NONE);
                     if (arg.status != RESULT_OK)
                     {
                         c->eval->primitive_arg_depth--;
@@ -565,7 +577,7 @@ static Result compile_primary(Compiler *c)
                     return result_error_arg(ERR_NOT_ENOUGH_INPUTS, user_name, NULL);
                 }
 
-                Result arg = compile_expr_bp(c, BP_NONE);
+                Result arg = compile_arg_expr(c, BP_NONE);
                 if (arg.status != RESULT_OK)
                 {
                     c->eval->primitive_arg_depth--;
@@ -600,7 +612,7 @@ static Result compile_primary(Compiler *c)
                     return result_error_arg(ERR_NOT_ENOUGH_INPUTS, user_proc->name, NULL);
                 }
 
-                Result arg = compile_expr_bp(c, BP_NONE);
+                Result arg = compile_arg_expr(c, BP_NONE);
                 if (arg.status != RESULT_OK)
                 {
                     return result_set_error_proc(arg, user_proc->name);

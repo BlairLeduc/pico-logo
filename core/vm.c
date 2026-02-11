@@ -12,6 +12,7 @@
 #include "variables.h"
 #include "eval.h"
 #include "frame.h"
+#include <stdlib.h>
 
 enum
 {
@@ -54,6 +55,8 @@ static Result vm_error_stack(void)
     return result_error(ERR_OUT_OF_SPACE);
 }
 
+static Result vm_exec_loop(VM *vm, Bytecode *bc);
+
 Result vm_exec(VM *vm, Bytecode *bc)
 {
     if (!vm || !bc || !bc->code)
@@ -61,14 +64,36 @@ Result vm_exec(VM *vm, Bytecode *bc)
 
     vm->bc = bc;
 
-    Value default_stack[VM_DEFAULT_STACK_CAP];
+    // Heap-allocate the default value stack to avoid consuming C stack space.
+    // Each vm_exec call with a stack-allocated array would use 512+ bytes of
+    // C stack (64 * sizeof(Value)).  In deeply nested evaluate-compile-execute
+    // patterns (e.g., spin 16 [square 100] with dashed.forward), up to 7
+    // vm_exec instances can be live on the C stack simultaneously.  On the
+    // Pico's 4 KiB C stack this overflows and corrupts memory.
+    Value *alloc_stack = NULL;
     if (!vm->stack)
     {
-        vm->stack = default_stack;
+        alloc_stack = (Value *)malloc(sizeof(Value) * VM_DEFAULT_STACK_CAP);
+        if (!alloc_stack)
+            return result_error(ERR_OUT_OF_SPACE);
+        vm->stack = alloc_stack;
         vm->stack_cap = VM_DEFAULT_STACK_CAP;
         vm->sp = 0;
     }
 
+    Result r = vm_exec_loop(vm, bc);
+
+    if (alloc_stack)
+    {
+        free(alloc_stack);
+        vm->stack = NULL;
+    }
+    return r;
+}
+
+// Inner execution loop – the caller (vm_exec) manages the value stack.
+static Result vm_exec_loop(VM *vm, Bytecode *bc)
+{
     size_t ip = 0;
     while (ip < bc->code_len)
     {

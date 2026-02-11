@@ -70,6 +70,7 @@ extern "C"
 
     void bc_init(Bytecode *bc, Arena *arena);
     bool bc_emit(Bytecode *bc, Op op, uint16_t a, uint16_t b);
+    void *arena_alloc(Arena *arena, size_t size);
 
 #ifdef __cplusplus
 }

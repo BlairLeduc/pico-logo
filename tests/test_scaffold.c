@@ -381,7 +381,13 @@ Result eval_string(const char *input)
     lexer_init(&lexer, input);
     eval_init(&eval, &lexer);
     eval_set_frames(&eval, proc_get_frame_stack());
-    return eval_expression(&eval);
+    Result r = eval_expression(&eval);
+    if (r.status == RESULT_CALL)
+    {
+        Result call_r = proc_call(&eval, r.call_proc, r.call_argc, r.call_args);
+        return call_r;
+    }
+    return r;
 }
 
 Result run_string(const char *input)
@@ -396,6 +402,16 @@ Result run_string(const char *input)
     while (!eval_at_end(&eval))
     {
         r = eval_instruction(&eval);
+        if (r.status == RESULT_CALL)
+        {
+            Result call_r = proc_call(&eval, r.call_proc, r.call_argc, r.call_args);
+            if (call_r.status != RESULT_NONE && call_r.status != RESULT_OK)
+            {
+                return call_r;
+            }
+            r = result_none();
+            continue;
+        }
         if (r.status == RESULT_ERROR)
             break;
     }

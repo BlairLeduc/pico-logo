@@ -129,6 +129,21 @@ word_offset_t frame_push(FrameStack *stack, UserProcedure *proc,
     frame->pending_bp = 0;
     frame->cont_flags = CONT_FLAG_NONE;
     frame->_reserved1 = 0;
+    frame->prim_cont = PRIM_CONT_NONE;
+    frame->prim_phase = PRIM_PHASE_INIT;
+    frame->prim_flags = 0;
+    frame->_reserved3 = 0;
+    frame->prim_i = 0;
+    frame->prim_count = 0;
+    frame->prim_saved_repcount = 0;
+    frame->prim_current = 0.0f;
+    frame->prim_limit = 0.0f;
+    frame->prim_step = 0.0f;
+    frame->prim_body = NODE_NIL;
+    frame->prim_pred = NODE_NIL;
+    frame->prim_cursor = NODE_NIL;
+    frame->prim_varname = NULL;
+    frame->prim_saved_value = value_none();
     frame->test_valid = false;
     frame->test_value = false;
     frame->_reserved2 = 0;
@@ -206,6 +221,20 @@ bool frame_reuse(FrameStack *stack, UserProcedure *proc,
     frame->pending_op = 0;
     frame->pending_bp = 0;
     frame->cont_flags = CONT_FLAG_NONE;
+    frame->prim_cont = PRIM_CONT_NONE;
+    frame->prim_phase = PRIM_PHASE_INIT;
+    frame->prim_flags = 0;
+    frame->prim_i = 0;
+    frame->prim_count = 0;
+    frame->prim_saved_repcount = 0;
+    frame->prim_current = 0.0f;
+    frame->prim_limit = 0.0f;
+    frame->prim_step = 0.0f;
+    frame->prim_body = NODE_NIL;
+    frame->prim_pred = NODE_NIL;
+    frame->prim_cursor = NODE_NIL;
+    frame->prim_varname = NULL;
+    frame->prim_saved_value = value_none();
 
     // Rebind parameters with new values
     if (param_count > 0 && args != NULL)
@@ -664,6 +693,24 @@ void frame_gc_mark_all(FrameStack *stack)
             {
                 mem_gc_mark(val->as.node);
             }
+        }
+
+        // Mark primitive continuation state
+        if (!mem_is_nil(frame->prim_body))
+        {
+            mem_gc_mark(frame->prim_body);
+        }
+        if (!mem_is_nil(frame->prim_pred))
+        {
+            mem_gc_mark(frame->prim_pred);
+        }
+        if (!mem_is_nil(frame->prim_cursor))
+        {
+            mem_gc_mark(frame->prim_cursor);
+        }
+        if (frame->prim_saved_value.type == VALUE_WORD || frame->prim_saved_value.type == VALUE_LIST)
+        {
+            mem_gc_mark(frame->prim_saved_value.as.node);
         }
 
         // Mark body cursor nodes

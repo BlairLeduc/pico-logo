@@ -391,6 +391,14 @@ static Result execute_body_vm(Evaluator *eval, UserProcedure *proc, Node body, b
     Result r = result_none();
     int line_index = 0;
 
+    // Pre-allocate a VM value stack that is reused across all lines.
+    // This avoids per-line malloc/free inside vm_exec and keeps the
+    // heap-allocated stack off the C stack (important for the 4 KiB
+    // Pico stack).
+    Value *vm_stack = (Value *)malloc(sizeof(Value) * VM_STACK_CAP);
+    if (!vm_stack)
+        return result_error(ERR_OUT_OF_SPACE);
+
     if (proc)
     {
         if (!proc_cache_prepare(proc))
@@ -422,7 +430,10 @@ static Result execute_body_vm(Evaluator *eval, UserProcedure *proc, Node body, b
         if (io)
         {
             if (logo_io_check_user_interrupt(io))
-                return result_error(ERR_STOPPED);
+            {
+                r = result_error(ERR_STOPPED);
+                goto cleanup;
+            }
 
             if (logo_io_check_freeze_request(io))
             {
@@ -430,7 +441,10 @@ static Result execute_body_vm(Evaluator *eval, UserProcedure *proc, Node body, b
                 while (!freeze_done)
                 {
                     if (logo_io_check_user_interrupt(io))
-                        return result_error(ERR_STOPPED);
+                    {
+                        r = result_error(ERR_STOPPED);
+                        goto cleanup;
+                    }
 
                     if (logo_io_check_pause_request(io))
                     {
@@ -450,7 +464,10 @@ static Result execute_body_vm(Evaluator *eval, UserProcedure *proc, Node body, b
                             repl_init(&state, io, REPL_FLAGS_PAUSE, proc_name);
                             Result pr = repl_run(&state);
                             if (pr.status != RESULT_OK && pr.status != RESULT_NONE)
-                                return pr;
+                            {
+                                r = pr;
+                                goto cleanup;
+                            }
                         }
                         freeze_done = true;
                     }
@@ -488,7 +505,10 @@ static Result execute_body_vm(Evaluator *eval, UserProcedure *proc, Node body, b
                     repl_init(&state, io, REPL_FLAGS_PAUSE, proc_name);
                     Result pr = repl_run(&state);
                     if (pr.status != RESULT_OK && pr.status != RESULT_NONE)
-                        return pr;
+                    {
+                        r = pr;
+                        goto cleanup;
+                    }
                 }
             }
         }
@@ -518,7 +538,10 @@ static Result execute_body_vm(Evaluator *eval, UserProcedure *proc, Node body, b
                 {
                     Result cr = proc_cache_compile_line(eval, line_tokens, true, &entry->bc_tail);
                     if (cr.status != RESULT_NONE && cr.status != RESULT_OK)
-                        return cr;
+                    {
+                        r = cr;
+                        goto cleanup;
+                    }
                     entry->has_tail = true;
                 }
                 bc = &entry->bc_tail;
@@ -529,7 +552,10 @@ static Result execute_body_vm(Evaluator *eval, UserProcedure *proc, Node body, b
                 {
                     Result cr = proc_cache_compile_line(eval, line_tokens, false, &entry->bc_normal);
                     if (cr.status != RESULT_NONE && cr.status != RESULT_OK)
-                        return cr;
+                    {
+                        r = cr;
+                        goto cleanup;
+                    }
                     entry->has_normal = true;
                 }
                 bc = &entry->bc_normal;
@@ -540,12 +566,17 @@ static Result execute_body_vm(Evaluator *eval, UserProcedure *proc, Node body, b
             Bytecode temp_bc = {0};
             Result cr = proc_cache_compile_line(eval, line_tokens, want_tail, &temp_bc);
             if (cr.status != RESULT_NONE && cr.status != RESULT_OK)
-                return cr;
+            {
+                r = cr;
+                goto cleanup;
+            }
             bc = &temp_bc;
 
             VM temp_vm;
             vm_init(&temp_vm);
             temp_vm.eval = eval;
+            temp_vm.stack = vm_stack;
+            temp_vm.stack_cap = VM_STACK_CAP;
             r = vm_exec(&temp_vm, bc);
 
             free(temp_bc.code);
@@ -563,17 +594,20 @@ static Result execute_body_vm(Evaluator *eval, UserProcedure *proc, Node body, b
                         frame->line_cursor = NODE_NIL;
                     }
                 }
-                return r;
+                goto cleanup;
             }
 
             if (r.status == RESULT_GOTO)
-                return r;
+                goto cleanup;
 
             if (r.status != RESULT_NONE && r.status != RESULT_OK)
-                return r;
+                goto cleanup;
 
             if (r.status == RESULT_OK)
-                return result_error_arg(ERR_DONT_KNOW_WHAT, NULL, value_to_string(r.value));
+            {
+                r = result_error_arg(ERR_DONT_KNOW_WHAT, NULL, value_to_string(r.value));
+                goto cleanup;
+            }
 
             curr = next;
             line_index++;
@@ -584,6 +618,8 @@ static Result execute_body_vm(Evaluator *eval, UserProcedure *proc, Node body, b
         VM vm;
         vm_init(&vm);
         vm.eval = eval;
+        vm.stack = vm_stack;
+        vm.stack_cap = VM_STACK_CAP;
         r = vm_exec(&vm, bc);
         eval->in_tail_position = saved_tail;
 
@@ -599,22 +635,27 @@ static Result execute_body_vm(Evaluator *eval, UserProcedure *proc, Node body, b
                     frame->line_cursor = NODE_NIL;
                 }
             }
-            return r;
+            goto cleanup;
         }
 
         if (r.status == RESULT_GOTO)
-            return r;
+            goto cleanup;
 
         if (r.status != RESULT_NONE && r.status != RESULT_OK)
-            return r;
+            goto cleanup;
 
         if (r.status == RESULT_OK)
-            return result_error_arg(ERR_DONT_KNOW_WHAT, NULL, value_to_string(r.value));
+        {
+            r = result_error_arg(ERR_DONT_KNOW_WHAT, NULL, value_to_string(r.value));
+            goto cleanup;
+        }
 
         curr = next;
         line_index++;
     }
 
+cleanup:
+    free(vm_stack);
     return r;
 }
 
@@ -685,6 +726,31 @@ static Result execute_body_with_step(Evaluator *eval, Node body, bool enable_tco
         {
             Node next = mem_cdr(resume_line);
             bool is_last_line = mem_is_nil(next);
+
+            if (frame && frame->prim_cont != PRIM_CONT_NONE)
+            {
+                r = primitives_control_flow_continue(eval);
+                if (r.status == RESULT_CALL)
+                {
+                    return r;
+                }
+                if (r.status == RESULT_GOTO)
+                {
+                    Node after = find_label_after(body, r.goto_label);
+                    if (mem_is_nil(after))
+                        return result_error_arg(ERR_CANT_FIND_LABEL, NULL, r.goto_label);
+                    frame->body_cursor = NODE_NIL;
+                    curr = after;
+                }
+                else if (r.status != RESULT_NONE && r.status != RESULT_OK)
+                {
+                    return r;
+                }
+                else if (r.status == RESULT_OK)
+                {
+                    return result_error_arg(ERR_DONT_KNOW_WHAT, NULL, value_to_string(r.value));
+                }
+            }
 
             if (frame && !mem_is_nil(frame->line_cursor))
             {

@@ -101,6 +101,35 @@ extern "C"
     #define CONT_FLAG_IN_PAREN       0x02  // Inside parenthesized expression
     #define CONT_FLAG_TAIL_POSITION  0x04  // Current instruction is in tail position
 
+    //=========================================================================
+    // Primitive Continuation Kinds (for CPS resumption)
+    //==========================================================================
+
+    typedef enum
+    {
+        PRIM_CONT_NONE = 0,
+        PRIM_CONT_RUN,
+        PRIM_CONT_REPEAT,
+        PRIM_CONT_FOREVER,
+        PRIM_CONT_WHILE,
+        PRIM_CONT_DO_WHILE,
+        PRIM_CONT_UNTIL,
+        PRIM_CONT_DO_UNTIL,
+        PRIM_CONT_FOR
+    } PrimContinuationKind;
+
+    typedef enum
+    {
+        PRIM_PHASE_INIT = 0,
+        PRIM_PHASE_BODY,
+        PRIM_PHASE_PRED
+    } PrimContinuationPhase;
+
+    #define PRIM_FLAG_FOR_IN_PROC        0x01
+    #define PRIM_FLAG_FOR_HAD_VALUE      0x02
+    #define PRIM_FLAG_FOR_DECLARED_LOCAL 0x04
+    #define PRIM_FLAG_CURSOR_AT_END      0x08
+
     //==========================================================================
     // Frame Header Structure
     //==========================================================================
@@ -132,6 +161,23 @@ extern "C"
         uint8_t pending_bp;            // Binding power for Pratt parser resumption
         uint8_t cont_flags;            // Continuation flags (CONT_FLAG_*)
         uint8_t _reserved1;            // Reserved for alignment
+
+        // Primitive continuation state (for CPS resumption)
+        uint8_t prim_cont;             // PrimContinuationKind
+        uint8_t prim_phase;            // PrimContinuationPhase
+        uint8_t prim_flags;            // PRIM_FLAG_* bitset
+        uint8_t _reserved3;            // Reserved for alignment
+        int16_t prim_i;                // Loop index (repeat/forever)
+        int16_t prim_count;            // Repeat count
+        int32_t prim_saved_repcount;   // Saved repcount for repeat/forever
+        float prim_current;            // Current value (for)
+        float prim_limit;              // Limit value (for)
+        float prim_step;               // Step value (for)
+        Node prim_body;                // Body list
+        Node prim_pred;                // Predicate list
+        Node prim_cursor;              // Saved list cursor for CPS
+        const char *prim_varname;      // Control variable name (for)
+        Value prim_saved_value;        // Saved variable value (for, top-level)
 
         // TEST state (per Logo spec, local to procedure)
         bool test_valid;               // True if TEST has been executed in this frame

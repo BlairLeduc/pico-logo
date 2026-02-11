@@ -116,6 +116,9 @@ extern "C"
     // Returns true on success, false if out of space or primitive not found
     bool primitive_register_alias(const char *alias_name, const Primitive *source);
 
+    // Resume any pending control-flow primitive continuation (CPS)
+    Result primitives_control_flow_continue(Evaluator *eval);
+
     // Initialize primitive categories
     void primitives_arithmetic_init(void);
     void primitives_conditionals_init(void);

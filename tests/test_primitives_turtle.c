@@ -1285,6 +1285,22 @@ void test_spin_row_square_dashed_repro(void)
     }
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     TEST_ASSERT_TRUE_MESSAGE(mock_device_line_count() > 0, "expected some drawn lines");
+
+    Result r2 = run_string("spin 4 [square 100]");
+    if (r2.status == RESULT_ERROR)
+    {
+        TEST_FAIL_MESSAGE(error_format(r2));
+    }
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+    TEST_ASSERT_TRUE_MESSAGE(mock_device_line_count() > 0, "expected lines after spin 4");
+
+    Result r3 = run_string("spin 16 [square 100]");
+    if (r3.status == RESULT_ERROR)
+    {
+        TEST_FAIL_MESSAGE(error_format(r3));
+    }
+    TEST_ASSERT_EQUAL(RESULT_NONE, r3.status);
+    TEST_ASSERT_TRUE_MESSAGE(mock_device_line_count() > 0, "expected lines after spin 16");
 }
 
 //==========================================================================

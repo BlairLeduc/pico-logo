@@ -33,6 +33,7 @@ void eval_init(Evaluator *eval, Lexer *lexer)
     eval->proc_depth = 0;
     eval->repcount = -1;
     eval->primitive_arg_depth = 0;
+    eval->cps_list_depth = 0;
     eval->suppress_token_source_save = false;
 }
 
@@ -161,10 +162,24 @@ Result eval_expression(Evaluator *eval)
         }
     }
 
-    uint8_t arena_buf[BYTECODE_ARENA_SIZE];
+    uint8_t *arena_buf = (uint8_t *)malloc(BYTECODE_ARENA_SIZE);
+    if (!arena_buf)
+    {
+        if (do_restore)
+        {
+            token_source_copy(&eval->token_source, &saved_source);
+            if (saved_lexer_valid && eval->token_source.type == TOKEN_SOURCE_LEXER && eval->token_source.lexer)
+            {
+                *eval->token_source.lexer = saved_lexer;
+            }
+            eval->paren_depth = saved_paren_depth;
+            eval->primitive_arg_depth = saved_primitive_depth;
+        }
+        return result_error(ERR_OUT_OF_SPACE);
+    }
     Arena arena = {
         .base = arena_buf,
-        .capacity = sizeof(arena_buf),
+        .capacity = BYTECODE_ARENA_SIZE,
         .used = 0
     };
     Bytecode bc = {
@@ -187,6 +202,7 @@ Result eval_expression(Evaluator *eval)
     Result cr = compile_expression(&c, &bc);
     if (cr.status != RESULT_OK)
     {
+        free(arena_buf);
         if (do_restore)
         {
             token_source_copy(&eval->token_source, &saved_source);
@@ -203,7 +219,17 @@ Result eval_expression(Evaluator *eval)
     VM vm;
     vm_init(&vm);
     vm.eval = eval;
-    return vm_exec(&vm, &bc);
+    // Pre-allocate the VM value stack from the arena to avoid a separate
+    // heap allocation inside vm_exec (and to keep C stack usage low).
+    Value *vm_stack = (Value *)arena_alloc(&arena, sizeof(Value) * VM_STACK_CAP);
+    if (vm_stack)
+    {
+        vm.stack = vm_stack;
+        vm.stack_cap = VM_STACK_CAP;
+    }
+    Result r = vm_exec(&vm, &bc);
+    free(arena_buf);
+    return r;
 }
 
 Result eval_instruction(Evaluator *eval)
@@ -330,10 +356,24 @@ Result eval_instruction(Evaluator *eval)
         }
     }
 
-    uint8_t arena_buf[BYTECODE_ARENA_SIZE];
+    uint8_t *arena_buf = (uint8_t *)malloc(BYTECODE_ARENA_SIZE);
+    if (!arena_buf)
+    {
+        if (do_restore)
+        {
+            token_source_copy(&eval->token_source, &saved_source);
+            if (saved_lexer_valid && eval->token_source.type == TOKEN_SOURCE_LEXER && eval->token_source.lexer)
+            {
+                *eval->token_source.lexer = saved_lexer;
+            }
+            eval->paren_depth = saved_paren_depth;
+            eval->primitive_arg_depth = saved_primitive_depth;
+        }
+        return result_error(ERR_OUT_OF_SPACE);
+    }
     Arena arena = {
         .base = arena_buf,
-        .capacity = sizeof(arena_buf),
+        .capacity = BYTECODE_ARENA_SIZE,
         .used = 0
     };
     Bytecode bc = {
@@ -359,8 +399,19 @@ Result eval_instruction(Evaluator *eval)
         VM vm;
         vm_init(&vm);
         vm.eval = eval;
-        return vm_exec(&vm, &bc);
+        // Pre-allocate the VM value stack from the arena to avoid a separate
+        // heap allocation inside vm_exec (and to keep C stack usage low).
+        Value *vm_stack = (Value *)arena_alloc(&arena, sizeof(Value) * VM_STACK_CAP);
+        if (vm_stack)
+        {
+            vm.stack = vm_stack;
+            vm.stack_cap = VM_STACK_CAP;
+        }
+        Result r = vm_exec(&vm, &bc);
+        free(arena_buf);
+        return r;
     }
+    free(arena_buf);
     if (do_restore)
     {
         token_source_copy(&eval->token_source, &saved_source);
@@ -374,9 +425,9 @@ Result eval_instruction(Evaluator *eval)
     return cr;
 }
 
-// Evaluate a list as procedure body with tail call optimization
-// The last instruction in the list is evaluated in tail position
-Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
+static Result eval_run_list_with_tco_impl(Evaluator *eval, Node list, bool enable_tco,
+                                          bool inline_calls, bool save_line_cursor,
+                                          Node *out_cursor)
 {
     bool saved_suppress = eval->suppress_token_source_save;
     TokenSource saved_source;
@@ -405,14 +456,31 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
 
         if (r.status == RESULT_CALL)
         {
-            Result call_r = proc_call(eval, r.call_proc, r.call_argc, r.call_args);
-            if (call_r.status == RESULT_NONE)
+            if (inline_calls)
             {
-                r = result_none();
-                continue;
+                r = proc_call(eval, r.call_proc, r.call_argc, r.call_args);
             }
-            r = call_r;
-            break;
+            else
+            {
+                Node cursor = token_source_get_position(&eval->token_source);
+                if (save_line_cursor)
+                {
+                    FrameStack *frames = eval->frames;
+                    if (frames && !frame_stack_is_empty(frames))
+                    {
+                        FrameHeader *frame = frame_current(frames);
+                        if (frame)
+                        {
+                            frame->line_cursor = cursor;
+                        }
+                    }
+                }
+                if (out_cursor)
+                {
+                    *out_cursor = cursor;
+                }
+                break;
+            }
         }
 
         if (r.status == RESULT_GOTO)
@@ -432,19 +500,24 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
     return r;
 }
 
+// Evaluate a list as procedure body with tail call optimization
+// The last instruction in the list is evaluated in tail position
+Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
+{
+    return eval_run_list_with_tco_impl(eval, list, enable_tco, false, true, NULL);
+}
+
 Result eval_run_list(Evaluator *eval, Node list)
 {
     int saved_primitive_depth = eval->primitive_arg_depth;
     eval->primitive_arg_depth = 0;
-    Result r = eval_run_list_with_tco(eval, list, false);
+    Result r = eval_run_list_with_tco_impl(eval, list, false, true, false, NULL);
     eval->primitive_arg_depth = saved_primitive_depth;
     return r;
 }
 
-// Run a list as an expression - allows the list to output a value
-// Used by 'run' and 'if' when they act as operations
-// Propagates tail position for TCO
-Result eval_run_list_expr(Evaluator *eval, Node list)
+static Result eval_run_list_expr_impl(Evaluator *eval, Node list, bool inline_calls,
+                                      bool save_line_cursor, Node *out_cursor)
 {
     bool enable_tco = eval->in_tail_position && eval->proc_depth > 0;
     bool saved_suppress = eval->suppress_token_source_save;
@@ -477,14 +550,31 @@ Result eval_run_list_expr(Evaluator *eval, Node list)
 
         if (r.status == RESULT_CALL)
         {
-            Result call_r = proc_call(eval, r.call_proc, r.call_argc, r.call_args);
-            if (call_r.status == RESULT_NONE)
+            if (inline_calls)
             {
-                r = result_none();
-                continue;
+                r = proc_call(eval, r.call_proc, r.call_argc, r.call_args);
             }
-            r = call_r;
-            break;
+            else
+            {
+                Node cursor = token_source_get_position(&eval->token_source);
+                if (save_line_cursor)
+                {
+                    FrameStack *frames = eval->frames;
+                    if (frames && !frame_stack_is_empty(frames))
+                    {
+                        FrameHeader *frame = frame_current(frames);
+                        if (frame)
+                        {
+                            frame->line_cursor = cursor;
+                        }
+                    }
+                }
+                if (out_cursor)
+                {
+                    *out_cursor = cursor;
+                }
+                break;
+            }
         }
 
         if (r.status == RESULT_OK)
@@ -506,5 +596,32 @@ Result eval_run_list_expr(Evaluator *eval, Node list)
     eval->in_tail_position = saved_tail;
     eval->primitive_arg_depth = saved_primitive_depth;
     eval->suppress_token_source_save = saved_suppress;
+    return r;
+}
+
+// Run a list as an expression - allows the list to output a value
+// Used by 'run' and 'if' when they act as operations
+// Propagates tail position for TCO
+Result eval_run_list_expr(Evaluator *eval, Node list)
+{
+    return eval_run_list_expr_impl(eval, list, true, false, NULL);
+}
+
+Result eval_run_list_cps(Evaluator *eval, Node list, bool enable_tco, Node *out_cursor)
+{
+    int saved_primitive_depth = eval->primitive_arg_depth;
+    eval->primitive_arg_depth = 0;
+    eval->cps_list_depth++;
+    Result r = eval_run_list_with_tco_impl(eval, list, enable_tco, false, false, out_cursor);
+    eval->cps_list_depth--;
+    eval->primitive_arg_depth = saved_primitive_depth;
+    return r;
+}
+
+Result eval_run_list_expr_cps(Evaluator *eval, Node list, Node *out_cursor)
+{
+    eval->cps_list_depth++;
+    Result r = eval_run_list_expr_impl(eval, list, false, false, out_cursor);
+    eval->cps_list_depth--;
     return r;
 }

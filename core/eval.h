@@ -28,6 +28,7 @@ extern "C"
         int proc_depth;            // Depth of user procedure calls (for TCO)
         int repcount;              // Current repeat count (for REPCOUNT)
         int primitive_arg_depth;   // > 0 when collecting args for primitives (CPS fallback)
+        int cps_list_depth;        // > 0 when running list eval in CPS mode
         bool suppress_token_source_save; // Skip token_source snapshots for nested evals
     } Evaluator;
 
@@ -55,6 +56,14 @@ extern "C"
     // Run a list as an expression (for run, if as operation)
     // Allows the list to output a value which is returned
     Result eval_run_list_expr(Evaluator *eval, Node list);
+
+    // Run a list as code in CPS mode (no inline proc_call)
+    // On RESULT_CALL, stores the current list cursor in out_cursor
+    Result eval_run_list_cps(Evaluator *eval, Node list, bool enable_tco, Node *out_cursor);
+
+    // Run a list as an expression in CPS mode (no inline proc_call)
+    // On RESULT_CALL, stores the current list cursor in out_cursor
+    Result eval_run_list_expr_cps(Evaluator *eval, Node list, Node *out_cursor);
 
     // Run a list as code with tail call optimization enabled
     // Used internally by proc_call for procedure bodies

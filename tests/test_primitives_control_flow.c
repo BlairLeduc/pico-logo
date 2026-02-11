@@ -6,6 +6,7 @@
 //
 
 #include "test_scaffold.h"
+#include <string.h>
 
 void setUp(void)
 {
@@ -32,6 +33,63 @@ void test_repeat_multiple_instructions(void)
 {
     run_string("repeat 2 [print \"a print \"b]");
     TEST_ASSERT_EQUAL_STRING("a\nb\na\nb\n", output_buffer);
+}
+
+void test_repeat_with_expression_arg_and_following_command(void)
+{
+    Result r = proc_define_from_text(
+        "to f :n\n"
+        "pr :n\n"
+        "end\n");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    Result r2 = proc_define_from_text(
+        "to sq :n\n"
+        "repeat 4 [f :n / 2 pr 100]\n"
+        "end\n");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+
+    Result text_r = eval_string("text \"sq");
+    TEST_ASSERT_EQUAL(RESULT_OK, text_r.status);
+    TEST_ASSERT_TRUE(value_is_list(text_r.value));
+    Node body = text_r.value.as.node;
+    body = mem_cdr(body);
+    TEST_ASSERT_FALSE(mem_is_nil(body));
+    Node line = mem_car(body);
+    TEST_ASSERT_TRUE(mem_is_list(line));
+    bool saw_pr = false;
+    Node tokens = line;
+    while (!mem_is_nil(tokens))
+    {
+        Node tok = mem_car(tokens);
+        if (NODE_GET_TYPE(tok) == NODE_TYPE_LIST)
+        {
+            Node inner = NODE_MAKE_LIST(NODE_GET_INDEX(tok));
+            Node inner_tokens = inner;
+            while (!mem_is_nil(inner_tokens))
+            {
+                Node inner_tok = mem_car(inner_tokens);
+                if (mem_is_word(inner_tok))
+                {
+                    if (strcmp(mem_word_ptr(inner_tok), "pr") == 0)
+                    {
+                        saw_pr = true;
+                        break;
+                    }
+                }
+                inner_tokens = mem_cdr(inner_tokens);
+            }
+        }
+        if (saw_pr)
+            break;
+        tokens = mem_cdr(tokens);
+    }
+    TEST_ASSERT_TRUE_MESSAGE(saw_pr, "expected pr token in repeat body");
+
+    reset_output();
+    Result r3 = run_string("sq 5");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r3.status);
+    TEST_ASSERT_EQUAL_STRING("2.5\n100\n2.5\n100\n2.5\n100\n2.5\n100\n", output_buffer);
 }
 
 void test_repcount_basic(void)
@@ -458,6 +516,8 @@ int main(void)
     UNITY_BEGIN();
 
     RUN_TEST(test_repeat);
+    RUN_TEST(test_repeat_multiple_instructions);
+    RUN_TEST(test_repeat_with_expression_arg_and_following_command);
     RUN_TEST(test_repcount_basic);
     RUN_TEST(test_repcount_no_repeat);
     RUN_TEST(test_repcount_nested);

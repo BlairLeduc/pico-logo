@@ -13,7 +13,7 @@ enum
     BC_DEFAULT_CONST_CAP = 64
 };
 
-static void *arena_alloc(Arena *arena, size_t size)
+void *arena_alloc(Arena *arena, size_t size)
 {
     if (!arena || !arena->base)
         return NULL;

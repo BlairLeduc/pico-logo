@@ -11,11 +11,11 @@
 #include "audio.h"
 #include "keyboard.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <unistd.h>
+    #include <stdio.h>
+    #include <stdlib.h>
+    #include <string.h>
+    #include <sys/stat.h>
+    #include <unistd.h>
 
 #include <pico/stdlib.h>
 #include <pico/rand.h>

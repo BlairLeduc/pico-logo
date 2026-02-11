@@ -52,6 +52,8 @@ extern "C"
             Lexer *lexer;
             NodeIterator node_iter;
         };
+        NodeIterator peeked_iter;  // Cached iterator state for peek (node iterator only)
+        bool has_peeked_iter;      // True if peeked_iter is valid
         Token current;      // Current token (for peek)
         bool has_current;   // True if current is valid
     };

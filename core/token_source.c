@@ -186,6 +186,7 @@ void token_source_init_lexer(TokenSource *ts, Lexer *lexer)
     ts->type = TOKEN_SOURCE_LEXER;
     ts->lexer = lexer;
     ts->has_current = false;
+    ts->has_peeked_iter = false;
 }
 
 // Initialize token source from a Node list
@@ -197,6 +198,7 @@ void token_source_init_list(TokenSource *ts, Node list)
     ts->node_iter.has_peeked = false;
     ts->node_iter.previous_was_delimiter = true;  // Start of list acts like delimiter
     ts->has_current = false;
+    ts->has_peeked_iter = false;
 }
 
 // Get next token from node iterator
@@ -262,6 +264,11 @@ Token token_source_next(TokenSource *ts)
     // If we have a cached token, consume and return it
     if (ts->has_current)
     {
+        if (ts->type == TOKEN_SOURCE_NODE_ITERATOR && ts->has_peeked_iter)
+        {
+            ts->node_iter = ts->peeked_iter;
+            ts->has_peeked_iter = false;
+        }
         ts->has_current = false;
         return ts->current;
     }
@@ -281,7 +288,17 @@ Token token_source_peek(TokenSource *ts)
 {
     if (!ts->has_current)
     {
-        ts->current = token_source_next(ts);
+        if (ts->type == TOKEN_SOURCE_NODE_ITERATOR)
+        {
+            NodeIterator temp = ts->node_iter;
+            ts->current = node_iter_next(&temp);
+            ts->peeked_iter = temp;
+            ts->has_peeked_iter = true;
+        }
+        else
+        {
+            ts->current = token_source_next(ts);
+        }
         ts->has_current = true;
     }
     return ts->current;
@@ -320,6 +337,7 @@ void token_source_consume_sublist(TokenSource *ts)
         ts->node_iter.pending_sublist = NODE_NIL;
         // Also clear the cached current token since we've consumed the bracket
         ts->has_current = false;
+        ts->has_peeked_iter = false;
     }
 }
 
@@ -343,5 +361,6 @@ void token_source_set_position(TokenSource *ts, Node position)
         ts->node_iter.has_peeked = false;
         ts->node_iter.previous_was_delimiter = true;
         ts->has_current = false;
+        ts->has_peeked_iter = false;
     }
 }
