@@ -121,8 +121,13 @@ int main(void)
     while (1)
     {
         ReplState repl;
-        repl_init(&repl, &io, REPL_FLAGS_FULL, "");
+        if (!repl_init(&repl, &io, REPL_FLAGS_FULL, ""))
+        {
+            logo_io_write_line(&io, "Out of memory");
+            continue;
+        }
         Result r = repl_run(&repl);
+        repl_cleanup(&repl);
         
         // If throw "toplevel or any other reason to exit, just restart
         // On device we should never exit main()

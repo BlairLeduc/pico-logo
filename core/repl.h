@@ -46,18 +46,23 @@ typedef struct {
     
     // Internal state
     char line[REPL_MAX_LINE_LENGTH];
-    char proc_buffer[REPL_MAX_PROC_BUFFER];
+    char *proc_buffer;            // Heap-allocated [REPL_MAX_PROC_BUFFER]
     size_t proc_len;
     bool in_procedure_def;
     
-    char expr_buffer[REPL_MAX_PROC_BUFFER];
+    char *expr_buffer;            // Heap-allocated [REPL_MAX_PROC_BUFFER]
     size_t expr_len;
     int bracket_depth;
 } ReplState;
 
 // Initialize REPL state with default values
 // proc_prefix is the procedure name prefix for prompts (empty string for top level)
-void repl_init(ReplState *state, LogoIO *io, ReplFlags flags, const char *proc_prefix);
+// Returns false if memory allocation fails
+bool repl_init(ReplState *state, LogoIO *io, ReplFlags flags, const char *proc_prefix);
+
+// Free heap-allocated buffers in REPL state
+// Must be called when done with a ReplState that was successfully initialized
+void repl_cleanup(ReplState *state);
 
 // Run the REPL loop
 // Returns:

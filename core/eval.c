@@ -830,12 +830,15 @@ Result eval_instruction(Evaluator *eval)
                     logo_io_write_line(io, "Pausing...");
                     
                     ReplState state;
-                    repl_init(&state, io, REPL_FLAGS_PAUSE, proc_name);
-                    Result r = repl_run(&state);
-                    
-                    if (r.status != RESULT_OK && r.status != RESULT_NONE)
+                    if (repl_init(&state, io, REPL_FLAGS_PAUSE, proc_name))
                     {
-                        return r;
+                        Result r = repl_run(&state);
+                        repl_cleanup(&state);
+                        
+                        if (r.status != RESULT_OK && r.status != RESULT_NONE)
+                        {
+                            return r;
+                        }
                     }
                 }
                 // After pause REPL exits, continue execution
@@ -873,13 +876,16 @@ Result eval_instruction(Evaluator *eval)
             logo_io_write_line(io, "Pausing...");
             
             ReplState state;
-            repl_init(&state, io, REPL_FLAGS_PAUSE, proc_name);
-            Result r = repl_run(&state);
-            
-            // If pause REPL exited with throw or error, propagate it
-            if (r.status != RESULT_OK && r.status != RESULT_NONE)
+            if (repl_init(&state, io, REPL_FLAGS_PAUSE, proc_name))
             {
-                return r;
+                Result r = repl_run(&state);
+                repl_cleanup(&state);
+                
+                // If pause REPL exited with throw or error, propagate it
+                if (r.status != RESULT_OK && r.status != RESULT_NONE)
+                {
+                    return r;
+                }
             }
             // Otherwise continue execution
         }

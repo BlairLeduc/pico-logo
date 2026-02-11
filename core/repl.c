@@ -9,6 +9,7 @@
 
 #include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 
@@ -98,16 +99,38 @@ int repl_count_bracket_balance(const char *line)
 }
 
 // Initialize REPL state
-void repl_init(ReplState *state, LogoIO *io, ReplFlags flags, const char *proc_prefix)
+bool repl_init(ReplState *state, LogoIO *io, ReplFlags flags, const char *proc_prefix)
 {
     state->io = io;
     state->flags = flags;
     state->proc_prefix = proc_prefix ? proc_prefix : "";
     
+    state->proc_buffer = malloc(REPL_MAX_PROC_BUFFER);
+    state->expr_buffer = malloc(REPL_MAX_PROC_BUFFER);
+    
+    if (!state->proc_buffer || !state->expr_buffer)
+    {
+        free(state->proc_buffer);
+        free(state->expr_buffer);
+        state->proc_buffer = NULL;
+        state->expr_buffer = NULL;
+        return false;
+    }
+    
     state->proc_len = 0;
     state->in_procedure_def = false;
     state->expr_len = 0;
     state->bracket_depth = 0;
+    return true;
+}
+
+// Free heap-allocated buffers
+void repl_cleanup(ReplState *state)
+{
+    free(state->proc_buffer);
+    free(state->expr_buffer);
+    state->proc_buffer = NULL;
+    state->expr_buffer = NULL;
 }
 
 // Handle a single line evaluation
@@ -152,15 +175,17 @@ static Result repl_evaluate_line(ReplState *state, const char *input)
         {
             // Nested pause - recursively run pause REPL
             ReplState pause_state;
-            repl_init(&pause_state, state->io, REPL_FLAGS_PAUSE, r.pause_proc);
-            
-            logo_io_write_line(state->io, "Pausing...");
-            
-            Result pr = repl_run(&pause_state);
-            if (pr.status == RESULT_THROW)
+            if (repl_init(&pause_state, state->io, REPL_FLAGS_PAUSE, r.pause_proc))
             {
-                // Propagate throw
-                return pr;
+                logo_io_write_line(state->io, "Pausing...");
+                
+                Result pr = repl_run(&pause_state);
+                repl_cleanup(&pause_state);
+                if (pr.status == RESULT_THROW)
+                {
+                    // Propagate throw
+                    return pr;
+                }
             }
         }
         else if (r.status == RESULT_OK)
