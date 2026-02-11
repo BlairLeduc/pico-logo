@@ -25,6 +25,10 @@
 #endif
 static char editor_buffer[LOGO_EDITOR_BUFFER_SIZE];
 
+// Static buffer for assembling procedure definitions from editor output.
+// Safe as static because the editor is a blocking UI operation (no reentrancy).
+static char editor_proc_buffer[LOGO_EDITOR_BUFFER_SIZE];
+
 // Helper to check if a line starts with "to " (case-insensitive)
 static bool line_starts_with_to(const char *line)
 {
@@ -98,8 +102,8 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
     // Process the buffer content - each line is executed as if typed at top level
     // We need to handle procedure definitions (to...end) specially
     
-    // Procedure definition buffer
-    char proc_buffer[LOGO_EDITOR_BUFFER_SIZE];
+    // Procedure definition buffer (uses static to avoid 8KB on C stack)
+    char *proc_buffer = editor_proc_buffer;
     size_t proc_len = 0;
     bool in_procedure_def = false;
     

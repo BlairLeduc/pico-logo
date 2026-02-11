@@ -993,6 +993,10 @@ static bool line_is_end(const char *line)
 // Maximum procedure buffer for load
 #define LOAD_MAX_PROC 4096
 
+// Static buffer for assembling procedure definitions during load.
+// Safe as static because loading_in_progress prevents reentrancy.
+static char load_proc_buffer[LOAD_MAX_PROC];
+
 // load pathname - loads and executes file contents
 static Result prim_load(Evaluator *eval, int argc, Value *args)
 {
@@ -1036,7 +1040,7 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
 
     // Read and execute the file line by line
     char line[LOAD_MAX_LINE];
-    char proc_buffer[LOAD_MAX_PROC];
+    char *proc_buffer = load_proc_buffer;
     size_t proc_len = 0;
     bool in_procedure_def = false;
     Result result = result_none();
