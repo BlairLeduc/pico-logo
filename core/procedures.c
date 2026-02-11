@@ -43,6 +43,9 @@ static int procedure_count = 0;
 // Tail call state (global for trampoline)
 static TailCall tail_call_state;
 
+// Pending CPS call state (global, avoids large Result structs on stack)
+static PendingCall pending_call_state;
+
 // Current procedure stack (for pause prompt)
 static const char *current_proc_stack[MAX_CURRENT_PROC_DEPTH];
 static int current_proc_depth = 0;
@@ -487,6 +490,11 @@ void proc_clear_tail_call(void)
     tail_call_state.arg_count = 0;
 }
 
+PendingCall *proc_get_pending_call(void)
+{
+    return &pending_call_state;
+}
+
 int proc_count(bool include_buried)
 {
     int count = 0;
@@ -762,11 +770,12 @@ Result proc_call(Evaluator *eval, UserProcedure *proc, int argc, Value *args)
         {
             // Push new frame for the callee and continue
             // The current frame's body_cursor/line_cursor were saved by execute_body_with_step
-            proc = result.call_proc;
-            argc = result.call_argc;
+            PendingCall *pc = proc_get_pending_call();
+            proc = pc->proc;
+            argc = pc->argc;
             for (int i = 0; i < argc; i++)
             {
-                args[i] = result.call_args[i];
+                args[i] = pc->args[i];
             }
             // Not a tail call, not a continuation - it's a new nested call
             continue;

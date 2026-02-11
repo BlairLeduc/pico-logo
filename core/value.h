@@ -63,25 +63,28 @@ extern "C"
     // Forward declaration for RESULT_CALL
     typedef struct UserProcedure UserProcedure;
 
-    // Maximum args for RESULT_CALL (must match MAX_PROC_PARAMS)
-    #define RESULT_CALL_MAX_ARGS 16
-
     // Evaluation result (FP-style)
+    //
+    // Uses a union for status-specific fields to minimize size.
+    // CPS call data (RESULT_CALL) is stored in a global PendingCall
+    // struct rather than inline, keeping Result small on the C stack.
     typedef struct
     {
         ResultStatus status;
-        Value value;           // Valid for RESULT_OK and RESULT_OUTPUT
-        int error_code;        // Valid for RESULT_ERROR
-        const char *error_proc;  // Procedure that caused error (e.g., "sum")
-        const char *error_arg;   // Bad argument as string (e.g., "hello")
-        const char *error_caller; // User procedure where error occurred (e.g., "add")
-        const char *throw_tag;   // Tag for RESULT_THROW (e.g., "error", "toplevel")
-        const char *pause_proc;  // Procedure name for RESULT_PAUSE
-        const char *goto_label;  // Label name for RESULT_GOTO
-        // For RESULT_CALL (CPS user procedure calls)
-        UserProcedure *call_proc; // Procedure to call
-        Value call_args[RESULT_CALL_MAX_ARGS];  // Arguments for the call
-        int call_argc;           // Number of arguments
+        Value value;           // Valid for RESULT_OK, RESULT_OUTPUT, RESULT_THROW
+        union
+        {
+            struct                       // RESULT_ERROR
+            {
+                int error_code;
+                const char *error_proc;  // Procedure that caused error (e.g., "sum")
+                const char *error_arg;   // Bad argument as string (e.g., "hello")
+                const char *error_caller; // User procedure where error occurred
+            };
+            const char *throw_tag;   // RESULT_THROW (e.g., "error", "toplevel")
+            const char *pause_proc;  // RESULT_PAUSE
+            const char *goto_label;  // RESULT_GOTO
+        };
     } Result;
 
     //==========================================================================

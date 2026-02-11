@@ -433,6 +433,47 @@ void test_for_non_word_varname(void)
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
+// Deep nesting: user procedures called inside repeat via run
+// This exercises the C stack depth that caused stack overflow on Pico
+void test_deep_nested_proc_in_repeat(void)
+{
+    // Define dashed.forward: repeat with simple commands inside
+    Result r = proc_define_from_text(
+        "to dashed.forward :side\n"
+        "repeat :side / 10 [print 1]\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    // Define square: repeat calling dashed.forward
+    r = proc_define_from_text(
+        "to square :side\n"
+        "repeat 4 [dashed.forward :side / 2]\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    // Define spin: repeat calling run which calls square
+    r = proc_define_from_text(
+        "to spin :times :commands\n"
+        "repeat :times [run :commands]\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    // Run: spin -> repeat -> run -> square -> repeat -> dashed.forward -> repeat
+    // 3 levels of proc_call, each inside repeat (primitive_arg_depth > 0)
+    output_buffer[0] = '\0';
+    run_string("spin 2 [square 100]");
+
+    // Each square call: 4 sides × dashed.forward(50) → 50/10=5 repeats × print 1
+    // = 4 × 5 = 20 lines of "1\n" per square call
+    // 2 spins × 20 = 40 lines
+    int count = 0;
+    for (const char *p = output_buffer; *p; p++)
+    {
+        if (*p == '\n') count++;
+    }
+    TEST_ASSERT_EQUAL(40, count);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -484,6 +525,7 @@ int main(void)
     RUN_TEST(test_for_too_few_items);
     RUN_TEST(test_for_too_many_items);
     RUN_TEST(test_for_non_word_varname);
+    RUN_TEST(test_deep_nested_proc_in_repeat);
 
     return UNITY_END();
 }
