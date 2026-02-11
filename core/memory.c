@@ -730,52 +730,52 @@ static void gc_mark_node(Node n)
 
 static void gc_mark_index(uint16_t index)
 {
-    if (index == 0)
+    // Iteratively follow cdr chains to avoid stack overflow on long lists.
+    // Only car branches recurse (bounded by list nesting depth, not length).
+    while (index != 0)
     {
-        return;
-    }
+        // Validate that the index is within our allocated node region
+        uint32_t *cell_ptr = get_node_ptr(index);
+        if (cell_ptr == NULL)
+        {
+            return;
+        }
+        
+        // Check if the node is actually allocated (within node_bottom to LOGO_MEMORY_SIZE)
+        size_t byte_offset = (uint8_t *)cell_ptr - memory_block;
+        if (byte_offset < node_bottom || byte_offset >= LOGO_MEMORY_SIZE)
+        {
+            return;
+        }
 
-    // Validate that the index is within our allocated node region
-    uint32_t *cell_ptr = get_node_ptr(index);
-    if (cell_ptr == NULL)
-    {
-        return;
-    }
-    
-    // Check if the node is actually allocated (within node_bottom to LOGO_MEMORY_SIZE)
-    size_t byte_offset = (uint8_t *)cell_ptr - memory_block;
-    if (byte_offset < node_bottom || byte_offset >= LOGO_MEMORY_SIZE)
-    {
-        return;
-    }
+        // Check if already marked
+        uint32_t word_idx = index / 32;
+        uint32_t bit_idx = index % 32;
+        if (gc_marks[word_idx] & (1u << bit_idx))
+        {
+            return; // Already marked
+        }
 
-    // Check if already marked
-    uint32_t word_idx = index / 32;
-    uint32_t bit_idx = index % 32;
-    if (gc_marks[word_idx] & (1u << bit_idx))
-    {
-        return; // Already marked
-    }
+        // Mark this node
+        gc_marks[word_idx] |= (1u << bit_idx);
 
-    // Mark this node
-    gc_marks[word_idx] |= (1u << bit_idx);
+        // Get car and cdr
+        uint32_t cell = *cell_ptr;
+        uint16_t car_idx = CELL_GET_CAR(cell);
+        uint16_t cdr_idx = CELL_GET_CDR(cell);
 
-    // Recursively mark car and cdr
-    uint32_t cell = *cell_ptr;
-    uint16_t car_idx = CELL_GET_CAR(cell);
-    uint16_t cdr_idx = CELL_GET_CDR(cell);
+        // Mark car recursively (only for nested lists, not words)
+        if (car_idx != 0 && !(car_idx & 0x8000))
+        {
+            gc_mark_index(car_idx);
+        }
 
-    // Mark car (may be word reference with high bit, or list index)
-    if (car_idx != 0 && !(car_idx & 0x8000))
-    {
-        // List reference - mark recursively
-        gc_mark_index(car_idx);
-    }
-
-    // Mark cdr
-    if (cdr_idx != 0 && !(cdr_idx & 0x8000))
-    {
-        gc_mark_index(cdr_idx);
+        // Follow cdr iteratively (tail-call elimination)
+        if (cdr_idx == 0 || (cdr_idx & 0x8000))
+        {
+            return;
+        }
+        index = cdr_idx;
     }
 }
 
