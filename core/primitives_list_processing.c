@@ -1469,8 +1469,9 @@ static Result prim_reduce(Evaluator *eval, int argc, Value *args)
     }
     
     // Collect elements into array (we need to process from the end)
-    Value elements[256];  // Reasonable max
-    if (count > 256)
+    // Heap-allocated to avoid 2KB stack usage (Value is 8 bytes × count)
+    Value *elements = malloc(count * sizeof(Value));
+    if (!elements)
     {
         return result_error(ERR_OUT_OF_SPACE);
     }
@@ -1517,6 +1518,7 @@ static Result prim_reduce(Evaluator *eval, int argc, Value *args)
     if (r.status == RESULT_ERROR || r.status == RESULT_THROW ||
         r.status == RESULT_STOP)
     {
+        free(elements);
         return r;
     }
     
@@ -1528,6 +1530,7 @@ static Result prim_reduce(Evaluator *eval, int argc, Value *args)
     
     if (r.status != RESULT_OK)
     {
+        free(elements);
         return result_error_arg(ERR_DIDNT_OUTPUT, NULL, NULL);
     }
     
@@ -1546,6 +1549,7 @@ static Result prim_reduce(Evaluator *eval, int argc, Value *args)
         if (r.status == RESULT_ERROR || r.status == RESULT_THROW ||
             r.status == RESULT_STOP)
         {
+            free(elements);
             return r;
         }
         
@@ -1556,12 +1560,14 @@ static Result prim_reduce(Evaluator *eval, int argc, Value *args)
         
         if (r.status != RESULT_OK)
         {
+            free(elements);
             return result_error_arg(ERR_DIDNT_OUTPUT, NULL, NULL);
         }
         
         accumulator = r.value;
     }
     
+    free(elements);
     return result_ok(accumulator);
 }
 

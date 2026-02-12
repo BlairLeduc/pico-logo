@@ -312,7 +312,7 @@ static Result prim_readlist(Evaluator *eval, int argc, Value *args)
         return result_ok(value_word(mem_atom("", 0))); // Empty word on error
     }
 
-    char buffer[1024];
+    static char buffer[1024];
     int len = logo_io_read_line(io, buffer, sizeof(buffer));
     if (len == LOGO_STREAM_INTERRUPTED)
     {
@@ -345,7 +345,7 @@ static Result prim_readword(Evaluator *eval, int argc, Value *args)
         return result_ok(value_list(NODE_NIL)); // Empty list on error/EOF
     }
 
-    char buffer[1024];
+    static char buffer[1024];
     int len = logo_io_read_line(io, buffer, sizeof(buffer));
     if (len == LOGO_STREAM_INTERRUPTED)
     {

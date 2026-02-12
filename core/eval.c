@@ -1234,10 +1234,11 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
         bool last_instruction = false;
         if (enable_tco)
         {
-            // Create lookahead copy
-            Evaluator lookahead = *eval;
-            token_source_copy(&lookahead.token_source, &eval->token_source);
-            last_instruction = skip_instruction(&lookahead) && eval_at_end(&lookahead);
+            // Save token source position, skip ahead to check if last instruction,
+            // then restore. Avoids copying the full Evaluator struct.
+            TokenSource saved_ts = eval->token_source;
+            last_instruction = skip_instruction(eval) && eval_at_end(eval);
+            eval->token_source = saved_ts;
         }
 
         // Set tail position for this instruction
@@ -1390,10 +1391,11 @@ Result eval_run_list_expr(Evaluator *eval, Node list)
         bool last_instruction = false;
         if (enable_tco)
         {
-            // Create lookahead copy
-            Evaluator lookahead = *eval;
-            token_source_copy(&lookahead.token_source, &eval->token_source);
-            last_instruction = skip_instruction(&lookahead) && eval_at_end(&lookahead);
+            // Save token source position, skip ahead to check if last instruction,
+            // then restore. Avoids copying the full Evaluator struct.
+            TokenSource saved_ts = eval->token_source;
+            last_instruction = skip_instruction(eval) && eval_at_end(eval);
+            eval->token_source = saved_ts;
         }
 
         // Set tail position for this instruction
