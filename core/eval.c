@@ -1247,9 +1247,6 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
         // Execute instruction
         r = eval_instruction(eval);
 
-        // Restore tail flag
-        eval->in_tail_position = old_tail;
-
         // Check if there's more to execute
         bool at_end = eval_at_end(eval);
         
@@ -1282,6 +1279,9 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
             }
             break;  // Propagate to caller
         }
+
+        // Restore tail flag after all dispatch is complete
+        eval->in_tail_position = old_tail;
 
         // Handle RESULT_GOTO - let it bubble up to execute_body_with_step
         // which has access to the full procedure body with all lines
@@ -1328,9 +1328,6 @@ Result eval_run_list(Evaluator *eval, Node list)
 
         r = eval_instruction(eval);
 
-        // Restore tail flag
-        eval->in_tail_position = old_tail;
-
         // Handle RESULT_CALL: dispatch the procedure call directly.
         // Previously we bumped primitive_arg_depth to force all procedure
         // calls inside primitive bodies to use C-stack recursion via proc_call.
@@ -1344,6 +1341,9 @@ Result eval_run_list(Evaluator *eval, Node list)
             PendingCall *pc = proc_get_pending_call();
             r = proc_call(eval, pc->proc, pc->argc, pc->args);
         }
+
+        // Restore tail flag after all dispatch is complete
+        eval->in_tail_position = old_tail;
 
         // Propagate stop/output/error/throw immediately
         if (r.status != RESULT_NONE && r.status != RESULT_OK)
@@ -1402,9 +1402,6 @@ Result eval_run_list_expr(Evaluator *eval, Node list)
         eval->in_tail_position = enable_tco && last_instruction;
         
         r = eval_instruction(eval);
-        
-        // Restore tail flag
-        eval->in_tail_position = old_tail;
 
         // Handle RESULT_CALL: dispatch the procedure call directly.
         // This replaces the old primitive_arg_depth++ approach.
@@ -1414,6 +1411,9 @@ Result eval_run_list_expr(Evaluator *eval, Node list)
             PendingCall *pc = proc_get_pending_call();
             r = proc_call(eval, pc->proc, pc->argc, pc->args);
         }
+
+        // Restore tail flag after all dispatch is complete
+        eval->in_tail_position = old_tail;
         
         // Check if there's more to execute
         bool at_end = eval_at_end(eval);
