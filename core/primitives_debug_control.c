@@ -97,8 +97,13 @@ static Result prim_pause(Evaluator *eval, int argc, Value *args)
     logo_io_write_line(io, "Pausing...");
     
     ReplState state;
-    repl_init(&state, io, REPL_FLAGS_PAUSE, proc_name);
-    return repl_run(&state);
+    if (!repl_init(&state, io, REPL_FLAGS_PAUSE, proc_name))
+    {
+        return result_error(ERR_OUT_OF_SPACE);
+    }
+    Result r = repl_run(&state);
+    repl_cleanup(&state);
+    return r;
 }
 
 static Result prim_co(Evaluator *eval, int argc, Value *args)
