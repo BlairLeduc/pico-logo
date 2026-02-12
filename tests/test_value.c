@@ -520,7 +520,9 @@ void test_result_ok_no_throw_tag(void)
 {
     Value v = value_number(42.0f);
     Result r = result_ok(v);
-    TEST_ASSERT_NULL(r.throw_tag);
+    // throw_tag is in a union with error fields;
+    // only valid to check when status is RESULT_THROW
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
 }
 
 void test_result_none_status(void)
@@ -538,7 +540,9 @@ void test_result_none_value(void)
 void test_result_none_no_throw_tag(void)
 {
     Result r = result_none();
-    TEST_ASSERT_NULL(r.throw_tag);
+    // throw_tag is in a union with error fields;
+    // only valid to check when status is RESULT_THROW
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
 }
 
 void test_result_stop_status(void)
@@ -556,7 +560,9 @@ void test_result_stop_value(void)
 void test_result_stop_no_throw_tag(void)
 {
     Result r = result_stop();
-    TEST_ASSERT_NULL(r.throw_tag);
+    // throw_tag is in a union with error fields;
+    // only valid to check when status is RESULT_THROW
+    TEST_ASSERT_EQUAL(RESULT_STOP, r.status);
 }
 
 void test_result_output_status(void)
@@ -578,7 +584,9 @@ void test_result_output_no_throw_tag(void)
 {
     Value v = value_number(99.0f);
     Result r = result_output(v);
-    TEST_ASSERT_NULL(r.throw_tag);
+    // throw_tag is in a union with error fields;
+    // only valid to check when status is RESULT_THROW
+    TEST_ASSERT_EQUAL(RESULT_OUTPUT, r.status);
 }
 
 void test_result_error_status(void)
@@ -599,7 +607,8 @@ void test_result_error_nulls(void)
     TEST_ASSERT_NULL(r.error_proc);
     TEST_ASSERT_NULL(r.error_arg);
     TEST_ASSERT_NULL(r.error_caller);
-    TEST_ASSERT_NULL(r.throw_tag);
+    // Note: throw_tag is in a union with error fields,
+    // so it cannot be checked when status is RESULT_ERROR
 }
 
 void test_result_throw_status(void)

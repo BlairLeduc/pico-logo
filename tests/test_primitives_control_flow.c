@@ -433,6 +433,160 @@ void test_for_non_word_varname(void)
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
+// Deep nesting: user procedures called inside repeat via run
+// This exercises the C stack depth that caused stack overflow on Pico
+void test_deep_nested_proc_in_repeat(void)
+{
+    // Define dashed.forward: repeat with simple commands inside
+    Result r = proc_define_from_text(
+        "to dashed.forward :side\n"
+        "repeat :side / 10 [print 1]\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    // Define square: repeat calling dashed.forward
+    r = proc_define_from_text(
+        "to square :side\n"
+        "repeat 4 [dashed.forward :side / 2]\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    // Define spin: repeat calling run which calls square
+    r = proc_define_from_text(
+        "to spin :times :commands\n"
+        "repeat :times [run :commands]\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    // Run: spin -> repeat -> run -> square -> repeat -> dashed.forward -> repeat
+    // 3 levels of proc_call, each inside repeat (primitive_arg_depth > 0)
+    output_buffer[0] = '\0';
+    run_string("spin 2 [square 100]");
+
+    // Each square call: 4 sides × dashed.forward(50) → 50/10=5 repeats × print 1
+    // = 4 × 5 = 20 lines of "1\n" per square call
+    // 2 spins × 20 = 40 lines
+    int count = 0;
+    for (const char *p = output_buffer; *p; p++)
+    {
+        if (*p == '\n') count++;
+    }
+    TEST_ASSERT_EQUAL(40, count);
+}
+
+// CPS-in-primitives: procedure calls inside repeat within a procedure
+// When proc_depth > 0 and primitive_arg_depth == 0, RESULT_CALL is returned.
+// eval_run_list must catch RESULT_CALL and dispatch via proc_call.
+void test_proc_call_in_repeat_within_procedure(void)
+{
+    // inc increments a global counter
+    Result r = proc_define_from_text(
+        "to inc\n"
+        "make \"count :count + 1\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    // outer calls repeat with inc — proc_depth > 0 inside outer's body
+    r = proc_define_from_text(
+        "to outer :n\n"
+        "repeat :n [inc]\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    run_string("make \"count 0");
+    reset_output();
+    run_string("outer 200");
+    reset_output();
+
+    run_string("print :count");
+    TEST_ASSERT_EQUAL_STRING("200\n", output_buffer);
+}
+
+// CPS-in-primitives: procedure as expression inside run within a procedure
+// eval_run_list_expr must catch RESULT_CALL and dispatch via proc_call.
+void test_proc_expr_in_run_within_procedure(void)
+{
+    // double returns a value
+    Result r = proc_define_from_text(
+        "to double :x\n"
+        "output :x * 2\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    // wrapper uses run to evaluate double as expression
+    r = proc_define_from_text(
+        "to wrapper :x\n"
+        "output run [double :x]\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    run_string("print wrapper 21");
+    TEST_ASSERT_EQUAL_STRING("42\n", output_buffer);
+}
+
+// CPS-in-primitives: if body calls procedure inside a procedure
+void test_proc_call_in_if_within_procedure(void)
+{
+    Result r = proc_define_from_text(
+        "to greet\n"
+        "print [hello]\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    r = proc_define_from_text(
+        "to maybe.greet :flag\n"
+        "if :flag [greet]\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    run_string("maybe.greet \"true");
+    TEST_ASSERT_EQUAL_STRING("hello\n", output_buffer);
+}
+
+// CPS-in-primitives: nested repeat+proc inside a procedure with many iterations
+void test_many_iterations_proc_in_repeat_within_procedure(void)
+{
+    Result r = proc_define_from_text(
+        "to bump\n"
+        "make \"total :total + 1\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    r = proc_define_from_text(
+        "to stress :n\n"
+        "repeat :n [bump]\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    // Many iterations — with the old primitive_arg_depth approach this would
+    // recurse deeply on the C stack; now each iteration is flat.
+    run_string("make \"total 0");
+    reset_output();
+    run_string("stress 500");
+    reset_output();
+
+    run_string("print :total");
+    TEST_ASSERT_EQUAL_STRING("500\n", output_buffer);
+}
+
+// CPS-in-primitives: procedure call + more commands in same list body
+void test_proc_call_followed_by_commands_in_repeat(void)
+{
+    Result r = proc_define_from_text(
+        "to noop\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    r = proc_define_from_text(
+        "to runner\n"
+        "repeat 3 [noop print repcount]\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    run_string("runner");
+    TEST_ASSERT_EQUAL_STRING("1\n2\n3\n", output_buffer);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -484,6 +638,12 @@ int main(void)
     RUN_TEST(test_for_too_few_items);
     RUN_TEST(test_for_too_many_items);
     RUN_TEST(test_for_non_word_varname);
+    RUN_TEST(test_deep_nested_proc_in_repeat);
+    RUN_TEST(test_proc_call_in_repeat_within_procedure);
+    RUN_TEST(test_proc_expr_in_run_within_procedure);
+    RUN_TEST(test_proc_call_in_if_within_procedure);
+    RUN_TEST(test_many_iterations_proc_in_repeat_within_procedure);
+    RUN_TEST(test_proc_call_followed_by_commands_in_repeat);
 
     return UNITY_END();
 }

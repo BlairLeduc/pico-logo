@@ -181,7 +181,7 @@ void test_repl_init_basic(void)
     ReplState state;
     LogoIO io;
     
-    repl_init(&state, &io, REPL_FLAGS_FULL, "");
+    TEST_ASSERT_TRUE(repl_init(&state, &io, REPL_FLAGS_FULL, ""));
     
     TEST_ASSERT_EQUAL_PTR(&io, state.io);
     TEST_ASSERT_EQUAL(REPL_FLAGS_FULL, state.flags);
@@ -190,6 +190,9 @@ void test_repl_init_basic(void)
     TEST_ASSERT_EQUAL(0, state.proc_len);
     TEST_ASSERT_EQUAL(0, state.expr_len);
     TEST_ASSERT_EQUAL(0, state.bracket_depth);
+    TEST_ASSERT_NOT_NULL(state.proc_buffer);
+    TEST_ASSERT_NOT_NULL(state.expr_buffer);
+    repl_cleanup(&state);
 }
 
 void test_repl_init_with_proc_prefix(void)
@@ -197,10 +200,11 @@ void test_repl_init_with_proc_prefix(void)
     ReplState state;
     LogoIO io;
     
-    repl_init(&state, &io, REPL_FLAGS_PAUSE, "myfunc");
+    TEST_ASSERT_TRUE(repl_init(&state, &io, REPL_FLAGS_PAUSE, "myfunc"));
     
     TEST_ASSERT_EQUAL_STRING("myfunc", state.proc_prefix);
     TEST_ASSERT_EQUAL(REPL_FLAGS_PAUSE, state.flags);
+    repl_cleanup(&state);
 }
 
 void test_repl_init_null_prefix(void)
@@ -208,10 +212,11 @@ void test_repl_init_null_prefix(void)
     ReplState state;
     LogoIO io;
     
-    repl_init(&state, &io, REPL_FLAGS_FULL, NULL);
+    TEST_ASSERT_TRUE(repl_init(&state, &io, REPL_FLAGS_FULL, NULL));
     
     // NULL should be converted to empty string
     TEST_ASSERT_EQUAL_STRING("", state.proc_prefix);
+    repl_cleanup(&state);
 }
 
 void test_repl_flags_full(void)
@@ -245,6 +250,7 @@ void test_repl_run_simple_print(void)
     
     repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
     Result r = repl_run(&state);
+    repl_cleanup(&state);
     
     // Should return RESULT_NONE on EOF
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
@@ -262,6 +268,7 @@ void test_repl_run_multiple_lines(void)
     
     repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
     Result r = repl_run(&state);
+    repl_cleanup(&state);
     
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     TEST_ASSERT_TRUE(strstr(output_buffer, "1") != NULL);
@@ -277,6 +284,7 @@ void test_repl_run_empty_lines_skipped(void)
     
     repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
     Result r = repl_run(&state);
+    repl_cleanup(&state);
     
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     TEST_ASSERT_TRUE(strstr(output_buffer, "99") != NULL);
@@ -290,6 +298,7 @@ void test_repl_run_with_proc_prefix(void)
     
     repl_init(&state, &mock_io, REPL_FLAGS_FULL, "myproc");
     Result r = repl_run(&state);
+    repl_cleanup(&state);
     
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     // The prompt should be "myproc?" - check it's in output
@@ -304,6 +313,7 @@ void test_repl_run_throw_toplevel(void)
     
     repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
     Result r = repl_run(&state);
+    repl_cleanup(&state);
     
     // throw "toplevel should exit the REPL with RESULT_THROW
     TEST_ASSERT_EQUAL(RESULT_THROW, r.status);
@@ -319,6 +329,7 @@ void test_repl_run_error_handling(void)
     
     repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
     Result r = repl_run(&state);
+    repl_cleanup(&state);
     
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     // Error should be printed but REPL continues
@@ -336,6 +347,7 @@ void test_repl_run_uncaught_throw_error(void)
     
     repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
     Result r = repl_run(&state);
+    repl_cleanup(&state);
     
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     // Should print "Can't find a catch for myerror" and continue
@@ -352,6 +364,7 @@ void test_repl_run_value_without_consumer(void)
     
     repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
     Result r = repl_run(&state);
+    repl_cleanup(&state);
     
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     // Should print "I don't know what to do with 3"
@@ -370,6 +383,7 @@ void test_repl_run_define_procedure(void)
     
     repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
     Result r = repl_run(&state);
+    repl_cleanup(&state);
     
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     // Should show "square defined"
@@ -389,6 +403,7 @@ void test_repl_run_define_procedure_prompt_changes(void)
     
     repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
     repl_run(&state);
+    repl_cleanup(&state);
     
     // Should show ">" prompts during definition
     TEST_ASSERT_TRUE(strstr(output_buffer, ">") != NULL);
@@ -403,6 +418,7 @@ void test_repl_run_define_primitive_error(void)
     
     repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
     Result r = repl_run(&state);
+    repl_cleanup(&state);
     
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     // Should show error about primitive
@@ -418,6 +434,7 @@ void test_repl_run_proc_def_in_pause(void)
     
     repl_init(&state, &mock_io, REPL_FLAGS_PAUSE, "test");
     Result r = repl_run(&state);
+    repl_cleanup(&state);
     
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     // Should show "myproc defined"
@@ -444,6 +461,7 @@ void test_repl_run_bracket_continuation(void)
     
     repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
     Result r = repl_run(&state);
+    repl_cleanup(&state);
     
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     // Should show "~" continuation prompt
@@ -465,6 +483,7 @@ void test_repl_run_continuation_in_pause(void)
     
     repl_init(&state, &mock_io, REPL_FLAGS_PAUSE, "test");
     Result r = repl_run(&state);
+    repl_cleanup(&state);
     
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     // Should show "~" continuation prompt (prefixed with proc name)
@@ -490,6 +509,7 @@ void test_repl_throw_toplevel_from_pause_in_procedure(void)
     
     repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
     Result r = repl_run(&state);
+    repl_cleanup(&state);
     
     // throw "toplevel should exit the REPL entirely
     TEST_ASSERT_EQUAL(RESULT_THROW, r.status);

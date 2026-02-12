@@ -6,6 +6,7 @@
 #include "value.h"
 #include "error.h"
 #include "format.h"
+#include "procedures.h"
 #include <ctype.h>
 #include <stdlib.h>
 
@@ -340,22 +341,22 @@ const char *value_to_string(Value v)
 
 Result result_ok(Value v)
 {
-    return (Result){.status = RESULT_OK, .value = v, .throw_tag = NULL};
+    return (Result){.status = RESULT_OK, .value = v};
 }
 
 Result result_none(void)
 {
-    return (Result){.status = RESULT_NONE, .value = value_none(), .throw_tag = NULL};
+    return (Result){.status = RESULT_NONE};
 }
 
 Result result_stop(void)
 {
-    return (Result){.status = RESULT_STOP, .value = value_none(), .throw_tag = NULL};
+    return (Result){.status = RESULT_STOP};
 }
 
 Result result_output(Value v)
 {
-    return (Result){.status = RESULT_OUTPUT, .value = v, .throw_tag = NULL};
+    return (Result){.status = RESULT_OUTPUT, .value = v};
 }
 
 Result result_error(int code)
@@ -365,8 +366,7 @@ Result result_error(int code)
         .error_code = code,
         .error_proc = NULL,
         .error_arg = NULL,
-        .error_caller = NULL,
-        .throw_tag = NULL
+        .error_caller = NULL
     };
 }
 
@@ -375,12 +375,7 @@ Result result_throw(const char *tag)
     return (Result){
         .status = RESULT_THROW,
         .throw_tag = tag,
-        .value = value_none(),
-        .pause_proc = NULL,
-        .error_code = 0,
-        .error_proc = NULL,
-        .error_arg = NULL,
-        .error_caller = NULL
+        .value = value_none()
     };
 }
 
@@ -388,14 +383,7 @@ Result result_pause(const char *proc_name)
 {
     return (Result){
         .status = RESULT_PAUSE,
-        .pause_proc = proc_name,
-        .value = value_none(),
-        .error_code = 0,
-        .error_proc = NULL,
-        .error_arg = NULL,
-        .error_caller = NULL,
-        .throw_tag = NULL,
-        .goto_label = NULL
+        .pause_proc = proc_name
     };
 }
 
@@ -403,52 +391,26 @@ Result result_goto(const char *label)
 {
     return (Result){
         .status = RESULT_GOTO,
-        .goto_label = label,
-        .value = value_none(),
-        .error_code = 0,
-        .error_proc = NULL,
-        .error_arg = NULL,
-        .error_caller = NULL,
-        .throw_tag = NULL,
-        .pause_proc = NULL,
-        .call_proc = NULL,
-        .call_argc = 0
+        .goto_label = label
     };
 }
 
 Result result_call(UserProcedure *proc, int argc, Value *args)
 {
-    Result r = {
-        .status = RESULT_CALL,
-        .call_proc = proc,
-        .call_argc = argc,
-        .value = value_none(),
-        .error_code = 0,
-        .error_proc = NULL,
-        .error_arg = NULL,
-        .error_caller = NULL,
-        .throw_tag = NULL,
-        .pause_proc = NULL,
-        .goto_label = NULL
-    };
-    for (int i = 0; i < argc && i < RESULT_CALL_MAX_ARGS; i++)
+    // Store call data in global PendingCall to avoid bloating Result
+    PendingCall *pc = proc_get_pending_call();
+    pc->proc = proc;
+    pc->argc = argc;
+    for (int i = 0; i < argc && i < MAX_PROC_PARAMS; i++)
     {
-        r.call_args[i] = args[i];
+        pc->args[i] = args[i];
     }
-    return r;
+    return (Result){.status = RESULT_CALL};
 }
 
 Result result_eof(void)
 {
-    return (Result){
-        .status = RESULT_EOF,
-        .value = value_none(),
-        .error_code = 0,
-        .error_proc = NULL,
-        .error_arg = NULL,
-        .error_caller = NULL,
-        .throw_tag = NULL
-    };
+    return (Result){.status = RESULT_EOF};
 }
 
 Result result_error_arg(int code, const char *proc, const char *arg)
@@ -458,8 +420,7 @@ Result result_error_arg(int code, const char *proc, const char *arg)
         .error_code = code,
         .error_proc = proc,
         .error_arg = arg,
-        .error_caller = NULL,
-        .throw_tag = NULL
+        .error_caller = NULL
     };
 }
 

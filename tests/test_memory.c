@@ -414,6 +414,68 @@ void test_atoms_not_freed_by_gc(void)
     TEST_ASSERT_TRUE(mem_word_eq(word, "permanent", 9));
 }
 
+void test_gc_preserves_long_list(void)
+{
+    // Build a list of 200 elements - previously this would cause deep
+    // C-stack recursion in gc_mark_index (~20 bytes per level = 4KB).
+    // With iterative cdr traversal, this uses constant stack.
+    Node word = mem_atom("x", 1);
+    Node list = NODE_NIL;
+    for (int i = 0; i < 200; i++)
+    {
+        list = mem_cons(word, list);
+    }
+    
+    size_t free_before = mem_free_nodes();
+    
+    Node roots[] = {list};
+    mem_gc(roots, 1);
+    
+    size_t free_after = mem_free_nodes();
+    
+    // All 200 nodes should be preserved (no change in free count)
+    TEST_ASSERT_EQUAL(free_before, free_after);
+    
+    // Verify the list is still intact by walking it
+    Node cur = list;
+    int count = 0;
+    while (cur != NODE_NIL)
+    {
+        TEST_ASSERT_TRUE(mem_is_list(cur));
+        TEST_ASSERT_TRUE(mem_word_eq(mem_car(cur), "x", 1));
+        cur = mem_cdr(cur);
+        count++;
+    }
+    TEST_ASSERT_EQUAL(200, count);
+}
+
+void test_gc_preserves_nested_lists(void)
+{
+    // Test that nested lists (car branches) are still marked correctly
+    Node a = mem_atom("a", 1);
+    Node b = mem_atom("b", 1);
+    
+    // Inner list: [b]
+    Node inner = mem_cons(b, NODE_NIL);
+    // Outer list: [[b] a]
+    Node outer = mem_cons(inner, mem_cons(a, NODE_NIL));
+    
+    Node roots[] = {outer};
+    mem_gc(roots, 1);
+    
+    // Outer list should still be valid
+    TEST_ASSERT_TRUE(mem_is_list(outer));
+    
+    // Car of outer is the inner list
+    Node car = mem_car(outer);
+    TEST_ASSERT_TRUE(mem_is_list(car));
+    TEST_ASSERT_TRUE(mem_word_eq(mem_car(car), "b", 1));
+    
+    // Cadr of outer is "a"
+    Node cadr = mem_car(mem_cdr(outer));
+    TEST_ASSERT_TRUE(mem_word_eq(cadr, "a", 1));
+}
+
 void test_free_nodes_accurate(void)
 {
     // Get initial count - this is after logo_mem_init which allocates the newline marker atom
@@ -618,6 +680,8 @@ int main(void)
     RUN_TEST(test_gc_preserves_linked_lists);
     RUN_TEST(test_gc_frees_unreachable);
     RUN_TEST(test_atoms_not_freed_by_gc);
+    RUN_TEST(test_gc_preserves_long_list);
+    RUN_TEST(test_gc_preserves_nested_lists);
     RUN_TEST(test_free_nodes_accurate);
 
     // Edge Cases

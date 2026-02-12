@@ -830,12 +830,15 @@ Result eval_instruction(Evaluator *eval)
                     logo_io_write_line(io, "Pausing...");
                     
                     ReplState state;
-                    repl_init(&state, io, REPL_FLAGS_PAUSE, proc_name);
-                    Result r = repl_run(&state);
-                    
-                    if (r.status != RESULT_OK && r.status != RESULT_NONE)
+                    if (repl_init(&state, io, REPL_FLAGS_PAUSE, proc_name))
                     {
-                        return r;
+                        Result r = repl_run(&state);
+                        repl_cleanup(&state);
+                        
+                        if (r.status != RESULT_OK && r.status != RESULT_NONE)
+                        {
+                            return r;
+                        }
                     }
                 }
                 // After pause REPL exits, continue execution
@@ -873,13 +876,16 @@ Result eval_instruction(Evaluator *eval)
             logo_io_write_line(io, "Pausing...");
             
             ReplState state;
-            repl_init(&state, io, REPL_FLAGS_PAUSE, proc_name);
-            Result r = repl_run(&state);
-            
-            // If pause REPL exited with throw or error, propagate it
-            if (r.status != RESULT_OK && r.status != RESULT_NONE)
+            if (repl_init(&state, io, REPL_FLAGS_PAUSE, proc_name))
             {
-                return r;
+                Result r = repl_run(&state);
+                repl_cleanup(&state);
+                
+                // If pause REPL exited with throw or error, propagate it
+                if (r.status != RESULT_OK && r.status != RESULT_NONE)
+                {
+                    return r;
+                }
             }
             // Otherwise continue execution
         }
@@ -1228,10 +1234,11 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
         bool last_instruction = false;
         if (enable_tco)
         {
-            // Create lookahead copy
-            Evaluator lookahead = *eval;
-            token_source_copy(&lookahead.token_source, &eval->token_source);
-            last_instruction = skip_instruction(&lookahead) && eval_at_end(&lookahead);
+            // Save token source position, skip ahead to check if last instruction,
+            // then restore. Avoids copying the full Evaluator struct.
+            TokenSource saved_ts = eval->token_source;
+            last_instruction = skip_instruction(eval) && eval_at_end(eval);
+            eval->token_source = saved_ts;
         }
 
         // Set tail position for this instruction
@@ -1239,9 +1246,6 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
 
         // Execute instruction
         r = eval_instruction(eval);
-
-        // Restore tail flag
-        eval->in_tail_position = old_tail;
 
         // Check if there's more to execute
         bool at_end = eval_at_end(eval);
@@ -1276,6 +1280,9 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
             break;  // Propagate to caller
         }
 
+        // Restore tail flag after all dispatch is complete
+        eval->in_tail_position = old_tail;
+
         // Handle RESULT_GOTO - let it bubble up to execute_body_with_step
         // which has access to the full procedure body with all lines
         if (r.status == RESULT_GOTO)
@@ -1306,12 +1313,56 @@ Result eval_run_list_with_tco(Evaluator *eval, Node list, bool enable_tco)
 
 Result eval_run_list(Evaluator *eval, Node list)
 {
-    // Increment primitive_arg_depth to disable CPS during this call
-    // This ensures nested procedure calls complete before returning to caller
-    // (CPS would return RESULT_CALL which primitives don't handle)
-    eval->primitive_arg_depth++;
-    Result r = eval_run_list_with_tco(eval, list, false);
-    eval->primitive_arg_depth--;
+    // Save current state
+    TokenSource old_source = eval->token_source;
+    bool old_tail = eval->in_tail_position;
+
+    // Create new token source from the Node list
+    token_source_init_list(&eval->token_source, list);
+
+    Result r = result_none();
+
+    while (!eval_at_end(eval))
+    {
+        eval->in_tail_position = false;
+
+        r = eval_instruction(eval);
+
+        // Handle RESULT_CALL: dispatch the procedure call directly.
+        // Previously we bumped primitive_arg_depth to force all procedure
+        // calls inside primitive bodies to use C-stack recursion via proc_call.
+        // Now we catch RESULT_CALL here and dispatch via proc_call ourselves.
+        // This keeps the C stack flat: repeat 1000 [myproc] no longer
+        // recurses 1000 levels deep on the C stack.
+        // proc_call saves/restores eval->token_source internally,
+        // so our position in this list is preserved after the call returns.
+        if (r.status == RESULT_CALL)
+        {
+            PendingCall *pc = proc_get_pending_call();
+            r = proc_call(eval, pc->proc, pc->argc, pc->args);
+        }
+
+        // Restore tail flag after all dispatch is complete
+        eval->in_tail_position = old_tail;
+
+        // Propagate stop/output/error/throw immediately
+        if (r.status != RESULT_NONE && r.status != RESULT_OK)
+        {
+            break;
+        }
+
+        // If we got a value at top level of list, it's an error
+        if (r.status == RESULT_OK)
+        {
+            r = result_error_arg(ERR_DONT_KNOW_WHAT, NULL, value_to_string(r.value));
+            break;
+        }
+    }
+
+    // Restore state
+    eval->in_tail_position = old_tail;
+    eval->token_source = old_source;
+
     return r;
 }
 
@@ -1324,11 +1375,6 @@ Result eval_run_list_expr(Evaluator *eval, Node list)
     // in this list is also in tail position - enables TCO for:
     //   if :n > 0 [recurse :n - 1]
     bool enable_tco = eval->in_tail_position && eval->proc_depth > 0;
-    
-    // Increment primitive_arg_depth to disable CPS during this call
-    // This ensures nested procedure calls complete before returning to caller
-    // (TCO still works via the tail call mechanism)
-    eval->primitive_arg_depth++;
     
     // Save current token source state
     TokenSource old_source = eval->token_source;
@@ -1345,18 +1391,28 @@ Result eval_run_list_expr(Evaluator *eval, Node list)
         bool last_instruction = false;
         if (enable_tco)
         {
-            // Create lookahead copy
-            Evaluator lookahead = *eval;
-            token_source_copy(&lookahead.token_source, &eval->token_source);
-            last_instruction = skip_instruction(&lookahead) && eval_at_end(&lookahead);
+            // Save token source position, skip ahead to check if last instruction,
+            // then restore. Avoids copying the full Evaluator struct.
+            TokenSource saved_ts = eval->token_source;
+            last_instruction = skip_instruction(eval) && eval_at_end(eval);
+            eval->token_source = saved_ts;
         }
 
         // Set tail position for this instruction
         eval->in_tail_position = enable_tco && last_instruction;
         
         r = eval_instruction(eval);
-        
-        // Restore tail flag
+
+        // Handle RESULT_CALL: dispatch the procedure call directly.
+        // This replaces the old primitive_arg_depth++ approach.
+        // proc_call saves/restores eval->token_source internally.
+        if (r.status == RESULT_CALL)
+        {
+            PendingCall *pc = proc_get_pending_call();
+            r = proc_call(eval, pc->proc, pc->argc, pc->args);
+        }
+
+        // Restore tail flag after all dispatch is complete
         eval->in_tail_position = old_tail;
         
         // Check if there's more to execute
@@ -1396,7 +1452,6 @@ Result eval_run_list_expr(Evaluator *eval, Node list)
     // Restore state
     eval->in_tail_position = old_tail;
     eval->token_source = old_source;
-    eval->primitive_arg_depth--;
 
     return r;
 }

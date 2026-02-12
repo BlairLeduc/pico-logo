@@ -91,8 +91,13 @@ int main(void)
     while (1)
     {
         ReplState repl;
-        repl_init(&repl, &io, REPL_FLAGS_FULL, "");
+        if (!repl_init(&repl, &io, REPL_FLAGS_FULL, ""))
+        {
+            logo_io_write_line(&io, "Out of memory");
+            break;
+        }
         Result r = repl_run(&repl);
+        repl_cleanup(&repl);
         
         // Exit on EOF, restart on throw "toplevel or other
         if (r.status == RESULT_EOF)
