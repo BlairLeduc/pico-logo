@@ -3,7 +3,7 @@
 //  Copyright 2025 Blair Leduc. See LICENSE for details.
 //
 //  WiFi management primitives: wifi?, wifi.connect, wifi.disconnect,
-//  wifi.ip, wifi.ssid, wifi.scan
+//  wifi.ip, wifi.mac, wifi.ssid, wifi.scan
 //
 
 #include "primitives.h"
@@ -95,6 +95,29 @@ static Result prim_wifi_ip(Evaluator *eval, int argc, Value *args)
     return result_ok(value_list(NODE_NIL));
 }
 
+// wifi.mac
+// Returns the MAC address as a colon-separated hex word (e.g. "00:00:5E:12:34:56")
+static Result prim_wifi_mac(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
+
+    LogoIO *io = primitives_get_io();
+    if (io && io->hardware && io->hardware->ops && io->hardware->ops->wifi_get_mac)
+    {
+        uint8_t mac[6];
+        if (io->hardware->ops->wifi_get_mac(mac))
+        {
+            char buf[18]; // "XX:XX:XX:XX:XX:XX" + null
+            snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X",
+                     mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+            return result_ok(value_word(mem_atom_cstr(buf)));
+        }
+    }
+
+    // WiFi not available - return empty list
+    return result_ok(value_list(NODE_NIL));
+}
+
 // wifi.ssid
 // Returns the SSID of the connected network, or empty list if not connected
 static Result prim_wifi_ssid(Evaluator *eval, int argc, Value *args)
@@ -171,6 +194,7 @@ void primitives_wifi_init(void)
     primitive_register("wifi.connect", 2, prim_wifi_connect);
     primitive_register("wifi.disconnect", 0, prim_wifi_disconnect);
     primitive_register("wifi.ip", 0, prim_wifi_ip);
+    primitive_register("wifi.mac", 0, prim_wifi_mac);
     primitive_register("wifi.ssid", 0, prim_wifi_ssid);
     primitive_register("wifi.scan", 0, prim_wifi_scan);
 }

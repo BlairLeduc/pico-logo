@@ -236,6 +236,7 @@ LogoHardwareOps mock_hardware_ops = {
     .wifi_disconnect = mock_wifi_disconnect,
     .wifi_get_ip = mock_wifi_get_ip,
     .wifi_get_ssid = mock_wifi_get_ssid,
+    .wifi_get_mac = mock_wifi_get_mac,
     .wifi_scan = mock_wifi_scan,
     // Network operations (always available in tests)
     .network_ping = mock_network_ping,

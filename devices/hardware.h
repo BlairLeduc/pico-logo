@@ -87,6 +87,11 @@ extern "C"
         // ssid_buffer should be at least 33 bytes (32 chars + null)
         bool (*wifi_get_ssid)(char *ssid_buffer, size_t buffer_size);
 
+        // Get the MAC address of the WiFi interface
+        // Returns true if MAC address was retrieved, false otherwise
+        // mac_buffer should be at least 6 bytes
+        bool (*wifi_get_mac)(uint8_t mac_buffer[6]);
+
         // Scan for available WiFi networks
         // Returns number of networks found (up to max_networks), -1 on error
         // Each network's SSID is stored in ssids[i] (max 32 chars + null)

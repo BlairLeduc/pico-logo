@@ -225,6 +225,8 @@ extern "C"
             } scan_results[16];
             int scan_result_count;
             int scan_return_value;           // Result to return from wifi_scan (0 = success)
+            uint8_t mac[6];                  // MAC address to return
+            bool mac_available;              // Whether MAC is available
         } wifi;
 
         // Network state tracking
@@ -327,6 +329,7 @@ extern "C"
     void mock_device_add_wifi_scan_result(const char *ssid, int8_t rssi);
     void mock_device_clear_wifi_scan_results(void);
     void mock_device_set_wifi_scan_result(int result);
+    void mock_device_set_wifi_mac(const uint8_t mac[6]);
 
     // Mock WiFi operations (for use by test_scaffold in mock_hardware_ops)
     bool mock_wifi_is_connected(void);
@@ -334,6 +337,7 @@ extern "C"
     void mock_wifi_disconnect(void);
     bool mock_wifi_get_ip(char *ip_buffer, size_t buffer_size);
     bool mock_wifi_get_ssid(char *ssid_buffer, size_t buffer_size);
+    bool mock_wifi_get_mac(uint8_t mac_buffer[6]);
     int mock_wifi_scan(char ssids[][33], int8_t strengths[], int max_networks);
 
     // Network helpers for testing

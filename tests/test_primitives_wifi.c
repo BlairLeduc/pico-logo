@@ -3,7 +3,7 @@
 //  Copyright 2025 Blair Leduc. See LICENSE for details.
 //
 //  Tests for WiFi primitives: wifi?, wifi.connect, wifi.disconnect,
-//  wifi.ip, wifi.ssid, wifi.scan
+//  wifi.ip, wifi.mac, wifi.ssid, wifi.scan
 //
 
 #include "test_scaffold.h"
@@ -159,6 +159,69 @@ void test_wifi_ip_returns_empty_list_when_not_connected(void)
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
     TEST_ASSERT_TRUE(mem_is_nil(r.value.as.node));  // Empty list
+}
+
+// ============================================================================
+// wifi.mac tests
+// ============================================================================
+
+void test_wifi_mac_returns_mac_address(void)
+{
+    uint8_t mac[6] = {0xDE, 0xAD, 0xBE, 0xEF, 0x12, 0x34};
+    mock_device_set_wifi_mac(mac);
+    
+    Result r = eval_string("wifi.mac");
+    
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("DE:AD:BE:EF:12:34", mem_word_ptr(r.value.as.node));
+}
+
+void test_wifi_mac_returns_empty_list_when_unavailable(void)
+{
+    // Don't set a MAC - mac_available defaults to false
+    
+    Result r = eval_string("wifi.mac");
+    
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
+    TEST_ASSERT_TRUE(mem_is_nil(r.value.as.node));
+}
+
+void test_wifi_mac_returns_all_zeros(void)
+{
+    uint8_t mac[6] = {0, 0, 0, 0, 0, 0};
+    mock_device_set_wifi_mac(mac);
+    
+    Result r = eval_string("wifi.mac");
+    
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("00:00:00:00:00:00", mem_word_ptr(r.value.as.node));
+}
+
+void test_wifi_mac_returns_all_255(void)
+{
+    uint8_t mac[6] = {255, 255, 255, 255, 255, 255};
+    mock_device_set_wifi_mac(mac);
+    
+    Result r = eval_string("wifi.mac");
+    
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("FF:FF:FF:FF:FF:FF", mem_word_ptr(r.value.as.node));
+}
+
+void test_wifi_mac_returns_empty_list_when_no_wifi_hardware(void)
+{
+    // Simulate a device with no WiFi hardware
+    mock_hardware_ops.wifi_get_mac = NULL;
+    
+    Result r = eval_string("wifi.mac");
+    
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
+    TEST_ASSERT_TRUE(mem_is_nil(r.value.as.node));
 }
 
 // ============================================================================
@@ -318,6 +381,13 @@ int main(void)
     // wifi.ip tests
     RUN_TEST(test_wifi_ip_returns_ip_when_connected);
     RUN_TEST(test_wifi_ip_returns_empty_list_when_not_connected);
+    
+    // wifi.mac tests
+    RUN_TEST(test_wifi_mac_returns_mac_address);
+    RUN_TEST(test_wifi_mac_returns_empty_list_when_unavailable);
+    RUN_TEST(test_wifi_mac_returns_all_zeros);
+    RUN_TEST(test_wifi_mac_returns_all_255);
+    RUN_TEST(test_wifi_mac_returns_empty_list_when_no_wifi_hardware);
     
     // wifi.ssid tests
     RUN_TEST(test_wifi_ssid_returns_ssid_when_connected);
