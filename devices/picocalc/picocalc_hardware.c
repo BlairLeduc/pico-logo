@@ -568,6 +568,17 @@ static bool picocalc_wifi_get_ssid(char *ssid_buffer, size_t buffer_size)
     return current_ssid[0] != '\0';
 }
 
+static bool picocalc_wifi_get_mac(uint8_t mac_buffer[6])
+{
+    if (!ensure_wifi_initialized())
+    {
+        return false;
+    }
+
+    int err = cyw43_wifi_get_mac(&cyw43_state, CYW43_ITF_STA, mac_buffer);
+    return err == 0;
+}
+
 static int picocalc_wifi_scan(char ssids[][33], int8_t strengths[], int max_networks)
 {
     if (!ensure_wifi_initialized())
@@ -1528,6 +1539,7 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .wifi_disconnect = picocalc_wifi_disconnect,
     .wifi_get_ip = picocalc_wifi_get_ip,
     .wifi_get_ssid = picocalc_wifi_get_ssid,
+    .wifi_get_mac = picocalc_wifi_get_mac,
     .wifi_scan = picocalc_wifi_scan,
     .network_ping = picocalc_network_ping,
     .network_resolve = picocalc_network_resolve,
@@ -1543,6 +1555,7 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .wifi_disconnect = NULL,
     .wifi_get_ip = NULL,
     .wifi_get_ssid = NULL,
+    .wifi_get_mac = NULL,
     .wifi_scan = NULL,
     .network_ping = NULL,
     .network_resolve = NULL,

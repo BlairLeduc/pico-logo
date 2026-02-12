@@ -797,6 +797,8 @@ void mock_device_reset(void)
     mock_state.wifi.disconnect_result = 0;   // Default to success
     mock_state.wifi.scan_result_count = 0;
     mock_state.wifi.scan_return_value = 0;   // Default to success
+    memset(mock_state.wifi.mac, 0, 6);
+    mock_state.wifi.mac_available = false;
 
     // Initialize network state
     mock_state.network.ping_result_ms = -1;  // Default to ping failure
@@ -1130,6 +1132,16 @@ int mock_wifi_scan(char ssids[][33], int8_t strengths[], int max_networks)
     return count;
 }
 
+bool mock_wifi_get_mac(uint8_t mac_buffer[6])
+{
+    if (!mock_state.wifi.mac_available)
+    {
+        return false;
+    }
+    memcpy(mac_buffer, mock_state.wifi.mac, 6);
+    return true;
+}
+
 //
 // Mock network operations (exposed for test_scaffold.c to use in mock_hardware_ops)
 //
@@ -1314,6 +1326,12 @@ void mock_device_clear_wifi_scan_results(void)
 void mock_device_set_wifi_scan_result(int result)
 {
     mock_state.wifi.scan_return_value = result;
+}
+
+void mock_device_set_wifi_mac(const uint8_t mac[6])
+{
+    memcpy(mock_state.wifi.mac, mac, 6);
+    mock_state.wifi.mac_available = true;
 }
 
 // ============================================================================

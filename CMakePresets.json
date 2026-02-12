@@ -202,6 +202,22 @@
             "configurePreset": "pico2-debug"
         },
         {
+            "name": "picow",
+            "configurePreset": "picow"
+        },
+        {
+            "name": "picow-debug",
+            "configurePreset": "picow-debug"
+        },
+        {
+            "name": "pico2w",
+            "configurePreset": "pico2w"
+        },
+        {
+            "name": "pico2w-debug",
+            "configurePreset": "pico2w-debug"
+        },
+        {
             "name": "pico+2w",
             "configurePreset": "pico+2w"
         },

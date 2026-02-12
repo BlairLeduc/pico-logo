@@ -354,9 +354,9 @@ Line continuation characters are not supported.
 
 Words with internal spaces are created using the "`\`" character, not using the veritcal bar notation.
 
-`ifelse` is not a primitive. Use `(if predicate list1 list2)` instead.
+Pico Logo does not support the `if predicate list1 list2` form. Use `(if predicate list1 list2)` instead.
 
-`ifelse` can be implemented as follows:
+`ifelse` is not a primitive. It can be implemented as follows:
 
 ```logo
 to ifelse :predicate :list1 :list2
@@ -383,6 +383,7 @@ The following lists the capabilities of the different supported processors.
 - 65536 characters of editor buffer
 - 8192 characters in the copy buffer
 - Hardware floating-point operations
+- Wifi supported on W variants
 
 
 
@@ -3399,6 +3400,22 @@ wifi?
 `wifi?` outputs `true` if the WiFi is connected, otherwise it outputs `false`.
 
 
+## wifi.mac
+
+wifi.mac
+
+`operation`
+
+`wifi.mac` outputs the MAC address of the device as a word of six hexadecimal numbers separated by colons, each between 0 and FF. The MAC address is a unique identifier for the device on a network.
+
+### Example
+
+```logo
+?wifi.mac
+00:00:5E:12:34:56
+```
+
+
 ## wifi.connect
 
 wifi.connect _ssid_ _password_
@@ -3815,3 +3832,57 @@ The parser tries to be clever about this potential ambiguity and figure out whic
   - `print - 3 4` (procedurally the same as the previous example) 
 
 
+# Appendix A: Useful Procedures
+
+
+This Appendix contains procedures that are not primitives but are useful for various purposes. You can use these procedures as they are or modify them to suit your needs.
+
+You can add these procedures to your `startup` file so they are always available when you start Logo. To do this, copy and paste the code into a file named `startup` and save it in the `/Logo` directory on your SD Card.
+
+## File Navigation
+
+These procedures are for navigating the file system. The `ls` procedure lists the files and directories in the current directory, and the `cd` procedure changes the current directory to the one specified by _path_.
+
+```logo
+to ls
+  catalog
+end
+
+to cd :path
+  setprefix :path
+end
+```
+
+## Displaying Formatted Time
+
+These procedures are for displaying the date and time in a more human-friendly format. The `zeropad` procedure adds a leading zero to numbers less than 10. The `fdate` and `ftime` procedures format the date and time, respectively, using `zeropad` to ensure that single-digit numbers are displayed with a leading zero.
+
+```logo
+to zeropad :n
+  if 2 > count :n [op word "0 :n]
+  op :n
+end
+
+to fdate
+  op reduce [[a b] (word :a "- :b)] map "zeropad date
+end
+
+to ftime
+  op reduce [[a b] (word :a ": :b)] map "zeropad time
+end
+```
+
+## WiFi Connection
+
+This procedure connects to a WiFi network and then synchronizes the time with an NTP server. You can change the SSID, password, timezone (-5), and NTP server ("ca.pool.ntp.org) as needed.
+
+```logo
+to connect
+  if not wifi? [
+    wifi.connect "SSID "Password
+  ]
+  if (network.ntp -5 "ca.pool.ntp.org) [
+    (pr [The time is] fdate ftime)
+  ]
+end
+```
