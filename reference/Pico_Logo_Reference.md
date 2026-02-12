@@ -383,7 +383,7 @@ The following lists the capabilities of the different supported processors.
 - 65536 characters of editor buffer
 - 8192 characters in the copy buffer
 - Hardware floating-point operations
-- Wifi supported on W variants
+- WiFi supported on W variants
 
 
 

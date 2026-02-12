@@ -212,6 +212,18 @@ void test_wifi_mac_returns_all_255(void)
     TEST_ASSERT_EQUAL_STRING("FF:FF:FF:FF:FF:FF", mem_word_ptr(r.value.as.node));
 }
 
+void test_wifi_mac_returns_empty_list_when_no_wifi_hardware(void)
+{
+    // Simulate a device with no WiFi hardware
+    mock_hardware_ops.wifi_get_mac = NULL;
+    
+    Result r = eval_string("wifi.mac");
+    
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
+    TEST_ASSERT_TRUE(mem_is_nil(r.value.as.node));
+}
+
 // ============================================================================
 // wifi.ssid tests
 // ============================================================================
@@ -375,6 +387,7 @@ int main(void)
     RUN_TEST(test_wifi_mac_returns_empty_list_when_unavailable);
     RUN_TEST(test_wifi_mac_returns_all_zeros);
     RUN_TEST(test_wifi_mac_returns_all_255);
+    RUN_TEST(test_wifi_mac_returns_empty_list_when_no_wifi_hardware);
     
     // wifi.ssid tests
     RUN_TEST(test_wifi_ssid_returns_ssid_when_connected);
