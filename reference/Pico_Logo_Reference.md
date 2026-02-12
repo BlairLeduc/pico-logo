@@ -1,8 +1,16 @@
 # Pico Logo
 
-From the [Releases](https://github.com/BlairLeduc/pico-logo/releases) page, download the UF2 file for your device and the `logo.zip` file. On your SD Card, extract the `logo.zip` file to a subdirectory on the root named `Logo`.  Boot your pico into BOOTSEL mode, and copy the UF2 file to the Pico.
+From the [Releases](https://github.com/BlairLeduc/pico-logo/releases) page, download the UF2 file for your device and the `logo.zip` file. On your SD Card, extract the `logo.zip` file to a subdirectory on the root named `Logo`.  
 
-After flashing Pico Logo, you should see:
+Flash the PicoCalc with the latest release and reboot your PicoCalc:
+
+1. Make sure your PicoCalc is off.
+1. Push and hold the BOOTSEL button, accessible through the back of the PicoCalc, while connecting your PicoCalc with a USB cable to a computer. Use the USB port of the Pico, closest to the bottom of the device. 
+1. Release the BOOTSEL button once your Pico appears as a mass storage device called `RPI-RP2`.
+1. Drag and drop the Pico Logo UF2 file onto the `RPI-RP2` volume. Your Pico will reboot.
+1. Disconnect the USB cable and turn on the PicoCalc. You are now running Pico Logo.
+
+You should see:
 
 ```
 Copyright 2025-2026 Blair Leduc
