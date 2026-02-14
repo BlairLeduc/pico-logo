@@ -298,6 +298,11 @@ if(BUILD_FOR_HOST)
     target_include_directories(logo PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
     )
+
+    # Allow LOGO_OP_STACK_DEPTH to be set via CMake cache variable
+    if(DEFINED LOGO_OP_STACK_DEPTH)
+        target_compile_definitions(logo_core PUBLIC MAX_OP_STACK_DEPTH=${LOGO_OP_STACK_DEPTH})
+    endif()
 endif()
 
 # ============================================================================
@@ -396,6 +401,11 @@ if(BUILD_TESTING)
     )
 
     target_link_libraries(logo_core logo_devices m)
+
+    # Allow LOGO_OP_STACK_DEPTH to be set via CMake cache variable
+    if(DEFINED LOGO_OP_STACK_DEPTH)
+        target_compile_definitions(logo_core PUBLIC MAX_OP_STACK_DEPTH=${LOGO_OP_STACK_DEPTH})
+    endif()
 
     # Include the tests subdirectory
     add_subdirectory(tests)

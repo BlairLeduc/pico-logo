@@ -43,3 +43,12 @@ int op_stack_depth(OpStack *stack)
 {
     return stack->top;
 }
+
+void op_stack_swap_top(OpStack *stack)
+{
+    if (stack->top < 2)
+        return;
+    EvalOp tmp = stack->ops[stack->top - 1];
+    stack->ops[stack->top - 1] = stack->ops[stack->top - 2];
+    stack->ops[stack->top - 2] = tmp;
+}

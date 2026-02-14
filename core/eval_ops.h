@@ -46,6 +46,8 @@ extern "C"
         OP_RUN,           // run [list]
         OP_CATCH,         // catch "tag [body]
         OP_PROC_CALL,     // User procedure call (frame + body execution)
+        OP_EXPR_EVAL,     // Expression evaluation resume after deferred proc call
+        OP_PRIM_CALL,     // Deferred primitive call (args collected via expression)
     } EvalOpKind;
 
     //==========================================================================
@@ -138,6 +140,44 @@ extern "C"
         uint8_t phase;               // 0 = push first line, 1+ = handle line result
     } ProcCallState;
 
+    // Maximum pending binary operator nesting in expressions.
+    // Bounded by the number of distinct precedence levels (comparison < additive < multiplicative = 3).
+    #define MAX_EXPR_OPS 4
+
+    // A pending binary operator in the iterative Pratt parser.
+    typedef struct
+    {
+        Value left;          // Left operand value
+        uint8_t op_type;     // TokenType of the operator (TOKEN_PLUS, etc.)
+        int min_bp;          // Minimum binding power at this level
+    } PendingBinOp;
+
+    // State for OP_EXPR_EVAL: resumes expression evaluation after a deferred proc call.
+    typedef struct
+    {
+        PendingBinOp ops[MAX_EXPR_OPS];  // Saved operator stack
+        int depth;                        // Number of entries in ops[]
+        int min_bp;                       // Current minimum binding power
+        uint8_t phase;                    // 0 = waiting for proc call result
+    } ExprEvalState;
+
+    // Maximum staged arguments for deferred primitive calls.
+    // Covers all common primitives (output=1, sum=2, setxy=2, etc.)
+    #define MAX_PRIM_STAGED_ARGS 4
+
+    // State for OP_PRIM_CALL: deferred call to a primitive.
+    // When a primitive's arg expression contains a user proc call, we push this op
+    // to call the primitive once the expression result is available.
+    typedef struct
+    {
+        const struct Primitive *prim;  // The primitive to call
+        const char *user_name;         // User's name for error messages (interned)
+        Value args[MAX_PRIM_STAGED_ARGS]; // Arguments collected so far
+        int argc;                      // Number of arguments collected
+        int total_args;                // Total arguments expected
+        int current_arg;               // Index of the argument being evaluated
+    } PrimCallState;
+
     //==========================================================================
     // Operation Flags
     //==========================================================================
@@ -176,6 +216,8 @@ extern "C"
             RunState run;
             CatchState catch_state;
             ProcCallState proc_call;
+            ExprEvalState expr_eval;
+            PrimCallState prim_call;
         };
     } EvalOp;
 
@@ -206,6 +248,10 @@ extern "C"
 
     // Get current depth
     int op_stack_depth(OpStack *stack);
+
+    // Swap the top two operations on the stack.
+    // Used to ensure correct execution order when pushing continuation + operation.
+    void op_stack_swap_top(OpStack *stack);
 
 #ifdef __cplusplus
 }

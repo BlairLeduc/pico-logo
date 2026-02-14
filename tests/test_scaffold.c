@@ -382,7 +382,8 @@ Result eval_string(const char *input)
     lexer_init(&lexer, input);
     eval_init(&eval, &lexer);
     eval_set_frames(&eval, proc_get_frame_stack());
-    return eval_expression(&eval);
+    Result r = eval_expression(&eval);
+    return r;
 }
 
 Result run_string(const char *input)

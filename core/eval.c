@@ -28,6 +28,62 @@ static OpStack global_op_stack;
 
 // Forward declarations
 static Result eval_expr_bp(Evaluator *eval, int min_bp);
+static Result step_expr_eval(Evaluator *eval, EvalOp *op);
+static Result step_prim_call(Evaluator *eval, EvalOp *op);
+
+// Apply a binary infix operator to two values.
+// Returns RESULT_OK with the computed value, or RESULT_ERROR on type/divide errors.
+static Result apply_binary_op(TokenType op_type, Value left, Value right)
+{
+    // Handle = separately since it works with all value types
+    if (op_type == TOKEN_EQUALS)
+    {
+        bool equal = values_equal(left, right);
+        return result_ok(value_word(mem_atom_cstr(equal ? "true" : "false")));
+    }
+
+    float left_n, right_n;
+    bool left_ok = value_to_number(left, &left_n);
+    bool right_ok = value_to_number(right, &right_n);
+
+    // Get operator name for error messages
+    const char *op_name;
+    switch (op_type)
+    {
+    case TOKEN_PLUS: op_name = "+"; break;
+    case TOKEN_MINUS: op_name = "-"; break;
+    case TOKEN_MULTIPLY: op_name = "*"; break;
+    case TOKEN_DIVIDE: op_name = "/"; break;
+    case TOKEN_LESS_THAN: op_name = "<"; break;
+    case TOKEN_GREATER_THAN: op_name = ">"; break;
+    default: op_name = "?"; break;
+    }
+
+    if (!left_ok)
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, op_name, value_to_string(left));
+    if (!right_ok)
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, op_name, value_to_string(right));
+
+    switch (op_type)
+    {
+    case TOKEN_PLUS:
+        return result_ok(value_number(left_n + right_n));
+    case TOKEN_MINUS:
+        return result_ok(value_number(left_n - right_n));
+    case TOKEN_MULTIPLY:
+        return result_ok(value_number(left_n * right_n));
+    case TOKEN_DIVIDE:
+        if (right_n == 0)
+            return result_error(ERR_DIVIDE_BY_ZERO);
+        return result_ok(value_number(left_n / right_n));
+    case TOKEN_LESS_THAN:
+        return result_ok(value_word(mem_atom_cstr((left_n < right_n) ? "true" : "false")));
+    case TOKEN_GREATER_THAN:
+        return result_ok(value_word(mem_atom_cstr((left_n > right_n) ? "true" : "false")));
+    default:
+        return result_error_arg(ERR_DONT_KNOW_WHAT, NULL, op_name);
+    }
+}
 static Result eval_primary(Evaluator *eval);
 
 void eval_init(Evaluator *eval, Lexer *lexer)
@@ -46,6 +102,7 @@ void eval_init(Evaluator *eval, Lexer *lexer)
     eval->proc_depth = 0;
     eval->repcount = -1;
     eval->primitive_arg_depth = 0;
+    eval->user_arg_depth = 0;
 }
 
 void eval_set_frames(Evaluator *eval, FrameStack *frames)
@@ -461,8 +518,29 @@ static Result eval_primary(Evaluator *eval)
                 // Greedily collect all arguments until )
                 Value args[16];
                 int argc = 0;
+
+                // Speculative OP_PRIM_CALL for deferred expression handling
+                EvalOp *prim_staging_paren = NULL;
+                int depth_before_prim_paren = op_stack_depth(eval->op_stack);
+                if (eval->proc_depth > 0)
+                {
+                    prim_staging_paren = op_stack_push(eval->op_stack);
+                    if (!prim_staging_paren)
+                    {
+                        eval->paren_depth--;
+                        return result_error(ERR_STACK_OVERFLOW);
+                    }
+                    prim_staging_paren->kind = OP_PRIM_CALL;
+                    prim_staging_paren->flags = OP_FLAG_NONE;
+                    prim_staging_paren->result = result_none();
+                    prim_staging_paren->prim_call.prim = prim;
+                    prim_staging_paren->prim_call.user_name = user_name;
+                    prim_staging_paren->prim_call.argc = 0;
+                    prim_staging_paren->prim_call.total_args = -1; // varargs
+                    prim_staging_paren->prim_call.current_arg = 0;
+                }
                 
-                // Track that we're collecting primitive args (CPS fallback zone)
+                // Track that we're collecting primitive args
                 eval->primitive_arg_depth++;
                 
                 while (argc < 16)
@@ -476,9 +554,25 @@ static Result eval_primary(Evaluator *eval)
                     eval->in_tail_position = false;
                     Result arg = eval_expression(eval);
                     eval->in_tail_position = old_tail;
+
+                    // Check if expression was deferred
+                    if (arg.status == RESULT_NONE &&
+                        prim_staging_paren &&
+                        op_stack_depth(eval->op_stack) > depth_before_prim_paren + 1)
+                    {
+                        for (int j = 0; j < argc && j < MAX_PRIM_STAGED_ARGS; j++)
+                            prim_staging_paren->prim_call.args[j] = args[j];
+                        prim_staging_paren->prim_call.argc = argc;
+                        prim_staging_paren->prim_call.current_arg = argc;
+                        eval->primitive_arg_depth--;
+                        // Don't decrement paren_depth — the closing ) hasn't been consumed
+                        // and will be handled by step_prim_call
+                        return result_none();
+                    }
                     
                     if (arg.status == RESULT_ERROR)
                     {
+                        if (prim_staging_paren) op_stack_pop(eval->op_stack);
                         eval->primitive_arg_depth--;
                         eval->paren_depth--;
                         return result_set_error_proc(arg, user_name);
@@ -489,6 +583,10 @@ static Result eval_primary(Evaluator *eval)
                 }
                 
                 eval->primitive_arg_depth--;
+                
+                // All args collected synchronously — remove speculative OP_PRIM_CALL
+                if (prim_staging_paren)
+                    op_stack_pop(eval->op_stack);
                 
                 // Consume closing paren
                 Token closing = peek(eval);
@@ -568,7 +666,29 @@ static Result eval_primary(Evaluator *eval)
             Value args[16]; // Max args
             int argc = 0;
 
-            // Track that we're collecting primitive args (CPS fallback zone)
+            // When inside a procedure, speculatively push OP_PRIM_CALL.
+            // If an arg expression defers (user proc call pushed OP_PROC_CALL),
+            // OP_PRIM_CALL is already in the correct stack position below.
+            // If all args are collected synchronously, we pop it and call directly.
+            EvalOp *prim_staging = NULL;
+            int depth_before_prim = op_stack_depth(eval->op_stack);
+            if (eval->proc_depth > 0 && prim->default_args > 0 &&
+                prim->default_args <= MAX_PRIM_STAGED_ARGS)
+            {
+                prim_staging = op_stack_push(eval->op_stack);
+                if (!prim_staging)
+                    return result_error(ERR_STACK_OVERFLOW);
+                prim_staging->kind = OP_PRIM_CALL;
+                prim_staging->flags = OP_FLAG_NONE;
+                prim_staging->result = result_none();
+                prim_staging->prim_call.prim = prim;
+                prim_staging->prim_call.user_name = user_name;
+                prim_staging->prim_call.argc = 0;
+                prim_staging->prim_call.total_args = prim->default_args;
+                prim_staging->prim_call.current_arg = 0;
+            }
+
+            // Track that we're collecting primitive args
             eval->primitive_arg_depth++;
 
             for (int i = 0; i < prim->default_args && !eval_at_end(eval); i++)
@@ -585,16 +705,32 @@ static Result eval_primary(Evaluator *eval)
                 eval->in_tail_position = false;
                 Result arg = eval_expression(eval);
                 eval->in_tail_position = old_tail;
+
+                // Check if expression was deferred (user proc call on op stack)
+                if (arg.status == RESULT_NONE &&
+                    op_stack_depth(eval->op_stack) > depth_before_prim + 1 &&
+                    prim_staging)
+                {
+                    // Save collected args so far into OP_PRIM_CALL
+                    for (int j = 0; j < argc; j++)
+                        prim_staging->prim_call.args[j] = args[j];
+                    prim_staging->prim_call.argc = argc;
+                    prim_staging->prim_call.current_arg = i;
+                    eval->primitive_arg_depth--;
+                    return result_none();
+                }
                 
                 // Propagate errors and control flow (throw, stop, output)
                 if (arg.status == RESULT_ERROR || arg.status == RESULT_THROW ||
                     arg.status == RESULT_STOP || arg.status == RESULT_OUTPUT)
                 {
+                    if (prim_staging) op_stack_pop(eval->op_stack);
                     eval->primitive_arg_depth--;
                     return result_set_error_proc(arg, user_name);
                 }
                 if (arg.status != RESULT_OK)
                 {
+                    if (prim_staging) op_stack_pop(eval->op_stack);
                     eval->primitive_arg_depth--;
                     return result_error_arg(ERR_NOT_ENOUGH_INPUTS, user_name, NULL);
                 }
@@ -602,6 +738,10 @@ static Result eval_primary(Evaluator *eval)
             }
 
             eval->primitive_arg_depth--;
+
+            // All args collected synchronously — remove speculative OP_PRIM_CALL
+            if (prim_staging)
+                op_stack_pop(eval->op_stack);
 
             if (argc < prim->default_args)
             {
@@ -622,6 +762,10 @@ static Result eval_primary(Evaluator *eval)
             Value args[MAX_PROC_PARAMS];
             int argc = 0;
 
+            // Track that we're collecting user proc args (blocks deferral
+            // for nested proc calls — only OP_PRIM_CALL can handle deferrals)
+            eval->user_arg_depth++;
+
             for (int i = 0; i < user_proc->param_count && !eval_at_end(eval); i++)
             {
                 // Check for tokens that would end args
@@ -640,13 +784,19 @@ static Result eval_primary(Evaluator *eval)
                 // Propagate errors and control flow (throw, stop, output)
                 if (arg.status == RESULT_ERROR || arg.status == RESULT_THROW ||
                     arg.status == RESULT_STOP || arg.status == RESULT_OUTPUT)
+                {
+                    eval->user_arg_depth--;
                     return arg;
+                }
                 if (arg.status != RESULT_OK)
                 {
+                    eval->user_arg_depth--;
                     return result_error_arg(ERR_NOT_ENOUGH_INPUTS, user_proc->name, NULL);
                 }
                 args[argc++] = arg.value;
             }
+
+            eval->user_arg_depth--;
 
             if (argc < user_proc->param_count)
             {
@@ -680,9 +830,14 @@ static Result eval_primary(Evaluator *eval)
                 // Non-self-recursive tail call - fall through to op stack
             }
 
-            // Inside a procedure, NOT collecting primitive args:
-            // Push OP_PROC_CALL on the op stack (trampoline handles it).
-            if (eval->proc_depth > 0 && eval->primitive_arg_depth == 0)
+            // Inside a procedure and not collecting user proc args: push
+            // OP_PROC_CALL on the op stack. The trampoline handles it
+            // asynchronously.  When inside a primitive's arg expression,
+            // OP_PRIM_CALL (speculatively pushed) catches the deferral.
+            // When inside a user proc's arg collection (user_arg_depth > 0)
+            // we fall through to the synchronous sub-trampoline since user
+            // proc arg collection doesn't have OP_PRIM_CALL support.
+            if (eval->proc_depth > 0 && eval->user_arg_depth == 0)
             {
                 // Push frame
                 word_offset_t frame_offset = frame_push(eval->frames, user_proc, args, argc);
@@ -737,86 +892,105 @@ static Result eval_primary(Evaluator *eval)
 }
 
 // Pratt parser for expressions with infix operators
+// Iterative Pratt parser for infix expressions.
+// Uses an explicit operator stack instead of C recursion, so that when
+// eval_primary defers a user procedure call (pushes OP_PROC_CALL and returns
+// result_none()), we can save our state to OP_EXPR_EVAL on the op stack and
+// yield to the trampoline instead of blocking on the C stack.
 static Result eval_expr_bp(Evaluator *eval, int min_bp)
 {
+    PendingBinOp op_stack[MAX_EXPR_OPS];
+    int depth = 0;
+    int depth_before_primary = op_stack_depth(eval->op_stack);
+
     Result lhs = eval_primary(eval);
+
+    // If eval_primary pushed a deferred proc call, save expression state
+    if (lhs.status == RESULT_NONE && op_stack_depth(eval->op_stack) > depth_before_primary)
+    {
+        // When depth == 0 (no pending infix operators), OP_EXPR_EVAL would be
+        // a no-op pass-through, so skip it and save an op stack slot per level.
+        if (depth == 0)
+            return result_none();
+
+        // Push OP_EXPR_EVAL above the OP_PROC_CALL, then swap so it's below.
+        // Stack order: ... → OP_EXPR_EVAL → OP_PROC_CALL (top)
+        // Trampoline runs OP_PROC_CALL first, result flows to OP_EXPR_EVAL.
+        EvalOp *expr_op = op_stack_push(eval->op_stack);
+        if (!expr_op)
+            return result_error(ERR_STACK_OVERFLOW);
+        expr_op->kind = OP_EXPR_EVAL;
+        expr_op->flags = OP_FLAG_NONE;
+        expr_op->saved_source = eval->token_source;
+        expr_op->result = result_none();
+        expr_op->expr_eval.depth = depth;  // 0 — no pending ops yet
+        expr_op->expr_eval.min_bp = min_bp;
+        expr_op->expr_eval.phase = 0;
+        op_stack_swap_top(eval->op_stack);
+        return result_none();
+    }
+
     if (lhs.status != RESULT_OK)
         return lhs;
 
-    while (true)
+    for (;;)
     {
-        Token op = peek(eval);
-        int bp = get_infix_bp(op.type);
+        Token op_tok = peek(eval);
+        int bp = get_infix_bp(op_tok.type);
+
+        // Reduce: apply pending operators with binding power > current
+        while ((bp == BP_NONE || bp < min_bp) && depth > 0)
+        {
+            depth--;
+            Result r = apply_binary_op(op_stack[depth].op_type, op_stack[depth].left, lhs.value);
+            if (r.status != RESULT_OK)
+                return r;
+            lhs = r;
+            min_bp = op_stack[depth].min_bp;
+
+            // Re-check with restored binding power
+            op_tok = peek(eval);
+            bp = get_infix_bp(op_tok.type);
+        }
 
         if (bp == BP_NONE || bp < min_bp)
             break;
 
+        // Shift: save current state and parse right operand
         advance(eval);
+        if (depth >= MAX_EXPR_OPS)
+            return result_error(ERR_STACK_OVERFLOW);
+        op_stack[depth].left = lhs.value;
+        op_stack[depth].op_type = (uint8_t)op_tok.type;
+        op_stack[depth].min_bp = min_bp;
+        depth++;
+        min_bp = bp + 1;
 
-        Result rhs = eval_expr_bp(eval, bp + 1);
-        if (rhs.status != RESULT_OK)
-            return rhs;
+        depth_before_primary = op_stack_depth(eval->op_stack);
+        lhs = eval_primary(eval);
 
-        // Handle = separately since it works with all value types
-        if (op.type == TOKEN_EQUALS)
+        // If eval_primary pushed a deferred proc call, save expression state
+        if (lhs.status == RESULT_NONE && op_stack_depth(eval->op_stack) > depth_before_primary)
         {
-            bool equal = values_equal(lhs.value, rhs.value);
-            lhs = result_ok(value_word(mem_atom_cstr(equal ? "true" : "false")));
-            continue;
+            // Push OP_EXPR_EVAL above the OP_PROC_CALL, then swap so it's below.
+            EvalOp *expr_op = op_stack_push(eval->op_stack);
+            if (!expr_op)
+                return result_error(ERR_STACK_OVERFLOW);
+            expr_op->kind = OP_EXPR_EVAL;
+            expr_op->flags = OP_FLAG_NONE;
+            expr_op->saved_source = eval->token_source;
+            expr_op->result = result_none();
+            expr_op->expr_eval.depth = depth;
+            expr_op->expr_eval.min_bp = min_bp;
+            expr_op->expr_eval.phase = 0;
+            for (int i = 0; i < depth; i++)
+                expr_op->expr_eval.ops[i] = op_stack[i];
+            op_stack_swap_top(eval->op_stack);
+            return result_none();
         }
 
-        float left_n, right_n;
-        bool left_ok = value_to_number(lhs.value, &left_n);
-        bool right_ok = value_to_number(rhs.value, &right_n);
-        
-        // Get operator name for error messages
-        const char *op_name;
-        switch (op.type)
-        {
-        case TOKEN_PLUS: op_name = "+"; break;
-        case TOKEN_MINUS: op_name = "-"; break;
-        case TOKEN_MULTIPLY: op_name = "*"; break;
-        case TOKEN_DIVIDE: op_name = "/"; break;
-        case TOKEN_LESS_THAN: op_name = "<"; break;
-        case TOKEN_GREATER_THAN: op_name = ">"; break;
-        default: op_name = "?"; break;
-        }
-        
-        if (!left_ok)
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, op_name, value_to_string(lhs.value));
-        if (!right_ok)
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, op_name, value_to_string(rhs.value));
-
-        float result;
-        switch (op.type)
-        {
-        case TOKEN_PLUS:
-            result = left_n + right_n;
-            break;
-        case TOKEN_MINUS:
-            result = left_n - right_n;
-            break;
-        case TOKEN_MULTIPLY:
-            result = left_n * right_n;
-            break;
-        case TOKEN_DIVIDE:
-            if (right_n == 0)
-                return result_error(ERR_DIVIDE_BY_ZERO);
-            result = left_n / right_n;
-            break;
-        case TOKEN_LESS_THAN:
-            // Return boolean word "true" or "false"
-            lhs = result_ok(value_word(mem_atom_cstr((left_n < right_n) ? "true" : "false")));
-            continue;
-        case TOKEN_GREATER_THAN:
-            // Return boolean word "true" or "false"
-            lhs = result_ok(value_word(mem_atom_cstr((left_n > right_n) ? "true" : "false")));
-            continue;
-        default:
-            return result_error_arg(ERR_DONT_KNOW_WHAT, NULL, op_name);
-        }
-
-        lhs = result_ok(value_number(result));
+        if (lhs.status != RESULT_OK)
+            return lhs;
     }
 
     return lhs;
@@ -1329,10 +1503,22 @@ static Result step_run_list(Evaluator *eval, EvalOp *op)
     // Execute one instruction
     int depth_pre = op_stack_depth(eval->op_stack);
     Result r = eval_instruction(eval);
+    int depth_post = op_stack_depth(eval->op_stack);
 
     // Check if eval_instruction (or a primitive) pushed an op on the stack
-    if (op_stack_depth(eval->op_stack) > depth_pre)
+    if (depth_post > depth_pre)
     {
+        // If eval_instruction returned an error but left ops on the stack
+        // (e.g., speculative PRIM_CALL remains after a failed EXPR_EVAL push),
+        // clean up the orphaned ops and propagate the error.
+        if (r.status == RESULT_ERROR || r.status == RESULT_THROW)
+        {
+            while (op_stack_depth(eval->op_stack) > depth_pre)
+                op_stack_pop(eval->op_stack);
+            eval->token_source = op->saved_source;
+            op_stack_pop(eval->op_stack);
+            return r;
+        }
         // An op was pushed — yield to trampoline to process it.
         // The result will come back via op->result on the next call.
         return result_none();
@@ -2224,6 +2410,217 @@ static Result step_proc_call(Evaluator *eval, EvalOp *op)
     return proc_call_cleanup(eval, op, result_none());
 }
 
+// Step function for OP_EXPR_EVAL.
+// Resumes an iterative Pratt parse after a deferred procedure call completes.
+// The proc call result is in op->result; the saved operator stack is in op->expr_eval.
+static Result step_expr_eval(Evaluator *eval, EvalOp *op)
+{
+    ExprEvalState *st = &op->expr_eval;
+
+    // The proc call just completed. Get its result.
+    Result lhs = op->result;
+    op->result = result_none();
+
+    // If the proc call returned an error/stop/output/throw, propagate it
+    if (lhs.status != RESULT_OK && lhs.status != RESULT_NONE)
+    {
+        op_stack_pop(eval->op_stack);
+        return lhs;
+    }
+
+    // RESULT_NONE means the proc had no output (void call).
+    // If we have pending operators (depth > 0), we need a value — error.
+    // If depth == 0, this is a void expression at statement level (e.g., print)
+    // — just pass through.
+    if (lhs.status == RESULT_NONE)
+    {
+        if (st->depth > 0)
+        {
+            op_stack_pop(eval->op_stack);
+            return result_error(ERR_DIDNT_OUTPUT);
+        }
+        // No pending operators — pass through void result
+        op_stack_pop(eval->op_stack);
+        return result_none();
+    }
+
+    // Resume the iterative Pratt parse with the proc call's return value.
+    // We have the pending operator stack and current min_bp from when we yielded.
+    PendingBinOp local_ops[MAX_EXPR_OPS];
+    int depth = st->depth;
+    int min_bp = st->min_bp;
+    for (int i = 0; i < depth; i++)
+        local_ops[i] = st->ops[i];
+
+    for (;;)
+    {
+        Token op_tok = peek(eval);
+        int bp = get_infix_bp(op_tok.type);
+
+        // Reduce: apply pending operators with binding power > current
+        while ((bp == BP_NONE || bp < min_bp) && depth > 0)
+        {
+            depth--;
+            Result r = apply_binary_op(local_ops[depth].op_type, local_ops[depth].left, lhs.value);
+            if (r.status != RESULT_OK)
+            {
+                op_stack_pop(eval->op_stack);
+                return r;
+            }
+            lhs = r;
+            min_bp = local_ops[depth].min_bp;
+            op_tok = peek(eval);
+            bp = get_infix_bp(op_tok.type);
+        }
+
+        if (bp == BP_NONE || bp < min_bp)
+            break;
+
+        // Shift: save current state and parse right operand
+        advance(eval);
+        if (depth >= MAX_EXPR_OPS)
+        {
+            op_stack_pop(eval->op_stack);
+            return result_error(ERR_STACK_OVERFLOW);
+        }
+        local_ops[depth].left = lhs.value;
+        local_ops[depth].op_type = (uint8_t)op_tok.type;
+        local_ops[depth].min_bp = min_bp;
+        depth++;
+        min_bp = bp + 1;
+
+        int depth_before_primary = op_stack_depth(eval->op_stack);
+        lhs = eval_primary(eval);
+
+        // If eval_primary pushed another deferred proc call, save and yield again
+        if (lhs.status == RESULT_NONE && op_stack_depth(eval->op_stack) > depth_before_primary)
+        {
+            // Update our saved state for the next resume
+            st->depth = depth;
+            st->min_bp = min_bp;
+            for (int i = 0; i < depth; i++)
+                st->ops[i] = local_ops[i];
+            // OP_PROC_CALL was pushed above us by eval_primary.
+            // Return result_none() to yield. The trampoline will process the
+            // OP_PROC_CALL, and when it pops, store its result in our op->result.
+            return result_none();
+        }
+
+        if (lhs.status != RESULT_OK)
+        {
+            op_stack_pop(eval->op_stack);
+            return lhs;
+        }
+    }
+
+    // Expression complete — return the final value
+    op_stack_pop(eval->op_stack);
+    return lhs;
+}
+
+// Step function for OP_PRIM_CALL.
+// Called after a deferred expression evaluation completes for a primitive's argument.
+// Stores the argument value and calls the primitive when all args are ready.
+static Result step_prim_call(Evaluator *eval, EvalOp *op)
+{
+    PrimCallState *st = &op->prim_call;
+    const struct Primitive *prim = st->prim;
+
+    // Get the result from the child op (expression evaluation)
+    Result arg_result = op->result;
+    op->result = result_none();
+
+    // Propagate errors and control flow
+    if (arg_result.status != RESULT_OK && arg_result.status != RESULT_NONE)
+    {
+        op_stack_pop(eval->op_stack);
+        return result_set_error_proc(arg_result, st->user_name);
+    }
+
+    // RESULT_NONE means the expression didn't produce a value.
+    // For statement-level void calls (e.g., print without output), pass through.
+    if (arg_result.status == RESULT_NONE)
+    {
+        // The child expression was void — propagate as-is
+        op_stack_pop(eval->op_stack);
+        return result_none();
+    }
+
+    // Store the argument value
+    int idx = st->current_arg;
+    if (idx < MAX_PRIM_STAGED_ARGS)
+    {
+        st->args[idx] = arg_result.value;
+    }
+    st->argc = idx + 1;
+    st->current_arg = idx + 1;
+
+    // Check if this was a varargs call (total_args == -1) and we need to
+    // check for more args by peeking the token source.
+    // For the paren path, we'd need to continue collecting until ')'.
+    // For simplicity, varargs OP_PRIM_CALL currently completes after the
+    // first deferred arg batch — remaining args would have been collected
+    // synchronously before the deferral.
+
+    // Check if we have enough args for non-varargs calls
+    if (st->total_args > 0 && st->argc < st->total_args)
+    {
+        // Need more args. Evaluate the next expression.
+        // The token source should be positioned at the next arg.
+        eval->primitive_arg_depth++;
+        bool old_tail = eval->in_tail_position;
+        eval->in_tail_position = false;
+
+        int depth_before = op_stack_depth(eval->op_stack);
+        Result next_arg = eval_expression(eval);
+
+        eval->in_tail_position = old_tail;
+
+        // Check for another deferral
+        if (next_arg.status == RESULT_NONE &&
+            op_stack_depth(eval->op_stack) > depth_before)
+        {
+            // Another expression deferred. The ops are above us.
+            // Return result_none() to yield; we'll resume on next call.
+            eval->primitive_arg_depth--;
+            return result_none();
+        }
+
+        eval->primitive_arg_depth--;
+
+        if (next_arg.status == RESULT_ERROR || next_arg.status == RESULT_THROW ||
+            next_arg.status == RESULT_STOP || next_arg.status == RESULT_OUTPUT)
+        {
+            op_stack_pop(eval->op_stack);
+            return result_set_error_proc(next_arg, st->user_name);
+        }
+        if (next_arg.status != RESULT_OK)
+        {
+            op_stack_pop(eval->op_stack);
+            return result_error_arg(ERR_NOT_ENOUGH_INPUTS, st->user_name, NULL);
+        }
+
+        if (st->current_arg < MAX_PRIM_STAGED_ARGS)
+            st->args[st->current_arg] = next_arg.value;
+        st->argc++;
+        st->current_arg++;
+
+        // If still not enough, recurse (bounded by prim->default_args)
+        if (st->argc < st->total_args)
+        {
+            // Continue collecting — call step_prim_call again on next trampoline iteration
+            // Actually, we should loop here for remaining args
+            // For now, since most primitives have 1-2 args, recurse via trampoline
+            return result_none(); // will we be called again? Only if depth didn't change.
+        }
+    }
+
+    // All args collected — call the primitive
+    op_stack_pop(eval->op_stack);
+    Result r = prim->func(eval, st->argc, st->args);
+    return result_set_error_proc(r, st->user_name);
+}
+
 // Main trampoline dispatch loop.
 // Processes operations on the op stack until the stack returns to base_depth.
 Result eval_trampoline(Evaluator *eval, int base_depth)
@@ -2277,6 +2674,14 @@ Result eval_trampoline(Evaluator *eval, int base_depth)
 
         case OP_PROC_CALL:
             r = step_proc_call(eval, op);
+            break;
+
+        case OP_EXPR_EVAL:
+            r = step_expr_eval(eval, op);
+            break;
+
+        case OP_PRIM_CALL:
+            r = step_prim_call(eval, op);
             break;
 
         default:
