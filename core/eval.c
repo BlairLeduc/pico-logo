@@ -2568,11 +2568,10 @@ static Result step_prim_call(Evaluator *eval, EvalOp *op)
     // first deferred arg batch — remaining args would have been collected
     // synchronously before the deferral.
 
-    // Check if we have enough args for non-varargs calls
-    if (st->total_args > 0 && st->argc < st->total_args)
+    // Collect remaining args synchronously, yielding to trampoline only on deferral
+    while (st->total_args > 0 && st->argc < st->total_args)
     {
         // Need more args. Evaluate the next expression.
-        // The token source should be positioned at the next arg.
         eval->primitive_arg_depth++;
         bool old_tail = eval->in_tail_position;
         eval->in_tail_position = false;
@@ -2582,7 +2581,7 @@ static Result step_prim_call(Evaluator *eval, EvalOp *op)
 
         eval->in_tail_position = old_tail;
 
-        // Check for another deferral
+        // Check for another deferral (async proc call pushed above us)
         if (next_arg.status == RESULT_NONE &&
             op_stack_depth(eval->op_stack) > depth_before)
         {
@@ -2610,15 +2609,6 @@ static Result step_prim_call(Evaluator *eval, EvalOp *op)
             st->args[st->current_arg] = next_arg.value;
         st->argc++;
         st->current_arg++;
-
-        // If still not enough, recurse (bounded by prim->default_args)
-        if (st->argc < st->total_args)
-        {
-            // Continue collecting — call step_prim_call again on next trampoline iteration
-            // Actually, we should loop here for remaining args
-            // For now, since most primitives have 1-2 args, recurse via trampoline
-            return result_none(); // will we be called again? Only if depth didn't change.
-        }
     }
 
     // All args collected — call the primitive
