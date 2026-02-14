@@ -56,14 +56,6 @@ extern "C"
         int arg_count;              // Number of arguments
     } TailCall;
 
-    // Pending CPS call state (shared global, avoids large Result structs on stack)
-    typedef struct PendingCall
-    {
-        UserProcedure *proc;                // Procedure to call
-        Value args[MAX_PROC_PARAMS];        // Arguments for the call
-        int argc;                           // Number of arguments
-    } PendingCall;
-
     // Initialize procedure storage
     void procedures_init(void);
 
@@ -82,16 +74,9 @@ extern "C"
     // Erase all procedures (respects buried flag if check_buried is true)
     void proc_erase_all(bool check_buried);
 
-    // Call a user procedure with arguments
-    // Handles scope push/pop and tail call optimization
-    Result proc_call(Evaluator *eval, UserProcedure *proc, int argc, Value *args);
-
     // Get/set tail call info (for TCO)
     TailCall *proc_get_tail_call(void);
     void proc_clear_tail_call(void);
-
-    // Get pending CPS call state (for RESULT_CALL)
-    PendingCall *proc_get_pending_call(void);
 
     // Iteration helpers for poall, pots, etc.
     int proc_count(bool include_buried);

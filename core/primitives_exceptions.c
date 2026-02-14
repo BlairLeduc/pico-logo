@@ -26,39 +26,7 @@ static Result prim_catch(Evaluator *eval, int argc, Value *args)
     
     const char *tag = value_to_string(args[0]);
     
-    // Run the list
-    Result r = eval_run_list(eval, args[1].as.node);
-    
-    // Check if a throw or error occurred
-    if (r.status == RESULT_THROW)
-    {
-        // Special case: throw "toplevel always propagates to top level
-        // and is never caught by any catch (per Logo reference)
-        if (strcasecmp(r.throw_tag, "toplevel") == 0)
-        {
-            return r;
-        }
-        
-        // Check if the tag matches
-        if (strcasecmp(r.throw_tag, tag) == 0)
-        {
-            // Caught the throw, return normally
-            return result_none();
-        }
-        // Tag doesn't match, propagate the throw
-        return r;
-    }
-    else if (r.status == RESULT_ERROR && strcasecmp(tag, "error") == 0)
-    {
-        // Special case: catch "error catches errors
-        // Save the error info for the error primitive
-        error_set_caught(&r);
-        // Return normally (error was caught)
-        return result_none();
-    }
-    
-    // No throw/error or didn't match, return the result as-is
-    return r;
+    return eval_push_catch(eval, tag, args[1].as.node);
 }
 
 static Result prim_throw(Evaluator *eval, int argc, Value *args)

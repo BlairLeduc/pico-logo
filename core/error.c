@@ -75,6 +75,7 @@ static const char *error_templates[] = {
     [ERR_CANT_ON_NETWORK] = "Can't %s on a network connection",
     [ERR_NETWORK_TIMEOUT] = "Network timeout occurred",
     [ERR_INVALID_NETWORK_OP] = "Invalid network operation",
+    [ERR_STACK_OVERFLOW] = "Stack overflow - too many nested operations",
 };
 
 #define NUM_ERRORS (sizeof(error_templates) / sizeof(error_templates[0]))

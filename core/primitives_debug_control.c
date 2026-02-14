@@ -131,7 +131,7 @@ static Result prim_go(Evaluator *eval, int argc, Value *args)
     }
     
     // Return RESULT_GOTO with the label name
-    // The label will be found and jumped to by eval_run_list_with_tco
+    // The label will be found and jumped to by step_proc_call
     const char *label = mem_word_ptr(args[0].as.node);
     return result_goto(label);
 }

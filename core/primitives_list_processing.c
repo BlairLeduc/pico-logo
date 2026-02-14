@@ -181,8 +181,8 @@ static Result invoke_proc_spec(Evaluator *eval, ProcSpec *spec, int argc, Value 
         }
         else if (spec->as.named.user_proc)
         {
-            // Call user procedure
-            return proc_call(eval, spec->as.named.user_proc, argc, args);
+            // Call user procedure via op-stack sub-trampoline
+            return eval_push_proc_call(eval, spec->as.named.user_proc, argc, args);
         }
         // Should never reach here - parse_proc_spec validates the input
         return result_error(ERR_UNDEFINED);

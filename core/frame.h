@@ -41,7 +41,7 @@
 //  ===========
 //
 //  The frame system integrates with the interpreter via:
-//  - proc_call() uses frame_push/frame_pop/frame_reuse
+//  - eval_push_proc_call() and step_proc_call() use frame_push/frame_pop/frame_reuse
 //  - var_get/var_set check frame bindings before globals
 //  - var_set_test/var_get_test use frame TEST state when in procedure
 //  - LOCAL primitive uses frame_declare_local

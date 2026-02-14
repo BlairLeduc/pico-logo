@@ -27,25 +27,7 @@ static Result prim_forever(Evaluator *eval, int argc, Value *args)
     UNUSED(argc);
     REQUIRE_LIST(args[0]);
 
-    Node body = args[0].as.node;
-    int previous_repcount = eval->repcount;
-    int iteration = 0;
-    while (true)
-    {
-        eval->repcount = iteration + 1;  // repcount is 1-based
-        Result r = eval_run_list(eval, body);
-        iteration++;
-        // Propagate stop/output/error/throw
-        if (r.status != RESULT_NONE && r.status != RESULT_OK)
-        {
-            eval->repcount = previous_repcount;  // Restore previous repcount
-            return r;
-        }
-    }
-
-    // Unreachable, but for completeness
-    eval->repcount = previous_repcount;  // Restore previous repcount
-    return result_none();
+    return eval_push_forever(eval, args[0].as.node);
 }
 
 // repeat count list - repeats the provided list count times
@@ -56,22 +38,7 @@ static Result prim_repeat(Evaluator *eval, int argc, Value *args)
     REQUIRE_LIST(args[1]);
 
     int count = (int)count_f;
-    Node body = args[1].as.node;
-
-    int previous_repcount = eval->repcount;
-    for (int i = 0; i < count; i++)
-    {
-        eval->repcount = i + 1;  // repcount is 1-based
-        Result r = eval_run_list(eval, body);
-        // Propagate stop/output/error/throw
-        if (r.status != RESULT_NONE && r.status != RESULT_OK)
-        {
-            eval->repcount = previous_repcount;  // Restore previous repcount
-            return r;
-        }
-    }
-    eval->repcount = previous_repcount;  // Restore previous repcount
-    return result_none();
+    return eval_push_repeat(eval, count, args[1].as.node);
 }
 
 static Result prim_repcount(Evaluator *eval, int argc, Value *args)
@@ -118,38 +85,7 @@ static Result prim_do_while(Evaluator *eval, int argc, Value *args)
     REQUIRE_LIST(args[0]);
     REQUIRE_LIST(args[1]);
 
-    Node body = args[0].as.node;
-    Node predicate_list = args[1].as.node;
-    
-    do
-    {
-        // Run the body
-        Result r = eval_run_list(eval, body);
-        // Propagate stop/output/error/throw
-        if (r.status != RESULT_NONE && r.status != RESULT_OK)
-        {
-            return r;
-        }
-        
-        // Evaluate the predicate list to get a boolean
-        Result pred_result = eval_run_list_expr(eval, predicate_list);
-        if (pred_result.status == RESULT_ERROR)
-        {
-            return pred_result;
-        }
-        if (pred_result.status != RESULT_OK)
-        {
-            return result_error_arg(ERR_NOT_BOOL, NULL, NULL);
-        }
-        
-        REQUIRE_BOOL(pred_result.value, condition);
-        if (!condition)
-        {
-            break;
-        }
-    } while (true);
-    
-    return result_none();
+    return eval_push_do_while(eval, args[0].as.node, args[1].as.node);
 }
 
 // while predicate_list list - tests predicate_list and runs list if true, repeats until false
@@ -160,38 +96,7 @@ static Result prim_while(Evaluator *eval, int argc, Value *args)
     REQUIRE_LIST(args[0]);
     REQUIRE_LIST(args[1]);
 
-    Node predicate_list = args[0].as.node;
-    Node body = args[1].as.node;
-    
-    while (true)
-    {
-        // Evaluate the predicate list to get a boolean
-        Result pred_result = eval_run_list_expr(eval, predicate_list);
-        if (pred_result.status == RESULT_ERROR)
-        {
-            return pred_result;
-        }
-        if (pred_result.status != RESULT_OK)
-        {
-            return result_error_arg(ERR_NOT_BOOL, NULL, NULL);
-        }
-        
-        REQUIRE_BOOL(pred_result.value, condition);
-        if (!condition)
-        {
-            break;
-        }
-        
-        // Run the body
-        Result r = eval_run_list(eval, body);
-        // Propagate stop/output/error/throw
-        if (r.status != RESULT_NONE && r.status != RESULT_OK)
-        {
-            return r;
-        }
-    }
-    
-    return result_none();
+    return eval_push_while(eval, args[0].as.node, args[1].as.node);
 }
 
 // do.until list predicate_list - runs list repeatedly until predicate_list evaluates to true
@@ -202,38 +107,7 @@ static Result prim_do_until(Evaluator *eval, int argc, Value *args)
     REQUIRE_LIST(args[0]);
     REQUIRE_LIST(args[1]);
 
-    Node body = args[0].as.node;
-    Node predicate_list = args[1].as.node;
-    
-    do
-    {
-        // Run the body
-        Result r = eval_run_list(eval, body);
-        // Propagate stop/output/error/throw
-        if (r.status != RESULT_NONE && r.status != RESULT_OK)
-        {
-            return r;
-        }
-        
-        // Evaluate the predicate list to get a boolean
-        Result pred_result = eval_run_list_expr(eval, predicate_list);
-        if (pred_result.status == RESULT_ERROR)
-        {
-            return pred_result;
-        }
-        if (pred_result.status != RESULT_OK)
-        {
-            return result_error_arg(ERR_NOT_BOOL, NULL, NULL);
-        }
-        
-        REQUIRE_BOOL(pred_result.value, condition);
-        if (condition)
-        {
-            break;
-        }
-    } while (true);
-    
-    return result_none();
+    return eval_push_do_until(eval, args[0].as.node, args[1].as.node);
 }
 
 // until predicate_list list - tests predicate_list and runs list if false, repeats until true
@@ -244,38 +118,7 @@ static Result prim_until(Evaluator *eval, int argc, Value *args)
     REQUIRE_LIST(args[0]);
     REQUIRE_LIST(args[1]);
 
-    Node predicate_list = args[0].as.node;
-    Node body = args[1].as.node;
-    
-    while (true)
-    {
-        // Evaluate the predicate list to get a boolean
-        Result pred_result = eval_run_list_expr(eval, predicate_list);
-        if (pred_result.status == RESULT_ERROR)
-        {
-            return pred_result;
-        }
-        if (pred_result.status != RESULT_OK)
-        {
-            return result_error_arg(ERR_NOT_BOOL, NULL, NULL);
-        }
-        
-        REQUIRE_BOOL(pred_result.value, condition);
-        if (condition)
-        {
-            break;
-        }
-        
-        // Run the body
-        Result r = eval_run_list(eval, body);
-        // Propagate stop/output/error/throw
-        if (r.status != RESULT_NONE && r.status != RESULT_OK)
-        {
-            return r;
-        }
-    }
-    
-    return result_none();
+    return eval_push_until(eval, args[0].as.node, args[1].as.node);
 }
 
 // Helper to evaluate a word or list to get a number
@@ -399,7 +242,8 @@ static Result prim_for(Evaluator *eval, int argc, Value *args)
     
     // Declare the variable as local if we're in a procedure scope
     // This allows var_set to update the local binding
-    if (eval_in_procedure(eval))
+    bool in_procedure = eval_in_procedure(eval);
+    if (in_procedure)
     {
         if (!var_declare_local(varname))
         {
@@ -407,58 +251,8 @@ static Result prim_for(Evaluator *eval, int argc, Value *args)
         }
     }
     
-    // Loop
-    float current = start;
-    Result loop_result = result_none();
-    while (true)
-    {
-        // Check termination condition: (current - limit) has same sign as step
-        // This means we've gone past the limit
-        float diff = current - limit;
-        
-        // If step is positive, we stop when current > limit (diff > 0)
-        // If step is negative, we stop when current < limit (diff < 0)
-        // So we stop when diff * step > 0 (same sign)
-        if (diff * step > 0)
-        {
-            break;
-        }
-        
-        // Set the control variable
-        if (!var_set(varname, value_number(current)))
-        {
-            loop_result = result_error(ERR_OUT_OF_SPACE);
-            break;
-        }
-        
-        // Run the body
-        r = eval_run_list(eval, body);
-        // Propagate stop/output/error/throw
-        if (r.status != RESULT_NONE && r.status != RESULT_OK)
-        {
-            loop_result = r;
-            break;
-        }
-        
-        // Increment
-        current += step;
-    }
-    
-    // Restore the original variable state (only if not in procedure scope)
-    // In procedure scope, the frame system handles cleanup
-    if (!eval_in_procedure(eval))
-    {
-        if (had_value)
-        {
-            var_set(varname, saved_value);
-        }
-        else
-        {
-            var_erase(varname);
-        }
-    }
-    
-    return loop_result;
+    return eval_push_for(eval, varname, start, limit, step, body,
+                         saved_value, had_value, in_procedure);
 }
 
 
