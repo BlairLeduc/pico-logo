@@ -2561,16 +2561,19 @@ static Result step_prim_call(Evaluator *eval, EvalOp *op)
     st->argc = idx + 1;
     st->current_arg = idx + 1;
 
-    // Check if this was a varargs call (total_args == -1) and we need to
-    // check for more args by peeking the token source.
-    // For the paren path, we'd need to continue collecting until ')'.
-    // For simplicity, varargs OP_PRIM_CALL currently completes after the
-    // first deferred arg batch — remaining args would have been collected
-    // synchronously before the deferral.
-
-    // Collect remaining args synchronously, yielding to trampoline only on deferral
-    while (st->total_args > 0 && st->argc < st->total_args)
+    // Collect remaining args, handling both fixed-arity and varargs (paren) calls.
+    // For varargs (total_args == -1): collect until ')' then consume it.
+    // For fixed-arity (total_args > 0): collect until argc reaches total_args.
+    while (st->total_args == -1 || (st->total_args > 0 && st->argc < st->total_args))
     {
+        // For varargs, stop at closing paren or end of input
+        if (st->total_args == -1)
+        {
+            Token t = peek(eval);
+            if (t.type == TOKEN_RIGHT_PAREN || t.type == TOKEN_EOF)
+                break;
+        }
+
         // Need more args. Evaluate the next expression.
         eval->primitive_arg_depth++;
         bool old_tail = eval->in_tail_position;
@@ -2601,6 +2604,8 @@ static Result step_prim_call(Evaluator *eval, EvalOp *op)
         }
         if (next_arg.status != RESULT_OK)
         {
+            if (st->total_args == -1)
+                break; // varargs: end of args
             op_stack_pop(eval->op_stack);
             return result_error_arg(ERR_NOT_ENOUGH_INPUTS, st->user_name, NULL);
         }
@@ -2609,6 +2614,15 @@ static Result step_prim_call(Evaluator *eval, EvalOp *op)
             st->args[st->current_arg] = next_arg.value;
         st->argc++;
         st->current_arg++;
+    }
+
+    // For varargs paren calls, consume the closing ')' and decrement paren_depth
+    if (st->total_args == -1)
+    {
+        Token closing = peek(eval);
+        if (closing.type == TOKEN_RIGHT_PAREN)
+            advance(eval);
+        eval->paren_depth--;
     }
 
     // All args collected — call the primitive
