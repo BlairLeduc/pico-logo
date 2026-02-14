@@ -56,18 +56,12 @@ extern "C"
         RESULT_THROW,  // throw command, propagate to catch
         RESULT_PAUSE,  // pause command, enter nested REPL
         RESULT_GOTO,   // go command, jump to label
-        RESULT_CALL,   // CPS: need to call a user procedure
         RESULT_EOF     // End of input, exit REPL
     } ResultStatus;
-
-    // Forward declaration for RESULT_CALL
-    typedef struct UserProcedure UserProcedure;
 
     // Evaluation result (FP-style)
     //
     // Uses a union for status-specific fields to minimize size.
-    // CPS call data (RESULT_CALL) is stored in a global PendingCall
-    // struct rather than inline, keeping Result small on the C stack.
     typedef struct
     {
         ResultStatus status;
@@ -147,7 +141,6 @@ extern "C"
     Result result_throw(const char *tag);
     Result result_pause(const char *proc_name);
     Result result_goto(const char *label);
-    Result result_call(UserProcedure *proc, int argc, Value *args);
     Result result_eof(void);
 
     // Error with context: "proc doesn't like arg as input"

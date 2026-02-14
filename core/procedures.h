@@ -56,14 +56,6 @@ extern "C"
         int arg_count;              // Number of arguments
     } TailCall;
 
-    // Pending CPS call state (shared global, avoids large Result structs on stack)
-    typedef struct PendingCall
-    {
-        UserProcedure *proc;                // Procedure to call
-        Value args[MAX_PROC_PARAMS];        // Arguments for the call
-        int argc;                           // Number of arguments
-    } PendingCall;
-
     // Initialize procedure storage
     void procedures_init(void);
 
@@ -82,16 +74,9 @@ extern "C"
     // Erase all procedures (respects buried flag if check_buried is true)
     void proc_erase_all(bool check_buried);
 
-    // Call a user procedure with arguments
-    // Handles scope push/pop and tail call optimization
-    Result proc_call(Evaluator *eval, UserProcedure *proc, int argc, Value *args);
-
     // Get/set tail call info (for TCO)
     TailCall *proc_get_tail_call(void);
     void proc_clear_tail_call(void);
-
-    // Get pending CPS call state (for RESULT_CALL)
-    PendingCall *proc_get_pending_call(void);
 
     // Iteration helpers for poall, pots, etc.
     int proc_count(bool include_buried);
@@ -122,6 +107,18 @@ extern "C"
     // Reset all procedure execution state (frame stack, current proc tracking, tail call)
     // Call this after errors or when returning to top level unexpectedly
     void proc_reset_execution_state(void);
+
+    // Snapshot of procedure execution state for save/restore during pause
+    typedef struct {
+        FrameStackSnapshot frame_snapshot;
+        int proc_depth;
+    } ProcExecSnapshot;
+
+    // Save current procedure execution state (for pause REPL error recovery)
+    ProcExecSnapshot proc_save_execution_state(void);
+
+    // Restore procedure execution state to a previously saved snapshot
+    void proc_restore_execution_state(ProcExecSnapshot snapshot);
 
     // Parse and define a procedure from text: "to name :param ... body ... end"
     // Returns a Result - RESULT_NONE on success, RESULT_ERROR on failure

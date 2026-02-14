@@ -409,6 +409,83 @@ void test_variable_escape_in_name(void)
     TEST_ASSERT_EQUAL_FLOAT(42.0f, r.value.as.number);
 }
 
+//==========================================================================
+// Deep Recursion Tests
+// These verify that user procedure calls within expressions use the op
+// stack (OP_PRIM_CALL + OP_EXPR_EVAL) instead of C recursion, avoiding
+// C stack overflow on platforms with small stacks (e.g., 4KB SCRATCH_Y).
+//==========================================================================
+
+void test_deep_recursion_addupto(void)
+{
+    // to addupto :n
+    //   if :n = 1 [op 1]
+    //   op :n + addupto :n - 1
+    // end
+    const char *params[] = {"n"};
+    define_proc("addupto", params, 1,
+        "if :n = 1 [op 1]\nop :n + addupto :n - 1");
+    
+    // addupto 10 = 1+2+3+...+10 = 55
+    Result r = eval_string("addupto 10");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(55.0f, r.value.as.number);
+}
+
+void test_deep_recursion_factorial(void)
+{
+    const char *params[] = {"n"};
+    define_proc("fact", params, 1,
+        "if :n = 0 [op 1]\nop :n * fact :n - 1");
+    
+    Result r = eval_string("fact 10");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(3628800.0f, r.value.as.number);
+}
+
+void test_deep_recursion_100_levels(void)
+{
+    const char *params[] = {"n"};
+    define_proc("addupto2", params, 1,
+        "if :n = 1 [op 1]\nop :n + addupto2 :n - 1");
+    
+    // Jump straight to depth 100
+    Result r = eval_string("addupto2 100");
+    if (r.status == RESULT_ERROR)
+    {
+        char msg[128];
+        snprintf(msg, sizeof(msg), "Direct depth 100: error code %d", r.error_code);
+        TEST_FAIL_MESSAGE(msg);
+    }
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(5050.0f, r.value.as.number);
+}
+
+void test_deep_recursion_print_result(void)
+{
+    // Test that print (a void primitive) works with deferred proc calls
+    const char *params[] = {"n"};
+    define_proc("addupto", params, 1,
+        "if :n = 1 [op 1]\nop :n + addupto :n - 1");
+    
+    run_string("print addupto 10");
+    TEST_ASSERT_EQUAL_STRING("55\n", output_buffer);
+}
+
+void test_deep_recursion_nested_in_expression(void)
+{
+    // Test: make "x addupto 10
+    // The proc call happens as an arg to MAKE (a primitive)
+    const char *params[] = {"n"};
+    define_proc("addupto", params, 1,
+        "if :n = 1 [op 1]\nop :n + addupto :n - 1");
+    
+    run_string("make \"x addupto 10");
+    Result r = eval_string(":x");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(55.0f, r.value.as.number);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -463,6 +540,13 @@ int main(void)
     RUN_TEST(test_quoted_word_escape_space);
     RUN_TEST(test_quoted_word_escape_bracket);
     RUN_TEST(test_variable_escape_in_name);
+
+    // Deep recursion tests (op stack, not C stack)
+    RUN_TEST(test_deep_recursion_addupto);
+    RUN_TEST(test_deep_recursion_factorial);
+    RUN_TEST(test_deep_recursion_100_levels);
+    RUN_TEST(test_deep_recursion_print_result);
+    RUN_TEST(test_deep_recursion_nested_in_expression);
 
     return UNITY_END();
 }

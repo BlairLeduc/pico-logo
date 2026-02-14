@@ -64,6 +64,22 @@ void frame_stack_reset(FrameStack *stack)
     stack->depth = 0;
 }
 
+FrameStackSnapshot frame_stack_snapshot(FrameStack *stack)
+{
+    return (FrameStackSnapshot){
+        .current = stack->current,
+        .arena_top = arena_top(&stack->arena),
+        .depth = stack->depth,
+    };
+}
+
+void frame_stack_restore(FrameStack *stack, FrameStackSnapshot snapshot)
+{
+    arena_free_to(&stack->arena, snapshot.arena_top);
+    stack->current = snapshot.current;
+    stack->depth = snapshot.depth;
+}
+
 bool frame_stack_is_empty(FrameStack *stack)
 {
     return stack->current == OFFSET_NONE;

@@ -6,7 +6,6 @@
 #include "value.h"
 #include "error.h"
 #include "format.h"
-#include "procedures.h"
 #include <ctype.h>
 #include <stdlib.h>
 
@@ -393,19 +392,6 @@ Result result_goto(const char *label)
         .status = RESULT_GOTO,
         .goto_label = label
     };
-}
-
-Result result_call(UserProcedure *proc, int argc, Value *args)
-{
-    // Store call data in global PendingCall to avoid bloating Result
-    PendingCall *pc = proc_get_pending_call();
-    pc->proc = proc;
-    pc->argc = argc;
-    for (int i = 0; i < argc && i < MAX_PROC_PARAMS; i++)
-    {
-        pc->args[i] = args[i];
-    }
-    return (Result){.status = RESULT_CALL};
 }
 
 Result result_eof(void)

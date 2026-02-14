@@ -82,11 +82,73 @@ void test_pause_request_triggers_pause_in_procedure(void)
     
     // Should see "Pausing..." then continue after co
     TEST_ASSERT_TRUE(strstr(output_buffer, "Pausing...") != NULL);
-    // Should complete after co
+    // Should complete BOTH prints after co
     TEST_ASSERT_TRUE(strstr(output_buffer, "1") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "2") != NULL);
     
     // Flag should be cleared after check
     TEST_ASSERT_FALSE(mock_pause_requested);
+}
+
+void test_pause_request_shows_procedure_prompt(void)
+{
+    // F9 pause should show prompt with procedure name
+    proc_define_from_text("to myfunc\nprint 1\nend");
+    set_mock_input("co\n");
+    mock_pause_requested = true;
+    
+    run_string("myfunc");
+    
+    // Should see the procedure name in the prompt
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "myfunc?"));
+}
+
+void test_pause_request_can_inspect_variables(void)
+{
+    // F9 pause should allow inspecting local variables
+    proc_define_from_text("to showvar :x\nprint :x\nend");
+    set_mock_input("print :x\nco\n");
+    mock_pause_requested = true;
+    
+    run_string("showvar 99");
+    
+    // Should see the variable value printed during pause
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "99"));
+}
+
+void test_pause_request_throw_toplevel_exits(void)
+{
+    // F9 pause + throw "toplevel should exit to top level
+    proc_define_from_text("to exitme\nprint \"before\nprint \"after\nend");
+    set_mock_input("throw \"toplevel\n");
+    mock_pause_requested = true;
+    
+    Result r = run_string("exitme");
+    
+    TEST_ASSERT_EQUAL(RESULT_THROW, r.status);
+    TEST_ASSERT_EQUAL_STRING("toplevel", r.throw_tag);
+}
+
+void test_pause_request_in_nested_procedure(void)
+{
+    // F9 should show the current procedure at the time of the pause.
+    // Since the flag is set before execution, the pause triggers at the
+    // first eval_instruction inside a procedure — which is in "outer"
+    // before the call to "inner".
+    proc_define_from_text("to inner\nprint \"inside\nend");
+    proc_define_from_text("to outer\ninner\nend");
+    set_mock_input("co\n");
+    
+    mock_pause_requested = true;
+    
+    run_string("outer");
+    
+    // Should see Pausing... and the outer procedure's prompt
+    // (because F9 triggers before "inner" is called)
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "Pausing..."));
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "outer?"));
+    // After co, inner should still execute
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "inside"));
 }
 
 void test_pause_request_ignored_at_toplevel(void)
@@ -337,6 +399,73 @@ void test_pause_throw_toplevel_exits(void)
     TEST_ASSERT_NULL(strstr(output_buffer, "after\n"));
 }
 
+void test_pause_error_preserves_local_variables(void)
+{
+    // Bug: during pause, if user enters a command that causes an error,
+    // proc_reset_execution_state() wipes all frames including the caller's,
+    // so CO can no longer access local variables.
+    Result def = proc_define_from_text("to testproc :x\npause\nprint :x + 1\nend");
+    TEST_ASSERT_EQUAL(RESULT_OK, def.status);
+    reset_output();
+    
+    // During pause: cause an error (undefined variable), then continue
+    set_mock_input("print :nonexistent\nco\n");
+    
+    Result r = run_string("testproc 5");
+    
+    // Should complete normally - :x should still be accessible after co
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Should have the error message for :nonexistent
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "nonexistent"));
+    
+    // Should still print 6 after co (proves :x survived the error)
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "6\n"));
+}
+
+void test_pause_error_preserves_variables_f9(void)
+{
+    // Same bug but triggered via F9 pause request
+    proc_define_from_text("to showvar :x\nprint :x\nprint :x + 10\nend");
+    reset_output();
+    
+    // Set up: F9 pause, cause error, then co
+    set_mock_input("print :bogus\nco\n");
+    mock_pause_requested = true;
+    
+    Result r = run_string("showvar 7");
+    
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Should have printed the error
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "bogus"));
+    
+    // After co, should still have :x and print both values
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "7\n"));
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "17\n"));
+}
+
+void test_pause_uncaught_throw_preserves_local_variables(void)
+{
+    // Uncaught throws during pause should also preserve state
+    Result def = proc_define_from_text("to testproc :x\npause\nprint :x + 1\nend");
+    TEST_ASSERT_EQUAL(RESULT_OK, def.status);
+    reset_output();
+    
+    // During pause: uncaught throw (not "toplevel"), then continue
+    set_mock_input("throw \"oops\nco\n");
+    
+    Result r = run_string("testproc 5");
+    
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Should have the uncaught throw error message  
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "oops"));
+    
+    // Should still print 6 after co
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "6\n"));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -350,6 +479,10 @@ int main(void)
     
     // F9 pause request
     RUN_TEST(test_pause_request_triggers_pause_in_procedure);
+    RUN_TEST(test_pause_request_shows_procedure_prompt);
+    RUN_TEST(test_pause_request_can_inspect_variables);
+    RUN_TEST(test_pause_request_throw_toplevel_exits);
+    RUN_TEST(test_pause_request_in_nested_procedure);
     RUN_TEST(test_pause_request_ignored_at_toplevel);
     
     // F4 freeze request
@@ -370,6 +503,9 @@ int main(void)
     RUN_TEST(test_pause_can_inspect_local_variables);
     RUN_TEST(test_pause_prompt_shows_procedure_name);
     RUN_TEST(test_pause_throw_toplevel_exits);
+    RUN_TEST(test_pause_error_preserves_local_variables);
+    RUN_TEST(test_pause_error_preserves_variables_f9);
+    RUN_TEST(test_pause_uncaught_throw_preserves_local_variables);
 
     return UNITY_END();
 }

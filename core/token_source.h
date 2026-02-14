@@ -38,6 +38,7 @@ extern "C"
     {
         Node current;           // Current position in list
         Node pending_sublist;   // Sublist element (when TOKEN_LEFT_BRACKET returned)
+        bool has_pending_sublist; // True if a sublist (including empty) is pending
         bool has_peeked;        // True if we have a peeked token
         Token peeked_token;     // The peeked token
         bool previous_was_delimiter; // For unary minus detection
@@ -73,6 +74,10 @@ extern "C"
 
     // Copy the current state for lookahead
     void token_source_copy(TokenSource *dest, const TokenSource *src);
+
+    // For NodeIterator: check if a sublist is pending (including empty lists)
+    // Returns false for Lexer sources
+    bool token_source_has_sublist(TokenSource *ts);
 
     // For NodeIterator: get the pending sublist after TOKEN_LEFT_BRACKET
     // Returns NODE_NIL if not a node iterator or no pending sublist

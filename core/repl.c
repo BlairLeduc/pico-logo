@@ -142,14 +142,31 @@ static Result repl_evaluate_line(ReplState *state, const char *input)
     eval_init(&eval, &lexer);
     eval_set_frames(&eval, proc_get_frame_stack());
 
+    // During pause, save state so errors only undo what the pause command did
+    bool in_pause = (state->flags & REPL_FLAG_EXIT_ON_CO) != 0;
+    ProcExecSnapshot snapshot;
+    if (in_pause)
+    {
+        snapshot = proc_save_execution_state();
+    }
+
     while (!eval_at_end(&eval))
     {
         Result r = eval_instruction(&eval);
         
         if (r.status == RESULT_ERROR)
         {
-            // Reset all execution state to clean up any stale frames from the error
-            proc_reset_execution_state();
+            // Clean up execution state from the failed command
+            if (in_pause)
+            {
+                // Restore to pause point - preserve caller's frames
+                proc_restore_execution_state(snapshot);
+            }
+            else
+            {
+                // Top-level: reset everything
+                proc_reset_execution_state();
+            }
             logo_io_write_line(state->io, error_format(r));
             return result_none();  // Error handled, continue REPL
         }
@@ -163,8 +180,15 @@ static Result repl_evaluate_line(ReplState *state, const char *input)
             }
             else
             {
-                // Other uncaught throws are errors - reset execution state first
-                proc_reset_execution_state();
+                // Other uncaught throws are errors
+                if (in_pause)
+                {
+                    proc_restore_execution_state(snapshot);
+                }
+                else
+                {
+                    proc_reset_execution_state();
+                }
                 char msg[128];
                 snprintf(msg, sizeof(msg), "Can't find a catch for %s", r.throw_tag);
                 logo_io_write_line(state->io, msg);
@@ -232,8 +256,13 @@ Result repl_run(ReplState *state)
         
         if (len == LOGO_STREAM_INTERRUPTED)
         {
-            // User pressed BRK at the prompt - reset any stale execution state
-            proc_reset_execution_state();
+            // User pressed BRK at the prompt
+            if (!(state->flags & REPL_FLAG_EXIT_ON_CO))
+            {
+                // Top-level: reset all execution state
+                proc_reset_execution_state();
+            }
+            // During pause: don't reset - preserve caller's frames
             logo_io_write_line(state->io, "Stopped!");
             continue;
         }

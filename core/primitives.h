@@ -95,7 +95,7 @@ extern "C"
     typedef Result (*PrimitiveFunc)(Evaluator *eval, int argc, Value *args);
 
     // Primitive definition
-    typedef struct
+    typedef struct Primitive
     {
         const char *name;
         int default_args; // Number of args to parse without parentheses

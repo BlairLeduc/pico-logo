@@ -459,7 +459,7 @@ void test_deep_nested_proc_in_repeat(void)
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
 
     // Run: spin -> repeat -> run -> square -> repeat -> dashed.forward -> repeat
-    // 3 levels of proc_call, each inside repeat (primitive_arg_depth > 0)
+    // 3 levels of proc call, each inside repeat
     output_buffer[0] = '\0';
     run_string("spin 2 [square 100]");
 
@@ -474,9 +474,8 @@ void test_deep_nested_proc_in_repeat(void)
     TEST_ASSERT_EQUAL(40, count);
 }
 
-// CPS-in-primitives: procedure calls inside repeat within a procedure
-// When proc_depth > 0 and primitive_arg_depth == 0, RESULT_CALL is returned.
-// eval_run_list must catch RESULT_CALL and dispatch via proc_call.
+// Procedure calls inside repeat within a procedure
+// When proc_depth > 0 and primitive_arg_depth == 0, OP_PROC_CALL is pushed.
 void test_proc_call_in_repeat_within_procedure(void)
 {
     // inc increments a global counter
@@ -502,8 +501,7 @@ void test_proc_call_in_repeat_within_procedure(void)
     TEST_ASSERT_EQUAL_STRING("200\n", output_buffer);
 }
 
-// CPS-in-primitives: procedure as expression inside run within a procedure
-// eval_run_list_expr must catch RESULT_CALL and dispatch via proc_call.
+// Procedure as expression inside run within a procedure
 void test_proc_expr_in_run_within_procedure(void)
 {
     // double returns a value

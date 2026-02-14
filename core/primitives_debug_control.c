@@ -94,7 +94,7 @@ static Result prim_pause(Evaluator *eval, int argc, Value *args)
         return result_none();
     }
     
-    logo_io_write_line(io, "Pausing...");
+    logo_io_console_write_line(io, "Pausing...");
     
     ReplState state;
     if (!repl_init(&state, io, REPL_FLAGS_PAUSE, proc_name))
@@ -131,7 +131,7 @@ static Result prim_go(Evaluator *eval, int argc, Value *args)
     }
     
     // Return RESULT_GOTO with the label name
-    // The label will be found and jumped to by eval_run_list_with_tco
+    // The label will be found and jumped to by step_proc_call
     const char *label = mem_word_ptr(args[0].as.node);
     return result_goto(label);
 }

@@ -57,6 +57,7 @@ if(NOT BUILD_TESTING AND NOT BUILD_FOR_HOST)
 add_library(logo_core
     core/error.c
     core/eval.c
+    core/eval_ops.c
     core/format.c
     core/frame.c
     core/frame_arena.c
@@ -113,6 +114,12 @@ endif()
 # Allow LOGO_EDITOR_BUFFER_SIZE to be set via CMake cache variable
 if(DEFINED LOGO_EDITOR_BUFFER_SIZE)
     target_compile_definitions(logo_core PUBLIC LOGO_EDITOR_BUFFER_SIZE=${LOGO_EDITOR_BUFFER_SIZE})
+endif()
+
+# Allow LOGO_OP_STACK_DEPTH to be set via CMake cache variable
+# Controls max depth of the evaluator operation stack (default 256)
+if(DEFINED LOGO_OP_STACK_DEPTH)
+    target_compile_definitions(logo_core PUBLIC MAX_OP_STACK_DEPTH=${LOGO_OP_STACK_DEPTH})
 endif()
 
 # WiFi support (only for Pico W boards)
@@ -195,9 +202,7 @@ if(DEFINED LOGO_COPY_BUFFER_SIZE)
 endif()
 
 # Set C stack size (default Pico SDK is 0x800 = 2KB)
-# Default to 4KB.
-# Note: this project uses a custom linker script that places the core 0 stack in main RAM,
-# so the stack size is no longer constrained by the 4KB SCRATCH_Y region.
+# Default to 4KB. With the explicit operation stack, C stack usage is minimal.
 if(DEFINED PICO_STACK_SIZE)
     target_compile_definitions(pico-logo PRIVATE PICO_STACK_SIZE=${PICO_STACK_SIZE})
 else()
@@ -205,14 +210,6 @@ else()
 endif()
 
 target_link_options(pico-logo PRIVATE -Wl,--print-memory-usage)
-
-# Use project-local memmap to place the core 0 stack in main RAM (not SCRATCH_Y).
-# This frees SCRATCH_Y for other uses while keeping the default stack size policy.
-if(PICO_RP2040)
-    pico_set_linker_script(pico-logo ${CMAKE_CURRENT_LIST_DIR}/linker/rp2040/memmap_default_stack_in_ram.ld)
-elseif(PICO_RP2350)
-    pico_set_linker_script(pico-logo ${CMAKE_CURRENT_LIST_DIR}/linker/rp2350/memmap_default_stack_in_ram.ld)
-endif()
 
 pico_add_extra_outputs(pico-logo)
 
@@ -242,6 +239,7 @@ if(BUILD_FOR_HOST)
     add_library(logo_core
         core/error.c
         core/eval.c
+        core/eval_ops.c
         core/format.c
         core/frame.c
         core/frame_arena.c
@@ -300,6 +298,11 @@ if(BUILD_FOR_HOST)
     target_include_directories(logo PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
     )
+
+    # Allow LOGO_OP_STACK_DEPTH to be set via CMake cache variable
+    if(DEFINED LOGO_OP_STACK_DEPTH)
+        target_compile_definitions(logo_core PUBLIC MAX_OP_STACK_DEPTH=${LOGO_OP_STACK_DEPTH})
+    endif()
 endif()
 
 # ============================================================================
@@ -354,6 +357,7 @@ if(BUILD_TESTING)
     add_library(logo_core
         ${CMAKE_CURRENT_SOURCE_DIR}/core/error.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/eval.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/eval_ops.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/format.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/frame.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/frame_arena.c
@@ -397,6 +401,11 @@ if(BUILD_TESTING)
     )
 
     target_link_libraries(logo_core logo_devices m)
+
+    # Allow LOGO_OP_STACK_DEPTH to be set via CMake cache variable
+    if(DEFINED LOGO_OP_STACK_DEPTH)
+        target_compile_definitions(logo_core PUBLIC MAX_OP_STACK_DEPTH=${LOGO_OP_STACK_DEPTH})
+    endif()
 
     # Include the tests subdirectory
     add_subdirectory(tests)
