@@ -156,6 +156,17 @@ extern "C"
     } FrameStack;
 
     //==========================================================================
+    // Frame Stack Snapshot (for save/restore during pause)
+    //==========================================================================
+
+    // Snapshot of frame stack state for save/restore
+    typedef struct {
+        word_offset_t current;     // Saved current frame offset
+        word_offset_t arena_top;   // Saved arena top position
+        int depth;                 // Saved frame depth
+    } FrameStackSnapshot;
+
+    //==========================================================================
     // Frame Stack Operations
     //==========================================================================
 
@@ -165,6 +176,12 @@ extern "C"
 
     // Reset the frame stack (pop all frames)
     void frame_stack_reset(FrameStack *stack);
+
+    // Save a snapshot of the current frame stack state
+    FrameStackSnapshot frame_stack_snapshot(FrameStack *stack);
+
+    // Restore frame stack to a previously saved snapshot
+    void frame_stack_restore(FrameStack *stack, FrameStackSnapshot snapshot);
 
     // Check if the frame stack is empty
     bool frame_stack_is_empty(FrameStack *stack);

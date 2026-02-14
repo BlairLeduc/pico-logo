@@ -241,6 +241,26 @@ void test_output_in_pig_latin_procedure(void)
 
 // --- IF error cases ---
 
+void test_if_list_with_print_empty_then_stop(void)
+{
+    // Bug: if empty? :thing [pr [] stop] was printing "stop" instead of
+    // printing an empty list and then stopping. The empty list [] in the
+    // instruction list was not being handled as a pre-parsed sublist,
+    // causing parse_list to consume "stop" as part of the list.
+    run_string("make \"thing []");
+    Result r = run_string("if empty? :thing [pr [] stop]");
+    TEST_ASSERT_EQUAL(RESULT_STOP, r.status);
+    TEST_ASSERT_EQUAL_STRING("\n", output_buffer);
+}
+
+void test_if_list_with_empty_list_arg(void)
+{
+    // Verify that an empty list literal works as a primitive argument
+    // inside an instruction list evaluated by if
+    run_string("if true [print count []]");
+    TEST_ASSERT_EQUAL_STRING("0\n", output_buffer);
+}
+
 void test_if_non_boolean_predicate_error(void)
 {
     // if with non-boolean predicate should error
@@ -456,6 +476,8 @@ int main(void)
     RUN_TEST(test_output_with_recursive_call_in_if);
     RUN_TEST(test_output_in_recursive_procedure);
     RUN_TEST(test_output_in_pig_latin_procedure);
+    RUN_TEST(test_if_list_with_print_empty_then_stop);
+    RUN_TEST(test_if_list_with_empty_list_arg);
     RUN_TEST(test_if_non_boolean_predicate_error);
     RUN_TEST(test_if_number_predicate_error);
     RUN_TEST(test_if_list_predicate_error);

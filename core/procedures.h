@@ -108,6 +108,18 @@ extern "C"
     // Call this after errors or when returning to top level unexpectedly
     void proc_reset_execution_state(void);
 
+    // Snapshot of procedure execution state for save/restore during pause
+    typedef struct {
+        FrameStackSnapshot frame_snapshot;
+        int proc_depth;
+    } ProcExecSnapshot;
+
+    // Save current procedure execution state (for pause REPL error recovery)
+    ProcExecSnapshot proc_save_execution_state(void);
+
+    // Restore procedure execution state to a previously saved snapshot
+    void proc_restore_execution_state(ProcExecSnapshot snapshot);
+
     // Parse and define a procedure from text: "to name :param ... body ... end"
     // Returns a Result - RESULT_NONE on success, RESULT_ERROR on failure
     Result proc_define_from_text(const char *text);

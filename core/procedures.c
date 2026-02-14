@@ -343,6 +343,21 @@ void proc_reset_execution_state(void)
     frame_stack_reset(&global_frame_stack);
 }
 
+ProcExecSnapshot proc_save_execution_state(void)
+{
+    return (ProcExecSnapshot){
+        .frame_snapshot = frame_stack_snapshot(&global_frame_stack),
+        .proc_depth = current_proc_depth,
+    };
+}
+
+void proc_restore_execution_state(ProcExecSnapshot snapshot)
+{
+    proc_clear_tail_call();
+    frame_stack_restore(&global_frame_stack, snapshot.frame_snapshot);
+    current_proc_depth = snapshot.proc_depth;
+}
+
 // Mark all procedure bodies as GC roots
 void proc_gc_mark_all(void)
 {

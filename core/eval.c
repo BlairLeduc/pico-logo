@@ -352,10 +352,11 @@ static Result eval_primary(Evaluator *eval)
         
         // Check if this is a pre-parsed sublist from NodeIterator
         // This happens when the source list has nested list nodes, not flat [ ] tokens
-        Node sublist = token_source_get_sublist(&eval->token_source);
-        if (!mem_is_nil(sublist))
+        // token_source_has_sublist returns true even for empty sublists (NODE_NIL)
+        if (token_source_has_sublist(&eval->token_source))
         {
             // For NodeIterator with nested list: sublist is already parsed, just use it
+            Node sublist = token_source_get_sublist(&eval->token_source);
             token_source_consume_sublist(&eval->token_source);
             // Handle the list marker wrapping
             if (NODE_GET_TYPE(sublist) == NODE_TYPE_LIST)
@@ -1027,10 +1028,10 @@ Result eval_instruction(Evaluator *eval)
             if (logo_io_check_pause_request(io))
             {
                 const char *proc_name = proc_get_current();
-                if (proc_name != NULL)
+                if (proc_name != NULL && io->console)
                 {
                     logo_io_clear_pause_request(io);
-                    logo_io_write_line(io, "Pausing...");
+                    logo_io_console_write_line(io, "Pausing...");
                     
                     ReplState state;
                     if (repl_init(&state, io, REPL_FLAGS_PAUSE, proc_name))
@@ -1043,6 +1044,12 @@ Result eval_instruction(Evaluator *eval)
                             return r;
                         }
                     }
+                }
+                else
+                {
+                    // Not in a procedure or no console — clear flag since we're
+                    // already in a freeze; the flag isn't useful when deferred
+                    logo_io_clear_pause_request(io);
                 }
                 // After pause REPL exits, continue execution
                 freeze_done = true;
@@ -1066,17 +1073,16 @@ Result eval_instruction(Evaluator *eval)
     }
 
     // Check for pause request (F9 key) - only works inside a procedure
-    // We check if the flag is set, but only clear it if we actually pause
     if (io && logo_io_check_pause_request(io))
     {
         const char *proc_name = proc_get_current();
-        if (proc_name != NULL)
+        if (proc_name != NULL && io->console)
         {
             // Clear the flag now that we're actually pausing
             logo_io_clear_pause_request(io);
             
             // Run the pause REPL - this blocks until co is called or throw "toplevel
-            logo_io_write_line(io, "Pausing...");
+            logo_io_console_write_line(io, "Pausing...");
             
             ReplState state;
             if (repl_init(&state, io, REPL_FLAGS_PAUSE, proc_name))
@@ -1092,7 +1098,7 @@ Result eval_instruction(Evaluator *eval)
             }
             // Otherwise continue execution
         }
-        // Don't clear flag if at top level - defer to when we're inside a procedure
+        // If not in a procedure, defer — flag stays set until we enter one
     }
 
     if (eval_at_end(eval))

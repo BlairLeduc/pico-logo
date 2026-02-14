@@ -194,6 +194,7 @@ void token_source_init_list(TokenSource *ts, Node list)
     ts->type = TOKEN_SOURCE_NODE_ITERATOR;
     ts->node_iter.current = list;
     ts->node_iter.pending_sublist = NODE_NIL;
+    ts->node_iter.has_pending_sublist = false;
     ts->node_iter.has_peeked = false;
     ts->node_iter.previous_was_delimiter = true;  // Start of list acts like delimiter
     ts->has_current = false;
@@ -248,6 +249,7 @@ static Token node_iter_next(NodeIterator *iter)
         // Store the sublist for the evaluator to retrieve via token_source_get_sublist()
         // Return TOKEN_LEFT_BRACKET to signal a list literal
         iter->pending_sublist = element;
+        iter->has_pending_sublist = true;
         iter->previous_was_delimiter = true;
         return (Token){TOKEN_LEFT_BRACKET, NULL, 0};
     }
@@ -302,6 +304,16 @@ void token_source_copy(TokenSource *dest, const TokenSource *src)
     // For node iterator, the struct is copied by value
 }
 
+// Check if a sublist is pending (including empty lists)
+bool token_source_has_sublist(TokenSource *ts)
+{
+    if (ts->type == TOKEN_SOURCE_NODE_ITERATOR)
+    {
+        return ts->node_iter.has_pending_sublist;
+    }
+    return false;
+}
+
 // Get pending sublist (after TOKEN_LEFT_BRACKET from NodeIterator)
 Node token_source_get_sublist(TokenSource *ts)
 {
@@ -318,6 +330,7 @@ void token_source_consume_sublist(TokenSource *ts)
     if (ts->type == TOKEN_SOURCE_NODE_ITERATOR)
     {
         ts->node_iter.pending_sublist = NODE_NIL;
+        ts->node_iter.has_pending_sublist = false;
         // Also clear the cached current token since we've consumed the bracket
         ts->has_current = false;
     }
@@ -340,6 +353,7 @@ void token_source_set_position(TokenSource *ts, Node position)
     {
         ts->node_iter.current = position;
         ts->node_iter.pending_sublist = NODE_NIL;
+        ts->node_iter.has_pending_sublist = false;
         ts->node_iter.has_peeked = false;
         ts->node_iter.previous_was_delimiter = true;
         ts->has_current = false;

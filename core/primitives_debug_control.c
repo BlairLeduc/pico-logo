@@ -94,7 +94,7 @@ static Result prim_pause(Evaluator *eval, int argc, Value *args)
         return result_none();
     }
     
-    logo_io_write_line(io, "Pausing...");
+    logo_io_console_write_line(io, "Pausing...");
     
     ReplState state;
     if (!repl_init(&state, io, REPL_FLAGS_PAUSE, proc_name))
