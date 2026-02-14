@@ -95,6 +95,14 @@ uint8_t screen_gfx_get_point(float x, float y);
 void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, bool reverse);
 void screen_gfx_fill(float x, float y, uint8_t colour);
 void screen_gfx_update(void);
+
+// Dirty rectangle tracking — mark a range of rows as needing re-blit.
+// y_min and y_max are inclusive row indices in [0, SCREEN_HEIGHT-1].
+// Callers that write directly to screen_gfx_frame() must call this.
+void screen_gfx_mark_dirty(uint16_t y_min, uint16_t y_max);
+
+// Mark the entire graphics buffer as dirty (e.g. after palette change).
+void screen_gfx_mark_all_dirty(void);
 int screen_gfx_save(const char *filename);
 int screen_gfx_load(const char *filename);
 

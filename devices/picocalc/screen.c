@@ -49,6 +49,13 @@ static uint8_t screen_mode = SCREEN_MODE_TXT;
 // Graphics boundary mode (for turtle graphics)
 static ScreenBoundaryMode screen_boundary_mode = SCREEN_BOUNDARY_WRAP;
 
+// Dirty rectangle tracking for efficient screen updates.
+// Only full-width row ranges are tracked (x is always 0..SCREEN_WIDTH-1).
+// When dirty is true, rows dirty_y_min..dirty_y_max (inclusive) need blitting.
+static bool gfx_dirty = false;
+static uint16_t dirty_y_min = 0;
+static uint16_t dirty_y_max = 0;
+
 // Text state
 static const font_t *screen_font = &logo_font;       // Default font for text mode
 static uint16_t text_row = 0;                        // The last row written to in text mode
@@ -213,12 +220,14 @@ void screen_set_mode(uint8_t mode)
             // In full-screen graphics mode, we clear the screen
             lcd_erase_cursor();
             lcd_define_scrolling(0, 0); // No scrolling area in full-screen graphics mode
+            screen_gfx_mark_all_dirty();  // Force full blit on mode switch
             screen_gfx_update();
         }
         else if (mode == SCREEN_MODE_SPLIT)
         {
             lcd_erase_cursor();
             lcd_define_scrolling(SCREEN_SPLIT_GFX_HEIGHT, 0); // Set scrolling area for text at the bottom
+            screen_gfx_mark_all_dirty();  // Force full blit on mode switch
             screen_gfx_update();
             screen_txt_update();
         }
@@ -284,6 +293,32 @@ uint8_t *screen_gfx_frame()
     return gfx_buffer;
 }
 
+// Mark a range of rows as dirty (need re-blitting to LCD).
+// y_min and y_max are inclusive row indices in [0, SCREEN_HEIGHT-1].
+void screen_gfx_mark_dirty(uint16_t y_min, uint16_t y_max)
+{
+    // Clamp to valid range
+    if (y_max >= SCREEN_HEIGHT) y_max = SCREEN_HEIGHT - 1;
+    if (y_min >= SCREEN_HEIGHT) return;  // Nothing to mark
+
+    if (!gfx_dirty) {
+        dirty_y_min = y_min;
+        dirty_y_max = y_max;
+        gfx_dirty = true;
+    } else {
+        if (y_min < dirty_y_min) dirty_y_min = y_min;
+        if (y_max > dirty_y_max) dirty_y_max = y_max;
+    }
+}
+
+// Mark the entire graphics buffer as dirty.
+void screen_gfx_mark_all_dirty(void)
+{
+    dirty_y_min = 0;
+    dirty_y_max = SCREEN_HEIGHT - 1;
+    gfx_dirty = true;
+}
+
 // Clear the graphics buffer
 void screen_gfx_clear(void)
 {
@@ -298,6 +333,9 @@ void screen_gfx_clear(void)
         // Clear the graphics area in split mode
         lcd_solid_rectangle(background, 0, 0, SCREEN_WIDTH, SCREEN_SPLIT_GFX_HEIGHT);
     }
+
+    // Buffer and LCD are now in sync — reset dirty state
+    gfx_dirty = false;
 }
 
 // Draw a point in the graphics buffer
@@ -323,6 +361,7 @@ void screen_gfx_set_point(float x, float y, uint8_t colour)
     }
 
     gfx_buffer[pixel_y * SCREEN_WIDTH + pixel_x] = colour;
+    screen_gfx_mark_dirty(pixel_y, pixel_y);
 }
 
 uint8_t screen_gfx_get_point(float x, float y)
@@ -372,6 +411,7 @@ void screen_gfx_reverse_point(float x, float y)
 
     uint8_t *pixel = &gfx_buffer[pixel_y * SCREEN_WIDTH + pixel_x];
     *pixel = (*pixel == GFX_DEFAULT_BACKGROUND) ? foreground : GFX_DEFAULT_BACKGROUND;
+    screen_gfx_mark_dirty(pixel_y, pixel_y);
 }
 
 // Draw a line in the graphics buffer using Bresenham's algorithm
@@ -397,6 +437,32 @@ void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, boo
 
     int x = ix1;
     int y = iy1;
+
+    // Pre-compute y dirty range from endpoints.
+    // In wrap mode the actual pixel rows are computed per-pixel, so we may
+    // under-estimate; the PLOT_PIXEL macro handles the rest.
+    // In clip/fence mode we can clamp.
+    {
+        int y_lo = (iy1 < iy2) ? iy1 : iy2;
+        int y_hi = (iy1 > iy2) ? iy1 : iy2;
+        if (screen_boundary_mode == SCREEN_BOUNDARY_WRAP) {
+            // Wrapping may scatter pixels, but if the line fits on screen
+            // then the endpoint range is correct. For lines that wrap we
+            // fall back to marking per-pixel inside PLOT_PIXEL.
+            if (y_lo >= 0 && y_hi < SCREEN_HEIGHT) {
+                screen_gfx_mark_dirty(y_lo, y_hi);
+            } else {
+                // Line wraps — mark everything dirty
+                screen_gfx_mark_dirty(0, SCREEN_HEIGHT - 1);
+            }
+        } else {
+            if (y_lo < 0) y_lo = 0;
+            if (y_hi >= SCREEN_HEIGHT) y_hi = SCREEN_HEIGHT - 1;
+            if (y_lo <= y_hi) {
+                screen_gfx_mark_dirty(y_lo, y_hi);
+            }
+        }
+    }
 
     // Helper macro to plot a pixel with boundary handling
     #define PLOT_PIXEL(px, py) do { \
@@ -512,6 +578,7 @@ void screen_gfx_fill(float x, float y, uint8_t colour)
     {
         row[i] = colour;
     }
+    screen_gfx_mark_dirty(start_y, start_y);
 
     // Push spans above and below to process
     if (start_y > 0)
@@ -570,6 +637,7 @@ void screen_gfx_fill(float x, float y, uint8_t colour)
             {
                 row[i] = colour;
             }
+            screen_gfx_mark_dirty(y, y);
 
             // Push span in same direction
             int next_y = y + dir;
@@ -597,17 +665,35 @@ void screen_gfx_fill(float x, float y, uint8_t colour)
     }
 }
 
-// Write the frame buffer to the LCD display
+// Write the dirty region of the frame buffer to the LCD display.
+// If no rows are dirty, this is a no-op.
 void screen_gfx_update(void)
 {
+    if (!gfx_dirty)
+        return;  // Nothing changed since last update
+
+    uint16_t y_min = dirty_y_min;
+    uint16_t y_max = dirty_y_max;
+
+    // Reset dirty state before blitting (so new writes during blit are tracked)
+    gfx_dirty = false;
+
     if (screen_mode == SCREEN_MODE_GFX)
     {
-        lcd_blit(gfx_buffer, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+        // Clamp to screen bounds (should already be, but be safe)
+        if (y_max >= SCREEN_HEIGHT) y_max = SCREEN_HEIGHT - 1;
+        lcd_blit(gfx_buffer + y_min * SCREEN_WIDTH,
+                 0, y_min, SCREEN_WIDTH, y_max - y_min + 1);
     }
     else if (screen_mode == SCREEN_MODE_SPLIT)
     {
-        // Blit the graphics area only
-        lcd_blit(gfx_buffer, 0, 0, SCREEN_WIDTH, SCREEN_SPLIT_GFX_HEIGHT);
+        // Only blit the graphics portion (top SCREEN_SPLIT_GFX_HEIGHT rows)
+        if (y_min >= SCREEN_SPLIT_GFX_HEIGHT)
+            return;  // Dirty region is entirely in the text area
+        if (y_max >= SCREEN_SPLIT_GFX_HEIGHT)
+            y_max = SCREEN_SPLIT_GFX_HEIGHT - 1;
+        lcd_blit(gfx_buffer + y_min * SCREEN_WIDTH,
+                 0, y_min, SCREEN_WIDTH, y_max - y_min + 1);
     }
     // In text mode, we don't update the display
 }
@@ -819,6 +905,7 @@ int screen_gfx_load(const char *filename)
     }
 
     fat32_close(&file);
+    screen_gfx_mark_all_dirty();  // Entire buffer was replaced
     return 0;
 }
 

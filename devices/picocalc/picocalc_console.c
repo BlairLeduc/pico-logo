@@ -353,6 +353,17 @@ static void turtle_erase(void)
                 screen_gfx_frame()[sy * SCREEN_WIDTH + sx] = turtle_background_shape0[row][col];
             }
         }
+        // Mark the rows touched by the erased turtle region
+        {
+            int y0 = wrap_coord(turtle_bg_saved_y, SCREEN_HEIGHT);
+            int y1 = wrap_coord(turtle_bg_saved_y + SHAPE0_BG_SIZE - 1, SCREEN_HEIGHT);
+            if (y0 <= y1)
+                screen_gfx_mark_dirty(y0, y1);
+            else {
+                screen_gfx_mark_dirty(y0, SCREEN_HEIGHT - 1);
+                screen_gfx_mark_dirty(0, y1);
+            }
+        }
     }
     else
     {
@@ -363,6 +374,17 @@ static void turtle_erase(void)
                 int sx = wrap_coord(turtle_bg_saved_x + col, SCREEN_WIDTH);
                 int sy = wrap_coord(turtle_bg_saved_y + row, SCREEN_HEIGHT);
                 screen_gfx_frame()[sy * SCREEN_WIDTH + sx] = turtle_background_bitmap[row][col];
+            }
+        }
+        // Mark the rows touched by the erased turtle region
+        {
+            int y0 = wrap_coord(turtle_bg_saved_y, SCREEN_HEIGHT);
+            int y1 = wrap_coord(turtle_bg_saved_y + BITMAP_BG_SIZE - 1, SCREEN_HEIGHT);
+            if (y0 <= y1)
+                screen_gfx_mark_dirty(y0, y1);
+            else {
+                screen_gfx_mark_dirty(y0, SCREEN_HEIGHT - 1);
+                screen_gfx_mark_dirty(0, y1);
             }
         }
     }
@@ -425,6 +447,18 @@ static void turtle_draw_bitmap_shape(void)
                 int sy = wrap_coord(base_y + row, SCREEN_HEIGHT);
                 screen_gfx_frame()[sy * SCREEN_WIDTH + sx] = turtle_colour;
             }
+        }
+    }
+
+    // Mark dirty rows for the bitmap shape region
+    {
+        int y0 = wrap_coord(base_y, SCREEN_HEIGHT);
+        int y1 = wrap_coord(base_y + 15, SCREEN_HEIGHT);
+        if (y0 <= y1)
+            screen_gfx_mark_dirty(y0, y1);
+        else {
+            screen_gfx_mark_dirty(y0, SCREEN_HEIGHT - 1);
+            screen_gfx_mark_dirty(0, y1);
         }
     }
 }
@@ -706,6 +740,7 @@ static void turtle_set_bg_colour(uint8_t slot)
     palette_value = lcd_get_palette_value(slot);
     lcd_set_palette_value(PALETTE_FG, palette_value);
 
+    screen_gfx_mark_all_dirty();  // Palette changed — entire buffer needs re-blit
     screen_gfx_update();
     screen_txt_update();
 }
@@ -841,6 +876,7 @@ static int turtle_gfx_load(const char *filename)
 static void turtle_set_palette(uint8_t slot, uint8_t r, uint8_t g, uint8_t b)
 {
     lcd_set_palette_rgb(slot, r, g, b);
+    screen_gfx_mark_all_dirty();  // Palette changed — entire buffer needs re-blit
     screen_gfx_update();
     screen_txt_update();
 }
@@ -855,6 +891,7 @@ static void turtle_restore_palette(void)
     lcd_restore_palette();
     turtle_set_bg_colour(background_colour);
     
+    screen_gfx_mark_all_dirty();  // Palette changed — entire buffer needs re-blit
     screen_gfx_update();
     screen_txt_update();
 }
