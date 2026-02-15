@@ -1684,12 +1684,12 @@ static Result step_while(Evaluator *eval, EvalOp *op)
         if (child_r.status != RESULT_OK)
         {
             op_stack_pop(eval->op_stack);
-            return result_error_arg(ERR_NOT_BOOL, NULL, NULL);
+            return result_error_arg(ERR_NOT_BOOL, "while", NULL);
         }
         if (!value_is_word(child_r.value))
         {
             op_stack_pop(eval->op_stack);
-            return result_error_arg(ERR_NOT_BOOL, NULL, value_to_string(child_r.value));
+            return result_error_arg(ERR_NOT_BOOL, "while", value_to_string(child_r.value));
         }
         const char *str = value_to_string(child_r.value);
         if (strcasecmp(str, "true") == 0)
@@ -1712,7 +1712,7 @@ static Result step_while(Evaluator *eval, EvalOp *op)
         else
         {
             op_stack_pop(eval->op_stack);
-            return result_error_arg(ERR_NOT_BOOL, NULL, str);
+            return result_error_arg(ERR_NOT_BOOL, "while", str);
         }
     }
 
@@ -1762,12 +1762,12 @@ static Result step_until(Evaluator *eval, EvalOp *op)
         if (child_r.status != RESULT_OK)
         {
             op_stack_pop(eval->op_stack);
-            return result_error_arg(ERR_NOT_BOOL, NULL, NULL);
+            return result_error_arg(ERR_NOT_BOOL, "until", NULL);
         }
         if (!value_is_word(child_r.value))
         {
             op_stack_pop(eval->op_stack);
-            return result_error_arg(ERR_NOT_BOOL, NULL, value_to_string(child_r.value));
+            return result_error_arg(ERR_NOT_BOOL, "until", value_to_string(child_r.value));
         }
         const char *str = value_to_string(child_r.value);
         if (strcasecmp(str, "true") == 0)
@@ -1791,7 +1791,7 @@ static Result step_until(Evaluator *eval, EvalOp *op)
         else
         {
             op_stack_pop(eval->op_stack);
-            return result_error_arg(ERR_NOT_BOOL, NULL, str);
+            return result_error_arg(ERR_NOT_BOOL, "until", str);
         }
     }
 
@@ -1862,12 +1862,12 @@ static Result step_do_while(Evaluator *eval, EvalOp *op)
         if (child_r.status != RESULT_OK)
         {
             op_stack_pop(eval->op_stack);
-            return result_error_arg(ERR_NOT_BOOL, NULL, NULL);
+            return result_error_arg(ERR_NOT_BOOL, "do.while", NULL);
         }
         if (!value_is_word(child_r.value))
         {
             op_stack_pop(eval->op_stack);
-            return result_error_arg(ERR_NOT_BOOL, NULL, value_to_string(child_r.value));
+            return result_error_arg(ERR_NOT_BOOL, "do.while", value_to_string(child_r.value));
         }
         const char *str = value_to_string(child_r.value);
         if (strcasecmp(str, "false") == 0)
@@ -1883,7 +1883,7 @@ static Result step_do_while(Evaluator *eval, EvalOp *op)
         else
         {
             op_stack_pop(eval->op_stack);
-            return result_error_arg(ERR_NOT_BOOL, NULL, str);
+            return result_error_arg(ERR_NOT_BOOL, "do.while", str);
         }
     }
 
@@ -1941,12 +1941,12 @@ static Result step_do_until(Evaluator *eval, EvalOp *op)
         if (child_r.status != RESULT_OK)
         {
             op_stack_pop(eval->op_stack);
-            return result_error_arg(ERR_NOT_BOOL, NULL, NULL);
+            return result_error_arg(ERR_NOT_BOOL, "do.until", NULL);
         }
         if (!value_is_word(child_r.value))
         {
             op_stack_pop(eval->op_stack);
-            return result_error_arg(ERR_NOT_BOOL, NULL, value_to_string(child_r.value));
+            return result_error_arg(ERR_NOT_BOOL, "do.until", value_to_string(child_r.value));
         }
         const char *str = value_to_string(child_r.value);
         if (strcasecmp(str, "true") == 0)
@@ -1962,7 +1962,7 @@ static Result step_do_until(Evaluator *eval, EvalOp *op)
         else
         {
             op_stack_pop(eval->op_stack);
-            return result_error_arg(ERR_NOT_BOOL, NULL, str);
+            return result_error_arg(ERR_NOT_BOOL, "do.until", str);
         }
     }
 

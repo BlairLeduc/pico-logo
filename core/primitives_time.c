@@ -142,14 +142,14 @@ static Result prim_setdate(Evaluator *eval, int argc, Value *args)
 
     if (mem_is_nil(list))
     {
-        return result_error_arg(ERR_TOO_FEW_ITEMS, "setdate", NULL);
+        return result_error_arg(ERR_TOO_FEW_ITEMS, "setdate", value_to_string(args[0]));
     }
     Node second = mem_car(list);
     list = mem_cdr(list);
 
     if (mem_is_nil(list))
     {
-        return result_error_arg(ERR_TOO_FEW_ITEMS, "setdate", NULL);
+        return result_error_arg(ERR_TOO_FEW_ITEMS, "setdate", value_to_string(args[0]));
     }
     Node third = mem_car(list);
     list = mem_cdr(list);
@@ -219,14 +219,14 @@ static Result prim_settime(Evaluator *eval, int argc, Value *args)
 
     if (mem_is_nil(list))
     {
-        return result_error_arg(ERR_TOO_FEW_ITEMS, "settime", NULL);
+        return result_error_arg(ERR_TOO_FEW_ITEMS, "settime", value_to_string(args[0]));
     }
     Node second_node = mem_car(list);
     list = mem_cdr(list);
 
     if (mem_is_nil(list))
     {
-        return result_error_arg(ERR_TOO_FEW_ITEMS, "settime", NULL);
+        return result_error_arg(ERR_TOO_FEW_ITEMS, "settime", value_to_string(args[0]));
     }
     Node third = mem_car(list);
     list = mem_cdr(list);

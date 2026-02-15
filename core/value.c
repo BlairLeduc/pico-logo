@@ -183,7 +183,7 @@ bool value_extract_xy(Value list, float *x, float *y, Result *error)
     Node node = list.as.node;
     if (mem_is_nil(node))
     {
-        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, NULL, NULL);
+        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, NULL, value_to_string(list));
         return false;
     }
 
@@ -192,7 +192,7 @@ bool value_extract_xy(Value list, float *x, float *y, Result *error)
     
     if (mem_is_nil(node))
     {
-        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, NULL, NULL);
+        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, NULL, value_to_string(list));
         return false;
     }
     
@@ -225,7 +225,7 @@ bool value_extract_rgb(Value list, uint8_t *r, uint8_t *g, uint8_t *b, Result *e
     Node node = list.as.node;
     if (mem_is_nil(node))
     {
-        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, NULL, NULL);
+        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, NULL, value_to_string(list));
         return false;
     }
 
@@ -234,7 +234,7 @@ bool value_extract_rgb(Value list, uint8_t *r, uint8_t *g, uint8_t *b, Result *e
     
     if (mem_is_nil(node))
     {
-        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, NULL, NULL);
+        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, NULL, value_to_string(list));
         return false;
     }
     
@@ -243,7 +243,7 @@ bool value_extract_rgb(Value list, uint8_t *r, uint8_t *g, uint8_t *b, Result *e
     
     if (mem_is_nil(node))
     {
-        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, NULL, NULL);
+        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, NULL, value_to_string(list));
         return false;
     }
     
