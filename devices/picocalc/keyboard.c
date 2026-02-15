@@ -189,6 +189,9 @@ char keyboard_peek_key()
 
 char keyboard_get_key()
 {
+    // Flush any pending graphics before blocking on keyboard input
+    screen_gfx_flush();
+
     // Wait for a key, running the screen saver while idle
     while (!keyboard_key_available())
     {

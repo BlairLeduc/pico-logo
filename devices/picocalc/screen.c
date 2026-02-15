@@ -56,6 +56,12 @@ static bool gfx_dirty = false;
 static uint16_t dirty_y_min = 0;
 static uint16_t dirty_y_max = 0;
 
+// 60 Hz rate limiter: minimum microseconds between LCD blits.
+// screen_gfx_update() skips the blit if called again within this interval.
+// screen_gfx_flush() always blits regardless.
+#define GFX_FRAME_INTERVAL_US 16667  // ~60 Hz
+static uint64_t last_blit_time_us = 0;
+
 // Text state
 static const font_t *screen_font = &logo_font;       // Default font for text mode
 static uint16_t text_row = 0;                        // The last row written to in text mode
@@ -665,13 +671,10 @@ void screen_gfx_fill(float x, float y, uint8_t colour)
     }
 }
 
-// Write the dirty region of the frame buffer to the LCD display.
-// If no rows are dirty, this is a no-op.
-void screen_gfx_update(void)
+// Internal: blit the current dirty region to the LCD unconditionally.
+// Assumes gfx_dirty is true. Resets dirty state and records the blit timestamp.
+static void screen_gfx_blit_dirty(void)
 {
-    if (!gfx_dirty)
-        return;  // Nothing changed since last update
-
     uint16_t y_min = dirty_y_min;
     uint16_t y_max = dirty_y_max;
 
@@ -696,6 +699,35 @@ void screen_gfx_update(void)
                  0, y_min, SCREEN_WIDTH, y_max - y_min + 1);
     }
     // In text mode, we don't update the display
+
+    last_blit_time_us = time_us_64();
+}
+
+// Write the dirty region of the frame buffer to the LCD display.
+// Rate-limited to ~60 Hz: if called within GFX_FRAME_INTERVAL_US of the
+// last blit, the dirty state is preserved and the blit is deferred.
+void screen_gfx_update(void)
+{
+    if (!gfx_dirty)
+        return;  // Nothing changed since last update
+
+    // Rate limit: skip this blit if we're within the frame interval
+    uint64_t now = time_us_64();
+    if ((now - last_blit_time_us) < GFX_FRAME_INTERVAL_US)
+        return;  // Too soon — dirty flag stays set for next call
+
+    screen_gfx_blit_dirty();
+}
+
+// Flush any pending dirty region to the LCD immediately, bypassing the
+// 60 Hz rate limiter. Call this before blocking operations (sleep, I/O)
+// to ensure the user sees the latest frame.
+void screen_gfx_flush(void)
+{
+    if (!gfx_dirty)
+        return;
+
+    screen_gfx_blit_dirty();
 }
 
 int screen_gfx_save(const char *filename)

@@ -103,6 +103,10 @@ void screen_gfx_mark_dirty(uint16_t y_min, uint16_t y_max);
 
 // Mark the entire graphics buffer as dirty (e.g. after palette change).
 void screen_gfx_mark_all_dirty(void);
+
+// Flush any pending dirty region immediately, bypassing the 60 Hz rate
+// limiter. Call before blocking operations (sleep, keyboard wait, I/O).
+void screen_gfx_flush(void);
 int screen_gfx_save(const char *filename);
 int screen_gfx_load(const char *filename);
 
