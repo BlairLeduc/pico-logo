@@ -146,6 +146,24 @@ cmake --build --preset=pico
 
 This produces `build-pico/pico-logo.uf2`.
 
+## Scripts
+
+### flash.sh
+
+A helper script to flash the Pico firmware. It uses `openocd` under the hood to program the device via SWD.
+
+```sh
+./flash.sh
+```
+
+### dist.sh
+
+A helper script to create a release files of the project, including documentation, and build artifacts. The `dist` directory is created to hold the release files.
+
+```sh
+./dist.sh
+```
+
 # About Logo
 - [Mindstorms](http://worrydream.com/refs/Papert%20-%20Mindstorms%201st%20ed.pdf) by Seymour Papert
 - [Logo's Lineage](https://www.atarimagazines.com/v2n12/logoslineage.php) by Ian Chadwick
