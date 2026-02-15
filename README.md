@@ -77,6 +77,25 @@ Many more books are freely available on the internet.
 
 The following information will allow you to configure your development environment.
 
+## Dependencies
+
+Install the following with [Homebrew](https://brew.sh/):
+
+```sh
+brew install cmake pandoc librsvg
+brew install --cask basictex
+```
+
+After installing BasicTeX, add the required LaTeX packages:
+
+```sh
+sudo tlmgr update --self
+sudo tlmgr install latexmk framed
+```
+
+> **Note:** You may need to restart your terminal after installing BasicTeX for the TeX commands to be available, or run `eval "$(/usr/libexec/path_helper)"`.
+
+
 ## Visual Studio Code
 
 Visual Studio Code is recommended to build Pico Logo. You will need the following extensions:
