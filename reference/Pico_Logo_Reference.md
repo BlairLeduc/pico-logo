@@ -418,7 +418,7 @@ You also erase procedures and variables that are only needed for startup process
 ===
 # Using the Logo Editor
 
-The Logo Editor is an interactive screen-oriented text editor, which provides a flexible way to define and change Logo instructions. The main command for starting up the Logo Editor is [`edit`](#edit).
+The Logo Editor is an interactive screen-oriented text editor, which provides a flexible way to define and change Logo instructions. The main command for starting up the Logo Editor is [`edit`](#edit-ed).
 
 ## How the editor works
 
@@ -557,7 +557,6 @@ to _name_ _input1_ _input2_ ...
 
 `to` tells Logo you are defining a procedure called _name_ with the inputs (if any) as indicated. From top level, the prompt character changes from `?` to `>` to remind you that you are defining a procedure. While you are defining a procedure, Logo does not carry out the instructions.
 
-> [!NOTE]
 > You need not put a quotation mark before name because TO puts one there automatically.
 
 To complete the procedure and return Logo to top level, type the word [`end`](#end) as the last line of the procedure. The special
@@ -797,7 +796,7 @@ towards [_xcor_ _ycor_]
 
 `operation`
 
-`towards` outputs a heading that would make the turtle face in the direction indicated by `[_xcor_ _ycor_]`.
+`towards` outputs a heading that would make the turtle face in the direction indicated by [_xcor_ _ycor_].
 
 
 ## xcor
@@ -908,7 +907,7 @@ The background colour number is 255 and the text colour number is 254. The text 
 
 The default background colour number is 74.
 
-See [Colours](Colours.md) for the default palette.
+See [Colours](#appendix-c-colour-palette-for-pico-logo) for the default palette.
 
 
 ## setpc
@@ -919,7 +918,7 @@ setpc _colournumber_
 
 The `setpc` (for set pencolor) command sets the color of the pen to _colourumber_, where _colournumber_ is a value between 0 and 255. 
 
-See [Colours](Colours.md) for the default palette.
+See [Colours](#appendix-c-colour-palette-for-pico-logo) for the default palette.
 
 
 ## setpalette
@@ -986,7 +985,7 @@ bg
 
 `background` outputs a number representing the colour of the background and is a value between 0 and 255. 
 
-See [Colours](Colours.md) for the default palette.
+See [Colours](#appendix-c-colour-palette-for-pico-logo) for the default palette.
 
 
 ## dot? (dotp)
@@ -1013,21 +1012,25 @@ pen
 pencolor  
 pc  
 
+`operation`
+
 `pencolor` outputs a number representing the current colour of the pen.
 
-See [Colours](Colours.md) for the default palette.
+See [Colours](#appendix-c-colour-palette-for-pico-logo) for the default palette.
 
 
 
 ===
 # Text and Screen Commands
 
-Your PicoCalc has 32 lines of text on the screen, with 40 characters on each line. You can use the screen entirely for text or entirely for graphics. The PicoCalc also lets you use the top 24 lines for graphics and the bottom eight for text at the same time. When you start up Logo, the entire screen is available for text. 
+Your PicoCalc has 32 lines of text on the screen, with 40 characters on each line. You can use the screen entirely for text or entirely for graphics. The PicoCalc also lets you use the top 24 lines (240 turtle units) for graphics and the bottom eight for text at the same time. When you start up Logo, the entire screen is available for text. 
 
 There are two ways to change the use of your screen:
 
 - With regular Logo commands, which you can type at top level or insert within procedures ([`fullscreen`](#fullscreen-fs), [`splitscreen`](#splitscreen-ss), and [`textscreen`](#textscreen-ts))
 - With special control characters, which are read from the keyboard and obeyed almost immediately (while a procedure continues running); these cannot be placed within procedures (`F1`–textscreen, `F2`–splitscreen, and `F3`–fullscreen).
+
+You always can use the entire text screen and the entire graphics screen at the same time, but you cannot display both at the same time. When you use the `fullscreen` command, the text screen is still there, but you can't see it until you use `textscreen` or `splitscreen`. When you use `textscreen`, the graphics screen is still there, but you can't see it until you use `fullscreen` or `splitscreen`. When you use `splitscreen`, both screens are still there, but you can only see the top 24 lines of the graphics screen (240 turtle units) and the bottom eight lines of the text screen.
 
 
 ## cleartext (ct)
@@ -1656,6 +1659,7 @@ thing _name_
 This section presents all the Logo operations that manipulate numbers. Logo has two kinds of notation for expressing arithmetic operations: prefix notation and infix notation. Prefix notation means that the name of the procedure comes before its inputs. With infix notation, the name of the procedure goes between its inputs, not before them.
 
 This chapter contains
+
 - a general introduction to Logo's arithmetic operations
 - descriptions of the prefix-form operations
 - descriptions of the infix-form operations.
@@ -2020,7 +2024,7 @@ error
 
 Logo runs `throw "error [whenever]` an error occurs during the execution of a procedure. Control passes to top level unless a `catch "error` has been run. When an error is caught in this way, no error message is printed, and you can design your own.
 
-Refer to the reference document [Error Messages](./Error_Messages.md) for a complete list of error messages and their meanings.
+Refer to the reference document [Error Messages](#appendix-b-error-messages) for a complete list of error messages and their meanings.
 
 
 ## go
@@ -2325,7 +2329,7 @@ map.se _procedure_ _data_
 
 `operation`
 
-Outputs a list formed by evaluating the _procedure_ repeatedly and concatenating the results using [`sentence`](#sentence). That is, the members of the output are the members of the results of the evaluations. The output list might, therefore, be of a different length from that of the data input(s). (If the result of an evaluation is the empty list, it contributes nothing to the final output.) The data inputs may be words or lists.
+Outputs a list formed by evaluating the _procedure_ repeatedly and concatenating the results using [`sentence`](#sentence-se). That is, the members of the output are the members of the results of the evaluations. The output list might, therefore, be of a different length from that of the data input(s). (If the result of an evaluation is the empty list, it contributes nothing to the final output.) The data inputs may be words or lists.
 
 Each data list provides one input to _procedure_ at each evaluation. Thus, if there are two data lists, _procedure_ must have two inputs; if there are three data lists, _procedure_ must have three inputs; and so on.
 
@@ -2730,7 +2734,6 @@ If one frequency is provided the same tone is produced on both left and right ch
 
 `toot` does not block. If a second `toot` is requested, Logo will wait until the previous `toot` completes. 
 
-> [!NOTE]
 > The actual frequency range is 100Hz to 2000Hz. If the input is outside this range, no tone is produced and but `toot` behaves as if a rest is requested. By convention, a rest is produced using a frequency of 0Hz.
 
 
@@ -3122,7 +3125,7 @@ save _pathname_
 
 `command`
 
-The `save` command creates a file and saves in it all unburied procedures and variables and all properties in the workspace. An error occurs if the file you name already exists. In this case, you should first either erase the existing file using [`erasefile`](#erasefile) or rename it using [`rename`](#rename).
+The `save` command creates a file and saves in it all unburied procedures and variables and all properties in the workspace. An error occurs if the file you name already exists. In this case, you should first either erase the existing file using [`erasefile`](#erasefile-erf) or rename it using [`rename`](#rename).
 
 
 ## savel
@@ -3132,7 +3135,7 @@ savel _namelist_ _pathname_
 
 `command`
 
-The `savel` command saves the procedures named in _name_ or _namelist_, and all the unburied variables and properties in the workspace to _pathname_. An error occurs if any of the procedures named in _name_ or _namelist_ do not exist in the workspace, or if the file you name already exists. In this case, you should first either erase the existing file using [`erasefile`](#erasefile) or rename it using [`rename`](#rename). This command is useful for saving a portion of your workspace onto a SD Card. Compare it with [`save`](#save).
+The `savel` command saves the procedures named in _name_ or _namelist_, and all the unburied variables and properties in the workspace to _pathname_. An error occurs if any of the procedures named in _name_ or _namelist_ do not exist in the workspace, or if the file you name already exists. In this case, you should first either erase the existing file using [`erasefile`](#erasefile-erf) or rename it using [`rename`](#rename). This command is useful for saving a portion of your workspace onto a SD Card. Compare it with [`save`](#save).
 
 
 ## loadpic
@@ -3146,7 +3149,9 @@ The `loadpic` command loads the picture named by _pathname_ onto the graphics sc
 
 ## savepic
 
-savepic _pathname_ (command)
+savepic _pathname_  
+
+`command`
 
 `savepic` saves the graphics screen into the file indicated by _pathname_. You can retrieve the screen later using [`loadpic`](#loadpic). The image is saved as a 8-bit indexed color BMP (.bmp) file.
 
@@ -3288,13 +3293,12 @@ setwrite _target_
 
 `command`
 
-`setwrite` sets the current writer to the file, network connection or the screen you name. The primitives [`print`](#print), [`type`](#type), and [`show`](#show) all print to the current writer. You cannot use `setwrite` unless the file or network connection has previously been opened.
+`setwrite` sets the current writer to the file, network connection or the screen you name. The primitives [`print`](#print-pr), [`type`](#type), and [`show`](#show) all print to the current writer. You cannot use `setwrite` unless the file or network connection has previously been opened.
 
 Before you use `setwrite`, you must open the file or network connection with the [`open`](#open) command. An error occurs if the file or network connection is not open.
 
 To restore the screen as the current writer, use the `setwrite` command with the empty list as input.
 
-> [!NOTE]
 > The commands [`po`](#po), [`poall`](#poall), [`pon`](#pon), [`pons`](#pons), [`pops`](#pops), [`pot`](#pot), [`pots`](#pots), and [`pofile`](#pofile) all print to the screen but not to the current writer.
 
 

@@ -41,8 +41,8 @@ sed -e '/^# Contents$/d' \
     --lua-filter=reference/index-filter.lua \
     -V fontsize=12pt \
     -V geometry:margin=1in \
-    -V mainfont="Helvetica" \
-    -V monofont="Menlo" \
+    -V mainfont="Charter" \
+    -V monofont="Iosevka" \
     -H dist/_header.tex \
     --syntax-highlighting=tango
 rm -f dist/Colours.pdf dist/_header.tex
