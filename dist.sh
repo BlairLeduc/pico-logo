@@ -26,6 +26,8 @@ cat > dist/_header.tex <<'EOF'
 \fancyhead[L]{\leftmark}
 \fancyhead[R]{\thepage}
 \renewcommand{\headrulewidth}{0.4pt}
+\usepackage{makeidx}
+\makeindex
 EOF
 sed -e '/^# Contents$/d' \
     -e 's/^{{TOC}}$/\\tableofcontents/' \
@@ -34,7 +36,9 @@ sed -e '/^# Contents$/d' \
     reference/Pico_Logo_Reference.md | \
     pandoc -f markdown -o dist/Pico_Logo_Reference.pdf \
     --resource-path=reference \
-    --pdf-engine=xelatex \
+    --pdf-engine=latexmk \
+    --pdf-engine-opt=-xelatex \
+    --lua-filter=reference/index-filter.lua \
     -V fontsize=12pt \
     -V geometry:margin=1in \
     -V mainfont="Helvetica" \
