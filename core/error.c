@@ -75,7 +75,7 @@ static const char *error_templates[] = {
     [ERR_CANT_ON_NETWORK] = "Can't %s on a network connection",
     [ERR_NETWORK_TIMEOUT] = "Network timeout occurred",
     [ERR_INVALID_NETWORK_OP] = "Invalid network operation",
-    [ERR_STACK_OVERFLOW] = "Stack overflow - too many nested operations",
+    [ERR_STACK_OVERFLOW] = "Too many nested operations",
 };
 
 #define NUM_ERRORS (sizeof(error_templates) / sizeof(error_templates[0]))
@@ -226,7 +226,24 @@ const char *error_format(Result r)
         break;
     }
     
-    // Fallback: return template as-is (may have unsubstituted %s)
+    // Fallback: strip any unsubstituted %s from the template
+    if (strstr(tmpl, "%s"))
+    {
+        // Copy template, replacing %s with empty string
+        size_t i = 0;
+        const char *src = tmpl;
+        while (*src && i < sizeof(buf) - 1)
+        {
+            if (src[0] == '%' && src[1] == 's')
+            {
+                src += 2;
+                continue;
+            }
+            buf[i++] = *src++;
+        }
+        buf[i] = '\0';
+        return buf;
+    }
     return tmpl;
 }
 

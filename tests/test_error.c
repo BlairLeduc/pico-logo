@@ -121,8 +121,8 @@ void test_error_format_doesnt_like_input_missing_fields(void)
     r.error_code = ERR_DOESNT_LIKE_INPUT;
     // Missing proc and arg
     
-    // Should return the raw template with %s
-    TEST_ASSERT_EQUAL_STRING("%s doesn't like %s as input", error_format(r));
+    // Should strip %s placeholders
+    TEST_ASSERT_EQUAL_STRING(" doesn't like  as input", error_format(r));
 }
 
 void test_error_format_didnt_output_to_missing_proc(void)
@@ -132,7 +132,7 @@ void test_error_format_didnt_output_to_missing_proc(void)
     r.error_code = ERR_DIDNT_OUTPUT_TO;
     // Missing proc
     
-    TEST_ASSERT_EQUAL_STRING("%s didn't output to %s", error_format(r));
+    TEST_ASSERT_EQUAL_STRING(" didn't output to ", error_format(r));
 }
 
 void test_error_format_too_few_items_missing_arg(void)
@@ -142,7 +142,7 @@ void test_error_format_too_few_items_missing_arg(void)
     r.error_code = ERR_TOO_FEW_ITEMS;
     // Missing arg
     
-    TEST_ASSERT_EQUAL_STRING("Too few items in %s", error_format(r));
+    TEST_ASSERT_EQUAL_STRING("Too few items in ", error_format(r));
 }
 
 void test_error_format_single_placeholder_missing_fields(void)
@@ -152,7 +152,7 @@ void test_error_format_single_placeholder_missing_fields(void)
     r.error_code = ERR_NOT_PROCEDURE;
     // Missing proc/arg
     
-    TEST_ASSERT_EQUAL_STRING("%s isn't a procedure", error_format(r));
+    TEST_ASSERT_EQUAL_STRING(" isn't a procedure", error_format(r));
 }
 
 void test_error_format_single_placeholder_with_caller(void)

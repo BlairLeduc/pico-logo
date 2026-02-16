@@ -10,6 +10,7 @@
 #include "southbridge.h"
 #include "audio.h"
 #include "keyboard.h"
+#include "screen.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -88,6 +89,7 @@ static int wifi_scan_callback(void *env, const cyw43_ev_scan_result_t *result)
 
 static void picocalc_sleep(int milliseconds)
 {
+    screen_gfx_flush();  // Show latest frame before blocking
     sleep_ms((uint32_t)milliseconds);
 }
 

@@ -62,6 +62,7 @@ The best place to start is the included [Pico Logo Reference](/reference/Pico_Lo
 - [Logo Physics](https://archive.org/details/logo-physics-1985) by James P. Hurley
 
 ## Advanced Logo
+- [Advanced Logo: A Language for Learning](https://www.routledge.com/Advanced-Logo-A-Language-for-Learning/Friendly/p/book/9780805800746) by Michael Friendly
 - [LogoWorks: Challenging Programs in Logo](https://logothings.github.io/logothings/logoworks/Home.html) by Cynthia Solomon, Margaret Minsky, Brian Harvey
 - [Turtle Geometry: The Computer as a Medium for Exploring Mathematics](https://direct.mit.edu/books/oa-monograph/4663/Turtle-GeometryThe-Computer-as-a-Medium-for) by Harold Abelson, Andrea diSessa
 - <ins>Computer Science Logo Style</ins> by Brian Harvey
@@ -76,6 +77,27 @@ Many more books are freely available on the internet.
 # Contributing
 
 The following information will allow you to configure your development environment.
+
+## Dependencies
+
+Install the following with [Homebrew](https://brew.sh/):
+
+```sh
+brew install cmake pandoc librsvg
+brew install --cask font-iosevka
+brew install --cask basictex
+```
+
+After installing BasicTeX, add the required LaTeX packages:
+
+```sh
+sudo tlmgr update --self
+sudo tlmgr install latexmk framed
+```
+
+> [!NOTE]
+> You may need to restart your terminal after installing BasicTeX for the TeX commands to be available, or run `eval "$(/usr/libexec/path_helper)"`.
+
 
 ## Visual Studio Code
 
@@ -145,6 +167,24 @@ cmake --build --preset=pico
 ```
 
 This produces `build-pico/pico-logo.uf2`.
+
+## Scripts
+
+### flash.sh
+
+A helper script to flash the Pico firmware. It uses `openocd` under the hood to program the device via SWD.
+
+```sh
+./flash.sh
+```
+
+### dist.sh
+
+A helper script to create a release files of the project, including documentation, and build artifacts. The `dist` directory is created to hold the release files.
+
+```sh
+./dist.sh
+```
 
 # About Logo
 - [Mindstorms](http://worrydream.com/refs/Papert%20-%20Mindstorms%201st%20ed.pdf) by Seymour Papert
