@@ -1018,7 +1018,7 @@ pc
 
 `pencolor` outputs a number representing the current colour of the pen.
 
-See [Colours](#appendix-c-colour-palette-for-pico-logo) for the default palette.
+See [Colours](#appendix-e-colour-palette-for-pico-logo) for the default palette.
 
 
 
