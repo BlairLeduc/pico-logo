@@ -7,6 +7,7 @@ to arcr :radius :degrees
 end
 
 to arcl :radius :degrees
+  ; [this is a copy of arcr with lt instead of rt]
   local "step local "rem
   make "step 2 * :radius * 3.1416 / 36
   make "rem remainder :degrees 10
