@@ -375,13 +375,15 @@ The following lists the capabilities of the different supported processors.
 - 8192 nodes for procedure and variable storage
 - 8192 characters of editor buffer
 - 1024 characters in the copy buffer
+- 32 levels of recursion
 - Software floating-point operations
 
 **RP2350** (Pico 2 family of devices):
 
 - 32768 nodes for procedure and variable storage
-- 65536 characters of editor buffer
+- 24576 characters of editor buffer
 - 8192 characters in the copy buffer
+- 192 levels of recursion (128 levels for W variants)
 - Hardware floating-point operations
 - WiFi supported on W variants
 
@@ -3586,7 +3588,7 @@ goodbye
 
 
 ===
-# Useful Tools
+# Appendix A: Useful Tools
 
 The procedures presented here are for your convenience when constructing your own procedures. Some of them were defined as examples for primitives and others appear here for the first time. These procedures are in the logo archive in the release. You can extract the contents of the archive into the `/Logo` directory on your SD Card. A sample `startup` file is also included to load these tools.
 
@@ -3648,7 +3650,7 @@ sort _arg_ _list_
 
 
 ===
-# Parsing 
+# Appendix B: Parsing 
 
 When you type a line at Logo, it recognizes the characters as words and lists, and builds a list with is Logo’s internal representation of the line. This process is called _parsing_. The list is similar to the list that would be output by `readlist`. This section will help you understand how lines are parsed. 
 
@@ -3836,8 +3838,8 @@ The parser tries to be clever about this potential ambiguity and figure out whic
   - `print - 3 4` (procedurally the same as the previous example) 
 
 
-# Appendix A: Useful Procedures
-
+===
+# Appendix C: Useful Procedures
 
 This Appendix contains procedures that are not primitives but are useful for various purposes. You can use these procedures as they are or modify them to suit your needs.
 
@@ -3891,7 +3893,8 @@ to connect
 end
 ```
 
-# Appendix B: Error Messages
+===
+# Appendix D: Error Messages
 
 |Number|Message|
 |---|---|
@@ -3961,8 +3964,8 @@ end
 ||!!! LOGO SYSTEM BUG !!! _Should not occur. Please let me know._
 
 
-
-# Appendix C: Colour Palette for Pico Logo
+===
+# Appendix E: Colour Palette for Pico Logo
 
 The following is the colour palette for Pico Logo. The palette contains 256 colours with the first 128 colours (0-127) being the standard palette and the next 128 colours can be customized by the user. The standard palette includes a range of colors from black to white, as well as various shades of red, green, blue, cyan, magenta, and yellow.
 

@@ -62,6 +62,7 @@ The best place to start is the included [Pico Logo Reference](/reference/Pico_Lo
 - [Logo Physics](https://archive.org/details/logo-physics-1985) by James P. Hurley
 
 ## Advanced Logo
+- [Advanced Logo: A Language for Learning](https://www.routledge.com/Advanced-Logo-A-Language-for-Learning/Friendly/p/book/9780805800746) by Michael Friendly
 - [LogoWorks: Challenging Programs in Logo](https://logothings.github.io/logothings/logoworks/Home.html) by Cynthia Solomon, Margaret Minsky, Brian Harvey
 - [Turtle Geometry: The Computer as a Medium for Exploring Mathematics](https://direct.mit.edu/books/oa-monograph/4663/Turtle-GeometryThe-Computer-as-a-Medium-for) by Harold Abelson, Andrea diSessa
 - <ins>Computer Science Logo Style</ins> by Brian Harvey
@@ -83,6 +84,7 @@ Install the following with [Homebrew](https://brew.sh/):
 
 ```sh
 brew install cmake pandoc librsvg
+brew install --cask font-iosevka
 brew install --cask basictex
 ```
 
@@ -93,7 +95,8 @@ sudo tlmgr update --self
 sudo tlmgr install latexmk framed
 ```
 
-> **Note:** You may need to restart your terminal after installing BasicTeX for the TeX commands to be available, or run `eval "$(/usr/libexec/path_helper)"`.
+> [!NOTE]
+> You may need to restart your terminal after installing BasicTeX for the TeX commands to be available, or run `eval "$(/usr/libexec/path_helper)"`.
 
 
 ## Visual Studio Code
