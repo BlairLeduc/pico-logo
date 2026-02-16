@@ -486,6 +486,47 @@ void test_deep_recursion_nested_in_expression(void)
     TEST_ASSERT_EQUAL_FLOAT(55.0f, r.value.as.number);
 }
 
+void test_paren_user_proc_infix_simple(void)
+{
+    // Bug: (double 3) + (double 4) should be 14
+    // When a user proc call is parenthesized in an infix expression,
+    // the closing ) must be consumed and the infix operator must be
+    // evaluated after the deferred proc call completes.
+    const char *params[] = {"n"};
+    define_proc("double", params, 1, "op :n * 2");
+
+    Result r = eval_string("(double 3) + (double 4)");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(14.0f, r.value.as.number);
+}
+
+void test_paren_user_proc_infix_in_proc(void)
+{
+    // Same as above but the expression is inside a procedure (deferred path)
+    const char *params[] = {"n"};
+    define_proc("double", params, 1, "op :n * 2");
+    define_proc("add.doubled", params, 1,
+        "op (double :n) + (double :n + 1)");
+
+    Result r = eval_string("add.doubled 3");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(14.0f, r.value.as.number);
+}
+
+void test_paren_user_proc_recursive_count_words(void)
+{
+    // Bug reproduction: count.words [[a b] [c d]] should be 4
+    const char *params[] = {"list"};
+    define_proc("count.words", params, 1,
+        "if empty? :list [op 0]\n"
+        "if word? :list [op 1]\n"
+        "op (count.words first :list) + (count.words bf :list)");
+
+    Result r = eval_string("count.words [[a b] [c d]]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(4.0f, r.value.as.number);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -547,6 +588,11 @@ int main(void)
     RUN_TEST(test_deep_recursion_100_levels);
     RUN_TEST(test_deep_recursion_print_result);
     RUN_TEST(test_deep_recursion_nested_in_expression);
+
+    // Parenthesized user proc call in infix expression
+    RUN_TEST(test_paren_user_proc_infix_simple);
+    RUN_TEST(test_paren_user_proc_infix_in_proc);
+    RUN_TEST(test_paren_user_proc_recursive_count_words);
 
     return UNITY_END();
 }

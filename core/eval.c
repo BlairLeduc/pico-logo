@@ -831,6 +831,19 @@ static Result eval_primary(Evaluator *eval)
                 // Non-self-recursive tail call - fall through to op stack
             }
 
+            // Consume closing paren of (proc args) call.
+            // Must happen before deferring so that the saved token source
+            // is past the ')' and the infix expression parser can see
+            // operators that follow, e.g. (f :x) + (g :y).
+            {
+                Token closing = peek(eval);
+                if (closing.type == TOKEN_RIGHT_PAREN)
+                {
+                    advance(eval);
+                }
+                eval->paren_depth--;
+            }
+
             // Inside a procedure and not collecting user proc args: push
             // OP_PROC_CALL on the op stack. The trampoline handles it
             // asynchronously.  When inside a primitive's arg expression,
@@ -906,14 +919,12 @@ static Result eval_expr_bp(Evaluator *eval, int min_bp)
 
     Result lhs = eval_primary(eval);
 
-    // If eval_primary pushed a deferred proc call, save expression state
+    // If eval_primary pushed a deferred proc call, save expression state.
+    // Always push OP_EXPR_EVAL so the infix loop can resume after the
+    // deferred call completes — there may be infix operators following
+    // the primary expression (e.g. (f :x) + (g :y)).
     if (lhs.status == RESULT_NONE && op_stack_depth(eval->op_stack) > depth_before_primary)
     {
-        // When depth == 0 (no pending infix operators), OP_EXPR_EVAL would be
-        // a no-op pass-through, so skip it and save an op stack slot per level.
-        if (depth == 0)
-            return result_none();
-
         // Push OP_EXPR_EVAL above the OP_PROC_CALL, then swap so it's below.
         // Stack order: ... → OP_EXPR_EVAL → OP_PROC_CALL (top)
         // Trampoline runs OP_PROC_CALL first, result flows to OP_EXPR_EVAL.
@@ -924,7 +935,7 @@ static Result eval_expr_bp(Evaluator *eval, int min_bp)
         expr_op->flags = OP_FLAG_NONE;
         expr_op->saved_source = eval->token_source;
         expr_op->result = result_none();
-        expr_op->expr_eval.depth = depth;  // 0 — no pending ops yet
+        expr_op->expr_eval.depth = depth;
         expr_op->expr_eval.min_bp = min_bp;
         expr_op->expr_eval.phase = 0;
         op_stack_swap_top(eval->op_stack);
