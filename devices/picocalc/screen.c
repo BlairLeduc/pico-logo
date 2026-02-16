@@ -227,14 +227,14 @@ void screen_set_mode(uint8_t mode)
             lcd_erase_cursor();
             lcd_define_scrolling(0, 0); // No scrolling area in full-screen graphics mode
             screen_gfx_mark_all_dirty();  // Force full blit on mode switch
-            screen_gfx_update();
+            screen_gfx_flush();           // Bypass rate limiter so mode change is visible immediately
         }
         else if (mode == SCREEN_MODE_SPLIT)
         {
             lcd_erase_cursor();
             lcd_define_scrolling(SCREEN_SPLIT_GFX_HEIGHT, 0); // Set scrolling area for text at the bottom
             screen_gfx_mark_all_dirty();  // Force full blit on mode switch
-            screen_gfx_update();
+            screen_gfx_flush();           // Bypass rate limiter so mode change is visible immediately
             screen_txt_update();
         }
     }
@@ -698,7 +698,12 @@ static void screen_gfx_blit_dirty(void)
         lcd_blit(gfx_buffer + y_min * SCREEN_WIDTH,
                  0, y_min, SCREEN_WIDTH, y_max - y_min + 1);
     }
-    // In text mode, we don't update the display
+    else
+    {
+        // In text mode, no blit occurs — don't update timestamp so the
+        // rate limiter won't suppress the first real blit after a mode switch.
+        return;
+    }
 
     last_blit_time_us = time_us_64();
 }

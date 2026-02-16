@@ -63,7 +63,7 @@ return {
   -- Second traverse: add index entries at H2 headers
   { Header = index_at_header },
   -- Third traverse: add index entries at internal links
-  { Inline = index_at_link },
+  { Link = index_at_link },
   -- Fourth traverse: append \printindex
   { Pandoc = add_printindex }
 }
