@@ -909,7 +909,7 @@ The background colour number is 255 and the text colour number is 254. The text 
 
 The default background colour number is 74.
 
-See [Colours](#appendix-c-colour-palette-for-pico-logo) for the default palette.
+See [Colours](#appendix-e-colour-palette-for-pico-logo) for the default palette.
 
 
 ## setpc
@@ -920,7 +920,7 @@ setpc _colournumber_
 
 The `setpc` (for set pencolor) command sets the color of the pen to _colourumber_, where _colournumber_ is a value between 0 and 255. 
 
-See [Colours](#appendix-c-colour-palette-for-pico-logo) for the default palette.
+See [Colours](#appendix-e-colour-palette-for-pico-logo) for the default palette.
 
 
 ## setpalette
@@ -987,7 +987,7 @@ bg
 
 `background` outputs a number representing the colour of the background and is a value between 0 and 255. 
 
-See [Colours](#appendix-c-colour-palette-for-pico-logo) for the default palette.
+See [Colours](#appendix-e-colour-palette-for-pico-logo) for the default palette.
 
 
 ## dot? (dotp)
