@@ -400,7 +400,7 @@ The default prefix is `/Logo/`. On the SD card, the `startup` file is located at
 >editfile "startup
 ```
 
-You can [`bury`](#bury) procedures and [`burname`](#buryname) variables created in your `startup` file (using the `startup` variable!) so they are not a distraction. [`buryall`](#buryall) is a good approach.
+You can [`bury`](#bury) procedures and [`buryname`](#buryname) variables created in your `startup` file (using the `startup` variable!) so they are not a distraction. [`buryall`](#buryall) is a good approach.
 
 For example:
 
@@ -508,12 +508,12 @@ Exiting the editor using `Brk`, Logo does not read any lines in the edit buffer.
 
 ## edit (ed)
 
-edit _name_
-edit _namelist_
-ed _name_
-ed _namelist_
-(edit)
-(ed)
+edit _name_  
+edit _namelist_  
+ed _name_  
+ed _namelist_  
+(edit)  
+(ed)  
 
 `command`
 
@@ -980,7 +980,7 @@ See [`fence`](#fence) and [`window`](#window).
 
 ## background (bg)
 
-background
+background  
 bg  
 
 `operation`
@@ -1264,7 +1264,7 @@ The `fput` (for first put) operation outputs a new list formed by putting _objec
 ## list
 
 list _object1_ _object2_  
-(LIST _object1_ _object2_ _object3_ _object4_ ...)
+(list _object1_ _object2_ _object3_ _object4_ ...)
 
 `operation`
 
@@ -3056,7 +3056,7 @@ Stands for erase directory. Erases a directory. The directory must be empty or t
 
 ## catalog
 
-catalog
+catalog  
 (catalog _pathname_)  
 
 `command`
@@ -3132,7 +3132,7 @@ The `save` command creates a file and saves in it all unburied procedures and va
 
 ## savel
 
-savel _name_ _pathname_
+savel _name_ _pathname_  
 savel _namelist_ _pathname_
 
 `command`
@@ -3491,8 +3491,8 @@ The `network.resolve` operation takes a _hostname_ (e.g., "www.example.com") and
 ## network.ntp
 
 network.ntp  
-(network.ntp _timezone_)
-(network.ntp _timezone_ _serveraddress_)
+(network.ntp _timezone_)  
+(network.ntp _timezone_ _serveraddress_)  
 
 `operation`
 
