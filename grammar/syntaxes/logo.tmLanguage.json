@@ -9,7 +9,8 @@
     { "include": "#variable" },
     { "include": "#quoted-word" },
     { "include": "#number" },
-    { "include": "#operator" }
+    { "include": "#operator" },
+    { "include": "#command" }
   ],
   "repository": {
     "comment": {
@@ -80,6 +81,10 @@
     "operator": {
       "name": "keyword.operator.logo",
       "match": "[+\\-*/=<>]"
+    },
+    "command": {
+      "name": "support.function.logo",
+      "match": "(?<![\":])\\b[a-zA-Z][a-zA-Z0-9_.?]*\\b"
     }
   }
 }
