@@ -26,12 +26,12 @@ npm install
 npm run package
 ```
 
-This produces `pico-logo-0.1.0.vsix`.
+This produces a VSIX file like `pico-logo-<version>.vsix`.
 
 ## Installation
 
 ```sh
-code --install-extension pico-logo-0.1.0.vsix
+code --install-extension pico-logo-*.vsix
 ```
 
 Or in VS Code: **Extensions** → **⋯** → **Install from VSIX…**
