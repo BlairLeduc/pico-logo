@@ -1,0 +1,48 @@
+{
+  "name": "pico-logo",
+  "displayName": "Pico Logo",
+  "description": "Syntax highlighting for the Pico Logo language",
+  "version": "0.2.0",
+  "publisher": "BlairLeduc",
+  "license": "MIT",
+  "repository": {
+		"type": "git",
+		"url": "https://github.com/BlairLeduc/pico-logo"
+	},
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "logo",
+        "aliases": [
+          "Logo",
+          "Pico Logo"
+        ],
+        "extensions": [
+          ".logo",
+          ".lgo",
+          ".lg"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "logo",
+        "scopeName": "source.logo",
+        "path": "./syntaxes/logo.tmLanguage.json"
+      }
+    ]
+  },
+  "scripts": {
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.2.2"
+  }
+}

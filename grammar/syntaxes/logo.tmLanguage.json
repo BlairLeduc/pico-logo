@@ -1,0 +1,90 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Logo",
+  "scopeName": "source.logo",
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#to-end" },
+    { "include": "#list" },
+    { "include": "#variable" },
+    { "include": "#quoted-word" },
+    { "include": "#number" },
+    { "include": "#operator" },
+    { "include": "#command" }
+  ],
+  "repository": {
+    "comment": {
+      "name": "comment.block.logo",
+      "begin": ";\\s*(\\[)",
+      "beginCaptures": {
+        "0": { "name": "punctuation.definition.comment.begin.logo" }
+      },
+      "end": "\\]",
+      "endCaptures": {
+        "0": { "name": "punctuation.definition.comment.end.logo" }
+      },
+      "patterns": [
+        { "include": "#comment-nested-bracket" }
+      ]
+    },
+    "comment-nested-bracket": {
+      "name": "comment.block.logo",
+      "begin": "\\[",
+      "end": "\\]",
+      "patterns": [
+        { "include": "#comment-nested-bracket" }
+      ]
+    },
+    "to-end": {
+      "name": "meta.procedure.logo",
+      "begin": "(?i)^\\s*(to)\\s+([^\\s\\[\\]\\(\\)]+)",
+      "beginCaptures": {
+        "1": { "name": "keyword.control.to.logo" },
+        "2": { "name": "entity.name.function.logo" }
+      },
+      "end": "(?i)^\\s*(end)\\s*$",
+      "endCaptures": {
+        "1": { "name": "keyword.control.end.logo" }
+      },
+      "patterns": [
+        {
+          "name": "variable.parameter.logo",
+          "match": ":[^\\s\\[\\]\\(\\)\\+\\-\\*/=<>]+"
+        },
+        { "include": "$self" }
+      ]
+    },
+    "list": {
+      "patterns": [
+        {
+          "name": "punctuation.definition.list.begin.logo",
+          "match": "\\["
+        },
+        {
+          "name": "punctuation.definition.list.end.logo",
+          "match": "\\]"
+        }
+      ]
+    },
+    "variable": {
+      "name": "variable.other.logo",
+      "match": ":[^\\s\\[\\]\\(\\)\\+\\-\\*/=<>]+"
+    },
+    "quoted-word": {
+      "name": "string.quoted.other.logo",
+      "match": "\"[^\\s\\[\\]\\(\\)]*"
+    },
+    "number": {
+      "name": "constant.numeric.logo",
+      "match": "(?<![\\w\"])\\-?\\b[0-9]+(\\.[0-9]*)?([eEnN][+-]?[0-9]+)?\\b"
+    },
+    "operator": {
+      "name": "keyword.operator.logo",
+      "match": "[+\\-*/=<>]"
+    },
+    "command": {
+      "name": "support.function.logo",
+      "match": "(?<![\":])\\b[a-zA-Z][a-zA-Z0-9_.?]*\\b"
+    }
+  }
+}
