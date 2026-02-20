@@ -694,9 +694,9 @@ bool format_property(FormatOutputFunc out, void *ctx, const char *name,
     {
         // Check if it's a number (numbers are stored as words)
         const char *str = mem_word_ptr(val_node);
-        char *endptr;
-        strtof(str, &endptr);
-        if (*endptr == '\0' && str[0] != '\0')
+        Value word_val = value_word(val_node);
+        float num_check;
+        if (value_to_number(word_val, &num_check))
         {
             // It's a number, output without quote
             if (!out(ctx, str))

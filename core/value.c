@@ -8,6 +8,7 @@
 #include "format.h"
 #include <ctype.h>
 #include <stdlib.h>
+#include <string.h>
 
 //==========================================================================
 // Value Constructors
@@ -150,6 +151,34 @@ bool value_to_number(Value v, float *out)
         const char *str = mem_word_ptr(v.as.node);
         if (str == NULL)
             return false;
+
+        // Check for n/N notation (e.g., 1n5 = 1 * 10^-5 = 0.00001)
+        // Must check before strtof since strtof doesn't understand n/N
+        const char *n_pos = strchr(str, 'n');
+        if (!n_pos)
+            n_pos = strchr(str, 'N');
+
+        if (n_pos && n_pos != str)
+        {
+            // Parse mantissa (part before n)
+            char *end;
+            float mantissa = strtof(str, &end);
+            if (end != n_pos)
+                return false; // mantissa didn't parse up to n
+
+            // Parse exponent (part after n)
+            float exp = strtof(n_pos + 1, &end);
+            if (*end != '\0' || end == n_pos + 1)
+                return false; // exponent didn't parse or was empty
+
+            float result = mantissa;
+            for (int i = 0; i < (int)exp; i++)
+            {
+                result /= 10.0f;
+            }
+            *out = result;
+            return true;
+        }
 
         char *end;
         float n = strtof(str, &end);

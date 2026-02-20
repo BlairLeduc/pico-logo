@@ -254,6 +254,36 @@ void test_value_to_number_from_word_scientific(void)
     TEST_ASSERT_EQUAL_FLOAT(10000.0f, out);
 }
 
+void test_value_to_number_from_word_n_notation(void)
+{
+    // 1n5 means 1 * 10^-5 = 0.00001
+    Node word = mem_atom("1n5", 3);
+    Value v = value_word(word);
+    float out;
+    TEST_ASSERT_TRUE(value_to_number(v, &out));
+    TEST_ASSERT_EQUAL_FLOAT(0.00001f, out);
+}
+
+void test_value_to_number_from_word_n_notation_uppercase(void)
+{
+    // 2N3 means 2 * 10^-3 = 0.002
+    Node word = mem_atom("2N3", 3);
+    Value v = value_word(word);
+    float out;
+    TEST_ASSERT_TRUE(value_to_number(v, &out));
+    TEST_ASSERT_EQUAL_FLOAT(0.002f, out);
+}
+
+void test_value_to_number_from_word_n_notation_with_mantissa(void)
+{
+    // 5.5n2 means 5.5 * 10^-2 = 0.055
+    Node word = mem_atom("5.5n2", 5);
+    Value v = value_word(word);
+    float out;
+    TEST_ASSERT_TRUE(value_to_number(v, &out));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.055f, out);
+}
+
 void test_value_to_number_from_word_invalid(void)
 {
     Node word = mem_atom("hello", 5);
@@ -1023,6 +1053,9 @@ int main(void)
     RUN_TEST(test_value_to_number_from_word_float);
     RUN_TEST(test_value_to_number_from_word_negative);
     RUN_TEST(test_value_to_number_from_word_scientific);
+    RUN_TEST(test_value_to_number_from_word_n_notation);
+    RUN_TEST(test_value_to_number_from_word_n_notation_uppercase);
+    RUN_TEST(test_value_to_number_from_word_n_notation_with_mantissa);
     RUN_TEST(test_value_to_number_from_word_invalid);
     RUN_TEST(test_value_to_number_from_word_partial);
     RUN_TEST(test_value_to_number_from_none);
