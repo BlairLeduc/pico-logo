@@ -742,6 +742,94 @@ void test_back_in_fence_mode_errors_at_boundary(void)
     ASSERT_POSITION(0, 0);
 }
 
+void test_fence_prevents_setpos_past_boundary(void)
+{
+    run_string("fence");
+    
+    // Try to setpos past the boundary
+    Result r = run_string("setpos [200 0]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    
+    // Turtle should not have moved
+    ASSERT_POSITION(0, 0);
+}
+
+void test_fence_prevents_setx_past_boundary(void)
+{
+    run_string("fence");
+    
+    // Try to setx past the boundary
+    Result r = run_string("setx 200");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    
+    // Turtle should not have moved
+    ASSERT_POSITION(0, 0);
+}
+
+void test_fence_prevents_sety_past_boundary(void)
+{
+    run_string("fence");
+    
+    // Try to sety past the boundary
+    Result r = run_string("sety 200");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    
+    // Turtle should not have moved
+    ASSERT_POSITION(0, 0);
+}
+
+void test_fence_allows_setpos_within_bounds(void)
+{
+    run_string("fence");
+    
+    Result r = run_string("setpos [100 50]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    ASSERT_POSITION(100, 50);
+}
+
+void test_window_allows_setpos_past_boundary(void)
+{
+    run_string("window");
+    
+    Result r = run_string("setpos [500 300]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    ASSERT_POSITION(500, 300);
+}
+
+void test_wrap_wraps_setpos_at_boundary(void)
+{
+    run_string("wrap");
+    
+    // setpos [180 0] from [0,0]: 180 is 20 past the right edge (160)
+    // Should wrap to -140 (180 - 320 = -140)
+    Result r = run_string("setpos [180 0]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    ASSERT_POSITION(-140, 0);
+}
+
+void test_wrap_setpos_draws_correct_line(void)
+{
+    // In wrap mode, setpos [180 0] from [0,0] should draw a line
+    // that goes right and wraps, not directly to the wrapped position
+    run_string("wrap");
+    
+    Result r = run_string("setpos [180 0]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    // The line should be from (0,0) to (180,0) (unwrapped endpoint)
+    // NOT from (0,0) to (-140,0) (the wrapped endpoint)
+    // The mock records a single line from old to new unwrapped position
+    const MockDeviceState *state = mock_device_get_state();
+    TEST_ASSERT_EQUAL(1, state->graphics.line_count);
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 0.0f, state->graphics.lines[0].x1);
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 0.0f, state->graphics.lines[0].y1);
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 180.0f, state->graphics.lines[0].x2);
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 0.0f, state->graphics.lines[0].y2);
+    
+    // But the turtle position should be wrapped
+    ASSERT_POSITION(-140, 0);
+}
+
 //==========================================================================
 // Line Drawing Tests (pen down movement)
 //==========================================================================
@@ -1340,6 +1428,13 @@ int main(void)
     RUN_TEST(test_window_allows_movement_past_boundary);
     RUN_TEST(test_wrap_wraps_at_boundary);
     RUN_TEST(test_back_in_fence_mode_errors_at_boundary);
+    RUN_TEST(test_fence_prevents_setpos_past_boundary);
+    RUN_TEST(test_fence_prevents_setx_past_boundary);
+    RUN_TEST(test_fence_prevents_sety_past_boundary);
+    RUN_TEST(test_fence_allows_setpos_within_bounds);
+    RUN_TEST(test_window_allows_setpos_past_boundary);
+    RUN_TEST(test_wrap_wraps_setpos_at_boundary);
+    RUN_TEST(test_wrap_setpos_draws_correct_line);
     
     // Line drawing tests
     RUN_TEST(test_forward_with_pendown_draws_line);

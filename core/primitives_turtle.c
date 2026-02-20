@@ -112,7 +112,10 @@ static Result prim_setpos(Evaluator *eval, int argc, Value *args)
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_position)
     {
-        turtle->set_position(x, y);
+        if (!turtle->set_position(x, y))
+        {
+            return result_error(ERR_TURTLE_BOUNDS);
+        }
     }
     
     return result_none();
@@ -130,7 +133,10 @@ static Result prim_setx(Evaluator *eval, int argc, Value *args)
     {
         float curr_x, curr_y;
         turtle->get_position(&curr_x, &curr_y);
-        turtle->set_position(x, curr_y);
+        if (!turtle->set_position(x, curr_y))
+        {
+            return result_error(ERR_TURTLE_BOUNDS);
+        }
     }
     
     return result_none();
@@ -148,7 +154,10 @@ static Result prim_sety(Evaluator *eval, int argc, Value *args)
     {
         float curr_x, curr_y;
         turtle->get_position(&curr_x, &curr_y);
-        turtle->set_position(curr_x, y);
+        if (!turtle->set_position(curr_x, y))
+        {
+            return result_error(ERR_TURTLE_BOUNDS);
+        }
     }
     
     return result_none();
