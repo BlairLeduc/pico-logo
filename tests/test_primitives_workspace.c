@@ -898,6 +898,33 @@ void test_multiline_list_followed_by_more_code(void)
     TEST_ASSERT_EQUAL_STRING("hello\nafter\n", output_buffer);
 }
 
+// Test that multiline lists with 3+ content lines format correctly
+void test_po_multiline_list_three_lines(void)
+{
+    Result r = proc_define_from_text(
+        "to test.format\n"
+        "repeat 5 [\n"
+        "pr \"Hello\n"
+        "pr \"my\n"
+        "pr \"World!\n"
+        "]\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    reset_output();
+    run_string("po \"test.format");
+    
+    const char *expected =
+        "to test.format\n"
+        "  repeat 5 [\n"
+        "    pr \"Hello\n"
+        "    pr \"my\n"
+        "    pr \"World!\n"
+        "  ]\n"
+        "end\n";
+    TEST_ASSERT_EQUAL_STRING(expected, output_buffer);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -963,6 +990,7 @@ int main(void)
     // Multiline list tests
     RUN_TEST(test_po_multiline_list);
     RUN_TEST(test_multiline_list_followed_by_more_code);
+    RUN_TEST(test_po_multiline_list_three_lines);
 
     return UNITY_END();
 }
