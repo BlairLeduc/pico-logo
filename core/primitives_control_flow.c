@@ -51,13 +51,17 @@ static Result prim_repcount(Evaluator *eval, int argc, Value *args)
 
 static Result prim_stop(Evaluator *eval, int argc, Value *args)
 {
-    UNUSED(eval); UNUSED(argc); UNUSED(args);
+    UNUSED(argc); UNUSED(args);
+    if (eval->proc_depth == 0)
+        return result_error(ERR_ONLY_IN_PROCEDURE);
     return result_stop();
 }
 
 static Result prim_output(Evaluator *eval, int argc, Value *args)
 {
-    UNUSED(eval); UNUSED(argc);
+    UNUSED(argc);
+    if (eval->proc_depth == 0)
+        return result_error(ERR_ONLY_IN_PROCEDURE);
     return result_output(args[0]);
 }
 

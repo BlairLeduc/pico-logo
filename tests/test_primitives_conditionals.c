@@ -166,17 +166,22 @@ void test_if_operation_nested(void)
 
 void test_if_list_with_stop(void)
 {
-    // if with stop inside should propagate stop
-    Result r = run_string("if true [stop]");
-    TEST_ASSERT_EQUAL(RESULT_STOP, r.status);
+    // if with stop inside a procedure should propagate stop
+    run_string("define \"teststop [[] [if true [stop] print \"should_not_print]]");
+    Result r = run_string("teststop");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("", output_buffer);
+    run_string("erase \"teststop");
 }
 
 void test_if_list_with_output(void)
 {
-    // if with output inside should propagate output
-    Result r = eval_string("if true [output 42]");
-    TEST_ASSERT_EQUAL(RESULT_OUTPUT, r.status);
-    TEST_ASSERT_EQUAL_FLOAT(42.0f, r.value.as.number);
+    // if with output inside a procedure should propagate output
+    run_string("define \"testoutput [[] [if true [output 42]]]");
+    Result r = run_string("print testoutput");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("42\n", output_buffer);
+    run_string("erase \"testoutput");
 }
 
 void test_output_with_recursive_call_in_if(void)
@@ -247,10 +252,13 @@ void test_if_list_with_print_empty_then_stop(void)
     // printing an empty list and then stopping. The empty list [] in the
     // instruction list was not being handled as a pre-parsed sublist,
     // causing parse_list to consume "stop" as part of the list.
+    // Must be tested inside a procedure since stop requires procedure context.
     run_string("make \"thing []");
-    Result r = run_string("if empty? :thing [pr [] stop]");
-    TEST_ASSERT_EQUAL(RESULT_STOP, r.status);
+    run_string("define \"teststop2 [[] [if empty? :thing [pr [] stop] print \"after]]");
+    Result r = run_string("teststop2");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     TEST_ASSERT_EQUAL_STRING("\n", output_buffer);
+    run_string("erase \"teststop2");
 }
 
 void test_if_list_with_empty_list_arg(void)
