@@ -501,6 +501,20 @@ void test_minus_after_paren(void)
     assert_token(&lexer, TOKEN_NUMBER, "5");
 }
 
+void test_minus_after_paren_space_before_no_space_after(void)
+{
+    // (pr (5+3) -2) should tokenize -2 as negative number, not binary minus
+    // Space before '-' and no space after means unary/negative
+    Lexer lexer;
+    lexer_init(&lexer, "(5+3) -2");
+    assert_token(&lexer, TOKEN_LEFT_PAREN, "(");
+    assert_token(&lexer, TOKEN_NUMBER, "5");
+    assert_token(&lexer, TOKEN_PLUS, "+");
+    assert_token(&lexer, TOKEN_NUMBER, "3");
+    assert_token(&lexer, TOKEN_RIGHT_PAREN, ")");
+    assert_token(&lexer, TOKEN_NUMBER, "-2");
+}
+
 void test_minus_in_list(void)
 {
     // first [-3 4] (outputs -3)
@@ -893,6 +907,7 @@ int main(void)
     RUN_TEST(test_minus_in_expression);
     RUN_TEST(test_minus_negative_number);
     RUN_TEST(test_minus_after_paren);
+    RUN_TEST(test_minus_after_paren_space_before_no_space_after);
     RUN_TEST(test_minus_in_list);
     RUN_TEST(test_unary_minus_variable);
     RUN_TEST(test_unary_minus_word);
