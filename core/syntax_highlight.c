@@ -169,11 +169,9 @@ static bool scan_number(const char *line, int length,
     int p = *pos;
 
     // Optional leading minus
-    bool has_minus = false;
     if (p < length && line[p] == '-') {
         // Only treat as sign if preceded by a delimiter or at SOL
         if (p == 0 || is_delimiter(line[p - 1])) {
-            has_minus = true;
             p++;
         }
     }
