@@ -183,6 +183,10 @@ bool value_to_number(Value v, float *out)
             if (end == exp_start)
                 return false; // no digits found
 
+            // Clamp exponent: beyond 45, result underflows to 0.0f anyway
+            if (exp > 45)
+                exp = 45;
+
             float result = mantissa;
             for (int i = 0; i < exp; i++)
             {
