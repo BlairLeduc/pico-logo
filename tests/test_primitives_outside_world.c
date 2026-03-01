@@ -129,7 +129,7 @@ void test_type_list_no_outer_brackets(void)
 void test_type_multiple_args(void)
 {
     run_string("(type 1 2 3)");
-    TEST_ASSERT_EQUAL_STRING("1 2 3", output_buffer);
+    TEST_ASSERT_EQUAL_STRING("123", output_buffer);
 }
 
 void test_type_then_print(void)

@@ -2709,7 +2709,7 @@ type _object_
 
 `command`
 
-The `type` command prints its inputs without a carriage return on the screen, unless the destination has been changed by [`setwrite`](#setwrite). The outermost brackets of lists are not printed.
+The `type` command prints its inputs without a carriage return on the screen, unless the destination has been changed by [`setwrite`](#setwrite). The outermost brackets of lists are not printed. Spaces are not printed between the inputs.
 
 Compare with [`print`](#print-pr) and [`show`](#show).
 
