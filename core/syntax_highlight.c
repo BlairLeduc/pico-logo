@@ -195,9 +195,14 @@ static bool scan_number(const char *line, int length,
     // Optional exponent (e/E/n/N)
     if (p < length && (line[p] == 'e' || line[p] == 'E' ||
                        line[p] == 'n' || line[p] == 'N')) {
+        bool is_n = (line[p] == 'n' || line[p] == 'N');
         p++;
-        if (p < length && (line[p] == '+' || line[p] == '-'))
+        // Only e/E allows optional sign, not n/N (matching lexer)
+        if (!is_n && p < length && (line[p] == '+' || line[p] == '-'))
             p++;
+        // Must have at least one digit after exponent
+        if (p >= length || !isdigit((unsigned char)line[p]))
+            return false;
         while (p < length && isdigit((unsigned char)line[p]))
             p++;
     }

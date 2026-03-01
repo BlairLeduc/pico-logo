@@ -261,6 +261,51 @@ void test_number_exponent_negative(void)
     assert_range(cat, 0, 6, SYNTAX_NUMBER, "exponent neg");
 }
 
+void test_number_exponent_no_digits(void)
+{
+    // "1e" has no digit after exponent — should NOT highlight as number
+    const char *line = "1e";
+    int len = (int)strlen(line);
+    uint8_t cat[4];
+    syntax_highlight_line(line, len, cat, 0);
+    // scan_number fails, "1" stays SYNTAX_DEFAULT, "e" becomes SYNTAX_COMMAND
+    assert_cat(cat, 0, SYNTAX_DEFAULT, "1e: digit");
+    assert_cat(cat, 1, SYNTAX_COMMAND, "1e: letter");
+}
+
+void test_number_exponent_sign_no_digits(void)
+{
+    // "1e+" has a sign but no digit after — should NOT highlight as number
+    const char *line = "1e+";
+    int len = (int)strlen(line);
+    uint8_t cat[4];
+    syntax_highlight_line(line, len, cat, 0);
+    // scan_number fails => "1" default, "e" command, "+" default (operator)
+    assert_cat(cat, 0, SYNTAX_DEFAULT, "1e+: digit");
+    assert_cat(cat, 1, SYNTAX_COMMAND, "1e+: letter");
+    assert_cat(cat, 2, SYNTAX_DEFAULT, "1e+: sign");
+}
+
+void test_number_exponent_n_no_sign(void)
+{
+    // "1n5" is valid (n exponent, no sign allowed)
+    const char *line = "1n5";
+    int len = (int)strlen(line);
+    uint8_t cat[4];
+    syntax_highlight_line(line, len, cat, 0);
+    assert_range(cat, 0, 3, SYNTAX_NUMBER, "1n5");
+}
+
+void test_number_exponent_n_with_sign(void)
+{
+    // "1n+5" — n/N does not allow sign, should NOT highlight as number
+    const char *line = "1n+5";
+    int len = (int)strlen(line);
+    uint8_t cat[8];
+    syntax_highlight_line(line, len, cat, 0);
+    assert_cat(cat, 0, SYNTAX_DEFAULT, "1n+5[0]");
+}
+
 void test_number_in_context(void)
 {
     const char *line = "forward 100";
@@ -715,6 +760,10 @@ int main(void)
     RUN_TEST(test_number_negative);
     RUN_TEST(test_number_exponent);
     RUN_TEST(test_number_exponent_negative);
+    RUN_TEST(test_number_exponent_no_digits);
+    RUN_TEST(test_number_exponent_sign_no_digits);
+    RUN_TEST(test_number_exponent_n_no_sign);
+    RUN_TEST(test_number_exponent_n_with_sign);
     RUN_TEST(test_number_in_context);
 
     // Operators
