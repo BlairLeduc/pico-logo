@@ -90,12 +90,22 @@ static void skip_ws(const char *line, int length,
 }
 
 // Read a "word" — contiguous non-delimiter, non-bracket characters.
+// Handles backslash escapes: \X skips the backslash and next character.
 // Returns start position; *pos is advanced to one past the end.
 static int read_word_span(const char *line, int length, int *pos)
 {
     int start = *pos;
-    while (*pos < length && !is_delimiter(line[*pos]))
-        (*pos)++;
+    while (*pos < length) {
+        if (line[*pos] == '\\') {
+            (*pos)++;  // skip backslash
+            if (*pos < length)
+                (*pos)++;  // skip escaped character
+        } else if (is_delimiter(line[*pos])) {
+            break;
+        } else {
+            (*pos)++;
+        }
+    }
     return start;
 }
 
@@ -294,24 +304,42 @@ int syntax_highlight_line(const char *line, int length,
             continue;
         }
 
-        // Variable: :word
+        // Variable: :word (with backslash escape support)
         if (c == ':') {
             int start = pos;
             pos++;  // skip ':'
-            while (pos < length && !is_delimiter(line[pos]))
-                pos++;
+            while (pos < length) {
+                if (line[pos] == '\\') {
+                    pos++;  // skip backslash
+                    if (pos < length)
+                        pos++;  // skip escaped character
+                } else if (is_delimiter(line[pos])) {
+                    break;
+                } else {
+                    pos++;
+                }
+            }
             tag_range(categories, start, pos, SYNTAX_VARIABLE);
             continue;
         }
 
-        // Quoted word: "word
+        // Quoted word: "word (with backslash escape support)
         if (c == '"') {
             int start = pos;
             pos++;  // skip '"'
-            while (pos < length && line[pos] != ' '  && line[pos] != '\t' &&
-                   line[pos] != '['  && line[pos] != ']' &&
-                   line[pos] != '('  && line[pos] != ')')
-                pos++;
+            while (pos < length) {
+                if (line[pos] == '\\') {
+                    pos++;  // skip backslash
+                    if (pos < length)
+                        pos++;  // skip escaped character
+                } else if (line[pos] == ' '  || line[pos] == '\t' ||
+                           line[pos] == '['  || line[pos] == ']' ||
+                           line[pos] == '('  || line[pos] == ')') {
+                    break;
+                } else {
+                    pos++;
+                }
+            }
             tag_range(categories, start, pos, SYNTAX_STRING);
             continue;
         }
@@ -366,12 +394,23 @@ int syntax_highlight_line(const char *line, int length,
         }
 
         // Bare word: [a-zA-Z][a-zA-Z0-9_.?]*  → SYNTAX_COMMAND
-        if (isalpha((unsigned char)c)) {
+        // Also handles backslash escapes within words.
+        if (isalpha((unsigned char)c) || c == '\\') {
             int start = pos;
             pos++;
-            while (pos < length && (isalnum((unsigned char)line[pos]) ||
-                   line[pos] == '_' || line[pos] == '.' || line[pos] == '?'))
-                pos++;
+            while (pos < length) {
+                if (line[pos] == '\\') {
+                    pos++;  // skip backslash
+                    if (pos < length)
+                        pos++;  // skip escaped character
+                } else if (isalnum((unsigned char)line[pos]) ||
+                           line[pos] == '_' || line[pos] == '.' || line[pos] == '?' ||
+                           line[pos] == ':') {
+                    pos++;
+                } else {
+                    break;
+                }
+            }
             tag_range(categories, start, pos, SYNTAX_COMMAND);
             continue;
         }

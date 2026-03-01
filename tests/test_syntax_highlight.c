@@ -568,6 +568,99 @@ void test_comment_brackets_not_colored_as_brackets(void)
     TEST_ASSERT_EQUAL_INT(0, depth);
 }
 
+// ---------------------------------------------------------------------------
+// Backslash escape handling
+// ---------------------------------------------------------------------------
+
+void test_quoted_word_with_escaped_spaces(void)
+{
+    // "g\ o\ \"\ f  is a single quoted word with escaped spaces and quote
+    const char *line = "\"g\\ o\\ \\\"\\ f";
+    //                   "  g  \  _  o  \  _  \  "  \  _  f
+    //                   0  1  2  3  4  5  6  7  8  9  10 11
+    int len = (int)strlen(line);
+    uint8_t cat[16];
+    syntax_highlight_line(line, len, cat, 0);
+    // The entire token should be SYNTAX_STRING
+    assert_range(cat, 0, len, SYNTAX_STRING, "quoted word with escapes");
+}
+
+void test_quoted_word_with_escaped_bracket(void)
+{
+    // "hello\[world  — escaped bracket doesn't end the word
+    const char *line = "\"hello\\[world";
+    int len = (int)strlen(line);
+    uint8_t cat[16];
+    syntax_highlight_line(line, len, cat, 0);
+    assert_range(cat, 0, len, SYNTAX_STRING, "quoted word escaped bracket");
+}
+
+void test_variable_with_escaped_space(void)
+{
+    // :my\ var  — variable name with escaped space
+    const char *line = ":my\\ var";
+    //                  :  m  y  \  _  v  a  r
+    //                  0  1  2  3  4  5  6  7
+    int len = (int)strlen(line);
+    uint8_t cat[16];
+    syntax_highlight_line(line, len, cat, 0);
+    assert_range(cat, 0, len, SYNTAX_VARIABLE, "variable with escaped space");
+}
+
+void test_word_with_escaped_space(void)
+{
+    // go\ home  — bare word with escaped space
+    const char *line = "go\\ home";
+    //                  g  o  \  _  h  o  m  e
+    //                  0  1  2  3  4  5  6  7
+    int len = (int)strlen(line);
+    uint8_t cat[16];
+    syntax_highlight_line(line, len, cat, 0);
+    assert_range(cat, 0, len, SYNTAX_COMMAND, "word with escaped space");
+}
+
+void test_word_with_escaped_bracket(void)
+{
+    // go\[home  — bare word with escaped bracket
+    const char *line = "go\\[home";
+    int len = (int)strlen(line);
+    uint8_t cat[16];
+    syntax_highlight_line(line, len, cat, 0);
+    assert_range(cat, 0, len, SYNTAX_COMMAND, "word with escaped bracket");
+}
+
+void test_word_with_colon_mid_word(void)
+{
+    // go:there — colon mid-word should be a single command, not a variable
+    const char *line = "go:there";
+    int len = (int)strlen(line);
+    uint8_t cat[16];
+    syntax_highlight_line(line, len, cat, 0);
+    assert_range(cat, 0, len, SYNTAX_COMMAND, "word with colon mid-word");
+}
+
+void test_word_with_colon_in_brackets(void)
+{
+    // [go:there] — colon mid-word inside brackets
+    const char *line = "[go:there]";
+    int len = (int)strlen(line);
+    uint8_t cat[16];
+    syntax_highlight_line(line, len, cat, 0);
+    TEST_ASSERT_EQUAL_UINT8(SYNTAX_BRACKET_1, cat[0]);
+    assert_range(cat, 1, 9, SYNTAX_COMMAND, "word with colon in brackets");
+    TEST_ASSERT_EQUAL_UINT8(SYNTAX_BRACKET_1, cat[9]);
+}
+
+void test_quoted_word_with_colon(void)
+{
+    // "go:there — colon mid-word in quoted word
+    const char *line = "\"go:there";
+    int len = (int)strlen(line);
+    uint8_t cat[16];
+    syntax_highlight_line(line, len, cat, 0);
+    assert_range(cat, 0, len, SYNTAX_STRING, "quoted word with colon");
+}
+
 void test_to_body_highlighting(void)
 {
     // After TO name :params, the remaining body should be highlighted
@@ -647,6 +740,18 @@ int main(void)
 
     // Unbalanced
     RUN_TEST(test_unmatched_close_bracket);
+
+    // Backslash escapes
+    RUN_TEST(test_quoted_word_with_escaped_spaces);
+    RUN_TEST(test_quoted_word_with_escaped_bracket);
+    RUN_TEST(test_variable_with_escaped_space);
+    RUN_TEST(test_word_with_escaped_space);
+    RUN_TEST(test_word_with_escaped_bracket);
+
+    // Colon mid-word (not a variable)
+    RUN_TEST(test_word_with_colon_mid_word);
+    RUN_TEST(test_word_with_colon_in_brackets);
+    RUN_TEST(test_quoted_word_with_colon);
 
     // Complex lines
     RUN_TEST(test_repeat_command);
