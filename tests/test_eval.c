@@ -486,6 +486,19 @@ void test_deep_recursion_nested_in_expression(void)
     TEST_ASSERT_EQUAL_FLOAT(55.0f, r.value.as.number);
 }
 
+void test_paren_user_proc_standalone(void)
+{
+    // (double 3) as a standalone paren call should return 6.
+    // Regression: unconditional paren_depth-- caused double-decrement
+    // when the grouping handler also decremented.
+    const char *params[] = {"n"};
+    define_proc("double", params, 1, "op :n * 2");
+
+    Result r = eval_string("(double 3)");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(6.0f, r.value.as.number);
+}
+
 void test_paren_user_proc_infix_simple(void)
 {
     // Bug: (double 3) + (double 4) should be 14
@@ -590,6 +603,7 @@ int main(void)
     RUN_TEST(test_deep_recursion_nested_in_expression);
 
     // Parenthesized user proc call in infix expression
+    RUN_TEST(test_paren_user_proc_standalone);
     RUN_TEST(test_paren_user_proc_infix_simple);
     RUN_TEST(test_paren_user_proc_infix_in_proc);
     RUN_TEST(test_paren_user_proc_recursive_count_words);

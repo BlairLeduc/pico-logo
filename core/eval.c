@@ -840,19 +840,6 @@ static Result eval_primary(Evaluator *eval)
                 // Non-self-recursive tail call - fall through to op stack
             }
 
-            // Consume closing paren of (proc args) call.
-            // Must happen before deferring so that the saved token source
-            // is past the ')' and the infix expression parser can see
-            // operators that follow, e.g. (f :x) + (g :y).
-            {
-                Token closing = peek(eval);
-                if (closing.type == TOKEN_RIGHT_PAREN)
-                {
-                    advance(eval);
-                }
-                eval->paren_depth--;
-            }
-
             // Inside a procedure and not collecting user proc args: push
             // OP_PROC_CALL on the op stack. The trampoline handles it
             // asynchronously.  When inside a primitive's arg expression,
@@ -862,6 +849,18 @@ static Result eval_primary(Evaluator *eval)
             // proc arg collection doesn't have OP_PRIM_CALL support.
             if (eval->proc_depth > 0 && eval->user_arg_depth == 0)
             {
+                // Consume closing paren of (proc args) call before deferring
+                // so that the saved token source is past the ')' and the
+                // infix expression parser can see operators that follow,
+                // e.g. (f :x) + (g :y).  Don't decrement paren_depth here;
+                // the TOKEN_LEFT_PAREN "grouping" handler does that.
+                {
+                    Token closing = peek(eval);
+                    if (closing.type == TOKEN_RIGHT_PAREN)
+                    {
+                        advance(eval);
+                    }
+                }
                 // Push frame
                 word_offset_t frame_offset = frame_push(eval->frames, user_proc, args, argc);
                 if (frame_offset == OFFSET_NONE)
