@@ -235,6 +235,8 @@ static Result invoke_proc_spec(Evaluator *eval, ProcSpec *spec, int argc, Value 
         }
         
         // Execute the body
+        // Increment proc_depth so stop/output know they're in a procedure context
+        eval->proc_depth++;
         Result r;
         if (spec->as.lambda.is_expression)
         {
@@ -281,6 +283,8 @@ static Result invoke_proc_spec(Evaluator *eval, ProcSpec *spec, int argc, Value 
                 body = mem_cdr(body);
             }
         }
+        
+        eval->proc_depth--;
         
         // Restore original variable state
         for (int i = 0; i < spec->as.lambda.param_count; i++)

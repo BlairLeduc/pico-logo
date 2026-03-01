@@ -45,7 +45,8 @@ extern "C"
         void (*home)(void);
 
         // Absolute position control
-        void (*set_position)(float x, float y);
+        // Returns true on success, false if boundary error (fence mode)
+        bool (*set_position)(float x, float y);
         void (*get_position)(float *x, float *y);
 
         // Heading control (0 = north, 90 = east)

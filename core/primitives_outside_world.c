@@ -425,14 +425,13 @@ static Result prim_show(Evaluator *eval, int argc, Value *args)
 
 // type object - prints object without newline
 // Outermost brackets of lists are not printed.
+// Spaces are not printed between the inputs.
 static Result prim_type(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
 
     for (int i = 0; i < argc; i++)
     {
-        if (i > 0)
-            print_output(NULL, " ");
         format_value(print_output, NULL, args[i]);
     }
     flush_writer();

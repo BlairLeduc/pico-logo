@@ -75,9 +75,11 @@ static bool is_valid_number(const char *start, size_t length)
             if (has_exp || !has_digit)
                 return false; // Multiple exponents or exponent without digits
             has_exp = true;
+            bool is_n = (*p == 'n' || *p == 'N');
             // Exponent can be followed by optional sign and digits
+            // but only e/E allows signs, not n/N
             p++;
-            if (p < end && (*p == '+' || *p == '-'))
+            if (!is_n && p < end && (*p == '+' || *p == '-'))
             {
                 p++;
             }
@@ -278,12 +280,13 @@ static Token read_number(Lexer *lexer)
     // Read digits and number characters
     while (*lexer->current && (is_number_char(*lexer->current) || is_digit(*lexer->current)))
     {
-        // Handle exponent sign
+        // Handle exponent marker and optional sign (signs only for e/E)
         if ((*lexer->current == 'e' || *lexer->current == 'E' ||
              *lexer->current == 'n' || *lexer->current == 'N'))
         {
+            bool is_n_notation = (*lexer->current == 'n' || *lexer->current == 'N');
             lexer->current++;
-            if (*lexer->current == '+' || *lexer->current == '-')
+            if (!is_n_notation && (*lexer->current == '+' || *lexer->current == '-'))
             {
                 lexer->current++;
             }
@@ -326,8 +329,7 @@ static bool looks_like_number(const char *p)
             return true;
         }
         if (!is_digit(*p) && *p != '.' && 
-            *p != 'e' && *p != 'E' && *p != 'n' && *p != 'N' &&
-            *p != '+' && *p != '-')
+            *p != 'e' && *p != 'E' && *p != 'n' && *p != 'N')
         {
             // Non-number character without being a delimiter - it's a word
             return false;
@@ -335,10 +337,16 @@ static bool looks_like_number(const char *p)
         // Handle exponent
         if (*p == 'e' || *p == 'E' || *p == 'n' || *p == 'N')
         {
+            bool is_n = (*p == 'n' || *p == 'N');
             p++;
-            if (*p == '+' || *p == '-')
+            if (!is_n && (*p == '+' || *p == '-'))
             {
                 p++;
+            }
+            // Must have at least one digit after exponent (and optional sign)
+            if (!*p || !is_digit(*p))
+            {
+                return false;
             }
             continue;
         }
@@ -364,15 +372,12 @@ static bool should_be_unary_minus(const Lexer *lexer)
     // If there was whitespace before the minus, it follows a delimiter
     if (lexer->had_whitespace)
     {
-        // After ), even with whitespace, it's still binary minus
-        if (prev == TOKEN_RIGHT_PAREN)
-            return false;
         // Whitespace before AND immediately precedes something = unary/negative
-        // e.g., "print 3 * -4" or "[-1 -2 -3]"
+        // e.g., "print 3 * -4", "[-1 -2 -3]", "(5+3) -2"
         if (immediately_precedes)
             return true;
         // Whitespace both before and after = binary
-        // e.g., "7 - 3"
+        // e.g., "7 - 3", "(5+3) - 2"
         return false;
     }
     

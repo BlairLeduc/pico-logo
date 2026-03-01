@@ -55,15 +55,14 @@ static Value prop_node_to_value(Node n)
     }
     else if (mem_is_word(n))
     {
-        // Check if it's a number
-        const char *str = mem_word_ptr(n);
-        char *endptr;
-        float num = strtof(str, &endptr);
-        if (*endptr == '\0' && str[0] != '\0')
+        // Check if it's a number (handles e/E and n/N notation)
+        Value word = value_word(n);
+        float num;
+        if (value_to_number(word, &num))
         {
             return value_number(num);
         }
-        return value_word(n);
+        return word;
     }
     else if (mem_is_list(n))
     {

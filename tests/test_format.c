@@ -262,6 +262,70 @@ void test_format_procedure_definition_multiline(void)
     TEST_ASSERT_TRUE(strstr(buffer, "end\n") != NULL);
 }
 
+void test_format_procedure_definition_bracket_three_lines(void)
+{
+    // Bug: 3+ lines inside brackets - last content line loses indentation
+    char buffer[512];
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    
+    Result r = proc_define_from_text(
+        "to test.format\n"
+        "repeat 5 [\n"
+        "pr \"Hello\n"
+        "pr \"my\n"
+        "pr \"World!\n"
+        "]\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    UserProcedure *proc = proc_find("test.format");
+    TEST_ASSERT_NOT_NULL(proc);
+    
+    TEST_ASSERT_TRUE(format_procedure_definition(format_buffer_output, &ctx, proc));
+    
+    const char *expected =
+        "to test.format\n"
+        "  repeat 5 [\n"
+        "    pr \"Hello\n"
+        "    pr \"my\n"
+        "    pr \"World!\n"
+        "  ]\n"
+        "end\n";
+    TEST_ASSERT_EQUAL_STRING(expected, buffer);
+}
+
+void test_format_procedure_definition_bracket_single_token_last_line(void)
+{
+    // Single-token last content line inside brackets should keep same indent
+    char buffer[512];
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    
+    Result r = proc_define_from_text(
+        "to singletok\n"
+        "repeat 3 [\n"
+        "fd 10\n"
+        "rt\n"
+        "]\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    UserProcedure *proc = proc_find("singletok");
+    TEST_ASSERT_NOT_NULL(proc);
+    
+    TEST_ASSERT_TRUE(format_procedure_definition(format_buffer_output, &ctx, proc));
+    
+    const char *expected =
+        "to singletok\n"
+        "  repeat 3 [\n"
+        "    fd 10\n"
+        "    rt\n"
+        "  ]\n"
+        "end\n";
+    TEST_ASSERT_EQUAL_STRING(expected, buffer);
+}
+
 //==========================================================================
 // format_variable Tests
 //==========================================================================
@@ -657,6 +721,8 @@ int main(void)
     RUN_TEST(test_format_procedure_definition_simple);
     RUN_TEST(test_format_procedure_definition_with_params);
     RUN_TEST(test_format_procedure_definition_multiline);
+    RUN_TEST(test_format_procedure_definition_bracket_three_lines);
+    RUN_TEST(test_format_procedure_definition_bracket_single_token_last_line);
     
     // format_variable tests
     RUN_TEST(test_format_variable_number);

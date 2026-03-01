@@ -8,6 +8,7 @@
 #include "format.h"
 #include <ctype.h>
 #include <stdlib.h>
+#include <string.h>
 
 //==========================================================================
 // Value Constructors
@@ -150,6 +151,50 @@ bool value_to_number(Value v, float *out)
         const char *str = mem_word_ptr(v.as.node);
         if (str == NULL)
             return false;
+
+        // Check for n/N notation (e.g., 1n5 = 1 * 10^-5 = 0.00001)
+        // Must check before strtof since strtof doesn't understand n/N
+        const char *n_pos = strchr(str, 'n');
+        if (!n_pos)
+            n_pos = strchr(str, 'N');
+
+        if (n_pos && n_pos != str)
+        {
+            // Parse mantissa (part before n)
+            char *end;
+            float mantissa = strtof(str, &end);
+            if (end != n_pos)
+                return false; // mantissa didn't parse up to n
+
+            // Parse exponent as digits-only non-negative integer
+            // n/N notation means mantissa * 10^-k, so only digits are valid
+            const char *exp_start = n_pos + 1;
+            if (*exp_start == '\0')
+                return false; // exponent was empty
+            int exp = 0;
+            end = (char *)exp_start;
+            while (*end != '\0')
+            {
+                if (!isdigit((unsigned char)*end))
+                    return false; // reject signs, decimals, etc.
+                exp = exp * 10 + (*end - '0');
+                end++;
+            }
+            if (end == exp_start)
+                return false; // no digits found
+
+            // Clamp exponent: beyond 45, result underflows to 0.0f anyway
+            if (exp > 45)
+                exp = 45;
+
+            float result = mantissa;
+            for (int i = 0; i < exp; i++)
+            {
+                result /= 10.0f;
+            }
+            *out = result;
+            return true;
+        }
 
         char *end;
         float n = strtof(str, &end);

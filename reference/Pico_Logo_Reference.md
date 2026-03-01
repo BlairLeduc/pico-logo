@@ -933,6 +933,24 @@ setpalette _colournumber_ _list_
 
 The first 128 colour numbers are the default palette for Pico Logo, and changing these colour numbers should be avoided. Colour numbers 254 and 255 are the foreground text and background colour numbers.
 
+The following colour numbers are used by the Logo Editor for syntax colouring. You can change these to customise the editor's appearance:
+
+| Colour Number | Purpose |
+|---|---|
+| 240 | Default text |
+| 241 | Comments |
+| 242 | Keywords (`to`, `end`) |
+| 243 | Functions (word after `to`) |
+| 244 | Variables (`:name`) |
+| 245 | Strings (`"word`) |
+| 246 | Numbers |
+| 247 | Commands |
+| 248–249 | _Reserved for future use_ |
+| 250 | Bracket depth 1 |
+| 251 | Bracket depth 2 |
+| 252 | Bracket depth 3 |
+| 253 | Editor background |
+
 
 ## palette
 
@@ -2686,7 +2704,7 @@ pr _object_
 
 `command`
 
-The `print` command prints its inputs followed by a carriage return on the screen, unless the destination has been changed by [`setwrite`](#setwrite). The outermost brackets of lists are not printed.
+The `print` command prints its inputs followed by a carriage return on the screen, unless the destination has been changed by [`setwrite`](#setwrite). The outermost brackets of lists are not printed. A space is printed between the inputs if there is more than one.
 
 Compare with [`type`](#type) and [`show`](#show).
 
@@ -2697,7 +2715,7 @@ show _object_
 
 `command`
 
-The `show` command prints _object_ followed by a carriage return on the screen, unless the destination has been changed by [`setwrite`](#setwrite). If object is a list, Logo leaves brackets around it.
+The `show` command prints _object_ followed by a carriage return on the screen, unless the destination has been changed by [`setwrite`](#setwrite). If object is a list, Logo leaves brackets around it. A space is printed between the inputs if there is more than one.
 
 Compare with [`type`](#type) and [`print`](#print-pr).
 
@@ -2709,7 +2727,7 @@ type _object_
 
 `command`
 
-The `type` command prints its inputs without a carriage return on the screen, unless the destination has been changed by [`setwrite`](#setwrite). The outermost brackets of lists are not printed.
+The `type` command prints its inputs without a carriage return on the screen, unless the destination has been changed by [`setwrite`](#setwrite). The outermost brackets of lists are not printed. Spaces are not printed between the inputs.
 
 Compare with [`print`](#print-pr) and [`show`](#show).
 

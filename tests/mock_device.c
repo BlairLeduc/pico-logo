@@ -166,9 +166,34 @@ static void mock_turtle_home(void)
     record_command(MOCK_CMD_HOME);
 }
 
-static void mock_turtle_set_position(float x, float y)
+static bool mock_turtle_set_position(float x, float y)
 {
-    // Draw line to new position if pen is down
+    float new_x = x;
+    float new_y = y;
+
+    // Handle boundary modes
+    switch (mock_state.turtle.boundary_mode)
+    {
+    case MOCK_BOUNDARY_FENCE:
+        // Check if new position is out of bounds
+        if (new_x < -SCREEN_HALF_WIDTH - 0.5f || new_x >= SCREEN_HALF_WIDTH - 0.5f ||
+            new_y < -SCREEN_HALF_HEIGHT - 0.5f || new_y >= SCREEN_HALF_HEIGHT - 0.5f)
+        {
+            mock_state.boundary_error = true;
+            return false;  // Boundary error
+        }
+        break;
+
+    case MOCK_BOUNDARY_WINDOW:
+        // Allow any position, no restrictions
+        break;
+
+    case MOCK_BOUNDARY_WRAP:
+        // Don't wrap yet - draw line with unwrapped coordinates first
+        break;
+    }
+
+    // Draw line if pen is down (use unwrapped coordinates for correct wrap rendering)
     if (mock_state.turtle.pen_state == LOGO_PEN_DOWN)
     {
         if (mock_state.graphics.line_count < MOCK_MAX_LINES)
@@ -176,15 +201,28 @@ static void mock_turtle_set_position(float x, float y)
             MockLine *line = &mock_state.graphics.lines[mock_state.graphics.line_count++];
             line->x1 = mock_state.turtle.x;
             line->y1 = mock_state.turtle.y;
-            line->x2 = x;
-            line->y2 = y;
+            line->x2 = new_x;
+            line->y2 = new_y;
             line->colour = mock_state.turtle.pen_colour;
         }
     }
-    
-    mock_state.turtle.x = x;
-    mock_state.turtle.y = y;
-    record_command_position(MOCK_CMD_SET_POSITION, x, y);
+
+    mock_state.turtle.x = new_x;
+    mock_state.turtle.y = new_y;
+
+    // Now wrap the position after drawing (for wrap mode only)
+    if (mock_state.turtle.boundary_mode == MOCK_BOUNDARY_WRAP)
+    {
+        float norm_x = mock_state.turtle.x + SCREEN_HALF_WIDTH;
+        float norm_y = mock_state.turtle.y + SCREEN_HALF_HEIGHT;
+        norm_x = norm_x - floorf(norm_x / SCREEN_WIDTH) * SCREEN_WIDTH;
+        norm_y = norm_y - floorf(norm_y / SCREEN_HEIGHT) * SCREEN_HEIGHT;
+        mock_state.turtle.x = norm_x - SCREEN_HALF_WIDTH;
+        mock_state.turtle.y = norm_y - SCREEN_HALF_HEIGHT;
+    }
+
+    record_command_position(MOCK_CMD_SET_POSITION, mock_state.turtle.x, mock_state.turtle.y);
+    return true;  // Success
 }
 
 static void mock_turtle_get_position(float *x, float *y)

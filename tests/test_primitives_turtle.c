@@ -742,6 +742,94 @@ void test_back_in_fence_mode_errors_at_boundary(void)
     ASSERT_POSITION(0, 0);
 }
 
+void test_fence_prevents_setpos_past_boundary(void)
+{
+    run_string("fence");
+    
+    // Try to setpos past the boundary
+    Result r = run_string("setpos [200 0]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    
+    // Turtle should not have moved
+    ASSERT_POSITION(0, 0);
+}
+
+void test_fence_prevents_setx_past_boundary(void)
+{
+    run_string("fence");
+    
+    // Try to setx past the boundary
+    Result r = run_string("setx 200");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    
+    // Turtle should not have moved
+    ASSERT_POSITION(0, 0);
+}
+
+void test_fence_prevents_sety_past_boundary(void)
+{
+    run_string("fence");
+    
+    // Try to sety past the boundary
+    Result r = run_string("sety 200");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    
+    // Turtle should not have moved
+    ASSERT_POSITION(0, 0);
+}
+
+void test_fence_allows_setpos_within_bounds(void)
+{
+    run_string("fence");
+    
+    Result r = run_string("setpos [100 50]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    ASSERT_POSITION(100, 50);
+}
+
+void test_window_allows_setpos_past_boundary(void)
+{
+    run_string("window");
+    
+    Result r = run_string("setpos [500 300]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    ASSERT_POSITION(500, 300);
+}
+
+void test_wrap_wraps_setpos_at_boundary(void)
+{
+    run_string("wrap");
+    
+    // setpos [180 0] from [0,0]: 180 is 20 past the right edge (160)
+    // Should wrap to -140 (180 - 320 = -140)
+    Result r = run_string("setpos [180 0]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    ASSERT_POSITION(-140, 0);
+}
+
+void test_wrap_setpos_draws_correct_line(void)
+{
+    // In wrap mode, setpos [180 0] from [0,0] should draw a line
+    // that goes right and wraps, not directly to the wrapped position
+    run_string("wrap");
+    
+    Result r = run_string("setpos [180 0]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    // The line should be from (0,0) to (180,0) (unwrapped endpoint)
+    // NOT from (0,0) to (-140,0) (the wrapped endpoint)
+    // The mock records a single line from old to new unwrapped position
+    const MockDeviceState *state = mock_device_get_state();
+    TEST_ASSERT_EQUAL(1, state->graphics.line_count);
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 0.0f, state->graphics.lines[0].x1);
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 0.0f, state->graphics.lines[0].y1);
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 180.0f, state->graphics.lines[0].x2);
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 0.0f, state->graphics.lines[0].y2);
+    
+    // But the turtle position should be wrapped
+    ASSERT_POSITION(-140, 0);
+}
+
 //==========================================================================
 // Line Drawing Tests (pen down movement)
 //==========================================================================
@@ -928,15 +1016,28 @@ void test_palette_outputs_rgb_list(void)
 
 void test_restorepalette_resets_palette(void)
 {
-    // Set a custom palette value
+    // Set a custom palette value (slot 50 default is palette_24bit[50])
     run_string("setpalette 50 [255 0 0]");
     
+    // Verify the custom value was set
+    Result r = run_string("palette 50");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    Node list = r.value.as.node;
+    TEST_ASSERT_EQUAL_STRING("255", mem_word_ptr(mem_car(list)));
+    
     // Restore palette
-    Result r = run_string("restorepalette");
+    r = run_string("restorepalette");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     
-    // Check that restore was called
+    // Check that restore was called on the device
     TEST_ASSERT_TRUE(mock_device_was_restore_palette_called());
+    
+    // Verify the core palette was restored (slot 50 should no longer be [255 0 0])
+    r = run_string("palette 50");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    list = r.value.as.node;
+    // Slot 50 default is from palette_24bit[50] = 0x581100 → r=88, g=17, b=0
+    TEST_ASSERT_EQUAL_STRING("88", mem_word_ptr(mem_car(list)));
 }
 
 void test_setpalette_clamps_values(void)
@@ -987,6 +1088,39 @@ void test_palette_validates_slot(void)
     // Slot out of range (too high)
     r = run_string("palette 256");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_setpalette_overwrites_previous_value(void)
+{
+    // Set initial palette value
+    Result r = run_string("setpalette 242 [197 134 192]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(mock_device_verify_palette(242, 197, 134, 192));
+
+    // Read it back to confirm
+    r = run_string("palette 242");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    Node list = r.value.as.node;
+    TEST_ASSERT_EQUAL_STRING("197", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_EQUAL_STRING("134", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_EQUAL_STRING("192", mem_word_ptr(mem_car(list)));
+
+    // Now set a DIFFERENT value on the same slot
+    r = run_string("setpalette 242 [198 120 221]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(mock_device_verify_palette(242, 198, 120, 221));
+
+    // Read it back — must show the NEW values, not the old ones
+    r = run_string("palette 242");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    list = r.value.as.node;
+    TEST_ASSERT_EQUAL_STRING("198", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_EQUAL_STRING("120", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_EQUAL_STRING("221", mem_word_ptr(mem_car(list)));
 }
 
 //==========================================================================
@@ -1340,6 +1474,13 @@ int main(void)
     RUN_TEST(test_window_allows_movement_past_boundary);
     RUN_TEST(test_wrap_wraps_at_boundary);
     RUN_TEST(test_back_in_fence_mode_errors_at_boundary);
+    RUN_TEST(test_fence_prevents_setpos_past_boundary);
+    RUN_TEST(test_fence_prevents_setx_past_boundary);
+    RUN_TEST(test_fence_prevents_sety_past_boundary);
+    RUN_TEST(test_fence_allows_setpos_within_bounds);
+    RUN_TEST(test_window_allows_setpos_past_boundary);
+    RUN_TEST(test_wrap_wraps_setpos_at_boundary);
+    RUN_TEST(test_wrap_setpos_draws_correct_line);
     
     // Line drawing tests
     RUN_TEST(test_forward_with_pendown_draws_line);
@@ -1358,6 +1499,7 @@ int main(void)
     RUN_TEST(test_setpalette_requires_list);
     RUN_TEST(test_setpalette_requires_three_elements);
     RUN_TEST(test_palette_validates_slot);
+    RUN_TEST(test_setpalette_overwrites_previous_value);
     
     // Integration tests
     RUN_TEST(test_draw_square);

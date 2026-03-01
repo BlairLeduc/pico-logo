@@ -622,7 +622,8 @@ static void turtle_home(void)
 // Set the turtle position to the specified coordinates
 // Logo coordinates: origin at center, Y increases upward (north)
 // Screen coordinates: origin at top-left, Y increases downward
-static void turtle_set_position(float x, float y)
+// Returns true on success, false if boundary error (fence mode)
+static bool turtle_set_position(float x, float y)
 {
     screen_show_field();
 
@@ -635,8 +636,38 @@ static void turtle_set_position(float x, float y)
     // Convert Logo coordinates to screen coordinates:
     // - X: Logo 0 -> Screen center (SCREEN_WIDTH/2)
     // - Y: Logo 0 -> Screen center, but Y axis is flipped (Logo Y up, Screen Y down)
-    turtle_x = fmodf((x + SCREEN_WIDTH / 2) + SCREEN_WIDTH, SCREEN_WIDTH);
-    turtle_y = fmodf((-y + SCREEN_HEIGHT / 2) + SCREEN_HEIGHT, SCREEN_HEIGHT);
+    float new_x = x + SCREEN_WIDTH / 2;
+    float new_y = -y + SCREEN_HEIGHT / 2;
+
+    // Handle boundary modes
+    switch (turtle_boundary_mode)
+    {
+    case BOUNDARY_MODE_FENCE:
+        // Check if new position is out of bounds (in Logo coordinates)
+        if (x < TURTLE_MIN_X - 0.5f || x >= TURTLE_MAX_X + 0.5f ||
+            y < TURTLE_MIN_Y - 0.5f || y >= TURTLE_MAX_Y + 0.5f)
+        {
+            // Redraw turtle at original position and don't move
+            turtle_draw();
+            return false;  // Boundary error
+        }
+        turtle_x = new_x;
+        turtle_y = new_y;
+        break;
+
+    case BOUNDARY_MODE_WINDOW:
+        // Allow any position, no restrictions
+        turtle_x = new_x;
+        turtle_y = new_y;
+        break;
+
+    case BOUNDARY_MODE_WRAP:
+        // Don't wrap yet - we need unwrapped coordinates for line drawing
+        // so that pixel-by-pixel wrapping happens correctly in screen_gfx_line
+        turtle_x = new_x;
+        turtle_y = new_y;
+        break;
+    }
 
     // Draw line if pen is down
     if (turtle_pen_state == LOGO_PEN_DOWN)
@@ -653,9 +684,17 @@ static void turtle_set_position(float x, float y)
     }
     // else if LOGO_PEN_UP: do not draw anything
 
+    // Now wrap the turtle position after drawing (for wrap mode only)
+    if (turtle_boundary_mode == BOUNDARY_MODE_WRAP)
+    {
+        turtle_x = turtle_x - floorf(turtle_x / SCREEN_WIDTH) * SCREEN_WIDTH;
+        turtle_y = turtle_y - floorf(turtle_y / SCREEN_HEIGHT) * SCREEN_HEIGHT;
+    }
+
     // Draw the turtle at the new position
     turtle_draw();
     screen_gfx_update();
+    return true;  // Success
 }
 
 // Get the current turtle position

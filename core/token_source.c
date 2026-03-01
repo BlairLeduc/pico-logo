@@ -43,8 +43,10 @@ static bool is_number_word(const char *str, size_t len)
     // Exponent part (e/E for standard, n/N for negative exponent)
     if (i < len && (str[i] == 'e' || str[i] == 'E' || str[i] == 'n' || str[i] == 'N'))
     {
+        bool is_n_notation = (str[i] == 'n' || str[i] == 'N');
         i++;
-        if (i < len && (str[i] == '-' || str[i] == '+'))
+        // Only allow signs after e/E, not after n/N
+        if (!is_n_notation && i < len && (str[i] == '-' || str[i] == '+'))
             i++;
         while (i < len && isdigit((unsigned char)str[i]))
             i++;

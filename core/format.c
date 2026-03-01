@@ -333,21 +333,7 @@ static bool list_has_newlines(Node list)
     return false;
 }
 
-// Check if only newline markers remain in the list (for closing bracket indent)
-static bool only_newlines_remain(Node list)
-{
-    Node curr = list;
-    while (!mem_is_nil(curr))
-    {
-        Node elem = mem_car(curr);
-        if (!mem_is_newline(elem))
-        {
-            return false;
-        }
-        curr = mem_cdr(curr);
-    }
-    return true;
-}
+
 
 // Forward declaration for mutual recursion
 static bool format_list_with_newlines(FormatOutputFunc out, void *ctx, Node list, int depth);
@@ -412,7 +398,6 @@ static bool format_list_with_newlines(FormatOutputFunc out, void *ctx, Node list
     while (!mem_is_nil(curr))
     {
         Node elem = mem_car(curr);
-        Node next = mem_cdr(curr);
         
         if (mem_is_newline(elem))
         {
@@ -425,13 +410,9 @@ static bool format_list_with_newlines(FormatOutputFunc out, void *ctx, Node list
         {
             if (at_line_start)
             {
-                // Indent: 2 spaces base + 2 spaces per depth level
-                // But reduce by 1 level if only newlines remain (for closing bracket)
+                // Indent: 2 spaces per depth level for content inside brackets
+                // The closing bracket gets its own indentation at end of function
                 int indent_depth = depth + 1;
-                if (only_newlines_remain(next))
-                {
-                    indent_depth = depth;
-                }
                 for (int i = 0; i < indent_depth; i++)
                 {
                     if (!out(ctx, "  "))
@@ -450,7 +431,7 @@ static bool format_list_with_newlines(FormatOutputFunc out, void *ctx, Node list
                 return false;
         }
         
-        curr = next;
+        curr = mem_cdr(curr);
     }
     
     // If we ended with a newline, indent the closing bracket to match the opening
@@ -694,9 +675,9 @@ bool format_property(FormatOutputFunc out, void *ctx, const char *name,
     {
         // Check if it's a number (numbers are stored as words)
         const char *str = mem_word_ptr(val_node);
-        char *endptr;
-        strtof(str, &endptr);
-        if (*endptr == '\0' && str[0] != '\0')
+        Value word_val = value_word(val_node);
+        float num_check;
+        if (value_to_number(word_val, &num_check))
         {
             // It's a number, output without quote
             if (!out(ctx, str))

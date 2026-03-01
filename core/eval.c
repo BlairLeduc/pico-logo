@@ -189,8 +189,10 @@ static bool is_number_string(const char *str, size_t len)
     }
     if (i < len && (str[i] == 'e' || str[i] == 'E' || str[i] == 'n' || str[i] == 'N'))
     {
+        bool is_n_notation = (str[i] == 'n' || str[i] == 'N');
         i++;
-        if (i < len && (str[i] == '-' || str[i] == '+'))
+        // Only allow signs after e/E, not after n/N
+        if (!is_n_notation && i < len && (str[i] == '-' || str[i] == '+'))
             i++;
         while (i < len && isdigit((unsigned char)str[i]))
             i++;
@@ -216,9 +218,16 @@ static float parse_number(const char *str, size_t len)
     {
         *n_pos = '\0';
         float mantissa = strtof(buf, NULL);
-        float exp = strtof(n_pos + 1, NULL);
+        // Parse exponent as digits-only non-negative integer
+        int exp = 0;
+        const char *p = n_pos + 1;
+        while (*p != '\0')
+        {
+            exp = exp * 10 + (*p - '0');
+            p++;
+        }
         float result = mantissa;
-        for (int i = 0; i < (int)exp; i++)
+        for (int i = 0; i < exp; i++)
         {
             result /= 10.0f;
         }
@@ -840,6 +849,18 @@ static Result eval_primary(Evaluator *eval)
             // proc arg collection doesn't have OP_PRIM_CALL support.
             if (eval->proc_depth > 0 && eval->user_arg_depth == 0)
             {
+                // Consume closing paren of (proc args) call before deferring
+                // so that the saved token source is past the ')' and the
+                // infix expression parser can see operators that follow,
+                // e.g. (f :x) + (g :y).  Don't decrement paren_depth here;
+                // the TOKEN_LEFT_PAREN "grouping" handler does that.
+                {
+                    Token closing = peek(eval);
+                    if (closing.type == TOKEN_RIGHT_PAREN)
+                    {
+                        advance(eval);
+                    }
+                }
                 // Push frame
                 word_offset_t frame_offset = frame_push(eval->frames, user_proc, args, argc);
                 if (frame_offset == OFFSET_NONE)
@@ -906,14 +927,12 @@ static Result eval_expr_bp(Evaluator *eval, int min_bp)
 
     Result lhs = eval_primary(eval);
 
-    // If eval_primary pushed a deferred proc call, save expression state
+    // If eval_primary pushed a deferred proc call, save expression state.
+    // Always push OP_EXPR_EVAL so the infix loop can resume after the
+    // deferred call completes — there may be infix operators following
+    // the primary expression (e.g. (f :x) + (g :y)).
     if (lhs.status == RESULT_NONE && op_stack_depth(eval->op_stack) > depth_before_primary)
     {
-        // When depth == 0 (no pending infix operators), OP_EXPR_EVAL would be
-        // a no-op pass-through, so skip it and save an op stack slot per level.
-        if (depth == 0)
-            return result_none();
-
         // Push OP_EXPR_EVAL above the OP_PROC_CALL, then swap so it's below.
         // Stack order: ... → OP_EXPR_EVAL → OP_PROC_CALL (top)
         // Trampoline runs OP_PROC_CALL first, result flows to OP_EXPR_EVAL.
@@ -924,7 +943,7 @@ static Result eval_expr_bp(Evaluator *eval, int min_bp)
         expr_op->flags = OP_FLAG_NONE;
         expr_op->saved_source = eval->token_source;
         expr_op->result = result_none();
-        expr_op->expr_eval.depth = depth;  // 0 — no pending ops yet
+        expr_op->expr_eval.depth = depth;
         expr_op->expr_eval.min_bp = min_bp;
         expr_op->expr_eval.phase = 0;
         op_stack_swap_top(eval->op_stack);

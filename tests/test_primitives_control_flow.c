@@ -83,16 +83,27 @@ void test_forever_repcount_nested_in_repeat(void)
 
 void test_stop(void)
 {
-    // stop should return RESULT_STOP
-    Result r = eval_string("stop");
-    TEST_ASSERT_EQUAL(RESULT_STOP, r.status);
+    // stop at toplevel should error
+    Result r = run_string("stop");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_ONLY_IN_PROCEDURE, r.error_code);
 }
 
 void test_output(void)
 {
-    Result r = eval_string("output 99");
-    TEST_ASSERT_EQUAL(RESULT_OUTPUT, r.status);
-    TEST_ASSERT_EQUAL_FLOAT(99.0f, r.value.as.number);
+    // output at toplevel should error
+    Result r = run_string("output 99");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_ONLY_IN_PROCEDURE, r.error_code);
+}
+
+void test_output_in_if_expression_at_toplevel(void)
+{
+    // op inside an if expression at toplevel should error (error 33)
+    run_string("make \"x 5");
+    Result r = run_string("pr (if :x > 5 [op \"big] [op \"small])");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_ONLY_IN_PROCEDURE, r.error_code);
 }
 
 void test_run_list(void)
@@ -599,6 +610,7 @@ int main(void)
     RUN_TEST(test_forever_repcount_nested_in_repeat);
     RUN_TEST(test_stop);
     RUN_TEST(test_output);
+    RUN_TEST(test_output_in_if_expression_at_toplevel);
     RUN_TEST(test_run_list);
     RUN_TEST(test_infix_minus_in_list);
     RUN_TEST(test_while_basic);
