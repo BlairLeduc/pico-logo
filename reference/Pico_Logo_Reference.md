@@ -2686,7 +2686,7 @@ pr _object_
 
 `command`
 
-The `print` command prints its inputs followed by a carriage return on the screen, unless the destination has been changed by [`setwrite`](#setwrite). The outermost brackets of lists are not printed.
+The `print` command prints its inputs followed by a carriage return on the screen, unless the destination has been changed by [`setwrite`](#setwrite). The outermost brackets of lists are not printed. A space is printed between the inputs if there is more than one.
 
 Compare with [`type`](#type) and [`show`](#show).
 
@@ -2697,7 +2697,7 @@ show _object_
 
 `command`
 
-The `show` command prints _object_ followed by a carriage return on the screen, unless the destination has been changed by [`setwrite`](#setwrite). If object is a list, Logo leaves brackets around it.
+The `show` command prints _object_ followed by a carriage return on the screen, unless the destination has been changed by [`setwrite`](#setwrite). If object is a list, Logo leaves brackets around it. A space is printed between the inputs if there is more than one.
 
 Compare with [`type`](#type) and [`print`](#print-pr).
 
