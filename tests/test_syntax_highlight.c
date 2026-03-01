@@ -8,6 +8,7 @@
 #include "unity.h"
 #include "core/syntax_highlight.h"
 
+#include <stdio.h>
 #include <string.h>
 
 void setUp(void)  {}
