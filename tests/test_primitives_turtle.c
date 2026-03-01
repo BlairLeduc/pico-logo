@@ -1016,15 +1016,28 @@ void test_palette_outputs_rgb_list(void)
 
 void test_restorepalette_resets_palette(void)
 {
-    // Set a custom palette value
+    // Set a custom palette value (slot 50 default is palette_24bit[50])
     run_string("setpalette 50 [255 0 0]");
     
+    // Verify the custom value was set
+    Result r = run_string("palette 50");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    Node list = r.value.as.node;
+    TEST_ASSERT_EQUAL_STRING("255", mem_word_ptr(mem_car(list)));
+    
     // Restore palette
-    Result r = run_string("restorepalette");
+    r = run_string("restorepalette");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     
-    // Check that restore was called
+    // Check that restore was called on the device
     TEST_ASSERT_TRUE(mock_device_was_restore_palette_called());
+    
+    // Verify the core palette was restored (slot 50 should no longer be [255 0 0])
+    r = run_string("palette 50");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    list = r.value.as.node;
+    // Slot 50 default is from palette_24bit[50] = 0x581100 → r=88, g=17, b=0
+    TEST_ASSERT_EQUAL_STRING("88", mem_word_ptr(mem_car(list)));
 }
 
 void test_setpalette_clamps_values(void)
@@ -1075,6 +1088,39 @@ void test_palette_validates_slot(void)
     // Slot out of range (too high)
     r = run_string("palette 256");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_setpalette_overwrites_previous_value(void)
+{
+    // Set initial palette value
+    Result r = run_string("setpalette 242 [197 134 192]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(mock_device_verify_palette(242, 197, 134, 192));
+
+    // Read it back to confirm
+    r = run_string("palette 242");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    Node list = r.value.as.node;
+    TEST_ASSERT_EQUAL_STRING("197", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_EQUAL_STRING("134", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_EQUAL_STRING("192", mem_word_ptr(mem_car(list)));
+
+    // Now set a DIFFERENT value on the same slot
+    r = run_string("setpalette 242 [198 120 221]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(mock_device_verify_palette(242, 198, 120, 221));
+
+    // Read it back — must show the NEW values, not the old ones
+    r = run_string("palette 242");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    list = r.value.as.node;
+    TEST_ASSERT_EQUAL_STRING("198", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_EQUAL_STRING("120", mem_word_ptr(mem_car(list)));
+    list = mem_cdr(list);
+    TEST_ASSERT_EQUAL_STRING("221", mem_word_ptr(mem_car(list)));
 }
 
 //==========================================================================
@@ -1453,6 +1499,7 @@ int main(void)
     RUN_TEST(test_setpalette_requires_list);
     RUN_TEST(test_setpalette_requires_three_elements);
     RUN_TEST(test_palette_validates_slot);
+    RUN_TEST(test_setpalette_overwrites_previous_value);
     
     // Integration tests
     RUN_TEST(test_draw_square);

@@ -10,9 +10,31 @@
 #include "error.h"
 #include "eval.h"
 #include "devices/io.h"
+#include "devices/palette.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+
+//==========================================================================
+// Core palette state
+//
+// The interpreter maintains its own authoritative 24-bit RGB palette so that
+// PALETTE always returns the exact values set by SETPALETTE, regardless of
+// any precision loss in the device layer (e.g. RGB565 on PicoCalc).
+//==========================================================================
+
+static struct { uint8_t r, g, b; } core_palette[256];
+
+static void core_palette_init(void)
+{
+    for (int i = 0; i < 256; i++)
+    {
+        uint32_t rgb = palette_24bit[i];
+        core_palette[i].r = (rgb >> 16) & 0xFF;
+        core_palette[i].g = (rgb >> 8)  & 0xFF;
+        core_palette[i].b =  rgb        & 0xFF;
+    }
+}
 
 //==========================================================================
 // Helper functions
@@ -739,6 +761,12 @@ static Result prim_setpalette(Evaluator *eval, int argc, Value *args)
         return error;
     }
 
+    // Update the core 24-bit palette (authoritative source for PALETTE)
+    core_palette[slot].r = r;
+    core_palette[slot].g = g;
+    core_palette[slot].b = b;
+
+    // Forward to device for display update
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_palette)
     {
@@ -761,15 +789,10 @@ static Result prim_palette(Evaluator *eval, int argc, Value *args)
     }
 
     uint8_t slot = (uint8_t)slot_num;
-    uint8_t r = 0, g = 0, b = 0;
 
-    const LogoConsoleTurtle *turtle = get_turtle_ops();
-    if (turtle && turtle->get_palette)
-    {
-        turtle->get_palette(slot, &r, &g, &b);
-    }
-    
-    return result_ok(make_rgb_list(r, g, b));
+    // Read from core palette (exact 24-bit values, no device round-trip)
+    return result_ok(make_rgb_list(
+        core_palette[slot].r, core_palette[slot].g, core_palette[slot].b));
 }
 
 // restorepalette - Restore default palette (slots 0-127)
@@ -777,6 +800,16 @@ static Result prim_restorepalette(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc); UNUSED(args);
 
+    // Restore core palette slots 0-127 from defaults
+    for (int i = 0; i < 128; i++)
+    {
+        uint32_t rgb = palette_24bit[i];
+        core_palette[i].r = (rgb >> 16) & 0xFF;
+        core_palette[i].g = (rgb >> 8)  & 0xFF;
+        core_palette[i].b =  rgb        & 0xFF;
+    }
+
+    // Forward to device
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->restore_palette)
     {
@@ -928,6 +961,9 @@ static Result prim_shape(Evaluator *eval, int argc, Value *args)
 
 void primitives_turtle_init(void)
 {
+    // Initialize the core 24-bit palette from default values
+    core_palette_init();
+
     // Movement primitives
     primitive_register("back", 1, prim_back);
     primitive_register("bk", 1, prim_back);

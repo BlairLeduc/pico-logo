@@ -1,10 +1,10 @@
 ; [Dracula Theme for Pico Logo Editor]
 ; [Sets palette slots 240-253 to match]
 ; [the Dracula colour scheme.]
-;
+; []
 ; [Usage: load "dracula.theme]
-;
-; [Semantic colours (slots 240-247)]
+; []
+; [Semantic colours - slots 240-247]
 setpalette 240 [248 248 242]
 setpalette 241 [98 114 164]
 setpalette 242 [255 121 198]

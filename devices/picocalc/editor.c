@@ -49,7 +49,6 @@
 #define PALETTE_SYNTAX_BRACKET_2  251
 #define PALETTE_SYNTAX_BRACKET_3  252
 #define PALETTE_SYNTAX_BG         253
-#define PALETTE_SYNTAX_SLOT_COUNT 14   // Total slots used (240-253)
 
 // Map SyntaxCategory enum values to palette slots
 static const uint8_t category_to_palette[] = {
@@ -106,11 +105,6 @@ typedef struct {
     uint8_t dirty_flags;    // What needs to be redrawn
     int dirty_line;         // Line that needs redraw (for DIRTY_LINE)
     int dirty_from;         // First line to redraw (for DIRTY_FROM_LINE)
-    
-    // Saved palette state for restore on exit
-    uint16_t saved_palette[PALETTE_SYNTAX_SLOT_COUNT];
-    uint8_t saved_fg_slot;
-    uint8_t saved_bg_slot;
 } EditorState;
 
 static EditorState editor;
@@ -1242,33 +1236,8 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
     // Start with underline cursor (normal editing mode)
     lcd_set_cursor_style(LCD_CURSOR_UNDERLINE);
     
-    // Save current palette slots and foreground/background for restore on exit
-    editor.saved_fg_slot = PALETTE_FG;  // Logical slot number (always 254)
-    editor.saved_bg_slot = PALETTE_BG;  // Logical slot number (always 255)
-    static const uint8_t syntax_slots[] = {
-        240, 241, 242, 243, 244, 245, 246, 247,  // Semantic colors
-        250, 251, 252,                              // Bracket depths
-        253                                         // Editor background
-    };
-    for (int i = 0; i < (int)(sizeof(syntax_slots)/sizeof(syntax_slots[0])); i++) {
-        editor.saved_palette[i] = lcd_get_palette_value(syntax_slots[i]);
-    }
-    
-    // Set up Dark+ theme palette for syntax highlighting
-    lcd_set_palette_value(PALETTE_SYNTAX_DEFAULT,   RGB(0xD4, 0xD4, 0xD4));  // #D4D4D4
-    lcd_set_palette_value(PALETTE_SYNTAX_COMMENT,   RGB(0x6A, 0x99, 0x55));  // #6A9955
-    lcd_set_palette_value(PALETTE_SYNTAX_KEYWORD,   RGB(0xC5, 0x86, 0xC0));  // #C586C0
-    lcd_set_palette_value(PALETTE_SYNTAX_FUNCTION,  RGB(0xDC, 0xDC, 0xAA));  // #DCDCAA
-    lcd_set_palette_value(PALETTE_SYNTAX_VARIABLE,  RGB(0x9C, 0xDC, 0xFE));  // #9CDCFE
-    lcd_set_palette_value(PALETTE_SYNTAX_STRING,    RGB(0xCE, 0x91, 0x78));  // #CE9178
-    lcd_set_palette_value(PALETTE_SYNTAX_NUMBER,    RGB(0xB5, 0xCE, 0xA8));  // #B5CEA8
-    lcd_set_palette_value(PALETTE_SYNTAX_COMMAND,   RGB(0xDC, 0xDC, 0xAA));  // #DCDCAA
-    lcd_set_palette_value(PALETTE_SYNTAX_BRACKET_1, RGB(0xFF, 0xD7, 0x00));  // #FFD700
-    lcd_set_palette_value(PALETTE_SYNTAX_BRACKET_2, RGB(0xDA, 0x70, 0xD6));  // #DA70D6
-    lcd_set_palette_value(PALETTE_SYNTAX_BRACKET_3, RGB(0x17, 0x9F, 0xFF));  // #179FFF
-    lcd_set_palette_value(PALETTE_SYNTAX_BG,        RGB(0x1E, 0x1E, 0x1E));  // #1E1E1E
-    
-    // Use Dark+ colors for the editor
+    // Use syntax palette colours for the editor
+    // (defaults set at LCD init; user can override with setpalette or theme files)
     lcd_set_foreground(PALETTE_SYNTAX_DEFAULT);
     lcd_set_background(PALETTE_SYNTAX_BG);
     
@@ -1331,17 +1300,9 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                 screen_txt_erase_cursor();
                 screen_txt_enable_cursor(false);
                 input_active = false;  // Re-enable keyboard mode switching
-                // Restore saved palette and foreground/background
-                {
-                    static const uint8_t slots[] = {
-                        240, 241, 242, 243, 244, 245, 246, 247,
-                        250, 251, 252, 253
-                    };
-                    for (int i = 0; i < (int)(sizeof(slots)/sizeof(slots[0])); i++)
-                        lcd_set_palette_value(slots[i], editor.saved_palette[i]);
-                    lcd_set_foreground(PALETTE_FG);
-                    lcd_set_background(PALETTE_BG);
-                }
+                // Restore foreground/background palette slots
+                lcd_set_foreground(PALETTE_FG);
+                lcd_set_background(PALETTE_BG);
                 screen_set_mode(saved_screen_mode);  // Restore screen mode
                 screen_txt_set_cursor(saved_cursor_col, saved_cursor_row);
                 return LOGO_EDITOR_ACCEPT;
@@ -1351,17 +1312,9 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                 screen_txt_erase_cursor();
                 screen_txt_enable_cursor(false);
                 input_active = false;  // Re-enable keyboard mode switching
-                // Restore saved palette and foreground/background
-                {
-                    static const uint8_t slots[] = {
-                        240, 241, 242, 243, 244, 245, 246, 247,
-                        250, 251, 252, 253
-                    };
-                    for (int i = 0; i < (int)(sizeof(slots)/sizeof(slots[0])); i++)
-                        lcd_set_palette_value(slots[i], editor.saved_palette[i]);
-                    lcd_set_foreground(PALETTE_FG);
-                    lcd_set_background(PALETTE_BG);
-                }
+                // Restore foreground/background palette slots
+                lcd_set_foreground(PALETTE_FG);
+                lcd_set_background(PALETTE_BG);
                 screen_set_mode(saved_screen_mode);  // Restore screen mode
                 screen_txt_set_cursor(saved_cursor_col, saved_cursor_row);
                 return LOGO_EDITOR_CANCEL;

@@ -1,10 +1,10 @@
 ; [Monokai Theme for Pico Logo Editor]
 ; [Sets palette slots 240-253 to match]
 ; [the VS Code Monokai colour scheme.]
-;
+; []
 ; [Usage: load "monokai.theme]
-;
-; [Semantic colours (slots 240-247)]
+; []
+; [Semantic colours - slots 240-247]
 setpalette 240 [248 248 242]
 setpalette 241 [117 113 94]
 setpalette 242 [249 38 114]

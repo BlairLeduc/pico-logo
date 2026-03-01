@@ -1,10 +1,10 @@
 ; [One Dark Theme for Pico Logo Editor]
 ; [Sets palette slots 240-253 to match]
 ; [the Atom One Dark colour scheme.]
-;
+; []
 ; [Usage: load "one-dark.theme]
-;
-; [Semantic colours (slots 240-247)]
+; []
+; [Semantic colours - slots 240-247]
 setpalette 240 [171 178 191]
 setpalette 241 [92 99 112]
 setpalette 242 [198 120 221]

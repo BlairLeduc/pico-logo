@@ -1,10 +1,10 @@
 ; [Dark+ Theme for Pico Logo Editor]
 ; [Sets palette slots 240-253 to match]
 ; [the VS Code Dark+ colour scheme.]
-;
+; []
 ; [Usage: load "dark-plus.theme]
-;
-; [Semantic colours (slots 240-247)]
+; []
+; [Semantic colours - slots 240-247]
 setpalette 240 [212 212 212]
 setpalette 241 [106 153 85]
 setpalette 242 [197 134 192]

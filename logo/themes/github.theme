@@ -1,10 +1,10 @@
 ; [GitHub Dark Theme for Pico Logo Editor]
 ; [Sets palette slots 240-253 to match]
 ; [the GitHub Dark Default colour scheme.]
-;
+; []
 ; [Usage: load "github-dark.theme]
-;
-; [Semantic colours (slots 240-247)]
+; []
+; [Semantic colours - slots 240-247]
 setpalette 240 [201 209 217]
 setpalette 241 [139 148 158]
 setpalette 242 [255 123 114]
