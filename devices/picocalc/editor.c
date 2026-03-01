@@ -16,6 +16,7 @@
 #include "lcd.h"
 #include "screen.h"
 #include "devices/font.h"
+#include "core/syntax_highlight.h"
 
 #include <string.h>
 #include <stdbool.h>
@@ -33,6 +34,37 @@
 
 // Tab width for indentation (2 spaces per tab stop)
 #define TAB_WIDTH             2
+
+// Syntax highlighting palette slots (Dark+ theme)
+// Slots 240-247: semantic colors, 250-252: bracket depth, 253: editor bg
+#define PALETTE_SYNTAX_DEFAULT    240
+#define PALETTE_SYNTAX_COMMENT    241
+#define PALETTE_SYNTAX_KEYWORD    242
+#define PALETTE_SYNTAX_FUNCTION   243
+#define PALETTE_SYNTAX_VARIABLE   244
+#define PALETTE_SYNTAX_STRING     245
+#define PALETTE_SYNTAX_NUMBER     246
+#define PALETTE_SYNTAX_COMMAND    247
+#define PALETTE_SYNTAX_BRACKET_1  250
+#define PALETTE_SYNTAX_BRACKET_2  251
+#define PALETTE_SYNTAX_BRACKET_3  252
+#define PALETTE_SYNTAX_BG         253
+#define PALETTE_SYNTAX_SLOT_COUNT 14   // Total slots used (240-253)
+
+// Map SyntaxCategory enum values to palette slots
+static const uint8_t category_to_palette[] = {
+    [SYNTAX_DEFAULT]   = PALETTE_SYNTAX_DEFAULT,
+    [SYNTAX_COMMENT]   = PALETTE_SYNTAX_COMMENT,
+    [SYNTAX_KEYWORD]   = PALETTE_SYNTAX_KEYWORD,
+    [SYNTAX_FUNCTION]  = PALETTE_SYNTAX_FUNCTION,
+    [SYNTAX_VARIABLE]  = PALETTE_SYNTAX_VARIABLE,
+    [SYNTAX_STRING]    = PALETTE_SYNTAX_STRING,
+    [SYNTAX_NUMBER]    = PALETTE_SYNTAX_NUMBER,
+    [SYNTAX_COMMAND]   = PALETTE_SYNTAX_COMMAND,
+    [SYNTAX_BRACKET_1] = PALETTE_SYNTAX_BRACKET_1,
+    [SYNTAX_BRACKET_2] = PALETTE_SYNTAX_BRACKET_2,
+    [SYNTAX_BRACKET_3] = PALETTE_SYNTAX_BRACKET_3,
+};
 
 // Copy buffer size (default 1024 for RP2040, 8192 for RP2350)
 #ifndef LOGO_COPY_BUFFER_SIZE
@@ -74,6 +106,11 @@ typedef struct {
     uint8_t dirty_flags;    // What needs to be redrawn
     int dirty_line;         // Line that needs redraw (for DIRTY_LINE)
     int dirty_from;         // First line to redraw (for DIRTY_FROM_LINE)
+    
+    // Saved palette state for restore on exit
+    uint16_t saved_palette[PALETTE_SYNTAX_SLOT_COUNT];
+    uint8_t saved_fg_slot;
+    uint8_t saved_bg_slot;
 } EditorState;
 
 static EditorState editor;
@@ -82,7 +119,7 @@ static EditorState editor;
 static void editor_draw_header(void);
 static void editor_draw_footer(void);
 static void editor_draw_content(void);
-static void editor_draw_line(int screen_row, int line_index);
+static void editor_draw_line(int screen_row, int line_index, int bracket_depth);
 static void editor_position_cursor(void);
 static void editor_insert_char(char c);
 static void editor_insert_tab(void);
@@ -328,11 +365,54 @@ static bool editor_ensure_cursor_visible(void)
 }
 
 //
+// Compute the bracket nesting depth at the start of a given line.
+// Scans backward to the nearest TO line (which resets depth to 0),
+// then scans forward line-by-line using syntax_highlight_line in
+// depth-only mode (NULL categories).
+//
+static int editor_compute_depth_at_line(int target_line)
+{
+    // Find the nearest preceding TO line (or line 0)
+    int scan_from = 0;
+    for (int ln = target_line - 1; ln >= 0; ln--) {
+        int ls = editor_get_line_start(ln);
+        if (ls >= (int)editor.content_length) continue;
+        
+        // Check if this line starts with optional whitespace then "to"
+        int p = ls;
+        while (p < (int)editor.content_length && (editor.buffer[p] == ' ' || editor.buffer[p] == '\t'))
+            p++;
+        int le = editor_get_line_end(ln);
+        int remaining = le - p;
+        if (remaining >= 2 &&
+            (editor.buffer[p] == 't' || editor.buffer[p] == 'T') &&
+            (editor.buffer[p + 1] == 'o' || editor.buffer[p + 1] == 'O') &&
+            (remaining == 2 || editor.buffer[p + 2] == ' ' || editor.buffer[p + 2] == '\t')) {
+            scan_from = ln;
+            break;
+        }
+    }
+    
+    // Scan forward from scan_from, accumulating depth
+    int depth = 0;
+    for (int ln = scan_from; ln < target_line; ln++) {
+        int ls = editor_get_line_start(ln);
+        int le = editor_get_line_end(ln);
+        int len = le - ls;
+        if (ls < (int)editor.content_length && len > 0) {
+            depth = syntax_highlight_line(editor.buffer + ls, len, NULL, depth);
+        }
+    }
+    return depth;
+}
+
+//
 // Draw a single line of content at the specified screen row
 // Handles horizontal scrolling with left/right arrow indicators
 // Always draws full 40 characters to avoid flicker (no erase needed)
+// bracket_depth: nesting depth at the start of this line (for coloring)
 //
-static void editor_draw_line(int screen_row, int line_index)
+static void editor_draw_line(int screen_row, int line_index, int bracket_depth)
 {
     int actual_row = EDITOR_FIRST_ROW + screen_row;
     
@@ -342,10 +422,23 @@ static void editor_draw_line(int screen_row, int line_index)
     
     // Handle empty/non-existent lines - just draw spaces
     if (line_start >= (int)editor.content_length) {
+        lcd_set_foreground(PALETTE_SYNTAX_DEFAULT);
         for (int col = 0; col < EDITOR_MAX_COLS; col++) {
             lcd_putc(col, actual_row, ' ');
         }
         return;
+    }
+    
+    // Syntax-highlight this line
+    // Use a stack buffer (lines rarely exceed a few hundred chars)
+    uint8_t categories_buf[512];
+    uint8_t *categories = categories_buf;
+    if (line_len > (int)sizeof(categories_buf)) {
+        // Extremely long line — skip highlighting, use default
+        categories = NULL;
+    } else if (line_len > 0) {
+        syntax_highlight_line(editor.buffer + line_start, line_len,
+                              categories, bracket_depth);
     }
     
     // Check if this is the line with the cursor (uses h_scroll)
@@ -362,6 +455,7 @@ static void editor_draw_line(int screen_row, int line_index)
     
     // Draw left arrow if needed
     if (show_left_arrow) {
+        lcd_set_foreground(PALETTE_SYNTAX_DEFAULT);
         lcd_putc(screen_col++, actual_row, EDITOR_LEFT_ARROW);
         visible_cols--;
     }
@@ -376,10 +470,16 @@ static void editor_draw_line(int screen_row, int line_index)
         int buf_col = h_offset + col;
         char c = ' ';  // Default to space
         bool in_selection = false;
+        uint8_t palette_slot = PALETTE_SYNTAX_DEFAULT;
         
         if (buf_col < line_len) {
             size_t buf_pos = line_start + buf_col;
             c = editor.buffer[buf_pos];
+            
+            // Look up syntax color for this character
+            if (categories && buf_col < line_len) {
+                palette_slot = category_to_palette[categories[buf_col]];
+            }
             
             // Check if this character is in selection
             if (editor.selecting) {
@@ -391,20 +491,24 @@ static void editor_draw_line(int screen_row, int line_index)
             }
         }
         
-        // Use bit 7 for reverse video when selected
+        // Use bit 7 for reverse video when selected (default color for uniform selection)
         if (in_selection) {
+            lcd_set_foreground(PALETTE_SYNTAX_DEFAULT);
             lcd_putc(screen_col++, actual_row, c | 0x80);
         } else {
+            lcd_set_foreground(palette_slot);
             lcd_putc(screen_col++, actual_row, c);
         }
     }
     
     // Draw right arrow or final space
     if (show_right_arrow) {
+        lcd_set_foreground(PALETTE_SYNTAX_DEFAULT);
         lcd_putc(screen_col++, actual_row, EDITOR_RIGHT_ARROW);
     }
     
     // Fill any remaining columns with spaces (shouldn't happen but be safe)
+    lcd_set_foreground(PALETTE_SYNTAX_DEFAULT);
     while (screen_col < EDITOR_MAX_COLS) {
         lcd_putc(screen_col++, actual_row, ' ');
     }
@@ -412,11 +516,24 @@ static void editor_draw_line(int screen_row, int line_index)
 
 //
 // Draw all visible content
+// Tracks bracket nesting depth across lines for syntax coloring
 //
 static void editor_draw_content(void)
 {
+    int depth = editor_compute_depth_at_line(editor.view_start_line);
     for (int row = 0; row < EDITOR_VISIBLE_ROWS; row++) {
-        editor_draw_line(row, editor.view_start_line + row);
+        int line_index = editor.view_start_line + row;
+        int line_start = editor_get_line_start(line_index);
+        int line_end = editor_get_line_end(line_index);
+        int line_len = line_end - line_start;
+        
+        editor_draw_line(row, line_index, depth);
+        
+        // Advance depth for the next line
+        if (line_start < (int)editor.content_length && line_len > 0) {
+            depth = syntax_highlight_line(editor.buffer + line_start,
+                                          line_len, NULL, depth);
+        }
     }
 }
 
@@ -495,17 +612,26 @@ static void editor_update_dirty(void)
         // Full redraw
         editor_draw_content();
     } else if (editor.dirty_flags & DIRTY_FROM_LINE) {
-        // Redraw from dirty_from to bottom
+        // Redraw from dirty_from to bottom, tracking bracket depth
         int start_row = editor.dirty_from - editor.view_start_line;
         if (start_row < 0) start_row = 0;
+        int first_line = editor.view_start_line + start_row;
+        int depth = editor_compute_depth_at_line(first_line);
         for (int row = start_row; row < EDITOR_VISIBLE_ROWS; row++) {
-            editor_draw_line(row, editor.view_start_line + row);
+            int line_index = editor.view_start_line + row;
+            int ls = editor_get_line_start(line_index);
+            int le = editor_get_line_end(line_index);
+            int len = le - ls;
+            editor_draw_line(row, line_index, depth);
+            if (ls < (int)editor.content_length && len > 0)
+                depth = syntax_highlight_line(editor.buffer + ls, len, NULL, depth);
         }
     } else if (editor.dirty_flags & DIRTY_LINE) {
         // Redraw single line
         int screen_row = editor.dirty_line - editor.view_start_line;
         if (screen_row >= 0 && screen_row < EDITOR_VISIBLE_ROWS) {
-            editor_draw_line(screen_row, editor.dirty_line);
+            int depth = editor_compute_depth_at_line(editor.dirty_line);
+            editor_draw_line(screen_row, editor.dirty_line, depth);
         }
     }
     // DIRTY_CURSOR doesn't need any content redraw, just cursor positioning
@@ -1116,6 +1242,36 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
     // Start with underline cursor (normal editing mode)
     lcd_set_cursor_style(LCD_CURSOR_UNDERLINE);
     
+    // Save current palette slots and foreground/background for restore on exit
+    editor.saved_fg_slot = PALETTE_FG;  // Logical slot number (always 254)
+    editor.saved_bg_slot = PALETTE_BG;  // Logical slot number (always 255)
+    static const uint8_t syntax_slots[] = {
+        240, 241, 242, 243, 244, 245, 246, 247,  // Semantic colors
+        250, 251, 252,                              // Bracket depths
+        253                                         // Editor background
+    };
+    for (int i = 0; i < (int)(sizeof(syntax_slots)/sizeof(syntax_slots[0])); i++) {
+        editor.saved_palette[i] = lcd_get_palette_value(syntax_slots[i]);
+    }
+    
+    // Set up Dark+ theme palette for syntax highlighting
+    lcd_set_palette_value(PALETTE_SYNTAX_DEFAULT,   RGB(0xD4, 0xD4, 0xD4));  // #D4D4D4
+    lcd_set_palette_value(PALETTE_SYNTAX_COMMENT,   RGB(0x6A, 0x99, 0x55));  // #6A9955
+    lcd_set_palette_value(PALETTE_SYNTAX_KEYWORD,   RGB(0xC5, 0x86, 0xC0));  // #C586C0
+    lcd_set_palette_value(PALETTE_SYNTAX_FUNCTION,  RGB(0xDC, 0xDC, 0xAA));  // #DCDCAA
+    lcd_set_palette_value(PALETTE_SYNTAX_VARIABLE,  RGB(0x9C, 0xDC, 0xFE));  // #9CDCFE
+    lcd_set_palette_value(PALETTE_SYNTAX_STRING,    RGB(0xCE, 0x91, 0x78));  // #CE9178
+    lcd_set_palette_value(PALETTE_SYNTAX_NUMBER,    RGB(0xB5, 0xCE, 0xA8));  // #B5CEA8
+    lcd_set_palette_value(PALETTE_SYNTAX_COMMAND,   RGB(0xDC, 0xDC, 0xAA));  // #DCDCAA
+    lcd_set_palette_value(PALETTE_SYNTAX_BRACKET_1, RGB(0xFF, 0xD7, 0x00));  // #FFD700
+    lcd_set_palette_value(PALETTE_SYNTAX_BRACKET_2, RGB(0xDA, 0x70, 0xD6));  // #DA70D6
+    lcd_set_palette_value(PALETTE_SYNTAX_BRACKET_3, RGB(0x17, 0x9F, 0xFF));  // #179FFF
+    lcd_set_palette_value(PALETTE_SYNTAX_BG,        RGB(0x1E, 0x1E, 0x1E));  // #1E1E1E
+    
+    // Use Dark+ colors for the editor
+    lcd_set_foreground(PALETTE_SYNTAX_DEFAULT);
+    lcd_set_background(PALETTE_SYNTAX_BG);
+    
     // Ensure cursor is on second line if we have "to name\n" template
     // (currently we start at beginning; template-specific positioning can be added here)
     
@@ -1175,6 +1331,17 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                 screen_txt_erase_cursor();
                 screen_txt_enable_cursor(false);
                 input_active = false;  // Re-enable keyboard mode switching
+                // Restore saved palette and foreground/background
+                {
+                    static const uint8_t slots[] = {
+                        240, 241, 242, 243, 244, 245, 246, 247,
+                        250, 251, 252, 253
+                    };
+                    for (int i = 0; i < (int)(sizeof(slots)/sizeof(slots[0])); i++)
+                        lcd_set_palette_value(slots[i], editor.saved_palette[i]);
+                    lcd_set_foreground(PALETTE_FG);
+                    lcd_set_background(PALETTE_BG);
+                }
                 screen_set_mode(saved_screen_mode);  // Restore screen mode
                 screen_txt_set_cursor(saved_cursor_col, saved_cursor_row);
                 return LOGO_EDITOR_ACCEPT;
@@ -1184,6 +1351,17 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                 screen_txt_erase_cursor();
                 screen_txt_enable_cursor(false);
                 input_active = false;  // Re-enable keyboard mode switching
+                // Restore saved palette and foreground/background
+                {
+                    static const uint8_t slots[] = {
+                        240, 241, 242, 243, 244, 245, 246, 247,
+                        250, 251, 252, 253
+                    };
+                    for (int i = 0; i < (int)(sizeof(slots)/sizeof(slots[0])); i++)
+                        lcd_set_palette_value(slots[i], editor.saved_palette[i]);
+                    lcd_set_foreground(PALETTE_FG);
+                    lcd_set_background(PALETTE_BG);
+                }
                 screen_set_mode(saved_screen_mode);  // Restore screen mode
                 screen_txt_set_cursor(saved_cursor_col, saved_cursor_row);
                 return LOGO_EDITOR_CANCEL;
