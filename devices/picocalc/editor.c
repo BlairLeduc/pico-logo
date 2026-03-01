@@ -35,7 +35,7 @@
 // Tab width for indentation (2 spaces per tab stop)
 #define TAB_WIDTH             2
 
-// Syntax highlighting palette slots (Dark+ theme)
+// Syntax highlighting palette slots (default theme)
 // Slots 240-247: semantic colors, 250-252: bracket depth, 253: editor bg
 #define PALETTE_SYNTAX_DEFAULT    240
 #define PALETTE_SYNTAX_COMMENT    241

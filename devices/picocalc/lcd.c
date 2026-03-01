@@ -655,20 +655,20 @@ void lcd_init()
     // Load the default turtle palette (slots 0-127)
     memcpy(palette, default_palette, sizeof(default_palette));
 
-    // Set default Dark+ syntax highlighting palette (slots 240-253)
+    // Set default syntax highlighting palette (slots 240-253)
     // These can be overridden by the user with setpalette or loading a theme file
-    palette[240] = RGB(0xD4, 0xD4, 0xD4);  // Default text
-    palette[241] = RGB(0x6A, 0x99, 0x55);  // Comments
-    palette[242] = RGB(0xC5, 0x86, 0xC0);  // Keywords
-    palette[243] = RGB(0xDC, 0xDC, 0xAA);  // Functions
-    palette[244] = RGB(0x9C, 0xDC, 0xFE);  // Variables
-    palette[245] = RGB(0xCE, 0x91, 0x78);  // Strings
-    palette[246] = RGB(0xB5, 0xCE, 0xA8);  // Numbers
-    palette[247] = RGB(0xDC, 0xDC, 0xAA);  // Commands
-    palette[250] = RGB(0xFF, 0xD7, 0x00);  // Bracket depth 1
-    palette[251] = RGB(0xDA, 0x70, 0xD6);  // Bracket depth 2
-    palette[252] = RGB(0x17, 0x9F, 0xFF);  // Bracket depth 3
-    palette[253] = RGB(0x1E, 0x1E, 0x1E);  // Editor background
+    palette[240] = RGB(0xE6, 0xE6, 0xEB);  // Default text
+    palette[241] = RGB(0x50, 0xC8, 0x50);  // Comments
+    palette[242] = RGB(0xE6, 0x64, 0xFF);  // Keywords
+    palette[243] = RGB(0xFF, 0xF0, 0x64);  // Functions
+    palette[244] = RGB(0x50, 0xD2, 0xFF);  // Variables
+    palette[245] = RGB(0xFF, 0x96, 0x50);  // Strings
+    palette[246] = RGB(0x82, 0xF0, 0x82);  // Numbers
+    palette[247] = RGB(0xFF, 0xD2, 0x50);  // Commands
+    palette[250] = RGB(0xFF, 0xDC, 0x14);  // Bracket depth 1
+    palette[251] = RGB(0xFF, 0x50, 0xDC);  // Bracket depth 2
+    palette[252] = RGB(0x14, 0xB4, 0xFF);  // Bracket depth 3
+    palette[253] = RGB(0x18, 0x18, 0x1E);  // Editor background
 
     // initialise GPIO
     gpio_init(LCD_SCL);

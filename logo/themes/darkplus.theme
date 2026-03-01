@@ -2,7 +2,7 @@
 ; [Sets palette slots 240-253 to match]
 ; [the VS Code Dark+ colour scheme.]
 ; []
-; [Usage: load "dark-plus.theme]
+; [Usage: load "darkplus.theme]
 ; []
 ; [Semantic colours - slots 240-247]
 setpalette 240 [212 212 212]

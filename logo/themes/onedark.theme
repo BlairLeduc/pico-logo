@@ -2,7 +2,7 @@
 ; [Sets palette slots 240-253 to match]
 ; [the Atom One Dark colour scheme.]
 ; []
-; [Usage: load "one-dark.theme]
+; [Usage: load "onedark.theme]
 ; []
 ; [Semantic colours - slots 240-247]
 setpalette 240 [171 178 191]
