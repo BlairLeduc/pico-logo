@@ -284,6 +284,33 @@ void test_value_to_number_from_word_n_notation_with_mantissa(void)
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.055f, out);
 }
 
+void test_value_to_number_from_word_n_notation_rejects_sign(void)
+{
+    // "1n-5" should be rejected - signs not allowed after n
+    Node word = mem_atom("1n-5", 4);
+    Value v = value_word(word);
+    float out;
+    TEST_ASSERT_FALSE(value_to_number(v, &out));
+}
+
+void test_value_to_number_from_word_n_notation_rejects_plus(void)
+{
+    // "1n+5" should be rejected - signs not allowed after n
+    Node word = mem_atom("1n+5", 4);
+    Value v = value_word(word);
+    float out;
+    TEST_ASSERT_FALSE(value_to_number(v, &out));
+}
+
+void test_value_to_number_from_word_n_notation_rejects_decimal(void)
+{
+    // "1n2.5" should be rejected - decimal not allowed in n exponent
+    Node word = mem_atom("1n2.5", 5);
+    Value v = value_word(word);
+    float out;
+    TEST_ASSERT_FALSE(value_to_number(v, &out));
+}
+
 void test_value_to_number_from_word_invalid(void)
 {
     Node word = mem_atom("hello", 5);
@@ -1056,6 +1083,9 @@ int main(void)
     RUN_TEST(test_value_to_number_from_word_n_notation);
     RUN_TEST(test_value_to_number_from_word_n_notation_uppercase);
     RUN_TEST(test_value_to_number_from_word_n_notation_with_mantissa);
+    RUN_TEST(test_value_to_number_from_word_n_notation_rejects_sign);
+    RUN_TEST(test_value_to_number_from_word_n_notation_rejects_plus);
+    RUN_TEST(test_value_to_number_from_word_n_notation_rejects_decimal);
     RUN_TEST(test_value_to_number_from_word_invalid);
     RUN_TEST(test_value_to_number_from_word_partial);
     RUN_TEST(test_value_to_number_from_none);

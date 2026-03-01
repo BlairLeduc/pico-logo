@@ -148,6 +148,22 @@ void test_scientific_notation_N(void)
     assert_token(&lexer, TOKEN_NUMBER, "5N3");
 }
 
+void test_n_notation_no_sign(void)
+{
+    // "1n" without exponent digits should be a word, not a number
+    Lexer lexer;
+    lexer_init(&lexer, "1n");
+    assert_token(&lexer, TOKEN_WORD, "1n");
+}
+
+void test_e_notation_with_sign(void)
+{
+    // e/E notation still allows signs: "1e-5" is a valid number
+    Lexer lexer;
+    lexer_init(&lexer, "1e-5");
+    assert_token(&lexer, TOKEN_NUMBER, "1e-5");
+}
+
 void test_numbers_self_quoting(void)
 {
     // Numbers are self-quoting, so "100" without quotes parses as NUMBER
@@ -862,6 +878,8 @@ int main(void)
     RUN_TEST(test_scientific_notation_E);
     RUN_TEST(test_scientific_notation_n);
     RUN_TEST(test_scientific_notation_N);
+    RUN_TEST(test_n_notation_no_sign);
+    RUN_TEST(test_e_notation_with_sign);
     RUN_TEST(test_numbers_self_quoting);
 
     // Quoted words

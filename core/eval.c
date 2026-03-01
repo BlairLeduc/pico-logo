@@ -189,8 +189,10 @@ static bool is_number_string(const char *str, size_t len)
     }
     if (i < len && (str[i] == 'e' || str[i] == 'E' || str[i] == 'n' || str[i] == 'N'))
     {
+        bool is_n_notation = (str[i] == 'n' || str[i] == 'N');
         i++;
-        if (i < len && (str[i] == '-' || str[i] == '+'))
+        // Only allow signs after e/E, not after n/N
+        if (!is_n_notation && i < len && (str[i] == '-' || str[i] == '+'))
             i++;
         while (i < len && isdigit((unsigned char)str[i]))
             i++;
@@ -216,9 +218,16 @@ static float parse_number(const char *str, size_t len)
     {
         *n_pos = '\0';
         float mantissa = strtof(buf, NULL);
-        float exp = strtof(n_pos + 1, NULL);
+        // Parse exponent as digits-only non-negative integer
+        int exp = 0;
+        const char *p = n_pos + 1;
+        while (*p != '\0')
+        {
+            exp = exp * 10 + (*p - '0');
+            p++;
+        }
         float result = mantissa;
-        for (int i = 0; i < (int)exp; i++)
+        for (int i = 0; i < exp; i++)
         {
             result /= 10.0f;
         }

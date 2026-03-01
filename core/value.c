@@ -166,13 +166,25 @@ bool value_to_number(Value v, float *out)
             if (end != n_pos)
                 return false; // mantissa didn't parse up to n
 
-            // Parse exponent (part after n)
-            float exp = strtof(n_pos + 1, &end);
-            if (*end != '\0' || end == n_pos + 1)
-                return false; // exponent didn't parse or was empty
+            // Parse exponent as digits-only non-negative integer
+            // n/N notation means mantissa * 10^-k, so only digits are valid
+            const char *exp_start = n_pos + 1;
+            if (*exp_start == '\0')
+                return false; // exponent was empty
+            int exp = 0;
+            end = (char *)exp_start;
+            while (*end != '\0')
+            {
+                if (!isdigit((unsigned char)*end))
+                    return false; // reject signs, decimals, etc.
+                exp = exp * 10 + (*end - '0');
+                end++;
+            }
+            if (end == exp_start)
+                return false; // no digits found
 
             float result = mantissa;
-            for (int i = 0; i < (int)exp; i++)
+            for (int i = 0; i < exp; i++)
             {
                 result /= 10.0f;
             }
