@@ -1304,6 +1304,8 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                 lcd_set_foreground(PALETTE_FG);
                 lcd_set_background(PALETTE_BG);
                 screen_set_mode(saved_screen_mode);  // Restore screen mode
+                screen_txt_mark_all_dirty();          // Editor drew directly to LCD; repaint text buffer
+                screen_txt_update();                   // Flush immediately so the user sees the REPL
                 screen_txt_set_cursor(saved_cursor_col, saved_cursor_row);
                 return LOGO_EDITOR_ACCEPT;
                 
@@ -1316,6 +1318,8 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                 lcd_set_foreground(PALETTE_FG);
                 lcd_set_background(PALETTE_BG);
                 screen_set_mode(saved_screen_mode);  // Restore screen mode
+                screen_txt_mark_all_dirty();          // Editor drew directly to LCD; repaint text buffer
+                screen_txt_update();                   // Flush immediately so the user sees the REPL
                 screen_txt_set_cursor(saved_cursor_col, saved_cursor_row);
                 return LOGO_EDITOR_CANCEL;
             

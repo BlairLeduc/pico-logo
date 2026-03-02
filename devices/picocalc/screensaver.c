@@ -165,6 +165,7 @@ static void refresh_display(void)
     }
     if (mode == SCREEN_MODE_TXT || mode == SCREEN_MODE_SPLIT)
     {
+        screen_txt_mark_all_dirty();  // Palette changed — text colours need refresh
         screen_txt_update();
     }
 }

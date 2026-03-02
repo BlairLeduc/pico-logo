@@ -120,6 +120,7 @@ void screen_txt_get_cursor(uint8_t *column, uint8_t *row);
 void screen_txt_enable_cursor(bool cursor_on);
 void screen_txt_draw_cursor(void);
 void screen_txt_erase_cursor(void);
+void screen_txt_mark_all_dirty(void);
 void screen_txt_update(void);
 
 // Screen initialization

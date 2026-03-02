@@ -71,6 +71,34 @@ static uint8_t cursor_column = 0;                    // Cursor x position for te
 static uint8_t cursor_row = 0;                       // Cursor y position for text mode
 static bool cursor_enabled = true;                   // Cursor visibility state for text mode
 
+// Text dirty-tracking: per-row flags and an aggregate "any row dirty" flag.
+// When a row's content changes, its entry is set to true and txt_dirty_any is set.
+// screen_txt_update() redraws only the dirty rows and clears the flags.
+static bool txt_dirty_rows[SCREEN_ROWS] = {0};
+static bool txt_dirty_any = false;
+
+// Mark a single buffer row as dirty (needing re-draw to LCD).
+static inline void txt_mark_dirty_row(uint8_t row)
+{
+    if (row < SCREEN_ROWS)
+    {
+        txt_dirty_rows[row] = true;
+        txt_dirty_any = true;
+    }
+}
+
+// Mark every buffer row as dirty (e.g. after a scroll, clear, palette change,
+// or mode switch).  Public so that callers outside screen.c (palette / colour
+// mutations) can force a full text repaint via screen_txt_update().
+void screen_txt_mark_all_dirty(void)
+{
+    for (uint8_t r = 0; r < SCREEN_ROWS; r++)
+    {
+        txt_dirty_rows[r] = true;
+    }
+    txt_dirty_any = true;
+}
+
 //
 //  Helper functions
 //
@@ -128,6 +156,9 @@ static void screen_txt_scroll_up(void)
     memset(txt_buffer + (SCREEN_ROWS - 1) * SCREEN_COLUMNS,
            0x20,
            SCREEN_COLUMNS * sizeof(uint8_t));
+
+    // All rows shifted — mark every row dirty so screen_txt_update redraws them
+    screen_txt_mark_all_dirty();
 }
 
 // Get the location for the cursor in TXT or SPLIT mode
@@ -218,6 +249,7 @@ void screen_set_mode(uint8_t mode)
         {
             // In text mode, we don't use the frame buffer
             lcd_define_scrolling(0, 0); // All scrolling area in full-screen text mode
+            screen_txt_mark_all_dirty();       // Ensure first refresh fully syncs
             screen_txt_update();
             // lcd_move_cursor(cursor_column, cursor_row); // Move the cursor to the current position
         }
@@ -235,6 +267,7 @@ void screen_set_mode(uint8_t mode)
             lcd_define_scrolling(SCREEN_SPLIT_GFX_HEIGHT, 0); // Set scrolling area for text at the bottom
             screen_gfx_mark_all_dirty();  // Force full blit on mode switch
             screen_gfx_flush();           // Bypass rate limiter so mode change is visible immediately
+            screen_txt_mark_all_dirty();         // Ensure first refresh fully syncs
             screen_txt_update();
         }
     }
@@ -950,7 +983,10 @@ int screen_gfx_load(const char *filename)
 //  Text functions
 //
 
-// Get the text frame buffer
+// Get the text frame buffer.
+// WARNING: Writing through the returned pointer bypasses dirty tracking.
+// Callers that modify the buffer must call screen_txt_mark_all_dirty() then
+// screen_txt_update(), or use screen_txt_putc() / screen_txt_clear() instead.
 uint8_t *screen_txt_frame()
 {
     return txt_buffer;
@@ -961,6 +997,7 @@ void screen_txt_clear(void)
 {
     text_row = 0;                                 // Reset the text row to the top
     memset(txt_buffer, 0x20, sizeof(txt_buffer)); // Clear the text buffer
+    screen_txt_mark_all_dirty();                         // All rows changed
     
     if (screen_mode == SCREEN_MODE_SPLIT)
     {
@@ -1120,7 +1157,8 @@ bool screen_txt_putc(uint8_t c)
             return false;
         }
 
-        txt_buffer[cursor_row * SCREEN_COLUMNS + cursor_column] = 0; // Clear the character
+        txt_buffer[cursor_row * SCREEN_COLUMNS + cursor_column] = 0x20; // Clear the character (space)
+        txt_mark_dirty_row(cursor_row);
         if (screen_mode == SCREEN_MODE_TXT || screen_mode == SCREEN_MODE_SPLIT)
         {
             if (screen_mode == SCREEN_MODE_SPLIT)
@@ -1153,6 +1191,7 @@ bool screen_txt_putc(uint8_t c)
         if (cursor_row < SCREEN_ROWS && cursor_column < SCREEN_COLUMNS)
         {
             txt_buffer[cursor_row * SCREEN_COLUMNS + cursor_column] = c;
+            txt_mark_dirty_row(cursor_row);
             if (screen_mode == SCREEN_MODE_TXT || screen_mode == SCREEN_MODE_SPLIT)
             {
                 if (screen_mode == SCREEN_MODE_SPLIT)
@@ -1268,28 +1307,31 @@ bool screen_txt_puts(const char *str)
 // Write the text buffer to the LCD display
 void screen_txt_update(void)
 {
-    bool cursor_enabled = lcd_cursor_enabled(); // Save the current cursor state
-    lcd_enable_cursor(false);                   // Disable the cursor while updating
+    if (!txt_dirty_any)
+        return;  // Nothing changed since last update
+
+    bool saved_cursor = lcd_cursor_enabled(); // Save the current cursor state
+    lcd_enable_cursor(false);                  // Disable the cursor while updating
 
     if (screen_mode == SCREEN_MODE_TXT)
     {
-        // In full-screen text mode, we clear the screen and redraw the text
+        // In full-screen text mode, redraw only dirty rows
         for (uint8_t row = 0; row < SCREEN_ROWS; row++)
         {
+            if (!txt_dirty_rows[row])
+                continue;
+
             for (uint8_t col = 0; col < SCREEN_COLUMNS; col++)
             {
                 lcd_putc(col, row, txt_buffer[row * SCREEN_COLUMNS + col]);
             }
+            txt_dirty_rows[row] = false;
         }
     }
     else if (screen_mode == SCREEN_MODE_SPLIT)
     {
-        // In split screen mode, we copy:
-        // From and including the cursor_row and the preceeding number of rows equal to the text area height
-        // If there are not enough rows, we insert empty rows after the cursor_row
-
-        // Clear the text area first
-        //        lcd_scroll_clear();
+        // In split screen mode, redraw only dirty rows that are currently visible.
+        // Visible rows are buffer rows [start_row, start_row + SCREEN_SPLIT_TXT_ROWS).
 
         // Calculate the starting row in the buffer to display
         int16_t start_row = text_row - (SCREEN_SPLIT_TXT_ROWS - 1);
@@ -1303,20 +1345,35 @@ void screen_txt_update(void)
         {
             int16_t buffer_row = start_row + display_row;
 
-            if (buffer_row < SCREEN_ROWS)
+            if (buffer_row >= SCREEN_ROWS)
+                continue;  // No buffer content for this display row
+
+            if (!txt_dirty_rows[buffer_row])
+                continue;
+
+            // Copy this row from the buffer to the display
+            for (uint8_t col = 0; col < SCREEN_COLUMNS; col++)
             {
-                // Copy this row from the buffer to the display
-                for (uint8_t col = 0; col < SCREEN_COLUMNS; col++)
-                {
-                    lcd_putc(col, SCREEN_SPLIT_TXT_ROW + display_row, txt_buffer[buffer_row * SCREEN_COLUMNS + col]);
-                }
+                lcd_putc(col, SCREEN_SPLIT_TXT_ROW + display_row, txt_buffer[buffer_row * SCREEN_COLUMNS + col]);
             }
-            // If buffer_row >= SCREEN_ROWS, the row remains empty (already cleared)
+            txt_dirty_rows[buffer_row] = false;
         }
     }
     // else for full-screen graphics mode, we do not update the text display
 
-    lcd_enable_cursor(cursor_enabled); // Restore the cursor state
+    // Recompute aggregate dirty flag in case some rows remain dirty
+    // (e.g. non-visible buffer rows in SPLIT mode are not cleared above)
+    txt_dirty_any = false;
+    for (uint8_t r = 0; r < SCREEN_ROWS; r++)
+    {
+        if (txt_dirty_rows[r])
+        {
+            txt_dirty_any = true;
+            break;
+        }
+    }
+
+    lcd_enable_cursor(saved_cursor); // Restore the cursor state
 }
 
 //
@@ -1328,6 +1385,9 @@ void screen_init()
 {
     // Initialize the display
     lcd_init();
+
+    // Mark all text rows dirty so the first draw paints everything
+    screen_txt_mark_all_dirty();
 
     // Set for a default of split screen
     screen_set_mode(SCREEN_MODE_TXT);

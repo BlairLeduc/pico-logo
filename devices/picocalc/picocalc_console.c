@@ -781,6 +781,7 @@ static void turtle_set_bg_colour(uint8_t slot)
 
     screen_gfx_mark_all_dirty();  // Palette changed — entire buffer needs re-blit
     screen_gfx_update();
+    screen_txt_mark_all_dirty();  // FG palette changed — text colours need refresh
     screen_txt_update();
 }
 
@@ -917,6 +918,7 @@ static void turtle_set_palette(uint8_t slot, uint8_t r, uint8_t g, uint8_t b)
     lcd_set_palette_rgb(slot, r, g, b);
     screen_gfx_mark_all_dirty();  // Palette changed — entire buffer needs re-blit
     screen_gfx_update();
+    screen_txt_mark_all_dirty();  // Palette changed — text colours need refresh
     screen_txt_update();
 }
 
@@ -932,6 +934,7 @@ static void turtle_restore_palette(void)
     
     screen_gfx_mark_all_dirty();  // Palette changed — entire buffer needs re-blit
     screen_gfx_update();
+    screen_txt_mark_all_dirty();  // Palette changed — text colours need refresh
     screen_txt_update();
 }
 
