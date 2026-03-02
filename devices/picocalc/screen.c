@@ -74,7 +74,7 @@ static bool cursor_enabled = true;                   // Cursor visibility state 
 // Text dirty-tracking: per-row flags and an aggregate "any row dirty" flag.
 // When a row's content changes, its entry is set to true and txt_dirty_any is set.
 // screen_txt_update() redraws only the dirty rows and clears the flags.
-static bool txt_dirty_rows[SCREEN_ROWS] = {false};
+static bool txt_dirty_rows[SCREEN_ROWS] = {0};
 static bool txt_dirty_any = false;
 
 // Mark a single buffer row as dirty (needing re-draw to LCD).
@@ -991,7 +991,10 @@ int screen_gfx_load(const char *filename)
 //  Text functions
 //
 
-// Get the text frame buffer
+// Get the text frame buffer.
+// WARNING: Writing through the returned pointer bypasses dirty tracking.
+// Callers that modify the buffer must call screen_txt_update() with all rows
+// assumed dirty, or use screen_txt_putc() / screen_txt_clear() instead.
 uint8_t *screen_txt_frame()
 {
     return txt_buffer;
@@ -1315,8 +1318,8 @@ void screen_txt_update(void)
     if (!txt_dirty_any)
         return;  // Nothing changed since last update
 
-    bool cursor_enabled = lcd_cursor_enabled(); // Save the current cursor state
-    lcd_enable_cursor(false);                   // Disable the cursor while updating
+    bool saved_cursor = lcd_cursor_enabled(); // Save the current cursor state
+    lcd_enable_cursor(false);                  // Disable the cursor while updating
 
     if (screen_mode == SCREEN_MODE_TXT)
     {
@@ -1378,7 +1381,7 @@ void screen_txt_update(void)
         }
     }
 
-    lcd_enable_cursor(cursor_enabled); // Restore the cursor state
+    lcd_enable_cursor(saved_cursor); // Restore the cursor state
 }
 
 //
