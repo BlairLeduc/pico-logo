@@ -87,8 +87,10 @@ static inline void txt_mark_dirty_row(uint8_t row)
     }
 }
 
-// Mark every buffer row as dirty (e.g. after a scroll, clear, or mode switch).
-static inline void txt_mark_all_dirty(void)
+// Mark every buffer row as dirty (e.g. after a scroll, clear, palette change,
+// or mode switch).  Public so that callers outside screen.c (palette / colour
+// mutations) can force a full text repaint via screen_txt_update().
+void screen_txt_mark_all_dirty(void)
 {
     for (uint8_t r = 0; r < SCREEN_ROWS; r++)
     {
@@ -156,7 +158,7 @@ static void screen_txt_scroll_up(void)
            SCREEN_COLUMNS * sizeof(uint8_t));
 
     // All rows shifted — mark every row dirty so screen_txt_update redraws them
-    txt_mark_all_dirty();
+    screen_txt_mark_all_dirty();
 }
 
 // Get the location for the cursor in TXT or SPLIT mode
@@ -247,7 +249,7 @@ void screen_set_mode(uint8_t mode)
         {
             // In text mode, we don't use the frame buffer
             lcd_define_scrolling(0, 0); // All scrolling area in full-screen text mode
-            txt_mark_all_dirty();       // Ensure first refresh fully syncs
+            screen_txt_mark_all_dirty();       // Ensure first refresh fully syncs
             screen_txt_update();
             // lcd_move_cursor(cursor_column, cursor_row); // Move the cursor to the current position
         }
@@ -265,7 +267,7 @@ void screen_set_mode(uint8_t mode)
             lcd_define_scrolling(SCREEN_SPLIT_GFX_HEIGHT, 0); // Set scrolling area for text at the bottom
             screen_gfx_mark_all_dirty();  // Force full blit on mode switch
             screen_gfx_flush();           // Bypass rate limiter so mode change is visible immediately
-            txt_mark_all_dirty();         // Ensure first refresh fully syncs
+            screen_txt_mark_all_dirty();         // Ensure first refresh fully syncs
             screen_txt_update();
         }
     }
@@ -983,8 +985,8 @@ int screen_gfx_load(const char *filename)
 
 // Get the text frame buffer.
 // WARNING: Writing through the returned pointer bypasses dirty tracking.
-// Callers that modify the buffer must call screen_txt_update() with all rows
-// assumed dirty, or use screen_txt_putc() / screen_txt_clear() instead.
+// Callers that modify the buffer must call screen_txt_mark_all_dirty() then
+// screen_txt_update(), or use screen_txt_putc() / screen_txt_clear() instead.
 uint8_t *screen_txt_frame()
 {
     return txt_buffer;
@@ -995,7 +997,7 @@ void screen_txt_clear(void)
 {
     text_row = 0;                                 // Reset the text row to the top
     memset(txt_buffer, 0x20, sizeof(txt_buffer)); // Clear the text buffer
-    txt_mark_all_dirty();                         // All rows changed
+    screen_txt_mark_all_dirty();                         // All rows changed
     
     if (screen_mode == SCREEN_MODE_SPLIT)
     {
@@ -1385,7 +1387,7 @@ void screen_init()
     lcd_init();
 
     // Mark all text rows dirty so the first draw paints everything
-    txt_mark_all_dirty();
+    screen_txt_mark_all_dirty();
 
     // Set for a default of split screen
     screen_set_mode(SCREEN_MODE_TXT);
