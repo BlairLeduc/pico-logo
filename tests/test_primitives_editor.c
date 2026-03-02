@@ -702,6 +702,69 @@ void test_edit_runs_mixed_content(void)
     TEST_ASSERT_TRUE(proc_exists("myproc"));
 }
 
+void test_edit_runs_multiline_bracket_expression(void)
+{
+    // make "x [ ... ] spanning multiple lines should work in editor
+    mock_device_clear_editor();
+    mock_device_set_editor_result(LOGO_EDITOR_ACCEPT);
+    mock_device_set_editor_content(
+        "make \"x [\n"
+        "    [1 one]\n"
+        "    [2 two]\n"
+        "    [3 three]\n"
+        "]\n"
+    );
+    
+    // Ensure variable doesn't exist first
+    Value dummy;
+    TEST_ASSERT_FALSE(var_get("x", &dummy));
+    
+    Result r = run_string("(edit)");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    // Variable should now exist with a list of 3 sublists
+    Value value;
+    TEST_ASSERT_TRUE_MESSAGE(var_get("x", &value), "Variable x should exist");
+    TEST_ASSERT_EQUAL_MESSAGE(VALUE_LIST, value.type, "Variable x should be a list");
+    
+    // The list should have 3 elements: [1 one] [2 two] [3 three]
+    const char *str = value_to_string(value);
+    TEST_ASSERT_NOT_NULL(str);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(str, "one"), "List should contain 'one'");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(str, "two"), "List should contain 'two'");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(str, "three"), "List should contain 'three'");
+}
+
+void test_edit_runs_multiline_bracket_then_more_commands(void)
+{
+    // Multi-line bracket expression followed by regular commands
+    mock_device_clear_editor();
+    mock_device_set_editor_result(LOGO_EDITOR_ACCEPT);
+    mock_device_set_editor_content(
+        "make \"data [\n"
+        "    hello\n"
+        "    world\n"
+        "]\n"
+        "make \"y 99\n"
+    );
+    
+    Result r = run_string("(edit)");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    Value value;
+    TEST_ASSERT_TRUE_MESSAGE(var_get("data", &value), "Variable data should exist");
+    TEST_ASSERT_EQUAL_MESSAGE(VALUE_LIST, value.type, "Variable data should be a list");
+    
+    // Verify the list contains both words
+    const char *str = value_to_string(value);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(str, "hello"), "List should contain 'hello'");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(str, "world"), "List should contain 'world'");
+    
+    TEST_ASSERT_TRUE(var_get("y", &value));
+    TEST_ASSERT_EQUAL(VALUE_NUMBER, value.type);
+    TEST_ASSERT_EQUAL(99, value.as.number);
+}
+
 void test_edall_formats_all_procedures(void)
 {
     const char *params[] = {};
@@ -1134,6 +1197,8 @@ int main(void)
     RUN_TEST(test_edit_runs_regular_commands);
     RUN_TEST(test_edit_runs_multiple_commands);
     RUN_TEST(test_edit_runs_mixed_content);
+    RUN_TEST(test_edit_runs_multiline_bracket_expression);
+    RUN_TEST(test_edit_runs_multiline_bracket_then_more_commands);
     
     // editfile tests
     RUN_TEST(test_editfile_creates_new_file);
