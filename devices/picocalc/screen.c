@@ -97,16 +97,6 @@ static inline void txt_mark_all_dirty(void)
     txt_dirty_any = true;
 }
 
-// Clear all dirty flags after a full redraw.
-static inline void txt_clear_dirty(void)
-{
-    for (uint8_t r = 0; r < SCREEN_ROWS; r++)
-    {
-        txt_dirty_rows[r] = false;
-    }
-    txt_dirty_any = false;
-}
-
 //
 //  Helper functions
 //
