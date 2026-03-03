@@ -354,15 +354,8 @@ Line continuation characters are not supported.
 
 Words with internal spaces are created using the "`\`" character, not using the veritcal bar notation.
 
-Pico Logo does not support the `if predicate list1 list2` form. Use `(if predicate list1 list2)` instead.
+Pico Logo does not support the `if predicate list1 list2` form. Use `(if predicate list1 list2)` or `ifelse predicate list1 list2` instead.
 
-`ifelse` is not a primitive. It can be implemented as follows:
-
-```logo
-to ifelse :predicate :list1 :list2
-  (if :predicate :list1 :list2)
-end
-```
 
 
 ===
@@ -424,7 +417,7 @@ The Logo Editor is an interactive screen-oriented text editor, which provides a 
 
 ## How the editor works
 
-When you call the Editor, Logo changes the screen. The editor uses for all text screen with:
+When you call the Editor, Logo changes the screen. The editor uses the entire screen with the header:
 
 `PICO LOGO EDITOR`
 
@@ -432,7 +425,7 @@ centred on the top row (the top row is reverse video). The bottom line has centr
 
 `ESC - ACCEPT    BRK - CANCEL`
 
- The content you edit is on the 30 lines between the top and bottom rows. There is no prompt character, but the cursor shows where you are typing.
+The content you edit is on the 30 lines between the top and bottom rows. There is no prompt character, but the cursor shows where you are typing.
 
 The text that you edit is in an area of memory called a **buffer**. When you enter the Editor, Logo displays the text from the edit buffer, up to 30 lines per screen.
 
@@ -1931,6 +1924,26 @@ to decide
   output (if 0 = random 2 ["yes] ["no])
 end
 ```
+
+
+## ifelse
+
+ifelse _predicate_ _list1_ _list2_
+
+`command` or `operation`
+
+`ifelse` is the same as `if` except that _list2_ must be present. If _predicate_ is `true`, Logo runs _list1_; if _predicate_ is `false`, Logo runs _list2_. In either case, if the selected list outputs something, the `ifelse` is an operation. If the list outputs nothing, the `ifelse` is a command.
+
+Example:
+
+```logo
+to decide
+  ifelse 0 = random 2 [op "yes] [op "no]
+end
+```
+
+
+
 
 ## iffalse (iff)
 

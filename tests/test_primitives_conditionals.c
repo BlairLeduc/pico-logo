@@ -309,6 +309,109 @@ void test_if_non_list_else_body_error(void)
     TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
 }
 
+//==========================================================================
+// IFELSE Command/Operation Tests
+//==========================================================================
+
+void test_ifelse_true_command(void)
+{
+    run_string("ifelse true [print \"yes] [print \"no]");
+    TEST_ASSERT_EQUAL_STRING("yes\n", output_buffer);
+}
+
+void test_ifelse_false_command(void)
+{
+    run_string("ifelse false [print \"yes] [print \"no]");
+    TEST_ASSERT_EQUAL_STRING("no\n", output_buffer);
+}
+
+void test_ifelse_with_expression_predicate(void)
+{
+    run_string("ifelse 5 > 3 [print \"greater] [print \"notgreater]");
+    TEST_ASSERT_EQUAL_STRING("greater\n", output_buffer);
+}
+
+void test_ifelse_false_with_expression_predicate(void)
+{
+    run_string("ifelse 2 > 5 [print \"greater] [print \"notgreater]");
+    TEST_ASSERT_EQUAL_STRING("notgreater\n", output_buffer);
+}
+
+void test_ifelse_true_operation_returns_value(void)
+{
+    Result r = eval_string("ifelse true [\"yes] [\"no]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_word(r.value));
+    TEST_ASSERT_EQUAL_STRING("yes", value_to_string(r.value));
+}
+
+void test_ifelse_false_operation_returns_value(void)
+{
+    Result r = eval_string("ifelse false [\"yes] [\"no]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_word(r.value));
+    TEST_ASSERT_EQUAL_STRING("no", value_to_string(r.value));
+}
+
+void test_ifelse_operation_with_arithmetic(void)
+{
+    Result r = eval_string("ifelse true [sum 1 2] [sum 3 4]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(3.0f, r.value.as.number);
+}
+
+void test_ifelse_operation_false_with_arithmetic(void)
+{
+    Result r = eval_string("ifelse false [sum 1 2] [sum 3 4]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(7.0f, r.value.as.number);
+}
+
+void test_ifelse_used_in_print(void)
+{
+    run_string("print ifelse true [\"hello] [\"goodbye]");
+    TEST_ASSERT_EQUAL_STRING("hello\n", output_buffer);
+}
+
+void test_ifelse_nested(void)
+{
+    Result r = eval_string("ifelse true [ifelse false [\"inner_yes] [\"inner_no]] [\"outer_no]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_word(r.value));
+    TEST_ASSERT_EQUAL_STRING("inner_no", value_to_string(r.value));
+}
+
+void test_ifelse_non_boolean_predicate_error(void)
+{
+    Result r = run_string("ifelse \"notabool [print \"yes] [print \"no]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NOT_BOOL, r.error_code);
+}
+
+void test_ifelse_non_list_true_body_error(void)
+{
+    Result r = run_string("ifelse true \"notalist [print \"no]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_ifelse_non_list_false_body_error(void)
+{
+    Result r = run_string("ifelse false [print \"yes] \"notalist");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_ifelse_in_procedure_with_output(void)
+{
+    run_string("define \"decide [[] [output ifelse 0 = random 1 [\"yes] [\"no]]]");
+    Result r = eval_string("decide");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    // random 1 always returns 0, so 0 = 0 is true
+    TEST_ASSERT_EQUAL_STRING("yes", value_to_string(r.value));
+    run_string("erase \"decide");
+}
+
 // --- IF case insensitivity ---
 
 void test_if_true_case_insensitive(void)
@@ -494,6 +597,22 @@ int main(void)
     RUN_TEST(test_if_true_case_insensitive);
     RUN_TEST(test_if_false_case_insensitive);
     
+    // IFELSE command/operation tests
+    RUN_TEST(test_ifelse_true_command);
+    RUN_TEST(test_ifelse_false_command);
+    RUN_TEST(test_ifelse_with_expression_predicate);
+    RUN_TEST(test_ifelse_false_with_expression_predicate);
+    RUN_TEST(test_ifelse_true_operation_returns_value);
+    RUN_TEST(test_ifelse_false_operation_returns_value);
+    RUN_TEST(test_ifelse_operation_with_arithmetic);
+    RUN_TEST(test_ifelse_operation_false_with_arithmetic);
+    RUN_TEST(test_ifelse_used_in_print);
+    RUN_TEST(test_ifelse_nested);
+    RUN_TEST(test_ifelse_non_boolean_predicate_error);
+    RUN_TEST(test_ifelse_non_list_true_body_error);
+    RUN_TEST(test_ifelse_non_list_false_body_error);
+    RUN_TEST(test_ifelse_in_procedure_with_output);
+
     // Test/conditional flow
     RUN_TEST(test_test_iftrue);
     RUN_TEST(test_test_iffalse);
