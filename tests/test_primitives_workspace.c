@@ -5,6 +5,8 @@
 
 #include "test_scaffold.h"
 #include "core/frame.h"
+#include "core/help.h"
+#include "core/error.h"
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -996,6 +998,70 @@ void test_primitives_includes_itself(void)
     TEST_ASSERT_EQUAL_STRING("true\n", output_buffer);
 }
 
+//==========================================================================
+// Help Tests
+//==========================================================================
+
+void test_help_lookup_known_primitive(void)
+{
+    const char *text = help_lookup("forward");
+    TEST_ASSERT_NOT_NULL(text);
+    TEST_ASSERT_TRUE(strstr(text, "forward") != NULL);
+}
+
+void test_help_lookup_alias(void)
+{
+    const char *text = help_lookup("fd");
+    TEST_ASSERT_NOT_NULL(text);
+    // Alias should have same text as primary
+    const char *primary = help_lookup("forward");
+    TEST_ASSERT_EQUAL_STRING(primary, text);
+}
+
+void test_help_lookup_case_insensitive(void)
+{
+    const char *lower = help_lookup("forward");
+    const char *upper = help_lookup("FORWARD");
+    TEST_ASSERT_NOT_NULL(lower);
+    TEST_ASSERT_EQUAL_STRING(lower, upper);
+}
+
+void test_help_lookup_unknown_returns_null(void)
+{
+    const char *text = help_lookup("nonexistentprimitive");
+    TEST_ASSERT_NULL(text);
+}
+
+void test_help_command_outputs_text(void)
+{
+    reset_output();
+    run_string("help \"forward");
+    TEST_ASSERT_TRUE(strlen(output_buffer) > 0);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "forward") != NULL);
+}
+
+void test_help_command_unknown_gives_error(void)
+{
+    reset_output();
+    Result r = run_string("help \"xyznotreal");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_ABOUT, r.error_code);
+}
+
+void test_help_shows_badge(void)
+{
+    reset_output();
+    run_string("help \"forward");
+    TEST_ASSERT_TRUE(strstr(output_buffer, "(command)") != NULL);
+}
+
+void test_help_shows_operation_badge(void)
+{
+    reset_output();
+    run_string("help \"sum");
+    TEST_ASSERT_TRUE(strstr(output_buffer, "(operation)") != NULL);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -1070,6 +1136,16 @@ int main(void)
     RUN_TEST(test_po_multiline_list);
     RUN_TEST(test_multiline_list_followed_by_more_code);
     RUN_TEST(test_po_multiline_list_three_lines);
+
+    // Help tests
+    RUN_TEST(test_help_lookup_known_primitive);
+    RUN_TEST(test_help_lookup_alias);
+    RUN_TEST(test_help_lookup_case_insensitive);
+    RUN_TEST(test_help_lookup_unknown_returns_null);
+    RUN_TEST(test_help_command_outputs_text);
+    RUN_TEST(test_help_command_unknown_gives_error);
+    RUN_TEST(test_help_shows_badge);
+    RUN_TEST(test_help_shows_operation_badge);
 
     return UNITY_END();
 }

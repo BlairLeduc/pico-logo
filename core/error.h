@@ -78,6 +78,7 @@ extern "C"
     #define ERR_NETWORK_TIMEOUT        65
     #define ERR_INVALID_NETWORK_OP     66
     #define ERR_STACK_OVERFLOW         67
+    #define ERR_DONT_KNOW_ABOUT       68
 
     // Format an error message from a Result
     // Returns pointer to static buffer - do not free

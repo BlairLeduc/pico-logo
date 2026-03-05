@@ -1850,7 +1850,7 @@ sum _number1_ _number2_
 
 `operation`
 
-Outputs the sum of its inputs. `sum` is equivalent t o the `+` infix-form operation. With one input, `sum` outputs its input.
+Outputs the sum of its inputs. `sum` is equivalent to the `+` infix-form operation. With one input, `sum` outputs its input.
 
 
 ===
@@ -2552,6 +2552,35 @@ primitives
 `operation`
 
 `primitives` outputs a list of the names of all primitives, in alphabetical order. This list includes the names of all operations and commands described in this reference, as well as some additional primitives that are not described here but are available for use in your programs. The list does not include the names of user-defined procedures.
+
+
+## help
+
+help _name_
+
+`command`
+
+`help` outputs a brief description of the primitive _name_. If _name_ is not the name of a primitive, an error occurs. The description includes the type of primitive (command or operation) and the number and types of inputs it takes. It also includes a brief description of what the primitive does. The description is not intended to be a complete explanation of the primitive, but rather a quick reminder of its purpose and use.
+
+```logo
+?help "help
+help :name
+(command)
+
+Outputs a brief description of the
+primitive :name. If :name is not the
+name of a primitive, an error occurs.
+The description includes the type of
+primitive (command or operation) and
+the number and types of inputs it
+takes. It also includes a brief
+description of what the primitive
+does. The description is not intended
+to be a complete explanation of the
+primitive, but rather a quick reminder
+of its purpose and use.
+?
+```
 
 
 ===

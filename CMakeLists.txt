@@ -53,6 +53,18 @@ endif()
 # ============================================================================
 if(NOT BUILD_TESTING AND NOT BUILD_FOR_HOST)
 
+# Generate help_data.c from the reference document
+set(HELP_REFERENCE_MD ${CMAKE_CURRENT_SOURCE_DIR}/reference/Pico_Logo_Reference.md)
+set(HELP_DATA_C ${CMAKE_CURRENT_BINARY_DIR}/help_data.c)
+add_custom_command(
+    OUTPUT ${HELP_DATA_C}
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_help.sh ${HELP_REFERENCE_MD} ${HELP_DATA_C}
+    DEPENDS ${HELP_REFERENCE_MD}
+            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_help.sh
+            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_help.awk
+    COMMENT "Generating help data from reference document"
+)
+
 # Core Logo interpreter library
 add_library(logo_core
     core/error.c
@@ -100,6 +112,8 @@ add_library(logo_core
     devices/io.c
     devices/storage.c
     devices/stream.c
+    core/help.c
+    ${HELP_DATA_C}
 )
 
 target_include_directories(logo_core
@@ -237,6 +251,17 @@ if(BUILD_FOR_HOST)
 
 
     # Core Logo interpreter library for host (with host device implementations)
+    set(HELP_REFERENCE_MD ${CMAKE_CURRENT_SOURCE_DIR}/reference/Pico_Logo_Reference.md)
+    set(HELP_DATA_C ${CMAKE_CURRENT_BINARY_DIR}/help_data.c)
+    add_custom_command(
+        OUTPUT ${HELP_DATA_C}
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_help.sh ${HELP_REFERENCE_MD} ${HELP_DATA_C}
+        DEPENDS ${HELP_REFERENCE_MD}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_help.sh
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_help.awk
+        COMMENT "Generating help data from reference document"
+    )
+
     add_library(logo_core
         core/error.c
         core/eval.c
@@ -278,6 +303,8 @@ if(BUILD_FOR_HOST)
         core/token_source.c
         core/value.c
         core/variables.c
+        core/help.c
+        ${HELP_DATA_C}
     )
 
     target_include_directories(logo_core PUBLIC
@@ -356,6 +383,17 @@ if(BUILD_TESTING)
     )
 
     # Core library without device-specific code
+    set(HELP_REFERENCE_MD ${CMAKE_CURRENT_SOURCE_DIR}/reference/Pico_Logo_Reference.md)
+    set(HELP_DATA_C ${CMAKE_CURRENT_BINARY_DIR}/help_data.c)
+    add_custom_command(
+        OUTPUT ${HELP_DATA_C}
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_help.sh ${HELP_REFERENCE_MD} ${HELP_DATA_C}
+        DEPENDS ${HELP_REFERENCE_MD}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_help.sh
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_help.awk
+        COMMENT "Generating help data from reference document"
+    )
+
     add_library(logo_core
         ${CMAKE_CURRENT_SOURCE_DIR}/core/error.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/eval.c
@@ -397,6 +435,8 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/core/token_source.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/value.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/variables.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/help.c
+        ${HELP_DATA_C}
     )
 
     target_include_directories(logo_core PUBLIC

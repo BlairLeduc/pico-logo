@@ -14,6 +14,7 @@
 #include "error.h"
 #include "eval.h"
 #include "format.h"
+#include "help.h"
 #include "devices/io.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -665,6 +666,32 @@ static Result prim_recycle(Evaluator *eval, int argc, Value *args)
     return result_none();
 }
 
+// -------------------------------------------------------------------------
+// help "name
+// -------------------------------------------------------------------------
+static Result prim_help(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
+
+    if (!value_is_word(args[0])) {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
+
+    const char *name = mem_word_ptr(args[0].as.node);
+    const char *text = help_lookup(name);
+    if (text == NULL) {
+        return result_error_arg(ERR_DONT_KNOW_ABOUT, name, NULL);
+    }
+
+    LogoIO *io = primitives_get_io();
+    if (io) {
+        logo_io_write(io, text);
+    }
+
+    return result_none();
+}
+
 void primitives_workspace_init(void)
 {
     primitive_register("po", 1, prim_po);
@@ -695,4 +722,7 @@ void primitives_workspace_init(void)
     primitive_register("nodes", 0, prim_nodes);
     primitive_register("primitives", 0, prim_primitives);
     primitive_register("recycle", 0, prim_recycle);
+    
+    // Help
+    primitive_register("help", 1, prim_help);
 }
