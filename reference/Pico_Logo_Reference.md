@@ -2545,6 +2545,14 @@ text _name_
 The `text` primitive outputs the definition of _name_ as a list of lists, suitable for input to [`define`](#define).
 
 
+## primitives
+
+primitives
+
+`operation`
+
+`primitives` outputs a list of the names of all primitives, in alphabetical order. This list includes the names of all operations and commands described in this reference, as well as some additional primitives that are not described here but are available for use in your programs. The list does not include the names of user-defined procedures.
+
 
 ===
 # Logical Operations

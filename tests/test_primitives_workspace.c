@@ -7,6 +7,7 @@
 #include "core/frame.h"
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 void setUp(void)
 {
@@ -925,6 +926,76 @@ void test_po_multiline_list_three_lines(void)
     TEST_ASSERT_EQUAL_STRING(expected, output_buffer);
 }
 
+//==========================================================================
+// primitives operation tests
+//==========================================================================
+
+void test_primitives_returns_list(void)
+{
+    Result r = eval_string("primitives");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_list(r.value));
+}
+
+void test_primitives_list_is_nonempty(void)
+{
+    Result r = eval_string("primitives");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_list(r.value));
+    TEST_ASSERT_FALSE(mem_is_nil(r.value.as.node));
+}
+
+void test_primitives_contains_known_names(void)
+{
+    // Use show to print the list and check for known primitives
+    reset_output();
+    run_string("print member? \"print primitives");
+    TEST_ASSERT_EQUAL_STRING("true\n", output_buffer);
+
+    reset_output();
+    run_string("print member? \"forward primitives");
+    TEST_ASSERT_EQUAL_STRING("true\n", output_buffer);
+
+    reset_output();
+    run_string("print member? \"make primitives");
+    TEST_ASSERT_EQUAL_STRING("true\n", output_buffer);
+}
+
+void test_primitives_list_is_sorted(void)
+{
+    // Print first and second primitives on separate lines, then verify ordering
+    reset_output();
+    run_string("print first primitives");
+    run_string("print first bf primitives");
+    // output_buffer should have "name1\nname2\n"
+    char *nl1 = strchr(output_buffer, '\n');
+    TEST_ASSERT_NOT_NULL(nl1);
+    *nl1 = '\0';
+    char *second = nl1 + 1;
+    char *nl2 = strchr(second, '\n');
+    if (nl2) *nl2 = '\0';
+    TEST_ASSERT_TRUE(strlen(output_buffer) > 0);
+    TEST_ASSERT_TRUE(strlen(second) > 0);
+    TEST_ASSERT_TRUE(strcasecmp(output_buffer, second) <= 0);
+}
+
+void test_primitives_excludes_user_procedures(void)
+{
+    const char *params[] = {};
+    define_proc("myfoo", params, 0, "print 1");
+
+    reset_output();
+    run_string("print member? \"myfoo primitives");
+    TEST_ASSERT_EQUAL_STRING("false\n", output_buffer);
+}
+
+void test_primitives_includes_itself(void)
+{
+    reset_output();
+    run_string("print member? \"primitives primitives");
+    TEST_ASSERT_EQUAL_STRING("true\n", output_buffer);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -968,6 +1039,14 @@ int main(void)
     RUN_TEST(test_recycle_runs_without_error);
     RUN_TEST(test_recycle_frees_memory);
     RUN_TEST(test_recycle_preserves_live_data);
+
+    // primitives operation tests
+    RUN_TEST(test_primitives_returns_list);
+    RUN_TEST(test_primitives_list_is_nonempty);
+    RUN_TEST(test_primitives_contains_known_names);
+    RUN_TEST(test_primitives_list_is_sorted);
+    RUN_TEST(test_primitives_excludes_user_procedures);
+    RUN_TEST(test_primitives_includes_itself);
     
     // Erase tests
     RUN_TEST(test_erase_removes_procedure);
