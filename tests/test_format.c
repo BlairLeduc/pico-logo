@@ -326,6 +326,56 @@ void test_format_procedure_definition_bracket_single_token_last_line(void)
     TEST_ASSERT_EQUAL_STRING(expected, buffer);
 }
 
+void test_format_procedure_definition_with_parens(void)
+{
+    // Parentheses should not have spaces inside: (4 + 5) not ( 4 + 5 )
+    char buffer[512];
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    
+    Result r = proc_define_from_text(
+        "to addnine :x\n"
+        "output ( :x + 4 + 5 )\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    UserProcedure *proc = proc_find("addnine");
+    TEST_ASSERT_NOT_NULL(proc);
+    
+    TEST_ASSERT_TRUE(format_procedure_definition(format_buffer_output, &ctx, proc));
+
+    const char *expected =
+        "to addnine :x\n"
+        "  output (:x + 4 + 5)\n"
+        "end\n";
+    TEST_ASSERT_EQUAL_STRING(expected, buffer);
+}
+
+void test_format_procedure_definition_nested_parens(void)
+{
+    // Nested parentheses: (sum 1 2 (sum 3 4))
+    char buffer[512];
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    
+    Result r = proc_define_from_text(
+        "to nested\n"
+        "output ( sum 1 2 ( sum 3 4 ) )\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    UserProcedure *proc = proc_find("nested");
+    TEST_ASSERT_NOT_NULL(proc);
+    
+    TEST_ASSERT_TRUE(format_procedure_definition(format_buffer_output, &ctx, proc));
+
+    const char *expected =
+        "to nested\n"
+        "  output (sum 1 2 (sum 3 4))\n"
+        "end\n";
+    TEST_ASSERT_EQUAL_STRING(expected, buffer);
+}
+
 //==========================================================================
 // format_variable Tests
 //==========================================================================
@@ -723,6 +773,8 @@ int main(void)
     RUN_TEST(test_format_procedure_definition_multiline);
     RUN_TEST(test_format_procedure_definition_bracket_three_lines);
     RUN_TEST(test_format_procedure_definition_bracket_single_token_last_line);
+    RUN_TEST(test_format_procedure_definition_with_parens);
+    RUN_TEST(test_format_procedure_definition_nested_parens);
     
     // format_variable tests
     RUN_TEST(test_format_variable_number);

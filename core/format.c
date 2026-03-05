@@ -309,6 +309,20 @@ Node number_to_word(float n)
 }
 
 //==========================================================================
+// Parenthesis helpers
+//==========================================================================
+
+static bool is_open_paren(Node n)
+{
+    return mem_is_word(n) && strcmp(mem_word_ptr(n), "(") == 0;
+}
+
+static bool is_close_paren(Node n)
+{
+    return mem_is_word(n) && strcmp(mem_word_ptr(n), ")") == 0;
+}
+
+//==========================================================================
 // Newline-aware list formatting helpers
 //==========================================================================
 
@@ -362,6 +376,7 @@ static bool format_body_element_multiline(FormatOutputFunc out, void *ctx, Node 
             if (!out(ctx, "["))
                 return false;
             bool first = true;
+            Node prev = NODE_NIL;
             Node curr = elem;
             while (!mem_is_nil(curr))
             {
@@ -370,12 +385,16 @@ static bool format_body_element_multiline(FormatOutputFunc out, void *ctx, Node 
                 {
                     if (!first)
                     {
-                        if (!out(ctx, " "))
-                            return false;
+                        if (!is_open_paren(prev) && !is_close_paren(e))
+                        {
+                            if (!out(ctx, " "))
+                                return false;
+                        }
                     }
                     first = false;
                     if (!format_body_element_multiline(out, ctx, e, depth))
                         return false;
+                    prev = e;
                 }
                 curr = mem_cdr(curr);
             }
@@ -393,6 +412,7 @@ static bool format_list_with_newlines(FormatOutputFunc out, void *ctx, Node list
     
     bool first = true;
     bool at_line_start = false;
+    Node prev = NODE_NIL;
     Node curr = list;
     
     while (!mem_is_nil(curr))
@@ -422,13 +442,17 @@ static bool format_list_with_newlines(FormatOutputFunc out, void *ctx, Node list
             }
             else if (!first)
             {
-                if (!out(ctx, " "))
-                    return false;
+                if (!is_open_paren(prev) && !is_close_paren(elem))
+                {
+                    if (!out(ctx, " "))
+                        return false;
+                }
             }
             first = false;
             
             if (!format_body_element_multiline(out, ctx, elem, depth + 1))
                 return false;
+            prev = elem;
         }
         
         curr = mem_cdr(curr);
@@ -474,17 +498,23 @@ bool format_body_element(FormatOutputFunc out, void *ctx, Node elem)
         if (!out(ctx, "["))
             return false;
         bool first = true;
+        Node prev = NODE_NIL;
         Node curr = elem;
         while (!mem_is_nil(curr))
         {
+            Node e = mem_car(curr);
             if (!first)
             {
-                if (!out(ctx, " "))
-                    return false;
+                if (!is_open_paren(prev) && !is_close_paren(e))
+                {
+                    if (!out(ctx, " "))
+                        return false;
+                }
             }
             first = false;
-            if (!format_body_element(out, ctx, mem_car(curr)))
+            if (!format_body_element(out, ctx, e))
                 return false;
+            prev = e;
             curr = mem_cdr(curr);
         }
         return out(ctx, "]");
@@ -581,12 +611,18 @@ bool format_procedure_definition(FormatOutputFunc out, void *ctx, UserProcedure 
                 }
             }
             
-            // Add space between elements on same line
+            // Add space between elements on same line (skip around parentheses)
             Node next = mem_cdr(tokens);
             if (!mem_is_nil(next))
             {
-                if (!out(ctx, " "))
-                    return false;
+                bool curr_is_open = mem_is_word(elem) && strcmp(mem_word_ptr(elem), "(") == 0;
+                Node next_elem = mem_car(next);
+                bool next_is_close = mem_is_word(next_elem) && strcmp(mem_word_ptr(next_elem), ")") == 0;
+                if (!curr_is_open && !next_is_close)
+                {
+                    if (!out(ctx, " "))
+                        return false;
+                }
             }
             tokens = next;
         }
