@@ -19,7 +19,7 @@
 #   > quote       -> quote      (strip blockquote markers)
 
 BEGIN {
-    MAX_COL = 40
+    MAX_COL = 39
     in_appendix = 0
     in_entry = 0
     in_code_fence = 0
@@ -251,7 +251,6 @@ function emit_c_file(    i, j, n, varname, nnames, key_name, key_var) {
             printf "    \"%s\\n\"\n", c_escape(siglines[j])
         }
 
-        printf "    \"(%s)\\n\"\n", entries_badge[i]
         printf "    \"\\n\"\n"
 
         wrap_and_emit(entries_desc[i])

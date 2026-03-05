@@ -1048,18 +1048,14 @@ void test_help_command_unknown_gives_error(void)
     TEST_ASSERT_EQUAL(ERR_DONT_KNOW_ABOUT, r.error_code);
 }
 
-void test_help_shows_badge(void)
+void test_help_shows_description(void)
 {
     reset_output();
     run_string("help \"forward");
-    TEST_ASSERT_TRUE(strstr(output_buffer, "(command)") != NULL);
-}
-
-void test_help_shows_operation_badge(void)
-{
-    reset_output();
-    run_string("help \"sum");
-    TEST_ASSERT_TRUE(strstr(output_buffer, "(operation)") != NULL);
+    // Should contain signature and description, not a badge
+    TEST_ASSERT_TRUE(strstr(output_buffer, "forward") != NULL);
+    TEST_ASSERT_NULL(strstr(output_buffer, "(command)"));
+    TEST_ASSERT_NULL(strstr(output_buffer, "(operation)"));
 }
 
 int main(void)
@@ -1144,8 +1140,7 @@ int main(void)
     RUN_TEST(test_help_lookup_unknown_returns_null);
     RUN_TEST(test_help_command_outputs_text);
     RUN_TEST(test_help_command_unknown_gives_error);
-    RUN_TEST(test_help_shows_badge);
-    RUN_TEST(test_help_shows_operation_badge);
+    RUN_TEST(test_help_shows_description);
 
     return UNITY_END();
 }
