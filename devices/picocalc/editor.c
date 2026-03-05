@@ -1005,16 +1005,69 @@ static void editor_move_cursor_end(void)
 
 static void editor_page_up(void)
 {
-    for (int i = 0; i < EDITOR_VISIBLE_ROWS; i++) {
-        editor_move_cursor_up();
+    int current_line = editor_get_line_at_pos(editor.cursor_pos);
+    int current_col = editor_get_col_at_pos(editor.cursor_pos);
+    
+    // Move cursor and viewport up by one page, preserving screen position
+    int new_line = current_line - EDITOR_VISIBLE_ROWS;
+    if (new_line < 0) {
+        new_line = 0;
     }
+    
+    int new_view_start = editor.view_start_line - EDITOR_VISIBLE_ROWS;
+    if (new_view_start < 0) {
+        new_view_start = 0;
+    }
+    editor.view_start_line = new_view_start;
+    
+    // Move cursor to the same column on the new line
+    int line_start = editor_get_line_start(new_line);
+    int line_end = editor_get_line_end(new_line);
+    int line_len = line_end - line_start;
+    
+    if (current_col > line_len) {
+        editor.cursor_pos = line_end;
+    } else {
+        editor.cursor_pos = line_start + current_col;
+    }
+    
+    editor.h_scroll_offset = 0;
 }
 
 static void editor_page_down(void)
 {
-    for (int i = 0; i < EDITOR_VISIBLE_ROWS; i++) {
-        editor_move_cursor_down();
+    int current_line = editor_get_line_at_pos(editor.cursor_pos);
+    int current_col = editor_get_col_at_pos(editor.cursor_pos);
+    int total_lines = editor_count_lines();
+    
+    // Move cursor and viewport down by one page, preserving screen position
+    int new_line = current_line + EDITOR_VISIBLE_ROWS;
+    if (new_line >= total_lines) {
+        new_line = total_lines - 1;
     }
+    
+    int new_view_start = editor.view_start_line + EDITOR_VISIBLE_ROWS;
+    int max_view_start = total_lines - EDITOR_VISIBLE_ROWS;
+    if (max_view_start < 0) {
+        max_view_start = 0;
+    }
+    if (new_view_start > max_view_start) {
+        new_view_start = max_view_start;
+    }
+    editor.view_start_line = new_view_start;
+    
+    // Move cursor to the same column on the new line
+    int line_start = editor_get_line_start(new_line);
+    int line_end = editor_get_line_end(new_line);
+    int line_len = line_end - line_start;
+    
+    if (current_col > line_len) {
+        editor.cursor_pos = line_end;
+    } else {
+        editor.cursor_pos = line_start + current_col;
+    }
+    
+    editor.h_scroll_offset = 0;
 }
 
 //
@@ -1383,22 +1436,14 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                 
             case KEY_PAGE_UP:
                 editor_page_up();
-                if (editor.selecting) {
-                    // Selection spans many lines
-                    editor_mark_all_dirty();
-                } else {
-                    // Page moves likely cause vertical scroll - check after ensure_visible
-                    editor.dirty_flags = DIRTY_CURSOR;
-                }
+                // Page moves change viewport directly - always need full redraw
+                editor_mark_all_dirty();
                 break;
                 
             case KEY_PAGE_DOWN:
                 editor_page_down();
-                if (editor.selecting) {
-                    editor_mark_all_dirty();
-                } else {
-                    editor.dirty_flags = DIRTY_CURSOR;
-                }
+                // Page moves change viewport directly - always need full redraw
+                editor_mark_all_dirty();
                 break;
                 
             case KEY_BACKSPACE:

@@ -41,6 +41,29 @@ static Result prim_if(Evaluator *eval, int argc, Value *args)
 }
 
 //==========================================================================
+// IFELSE Command/Operation
+//==========================================================================
+
+// ifelse predicate list1 list2
+// If predicate is true, run list1; if false, run list2
+static Result prim_ifelse(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(argc);
+    REQUIRE_BOOL(args[0], condition);
+    REQUIRE_LIST(args[1]);
+    REQUIRE_LIST(args[2]);
+    
+    if (condition)
+    {
+        return eval_run_list_expr(eval, args[1].as.node);
+    }
+    else
+    {
+        return eval_run_list_expr(eval, args[2].as.node);
+    }
+}
+
+//==========================================================================
 // Boolean Operations
 //==========================================================================
 
@@ -105,6 +128,7 @@ static Result prim_iffalse(Evaluator *eval, int argc, Value *args)
 void primitives_conditionals_init(void)
 {
     primitive_register("if", 2, prim_if);
+    primitive_register("ifelse", 3, prim_ifelse);
     
     // Boolean operations
     primitive_register("true", 0, prim_true);

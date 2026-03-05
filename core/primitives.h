@@ -116,6 +116,12 @@ extern "C"
     // Returns true on success, false if out of space or primitive not found
     bool primitive_register_alias(const char *alias_name, const Primitive *source);
 
+    // Get the number of registered primitives
+    int primitive_get_count(void);
+
+    // Get a primitive by index (0-based), returns NULL if out of range
+    const Primitive *primitive_get_by_index(int index);
+
     // Initialize primitive categories
     void primitives_arithmetic_init(void);
     void primitives_conditionals_init(void);

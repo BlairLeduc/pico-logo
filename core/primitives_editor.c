@@ -65,6 +65,18 @@ static bool line_is_end(const char *line)
     return *line == '\0';
 }
 
+// Count bracket balance in a line (positive = more '[', negative = more ']')
+static int count_bracket_balance(const char *line)
+{
+    int balance = 0;
+    for (const char *p = line; *p; p++)
+    {
+        if (*p == '[') balance++;
+        else if (*p == ']') balance--;
+    }
+    return balance;
+}
+
 // Run editor and process results
 // Processes buffer as if each line were typed at top level
 static Result run_editor_and_process(Evaluator *eval, char *buffer)
@@ -106,6 +118,10 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
     char *proc_buffer = editor_proc_buffer;
     size_t proc_len = 0;
     bool in_procedure_def = false;
+    
+    // Bracket-balance tracking for multi-line expressions (e.g. make "x [\n...\n])
+    int bracket_depth = 0;
+    size_t expr_len = 0;
     
     // Process line by line
     char *line_start = buffer;
@@ -216,10 +232,87 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
             }
             else
             {
-                // Regular instruction - evaluate it
+                // Regular instruction - handle multi-line bracket expressions
+                
+                if (bracket_depth > 0)
+                {
+                    // Continuing a multi-line bracket expression - append this line
+                    if (expr_len + line_len + 2 < LOGO_EDITOR_BUFFER_SIZE - 10)
+                    {
+                        // Add a space separator then the line content
+                        proc_buffer[expr_len] = ' ';
+                        memcpy(proc_buffer + expr_len + 1, line_start, line_len);
+                        expr_len += line_len + 1;
+                        proc_buffer[expr_len] = '\0';
+                    }
+                    else
+                    {
+                        logo_io_write(io, "Expression too long\n");
+                        bracket_depth = 0;
+                        expr_len = 0;
+                        // Restore and skip
+                        *line_end = saved;
+                        if (*line_end == '\n')
+                            line_start = line_end + 1;
+                        else
+                            break;
+                        continue;
+                    }
+                    
+                    bracket_depth += count_bracket_balance(line_start);
+                    
+                    if (bracket_depth > 0)
+                    {
+                        // Still accumulating - move to next line
+                        *line_end = saved;
+                        if (*line_end == '\n')
+                            line_start = line_end + 1;
+                        else
+                            break;
+                        continue;
+                    }
+                    
+                    // Brackets balanced - fall through to evaluate proc_buffer
+                    bracket_depth = 0;
+                }
+                else
+                {
+                    // Check if this line starts a multi-line bracket expression
+                    int line_balance = count_bracket_balance(line_start);
+                    if (line_balance > 0)
+                    {
+                        // Start accumulating multi-line expression
+                        bracket_depth = line_balance;
+                        expr_len = 0;
+                        
+                        if (line_len + 1 < LOGO_EDITOR_BUFFER_SIZE - 10)
+                        {
+                            memcpy(proc_buffer, line_start, line_len);
+                            expr_len = line_len;
+                            proc_buffer[expr_len] = '\0';
+                        }
+                        else
+                        {
+                            logo_io_write(io, "Expression too long\n");
+                            bracket_depth = 0;
+                        }
+                        
+                        // Move to next line to continue accumulating
+                        *line_end = saved;
+                        if (*line_end == '\n')
+                            line_start = line_end + 1;
+                        else
+                            break;
+                        continue;
+                    }
+                }
+                
+                // Evaluate the instruction (single line or accumulated multi-line)
+                const char *eval_text = (expr_len > 0) ? proc_buffer : line_start;
+                
                 Lexer lexer;
                 Evaluator line_eval;
-                lexer_init(&lexer, line_start);
+                lexer_init(&lexer, eval_text);
                 eval_init(&line_eval, &lexer);
                 
                 // Evaluate all instructions on the line
@@ -261,6 +354,9 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
                     }
                     // RESULT_NONE means command completed successfully - continue
                 }
+                
+                // Reset multi-line expression state
+                expr_len = 0;
             }
             
             // Restore the character

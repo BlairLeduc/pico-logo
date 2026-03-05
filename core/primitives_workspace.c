@@ -3,7 +3,7 @@
 //  Copyright 2025 Blair Leduc. See LICENSE for details.
 //
 //  Workspace management primitives: po, poall, pon, pons, pops, pot, pots,
-//                                   nodes, recycle
+//                                   nodes, primitives, recycle
 //
 
 #include "primitives.h"
@@ -14,9 +14,12 @@
 #include "error.h"
 #include "eval.h"
 #include "format.h"
+#include "help.h"
 #include "devices/io.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 // Output callback for workspace printing (always succeeds)
 static bool ws_output(void *ctx, const char *str)
@@ -600,6 +603,42 @@ static Result prim_erps(Evaluator *eval, int argc, Value *args)
     return result_none();
 }
 
+// primitives
+// Outputs a list of all primitive names in alphabetical order
+static int compare_strings(const void *a, const void *b)
+{
+    return strcasecmp(*(const char **)a, *(const char **)b);
+}
+
+static Result prim_primitives(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
+
+    int count = primitive_get_count();
+
+    // Collect unique names (aliases share the same func, but all names are included)
+    const char **names = malloc(count * sizeof(const char *));
+    if (!names)
+        return result_error(ERR_OUT_OF_SPACE);
+
+    for (int i = 0; i < count; i++)
+        names[i] = primitive_get_by_index(i)->name;
+
+    // Sort alphabetically
+    qsort(names, count, sizeof(const char *), compare_strings);
+
+    // Build list in reverse order so first name ends up at the head
+    Node list = NODE_NIL;
+    for (int i = count - 1; i >= 0; i--)
+    {
+        Node atom = mem_atom_cstr(names[i]);
+        list = mem_cons(atom, list);
+    }
+
+    free(names);
+    return result_ok(value_list(list));
+}
+
 // nodes
 // Outputs the number of free nodes available
 static Result prim_nodes(Evaluator *eval, int argc, Value *args)
@@ -624,6 +663,32 @@ static Result prim_recycle(Evaluator *eval, int argc, Value *args)
     // Sweep unmarked nodes
     mem_gc_sweep();
     
+    return result_none();
+}
+
+// -------------------------------------------------------------------------
+// help "name
+// -------------------------------------------------------------------------
+static Result prim_help(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
+
+    if (!value_is_word(args[0])) {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
+
+    const char *name = mem_word_ptr(args[0].as.node);
+    const char *text = help_lookup(name);
+    if (text == NULL) {
+        return result_error_arg(ERR_DONT_KNOW_ABOUT, name, NULL);
+    }
+
+    LogoIO *io = primitives_get_io();
+    if (io) {
+        logo_io_write(io, text);
+    }
+
     return result_none();
 }
 
@@ -655,5 +720,9 @@ void primitives_workspace_init(void)
     
     // Memory management
     primitive_register("nodes", 0, prim_nodes);
+    primitive_register("primitives", 0, prim_primitives);
     primitive_register("recycle", 0, prim_recycle);
+    
+    // Help
+    primitive_register("help", 1, prim_help);
 }

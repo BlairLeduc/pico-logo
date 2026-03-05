@@ -76,6 +76,7 @@ static const char *error_templates[] = {
     [ERR_NETWORK_TIMEOUT] = "Network timeout occurred",
     [ERR_INVALID_NETWORK_OP] = "Invalid network operation",
     [ERR_STACK_OVERFLOW] = "Too many nested operations",
+    [ERR_DONT_KNOW_ABOUT] = "I don't know about %s",
 };
 
 #define NUM_ERRORS (sizeof(error_templates) / sizeof(error_templates[0]))
@@ -188,6 +189,7 @@ const char *error_format(Result r)
     case ERR_SUBDIR_NOT_FOUND:
     case ERR_SUBDIR_NOT_EMPTY:
     case ERR_CANT_ON_NETWORK:
+    case ERR_DONT_KNOW_ABOUT:
         // Single %s placeholder - use error_proc or error_arg
         if (r.error_proc)
         {

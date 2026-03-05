@@ -92,3 +92,15 @@ bool primitive_register_alias(const char *alias_name, const Primitive *source)
         .func = source->func};
     return true;
 }
+
+int primitive_get_count(void)
+{
+    return primitive_count;
+}
+
+const Primitive *primitive_get_by_index(int index)
+{
+    if (index < 0 || index >= primitive_count)
+        return NULL;
+    return &primitives[index];
+}

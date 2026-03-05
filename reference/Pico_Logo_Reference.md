@@ -354,15 +354,8 @@ Line continuation characters are not supported.
 
 Words with internal spaces are created using the "`\`" character, not using the veritcal bar notation.
 
-Pico Logo does not support the `if predicate list1 list2` form. Use `(if predicate list1 list2)` instead.
+Pico Logo does not support the `if predicate list1 list2` form. Use `(if predicate list1 list2)` or `ifelse predicate list1 list2` instead.
 
-`ifelse` is not a primitive. It can be implemented as follows:
-
-```logo
-to ifelse :predicate :list1 :list2
-  (if :predicate :list1 :list2)
-end
-```
 
 
 ===
@@ -424,7 +417,7 @@ The Logo Editor is an interactive screen-oriented text editor, which provides a 
 
 ## How the editor works
 
-When you call the Editor, Logo changes the screen. The editor uses for all text screen with:
+When you call the Editor, Logo changes the screen. The editor uses the entire screen with the header:
 
 `PICO LOGO EDITOR`
 
@@ -432,7 +425,7 @@ centred on the top row (the top row is reverse video). The bottom line has centr
 
 `ESC - ACCEPT    BRK - CANCEL`
 
- The content you edit is on the 30 lines between the top and bottom rows. There is no prompt character, but the cursor shows where you are typing.
+The content you edit is on the 30 lines between the top and bottom rows. There is no prompt character, but the cursor shows where you are typing.
 
 The text that you edit is in an area of memory called a **buffer**. When you enter the Editor, Logo displays the text from the edit buffer, up to 30 lines per screen.
 
@@ -1857,7 +1850,7 @@ sum _number1_ _number2_
 
 `operation`
 
-Outputs the sum of its inputs. `sum` is equivalent t o the `+` infix-form operation. With one input, `sum` outputs its input.
+Outputs the sum of its inputs. `sum` is equivalent to the `+` infix-form operation. With one input, `sum` outputs its input.
 
 
 ===
@@ -1931,6 +1924,26 @@ to decide
   output (if 0 = random 2 ["yes] ["no])
 end
 ```
+
+
+## ifelse
+
+ifelse _predicate_ _list1_ _list2_
+
+`command` or `operation`
+
+`ifelse` is the same as `if` except that _list2_ must be present. If _predicate_ is `true`, Logo runs _list1_; if _predicate_ is `false`, Logo runs _list2_. In either case, if the selected list outputs something, the `ifelse` is an operation. If the list outputs nothing, the `ifelse` is a command.
+
+Example:
+
+```logo
+to decide
+  ifelse 0 = random 2 [op "yes] [op "no]
+end
+```
+
+
+
 
 ## iffalse (iff)
 
@@ -2071,7 +2084,7 @@ for _forcontrol_ _instructionlist_
 
 `command`
 
-The first input must be a list containing three or four members: (1) a word, which will be used as the name of a local variable; (2) a word or list that will be evaluated as by RUN to determine a number, the starting value of the variable; (3) a word or list that will be evaluated to determine a number, the limit value of the variable; (4) an optional word or list that will be evaluated to determine the step size. If the fourth member is missing, the step size will be 1 or –1 depending on whether the limit value is greater than or less than the starting value, respectively.
+The first input must be a list containing three or four members: (1) a word, which will be used as the name of a local variable; (2) a word or list that will be evaluated as by RUN to determine a number, the starting value of the variable; (3) a word or list that will be evaluated to determine a number, the limit value of the variable; (4) an optional word or list that will be evaluated to determine the step size. If the fourth member is missing, the step size will be 1 or -1 depending on whether the limit value is greater than or less than the starting value, respectively.
 
 The second input is an _instructionlist_. The effect of `for` is to run that _instructionlist_ repeatedly, assigning a new value to the control variable (the one named by the first member of the _forcontrol_ list) each time. First the starting value is assigned to the control variable. Then the value is compared to the limit value. `for` is complete when the sign of (current - limit) is the same as the sign of the step size. (If no explicit step size is provided, the _instructionlist_ is always run at least once. An explicit step size can lead to a zero-trip `for`, e.g., `for [i 1 0 1] ...`). Otherwise, the _instructionlist_ is run, then the step is added to the current value of the control variable and `for` returns to the comparison step.
 
@@ -2531,6 +2544,43 @@ text _name_
 
 The `text` primitive outputs the definition of _name_ as a list of lists, suitable for input to [`define`](#define).
 
+
+## primitives
+
+primitives
+
+`operation`
+
+`primitives` outputs a list of the names of all primitives, in alphabetical order. This list includes the names of all operations and commands described in this reference, as well as some additional primitives that are not described here but are available for use in your programs. The list does not include the names of user-defined procedures.
+
+
+## help
+
+help _name_
+
+`command`
+
+`help` outputs a brief description of the primitive _name_. If _name_ is not the name of a primitive, an error occurs. The description includes the type of primitive (command or operation) and the number and types of inputs it takes. It also includes a brief description of what the primitive does. The description is not intended to be a complete explanation of the primitive, but rather a quick reminder of its purpose and use.
+
+```logo
+?help "help
+help :name
+(command)
+
+Outputs a brief description of the
+primitive :name. If :name is not the
+name of a primitive, an error occurs.
+The description includes the type of
+primitive (command or operation) and
+the number and types of inputs it
+takes. It also includes a brief
+description of what the primitive
+does. The description is not intended
+to be a complete explanation of the
+primitive, but rather a quick reminder
+of its purpose and use.
+?
+```
 
 
 ===
