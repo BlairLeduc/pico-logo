@@ -6,6 +6,7 @@
 //
 
 #include "help.h"
+#include <stddef.h>
 #include <strings.h>
 
 const char *help_lookup(const char *name)
