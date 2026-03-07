@@ -1075,6 +1075,16 @@ static Result proc_call_cleanup(Evaluator *eval, EvalOp *op, Result body_result)
 {
     ProcCallState *st = &op->proc_call;
 
+    // Bare tail call that produced a value via output — this is an error.
+    // Without TCO, the bare call on the last line would have returned the
+    // value to a non-expression OP_RUN_LIST context, which reports
+    // "You don't say what to do with..."
+    if (body_result.status == RESULT_OUTPUT && st->tco_mode == TCO_MODE_BARE)
+    {
+        body_result = result_error_arg(ERR_DONT_KNOW_WHAT, NULL,
+                                       value_to_string(body_result.value));
+    }
+
     eval_trace_exit(eval, st->proc, body_result);
 
     eval->proc_depth--;
@@ -1115,6 +1125,10 @@ Result step_proc_call(Evaluator *eval, EvalOp *op)
                     Value args[MAX_PROC_PARAMS];
                     for (int i = 0; i < argc; i++)
                         args[i] = tc->args[i];
+
+                    // Track TCO context: bare call vs output call
+                    st->tco_mode = tc->is_output_call ? TCO_MODE_OUTPUT
+                                                      : TCO_MODE_BARE;
                     proc_clear_tail_call();
 
                     proc_pop_current();

@@ -12,6 +12,7 @@
 #include "variables.h"
 #include "frame.h"
 #include <string.h>
+#include <strings.h>
 #include <stdlib.h>
 #include <ctype.h>
 
@@ -521,8 +522,13 @@ Result eval_primary(Evaluator *eval)
             }
         }
         
-        // Not a procedure call, just grouping
+        // Not a procedure call, just grouping.
+        // A parenthesized subexpression is not in tail position — its
+        // result may feed into an outer infix expression.
+        bool old_tail = eval->in_tail_position;
+        eval->in_tail_position = false;
         Result r = eval_expr_bp(eval, BP_NONE);
+        eval->in_tail_position = old_tail;
         if (r.status == RESULT_ERROR)
         {
             eval->paren_depth--;
@@ -619,9 +625,15 @@ Result eval_primary(Evaluator *eval)
                     break;
                 }
 
-                // Arguments to primitives are not in tail position
+                // Arguments to primitives are not in tail position.
+                // EXCEPTION: output/op in tail position propagates tail
+                // position to its argument, enabling TCO for
+                // "output <self-recursive-call>".
+                bool is_output_prim = (strcasecmp(name_buf, "output") == 0 ||
+                                       strcasecmp(name_buf, "op") == 0);
                 bool old_tail = eval->in_tail_position;
-                eval->in_tail_position = false;
+                if (!(is_output_prim && eval->in_tail_position))
+                    eval->in_tail_position = false;
                 Result arg = eval_expression(eval);
                 eval->in_tail_position = old_tail;
 
@@ -736,6 +748,7 @@ Result eval_primary(Evaluator *eval)
                         // Self-recursive tail call - set up TCO
                         TailCall *tc = proc_get_tail_call();
                         tc->is_tail_call = true;
+                        tc->is_output_call = (eval->primitive_arg_depth > 0);
                         tc->proc_name = user_proc->name;
                         tc->arg_count = argc;
                         for (int i = 0; i < argc; i++)
@@ -792,6 +805,7 @@ Result eval_primary(Evaluator *eval)
                 call_op->proc_call.proc = user_proc;
                 call_op->proc_call.current_line = user_proc->body;
                 call_op->proc_call.phase = 0;
+                call_op->proc_call.tco_mode = TCO_MODE_NONE;
                 return result_none();
             }
 
@@ -884,6 +898,12 @@ Result eval_expr_bp(Evaluator *eval, int min_bp)
 
         if (bp == BP_NONE || bp < min_bp)
             break;
+
+        // In a binary expression: operands are not in tail position.
+        // This prevents TCO from firing for patterns like
+        // "output :n * factorial :n - 1" where the self-call result
+        // is needed for the multiplication.
+        eval->in_tail_position = false;
 
         // Shift: save current state and parse right operand
         advance(eval);

@@ -165,6 +165,7 @@ TailCall *proc_get_tail_call(void)
 void proc_clear_tail_call(void)
 {
     tail_call_state.is_tail_call = false;
+    tail_call_state.is_output_call = false;
     tail_call_state.proc_name = NULL;
     tail_call_state.arg_count = 0;
 }

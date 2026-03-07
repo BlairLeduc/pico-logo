@@ -133,11 +133,17 @@ extern "C"
         int phase;
     } CatchState;
 
+    // TCO mode tracking for proc calls
+    #define TCO_MODE_NONE   0  // No TCO has occurred
+    #define TCO_MODE_BARE   1  // TCO from bare self-call (no output)
+    #define TCO_MODE_OUTPUT 2  // TCO from output <self-call>
+
     typedef struct
     {
         struct UserProcedure *proc;  // The procedure being executed
         Node current_line;           // Current body line cursor
         uint8_t phase;               // 0 = push first line, 1+ = handle line result
+        uint8_t tco_mode;            // TCO_MODE_NONE/BARE/OUTPUT
     } ProcCallState;
 
     // Maximum pending binary operator nesting in expressions.
