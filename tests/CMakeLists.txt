@@ -26,6 +26,7 @@ macro(add_logo_test TEST_NAME)
 endmacro()
 
 # Core tests
+add_logo_test(test_eval_ops)
 add_logo_test(test_frame)
 add_logo_test(test_frame_arena)
 add_logo_test(test_lexer)
