@@ -822,7 +822,7 @@ bool logo_io_dir_exists(const LogoIO *io, const char *pathname)
     char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
     if (!full_path)
     {
-        return NULL;
+        return false;
     }
 
     return io->storage->ops->dir_exists(full_path);
@@ -840,7 +840,7 @@ bool logo_io_file_delete(const LogoIO *io, const char *pathname)
     char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
     if (!full_path)
     {
-        return NULL;
+        return false;
     }
 
     return io->storage->ops->file_delete(full_path);
@@ -858,7 +858,7 @@ bool logo_io_dir_create(const LogoIO *io, const char *pathname)
     char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
     if (!full_path)
     {
-        return NULL;
+        return false;
     }
 
     return io->storage->ops->dir_create(full_path);
@@ -876,7 +876,7 @@ bool logo_io_dir_delete(const LogoIO *io, const char *pathname)
     char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
     if (!full_path)
     {
-        return NULL;
+        return false;
     }
 
     return io->storage->ops->dir_delete(full_path);
@@ -894,13 +894,13 @@ bool logo_io_rename(const LogoIO *io, const char *old_path, const char *new_path
     char *full_old_path = logo_io_resolve_path(io, old_path, resolved_old, sizeof(resolved_old));
     if (!full_old_path)
     {
-        return NULL;
+        return false;
     }
     char resolved_new[LOGO_STREAM_NAME_MAX];
     char *full_new_path = logo_io_resolve_path(io, new_path, resolved_new, sizeof(resolved_new));
     if (!full_new_path)
     {
-        return NULL;
+        return false;
     }
 
     return io->storage->ops->rename(full_old_path, full_new_path);
