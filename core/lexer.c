@@ -315,6 +315,9 @@ static bool looks_like_number(const char *p)
         return false;
     }
     
+    bool has_dot = false;
+    bool has_exp = false;
+
     // Scan ahead to see if this is a pure number
     while (*p)
     {
@@ -328,15 +331,20 @@ static bool looks_like_number(const char *p)
             // Hit a delimiter - it's a number
             return true;
         }
-        if (!is_digit(*p) && *p != '.' && 
-            *p != 'e' && *p != 'E' && *p != 'n' && *p != 'N')
+        if (*p == '.')
         {
-            // Non-number character without being a delimiter - it's a word
-            return false;
+            if (has_dot || has_exp)
+                return false; // Multiple dots or dot after exponent
+            has_dot = true;
+            p++;
+            continue;
         }
         // Handle exponent
         if (*p == 'e' || *p == 'E' || *p == 'n' || *p == 'N')
         {
+            if (has_exp)
+                return false; // Multiple exponents
+            has_exp = true;
             bool is_n = (*p == 'n' || *p == 'N');
             p++;
             if (!is_n && (*p == '+' || *p == '-'))
@@ -349,6 +357,11 @@ static bool looks_like_number(const char *p)
                 return false;
             }
             continue;
+        }
+        if (!is_digit(*p))
+        {
+            // Non-number character without being a delimiter - it's a word
+            return false;
         }
         p++;
     }
