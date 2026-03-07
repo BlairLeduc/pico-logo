@@ -17,6 +17,10 @@
 #include <stdio.h>
 #include <ctype.h>
 
+//==========================================================================
+// Element access: first, last, butfirst, butlast, item, replace, member
+//==========================================================================
+
 // first object
 // Outputs the first element of object.
 // For a word: outputs the first character as a word
@@ -637,6 +641,10 @@ static Result prim_member(Evaluator *eval, int argc, Value *args)
     return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj2));
 }
 
+//==========================================================================
+// List/word construction: fput, list, lput, parse, sentence, word
+//==========================================================================
+
 // fput object list
 // Outputs a new list with object at the beginning.
 static Result prim_fput(Evaluator *eval, int argc, Value *args)
@@ -1004,6 +1012,10 @@ static Result prim_word(Evaluator *eval, int argc, Value *args)
     Node result = mem_atom_cstr(buffer);
     return result_ok(value_word(result));
 }
+
+//==========================================================================
+// Character operations and predicates
+//==========================================================================
 
 // ascii character
 // Outputs the ASCII code of character.

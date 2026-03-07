@@ -69,6 +69,8 @@ add_custom_command(
 add_library(logo_core
     core/error.c
     core/eval.c
+    core/eval_expr.c
+    core/eval_steps.c
     core/eval_ops.c
     core/format.c
     core/frame.c
@@ -84,6 +86,8 @@ add_library(logo_core
     core/primitives_editor.c
     core/primitives_exceptions.c
     core/primitives_files.c
+    core/primitives_files_directory.c
+    core/primitives_files_load_save.c
     core/primitives_hardware.c
     core/primitives_logical.c
     core/primitives_bitwise.c
@@ -265,6 +269,8 @@ if(BUILD_FOR_HOST)
     add_library(logo_core
         core/error.c
         core/eval.c
+        core/eval_expr.c
+        core/eval_steps.c
         core/eval_ops.c
         core/format.c
         core/frame.c
@@ -280,6 +286,8 @@ if(BUILD_FOR_HOST)
         core/primitives_editor.c
         core/primitives_exceptions.c
         core/primitives_files.c
+        core/primitives_files_directory.c
+        core/primitives_files_load_save.c
         core/primitives_hardware.c
         core/primitives_logical.c
         core/primitives_bitwise.c
@@ -397,6 +405,8 @@ if(BUILD_TESTING)
     add_library(logo_core
         ${CMAKE_CURRENT_SOURCE_DIR}/core/error.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/eval.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/eval_expr.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/eval_steps.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/eval_ops.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/format.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/frame.c
@@ -412,6 +422,8 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_editor.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_exceptions.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_files.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_files_directory.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_files_load_save.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_hardware.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_logical.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_bitwise.c
