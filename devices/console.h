@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Defines the LogoConsole interface for physical keyboard/screen devices.
 //  A console provides streams for keyboard input and screen output,

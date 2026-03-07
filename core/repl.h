@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  REPL (Read-Eval-Print Loop) shared implementation
 //

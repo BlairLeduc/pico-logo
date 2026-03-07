@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Editor primitives: edit, edall, edn, edns, editfile
 //

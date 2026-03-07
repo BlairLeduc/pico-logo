@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  This font is strongly based on the original font used in Atari 8-bit
 //  computers.

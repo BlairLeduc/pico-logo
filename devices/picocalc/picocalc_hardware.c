@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Implements the LogoHardware interface for PicoCalc device.
 //
@@ -326,12 +326,12 @@ static int days_in_month_of_year(int month, int year)
     return days_in_month[month - 1];
 }
 
-// Convert year/month/day/hour/min/sec to milliseconds since Jan 1, 2025 00:00:00
+// Convert year/month/day/hour/min/sec to milliseconds since Jan 1, 2026 00:00:00
 static int64_t datetime_to_ms(int year, int month, int day, int hour, int min, int sec)
 {
     int64_t total_days = 0;
     
-    // Add days for years from 2025 to year-1
+    // Add days for years from 2026 to year-1
     for (int y = 2025; y < year; y++)
     {
         total_days += is_leap_year(y) ? 366 : 365;
@@ -351,7 +351,7 @@ static int64_t datetime_to_ms(int year, int month, int day, int hour, int min, i
     return total_seconds * 1000LL;
 }
 
-// Convert milliseconds since Jan 1, 2025 to date/time components
+// Convert milliseconds since Jan 1, 2026 to date/time components
 static void ms_to_datetime(int64_t ms, int *year, int *month, int *day, int *hour, int *min, int *sec)
 {
     int64_t total_seconds = ms / 1000;
@@ -390,7 +390,7 @@ static void ensure_software_clock_initialized(void)
     if (!software_clock_initialized)
     {
         clock_base_time = get_absolute_time();
-        // Default to Jan 1, 2025 00:00:00
+        // Default to Jan 1, 2026 00:00:00
         clock_epoch_offset_ms = 0;
         software_clock_initialized = true;
     }
@@ -422,7 +422,7 @@ static bool picocalc_set_date(int year, int month, int day)
     ensure_software_clock_initialized();
     
     // Validate inputs
-    if (year < 2025 || year > 4095) return false;
+    if (year < 2026 || year > 4095) return false;
     if (month < 1 || month > 12) return false;
     if (day < 1 || day > 31) return false;
     
