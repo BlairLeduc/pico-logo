@@ -444,6 +444,15 @@ void test_for_non_word_varname(void)
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
+void test_for_step_zero(void)
+{
+    // step=0 should be an error (infinite loop)
+    Result r = eval_string("for [i 1 10 0] [print :i]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    // Body should not execute
+    TEST_ASSERT_EQUAL_STRING("", output_buffer);
+}
+
 // Deep nesting: user procedures called inside repeat via run
 // This exercises the C stack depth that caused stack overflow on Pico
 void test_deep_nested_proc_in_repeat(void)
@@ -648,6 +657,7 @@ int main(void)
     RUN_TEST(test_for_too_few_items);
     RUN_TEST(test_for_too_many_items);
     RUN_TEST(test_for_non_word_varname);
+    RUN_TEST(test_for_step_zero);
     RUN_TEST(test_deep_nested_proc_in_repeat);
     RUN_TEST(test_proc_call_in_repeat_within_procedure);
     RUN_TEST(test_proc_expr_in_run_within_procedure);
