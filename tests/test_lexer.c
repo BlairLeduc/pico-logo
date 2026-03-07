@@ -8,6 +8,7 @@
 #include "unity.h"
 #include "core/lexer.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 void setUp(void)
@@ -855,6 +856,682 @@ void test_quoted_empty_before_bracket(void)
 }
 
 //============================================================================
+// Fuzz / Adversarial Input Tests
+//============================================================================
+
+// Helper: drain all tokens from lexer, return count (excluding EOF)
+static int drain_tokens(Lexer *lexer)
+{
+    int count = 0;
+    Token t;
+    do
+    {
+        t = lexer_next_token(lexer);
+        if (t.type != TOKEN_EOF)
+            count++;
+    } while (t.type != TOKEN_EOF);
+    return count;
+}
+
+// --- Very long tokens ---
+
+void test_fuzz_very_long_word(void)
+{
+    // A word of 10000 characters should not crash
+    char *input = malloc(10001);
+    TEST_ASSERT_NOT_NULL(input);
+    memset(input, 'a', 10000);
+    input[10000] = '\0';
+
+    Lexer lexer;
+    lexer_init(&lexer, input);
+    Token t = lexer_next_token(&lexer);
+    TEST_ASSERT_EQUAL_INT(TOKEN_WORD, t.type);
+    TEST_ASSERT_EQUAL_INT(10000, (int)t.length);
+    assert_token_type(&lexer, TOKEN_EOF);
+
+    free(input);
+}
+
+void test_fuzz_very_long_number(void)
+{
+    // A number with 5000 digits
+    char *input = malloc(5001);
+    TEST_ASSERT_NOT_NULL(input);
+    input[0] = '1';
+    memset(input + 1, '0', 4999);
+    input[5000] = '\0';
+
+    Lexer lexer;
+    lexer_init(&lexer, input);
+    Token t = lexer_next_token(&lexer);
+    TEST_ASSERT_EQUAL_INT(TOKEN_NUMBER, t.type);
+    TEST_ASSERT_EQUAL_INT(5000, (int)t.length);
+    assert_token_type(&lexer, TOKEN_EOF);
+
+    free(input);
+}
+
+void test_fuzz_very_long_quoted_word(void)
+{
+    // A quoted word of 8000 characters: "aaaa...
+    char *input = malloc(8002);
+    TEST_ASSERT_NOT_NULL(input);
+    input[0] = '"';
+    memset(input + 1, 'x', 8000);
+    input[8001] = '\0';
+
+    Lexer lexer;
+    lexer_init(&lexer, input);
+    Token t = lexer_next_token(&lexer);
+    TEST_ASSERT_EQUAL_INT(TOKEN_QUOTED, t.type);
+    TEST_ASSERT_EQUAL_INT(8001, (int)t.length);
+    assert_token_type(&lexer, TOKEN_EOF);
+
+    free(input);
+}
+
+void test_fuzz_very_long_variable(void)
+{
+    // :aaa... with 6000 chars after colon
+    char *input = malloc(6002);
+    TEST_ASSERT_NOT_NULL(input);
+    input[0] = ':';
+    memset(input + 1, 'v', 6000);
+    input[6001] = '\0';
+
+    Lexer lexer;
+    lexer_init(&lexer, input);
+    Token t = lexer_next_token(&lexer);
+    TEST_ASSERT_EQUAL_INT(TOKEN_COLON, t.type);
+    TEST_ASSERT_EQUAL_INT(6001, (int)t.length);
+    assert_token_type(&lexer, TOKEN_EOF);
+
+    free(input);
+}
+
+// --- Binary data and control characters ---
+
+void test_fuzz_control_characters(void)
+{
+    // Control chars 0x01-0x08, 0x0B, 0x0C, 0x0E-0x1F are not whitespace
+    // and not delimiters, so they should be consumed as word characters
+    char input[] = {0x01, 0x02, 0x03, 0x7F, 0x00};
+    Lexer lexer;
+    lexer_init(&lexer, input);
+    Token t = lexer_next_token(&lexer);
+    TEST_ASSERT_EQUAL_INT(TOKEN_WORD, t.type);
+    TEST_ASSERT_EQUAL_INT(4, (int)t.length);
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+void test_fuzz_high_bytes(void)
+{
+    // Characters 0x80-0xFF (high bytes, e.g. UTF-8 continuations)
+    // should be treated as word characters
+    char input[] = {(char)0x80, (char)0xC0, (char)0xFF, (char)0xFE, 0x00};
+    Lexer lexer;
+    lexer_init(&lexer, input);
+    Token t = lexer_next_token(&lexer);
+    TEST_ASSERT_EQUAL_INT(TOKEN_WORD, t.type);
+    TEST_ASSERT_EQUAL_INT(4, (int)t.length);
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+void test_fuzz_binary_mixed_with_delimiters(void)
+{
+    // Binary chars mixed with operators: 0x01+0x02*0x03
+    char input[] = {0x01, '+', 0x02, '*', 0x03, 0x00};
+    Lexer lexer;
+    lexer_init(&lexer, input);
+
+    Token t = lexer_next_token(&lexer);
+    TEST_ASSERT_EQUAL_INT(TOKEN_WORD, t.type);
+    TEST_ASSERT_EQUAL_INT(1, (int)t.length);
+
+    assert_token_type(&lexer, TOKEN_PLUS);
+
+    t = lexer_next_token(&lexer);
+    TEST_ASSERT_EQUAL_INT(TOKEN_WORD, t.type);
+    TEST_ASSERT_EQUAL_INT(1, (int)t.length);
+
+    assert_token_type(&lexer, TOKEN_MULTIPLY);
+
+    t = lexer_next_token(&lexer);
+    TEST_ASSERT_EQUAL_INT(TOKEN_WORD, t.type);
+    TEST_ASSERT_EQUAL_INT(1, (int)t.length);
+
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+void test_fuzz_null_byte_terminates(void)
+{
+    // Embedded null byte should terminate tokenization
+    // (C string semantics)
+    char input[] = {'h', 'e', 'l', '\0', 'l', 'o'};
+    Lexer lexer;
+    lexer_init(&lexer, input);
+    assert_token(&lexer, TOKEN_WORD, "hel");
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+void test_fuzz_control_chars_as_word_content(void)
+{
+    // Tab and newline ARE whitespace, but form feed, vertical tab are not
+    // according to our is_space: only ' ', '\t', '\n', '\r'
+    char input[] = {'a', '\x0B', 'b', '\x0C', 'c', 0x00};
+    Lexer lexer;
+    lexer_init(&lexer, input);
+    Token t = lexer_next_token(&lexer);
+    TEST_ASSERT_EQUAL_INT(TOKEN_WORD, t.type);
+    // VT (0x0B) and FF (0x0C) are not whitespace, so the whole thing is one word
+    TEST_ASSERT_EQUAL_INT(5, (int)t.length);
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+// --- Backslash edge cases ---
+
+void test_fuzz_trailing_backslash_in_word(void)
+{
+    // Backslash at very end of input inside a word
+    Lexer lexer;
+    lexer_init(&lexer, "hello\\");
+    Token t = lexer_next_token(&lexer);
+    TEST_ASSERT_EQUAL_INT(TOKEN_WORD, t.type);
+    // Backslash plus nothing after it; lexer skips backslash, no next char
+    TEST_ASSERT_EQUAL_INT(6, (int)t.length);
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+void test_fuzz_trailing_backslash_in_quoted(void)
+{
+    // Backslash at end in a quoted word: "hello\<EOF>
+    Lexer lexer;
+    lexer_init(&lexer, "\"hello\\");
+    Token t = lexer_next_token(&lexer);
+    TEST_ASSERT_EQUAL_INT(TOKEN_QUOTED, t.type);
+    TEST_ASSERT_EQUAL_INT(7, (int)t.length);
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+void test_fuzz_trailing_backslash_in_colon(void)
+{
+    // Backslash at end in a variable ref: :var\<EOF>
+    Lexer lexer;
+    lexer_init(&lexer, ":var\\");
+    Token t = lexer_next_token(&lexer);
+    TEST_ASSERT_EQUAL_INT(TOKEN_COLON, t.type);
+    TEST_ASSERT_EQUAL_INT(5, (int)t.length);
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+void test_fuzz_only_backslash(void)
+{
+    // Just a single backslash
+    Lexer lexer;
+    lexer_init(&lexer, "\\");
+    Token t = lexer_next_token(&lexer);
+    TEST_ASSERT_EQUAL_INT(TOKEN_WORD, t.type);
+    TEST_ASSERT_EQUAL_INT(1, (int)t.length);
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+void test_fuzz_many_backslashes(void)
+{
+    // Many consecutive backslashes (each escapes the next)
+    Lexer lexer;
+    lexer_init(&lexer, "\\\\\\\\\\\\\\\\");
+    Token t = lexer_next_token(&lexer);
+    TEST_ASSERT_EQUAL_INT(TOKEN_WORD, t.type);
+    TEST_ASSERT_EQUAL_INT(8, (int)t.length);
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+void test_fuzz_odd_backslashes(void)
+{
+    // Odd number of backslashes: last one has nothing to escape
+    Lexer lexer;
+    lexer_init(&lexer, "\\\\\\");
+    Token t = lexer_next_token(&lexer);
+    TEST_ASSERT_EQUAL_INT(TOKEN_WORD, t.type);
+    TEST_ASSERT_EQUAL_INT(3, (int)t.length);
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+// --- Lone special characters ---
+
+void test_fuzz_lone_quote(void)
+{
+    // Just a quote character with nothing following
+    Lexer lexer;
+    lexer_init(&lexer, "\"");
+    Token t = lexer_next_token(&lexer);
+    TEST_ASSERT_EQUAL_INT(TOKEN_QUOTED, t.type);
+    TEST_ASSERT_EQUAL_INT(1, (int)t.length);
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+void test_fuzz_lone_colon(void)
+{
+    // Just a colon with nothing following
+    Lexer lexer;
+    lexer_init(&lexer, ":");
+    Token t = lexer_next_token(&lexer);
+    TEST_ASSERT_EQUAL_INT(TOKEN_COLON, t.type);
+    TEST_ASSERT_EQUAL_INT(1, (int)t.length);
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+void test_fuzz_lone_minus(void)
+{
+    // Just a minus sign
+    Lexer lexer;
+    lexer_init(&lexer, "-");
+    Token t = lexer_next_token(&lexer);
+    // At start of input with nothing after: unary minus (no digit follows)
+    TEST_ASSERT_EQUAL_INT(TOKEN_UNARY_MINUS, t.type);
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+// --- All operators in sequence ---
+
+void test_fuzz_all_operators_consecutive(void)
+{
+    // Every delimiter character adjacent: +-*/<=>[]()
+    Lexer lexer;
+    lexer_init(&lexer, "+-*/<=>[]()");
+    assert_token_type(&lexer, TOKEN_PLUS);
+    assert_token_type(&lexer, TOKEN_UNARY_MINUS); // unary: follows operator
+    assert_token_type(&lexer, TOKEN_MULTIPLY);
+    assert_token_type(&lexer, TOKEN_DIVIDE);
+    assert_token_type(&lexer, TOKEN_LESS_THAN);
+    assert_token_type(&lexer, TOKEN_EQUALS);
+    assert_token_type(&lexer, TOKEN_GREATER_THAN);
+    assert_token_type(&lexer, TOKEN_LEFT_BRACKET);
+    assert_token_type(&lexer, TOKEN_RIGHT_BRACKET);
+    assert_token_type(&lexer, TOKEN_LEFT_PAREN);
+    assert_token_type(&lexer, TOKEN_RIGHT_PAREN);
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+void test_fuzz_many_consecutive_minus(void)
+{
+    // 20 minus signs in a row — context-sensitive minus handling
+    Lexer lexer;
+    lexer_init(&lexer, "--------------------");
+    int count = drain_tokens(&lexer);
+    TEST_ASSERT_EQUAL_INT(20, count);
+}
+
+// --- Deeply nested brackets ---
+
+void test_fuzz_deeply_nested_brackets(void)
+{
+    // 500 levels of nested brackets: [[[...]]]
+    const int depth = 500;
+    char *input = malloc(depth * 2 + 1);
+    TEST_ASSERT_NOT_NULL(input);
+    for (int i = 0; i < depth; i++)
+        input[i] = '[';
+    for (int i = 0; i < depth; i++)
+        input[depth + i] = ']';
+    input[depth * 2] = '\0';
+
+    Lexer lexer;
+    lexer_init(&lexer, input);
+    int count = drain_tokens(&lexer);
+    TEST_ASSERT_EQUAL_INT(depth * 2, count);
+
+    free(input);
+}
+
+// --- Whitespace stress ---
+
+void test_fuzz_very_long_whitespace(void)
+{
+    // 10000 spaces followed by a word
+    char *input = malloc(10006);
+    TEST_ASSERT_NOT_NULL(input);
+    memset(input, ' ', 10000);
+    memcpy(input + 10000, "hello", 5);
+    input[10005] = '\0';
+
+    Lexer lexer;
+    lexer_init(&lexer, input);
+    assert_token(&lexer, TOKEN_WORD, "hello");
+    assert_token_type(&lexer, TOKEN_EOF);
+
+    free(input);
+}
+
+void test_fuzz_only_whitespace_long(void)
+{
+    // 5000 mixed whitespace chars with no tokens
+    char *input = malloc(5001);
+    TEST_ASSERT_NOT_NULL(input);
+    for (int i = 0; i < 5000; i++)
+    {
+        switch (i % 4)
+        {
+        case 0: input[i] = ' '; break;
+        case 1: input[i] = '\t'; break;
+        case 2: input[i] = '\n'; break;
+        case 3: input[i] = '\r'; break;
+        }
+    }
+    input[5000] = '\0';
+
+    Lexer lexer;
+    lexer_init(&lexer, input);
+    assert_token_type(&lexer, TOKEN_EOF);
+    TEST_ASSERT_TRUE(lexer_is_at_end(&lexer));
+
+    free(input);
+}
+
+void test_fuzz_many_newlines(void)
+{
+    // After consuming many newlines, newline_count should be correct
+    char *input = malloc(1001);
+    TEST_ASSERT_NOT_NULL(input);
+    memset(input, '\n', 999);
+    input[999] = 'x';
+    input[1000] = '\0';
+
+    Lexer lexer;
+    lexer_init(&lexer, input);
+    Token t = lexer_next_token(&lexer);
+    TEST_ASSERT_EQUAL_INT(TOKEN_WORD, t.type);
+    TEST_ASSERT_TRUE(lexer.had_newline);
+    TEST_ASSERT_EQUAL_INT(999, lexer.newline_count);
+    assert_token_type(&lexer, TOKEN_EOF);
+
+    free(input);
+}
+
+// --- Token text buffer edge cases ---
+
+void test_fuzz_token_text_null_buffer(void)
+{
+    Lexer lexer;
+    lexer_init(&lexer, "hello");
+    Token t = lexer_next_token(&lexer);
+    // NULL buffer: returns required size
+    size_t needed = lexer_token_text(&t, NULL, 0);
+    TEST_ASSERT_EQUAL_INT(5, (int)needed);
+}
+
+void test_fuzz_token_text_zero_size(void)
+{
+    Lexer lexer;
+    lexer_init(&lexer, "hello");
+    Token t = lexer_next_token(&lexer);
+    char buf[10];
+    // Zero size: returns required size
+    size_t needed = lexer_token_text(&t, buf, 0);
+    TEST_ASSERT_EQUAL_INT(5, (int)needed);
+}
+
+void test_fuzz_token_text_size_one(void)
+{
+    Lexer lexer;
+    lexer_init(&lexer, "hello");
+    Token t = lexer_next_token(&lexer);
+    char buf[1];
+    size_t copied = lexer_token_text(&t, buf, 1);
+    TEST_ASSERT_EQUAL_INT(0, (int)copied);
+    TEST_ASSERT_EQUAL_CHAR('\0', buf[0]);
+}
+
+void test_fuzz_token_text_truncation(void)
+{
+    // Token of 10000 chars, copy into small buffer
+    char *input = malloc(10001);
+    TEST_ASSERT_NOT_NULL(input);
+    memset(input, 'z', 10000);
+    input[10000] = '\0';
+
+    Lexer lexer;
+    lexer_init(&lexer, input);
+    Token t = lexer_next_token(&lexer);
+
+    char buf[8];
+    size_t copied = lexer_token_text(&t, buf, sizeof(buf));
+    TEST_ASSERT_EQUAL_INT(7, (int)copied);
+    TEST_ASSERT_EQUAL_STRING("zzzzzzz", buf);
+
+    free(input);
+}
+
+// --- Invalid / malformed number patterns ---
+
+void test_fuzz_negative_invalid_number(void)
+{
+    // -1.2.3 via minus path: minus sees digit after, calls read_number
+    // read_number doesn't validate like looks_like_number does
+    Lexer lexer;
+    lexer_init(&lexer, "-1.2.3");
+    Token t = lexer_next_token(&lexer);
+    // This goes through the negative literal path
+    // read_number consumes all number-like chars
+    TEST_ASSERT_EQUAL_INT(TOKEN_NUMBER, t.type);
+    // Verify it consumed the whole thing
+    char buf[32];
+    lexer_token_text(&t, buf, sizeof(buf));
+    TEST_ASSERT_EQUAL_STRING("-1.2.3", buf);
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+void test_fuzz_negative_double_exponent(void)
+{
+    // -1e2e3 via minus path
+    Lexer lexer;
+    lexer_init(&lexer, "-1e2e3");
+    Token t = lexer_next_token(&lexer);
+    TEST_ASSERT_EQUAL_INT(TOKEN_NUMBER, t.type);
+    char buf[32];
+    lexer_token_text(&t, buf, sizeof(buf));
+    TEST_ASSERT_EQUAL_STRING("-1e2e3", buf);
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+void test_fuzz_positive_double_dot_not_number(void)
+{
+    // 1.2.3 without leading minus: looks_like_number rejects it
+    Lexer lexer;
+    lexer_init(&lexer, "1.2.3");
+    Token t = lexer_next_token(&lexer);
+    // looks_like_number returns false for this, so it goes through read_word
+    TEST_ASSERT_EQUAL_INT(TOKEN_WORD, t.type);
+    char buf[32];
+    lexer_token_text(&t, buf, sizeof(buf));
+    TEST_ASSERT_EQUAL_STRING("1.2.3", buf);
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+void test_fuzz_negative_trailing_dot(void)
+{
+    // -1. is a valid-ish number (read_number will consume it)
+    Lexer lexer;
+    lexer_init(&lexer, "-1.");
+    Token t = lexer_next_token(&lexer);
+    TEST_ASSERT_EQUAL_INT(TOKEN_NUMBER, t.type);
+    char buf[32];
+    lexer_token_text(&t, buf, sizeof(buf));
+    TEST_ASSERT_EQUAL_STRING("-1.", buf);
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+void test_fuzz_negative_trailing_e(void)
+{
+    // -1e via minus path — exponent with no digits after
+    Lexer lexer;
+    lexer_init(&lexer, "-1e");
+    Token t = lexer_next_token(&lexer);
+    TEST_ASSERT_EQUAL_INT(TOKEN_NUMBER, t.type);
+    char buf[32];
+    lexer_token_text(&t, buf, sizeof(buf));
+    TEST_ASSERT_EQUAL_STRING("-1e", buf);
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+// --- Rapid alternation of token types ---
+
+void test_fuzz_mixed_tokens_rapid(void)
+{
+    // Quick alternation: "a :b 3 [+] ("c)
+    Lexer lexer;
+    lexer_init(&lexer, "\"a :b 3 [+] (\"c)");
+    assert_token(&lexer, TOKEN_QUOTED, "\"a");
+    assert_token(&lexer, TOKEN_COLON, ":b");
+    assert_token(&lexer, TOKEN_NUMBER, "3");
+    assert_token_type(&lexer, TOKEN_LEFT_BRACKET);
+    assert_token_type(&lexer, TOKEN_PLUS);
+    assert_token_type(&lexer, TOKEN_RIGHT_BRACKET);
+    assert_token_type(&lexer, TOKEN_LEFT_PAREN);
+    assert_token(&lexer, TOKEN_QUOTED, "\"c");
+    assert_token_type(&lexer, TOKEN_RIGHT_PAREN);
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+// --- Many tokens stress ---
+
+void test_fuzz_many_small_tokens(void)
+{
+    // 2000 single-char words separated by spaces
+    const int n = 2000;
+    char *input = malloc(n * 2);
+    TEST_ASSERT_NOT_NULL(input);
+    for (int i = 0; i < n; i++)
+    {
+        input[i * 2] = 'a' + (i % 26);
+        input[i * 2 + 1] = ' ';
+    }
+    input[n * 2 - 1] = '\0';
+
+    Lexer lexer;
+    lexer_init(&lexer, input);
+    int count = drain_tokens(&lexer);
+    TEST_ASSERT_EQUAL_INT(n, count);
+
+    free(input);
+}
+
+void test_fuzz_many_quoted_words(void)
+{
+    // Hundreds of quoted words: "a "b "c ...
+    const int n = 500;
+    char *input = malloc(n * 3 + 1);
+    TEST_ASSERT_NOT_NULL(input);
+    for (int i = 0; i < n; i++)
+    {
+        input[i * 3] = '"';
+        input[i * 3 + 1] = 'a' + (i % 26);
+        input[i * 3 + 2] = ' ';
+    }
+    input[n * 3] = '\0';
+
+    Lexer lexer;
+    lexer_init(&lexer, input);
+    int count = drain_tokens(&lexer);
+    TEST_ASSERT_EQUAL_INT(n, count);
+
+    free(input);
+}
+
+// --- Peek consistency under adversarial input ---
+
+void test_fuzz_peek_consistency_long_input(void)
+{
+    // Peek should always return the same as the next actual token
+    char *input = malloc(201);
+    TEST_ASSERT_NOT_NULL(input);
+    // Mix of operators, words, numbers
+    const char pattern[] = "abc 123 + \"x :y [z] ";
+    int plen = (int)strlen(pattern);
+    for (int i = 0; i < 200; i++)
+        input[i] = pattern[i % plen];
+    input[200] = '\0';
+
+    Lexer lexer;
+    lexer_init(&lexer, input);
+
+    Token peeked, actual;
+    int count = 0;
+    do
+    {
+        peeked = lexer_peek_token(&lexer);
+        actual = lexer_next_token(&lexer);
+        TEST_ASSERT_EQUAL_INT(peeked.type, actual.type);
+        TEST_ASSERT_EQUAL_INT((int)peeked.length, (int)actual.length);
+        TEST_ASSERT_EQUAL_PTR(peeked.start, actual.start);
+        count++;
+    } while (actual.type != TOKEN_EOF);
+
+    TEST_ASSERT_TRUE(count > 1);
+    free(input);
+}
+
+// --- Empty string ---
+
+void test_fuzz_empty_string(void)
+{
+    Lexer lexer;
+    lexer_init(&lexer, "");
+    assert_token_type(&lexer, TOKEN_EOF);
+    // Calling again should still return EOF
+    assert_token_type(&lexer, TOKEN_EOF);
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+// --- Repeated EOF reads ---
+
+void test_fuzz_repeated_eof(void)
+{
+    Lexer lexer;
+    lexer_init(&lexer, "x");
+    assert_token(&lexer, TOKEN_WORD, "x");
+    // Read EOF many times — should never crash or change
+    for (int i = 0; i < 100; i++)
+    {
+        Token t = lexer_next_token(&lexer);
+        TEST_ASSERT_EQUAL_INT(TOKEN_EOF, t.type);
+    }
+}
+
+// --- Escaped null-ish characters ---
+
+void test_fuzz_backslash_before_delimiter(void)
+{
+    // Backslash should escape each delimiter in a word
+    Lexer lexer;
+    lexer_init(&lexer, "a\\+b\\*c\\=d");
+    Token t = lexer_next_token(&lexer);
+    TEST_ASSERT_EQUAL_INT(TOKEN_WORD, t.type);
+    TEST_ASSERT_EQUAL_INT(10, (int)t.length);
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+// --- Mixed high byte + delimiter stress ---
+
+void test_fuzz_high_bytes_with_brackets(void)
+{
+    // UTF-8-like bytes interspersed with brackets
+    char input[] = {(char)0xC3, (char)0xA9, '[', (char)0xE2, (char)0x80, ']', 0x00};
+    Lexer lexer;
+    lexer_init(&lexer, input);
+    Token t = lexer_next_token(&lexer);
+    TEST_ASSERT_EQUAL_INT(TOKEN_WORD, t.type);
+    TEST_ASSERT_EQUAL_INT(2, (int)t.length); // 0xC3, 0xA9
+    assert_token_type(&lexer, TOKEN_LEFT_BRACKET);
+    t = lexer_next_token(&lexer);
+    TEST_ASSERT_EQUAL_INT(TOKEN_WORD, t.type);
+    TEST_ASSERT_EQUAL_INT(2, (int)t.length); // 0xE2, 0x80
+    assert_token_type(&lexer, TOKEN_RIGHT_BRACKET);
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+//============================================================================
 // Main
 //============================================================================
 
@@ -960,6 +1637,49 @@ int main(void)
     RUN_TEST(test_word_with_dot);
     RUN_TEST(test_true_false_words);
     RUN_TEST(test_quoted_empty_before_bracket);
+
+    // Fuzz / adversarial input
+    RUN_TEST(test_fuzz_very_long_word);
+    RUN_TEST(test_fuzz_very_long_number);
+    RUN_TEST(test_fuzz_very_long_quoted_word);
+    RUN_TEST(test_fuzz_very_long_variable);
+    RUN_TEST(test_fuzz_control_characters);
+    RUN_TEST(test_fuzz_high_bytes);
+    RUN_TEST(test_fuzz_binary_mixed_with_delimiters);
+    RUN_TEST(test_fuzz_null_byte_terminates);
+    RUN_TEST(test_fuzz_control_chars_as_word_content);
+    RUN_TEST(test_fuzz_trailing_backslash_in_word);
+    RUN_TEST(test_fuzz_trailing_backslash_in_quoted);
+    RUN_TEST(test_fuzz_trailing_backslash_in_colon);
+    RUN_TEST(test_fuzz_only_backslash);
+    RUN_TEST(test_fuzz_many_backslashes);
+    RUN_TEST(test_fuzz_odd_backslashes);
+    RUN_TEST(test_fuzz_lone_quote);
+    RUN_TEST(test_fuzz_lone_colon);
+    RUN_TEST(test_fuzz_lone_minus);
+    RUN_TEST(test_fuzz_all_operators_consecutive);
+    RUN_TEST(test_fuzz_many_consecutive_minus);
+    RUN_TEST(test_fuzz_deeply_nested_brackets);
+    RUN_TEST(test_fuzz_very_long_whitespace);
+    RUN_TEST(test_fuzz_only_whitespace_long);
+    RUN_TEST(test_fuzz_many_newlines);
+    RUN_TEST(test_fuzz_token_text_null_buffer);
+    RUN_TEST(test_fuzz_token_text_zero_size);
+    RUN_TEST(test_fuzz_token_text_size_one);
+    RUN_TEST(test_fuzz_token_text_truncation);
+    RUN_TEST(test_fuzz_negative_invalid_number);
+    RUN_TEST(test_fuzz_negative_double_exponent);
+    RUN_TEST(test_fuzz_positive_double_dot_not_number);
+    RUN_TEST(test_fuzz_negative_trailing_dot);
+    RUN_TEST(test_fuzz_negative_trailing_e);
+    RUN_TEST(test_fuzz_mixed_tokens_rapid);
+    RUN_TEST(test_fuzz_many_small_tokens);
+    RUN_TEST(test_fuzz_many_quoted_words);
+    RUN_TEST(test_fuzz_peek_consistency_long_input);
+    RUN_TEST(test_fuzz_empty_string);
+    RUN_TEST(test_fuzz_repeated_eof);
+    RUN_TEST(test_fuzz_backslash_before_delimiter);
+    RUN_TEST(test_fuzz_high_bytes_with_brackets);
 
     return UNITY_END();
 }
