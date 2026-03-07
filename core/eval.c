@@ -496,6 +496,7 @@ Result eval_push_proc_call(Evaluator *eval, UserProcedure *proc, int argc, Value
     op->proc_call.proc = proc;
     op->proc_call.current_line = proc->body;
     op->proc_call.phase = 0;
+    op->proc_call.tco_mode = TCO_MODE_NONE;
 
     return eval_trampoline(eval, base_depth);
 }

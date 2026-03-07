@@ -51,6 +51,7 @@ extern "C"
     typedef struct TailCall
     {
         bool is_tail_call;          // True if this is a tail call
+        bool is_output_call;        // True if TCO triggered from output's argument
         const char *proc_name;      // Name of procedure to call
         Value args[MAX_PROC_PARAMS]; // Arguments for tail call
         int arg_count;              // Number of arguments
