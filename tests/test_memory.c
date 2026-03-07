@@ -624,6 +624,252 @@ void test_node_allocation_from_top(void)
 }
 
 //============================================================================
+// Node Pool Exhaustion Tests
+//============================================================================
+
+void test_cons_until_full_returns_nil(void)
+{
+    // Keep cons-ing until we run out of memory
+    Node word = mem_atom("x", 1);
+    TEST_ASSERT_FALSE(mem_is_nil(word));
+
+    int allocated = 0;
+    Node last = NODE_NIL;
+    while (true)
+    {
+        Node cell = mem_cons(word, last);
+        if (mem_is_nil(cell))
+            break;
+        last = cell;
+        allocated++;
+        // Safety limit to avoid infinite loop
+        if (allocated > 100000)
+            break;
+    }
+
+    // We should have allocated many nodes before running out
+    TEST_ASSERT_TRUE(allocated > 100);
+    // The last allocation should have returned NODE_NIL
+    TEST_ASSERT_TRUE(mem_is_nil(mem_cons(word, NODE_NIL)));
+}
+
+void test_free_nodes_zero_when_exhausted(void)
+{
+    Node word = mem_atom("y", 1);
+
+    // Exhaust node pool
+    Node list = NODE_NIL;
+    while (true)
+    {
+        Node cell = mem_cons(word, list);
+        if (mem_is_nil(cell))
+            break;
+        list = cell;
+    }
+
+    // The gap between atom_next and node_bottom may leave up to 1
+    // potential node that can't actually be allocated
+    TEST_ASSERT_LESS_OR_EQUAL(1, mem_free_nodes());
+    // Verify we truly can't allocate
+    TEST_ASSERT_TRUE(mem_is_nil(mem_cons(word, NODE_NIL)));
+}
+
+void test_gc_recovers_exhausted_nodes(void)
+{
+    Node word = mem_atom("z", 1);
+    size_t initial_free = mem_free_nodes();
+
+    // Exhaust by building a long list (not rooted for GC)
+    Node list = NODE_NIL;
+    int allocated = 0;
+    while (true)
+    {
+        Node cell = mem_cons(word, list);
+        if (mem_is_nil(cell))
+            break;
+        list = cell;
+        allocated++;
+    }
+    TEST_ASSERT_TRUE(allocated > 100);
+    TEST_ASSERT_LESS_OR_EQUAL(1, mem_free_nodes());
+    TEST_ASSERT_TRUE(mem_is_nil(mem_cons(word, NODE_NIL)));
+
+    // GC with no roots — everything should be freed
+    mem_gc(NULL, 0);
+    TEST_ASSERT_TRUE(mem_free_nodes() > 0);
+}
+
+void test_gc_partial_recovery(void)
+{
+    Node word = mem_atom("a", 1);
+
+    // Build 10 rooted cells
+    Node rooted = NODE_NIL;
+    for (int i = 0; i < 10; i++)
+    {
+        Node cell = mem_cons(word, rooted);
+        TEST_ASSERT_FALSE(mem_is_nil(cell));
+        rooted = cell;
+    }
+
+    // Build many unreachable cells
+    Node throwaway = NODE_NIL;
+    int allocated = 0;
+    while (true)
+    {
+        Node cell = mem_cons(word, throwaway);
+        if (mem_is_nil(cell))
+            break;
+        throwaway = cell;
+        allocated++;
+    }
+    TEST_ASSERT_TRUE(allocated > 0);
+    TEST_ASSERT_LESS_OR_EQUAL(1, mem_free_nodes());
+    TEST_ASSERT_TRUE(mem_is_nil(mem_cons(word, NODE_NIL)));
+
+    // GC with rooted list — should recover throwaway cells
+    mem_gc(&rooted, 1);
+    TEST_ASSERT_TRUE(mem_free_nodes() > 0);
+
+    // Rooted list should still be accessible
+    Node cursor = rooted;
+    int count = 0;
+    while (!mem_is_nil(cursor))
+    {
+        count++;
+        cursor = mem_cdr(cursor);
+    }
+    TEST_ASSERT_EQUAL(10, count);
+}
+
+void test_allocate_after_gc_recovery(void)
+{
+    Node word = mem_atom("b", 1);
+
+    // Exhaust pool
+    Node throwaway = NODE_NIL;
+    while (true)
+    {
+        Node cell = mem_cons(word, throwaway);
+        if (mem_is_nil(cell))
+            break;
+        throwaway = cell;
+    }
+
+    // Recover via GC
+    mem_gc(NULL, 0);
+    size_t free_after_gc = mem_free_nodes();
+    TEST_ASSERT_TRUE(free_after_gc > 0);
+
+    // New allocations should work
+    Node new_cell = mem_cons(word, NODE_NIL);
+    TEST_ASSERT_FALSE(mem_is_nil(new_cell));
+}
+
+//============================================================================
+// Atom Space Exhaustion Tests
+//============================================================================
+
+void test_large_atoms_exhaust_space(void)
+{
+    // Create atoms with increasingly large names to exhaust atom table
+    // Also consume node space with cons cells so the shared pool exhausts
+    int created = 0;
+    Node list = NODE_NIL;
+    for (int i = 0; i < 100000; i++)
+    {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "lau%05d", i);
+        Node word = mem_atom(buf, strlen(buf));
+        if (mem_is_nil(word))
+            break;
+        // Also consume node space to converge the two regions
+        Node cell = mem_cons(word, list);
+        if (!mem_is_nil(cell))
+            list = cell;
+        created++;
+    }
+
+    // Should have created many atoms before exhaustion
+    TEST_ASSERT_TRUE(created > 50);
+}
+
+void test_interleaved_atom_node_exhaustion(void)
+{
+    // Alternate between creating atoms and cons cells to exhaust the shared pool
+    int atoms_created = 0;
+    int nodes_created = 0;
+    Node list = NODE_NIL;
+
+    for (int i = 0; i < 50000; i++)
+    {
+        if (i % 2 == 0)
+        {
+            char buf[32];
+            snprintf(buf, sizeof(buf), "iw%d", i);
+            Node word = mem_atom(buf, strlen(buf));
+            if (mem_is_nil(word))
+                break;
+            atoms_created++;
+        }
+        else
+        {
+            Node cell = mem_cons(mem_atom("c", 1), list);
+            if (mem_is_nil(cell))
+                break;
+            list = cell;
+            nodes_created++;
+        }
+    }
+
+    // Both atoms and nodes should have been created
+    TEST_ASSERT_TRUE(atoms_created > 10);
+    TEST_ASSERT_TRUE(nodes_created > 10);
+}
+
+void test_cons_returns_nil_not_crash_on_full(void)
+{
+    Node word = mem_atom("d", 1);
+
+    // Exhaust completely
+    while (!mem_is_nil(mem_cons(word, NODE_NIL)))
+    {
+        // keep allocating
+    }
+
+    // Multiple OOM calls should all safely return NODE_NIL
+    for (int i = 0; i < 20; i++)
+    {
+        TEST_ASSERT_TRUE(mem_is_nil(mem_cons(word, NODE_NIL)));
+    }
+}
+
+void test_atom_returns_nil_not_crash_when_full(void)
+{
+    // Fill atom space with large unique atoms
+    int created = 0;
+    for (int i = 0; i < 100000; i++)
+    {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "fill_atom_%06d", i);
+        Node word = mem_atom(buf, strlen(buf));
+        if (mem_is_nil(word))
+            break;
+        created++;
+    }
+    TEST_ASSERT_TRUE(created > 0);
+
+    // Multiple OOM atom calls should safely return NODE_NIL
+    for (int i = 0; i < 20; i++)
+    {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "overflow_%d", i);
+        Node word = mem_atom(buf, strlen(buf));
+        TEST_ASSERT_TRUE(mem_is_nil(word));
+    }
+}
+
+//============================================================================
 // Main
 //============================================================================
 
@@ -697,6 +943,19 @@ int main(void)
     RUN_TEST(test_mixed_allocation);
     RUN_TEST(test_memory_pressure);
     RUN_TEST(test_node_allocation_from_top);
+
+    // Node Pool Exhaustion
+    RUN_TEST(test_cons_until_full_returns_nil);
+    RUN_TEST(test_free_nodes_zero_when_exhausted);
+    RUN_TEST(test_gc_recovers_exhausted_nodes);
+    RUN_TEST(test_gc_partial_recovery);
+    RUN_TEST(test_allocate_after_gc_recovery);
+
+    // Atom Space Exhaustion
+    RUN_TEST(test_large_atoms_exhaust_space);
+    RUN_TEST(test_interleaved_atom_node_exhaustion);
+    RUN_TEST(test_cons_returns_nil_not_crash_on_full);
+    RUN_TEST(test_atom_returns_nil_not_crash_when_full);
 
     return UNITY_END();
 }

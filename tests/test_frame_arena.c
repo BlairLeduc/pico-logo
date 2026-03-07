@@ -477,6 +477,167 @@ void test_data_integrity(void)
 }
 
 //============================================================================
+// Exhaustion and Stress Tests
+//============================================================================
+
+void test_tiny_arena_exhaustion(void)
+{
+    // 16 bytes = 4 words
+    uint32_t tiny[4];
+    FrameArena tiny_arena;
+    arena_init(&tiny_arena, tiny, sizeof(tiny));
+
+    TEST_ASSERT_EQUAL(4, arena_capacity(&tiny_arena));
+
+    // Allocate all 4 words
+    word_offset_t off = arena_alloc_words(&tiny_arena, 4);
+    TEST_ASSERT_NOT_EQUAL(OFFSET_NONE, off);
+    TEST_ASSERT_EQUAL(0, arena_available(&tiny_arena));
+
+    // Any further allocation should fail
+    TEST_ASSERT_EQUAL(OFFSET_NONE, arena_alloc_words(&tiny_arena, 1));
+}
+
+void test_single_word_arena_boundary(void)
+{
+    // Exactly 1 word (4 bytes)
+    uint32_t one[1];
+    FrameArena one_arena;
+    arena_init(&one_arena, one, sizeof(one));
+
+    TEST_ASSERT_EQUAL(1, arena_capacity(&one_arena));
+
+    word_offset_t off = arena_alloc_words(&one_arena, 1);
+    TEST_ASSERT_NOT_EQUAL(OFFSET_NONE, off);
+    TEST_ASSERT_EQUAL(0, arena_available(&one_arena));
+    TEST_ASSERT_EQUAL(OFFSET_NONE, arena_alloc_words(&one_arena, 1));
+}
+
+void test_one_word_at_a_time_until_full(void)
+{
+    word_offset_t capacity = arena_capacity(&arena);
+    for (word_offset_t i = 0; i < capacity; i++)
+    {
+        word_offset_t off = arena_alloc_words(&arena, 1);
+        TEST_ASSERT_NOT_EQUAL(OFFSET_NONE, off);
+        TEST_ASSERT_EQUAL(i, off);
+    }
+    TEST_ASSERT_EQUAL(0, arena_available(&arena));
+    TEST_ASSERT_EQUAL(OFFSET_NONE, arena_alloc_words(&arena, 1));
+}
+
+void test_exhaust_then_free_then_reuse(void)
+{
+    // Fill completely
+    word_offset_t cap = arena_capacity(&arena);
+    arena_alloc_words(&arena, cap);
+    TEST_ASSERT_EQUAL(OFFSET_NONE, arena_alloc_words(&arena, 1));
+
+    // Free all
+    arena_free_to(&arena, 0);
+    TEST_ASSERT_TRUE(arena_is_empty(&arena));
+
+    // Should be fully reusable
+    word_offset_t off = arena_alloc_words(&arena, cap);
+    TEST_ASSERT_NOT_EQUAL(OFFSET_NONE, off);
+    TEST_ASSERT_EQUAL(0, arena_available(&arena));
+}
+
+void test_repeated_fill_and_drain_cycles(void)
+{
+    word_offset_t cap = arena_capacity(&arena);
+    for (int cycle = 0; cycle < 100; cycle++)
+    {
+        word_offset_t off = arena_alloc_words(&arena, cap);
+        TEST_ASSERT_NOT_EQUAL(OFFSET_NONE, off);
+        TEST_ASSERT_EQUAL(OFFSET_NONE, arena_alloc_words(&arena, 1));
+
+        arena_free_to(&arena, 0);
+        TEST_ASSERT_TRUE(arena_is_empty(&arena));
+    }
+}
+
+void test_extend_at_capacity_fails(void)
+{
+    word_offset_t cap = arena_capacity(&arena);
+    arena_alloc_words(&arena, cap);
+    TEST_ASSERT_EQUAL(0, arena_available(&arena));
+
+    // Extend by even 1 word should fail
+    TEST_ASSERT_FALSE(arena_extend(&arena, 1));
+    TEST_ASSERT_EQUAL(cap, arena_used(&arena));
+}
+
+void test_alloc_just_over_available_fails(void)
+{
+    // Leave exactly 5 words free
+    word_offset_t cap = arena_capacity(&arena);
+    arena_alloc_words(&arena, cap - 5);
+    TEST_ASSERT_EQUAL(5, arena_available(&arena));
+
+    // 6 words should fail
+    TEST_ASSERT_EQUAL(OFFSET_NONE, arena_alloc_words(&arena, 6));
+    // 5 should succeed
+    TEST_ASSERT_NOT_EQUAL(OFFSET_NONE, arena_alloc_words(&arena, 5));
+    TEST_ASSERT_EQUAL(0, arena_available(&arena));
+}
+
+void test_interleaved_alloc_free_stress(void)
+{
+    // Simulate frame-like push/pop with varying sizes
+    word_offset_t marks[50];
+    int count = 0;
+
+    for (int i = 0; i < 200; i++)
+    {
+        uint16_t alloc_size = (uint16_t)((i % 7) + 1); // 1-7 words
+
+        if (count > 0 && (i % 3 == 0))
+        {
+            // Pop a frame
+            count--;
+            arena_free_to(&arena, marks[count]);
+        }
+        else if (arena_available(&arena) >= alloc_size && count < 50)
+        {
+            marks[count] = arena_top(&arena);
+            word_offset_t off = arena_alloc_words(&arena, alloc_size);
+            if (off != OFFSET_NONE)
+                count++;
+        }
+    }
+
+    // Clean up
+    while (count > 0)
+    {
+        count--;
+        arena_free_to(&arena, marks[count]);
+    }
+    TEST_ASSERT_TRUE(arena_is_empty(&arena));
+}
+
+void test_data_survives_adjacent_exhaustion(void)
+{
+    // Allocate first block with known data
+    word_offset_t off1 = arena_alloc_words(&arena, 2);
+    uint32_t *ptr1 = (uint32_t *)arena_offset_to_ptr(&arena, off1);
+    ptr1[0] = 0xAAAA1111;
+    ptr1[1] = 0xBBBB2222;
+
+    // Fill up remaining space
+    word_offset_t remaining = arena_available(&arena);
+    arena_alloc_words(&arena, remaining);
+    TEST_ASSERT_EQUAL(0, arena_available(&arena));
+
+    // Overflow attempt
+    TEST_ASSERT_EQUAL(OFFSET_NONE, arena_alloc_words(&arena, 1));
+
+    // Original data must be intact
+    TEST_ASSERT_EQUAL_HEX32(0xAAAA1111, ptr1[0]);
+    TEST_ASSERT_EQUAL_HEX32(0xBBBB2222, ptr1[1]);
+}
+
+//============================================================================
 // Test Runner
 //============================================================================
 
@@ -547,6 +708,17 @@ int main(void)
     RUN_TEST(test_lifo_push_pop_pattern);
     RUN_TEST(test_lifo_extend_top_frame);
     RUN_TEST(test_data_integrity);
+
+    // Exhaustion and stress tests
+    RUN_TEST(test_tiny_arena_exhaustion);
+    RUN_TEST(test_single_word_arena_boundary);
+    RUN_TEST(test_one_word_at_a_time_until_full);
+    RUN_TEST(test_exhaust_then_free_then_reuse);
+    RUN_TEST(test_repeated_fill_and_drain_cycles);
+    RUN_TEST(test_extend_at_capacity_fails);
+    RUN_TEST(test_alloc_just_over_available_fails);
+    RUN_TEST(test_interleaved_alloc_free_stress);
+    RUN_TEST(test_data_survives_adjacent_exhaustion);
 
     return UNITY_END();
 }
