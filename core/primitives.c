@@ -47,6 +47,8 @@ void primitives_init(void)
     primitives_debug_init();
     primitives_editor_init();
     primitives_files_init();
+    primitives_files_directory_init();
+    primitives_files_load_save_init();
     primitives_text_init();
     primitives_turtle_init();
     primitives_hardware_init();
