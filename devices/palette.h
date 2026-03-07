@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  This is the fixed colour palette for Pico Logo, 128 colours are divided into 16
 //  groups of 8 shades each. Groups are organized by hue, from grayscale through

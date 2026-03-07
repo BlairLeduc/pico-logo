@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  File directory primitives: files, directories, catalog, setprefix, prefix,
 //                             erasefile, erasedir, createdir, file?, dir?, rename

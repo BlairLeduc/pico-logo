@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Mock device for testing turtle graphics and text screen primitives.
 //  Provides trackable state and command history for verification in tests.

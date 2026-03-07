@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  File stream primitives: open, close, closeall, setread, setwrite, reader, writer,
 //                          allopen, readpos, setreadpos, writepos, setwritepos, filelen,

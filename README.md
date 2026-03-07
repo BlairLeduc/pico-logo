@@ -195,5 +195,5 @@ A helper script to create a release files of the project, including documentatio
 
 ## License
 
-Copyright 2025 Blair Leduc  
+Copyright 2026 Blair Leduc  
 See [LICENSE](/LICENSE) for details.

@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Words and Lists primitives: first, last, butfirst, butlast, item, member,
 //  fput, list, lput, parse, sentence, word, ascii, before?, char, equal?,

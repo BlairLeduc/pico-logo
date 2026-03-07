@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  WiFi management primitives: wifi?, wifi.connect, wifi.disconnect,
 //  wifi.ip, wifi.mac, wifi.ssid, wifi.scan

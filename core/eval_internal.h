@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Internal header shared between eval.c, eval_expr.c, and eval_steps.c.
 //  Not part of the public API — do not include from other modules.

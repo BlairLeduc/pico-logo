@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Workspace management primitives: po, poall, pon, pons, pops, pot, pots,
 //                                   nodes, primitives, recycle

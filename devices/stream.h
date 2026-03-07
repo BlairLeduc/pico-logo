@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Defines the LogoStream interface for abstract I/O sources and sinks.
 //  Streams can represent files, serial ports, or console I/O.

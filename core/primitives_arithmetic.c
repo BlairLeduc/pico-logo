@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Arithmetic primitives: sum, difference, product, quotient, random,
 //                         arctan, cos, sin, int, intquotient, remainder, round, sqrt, form
