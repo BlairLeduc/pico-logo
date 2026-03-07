@@ -232,6 +232,10 @@ static Result prim_for(Evaluator *eval, int argc, Value *args)
         {
             return r;
         }
+        if (step == 0.0f)
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+        }
     }
     else
     {
