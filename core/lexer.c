@@ -219,9 +219,9 @@ static Token read_quoted(Lexer *lexer)
             // Space ends the quoted word
             break;
         }
-        else if (!first_char && is_delimiter(*lexer->current))
+        else if (!first_char && is_delimiter(*lexer->current) && *lexer->current != '/')
         {
-            // Non-first delimiter ends the word
+            // Non-first delimiter ends the word (except / for file paths)
             break;
         }
         else
