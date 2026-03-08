@@ -3788,6 +3788,13 @@ Note that the quotation mark character (") and the colon (:not word delimiters.
 
 You can also have an empty word, which is a word with elements. You type in the empty word by typing `"`.
 
+One exception is the use of '/' in quoted words. You can use '/' in file names without escaping it, and Logo will treat it as a normal character. For example:
+
+```logo
+?print "my/file/name
+my/file/name
+```
+
 ## Infix Procedures 
 
 The following characters are the names of infix procedures. You write the name between the two inputs, but Logo considers the procedures to have two inputs. 

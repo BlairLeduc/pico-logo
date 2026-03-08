@@ -243,6 +243,44 @@ void test_print_heading_example(void)
     assert_token(&lexer, TOKEN_QUOTED, "\"heading");
 }
 
+void test_quoted_word_with_slash(void)
+{
+    // Slash is allowed in quoted words for file paths
+    Lexer lexer;
+    lexer_init(&lexer, "\"/path/to/file");
+    assert_token(&lexer, TOKEN_QUOTED, "\"/path/to/file");
+    assert_token(&lexer, TOKEN_EOF, "");
+}
+
+void test_quoted_word_slash_in_middle(void)
+{
+    // Slash in the middle of a quoted word
+    Lexer lexer;
+    lexer_init(&lexer, "\"hello/world");
+    assert_token(&lexer, TOKEN_QUOTED, "\"hello/world");
+    assert_token(&lexer, TOKEN_EOF, "");
+}
+
+void test_quoted_word_slash_does_not_affect_numbers(void)
+{
+    // Self-quoting numbers still use / as division
+    Lexer lexer;
+    lexer_init(&lexer, "12/3");
+    assert_token(&lexer, TOKEN_NUMBER, "12");
+    assert_token(&lexer, TOKEN_DIVIDE, "/");
+    assert_token(&lexer, TOKEN_NUMBER, "3");
+}
+
+void test_quoted_word_slash_does_not_affect_words(void)
+{
+    // Unquoted words still treat / as delimiter
+    Lexer lexer;
+    lexer_init(&lexer, "hello/world");
+    assert_token(&lexer, TOKEN_WORD, "hello");
+    assert_token(&lexer, TOKEN_DIVIDE, "/");
+    assert_token(&lexer, TOKEN_WORD, "world");
+}
+
 //============================================================================
 // Variable Reference Tests (Colon/Dots)
 //============================================================================
@@ -1568,6 +1606,10 @@ int main(void)
     RUN_TEST(test_quoted_space_with_backslash);
     RUN_TEST(test_quoted_empty_word);
     RUN_TEST(test_print_heading_example);
+    RUN_TEST(test_quoted_word_with_slash);
+    RUN_TEST(test_quoted_word_slash_in_middle);
+    RUN_TEST(test_quoted_word_slash_does_not_affect_numbers);
+    RUN_TEST(test_quoted_word_slash_does_not_affect_words);
 
     // Variable references
     RUN_TEST(test_variable_reference);
