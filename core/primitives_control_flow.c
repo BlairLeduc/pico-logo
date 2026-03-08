@@ -17,8 +17,7 @@ static Result prim_run(Evaluator *eval, int argc, Value *args)
     UNUSED(argc);
     REQUIRE_LIST(args[0]);
 
-    // Use eval_run_list_expr so run can act as an operation
-    return eval_run_list_expr(eval, args[0].as.node);
+    return eval_push_if(eval, args[0].as.node, true);
 }
 
 // forever - repeats the provided list indefinitely

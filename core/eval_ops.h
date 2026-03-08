@@ -77,6 +77,7 @@ extern "C"
     typedef struct
     {
         Node chosen_branch;  // The branch to execute (already chosen by primitive)
+        uint8_t phase;       // 0 = push branch, 1 = branch completed
     } IfState;
 
     typedef struct

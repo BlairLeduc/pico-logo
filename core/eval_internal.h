@@ -87,6 +87,7 @@ extern "C"
     // Step functions from eval_steps.c (called by trampoline in eval.c)
     //==========================================================================
     Result step_run_list(Evaluator *eval, EvalOp *op);
+    Result step_if(Evaluator *eval, EvalOp *op);
     Result step_repeat(Evaluator *eval, EvalOp *op);
     Result step_forever(Evaluator *eval, EvalOp *op);
     Result step_while(Evaluator *eval, EvalOp *op);

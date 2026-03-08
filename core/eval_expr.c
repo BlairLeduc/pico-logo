@@ -626,13 +626,16 @@ Result eval_primary(Evaluator *eval)
                 }
 
                 // Arguments to primitives are not in tail position.
-                // EXCEPTION: output/op in tail position propagates tail
-                // position to its argument, enabling TCO for
-                // "output <self-recursive-call>".
+                // EXCEPTION: output/op ALWAYS puts its argument in tail
+                // position when inside a procedure, because output terminates
+                // the procedure regardless of where it appears (e.g. inside
+                // an if branch that isn't on the last body line).
                 bool is_output_prim = (strcasecmp(name_buf, "output") == 0 ||
                                        strcasecmp(name_buf, "op") == 0);
                 bool old_tail = eval->in_tail_position;
-                if (!(is_output_prim && eval->in_tail_position))
+                if (is_output_prim && eval->proc_depth > 0)
+                    eval->in_tail_position = true;
+                else
                     eval->in_tail_position = false;
                 Result arg = eval_expression(eval);
                 eval->in_tail_position = old_tail;
