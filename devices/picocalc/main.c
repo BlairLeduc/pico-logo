@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <setjmp.h>
 
 #include "devices/console.h"
 #include "devices/io.h"
@@ -35,6 +36,41 @@ volatile bool screensaver_dismissed = false;  // Set when screen saver just dism
 
 // Forward declaration for the I/O setter
 extern void primitives_set_io(LogoIO *io);
+
+// HardFault recovery: longjmp target set in main REPL loop
+static jmp_buf fault_recovery;
+static volatile bool fault_recovery_active = false;
+
+// Called in thread mode with a clean stack after HardFault
+static void __attribute__((used)) hardfault_recovery(void)
+{
+    longjmp(fault_recovery, 1);
+}
+
+// Override the SDK's weak isr_hardfault.
+// Resets MSP to __StackTop, builds a fake Cortex-M exception frame
+// pointing at hardfault_recovery, and returns to thread mode.
+extern uint32_t __StackTop;
+void __attribute__((naked)) isr_hardfault(void)
+{
+    __asm volatile(
+        "ldr r0, =__StackTop\n"          // Reset MSP to known-good top of stack
+        "msr msp, r0\n"
+        "ldr r0, =hardfault_recovery\n"  // PC = recovery function (Thumb bit set by linker)
+        "movs r1, #0\n"
+        "ldr r2, =0x01000000\n"          // xPSR: Thumb bit set
+        "push {r2}\n"                    // [7] xPSR
+        "push {r0}\n"                    // [6] PC
+        "push {r1}\n"                    // [5] LR
+        "push {r1}\n"                    // [4] R12
+        "push {r1}\n"                    // [3] R3
+        "push {r1}\n"                    // [2] R2
+        "push {r1}\n"                    // [1] R1
+        "push {r1}\n"                    // [0] R0
+        "ldr r0, =0xFFFFFFF9\n"         // EXC_RETURN: thread mode, MSP, basic frame
+        "bx r0\n"
+    );
+}
 
 int main(void)
 {
@@ -118,8 +154,18 @@ int main(void)
 
     // Run the main REPL in a loop (empty prefix for top level)
     // throw "toplevel exits the current REPL, but on device we just restart
+    fault_recovery_active = true;
     while (1)
     {
+        if (setjmp(fault_recovery) != 0)
+        {
+            // Arrived here from HardFault handler — treat as error 23
+            proc_reset_execution_state();
+            Result err = result_error(ERR_OUT_OF_SPACE);
+            logo_io_write_line(&io, error_format(err));
+            // Fall through to restart the REPL
+        }
+
         ReplState repl;
         if (!repl_init(&repl, &io, REPL_FLAGS_FULL, ""))
         {
