@@ -474,6 +474,40 @@ Result step_run_list(Evaluator *eval, EvalOp *op)
     return result_none();
 }
 
+// Step function for OP_IF.
+// Phase 0: push child OP_RUN_LIST/OP_RUN_LIST_EXPR for the chosen branch.
+// Phase 1: child completed — return its result.
+Result step_if(Evaluator *eval, EvalOp *op)
+{
+    IfState *st = &op->if_state;
+
+    if (st->phase == 1)
+    {
+        // Phase 1: child completed
+        Result child_r = op->result;
+        op->result = result_none();
+        op_stack_pop(eval->op_stack);
+        return child_r;
+    }
+
+    // Phase 0: push the chosen branch as a child run-list
+    st->phase = 1;
+    bool is_expr = (op->flags & OP_FLAG_IS_EXPR) != 0;
+    bool enable_tco = (op->flags & OP_FLAG_ENABLE_TCO) != 0;
+
+    EvalOp *body_op = op_stack_push(eval->op_stack);
+    if (!body_op)
+    {
+        op_stack_pop(eval->op_stack);
+        return result_error(ERR_STACK_OVERFLOW);
+    }
+    body_op->kind = is_expr ? OP_RUN_LIST_EXPR : OP_RUN_LIST;
+    body_op->flags = enable_tco ? OP_FLAG_ENABLE_TCO : OP_FLAG_NONE;
+    body_op->saved_source = eval->token_source;
+    token_source_init_list(&eval->token_source, st->chosen_branch);
+    return result_none();
+}
+
 // Step function for OP_REPEAT.
 Result step_repeat(Evaluator *eval, EvalOp *op)
 {
@@ -1126,9 +1160,13 @@ Result step_proc_call(Evaluator *eval, EvalOp *op)
                     for (int i = 0; i < argc; i++)
                         args[i] = tc->args[i];
 
-                    // Track TCO context: bare call vs output call
-                    st->tco_mode = tc->is_output_call ? TCO_MODE_OUTPUT
-                                                      : TCO_MODE_BARE;
+                    // Track TCO context: bare call vs output call.
+                    // Only set on FIRST hop — preserves the original entry
+                    // context. A bare call that later hops through an output
+                    // branch must still error if a value is produced.
+                    if (st->tco_mode == TCO_MODE_NONE)
+                        st->tco_mode = tc->is_output_call ? TCO_MODE_OUTPUT
+                                                          : TCO_MODE_BARE;
                     proc_clear_tail_call();
 
                     proc_pop_current();

@@ -191,6 +191,10 @@ Result eval_trampoline(Evaluator *eval, int base_depth)
             r = step_run_list(eval, op);
             break;
 
+        case OP_IF:
+            r = step_if(eval, op);
+            break;
+
         case OP_REPEAT:
             r = step_repeat(eval, op);
             break;
@@ -449,6 +453,24 @@ Result eval_push_for(Evaluator *eval, const char *varname, float start,
     op->for_state.had_value = had_value;
     op->for_state.in_procedure = in_procedure;
     op->for_state.phase = 0;
+    if (base_depth > 0)
+        return result_none();
+    return eval_trampoline(eval, base_depth);
+}
+
+Result eval_push_if(Evaluator *eval, Node branch, bool is_expr)
+{
+    OpStack *stack = eval->op_stack;
+    int base_depth = op_stack_depth(stack);
+    EvalOp *op = op_stack_push(stack);
+    if (!op)
+        return result_error(ERR_STACK_OVERFLOW);
+    op->kind = OP_IF;
+    op->flags = is_expr ? OP_FLAG_IS_EXPR : OP_FLAG_NONE;
+    if (is_expr && eval->in_tail_position && eval->proc_depth > 0)
+        op->flags |= OP_FLAG_ENABLE_TCO;
+    op->if_state.chosen_branch = branch;
+    op->if_state.phase = 0;
     if (base_depth > 0)
         return result_none();
     return eval_trampoline(eval, base_depth);

@@ -92,6 +92,11 @@ extern "C"
                          float limit, float step, Node body,
                          Value saved_value, bool had_value, bool in_procedure);
 
+    // Push an OP_IF operation (for if/ifelse/iftrue/iffalse).
+    // branch is the chosen list to execute. is_expr controls whether
+    // the branch can output a value (OP_RUN_LIST_EXPR vs OP_RUN_LIST).
+    Result eval_push_if(Evaluator *eval, Node branch, bool is_expr);
+
     // Push an OP_CATCH operation. Returns RESULT_NONE on success.
     Result eval_push_catch(Evaluator *eval, const char *tag, Node body);
 

@@ -26,15 +26,13 @@ static Result prim_if(Evaluator *eval, int argc, Value *args)
     
     if (condition)
     {
-        // Use eval_run_list_expr so if can act as an operation
-        return eval_run_list_expr(eval, args[1].as.node);
+        return eval_push_if(eval, args[1].as.node, true);
     }
     else if (argc >= 3)
     {
         REQUIRE_LIST(args[2]);
 
-        // Use eval_run_list_expr so if can act as an operation
-        return eval_run_list_expr(eval, args[2].as.node);
+        return eval_push_if(eval, args[2].as.node, true);
     }
     
     return result_none();
@@ -55,11 +53,11 @@ static Result prim_ifelse(Evaluator *eval, int argc, Value *args)
     
     if (condition)
     {
-        return eval_run_list_expr(eval, args[1].as.node);
+        return eval_push_if(eval, args[1].as.node, true);
     }
     else
     {
-        return eval_run_list_expr(eval, args[2].as.node);
+        return eval_push_if(eval, args[2].as.node, true);
     }
 }
 
@@ -105,7 +103,7 @@ static Result prim_iftrue(Evaluator *eval, int argc, Value *args)
     bool test_value;
     if (var_get_test(&test_value) && test_value)
     {
-        return eval_run_list(eval, args[0].as.node);
+        return eval_push_if(eval, args[0].as.node, false);
     }
     
     return result_none();
@@ -119,7 +117,7 @@ static Result prim_iffalse(Evaluator *eval, int argc, Value *args)
     bool test_value;
     if (var_get_test(&test_value) && !test_value)
     {
-        return eval_run_list(eval, args[0].as.node);
+        return eval_push_if(eval, args[0].as.node, false);
     }
     
     return result_none();
