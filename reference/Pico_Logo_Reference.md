@@ -896,11 +896,9 @@ setbg _colournumber_
 
 `command`
 
-The `setbg` (for set background) command sets the background colour to the colour represented by _colournumber_, where _colournumber_ is a value between 0 and 253.
+The `setbg` (for set background) command sets the background colour to the colour represented by _colournumber_, where _colournumber_ is a value between 0 and 254. The backgound colour is used for the background of the full graphics screen and not for the text screen. To set the background colour for text see [`settextcolor`](#settextcolor-settc).
 
-The background colour number is 255 and the text colour number is 254. The text colour is chosen to be in the same hue as the set background colour with a contrasting shade.
-
-The default background colour number is 74.
+The background colour number is 255. The default background colour number is 0.
 
 See [Colours](#appendix-e-colour-palette-for-pico-logo) for the default palette.
 
@@ -916,6 +914,19 @@ The `setpc` (for set pencolor) command sets the color of the pen to _colourumber
 See [Colours](#appendix-e-colour-palette-for-pico-logo) for the default palette.
 
 
+## settextcolor (settc)
+
+settextcolor [_foreground_ _background_]  
+settc [_foreground_ _background_]
+
+`command`
+
+The `settextcolor` command sets the _foreground_ and _background_ colours for text. The input is a list of two colour numbers, where each colour number is a value between 0 and 15. 
+
+See [Colours](#appendix-e-colour-palette-for-pico-logo) for the default palette.
+
+
+
 ## setpalette
 
 setpalette _colournumber_ _list_
@@ -924,25 +935,30 @@ setpalette _colournumber_ _list_
 
 `setpalette` sets the actual colour corresponding to a given _colournumber_ and _colournumber_ must be an integer greater than or equal to 0. The second input is a list of three nonnegative numbers less than 256 specifying the saturation of red, green, and blue in the desired colour.
 
-The first 128 colour numbers are the default palette for Pico Logo, and changing these colour numbers should be avoided. Colour numbers 254 and 255 are the foreground text and background colour numbers.
+The first 16 colours are the default palette for the text screen.
+
+The next 160 colour numbers are the default palette for Pico Logo, and changing these colour numbers should be avoided. 
+
+Colour numbers 176 through 247 are unallocated and can be used for your own purposes. You can change these colour numbers to create your own palette.
+
+Colour numbers 248 and 254 are the primary and secondary colour numbers. Colour number 255 is the background colour number. Changing these colour numbers should be avoided.
 
 The following colour numbers are used by the Logo Editor for syntax colouring. You can change these to customise the editor's appearance:
 
 | Colour Number | Purpose |
 |---|---|
-| 240 | Default text |
-| 241 | Comments |
-| 242 | Keywords (`to`, `end`) |
-| 243 | Functions (word after `to`) |
-| 244 | Variables (`:name`) |
-| 245 | Strings (`"word`) |
-| 246 | Numbers |
-| 247 | Commands |
-| 248–249 | _Reserved for future use_ |
-| 250 | Bracket depth 1 |
-| 251 | Bracket depth 2 |
-| 252 | Bracket depth 3 |
-| 253 | Editor background |
+| 0 | Editor background |
+| 4 | Default text |
+| 6 | Strings (`"word`) |
+| 7 | Commands |
+| 8 | Procedure (word after `to`) |
+| 9 | Numbers |
+| 10 | Comments |
+| 11 | Variables (`:name`) |
+| 12 | Keywords (`to`, `end`) |
+| 13 | Bracket depth 1 |
+| 14 | Bracket depth 2 |
+| 15 | Bracket depth 3 |
 
 
 ## palette
@@ -1028,6 +1044,18 @@ pc
 `operation`
 
 `pencolor` outputs a number representing the current colour of the pen.
+
+See [Colours](#appendix-e-colour-palette-for-pico-logo) for the default palette.
+
+
+## textcolor (tc)
+
+textcolor  
+tc
+
+`operation`
+
+`textcolor` outputs a list of two colour numbers representing the foreground and background colours for text. Each colour number is a value between 0 and 15.
 
 See [Colours](#appendix-e-colour-palette-for-pico-logo) for the default palette.
 
