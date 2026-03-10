@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Palette and Editor Colours Viewer</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #222;
+            color: #fff;
+            padding: 20px;
+        }
+
+        .section {
+            margin-bottom: 28px;
+        }
+
+        .palette {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .swatch {
+            width: 120px;
+            height: 120px;
+            border: 2px solid #444;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #000;
+            text-shadow: 1px 1px 1px #fff;
+            font-weight: bold;
+        }
+
+        .swatch.black,
+        .swatch.dark-gray,
+        .swatch.editor-default,
+        .swatch.editor-bg {
+            color: #fff;
+            text-shadow: 1px 1px 1px #000;
+        }
+
+        .swatch.light-gray,
+        .swatch.white {
+            color: #000;
+            text-shadow: none;
+        }
+
+        h1,
+        h2 {
+            text-align: center;
+        }
+
+        .index {
+            font-size: 1.2em;
+            margin-bottom: 5px;
+        }
+
+        .name {
+            font-size: 0.9em;
+            text-align: center;
+        }
+
+        .hex {
+            font-size: 0.8em;
+            margin-top: 4px;
+            opacity: 0.9;
+        }
+
+        .demo-text {
+            font-size: 18px;
+            margin-top: 20px;
+            padding: 10px;
+            background: #333;
+        }
+
+        .note {
+            max-width: 900px;
+            margin: 0 auto 10px auto;
+            text-align: center;
+            color: #d0d0d0;
+        }
+
+        @media (max-width: 640px) {
+            body {
+                padding: 12px;
+            }
+
+            .swatch {
+                width: calc(50% - 8px);
+                min-width: 140px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Colour Palettes</h1>
+
+        <section class="section">
+        <h2>16-Colour Text Palette</h2>
+        <p class="note">Colours can be used as foreground or background. Slots 0-15.</p>
+        <div class="palette">
+            <div class="swatch black" style="background-color: #000000;">
+                <div class="index">0</div>
+                <div class="name">Black</div>
+                <span>#000000</span>
+            </div>
+            <div class="swatch dark-gray" style="background-color: #3F3F3F;">
+                <div class="index">1</div>
+                <div class="name">Dark Gray</div>
+                <span>#3F3F3F</span>
+            </div>
+                        <div class="swatch spare" style="background-color: #7E7E7E;">
+                <div class="index">2</div>
+                <div class="name">Middle Grey</div>
+                <span>#7E7E7E</span>
+            </div>
+            <div class="swatch light-gray" style="background-color: #BEBEBE;">
+                <div class="index">3</div>
+                <div class="name">Light Gray</div>
+                <span>#BEBEBE</span>
+            </div>
+            <div class="swatch white" style="background-color: #ffffff;">
+                <div class="index">4</div>
+                <div class="name">White</div>
+                <span>#ffffff</span>
+            </div>
+            <div class="swatch error" style="background-color: #ea4747;">
+                <div class="index">5</div>
+                <div class="name">Error</div>
+                <span>#ea4747</span>
+            </div>
+            <div class="swatch strings" style="background-color: #FF9650;">
+                <div class="index">6</div>
+                <div class="name">Strings</div>
+                <span>#FF9650</span>
+            </div>
+            <div class="swatch commands" style="background-color: #FFD250;">
+                <div class="index">7</div>
+                <div class="name">Commands</div>
+                <span>#FFD250</span>
+            </div>
+            <div class="swatch procedures" style="background-color: #FFF064;">
+                <div class="index">8</div>
+                <div class="name">Procedures</div>
+                <span>#FFF064</span>
+            </div>
+            <div class="swatch numbers" style="background-color: #82F082;">
+                <div class="index">9</div>
+                <div class="name">Numbers</div>
+                <span>#82F082</span>
+            </div>
+            <div class="swatch comments" style="background-color: #50C850;">
+                <div class="index">10</div>
+                <div class="name">Comments</div>
+                <span>#50C850</span>
+            </div>
+            <div class="swatch variables" style="background-color: #50D2FF;">
+                <div class="index">11</div>
+                <div class="name">Variables</div>
+                <span>#50D2FF</span>
+            </div>
+            <div class="swatch keywords" style="background-color: #E664FF;">
+                <div class="index">12</div>
+                <div class="name">Keywords</div>
+                <span>#E664FF</span>
+            </div>
+            <div class="swatch bracket-depth-1" style="background-color: #ea47c1;">
+                <div class="index">13</div>
+                <div class="name">Bracket Depth 1</div>
+                <span>#ea47c1</span>
+            </div>
+            <div class="swatch bracket-depth-2" style="background-color: #FFDC14;">
+                <div class="index">14</div>
+                <div class="name">Bracket Depth 2</div>
+                <span>#FFDC14</span>
+            </div>
+            <div class="swatch bracket-depth-3" style="background-color: #14B4FF;">
+                <div class="index">15</div>
+                <div class="name">Bracket Depth 3</div>
+                <span>#14B4FF</span>
+            </div>
+        </div>
+    </section>
+
+
+    <section class="section">
+        <h2>Tailwind CSS Palette (22 Colors × 8 Shades, Slots 16–175)</h2>
+        <p class="note">Shades 200–900 from Tailwind CSS v4. Slots 176–247 unallocated.</p>
+        <style>
+            .tw-grid {
+                display: grid;
+                grid-template-columns: 80px repeat(8, 1fr);
+                gap: 2px;
+                margin-bottom: 4px;
+            }
+
+            .tw-label {
+                display: flex;
+                align-items: center;
+                font-size: 0.75em;
+                color: #aaa;
+                padding-right: 6px;
+            }
+
+            .tw-cell {
+                height: 36px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 0.65em;
+                font-weight: bold;
+                border-radius: 4px;
+            }
+
+            .tw-cell.light {
+                color: #000;
+            }
+
+            .tw-cell.dark {
+                color: #fff;
+            }
+
+            .tw-header {
+                font-size: 0.7em;
+                color: #888;
+                text-align: center;
+                padding: 2px 0;
+            }
+        </style>
+        <div class="tw-grid">
+            <div></div>
+            <div class="tw-header">200</div>
+            <div class="tw-header">300</div>
+            <div class="tw-header">400</div>
+            <div class="tw-header">500</div>
+            <div class="tw-header">600</div>
+            <div class="tw-header">700</div>
+            <div class="tw-header">800</div>
+            <div class="tw-header">900</div>
+        </div>
+        <!-- Red 0-7 -->
+        <div class="tw-grid">
+            <div class="tw-label">16 Red</div>
+            <div class="tw-cell light" style="background:#fecaca;">16</div>
+            <div class="tw-cell light" style="background:#fca5a5;">17</div>
+            <div class="tw-cell light" style="background:#f87171;">18</div>
+            <div class="tw-cell light" style="background:#ef4444;">19</div>
+            <div class="tw-cell dark" style="background:#dc2626;">20</div>
+            <div class="tw-cell dark" style="background:#b91c1c;">21</div>
+            <div class="tw-cell dark" style="background:#991b1b;">22</div>
+            <div class="tw-cell dark" style="background:#7f1d1d;">23</div>
+        </div>
+        <!-- Orange 8-15 -->
+        <div class="tw-grid">
+            <div class="tw-label">24 Orange</div>
+            <div class="tw-cell light" style="background:#fed7aa;">24</div>
+            <div class="tw-cell light" style="background:#fdba74;">25</div>
+            <div class="tw-cell light" style="background:#fb923c;">26</div>
+            <div class="tw-cell light" style="background:#f97316;">27</div>
+            <div class="tw-cell dark" style="background:#ea580c;">28</div>
+            <div class="tw-cell dark" style="background:#c2410c;">29</div>
+            <div class="tw-cell dark" style="background:#9a3412;">30</div>
+            <div class="tw-cell dark" style="background:#7c2d12;">31</div>
+        </div>
+        <!-- Amber 32-39 -->
+        <div class="tw-grid">
+            <div class="tw-label">32 Amber</div>
+            <div class="tw-cell light" style="background:#fde68a;">32</div>
+            <div class="tw-cell light" style="background:#fcd34d;">33</div>
+            <div class="tw-cell light" style="background:#fbbf24;">34</div>
+            <div class="tw-cell light" style="background:#f59e0b;">35</div>
+            <div class="tw-cell dark" style="background:#d97706;">36</div>
+            <div class="tw-cell dark" style="background:#b45309;">37</div>
+            <div class="tw-cell dark" style="background:#92400e;">38</div>
+            <div class="tw-cell dark" style="background:#78350f;">39</div>
+        </div>
+        <!-- Yellow 40-47 -->
+        <div class="tw-grid">
+            <div class="tw-label">40 Yellow</div>
+            <div class="tw-cell light" style="background:#fef08a;">40</div>
+            <div class="tw-cell light" style="background:#fde047;">41</div>
+            <div class="tw-cell light" style="background:#facc15;">42</div>
+            <div class="tw-cell light" style="background:#eab308;">43</div>
+            <div class="tw-cell dark" style="background:#ca8a04;">44</div>
+            <div class="tw-cell dark" style="background:#a16207;">45</div>
+            <div class="tw-cell dark" style="background:#854d0e;">46</div>
+            <div class="tw-cell dark" style="background:#713f12;">47</div>
+        </div>
+        <!-- Lime 48-55 -->
+        <div class="tw-grid">
+            <div class="tw-label">48 Lime</div>
+            <div class="tw-cell light" style="background:#d9f99d;">48</div>
+            <div class="tw-cell light" style="background:#bef264;">49</div>
+            <div class="tw-cell light" style="background:#a3e635;">50</div>
+            <div class="tw-cell light" style="background:#84cc16;">51</div>
+            <div class="tw-cell dark" style="background:#65a30d;">52</div>
+            <div class="tw-cell dark" style="background:#4d7c0f;">53</div>
+            <div class="tw-cell dark" style="background:#3f6212;">54</div>
+            <div class="tw-cell dark" style="background:#365314;">55</div>
+        </div>
+        <!-- Green 56-63 -->
+        <div class="tw-grid">
+            <div class="tw-label">56 Green</div>
+            <div class="tw-cell light" style="background:#bbf7d0;">56</div>
+            <div class="tw-cell light" style="background:#86efac;">57</div>
+            <div class="tw-cell light" style="background:#4ade80;">58</div>
+            <div class="tw-cell dark" style="background:#22c55e;">59</div>
+            <div class="tw-cell dark" style="background:#16a34a;">60</div>
+            <div class="tw-cell dark" style="background:#15803d;">61</div>
+            <div class="tw-cell dark" style="background:#166534;">62</div>
+            <div class="tw-cell dark" style="background:#14532d;">63</div>
+        </div>
+        <!-- Emerald 64-71 -->
+        <div class="tw-grid">
+            <div class="tw-label">64 Emerald</div>
+            <div class="tw-cell light" style="background:#a7f3d0;">64</div>
+            <div class="tw-cell light" style="background:#6ee7b7;">65</div>
+            <div class="tw-cell light" style="background:#34d399;">66</div>
+            <div class="tw-cell dark" style="background:#10b981;">67</div>
+            <div class="tw-cell dark" style="background:#059669;">68</div>
+            <div class="tw-cell dark" style="background:#047857;">69</div>
+            <div class="tw-cell dark" style="background:#065f46;">70</div>
+            <div class="tw-cell dark" style="background:#064e3b;">71</div>
+        </div>
+        <!-- Teal 72-79 -->
+        <div class="tw-grid">
+            <div class="tw-label">72 Teal</div>
+            <div class="tw-cell light" style="background:#99f6e4;">72</div>
+            <div class="tw-cell light" style="background:#5eead4;">73</div>
+            <div class="tw-cell light" style="background:#2dd4bf;">74</div>
+            <div class="tw-cell dark" style="background:#14b8a6;">75</div>
+            <div class="tw-cell dark" style="background:#0d9488;">76</div>
+            <div class="tw-cell dark" style="background:#0f766e;">77</div>
+            <div class="tw-cell dark" style="background:#115e59;">78</div>
+            <div class="tw-cell dark" style="background:#134e4a;">79</div>
+        </div>
+        <!-- Cyan 80-87 -->
+        <div class="tw-grid">
+            <div class="tw-label">80 Cyan</div>
+            <div class="tw-cell light" style="background:#a5f3fc;">80</div>
+            <div class="tw-cell light" style="background:#67e8f9;">81</div>
+            <div class="tw-cell light" style="background:#22d3ee;">82</div>
+            <div class="tw-cell dark" style="background:#06b6d4;">83</div>
+            <div class="tw-cell dark" style="background:#0891b2;">84</div>
+            <div class="tw-cell dark" style="background:#0e7490;">85</div>
+            <div class="tw-cell dark" style="background:#155e75;">86</div>
+            <div class="tw-cell dark" style="background:#164e63;">87</div>
+        </div>
+        <!-- Sky 88-95 -->
+        <div class="tw-grid">
+            <div class="tw-label">88 Sky</div>
+            <div class="tw-cell light" style="background:#bae6fd;">88</div>
+            <div class="tw-cell light" style="background:#7dd3fc;">89</div>
+            <div class="tw-cell light" style="background:#38bdf8;">90</div>
+            <div class="tw-cell dark" style="background:#0ea5e9;">91</div>
+            <div class="tw-cell dark" style="background:#0284c7;">92</div>
+            <div class="tw-cell dark" style="background:#0369a1;">93</div>
+            <div class="tw-cell dark" style="background:#075985;">94</div>
+            <div class="tw-cell dark" style="background:#0c4a6e;">95</div>
+        </div>
+        <!-- Blue 96-103 -->
+        <div class="tw-grid">
+            <div class="tw-label">96 Blue</div>
+            <div class="tw-cell light" style="background:#bfdbfe;">96</div>
+            <div class="tw-cell light" style="background:#93c5fd;">97</div>
+            <div class="tw-cell light" style="background:#60a5fa;">98</div>
+            <div class="tw-cell dark" style="background:#3b82f6;">99</div>
+            <div class="tw-cell dark" style="background:#2563eb;">100</div>
+            <div class="tw-cell dark" style="background:#1d4ed8;">101</div>
+            <div class="tw-cell dark" style="background:#1e40af;">102</div>
+            <div class="tw-cell dark" style="background:#1e3a8a;">103</div>
+        </div>
+        <!-- Indigo 104-111 -->
+        <div class="tw-grid">
+            <div class="tw-label">104 Indigo</div>
+            <div class="tw-cell light" style="background:#c7d2fe;">104</div>
+            <div class="tw-cell light" style="background:#a5b4fc;">105</div>
+            <div class="tw-cell dark" style="background:#818cf8;">106</div>
+            <div class="tw-cell dark" style="background:#6366f1;">107</div>
+            <div class="tw-cell dark" style="background:#4f46e5;">108</div>
+            <div class="tw-cell dark" style="background:#4338ca;">109</div>
+            <div class="tw-cell dark" style="background:#3730a3;">110</div>
+            <div class="tw-cell dark" style="background:#312e81;">111</div>
+        </div>
+        <!-- Violet 112-119 -->
+        <div class="tw-grid">
+            <div class="tw-label">112 Violet</div>
+            <div class="tw-cell light" style="background:#ddd6fe;">112</div>
+            <div class="tw-cell light" style="background:#c4b5fd;">113</div>
+            <div class="tw-cell light" style="background:#a78bfa;">114</div>
+            <div class="tw-cell dark" style="background:#8b5cf6;">115</div>
+            <div class="tw-cell dark" style="background:#7c3aed;">116</div>
+            <div class="tw-cell dark" style="background:#6d28d9;">117</div>
+            <div class="tw-cell dark" style="background:#5b21b6;">118</div>
+            <div class="tw-cell dark" style="background:#4c1d95;">119</div>
+        </div>
+        <!-- Purple 120-127 -->
+        <div class="tw-grid">
+            <div class="tw-label">120 Purple</div>
+            <div class="tw-cell light" style="background:#e9d5ff;">120</div>
+            <div class="tw-cell light" style="background:#d8b4fe;">121</div>
+            <div class="tw-cell light" style="background:#c084fc;">122</div>
+            <div class="tw-cell dark" style="background:#a855f7;">123</div>
+            <div class="tw-cell dark" style="background:#9333ea;">124</div>
+            <div class="tw-cell dark" style="background:#7e22ce;">125</div>
+            <div class="tw-cell dark" style="background:#6b21a8;">126</div>
+            <div class="tw-cell dark" style="background:#581c87;">127</div>
+        </div>
+        <!-- Fuchsia 128-135 -->
+        <div class="tw-grid">
+            <div class="tw-label">128 Fuchsia</div>
+            <div class="tw-cell light" style="background:#f5d0fe;">128</div>
+            <div class="tw-cell light" style="background:#f0abfc;">129</div>
+            <div class="tw-cell light" style="background:#e879f9;">130</div>
+            <div class="tw-cell dark" style="background:#d946ef;">131</div>
+            <div class="tw-cell dark" style="background:#c026d3;">132</div>
+            <div class="tw-cell dark" style="background:#a21caf;">133</div>
+            <div class="tw-cell dark" style="background:#86198f;">134</div>
+            <div class="tw-cell dark" style="background:#701a75;">135</div>
+        </div>
+        <!-- Pink 136-143 -->
+        <div class="tw-grid">
+            <div class="tw-label">136 Pink</div>
+            <div class="tw-cell light" style="background:#fbcfe8;">136</div>
+            <div class="tw-cell light" style="background:#f9a8d4;">137</div>
+            <div class="tw-cell light" style="background:#f472b6;">138</div>
+            <div class="tw-cell dark" style="background:#ec4899;">139</div>
+            <div class="tw-cell dark" style="background:#db2777;">140</div>
+            <div class="tw-cell dark" style="background:#be185d;">141</div>
+            <div class="tw-cell dark" style="background:#9d174d;">142</div>
+            <div class="tw-cell dark" style="background:#831843;">143</div>
+        </div>
+        <!-- Rose 144-151 -->
+        <div class="tw-grid">
+            <div class="tw-label">144 Rose</div>
+            <div class="tw-cell light" style="background:#fecdd3;">144</div>
+            <div class="tw-cell light" style="background:#fda4af;">145</div>
+            <div class="tw-cell light" style="background:#fb7185;">146</div>
+            <div class="tw-cell dark" style="background:#f43f5e;">147</div>
+            <div class="tw-cell dark" style="background:#e11d48;">148</div>
+            <div class="tw-cell dark" style="background:#be123c;">149</div>
+            <div class="tw-cell dark" style="background:#9f1239;">150</div>
+            <div class="tw-cell dark" style="background:#881337;">151</div>
+        </div>
+        <!-- Slate 152-159 -->
+        <div class="tw-grid">
+            <div class="tw-label">152 Slate</div>
+            <div class="tw-cell light" style="background:#e2e8f0;">152</div>
+            <div class="tw-cell light" style="background:#cbd5e1;">153</div>
+            <div class="tw-cell light" style="background:#94a3b8;">154</div>
+            <div class="tw-cell dark" style="background:#64748b;">155</div>
+            <div class="tw-cell dark" style="background:#475569;">156</div>
+            <div class="tw-cell dark" style="background:#334155;">157</div>
+            <div class="tw-cell dark" style="background:#1e293b;">158</div>
+            <div class="tw-cell dark" style="background:#0f172a;">159</div>
+        </div>
+        <!-- Neutral 160-175 -->
+        <div class="tw-grid">
+            <div class="tw-label">160 Neutral</div>
+            <div class="tw-cell light" style="background:#e5e5e5;">160</div>
+            <div class="tw-cell light" style="background:#d4d4d4;">161</div>
+            <div class="tw-cell light" style="background:#a3a3a3;">162</div>
+            <div class="tw-cell dark" style="background:#737373;">163</div>
+            <div class="tw-cell dark" style="background:#525252;">164</div>
+            <div class="tw-cell dark" style="background:#404040;">165</div>
+            <div class="tw-cell dark" style="background:#262626;">166</div>
+            <div class="tw-cell dark" style="background:#171717;">167</div>
+        </div>
+        <!-- Stone 168-175 -->
+        <div class="tw-grid">
+            <div class="tw-label">168 Stone</div>
+            <div class="tw-cell light" style="background:#e7e5e4;">168</div>
+            <div class="tw-cell light" style="background:#d6d3d1;">169</div>
+            <div class="tw-cell light" style="background:#a8a29e;">170</div>
+            <div class="tw-cell dark" style="background:#78716c;">171</div>
+            <div class="tw-cell dark" style="background:#57534e;">172</div>
+            <div class="tw-cell dark" style="background:#44403c;">173</div>
+            <div class="tw-cell dark" style="background:#292524;">174</div>
+            <div class="tw-cell dark" style="background:#1c1917;">175</div>
+        </div>
+        <!-- Unallocated -->
+        <div class="tw-grid">
+            <div class="tw-label" style="color:#555;">176–247</div>
+            <div class="tw-cell" style="background:#333;color:#666;" colspan="8">Unallocated (64 slots)</div>
+        </div>
+    </section>
+
+    <section class="section">
+        <h2>8-Colour Primary/Secondary Palette + Background Slot</h2>
+        <p class="note">These are the pure primary and secondary colours. The background slot is used for the graphics screen, which has a single background colour fixed at slot 255. The pen colour can use any slot.</p>
+        <div class="palette">
+            <div class="swatch red" style="background-color: #FF0000;">
+                <div class="index">248</div>
+                <div class="name">Red</div>
+                <span>#FF0000</span>
+            </div>
+            <div class="swatch green" style="background-color: #00FF00;">
+                <div class="index">249</div>
+                <div class="name">Green</div>
+                <span>#00FF00</span>
+            </div>
+            <div class="swatch blue" style="background-color: #0000FF;">
+                <div class="index">250</div>
+                <div class="name">Blue</div>
+                <span>#0000FF</span>
+            </div>
+            <div class="swatch yellow" style="background-color: #FFFF00;">
+                <div class="index">251</div>
+                <div class="name">Yellow</div>
+                <span>#FFFF00</span>
+            </div>
+            <div class="swatch cyan" style="background-color: #00FFFF;">
+                <div class="index">252</div>
+                <div class="name">Cyan</div>
+                <span>#00FFFF</span>
+            </div>
+            <div class="swatch magenta" style="background-color: #FF00FF;">
+                <div class="index">253</div>
+                <div class="name">Magenta</div>
+                <span>#FF00FF</span>
+            </div>
+            <div class="swatch white" style="background-color: #FFFFFF;">
+                <div class="index">254</div>
+                <div class="name">White</div>
+                <span>#FFFFFF</span>
+            </div>
+            <div class="swatch black" style="background-color: #000000;">
+                <div class="index">255</div>
+                <div class="name">Backgound Slot</div>
+                <span>#000000</span>
+            </div>
+        </div>
+    </section>
+
+</body>
+
+</html>
