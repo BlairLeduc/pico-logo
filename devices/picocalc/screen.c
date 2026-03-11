@@ -29,8 +29,8 @@
 //  The GFX frame buffer: each pixel is 8-bits (points into a palette)
 static uint8_t gfx_buffer[SCREEN_WIDTH * SCREEN_HEIGHT] = {0};
 
-//  The text frame buffer: each character is 8-bits (ASCII code)
-static uint8_t txt_buffer[SCREEN_COLUMNS * SCREEN_ROWS] = {0};
+//  The text frame buffer: each entry packs fg, bg, and character (see TXT_PACK)
+static uint16_t txt_buffer[SCREEN_COLUMNS * SCREEN_ROWS] = {0};
 
 // The screen can be in one of three modes:
 //
@@ -65,8 +65,8 @@ static uint64_t last_blit_time_us = 0;
 // Text state
 static const font_t *screen_font = &logo_font;       // Default font for text mode
 static uint16_t text_row = 0;                        // The last row written to in text mode
-static uint16_t foreground = TXT_DEFAULT_FOREGROUND; // Default foreground colour (white)
-static uint16_t background = TXT_DEFAULT_BACKGROUND; // Default background colour (black)
+static uint8_t foreground = TXT_DEFAULT_FOREGROUND; // Default fg text palette index (0-15)
+static uint8_t background = TXT_DEFAULT_BACKGROUND; // Default bg text palette index (0-15)
 static uint8_t cursor_column = 0;                    // Cursor x position for text mode
 static uint8_t cursor_row = 0;                       // Cursor y position for text mode
 static bool cursor_enabled = true;                   // Cursor visibility state for text mode
@@ -150,12 +150,14 @@ static void screen_txt_scroll_up(void)
     // Move all rows up by one using memmove (handles overlapping memory correctly)
     memmove(txt_buffer,
             txt_buffer + SCREEN_COLUMNS,
-            (SCREEN_ROWS - 1) * SCREEN_COLUMNS * sizeof(uint8_t));
+            (SCREEN_ROWS - 1) * SCREEN_COLUMNS * sizeof(uint16_t));
 
-    // Clear the last row using memset
-    memset(txt_buffer + (SCREEN_ROWS - 1) * SCREEN_COLUMNS,
-           0x20,
-           SCREEN_COLUMNS * sizeof(uint8_t));
+    // Clear the last row with current fg/bg and space character
+    uint16_t space = TXT_PACK(foreground, background, ' ');
+    for (int i = 0; i < SCREEN_COLUMNS; i++)
+    {
+        txt_buffer[(SCREEN_ROWS - 1) * SCREEN_COLUMNS + i] = space;
+    }
 
     // All rows shifted — mark every row dirty so screen_txt_update redraws them
     screen_txt_mark_all_dirty();
@@ -365,12 +367,12 @@ void screen_gfx_clear(void)
 
     if (screen_mode == SCREEN_MODE_GFX)
     {
-        lcd_clear_screen(); // Clear the LCD screen in graphics mode
+        lcd_clear_screen(GFX_DEFAULT_BACKGROUND); // Clear the LCD screen in graphics mode
     }
     else if (screen_mode == SCREEN_MODE_SPLIT)
     {
         // Clear the graphics area in split mode
-        lcd_solid_rectangle(background, 0, 0, SCREEN_WIDTH, SCREEN_SPLIT_GFX_HEIGHT);
+        lcd_solid_rectangle(GFX_DEFAULT_BACKGROUND, 0, 0, SCREEN_WIDTH, SCREEN_SPLIT_GFX_HEIGHT);
     }
 
     // Buffer and LCD are now in sync — reset dirty state
@@ -987,7 +989,7 @@ int screen_gfx_load(const char *filename)
 // WARNING: Writing through the returned pointer bypasses dirty tracking.
 // Callers that modify the buffer must call screen_txt_mark_all_dirty() then
 // screen_txt_update(), or use screen_txt_putc() / screen_txt_clear() instead.
-uint8_t *screen_txt_frame()
+uint16_t *screen_txt_frame()
 {
     return txt_buffer;
 }
@@ -996,16 +998,20 @@ uint8_t *screen_txt_frame()
 void screen_txt_clear(void)
 {
     text_row = 0;                                 // Reset the text row to the top
-    memset(txt_buffer, 0x20, sizeof(txt_buffer)); // Clear the text buffer
+    uint16_t space = TXT_PACK(foreground, background, ' ');
+    for (int i = 0; i < SCREEN_COLUMNS * SCREEN_ROWS; i++)
+    {
+        txt_buffer[i] = space;                    // Fill with current fg/bg space
+    }
     screen_txt_mark_all_dirty();                         // All rows changed
     
     if (screen_mode == SCREEN_MODE_SPLIT)
     {
-        lcd_scroll_clear();                       // Clear only the text area in split mode
+        lcd_scroll_clear(background);                       // Clear only the text area in split mode
     }
     else
     {
-        lcd_clear_screen();                       // Clear the entire LCD screen in text mode
+        lcd_clear_screen(background);                       // Clear the entire LCD screen in text mode
     }
     
     // Always set cursor to row 0 in the text buffer.
@@ -1019,6 +1025,9 @@ void screen_txt_set_cursor(uint8_t column, uint8_t row)
 {
     cursor_column = column < MAX_COLUMN ? column : MAX_COLUMN; // Ensure column is within bounds
     cursor_row = row < SCREEN_ROWS ? row : SCREEN_ROWS - 1;    // Ensure row is within bounds
+
+    // Sync the packed text entry under the cursor for cursor rendering
+    lcd_set_cursor_char(txt_buffer[cursor_row * SCREEN_COLUMNS + cursor_column]);
 
     screen_txt_map_location(&column, &row);
     lcd_move_cursor(column, row);
@@ -1059,9 +1068,10 @@ void screen_txt_draw_cursor(void)
     uint8_t column, row;
     if (screen_txt_map_location(&column, &row))
     {
-        // The cursor is visible, we can draw it
-        lcd_move_cursor(column, row); // Move the cursor to the current position
-        lcd_draw_cursor();            // Draw the cursor at the current position
+        // Sync cursor char from text buffer and draw
+        lcd_set_cursor_char(txt_buffer[cursor_row * SCREEN_COLUMNS + cursor_column]);
+        lcd_move_cursor(column, row);
+        lcd_draw_cursor();
     }
 }
 
@@ -1071,9 +1081,10 @@ void screen_txt_erase_cursor(void)
     uint8_t column, row;
     if (screen_txt_map_location(&column, &row))
     {
-        // The cursor is visible, we can draw it
-        lcd_move_cursor(column, row); // Move the cursor to the current position
-        lcd_erase_cursor();           // Draw the cursor at the current position
+        // Sync cursor char from text buffer and erase
+        lcd_set_cursor_char(txt_buffer[cursor_row * SCREEN_COLUMNS + cursor_column]);
+        lcd_move_cursor(column, row);
+        lcd_erase_cursor();
     }
 }
 
@@ -1098,7 +1109,7 @@ bool screen_txt_putc(uint8_t c)
                 screen_txt_scroll_up();
                 if (screen_mode == SCREEN_MODE_TXT)
                 {
-                    lcd_scroll_up(); // Scroll the LCD display up one line in TXT mode
+                    lcd_scroll_up(background); // Scroll the LCD display up one line in TXT mode
                 }
                 cursor_row = SCREEN_ROWS - 1;
                 scrolled = true;
@@ -1130,7 +1141,7 @@ bool screen_txt_putc(uint8_t c)
                     start_row++;
                 }
 
-                lcd_scroll_up(); // Scroll the LCD display up one line in split mode
+                lcd_scroll_up(background); // Scroll the LCD display up one line in split mode
                 cursor_row = start_row + SCREEN_SPLIT_TXT_ROWS - 1;
                 scrolled = true;
                 screen_txt_set_cursor(cursor_column, cursor_row);
@@ -1157,7 +1168,7 @@ bool screen_txt_putc(uint8_t c)
             return false;
         }
 
-        txt_buffer[cursor_row * SCREEN_COLUMNS + cursor_column] = 0x20; // Clear the character (space)
+        txt_buffer[cursor_row * SCREEN_COLUMNS + cursor_column] = TXT_PACK(foreground, background, ' '); // Clear the character (space)
         txt_mark_dirty_row(cursor_row);
         if (screen_mode == SCREEN_MODE_TXT || screen_mode == SCREEN_MODE_SPLIT)
         {
@@ -1172,14 +1183,16 @@ bool screen_txt_putc(uint8_t c)
                 if (cursor_row >= start_row && cursor_row < start_row + SCREEN_SPLIT_TXT_ROWS)
                 {
                     // Redraw the character at the cursor position
-                    lcd_putc(cursor_column, SCREEN_SPLIT_TXT_ROW + cursor_row - start_row, ' ');
+                    uint16_t bs_packed = TXT_PACK(foreground, background, ' ');
+                    lcd_putc_attr(cursor_column, SCREEN_SPLIT_TXT_ROW + cursor_row - start_row, bs_packed);
+                    lcd_set_cursor_char(bs_packed);
                     lcd_move_cursor(cursor_column, SCREEN_SPLIT_TXT_ROW + cursor_row - start_row);
                 }
             }
             else
             {
                 // In text mode, we can simply clear the character
-                lcd_putc(cursor_column, cursor_row, ' ');
+                lcd_putc_attr(cursor_column, cursor_row, TXT_PACK(foreground, background, ' '));
                 screen_txt_set_cursor(cursor_column, cursor_row);
             }
         }
@@ -1190,7 +1203,8 @@ bool screen_txt_putc(uint8_t c)
         // Store character in buffer
         if (cursor_row < SCREEN_ROWS && cursor_column < SCREEN_COLUMNS)
         {
-            txt_buffer[cursor_row * SCREEN_COLUMNS + cursor_column] = c;
+            uint16_t packed = TXT_PACK(foreground, background, c);
+            txt_buffer[cursor_row * SCREEN_COLUMNS + cursor_column] = packed;
             txt_mark_dirty_row(cursor_row);
             if (screen_mode == SCREEN_MODE_TXT || screen_mode == SCREEN_MODE_SPLIT)
             {
@@ -1205,14 +1219,16 @@ bool screen_txt_putc(uint8_t c)
                     if (cursor_row >= start_row && cursor_row < start_row + SCREEN_SPLIT_TXT_ROWS)
                     {
                         // Redraw the character at the cursor position
-                        lcd_putc(cursor_column, SCREEN_SPLIT_TXT_ROW + cursor_row - start_row, c);
+                        lcd_putc_attr(cursor_column, SCREEN_SPLIT_TXT_ROW + cursor_row - start_row, packed);
+                        lcd_set_cursor_char(txt_buffer[cursor_row * SCREEN_COLUMNS + cursor_column + 1]);
                         lcd_move_cursor(cursor_column + 1, SCREEN_SPLIT_TXT_ROW + cursor_row - start_row);
                     }
                 }
                 else
                 {
-                    // In text mode, we can simply clear the character
-                    lcd_putc(cursor_column, cursor_row, c);
+                    // In text mode, render the character immediately
+                    lcd_putc_attr(cursor_column, cursor_row, packed);
+                    lcd_set_cursor_char(txt_buffer[cursor_row * SCREEN_COLUMNS + cursor_column + 1]);
                     lcd_move_cursor(cursor_column + 1, cursor_row);
                 }
             }
@@ -1234,7 +1250,7 @@ bool screen_txt_putc(uint8_t c)
                         screen_txt_scroll_up();
                         if (screen_mode == SCREEN_MODE_TXT)
                         {
-                            lcd_scroll_up(); // Scroll the LCD display up one line in TXT mode
+                            lcd_scroll_up(background); // Scroll the LCD display up one line in TXT mode
                         }
                         cursor_row = SCREEN_ROWS - 1;
                         scrolled = true;
@@ -1266,7 +1282,7 @@ bool screen_txt_putc(uint8_t c)
                             start_row++;
                         }
 
-                        lcd_scroll_up(); // Scroll the LCD display up one line in split mode
+                        lcd_scroll_up(background); // Scroll the LCD display up one line in split mode
                         cursor_row = start_row + SCREEN_SPLIT_TXT_ROWS - 1;
                         scrolled = true;
                     }
@@ -1323,7 +1339,7 @@ void screen_txt_update(void)
 
             for (uint8_t col = 0; col < SCREEN_COLUMNS; col++)
             {
-                lcd_putc(col, row, txt_buffer[row * SCREEN_COLUMNS + col]);
+                lcd_putc_attr(col, row, txt_buffer[row * SCREEN_COLUMNS + col]);
             }
             txt_dirty_rows[row] = false;
         }
@@ -1354,7 +1370,7 @@ void screen_txt_update(void)
             // Copy this row from the buffer to the display
             for (uint8_t col = 0; col < SCREEN_COLUMNS; col++)
             {
-                lcd_putc(col, SCREEN_SPLIT_TXT_ROW + display_row, txt_buffer[buffer_row * SCREEN_COLUMNS + col]);
+                lcd_putc_attr(col, SCREEN_SPLIT_TXT_ROW + display_row, txt_buffer[buffer_row * SCREEN_COLUMNS + col]);
             }
             txt_dirty_rows[buffer_row] = false;
         }
@@ -1392,10 +1408,30 @@ void screen_init()
     // Set for a default of split screen
     screen_set_mode(SCREEN_MODE_TXT);
 
-    // Set foreground and background colors
-    lcd_set_foreground(foreground);
-    lcd_set_background(background);
+    // Set LCD global fg/bg for editor and graphics (text uses per-character colors)
+    lcd_set_foreground(PALETTE_FG);
+    lcd_set_background(PALETTE_BG);
 
     // Disable cursor
     screen_txt_enable_cursor(true);
+}
+
+void screen_txt_set_foreground(uint8_t index)
+{
+    foreground = index & 0xF;
+}
+
+uint8_t screen_txt_get_foreground(void)
+{
+    return foreground;
+}
+
+void screen_txt_set_background(uint8_t index)
+{
+    background = index & 0xF;
+}
+
+uint8_t screen_txt_get_background(void)
+{
+    return background;
 }

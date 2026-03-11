@@ -7,6 +7,7 @@
 
 #include "test_scaffold.h"
 #include "mock_device.h"
+#include <string.h>
 
 void setUp(void)
 {
@@ -333,6 +334,107 @@ void test_setcursor_with_list_operation(void)
 }
 
 // ============================================================================
+// settextcolor / settc tests
+// ============================================================================
+
+void test_settextcolor_sets_colors(void)
+{
+    const MockDeviceState *state = mock_device_get_state();
+    
+    Result r = run_string("settextcolor [4 0]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL(4, state->text.foreground);
+    TEST_ASSERT_EQUAL(0, state->text.background);
+}
+
+void test_settc_is_alias(void)
+{
+    const MockDeviceState *state = mock_device_get_state();
+    
+    Result r = run_string("settc [9 2]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL(9, state->text.foreground);
+    TEST_ASSERT_EQUAL(2, state->text.background);
+}
+
+void test_settextcolor_zero_fifteen(void)
+{
+    const MockDeviceState *state = mock_device_get_state();
+    
+    Result r = run_string("settextcolor [0 15]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL(0, state->text.foreground);
+    TEST_ASSERT_EQUAL(15, state->text.background);
+}
+
+void test_settextcolor_rejects_out_of_range_fg(void)
+{
+    Result r = run_string("settextcolor [16 0]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_settextcolor_rejects_out_of_range_bg(void)
+{
+    Result r = run_string("settextcolor [0 16]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_settextcolor_rejects_negative(void)
+{
+    Result r = run_string("settextcolor [-1 0]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_settextcolor_requires_list(void)
+{
+    Result r = run_string("settextcolor 5");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_settextcolor_requires_two_items(void)
+{
+    Result r = run_string("settextcolor [1]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+// ============================================================================
+// textcolor / tc tests
+// ============================================================================
+
+void test_textcolor_returns_defaults(void)
+{
+    Result r = eval_string("textcolor");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(r.value.type == VALUE_LIST);
+    
+    // Default is [4 0] (fg=4 white, bg=0 black)
+    const char *s = value_to_string(r.value);
+    TEST_ASSERT_EQUAL_STRING("[4 0]", s);
+}
+
+void test_textcolor_reflects_settextcolor(void)
+{
+    run_string("settextcolor [9 3]");
+    
+    Result r = eval_string("textcolor");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    const char *s = value_to_string(r.value);
+    TEST_ASSERT_EQUAL_STRING("[9 3]", s);
+}
+
+void test_tc_is_alias(void)
+{
+    run_string("settc [7 1]");
+    
+    Result r = eval_string("tc");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    
+    const char *s = value_to_string(r.value);
+    TEST_ASSERT_EQUAL_STRING("[7 1]", s);
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -381,6 +483,21 @@ int main(void)
     // Integration tests
     RUN_TEST(test_cursor_with_first);
     RUN_TEST(test_setcursor_with_list_operation);
+    
+    // settextcolor tests
+    RUN_TEST(test_settextcolor_sets_colors);
+    RUN_TEST(test_settc_is_alias);
+    RUN_TEST(test_settextcolor_zero_fifteen);
+    RUN_TEST(test_settextcolor_rejects_out_of_range_fg);
+    RUN_TEST(test_settextcolor_rejects_out_of_range_bg);
+    RUN_TEST(test_settextcolor_rejects_negative);
+    RUN_TEST(test_settextcolor_requires_list);
+    RUN_TEST(test_settextcolor_requires_two_items);
+
+    // textcolor tests
+    RUN_TEST(test_textcolor_returns_defaults);
+    RUN_TEST(test_textcolor_reflects_settextcolor);
+    RUN_TEST(test_tc_is_alias);
     
     return UNITY_END();
 }

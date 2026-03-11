@@ -155,17 +155,17 @@ void test_error_no_error(void)
 void test_catch_through_calls_good(void)
 {
     // Test that catch works through nested procedure calls
-    run_string("define \"tc [[in] [catch \"oops [trythis :in]]]");
+    run_string("define \"testcatch [[in] [catch \"oops [trythis :in]]]");
     run_string("define \"trythis [[n] [pr check :n pr \"good]]");
     run_string("define \"check [[num] [if :num = 0 [throw \"oops] op :num]]");
 
     // Run catch around outerproc
-    Result r = run_string("tc 1");
+    Result r = run_string("testcatch 1");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     TEST_ASSERT_NOT_NULL(strstr(output_buffer, "1\ngood\n"));
     
     // Clean up
-    run_string("erase \"tc");
+    run_string("erase \"testcatch");
     run_string("erase \"trythis");
     run_string("erase \"check");
 }
@@ -173,16 +173,16 @@ void test_catch_through_calls_good(void)
 void test_catch_through_calls_catch(void)
 {
     // Test that catch works through nested procedure calls
-    run_string("define \"tc [[in] [catch \"oops [trythis :in]]]");
+    run_string("define \"testcatch [[in] [catch \"oops [trythis :in]]]");
     run_string("define \"trythis [[n] [pr check :n pr \"good]]");
     run_string("define \"check [[num] [if :num = 0 [throw \"oops] op :num]]");
 
     // Run catch around outerproc
-    Result r = run_string("tc 0");
+    Result r = run_string("testcatch 0");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     
     // Clean up
-    run_string("erase \"tc");
+    run_string("erase \"testcatch");
     run_string("erase \"trythis");
     run_string("erase \"check");
 }

@@ -205,6 +205,37 @@ static const LogoStreamOps picocalc_output_ops = {
 };
 
 //
+//  Error output stream — writes in error color (red) then restores default
+//
+
+static void error_output_write(LogoStream *stream, const char *text)
+{
+    screen_txt_set_foreground(TXT_ERROR);
+    screen_txt_puts(text);
+    screen_txt_set_foreground(TXT_DEFAULT_FOREGROUND);
+}
+
+static void error_output_flush(LogoStream *stream)
+{
+    screen_txt_update();
+}
+
+static const LogoStreamOps picocalc_error_output_ops = {
+    .read_char = NULL,
+    .read_chars = NULL,
+    .read_line = NULL,
+    .can_read = NULL,
+    .write = error_output_write,
+    .flush = error_output_flush,
+    .get_read_pos = NULL,
+    .set_read_pos = NULL,
+    .get_write_pos = NULL,
+    .set_write_pos = NULL,
+    .get_length = NULL,
+    .close = NULL,
+};
+
+//
 //  Screen operations
 //
 
@@ -248,10 +279,34 @@ static void text_get_cursor(uint8_t *column, uint8_t *row)
     screen_txt_get_cursor(column, row);
 }
 
+static void text_set_foreground(uint8_t index)
+{
+    screen_txt_set_foreground(index);
+}
+
+static uint8_t text_get_foreground(void)
+{
+    return screen_txt_get_foreground();
+}
+
+static void text_set_background(uint8_t index)
+{
+    screen_txt_set_background(index);
+}
+
+static uint8_t text_get_background(void)
+{
+    return screen_txt_get_background();
+}
+
 static const LogoConsoleText picocalc_text_ops = {
     .clear = text_clear,
     .set_cursor = text_set_cursor,
     .get_cursor = text_get_cursor,
+    .set_foreground = text_set_foreground,
+    .get_foreground = text_get_foreground,
+    .set_background = text_set_background,
+    .get_background = text_get_background,
 };
 
 //
@@ -767,22 +822,8 @@ static void turtle_set_bg_colour(uint8_t slot)
     lcd_set_palette_value(PALETTE_BG, palette_value);
     background_colour = slot;
 
-    // The foreground colour will be the minimum or maxium shade in the hue for contrast
-    if ((slot & 0x07) < 4)
-    {
-        slot |= 0x07;
-    }
-    else
-    {
-        slot &= ~0x07;
-    }
-    palette_value = lcd_get_palette_value(slot);
-    lcd_set_palette_value(PALETTE_FG, palette_value);
-
     screen_gfx_mark_all_dirty();  // Palette changed — entire buffer needs re-blit
     screen_gfx_update();
-    screen_txt_mark_all_dirty();  // FG palette changed — text colours need refresh
-    screen_txt_update();
 }
 
 static uint8_t turtle_get_bg_colour(void)
@@ -1139,12 +1180,17 @@ LogoConsole *logo_picocalc_console_create(void)
     }
 
     logo_console_init(console, &picocalc_input_ops, &picocalc_output_ops, NULL);
+    logo_stream_init(&console->error_output,
+                     LOGO_STREAM_CONSOLE_OUTPUT,
+                     &picocalc_error_output_ops,
+                     NULL,
+                     "error");
     console->screen = &picocalc_screen_ops;
     console->text = &picocalc_text_ops;
     console->turtle = &picocalc_turtle_ops;
     console->editor = picocalc_editor_get_ops();
 
-    turtle_set_bg_colour(74); // Set default background color
+    turtle_set_bg_colour(0); // Set default background color (black)
     screen_gfx_clear();
     screen_txt_clear();
     turtle_draw();

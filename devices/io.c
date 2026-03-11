@@ -1173,6 +1173,29 @@ void logo_io_write_line(LogoIO *io, const char *text)
     logo_io_write(io, "\n");
 }
 
+void logo_io_write_error_line(LogoIO *io, const char *text)
+{
+    if (!io)
+    {
+        return;
+    }
+
+    // Use error_output stream if available, otherwise fall back to regular output
+    if (io->console && io->console->error_output.ops)
+    {
+        if (text)
+        {
+            logo_stream_write(&io->console->error_output, text);
+        }
+        logo_stream_write(&io->console->error_output, "\n");
+        logo_stream_flush(&io->console->error_output);
+    }
+    else
+    {
+        logo_io_write_line(io, text);
+    }
+}
+
 void logo_io_flush(LogoIO *io)
 {
     if (!io)

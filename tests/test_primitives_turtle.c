@@ -439,6 +439,42 @@ void test_setbg_sets_background_color(void)
     TEST_ASSERT_EQUAL(3, state->turtle.bg_colour);
 }
 
+void test_setbg_accepts_zero(void)
+{
+    Result r = run_string("setbg 0");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    const MockDeviceState *state = mock_device_get_state();
+    TEST_ASSERT_EQUAL(0, state->turtle.bg_colour);
+}
+
+void test_setbg_accepts_254(void)
+{
+    Result r = run_string("setbg 254");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    const MockDeviceState *state = mock_device_get_state();
+    TEST_ASSERT_EQUAL(254, state->turtle.bg_colour);
+}
+
+void test_setbg_rejects_255(void)
+{
+    Result r = run_string("setbg 255");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_setbg_rejects_negative(void)
+{
+    Result r = run_string("setbg -1");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_setbg_rejects_256(void)
+{
+    Result r = run_string("setbg 256");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
 void test_background_outputs_bg_color(void)
 {
     run_string("setbg 8");
@@ -1036,8 +1072,8 @@ void test_restorepalette_resets_palette(void)
     r = run_string("palette 50");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     list = r.value.as.node;
-    // Slot 50 default is from palette_24bit[50] = 0x581100 → r=88, g=17, b=0
-    TEST_ASSERT_EQUAL_STRING("88", mem_word_ptr(mem_car(list)));
+    // Slot 50 default is from palette_24bit[50] = 0xA3E635 → r=163, g=230, b=53
+    TEST_ASSERT_EQUAL_STRING("163", mem_word_ptr(mem_car(list)));
 }
 
 void test_setpalette_clamps_values(void)
@@ -1437,6 +1473,11 @@ int main(void)
     RUN_TEST(test_pencolor_outputs_pen_color);
     RUN_TEST(test_pc_alias);
     RUN_TEST(test_setbg_sets_background_color);
+    RUN_TEST(test_setbg_accepts_zero);
+    RUN_TEST(test_setbg_accepts_254);
+    RUN_TEST(test_setbg_rejects_255);
+    RUN_TEST(test_setbg_rejects_negative);
+    RUN_TEST(test_setbg_rejects_256);
     RUN_TEST(test_background_outputs_bg_color);
     RUN_TEST(test_bg_alias);
     RUN_TEST(test_penerase_command);

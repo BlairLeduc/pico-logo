@@ -74,11 +74,7 @@ uint16_t lcd_get_palette_value(uint8_t slot)
 
 void lcd_set_palette_rgb(uint8_t slot, uint8_t r, uint8_t g, uint8_t b)
 {
-    // Convert 8-bit RGB to RGB565
-    uint16_t r5 = (r >> 3) & 0x1F;
-    uint16_t g6 = (g >> 2) & 0x3F;
-    uint16_t b5 = (b >> 3) & 0x1F;
-    palette[slot] = (r5 << 11) | (g6 << 5) | b5;
+    palette[slot] = RGB(r, g, b);
 }
 
 void lcd_get_palette_rgb(uint8_t slot, uint8_t *r, uint8_t *g, uint8_t *b)
@@ -96,8 +92,8 @@ void lcd_get_palette_rgb(uint8_t slot, uint8_t *r, uint8_t *g, uint8_t *b)
 
 void lcd_restore_palette(void)
 {
-    // Restore first 128 slots from the default palette
-    memcpy(palette, default_palette, sizeof(default_palette));
+    // Restore slots 0-254 from the default palette; slot 255 (BG) is user-controlled
+    memcpy(palette, palette_16bit, 255 * sizeof(uint16_t));
 }
 
 
@@ -347,16 +343,16 @@ void lcd_scroll_reset()
     lcd_enable_interrupts();
 }
 
-void lcd_scroll_clear()
+void lcd_scroll_clear(uint8_t bg_colour)
 {
     lcd_scroll_reset(); // Reset the scroll area to the top
 
     // Clear the scrolling area
-    lcd_solid_rectangle(background, 0, lcd_scroll_top, WIDTH, lcd_memory_scroll_height);
+    lcd_solid_rectangle(bg_colour, 0, lcd_scroll_top, WIDTH, lcd_memory_scroll_height);
 }
 
 // Scroll the screen up one line (make space at the bottom)
-void lcd_scroll_up()
+void lcd_scroll_up(uint8_t bg_colour)
 {
     // Ensure the scroll height is non-zero to avoid division by zero
     if (lcd_memory_scroll_height == 0)
@@ -373,11 +369,11 @@ void lcd_scroll_up()
     lcd_enable_interrupts();
 
     // Clear the new line at the bottom
-    lcd_solid_rectangle(background, 0, HEIGHT - GLYPH_HEIGHT, WIDTH, GLYPH_HEIGHT);
+    lcd_solid_rectangle(bg_colour, 0, HEIGHT - GLYPH_HEIGHT, WIDTH, GLYPH_HEIGHT);
 }
 
 // Scroll the screen down one line (making space at the top)
-void lcd_scroll_down()
+void lcd_scroll_down(uint8_t bg_colour)
 {
     // Ensure lcd_memory_scroll_height is non-zero to avoid division by zero
     if (lcd_memory_scroll_height == 0)
@@ -394,7 +390,7 @@ void lcd_scroll_down()
     lcd_enable_interrupts();
 
     // Clear the new line at the top
-    lcd_solid_rectangle(background, 0, lcd_scroll_top, WIDTH, GLYPH_HEIGHT);
+    lcd_solid_rectangle(bg_colour, 0, lcd_scroll_top, WIDTH, GLYPH_HEIGHT);
 }
 
 //
@@ -402,15 +398,15 @@ void lcd_scroll_down()
 //
 
 // Clear the entire screen
-void lcd_clear_screen()
+void lcd_clear_screen(uint8_t bg_colour)
 {
     lcd_scroll_reset(); // Reset the scrolling area to the top
-    lcd_solid_rectangle(background, 0, 0, WIDTH, FRAME_HEIGHT);
+    lcd_solid_rectangle(bg_colour, 0, 0, WIDTH, FRAME_HEIGHT);
 }
 
-void lcd_erase_line(uint8_t row, uint8_t col_start, uint8_t col_end)
+void lcd_erase_line(uint8_t row, uint8_t col_start, uint8_t col_end, uint8_t bg_colour)
 {
-    lcd_solid_rectangle(background, col_start * GLYPH_WIDTH, row * GLYPH_HEIGHT, (col_end - col_start + 1) * GLYPH_WIDTH, GLYPH_HEIGHT);
+    lcd_solid_rectangle(bg_colour, col_start * GLYPH_WIDTH, row * GLYPH_HEIGHT, (col_end - col_start + 1) * GLYPH_WIDTH, GLYPH_HEIGHT);
 }
 
 // Helper function to decode a character and determine colours for rendering
@@ -437,6 +433,37 @@ void lcd_putc(uint8_t column, uint8_t row, uint8_t c)
     for (uint8_t i = 0; i < GLYPH_HEIGHT; i++, glyph++)
     {
         // Fill the row with the glyph data
+        *(buffer++) = (*glyph & 0x80) ? fg : bg;
+        *(buffer++) = (*glyph & 0x40) ? fg : bg;
+        *(buffer++) = (*glyph & 0x20) ? fg : bg;
+        *(buffer++) = (*glyph & 0x10) ? fg : bg;
+        *(buffer++) = (*glyph & 0x08) ? fg : bg;
+        *(buffer++) = (*glyph & 0x04) ? fg : bg;
+        *(buffer++) = (*glyph & 0x02) ? fg : bg;
+        *(buffer++) = (*glyph & 0x01) ? fg : bg;
+    }
+
+    lcd_blit(char_buffer, column * GLYPH_WIDTH, row * GLYPH_HEIGHT, GLYPH_WIDTH, GLYPH_HEIGHT);
+}
+
+// Draw a character with per-character attributes (packed uint16_t from TXT_PACK).
+// Extracts fg/bg palette indices and character from the packed value.
+void lcd_putc_attr(uint8_t column, uint8_t row, uint16_t packed)
+{
+    uint8_t fg_idx = (packed >> 12) & 0xF;
+    uint8_t bg_idx = (packed >> 8) & 0xF;
+    uint8_t c = packed & 0xFF;
+    bool reverse = (c & 0x80) != 0;
+    uint8_t char_code = c & 0x7F;
+
+    uint8_t fg = reverse ? bg_idx : fg_idx;
+    uint8_t bg = reverse ? fg_idx : bg_idx;
+
+    const uint8_t *glyph = &font->glyphs[char_code * GLYPH_HEIGHT];
+    uint8_t *buffer = char_buffer;
+
+    for (uint8_t i = 0; i < GLYPH_HEIGHT; i++, glyph++)
+    {
         *(buffer++) = (*glyph & 0x80) ? fg : bg;
         *(buffer++) = (*glyph & 0x40) ? fg : bg;
         *(buffer++) = (*glyph & 0x20) ? fg : bg;
@@ -501,7 +528,7 @@ static uint8_t cursor_column = 0;          // cursor x position for drawing
 static uint8_t cursor_row = 0;             // cursor y position for drawing
 static bool cursor_enabled = true;         // cursor visibility state
 static LcdCursorStyle cursor_style = LCD_CURSOR_UNDERLINE;  // cursor style
-static uint8_t cursor_char = ' ';          // character under cursor (for block style)
+static uint16_t cursor_char = 0x4020;      // packed entry under cursor (default: fg=4, bg=0, space)
 
 // Enable or disable the cursor
 void lcd_enable_cursor(bool cursor_on)
@@ -527,10 +554,10 @@ LcdCursorStyle lcd_get_cursor_style(void)
     return cursor_style;
 }
 
-// Set the character under the cursor (used for block cursor style)
-void lcd_set_cursor_char(uint8_t c)
+// Set the packed text entry under the cursor (used for cursor rendering)
+void lcd_set_cursor_char(uint16_t packed)
 {
-    cursor_char = c;
+    cursor_char = packed;
 }
 
 // Move the cursor to the specified position
@@ -554,15 +581,20 @@ void lcd_draw_cursor()
     if (!cursor_enabled)
         return;
 
+    uint8_t fg_idx = (cursor_char >> 12) & 0xF;
+    uint8_t bg_idx = (cursor_char >> 8) & 0xF;
+
     if (cursor_style == LCD_CURSOR_BLOCK)
     {
-        // Block cursor: draw character in reverse video
-        lcd_putc(cursor_column, cursor_row, cursor_char | 0x80);
+        // Block cursor: draw character in reverse video using per-character colors
+        uint8_t c = cursor_char & 0xFF;
+        lcd_putc_attr(cursor_column, cursor_row,
+                      (uint16_t)(((uint16_t)bg_idx << 12) | ((uint16_t)fg_idx << 8) | (c & 0x7F)));
     }
     else
     {
-        // Underline cursor: draw a line at the bottom of the character cell
-        lcd_solid_rectangle(foreground, cursor_column * GLYPH_WIDTH, ((cursor_row + 1) * GLYPH_HEIGHT) - 1, GLYPH_WIDTH, 1);
+        // Underline cursor: draw a line using the character's foreground color
+        lcd_solid_rectangle(fg_idx, cursor_column * GLYPH_WIDTH, ((cursor_row + 1) * GLYPH_HEIGHT) - 1, GLYPH_WIDTH, 1);
     }
 }
 
@@ -574,13 +606,14 @@ void lcd_erase_cursor()
 
     if (cursor_style == LCD_CURSOR_BLOCK)
     {
-        // Block cursor: redraw character in normal video
-        lcd_putc(cursor_column, cursor_row, cursor_char);
+        // Block cursor: redraw character in normal video with per-character colors
+        lcd_putc_attr(cursor_column, cursor_row, cursor_char);
     }
     else
     {
-        // Underline cursor: erase the line at the bottom of the character cell
-        lcd_solid_rectangle(background, cursor_column * GLYPH_WIDTH, ((cursor_row + 1) * GLYPH_HEIGHT) - 1, GLYPH_WIDTH, 1);
+        // Underline cursor: erase the line using the character's background color
+        uint8_t bg_idx = (cursor_char >> 8) & 0xF;
+        lcd_solid_rectangle(bg_idx, cursor_column * GLYPH_WIDTH, ((cursor_row + 1) * GLYPH_HEIGHT) - 1, GLYPH_WIDTH, 1);
     }
 }
 
@@ -652,23 +685,8 @@ void lcd_init()
         return; // already initialized
     }
 
-    // Load the default turtle palette (slots 0-127)
-    memcpy(palette, default_palette, sizeof(default_palette));
-
-    // Set default syntax highlighting palette (slots 240-253)
-    // These can be overridden by the user with setpalette or loading a theme file
-    palette[240] = RGB(0xE6, 0xE6, 0xEB);  // Default text
-    palette[241] = RGB(0x50, 0xC8, 0x50);  // Comments
-    palette[242] = RGB(0xE6, 0x64, 0xFF);  // Keywords
-    palette[243] = RGB(0xFF, 0xF0, 0x64);  // Functions
-    palette[244] = RGB(0x50, 0xD2, 0xFF);  // Variables
-    palette[245] = RGB(0xFF, 0x96, 0x50);  // Strings
-    palette[246] = RGB(0x82, 0xF0, 0x82);  // Numbers
-    palette[247] = RGB(0xFF, 0xD2, 0x50);  // Commands
-    palette[250] = RGB(0xFF, 0xDC, 0x14);  // Bracket depth 1
-    palette[251] = RGB(0xFF, 0x50, 0xDC);  // Bracket depth 2
-    palette[252] = RGB(0x14, 0xB4, 0xFF);  // Bracket depth 3
-    palette[253] = RGB(0x18, 0x18, 0x1E);  // Editor background
+    // Load the full default palette from static data
+    memcpy(palette, palette_16bit, sizeof(palette));
 
     // initialise GPIO
     gpio_init(LCD_SCL);
@@ -760,7 +778,7 @@ void lcd_init()
     busy_wait_us(10000); // required to wait at least 5ms
 
     // Clear the screen
-    lcd_clear_screen();
+    lcd_clear_screen(background);
 
     // Now that the display is initialized, display RAM garbage is cleared,
     // turn on the display

@@ -26,12 +26,23 @@
 #define SCREEN_SPLIT_TXT_ROW (SCREEN_HEIGHT - SCREEN_SPLIT_TXT_HEIGHT) / GLYPH_HEIGHT // Start row of text rows in split mode
 #define SCREEN_SPLIT_TXT_ROWS (SCREEN_SPLIT_TXT_HEIGHT / GLYPH_HEIGHT)                // Number of text rows in split mode
 
-// Text definitions
-#define TXT_DEFAULT_FOREGROUND (254) // Default foreground color (light blue)
-#define TXT_DEFAULT_BACKGROUND (255) // Default background color (blue)
+// Text palette defaults (indices into slots 0-15)
+#define TXT_DEFAULT_FOREGROUND (4) // Default foreground: White (palette slot 4)
+#define TXT_DEFAULT_BACKGROUND (0) // Default background: Black (palette slot 0)
+
+// Text buffer packing: each uint16_t entry packs fg, bg, and character
+//   Bits 15-12: Foreground index (0-15)
+//   Bits 11-8:  Background index (0-15)
+//   Bit 7:      Reverse video flag
+//   Bits 6-0:   Character code (ASCII 0-127)
+#define TXT_PACK(fg, bg, c)  ((uint16_t)(((fg) & 0xF) << 12 | ((bg) & 0xF) << 8 | ((c) & 0xFF)))
+#define TXT_CHAR(entry)      ((uint8_t)((entry) & 0xFF))
+#define TXT_FG(entry)        ((uint8_t)(((entry) >> 12) & 0xF))
+#define TXT_BG(entry)        ((uint8_t)(((entry) >> 8) & 0xF))
+#define TXT_DEFAULT_SPACE    TXT_PACK(TXT_DEFAULT_FOREGROUND, TXT_DEFAULT_BACKGROUND, 0x20)
 
 // Text definitions
-#define GFX_DEFAULT_BACKGROUND (255) // Default background color (blue)
+#define GFX_DEFAULT_BACKGROUND (255) // Default background uses palette slot 255 (PALETTE_BG)
 
 // Screen boundary modes for graphics
 typedef enum {
@@ -111,7 +122,7 @@ int screen_gfx_save(const char *filename);
 int screen_gfx_load(const char *filename);
 
 // Text functions
-uint8_t *screen_txt_frame(void);
+uint16_t *screen_txt_frame(void);
 void screen_txt_clear(void);
 bool screen_txt_putc(uint8_t c);
 bool screen_txt_puts(const char *str);
@@ -122,6 +133,10 @@ void screen_txt_draw_cursor(void);
 void screen_txt_erase_cursor(void);
 void screen_txt_mark_all_dirty(void);
 void screen_txt_update(void);
+void screen_txt_set_foreground(uint8_t index);
+uint8_t screen_txt_get_foreground(void);
+void screen_txt_set_background(uint8_t index);
+uint8_t screen_txt_get_background(void);
 
 // Screen initialization
 void screen_init(void);

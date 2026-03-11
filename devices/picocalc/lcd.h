@@ -75,8 +75,17 @@
 #define PALETTE_FG (254)              // foreground colour palette slot
 #define PALETTE_BG (255)              // background colour palette slot
 
+// Text palette slot constants
+#define TXT_BLACK (0)                 // text palette: black
+#define TXT_WHITE (4)                 // text palette: white
+#define TXT_ERROR (5)                 // text palette: error (red)
+
 // Handy macros
-#define RGB(r, g, b) ((uint16_t)(((r) >> 3) << 11 | ((g) >> 2) << 5 | ((b) >> 3)))
+// RGB565 conversion with rounding: add half-LSB bias before truncating,
+// clamped to 255 to prevent overflow.
+#define RGB_ROUND5(x) (((x) > 251 ? 255 : (x) + 4) >> 3)
+#define RGB_ROUND6(x) (((x) > 253 ? 255 : (x) + 2) >> 2)
+#define RGB(r, g, b) ((uint16_t)(RGB_ROUND5(r) << 11 | RGB_ROUND6(g) << 5 | RGB_ROUND5(b)))
 #define UPPER8(x) ((x) >> 8)   // upper byte of a 16-bit value
 #define LOWER8(x) ((x) & 0xFF) // lower byte of a 16-bit value
 
@@ -108,12 +117,15 @@ void lcd_write16_buf(const uint16_t *buffer, size_t len);
 void lcd_blit(const uint8_t *pixels, uint16_t x, uint16_t y, uint16_t width, uint16_t height);
 void lcd_solid_rectangle(uint8_t colour, uint16_t x, uint16_t y, uint16_t width, uint16_t height);
 
+// Text rendering with per-character attributes (packed uint16_t from TXT_PACK)
+void lcd_putc_attr(uint8_t column, uint8_t row, uint16_t packed);
+
 // Scrolling functions
 void lcd_define_scrolling(uint16_t top_fixed_area, uint16_t bottom_fixed_area);
 void lcd_scroll_reset();
-void lcd_scroll_clear();
-void lcd_scroll_up(void);
-void lcd_scroll_down(void);
+void lcd_scroll_clear(uint8_t bg_colour);
+void lcd_scroll_up(uint8_t bg_colour);
+void lcd_scroll_down(uint8_t bg_colour);
 
 // Cursor style
 typedef enum {
@@ -127,13 +139,13 @@ void lcd_putstr(uint8_t column, uint8_t row, const char *str);
 void lcd_move_cursor(uint8_t x, uint8_t y);
 void lcd_set_cursor_style(LcdCursorStyle style);
 LcdCursorStyle lcd_get_cursor_style(void);
-void lcd_set_cursor_char(uint8_t c);
+void lcd_set_cursor_char(uint16_t packed);
 void lcd_draw_cursor(void);
 void lcd_erase_cursor(void);
 void lcd_enable_cursor(bool cursor_on);
 bool lcd_cursor_enabled(void);
 
 // Initialization
-void lcd_clear_screen(void);
-void lcd_erase_line(uint8_t row, uint8_t col_start, uint8_t col_end);
+void lcd_clear_screen(uint8_t bg_colour);
+void lcd_erase_line(uint8_t row, uint8_t col_start, uint8_t col_end, uint8_t bg_colour);
 void lcd_init(void);

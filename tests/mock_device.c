@@ -489,11 +489,43 @@ static uint8_t mock_text_get_width(void)
     return mock_state.text.width;
 }
 
+static void mock_text_set_foreground(uint8_t index)
+{
+    mock_state.text.foreground = index;
+    MockCommand cmd = { .type = MOCK_CMD_SET_TEXT_FOREGROUND };
+    cmd.params.text_index = index;
+    mock_state.commands[mock_state.command_count % MOCK_COMMAND_HISTORY_SIZE] = cmd;
+    mock_state.command_count++;
+}
+
+static uint8_t mock_text_get_foreground(void)
+{
+    return mock_state.text.foreground;
+}
+
+static void mock_text_set_background(uint8_t index)
+{
+    mock_state.text.background = index;
+    MockCommand cmd = { .type = MOCK_CMD_SET_TEXT_BACKGROUND };
+    cmd.params.text_index = index;
+    mock_state.commands[mock_state.command_count % MOCK_COMMAND_HISTORY_SIZE] = cmd;
+    mock_state.command_count++;
+}
+
+static uint8_t mock_text_get_background(void)
+{
+    return mock_state.text.background;
+}
+
 // Text operations structure
 static const LogoConsoleText mock_text_ops = {
     .clear = mock_text_clear,
     .set_cursor = mock_text_set_cursor,
-    .get_cursor = mock_text_get_cursor
+    .get_cursor = mock_text_get_cursor,
+    .set_foreground = mock_text_set_foreground,
+    .get_foreground = mock_text_get_foreground,
+    .set_background = mock_text_set_background,
+    .get_background = mock_text_get_background,
 };
 
 //
@@ -782,7 +814,7 @@ void mock_device_reset(void)
     mock_state.turtle.y = 0.0f;
     mock_state.turtle.heading = 0.0f;  // North
     mock_state.turtle.pen_state = LOGO_PEN_DOWN;
-    mock_state.turtle.pen_colour = 1;  // Default color (not black)
+    mock_state.turtle.pen_colour = 254;  // Default color (white)
     mock_state.turtle.bg_colour = 0;   // Black background
     mock_state.turtle.visible = true;
     mock_state.turtle.boundary_mode = MOCK_BOUNDARY_WRAP;  // Default is wrap
@@ -792,6 +824,8 @@ void mock_device_reset(void)
     mock_state.text.cursor_row = 0;
     mock_state.text.width = 40;
     mock_state.text.cleared = false;
+    mock_state.text.foreground = 4;  // Default text foreground (white)
+    mock_state.text.background = 0;  // Default text background (black)
     
     // Initialize screen mode
     mock_state.screen_mode = MOCK_SCREEN_TEXT;
