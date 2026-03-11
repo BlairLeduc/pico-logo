@@ -27,8 +27,8 @@
 #define SCREEN_SPLIT_TXT_ROWS (SCREEN_SPLIT_TXT_HEIGHT / GLYPH_HEIGHT)                // Number of text rows in split mode
 
 // Text palette defaults (indices into slots 0-15)
-#define TXT_DEFAULT_FOREGROUND (4) // Default foreground: White (palette slot 4)
-#define TXT_DEFAULT_BACKGROUND (0) // Default background: Black (palette slot 0)
+#define TXT_DEFAULT_FOREGROUND (3) // Default foreground: White (palette slot 3)
+#define TXT_DEFAULT_BACKGROUND (4) // Default background: Editor bg (palette slot 4)
 
 // Text buffer packing: each uint16_t entry packs fg, bg, and character
 //   Bits 15-12: Foreground index (0-15)

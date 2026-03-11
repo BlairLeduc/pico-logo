@@ -77,7 +77,8 @@
 
 // Text palette slot constants
 #define TXT_BLACK (0)                 // text palette: black
-#define TXT_WHITE (4)                 // text palette: white
+#define TXT_WHITE (3)                 // text palette: white
+#define TXT_EDITOR_BG (4)            // text palette: editor background
 #define TXT_ERROR (5)                 // text palette: error (red)
 
 // Handy macros
