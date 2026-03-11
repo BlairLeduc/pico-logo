@@ -1072,8 +1072,8 @@ void test_restorepalette_resets_palette(void)
     r = run_string("palette 50");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     list = r.value.as.node;
-    // Slot 50 default is from palette_24bit[50] = 0xA3E635 → r=163, g=230, b=53
-    TEST_ASSERT_EQUAL_STRING("163", mem_word_ptr(mem_car(list)));
+    // Slot 50 default is from palette_24bit[50] = 0x4D7C0F → r=77, g=124, b=15
+    TEST_ASSERT_EQUAL_STRING("77", mem_word_ptr(mem_car(list)));
 }
 
 void test_setpalette_clamps_values(void)

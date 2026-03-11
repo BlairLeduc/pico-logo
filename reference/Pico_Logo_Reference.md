@@ -133,7 +133,7 @@ This is an expression, but it is not a Logo instruction.
 
 Everything that can be done in Logo can be done using formal Logo. But we have allowed some other idioms, either to make the language feel more natural or to eliminate large amounts of typing.
 
-Here we list some important relaxations of Logo. Others are mentioned in the body of the manual. See also [Parsing](#parsing). 
+Here we list some important relaxations of Logo. Others are mentioned in the body of the manual. See also [Parsing](#appendix-b-parsing). 
 
 **Numbers:** In formal Logo, all words used as direct inputs, including numbers, must be quoted. In relaxed Logo, numbers are self-quoting: the quote marks are unnecessary. For example, 
 
@@ -935,30 +935,8 @@ setpalette _colournumber_ _list_
 
 `setpalette` sets the actual colour corresponding to a given _colournumber_ and _colournumber_ must be an integer greater than or equal to 0. The second input is a list of three nonnegative numbers less than 256 specifying the saturation of red, green, and blue in the desired colour.
 
-The first 16 colours are the default palette for the text screen.
+See [Colours](#appendix-e-colour-palette-for-pico-logo) for the default palette.
 
-The next 160 colour numbers are the default palette for Pico Logo, and changing these colour numbers should be avoided. 
-
-Colour numbers 176 through 247 are unallocated and can be used for your own purposes. You can change these colour numbers to create your own palette.
-
-Colour numbers 248 and 254 are the primary and secondary colour numbers. Colour number 255 is the background colour number. Changing these colour numbers should be avoided.
-
-The following colour numbers are used by the Logo Editor for syntax colouring. You can change these to customise the editor's appearance:
-
-| Colour Number | Purpose |
-|---|---|
-| 0 | Editor background |
-| 4 | Default text |
-| 6 | Strings (`"word`) |
-| 7 | Commands |
-| 8 | Procedure (word after `to`) |
-| 9 | Numbers |
-| 10 | Comments |
-| 11 | Variables (`:name`) |
-| 12 | Keywords (`to`, `end`) |
-| 13 | Bracket depth 1 |
-| 14 | Bracket depth 2 |
-| 15 | Bracket depth 3 |
 
 
 ## palette
@@ -4070,8 +4048,38 @@ end
 ===
 # Appendix E: Colour Palette for Pico Logo
 
-The following is the colour palette for Pico Logo. The palette contains 256 colours with the first 128 colours (0-127) being the standard palette and the next 128 colours can be customized by the user. The standard palette includes a range of colors from black to white, as well as various shades of red, green, blue, cyan, magenta, and yellow.
+This is the colour palette for Pico Logo. The palette contains 256 colour numbers. The standard palette includes a range of colours across hues and includes greyscale colours.
 
-The background colour is palette 255, and the text foreground colour is palette 254.
+The first 16 colour numbers are the used by the text screen. Each character on the text screen has a foreground colour and a background colour, each of which is a colour number. The colour used for the foreground and background can be changed using [`settextcolor`](#textcolor-tc). The default foreground colour number is 3 (white) and the default background colour number is 4 (dark background).
+
+These colour numbers are assigned to the following purposes. You can change the colour stored in these colour numbers to customise the the text screen and editor's appearance:
+
+| Colour Number | Purpose |
+|---|---|
+| 0 | Text foreground (0%) |
+| 1 | Text foreground (33%) |
+| 2 | Text foreground (66%) |
+| 3 | Text foreground (100%) |
+| 4 | Text background |
+| 5 | Error messages|
+| 6 | Strings (`"word`) |
+| 7 | Commands |
+| 8 | Procedure name (word after `to`) |
+| 9 | Numbers |
+| 10 | Comments |
+| 11 | Variables (`:name`) |
+| 12 | Keywords (`to`, `end`) |
+| 13 | Bracket depth 1 |
+| 14 | Bracket depth 2 |
+| 15 | Bracket depth 3 |
+
+The following 160 colour numbers are the default palette for Pico Logo, and changing these colour numbers should be avoided.
+
+Colour numbers 176 through 247 are unallocated and can be used for your own purposes. You can change the colour stored in these colour numbers to create your own palette.
+
+Colour numbers 248 through 253 hold the primary and secondary colours. Changing this range of colour numbers should be avoided.
+
+Colour number 254 is used as the default pen colour. Colour number 255 contains the current background colour used on the graphics screen and is set using [`setbg`](#setbg). 
+
 
 ![Colour Palette for Pico Logo](./Colours.svg)

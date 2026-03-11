@@ -36,7 +36,7 @@
 #define TAB_WIDTH             2
 
 // Syntax highlighting palette slots — use the text palette (slots 0-15)
-#define PALETTE_SYNTAX_DEFAULT      4   // White
+#define PALETTE_SYNTAX_DEFAULT      3   // White
 #define PALETTE_SYNTAX_COMMENT     10   // Comments (green)
 #define PALETTE_SYNTAX_KEYWORD     12   // Keywords (purple)
 #define PALETTE_SYNTAX_FUNCTION     8   // Procedures (yellow-green)
@@ -47,7 +47,7 @@
 #define PALETTE_SYNTAX_BRACKET_1   13   // Bracket depth 1 (pink)
 #define PALETTE_SYNTAX_BRACKET_2   14   // Bracket depth 2 (gold)
 #define PALETTE_SYNTAX_BRACKET_3   15   // Bracket depth 3 (blue)
-#define PALETTE_SYNTAX_BG           0   // Black
+#define PALETTE_SYNTAX_BG           4   // Editor background
 
 // Map SyntaxCategory enum values to palette slots
 static const uint8_t category_to_palette[] = {
