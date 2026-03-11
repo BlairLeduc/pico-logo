@@ -481,6 +481,11 @@ static Result prim_setbg(Evaluator *eval, int argc, Value *args)
     REQUIRE_ARGC(1);
     REQUIRE_NUMBER(args[0], colour);
 
+    if (colour < 0 || colour > 254)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
+
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_bg_colour)
     {
@@ -795,13 +800,13 @@ static Result prim_palette(Evaluator *eval, int argc, Value *args)
         core_palette[slot].r, core_palette[slot].g, core_palette[slot].b));
 }
 
-// restorepalette - Restore default palette (slots 0-127)
+// restorepalette - Restore default palette (slots 0-254)
 static Result prim_restorepalette(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc); UNUSED(args);
 
-    // Restore core palette slots 0-127 from defaults
-    for (int i = 0; i < 128; i++)
+    // Restore core palette slots 0-254 from defaults (slot 255 is user BG)
+    for (int i = 0; i < 255; i++)
     {
         uint32_t rgb = palette_24bit[i];
         core_palette[i].r = (rgb >> 16) & 0xFF;

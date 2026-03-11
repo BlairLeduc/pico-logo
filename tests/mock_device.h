@@ -76,6 +76,8 @@ extern "C"
         MOCK_CMD_CLEAR_TEXT,
         MOCK_CMD_SET_CURSOR,
         MOCK_CMD_SET_WIDTH,
+        MOCK_CMD_SET_TEXT_FOREGROUND,
+        MOCK_CMD_SET_TEXT_BACKGROUND,
         // Screen modes
         MOCK_CMD_FULLSCREEN,
         MOCK_CMD_SPLITSCREEN,
@@ -100,6 +102,7 @@ extern "C"
             uint16_t colour;                 // SET_PEN_COLOUR, SET_BG_COLOUR
             struct { uint8_t col, row; } cursor;  // SET_CURSOR
             uint8_t width;                   // SET_WIDTH
+            uint8_t text_index;              // SET_TEXT_FOREGROUND, SET_TEXT_BACKGROUND
         } params;
     } MockCommand;
 
@@ -161,6 +164,8 @@ extern "C"
             uint8_t cursor_row;              // Current cursor row (0-based)
             uint8_t width;                   // Screen width (40 or 64)
             bool cleared;                    // Was screen cleared?
+            uint8_t foreground;              // Text foreground color index (0-15)
+            uint8_t background;              // Text background color index (0-15)
         } text;
 
         // Screen mode

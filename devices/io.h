@@ -265,6 +265,9 @@ extern "C"
     // Write text followed by newline
     void logo_io_write_line(LogoIO *io, const char *text);
 
+    // Write error text followed by newline (uses error_output if available)
+    void logo_io_write_error_line(LogoIO *io, const char *text);
+
     // Flush output
     void logo_io_flush(LogoIO *io);
 

@@ -22,7 +22,7 @@
 // The palette uses 4-bit hue (0-15) and 4-bit luminance (0-15)
 // Default 128-color palette uses only odd luminance values (bit 0 = 1)
 // 16 total hues: hue 0 = greyscale; hues 1-15 are chromatic at degrees 57,39,27,359,311,260,238,223,212,201,179,142,81,68,48
-#define SCREENSAVER_NUM_HUES    (16)             // 16 hues in the palette (4-bit)
+#define SCREENSAVER_NUM_HUES    (20)             // 20 hues in the Tailwind palette
 #define SCREENSAVER_NUM_SHADES  (8)              // 8 shades per hue in default palette
 #define SCREENSAVER_MAX_SHADE   (8)              // Use shades 0-7 for 50% brightness (4-bit luminance)
 #define SCREENSAVER_SHADE_STEP  (3)              // Increment shade by 3 each cycle (0→3→6→1→4→7→2→5→0)

@@ -167,7 +167,7 @@ static Result repl_evaluate_line(ReplState *state, const char *input)
                 // Top-level: reset everything
                 proc_reset_execution_state();
             }
-            logo_io_write_line(state->io, error_format(r));
+            logo_io_write_error_line(state->io, error_format(r));
             return result_none();  // Error handled, continue REPL
         }
         else if (r.status == RESULT_THROW)
@@ -191,7 +191,7 @@ static Result repl_evaluate_line(ReplState *state, const char *input)
                 }
                 char msg[128];
                 snprintf(msg, sizeof(msg), "Can't find a catch for %s", r.throw_tag);
-                logo_io_write_line(state->io, msg);
+                logo_io_write_error_line(state->io, msg);
                 return result_none();  // Error handled, continue REPL
             }
         }
@@ -218,7 +218,7 @@ static Result repl_evaluate_line(ReplState *state, const char *input)
             char msg[128];
             snprintf(msg, sizeof(msg), "I don't know what to do with %s", 
                      value_to_string(r.value));
-            logo_io_write_line(state->io, msg);
+            logo_io_write_error_line(state->io, msg);
             return result_none();  // Error handled, continue REPL
         }
         // RESULT_NONE, RESULT_STOP, RESULT_OUTPUT - continue evaluation
@@ -263,7 +263,7 @@ Result repl_run(ReplState *state)
                 proc_reset_execution_state();
             }
             // During pause: don't reset - preserve caller's frames
-            logo_io_write_line(state->io, "Stopped!");
+            logo_io_write_error_line(state->io, "Stopped!");
             continue;
         }
         
@@ -297,7 +297,7 @@ Result repl_run(ReplState *state)
             {
                 // Can't redefine a primitive
                 Result r = result_error_arg(ERR_IS_PRIMITIVE, proc_name, NULL);
-                logo_io_write_line(state->io, error_format(r));
+                logo_io_write_error_line(state->io, error_format(r));
                 continue;
             }
             
@@ -315,7 +315,7 @@ Result repl_run(ReplState *state)
             }
             else
             {
-                logo_io_write_line(state->io, "Procedure too long");
+                logo_io_write_error_line(state->io, "Procedure too long");
                 state->in_procedure_def = false;
                 state->proc_len = 0;
             }
@@ -340,7 +340,7 @@ Result repl_run(ReplState *state)
                 Result r = proc_define_from_text(state->proc_buffer);
                 if (r.status == RESULT_ERROR)
                 {
-                    logo_io_write_line(state->io, error_format(r));
+                    logo_io_write_error_line(state->io, error_format(r));
                 }
                 else if (r.status == RESULT_OK)
                 {
@@ -364,7 +364,7 @@ Result repl_run(ReplState *state)
                 }
                 else
                 {
-                    logo_io_write_line(state->io, "Procedure too long");
+                    logo_io_write_error_line(state->io, "Procedure too long");
                     state->in_procedure_def = false;
                     state->proc_len = 0;
                 }
@@ -401,7 +401,7 @@ Result repl_run(ReplState *state)
             }
             else
             {
-                logo_io_write_line(state->io, "Expression too long");
+                logo_io_write_error_line(state->io, "Expression too long");
                 state->bracket_depth = 0;
                 state->expr_len = 0;
             }
@@ -427,7 +427,7 @@ Result repl_run(ReplState *state)
                 }
                 else
                 {
-                    logo_io_write_line(state->io, "Expression too long");
+                    logo_io_write_error_line(state->io, "Expression too long");
                     state->bracket_depth = 0;
                     state->expr_len = 0;
                 }

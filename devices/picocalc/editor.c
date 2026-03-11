@@ -35,20 +35,19 @@
 // Tab width for indentation (2 spaces per tab stop)
 #define TAB_WIDTH             2
 
-// Syntax highlighting palette slots (default theme)
-// Slots 240-247: semantic colors, 250-252: bracket depth, 253: editor bg
-#define PALETTE_SYNTAX_DEFAULT    240
-#define PALETTE_SYNTAX_COMMENT    241
-#define PALETTE_SYNTAX_KEYWORD    242
-#define PALETTE_SYNTAX_FUNCTION   243
-#define PALETTE_SYNTAX_VARIABLE   244
-#define PALETTE_SYNTAX_STRING     245
-#define PALETTE_SYNTAX_NUMBER     246
-#define PALETTE_SYNTAX_COMMAND    247
-#define PALETTE_SYNTAX_BRACKET_1  250
-#define PALETTE_SYNTAX_BRACKET_2  251
-#define PALETTE_SYNTAX_BRACKET_3  252
-#define PALETTE_SYNTAX_BG         253
+// Syntax highlighting palette slots — use the text palette (slots 0-15)
+#define PALETTE_SYNTAX_DEFAULT      4   // White
+#define PALETTE_SYNTAX_COMMENT     10   // Comments (green)
+#define PALETTE_SYNTAX_KEYWORD     12   // Keywords (purple)
+#define PALETTE_SYNTAX_FUNCTION     8   // Procedures (yellow-green)
+#define PALETTE_SYNTAX_VARIABLE    11   // Variables (cyan)
+#define PALETTE_SYNTAX_STRING       6   // Strings (orange)
+#define PALETTE_SYNTAX_NUMBER       9   // Numbers (green)
+#define PALETTE_SYNTAX_COMMAND      7   // Commands (gold)
+#define PALETTE_SYNTAX_BRACKET_1   13   // Bracket depth 1 (pink)
+#define PALETTE_SYNTAX_BRACKET_2   14   // Bracket depth 2 (gold)
+#define PALETTE_SYNTAX_BRACKET_3   15   // Bracket depth 3 (blue)
+#define PALETTE_SYNTAX_BG           0   // Black
 
 // Map SyntaxCategory enum values to palette slots
 static const uint8_t category_to_palette[] = {
@@ -668,7 +667,7 @@ static void editor_position_cursor(void)
             cursor_char = ' ';  // Show space for newline
         }
     }
-    lcd_set_cursor_char(cursor_char);
+    lcd_set_cursor_char(TXT_PACK(PALETTE_SYNTAX_DEFAULT, PALETTE_SYNTAX_BG, cursor_char));
     
     screen_txt_set_cursor(screen_col, screen_row);
 }
@@ -1305,7 +1304,7 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
     input_active = true;
     
     // Clear screen and draw initial content
-    lcd_clear_screen();
+    lcd_clear_screen(PALETTE_SYNTAX_BG);
     editor_draw_header();
     editor_draw_footer();
     editor_draw_content();
@@ -1330,7 +1329,7 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
         // Check if screen saver was just dismissed - need full redraw
         if (screensaver_dismissed) {
             screensaver_dismissed = false;  // Clear the flag
-            lcd_clear_screen();
+            lcd_clear_screen(PALETTE_SYNTAX_BG);
             editor_draw_header();
             editor_draw_footer();
             editor_draw_content();
@@ -1572,7 +1571,7 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                     // Switch to text mode WITHOUT redrawing txt_buffer
                     // Then redraw the editor content directly to LCD
                     screen_set_mode_no_update(SCREEN_MODE_TXT);
-                    lcd_clear_screen();
+                    lcd_clear_screen(PALETTE_SYNTAX_BG);
                     editor_draw_header();
                     editor_draw_footer();
                     editor_draw_content();

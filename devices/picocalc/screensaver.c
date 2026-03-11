@@ -28,7 +28,7 @@ static uint64_t last_cycle_us = 0;
 // Palette cycling state
 static uint8_t shade_offset = 0;      // Current shade offset (0-7)
 static uint8_t shade_cycle_count = 0; // How many shade cycles completed (0-7)
-static uint8_t hue_offset = 0;        // Current hue offset (0-15)
+static uint8_t hue_offset = 0;        // Current hue offset (0-19)
 
 //
 // Initialize the screen saver
@@ -68,85 +68,67 @@ static void restore_palette(void)
 //
 // Cycle the palette colors
 //
-// For each of the 128 LCD palette slots:
-//   - Calculate new hue and shade with offsets
-//   - Look up the RGB565 value from palette_16bit[(hue << 4) | shade]
-//   - Shades are limited to 0-7 for 50% brightness
+// Tailwind palette: 20 hues × 8 shades at slots 16-175.
+// For each slot in the Tailwind range:
+//   - Calculate original hue and shade from slot position
+//   - Apply hue and shade offsets
+//   - Look up the cycled RGB565 value from palette_16bit
 //
-// Upper 126 slots (128-253) are copies of lower 128
-// Slots 254/255 are foreground/background derived from background_colour
+// Slots 0-15 (text palette) are left unchanged.
+// Slots 248-254 (primaries) are left unchanged.
+// Slots 254/255 are foreground/background derived from background_colour.
 //
+#define TAILWIND_BASE 16
+#define TAILWIND_SLOTS (SCREENSAVER_NUM_HUES * SCREENSAVER_NUM_SHADES)
+
 static void cycle_palette(void)
 {
-    // Update lower 128 palette slots with cycled colors
-    for (int i = 0; i < 128; i++)
+    // Update Tailwind palette slots (16-175) with cycled colors
+    for (int i = 0; i < TAILWIND_SLOTS; i++)
     {
-        // Original position: hue = i / 8, shade_index = i % 8
         int orig_hue = i / SCREENSAVER_NUM_SHADES;
-        int orig_shade_index = i % SCREENSAVER_NUM_SHADES;
+        int orig_shade = i % SCREENSAVER_NUM_SHADES;
 
-        // Calculate new hue and shade with offsets
         int new_hue = (orig_hue + hue_offset) % SCREENSAVER_NUM_HUES;
-        
-        // Apply shade offset within 0-7 range for 50% brightness
-        // Cycling by 3: 0→3→6→1→4→7→2→5→0 visits all 8 darker shades
-        int new_shade = (orig_shade_index + shade_offset) % SCREENSAVER_NUM_SHADES;
+        int new_shade = (orig_shade + shade_offset) % SCREENSAVER_NUM_SHADES;
 
-        // Look up RGB565 from palette_16bit using (hue << 4) | shade
-        uint16_t rgb565 = palette_16bit[(new_hue << 4) | new_shade];
-        
-        lcd_set_palette_value(i, rgb565);
-    }
-
-    // Copy lower 128 slots to upper slots (128-253)
-    for (int i = 128; i < 254; i++)
-    {
-        lcd_set_palette_value(i, lcd_get_palette_value(i - 128));
+        uint16_t rgb565 = palette_16bit[TAILWIND_BASE + new_hue * SCREENSAVER_NUM_SHADES + new_shade];
+        lcd_set_palette_value(TAILWIND_BASE + i, rgb565);
     }
 
     // Handle slots 254 (foreground) and 255 (background) using the same
     // logic as turtle_set_bg_colour() but with cycled values
-    
-    // Get the cycled background color from the transformed slot
     uint8_t bg_slot = background_colour;
-    if (bg_slot < 128)
+    if (bg_slot >= TAILWIND_BASE && bg_slot < TAILWIND_BASE + TAILWIND_SLOTS)
     {
-        // Background slot has already been transformed, just use it
+        // Background is in Tailwind range — already cycled in-place
         uint16_t bg_value = lcd_get_palette_value(bg_slot);
         lcd_set_palette_value(255, bg_value);
-        
-        // Foreground: use contrasting shade (same logic as turtle_set_bg_colour)
-        uint8_t fg_slot = bg_slot;
-        if ((bg_slot & 0x07) < 4)
+
+        // Foreground: contrasting shade within the same hue group
+        int shade = (bg_slot - TAILWIND_BASE) % SCREENSAVER_NUM_SHADES;
+        uint8_t fg_slot;
+        if (shade < 4)
         {
-            fg_slot = bg_slot | 0x07;  // Use brightest shade in hue
+            fg_slot = bg_slot | 0x07;  // Brightest shade in hue
         }
         else
         {
-            fg_slot = bg_slot & ~0x07; // Use darkest shade in hue
+            fg_slot = bg_slot & ~0x07; // Darkest shade in hue
         }
+        // Clamp fg_slot to Tailwind range
+        if (fg_slot < TAILWIND_BASE) fg_slot = TAILWIND_BASE;
+        if (fg_slot >= TAILWIND_BASE + TAILWIND_SLOTS) fg_slot = TAILWIND_BASE + TAILWIND_SLOTS - 1;
         uint16_t fg_value = lcd_get_palette_value(fg_slot);
         lcd_set_palette_value(254, fg_value);
     }
     else
     {
-        // Background slot is in upper range, use cycled copy
-        uint16_t bg_value = lcd_get_palette_value(bg_slot - 128);
+        // Background is outside Tailwind range (text palette or primaries) — keep as-is
+        uint16_t bg_value = lcd_get_palette_value(bg_slot);
         lcd_set_palette_value(255, bg_value);
-        
-        // Use a contrasting foreground
-        uint8_t mapped_slot = bg_slot - 128;
-        uint8_t fg_slot = mapped_slot;
-        if ((mapped_slot & 0x07) < 4)
-        {
-            fg_slot = mapped_slot | 0x07;
-        }
-        else
-        {
-            fg_slot = mapped_slot & ~0x07;
-        }
-        uint16_t fg_value = lcd_get_palette_value(fg_slot);
-        lcd_set_palette_value(254, fg_value);
+        // Use white for foreground contrast
+        lcd_set_palette_value(254, palette_16bit[248 + 6]); // White primary
     }
 }
 
