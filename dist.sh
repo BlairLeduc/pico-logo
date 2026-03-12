@@ -28,6 +28,11 @@ cat > dist/_header.tex <<'EOF'
 \renewcommand{\headrulewidth}{0.4pt}
 \usepackage{makeidx}
 \makeindex
+\usepackage[normalem]{ulem}
+\AtBeginDocument{%
+  \let\oldhref\href
+  \renewcommand{\href}[2]{\oldhref{#1}{\uline{#2}}}%
+}
 EOF
 sed -e '/^# Contents$/d' \
     -e 's/^{{TOC}}$/\\tableofcontents/' \
@@ -43,6 +48,9 @@ sed -e '/^# Contents$/d' \
     -V geometry:margin=1in \
     -V mainfont="Charter" \
     -V monofont="Iosevka" \
+    -V colorlinks=true \
+    -V urlcolor=blue \
+    -V linkcolor=blue \
     -H dist/_header.tex \
     --syntax-highlighting=tango
 rm -f dist/Colours.pdf dist/_header.tex
