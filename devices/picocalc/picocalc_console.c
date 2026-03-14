@@ -59,6 +59,11 @@ typedef enum {
 
 static BoundaryMode turtle_boundary_mode = BOUNDARY_MODE_WRAP;  // Default to wrap mode
 
+typedef struct PicoCalcConsoleContext
+{
+    LogoConsole *console;
+} PicoCalcConsoleContext;
+
 // Screen boundary constants (in turtle coordinates, centered at origin)
 #define TURTLE_MIN_X (-SCREEN_WIDTH / 2)
 #define TURTLE_MAX_X (SCREEN_WIDTH / 2 - 1)
@@ -126,8 +131,15 @@ static int input_read_chars(LogoStream *stream, char *buffer, int count)
 
 static int input_read_line(LogoStream *stream, char *buffer, size_t size)
 {
-    (void)stream;
-    return picocalc_read_line(buffer, size);
+    PicoCalcConsoleContext *ctx = (PicoCalcConsoleContext *)stream->context;
+    int initial_depth = 0;
+
+    if (ctx && ctx->console)
+    {
+        initial_depth = ctx->console->input_syntax_depth;
+    }
+
+    return picocalc_read_line(buffer, size, initial_depth);
 }
 
 static bool input_can_read(LogoStream *stream)
@@ -1172,18 +1184,23 @@ static const LogoConsoleTurtle picocalc_turtle_ops = {
 
 LogoConsole *logo_picocalc_console_create(void)
 {
+    PicoCalcConsoleContext *ctx = (PicoCalcConsoleContext *)malloc(sizeof(PicoCalcConsoleContext));
     LogoConsole *console = (LogoConsole *)malloc(sizeof(LogoConsole));
 
-    if (!console)
+    if (!ctx || !console)
     {
+        free(ctx);
+        free(console);
         return NULL;
     }
 
-    logo_console_init(console, &picocalc_input_ops, &picocalc_output_ops, NULL);
+    memset(ctx, 0, sizeof(*ctx));
+    logo_console_init(console, &picocalc_input_ops, &picocalc_output_ops, ctx);
+    ctx->console = console;
     logo_stream_init(&console->error_output,
                      LOGO_STREAM_CONSOLE_OUTPUT,
                      &picocalc_error_output_ops,
-                     NULL,
+                     ctx,
                      "error");
     console->screen = &picocalc_screen_ops;
     console->text = &picocalc_text_ops;

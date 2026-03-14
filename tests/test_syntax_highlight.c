@@ -38,6 +38,35 @@ static void assert_cat(const uint8_t *cat, int pos,
     TEST_ASSERT_EQUAL_UINT8_MESSAGE((uint8_t)expected, cat[pos], buf);
 }
 
+typedef struct SpanRecord
+{
+    char text[256];
+    SyntaxCategory category[64];
+    size_t length[64];
+    int count;
+} SpanRecord;
+
+static bool record_span(void *ctx, SyntaxCategory category,
+                        const char *text, size_t length)
+{
+    SpanRecord *record = (SpanRecord *)ctx;
+    size_t current_length;
+
+    if (!record || record->count >= 64)
+        return false;
+
+    current_length = strlen(record->text);
+    if (current_length + length >= sizeof(record->text))
+        return false;
+
+    memcpy(record->text + current_length, text, length);
+    record->text[current_length + length] = '\0';
+    record->category[record->count] = category;
+    record->length[record->count] = length;
+    record->count++;
+    return true;
+}
+
 // ---------------------------------------------------------------------------
 // Empty / whitespace
 // ---------------------------------------------------------------------------
@@ -57,6 +86,34 @@ void test_whitespace_only(void)
     int depth = syntax_highlight_line(line, len, cat, 0);
     assert_range(cat, 0, len, SYNTAX_DEFAULT, "whitespace");
     TEST_ASSERT_EQUAL_INT(0, depth);
+}
+
+void test_text_depth_carries_across_lines(void)
+{
+    const char *text = "repeat 2 [\nprint [hello\n]]\n";
+    TEST_ASSERT_EQUAL_INT(0, syntax_highlight_text_depth(text, 0));
+}
+
+void test_text_depth_ignores_comments_and_strings(void)
+{
+    const char *text = "print \"[hello\n; [comment]\nrepeat 2 [print \"ok]\n";
+    TEST_ASSERT_EQUAL_INT(1, syntax_highlight_text_depth(text, 0));
+}
+
+void test_text_depth_resets_on_to_line(void)
+{
+    const char *text = "repeat 2 [\nto demo\nprint [x\n]\n";
+    TEST_ASSERT_EQUAL_INT(0, syntax_highlight_text_depth(text, 0));
+}
+
+void test_text_span_emission_preserves_text(void)
+{
+    SpanRecord record = {0};
+    const char *text = "to demo :x\n  print :x\nend\n";
+
+    TEST_ASSERT_TRUE(syntax_highlight_text(text, 0, record_span, &record));
+    TEST_ASSERT_EQUAL_STRING(text, record.text);
+    TEST_ASSERT_TRUE(record.count > 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -735,6 +792,10 @@ int main(void)
     // Empty / whitespace
     RUN_TEST(test_empty_line);
     RUN_TEST(test_whitespace_only);
+    RUN_TEST(test_text_depth_carries_across_lines);
+    RUN_TEST(test_text_depth_ignores_comments_and_strings);
+    RUN_TEST(test_text_depth_resets_on_to_line);
+    RUN_TEST(test_text_span_emission_preserves_text);
 
     // TO / END
     RUN_TEST(test_to_simple);

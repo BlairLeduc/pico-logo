@@ -7,9 +7,54 @@
 #include "core/frame.h"
 #include "core/help.h"
 #include "core/error.h"
+#include "devices/io.h"
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+
+static char redirected_output_buffer[4096];
+static size_t redirected_output_length = 0;
+
+static void redirected_output_write(LogoStream *stream, const char *text)
+{
+    size_t length;
+
+    (void)stream;
+    if (!text)
+    {
+        return;
+    }
+
+    length = strlen(text);
+    if (redirected_output_length + length >= sizeof(redirected_output_buffer))
+    {
+        length = sizeof(redirected_output_buffer) - redirected_output_length - 1;
+    }
+
+    memcpy(redirected_output_buffer + redirected_output_length, text, length);
+    redirected_output_length += length;
+    redirected_output_buffer[redirected_output_length] = '\0';
+}
+
+static void redirected_output_flush(LogoStream *stream)
+{
+    (void)stream;
+}
+
+static const LogoStreamOps redirected_output_ops = {
+    .read_char = NULL,
+    .read_chars = NULL,
+    .read_line = NULL,
+    .can_read = NULL,
+    .write = redirected_output_write,
+    .flush = redirected_output_flush,
+    .get_read_pos = NULL,
+    .set_read_pos = NULL,
+    .get_write_pos = NULL,
+    .set_write_pos = NULL,
+    .get_length = NULL,
+    .close = NULL,
+};
 
 void setUp(void)
 {
@@ -928,6 +973,60 @@ void test_po_multiline_list_three_lines(void)
     TEST_ASSERT_EQUAL_STRING(expected, output_buffer);
 }
 
+void test_po_uses_syntax_highlighting_on_text_screen(void)
+{
+    const char *params[] = {};
+
+    test_scaffold_setUp_with_device();
+    define_proc("demo", params, 0, "repeat 2 [print \"hi]");
+    mock_device_clear_commands();
+    mock_device_clear_output();
+
+    run_string("po \"demo");
+
+    TEST_ASSERT_TRUE(strstr(mock_device_get_output(), "to demo") != NULL);
+
+    bool saw_keyword_colour = false;
+    bool saw_command_colour = false;
+    int command_count = mock_device_command_count();
+    for (int i = 0; i < command_count; i++)
+    {
+        const MockCommand *cmd = mock_device_get_command(i);
+        if (cmd->type != MOCK_CMD_SET_TEXT_FOREGROUND)
+            continue;
+
+        if (cmd->params.text_index == 12)
+            saw_keyword_colour = true;
+        if (cmd->params.text_index == 7)
+            saw_command_colour = true;
+    }
+
+    TEST_ASSERT_TRUE(saw_keyword_colour);
+    TEST_ASSERT_TRUE(saw_command_colour);
+}
+
+void test_po_redirected_output_stays_plain(void)
+{
+    const char *params[] = {};
+    LogoStream redirected_output;
+
+    test_scaffold_setUp_with_device();
+    define_proc("demo", params, 0, "print \"hi");
+    mock_device_clear_commands();
+    mock_device_clear_output();
+    redirected_output_buffer[0] = '\0';
+    redirected_output_length = 0;
+
+    logo_stream_init(&redirected_output, LOGO_STREAM_FILE, &redirected_output_ops,
+                     NULL, "redirected");
+    logo_io_set_writer(&mock_io, &redirected_output);
+    run_string("po \"demo");
+
+    TEST_ASSERT_EQUAL_STRING("", mock_device_get_output());
+    TEST_ASSERT_EQUAL(0, mock_device_command_count());
+    TEST_ASSERT_TRUE(strstr(redirected_output_buffer, "to demo") != NULL);
+}
+
 //==========================================================================
 // primitives operation tests
 //==========================================================================
@@ -1132,6 +1231,8 @@ int main(void)
     RUN_TEST(test_po_multiline_list);
     RUN_TEST(test_multiline_list_followed_by_more_code);
     RUN_TEST(test_po_multiline_list_three_lines);
+    RUN_TEST(test_po_uses_syntax_highlighting_on_text_screen);
+    RUN_TEST(test_po_redirected_output_stays_plain);
 
     // Help tests
     RUN_TEST(test_help_lookup_known_primitive);

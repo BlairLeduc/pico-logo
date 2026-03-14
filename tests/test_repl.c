@@ -172,6 +172,14 @@ void test_repl_count_bracket_balance_unbalanced(void)
     TEST_ASSERT_EQUAL(1, repl_count_bracket_balance("[a [b] c"));
 }
 
+void test_repl_next_bracket_depth_uses_syntax_rules(void)
+{
+    TEST_ASSERT_EQUAL(1, repl_next_bracket_depth(0, "repeat 2 ["));
+    TEST_ASSERT_EQUAL(0, repl_next_bracket_depth(1, "]"));
+    TEST_ASSERT_EQUAL(1, repl_next_bracket_depth(0, "print \"["));
+    TEST_ASSERT_EQUAL(0, repl_next_bracket_depth(0, "; [comment]"));
+}
+
 //==========================================================================
 // ReplState initialization tests
 //==========================================================================
@@ -495,6 +503,20 @@ void test_repl_run_continuation_in_pause(void)
     TEST_ASSERT_EQUAL(2, count);
 }
 
+void test_repl_run_continuation_ignores_brackets_in_comments(void)
+{
+    ReplState state;
+
+    set_mock_input("repeat 2 [\n; ]\nprint 1\n]\n");
+
+    repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
+    Result r = repl_run(&state);
+    repl_cleanup(&state);
+
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "~") != NULL);
+}
+
 void test_repl_throw_toplevel_from_pause_in_procedure(void)
 {
     ReplState state;
@@ -551,6 +573,7 @@ int main(void)
     RUN_TEST(test_repl_count_bracket_balance_nested);
     RUN_TEST(test_repl_count_bracket_balance_with_text);
     RUN_TEST(test_repl_count_bracket_balance_unbalanced);
+    RUN_TEST(test_repl_next_bracket_depth_uses_syntax_rules);
     
     // ReplState initialization tests
     RUN_TEST(test_repl_init_basic);
@@ -578,6 +601,7 @@ int main(void)
     // Bracket continuation tests
     RUN_TEST(test_repl_run_bracket_continuation);
     RUN_TEST(test_repl_run_continuation_in_pause);
+    RUN_TEST(test_repl_run_continuation_ignores_brackets_in_comments);
     
     // throw "toplevel from nested pause
     RUN_TEST(test_repl_throw_toplevel_from_pause_in_procedure);

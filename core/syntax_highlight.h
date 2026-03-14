@@ -15,6 +15,8 @@
 
 #pragma once
 
+#include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 // Syntax categories — each character in a line is tagged with one of these.
@@ -34,6 +36,9 @@ typedef enum {
     SYNTAX_CATEGORY_COUNT
 } SyntaxCategory;
 
+typedef bool (*SyntaxHighlightSpanFunc)(void *ctx, SyntaxCategory category,
+                                        const char *text, size_t length);
+
 // Highlight a single line of Logo source text.
 //
 // line:           pointer to the line text (not necessarily NUL-terminated)
@@ -46,3 +51,14 @@ typedef enum {
 // If the line starts with TO, initial_depth is forced to 0 internally.
 int syntax_highlight_line(const char *line, int length,
                           uint8_t *categories, int initial_depth);
+
+// Highlight a multi-line block of Logo text and emit contiguous spans.
+// Newline characters are emitted as SYNTAX_DEFAULT spans.
+// Returns false if the callback rejects any emitted span.
+bool syntax_highlight_text(const char *text, int initial_depth,
+                           SyntaxHighlightSpanFunc out, void *ctx);
+
+// Compute the bracket nesting depth after scanning a multi-line block of
+// Logo text. This uses the same rules as syntax_highlight_line, including
+// TO-line resets and ignoring brackets inside comments/quoted words.
+int syntax_highlight_text_depth(const char *text, int initial_depth);

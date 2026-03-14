@@ -13,6 +13,8 @@
 
 #include <stdbool.h>
 #include <ctype.h>
+#include <stdlib.h>
+#include <string.h>
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -421,6 +423,99 @@ int syntax_highlight_line(const char *line, int length,
         // Anything else — tag as default
         tag_one(categories, pos, SYNTAX_DEFAULT);
         pos++;
+    }
+
+    return depth;
+}
+
+bool syntax_highlight_text(const char *text, int initial_depth,
+                           SyntaxHighlightSpanFunc out, void *ctx)
+{
+    if (!text || !out)
+        return false;
+
+    int depth = initial_depth;
+    const char *cursor = text;
+
+    while (*cursor)
+    {
+        const char *line_end = cursor;
+        while (*line_end && *line_end != '\n')
+            line_end++;
+
+        int line_len = (int)(line_end - cursor);
+        if (line_len > 0)
+        {
+            uint8_t stack_categories[512];
+            uint8_t *categories = stack_categories;
+
+            if (line_len > (int)sizeof(stack_categories))
+            {
+                categories = (uint8_t *)malloc((size_t)line_len);
+                if (!categories)
+                    return false;
+            }
+
+            depth = syntax_highlight_line(cursor, line_len, categories, depth);
+
+            int span_start = 0;
+            while (span_start < line_len)
+            {
+                SyntaxCategory category = (SyntaxCategory)categories[span_start];
+                int span_end = span_start + 1;
+                while (span_end < line_len && categories[span_end] == (uint8_t)category)
+                    span_end++;
+
+                if (!out(ctx, category, cursor + span_start,
+                         (size_t)(span_end - span_start)))
+                {
+                    if (categories != stack_categories)
+                        free(categories);
+                    return false;
+                }
+
+                span_start = span_end;
+            }
+
+            if (categories != stack_categories)
+                free(categories);
+        }
+
+        if (*line_end == '\n')
+        {
+            if (!out(ctx, SYNTAX_DEFAULT, line_end, 1))
+                return false;
+            cursor = line_end + 1;
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    return true;
+}
+
+int syntax_highlight_text_depth(const char *text, int initial_depth)
+{
+    if (!text)
+        return initial_depth;
+
+    int depth = initial_depth;
+    const char *cursor = text;
+
+    while (*cursor)
+    {
+        const char *line_end = cursor;
+        while (*line_end && *line_end != '\n')
+            line_end++;
+
+        depth = syntax_highlight_line(cursor, (int)(line_end - cursor), NULL, depth);
+
+        if (*line_end == '\n')
+            cursor = line_end + 1;
+        else
+            break;
     }
 
     return depth;
