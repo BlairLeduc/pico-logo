@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "core/syntax_highlight.h"
 #include "keyboard.h"
 
 #include "screen.h"
@@ -16,6 +17,35 @@
 #include "devices/stream.h"
 
 static bool using_serial = false; // Flag to indicate if using serial input
+
+enum
+{
+    INPUT_SYNTAX_DEFAULT = 3,
+    INPUT_SYNTAX_COMMENT = 10,
+    INPUT_SYNTAX_KEYWORD = 12,
+    INPUT_SYNTAX_FUNCTION = 8,
+    INPUT_SYNTAX_VARIABLE = 11,
+    INPUT_SYNTAX_STRING = 6,
+    INPUT_SYNTAX_NUMBER = 9,
+    INPUT_SYNTAX_COMMAND = 7,
+    INPUT_SYNTAX_BRACKET_1 = 13,
+    INPUT_SYNTAX_BRACKET_2 = 14,
+    INPUT_SYNTAX_BRACKET_3 = 15,
+};
+
+static const uint8_t category_to_input_colour[SYNTAX_CATEGORY_COUNT] = {
+    [SYNTAX_DEFAULT] = INPUT_SYNTAX_DEFAULT,
+    [SYNTAX_COMMENT] = INPUT_SYNTAX_COMMENT,
+    [SYNTAX_KEYWORD] = INPUT_SYNTAX_KEYWORD,
+    [SYNTAX_FUNCTION] = INPUT_SYNTAX_FUNCTION,
+    [SYNTAX_VARIABLE] = INPUT_SYNTAX_VARIABLE,
+    [SYNTAX_STRING] = INPUT_SYNTAX_STRING,
+    [SYNTAX_NUMBER] = INPUT_SYNTAX_NUMBER,
+    [SYNTAX_COMMAND] = INPUT_SYNTAX_COMMAND,
+    [SYNTAX_BRACKET_1] = INPUT_SYNTAX_BRACKET_1,
+    [SYNTAX_BRACKET_2] = INPUT_SYNTAX_BRACKET_2,
+    [SYNTAX_BRACKET_3] = INPUT_SYNTAX_BRACKET_3,
+};
 
 static void picocalc_beep(void)
 {
@@ -55,7 +85,45 @@ static void calc_start_row(uint8_t start_col, uint8_t end_col, uint8_t end_row,
     }
 }
 
-int picocalc_read_line(char *buf, int size)
+static void redraw_input_line(char *buf, uint8_t length, uint8_t previous_length,
+                              uint8_t index, uint8_t start_col, uint8_t *start_row,
+                              uint8_t *end_col, uint8_t *end_row, int initial_depth)
+{
+    uint8_t categories[length > 0 ? length : 1];
+    uint8_t cursor_col = start_col;
+    uint8_t cursor_row = *start_row;
+
+    if (length > 0)
+    {
+        syntax_highlight_line(buf, length, categories, initial_depth);
+    }
+
+    screen_txt_set_cursor(start_col, *start_row);
+
+    for (uint8_t i = 0; i < length; i++)
+    {
+        screen_txt_set_foreground(category_to_input_colour[categories[i]]);
+        if (screen_txt_putc((uint8_t)buf[i]) && *start_row > 0)
+        {
+            (*start_row)--;
+        }
+    }
+
+    screen_txt_set_foreground(INPUT_SYNTAX_DEFAULT);
+    for (uint8_t i = length; i < previous_length; i++)
+    {
+        if (screen_txt_putc(' ') && *start_row > 0)
+        {
+            (*start_row)--;
+        }
+    }
+
+    screen_txt_get_cursor(end_col, end_row);
+    calc_cursor_pos(start_col, *start_row, index, &cursor_col, &cursor_row);
+    screen_txt_set_cursor(cursor_col, cursor_row);
+}
+
+int picocalc_read_line(char *buf, int size, int initial_depth)
 {
     char key;
     uint8_t start_row = 0, start_col = 0;
@@ -100,27 +168,13 @@ int picocalc_read_line(char *buf, int size)
                 // Reset history search when editing
                 in_history_search = false;
                 history_index = history_get_start_index();
-                
+
+                uint8_t previous_length = length;
                 index--;
                 length--;
-
-                if (index == length)
-                {
-                    buf[index] = 0; // Null-terminate the string
-                    putchar('\b');  // Move cursor back
-                    screen_txt_get_cursor(&end_col, &end_row);
-                }
-                else
-                {
-                    uint8_t col, row;
-                    putchar('\b'); // Move cursor back
-                    screen_txt_get_cursor(&col, &row);
-                    memmove(buf + index, buf + index + 1, length - index + 1);
-                    screen_txt_puts(buf + index); // Redisplay the rest of the line
-                    screen_txt_get_cursor(&end_col, &end_row);
-                    screen_txt_putc(' '); // Clear the rest of the line
-                    screen_txt_set_cursor(col, row);
-                }
+                memmove(buf + index, buf + index + 1, length - index + 1);
+                redraw_input_line(buf, length, previous_length, index, start_col,
+                                  &start_row, &end_col, &end_row, initial_depth);
             }
             break;
         case KEY_F1:
@@ -137,15 +191,12 @@ int picocalc_read_line(char *buf, int size)
                 // Reset history search when editing
                 in_history_search = false;
                 history_index = history_get_start_index();
-                
-                uint8_t col, row;
-                screen_txt_get_cursor(&col, &row);
+
+                uint8_t previous_length = length;
                 memmove(buf + index, buf + index + 1, length - index);
                 length--;
-                screen_txt_puts(buf + index); // Redisplay the rest of the line
-                screen_txt_get_cursor(&end_col, &end_row);
-                screen_txt_putc(' '); // Clear the rest of the line
-                screen_txt_set_cursor(col, row);
+                redraw_input_line(buf, length, previous_length, index, start_col,
+                                  &start_row, &end_col, &end_row, initial_depth);
             }
             break;
         case KEY_ESC: // delete to beginning of line
@@ -154,18 +205,13 @@ int picocalc_read_line(char *buf, int size)
                 // Reset history search when editing
                 in_history_search = false;
                 history_index = history_get_start_index();
-                
-                screen_txt_set_cursor(start_col, start_row);
-                for (int i = index; i < length - 1; i++)
-                {
-                    screen_txt_putc(' '); // Clear the rest of the line
-                }
+
+                uint8_t previous_length = length;
                 index = 0;
                 length = 0;
                 buf[0] = 0; // Reset buffer
-                screen_txt_set_cursor(start_col, start_row);
-                end_col = start_col;
-                end_row = start_row;
+                redraw_input_line(buf, length, previous_length, index, start_col,
+                                  &start_row, &end_col, &end_row, initial_depth);
             }
             break;
         case KEY_HOME:
@@ -197,21 +243,14 @@ int picocalc_read_line(char *buf, int size)
                 uint new_index = history_prev_matching(history_index, search_prefix, search_prefix_len);
                 if (new_index != history_index)
                 {
+                    uint8_t previous_length = length;
                     history_index = new_index;
                     history_get(buf, size - 1, history_index);
 
                     index = strlen(buf);
-                    screen_txt_set_cursor(start_col, start_row);
-                    screen_txt_puts(buf);
-                    screen_txt_get_cursor(&end_col, &end_row);
-                    for (int i = index; i < length; i++)
-                    {
-                        screen_txt_putc(' '); // Clear the rest of the line
-                    }
                     length = index;
-                    // Recalculate start_row based on where we ended up after potential scrolling
-                    calc_start_row(start_col, end_col, end_row, length, &start_row);
-                    screen_txt_set_cursor(end_col, end_row);
+                    redraw_input_line(buf, length, previous_length, index, start_col,
+                                      &start_row, &end_col, &end_row, initial_depth);
                 }
             }
             break;
@@ -241,18 +280,13 @@ int picocalc_read_line(char *buf, int size)
                 {
                     history_get(buf, size - 1, history_index);
                 }
-                index = strlen(buf);
-                screen_txt_set_cursor(start_col, start_row);
-                screen_txt_puts(buf);
-                screen_txt_get_cursor(&end_col, &end_row);
-                for (int i = index; i < length; i++)
                 {
-                    screen_txt_putc(' '); // Clear the rest of the line
+                    uint8_t previous_length = length;
+                    index = strlen(buf);
+                    length = index;
+                    redraw_input_line(buf, length, previous_length, index, start_col,
+                                      &start_row, &end_col, &end_row, initial_depth);
                 }
-                length = index;
-                // Recalculate start_row based on where we ended up after potential scrolling
-                calc_start_row(start_col, end_col, end_row, length, &start_row);
-                screen_txt_set_cursor(end_col, end_row);
             }
             break;
         case KEY_LEFT:
@@ -293,34 +327,13 @@ int picocalc_read_line(char *buf, int size)
                     // Reset history search when typing
                     in_history_search = false;
                     history_index = history_get_start_index();
-                    
-                    if (index == length)
-                    {
-                        buf[index++] = key;
-                        buf[index] = 0; // Null-terminate the string
-                        length++;
-                        if (screen_txt_putc(key))
-                        {
-                            start_row--; // Adjust start row if text scrolled
-                        }
-                        screen_txt_get_cursor(&end_col, &end_row);
-                    }
-                    else
-                    {
-                        uint8_t col, row;
-                        memmove(buf + index + 1, buf + index, length - index + 1);
-                        buf[index++] = key;
-                        length++;
-                        screen_txt_get_cursor(&col, &row);
-                        if (screen_txt_puts(buf + index - 1))
-                        {
-                            start_row--; // Adjust start row if text scrolled
-                        }
-                        screen_txt_get_cursor(&end_col, &end_row);
-                        // Calculate new cursor position accounting for wrap
-                        calc_cursor_pos(start_col, start_row, index, &col, &row);
-                        screen_txt_set_cursor(col, row);
-                    }
+
+                    uint8_t previous_length = length;
+                    memmove(buf + index + 1, buf + index, length - index + 1);
+                    buf[index++] = key;
+                    length++;
+                    redraw_input_line(buf, length, previous_length, index, start_col,
+                                      &start_row, &end_col, &end_row, initial_depth);
                 }
                 else
                 {

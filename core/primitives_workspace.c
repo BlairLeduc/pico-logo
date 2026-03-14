@@ -21,11 +21,16 @@
 #include <string.h>
 #include <strings.h>
 
+#define WS_FORMAT_BUFFER_SIZE 8192
+
 // Output callback for workspace printing (always succeeds)
 static bool ws_output(void *ctx, const char *str)
 {
-    (void)ctx;
-    LogoIO *io = primitives_get_io();
+    LogoIO *io = (LogoIO *)ctx;
+    if (!io)
+    {
+        io = primitives_get_io();
+    }
     if (io)
     {
         logo_io_write(io, str);
@@ -35,7 +40,76 @@ static bool ws_output(void *ctx, const char *str)
 
 static void ws_newline(void)
 {
-    ws_output(NULL, "\n");
+    LogoIO *io = primitives_get_io();
+    ws_output(io, "\n");
+}
+
+static void ws_write_text(LogoIO *io, const char *text)
+{
+    if (io && text)
+    {
+        logo_io_write_syntax_highlighted(io, text, 0);
+    }
+}
+
+static void ws_write_procedure_definition(LogoIO *io, UserProcedure *proc)
+{
+    char buffer[WS_FORMAT_BUFFER_SIZE];
+    FormatBufferContext ctx;
+
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    if (format_procedure_definition(format_buffer_output, &ctx, proc))
+    {
+        ws_write_text(io, buffer);
+        return;
+    }
+
+    format_procedure_definition(ws_output, io, proc);
+}
+
+static void ws_write_procedure_title(LogoIO *io, UserProcedure *proc)
+{
+    char buffer[WS_FORMAT_BUFFER_SIZE];
+    FormatBufferContext ctx;
+
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    if (format_procedure_title(format_buffer_output, &ctx, proc))
+    {
+        ws_write_text(io, buffer);
+        return;
+    }
+
+    format_procedure_title(ws_output, io, proc);
+}
+
+static void ws_write_variable(LogoIO *io, const char *name, Value value)
+{
+    char buffer[WS_FORMAT_BUFFER_SIZE];
+    FormatBufferContext ctx;
+
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    if (format_variable(format_buffer_output, &ctx, name, value))
+    {
+        ws_write_text(io, buffer);
+        return;
+    }
+
+    format_variable(ws_output, io, name, value);
+}
+
+static void ws_write_property_list(LogoIO *io, const char *name, Node list)
+{
+    char buffer[WS_FORMAT_BUFFER_SIZE];
+    FormatBufferContext ctx;
+
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    if (format_property_list(format_buffer_output, &ctx, name, list))
+    {
+        ws_write_text(io, buffer);
+        return;
+    }
+
+    format_property_list(ws_output, io, name, list);
 }
 
 // po "name or po [name1 name2 ...]
@@ -44,6 +118,7 @@ static Result prim_po(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
     REQUIRE_ARGC(1);
+    LogoIO *io = primitives_get_io();
     
     if (value_is_word(args[0]))
     {
@@ -54,7 +129,7 @@ static Result prim_po(Evaluator *eval, int argc, Value *args)
         {
             return result_error_arg(ERR_DONT_KNOW_HOW, name, NULL);
         }
-        format_procedure_definition(ws_output, NULL, proc);
+        ws_write_procedure_definition(io, proc);
     }
     else if (value_is_list(args[0]))
     {
@@ -71,7 +146,7 @@ static Result prim_po(Evaluator *eval, int argc, Value *args)
                 {
                     return result_error_arg(ERR_DONT_KNOW_HOW, name, NULL);
                 }
-                format_procedure_definition(ws_output, NULL, proc);
+                ws_write_procedure_definition(io, proc);
             }
             curr = mem_cdr(curr);
         }
@@ -88,6 +163,7 @@ static Result prim_po(Evaluator *eval, int argc, Value *args)
 static Result prim_poall(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc); UNUSED(args);
+    LogoIO *io = primitives_get_io();
     
     // Print all procedures (not buried)
     int count = proc_count(true);  // Get ALL, filter by buried in loop
@@ -96,7 +172,7 @@ static Result prim_poall(Evaluator *eval, int argc, Value *args)
         UserProcedure *proc = proc_get_by_index(i);
         if (proc && !proc->buried)
         {
-            format_procedure_definition(ws_output, NULL, proc);
+            ws_write_procedure_definition(io, proc);
             ws_newline();
         }
     }
@@ -109,7 +185,7 @@ static Result prim_poall(Evaluator *eval, int argc, Value *args)
         Value value;
         if (var_get_global_by_index(i, false, &name, &value))
         {
-            format_variable(ws_output, NULL, name, value);
+            ws_write_variable(io, name, value);
         }
     }
     
@@ -121,7 +197,7 @@ static Result prim_poall(Evaluator *eval, int argc, Value *args)
         if (prop_get_name_by_index(i, &name))
         {
             Node list = prop_get_list(name);
-            format_property_list(ws_output, NULL, name, list);
+            ws_write_property_list(io, name, list);
         }
     }
     
@@ -134,6 +210,7 @@ static Result prim_pon(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
     REQUIRE_ARGC(1);
+    LogoIO *io = primitives_get_io();
     
     if (value_is_word(args[0]))
     {
@@ -144,7 +221,7 @@ static Result prim_pon(Evaluator *eval, int argc, Value *args)
         {
             return result_error_arg(ERR_NO_VALUE, NULL, name);
         }
-        format_variable(ws_output, NULL, name, value);
+        ws_write_variable(io, name, value);
     }
     else if (value_is_list(args[0]))
     {
@@ -161,7 +238,7 @@ static Result prim_pon(Evaluator *eval, int argc, Value *args)
                 {
                     return result_error_arg(ERR_NO_VALUE, NULL, name);
                 }
-                format_variable(ws_output, NULL, name, value);
+                ws_write_variable(io, name, value);
             }
             curr = mem_cdr(curr);
         }
@@ -179,6 +256,7 @@ static Result prim_pon(Evaluator *eval, int argc, Value *args)
 static Result prim_pons(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc); UNUSED(args);
+    LogoIO *io = primitives_get_io();
     
     // Print local variables first (if any)
     int local_count = var_local_count();
@@ -190,7 +268,7 @@ static Result prim_pons(Evaluator *eval, int argc, Value *args)
             Value value;
             if (var_get_local_by_index(i, &name, &value))
             {
-                format_variable(ws_output, NULL, name, value);
+                ws_write_variable(io, name, value);
             }
         }
     }
@@ -206,7 +284,7 @@ static Result prim_pons(Evaluator *eval, int argc, Value *args)
             // Skip if shadowed by a local variable
             if (!var_is_shadowed_by_local(name))
             {
-                format_variable(ws_output, NULL, name, value);
+                ws_write_variable(io, name, value);
             }
         }
     }
@@ -218,6 +296,7 @@ static Result prim_pons(Evaluator *eval, int argc, Value *args)
 static Result prim_pops(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc); UNUSED(args);
+    LogoIO *io = primitives_get_io();
     
     int count = proc_count(true);  // Get ALL, filter by buried in loop
     for (int i = 0; i < count; i++)
@@ -225,7 +304,7 @@ static Result prim_pops(Evaluator *eval, int argc, Value *args)
         UserProcedure *proc = proc_get_by_index(i);
         if (proc && !proc->buried)
         {
-            format_procedure_definition(ws_output, NULL, proc);
+            ws_write_procedure_definition(io, proc);
             ws_newline();
         }
     }
@@ -239,6 +318,7 @@ static Result prim_pot(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
     REQUIRE_ARGC(1);
+    LogoIO *io = primitives_get_io();
     
     if (value_is_word(args[0]))
     {
@@ -249,7 +329,7 @@ static Result prim_pot(Evaluator *eval, int argc, Value *args)
         {
             return result_error_arg(ERR_DONT_KNOW_HOW, name, NULL);
         }
-        format_procedure_title(ws_output, NULL, proc);
+        ws_write_procedure_title(io, proc);
     }
     else if (value_is_list(args[0]))
     {
@@ -266,7 +346,7 @@ static Result prim_pot(Evaluator *eval, int argc, Value *args)
                 {
                     return result_error_arg(ERR_DONT_KNOW_HOW, name, NULL);
                 }
-                format_procedure_title(ws_output, NULL, proc);
+                ws_write_procedure_title(io, proc);
             }
             curr = mem_cdr(curr);
         }
@@ -283,6 +363,7 @@ static Result prim_pot(Evaluator *eval, int argc, Value *args)
 static Result prim_pots(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc); UNUSED(args);
+    LogoIO *io = primitives_get_io();
     
     int count = proc_count(true);  // Get ALL procedures, filter by buried in loop
     for (int i = 0; i < count; i++)
@@ -290,7 +371,7 @@ static Result prim_pots(Evaluator *eval, int argc, Value *args)
         UserProcedure *proc = proc_get_by_index(i);
         if (proc && !proc->buried)
         {
-            format_procedure_title(ws_output, NULL, proc);
+            ws_write_procedure_title(io, proc);
         }
     }
     

@@ -204,6 +204,11 @@ extern "C"
         // Optional editor operations (NULL if no editor support)
         const LogoConsoleEditor *editor;
 
+        // Carried syntax depth for line-oriented console input.
+        // Devices that support live input highlighting can use this to render
+        // a continued line relative to already-open brackets from prior lines.
+        int input_syntax_depth;
+
         // Private context for the console implementation
         void *context;
     } LogoConsole;

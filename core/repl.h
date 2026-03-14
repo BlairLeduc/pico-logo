@@ -86,4 +86,8 @@ const char *repl_extract_proc_name(const char *line, char *buffer, size_t buffer
 // Count bracket balance in a line (positive = more '[', negative = more ']')
 int repl_count_bracket_balance(const char *line);
 
+// Compute the carried bracket depth after applying a line to the current depth.
+// Uses the syntax highlighter's depth rules rather than raw character counting.
+int repl_next_bracket_depth(int current_depth, const char *line);
+
 #endif // LOGO_REPL_H

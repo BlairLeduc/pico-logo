@@ -12,6 +12,7 @@
 #include "devices/storage.h"
 #include "devices/stream.h"
 #include "devices/console.h"
+#include "core/syntax_highlight.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -238,6 +239,13 @@ extern "C"
 
     // Write user input to dribble file (for capturing typed input)
     void logo_io_dribble_input(LogoIO *io, const char *text);
+
+    // Write text to the current writer using syntax highlighting when the
+    // current writer is the console screen on a text-capable device.
+    // Always writes plain text to dribble output.
+    // Returns the ending bracket depth after scanning the text.
+    int logo_io_write_syntax_highlighted(LogoIO *io, const char *text,
+                                         int initial_depth);
 
     //
     // High-level I/O operations (use current reader/writer)

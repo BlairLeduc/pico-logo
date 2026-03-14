@@ -12,6 +12,67 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+enum
+{
+    LOGO_TEXT_SYNTAX_DEFAULT = 3,
+    LOGO_TEXT_SYNTAX_COMMENT = 10,
+    LOGO_TEXT_SYNTAX_KEYWORD = 12,
+    LOGO_TEXT_SYNTAX_FUNCTION = 8,
+    LOGO_TEXT_SYNTAX_VARIABLE = 11,
+    LOGO_TEXT_SYNTAX_STRING = 6,
+    LOGO_TEXT_SYNTAX_NUMBER = 9,
+    LOGO_TEXT_SYNTAX_COMMAND = 7,
+    LOGO_TEXT_SYNTAX_BRACKET_1 = 13,
+    LOGO_TEXT_SYNTAX_BRACKET_2 = 14,
+    LOGO_TEXT_SYNTAX_BRACKET_3 = 15,
+};
+
+static const uint8_t syntax_category_to_text_colour[SYNTAX_CATEGORY_COUNT] = {
+    [SYNTAX_DEFAULT] = LOGO_TEXT_SYNTAX_DEFAULT,
+    [SYNTAX_COMMENT] = LOGO_TEXT_SYNTAX_COMMENT,
+    [SYNTAX_KEYWORD] = LOGO_TEXT_SYNTAX_KEYWORD,
+    [SYNTAX_FUNCTION] = LOGO_TEXT_SYNTAX_FUNCTION,
+    [SYNTAX_VARIABLE] = LOGO_TEXT_SYNTAX_VARIABLE,
+    [SYNTAX_STRING] = LOGO_TEXT_SYNTAX_STRING,
+    [SYNTAX_NUMBER] = LOGO_TEXT_SYNTAX_NUMBER,
+    [SYNTAX_COMMAND] = LOGO_TEXT_SYNTAX_COMMAND,
+    [SYNTAX_BRACKET_1] = LOGO_TEXT_SYNTAX_BRACKET_1,
+    [SYNTAX_BRACKET_2] = LOGO_TEXT_SYNTAX_BRACKET_2,
+    [SYNTAX_BRACKET_3] = LOGO_TEXT_SYNTAX_BRACKET_3,
+};
+
+typedef struct HighlightWriteContext
+{
+    LogoIO *io;
+} HighlightWriteContext;
+
+static bool highlight_write_span(void *ctx, SyntaxCategory category,
+                                 const char *text, size_t length)
+{
+    HighlightWriteContext *write_ctx = (HighlightWriteContext *)ctx;
+
+    if (!write_ctx || !write_ctx->io || !write_ctx->io->console || !write_ctx->io->console->text)
+        return false;
+
+    write_ctx->io->console->text->set_foreground(syntax_category_to_text_colour[category]);
+
+    char buffer[128];
+    size_t offset = 0;
+    while (offset < length)
+    {
+        size_t chunk_len = length - offset;
+        if (chunk_len >= sizeof(buffer))
+            chunk_len = sizeof(buffer) - 1;
+
+        memcpy(buffer, text + offset, chunk_len);
+        buffer[chunk_len] = '\0';
+        logo_io_console_write(write_ctx->io, buffer);
+        offset += chunk_len;
+    }
+
+    return true;
+}
+
 //
 // Lifecycle
 //
@@ -1157,6 +1218,36 @@ void logo_io_write(LogoIO *io, const char *text)
     {
         logo_stream_write(io->dribble, text);
     }
+}
+
+int logo_io_write_syntax_highlighted(LogoIO *io, const char *text,
+                                     int initial_depth)
+{
+    if (!text)
+    {
+        return initial_depth;
+    }
+
+    int final_depth = syntax_highlight_text_depth(text, initial_depth);
+
+    if (!io || !logo_io_writer_is_screen(io) || !io->console || !logo_console_has_text(io->console))
+    {
+        logo_io_write(io, text);
+        return final_depth;
+    }
+
+    HighlightWriteContext ctx = { .io = io };
+    uint8_t saved_foreground = io->console->text->get_foreground();
+
+    if (!syntax_highlight_text(text, initial_depth, highlight_write_span, &ctx))
+    {
+        io->console->text->set_foreground(saved_foreground);
+        logo_io_write(io, text);
+        return final_depth;
+    }
+
+    io->console->text->set_foreground(saved_foreground);
+    return final_depth;
 }
 
 void logo_io_write_line(LogoIO *io, const char *text)
