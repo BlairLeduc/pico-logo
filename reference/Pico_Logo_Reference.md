@@ -1690,7 +1690,7 @@ abs _number_
 
 `operation`
 
-Outputs the absolute _number_. If _number_ less than zero the negative of _number is returned.
+Outputs the absolute _number_. If _number_ less than zero the negative of _number_ is returned.
 
 
 ## arctan
@@ -1949,8 +1949,6 @@ end
 ```
 
 
-
-
 ## iffalse (iff)
 
 iffalse _list_  
@@ -2063,7 +2061,7 @@ error
 
 Logo runs `throw "error [whenever]` an error occurs during the execution of a procedure. Control passes to top level unless a `catch "error` has been run. When an error is caught in this way, no error message is printed, and you can design your own.
 
-Refer to the reference document [Error Messages](#appendix-d-error-messages) for a complete list of error messages and their meanings.
+Refer to [Error Messages](#appendix-d-error-messages) for a complete list of error messages and their meanings.
 
 
 ## go
