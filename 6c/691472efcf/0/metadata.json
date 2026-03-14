@@ -1,0 +1,42 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "6c691472efcf",
+  "session_id": "a953c909-4cae-4525-9fa4-a92def00c9c6",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-14T16:17:20.685898Z",
+  "branch": "improvements",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "logo/themes/ayu.theme",
+    "logo/themes/cobalt2.theme",
+    "logo/themes/darkplus.theme",
+    "logo/themes/default.theme",
+    "logo/themes/dracula.theme",
+    "logo/themes/github.theme",
+    "logo/themes/monokai.theme",
+    "logo/themes/onedark.theme",
+    "logo/themes/purple.theme"
+  ],
+  "agent": "Copilot CLI",
+  "model": "gpt-5.4",
+  "turn_id": "d4895423dd07",
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 5083,
+    "api_call_count": 9
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-14T16:17:20.572514Z",
+    "agent_lines": 135,
+    "human_added": 2,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 137,
+    "agent_percentage": 98.54014598540147
+  }
+}
