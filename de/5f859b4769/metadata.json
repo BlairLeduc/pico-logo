@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "de5f859b4769",
+  "strategy": "manual-commit",
+  "branch": "improvements",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "reference/Pico_Logo_Reference.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/de/5f859b4769/0/metadata.json",
+      "transcript": "/de/5f859b4769/0/full.jsonl",
+      "content_hash": "/de/5f859b4769/0/content_hash.txt",
+      "prompt": "/de/5f859b4769/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 5083,
+    "api_call_count": 9
+  }
+}

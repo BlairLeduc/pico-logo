@@ -1,0 +1,1 @@
+We changed the mapping of the editor colours to align with the new foreground palette. Can you fiugure out the mapping between the old slot numbers and the new. We need to update the theme files.
