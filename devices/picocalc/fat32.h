@@ -82,10 +82,12 @@ typedef struct
     uint32_t size;
     uint16_t date;
     uint16_t time;
-    uint32_t start_cluster; // First cluster number (FAT32)
+    uint32_t start_cluster;     // First cluster number (FAT32)
     uint8_t attr;
-    uint32_t sector;
-    uint32_t offset;
+    uint32_t sector;            // Sector containing the 8.3 directory entry
+    uint32_t offset;            // Byte offset of the 8.3 entry within that sector
+    uint32_t dir_start_cluster; // First cluster of the parent directory (0 = unknown)
+    uint32_t dir_pos;           // Byte offset of the 8.3 entry from the start of the directory
 } fat32_entry_t;
 
 // Partition entry structure
