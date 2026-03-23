@@ -548,9 +548,25 @@ bool logo_picocalc_list_directory(const char *pathname, LogoDirCallback callback
 
     while (fat32_dir_read(&dir, &entry) == FAT32_OK && entry.filename[0])
     {
-        // Skip . and ..
+        // Skip dot-entries, volume labels, hidden, and system entries
         if (entry.filename[0] == '.'
             || ((entry.attr & (FAT32_ATTR_VOLUME_ID|FAT32_ATTR_HIDDEN|FAT32_ATTR_SYSTEM)) != 0))
+        {
+            continue;
+        }
+
+        // Skip entries whose name has no printable characters (e.g. corrupt
+        // volume labels with wrong attr, or names of only spaces/control chars)
+        bool has_printable = false;
+        for (const char *p = entry.filename; *p; p++)
+        {
+            if ((unsigned char)*p > ' ')
+            {
+                has_printable = true;
+                break;
+            }
+        }
+        if (!has_printable)
         {
             continue;
         }
