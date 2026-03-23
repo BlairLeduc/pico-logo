@@ -1333,6 +1333,11 @@ static fat32_error_t link_entry(fat32_entry_t *entry, const char *path)
                 CLOSE_AND_RETURN_ON_ERROR(clear_cluster(new_dir_cluster));
                 cluster = new_dir_cluster;
             }
+            else if (!is_valid_data_cluster(next_cluster))
+            {
+                fat32_close(&dir);
+                return FAT32_ERROR_INVALID_FORMAT;
+            }
             else
             {
                 cluster = next_cluster;
@@ -1756,7 +1761,7 @@ fat32_error_t fat32_write(fat32_file_t *file, const void *buffer, size_t size, s
         {
             uint32_t next_cluster;
             fat32_error_t fat_res = read_cluster_fat_entry(cluster, &next_cluster);
-            if (fat_res != FAT32_OK || is_eoc_cluster(next_cluster))
+            if (fat_res != FAT32_OK || is_chain_end_or_invalid(next_cluster))
             {
                 return FAT32_ERROR_DISK_FULL;
             }
