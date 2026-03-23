@@ -560,7 +560,7 @@ bool logo_picocalc_list_directory(const char *pathname, LogoDirCallback callback
         bool has_printable = false;
         for (const char *p = entry.filename; *p; p++)
         {
-            if (*p > ' ')
+            if ((unsigned char)*p > ' ')
             {
                 has_printable = true;
                 break;
