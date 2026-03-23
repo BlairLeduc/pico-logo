@@ -52,6 +52,7 @@ bool fat32_initialised = false;               // Set to true after successful fi
 // FAT32 file system state
 static fat32_boot_sector_t boot_sector;
 static fat32_fsinfo_t fsinfo;
+static bool fsinfo_valid = false; // True only when on-disk FSInfo signatures validated
 
 static uint32_t volume_start_block = 0; // First block of the volume
 static uint32_t first_data_sector;      // First sector of the data region
@@ -191,9 +192,8 @@ static fat32_error_t is_valid_fat32_boot_sector(const fat32_boot_sector_t *bs)
 
 static fat32_error_t update_fsinfo(void)
 {
-    // Only write if there is a valid FSInfo sector in the reserved area
-    if (boot_sector.fat32_info == 0 || boot_sector.fat32_info == 0xFFFF ||
-        boot_sector.fat32_info >= boot_sector.reserved_sectors)
+    // Only write if the on-disk FSInfo sector had valid signatures
+    if (!fsinfo_valid)
     {
         return FAT32_OK;
     }
@@ -523,7 +523,7 @@ fat32_error_t fat32_mount(void)
 
     // Cache the FSInfo sector.  An invalid or missing FSInfo sector is not
     // fatal — we simply mark free_count and next_free as unknown.
-    bool fsinfo_valid = false;
+    fsinfo_valid = false;
     if (boot_sector.fat32_info != 0 && boot_sector.fat32_info != 0xFFFF &&
         boot_sector.fat32_info < boot_sector.reserved_sectors)
     {
@@ -557,6 +557,7 @@ fat32_error_t fat32_mount(void)
 void fat32_unmount(void)
 {
     fat32_mounted = false;
+    fsinfo_valid = false;
     mount_status = FAT32_ERROR_NO_CARD;
     volume_start_block = 0;
     first_data_sector = 0;
