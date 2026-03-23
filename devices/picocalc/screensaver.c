@@ -29,6 +29,7 @@ static uint64_t last_cycle_us = 0;
 static uint8_t shade_offset = 0;      // Current shade offset (0-7)
 static uint8_t shade_cycle_count = 0; // How many shade cycles completed (0-7)
 static uint8_t hue_offset = 0;        // Current hue offset (0-19)
+static uint8_t text_offset = 0;       // Current text palette rotation offset (0-15)
 
 //
 // Initialize the screen saver
@@ -41,6 +42,7 @@ void screensaver_init(void)
     shade_offset = 0;
     shade_cycle_count = 0;
     hue_offset = 0;
+    text_offset = 0;
 }
 
 //
@@ -74,7 +76,7 @@ static void restore_palette(void)
 //   - Apply hue and shade offsets
 //   - Look up the cycled RGB565 value from palette_16bit
 //
-// Slots 0-15 (text palette) are left unchanged.
+// Slots 0-15 (text palette) are rotated by text_offset.
 // Slots 248-254 (primaries) are left unchanged.
 // Slots 254/255 are foreground/background derived from background_colour.
 //
@@ -83,6 +85,14 @@ static void restore_palette(void)
 
 static void cycle_palette(void)
 {
+    // Rotate text palette slots (0-15): slot i gets the backed-up value
+    // from slot (i + text_offset) % 16, shifting all text colours on screen
+    for (int i = 0; i < SCREENSAVER_TEXT_SLOTS; i++)
+    {
+        int src = (i + text_offset) % SCREENSAVER_TEXT_SLOTS;
+        lcd_set_palette_value(i, palette_backup[src]);
+    }
+
     // Update Tailwind palette slots (16-175) with cycled colors
     for (int i = 0; i < TAILWIND_SLOTS; i++)
     {
@@ -161,6 +171,9 @@ static void advance_cycle(void)
     // Cycle: 0→3→6→1→4→7→2→5→0
     shade_offset = (shade_offset + SCREENSAVER_SHADE_STEP) % SCREENSAVER_NUM_SHADES;
     
+    // Advance text palette rotation
+    text_offset = (text_offset + SCREENSAVER_TEXT_STEP) % SCREENSAVER_TEXT_SLOTS;
+    
     // Count each shade cycle
     shade_cycle_count++;
     
@@ -235,6 +248,7 @@ bool screensaver_on_key_press(void)
         shade_offset = 0;
         shade_cycle_count = 0;
         hue_offset = 0;
+        text_offset = 0;
         
         return true;  // Was active, display needs refresh
     }

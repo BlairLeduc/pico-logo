@@ -28,6 +28,10 @@
 #define SCREENSAVER_SHADE_STEP  (3)              // Increment shade by 3 each cycle (0→3→6→1→4→7→2→5→0)
 #define SCREENSAVER_SHADE_CYCLES (8)             // 8 shade cycles before incrementing hue
 
+// Text palette cycling constants
+#define SCREENSAVER_TEXT_SLOTS   (16)             // 16 text palette slots (0-15)
+#define SCREENSAVER_TEXT_STEP    (1)              // Rotate text palette by 1 slot each cycle
+
 // Initialize the screen saver module
 void screensaver_init(void);
 
