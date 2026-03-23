@@ -12,6 +12,7 @@
 //  Standard SD cards (SDSC) and SD High Capacity (SDHC) cards are supported.
 //
 
+#include <stdint.h>
 #include <string.h>
 #include <stdio.h>
 #include <ctype.h>
@@ -1681,6 +1682,13 @@ fat32_error_t fat32_write(fat32_file_t *file, const void *buffer, size_t size, s
     }
 
     uint32_t old_file_size = file->file_size;
+
+    // Guard against overflow: size must fit in 32 bits and the resulting
+    // end position must not wrap around.
+    if (size > UINT32_MAX - file->position)
+    {
+        return FAT32_ERROR_INVALID_PARAMETER;
+    }
 
     // Calculate how many clusters are currently allocated and how many are
     // needed after this write.
