@@ -4,6 +4,8 @@
 //
 
 #include "test_scaffold.h"
+#include <string.h>
+#include <stdio.h>
 
 void setUp(void)
 {
@@ -349,6 +351,38 @@ void test_word_operation(void)
     TEST_ASSERT_EQUAL_STRING("helloworld", mem_word_ptr(r.value.as.node));
 }
 
+void test_word_overflow_returns_error(void)
+{
+    // Atom interner caps at 255 chars; concatenating beyond that must
+    // raise ERR_OUT_OF_SPACE rather than silently truncating.
+    // Build a 200-char word and concatenate it with itself => 400 chars.
+    char big[256];
+    memset(big, 'a', 200);
+    big[200] = '\0';
+
+    char src[600];
+    snprintf(src, sizeof(src), "(word \"%s \"%s)", big, big);
+
+    Result r = eval_string(src);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_word_at_atom_limit_succeeds(void)
+{
+    // Exactly 255 chars total must still succeed (the cap is inclusive).
+    char a[200];
+    memset(a, 'a', 199); a[199] = '\0';
+    char b[60];
+    memset(b, 'b', 56); b[56] = '\0'; // 199 + 56 = 255
+
+    char src[600];
+    snprintf(src, sizeof(src), "(word \"%s \"%s)", a, b);
+    Result r = eval_string(src);
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_size_t(255, mem_word_len(r.value.as.node));
+}
+
 void test_parse(void)
 {
     // parse "hello world" should give [hello world]
@@ -685,6 +719,8 @@ int main(void)
     
     // Word operations
     RUN_TEST(test_word_operation);
+    RUN_TEST(test_word_overflow_returns_error);
+    RUN_TEST(test_word_at_atom_limit_succeeds);
     RUN_TEST(test_parse);
     
     // Character operations

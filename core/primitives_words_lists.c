@@ -12,6 +12,7 @@
 #include "error.h"
 #include "eval.h"
 #include "lexer.h"
+#include <assert.h>
 #include <string.h>
 #include <strings.h>
 #include <stdio.h>
@@ -952,11 +953,16 @@ static Result prim_sentence(Evaluator *eval, int argc, Value *args)
 
 // word word1 word2 ...
 // Outputs a word made by concatenating inputs.
+//
+// Atoms are limited to 255 characters by the interner (1-byte length
+// prefix). Rather than silently truncating an over-long concatenation
+// (which historically produced a corrupted-looking partial result),
+// return ERR_OUT_OF_SPACE so the user knows their data did not fit.
 static Result prim_word(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
-    
-    // Calculate total length needed
+
+    // Calculate total length needed and validate inputs.
     size_t total_len = 0;
     for (int i = 0; i < argc; i++)
     {
@@ -974,22 +980,21 @@ static Result prim_word(Evaluator *eval, int argc, Value *args)
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[i]));
         }
     }
-    
-    // Build concatenated string
-    char buffer[256];  // Reasonable limit for words
-    if (total_len >= sizeof(buffer))
+
+    // 255 is the hard atom-size limit; refuse rather than truncate.
+    if (total_len > 255)
     {
-        total_len = sizeof(buffer) - 1;
+        return result_error_arg(ERR_OUT_OF_SPACE, "word", NULL);
     }
-    
+
+    char buffer[256];
     char *p = buffer;
-    size_t remaining = sizeof(buffer) - 1;
-    
-    for (int i = 0; i < argc && remaining > 0; i++)
+
+    for (int i = 0; i < argc; i++)
     {
         const char *str;
         size_t len;
-        
+
         if (value_is_number(args[i]))
         {
             Node word = number_to_word(args[i].as.number);
@@ -1001,14 +1006,12 @@ static Result prim_word(Evaluator *eval, int argc, Value *args)
             str = mem_word_ptr(args[i].as.node);
             len = mem_word_len(args[i].as.node);
         }
-        
-        if (len > remaining) len = remaining;
+
         memcpy(p, str, len);
         p += len;
-        remaining -= len;
     }
     *p = '\0';
-    
+
     Node result = mem_atom_cstr(buffer);
     return result_ok(value_word(result));
 }
@@ -1268,16 +1271,17 @@ static Result prim_lowercase(Evaluator *eval, int argc, Value *args)
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
     }
-    
+
+    // Atoms are capped at 255 chars by the interner, so a 256-byte
+    // buffer is always sufficient for any valid input.
+    assert(len < 256);
     char buffer[256];
-    if (len >= sizeof(buffer)) len = sizeof(buffer) - 1;
-    
     for (size_t i = 0; i < len; i++)
     {
         buffer[i] = (char)tolower((unsigned char)str[i]);
     }
     buffer[len] = '\0';
-    
+
     Node result = mem_atom_cstr(buffer);
     return result_ok(value_word(result));
 }
@@ -1307,16 +1311,17 @@ static Result prim_uppercase(Evaluator *eval, int argc, Value *args)
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
     }
-    
+
+    // Atoms are capped at 255 chars by the interner, so a 256-byte
+    // buffer is always sufficient for any valid input.
+    assert(len < 256);
     char buffer[256];
-    if (len >= sizeof(buffer)) len = sizeof(buffer) - 1;
-    
     for (size_t i = 0; i < len; i++)
     {
         buffer[i] = (char)toupper((unsigned char)str[i]);
     }
     buffer[len] = '\0';
-    
+
     Node result = mem_atom_cstr(buffer);
     return result_ok(value_word(result));
 }
