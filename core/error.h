@@ -91,13 +91,23 @@ extern "C"
     // Caught Error Info (for 'error' primitive)
     //==========================================================================
 
-    // Structure to store information about the last caught error
+    // Structure to store information about the last caught error.
+    //
+    // Pointer ownership:
+    //   `proc` and `caller` are NON-OWNING references. They point to either
+    //     (a) a static string literal compiled into a primitive's
+    //         registration record, or
+    //     (b) a procedure name string interned in the atom table.
+    //   Both kinds of string outlive any caught error: primitive registration
+    //   data is read-only program memory, and atoms are never freed once
+    //   interned. Callers MUST NOT free these pointers and MUST NOT keep them
+    //   beyond the next call to `error_clear_caught` or interpreter reset.
     typedef struct {
         bool valid;           // true if there is a caught error
         int code;             // error code
-        char message[256];    // formatted error message
-        const char *proc;     // primitive that caused the error
-        const char *caller;   // procedure that called the primitive
+        char message[256];    // formatted error message (owned: in-struct buffer)
+        const char *proc;     // primitive that caused the error (non-owning)
+        const char *caller;   // procedure that called the primitive (non-owning)
     } CaughtError;
 
     // Set caught error info from a Result (called by catch "error)

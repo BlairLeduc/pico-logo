@@ -872,6 +872,59 @@ void test_set_position_noop_for_lexer(void)
 }
 
 //============================================================================
+// Number classification — alignment with lexer's is_valid_number
+//============================================================================
+//
+// `is_number_word` (used when re-tokenising lists) and the lexer's
+// `is_valid_number` MUST agree on what counts as a number, otherwise the
+// same atom is parsed differently depending on whether it came from raw
+// source text or from a list literal. These tests pin the contract.
+
+void test_classify_rejects_trailing_e(void)
+{
+    // "1e" is not a number — needs a digit after the exponent marker.
+    Node w = mem_atom("1e", 2);
+    Node list = mem_cons(w, NODE_NIL);
+    TokenSource ts;
+    token_source_init_list(&ts, list);
+    Token t = token_source_next(&ts);
+    assert_token(t, TOKEN_WORD, "1e");
+}
+
+void test_classify_rejects_trailing_e_with_sign(void)
+{
+    // "1e+" is not a number — sign without following digits.
+    Node w = mem_atom("1e+", 3);
+    Node list = mem_cons(w, NODE_NIL);
+    TokenSource ts;
+    token_source_init_list(&ts, list);
+    Token t = token_source_next(&ts);
+    assert_token(t, TOKEN_WORD, "1e+");
+}
+
+void test_classify_rejects_trailing_n(void)
+{
+    // "1n" is not a number — n notation also requires digits after.
+    Node w = mem_atom("1n", 2);
+    Node list = mem_cons(w, NODE_NIL);
+    TokenSource ts;
+    token_source_init_list(&ts, list);
+    Token t = token_source_next(&ts);
+    assert_token(t, TOKEN_WORD, "1n");
+}
+
+void test_classify_rejects_n_with_sign(void)
+{
+    // n notation may NOT be followed by an explicit sign.
+    Node w = mem_atom("1n+4", 4);
+    Node list = mem_cons(w, NODE_NIL);
+    TokenSource ts;
+    token_source_init_list(&ts, list);
+    Token t = token_source_next(&ts);
+    assert_token(t, TOKEN_WORD, "1n+4");
+}
+
+//============================================================================
 // Main
 //============================================================================
 
@@ -935,6 +988,12 @@ int main(void)
     RUN_TEST(test_get_position_for_node_iter);
     RUN_TEST(test_set_position_restores_state);
     RUN_TEST(test_set_position_noop_for_lexer);
+
+    // Number classification — must agree with lexer's is_valid_number
+    RUN_TEST(test_classify_rejects_trailing_e);
+    RUN_TEST(test_classify_rejects_trailing_e_with_sign);
+    RUN_TEST(test_classify_rejects_trailing_n);
+    RUN_TEST(test_classify_rejects_n_with_sign);
     
     return UNITY_END();
 }

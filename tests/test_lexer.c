@@ -1570,6 +1570,51 @@ void test_fuzz_high_bytes_with_brackets(void)
 }
 
 //============================================================================
+// Comment Tests (semicolon)
+//============================================================================
+
+void test_semicolon_comment_to_end_of_line(void)
+{
+    // Per reference: ; introduces a comment to end of line.
+    Lexer lexer;
+    lexer_init(&lexer, "forward 100 ; this is a comment");
+    assert_token(&lexer, TOKEN_WORD, "forward");
+    assert_token(&lexer, TOKEN_NUMBER, "100");
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+void test_semicolon_comment_then_next_line(void)
+{
+    // Comment must end at the newline, not consume the next line.
+    Lexer lexer;
+    lexer_init(&lexer, "fd 10 ; comment\nbk 5");
+    assert_token(&lexer, TOKEN_WORD, "fd");
+    assert_token(&lexer, TOKEN_NUMBER, "10");
+    assert_token(&lexer, TOKEN_WORD, "bk");
+    assert_token(&lexer, TOKEN_NUMBER, "5");
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+void test_semicolon_at_start_of_line(void)
+{
+    Lexer lexer;
+    lexer_init(&lexer, "; pure comment line\nfd 1");
+    assert_token(&lexer, TOKEN_WORD, "fd");
+    assert_token(&lexer, TOKEN_NUMBER, "1");
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+void test_semicolon_terminates_unquoted_word(void)
+{
+    // `foo;cmt` should split into the word `foo` and discard the rest.
+    Lexer lexer;
+    lexer_init(&lexer, "foo;cmt\nbar");
+    assert_token(&lexer, TOKEN_WORD, "foo");
+    assert_token(&lexer, TOKEN_WORD, "bar");
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+//============================================================================
 // Main
 //============================================================================
 
@@ -1722,6 +1767,12 @@ int main(void)
     RUN_TEST(test_fuzz_repeated_eof);
     RUN_TEST(test_fuzz_backslash_before_delimiter);
     RUN_TEST(test_fuzz_high_bytes_with_brackets);
+
+    // Comments
+    RUN_TEST(test_semicolon_comment_to_end_of_line);
+    RUN_TEST(test_semicolon_comment_then_next_line);
+    RUN_TEST(test_semicolon_at_start_of_line);
+    RUN_TEST(test_semicolon_terminates_unquoted_word);
 
     return UNITY_END();
 }

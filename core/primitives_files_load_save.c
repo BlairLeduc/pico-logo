@@ -151,10 +151,14 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
             }
             else
             {
-                // Initial "to" line does not fit in the procedure buffer - skip this procedure
+                // Procedure header is larger than the in-memory buffer.
+                // Returning ERR_OUT_OF_SPACE is preferable to silently
+                // dropping the entire procedure: the user needs to know
+                // their code did not load.
                 in_procedure_def = false;
                 proc_len = 0;
-                // Note: Error is not reported to avoid breaking load operation on partial file read
+                result = result_error_arg(ERR_OUT_OF_SPACE, NULL, pathname);
+                break;
             }
             continue;
         }
@@ -194,8 +198,14 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
                 }
                 else
                 {
-                    // Line does not fit - silently skip to avoid breaking load on partial file read
-                    // The procedure will be incomplete but load continues
+                    // Body line would overflow the procedure buffer. Report
+                    // ERR_OUT_OF_SPACE rather than silently truncating the
+                    // definition (which would leave a half-defined procedure
+                    // that may not even parse).
+                    in_procedure_def = false;
+                    proc_len = 0;
+                    result = result_error_arg(ERR_OUT_OF_SPACE, NULL, pathname);
+                    break;
                 }
             }
             continue;

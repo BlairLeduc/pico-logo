@@ -118,8 +118,10 @@ static Result prim_setcursor(Evaluator *eval, int argc, Value *args)
     int column = (int)col_num;
     int row = (int)row_num;
 
-    // Validate range
-    if (column < 0 || row < 0)
+    // Validate range. Reference defines the screen as 40 columns × 32 rows
+    // (columns 0..39, rows 0..31). Reject out-of-range coordinates rather
+    // than silently truncating to uint8_t at the device boundary.
+    if (column < 0 || column >= 40 || row < 0 || row >= 32)
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }

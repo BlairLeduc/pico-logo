@@ -105,13 +105,17 @@ static Result prim_iftrue(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(argc);
     REQUIRE_LIST(args[0]);
-    
+
+    // Per reference: "if test has not been run in the same procedure or a
+    // superprocedure, or from top level, iftrue does nothing." `var_get_test`
+    // returns false when no test is in scope, which makes the && short-circuit
+    // to the no-op path below.
     bool test_value;
     if (var_get_test(&test_value) && test_value)
     {
         return eval_push_if(eval, args[0].as.node, false);
     }
-    
+
     return result_none();
 }
 
@@ -119,13 +123,14 @@ static Result prim_iffalse(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(argc);
     REQUIRE_LIST(args[0]);
-    
+
+    // Per reference: same "no-op when no test has run" semantics as iftrue.
     bool test_value;
     if (var_get_test(&test_value) && !test_value)
     {
         return eval_push_if(eval, args[0].as.node, false);
     }
-    
+
     return result_none();
 }
 

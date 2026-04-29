@@ -114,21 +114,43 @@ void lexer_init(Lexer *lexer, const char *source)
     lexer->newline_count = 1;     // Start of input counts as one newline
 }
 
-// Skip whitespace and track if any was found
+// Skip whitespace and line comments (everything after `;` to end of line),
+// tracking whether any whitespace and how many newlines were consumed.
+// Per the language reference ("; comment"), a semicolon outside a quoted
+// word marks the rest of the line as a comment that the lexer must discard.
 static void skip_whitespace(Lexer *lexer)
 {
     lexer->had_whitespace = false;
     lexer->had_newline = false;
     lexer->newline_count = 0;
-    while (*lexer->current && is_space(*lexer->current))
+    for (;;)
     {
-        if (*lexer->current == '\n')
+        // Eat ordinary whitespace.
+        while (*lexer->current && is_space(*lexer->current))
         {
-            lexer->had_newline = true;
-            lexer->newline_count++;
+            if (*lexer->current == '\n')
+            {
+                lexer->had_newline = true;
+                lexer->newline_count++;
+            }
+            lexer->had_whitespace = true;
+            lexer->current++;
         }
-        lexer->had_whitespace = true;
-        lexer->current++;
+
+        // A semicolon at this position starts a line comment. Skip every
+        // character up to (but not including) the terminating newline so
+        // the next loop iteration counts the newline normally.
+        if (*lexer->current == ';')
+        {
+            lexer->had_whitespace = true;
+            while (*lexer->current && *lexer->current != '\n')
+            {
+                lexer->current++;
+            }
+            continue;
+        }
+
+        break;
     }
 }
 
@@ -165,8 +187,10 @@ static Token read_word(Lexer *lexer)
                 lexer->current++;
             }
         }
-        else if (is_space(*lexer->current) || is_delimiter(*lexer->current))
+        else if (is_space(*lexer->current) || is_delimiter(*lexer->current) || *lexer->current == ';')
         {
+            // `;` terminates an unquoted word so that `foo;comment` lexes
+            // as `foo` followed by the comment (consumed in skip_whitespace).
             break;
         }
         else
@@ -252,8 +276,9 @@ static Token read_colon(Lexer *lexer)
                 lexer->current++;
             }
         }
-        else if (is_space(*lexer->current) || is_delimiter(*lexer->current))
+        else if (is_space(*lexer->current) || is_delimiter(*lexer->current) || *lexer->current == ';')
         {
+            // `;` ends a variable reference (`:foo;cmt` -> :foo + comment).
             break;
         }
         else

@@ -56,29 +56,29 @@ These patterns recur across multiple modules and are worth fixing as a single sw
 
 | ID | Axis | File:line | Observation | Recommendation |
 |---|---|---|---|---|
-| P1-002 | M | [core/memory.h:30-40](../core/memory.h#L30-L40), [core/memory.c:196](../core/memory.c#L196) | Dual-pool collision invariant (`atom_next < node_bottom`) only documented in ASCII art; not asserted. | Add named `mem_would_collide()` helper plus assertion at allocation sites. |
-| P1-003 | M | [core/memory.c:199](../core/memory.c#L199) | Atom-table cap of `0x8000` (high-bit reserved as word marker) only enforced in `mem_atom`, not in lookups. | Add `_Static_assert(LOGO_ATOM_LIMIT <= 0x8000)`; introduce `CELL_WORD_MARKER` `#define`. |
+| P1-002 | M | [core/memory.h:30-40](../core/memory.h#L30-L40), [core/memory.c:196](../core/memory.c#L196) | ✅ Added `mem_would_collide()` helper used by both `alloc_cell` and `mem_atom`. |
+| P1-003 | M | [core/memory.c:199](../core/memory.c#L199) | ✅ Added `LOGO_ATOM_LIMIT`, `CELL_WORD_MARKER` constants + 3 `_Static_assert`s. |
 | **P1-004** ✅ | X | [core/memory.c:158-200](../core/memory.c#L158-L200) | Node index assumes `LOGO_MEMORY_SIZE/4 <= 0xFFFF`; silent overflow if size grows. | **Fixed:** added `_Static_assert(LOGO_MEMORY_SIZE % 4 == 0)`, introduced `MAX_LIST_INDEX = 0x7FFE`, and tightened `alloc_cell` to refuse pool indices that collide with the empty-list (`0x7FFF`) or word-reference (`0x8000+`) marker bits. The previous bound (`> 0xFFFF`) was off-by-two and could have produced corrupt cells once the pool grew past 32766 nodes. |
-| P1-005 / P1-006 | C | [core/memory.c:228-240](../core/memory.c#L228-L240) | `node_to_index`/`index_to_node` encoding is dual (16-bit cell index vs 32-bit Node), explained only in scattered comments; `0x8000` magic literal repeated 3×. | Add a header section comment + `CELL_WORD_MARKER`. |
-| P1-009 | X | [core/memory.c:616-625](../core/memory.c#L616-L625) | `gc_mark_index` validates pointer range but not cell index; corrupted root could mark unrelated memory. | Compute and check `max_index` at top of mark loop. |
+| P1-005 / P1-006 | C | [core/memory.c:228-240](../core/memory.c#L228-L240) | ✅ Magic literals replaced with named constants throughout. |
+| P1-009 | X | [core/memory.c:616-625](../core/memory.c#L616-L625) | ✅ `gc_mark_index` now bounds-checks against `MAX_LIST_INDEX` first. |
 | P1-010 | M | [core/value.h:39-54](../core/value.h#L39-L54) | `Value`/`Result` unions have no compiler-enforced tag check; reading wrong field is UB. | Provide `value_get_*`/`result_get_*` accessor macros that assert tag. |
 | P1-013 | X | [core/memory.c:165](../core/memory.c#L165) | `mem_newline_marker` singleton atom isn't documented as a permanent GC root; any caller forgetting to mark it can lose the sentinel. | Document; mark unconditionally inside `mem_gc()`. |
 | P1-014 | X | [core/frame_arena.c:1-20](../core/frame_arena.c#L1-L20) | `arena_init` clamps capacity but doesn't validate `size_bytes` matches; mismatch → OOB. | Reject `size_bytes < capacity_words * 4`. |
-| P1-016 | M | [core/value.c:86-128](../core/value.c#L86-L128) | `value_extract_xy` and `value_extract_rgb` duplicate identical list-of-numbers extraction. | Single `extract_number_list(node, n, out, &err)` helper. |
-| P1-017 | C | [core/error.h:64-68](../core/error.h#L64-L68) | `CaughtError` pointer lifetime not documented; risk of dangling references. | Doc-comment ownership rules. |
+| P1-016 | M | [core/value.c:86-128](../core/value.c#L86-L128) | ✅ Extracted shared `extract_number_list()` helper; ~80 lines deduplicated. |
+| P1-017 | C | [core/error.h:64-68](../core/error.h#L64-L68) | ✅ `CaughtError.proc`/`caller` ownership documented (non-owning). |
 
 ### Lexer / token source
 
 | ID | Axis | File:line | Observation | Recommendation |
 |---|---|---|---|---|
-| P2-001 | L | [core/lexer.c:115-130](../core/lexer.c#L115-L130) | `;` comments are not stripped; `; foo` is tokenised as a word, contradicting [Pico_Logo_Reference.md §3840-3892](Pico_Logo_Reference.md). | Skip from `;` to end-of-line in `skip_whitespace()`; add tests (P2-012). |
+| P2-001 | L | [core/lexer.c:115-130](../core/lexer.c#L115-L130) | ✅ Lexer now strips `;` to end-of-line in `skip_whitespace`; `;` is a word terminator; `prim_comment` removed (now unreachable). |
 | P2-002 | L | [core/lexer.c:118-130](../core/lexer.c#L118-L130) | Line continuation (`~` prompt on unbalanced brackets) is not specified to live in lexer or REPL; `newline_count` field is dead. | Decide ownership and document. If REPL-only, delete unused lexer state. |
 | P2-003 | C/L | [core/lexer.c:396-413](../core/lexer.c#L396-L413) | `should_be_unary_minus` rules are subtle and partly contradict reference (e.g. binary minus after WORD); risks silent semantic divergence. | Rewrite with reference rules quoted in comments; add edge-case tests (`word-foo`, `(5+3) -2`). |
 | P2-006 | X | [core/lexer.c:279, 388](../core/lexer.c#L279) | `looks_like_number` returns `true` on incomplete exponent like `1e`; later `read_number` accepts the bad token. | Make lookahead the validator (return token-type, not bool) or fail-stop in `read_number`. |
 | P2-005 | C | [core/lexer.c:201-220](../core/lexer.c#L201-L220) | First-char-after-quote rules (brackets always escape, slash special-case) are correct but reasoning buried. | Quote reference §3862-3876 in code; add tests for `"\/"` and `"path/file"`. |
 | P2-010 | L | [core/token_source.c:185-200](../core/token_source.c#L185-L200) | NodeIterator's minus classification simpler than lexer's → list-mode and text-mode evaluate the same expression differently. | Unify via shared `logo_classify_minus`; add NodeIterator minus tests (currently absent). |
-| P2-016 | L | [core/token_source.c:60-90](../core/token_source.c#L60-L90) | `n/N` exponent allows sign in `is_number_word` but lexer rejects sign on `n/N`. Same input parsed two different ways. | Align both to reference rule. |
-| P2-012 | L | [tests/test_lexer.c](../tests/test_lexer.c) | No tests for `;` comments. | Add coverage as part of fixing P2-001. |
+| P2-016 | L | [core/token_source.c:60-90](../core/token_source.c#L60-L90) | ✅ `is_number_word` now matches lexer: requires digit before exponent, requires digit after exponent, rejects sign after `n`/`N`. |
+| P2-012 | L | [tests/test_lexer.c](../tests/test_lexer.c) | ✅ Added with P2-001. |
 | P2-017 | L | [core/lexer.c:437-500](../core/lexer.c#L437-L500) | Slash-in-quoted-word rule for file paths is asymmetric (first vs non-first char); no tests. | Add tests; document in code. |
 
 ### Evaluator core
@@ -114,7 +114,7 @@ These patterns recur across multiple modules and are worth fixing as a single sw
 |---|---|---|---|---|
 | **P5a-001** ✅ | L | [core/primitives_logical.c:14-32](../core/primitives_logical.c#L14-L32) | `and`/`or`/`not` used case-sensitive `strcmp` for `true`/`false`. | **Fixed:** `get_bool_arg` now uses `strcasecmp`. Tests: `test_and_accepts_uppercase_bool`, `test_or_accepts_uppercase_bool`. |
 | P5a-005 | L | [core/primitives_arithmetic.c:309-312](../core/primitives_arithmetic.c#L309-L312) | `sum` and `product` registered with `default_args=2`; reference allows single-arg. Verify with parser whether `sum 5` works. | Either change registration or document why varargs path covers it; add a test. |
-| P5a-010 | L | [core/primitives_conditionals.c:76-94](../core/primitives_conditionals.c#L76-L94) | `iftrue`/`iffalse` consult `var_get_test()` without checking whether a `test` has run in this procedure. | Make `test_valid==false` an explicit no-op or error per reference. |
+| P5a-010 | L | [core/primitives_conditionals.c:76-94](../core/primitives_conditionals.c#L76-L94) | ✅ Verified per-reference no-op behaviour; documented in code; covered by `test_iftrue_without_test`. |
 | **P5a-013** ✅ | C | [core/primitives_arithmetic.c:24-30](../core/primitives_arithmetic.c#L24-L30) | `prim_abs` used `REQUIRE_NUMBER(args[0], n)` then `UNUSED(args)`; contradictory. | **Fixed:** dropped the `UNUSED(args)`. |
 | **P5a-014** ✅ | X | [core/primitives_arithmetic.c:272-294](../core/primitives_arithmetic.c#L272-L294) | `prim_form` `fmt_buf[48]` could in principle overflow on `snprintf`. | **Fixed:** check `snprintf` return value; refuse with `ERR_DOESNT_LIKE_INPUT` on overflow. (In practice unreachable for finite single-precision floats — `multiplier` overflows to `inf` first — but the defensive check is cheap and keeps the contract explicit.) |
 
@@ -133,13 +133,13 @@ These patterns recur across multiple modules and are worth fixing as a single sw
 | P5b-014 | X | [core/primitives_words_lists.c:780-810](../core/primitives_words_lists.c#L780-L810) | `member`/`memberp` mishandle leading/trailing space and use `mem_is_nil` inconsistently. | Add edge-case tests (`member "" [a b]`, `member "  " "a  b"`); normalise. |
 | P5b-016 | L | [core/primitives_words_lists.c:700-750](../core/primitives_words_lists.c#L700-L750) | `item` 1-indexing matches reference; just confirm with a documented test. | Add explicit test. |
 | P5b-018 | X | [core/primitives_procedures.c:195-280](../core/primitives_procedures.c#L195-L280) | `proc_define_from_text` newline tracking across multi-line bracket bodies is untested and may insert/lose blank lines. | Add tests for `to foo [...\n[...]\n...]`. |
-| P5b-020 | L | [core/primitives_text.c:85-110](../core/primitives_text.c#L85-L110) | `setcursor` only checks `< 0`, not upper bound (assumed 40×32). | Validate against device-reported screen size; return error if out of range. |
+| P5b-020 | L | [core/primitives_text.c:85-110](../core/primitives_text.c#L85-L110) | ✅ Now rejects `column >= 40 \|\| row >= 32` per reference's fixed 40×32 screen. |
 
 ### Primitives — world / files / debug
 
 | ID | Axis | File:line | Observation | Recommendation |
 |---|---|---|---|---|
-| P5c-003 | X | [core/primitives_files_load_save.c:110-115](../core/primitives_files_load_save.c#L110-L115) | Procedures > `LOAD_MAX_PROC` (4 KB) are silently truncated. | Return `ERR_OUT_OF_SPACE` and skip the procedure. |
+| P5c-003 | X | [core/primitives_files_load_save.c:110-115](../core/primitives_files_load_save.c#L110-L115) | ✅ Both truncation paths now return `ERR_OUT_OF_SPACE` instead of silent skip. |
 | **P5c-004** ✅ | X | [core/primitives_files.c:285-365](../core/primitives_files.c#L285-L365) | `pos_f` cast to `long` without range validation — UB outside `[LONG_MIN, LONG_MAX]`. | **Fixed:** both `setreadpos` and `setwritepos` now reject non-finite values and values outside `[0, LONG_MAX]` before the cast. Test: `test_setreadpos_extreme_value`. |
 | **P5c-005** ✅ | C | [core/primitives_turtle.c:347-358](../core/primitives_turtle.c#L347-L358) | `towards` normalised angle via `while` loop — pathological for huge magnitudes. | **Fixed:** delegate to `normalize_heading()` (uses `fmodf`). |
 | ~~P5c-007~~ | L | [core/primitives_hardware.c:72-74](../core/primitives_hardware.c#L72-L74) | **DOWNGRADED.** Reference §2811 explicitly states out-of-range `toot` frequencies behave as a rest, not an error. The current behaviour is correct; only the inline comment's range was misleading. | Optional: update the comment to match reference (100–2000 Hz, out-of-range = rest). |

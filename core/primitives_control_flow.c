@@ -72,13 +72,9 @@ static Result prim_ignore(Evaluator *eval, int argc, Value *args)
     return result_none();
 }
 
-// ; (comment) - ignores its input (a word or list)
-static Result prim_comment(Evaluator *eval, int argc, Value *args)
-{
-    UNUSED(eval); UNUSED(argc); UNUSED(args);
-
-    return result_none();
-}
+// Comments (`; ... <newline>`) are now stripped by the lexer to match the
+// reference language: "the rest of the line is a comment." No primitive
+// is registered for `;` because the lexer never emits it as a token.
 
 // do.while list predicate_list - runs list repeatedly as long as predicate_list evaluates to true
 // list is always run at least once
@@ -273,7 +269,6 @@ void primitives_control_flow_init(void)
     primitive_register("output", 1, prim_output);
     primitive_register("op", 1, prim_output); // Abbreviation
     primitive_register("ignore", 1, prim_ignore);
-    primitive_register(";", 1, prim_comment);
     primitive_register("do.while", 2, prim_do_while);
     primitive_register("while", 2, prim_while);
     primitive_register("do.until", 2, prim_do_until);

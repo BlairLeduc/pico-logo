@@ -7,6 +7,8 @@
 
 #include "test_mock_fs.h"
 #include <errno.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 void setUp(void) { mock_fs_setUp(); }
 void tearDown(void) { mock_fs_tearDown(); }
@@ -540,6 +542,34 @@ void test_load_with_prefix(void)
     TEST_ASSERT_EQUAL_FLOAT(42.0, val.as.number);
 }
 
+void test_load_oversize_procedure_reports_error(void)
+{
+    // Build a procedure body with enough lines that the accumulated text
+    // exceeds the load buffer (LOAD_MAX_PROC = 4096). Each line is 60 bytes
+    // plus newline; 100 such lines is ~6.1 KB, well over the limit.
+    char *content = malloc(8192);
+    TEST_ASSERT_NOT_NULL(content);
+
+    int pos = 0;
+    pos += snprintf(content + pos, 8192 - pos, "to bigproc\n");
+    for (int i = 0; i < 100; i++)
+    {
+        pos += snprintf(content + pos, 8192 - pos,
+                        "make \"line%d \"this_line_is_about_sixty_chars_long_padding_xx\n", i);
+    }
+    pos += snprintf(content + pos, 8192 - pos, "end\n");
+
+    mock_fs_create_file("big.logo", content);
+    free(content);
+
+    Result r = run_string("load \"big.logo");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+
+    // The truncated procedure must NOT have been defined.
+    TEST_ASSERT_FALSE(proc_exists("bigproc"));
+}
+
 void test_save_with_prefix(void)
 {
     // Set up
@@ -715,6 +745,7 @@ int main(void)
 
     // Prefix handling tests (load/save)
     RUN_TEST(test_load_with_prefix);
+    RUN_TEST(test_load_oversize_procedure_reports_error);
     RUN_TEST(test_save_with_prefix);
     RUN_TEST(test_save_load_preserves_empty_list);
 

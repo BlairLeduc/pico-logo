@@ -20,7 +20,7 @@
 //==========================================================================
 
 #define MOCK_MAX_FILES 10
-#define MOCK_FILE_SIZE 1024
+#define MOCK_FILE_SIZE 8192
 
 typedef struct MockFile
 {

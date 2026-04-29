@@ -150,6 +150,22 @@ void test_setcursor_rejects_negative(void)
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
+void test_setcursor_rejects_column_too_large(void)
+{
+    // Reference: columns are numbered 0..39. setcursor must reject 40.
+    Result r = run_string("setcursor [40 0]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_setcursor_rejects_row_too_large(void)
+{
+    // Reference: rows (lines) are numbered 0..31. setcursor must reject 32.
+    Result r = run_string("setcursor [0 32]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
 // ============================================================================
 // fullscreen / fs tests
 // ============================================================================
@@ -457,6 +473,8 @@ int main(void)
     RUN_TEST(test_setcursor_requires_list);
     RUN_TEST(test_setcursor_requires_two_items);
     RUN_TEST(test_setcursor_rejects_negative);
+    RUN_TEST(test_setcursor_rejects_column_too_large);
+    RUN_TEST(test_setcursor_rejects_row_too_large);
     
     // fullscreen tests
     RUN_TEST(test_fullscreen_sets_mode);

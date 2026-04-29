@@ -292,26 +292,29 @@ void test_do_until_invalid_predicate(void)
 //==========================================================================
 // Comment (;) Tests
 //==========================================================================
+//
+// Per the language reference, `;` introduces a comment that runs to the
+// end of the line. The lexer strips it before tokens reach the evaluator,
+// so a line that contains only a comment produces no instructions.
 
 void test_comment_with_list(void)
 {
-    // ; with a list should be ignored
-    Result r = eval_string("; [This is a comment]");
+    // ; followed by a list should be ignored — entire line is comment.
+    Result r = run_string("; [This is a comment]");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
 }
 
 void test_comment_with_word(void)
 {
-    // ; with a word should be ignored
-    Result r = eval_string("; \"comment");
+    // ; followed by a word should be ignored.
+    Result r = run_string("; \"comment");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
 }
 
 void test_comment_in_procedure(void)
 {
-    // ; should work inside procedures
-    // Use define primitive to create a procedure with a comment
-    run_string("define \"test.comment [[] [; [comment] print 42]]");
+    // ; should work inside procedures.
+    run_string("define \"test.comment [[] [print 42 ; trailing comment]]");
     reset_output();
     run_string("test.comment");
     TEST_ASSERT_EQUAL_STRING("42\n", output_buffer);
@@ -319,8 +322,9 @@ void test_comment_in_procedure(void)
 
 void test_comment_inline(void)
 {
-    // ; can be used inline with other commands
-    run_string("print 1 ; [comment after print]");
+    // ; can be used inline with other commands.
+    reset_output();
+    run_string("print 1 ; trailing comment");
     TEST_ASSERT_EQUAL_STRING("1\n", output_buffer);
 }
 
