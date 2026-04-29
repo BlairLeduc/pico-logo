@@ -10,6 +10,8 @@
 #include "primitives.h"
 #include "error.h"
 #include "devices/io.h"
+#include <limits.h>
+#include <math.h>
 #include <string.h>
 
 //==========================================================================
@@ -286,11 +288,13 @@ static Result prim_setreadpos(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
     REQUIRE_NUMBER(args[0], pos_f);
-    long pos = (long)pos_f;
-    if (pos < 0)
+    // Reject non-finite values and values outside the long range before the
+    // float -> long cast (which would otherwise be undefined behaviour).
+    if (!isfinite(pos_f) || pos_f < 0.0f || pos_f > (float)LONG_MAX)
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
+    long pos = (long)pos_f;
 
     LogoIO *io = primitives_get_io();
     if (!io || !io->reader)
@@ -355,11 +359,11 @@ static Result prim_setwritepos(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
     REQUIRE_NUMBER(args[0], pos_f);
-    long pos = (long)pos_f;
-    if (pos < 0)
+    if (!isfinite(pos_f) || pos_f < 0.0f || pos_f > (float)LONG_MAX)
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
+    long pos = (long)pos_f;
 
     LogoIO *io = primitives_get_io();
     if (!io || !io->writer)

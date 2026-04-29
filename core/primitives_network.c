@@ -101,6 +101,12 @@ static Result prim_ntp(Evaluator *eval, int argc, Value *args)
         {
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
         }
+        // Real-world UTC offsets span [-12, +14] hours; reject anything outside
+        // this band rather than passing nonsense to the NTP backend.
+        if (!(timezone_offset >= -12.0f && timezone_offset <= 14.0f))
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+        }
     }
 
     // Check for optional server argument

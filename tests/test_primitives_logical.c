@@ -194,6 +194,22 @@ void test_not_error_number(void)
     TEST_ASSERT_EQUAL(ERR_NOT_BOOL, r.error_code);
 }
 
+void test_and_accepts_uppercase_bool(void)
+{
+    // The rest of the interpreter is case-insensitive (atoms, primitive names,
+    // variable names). Boolean literals must follow the same rule.
+    Result r = eval_string("and \"TRUE \"True");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("true", value_to_string(r.value));
+}
+
+void test_or_accepts_uppercase_bool(void)
+{
+    Result r = eval_string("or \"FALSE \"True");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("true", value_to_string(r.value));
+}
+
 //==========================================================================
 // Combined Logical Tests
 //==========================================================================
@@ -258,6 +274,8 @@ int main(void)
     RUN_TEST(test_not_double);
     RUN_TEST(test_not_error_not_bool);
     RUN_TEST(test_not_error_number);
+    RUN_TEST(test_and_accepts_uppercase_bool);
+    RUN_TEST(test_or_accepts_uppercase_bool);
 
     // Combined tests
     RUN_TEST(test_and_or_combined);

@@ -21,6 +21,12 @@
 // If predicate is false and list2 provided, run list2
 static Result prim_if(Evaluator *eval, int argc, Value *args)
 {
+    // Guard the variadic-call path: `(if)` or `(if x)` reaches the primitive
+    // with argc < 2; without this check the args[0]/args[1] reads below
+    // would be undefined behaviour.
+    if (argc < 2)
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, NULL, NULL);
+
     REQUIRE_BOOL(args[0], condition);
     REQUIRE_LIST(args[1]);
     

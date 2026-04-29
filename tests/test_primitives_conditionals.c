@@ -558,6 +558,22 @@ void test_test_nested_procedures(void)
     run_string("erase \"inner");
 }
 
+void test_if_zero_args_via_parens(void)
+{
+    // (if) reaches the primitive via the variadic-call path with argc=0.
+    // Without an explicit guard, args[0] would be UB.
+    Result r = eval_string("(if)");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NOT_ENOUGH_INPUTS, r.error_code);
+}
+
+void test_if_one_arg_via_parens(void)
+{
+    Result r = eval_string("(if \"true)");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NOT_ENOUGH_INPUTS, r.error_code);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -624,6 +640,9 @@ int main(void)
     RUN_TEST(test_test_local_to_procedure);
     RUN_TEST(test_test_inherited_by_subprocedure);
     RUN_TEST(test_test_nested_procedures);
+
+    RUN_TEST(test_if_zero_args_via_parens);
+    RUN_TEST(test_if_one_arg_via_parens);
 
     return UNITY_END();
 }

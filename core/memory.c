@@ -21,8 +21,22 @@
 
 #include "core/memory.h"
 
+#include <assert.h>
 #include <ctype.h>
 #include <string.h>
+
+// Compile-time invariant:
+//   The high bit of a 16-bit cell index is reserved as the "word" marker
+//   (0x8000) and 0x7FFF is reserved as the empty-list marker. List pool
+//   indices must therefore fall in [1, 0x7FFE]. With 4-byte cells, the
+//   maximum addressable pool size is 0x7FFE * 4 bytes; the rest of the
+//   memory block is reserved for the atom table.
+_Static_assert(LOGO_MEMORY_SIZE % 4 == 0,
+    "LOGO_MEMORY_SIZE must be a multiple of cell size (4 bytes)");
+
+// Maximum valid pool index for a list reference (avoids 0x7FFF empty-list
+// marker and 0x8000 word-reference marker bits).
+#define MAX_LIST_INDEX 0x7FFE
 
 // Align value up to 4-byte boundary
 #define ALIGN4(x) (((x) + 3) & ~3)
@@ -182,8 +196,9 @@ static uint16_t alloc_cell(void)
     // Calculate the index for this new node
     uint16_t index = (uint16_t)((LOGO_MEMORY_SIZE - node_bottom) / 4);
     
-    // Check if index fits in 16 bits
-    if (index == 0 || index > 0xFFFF)
+    // Reject indices that would collide with the empty-list (0x7FFF) or
+    // word-reference (0x8000+) marker bits used inside cell storage.
+    if (index == 0 || index > MAX_LIST_INDEX)
     {
         // Restore state and fail
         node_bottom += 4;

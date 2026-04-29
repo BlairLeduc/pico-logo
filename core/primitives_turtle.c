@@ -348,12 +348,10 @@ static Result prim_towards(Evaluator *eval, int argc, Value *args)
     // atan2 gives angle from positive x-axis (counterclockwise)
     // Convert to Logo heading (clockwise from north)
     float angle = atan2f(dx, dy) * (180.0f / 3.14159265358979f);
-    
-    // Normalize to [0, 360)
-    while (angle < 0.0f) angle += 360.0f;
-    while (angle >= 360.0f) angle -= 360.0f;
 
-    return result_ok(value_number(angle));
+    // Normalize to [0, 360). atan2f always returns a value in [-pi, pi]
+    // so a single conditional add is sufficient (no loops needed).
+    return result_ok(value_number(normalize_heading(angle)));
 }
 
 //==========================================================================

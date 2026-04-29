@@ -501,6 +501,19 @@ void test_setreadpos_negative(void)
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
+void test_setreadpos_extreme_value(void)
+{
+    // Values outside the long range cannot be safely cast to long; must error
+    // rather than invoke undefined behaviour.
+    mock_fs_create_file("pos.txt", "data");
+    run_string("open \"pos.txt");
+    run_string("setread \"pos.txt");
+
+    Result r = run_string("setreadpos 1e30");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
 void test_readpos_no_file_selected(void)
 {
     // When reader is keyboard (no file selected), should return ERR_NO_FILE_SELECTED
@@ -710,6 +723,7 @@ int main(void)
     RUN_TEST(test_filelen_invalid_input);
     RUN_TEST(test_setreadpos_invalid_input);
     RUN_TEST(test_setreadpos_negative);
+    RUN_TEST(test_setreadpos_extreme_value);
     RUN_TEST(test_readpos_no_file_selected);
     RUN_TEST(test_setreadpos_no_file_selected);
     RUN_TEST(test_writepos_no_file_selected);

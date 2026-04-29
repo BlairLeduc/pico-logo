@@ -11,18 +11,21 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Helper to extract boolean from a value (word "true" or "false")
+// Helper to extract boolean from a value (word "true" or "false").
+// Comparison is case-insensitive to match the rest of the interpreter
+// (atom interning, primitive lookup, variable names) which all use
+// case-insensitive matching.
 static bool get_bool_arg(Value v, bool *out)
 {
     const char *str = value_to_string(v);
     if (str == NULL) return false;
     
-    if (strcmp(str, "true") == 0)
+    if (strcasecmp(str, "true") == 0)
     {
         *out = true;
         return true;
     }
-    if (strcmp(str, "false") == 0)
+    if (strcasecmp(str, "false") == 0)
     {
         *out = false;
         return true;

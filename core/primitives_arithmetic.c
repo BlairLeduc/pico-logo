@@ -23,7 +23,7 @@
 // abs - outputs absolute value of number
 static Result prim_abs(Evaluator *eval, int argc, Value *args)
 {
-    UNUSED(eval); UNUSED(argc); UNUSED(args);
+    UNUSED(eval); UNUSED(argc);
     REQUIRE_NUMBER(args[0], n);
 
     return result_ok(value_number(fabsf(n)));
@@ -282,6 +282,14 @@ static Result prim_form(Evaluator *eval, int argc, Value *args)
     {
         // Format with specified decimal places
         fmt_len = snprintf(fmt_buf, sizeof(fmt_buf), "%.*f", decimalplaces, (double)rounded);
+    }
+
+    // snprintf returns the number of bytes that *would* have been written
+    // (excluding the null terminator). If the formatted number is too large
+    // to fit in fmt_buf, refuse rather than truncate silently.
+    if (fmt_len < 0 || (size_t)fmt_len >= sizeof(fmt_buf))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
 
     // If the formatted number fits in width, pad with leading spaces
