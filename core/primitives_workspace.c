@@ -23,6 +23,16 @@
 
 #define WS_FORMAT_BUFFER_SIZE 8192
 
+// Shared formatting buffer for workspace printing.
+//
+// Each ws_write_* helper formats one item (procedure, variable, property)
+// at a time before flushing to the I/O layer. The helpers are not
+// reentrant (workspace primitives don't run user code), so a single
+// static buffer is safe and avoids placing 8 KB on the stack per call —
+// a significant hazard on Pico, where the default per-task stack is
+// only a few kilobytes.
+static char ws_format_buffer[WS_FORMAT_BUFFER_SIZE];
+
 // Output callback for workspace printing (always succeeds)
 static bool ws_output(void *ctx, const char *str)
 {
@@ -54,13 +64,12 @@ static void ws_write_text(LogoIO *io, const char *text)
 
 static void ws_write_procedure_definition(LogoIO *io, UserProcedure *proc)
 {
-    char buffer[WS_FORMAT_BUFFER_SIZE];
     FormatBufferContext ctx;
 
-    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    format_buffer_init(&ctx, ws_format_buffer, sizeof(ws_format_buffer));
     if (format_procedure_definition(format_buffer_output, &ctx, proc))
     {
-        ws_write_text(io, buffer);
+        ws_write_text(io, ws_format_buffer);
         return;
     }
 
@@ -69,13 +78,12 @@ static void ws_write_procedure_definition(LogoIO *io, UserProcedure *proc)
 
 static void ws_write_procedure_title(LogoIO *io, UserProcedure *proc)
 {
-    char buffer[WS_FORMAT_BUFFER_SIZE];
     FormatBufferContext ctx;
 
-    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    format_buffer_init(&ctx, ws_format_buffer, sizeof(ws_format_buffer));
     if (format_procedure_title(format_buffer_output, &ctx, proc))
     {
-        ws_write_text(io, buffer);
+        ws_write_text(io, ws_format_buffer);
         return;
     }
 
@@ -84,13 +92,12 @@ static void ws_write_procedure_title(LogoIO *io, UserProcedure *proc)
 
 static void ws_write_variable(LogoIO *io, const char *name, Value value)
 {
-    char buffer[WS_FORMAT_BUFFER_SIZE];
     FormatBufferContext ctx;
 
-    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    format_buffer_init(&ctx, ws_format_buffer, sizeof(ws_format_buffer));
     if (format_variable(format_buffer_output, &ctx, name, value))
     {
-        ws_write_text(io, buffer);
+        ws_write_text(io, ws_format_buffer);
         return;
     }
 
@@ -99,13 +106,12 @@ static void ws_write_variable(LogoIO *io, const char *name, Value value)
 
 static void ws_write_property_list(LogoIO *io, const char *name, Node list)
 {
-    char buffer[WS_FORMAT_BUFFER_SIZE];
     FormatBufferContext ctx;
 
-    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    format_buffer_init(&ctx, ws_format_buffer, sizeof(ws_format_buffer));
     if (format_property_list(format_buffer_output, &ctx, name, list))
     {
-        ws_write_text(io, buffer);
+        ws_write_text(io, ws_format_buffer);
         return;
     }
 
