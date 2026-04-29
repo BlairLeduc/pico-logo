@@ -676,6 +676,27 @@ void test_text_no_params(void)
     TEST_ASSERT_TRUE(value_is_list(r.value));
 }
 
+void test_text_empty_body_is_well_formed(void)
+{
+    // A procedure with no body lines must still produce a well-formed
+    // [[params]] list (proper NIL-terminated singleton), never a
+    // dotted [[params] | NIL] / mid-list NIL.
+    const char *params[] = {"x"};
+    proc_define(mem_word_ptr(mem_atom_cstr("emptybody")), params, 1, NODE_NIL);
+
+    Result r = eval_string("text \"emptybody");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_list(r.value));
+
+    // First (and only) element should be the params list [x]
+    Node outer = r.value.as.node;
+    TEST_ASSERT_FALSE(mem_is_nil(outer));
+    Node params_elem = mem_car(outer);
+    TEST_ASSERT_TRUE(mem_is_list(params_elem));
+    // Tail must be NIL (no body lines)
+    TEST_ASSERT_TRUE(mem_is_nil(mem_cdr(outer)));
+}
+
 //==========================================================================
 // proc_define_from_text tests
 //==========================================================================
@@ -1735,6 +1756,7 @@ int main(void)
     // TEXT primitive detailed tests
     RUN_TEST(test_text_with_params);
     RUN_TEST(test_text_no_params);
+    RUN_TEST(test_text_empty_body_is_well_formed);
     
     // proc_define_from_text tests
     RUN_TEST(test_proc_define_from_text_simple);

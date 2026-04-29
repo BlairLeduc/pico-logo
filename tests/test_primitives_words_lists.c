@@ -576,6 +576,64 @@ void test_memberp_list_false(void)
     TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
 }
 
+//---- member/memberp edge cases ----
+
+void test_member_empty_needle_in_word_returns_empty(void)
+{
+    // Empty needle in word context yields empty word ("not found"
+    // sentinel for the word-overload), not the whole haystack.
+    Result r = eval_string("member \"|| \"abc");  // || is empty word literal
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("", mem_word_ptr(r.value.as.node));
+}
+
+void test_member_multichar_substring_in_word(void)
+{
+    // Multi-character needle should be found as substring.
+    Result r = eval_string("member \"bc \"abcd");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("bcd", mem_word_ptr(r.value.as.node));
+}
+
+void test_member_word_is_case_insensitive(void)
+{
+    Result r = eval_string("member \"B \"abc");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    // Tail starts at position of 'b' in haystack
+    TEST_ASSERT_EQUAL_STRING("bc", mem_word_ptr(r.value.as.node));
+}
+
+void test_member_list_in_word_returns_empty(void)
+{
+    // List argument cannot be a member of a word; expect empty word.
+    Result r = eval_string("member [a] \"abc");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("", mem_word_ptr(r.value.as.node));
+}
+
+void test_member_number_in_list(void)
+{
+    Result r = eval_string("member 2 [1 2 3]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
+    Node first = mem_car(r.value.as.node);
+    TEST_ASSERT_EQUAL_STRING("2", mem_word_ptr(first));
+}
+
+void test_memberp_empty_needle_word(void)
+{
+    // The predicate form should be `false` when member returns the
+    // empty-word sentinel.
+    Result r = eval_string("member? \"|| \"abc");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -662,6 +720,12 @@ int main(void)
     RUN_TEST(test_memberp_word_true);
     RUN_TEST(test_memberp_list_true);
     RUN_TEST(test_memberp_list_false);
+    RUN_TEST(test_member_empty_needle_in_word_returns_empty);
+    RUN_TEST(test_member_multichar_substring_in_word);
+    RUN_TEST(test_member_word_is_case_insensitive);
+    RUN_TEST(test_member_list_in_word_returns_empty);
+    RUN_TEST(test_member_number_in_list);
+    RUN_TEST(test_memberp_empty_needle_word);
 
     return UNITY_END();
 }

@@ -27,6 +27,16 @@ void test_make_and_thing(void)
     TEST_ASSERT_EQUAL_FLOAT(42.0f, r.value.as.number);
 }
 
+void test_thing_unknown_raises_no_value(void)
+{
+    // `thing` on an undefined variable must signal NO_VALUE
+    // (the same error raised by `:foo` for an unbound name), not
+    // a generic "doesn't like" error.
+    Result r = eval_string("thing \"zzz_undefined");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NO_VALUE, r.error_code);
+}
+
 void test_dots_variable(void)
 {
     run_string("make \"y 100");
@@ -255,6 +265,7 @@ int main(void)
     UNITY_BEGIN();
 
     RUN_TEST(test_make_and_thing);
+    RUN_TEST(test_thing_unknown_raises_no_value);
     RUN_TEST(test_dots_variable);
     RUN_TEST(test_global_variable);
     RUN_TEST(test_local_declaration);

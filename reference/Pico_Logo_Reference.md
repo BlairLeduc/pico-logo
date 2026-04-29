@@ -903,7 +903,7 @@ The background colour number is 255. The default background colour number is 0.
 See [Colours](#appendix-e-colour-palette-for-pico-logo) for the default palette.
 
 
-## setpc
+## setpc (setpencolor)
 
 setpc _colournumber_  
 
@@ -2629,6 +2629,8 @@ Outputs `true` if any of its inputs are `true`. All inputs are evaluated.
 bitand _num1_ _num2_  
 (bitand _num1_ _num2_ _num3_ ...)
 
+`operation`
+
 Outputs the bitwise AND of its inputs, which must be integers.
 
 
@@ -2636,6 +2638,8 @@ Outputs the bitwise AND of its inputs, which must be integers.
 
 bitor _num1_ _num2_  
 (bitor _num1_ _num2_ _num3_ ...)
+
+`operation`
 
 Outputs the bitwise OR of its inputs, which must be integers.
 
@@ -2645,12 +2649,16 @@ Outputs the bitwise OR of its inputs, which must be integers.
 bitxor _num1_ _num2_  
 (bitxor _num1_ _num2_ _num3_ ...)
 
+`operation`
+
 Outputs the bitwise exclusive OR of its inputs, which must be integers.
 
 
 ## bitnot
 
 bitnot _num_  
+
+`operation`
 
 Outputs the bitwise NOT of its input, which must be an integer.
 
@@ -2659,12 +2667,16 @@ Outputs the bitwise NOT of its input, which must be an integer.
 
 ashift _num1_ _num2_  
 
+`operation`
+
 Outputs _num1_ arithmetic-shifted to the left by _num2_ bits. If _num2_ is negative, the shift is to the right with sign extension. The inputs must be integers.
 
 
 ## lshift
 
 lshift _num1_ _num2_  
+
+`operation`
 
 Outputs _num1_ logical-shifted to the left by _num2_ bits. If _num2_ is negative, the shift is to the right with zero fill. The inputs must be integers.
 
@@ -3469,7 +3481,7 @@ The `settime` command sets the current time to the specified _hour_, _minute_, a
 
 These procedures allow you to manage the WiFi connection of the device.
 
-## wifi?
+## wifi? (wifip)
 
 wifi?
 

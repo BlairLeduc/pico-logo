@@ -487,7 +487,13 @@ static Result prim_text(Evaluator *eval, int argc, Value *args)
     Node params_list = mem_is_nil(params) ? params : NODE_MAKE_LIST(NODE_GET_INDEX(params));
     
     // Body is already stored as list-of-lists [[line1] [line2] ...]
-    // Prepend params to create [[params] [line1] [line2] ...]
+    // Prepend params to create [[params] [line1] [line2] ...].
+    //
+    // Empty body case: proc->body is NODE_NIL, so mem_cons(params_list,
+    // NODE_NIL) yields the well-formed singleton [[params]] (proper NIL
+    // termination). This matches the reference's representation of a
+    // procedure with no instructions and is consumed cleanly by `define`
+    // for round-tripping.
     Node result = mem_cons(params_list, proc->body);
     
     return result_ok(value_list(result));

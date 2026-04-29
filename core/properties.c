@@ -38,7 +38,16 @@ static Node prop_value_to_node(Value v)
     }
     else if (value_is_number(v))
     {
-        // Store numbers as word atoms
+        // Store numbers as word atoms.
+        //
+        // PRECISION NOTE: this round-trips the value through
+        // `format_number` (single-precision %g style) and then back via
+        // `value_to_number` on read. The on-disk representation is the
+        // formatted text, not the binary float, so very small or very
+        // large values may lose a few least-significant bits compared
+        // to the original. Callers that need bit-exact storage should
+        // wrap the value in a single-element list, which is preserved
+        // verbatim.
         char buf[32];
         format_number(buf, sizeof(buf), v.as.number);
         return mem_atom_cstr(buf);
@@ -72,7 +81,15 @@ static Value prop_node_to_value(Node n)
 }
 
 // Find the entry for a name in the property list
-// Returns the entry list [name prop1 val1 ...], or NODE_NIL if not found
+// Returns the entry list [name prop1 val1 ...], or NODE_NIL if not found.
+//
+// COMPLEXITY: O(N) in the number of property lists. Per-property lookups
+// inside `find_entry` callers walk each entry as a flat name/value
+// sequence, so a `gprop`/`pprop` cycle is O(N + K) where K is the size
+// of the matching entry. The constant factors are small (a single
+// `strcasecmp` per node) and the property-list count in practice is
+// tiny, so the cost is negligible — but if profiling ever shows it
+// hot, switch to a hash table keyed on the interned name pointer.
 static Node find_entry(const char *name)
 {
     Node curr = property_lists;

@@ -1402,6 +1402,15 @@ static Result prim_find(Evaluator *eval, int argc, Value *args)
 //==========================================================================
 // reduce procedure data
 //==========================================================================
+//
+// Per the reference: "the last two members of `data` are provided as
+// inputs to `procedure`, and the output of `procedure` is then combined
+// with the previous member of `data` by calling `procedure` again."
+// In other words, `reduce` is a right-fold:
+//   reduce f [a b c d]  ==  f(a, f(b, f(c, d)))
+// not a left-fold (`f(f(f(a, b), c), d)`). For commutative procedures
+// (`sum`, `product`) the distinction is invisible; for non-commutative
+// ones (e.g. `word`) it matters and is pinned by `test_reduce_word_is_right_fold`.
 
 static Result prim_reduce(Evaluator *eval, int argc, Value *args)
 {

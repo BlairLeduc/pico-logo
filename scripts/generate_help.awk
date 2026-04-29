@@ -105,8 +105,11 @@ in_code_fence { next }
     next
 }
 
-# Badge line
-in_entry && state == "sig" && /^`(command|operation)`[[:space:]]*$/ {
+# Badge line. Accepts both single-form (`command` or `operation`) and
+# the disjunction form used by primitives that can serve as either, e.g.
+# `if`, `ifelse`, `run`, `apply`, the `bit*`/`*shift` ops, etc., which
+# spell their badge as: `command` or `operation`.
+in_entry && state == "sig" && /^`(command|operation)`([[:space:]]+or[[:space:]]+`(command|operation)`)?[[:space:]]*$/ {
     cur_badge = $0
     sub(/^`/, "", cur_badge)
     sub(/`[[:space:]]*$/, "", cur_badge)

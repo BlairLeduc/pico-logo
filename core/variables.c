@@ -109,6 +109,17 @@ bool var_set_local(const char *name, Value value)
 
 bool var_set(const char *name, Value value)
 {
+    // Logo uses dynamic scoping. `make` (this function) walks the frame
+    // chain looking for an existing binding of `name` in any *ancestor*
+    // procedure, and updates the innermost one it finds. If no frame in
+    // the chain has the name, it falls through to the global table
+    // (creating a new global if necessary). This is the spec behaviour
+    // and is what lets a procedure modify a variable owned by its caller
+    // without the caller having to pass it back out.
+    //
+    // Note this is distinct from `local` / `var_set_local`, which always
+    // creates a binding in the *current* frame.
+
     // First, search frame stack for existing local binding (if in a procedure)
     FrameStack *frames = proc_get_frame_stack();
     if (frames && !frame_stack_is_empty(frames))
@@ -446,25 +457,31 @@ void var_set_test(bool value)
 
 bool var_get_test(bool *out)
 {
-    // Try to use frame system if frames are active
+    // Lookup precedence for the implicit `test` value used by `iftrue`
+    // and `iffalse`:
+    //   1. The innermost active procedure frame (if any) that recorded
+    //      a `test` result via `var_set_test` / `frame_set_test`.
+    //   2. Otherwise the top-level (global) `test` slot.
+    // Returns false (and leaves *out unchanged) only when no test has
+    // been run anywhere in the active scope chain. This matches the
+    // reference's per-procedure scoping of TEST results while still
+    // allowing top-level REPL use.
     FrameStack *frames = proc_get_frame_stack();
     if (frames && !frame_stack_is_empty(frames))
     {
-        // Check frame chain first
         if (frame_get_test(frames, out))
         {
             return true;
         }
-        // Fall through to check global test state
+        // No frame in the chain has recorded a test; fall through.
     }
-    
-    // Check global test state
+
     if (global_test_valid)
     {
         if (out) *out = global_test_value;
         return true;
     }
-    
+
     return false;  // No test has been run in scope chain
 }
 

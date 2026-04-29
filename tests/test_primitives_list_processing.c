@@ -334,6 +334,25 @@ void test_reduce_empty_list_error(void)
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
+void test_reduce_word_is_right_fold(void)
+{
+    // For a non-commutative operation we can detect fold direction.
+    // `mark :x :y` outputs `word :x "L :y "R`, which brackets :y in
+    // L..R. With a right fold of [a b c d]:
+    //   inner f(c,d) -> "cLdR"
+    //   then  f(b, "cLdR") -> "bLcLdRR"
+    //   then  f(a, "bLcLdRR") -> "aLbLcLdRRR"
+    // A left fold would give a different shape, so this pins direction.
+    // Note: `to ... end` is REPL-level syntax, not an evaluator primitive,
+    // so we register `mark` directly via the test scaffold helper.
+    const char *params[] = {"x", "y"};
+    define_proc("mark", params, 2, "output (word :x \"L :y \"R)");
+    Result r = eval_string("reduce \"mark [a b c d]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("aLbLcLdRRR", mem_word_ptr(r.value.as.node));
+}
+
 //==========================================================================
 // crossmap tests
 //==========================================================================
@@ -675,6 +694,7 @@ int main(void)
     RUN_TEST(test_reduce_single_element);
     RUN_TEST(test_reduce_with_primitive);
     RUN_TEST(test_reduce_empty_list_error);
+    RUN_TEST(test_reduce_word_is_right_fold);
     RUN_TEST(test_reduce_with_word);
     
     // crossmap tests

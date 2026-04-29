@@ -128,7 +128,14 @@ extern "C"
     // Mark all procedure bodies as GC roots
     void proc_gc_mark_all(void);
 
-    // Get the global frame stack (for passing to evaluator)
+    // Get the global frame stack (for passing to evaluator).
+    //
+    // OWNERSHIP: the frame stack is owned (allocated and zeroed) by
+    // procedures.c. It is shared, not duplicated: variables.c, frame.c,
+    // and the evaluator all read and mutate it through this single
+    // accessor. There is exactly one frame stack per interpreter
+    // instance; there is no notion of multiple concurrent stacks.
+    // Callers MUST NOT free or replace the returned pointer.
     FrameStack *proc_get_frame_stack(void);
 
 #ifdef __cplusplus

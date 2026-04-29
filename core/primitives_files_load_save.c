@@ -262,7 +262,21 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
         {
             // Check if startup was set by the loaded file:
             // - It didn't exist before, or
-            // - It existed but the value (node pointer) changed
+            // - It existed but the value (node pointer) changed.
+            //
+            // IMPORTANT: this is a *node-identity* (pointer) comparison,
+            // not a structural deep-equal. It works because:
+            //   1. List literals parsed from the loaded file produce a
+            //      freshly cons'd list with a new node index, so any
+            //      `make "startup [...]` in the file changes the pointer
+            //      even if the printed contents look identical to the
+            //      previous binding.
+            //   2. The interpreter never mutates an existing list in
+            //      place to "replace" startup; `make` always rebinds.
+            // If either invariant ever changes (e.g. structural sharing
+            // of literal lists, or in-place edits), this comparison
+            // could spuriously skip a re-run; switch to value equality
+            // (deep compare via `values_equal`) at that point.
             bool startup_set_by_file = !startup_existed_before ||
                                        (startup_after.as.node != startup_before.as.node);
             
