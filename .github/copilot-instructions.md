@@ -37,4 +37,4 @@
 - When adding new features or fixing bugs:
   - Propose or update **unit tests first or alongside** the code changes.
 - Work incrementally toward the larger goal of Logo semantics, focusing on small, testable changes.
-- Prioritize code **clarity**, **maintainability**, **simplicity of implementation**, and adherence to Logo semantics. Refactor code as needed to improve these aspects, even if it means changing existing code.
+- Prioritize code **clarity**, **maintainability**, **simplicity of implementation**, and adherence to Logo semantics. Refactor code as needed to improve these aspects, even if it means changing existing code. However, do not ignore performance considerations, especially for core interpreter logic.

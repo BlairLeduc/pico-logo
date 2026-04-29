@@ -151,27 +151,50 @@ typedef struct {
     bool success;
 } ParseResult;
 
-// Helper: Parse a line into a list of words
-// This is similar to what the lexer does but returns a list structure
-// Returns success=false if memory allocation fails
-static ParseResult parse_line_to_list(const char *line)
-{
-    Lexer lexer;
-    lexer_init(&lexer, line);
+// Forward declaration
+static ParseResult parse_list_body(Lexer *lexer);
 
-    // Build list in reverse, then reverse it at the end
-    Node result = NODE_NIL;
-    Node *tail = &result;
+// Append a freshly built element cell (a single-cell list whose car is the
+// element) to the list under construction. Updates *head and *tail as needed.
+// Returns false if cell allocation failed.
+static bool append_element(Node element, Node *head, Node *tail)
+{
+    Node new_cell = mem_cons(element, NODE_NIL);
+    if (mem_is_nil(new_cell))
+    {
+        return false;
+    }
+    if (mem_is_nil(*head))
+    {
+        *head = new_cell;
+    }
+    else
+    {
+        mem_set_cdr(*tail, new_cell);
+    }
+    *tail = new_cell;
+    return true;
+}
+
+// Parse a list body from the lexer up to a matching TOKEN_RIGHT_BRACKET,
+// TOKEN_EOF, or TOKEN_ERROR. Nested lists are parsed recursively against
+// the same lexer so bracket matching mirrors the main parser exactly.
+static ParseResult parse_list_body(Lexer *lexer)
+{
+    Node head = NODE_NIL;
+    Node tail = NODE_NIL;
 
     for (;;)
     {
-        Token tok = lexer_next_token(&lexer);
-        if (tok.type == TOKEN_EOF || tok.type == TOKEN_ERROR)
+        Token tok = lexer_next_token(lexer);
+        if (tok.type == TOKEN_EOF || tok.type == TOKEN_ERROR ||
+            tok.type == TOKEN_RIGHT_BRACKET)
         {
             break;
         }
 
         Node element = NODE_NIL;
+        bool have_element = true;
 
         switch (tok.type)
         {
@@ -180,71 +203,28 @@ static ParseResult parse_line_to_list(const char *line)
         case TOKEN_NUMBER:
         case TOKEN_COLON:
         {
-            // Copy token text - token already includes quote/colon prefix if present
             char buf[256];
             size_t len = tok.length;
             if (len >= sizeof(buf))
                 len = sizeof(buf) - 1;
             memcpy(buf, tok.start, len);
             buf[len] = '\0';
-
-            // Token text already includes the prefix (", :), just use it directly
             element = mem_atom(buf, len);
             break;
         }
 
         case TOKEN_LEFT_BRACKET:
         {
-            // Parse nested list recursively
-            // Find matching right bracket
-            int depth = 1;
-            const char *list_start = lexer.current;
-            while (depth > 0 && !lexer_is_at_end(&lexer))
+            ParseResult inner = parse_list_body(lexer);
+            if (!inner.success)
             {
-                Token inner = lexer_next_token(&lexer);
-                if (inner.type == TOKEN_LEFT_BRACKET)
-                    depth++;
-                else if (inner.type == TOKEN_RIGHT_BRACKET)
-                    depth--;
-                else if (inner.type == TOKEN_EOF)
-                    break;
+                return inner;
             }
-            // list_start to current position (minus the ] we just consumed) forms the inner list
-            // For simplicity, recursively parse
-            size_t inner_len = lexer.current - list_start - 1; // Exclude the ]
-            if (inner_len > 0)
-            {
-                char *inner_str = (char *)malloc(inner_len + 1);
-                if (!inner_str)
-                {
-                    return (ParseResult){.node = NODE_NIL, .success = false};
-                }
-                memcpy(inner_str, list_start, inner_len);
-                inner_str[inner_len] = '\0';
-                ParseResult inner_result = parse_line_to_list(inner_str);
-                free(inner_str);
-                if (!inner_result.success)
-                {
-                    return inner_result;
-                }
-                element = inner_result.node;
-                // Wrap in list type
-                element = NODE_MAKE_LIST(NODE_GET_INDEX(element)) | (NODE_TYPE_LIST << NODE_TYPE_SHIFT);
-            }
-            else
-            {
-                element = NODE_NIL; // Empty list
-            }
-            // Mark as list value
-            Node new_cell = mem_cons(element, NODE_NIL);
-            *tail = new_cell;
-            tail = &((Node *)&new_cell)[0]; // This won't work directly, need different approach
-            continue; // Skip the normal append below
+            // An empty inner list must be encoded as NODE_MAKE_LIST(0), not
+            // NODE_NIL, so it round-trips through cell encoding correctly.
+            element = mem_is_nil(inner.node) ? NODE_MAKE_LIST(0) : inner.node;
+            break;
         }
-
-        case TOKEN_RIGHT_BRACKET:
-            // Shouldn't happen at top level, ignore
-            continue;
 
         case TOKEN_PLUS:
             element = mem_atom_cstr("+");
@@ -276,28 +256,29 @@ static ParseResult parse_line_to_list(const char *line)
             break;
 
         default:
-            continue;
+            have_element = false;
+            break;
         }
 
-        // Append element to list
-        Node new_cell = mem_cons(element, NODE_NIL);
-        if (mem_is_nil(result))
+        if (!have_element)
+            continue;
+
+        if (!append_element(element, &head, &tail))
         {
-            result = new_cell;
-        }
-        else
-        {
-            // Find end of list and append
-            Node current = result;
-            while (!mem_is_nil(mem_cdr(current)))
-            {
-                current = mem_cdr(current);
-            }
-            mem_set_cdr(current, new_cell);
+            return (ParseResult){.node = NODE_NIL, .success = false};
         }
     }
 
-    return (ParseResult){.node = result, .success = true};
+    return (ParseResult){.node = head, .success = true};
+}
+
+// Helper: Parse a line into a list of values, recursively handling
+// nested bracketed sublists.
+static ParseResult parse_line_to_list(const char *line)
+{
+    Lexer lexer;
+    lexer_init(&lexer, line);
+    return parse_list_body(&lexer);
 }
 
 // readlist (rl) - reads a line of input and outputs it as a list

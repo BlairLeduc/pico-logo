@@ -250,14 +250,17 @@ static Result prim_form(Evaluator *eval, int argc, Value *args)
     int width = (int)width_f;
     int decimalplaces = (int)decimalplaces_f;
 
+    // Buffer for formatting - must hold the padded result plus null terminator.
+    // FORM_MAX_WIDTH bounds the user-requested field width to avoid stack
+    // buffer overflow when padding is computed as (width - fmt_len).
+    #define FORM_MAX_WIDTH 255
+    char buf[FORM_MAX_WIDTH + 1];
+
     // Validate inputs
-    if (width <= 0)
+    if (width <= 0 || width > FORM_MAX_WIDTH)
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
     if (decimalplaces < 0)
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[2]));
-
-    // Buffer for formatting - enough for any reasonable number
-    char buf[64];
 
     // Round the number to the specified decimal places
     float multiplier = 1.0f;

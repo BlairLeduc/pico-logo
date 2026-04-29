@@ -269,17 +269,25 @@ static Node index_to_node(uint16_t index)
 //==========================================================================
 
 // Create a cons cell (list node) with car and cdr.
-// Returns NODE_NIL if out of memory.
+// Returns NODE_NIL if out of memory or if either operand cannot be encoded
+// in 16 bits (e.g. an atom whose offset is >= 0x8000).
 Node mem_cons(Node car, Node cdr)
 {
+    // Encode operands first so allocation isn't wasted on an unencodable cell.
+    // node_to_index returns 0 for NIL *and* for out-of-range references; we
+    // must distinguish these cases to avoid silently corrupting the cell.
+    uint16_t car_idx = node_to_index(car);
+    uint16_t cdr_idx = node_to_index(cdr);
+    if ((car != NODE_NIL && car_idx == 0) || (cdr != NODE_NIL && cdr_idx == 0))
+    {
+        return NODE_NIL; // Operand reference would be lost in 16-bit cell encoding
+    }
+
     uint16_t index = alloc_cell();
     if (index == 0)
     {
         return NODE_NIL; // Out of memory
     }
-
-    uint16_t car_idx = node_to_index(car);
-    uint16_t cdr_idx = node_to_index(cdr);
 
     uint32_t *cell_ptr = get_node_ptr(index);
     if (cell_ptr == NULL)

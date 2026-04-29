@@ -619,6 +619,16 @@ void test_form_decimal_places_negative_error(void)
     TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
 }
 
+void test_form_width_too_large_error(void)
+{
+    // form with extreme width must not write past the internal buffer.
+    // Reject widths that exceed the supported maximum rather than silently
+    // overflowing the stack buffer.
+    Result r = eval_string("form 1.5 1000 2");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -694,6 +704,7 @@ int main(void)
     RUN_TEST(test_form_width_zero_error);
     RUN_TEST(test_form_width_negative_error);
     RUN_TEST(test_form_decimal_places_negative_error);
+    RUN_TEST(test_form_width_too_large_error);
 
     return UNITY_END();
 }

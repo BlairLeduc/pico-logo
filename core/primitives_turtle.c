@@ -15,6 +15,16 @@
 #include <stdio.h>
 #include <string.h>
 
+// Normalize a heading in degrees to the half-open range [0, 360).
+// Used so that HEADING and SETHEADING expose canonical angles regardless
+// of how many full turns the underlying device accumulates.
+static float normalize_heading(float h)
+{
+    h = fmodf(h, 360.0f);
+    if (h < 0.0f) h += 360.0f;
+    return h;
+}
+
 //==========================================================================
 // Core palette state
 //
@@ -235,7 +245,7 @@ static Result prim_setheading(Evaluator *eval, int argc, Value *args)
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_heading)
     {
-        turtle->set_heading(degrees);
+        turtle->set_heading(normalize_heading(degrees));
     }
     
     return result_none();
@@ -258,7 +268,7 @@ static Result prim_heading(Evaluator *eval, int argc, Value *args)
         heading = turtle->get_heading();
     }
 
-    return result_ok(value_number(heading));
+    return result_ok(value_number(normalize_heading(heading)));
 }
 
 // pos - Output current position as [x y]

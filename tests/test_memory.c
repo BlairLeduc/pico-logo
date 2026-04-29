@@ -844,6 +844,22 @@ void test_cons_returns_nil_not_crash_on_full(void)
     }
 }
 
+void test_cons_rejects_word_with_offset_too_large(void)
+{
+    // Words referenced from cons cells are encoded with the high bit (0x8000)
+    // set on top of the atom offset, so any atom offset >= 0x8000 cannot fit.
+    // mem_cons must report failure (NODE_NIL) rather than silently writing a
+    // 0 cell index that would be indistinguishable from NIL.
+    Node bad_word = NODE_MAKE_WORD(0x8000);
+    Node result = mem_cons(bad_word, NODE_NIL);
+    TEST_ASSERT_TRUE(mem_is_nil(result));
+
+    // Also reject when only the cdr is unencodable
+    Node ok_word = mem_atom("ok", 2);
+    Node result2 = mem_cons(ok_word, bad_word);
+    TEST_ASSERT_TRUE(mem_is_nil(result2));
+}
+
 void test_atom_returns_nil_not_crash_when_full(void)
 {
     // Fill atom space with large unique atoms
@@ -955,6 +971,7 @@ int main(void)
     RUN_TEST(test_large_atoms_exhaust_space);
     RUN_TEST(test_interleaved_atom_node_exhaustion);
     RUN_TEST(test_cons_returns_nil_not_crash_on_full);
+    RUN_TEST(test_cons_rejects_word_with_offset_too_large);
     RUN_TEST(test_atom_returns_nil_not_crash_when_full);
 
     return UNITY_END();
