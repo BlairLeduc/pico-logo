@@ -122,6 +122,28 @@ void test_item_number(void)
     TEST_ASSERT_EQUAL_STRING("2", mem_word_ptr(r.value.as.node));
 }
 
+void test_item_is_one_indexed(void)
+{
+    // The reference defines `item` as 1-indexed: `item 1 [a b c]` -> a.
+    // Pin this with a list and a word.
+    Result r1 = eval_string("item 1 [a b c]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r1.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r1.value.type);
+    TEST_ASSERT_EQUAL_STRING("a", mem_word_ptr(r1.value.as.node));
+
+    Result r2 = eval_string("item 1 \"abc");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r2.value.type);
+    TEST_ASSERT_EQUAL_STRING("a", mem_word_ptr(r2.value.as.node));
+}
+
+void test_item_zero_index_errors(void)
+{
+    // 0 is below the valid range; should error per 1-indexed semantics.
+    Result r = eval_string("item 0 [a b c]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
 //==========================================================================
 // Replace Tests
 //==========================================================================
@@ -574,6 +596,8 @@ int main(void)
     RUN_TEST(test_item_word);
     RUN_TEST(test_item_list);
     RUN_TEST(test_item_number);
+    RUN_TEST(test_item_is_one_indexed);
+    RUN_TEST(test_item_zero_index_errors);
     
     // Replace
     RUN_TEST(test_replace_word);

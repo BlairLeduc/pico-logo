@@ -201,6 +201,14 @@ static Result invoke_proc_spec(Evaluator *eval, ProcSpec *spec, int argc, Value 
         {
             return result_error_arg(ERR_TOO_MANY_INPUTS, NULL, NULL);
         }
+        // The save/restore arrays below are sized at MAX_PROC_PARAMS;
+        // if the lambda was constructed with more parameters than that
+        // (defence in depth — parse_proc_spec should have rejected it)
+        // we would silently corrupt the stack. Fail loudly instead.
+        if (spec->as.lambda.param_count > MAX_PROC_PARAMS)
+        {
+            return result_error(ERR_TOO_MANY_INPUTS);
+        }
         
         // For lambda expressions, we create local bindings and evaluate
         // We need to save/restore any existing variables with the same names

@@ -68,6 +68,17 @@ void test_init_misaligned_memory_fails(void)
     TEST_ASSERT_FALSE(arena_init(&a, misaligned, 1024));
 }
 
+void test_init_undersized_fails(void)
+{
+    // size_bytes < sizeof(uint32_t) cannot hold even a single word.
+    FrameArena a;
+    TEST_ASSERT_FALSE(arena_init(&a, test_memory, 0));
+    TEST_ASSERT_FALSE(arena_init(&a, test_memory, 1));
+    TEST_ASSERT_FALSE(arena_init(&a, test_memory, 3));
+    // Exactly one word should succeed.
+    TEST_ASSERT_TRUE(arena_init(&a, test_memory, sizeof(uint32_t)));
+}
+
 void test_init_capacity_clamped_to_max(void)
 {
     // Try to init with more than max addressable (256KB)
@@ -652,6 +663,7 @@ int main(void)
     RUN_TEST(test_init_null_memory_fails);
     RUN_TEST(test_init_null_arena_fails);
     RUN_TEST(test_init_misaligned_memory_fails);
+    RUN_TEST(test_init_undersized_fails);
     RUN_TEST(test_init_capacity_clamped_to_max);
 
     // Allocation tests

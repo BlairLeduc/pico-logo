@@ -38,7 +38,7 @@ add_logo_test(test_eval)
 add_logo_test(test_error)
 add_logo_test(test_mock_device)
 add_logo_test(test_format)
-
+add_logo_test(test_help)
 # Primitive tests
 add_logo_test(test_primitives_arithmetic)
 add_logo_test(test_primitives_bitwise)

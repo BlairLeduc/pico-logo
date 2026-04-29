@@ -748,18 +748,28 @@ Result eval_primary(Evaluator *eval)
                     FrameHeader *current_frame = frame_current(frames);
                     if (current_frame && current_frame->proc == user_proc)
                     {
-                        // Self-recursive tail call - set up TCO
-                        TailCall *tc = proc_get_tail_call();
-                        tc->is_tail_call = true;
-                        tc->is_output_call = (eval->primitive_arg_depth > 0);
-                        tc->proc_name = user_proc->name;
-                        tc->arg_count = argc;
-                        for (int i = 0; i < argc; i++)
+                        // Self-recursive tail call - set up TCO.
+                        // TailCall.args is fixed-size (MAX_PROC_PARAMS); a
+                        // mismatch between the call's argc and the procedure's
+                        // declared param_count would silently corrupt the
+                        // tail-call buffer, so refuse TCO if the invariant
+                        // does not hold and fall through to a regular call.
+                        if (argc == user_proc->param_count &&
+                            argc >= 0 && argc <= MAX_PROC_PARAMS)
                         {
-                            tc->args[i] = args[i];
+                            TailCall *tc = proc_get_tail_call();
+                            tc->is_tail_call = true;
+                            tc->is_output_call = (eval->primitive_arg_depth > 0);
+                            tc->proc_name = user_proc->name;
+                            tc->arg_count = argc;
+                            for (int i = 0; i < argc; i++)
+                            {
+                                tc->args[i] = args[i];
+                            }
+                            // Return RESULT_STOP — step_proc_call handles TCO
+                            return result_stop();
                         }
-                        // Return RESULT_STOP — step_proc_call handles TCO
-                        return result_stop();
+                        // Invariant violated: fall through to non-TCO path.
                     }
                 }
                 // Non-self-recursive tail call - fall through to op stack

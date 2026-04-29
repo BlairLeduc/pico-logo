@@ -1614,6 +1614,36 @@ void test_semicolon_terminates_unquoted_word(void)
     assert_token_type(&lexer, TOKEN_EOF);
 }
 
+// `looks_like_number` must reject incomplete exponents so they fall through
+// to `read_word`, keeping the lexer and `is_number_word` in lockstep.
+void test_incomplete_exponent_e_is_word(void)
+{
+    Lexer lexer;
+    lexer_init(&lexer, "1e");
+    assert_token(&lexer, TOKEN_WORD, "1e");
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+void test_incomplete_exponent_e_with_sign_is_word(void)
+{
+    // `1e+5` is a number, but `1e+` (sign without digits) is rejected by
+    // looks_like_number; the `+` is also a delimiter so `1e+` tokenises as
+    // a `1e` word followed by a `+` operator.
+    Lexer lexer;
+    lexer_init(&lexer, "1e+");
+    assert_token(&lexer, TOKEN_WORD, "1e");
+    assert_token_type(&lexer, TOKEN_PLUS);
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+void test_incomplete_exponent_n_is_word(void)
+{
+    Lexer lexer;
+    lexer_init(&lexer, "1n");
+    assert_token(&lexer, TOKEN_WORD, "1n");
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
 //============================================================================
 // Main
 //============================================================================
@@ -1773,6 +1803,9 @@ int main(void)
     RUN_TEST(test_semicolon_comment_then_next_line);
     RUN_TEST(test_semicolon_at_start_of_line);
     RUN_TEST(test_semicolon_terminates_unquoted_word);
+    RUN_TEST(test_incomplete_exponent_e_is_word);
+    RUN_TEST(test_incomplete_exponent_e_with_sign_is_word);
+    RUN_TEST(test_incomplete_exponent_n_is_word);
 
     return UNITY_END();
 }

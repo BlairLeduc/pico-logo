@@ -64,6 +64,30 @@ void test_product_variadic_parens(void)
     TEST_ASSERT_EQUAL_FLOAT(24.0f, r.value.as.number);
 }
 
+void test_product_single_arg_parens(void)
+{
+    // (product 7) returns the single argument unchanged.
+    Result r = eval_string("(product 7)");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(7.0f, r.value.as.number);
+}
+
+void test_sum_zero_args_parens(void)
+{
+    // (sum) returns the additive identity.
+    Result r = eval_string("(sum)");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, r.value.as.number);
+}
+
+void test_product_zero_args_parens(void)
+{
+    // (product) returns the multiplicative identity.
+    Result r = eval_string("(product)");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(1.0f, r.value.as.number);
+}
+
 void test_quotient(void)
 {
     Result r = eval_string("quotient 20 4");
@@ -639,6 +663,9 @@ int main(void)
     RUN_TEST(test_difference);
     RUN_TEST(test_product);
     RUN_TEST(test_product_variadic_parens);
+    RUN_TEST(test_product_single_arg_parens);
+    RUN_TEST(test_sum_zero_args_parens);
+    RUN_TEST(test_product_zero_args_parens);
     RUN_TEST(test_quotient);
     RUN_TEST(test_divide_by_zero);
     RUN_TEST(test_error_divide_by_zero_msg);

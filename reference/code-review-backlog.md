@@ -62,8 +62,8 @@ These patterns recur across multiple modules and are worth fixing as a single sw
 | P1-005 / P1-006 | C | [core/memory.c:228-240](../core/memory.c#L228-L240) | ✅ Magic literals replaced with named constants throughout. |
 | P1-009 | X | [core/memory.c:616-625](../core/memory.c#L616-L625) | ✅ `gc_mark_index` now bounds-checks against `MAX_LIST_INDEX` first. |
 | P1-010 | M | [core/value.h:39-54](../core/value.h#L39-L54) | `Value`/`Result` unions have no compiler-enforced tag check; reading wrong field is UB. | Provide `value_get_*`/`result_get_*` accessor macros that assert tag. |
-| P1-013 | X | [core/memory.c:165](../core/memory.c#L165) | `mem_newline_marker` singleton atom isn't documented as a permanent GC root; any caller forgetting to mark it can lose the sentinel. | Document; mark unconditionally inside `mem_gc()`. |
-| P1-014 | X | [core/frame_arena.c:1-20](../core/frame_arena.c#L1-L20) | `arena_init` clamps capacity but doesn't validate `size_bytes` matches; mismatch → OOB. | Reject `size_bytes < capacity_words * 4`. |
+| P1-013 | X | [core/memory.c:165](../core/memory.c#L165) | ✅ Documented as a permanent atom (lives in atom region, not subject to sweep); `mem_gc()` now marks it unconditionally so callers cannot accidentally lose it. |
+| P1-014 | X | [core/frame_arena.c:1-20](../core/frame_arena.c#L1-L20) | ✅ `arena_init` now rejects sizes smaller than one word so misconfigured arenas fail loudly; test `test_init_undersized_fails`. |
 | P1-016 | M | [core/value.c:86-128](../core/value.c#L86-L128) | ✅ Extracted shared `extract_number_list()` helper; ~80 lines deduplicated. |
 | P1-017 | C | [core/error.h:64-68](../core/error.h#L64-L68) | ✅ `CaughtError.proc`/`caller` ownership documented (non-owning). |
 
@@ -72,9 +72,9 @@ These patterns recur across multiple modules and are worth fixing as a single sw
 | ID | Axis | File:line | Observation | Recommendation |
 |---|---|---|---|---|
 | P2-001 | L | [core/lexer.c:115-130](../core/lexer.c#L115-L130) | ✅ Lexer now strips `;` to end-of-line in `skip_whitespace`; `;` is a word terminator; `prim_comment` removed (now unreachable). |
-| P2-002 | L | [core/lexer.c:118-130](../core/lexer.c#L118-L130) | Line continuation (`~` prompt on unbalanced brackets) is not specified to live in lexer or REPL; `newline_count` field is dead. | Decide ownership and document. If REPL-only, delete unused lexer state. |
+| ~~P2-002~~ | L | [core/lexer.c:118-130](../core/lexer.c#L118-L130) | **STALE.** `newline_count` is heavily used by `primitives_procedures.c`; line continuation lives correctly in the REPL via `REPL_FLAG_ALLOW_CONTINUATION`. No action required. |
 | P2-003 | C/L | [core/lexer.c:396-413](../core/lexer.c#L396-L413) | `should_be_unary_minus` rules are subtle and partly contradict reference (e.g. binary minus after WORD); risks silent semantic divergence. | Rewrite with reference rules quoted in comments; add edge-case tests (`word-foo`, `(5+3) -2`). |
-| P2-006 | X | [core/lexer.c:279, 388](../core/lexer.c#L279) | `looks_like_number` returns `true` on incomplete exponent like `1e`; later `read_number` accepts the bad token. | Make lookahead the validator (return token-type, not bool) or fail-stop in `read_number`. |
+| P2-006 | X | [core/lexer.c:279, 388](../core/lexer.c#L279) | ✅ `looks_like_number` already rejects incomplete exponents (verified). Added regression tests `test_incomplete_exponent_e_is_word`, `..._with_sign_is_word`, `..._n_is_word`. |
 | P2-005 | C | [core/lexer.c:201-220](../core/lexer.c#L201-L220) | First-char-after-quote rules (brackets always escape, slash special-case) are correct but reasoning buried. | Quote reference §3862-3876 in code; add tests for `"\/"` and `"path/file"`. |
 | P2-010 | L | [core/token_source.c:185-200](../core/token_source.c#L185-L200) | NodeIterator's minus classification simpler than lexer's → list-mode and text-mode evaluate the same expression differently. | Unify via shared `logo_classify_minus`; add NodeIterator minus tests (currently absent). |
 | P2-016 | L | [core/token_source.c:60-90](../core/token_source.c#L60-L90) | ✅ `is_number_word` now matches lexer: requires digit before exponent, requires digit after exponent, rejects sign after `n`/`N`. |
@@ -85,7 +85,7 @@ These patterns recur across multiple modules and are worth fixing as a single sw
 
 | ID | Axis | File:line | Observation | Recommendation |
 |---|---|---|---|---|
-| P3-008 | L | [core/primitives_conditionals.c:22-37](../core/primitives_conditionals.c#L22-L37) | `if` registered with `default_args=2` but special-cases `argc>=3`; reference requires parens for the 3-arg form. Behaviour appears correct but the registration is misleading. | Add a clarifying test (`if x [a] [b]` without parens must error) and a comment on the registration. |
+| P3-008 | L | [core/primitives_conditionals.c:22-37](../core/primitives_conditionals.c#L22-L37) | ✅ Added comment on the `default_args=2` registration explaining the parens requirement; tests `test_if_three_args_requires_parens` and `test_if_three_args_with_parens_runs_else`. |
 | P3-009 | L | [core/eval_steps.c:480-510](../core/eval_steps.c#L480-L510), [core/eval.c:461-477](../core/eval.c#L461-L477) | `eval_push_if` sets `OP_FLAG_ENABLE_TCO`, but `step_if` doesn't propagate it to the branch's `OP_RUN_LIST_EXPR` → tail-recursive `if :n>0 [recurse]` is not in tail position. | Forward the flag; add a test that exercises deep recursion through an `if`. |
 | P3-006 | S | [core/eval_expr.c:450-461, 614-628](../core/eval_expr.c#L450-L461) | Speculative `OP_PRIM_CALL` staging (push-then-discard if args defer) is hard to reason about. | Switch to eager evaluation of primitive args; defer only when a user proc is encountered. |
 | P3-012 | X | [core/eval_expr.c:458, 620, 750](../core/eval_expr.c#L458) | Argument collection conflates EOF and `]`/`)` bounds; verify no over-consumption past `]` in nested forms. | Add a test for `repeat 3 [ f 1 2 ]` style nesting; tighten bounds in `eval_at_end`. |
@@ -101,7 +101,7 @@ These patterns recur across multiple modules and are worth fixing as a single sw
 | P4-003 | M | [core/frame.c:277-322](../core/frame.c#L277-L322) | `frame_find_binding` and `frame_find_binding_in_chain` duplicate the inner search. | Implement chain search as a loop over single-frame helper. |
 | P4-004 | C | [core/procedures.c:16](../core/procedures.c#L16), [core/procedures.h:34](../core/procedures.h#L34), [core/variables.c:19](../core/variables.c#L19) | `MAX_PROCEDURES`, `MAX_PROC_PARAMS`, `MAX_GLOBAL_VARIABLES` defined in `.c` files with no rationale or error story. | Move to one shared header with comments; ensure overflow paths set `error_context`. |
 | P4-006 | L | [core/variables.c:90-105](../core/variables.c#L90-L105) | Dynamic scoping behaviour (MAKE updates ancestor frames before falling back to global) is correct but very subtle. | Add a comment explaining the spec behaviour next to the chain walk. |
-| P4-011 | X | [core/procedures.h:30-33](../core/procedures.h#L30-L33) | `TailCall.args[MAX_PROC_PARAMS]` and `arg_count` invariants not asserted; size-mismatch silently breaks TCO. | Assert `arg_count == proc->param_count` when preparing the tail call. |
+| P4-011 | X | [core/procedures.h:30-33](../core/procedures.h#L30-L33) | ✅ Tail-call setup in `eval_expr.c` now refuses TCO when `argc != param_count` or `argc > MAX_PROC_PARAMS`, falling through to the regular call path. |
 | P4-012 | C | [core/properties.c:66-87](../core/properties.c#L66-L87) | Per-name property lookup walks list twice per iteration; not asymptotically wrong but worth documenting cost. | Add complexity comment. |
 | P4-014 | L | [core/properties.c:40-53](../core/properties.c#L40-L53) | Numbers in property lists are stored via word-atom round-trip; possible precision loss is undocumented. | Either document or store numbers as a typed atom format. |
 | P4-015 | M | [core/variables.c:435-445](../core/variables.c#L435-L445) | `var_get_test` fall-through from frame to global is implicit. | Restructure or comment as a single decision. |
@@ -113,7 +113,7 @@ These patterns recur across multiple modules and are worth fixing as a single sw
 | ID | Axis | File:line | Observation | Recommendation |
 |---|---|---|---|---|
 | **P5a-001** ✅ | L | [core/primitives_logical.c:14-32](../core/primitives_logical.c#L14-L32) | `and`/`or`/`not` used case-sensitive `strcmp` for `true`/`false`. | **Fixed:** `get_bool_arg` now uses `strcasecmp`. Tests: `test_and_accepts_uppercase_bool`, `test_or_accepts_uppercase_bool`. |
-| P5a-005 | L | [core/primitives_arithmetic.c:309-312](../core/primitives_arithmetic.c#L309-L312) | `sum` and `product` registered with `default_args=2`; reference allows single-arg. Verify with parser whether `sum 5` works. | Either change registration or document why varargs path covers it; add a test. |
+| P5a-005 | L | [core/primitives_arithmetic.c:309-312](../core/primitives_arithmetic.c#L309-L312) | ✅ Variadic path covers `(sum)` (=0), `(sum n)` (=n), `(product)` (=1), `(product n)` (=n). Tests added in `test_primitives_arithmetic`. |
 | P5a-010 | L | [core/primitives_conditionals.c:76-94](../core/primitives_conditionals.c#L76-L94) | ✅ Verified per-reference no-op behaviour; documented in code; covered by `test_iftrue_without_test`. |
 | **P5a-013** ✅ | C | [core/primitives_arithmetic.c:24-30](../core/primitives_arithmetic.c#L24-L30) | `prim_abs` used `REQUIRE_NUMBER(args[0], n)` then `UNUSED(args)`; contradictory. | **Fixed:** dropped the `UNUSED(args)`. |
 | **P5a-014** ✅ | X | [core/primitives_arithmetic.c:272-294](../core/primitives_arithmetic.c#L272-L294) | `prim_form` `fmt_buf[48]` could in principle overflow on `snprintf`. | **Fixed:** check `snprintf` return value; refuse with `ERR_DOESNT_LIKE_INPUT` on overflow. (In practice unreachable for finite single-precision floats — `multiplier` overflows to `inf` first — but the defensive check is cheap and keeps the contract explicit.) |
@@ -126,12 +126,12 @@ These patterns recur across multiple modules and are worth fixing as a single sw
 | P5b-002 / P5b-003 | X | [core/primitives_words_lists.c:942-975, 1097, 1129](../core/primitives_words_lists.c#L942-L975) | `word`, `lowercase`, `uppercase` truncate at 256 bytes silently. | Grow dynamically (using arena) or return `ERR_OUT_OF_SPACE`. |
 | P5b-006 | L | [core/primitives_list_processing.c:1790-1830](../core/primitives_list_processing.c#L1790-L1830) | `reduce` fold direction not verified against reference. | Add test `reduce "sum [1 2 3 4]` and confirm against reference; add a comment. |
 | P5b-007 | X | [core/primitives_list_processing.c](../core/primitives_list_processing.c) (`map`, `filter`, `crossmap`, `map.se`) | `malloc`/`free` paths aren't exception-safe — error in callback can leak `element_storage`/`result_word`. | Add `free` on error returns; consider arena allocation. Run with ASan. |
-| P5b-009 | X | [core/primitives_list_processing.c:240-280](../core/primitives_list_processing.c#L240-L280) | `invoke_proc_spec` save/restore arrays sized at `MAX_PROC_PARAMS`; a proc with more params silently corrupts state. | Assert `param_count <= MAX_PROC_PARAMS`. |
+| P5b-009 | X | [core/primitives_list_processing.c:240-280](../core/primitives_list_processing.c#L240-L280) | ✅ `invoke_proc_spec` now rejects lambdas with `param_count > MAX_PROC_PARAMS` with `ERR_TOO_MANY_INPUTS` before touching the fixed-size save/restore arrays. |
 | P5b-010 | L | [core/primitives_variables.c:21-26](../core/primitives_variables.c#L21-L26) | `thing` returns `ERR_NO_VALUE` on unknown; reference doesn't pin the behaviour. | Confirm against reference; document chosen behaviour and test. |
 | P5b-011 | L | [core/primitives_procedures.c:355-400](../core/primitives_procedures.c#L355-L400) | `text` returns malformed `[[params] | NIL]` if procedure body is empty. | Guard / assert non-nil body. |
 | P5b-012 | X | [core/primitives_workspace.c](../core/primitives_workspace.c) (PO/POALL/PONS) | Per-item 8 KB format buffer can overflow silently for large procedures. | Stream output line-by-line; remove the per-item buffer. |
 | P5b-014 | X | [core/primitives_words_lists.c:780-810](../core/primitives_words_lists.c#L780-L810) | `member`/`memberp` mishandle leading/trailing space and use `mem_is_nil` inconsistently. | Add edge-case tests (`member "" [a b]`, `member "  " "a  b"`); normalise. |
-| P5b-016 | L | [core/primitives_words_lists.c:700-750](../core/primitives_words_lists.c#L700-L750) | `item` 1-indexing matches reference; just confirm with a documented test. | Add explicit test. |
+| P5b-016 | L | [core/primitives_words_lists.c:700-750](../core/primitives_words_lists.c#L700-L750) | ✅ Added explicit tests `test_item_is_one_indexed` and `test_item_zero_index_errors`. |
 | P5b-018 | X | [core/primitives_procedures.c:195-280](../core/primitives_procedures.c#L195-L280) | `proc_define_from_text` newline tracking across multi-line bracket bodies is untested and may insert/lose blank lines. | Add tests for `to foo [...\n[...]\n...]`. |
 | P5b-020 | L | [core/primitives_text.c:85-110](../core/primitives_text.c#L85-L110) | ✅ Now rejects `column >= 40 \|\| row >= 32` per reference's fixed 40×32 screen. |
 
@@ -152,7 +152,7 @@ These patterns recur across multiple modules and are worth fixing as a single sw
 |---|---|---|---|---|
 | P6-002 | M | [core/repl.c:33-60](../core/repl.c#L33-L60) vs [core/primitives_files_load_save.c:29-55](../core/primitives_files_load_save.c#L29-L55) | Two copies of `line_starts_with_to`/`line_is_end`. | Extract to a shared utility used by both. |
 | P6-004 | L/X | [core/format.c:565-571](../core/format.c#L565-L571) | Procedure-definition formatter counts raw `[`/`]` tokens for indentation; `print "["` derails it and breaks SAVE→LOAD round-trip. | Use a lexer-aware depth counter; add a round-trip test. |
-| P6-007 | M | [core/help.c:7-25](../core/help.c#L7-L25) | Binary-search assumes sorted `help_entries[]` — only enforced by an external `awk` script. | Add a one-time sort-order spot-check at first lookup and document the requirement in `help.h`. |
+| P6-007 | M | [core/help.c:7-25](../core/help.c#L7-L25) | ✅ Documented requirement in `help.h`; added `help_check_sorted()` and `tests/test_help.c` to fail loudly if the table ever becomes unsorted. |
 | P6-008 | L | [core/help.c](../core/help.c), [core/primitives.c](../core/primitives.c) | No coverage check that every registered primitive has a help entry. | Add a startup validation and a unit test. |
 
 ---

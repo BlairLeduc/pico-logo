@@ -20,6 +20,15 @@ bool arena_init(FrameArena *arena, void *memory, size_t size_bytes)
         return false;
     }
 
+    // Reject sizes that cannot hold even a single word; otherwise the
+    // arena would appear initialised but every allocation would silently
+    // fail and callers would have no way to distinguish "out of memory"
+    // from "misconfigured".
+    if (size_bytes < sizeof(uint32_t))
+    {
+        return false;
+    }
+
     // Calculate capacity in words
     size_t capacity_words = size_bytes / sizeof(uint32_t);
 

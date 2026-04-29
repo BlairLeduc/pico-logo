@@ -181,7 +181,14 @@ static inline bool mem_would_collide(size_t extra)
 // Initialization
 //==========================================================================
 
-// Newline marker - initialized in logo_mem_init()
+// Newline marker.
+//
+// This is an interned atom (initialised once in `logo_mem_init`) used as a
+// sentinel inside list bodies returned by `text` and friends to preserve
+// source-line boundaries. Because it lives in the atom region and not the
+// cell region, the sweep phase cannot reclaim it; it is effectively a
+// permanent GC root. `mem_gc()` marks it unconditionally so callers do not
+// need to remember to add it to their root set.
 Node mem_newline_marker = NODE_NIL;
 
 // Initialize the memory system.
@@ -905,6 +912,10 @@ void mem_gc(Node *roots, size_t num_roots)
 {
     // Clear mark bits
     memset(gc_marks, 0, sizeof(gc_marks));
+
+    // Always mark the newline sentinel — callers must never have to
+    // remember it, and forgetting would corrupt list outputs from `text`.
+    mem_gc_mark(mem_newline_marker);
 
     // Mark phase
     for (size_t i = 0; i < num_roots; i++)

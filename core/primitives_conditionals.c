@@ -136,6 +136,12 @@ static Result prim_iffalse(Evaluator *eval, int argc, Value *args)
 
 void primitives_conditionals_init(void)
 {
+// `if` is registered with `default_args=2` (the predicate plus a list).
+// Per the reference, the optional 3-argument form `if pred [t] [f]` is
+// only accepted when the call is parenthesised: `(if pred [t] [f])`.
+// Without parens the third list is parsed as a separate statement and
+// the primitive is invoked with argc==2. The varargs path provides
+// argc==3 only via the `(if ...)` syntax; see `test_if_three_args_requires_parens`.
     primitive_register("if", 2, prim_if);
     primitive_register("ifelse", 3, prim_ifelse);
     
