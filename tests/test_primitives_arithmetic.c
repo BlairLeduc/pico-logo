@@ -653,6 +653,74 @@ void test_form_width_too_large_error(void)
     TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
 }
 
+//==========================================================================
+// Text-mode vs list-mode (run [...]) parity for minus.
+// The lexer (text mode) and the NodeIterator (list mode, used by `run`)
+// classify minus differently; these tests pin the user-visible behaviour
+// so any future drift between the two paths is caught immediately.
+//==========================================================================
+
+void test_minus_text_vs_list_binary_with_spaces(void)
+{
+    // `5 - 3` is binary subtraction in both modes.
+    Result a = eval_string("5 - 3");
+    TEST_ASSERT_EQUAL(RESULT_OK, a.status);
+    TEST_ASSERT_EQUAL_FLOAT(2.0f, a.value.as.number);
+
+    Result b = eval_string("run [5 - 3]");
+    TEST_ASSERT_EQUAL(RESULT_OK, b.status);
+    TEST_ASSERT_EQUAL_FLOAT(2.0f, b.value.as.number);
+}
+
+void test_minus_text_vs_list_after_paren(void)
+{
+    // `(2 + 1) - 3` => 0 in both modes (binary minus after `)`).
+    Result a = eval_string("(2 + 1) - 3");
+    TEST_ASSERT_EQUAL(RESULT_OK, a.status);
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, a.value.as.number);
+
+    Result b = eval_string("run [(2 + 1) - 3]");
+    TEST_ASSERT_EQUAL(RESULT_OK, b.status);
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, b.value.as.number);
+}
+
+void test_minus_text_vs_list_negative_literal(void)
+{
+    // Leading `-` on a number must produce -3 in both modes.
+    Result a = eval_string("sum 0 -3");
+    TEST_ASSERT_EQUAL(RESULT_OK, a.status);
+    TEST_ASSERT_EQUAL_FLOAT(-3.0f, a.value.as.number);
+
+    Result b = eval_string("run [sum 0 -3]");
+    TEST_ASSERT_EQUAL(RESULT_OK, b.status);
+    TEST_ASSERT_EQUAL_FLOAT(-3.0f, b.value.as.number);
+}
+
+void test_minus_text_vs_list_unary_after_operator(void)
+{
+    // `4 * -2` => -8 (unary minus after `*`); same for run [...].
+    Result a = eval_string("4 * -2");
+    TEST_ASSERT_EQUAL(RESULT_OK, a.status);
+    TEST_ASSERT_EQUAL_FLOAT(-8.0f, a.value.as.number);
+
+    Result b = eval_string("run [4 * -2]");
+    TEST_ASSERT_EQUAL(RESULT_OK, b.status);
+    TEST_ASSERT_EQUAL_FLOAT(-8.0f, b.value.as.number);
+}
+
+void test_minus_text_vs_list_with_variable(void)
+{
+    // `:x - 2` with :x = 5 must yield 3 in both modes.
+    run_string("make \"x 5");
+    Result a = eval_string(":x - 2");
+    TEST_ASSERT_EQUAL(RESULT_OK, a.status);
+    TEST_ASSERT_EQUAL_FLOAT(3.0f, a.value.as.number);
+
+    Result b = eval_string("run [:x - 2]");
+    TEST_ASSERT_EQUAL(RESULT_OK, b.status);
+    TEST_ASSERT_EQUAL_FLOAT(3.0f, b.value.as.number);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -732,6 +800,12 @@ int main(void)
     RUN_TEST(test_form_width_negative_error);
     RUN_TEST(test_form_decimal_places_negative_error);
     RUN_TEST(test_form_width_too_large_error);
+
+    RUN_TEST(test_minus_text_vs_list_binary_with_spaces);
+    RUN_TEST(test_minus_text_vs_list_after_paren);
+    RUN_TEST(test_minus_text_vs_list_negative_literal);
+    RUN_TEST(test_minus_text_vs_list_unary_after_operator);
+    RUN_TEST(test_minus_text_vs_list_with_variable);
 
     return UNITY_END();
 }
