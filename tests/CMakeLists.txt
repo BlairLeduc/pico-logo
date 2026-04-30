@@ -70,3 +70,22 @@ add_logo_test(test_io)
 add_logo_test(test_stream)
 add_logo_test(test_repl)
 add_logo_test(test_syntax_highlight)
+
+# FAT32 driver test — compiles devices/picocalc/fat32.c on the host with a
+# mock SD-card backend and tiny Pico SDK shim headers.  Independent of
+# logo_core / test_utils because fat32.c has no Logo runtime dependencies.
+add_executable(test_fat32
+    test_fat32.c
+    fat32_image.c
+    mock_sdcard.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/fat32.c
+    unity.c
+)
+target_include_directories(test_fat32 BEFORE PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/mocks
+)
+target_include_directories(test_fat32 PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/devices/picocalc
+)
+add_test(NAME test_fat32 COMMAND test_fat32)
