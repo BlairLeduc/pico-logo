@@ -281,6 +281,67 @@ void test_quoted_word_slash_does_not_affect_words(void)
     assert_token(&lexer, TOKEN_WORD, "world");
 }
 
+void test_quoted_escaped_slash_first_char(void)
+{
+    // Reference §3873: any non-bracket delimiter at the first position
+    // is literal -- backslash before it is allowed and the escape just
+    // contributes the character. The token text retains the backslash
+    // (escape resolution happens later when the word is interned).
+    Lexer lexer;
+    lexer_init(&lexer, "\"\\/etc");
+    assert_token(&lexer, TOKEN_QUOTED, "\"\\/etc");
+    assert_token(&lexer, TOKEN_EOF, "");
+}
+
+void test_quoted_first_char_delimiter_is_literal(void)
+{
+    // First-position non-bracket delimiters do not need a backslash:
+    // "+, "-, "*, "=, "<, ">  are all single-char quoted words.
+    const char *cases[] = { "\"+", "\"-", "\"*", "\"=", "\"<", "\">" };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)
+    {
+        Lexer lexer;
+        lexer_init(&lexer, cases[i]);
+        assert_token(&lexer, TOKEN_QUOTED, cases[i]);
+        assert_token(&lexer, TOKEN_EOF, "");
+    }
+}
+
+void test_quoted_first_char_bracket_always_terminates(void)
+{
+    // Reference §3888: brackets are the exception -- "[ produces an
+    // empty quoted word followed by the bracket, even at the first
+    // position after the quote.
+    Lexer lexer;
+    lexer_init(&lexer, "\"[abc]");
+    assert_token(&lexer, TOKEN_QUOTED, "\"");
+    assert_token(&lexer, TOKEN_LEFT_BRACKET, "[");
+    assert_token(&lexer, TOKEN_WORD, "abc");
+    assert_token(&lexer, TOKEN_RIGHT_BRACKET, "]");
+    assert_token(&lexer, TOKEN_EOF, "");
+}
+
+void test_quoted_unescaped_delimiter_in_middle_terminates(void)
+{
+    // Non-first non-slash delimiter terminates the word.
+    // "a+b lexes as "a, +, b.
+    Lexer lexer;
+    lexer_init(&lexer, "\"a+b");
+    assert_token(&lexer, TOKEN_QUOTED, "\"a");
+    assert_token(&lexer, TOKEN_PLUS, "+");
+    assert_token(&lexer, TOKEN_WORD, "b");
+    assert_token(&lexer, TOKEN_EOF, "");
+}
+
+void test_quoted_escaped_delimiter_in_middle_continues(void)
+{
+    // Escaped delimiter mid-word stays part of the word.
+    Lexer lexer;
+    lexer_init(&lexer, "\"a\\+b");
+    assert_token(&lexer, TOKEN_QUOTED, "\"a\\+b");
+    assert_token(&lexer, TOKEN_EOF, "");
+}
+
 //============================================================================
 // Variable Reference Tests (Colon/Dots)
 //============================================================================
@@ -1685,6 +1746,11 @@ int main(void)
     RUN_TEST(test_quoted_word_slash_in_middle);
     RUN_TEST(test_quoted_word_slash_does_not_affect_numbers);
     RUN_TEST(test_quoted_word_slash_does_not_affect_words);
+    RUN_TEST(test_quoted_escaped_slash_first_char);
+    RUN_TEST(test_quoted_first_char_delimiter_is_literal);
+    RUN_TEST(test_quoted_first_char_bracket_always_terminates);
+    RUN_TEST(test_quoted_unescaped_delimiter_in_middle_terminates);
+    RUN_TEST(test_quoted_escaped_delimiter_in_middle_continues);
 
     // Variable references
     RUN_TEST(test_variable_reference);

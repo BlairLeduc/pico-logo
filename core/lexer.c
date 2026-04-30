@@ -211,6 +211,29 @@ static Token read_word(Lexer *lexer)
 }
 
 // Read a quoted word (starts with ")
+//
+// Reference (Pico_Logo_Reference.md §3873-3895, "Quotation Marks and
+// Delimiters"):
+//   "Normally, you have to put a backslash (\) before the characters
+//    [, ], (, ), and \ itself. But the first character after a
+//    quotation mark (") does not need to have a backslash preceding it."
+//   "If a delimiter occupies any position but the first one after the
+//    quotation mark, it must have a backslash preceding it."
+//   "The only exception to the above general rule is brackets ([ ]).
+//    If you want to put a quotation mark before a bracket, you must
+//    always include a backslash between the quotation mark and the
+//    bracket."
+// Plus the file-path exception (§3807):
+//   "You can use '/' in file names without escaping it, and Logo will
+//    treat it as a normal character."
+// So the rules implemented here are:
+//   * brackets ([, ]) ALWAYS terminate a quoted word unless escaped,
+//     even at the first position;
+//   * any other delimiter at the first position is taken literally;
+//   * any other delimiter at a subsequent position terminates the word,
+//     EXCEPT '/' which is always literal (file-path exception);
+//   * a backslash escapes the following character;
+//   * any whitespace terminates the word.
 static Token read_quoted(Lexer *lexer)
 {
     // Skip the quote character
