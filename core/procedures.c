@@ -11,16 +11,13 @@
 #include "memory.h"
 #include "primitives.h"
 #include "frame.h"
+#include "limits.h"
 #include "devices/io.h"
 #include <string.h>
 #include <strings.h>
 #include <stdio.h>
 
-// Maximum number of user-defined procedures
-#define MAX_PROCEDURES 128
-
-// Maximum procedure call stack depth (for current proc tracking)
-#define MAX_CURRENT_PROC_DEPTH 32
+// (MAX_PROCEDURES, MAX_PROC_PARAMS, MAX_CURRENT_PROC_DEPTH live in limits.h)
 
 // Frame stack arena size (configurable per platform)
 // Default: 32KB for host/testing, can be adjusted via cmake
@@ -202,6 +199,32 @@ UserProcedure *proc_get_by_index(int index)
     }
     return NULL;
 }
+
+//==========================================================================
+// Procedure flags: bury / step / trace
+//
+// RE-ENTRANCY: these flags live on the `UserProcedure` struct itself,
+// not on the per-call frame. Setting `step`/`trace`/`bury` while the
+// procedure is mid-execution is intentionally a "best effort" knob:
+//
+//   * `bury`/`unbury` only affect future workspace operations (poall,
+//     erall, save, etc.). They never alter the behaviour of an in-flight
+//     call, so flipping them at any time is safe.
+//   * `trace` is consulted on each call entry/exit and on each stepped
+//     line, so toggling it mid-execution takes effect on the *next*
+//     observation point. Setting `trace` from inside a callback used by
+//     `map`/`filter`/`foreach` will start tracing on the next iteration,
+//     not the current one. This is intentional.
+//   * `step` behaves the same as `trace`: the flag is consulted at the
+//     top of each step, so a mid-call change applies to the next step.
+//
+// What is NOT supported: erasing or redefining a procedure that is
+// currently executing (the live frame would still reference the old
+// body). `proc_define` happily overwrites the slot, but the running
+// call retains its original `body` Node via the frame, so this works
+// as long as the body's nodes are not GC'd. `proc_gc_mark_all` walks
+// every slot regardless of executing state, which is sufficient.
+//==========================================================================
 
 void proc_bury(const char *name)
 {

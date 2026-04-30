@@ -23,6 +23,7 @@
 
 #include "value.h"
 #include "frame.h"
+#include "limits.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -32,8 +33,7 @@ extern "C"
     // Forward declaration
     typedef struct Evaluator Evaluator;
 
-    // Maximum parameters per procedure
-    #define MAX_PROC_PARAMS 16
+    // (MAX_PROC_PARAMS is defined in limits.h)
 
     // User-defined procedure
     typedef struct UserProcedure

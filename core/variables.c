@@ -7,12 +7,12 @@
 #include "memory.h"
 #include "procedures.h"  // For proc_get_frame_stack()
 #include "frame.h"
+#include "limits.h"
 #include <string.h>
 #include <strings.h>
 #include <stdio.h>
 
-// Configuration for memory constraints
-#define MAX_GLOBAL_VARIABLES 128
+// (MAX_GLOBAL_VARIABLES lives in limits.h)
 
 typedef struct
 {
