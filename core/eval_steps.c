@@ -1508,7 +1508,15 @@ Result step_prim_call(Evaluator *eval, EvalOp *op)
         // Need more args. Evaluate the next expression.
         eval->primitive_arg_depth++;
         bool old_tail = eval->in_tail_position;
-        eval->in_tail_position = false;
+        // Restore the per-arg tail position captured at deferral time.
+        // For output/op this is true (preserves the tail-position exception);
+        // for every other primitive it is false. Today no built-in primitive
+        // both has multiple args AND wants tail-position semantics, so this
+        // loop never executes for the output/op case (output has 1 arg). The
+        // saved value is plumbed through anyway so future multi-arg primitives
+        // with tail-position semantics inherit the correct context, instead
+        // of silently losing it to a hardcoded `false`.
+        eval->in_tail_position = st->saved_in_tail_position;
 
         int depth_before = op_stack_depth(eval->op_stack);
         Result next_arg = eval_expression(eval);

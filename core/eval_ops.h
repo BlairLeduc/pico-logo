@@ -183,6 +183,10 @@ extern "C"
         int argc;                      // Number of arguments collected
         int total_args;                // Total arguments expected
         int current_arg;               // Index of the argument being evaluated
+        bool saved_in_tail_position;   // Caller's in_tail_position at deferral time.
+                                       // For output/op this stays true so the
+                                       // tail-position exception survives the
+                                       // deferred resume in step_prim_call.
     } PrimCallState;
 
     //==========================================================================

@@ -458,6 +458,9 @@ Result eval_primary(Evaluator *eval)
                     prim_staging_paren->prim_call.argc = 0;
                     prim_staging_paren->prim_call.total_args = -1; // varargs
                     prim_staging_paren->prim_call.current_arg = 0;
+                    // Paren-form calls are never the output/op tail-position
+                    // exception; arg evaluation is not in tail position.
+                    prim_staging_paren->prim_call.saved_in_tail_position = false;
                 }
                 
                 // Track that we're collecting primitive args
@@ -611,6 +614,11 @@ Result eval_primary(Evaluator *eval)
                 prim_staging->prim_call.argc = 0;
                 prim_staging->prim_call.total_args = prim->default_args;
                 prim_staging->prim_call.current_arg = 0;
+                // Default to false; the deferral check below overwrites this
+                // with the per-arg value (true for output/op, false otherwise)
+                // so step_prim_call can preserve the output/op tail-position
+                // exception when collecting subsequent args.
+                prim_staging->prim_call.saved_in_tail_position = false;
             }
 
             // Track that we're collecting primitive args
@@ -650,6 +658,12 @@ Result eval_primary(Evaluator *eval)
                         prim_staging->prim_call.args[j] = args[j];
                     prim_staging->prim_call.argc = argc;
                     prim_staging->prim_call.current_arg = i;
+                    // Capture per-arg tail position so step_prim_call can
+                    // restore it when collecting subsequent args. For output/op
+                    // this preserves the tail-position exception across the
+                    // deferred resume; for everything else it stays false.
+                    prim_staging->prim_call.saved_in_tail_position =
+                        (is_output_prim && eval->proc_depth > 0);
                     eval->primitive_arg_depth--;
                     return result_none();
                 }
