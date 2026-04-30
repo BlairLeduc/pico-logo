@@ -694,6 +694,68 @@ void test_prefix_minus_spacing(void)
     assert_token(&lexer, TOKEN_NUMBER, "4");
 }
 
+// Edge case (P2-003): backlog explicitly called this out. With no
+// whitespace between a word and `-`, reference rule 3 applies and the
+// `-` is binary. e.g. `xcor-ycor` is `xcor MINUS ycor`, not
+// `xcor UNARY_MINUS ycor`.
+void test_binary_minus_after_word_no_space(void)
+{
+    Lexer lexer;
+    lexer_init(&lexer, "xcor-ycor");
+    assert_token(&lexer, TOKEN_WORD, "xcor");
+    assert_token(&lexer, TOKEN_MINUS, "-");
+    assert_token(&lexer, TOKEN_WORD, "ycor");
+}
+
+// Edge case (P2-003): same with a colon-variable on the left.
+void test_binary_minus_after_colon_no_space(void)
+{
+    Lexer lexer;
+    lexer_init(&lexer, ":x-:y");
+    assert_token(&lexer, TOKEN_COLON, ":x");
+    assert_token(&lexer, TOKEN_MINUS, "-");
+    assert_token(&lexer, TOKEN_COLON, ":y");
+}
+
+// Edge case (P2-003): symmetry with `)`. `]-X` (no space) is binary
+// because `]` closes a value just like `)` does.
+void test_binary_minus_after_right_bracket_no_space(void)
+{
+    Lexer lexer;
+    lexer_init(&lexer, "[1 2]-3");
+    assert_token(&lexer, TOKEN_LEFT_BRACKET, "[");
+    assert_token(&lexer, TOKEN_NUMBER, "1");
+    assert_token(&lexer, TOKEN_NUMBER, "2");
+    assert_token(&lexer, TOKEN_RIGHT_BRACKET, "]");
+    assert_token(&lexer, TOKEN_MINUS, "-");
+    assert_token(&lexer, TOKEN_NUMBER, "3");
+}
+
+// Edge case (P2-003): documents the deliberate convention noted in
+// `should_be_unary_minus`: once whitespace separates `]` from `-`, the
+// space is the delimiter and `-3` becomes a negative number. Mirrors
+// the existing `(5+3) -2` test for `)`.
+void test_negative_number_after_right_bracket_with_space(void)
+{
+    Lexer lexer;
+    lexer_init(&lexer, "[1 2] -3");
+    assert_token(&lexer, TOKEN_LEFT_BRACKET, "[");
+    assert_token(&lexer, TOKEN_NUMBER, "1");
+    assert_token(&lexer, TOKEN_NUMBER, "2");
+    assert_token(&lexer, TOKEN_RIGHT_BRACKET, "]");
+    assert_token(&lexer, TOKEN_NUMBER, "-3");
+}
+
+// Edge case (P2-003): reference rule 1 example `print 3*-4`.
+void test_negative_number_after_operator_no_space(void)
+{
+    Lexer lexer;
+    lexer_init(&lexer, "3*-4");
+    assert_token(&lexer, TOKEN_NUMBER, "3");
+    assert_token(&lexer, TOKEN_MULTIPLY, "*");
+    assert_token(&lexer, TOKEN_NUMBER, "-4");
+}
+
 //============================================================================
 // Escaped Character Tests
 //============================================================================
@@ -1791,6 +1853,11 @@ int main(void)
     RUN_TEST(test_unary_minus_word);
     RUN_TEST(test_binary_minus_spacing);
     RUN_TEST(test_prefix_minus_spacing);
+    RUN_TEST(test_binary_minus_after_word_no_space);
+    RUN_TEST(test_binary_minus_after_colon_no_space);
+    RUN_TEST(test_binary_minus_after_right_bracket_no_space);
+    RUN_TEST(test_negative_number_after_right_bracket_with_space);
+    RUN_TEST(test_negative_number_after_operator_no_space);
 
     // Escaped characters
     RUN_TEST(test_escaped_delimiter_in_word);
