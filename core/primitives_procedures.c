@@ -185,6 +185,15 @@ static Result prim_define(Evaluator *eval, int argc, Value *args)
                 if (pname[0] == ':')
                 {
                     pname++;  // Skip the colon
+                    // Re-intern the suffix so the stored pointer is a
+                    // canonical atom key, not an interior pointer into
+                    // the original `:x` atom. This lets variable lookup
+                    // (`frame_find_binding`, `find_global`) take its
+                    // pointer-equality fast path against names that
+                    // arrive from `mem_atom_unescape("x", 1)` at
+                    // `:x` references in the body.
+                    Node clean = mem_atom_cstr(pname);
+                    pname = mem_word_ptr(clean);
                 }
                 params[param_count++] = pname;
             }

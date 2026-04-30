@@ -1807,6 +1807,23 @@ void test_empty_list_inside_brackets_roundtrip(void)
         "second [] inside brackets should be preserved after roundtrip!");
 }
 
+// Regression: parameter lookup must remain case-insensitive even after the
+// pointer-equality fast path was added (see NAMING POLICY in core/frame.h).
+// Param `:X` interns case-sensitively, so a body reference `:x` lands in
+// the strcasecmp fallback. Verify the value still resolves.
+void test_proc_param_case_insensitive_lookup(void)
+{
+    Result r = proc_define_from_text("to mixedcase :X\noutput :x * 2\nend");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    Result out = eval_string("mixedcase 21");
+    TEST_ASSERT_EQUAL(RESULT_OK, out.status);
+    TEST_ASSERT_EQUAL(VALUE_NUMBER, out.value.type);
+    TEST_ASSERT_EQUAL_FLOAT(42.0f, out.value.as.number);
+
+    proc_erase("mixedcase");
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -1910,6 +1927,7 @@ int main(void)
     RUN_TEST(test_multiline_brackets_repeat);
     RUN_TEST(test_empty_list_roundtrip);
     RUN_TEST(test_empty_list_inside_brackets_roundtrip);
+    RUN_TEST(test_proc_param_case_insensitive_lookup);
 
     return UNITY_END();
 }

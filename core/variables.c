@@ -49,7 +49,14 @@ static int find_global(const char *name)
 {
     for (int i = 0; i < global_count; i++)
     {
-        if (global_variables[i].active && strcasecmp(global_variables[i].name, name) == 0)
+        if (!global_variables[i].active)
+        {
+            continue;
+        }
+        const char *gname = global_variables[i].name;
+        // Pointer-equality fast path; case-insensitive fallback. See the
+        // NAMING POLICY comment in core/frame.h for the rationale.
+        if (gname == name || strcasecmp(gname, name) == 0)
         {
             return i;
         }

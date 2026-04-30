@@ -335,7 +335,19 @@ Binding *frame_find_binding(FrameHeader *frame, const char *name)
 
     for (int i = 0; i < count; i++)
     {
-        if (bindings[i].name != NULL && strcasecmp(bindings[i].name, name) == 0)
+        const char *bname = bindings[i].name;
+        if (bname == NULL)
+        {
+            continue;
+        }
+        // Fast path: pointer equality. Both names are typically interned
+        // atoms from `mem_atom`/`mem_atom_unescape`, so the common case
+        // (variable reference inside the procedure that owns the binding)
+        // resolves in O(1) per binding. Falls back to case-insensitive
+        // string compare for callers that pass non-interned C literals
+        // (`var_get("startup", ...)`) or for cross-case references like
+        // `make "X 5` followed by `print :x`. See NAMING POLICY in frame.h.
+        if (bname == name || strcasecmp(bname, name) == 0)
         {
             return &bindings[i];
         }
