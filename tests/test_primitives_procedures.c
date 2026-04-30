@@ -6,6 +6,7 @@
 #include "test_scaffold.h"
 #include "core/format.h"
 #include <string.h>
+#include <stdio.h>
 
 void setUp(void)
 {
@@ -374,6 +375,51 @@ void test_deep_tail_recursion_through_output(void)
     Result r = eval_string("sumto 10000");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     TEST_ASSERT_EQUAL_FLOAT(0.0f, r.value.as.number);
+}
+
+// TCO concern #6: lock in tail-position propagation through `ifelse` so
+// any future change to OP_IF / OP_FLAG_ENABLE_TCO plumbing fails loudly.
+// `ifelse` shares the same OP_IF mechanism as `if`; if either branch is
+// chosen and contains a self-recursive call as its only/last instruction,
+// that call must TCO. 10000-deep would exhaust the C stack without TCO.
+void test_deep_tail_recursion_through_ifelse(void)
+{
+    const char *params[] = {"n"};
+    define_proc("ifecount", params, 1,
+                "ifelse :n > 0 [ifecount difference :n 1] [stop]");
+
+    Result r = eval_string("ifecount 10000");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+}
+
+// TCO concern #6: lock in tail-position propagation through *nested* `if`.
+// `if X [if Y [recurse]]` — the inner if is in tail position because the
+// outer if is, and the recurse is in tail position because the inner if
+// is. Each layer of OP_IF must carry OP_FLAG_ENABLE_TCO into its body.
+void test_deep_tail_recursion_through_nested_if(void)
+{
+    const char *params[] = {"n"};
+    define_proc("nestcount", params, 1,
+                "if :n > 0 [if :n > -1 [nestcount difference :n 1]]");
+
+    Result r = eval_string("nestcount 10000");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+}
+
+// TCO concern #6: tail recursion from the SECOND branch of `ifelse`.
+// Different code path than the first-branch test: ensures the false
+// branch also propagates tail position. The predicate uses `<` because
+// `=` / `equalp` in this exact shape leaks per-recursion state and
+// trips ERR_NOT_ENOUGH_INPUTS on `difference` around depth ~6500. See
+// the equality-predicate bug entry in reference/code-review-backlog.md.
+void test_deep_tail_recursion_through_ifelse_false_branch(void)
+{
+    const char *params[] = {"n"};
+    define_proc("ifefcount", params, 1,
+                "ifelse :n < 1 [stop] [ifefcount difference :n 1]");
+
+    Result r = eval_string("ifefcount 10000");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
 }
 
 void test_deep_non_tail_recursion_limit(void)
@@ -1840,6 +1886,9 @@ int main(void)
     RUN_TEST(test_deep_tail_recursion);
     RUN_TEST(test_very_deep_tail_recursion);
     RUN_TEST(test_deep_tail_recursion_through_output);
+    RUN_TEST(test_deep_tail_recursion_through_ifelse);
+    RUN_TEST(test_deep_tail_recursion_through_nested_if);
+    RUN_TEST(test_deep_tail_recursion_through_ifelse_false_branch);
     RUN_TEST(test_deep_non_tail_recursion_limit);
     RUN_TEST(test_definedp_true);
     RUN_TEST(test_definedp_false);
