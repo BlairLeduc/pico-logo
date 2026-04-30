@@ -57,6 +57,31 @@ void test_repcount_used_in_expression(void)
     TEST_ASSERT_EQUAL_STRING("10\n20\n30\n", output_buffer);
 }
 
+void test_repeat_arg_collection_does_not_leak_past_bracket(void)
+{
+    // P3-012 regression: argument collection inside [ ... ] must not
+    // over-consume past the closing ']'. `sum` defaults to 2 inputs;
+    // here it appears as the last expression inside the repeat body.
+    // If the bracket bound were leaked, `sum` would steal `]` (or the
+    // tokens after) and either error out or print something other than
+    // "5\n5\n5\n".
+    reset_output();
+    run_string("repeat 3 [print sum 2 3]");
+    TEST_ASSERT_EQUAL_STRING("5\n5\n5\n", output_buffer);
+}
+
+void test_repeat_inner_arg_collection_stops_at_closing_bracket(void)
+{
+    // P3-012 regression: nested case. The inner `print sum 2 3` ends
+    // exactly at the inner `]`; the outer `repeat` must still see the
+    // tokens after the outer `]` consumed correctly (here: nothing,
+    // followed by EOF). A leaky bound would see `print` swallow the
+    // outer `]` and produce wrong output or an error.
+    reset_output();
+    run_string("repeat 2 [repeat 1 [print sum 1 2]]");
+    TEST_ASSERT_EQUAL_STRING("3\n3\n", output_buffer);
+}
+
 void test_forever_with_stop(void)
 {
     // forever should repeat until stop is called
@@ -618,6 +643,8 @@ int main(void)
     RUN_TEST(test_repcount_no_repeat);
     RUN_TEST(test_repcount_nested);
     RUN_TEST(test_repcount_used_in_expression);
+    RUN_TEST(test_repeat_arg_collection_does_not_leak_past_bracket);
+    RUN_TEST(test_repeat_inner_arg_collection_stops_at_closing_bracket);
     RUN_TEST(test_forever_with_stop);
     RUN_TEST(test_forever_repcount);
     RUN_TEST(test_forever_repcount_nested_in_repeat);

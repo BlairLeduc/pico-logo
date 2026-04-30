@@ -832,6 +832,84 @@ void test_proc_define_from_text_all_operators(void)
     TEST_ASSERT_EQUAL_FLOAT(10.0f, r2.value.as.number);
 }
 
+void test_proc_define_from_text_multiline_bracket_body(void)
+{
+    // P5b-018: a bracket body that spans multiple source lines must not
+    // confuse the line tracker. The procedure should run as if the body
+    // were on a single line, and the body shape (one line containing
+    // one if + one bracket) should round-trip cleanly through `text`.
+    Result r = proc_define_from_text(
+        "to mlb :n\n"
+        "if :n > 0 [\n"
+        "  print :n\n"
+        "  print :n + 1\n"
+        "]\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    reset_output();
+    Result r2 = eval_string("mlb 5");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+    TEST_ASSERT_EQUAL_STRING("5\n6\n", output_buffer);
+
+    // text "mlb should produce a list whose first element is the params
+    // list [n] and whose subsequent elements are well-formed line lists.
+    // We don't assert the exact line shape (the parser may merge the
+    // bracket body onto its own line); we only assert that every list
+    // element is itself a proper list, never a stray atom or NIL middle.
+    Result rt = eval_string("text \"mlb");
+    TEST_ASSERT_EQUAL(RESULT_OK, rt.status);
+    TEST_ASSERT_TRUE(value_is_list(rt.value));
+    Node outer = rt.value.as.node;
+    TEST_ASSERT_FALSE(mem_is_nil(outer));
+    while (!mem_is_nil(outer))
+    {
+        Node elem = mem_car(outer);
+        TEST_ASSERT_TRUE(mem_is_list(elem));
+        outer = mem_cdr(outer);
+    }
+}
+
+void test_proc_define_from_text_nested_brackets_across_lines(void)
+{
+    // P5b-018: nested brackets that themselves cross newlines must
+    // still terminate correctly and produce a runnable procedure.
+    Result r = proc_define_from_text(
+        "to nested :n\n"
+        "repeat :n [\n"
+        "  if repcount = 1 [\n"
+        "    print \"first\n"
+        "  ]\n"
+        "]\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    reset_output();
+    Result r2 = eval_string("nested 3");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+    TEST_ASSERT_EQUAL_STRING("first\n", output_buffer);
+}
+
+void test_proc_define_from_text_blank_line_inside_bracket_body(void)
+{
+    // P5b-018: a blank line inside a bracket body must not terminate
+    // the body or insert a stray empty-line cell that breaks execution.
+    Result r = proc_define_from_text(
+        "to blanky\n"
+        "repeat 2 [\n"
+        "  print \"hi\n"
+        "\n"
+        "  print \"bye\n"
+        "]\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    reset_output();
+    Result r2 = eval_string("blanky");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+    TEST_ASSERT_EQUAL_STRING("hi\nbye\nhi\nbye\n", output_buffer);
+}
+
 void test_proc_define_from_text_equals_operator(void)
 {
     // Test equals operator with real newlines
@@ -1791,6 +1869,9 @@ int main(void)
     RUN_TEST(test_proc_define_from_text_error_redefine_primitive);
     RUN_TEST(test_proc_define_from_text_quoted_word);
     RUN_TEST(test_proc_define_from_text_all_operators);
+    RUN_TEST(test_proc_define_from_text_multiline_bracket_body);
+    RUN_TEST(test_proc_define_from_text_nested_brackets_across_lines);
+    RUN_TEST(test_proc_define_from_text_blank_line_inside_bracket_body);
     RUN_TEST(test_proc_define_from_text_equals_operator);
     RUN_TEST(test_proc_define_from_text_less_than_operator);
     RUN_TEST(test_proc_define_from_text_end_in_list);
