@@ -267,6 +267,50 @@ Result eval_trampoline(Evaluator *eval, int base_depth)
 
 Result eval_run_list(Evaluator *eval, Node list)
 {
+    // RE-ENTRANCY CONTRACT (P3-017)
+    // ----------------------------------------------------------------
+    // `eval_run_list` is the only re-entrant entry point into the
+    // trampoline. It is called from:
+    //   * REPL line evaluation (top level).
+    //   * `run` / `if` / `repeat` / etc. (same Evaluator, deeper list).
+    //   * `pause` -> nested REPL (a fresh Evaluator on the C stack).
+    //   * `load` (a fresh `load_eval` Evaluator on the C stack).
+    //   * Callbacks in `map`/`filter`/`reduce`/`crossmap`.
+    //
+    // What is shared, what is per-Evaluator, and why this is safe:
+    //
+    // 1. `global_op_stack` is shared across ALL evaluators. To make
+    //    nested REPLs safe, `eval_init` checks `op_stack_is_empty`
+    //    and skips re-init when ops belong to a parent evaluation.
+    //    `base_depth` below is captured BEFORE pushing this op, and
+    //    `eval_trampoline` only runs ops above `base_depth`. A nested
+    //    `eval_run_list` therefore only consumes its own ops and
+    //    never pops below the parent's frame.
+    //
+    // 2. `in_tail_position` and `proc_depth` are per-Evaluator. We
+    //    save/restore `in_tail_position` here so that returning from
+    //    a nested list does not leak tail-position into the caller's
+    //    next instruction. A nested REPL gets a brand-new Evaluator
+    //    with `in_tail_position = false` and `proc_depth = 0`, so
+    //    pause cannot disturb the parent Evaluator's TCO state — the
+    //    parent's struct is untouched on the C stack while paused.
+    //
+    // 3. `proc_get_frame_stack()` / `proc_get_current()` are global
+    //    (singleton). They reflect the LIVE call stack regardless of
+    //    which Evaluator is on top. This is intentional: `pause` in a
+    //    nested REPL needs to see the parent's procedure name and its
+    //    local bindings. The frame stack itself is grow-only during a
+    //    procedure call and is unwound by the call site, not by
+    //    `eval_run_list`.
+    //
+    // 4. Pause-during-tail-call: when a procedure is mid-tail-call and
+    //    F9 is pressed, the pause REPL runs on a fresh Evaluator while
+    //    the parent Evaluator's `in_tail_position == true` survives on
+    //    the C stack. After `co`, control returns to the parent's
+    //    trampoline with TCO state intact. See
+    //    `test_pause_resumes_tail_recursion` for a regression test.
+    // ----------------------------------------------------------------
+
     OpStack *stack = eval->op_stack;
     int base_depth = op_stack_depth(stack);
     bool old_tail = eval->in_tail_position;
