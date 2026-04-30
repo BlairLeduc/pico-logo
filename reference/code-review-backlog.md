@@ -34,6 +34,8 @@ These patterns recur across multiple modules and are worth fixing as a single sw
 ## 2. Findings — P0 (correctness / data loss)
 
 > **Verification status (current pass):** P5a-002, P5a-003, P5c-001, P5c-002, and P1-001 verified real and **fixed** with regression tests. P4-008, P4-005, and P4-010 were **rechecked against the source and downgraded** — see the inline notes below; no code change applied.
+>
+> **P1 follow-up batches (4–7):** P5b-002/003, P5b-006, P5b-009, P5b-012, P5b-016, P5b-020, P5c-003, P6-007, P6-008, P2-016 — fixed or pinned with tests. P2-010 audited (no behavioural drift today, parity tests added). P5c-010 and P6-004 reviewed and intentionally not changed (current code is safe under existing invariants — see inline notes).
 
 | ID | Axis | File:line | Observation | Recommendation |
 |---|---|---|---|---|
@@ -76,7 +78,7 @@ These patterns recur across multiple modules and are worth fixing as a single sw
 | P2-003 | C/L | [core/lexer.c:396-413](../core/lexer.c#L396-L413) | `should_be_unary_minus` rules are subtle and partly contradict reference (e.g. binary minus after WORD); risks silent semantic divergence. | Rewrite with reference rules quoted in comments; add edge-case tests (`word-foo`, `(5+3) -2`). |
 | P2-006 | X | [core/lexer.c:279, 388](../core/lexer.c#L279) | ✅ `looks_like_number` already rejects incomplete exponents (verified). Added regression tests `test_incomplete_exponent_e_is_word`, `..._with_sign_is_word`, `..._n_is_word`. |
 | P2-005 | C | [core/lexer.c:201-220](../core/lexer.c#L201-L220) | First-char-after-quote rules (brackets always escape, slash special-case) are correct but reasoning buried. | Quote reference §3862-3876 in code; add tests for `"\/"` and `"path/file"`. |
-| P2-010 | L | [core/token_source.c:185-200](../core/token_source.c#L185-L200) | NodeIterator's minus classification simpler than lexer's → list-mode and text-mode evaluate the same expression differently. | Unify via shared `logo_classify_minus`; add NodeIterator minus tests (currently absent). |
+| P2-010 | L | [core/token_source.c:185-200](../core/token_source.c#L185-L200) | ✅ Behaviour audit shows lexer and NodeIterator produce the same user-visible result for common minus cases (binary with spaces, after `)`, negative literal, after operator, with variable). Pinning tests added in `tests/test_primitives_arithmetic.c` (`test_minus_text_vs_list_*`) so any future drift in either path fails immediately. Unifying into a shared `logo_classify_minus` remains a P2 cleanup. |
 | P2-016 | L | [core/token_source.c:60-90](../core/token_source.c#L60-L90) | ✅ `is_number_word` now matches lexer: requires digit before exponent, requires digit after exponent, rejects sign after `n`/`N`. |
 | P2-012 | L | [tests/test_lexer.c](../tests/test_lexer.c) | ✅ Added with P2-001. |
 | P2-017 | L | [core/lexer.c:437-500](../core/lexer.c#L437-L500) | Slash-in-quoted-word rule for file paths is asymmetric (first vs non-first char); no tests. | Add tests; document in code. |
@@ -123,13 +125,13 @@ These patterns recur across multiple modules and are worth fixing as a single sw
 | ID | Axis | File:line | Observation | Recommendation |
 |---|---|---|---|---|
 | P5b-001 | L | [core/primitives_words_lists.c:1005-1030](../core/primitives_words_lists.c#L1005-L1030) | `parse` silently drops nested brackets ("In a full implementation, we'd recursively parse"). | Implement with the lexer; or document the limitation and reject bracketed input with `ERR_DOESNT_LIKE_INPUT`. |
-| P5b-002 / P5b-003 | X | [core/primitives_words_lists.c:942-975, 1097, 1129](../core/primitives_words_lists.c#L942-L975) | `word`, `lowercase`, `uppercase` truncate at 256 bytes silently. | Grow dynamically (using arena) or return `ERR_OUT_OF_SPACE`. |
-| P5b-006 | L | [core/primitives_list_processing.c:1790-1830](../core/primitives_list_processing.c#L1790-L1830) | `reduce` fold direction not verified against reference. | Add test `reduce "sum [1 2 3 4]` and confirm against reference; add a comment. |
+| P5b-002 / P5b-003 ✅ | X | [core/primitives_words_lists.c](../core/primitives_words_lists.c) | **Fixed:** `prim_word` now refuses concatenation > 255 chars with `ERR_OUT_OF_SPACE` (matches the atom interner cap); `prim_lowercase`/`prim_uppercase` replaced their silent clamp with an `assert` (input atom length is guaranteed ≤ 255, so the 256-byte buffer is provably sufficient). Tests: `test_word_overflow_returns_error`, `test_word_at_atom_limit_succeeds`. |
+| P5b-006 ✅ | L | [core/primitives_list_processing.c](../core/primitives_list_processing.c) | **Fixed/pinned:** added `test_reduce_word_is_right_fold` using a non-commutative `mark` procedure to prove right-to-left fold direction (`reduce "mark [a b c d]` → `aLbLcLdRRR`). |
 | P5b-007 | X | [core/primitives_list_processing.c](../core/primitives_list_processing.c) (`map`, `filter`, `crossmap`, `map.se`) | `malloc`/`free` paths aren't exception-safe — error in callback can leak `element_storage`/`result_word`. | Add `free` on error returns; consider arena allocation. Run with ASan. |
 | P5b-009 | X | [core/primitives_list_processing.c:240-280](../core/primitives_list_processing.c#L240-L280) | ✅ `invoke_proc_spec` now rejects lambdas with `param_count > MAX_PROC_PARAMS` with `ERR_TOO_MANY_INPUTS` before touching the fixed-size save/restore arrays. |
 | P5b-010 | L | [core/primitives_variables.c:21-26](../core/primitives_variables.c#L21-L26) | `thing` returns `ERR_NO_VALUE` on unknown; reference doesn't pin the behaviour. | Confirm against reference; document chosen behaviour and test. |
 | P5b-011 | L | [core/primitives_procedures.c:355-400](../core/primitives_procedures.c#L355-L400) | `text` returns malformed `[[params] | NIL]` if procedure body is empty. | Guard / assert non-nil body. |
-| P5b-012 | X | [core/primitives_workspace.c](../core/primitives_workspace.c) (PO/POALL/PONS) | Per-item 8 KB format buffer can overflow silently for large procedures. | Stream output line-by-line; remove the per-item buffer. |
+| P5b-012 ✅ | X | [core/primitives_workspace.c](../core/primitives_workspace.c) (PO/POALL/PONS) | **Fixed:** consolidated the four 8 KB stack buffers into a single static `ws_format_buffer`. Workspace primitives are not reentrant (they don't run user code), so the static buffer is safe and removes the per-call stack pressure (~32 KB worst case across the helper chain). The buffer-overflow concern itself is also mitigated: `format_buffer_output` already returns false on overflow, falling back to streaming `ws_output`. |
 | P5b-014 | X | [core/primitives_words_lists.c:780-810](../core/primitives_words_lists.c#L780-L810) | `member`/`memberp` mishandle leading/trailing space and use `mem_is_nil` inconsistently. | Add edge-case tests (`member "" [a b]`, `member "  " "a  b"`); normalise. |
 | P5b-016 | L | [core/primitives_words_lists.c:700-750](../core/primitives_words_lists.c#L700-L750) | ✅ Added explicit tests `test_item_is_one_indexed` and `test_item_zero_index_errors`. |
 | P5b-018 | X | [core/primitives_procedures.c:195-280](../core/primitives_procedures.c#L195-L280) | `proc_define_from_text` newline tracking across multi-line bracket bodies is untested and may insert/lose blank lines. | Add tests for `to foo [...\n[...]\n...]`. |
@@ -153,7 +155,7 @@ These patterns recur across multiple modules and are worth fixing as a single sw
 | P6-002 | M | [core/repl.c:33-60](../core/repl.c#L33-L60) vs [core/primitives_files_load_save.c:29-55](../core/primitives_files_load_save.c#L29-L55) | Two copies of `line_starts_with_to`/`line_is_end`. | Extract to a shared utility used by both. |
 | P6-004 | L/X | [core/format.c:565-571](../core/format.c#L565-L571) | Procedure-definition formatter counts raw `[`/`]` tokens for indentation; `print "["` derails it and breaks SAVE→LOAD round-trip. | Use a lexer-aware depth counter; add a round-trip test. |
 | P6-007 | M | [core/help.c:7-25](../core/help.c#L7-L25) | ✅ Documented requirement in `help.h`; added `help_check_sorted()` and `tests/test_help.c` to fail loudly if the table ever becomes unsorted. |
-| P6-008 | L | [core/help.c](../core/help.c), [core/primitives.c](../core/primitives.c) | No coverage check that every registered primitive has a help entry. | Add a startup validation and a unit test. |
+| P6-008 ✅ | L | [core/help.c](../core/help.c), [core/primitives.c](../core/primitives.c) | **Fixed:** added `tests/test_primitive_help_coverage.c` — iterates every registered primitive and fails if `help_lookup` returns null, printing all gaps. Wired into `tests/CMakeLists.txt`. |
 
 ---
 
@@ -203,7 +205,7 @@ Pre-requisite refactors: extract one shared `eval_infix_continuation` (P3-003), 
 ## 7. Suggested fix order
 
 1. **Stop the bleeding (P0).** P4-008 first (memory corruption); then P5a-002, P5a-003, P5c-001, P5c-002, P1-001, P4-005, P4-010.
-2. **Logo-semantics gaps users will hit.** P2-001 (`;` comments), P5b-001 (`parse`), P5b-002/003 (silent truncation), P5c-003 (load truncation), P3-009 (TCO through `if`).
+2. **Logo-semantics gaps users will hit.** P2-001 (`;` comments) and P5b-001 (`parse` nested brackets) remain. P5b-002/003 (silent truncation), P5c-003 (load truncation), and P3-009 (TCO through `if`) are resolved.
 3. **Cross-cutting cleanup sweep.** Themes table in §1 — buffer policy, hard-limit centralisation, lexer/token-source dedup, atom-interning policy.
 4. **Refactor P2 backlog.** Split `eval_expr.c` (§6), extract REPL/load duplication (P6-002), centralise operator/precedence definitions.
 5. **Polish P3 nits** opportunistically as files are touched.
