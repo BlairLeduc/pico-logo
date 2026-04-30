@@ -17,6 +17,7 @@
 #include <string.h>
 #include <strings.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <ctype.h>
 
 //==========================================================================
@@ -560,86 +561,92 @@ static Result prim_replace(Evaluator *eval, int argc, Value *args)
     return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
 }
 
+// Get the underlying word pointer (and length) for a number/word value.
+// Returns false if the value is neither.
+static bool value_as_word_str(Value v, const char **out_str, size_t *out_len)
+{
+    if (value_is_number(v))
+    {
+        Node word = number_to_word(v.as.number);
+        *out_str = mem_word_ptr(word);
+        *out_len = strlen(*out_str);
+        return true;
+    }
+    if (value_is_word(v))
+    {
+        *out_str = mem_word_ptr(v.as.node);
+        *out_len = mem_word_len(v.as.node);
+        return true;
+    }
+    return false;
+}
+
+// Find the first case-insensitive occurrence of needle (length needle_len)
+// in haystack (length haystack_len). Returns the offset into haystack, or
+// SIZE_MAX if not found. An empty needle is treated as "not found" so that
+// `member` and `member?` agree on empty-needle semantics for words.
+static size_t find_word_in_word(const char *haystack, size_t haystack_len,
+                                const char *needle, size_t needle_len)
+{
+    if (needle_len == 0 || needle_len > haystack_len)
+        return SIZE_MAX;
+    for (size_t i = 0; i + needle_len <= haystack_len; i++)
+    {
+        if (strncasecmp(haystack + i, needle, needle_len) == 0)
+            return i;
+    }
+    return SIZE_MAX;
+}
+
+// Walk a list and return the cons cell whose car is values_equal to obj,
+// or NODE_NIL if not found.
+static Node find_element_in_list(Value obj, Node list)
+{
+    while (!mem_is_nil(list))
+    {
+        Node car = mem_car(list);
+        Value car_val = mem_is_word(car) ? value_word(car) : value_list(car);
+        if (values_equal(obj, car_val))
+            return list;
+        list = mem_cdr(list);
+    }
+    return NODE_NIL;
+}
+
 // member object1 object2
 // Outputs the part of object2 starting with object1.
 static Result prim_member(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
-    
+
     Value obj1 = args[0];
     Value obj2 = args[1];
-    
+
     if (value_is_word(obj2) || value_is_number(obj2))
     {
-        // For words, obj1 must be a single character
         const char *str1;
-        if (value_is_number(obj1))
+        size_t len1;
+        if (!value_as_word_str(obj1, &str1, &len1))
         {
-            Node word = number_to_word(obj1.as.number);
-            str1 = mem_word_ptr(word);
+            // List can never appear inside a word.
+            return result_ok(value_word(mem_atom("", 0)));
         }
-        else if (value_is_word(obj1))
-        {
-            str1 = mem_word_ptr(obj1.as.node);
-        }
-        else
-        {
-            // List cannot be member of word
-            Node empty = mem_atom("", 0);
-            return result_ok(value_word(empty));
-        }
-        
+
         const char *str2;
         size_t len2;
-        if (value_is_number(obj2))
-        {
-            Node word = number_to_word(obj2.as.number);
-            str2 = mem_word_ptr(word);
-            len2 = strlen(str2);
-        }
-        else
-        {
-            str2 = mem_word_ptr(obj2.as.node);
-            len2 = mem_word_len(obj2.as.node);
-        }
-        
-        // Search for str1 in str2
-        size_t len1 = strlen(str1);
-        if (len1 == 0)
-        {
-            Node empty = mem_atom("", 0);
-            return result_ok(value_word(empty));
-        }
-        
-        for (size_t i = 0; i + len1 <= len2; i++)
-        {
-            if (strncasecmp(str2 + i, str1, len1) == 0)
-            {
-                Node result = mem_atom(str2 + i, len2 - i);
-                return result_ok(value_word(result));
-            }
-        }
-        
-        Node empty = mem_atom("", 0);
-        return result_ok(value_word(empty));
+        (void)value_as_word_str(obj2, &str2, &len2);
+
+        size_t pos = find_word_in_word(str2, len2, str1, len1);
+        if (pos == SIZE_MAX)
+            return result_ok(value_word(mem_atom("", 0)));
+        return result_ok(value_word(mem_atom(str2 + pos, len2 - pos)));
     }
     else if (value_is_list(obj2))
     {
-        // Search for obj1 as element in list
-        Node list = obj2.as.node;
-        while (!mem_is_nil(list))
-        {
-            Node car = mem_car(list);
-            Value car_val = mem_is_word(car) ? value_word(car) : value_list(car);
-            if (values_equal(obj1, car_val))
-            {
-                return result_ok(value_list(list));
-            }
-            list = mem_cdr(list);
-        }
-        return result_ok(value_list(NODE_NIL));
+        Node found = find_element_in_list(obj1, obj2.as.node);
+        return result_ok(value_list(found));
     }
-    
+
     return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj2));
 }
 
@@ -1070,80 +1077,38 @@ static Result prim_listp(Evaluator *eval, int argc, Value *args)
 static Result prim_memberp(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
-    
+
     Value obj1 = args[0];
     Value obj2 = args[1];
-    
+
+    bool found = false;
+
     if (value_is_word(obj2) || value_is_number(obj2))
     {
-        // For words, obj1 must be a single character
         const char *str1;
         size_t len1;
-        
-        if (value_is_number(obj1))
+        if (!value_as_word_str(obj1, &str1, &len1))
         {
-            Node word = number_to_word(obj1.as.number);
-            str1 = mem_word_ptr(word);
-            len1 = strlen(str1);
+            // List is never an element of a word.
+            return result_ok(value_word(mem_atom_cstr("false")));
         }
-        else if (value_is_word(obj1))
-        {
-            str1 = mem_word_ptr(obj1.as.node);
-            len1 = mem_word_len(obj1.as.node);
-        }
-        else
-        {
-            Node result = mem_atom_cstr("false");
-            return result_ok(value_word(result));
-        }
-        
+
         const char *str2;
         size_t len2;
-        
-        if (value_is_number(obj2))
-        {
-            Node word = number_to_word(obj2.as.number);
-            str2 = mem_word_ptr(word);
-            len2 = strlen(str2);
-        }
-        else
-        {
-            str2 = mem_word_ptr(obj2.as.node);
-            len2 = mem_word_len(obj2.as.node);
-        }
-        
-        // Search for str1 in str2
-        for (size_t i = 0; i + len1 <= len2; i++)
-        {
-            if (strncasecmp(str2 + i, str1, len1) == 0)
-            {
-                Node result = mem_atom_cstr("true");
-                return result_ok(value_word(result));
-            }
-        }
-        
-        Node result = mem_atom_cstr("false");
-        return result_ok(value_word(result));
+        (void)value_as_word_str(obj2, &str2, &len2);
+
+        found = (find_word_in_word(str2, len2, str1, len1) != SIZE_MAX);
     }
     else if (value_is_list(obj2))
     {
-        Node list = obj2.as.node;
-        while (!mem_is_nil(list))
-        {
-            Node car = mem_car(list);
-            Value car_val = mem_is_word(car) ? value_word(car) : value_list(car);
-            if (values_equal(obj1, car_val))
-            {
-                Node result = mem_atom_cstr("true");
-                return result_ok(value_word(result));
-            }
-            list = mem_cdr(list);
-        }
-        Node result = mem_atom_cstr("false");
-        return result_ok(value_word(result));
+        found = !mem_is_nil(find_element_in_list(obj1, obj2.as.node));
     }
-    
-    return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj2));
+    else
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj2));
+    }
+
+    return result_ok(value_word(mem_atom_cstr(found ? "true" : "false")));
 }
 
 // number? object

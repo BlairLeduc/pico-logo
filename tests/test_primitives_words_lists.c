@@ -735,6 +735,27 @@ void test_memberp_empty_needle_word(void)
     TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
 }
 
+void test_member_whitespace_needle_in_word(void)
+{
+    // Whitespace inside a word should match verbatim as a substring.
+    // Build needle "  " (two spaces) and haystack "a  b" using `char`.
+    Result r = eval_string(
+        "member (word char 32 char 32) (word \"a char 32 char 32 \"b)");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("  b", mem_word_ptr(r.value.as.node));
+}
+
+void test_memberp_whitespace_needle_in_word_agrees_with_member(void)
+{
+    // member returning non-empty implies memberp is true.
+    Result r = eval_string(
+        "member? (word char 32 char 32) (word \"a char 32 char 32 \"b)");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -832,6 +853,9 @@ int main(void)
     RUN_TEST(test_member_list_in_word_returns_empty);
     RUN_TEST(test_member_number_in_list);
     RUN_TEST(test_memberp_empty_needle_word);
+
+    RUN_TEST(test_member_whitespace_needle_in_word);
+    RUN_TEST(test_memberp_whitespace_needle_in_word_agrees_with_member);
 
     return UNITY_END();
 }
