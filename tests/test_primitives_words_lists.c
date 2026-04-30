@@ -4,6 +4,7 @@
 //
 
 #include "test_scaffold.h"
+#include "core/parse_list.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -394,6 +395,72 @@ void test_parse(void)
     TEST_ASSERT_EQUAL_STRING("hello", mem_word_ptr(first));
 }
 
+// Direct exercise of the shared parser used by both `parse` and `readlist`.
+// This is the cleanest regression for the previous "parse drops brackets"
+// bug because Logo's quoted-word syntax stops at `[` and `]`, so the
+// `parse` primitive itself can't easily be handed a bracket-containing
+// word from a Logo source line.
+void test_parse_list_from_string_nested(void)
+{
+    ParseListResult r = parse_list_from_string("a [b c] d");
+    TEST_ASSERT_TRUE(r.success);
+
+    Node first = mem_car(r.node);
+    TEST_ASSERT_TRUE(mem_is_word(first));
+    TEST_ASSERT_EQUAL_STRING("a", mem_word_ptr(first));
+
+    Node second_cell = mem_cdr(r.node);
+    Node sub = mem_car(second_cell);
+    TEST_ASSERT_TRUE(mem_is_list(sub));
+    TEST_ASSERT_EQUAL_STRING("b", mem_word_ptr(mem_car(sub)));
+    TEST_ASSERT_EQUAL_STRING("c", mem_word_ptr(mem_car(mem_cdr(sub))));
+    TEST_ASSERT_TRUE(mem_is_nil(mem_cdr(mem_cdr(sub))));
+
+    Node third_cell = mem_cdr(second_cell);
+    TEST_ASSERT_EQUAL_STRING("d", mem_word_ptr(mem_car(third_cell)));
+    TEST_ASSERT_TRUE(mem_is_nil(mem_cdr(third_cell)));
+}
+
+void test_parse_list_from_string_deeply_nested(void)
+{
+    ParseListResult r = parse_list_from_string("[a [b [c]]]");
+    TEST_ASSERT_TRUE(r.success);
+
+    // One outer element: the [a [b [c]]] sublist.
+    Node outer = mem_car(r.node);
+    TEST_ASSERT_TRUE(mem_is_list(outer));
+    TEST_ASSERT_TRUE(mem_is_nil(mem_cdr(r.node)));
+
+    TEST_ASSERT_EQUAL_STRING("a", mem_word_ptr(mem_car(outer)));
+    Node level1 = mem_car(mem_cdr(outer));
+    TEST_ASSERT_TRUE(mem_is_list(level1));
+
+    TEST_ASSERT_EQUAL_STRING("b", mem_word_ptr(mem_car(level1)));
+    Node level2 = mem_car(mem_cdr(level1));
+    TEST_ASSERT_TRUE(mem_is_list(level2));
+
+    TEST_ASSERT_EQUAL_STRING("c", mem_word_ptr(mem_car(level2)));
+    TEST_ASSERT_TRUE(mem_is_nil(mem_cdr(level2)));
+}
+
+// Empty bracketed group must be encoded so it survives mem_is_list checks.
+void test_parse_list_from_string_empty_sublist(void)
+{
+    ParseListResult r = parse_list_from_string("x [] y");
+    TEST_ASSERT_TRUE(r.success);
+
+    TEST_ASSERT_EQUAL_STRING("x", mem_word_ptr(mem_car(r.node)));
+
+    Node empty_cell = mem_cdr(r.node);
+    Node empty_sub = mem_car(empty_cell);
+    TEST_ASSERT_TRUE(mem_is_list(empty_sub));
+    TEST_ASSERT_TRUE(mem_is_nil(empty_sub));
+
+    Node y_cell = mem_cdr(empty_cell);
+    TEST_ASSERT_EQUAL_STRING("y", mem_word_ptr(mem_car(y_cell)));
+    TEST_ASSERT_TRUE(mem_is_nil(mem_cdr(y_cell)));
+}
+
 //==========================================================================
 // Character Operation Tests (ascii, char)
 //==========================================================================
@@ -722,6 +789,9 @@ int main(void)
     RUN_TEST(test_word_overflow_returns_error);
     RUN_TEST(test_word_at_atom_limit_succeeds);
     RUN_TEST(test_parse);
+    RUN_TEST(test_parse_list_from_string_nested);
+    RUN_TEST(test_parse_list_from_string_deeply_nested);
+    RUN_TEST(test_parse_list_from_string_empty_sublist);
     
     // Character operations
     RUN_TEST(test_ascii);

@@ -12,6 +12,7 @@
 #include "error.h"
 #include "eval.h"
 #include "lexer.h"
+#include "parse_list.h"
 #include <assert.h>
 #include <string.h>
 #include <strings.h>
@@ -782,14 +783,17 @@ static Result prim_lput(Evaluator *eval, int argc, Value *args)
 }
 
 // parse word
-// Outputs a list parsed from word.
+// Outputs a list parsed from word. Nested bracketed groups produce
+// sublists; operators and punctuation become single-character word
+// elements (matching `readlist`'s behaviour).
 static Result prim_parse(Evaluator *eval, int argc, Value *args)
 {
+    (void)eval;
     (void)argc;
-    
+
     Value obj = args[0];
     const char *str;
-    
+
     if (value_is_number(obj))
     {
         Node word = number_to_word(obj.as.number);
@@ -803,87 +807,13 @@ static Result prim_parse(Evaluator *eval, int argc, Value *args)
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
     }
-    
-    // Use a lexer to parse the string as a list
-    // (We don't need to modify eval's token source - just use a local lexer)
-    Lexer lexer;
-    lexer_init(&lexer, str);
-    
-    // Parse tokens into a list
-    Node result = NODE_NIL;
-    Node tail = NODE_NIL;
-    
-    while (true)
+
+    ParseListResult parsed = parse_list_from_string(str);
+    if (!parsed.success)
     {
-        Token t = lexer_next_token(&lexer);
-        if (t.type == TOKEN_EOF)
-            break;
-        
-        Node item = NODE_NIL;
-        
-        if (t.type == TOKEN_LEFT_BRACKET)
-        {
-            // Parse nested list - this is complex, so for now just store the bracket
-            // In a full implementation, we'd recursively parse
-            int depth = 1;
-            while (depth > 0 && !lexer_is_at_end(&lexer))
-            {
-                t = lexer_next_token(&lexer);
-                if (t.type == TOKEN_LEFT_BRACKET) depth++;
-                else if (t.type == TOKEN_RIGHT_BRACKET) depth--;
-            }
-            // For simplicity, just skip list content in parse
-            continue;
-        }
-        else if (t.type == TOKEN_RIGHT_BRACKET)
-        {
-            break;
-        }
-        else if (t.type == TOKEN_WORD || t.type == TOKEN_NUMBER)
-        {
-            item = mem_atom(t.start, t.length);
-        }
-        else if (t.type == TOKEN_QUOTED)
-        {
-            // Include the quote mark
-            item = mem_atom(t.start, t.length);
-        }
-        else if (t.type == TOKEN_COLON)
-        {
-            // Include the colon
-            item = mem_atom(t.start, t.length);
-        }
-        else if (t.type == TOKEN_PLUS || t.type == TOKEN_MINUS ||
-                 t.type == TOKEN_UNARY_MINUS ||
-                 t.type == TOKEN_MULTIPLY || t.type == TOKEN_DIVIDE ||
-                 t.type == TOKEN_EQUALS || t.type == TOKEN_LESS_THAN ||
-                 t.type == TOKEN_GREATER_THAN)
-        {
-            item = mem_atom(t.start, t.length);
-        }
-        else if (t.type == TOKEN_LEFT_PAREN || t.type == TOKEN_RIGHT_PAREN)
-        {
-            item = mem_atom(t.start, t.length);
-        }
-        else
-        {
-            continue;
-        }
-        
-        Node new_cons = mem_cons(item, NODE_NIL);
-        if (mem_is_nil(result))
-        {
-            result = new_cons;
-            tail = new_cons;
-        }
-        else
-        {
-            mem_set_cdr(tail, new_cons);
-            tail = new_cons;
-        }
+        return result_error(ERR_OUT_OF_SPACE);
     }
-    
-    return result_ok(value_list(result));
+    return result_ok(value_list(parsed.node));
 }
 
 // sentence object1 object2 ...

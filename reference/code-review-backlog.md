@@ -124,7 +124,7 @@ These patterns recur across multiple modules and are worth fixing as a single sw
 
 | ID | Axis | File:line | Observation | Recommendation |
 |---|---|---|---|---|
-| P5b-001 | L | [core/primitives_words_lists.c:1005-1030](../core/primitives_words_lists.c#L1005-L1030) | `parse` silently drops nested brackets ("In a full implementation, we'd recursively parse"). | Implement with the lexer; or document the limitation and reject bracketed input with `ERR_DOESNT_LIKE_INPUT`. |
+| P5b-001 ✅ | L | [core/primitives_words_lists.c](../core/primitives_words_lists.c), [core/parse_list.c](../core/parse_list.c) | **Fixed:** extracted the lexer-driven list parser used by `readlist` into a shared `core/parse_list.[ch]` module and routed `prim_parse` through it. `parse` now produces nested sublists (recursing through brackets and matching `readlist`'s shape) instead of silently dropping bracket content. Tests: `test_parse_list_from_string_nested`, `test_parse_list_from_string_deeply_nested`, `test_parse_list_from_string_empty_sublist`. |
 | P5b-002 / P5b-003 ✅ | X | [core/primitives_words_lists.c](../core/primitives_words_lists.c) | **Fixed:** `prim_word` now refuses concatenation > 255 chars with `ERR_OUT_OF_SPACE` (matches the atom interner cap); `prim_lowercase`/`prim_uppercase` replaced their silent clamp with an `assert` (input atom length is guaranteed ≤ 255, so the 256-byte buffer is provably sufficient). Tests: `test_word_overflow_returns_error`, `test_word_at_atom_limit_succeeds`. |
 | P5b-006 ✅ | L | [core/primitives_list_processing.c](../core/primitives_list_processing.c) | **Fixed/pinned:** added `test_reduce_word_is_right_fold` using a non-commutative `mark` procedure to prove right-to-left fold direction (`reduce "mark [a b c d]` → `aLbLcLdRRR`). |
 | P5b-007 | X | [core/primitives_list_processing.c](../core/primitives_list_processing.c) (`map`, `filter`, `crossmap`, `map.se`) | `malloc`/`free` paths aren't exception-safe — error in callback can leak `element_storage`/`result_word`. | Add `free` on error returns; consider arena allocation. Run with ASan. |
@@ -205,7 +205,7 @@ Pre-requisite refactors: extract one shared `eval_infix_continuation` (P3-003), 
 ## 7. Suggested fix order
 
 1. **Stop the bleeding (P0).** P4-008 first (memory corruption); then P5a-002, P5a-003, P5c-001, P5c-002, P1-001, P4-005, P4-010.
-2. **Logo-semantics gaps users will hit.** P2-001 (`;` comments) and P5b-001 (`parse` nested brackets) remain. P5b-002/003 (silent truncation), P5c-003 (load truncation), and P3-009 (TCO through `if`) are resolved.
+2. **Logo-semantics gaps users will hit.** P2-001 (`;` comments) is the last open item. P5b-001 (`parse` nested brackets), P5b-002/003 (silent truncation), P5c-003 (load truncation), and P3-009 (TCO through `if`) are resolved.
 3. **Cross-cutting cleanup sweep.** Themes table in §1 — buffer policy, hard-limit centralisation, lexer/token-source dedup, atom-interning policy.
 4. **Refactor P2 backlog.** Split `eval_expr.c` (§6), extract REPL/load duplication (P6-002), centralise operator/precedence definitions.
 5. **Polish P3 nits** opportunistically as files are touched.

@@ -14,6 +14,7 @@
 #include "eval.h"
 #include "lexer.h"
 #include "format.h"
+#include "parse_list.h"
 #include "devices/io.h"
 #include "devices/stream.h"
 #include <stdio.h>
@@ -146,140 +147,7 @@ static Result prim_readchars(Evaluator *eval, int argc, Value *args)
 }
 
 // Helper result for parse_line_to_list
-typedef struct {
-    Node node;
-    bool success;
-} ParseResult;
-
-// Forward declaration
-static ParseResult parse_list_body(Lexer *lexer);
-
-// Append a freshly built element cell (a single-cell list whose car is the
-// element) to the list under construction. Updates *head and *tail as needed.
-// Returns false if cell allocation failed.
-static bool append_element(Node element, Node *head, Node *tail)
-{
-    Node new_cell = mem_cons(element, NODE_NIL);
-    if (mem_is_nil(new_cell))
-    {
-        return false;
-    }
-    if (mem_is_nil(*head))
-    {
-        *head = new_cell;
-    }
-    else
-    {
-        mem_set_cdr(*tail, new_cell);
-    }
-    *tail = new_cell;
-    return true;
-}
-
-// Parse a list body from the lexer up to a matching TOKEN_RIGHT_BRACKET,
-// TOKEN_EOF, or TOKEN_ERROR. Nested lists are parsed recursively against
-// the same lexer so bracket matching mirrors the main parser exactly.
-static ParseResult parse_list_body(Lexer *lexer)
-{
-    Node head = NODE_NIL;
-    Node tail = NODE_NIL;
-
-    for (;;)
-    {
-        Token tok = lexer_next_token(lexer);
-        if (tok.type == TOKEN_EOF || tok.type == TOKEN_ERROR ||
-            tok.type == TOKEN_RIGHT_BRACKET)
-        {
-            break;
-        }
-
-        Node element = NODE_NIL;
-        bool have_element = true;
-
-        switch (tok.type)
-        {
-        case TOKEN_WORD:
-        case TOKEN_QUOTED:
-        case TOKEN_NUMBER:
-        case TOKEN_COLON:
-        {
-            char buf[256];
-            size_t len = tok.length;
-            if (len >= sizeof(buf))
-                len = sizeof(buf) - 1;
-            memcpy(buf, tok.start, len);
-            buf[len] = '\0';
-            element = mem_atom(buf, len);
-            break;
-        }
-
-        case TOKEN_LEFT_BRACKET:
-        {
-            ParseResult inner = parse_list_body(lexer);
-            if (!inner.success)
-            {
-                return inner;
-            }
-            // An empty inner list must be encoded as NODE_MAKE_LIST(0), not
-            // NODE_NIL, so it round-trips through cell encoding correctly.
-            element = mem_is_nil(inner.node) ? NODE_MAKE_LIST(0) : inner.node;
-            break;
-        }
-
-        case TOKEN_PLUS:
-            element = mem_atom_cstr("+");
-            break;
-        case TOKEN_MINUS:
-        case TOKEN_UNARY_MINUS:
-            element = mem_atom_cstr("-");
-            break;
-        case TOKEN_MULTIPLY:
-            element = mem_atom_cstr("*");
-            break;
-        case TOKEN_DIVIDE:
-            element = mem_atom_cstr("/");
-            break;
-        case TOKEN_EQUALS:
-            element = mem_atom_cstr("=");
-            break;
-        case TOKEN_LESS_THAN:
-            element = mem_atom_cstr("<");
-            break;
-        case TOKEN_GREATER_THAN:
-            element = mem_atom_cstr(">");
-            break;
-        case TOKEN_LEFT_PAREN:
-            element = mem_atom_cstr("(");
-            break;
-        case TOKEN_RIGHT_PAREN:
-            element = mem_atom_cstr(")");
-            break;
-
-        default:
-            have_element = false;
-            break;
-        }
-
-        if (!have_element)
-            continue;
-
-        if (!append_element(element, &head, &tail))
-        {
-            return (ParseResult){.node = NODE_NIL, .success = false};
-        }
-    }
-
-    return (ParseResult){.node = head, .success = true};
-}
-
-// Helper: Parse a line into a list of values, recursively handling
-// nested bracketed sublists.
-static ParseResult parse_line_to_list(const char *line)
-{
-    Lexer lexer;
-    lexer_init(&lexer, line);
-    return parse_list_body(&lexer);
-}
+// (now provided by core/parse_list.[ch])
 
 // readlist (rl) - reads a line of input and outputs it as a list
 // Echoes the input. Returns empty word if at EOF.
@@ -306,7 +174,7 @@ static Result prim_readlist(Evaluator *eval, int argc, Value *args)
     }
 
     // Parse the line into a list
-    ParseResult parse_result = parse_line_to_list(buffer);
+    ParseListResult parse_result = parse_list_from_string(buffer);
     if (!parse_result.success)
     {
         return result_error(ERR_OUT_OF_SPACE);
