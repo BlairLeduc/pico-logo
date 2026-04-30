@@ -13,6 +13,7 @@
 #include "eval.h"
 #include "format.h"
 #include "lexer.h"
+#include "repl.h"
 #include "devices/io.h"
 #include <string.h>
 #include <strings.h>
@@ -26,41 +27,8 @@ static bool loading_in_progress = false;
 // Load helpers
 //==========================================================================
 
-// Helper to check if a line starts with "to " (case-insensitive)
-static bool line_starts_with_to(const char *line)
-{
-    // Skip leading whitespace
-    while (*line && isspace((unsigned char)*line))
-        line++;
-
-    if (strncasecmp(line, "to", 2) != 0)
-        return false;
-
-    // Must be followed by whitespace or end of line
-    char c = line[2];
-    return c == '\0' || isspace((unsigned char)c);
-}
-
-// Helper to check if a line is just "end" (case-insensitive)
-static bool line_is_end(const char *line)
-{
-    // Skip leading whitespace
-    while (*line && isspace((unsigned char)*line))
-        line++;
-
-    if (strncasecmp(line, "end", 3) != 0)
-        return false;
-
-    // Must be followed by whitespace or end of string
-    line += 3;
-    
-    // Skip any trailing whitespace
-    while (*line && isspace((unsigned char)*line))
-        line++;
-    
-    // Line must be empty after "end" and whitespace
-    return *line == '\0';
-}
+// `to`-line and `end`-line detection are shared with the REPL; see
+// repl_line_starts_with_to / repl_line_is_end in core/repl.h.
 
 // Maximum line length for load
 #define LOAD_MAX_LINE 256
@@ -136,7 +104,7 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
         }
 
         // Handle multi-line procedure definitions
-        if (!in_procedure_def && line_starts_with_to(line))
+        if (!in_procedure_def && repl_line_starts_with_to(line))
         {
             // Start collecting procedure definition
             in_procedure_def = true;
@@ -165,7 +133,7 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
 
         if (in_procedure_def)
         {
-            if (line_is_end(line))
+            if (repl_line_is_end(line))
             {
                 // Complete the procedure definition
                 if (proc_len + 4 < LOAD_MAX_PROC)

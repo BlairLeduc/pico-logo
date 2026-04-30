@@ -13,6 +13,7 @@
 #include "error.h"
 #include "eval.h"
 #include "format.h"
+#include "repl.h"
 #include "devices/io.h"
 #include "devices/stream.h"
 #include <stdio.h>
@@ -29,41 +30,8 @@ static char editor_buffer[LOGO_EDITOR_BUFFER_SIZE];
 // Safe as static because the editor is a blocking UI operation (no reentrancy).
 static char editor_proc_buffer[LOGO_EDITOR_BUFFER_SIZE];
 
-// Helper to check if a line starts with "to " (case-insensitive)
-static bool line_starts_with_to(const char *line)
-{
-    // Skip leading whitespace
-    while (*line && (*line == ' ' || *line == '\t'))
-        line++;
-    
-    if (strncasecmp(line, "to", 2) != 0)
-        return false;
-    
-    // Must be followed by whitespace or end of line
-    char c = line[2];
-    return c == '\0' || c == ' ' || c == '\t' || c == '\n';
-}
-
-// Helper to check if a line is just "end" (case-insensitive)
-static bool line_is_end(const char *line)
-{
-    // Skip leading whitespace
-    while (*line && (*line == ' ' || *line == '\t'))
-        line++;
-    
-    if (strncasecmp(line, "end", 3) != 0)
-        return false;
-    
-    // Must be followed by whitespace or end of string
-    line += 3;
-    
-    // Skip any trailing whitespace
-    while (*line && (*line == ' ' || *line == '\t' || *line == '\n'))
-        line++;
-    
-    // Line must be empty after "end" and whitespace
-    return *line == '\0';
-}
+// `to`-line and `end`-line detection are shared with the REPL; see
+// repl_line_starts_with_to / repl_line_is_end in core/repl.h.
 
 // Count bracket balance in a line (positive = more '[', negative = more ']')
 static int count_bracket_balance(const char *line)
@@ -162,7 +130,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
             char saved = *line_end;
             *line_end = '\0';
             
-            if (!in_procedure_def && line_starts_with_to(line_start))
+            if (!in_procedure_def && repl_line_starts_with_to(line_start))
             {
                 // Start collecting procedure definition
                 in_procedure_def = true;
@@ -183,7 +151,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
             }
             else if (in_procedure_def)
             {
-                if (line_is_end(line_start))
+                if (repl_line_is_end(line_start))
                 {
                     // Complete the procedure definition
                     if (proc_len + 4 < LOGO_EDITOR_BUFFER_SIZE)
