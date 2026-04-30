@@ -75,7 +75,10 @@ static Result prim_goodbye(Evaluator *eval, int argc, Value *args)
 // (toot duration leftfrequency rightfrequency)
 // Plays a tone for the specified duration.
 // Duration is in 1/1000ths of a second (milliseconds).
-// Frequency is in Hz (131 to 1976).
+// Frequency is in Hz. The actual playable range is 100-2000 Hz; per
+// reference §2823, frequencies outside that range are not an error --
+// they behave as a rest (by convention 0 Hz). Range enforcement and the
+// rest fallback are implemented inside the device's tone backend, not here.
 static Result prim_toot(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);

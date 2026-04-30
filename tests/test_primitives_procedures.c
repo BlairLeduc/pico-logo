@@ -355,6 +355,27 @@ void test_very_deep_tail_recursion(void)
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
 }
 
+void test_deep_tail_recursion_through_output(void)
+{
+    // P3-016: confirm that `output` enables TCO for its argument expression
+    // even when the `output` itself is not on the last body line / not in
+    // syntactic tail position. Per Logo semantics, `output` always
+    // terminates the procedure, so a self-call inside its argument *is* a
+    // genuine tail call. If TCO were not applied here, this 10000-deep
+    // self-call would exhaust the C stack.
+    //
+    // sumto n: if :n = 0 [output 0]  output sumto difference :n 1
+    // (Recursive call sits inside the `output` argument on a non-tail line.)
+    const char *params[] = {"n"};
+    define_proc("sumto", params, 1,
+                "if :n = 0 [output 0]\n"
+                "output sumto difference :n 1");
+
+    Result r = eval_string("sumto 10000");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, r.value.as.number);
+}
+
 void test_deep_non_tail_recursion_limit(void)
 {
     // Test that non-tail recursion works for reasonable depths
@@ -1723,6 +1744,7 @@ int main(void)
     RUN_TEST(test_tail_recursive_countdown);
     RUN_TEST(test_deep_tail_recursion);
     RUN_TEST(test_very_deep_tail_recursion);
+    RUN_TEST(test_deep_tail_recursion_through_output);
     RUN_TEST(test_deep_non_tail_recursion_limit);
     RUN_TEST(test_definedp_true);
     RUN_TEST(test_definedp_false);

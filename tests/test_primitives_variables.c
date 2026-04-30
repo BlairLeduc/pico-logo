@@ -37,6 +37,17 @@ void test_thing_unknown_raises_no_value(void)
     TEST_ASSERT_EQUAL(ERR_NO_VALUE, r.error_code);
 }
 
+void test_thing_and_colon_agree_on_unknown(void)
+{
+    // Reference §1665 says `thing "any` is equivalent to `:any`.
+    // Both forms must raise the same error code on an unbound name.
+    Result r1 = eval_string("thing \"zzz_unbound_x");
+    Result r2 = eval_string(":zzz_unbound_x");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r1.status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r2.status);
+    TEST_ASSERT_EQUAL(r2.error_code, r1.error_code);
+}
+
 void test_dots_variable(void)
 {
     run_string("make \"y 100");
@@ -266,6 +277,7 @@ int main(void)
 
     RUN_TEST(test_make_and_thing);
     RUN_TEST(test_thing_unknown_raises_no_value);
+    RUN_TEST(test_thing_and_colon_agree_on_unknown);
     RUN_TEST(test_dots_variable);
     RUN_TEST(test_global_variable);
     RUN_TEST(test_local_declaration);
