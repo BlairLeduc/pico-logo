@@ -9,6 +9,19 @@
 //  2. Lambda expression: [[x] :x + 1]
 //  3. Procedure text: [[x y] [output :x + :y]]
 //
+//  Heap allocation contract (P5b-007):
+//  Several primitives below (`map`, `filter`, `reduce`, `crossmap`) heap-allocate
+//  scratch buffers (`result_word` for word output, `elements`/`element_storage`
+//  for cached arguments) before invoking a user callback. Every early return
+//  from these functions after the allocation point — including `RESULT_ERROR`,
+//  `RESULT_THROW`, `RESULT_STOP`, the non-bool/non-word/non-number value
+//  classification errors, and `realloc` failure — must `free` the buffer first.
+//  `free(NULL)` is well-defined, so it is safe (and we do) call `free` on the
+//  word buffer in the list-output paths where it was never allocated.
+//  The error-path regression tests in
+//  `tests/test_primitives_list_processing.c` (test_*_callback_error_*)
+//  pin this behaviour. Run the test suite under ASan to validate.
+//
 
 #include "primitives.h"
 #include "procedures.h"
