@@ -1259,6 +1259,69 @@ void test_result_set_error_proc_noop_for_non_error(void)
 }
 
 //============================================================================
+// Strict Accessor Tests (P1-010)
+//============================================================================
+
+void test_value_get_number_returns_payload(void)
+{
+    Value v = value_number(3.14f);
+    TEST_ASSERT_EQUAL_FLOAT(3.14f, value_get_number(v));
+}
+
+void test_value_get_node_word(void)
+{
+    Node atom = mem_atom_cstr("hello");
+    Value v = value_word(atom);
+    TEST_ASSERT_EQUAL(atom, value_get_node(v));
+}
+
+void test_value_get_node_list(void)
+{
+    Node atom = mem_atom_cstr("a");
+    Node list = mem_cons(atom, NODE_NIL);
+    Value v = value_list(list);
+    TEST_ASSERT_EQUAL(list, value_get_node(v));
+}
+
+void test_result_get_value_ok(void)
+{
+    Result r = result_ok(value_number(42));
+    Value v = result_get_value(r);
+    TEST_ASSERT_EQUAL(VALUE_NUMBER, v.type);
+    TEST_ASSERT_EQUAL_FLOAT(42.0f, v.as.number);
+}
+
+void test_result_get_value_output(void)
+{
+    Result r = result_output(value_number(7));
+    TEST_ASSERT_EQUAL_FLOAT(7.0f, value_get_number(result_get_value(r)));
+}
+
+void test_result_get_error_code(void)
+{
+    Result r = result_error(123);
+    TEST_ASSERT_EQUAL(123, result_get_error_code(r));
+}
+
+void test_result_get_throw_tag(void)
+{
+    Result r = result_throw("toplevel");
+    TEST_ASSERT_EQUAL_STRING("toplevel", result_get_throw_tag(r));
+}
+
+void test_result_get_pause_proc(void)
+{
+    Result r = result_pause("myproc");
+    TEST_ASSERT_EQUAL_STRING("myproc", result_get_pause_proc(r));
+}
+
+void test_result_get_goto_label(void)
+{
+    Result r = result_goto("loop");
+    TEST_ASSERT_EQUAL_STRING("loop", result_get_goto_label(r));
+}
+
+//============================================================================
 // Main
 //============================================================================
 
@@ -1443,6 +1506,17 @@ int main(void)
     RUN_TEST(test_result_set_error_proc_sets_proc);
     RUN_TEST(test_result_set_error_proc_preserves_existing);
     RUN_TEST(test_result_set_error_proc_noop_for_non_error);
+
+    // Strict accessors (P1-010)
+    RUN_TEST(test_value_get_number_returns_payload);
+    RUN_TEST(test_value_get_node_word);
+    RUN_TEST(test_value_get_node_list);
+    RUN_TEST(test_result_get_value_ok);
+    RUN_TEST(test_result_get_value_output);
+    RUN_TEST(test_result_get_error_code);
+    RUN_TEST(test_result_get_throw_tag);
+    RUN_TEST(test_result_get_pause_proc);
+    RUN_TEST(test_result_get_goto_label);
 
     return UNITY_END();
 }
