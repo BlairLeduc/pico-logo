@@ -216,6 +216,6 @@ Pre-requisite refactors: extract one shared `eval_infix_continuation` (P3-003), 
 
 - [ ] Every P0 fix lands with a failing-test-then-fix commit (Logo-input reproducer included in each finding).
 - [ ] After §3 sweep, run `cmake --build --preset=tests && ctest --preset=tests` to confirm green baseline.
-- [ ] Re-run with ASan/UBSan (host build) to validate the leak/UB findings (P5b-007 in particular).
+- [x] Re-run with ASan/UBSan (host build) to validate the leak/UB findings (P5b-007 in particular). All 43 test executables pass under AddressSanitizer (`build-tests-asan`, host clang). macOS ASan does not support `detect_leaks=1`, but use-after-free, double-free, and heap-corruption checks are clean. Re-run with `cmake --build build-tests-asan && (cd build-tests-asan && ctest)`.
 - [ ] Add a primitive ↔ help-entry coverage test (P6-008).
 - [ ] Add a SAVE→LOAD round-trip test for procedures containing string literals with `[` and `]` (P6-004).
