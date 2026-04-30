@@ -6,7 +6,6 @@
 #include "test_scaffold.h"
 #include "core/format.h"
 #include <string.h>
-#include <stdio.h>
 
 void setUp(void)
 {
@@ -408,15 +407,15 @@ void test_deep_tail_recursion_through_nested_if(void)
 
 // TCO concern #6: tail recursion from the SECOND branch of `ifelse`.
 // Different code path than the first-branch test: ensures the false
-// branch also propagates tail position. The predicate uses `<` because
-// `=` / `equalp` in this exact shape leaks per-recursion state and
-// trips ERR_NOT_ENOUGH_INPUTS on `difference` around depth ~6500. See
-// the equality-predicate bug entry in reference/code-review-backlog.md.
+// branch also propagates tail position. Uses `=` for the predicate to
+// guard against per-recursion leaks that previously only manifested
+// with equality comparisons (originally tracked as TCO-EQ-LEAK in the
+// backlog; root-caused to a `define_proc` test scaffold limitation).
 void test_deep_tail_recursion_through_ifelse_false_branch(void)
 {
     const char *params[] = {"n"};
     define_proc("ifefcount", params, 1,
-                "ifelse :n < 1 [stop] [ifefcount difference :n 1]");
+                "ifelse :n = 0 [stop] [ifefcount difference :n 1]");
 
     Result r = eval_string("ifefcount 10000");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
