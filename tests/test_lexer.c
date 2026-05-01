@@ -955,6 +955,7 @@ void test_token_type_names(void)
     TEST_ASSERT_EQUAL_STRING("EQUALS", lexer_token_type_name(TOKEN_EQUALS));
     TEST_ASSERT_EQUAL_STRING("LESS_THAN", lexer_token_type_name(TOKEN_LESS_THAN));
     TEST_ASSERT_EQUAL_STRING("GREATER_THAN", lexer_token_type_name(TOKEN_GREATER_THAN));
+    TEST_ASSERT_EQUAL_STRING("COMMENT", lexer_token_type_name(TOKEN_COMMENT));
     TEST_ASSERT_EQUAL_STRING("ERROR", lexer_token_type_name(TOKEN_ERROR));
 }
 
@@ -1737,6 +1738,30 @@ void test_semicolon_terminates_unquoted_word(void)
     assert_token_type(&lexer, TOKEN_EOF);
 }
 
+void test_semicolon_comment_preserved_when_enabled(void)
+{
+    Lexer lexer;
+    lexer_init(&lexer, "foo;cmt\nbar");
+    lexer_set_preserve_comments(&lexer, true);
+    assert_token(&lexer, TOKEN_WORD, "foo");
+    assert_token(&lexer, TOKEN_COMMENT, ";cmt");
+    assert_token(&lexer, TOKEN_WORD, "bar");
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
+void test_semicolon_comment_preserved_with_spaces(void)
+{
+    Lexer lexer;
+    lexer_init(&lexer, "print 1 ; explain [why]\nprint 2");
+    lexer_set_preserve_comments(&lexer, true);
+    assert_token(&lexer, TOKEN_WORD, "print");
+    assert_token(&lexer, TOKEN_NUMBER, "1");
+    assert_token(&lexer, TOKEN_COMMENT, "; explain [why]");
+    assert_token(&lexer, TOKEN_WORD, "print");
+    assert_token(&lexer, TOKEN_NUMBER, "2");
+    assert_token_type(&lexer, TOKEN_EOF);
+}
+
 // `looks_like_number` must reject incomplete exponents so they fall through
 // to `read_word`, keeping the lexer and `is_number_word` in lockstep.
 void test_incomplete_exponent_e_is_word(void)
@@ -1936,6 +1961,8 @@ int main(void)
     RUN_TEST(test_semicolon_comment_then_next_line);
     RUN_TEST(test_semicolon_at_start_of_line);
     RUN_TEST(test_semicolon_terminates_unquoted_word);
+    RUN_TEST(test_semicolon_comment_preserved_when_enabled);
+    RUN_TEST(test_semicolon_comment_preserved_with_spaces);
     RUN_TEST(test_incomplete_exponent_e_is_word);
     RUN_TEST(test_incomplete_exponent_e_with_sign_is_word);
     RUN_TEST(test_incomplete_exponent_n_is_word);

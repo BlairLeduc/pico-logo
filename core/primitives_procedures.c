@@ -61,6 +61,8 @@ static Node token_to_atom(Token *t)
             return mem_atom("<", 1);
         case TOKEN_GREATER_THAN:
             return mem_atom(">", 1);
+        case TOKEN_COMMENT:
+            return mem_atom(t->start, t->length);
         default:
             return NODE_NIL;
     }
@@ -222,6 +224,7 @@ Result proc_define_from_text(const char *text)
 {
     Lexer lexer;
     lexer_init(&lexer, text);
+    lexer_set_preserve_comments(&lexer, true);
     
     // Skip 'to'
     Token t = lexer_next_token(&lexer);

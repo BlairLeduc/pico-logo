@@ -194,6 +194,14 @@ static bool is_delimiter_token(TokenType type)
     }
 }
 
+static bool is_comment_node(Node element)
+{
+    if (!mem_is_word(element))
+        return false;
+    const char *str = mem_word_ptr(element);
+    return str && str[0] == ';';
+}
+
 // Initialize token source from a Lexer
 void token_source_init_lexer(TokenSource *ts, Lexer *lexer)
 {
@@ -230,6 +238,20 @@ static Token node_iter_next(NodeIterator *iter)
     while (!mem_is_nil(iter->current))
     {
         Node element = mem_car(iter->current);
+        if (is_comment_node(element))
+        {
+            iter->current = mem_cdr(iter->current);
+            while (!mem_is_nil(iter->current))
+            {
+                Node skipped = mem_car(iter->current);
+                iter->current = mem_cdr(iter->current);
+                if (mem_is_newline(skipped))
+                {
+                    break;
+                }
+            }
+            continue;
+        }
         if (!mem_is_newline(element))
         {
             break;

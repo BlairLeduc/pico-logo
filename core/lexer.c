@@ -112,6 +112,12 @@ void lexer_init(Lexer *lexer, const char *source)
     lexer->had_whitespace = true; // Start of input acts like whitespace
     lexer->had_newline = true;    // Start of input acts like start of line
     lexer->newline_count = 1;     // Start of input counts as one newline
+    lexer->preserve_comments = false;
+}
+
+void lexer_set_preserve_comments(Lexer *lexer, bool preserve)
+{
+    lexer->preserve_comments = preserve;
 }
 
 // Skip whitespace and line comments (everything after `;` to end of line),
@@ -140,7 +146,7 @@ static void skip_whitespace(Lexer *lexer)
         // A semicolon at this position starts a line comment. Skip every
         // character up to (but not including) the terminating newline so
         // the next loop iteration counts the newline normally.
-        if (*lexer->current == ';')
+        if (!lexer->preserve_comments && *lexer->current == ';')
         {
             lexer->had_whitespace = true;
             while (*lexer->current && *lexer->current != '\n')
@@ -280,6 +286,17 @@ static Token read_quoted(Lexer *lexer)
 
     size_t length = lexer->current - start;
     return make_token(lexer, TOKEN_QUOTED, start, length);
+}
+
+// Read a line comment (starts with ;), preserving the semicolon.
+static Token read_comment(Lexer *lexer)
+{
+    const char *start = lexer->current;
+    while (*lexer->current && *lexer->current != '\n')
+    {
+        lexer->current++;
+    }
+    return make_token(lexer, TOKEN_COMMENT, start, (size_t)(lexer->current - start));
 }
 
 // Read a variable reference (starts with :)
@@ -497,6 +514,7 @@ static bool should_be_unary_minus(const Lexer *lexer)
     case TOKEN_RIGHT_PAREN:   // The literal right-paren exception
     case TOKEN_RIGHT_BRACKET:
     case TOKEN_ERROR:
+    case TOKEN_COMMENT:
         return false;          // -> binary
     case TOKEN_EOF:
     case TOKEN_LEFT_BRACKET:
@@ -593,6 +611,9 @@ Token lexer_next_token(Lexer *lexer)
     case ':':
         return read_colon(lexer);
 
+    case ';':
+        return read_comment(lexer);
+
     default:
         // Check for number - but only if it looks like a pure number
         if (is_digit(c) && looks_like_number(lexer->current))
@@ -624,9 +645,21 @@ bool lexer_is_at_end(const Lexer *lexer)
 {
     // Skip whitespace to check for actual end
     const char *p = lexer->current;
-    while (*p && is_space(*p))
+    while (*p)
     {
-        p++;
+        while (*p && is_space(*p))
+        {
+            p++;
+        }
+        if (!lexer->preserve_comments && *p == ';')
+        {
+            while (*p && *p != '\n')
+            {
+                p++;
+            }
+            continue;
+        }
+        break;
     }
     return *p == '\0';
 }
@@ -691,6 +724,8 @@ const char *lexer_token_type_name(TokenType type)
         return "LESS_THAN";
     case TOKEN_GREATER_THAN:
         return "GREATER_THAN";
+    case TOKEN_COMMENT:
+        return "COMMENT";
     case TOKEN_ERROR:
         return "ERROR";
     default:

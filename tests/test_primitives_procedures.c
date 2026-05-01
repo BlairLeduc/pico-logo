@@ -865,6 +865,39 @@ void test_proc_define_from_text_quoted_word(void)
     TEST_ASSERT_EQUAL_STRING("hello\n", output_buffer);
 }
 
+void test_proc_define_from_text_preserves_comments(void)
+{
+    Result r = proc_define_from_text(
+        "to commented\n"
+        "; [This procedure says hello]\n"
+        "print \"hello ; inline comment\n"
+        "; another comment\n"
+        "print \"bye\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    reset_output();
+    Result r2 = run_string("commented");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+    TEST_ASSERT_EQUAL_STRING("hello\nbye\n", output_buffer);
+
+    char buffer[512];
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    UserProcedure *proc = proc_find("commented");
+    TEST_ASSERT_NOT_NULL(proc);
+    TEST_ASSERT_TRUE(format_procedure_definition(format_buffer_output, &ctx, proc));
+
+    const char *expected =
+        "to commented\n"
+        "  ; [This procedure says hello]\n"
+        "  print \"hello ; inline comment\n"
+        "  ; another comment\n"
+        "  print \"bye\n"
+        "end\n";
+    TEST_ASSERT_EQUAL_STRING(expected, buffer);
+}
+
 void test_proc_define_from_text_all_operators(void)
 {
     // Test all arithmetic and comparison operators with real newlines
@@ -913,6 +946,39 @@ void test_proc_define_from_text_multiline_bracket_body(void)
         TEST_ASSERT_TRUE(mem_is_list(elem));
         outer = mem_cdr(outer);
     }
+}
+
+void test_proc_define_from_text_preserves_comments_inside_bracket_body(void)
+{
+    Result r = proc_define_from_text(
+        "to blockcomments\n"
+        "repeat 1 [\n"
+        "; inside block\n"
+        "print \"inside ; inline block comment\n"
+        "]\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    reset_output();
+    Result r2 = run_string("blockcomments");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+    TEST_ASSERT_EQUAL_STRING("inside\n", output_buffer);
+
+    char buffer[512];
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    UserProcedure *proc = proc_find("blockcomments");
+    TEST_ASSERT_NOT_NULL(proc);
+    TEST_ASSERT_TRUE(format_procedure_definition(format_buffer_output, &ctx, proc));
+
+    const char *expected =
+        "to blockcomments\n"
+        "  repeat 1 [\n"
+        "    ; inside block\n"
+        "    print \"inside ; inline block comment\n"
+        "  ]\n"
+        "end\n";
+    TEST_ASSERT_EQUAL_STRING(expected, buffer);
 }
 
 void test_proc_define_from_text_nested_brackets_across_lines(void)
@@ -1933,8 +1999,10 @@ int main(void)
     RUN_TEST(test_proc_define_from_text_error_no_name);
     RUN_TEST(test_proc_define_from_text_error_redefine_primitive);
     RUN_TEST(test_proc_define_from_text_quoted_word);
+    RUN_TEST(test_proc_define_from_text_preserves_comments);
     RUN_TEST(test_proc_define_from_text_all_operators);
     RUN_TEST(test_proc_define_from_text_multiline_bracket_body);
+    RUN_TEST(test_proc_define_from_text_preserves_comments_inside_bracket_body);
     RUN_TEST(test_proc_define_from_text_nested_brackets_across_lines);
     RUN_TEST(test_proc_define_from_text_blank_line_inside_bracket_body);
     RUN_TEST(test_proc_define_from_text_equals_operator);
