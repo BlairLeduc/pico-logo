@@ -517,9 +517,9 @@ If `edit` does not have an input the current contents of the buffer are used.
 **Example**:
 
 ```logo
-?to greet  pr [Hello Canada]  end
-?edit "greet
-; Opens the editor with the greet procedure
+?to rink  pr [Zamboni break]  end
+?edit "rink
+; Opens the editor with the rink procedure
 ```
 
 
@@ -534,8 +534,8 @@ Starts the Pico Logo Editor with all procedures and variables. Procedures are fo
 **Example**:
 
 ```logo
-?make "city "Ottawa
-?to greet  pr [Hello from] pr :city  end
+?make "snack "butter\ tart
+?to pack  pr [Packed:] pr :snack  end
 ?edall
 ; Opens the editor with all procedures and variables
 ```
@@ -554,9 +554,9 @@ Stands for `ed`it `n`ame (name must be quoted). Starts the Logo Editor with the 
 **Example**:
 
 ```logo
-?make "province "Manitoba
-?edn "province
-; Opens the editor with: make "province "Manitoba
+?make "snack "ketchup\ chips
+?edn "snack
+; Opens the editor with: make "snack "ketchup\ chips
 ```
 
 
@@ -571,7 +571,7 @@ Stands for `ed`it `n`ame`s`. Starts the Logo Editor with all the names and their
 **Example**:
 
 ```logo
-?make "city "Ottawa
+?make "snack "ketchup\ chips
 ?make "temp -17
 ?edns
 ; Opens the editor with all variables
@@ -613,11 +613,11 @@ end
 **Example**:
 
 ```logo
-?to greet :city
->pr se [Hello from] :city
+?to announce :thing
+>pr se [Freshly zambonied] :thing
 >end
-?greet "Vancouver
-Hello from Vancouver
+?announce "ice
+Freshly zambonied ice
 ```
 
 
@@ -962,7 +962,7 @@ towards [_xcor_ _ycor_]
 **Example**:
 
 ```logo
-; What heading points from home towards Vancouver (west)?
+; What heading points from home toward the west coast ferry?
 ?home
 ?pr towards [-100 0]
 270
@@ -1163,7 +1163,7 @@ See [Colours](#appendix-e-colour-palette-for-pico-logo) for the default palette.
 **Example**:
 
 ```logo
-; Set a red background (like the Canadian flag)
+; Set a red background for the stop sign you nearly missed
 ?setbg 4
 ```
 
@@ -1201,9 +1201,9 @@ See [Colours](#appendix-e-colour-palette-for-pico-logo) for the default palette.
 **Example**:
 
 ```logo
-; White text on red background (Canadian flag colours)
+; White text on red background
 ?settc [15 4]
-?pr [Bonjour Canada!]
+?pr [Depot open at dawn]
 ```
 
 
@@ -1422,7 +1422,7 @@ ct
 **Example**:
 
 ```logo
-?pr [Welcome to Canada!]
+?pr [Snow route starts at midnight]
 ?ct
 ```
 
@@ -1479,7 +1479,7 @@ setcursor [_columnnumber_ _linenumber_]
 ```logo
 ; Position the cursor near the centre of the screen
 ?setcursor [20 15]
-?type "Ottawa
+?type "Curling
 ```
 
 
@@ -2038,13 +2038,13 @@ The `local` command makes its input(s) local to the procedure within which the `
 
 ```logo
 ?to greet
->local "province
->make "province "Ontario
->pr se [Welcome to] :province
+>local "snack
+>make "snack "butter\ tart
+>pr se [Saved for later:] :snack
 >end
 ?greet
-Welcome to Ontario
-?pr name? "province
+Saved for later: butter tart
+?pr name? "snack
 false
 ```
 
@@ -2060,9 +2060,9 @@ The `make` command puts _object_ in _name_'s container, that is, it gives the va
 **Example**:
 
 ```logo
-?make "city "Ottawa
-?pr :city
-Ottawa
+?make "team "house\ league
+?pr :team
+house league
 ```
 
 
@@ -2079,9 +2079,9 @@ The `name` command puts _object_ in _name_'s container, that is, it gives the va
 **Example**:
 
 ```logo
-?name "Vancouver "city
-?pr :city
-Vancouver
+?name "double\ double "order
+?pr :order
+double double
 ```
 
 
@@ -2097,10 +2097,10 @@ namep _word_
 **Example**:
 
 ```logo
-?make "province "Alberta
-?pr name? "province
+?make "permit "yes
+?pr name? "permit
 true
-?pr name? "territory
+?pr name? "ticket
 false
 ```
 
@@ -2116,11 +2116,11 @@ thing _name_
 **Example**:
 
 ```logo
-?make "capital "Ottawa
-?pr thing "capital
-Ottawa
-?pr :capital
-Ottawa
+?make "forecast "flurries
+?pr thing "forecast
+flurries
+?pr :forecast
+flurries
 ```
 
 
@@ -2148,7 +2148,7 @@ Outputs the absolute _number_. If _number_ less than zero the negative of _numbe
 **Example**:
 
 ```logo
-; Absolute value of a typical Winnipeg winter temperature
+; Absolute value of a wind-chill complaint
 ?pr abs -40
 40
 ```
@@ -2199,7 +2199,7 @@ Outputs _number2_ subtracted from _number1_.
 **Example**:
 
 ```logo
-; Distance between Winnipeg (705) and Toronto (416) area codes
+; Difference between two snow-route ticket numbers
 ?pr difference 705 416
 289
 ```
@@ -2236,7 +2236,7 @@ If _width_ is less than or equal to zero, or if _decimalplaces_ is less than zer
 **Examples**:
 
 ```logo
-; Format a Canadian dollar amount
+; Format the total after a farmers market pierogi run
 ?pr word "$ form 1234.56 10 2
 $   1234.56
 ?pr form -17.8 6 1
@@ -2274,9 +2274,9 @@ intquotient _integer1_ _integer2_
 **Example**:
 
 ```logo
-; How many complete periods in 82 hockey games?
-?pr intquotient 82 3
-27
+; How many full four-person curling teams from 18 players?
+?pr intquotient 18 4
+4
 ```
 
 
@@ -2327,9 +2327,9 @@ Outputs the product of its inputs. It is equivalent to the `*` infix-form operat
 **Example**:
 
 ```logo
-; Area of a hockey rink in square metres
-?pr product 26 61
-1586
+; Approximate area of a curling sheet in square metres
+?pr product 5 45
+225
 ```
 
 
@@ -2360,9 +2360,9 @@ Outputs the result of dividing _number1_ by _number2_. It is equivalent to the `
 **Example**:
 
 ```logo
-; Approximate driving time (hours) from Toronto to Vancouver at 100 km/h
-?pr quotient 4400 100
-44
+; How many 250 ml cups are in a 1 litre carton of chocolate milk?
+?pr quotient 1000 250
+4
 ```
 
 
@@ -2377,8 +2377,8 @@ Outputs a random non-negative integer less than _integer_.
 **Example**:
 
 ```logo
-; Pick a random province or territory (Canada has 13)
-?pr random 13
+; Pick a random seat row at the community rink
+?pr random 20
 7
 ```
 
@@ -2394,9 +2394,9 @@ Outputs the remainder obtained when _integer1_ is divided by _integer2_. The rem
 **Example**:
 
 ```logo
-; Canada Day is July 1 - what day of the week does it fall on?
-?pr remainder 1 7
-1
+; What is the remainder when dividing 17 by 5?
+?pr remainder 17 5
+2
 ```
 
 ## round
@@ -2424,7 +2424,7 @@ sin _number_
 
 `operation`
 
-Outputs the csine of _number_ in degrees.
+Outputs the cosine of _number_ in degrees.
 
 **Examples**:
 
@@ -2447,7 +2447,7 @@ Outputs the square root of _number_. The value _number_ must not be negative or 
 **Example**:
 
 ```logo
-; 13 provinces and territories: sqrt of 169
+; Square root of a 13 by 13 scarf pattern
 ?pr sqrt 169
 13
 ```
@@ -2465,8 +2465,8 @@ Outputs the sum of its inputs. `sum` is equivalent to the `+` infix-form operati
 **Examples**:
 
 ```logo
-; Total population of Toronto and Vancouver (millions)
-?pr sum 2.9 0.7
+; Coffee plus a maple dip
+?pr sum 2.15 1.45
 3.6
 ?pr (sum 1 2 3 4 5 6 7 8 9 10)
 55
@@ -2592,15 +2592,15 @@ iff _list_
 **Example**:
 
 ```logo
-?to check.city :city
->test equal? :city "Ottawa
->iftrue [pr [That is the capital of Canada!]]
->iffalse [pr se :city [is not the capital.]]
+?to check.rink :status
+>test equal? :status "open
+>iftrue [pr [Sharpen your skates]]
+>iffalse [pr [Try again after the thaw]]
 >end
-?check.city "Ottawa
-That is the capital of Canada!
-?check.city "Toronto
-Toronto is not the capital.
+?check.rink "open
+Sharpen your skates
+?check.rink "soft
+Try again after the thaw
 ```
 
 
@@ -2634,8 +2634,8 @@ test _predicate_
 ```logo
 ?make "score 7
 ?test :score > 5
-?ift [pr [Good game, Leafs!]]
-Good game, Leafs!
+?ift [pr [Good draw, skip!]]
+Good draw, skip!
 ```
 
 
@@ -2667,14 +2667,14 @@ The `co` (for continue) command resumes running of a procedure after a [`pause`]
 
 ```logo
 ?to survey
->pr [Enter province name:]
+>pr [Enter rink snack:]
 >pause
 >pr [Thank you!]
 >end
 ?survey
-Enter province name:
-survey? pr "Ontario
-Ontario
+Enter rink snack:
+survey? pr "fries
+fries
 survey? co
 Thank you!
 ```
@@ -2692,16 +2692,16 @@ The `output` command is meaningful only when it is within a procedure, not at to
 **Example**:
 
 ```logo
-?to capital :province
->if equal? :province "Ontario [output "Ottawa]
->if equal? :province "Quebec [output "Quebec]
->if equal? :province "Alberta [output "Edmonton]
+?to topping :snack
+>if equal? :snack "fries [output "gravy]
+>if equal? :snack "pierogi [output "sour\ cream]
+>if equal? :snack "toast [output "peameal]
 >output "Unknown
 >end
-?pr capital "Ontario
-Ottawa
-?pr capital "Alberta
-Edmonton
+?pr topping "fries
+gravy
+?pr topping "pierogi
+sour cream
 ```
 
 
@@ -2766,9 +2766,9 @@ wait _integer_
 
 ```logo
 ; Pause for 1 second between messages
-?pr [O Canada...]
+?pr [Kettle on...]
 ?wait 10
-?pr [Notre patrie et foyer!]
+?pr [Tea is steeped!]
 ```
 
 
@@ -2835,27 +2835,19 @@ The `go` command transfers control to the instruction following [`label`](#label
 **Example**:
 
 ```logo
-?to count.provinces
+?to count.loonies
 >make "n 0
 >label "loop
 >make "n :n + 1
 >pr :n
->if :n < 13 [go "loop]
+>if :n < 5 [go "loop]
 >end
-?count.provinces
+?count.loonies
 1
 2
 3
 4
 5
-6
-7
-8
-9
-10
-11
-12
-13
 ```
 
 
@@ -2876,7 +2868,7 @@ The `label` command itself does nothing. However, a [`go`](#go) _word_ passes co
 >pr :n
 >make "n :n - 1
 >if :n > 0 [go "start]
->pr [Puck drop!]
+>pr [Zamboni doors closed]
 >end
 ```
 
@@ -2912,12 +2904,12 @@ do.while _list_ _predicatelist_
 **Example**:
 
 ```logo
-; Count periods in a hockey game
-?make "period 1
-?do.while [pr se [Period:] :period  make "period :period + 1] [:period <= 3]
-Period: 1
-Period: 2
-Period: 3
+; Count ferry boarding calls
+?make "call 1
+?do.while [pr se [Call:] :call  make "call :call + 1] [:call <= 3]
+Call: 1
+Call: 2
+Call: 3
 ```
 
 
@@ -2952,9 +2944,9 @@ do.until _list_ _predicatelist_
 **Example**:
 
 ```logo
-; Print scores until we reach 5 goals
-?make "goals 0
-?do.until [make "goals :goals + 1  pr :goals] [:goals = 5]
+; Print ticks until the kettle boils
+?make "ticks 0
+?do.until [make "ticks :ticks + 1  pr :ticks] [:ticks = 5]
 1
 2
 3
@@ -2974,7 +2966,7 @@ until _predicatelist_ _list_
 **Example**:
 
 ```logo
-; Count up to 10 goals
+; Count loonies to ten
 ?make "score 0
 ?until [:score = 10] [make "score :score + 1]
 ?pr :score
@@ -3011,7 +3003,7 @@ repeat _integer_ _list_
 **Example**:
 
 ```logo
-; Draw a square (hockey rink corner)
+; Draw a square
 ?repeat 4 [fd 50 rt 90]
 ```
 
@@ -3027,11 +3019,11 @@ repcount
 **Example**:
 
 ```logo
-; Number the three periods of a hockey game
-?repeat 3 [pr se [Period] repcount]
-Period 1
-Period 2
-Period 3
+; Number three butter tart batches
+?repeat 3 [pr se [Batch] repcount]
+Batch 1
+Batch 2
+Batch 3
 ```
 
 
@@ -3046,11 +3038,11 @@ The `run` command runs _list_ as if typed in directly. If _list_ is an operation
 **Example**:
 
 ```logo
-?run [pr [Hello from Calgary!]]
-Hello from Calgary!
-?make "action [pr "Vancouver]
+?run [pr [Mind the slush]]
+Mind the slush
+?make "action [pr "sorry]
 ?run :action
-Vancouver
+sorry
 ```
 
 
@@ -3067,16 +3059,16 @@ See [`catch`](#catch).
 **Example**:
 
 ```logo
-?to find.province :list :target
+?to find.snack :list :target
 >catch "found [
 >  foreach :list [[p]
 >    if equal? :p :target [pr se [Found:] :p  throw "found]
 >  ]
->  pr [Province not found]
+>  pr [Snack not found]
 >]
 >end
-?find.province [Ontario Quebec Alberta] "Alberta
-Found: Alberta
+?find.snack [chips squares nanaimo] "nanaimo
+Found: nanaimo
 ```
 
 
@@ -3112,7 +3104,7 @@ The `step` command takes the procedure indicated by _name_ or _list_ as input an
 ```logo
 ?to greet
 >pr [Hello]
->pr [from Canada]
+>pr [from the rink]
 >end
 ?step "greet
 ?greet
@@ -3136,9 +3128,9 @@ The `trace` command takes the procedures indicated by _name_ or _list_ as input 
 >pr se [Hello] :name
 >end
 ?trace "greet
-?greet "Toronto
-==> greet [Toronto]
-Hello Toronto
+?greet "Riley
+==> greet [Riley]
+Hello Riley
 <== greet
 ```
 
@@ -3175,13 +3167,13 @@ untrace _list_
 
 ```logo
 ?trace "greet
-?greet "Ottawa
-==> greet [Ottawa]
-Hello Ottawa
+?greet "Casey
+==> greet [Casey]
+Hello Casey
 <== greet
 ?untrace "greet
-?greet "Ottawa
-Hello Ottawa
+?greet "Casey
+Hello Casey
 ```
 
 
@@ -3325,14 +3317,14 @@ Each data list provides one input to _procedure_ at each evaluation. Thus, if th
 **Example**:
 
 ```logo
-; Expand abbreviated province codes to full names
+; Expand rink-counter shorthand to full orders
 ?to expand :abbrev
->if equal? :abbrev "ON [output [Ontario]]
->if equal? :abbrev "BC [output [British Columbia]]
+>if equal? :abbrev "DD [output [double double]]
+>if equal? :abbrev "KD [output [macaroni dinner]]
 >output (list :abbrev)
 >end
-?show map.se "expand [ON BC AB]
-Ontario British Columbia AB
+?show map.se "expand [DD KD PB]
+[double double macaroni dinner PB]
 ```
 
 
@@ -3474,10 +3466,10 @@ copydef _name_ _newname_
 **Example**:
 
 ```logo
-?to greet  pr [Hello Canada]  end
-?copydef "greet "salut
-?salut
-Hello Canada
+?to kettle  pr [Tea is ready]  end
+?copydef "kettle "thermos
+?thermos
+Tea is ready
 ```
 
 
@@ -3496,9 +3488,9 @@ The second input to `define` has the same form as the output from [`text`](#text
 **Example**:
 
 ```logo
-?define "greet [[city] [pr se [Hello from] :city]]
-?greet "Ottawa
-Hello from Ottawa
+?define "notice [[item] [pr se [Found by the rink door:] :item]]
+?notice "mitts
+Found by the rink door: mitts
 ```
 
 
@@ -3552,11 +3544,11 @@ The `text` primitive outputs the definition of _name_ as a list of lists, suitab
 **Example**:
 
 ```logo
-?to greet :city
->pr se [Hello from] :city
+?to notice :item
+>pr se [Found by the rink door:] :item
 >end
-?show text "greet
-[[city] [pr se [Hello from] :city]]
+?show text "notice
+[[item] [pr se [Found by the rink door:] :item]]
 ```
 
 
@@ -3624,7 +3616,9 @@ Outputs `true` if all of its inputs are `true`. All inputs are evaluated.
 ```logo
 ?pr and true true
 true
-?pr and (temperature < 0) (city = "Winnipeg")
+?make "sidewalk "icy
+?make "salted true
+?pr and equal? :sidewalk "icy :salted
 true
 ?pr and true false
 false
@@ -3647,9 +3641,9 @@ Outputs `false` if _predicate_ is `true`.
 false
 ?pr not false
 true
-?make "raining false
-?if not :raining [pr [Nice day in Vancouver!]]
-Nice day in Vancouver!
+?make "snowing false
+?if not :snowing [pr [Patio season declared]]
+Patio season declared
 ```
 
 
@@ -3669,9 +3663,9 @@ Outputs `true` if any of its inputs are `true`. All inputs are evaluated.
 false
 ?pr or false true
 true
-?make "city "Calgary
-?if or equal? :city "Calgary equal? :city "Edmonton [pr [Alberta city!]]
-Alberta city!
+?make "snack "butter\ tart
+?if or equal? :snack "butter\ tart equal? :snack "nanaimo\ bar [pr [Dessert table approved]]
+Dessert table approved
 ```
 
 
@@ -3891,15 +3885,15 @@ If you are reading from a network connection and the read times out before a lin
 **Example**:
 
 ```logo
-?to ask.city
->pr [Enter a Canadian city:]
+?to ask.order
+>pr [Enter rink snack order:]
 >make "input rl
 >pr se [You entered:] :input
 >end
-?ask.city
-Enter a Canadian city:
-Ottawa
-You entered: Ottawa
+?ask.order
+Enter rink snack order:
+fries gravy
+You entered: fries gravy
 ```
 
 
@@ -3921,15 +3915,15 @@ See [`readlist`](#readlist-rl), [`readchar`](#readchar-rc), [`readchars`](#readc
 **Example**:
 
 ```logo
-?to ask.province
->pr [Enter a province name:]
->make "prov rw
->pr se [Province:] :prov
+?to ask.toque
+>pr [Enter toque colour:]
+>make "shade rw
+>pr se [Toque:] :shade
 >end
-?ask.province
-Enter a province name:
-Manitoba
-Province: Manitoba
+?ask.toque
+Enter toque colour:
+red
+Toque: red
 ```
 
 
@@ -3949,12 +3943,12 @@ Compare with [`type`](#type) and [`show`](#show).
 **Example**:
 
 ```logo
-?pr [Welcome to Canada!]
-Welcome to Canada!
-?pr "Ottawa
-Ottawa
-?(pr "Toronto "Vancouver "Calgary)
-Toronto Vancouver Calgary
+?pr [Snow route starts at midnight]
+Snow route starts at midnight
+?pr "sorry
+sorry
+?(pr "loonie "toonie "hydro)
+loonie toonie hydro
 ```
 
 
@@ -3971,10 +3965,10 @@ Compare with [`type`](#type) and [`print`](#print-pr).
 **Example**:
 
 ```logo
-?show [Toronto Vancouver Calgary]
-[Toronto Vancouver Calgary]
-?show "Ottawa
-Ottawa
+?show [loonie toonie hydro]
+[loonie toonie hydro]
+?show "sorry
+sorry
 ```
 
 
@@ -3992,10 +3986,10 @@ Compare with [`print`](#print-pr) and [`show`](#show).
 **Example**:
 
 ```logo
-?type "Ottawa
+?type "Rink
 ?type ": 
-?type "Ontario
-Ottawa: Ontario
+?type "closed
+Rink: closed
 ```
 
 
@@ -4010,10 +4004,10 @@ outputs _object_ in standout mode. In standout mode, text is displayed in revers
 **Example**:
 
 ```logo
-?pr standout "Ottawa
-Ottawa
-?pr standout [Capital of Canada]
-Capital of Canada
+?pr standout "Caution
+Caution
+?pr standout [Slush at door]
+Slush at door
 ```
 
 
@@ -4035,7 +4029,7 @@ If one frequency is provided the same tone is produced on both left and right ch
 **Example**:
 
 ```logo
-; Play A440 for 500ms (like a hockey buzzer)
+; Play A440 for 500ms (like a school gym scoreboard buzzer)
 ?toot 500 440
 ; Play two notes: a rising interval
 ?toot 250 440
@@ -4095,12 +4089,12 @@ The `po` (for print out) command prints the definition(s) of the named procedure
 **Example**:
 
 ```logo
-?to greet :city
->pr se [Hello from] :city
+?to notice :item
+>pr se [Found in lost and found:] :item
 >end
-?po "greet
-to greet :city
-pr se [Hello from] :city
+?po "notice
+to notice :item
+pr se [Found in lost and found:] :item
 end
 ```
 
@@ -4116,12 +4110,12 @@ The `poall` (for print out all) command prints the definition of every procedure
 **Example**:
 
 ```logo
-?make "province "Ontario
-?to hello  pr [Hello Canada]  end
+?make "snack "ketchup\ chips
+?to hello  pr [Hi]  end
 ?poall
-make "province "Ontario
+make "snack "ketchup\ chips
 to hello
-pr [Hello Canada]
+pr [Hi]
 end
 ```
 
@@ -4138,9 +4132,9 @@ pon _list_
 **Example**:
 
 ```logo
-?make "province "Saskatchewan
-?pon "province
-make "province "Saskatchewan
+?make "snowbank "tall
+?pon "snowbank
+make "snowbank "tall
 ```
 
 
@@ -4155,10 +4149,10 @@ pons
 **Example**:
 
 ```logo
-?make "city "Ottawa
+?make "snack "ketchup\ chips
 ?make "temp -17
 ?pons
-make "city "Ottawa
+make "snack "ketchup\ chips
 make "temp -17
 ```
 
@@ -4176,10 +4170,10 @@ See [`bury`](#bury) for exceptions.
 **Example**:
 
 ```logo
-?to canada  pr [O Canada!]  end
+?to weather  pr [Chance of flurries]  end
 ?pops
-to canada
-pr [O Canada!]
+to weather
+pr [Chance of flurries]
 end
 ```
 
@@ -4196,11 +4190,11 @@ The `pot` (for print out title) command prints the title line of the named proce
 **Example**:
 
 ```logo
-?to greet :city :country
->pr (se [Hello from] :city :country)
+?to label :item :shelf
+>pr (se [Put] :item [on] :shelf)
 >end
-?pot "greet
-to greet :city :country
+?pot "label
+to label :item :shelf
 ```
 
 
@@ -4238,10 +4232,10 @@ See [`bury`](#bury) for exceptions.
 **Example**:
 
 ```logo
-?make "province "Ontario
+?make "route "snow
 ?to hello  pr [Hi]  end
 ?erall
-?pr name? "province
+?pr name? "route
 false
 ```
 
@@ -4281,11 +4275,11 @@ The `ern` (for erase name) command erases the named variable(s) from the workspa
 **Example**:
 
 ```logo
-?make "province "Manitoba
-?pr name? "province
+?make "toque "red
+?pr name? "toque
 true
-?ern "province
-?pr name? "province
+?ern "toque
+?pr name? "toque
 false
 ```
 
@@ -4303,10 +4297,10 @@ See [`bury`](#bury) for exceptions.
 **Example**:
 
 ```logo
-?make "city "Ottawa
+?make "snack "ketchup\ chips
 ?make "temp -17
 ?erns
-?pr name? "city
+?pr name? "snack
 false
 ```
 
@@ -4324,9 +4318,9 @@ See [`bury`](#bury) for exceptions.
 **Example**:
 
 ```logo
-?to canada  pr [Great country!]  end
+?to pancake  pr [Needs syrup]  end
 ?erps
-?defined? "canada
+?defined? "pancake
 false
 ```
 
@@ -4363,8 +4357,8 @@ Once `buryall` is run, there are no procedure titles or names visible.
 **Example**:
 
 ```logo
-?to greet  pr [Hello Canada]  end
-?make "city "Ottawa
+?to greet  pr [Fresh coffee]  end
+?make "snack "butter\ tart
 ?buryall
 ?pots
 ; nothing listed
@@ -4441,10 +4435,10 @@ unburyname _list_
 **Example**:
 
 ```logo
-?buryname "province
-?unburyname "province
+?buryname "ticket
+?unburyname "ticket
 ?pons
-make "province "British Columbia
+make "ticket "snow\ route
 ```
 
 
@@ -4465,9 +4459,9 @@ Outputs a list of file names in the currect directory. If _ext_ is present, the 
 
 ```logo
 ?pr files
-[canada.lgo hockey.lgo readme.txt]
+[startup.lgo rink.lgo readme.txt]
 ?pr (files "lgo")
-[canada.lgo hockey.lgo]
+[startup.lgo rink.lgo]
 ```
 
 
@@ -4483,7 +4477,7 @@ Outputs a list of directory names in the current directory.
 
 ```logo
 ?pr directories
-[Logo provinces territories]
+[Logo sketches snacks]
 ```
 
 
@@ -4498,9 +4492,9 @@ createdir _pathname_
 **Example**:
 
 ```logo
-?createdir "provinces
+?createdir "sketches
 ?pr directories
-[provinces]
+[sketches]
 ```
 
 
@@ -4571,8 +4565,8 @@ When exiting the editor, the contents of the buffer are not run.
 **Example**:
 
 ```logo
-?editfile "canada.lgo
-; Opens the editor with canada.lgo contents
+?editfile "storm_notes.lgo
+; Opens the editor with storm_notes.lgo contents
 ; After saving and exiting, the file is updated
 ```
 
@@ -4630,9 +4624,9 @@ Prints a list of files and directories in the current directory. Directories hav
 
 ```logo
 ?catalog
-canada.lgo
-hockey.lgo
-provinces/
+startup.lgo
+rink.lgo
+sketches/
 ```
 
 
@@ -4648,7 +4642,7 @@ Outputs `true` if the file exists, otherwise `false`.
 **Example**:
 
 ```logo
-?pr file? "canada.lgo
+?pr file? "startup.lgo
 true
 ?pr file? "missing.lgo
 false
@@ -4667,9 +4661,9 @@ Outputs `true` if the directory exists, otherwise `false`.
 **Example**:
 
 ```logo
-?pr dir? "provinces
+?pr dir? "sketches
 true
-?pr dir? "territories
+?pr dir? "snacks
 false
 ```
 
@@ -4685,8 +4679,8 @@ Renames the file or directory from _pathname1_ to _pathname2_. A file or directo
 **Example**:
 
 ```logo
-?rename "draft.lgo "canada_final.lgo
-?pr file? "canada_final.lgo
+?rename "draft.lgo "pancake_final.lgo
+?pr file? "pancake_final.lgo
 true
 ```
 
@@ -4704,9 +4698,9 @@ pofile _pathname_
 **Example**:
 
 ```logo
-?pofile "canada.lgo
+?pofile "winter.lgo
 to greet
-pr [Hello from Canada!]
+pr [Mitts are in the hall]
 end
 ```
 
@@ -4728,8 +4722,8 @@ After Logo loads the contents of a file, it looks for a variable called `startup
 **Example**:
 
 ```logo
-?load "canada.lgo
-; Loads all procedures and variables from canada.lgo
+?load "winter.lgo
+; Loads all procedures and variables from winter.lgo
 ```
 
 
@@ -4744,9 +4738,9 @@ The `save` command creates a file and saves in it all unburied procedures and va
 **Example**:
 
 ```logo
-?to greet  pr [Hello Canada]  end
-?save "canada.lgo
-; Saves all procedures and variables to canada.lgo
+?to greet  pr [Fresh coffee]  end
+?save "winter.lgo
+; Saves all procedures and variables to winter.lgo
 ```
 
 
@@ -4780,8 +4774,8 @@ The `loadpic` command loads the picture named by _pathname_ onto the graphics sc
 **Example**:
 
 ```logo
-; Load a maple leaf image onto the graphics screen
-?loadpic "maple.bmp
+; Load a grey jay image onto the graphics screen
+?loadpic "greyjay.bmp
 ```
 
 
@@ -4814,8 +4808,8 @@ dribble _file_
 
 ```logo
 ?dribble "session.txt
-?pr [Hello from Ottawa!]
-Hello from Ottawa!
+?pr [Hello from the rink!]
+Hello from the rink!
 ?nodribble
 ; session.txt now contains the interaction
 ```
@@ -4860,10 +4854,10 @@ allopen
 **Example**:
 
 ```logo
-?open "canada.lgo
+?open "notes.lgo
 ?open "log.txt
 ?show allopen
-[canada.lgo log.txt]
+[notes.lgo log.txt]
 ```
 
 
@@ -4881,7 +4875,7 @@ The `close` command closes the named file or network connection that is currentl
 ```logo
 ?open "log.txt
 ?setwrite "log.txt
-?pr [Session started in Ottawa]
+?pr [Session started after snow clearing]
 ?setwrite []
 ?close "log.txt
 ```
@@ -4921,10 +4915,10 @@ This procedure returns an error if the file is a network connection.
 **Example**:
 
 ```logo
-?open "canada.lgo
-?pr filelen "canada.lgo
+?open "notes.lgo
+?pr filelen "notes.lgo
 1024
-?close "canada.lgo
+?close "notes.lgo
 ```
 
 
@@ -4949,7 +4943,7 @@ When you finish using Logo, you must close all files and network connections tha
 ```logo
 ?open "log.txt
 ?setwrite "log.txt
-?pr [Logging from Canada]
+?pr [Logging from the basement workbench]
 ?setwrite []
 ?close "log.txt
 ```
@@ -4968,10 +4962,10 @@ reader
 ```logo
 ?pr reader
 []
-?open "provinces.txt
-?setread "provinces.txt
+?open "recipes.txt
+?setread "recipes.txt
 ?pr reader
-provinces.txt
+recipes.txt
 ```
 
 
@@ -4986,8 +4980,8 @@ readpos
 **Example**:
 
 ```logo
-?open "canada.lgo
-?setread "canada.lgo
+?open "notes.lgo
+?setread "notes.lgo
 ?pr readpos
 0
 ?ignore readword
@@ -5012,10 +5006,10 @@ To set the current reader back to the keyboard, give `setread` the empty list as
 **Example**:
 
 ```logo
-?open "provinces.txt
-?setread "provinces.txt
+?open "recipes.txt
+?setread "recipes.txt
 ?pr readword
-Ontario
+buttertarts
 ?setread []
 ; back to reading from keyboard
 ```
@@ -5034,8 +5028,8 @@ See [`readpos`](#readpos) for more information about the `setreadpos` command.
 **Example**:
 
 ```logo
-?open "canada.lgo
-?setread "canada.lgo
+?open "notes.lgo
+?setread "notes.lgo
 ?setreadpos 0
 ?pr readpos
 0
@@ -5061,7 +5055,7 @@ To restore the screen as the current writer, use the `setwrite` command with the
 ```logo
 ?open "log.txt
 ?setwrite "log.txt
-?pr [Logged from Ottawa]
+?pr [Logged from the rink]
 ?setwrite []
 ?close "log.txt
 ```
@@ -5104,9 +5098,9 @@ writepos
 ```logo
 ?open "log.txt
 ?setwrite "log.txt
-?pr [Canada]
+?pr [Hydro]
 ?pr writepos
-7
+6
 ```
 
 
@@ -5185,7 +5179,7 @@ date
 ```logo
 ?show date
 [2026 7 1]
-; July 1 — Canada Day!
+; July 1, after the fireworks are swept up
 ?make "d date
 ?pr se [Year:] item 1 :d
 Year: 2026
@@ -5223,7 +5217,7 @@ The `setdate` command sets the current date to the specified _year_, _month_, an
 **Example**:
 
 ```logo
-; Set date to Canada Day 2026
+; Set date to a long-weekend morning
 ?setdate [2026 7 1]
 ?show date
 [2026 7 1]
@@ -5372,7 +5366,7 @@ wifi.scan
 
 ```logo
 ?show wifi.scan
-[[TimHortonsWiFi -65] [CanadaGovWiFi -72] [HomeNetwork -48]]
+[[TimHortonsWiFi -65] [HarveysWiFi -72] [HomeNetwork -48]]
 ```
 
 
@@ -5455,9 +5449,9 @@ erprops
 **Example**:
 
 ```logo
-?pprop "Ontario "capital "Toronto
+?pprop "loonie "value "one
 ?erprops
-?pr gprop "Ontario "capital
+?pr gprop "loonie "value
 []
 ```
 
@@ -5473,11 +5467,11 @@ gprop _name_ _property_
 **Example**:
 
 ```logo
-?pprop "Ontario "capital "Toronto
-?pprop "Ontario "abbrev "ON
-?pr gprop "Ontario "capital
-Toronto
-?pr gprop "Ontario "population
+?pprop "toque "season "winter
+?pprop "toque "drawer "hall
+?pr gprop "toque "season
+winter
+?pr gprop "toque "pom
 []
 ```
 
@@ -5493,10 +5487,10 @@ plist _name_
 **Example**:
 
 ```logo
-?pprop "Ontario "capital "Toronto
-?pprop "Ontario "abbrev "ON
-?show plist "Ontario
-[capital Toronto abbrev ON]
+?pprop "ferry "status "delayed
+?pprop "ferry "dock "three
+?show plist "ferry
+[status delayed dock three]
 ```
 
 
@@ -5511,12 +5505,12 @@ The `pprop` (for put property) command gives _name_ _property_ with value _objec
 **Example**:
 
 ```logo
-?pprop "Quebec "capital "Quebec
-?pprop "Quebec "lang "French
-?pr gprop "Quebec "capital
-Quebec
-?show plist "Quebec
-[capital Quebec lang French]
+?pprop "buttertart "filling "raisins
+?pprop "buttertart "debate "lively
+?pr gprop "buttertart "filling
+raisins
+?show plist "buttertart
+[filling raisins debate lively]
 ```
 
 
@@ -5531,11 +5525,11 @@ The `pps` (for print properties) command prints the property lists of everything
 **Example**:
 
 ```logo
-?pprop "Ontario "capital "Toronto
-?pprop "Quebec "capital "Quebec
+?pprop "loonie "value "one
+?pprop "toonie "value "two
 ?pps
-plist "Ontario [capital Toronto]
-plist "Quebec [capital Quebec]
+plist "loonie [value one]
+plist "toonie [value two]
 ```
 
 
@@ -5553,11 +5547,11 @@ See [`pprop`](#pprop) and [`gprop`](#gprop).
 **Example**:
 
 ```logo
-?pprop "Alberta "capital "Edmonton
-?pprop "Alberta "abbrev "AB
-?remprop "Alberta "abbrev
-?show plist "Alberta
-[capital Edmonton]
+?pprop "snowroute "starts "midnight
+?pprop "snowroute "zone "blue
+?remprop "snowroute "zone
+?show plist "snowroute
+[starts midnight]
 ```
 
 
@@ -5727,8 +5721,8 @@ To treat any of the characters mentioned above as a normal alphabetic character,
 ```logo
 ?print "Good\-bye
 Good-bye
-?print "San\ Francisco
-San Francisco
+?print "butter\ tart
+butter tart
 ```
 
 Note that the quotation mark character (") and the colon (:not word delimiters.
