@@ -155,24 +155,40 @@ int main(void)
     // Run the main REPL in a loop (empty prefix for top level)
     // throw "toplevel exits the current REPL, but on device we just restart
     fault_recovery_active = true;
+    static ReplState repl;
+    static bool repl_initialized = false;
+
     while (1)
     {
         if (setjmp(fault_recovery) != 0)
         {
             // Arrived here from HardFault handler — treat as error 23
+            if (repl_initialized)
+            {
+                repl_initialized = false;
+                repl_cleanup(&repl);
+            }
+            logo_io_set_reader(&io, NULL);
+            logo_io_set_writer(&io, NULL);
+            input_active = false;
             proc_reset_execution_state();
             Result err = result_error(ERR_OUT_OF_SPACE);
             logo_io_write_line(&io, error_format(err));
             // Fall through to restart the REPL
         }
 
-        ReplState repl;
         if (!repl_init(&repl, &io, REPL_FLAGS_FULL, ""))
         {
             logo_io_write_line(&io, "Out of memory");
-            continue;
+            logo_io_flush(&io);
+            while (1)
+            {
+                logo_io_sleep(&io, 1000);
+            }
         }
+        repl_initialized = true;
         Result r = repl_run(&repl);
+        repl_initialized = false;
         repl_cleanup(&repl);
         
         // If throw "toplevel or any other reason to exit, just restart
