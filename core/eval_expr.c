@@ -436,7 +436,7 @@ Result eval_primary(Evaluator *eval)
                 }
                 
                 // Greedily collect all arguments until )
-                Value args[16];
+                Value args[MAX_PRIM_ARGS];
                 int argc = 0;
 
                 // Speculative OP_PRIM_CALL for deferred expression handling
@@ -455,6 +455,14 @@ Result eval_primary(Evaluator *eval)
                     prim_staging_paren->result = result_none();
                     prim_staging_paren->prim_call.prim = prim;
                     prim_staging_paren->prim_call.user_name = user_name;
+                    prim_staging_paren->prim_call.arg_base = op_stack_alloc_prim_args(eval->op_stack, MAX_PRIM_ARGS);
+                    prim_staging_paren->prim_call.arg_capacity = MAX_PRIM_ARGS;
+                    if (prim_staging_paren->prim_call.arg_base < 0)
+                    {
+                        op_stack_pop(eval->op_stack);
+                        eval->paren_depth--;
+                        return result_error(ERR_STACK_OVERFLOW);
+                    }
                     prim_staging_paren->prim_call.argc = 0;
                     prim_staging_paren->prim_call.total_args = -1; // varargs
                     prim_staging_paren->prim_call.current_arg = 0;
@@ -466,7 +474,7 @@ Result eval_primary(Evaluator *eval)
                 // Track that we're collecting primitive args
                 eval->primitive_arg_depth++;
                 
-                while (argc < 16)
+                while (argc < MAX_PRIM_ARGS)
                 {
                     Token t = peek(eval);
                     if (t.type == TOKEN_RIGHT_PAREN || t.type == TOKEN_EOF)
@@ -483,8 +491,15 @@ Result eval_primary(Evaluator *eval)
                         prim_staging_paren &&
                         op_stack_depth(eval->op_stack) > depth_before_prim_paren + 1)
                     {
-                        for (int j = 0; j < argc && j < MAX_PRIM_STAGED_ARGS; j++)
-                            prim_staging_paren->prim_call.args[j] = args[j];
+                        Value *staged_args = op_stack_get_prim_args(eval->op_stack,
+                            prim_staging_paren->prim_call.arg_base);
+                        if (!staged_args)
+                        {
+                            eval->primitive_arg_depth--;
+                            return result_error(ERR_STACK_OVERFLOW);
+                        }
+                        for (int j = 0; j < argc; j++)
+                            staged_args[j] = args[j];
                         prim_staging_paren->prim_call.argc = argc;
                         prim_staging_paren->prim_call.current_arg = argc;
                         eval->primitive_arg_depth--;
@@ -591,7 +606,7 @@ Result eval_primary(Evaluator *eval)
             
             advance(eval);
             // Collect default number of arguments
-            Value args[16]; // Max args
+            Value args[MAX_PRIM_ARGS];
             int argc = 0;
 
             // When inside a procedure, speculatively push OP_PRIM_CALL.
@@ -611,6 +626,8 @@ Result eval_primary(Evaluator *eval)
                 prim_staging->result = result_none();
                 prim_staging->prim_call.prim = prim;
                 prim_staging->prim_call.user_name = user_name;
+                prim_staging->prim_call.arg_base = -1;
+                prim_staging->prim_call.arg_capacity = MAX_PRIM_STAGED_ARGS;
                 prim_staging->prim_call.argc = 0;
                 prim_staging->prim_call.total_args = prim->default_args;
                 prim_staging->prim_call.current_arg = 0;

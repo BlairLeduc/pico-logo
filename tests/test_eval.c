@@ -526,6 +526,19 @@ void test_paren_user_proc_infix_in_proc(void)
     TEST_ASSERT_EQUAL_FLOAT(14.0f, r.value.as.number);
 }
 
+void test_paren_user_proc_infix_in_variadic_primitive_arg(void)
+{
+    const char *params[] = {"n"};
+    define_proc("rem10", params, 1, "output remainder :n 10");
+    define_proc("num", params, 1,
+        "pr (se :n \"+ :n * 2 \"= (:n + :n * 2))\n"
+        "pr (se :n \"+ rem10 :n \"= (:n + rem10 :n))");
+
+    Result r = run_string("num 76");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("76 + 152 = 228\n76 + 6 = 82\n", output_buffer);
+}
+
 void test_paren_user_proc_recursive_count_words(void)
 {
     // Bug reproduction: count.words [[a b] [c d]] should be 4
@@ -606,6 +619,7 @@ int main(void)
     RUN_TEST(test_paren_user_proc_standalone);
     RUN_TEST(test_paren_user_proc_infix_simple);
     RUN_TEST(test_paren_user_proc_infix_in_proc);
+    RUN_TEST(test_paren_user_proc_infix_in_variadic_primitive_arg);
     RUN_TEST(test_paren_user_proc_recursive_count_words);
 
     return UNITY_END();

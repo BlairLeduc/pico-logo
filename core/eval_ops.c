@@ -9,6 +9,7 @@
 void op_stack_init(OpStack *stack)
 {
     stack->top = 0;
+    stack->prim_arg_top = 0;
 }
 
 EvalOp *op_stack_push(OpStack *stack)
@@ -24,7 +25,16 @@ EvalOp *op_stack_push(OpStack *stack)
 void op_stack_pop(OpStack *stack)
 {
     if (stack->top > 0)
+    {
+        EvalOp *op = &stack->ops[stack->top - 1];
+        if (op->kind == OP_PRIM_CALL && op->prim_call.arg_base >= 0)
+        {
+            int expected_top = op->prim_call.arg_base + op->prim_call.arg_capacity;
+            if (stack->prim_arg_top == expected_top)
+                stack->prim_arg_top = op->prim_call.arg_base;
+        }
         stack->top--;
+    }
 }
 
 EvalOp *op_stack_peek(OpStack *stack)
@@ -51,4 +61,21 @@ void op_stack_swap_top(OpStack *stack)
     EvalOp tmp = stack->ops[stack->top - 1];
     stack->ops[stack->top - 1] = stack->ops[stack->top - 2];
     stack->ops[stack->top - 2] = tmp;
+}
+
+int op_stack_alloc_prim_args(OpStack *stack, int capacity)
+{
+    if (capacity <= 0 || stack->prim_arg_top + capacity > MAX_PRIM_ARG_SPILL_VALUES)
+        return -1;
+
+    int base = stack->prim_arg_top;
+    stack->prim_arg_top += capacity;
+    return base;
+}
+
+Value *op_stack_get_prim_args(OpStack *stack, int base)
+{
+    if (base < 0 || base >= MAX_PRIM_ARG_SPILL_VALUES)
+        return NULL;
+    return &stack->prim_arg_spill[base];
 }

@@ -1466,6 +1466,15 @@ Result step_prim_call(Evaluator *eval, EvalOp *op)
 {
     PrimCallState *st = &op->prim_call;
     const struct Primitive *prim = st->prim;
+    Value *args = st->arg_base >= 0
+        ? op_stack_get_prim_args(eval->op_stack, st->arg_base)
+        : st->args;
+
+    if (!args)
+    {
+        op_stack_pop(eval->op_stack);
+        return result_error(ERR_STACK_OVERFLOW);
+    }
 
     // Get the result from the child op (expression evaluation)
     Result arg_result = op->result;
@@ -1487,10 +1496,12 @@ Result step_prim_call(Evaluator *eval, EvalOp *op)
 
     // Store the argument value
     int idx = st->current_arg;
-    if (idx < MAX_PRIM_STAGED_ARGS)
+    if (idx >= st->arg_capacity)
     {
-        st->args[idx] = arg_result.value;
+        op_stack_pop(eval->op_stack);
+        return result_error(ERR_TOO_MUCH_PARENS);
     }
+    args[idx] = arg_result.value;
     st->argc = idx + 1;
     st->current_arg = idx + 1;
 
@@ -1547,8 +1558,12 @@ Result step_prim_call(Evaluator *eval, EvalOp *op)
             return result_error_arg(ERR_NOT_ENOUGH_INPUTS, st->user_name, NULL);
         }
 
-        if (st->current_arg < MAX_PRIM_STAGED_ARGS)
-            st->args[st->current_arg] = next_arg.value;
+        if (st->current_arg >= st->arg_capacity)
+        {
+            op_stack_pop(eval->op_stack);
+            return result_error(ERR_TOO_MUCH_PARENS);
+        }
+        args[st->current_arg] = next_arg.value;
         st->argc++;
         st->current_arg++;
     }
@@ -1563,7 +1578,13 @@ Result step_prim_call(Evaluator *eval, EvalOp *op)
     }
 
     // All args collected — call the primitive
+    Value call_args[MAX_PRIM_ARGS];
+    for (int i = 0; i < st->argc && i < MAX_PRIM_ARGS; i++)
+        call_args[i] = args[i];
+    int argc = st->argc;
+    const char *user_name = st->user_name;
+
     op_stack_pop(eval->op_stack);
-    Result r = prim->func(eval, st->argc, st->args);
-    return result_set_error_proc(r, st->user_name);
+    Result r = prim->func(eval, argc, call_args);
+    return result_set_error_proc(r, user_name);
 }
