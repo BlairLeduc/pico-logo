@@ -361,15 +361,7 @@ Pico Logo does not support the `if predicate list1 list2` form. Use `(if predica
 ===
 # Processor Limits
 
-The following lists the capabilities of the different supported processors.
-
-**RP2040** (Pico 1 family of devices):
-
-- 8192 nodes for procedure and variable storage
-- 8192 characters of editor buffer
-- 1024 characters in the copy buffer
-- 32 levels of recursion
-- Software floating-point operations
+The following lists the capabilities of the supported processor.
 
 **RP2350** (Pico 2 family of devices):
 

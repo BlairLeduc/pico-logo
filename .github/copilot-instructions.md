@@ -1,13 +1,13 @@
 # Project
 
-- This project is a **Logo interpreter written in C**, targeting Raspberry Pi Pico boards (RP2040 / RP2350) using the **Pico C/C++ SDK**.
+- This project is a **Logo interpreter written in C**, targeting Raspberry Pi Pico 2 boards (RP2350) using the **Pico C/C++ SDK**.
 - The interpreter aims to be strictly compatible with the semantics described in [Pico_Language_reference](../reference/Pico_Logo_Reference.md).
 
 # Development
 - The code should be written in standard C (C11 or later) to ensure compatibility with the Pico SDK and ease of cross-compilation.
 - The project must use **CMake** with presets for building and managing dependencies.
-- The interpreter should be efficient and lightweight, suitable for running on resource-constrained hardware like the Raspberry Pi Pico.
-  - Only use single-precision floating point (32-bit) for numerical calculations. The RP2350 supports single-precision natively in hardware and the RP2040 supports single-precision in software.
+- The interpreter should be efficient and lightweight, suitable for running on resource-constrained hardware like the Raspberry Pi Pico 2.
+  - Only use single-precision floating point (32-bit) for numerical calculations. The RP2350 supports single-precision natively in hardware.
 - Only use the test framework when developing. Do not use the host device for developing new functionality or fixing bugs.
 - Avoid introducing unnecessary dependencies; keep the project lightweight and focused on C and the Pico SDK.
 

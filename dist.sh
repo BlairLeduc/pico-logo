@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-PRESETS="pico pico2 pico2w"
+PRESETS="pico2 pico2w"
 
 mkdir -p dist
 

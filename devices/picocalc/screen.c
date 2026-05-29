@@ -456,7 +456,7 @@ void screen_gfx_reverse_point(float x, float y)
 }
 
 // Draw a line in the graphics buffer using Bresenham's algorithm
-// This is a true integer-only Bresenham implementation for efficiency on RP2040
+// This is a true integer-only Bresenham implementation for efficiency on the Pico
 void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, bool reverse)
 {
     // Convert float endpoints to integers (round to nearest)

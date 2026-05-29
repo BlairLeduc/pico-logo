@@ -1,6 +1,6 @@
 # Pico Logo
 
-Pico Logo is a lightweight, modular Logo interpreter written in C, designed for the Raspberry Pi Pico (RP2040/RP2350). The project aims for compatibility with classic LCSI Logo semantics, _although is influenced by classic MIT Logo semantics_, focusing on clarity, maintainability, and resource efficiency.
+Pico Logo is a lightweight, modular Logo interpreter written in C, designed for the Raspberry Pi Pico 2 (RP2350). The project aims for compatibility with classic LCSI Logo semantics, _although is influenced by classic MIT Logo semantics_, focusing on clarity, maintainability, and resource efficiency.
 
 ![sqiral](assets/sqiral.png)
 
@@ -148,9 +148,7 @@ ctest --preset=tests
 
 For coverage builds, use the `tests-coverage` preset instead of `tests`.
 
-### Pico firmware (RP2040 / RP2350)
-
-**Pico 2 / RP2350 (recommended):**
+### Pico firmware (RP2350)
 
 ```sh
 cmake --preset=pico2
@@ -158,15 +156,6 @@ cmake --build --preset=pico2
 ```
 
 This produces `build/pico-logo.uf2`, which you can flash with `picotool` or by copying to the Pico’s USB mass‑storage device.
-
-**Original Pico / RP2040:**
-
-```sh
-cmake --preset=pico
-cmake --build --preset=pico
-```
-
-This produces `build-pico/pico-logo.uf2`.
 
 ## Scripts
 

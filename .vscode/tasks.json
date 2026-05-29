@@ -44,27 +44,6 @@
             }
         },
         {
-            "label": "Build Raspberry Pi Pico (Debug)",
-            "type": "shell",
-            "command": "cmake",
-            "args": [
-                "--build",
-                "--preset=pico-debug"
-            ],
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "presentation": {
-                "reveal": "always",
-                "panel": "dedicated"
-            },
-            "problemMatcher": "$gcc",
-            "windows": {
-                "command": "cmake"
-            }
-        },
-        {
             "label": "Configure Tests",
             "type": "shell",
             "command": "cmake",

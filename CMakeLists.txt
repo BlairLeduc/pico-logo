@@ -196,11 +196,6 @@ target_link_libraries(pico-logo
         hardware_spi
 )
 
-# Link hardware_rtc for RP2040 (RTC support)
-if(PICO_RP2040)
-    target_link_libraries(pico-logo hardware_rtc)
-endif()
-
 # Link WiFi libraries if WiFi support is enabled
 if(LOGO_HAS_WIFI)
     # Add the directory containing lwipopts.h to include path

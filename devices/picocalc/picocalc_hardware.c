@@ -21,11 +21,6 @@
 #include <pico/stdlib.h>
 #include <pico/rand.h>
 
-// Include RTC support for RP2040, use software clock for RP2350
-#if PICO_RP2040
-#include <hardware/rtc.h>
-#endif
-
 #ifdef LOGO_HAS_WIFI
 #include <pico/cyw43_arch.h>
 #include <lwip/ip4_addr.h>
@@ -171,138 +166,6 @@ static void picocalc_toot(uint32_t duration_ms, uint32_t left_freq, uint32_t rig
 // Time management operations
 // ============================================================================
 
-#if PICO_RP2040
-// RP2040 has hardware RTC
-static bool rtc_initialized = false;
-
-static bool ensure_rtc_initialized(void)
-{
-    if (!rtc_initialized)
-    {
-        rtc_init();
-        // Set a default date/time if not already set
-        datetime_t t = {
-            .year = 2025,
-            .month = 1,
-            .day = 1,
-            .dotw = 3,  // Wednesday
-            .hour = 0,
-            .min = 0,
-            .sec = 0
-        };
-        rtc_set_datetime(&t);
-        rtc_initialized = true;
-    }
-    return true;
-}
-
-static bool picocalc_get_date(int *year, int *month, int *day)
-{
-    if (!ensure_rtc_initialized())
-    {
-        return false;
-    }
-
-    datetime_t t;
-    if (!rtc_get_datetime(&t))
-    {
-        return false;
-    }
-
-    if (year) *year = t.year;
-    if (month) *month = t.month;
-    if (day) *day = t.day;
-    return true;
-}
-
-static bool picocalc_get_time(int *hour, int *minute, int *second)
-{
-    if (!ensure_rtc_initialized())
-    {
-        return false;
-    }
-
-    datetime_t t;
-    if (!rtc_get_datetime(&t))
-    {
-        return false;
-    }
-
-    if (hour) *hour = t.hour;
-    if (minute) *minute = t.min;
-    if (second) *second = t.sec;
-    return true;
-}
-
-// Helper to calculate day of week (Zeller's congruence, Sunday = 0)
-static int calculate_dotw(int year, int month, int day)
-{
-    if (month < 3)
-    {
-        month += 12;
-        year--;
-    }
-    int k = year % 100;
-    int j = year / 100;
-    int h = (day + (13 * (month + 1)) / 5 + k + k / 4 + j / 4 - 2 * j) % 7;
-    // Convert from Zeller (Sat=0, Sun=1, ..., Fri=6) to (Sun=0, Mon=1, ..., Sat=6)
-    return ((h + 6) % 7);
-}
-
-static bool picocalc_set_date(int year, int month, int day)
-{
-    if (!ensure_rtc_initialized())
-    {
-        return false;
-    }
-
-    // Validate inputs
-    if (year < 2000 || year > 4095) return false;  // RTC year range
-    if (month < 1 || month > 12) return false;
-    if (day < 1 || day > 31) return false;
-
-    // Get current time to preserve it
-    datetime_t t;
-    if (!rtc_get_datetime(&t))
-    {
-        return false;
-    }
-
-    t.year = (int16_t)year;
-    t.month = (int8_t)month;
-    t.day = (int8_t)day;
-    t.dotw = (int8_t)calculate_dotw(year, month, day);
-
-    return rtc_set_datetime(&t);
-}
-
-static bool picocalc_set_time(int hour, int minute, int second)
-{
-    if (!ensure_rtc_initialized())
-    {
-        return false;
-    }
-
-    // Validate inputs
-    if (hour < 0 || hour > 23) return false;
-    if (minute < 0 || minute > 59) return false;
-    if (second < 0 || second > 59) return false;
-
-    // Get current date to preserve it
-    datetime_t t;
-    if (!rtc_get_datetime(&t))
-    {
-        return false;
-    }
-
-    t.hour = (int8_t)hour;
-    t.min = (int8_t)minute;
-    t.sec = (int8_t)second;
-
-    return rtc_set_datetime(&t);
-}
-
-#else
 // RP2350 does not have hardware RTC - use software clock
 // Store time as milliseconds since epoch (Jan 1, 2025)
 static bool software_clock_initialized = false;
@@ -458,8 +321,6 @@ static bool picocalc_set_time(int hour, int minute, int second)
     
     return true;
 }
-
-#endif // PICO_RP2040
 
 // ============================================================================
 // WiFi operations (only available when LOGO_HAS_WIFI is defined)
