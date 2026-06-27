@@ -129,9 +129,8 @@ int main(void)
     // (backs the blob heap and relocates large buffers off SRAM). Must run
     // before primitives_init() so the editor buffers can be placed in it. If no
     // PSRAM is detected, the interpreter runs SRAM-only.
-    size_t psram_size = 0;
 #ifdef PIMORONI_PICO_PLUS2_W_PSRAM_CS_PIN
-    psram_size = picocalc_psram_init(PIMORONI_PICO_PLUS2_W_PSRAM_CS_PIN);
+    size_t psram_size = picocalc_psram_init(PIMORONI_PICO_PLUS2_W_PSRAM_CS_PIN);
     if (psram_size > 0)
     {
         logo_mem_set_aux_region((void *)PICOCALC_PSRAM_BASE, psram_size);
@@ -161,17 +160,6 @@ int main(void)
     logo_io_write_line(&io, "Copyright 2025-2026 Blair Leduc");
     logo_io_write_line(&io, "Welcome to Pico Logo.");
 
-    // Report PSRAM availability (it backs large values and the editor buffers).
-    {
-        char psram_msg[48];
-        if (psram_size > 0)
-            snprintf(psram_msg, sizeof(psram_msg), "PSRAM: %u KB",
-                     (unsigned)(psram_size / 1024));
-        else
-            snprintf(psram_msg, sizeof(psram_msg), "PSRAM: unavailable (using SRAM)");
-        logo_io_write_line(&io, psram_msg);
-    }
-    
     // Warn user if default directory is missing
     if (!default_dir_exists)
     {
