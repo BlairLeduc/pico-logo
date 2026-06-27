@@ -13,6 +13,11 @@
 //  HTTP only; https:// URLs are rejected. See the "HTTP Operations" section of
 //  reference/Pico_Logo_Reference.md for the language-level contract.
 //
+//  Memory: the RP2350's SRAM is largely spoken for (Logo arena, LCD frame
+//  buffer, operand stack), so this client keeps a tiny static footprint -- a
+//  single shared transfer buffer reused for the request and the response, plus
+//  one small buffer holding the most recent response headers.
+//
 
 #include "primitives.h"
 #include "memory.h"
@@ -27,9 +32,16 @@
 #include <string.h>
 
 //==========================================================================
-// Most-recent-response state (for http.status / http.header)
+// Static buffers
 //==========================================================================
 
+// One scratch buffer holds the request while it is built and sent, then is
+// reused to receive the response (the request bytes are no longer needed once
+// network_tcp_write returns). Must fit the larger of the two: a response is at
+// most HTTP_MAX_HEADERS + HTTP_MAX_BODY bytes.
+static char g_io[HTTP_MAX_HEADERS + HTTP_MAX_BODY + 64];
+
+// Most-recent-response state (for http.status / http.header).
 static bool g_has_response = false;
 static int g_status_code = 0;
 static char g_headers[HTTP_MAX_HEADERS]; // header lines only (status line excluded)
@@ -62,6 +74,13 @@ static bool buf_appendf(char *buf, int cap, int *len, const char *fmt, ...)
     va_end(ap);
     if (w < 0 || w >= cap - *len) return false;
     *len += w;
+    return true;
+}
+
+// Format callback that only counts output bytes (no storage).
+static bool count_output(void *ctx, const char *str)
+{
+    *(size_t *)ctx += strlen(str);
     return true;
 }
 
@@ -151,27 +170,28 @@ static bool parse_http_url(const char *url, char *host, size_t host_size,
 }
 
 //==========================================================================
-// Chunked transfer decoding
+// Chunked transfer decoding (in place)
 //==========================================================================
 
-// Decode chunked body `src` (length src_len) into `out` (capacity out_max).
-// Returns decoded length (>= 0), or -1 if it would exceed out_max ("too big"),
-// or -2 if the encoding is malformed or truncated before the 0-length chunk.
-static int decode_chunked(const char *src, int src_len, char *out, int out_max)
+// Decode chunked data in `buf` (length len) in place, since the decoded form is
+// always shorter than the encoded form. Returns decoded length (>= 0), or -1 if
+// it would exceed `cap` ("too big"), or -2 if the encoding is malformed or
+// truncated before the 0-length chunk.
+static int decode_chunked(char *buf, int len, int cap)
 {
     int si = 0, oi = 0;
-    while (si < src_len)
+    while (si < len)
     {
         // Chunk-size line: hex digits up to CRLF (chunk extensions after ';').
         int line_start = si;
-        while (si + 1 < src_len && !(src[si] == '\r' && src[si + 1] == '\n')) si++;
-        if (si + 1 >= src_len) return -2; // no CRLF -> truncated
+        while (si + 1 < len && !(buf[si] == '\r' && buf[si + 1] == '\n')) si++;
+        if (si + 1 >= len) return -2; // no CRLF -> truncated
 
         long chunk_size = 0;
         bool any_digit = false;
         for (int k = line_start; k < si; k++)
         {
-            char c = src[k];
+            char c = buf[k];
             int d;
             if (c >= '0' && c <= '9') d = c - '0';
             else if (c >= 'a' && c <= 'f') d = c - 'a' + 10;
@@ -187,14 +207,15 @@ static int decode_chunked(const char *src, int src_len, char *out, int out_max)
 
         if (chunk_size == 0) return oi; // final chunk; ignore trailers
 
-        if (si + (int)chunk_size > src_len) return -2; // body truncated
-        if (oi + (int)chunk_size > out_max) return -1; // too big
-        memcpy(out + oi, src + si, (size_t)chunk_size);
+        if (si + (int)chunk_size > len) return -2; // body truncated
+        if (oi + (int)chunk_size > cap) return -1; // too big
+        // Write lags read (we stripped the size line), so memmove is safe.
+        memmove(buf + oi, buf + si, (size_t)chunk_size);
         oi += (int)chunk_size;
         si += (int)chunk_size;
 
         // Skip the CRLF that follows the chunk data.
-        if (si + 1 < src_len && src[si] == '\r' && src[si + 1] == '\n') si += 2;
+        if (si + 1 < len && buf[si] == '\r' && buf[si + 1] == '\n') si += 2;
     }
     return -2; // ran out before the 0-length terminator
 }
@@ -204,10 +225,10 @@ static int decode_chunked(const char *src, int src_len, char *out, int out_max)
 //==========================================================================
 
 // Header arguments are supplied as alternating name/value words:
-// hdr_args[0]=name0, hdr_args[1]=value0, hdr_args[2]=name1, ...
-// hdr_argc must be even and every entry must be a word (validated by callers).
+// hdr_args[0]=name0, hdr_args[1]=value0, ... (validated by callers).
+// `body` is NULL for GET, or the POST body (a word or list).
 static Result http_request(const char *method, const char *url,
-                           const char *body, int body_len,
+                           const Value *body,
                            int hdr_argc, Value *hdr_args)
 {
     LogoIO *io = primitives_get_io();
@@ -228,6 +249,17 @@ static Result http_request(const char *method, const char *url,
     if (!parse_http_url(url, host, sizeof(host), &port, path, sizeof(path)))
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, url);
 
+    // Determine the body length up front (Content-Length precedes the body).
+    int body_len = 0;
+    if (body)
+    {
+        size_t bl = 0;
+        format_value(count_output, &bl, *body);
+        if (bl > HTTP_MAX_BODY)
+            return result_error_arg(ERR_FILE_TOO_BIG, NULL, NULL);
+        body_len = (int)bl;
+    }
+
     // Resolve the host to an IP if the device provides a resolver.
     char ip[16];
     if (ops->network_resolve)
@@ -247,38 +279,33 @@ static Result http_request(const char *method, const char *url,
     if (!conn)
         return result_error_arg(ERR_CANT_OPEN_NETWORK, NULL, NULL);
 
-    // Build the request.
-    static char req[HTTP_MAX_BODY + 1024];
+    // Build the request into the shared buffer.
     int n = 0;
-    bool ok = buf_appendf(req, sizeof(req), &n, "%s %s HTTP/1.1\r\n", method, path);
+    bool ok = buf_appendf(g_io, sizeof(g_io), &n, "%s %s HTTP/1.1\r\n", method, path);
     if (port == 80)
-        ok = ok && buf_appendf(req, sizeof(req), &n, "Host: %s\r\n", host);
+        ok = ok && buf_appendf(g_io, sizeof(g_io), &n, "Host: %s\r\n", host);
     else
-        ok = ok && buf_appendf(req, sizeof(req), &n, "Host: %s:%u\r\n", host, (unsigned)port);
+        ok = ok && buf_appendf(g_io, sizeof(g_io), &n, "Host: %s:%u\r\n", host, (unsigned)port);
 
-    // User-supplied headers: alternating name/value words.
     for (int i = 0; ok && i + 1 < hdr_argc; i += 2)
     {
         const char *hname = mem_word_ptr(hdr_args[i].as.node);
         const char *hval = mem_word_ptr(hdr_args[i + 1].as.node);
-        ok = ok && buf_appendf(req, sizeof(req), &n, "%s: %s\r\n", hname, hval);
+        ok = ok && buf_appendf(g_io, sizeof(g_io), &n, "%s: %s\r\n", hname, hval);
     }
 
     if (body)
-        ok = ok && buf_appendf(req, sizeof(req), &n, "Content-Length: %d\r\n", body_len);
-    ok = ok && buf_appendf(req, sizeof(req), &n, "Connection: close\r\n\r\n");
+        ok = ok && buf_appendf(g_io, sizeof(g_io), &n, "Content-Length: %d\r\n", body_len);
+    ok = ok && buf_appendf(g_io, sizeof(g_io), &n, "Connection: close\r\n\r\n");
 
-    if (ok && body && body_len > 0)
+    if (ok && body)
     {
-        if (n + body_len <= (int)sizeof(req))
-        {
-            memcpy(req + n, body, (size_t)body_len);
-            n += body_len;
-        }
+        FormatBufferContext bctx;
+        format_buffer_init(&bctx, g_io + n, sizeof(g_io) - (size_t)n);
+        if (format_value_to_buffer(&bctx, *body))
+            n += (int)format_buffer_pos(&bctx);
         else
-        {
             ok = false;
-        }
     }
 
     if (!ok)
@@ -287,19 +314,19 @@ static Result http_request(const char *method, const char *url,
         return result_error_arg(ERR_NETWORK_ERROR, NULL, NULL);
     }
 
-    if (ops->network_tcp_write(conn, req, n) < 0)
+    if (ops->network_tcp_write(conn, g_io, n) < 0)
     {
         ops->network_tcp_close(conn);
         return result_error_arg(ERR_LOST_CONNECTION, NULL, NULL);
     }
 
-    // Read the whole response (we asked for Connection: close).
-    static char raw[HTTP_MAX_HEADERS + HTTP_MAX_BODY + 64];
+    // Reuse the buffer to read the whole response (we asked for Connection:
+    // close, so the peer closes when done).
     int total = 0;
     bool timed_out = false;
-    while (total < (int)sizeof(raw))
+    while (total < (int)sizeof(g_io))
     {
-        int r = ops->network_tcp_read(conn, raw + total, (int)sizeof(raw) - total, timeout_ms);
+        int r = ops->network_tcp_read(conn, g_io + total, (int)sizeof(g_io) - total, timeout_ms);
         if (r > 0) { total += r; continue; }
         if (r == 0) { timed_out = true; break; }
         break; // r < 0: peer closed / EOF
@@ -313,8 +340,8 @@ static Result http_request(const char *method, const char *url,
     int hdr_end = -1;
     for (int i = 0; i + 3 < total; i++)
     {
-        if (raw[i] == '\r' && raw[i + 1] == '\n' &&
-            raw[i + 2] == '\r' && raw[i + 3] == '\n')
+        if (g_io[i] == '\r' && g_io[i + 1] == '\n' &&
+            g_io[i + 2] == '\r' && g_io[i + 3] == '\n')
         {
             hdr_end = i;
             break;
@@ -327,36 +354,36 @@ static Result http_request(const char *method, const char *url,
     int sl_end = total;
     for (int i = 0; i + 1 < total; i++)
     {
-        if (raw[i] == '\r' && raw[i + 1] == '\n') { sl_end = i; break; }
+        if (g_io[i] == '\r' && g_io[i + 1] == '\n') { sl_end = i; break; }
     }
 
     // Status code: the integer after the first space of the status line.
-    const char *sp = memchr(raw, ' ', (size_t)sl_end);
+    const char *sp = memchr(g_io, ' ', (size_t)sl_end);
     if (!sp)
         return result_error_arg(ERR_NETWORK_ERROR, NULL, NULL);
     int code = atoi(sp + 1);
 
-    // Header lines (between the status line and the blank line).
+    // Header lines occupy [hdr_start, hdr_end). Temporarily NUL-terminate them
+    // in place (overwriting the first '\r' of the blank line) for parsing; the
+    // body starts later at hdr_end + 4 and is unaffected.
     int hdr_start = sl_end + 2;
     int hdr_len = hdr_end - hdr_start;
     if (hdr_len < 0) hdr_len = 0;
     if (hdr_len >= (int)sizeof(g_headers))
         return result_error_arg(ERR_NETWORK_ERROR, NULL, NULL);
-    char hdrbuf[HTTP_MAX_HEADERS];
-    memcpy(hdrbuf, raw + hdr_start, (size_t)hdr_len);
-    hdrbuf[hdr_len] = '\0';
+    g_io[hdr_end] = '\0';
+    const char *parsed_headers = g_io + hdr_start;
 
     // Determine the body framing.
     int body_start = hdr_end + 4;
     int body_avail = total - body_start;
     if (body_avail < 0) body_avail = 0;
 
-    const char *body_ptr;
+    char *body_ptr;
     int final_len;
-    static char decoded[HTTP_MAX_BODY];
 
     char te[64];
-    bool chunked = header_value(hdrbuf, "Transfer-Encoding", te, sizeof(te));
+    bool chunked = header_value(parsed_headers, "Transfer-Encoding", te, sizeof(te));
     if (chunked)
     {
         for (char *t = te; *t; t++)
@@ -366,19 +393,18 @@ static Result http_request(const char *method, const char *url,
 
     if (chunked)
     {
-        int decoded_len = decode_chunked(raw + body_start, body_avail,
-                                         decoded, (int)sizeof(decoded));
+        int decoded_len = decode_chunked(g_io + body_start, body_avail, HTTP_MAX_BODY);
         if (decoded_len == -1)
             return result_error_arg(ERR_FILE_TOO_BIG, NULL, NULL);
         if (decoded_len < 0)
             return result_error_arg(ERR_LOST_CONNECTION, NULL, NULL);
-        body_ptr = decoded;
+        body_ptr = g_io + body_start;
         final_len = decoded_len;
     }
     else
     {
         char cl[32];
-        if (header_value(hdrbuf, "Content-Length", cl, sizeof(cl)))
+        if (header_value(parsed_headers, "Content-Length", cl, sizeof(cl)))
         {
             long declared = atol(cl);
             if (declared < 0)
@@ -387,7 +413,7 @@ static Result http_request(const char *method, const char *url,
                 return result_error_arg(ERR_FILE_TOO_BIG, NULL, NULL);
             if (body_avail < declared)
                 return result_error_arg(ERR_LOST_CONNECTION, NULL, NULL);
-            body_ptr = raw + body_start;
+            body_ptr = g_io + body_start;
             final_len = (int)declared;
         }
         else
@@ -395,17 +421,22 @@ static Result http_request(const char *method, const char *url,
             // No length framing: the body is everything until the close.
             if (body_avail > HTTP_MAX_BODY)
                 return result_error_arg(ERR_FILE_TOO_BIG, NULL, NULL);
-            body_ptr = raw + body_start;
+            body_ptr = g_io + body_start;
             final_len = body_avail;
         }
     }
 
-    // Commit the response metadata only now that the request fully succeeded.
-    memcpy(g_headers, hdrbuf, (size_t)hdr_len + 1);
+    // Intern the body before committing metadata (interning may move nothing,
+    // but keep the body bytes valid in g_io until copied out).
+    Node body_node = mem_atom(body_ptr, (size_t)final_len);
+
+    // Commit the response metadata now that the request fully succeeded.
+    memcpy(g_headers, parsed_headers, (size_t)hdr_len);
+    g_headers[hdr_len] = '\0';
     g_status_code = code;
     g_has_response = true;
 
-    return result_ok(value_word(mem_atom(body_ptr, (size_t)final_len)));
+    return result_ok(value_word(body_node));
 }
 
 //==========================================================================
@@ -440,7 +471,7 @@ static Result prim_http_get(Evaluator *eval, int argc, Value *args)
     Result chk = check_header_args(hdr_argc, hdr_args);
     if (chk.status != RESULT_OK) return chk;
 
-    return http_request("GET", url, NULL, 0, hdr_argc, hdr_args);
+    return http_request("GET", url, NULL, hdr_argc, hdr_args);
 }
 
 // http.post url data
@@ -452,37 +483,15 @@ static Result prim_http_post(Evaluator *eval, int argc, Value *args)
     REQUIRE_WORD(args[0]);
     const char *url = mem_word_ptr(args[0].as.node);
 
+    if (!value_is_word(args[1]) && !value_is_list(args[1]))
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
+
     int hdr_argc = argc - 2;
     Value *hdr_args = args + 2;
     Result chk = check_header_args(hdr_argc, hdr_args);
     if (chk.status != RESULT_OK) return chk;
 
-    static char bodybuf[HTTP_MAX_BODY + 1];
-    int body_len;
-    if (value_is_word(args[1]))
-    {
-        const char *b = mem_word_ptr(args[1].as.node);
-        size_t bl = strlen(b);
-        if (bl > HTTP_MAX_BODY)
-            return result_error_arg(ERR_FILE_TOO_BIG, NULL, NULL);
-        memcpy(bodybuf, b, bl);
-        bodybuf[bl] = '\0';
-        body_len = (int)bl;
-    }
-    else if (value_is_list(args[1]))
-    {
-        FormatBufferContext ctx;
-        format_buffer_init(&ctx, bodybuf, sizeof(bodybuf));
-        if (!format_value_to_buffer(&ctx, args[1]))
-            return result_error_arg(ERR_FILE_TOO_BIG, NULL, NULL);
-        body_len = (int)format_buffer_pos(&ctx);
-    }
-    else
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
-    }
-
-    return http_request("POST", url, bodybuf, body_len, hdr_argc, hdr_args);
+    return http_request("POST", url, &args[1], hdr_argc, hdr_args);
 }
 
 // http.status
