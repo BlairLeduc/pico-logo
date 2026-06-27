@@ -139,9 +139,37 @@ rather than inventing a second mechanism.
   cap and to stay PSRAM-friendly later.
 - Body size is bounded by a documented constant (an `HTTP_MAX_BODY` in
   `core/limits.h`); an over-size response is an **error**, never a silent
-  truncation.
+  truncation. This invariant is now enforced at the source: `mem_atom`/
+  `mem_atom_unescape` return `NODE_NIL` instead of truncating past 255 bytes, and
+  `prim_http_request` maps a non-empty body that fails to intern to
+  `ERR_FILE_TOO_BIG`.
 - PSRAM, when present, hosts the **receive/scratch buffer** (Role A) and lets us
   raise `HTTP_MAX_BODY`. It does **not** back Logo values in v1 (Role B).
+
+### Raising `HTTP_MAX_BODY` (the 512 KB target)
+
+512 KB is a reasonable post-rework target (1/16th of PSRAM; far under both the
+31-bit blob-descriptor length and the ~8 MB byte ceiling). But it depends on
+**two** things being PSRAM-backed first — raising the constant alone is a trap:
+
+1. **Value storage (Role B).** The body must become a PSRAM blob, not an atom.
+   Atoms cap at 255 bytes and are never freed; a 512 KB atom is impossible and
+   would leak regardless.
+2. **Receive buffer (Role A) — easy to miss.** The body is received into a
+   *static SRAM* buffer: `static char g_io[HTTP_MAX_HEADERS + HTTP_MAX_BODY + 64]`
+   (`core/primitives_http.c`). Bumping `HTTP_MAX_BODY` to 512 KB turns that into a
+   ~513 KB static array — the exact OOM-at-`repl_init` failure mode (it cannot fit
+   in 520 KB SRAM). `g_io` must move to PSRAM too.
+
+**Order of operations:** do *not* raise `HTTP_MAX_BODY` until both `g_io` and the
+body value are PSRAM-backed. Until then the honest cap is 255 bytes, now enforced
+as an error rather than a truncation.
+
+**Peak-memory note:** the naive path double-buffers transiently — raw bytes in
+`g_io` (≤512 KB) plus the interned blob copy (≤512 KB) ≈ 1 MB peak PSRAM per
+request. Fine within 8 MB, but the copy can be avoided by **receiving directly
+into a freshly allocated blob** and dropping the separate scratch buffer; decide
+this when building Role A/B.
 
 ---
 
