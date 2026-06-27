@@ -234,6 +234,7 @@ static int decode_chunked(char *buf, int len, int cap)
             else if (c == ' ' || c == '\t') continue;
             else return -2;                         // junk in size line
             chunk_size = chunk_size * 16 + d;
+            if (chunk_size > (long)cap) return -1;  // over-size: stop before it grows
             any_digit = true;
         }
         if (!any_digit) return -2;
@@ -252,6 +253,32 @@ static int decode_chunked(char *buf, int len, int cap)
         if (si + 1 < len && buf[si] == '\r' && buf[si + 1] == '\n') si += 2;
     }
     return -2; // ran out before the 0-length terminator
+}
+
+// Reject control characters and spaces in a URL. Without this, a URL built from
+// user data (e.g. via `char 13`/`char 10`) could inject extra request lines or
+// produce a malformed request line.
+static bool url_is_safe(const char *s)
+{
+    for (; *s != '\0'; s++)
+    {
+        unsigned char c = (unsigned char)*s;
+        if (c <= 0x20u || c == 0x7Fu)
+            return false;
+    }
+    return true;
+}
+
+// Reject CR/LF in a header name or value, which would otherwise allow header
+// injection / request smuggling.
+static bool header_token_is_safe(const char *s)
+{
+    if (s == NULL)
+        return false;
+    for (; *s != '\0'; s++)
+        if (*s == '\r' || *s == '\n')
+            return false;
+    return true;
 }
 
 //==========================================================================
@@ -281,6 +308,16 @@ static Result http_request(const char *method, const char *url,
     // If the device reports WiFi status, require a connection.
     if (ops->wifi_is_connected && !ops->wifi_is_connected())
         return result_error_arg(ERR_CANT_OPEN_NETWORK, NULL, NULL);
+
+    // Reject injection attempts before touching the network.
+    if (!url_is_safe(url))
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, url);
+    for (int i = 0; i + 1 < hdr_argc; i += 2)
+    {
+        if (!header_token_is_safe(mem_word_ptr(hdr_args[i].as.node)) ||
+            !header_token_is_safe(mem_word_ptr(hdr_args[i + 1].as.node)))
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, NULL);
+    }
 
     char host[LOGO_STREAM_NAME_MAX];
     char path[256];
@@ -353,10 +390,17 @@ static Result http_request(const char *method, const char *url,
         return result_error_arg(ERR_NETWORK_ERROR, NULL, NULL);
     }
 
-    if (ops->network_tcp_write(conn, g_io, n) < 0)
+    // tcp_write may perform a short write; loop until the whole request is sent.
+    int sent = 0;
+    while (sent < n)
     {
-        ops->network_tcp_close(conn);
-        return result_error_arg(ERR_LOST_CONNECTION, NULL, NULL);
+        int w = ops->network_tcp_write(conn, g_io + sent, n - sent);
+        if (w <= 0)
+        {
+            ops->network_tcp_close(conn);
+            return result_error_arg(ERR_LOST_CONNECTION, NULL, NULL);
+        }
+        sent += w;
     }
 
     // Reuse the buffer to read the whole response (we asked for Connection:
@@ -371,6 +415,11 @@ static Result http_request(const char *method, const char *url,
         break; // r < 0: peer closed / EOF
     }
     ops->network_tcp_close(conn);
+
+    // The receive buffer filled before the peer closed: we cannot tell whether
+    // the response was complete, so the body framing must treat this as too big
+    // rather than risk a silent truncation.
+    bool buffer_full = (total >= (int)g_io_cap);
 
     if (timed_out)
         return result_error_arg(ERR_NETWORK_ERROR, NULL, NULL);
@@ -457,8 +506,10 @@ static Result http_request(const char *method, const char *url,
         }
         else
         {
-            // No length framing: the body is everything until the close.
-            if (body_avail > (int)g_body_max)
+            // No length framing: the body is everything until the close. If the
+            // buffer filled first, the peer never closed, so we may be missing
+            // the tail -> error instead of returning a truncated body.
+            if (buffer_full || body_avail > (int)g_body_max)
                 return result_error_arg(ERR_FILE_TOO_BIG, NULL, NULL);
             body_ptr = g_io + body_start;
             final_len = body_avail;

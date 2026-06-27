@@ -1366,6 +1366,11 @@ void mock_device_set_tcp_read_chunk(int max_bytes_per_read)
     mock_state.tcp.read_chunk = max_bytes_per_read;
 }
 
+void mock_device_set_tcp_write_chunk(int max_bytes_per_write)
+{
+    mock_state.tcp.write_chunk = max_bytes_per_write;
+}
+
 void mock_device_set_tcp_timeout_after(int bytes)
 {
     mock_state.tcp.timeout_after = bytes;
@@ -1500,14 +1505,21 @@ int mock_network_tcp_write(void *connection, const char *data, int count)
     {
         to_store = space;
     }
-    if (to_store > 0)
+    // Optionally force a short write so callers must loop (exercises the
+    // client's short-write handling).
+    if (mock_state.tcp.write_chunk > 0 && to_store > mock_state.tcp.write_chunk)
     {
-        memcpy(mock_state.tcp.request + mock_state.tcp.request_len, data, (size_t)to_store);
-        mock_state.tcp.request_len += to_store;
-        mock_state.tcp.request[mock_state.tcp.request_len] = '\0';
+        to_store = mock_state.tcp.write_chunk;
     }
-    // Report the full count as written so the client does not spin retrying.
-    return count;
+    if (to_store <= 0)
+    {
+        return -1; // No room to store any bytes -> write error (per hardware.h)
+    }
+    memcpy(mock_state.tcp.request + mock_state.tcp.request_len, data, (size_t)to_store);
+    mock_state.tcp.request_len += to_store;
+    mock_state.tcp.request[mock_state.tcp.request_len] = '\0';
+    // Report the actual number of bytes stored (contract: bytes written).
+    return to_store;
 }
 
 bool mock_network_tcp_can_read(void *connection)

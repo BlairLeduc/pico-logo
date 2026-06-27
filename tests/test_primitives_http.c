@@ -10,6 +10,7 @@
 //
 
 #include "test_scaffold.h"
+#include <stdio.h>
 #include <string.h>
 
 void setUp(void)
@@ -44,6 +45,7 @@ static Result get_body_of_size(int n)
     static char resp[4096];
     int off = snprintf(resp, sizeof(resp),
                        "HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\n", n);
+    TEST_ASSERT_TRUE(off > 0 && (size_t)off + (size_t)n <= sizeof(resp));
     memset(resp + off, 'A', (size_t)n);
     mock_device_set_tcp_response(resp, (size_t)(off + n));
     return eval_string("http.get \"http://example.com/big.txt");
@@ -303,6 +305,73 @@ void test_http_get_print_large_body(void)
     TEST_ASSERT_NOT_EQUAL(RESULT_ERROR, r.status);
 }
 
+// ============================================================================
+// Injection rejection and robustness
+// ============================================================================
+
+void test_http_get_rejects_url_with_crlf(void)
+{
+    // A URL built with an embedded CR must be rejected (request-line injection).
+    Result r = eval_string("http.get (word \"http://example.com char 13 \"evil)");
+
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_http_get_rejects_header_with_crlf(void)
+{
+    // A header name containing CR must be rejected (header injection).
+    script_response("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi");
+
+    Result r = eval_string("(http.get \"http://example.com (word \"X char 13 \"Y) \"v)");
+
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_http_request_survives_short_writes(void)
+{
+    // Force 8-byte writes; the client must loop and still deliver the whole
+    // request (terminated by the blank line).
+    script_response("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi");
+    mock_device_set_tcp_write_chunk(8);
+
+    Result r = eval_string("http.get \"http://example.com/");
+
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    const char *req = mock_device_get_tcp_request();
+    size_t len = mock_device_get_tcp_request_len();
+    TEST_ASSERT_TRUE(len >= 4);
+    TEST_ASSERT_EQUAL_STRING_LEN("\r\n\r\n", req + len - 4, 4);
+}
+
+void test_http_get_close_delimited_overflow_errors(void)
+{
+    // No Content-Length and not chunked: a body that fills the receive buffer
+    // must error rather than return a silently truncated body.
+    static char resp[4096];
+    int off = snprintf(resp, sizeof(resp),
+                       "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n");
+    TEST_ASSERT_TRUE(off > 0 && (size_t)off < sizeof(resp));
+    memset(resp + off, 'A', sizeof(resp) - (size_t)off);
+    mock_device_set_tcp_response(resp, sizeof(resp));
+
+    Result r = eval_string("http.get \"http://example.com/");
+
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_http_get_chunked_oversize_chunk_errors(void)
+{
+    // A chunk-size far larger than the body cap must error (and must not
+    // overflow while the hex size line is parsed).
+    script_response("HTTP/1.1 200 OK\r\n"
+                    "Transfer-Encoding: chunked\r\n\r\n"
+                    "FFFFFFF\r\nabc");
+
+    Result r = eval_string("http.get \"http://example.com/");
+
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
 void test_http_get_rejects_https_url(void)
 {
     Result r = eval_string("http.get \"https://example.com/");
@@ -520,6 +589,11 @@ int main(void)
     RUN_TEST(test_http_get_large_body_becomes_blob);
     RUN_TEST(test_http_get_large_body_without_region_errors);
     RUN_TEST(test_http_get_print_large_body);
+    RUN_TEST(test_http_get_rejects_url_with_crlf);
+    RUN_TEST(test_http_get_rejects_header_with_crlf);
+    RUN_TEST(test_http_request_survives_short_writes);
+    RUN_TEST(test_http_get_close_delimited_overflow_errors);
+    RUN_TEST(test_http_get_chunked_oversize_chunk_errors);
 
     return UNITY_END();
 }

@@ -262,6 +262,7 @@ extern "C"
             int close_after;                 // read returns -1 (closed) once read_pos reaches this (-1 = never)
             char request[8192];              // Bytes the client wrote (the request)
             int request_len;
+            int write_chunk;                 // Max bytes per write (0 = unlimited; forces short writes)
         } tcp;
 
         // Time state tracking
@@ -380,6 +381,7 @@ extern "C"
     void mock_device_set_tcp_connect_result(bool success);
     void mock_device_set_tcp_response(const char *bytes, size_t len);
     void mock_device_set_tcp_read_chunk(int max_bytes_per_read);  // 0 = unlimited
+    void mock_device_set_tcp_write_chunk(int max_bytes_per_write); // 0 = unlimited (forces short writes)
     void mock_device_set_tcp_timeout_after(int bytes);            // -1 = never
     void mock_device_set_tcp_close_after(int bytes);              // -1 = never
     const char *mock_device_get_tcp_request(void);
