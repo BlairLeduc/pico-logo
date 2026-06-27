@@ -28,16 +28,24 @@ Pico Logo manages Logo objects in a **single contiguous arena** of
 
 Two encoding facts dominate every storage decision:
 
-- **Words** are referenced by a 30-bit atom-table **offset** (`NODE_TYPE_WORD`),
-  so the *encoding* can address up to ~1 GB of string data. A word can therefore
-  be very large in principle.
+- **Words** are referenced by a 30-bit atom-table **offset** at the *bare `Node`*
+  level (`NODE_MAKE_WORD`), which in isolation could address ~1 GB. **But the
+  moment a word is stored inside a cons cell**, `node_to_index()` re-encodes it
+  as a 16-bit cell reference: `CELL_WORD_MARKER (0x8000) | (offset & 0x7FFF)`. So
+  any word reachable through a list is capped at a **15-bit offset → 32 KB**
+  (`LOGO_ATOM_LIMIT`, `core/memory.c`). Since virtually every word ends up in a
+  list, **32 KB is the effective atom-arena ceiling**, not 1 GB.
+- **Atoms are never garbage-collected.** `mem_gc_mark` skips words ("atoms are
+  never freed", `core/memory.c`); the arena is append-only with dedup via
+  `find_atom`. Anything interned lives until reset.
 - **Cons cells** pack car and cdr as **16-bit indices**, capping the node pool
   at **65,535 nodes** regardless of how much RAM exists. This bounds *list*
   size independently of total memory.
 
-Consequence for networking: a payload returned as **one word** is limited only
-by available arena/atom space; a payload parsed into a **list** (lines, tokens)
-is limited to ~64 K cells no matter how much memory we add.
+Consequence for networking: even a payload returned as **one word** is bounded
+by the 32 KB in-cell offset ceiling (and leaks, since atoms are never freed) the
+instant it can be consed into a list; a payload parsed into a **list** (lines,
+tokens) is additionally limited to ~64 K cells no matter how much memory we add.
 
 ---
 
@@ -61,18 +69,61 @@ Recommendation: use PSRAM here, and only here, for the first HTTP cut.
 
 ### Role B — backing store for Logo *values* (deferred)
 
-The body that `http.get` outputs becomes a Logo **word** in the atom table.
-Today the atom table and node pool share one contiguous block. To put value
-bytes in PSRAM you would need to either:
+The body that `http.get` outputs becomes a Logo **word**. The naive idea —
+"relocate the atom arena into PSRAM" — does **not** by itself help, for two
+reasons established in §1:
 
-- relocate the whole arena into PSRAM (slow XIP access on every word
-  compare/copy and every GC sweep that touches strings), **or**
-- split the atom arena from the node pool, so bulk strings live in PSRAM while
-  the hot cons cells stay in fast SRAM.
+- **The 15-bit in-cell offset is the real wall.** A word referenced from any
+  cons cell is capped at a 32 KB offset (`LOGO_ATOM_LIMIT`). Moving the arena to
+  PSRAM without changing the cell encoding just relocates the same 32 KB cap into
+  slower memory. The blocker is the **encoding**, not only the layout. (An
+  earlier draft of this note had this backwards.)
+- **Atoms are never freed.** Pouring multi-MB bodies into the interned atom table
+  is a monotonic leak, and bloats every linear `find_atom` scan. Interning is
+  correct for *symbols* (procedure/keyword names) — not for large transient
+  values.
 
-The 30-bit word offset already allows addressing such large atoms, so the
-*encoding* is not the blocker — the **layout** is. This is a real, contained,
-but non-trivial change. Deferred out of v1.
+So Role B is really two problems: *where the bytes live* (easy: PSRAM) and *how
+large byte vectors are referenced and reclaimed* (hard). The recommended shape
+is **not** "big atoms" but a **separate PSRAM-backed blob heap**:
+
+- Keep the interned atom table small, permanent, and in SRAM (symbols, keywords,
+  short words — the hot dedup path).
+- Add a PSRAM blob heap for large byte vectors, referenced by a **handle** into
+  a small SRAM descriptor table, with the blob bit carved out of the
+  `NODE_TYPE_WORD` payload (`bit 29`). Handles are constrained to 15 bits so they
+  still survive the existing 4-byte cell encoding — no pool-wide 8-byte-cell cost.
+- Give blobs their **own mark/sweep GC** (unlike atoms, blobs must be
+  reclaimable). The public `mem_word_ptr`/`mem_word_len` API stays unchanged, so
+  callers still just see "a word"; only the `mem_word_ptr`-across-GC lifetime
+  contract needs care if the blob heap compacts.
+
+This is a real, contained, but non-trivial change. Deferred out of v1.
+
+### Role C — relocating cold static buffers (orthogonal SRAM relief)
+
+Independent of networking: the SRAM crunch can be eased by moving **cold,
+human-speed** static buffers to PSRAM. Triage by access pattern, not size:
+
+| Buffer | Size | Access pattern | Verdict |
+|--------|------|----------------|---------|
+| `editor_buffer` + `editor_proc_buffer` (`core/primitives_editor.c`) | 8 KB × 2 | only while a human edits | **move to PSRAM** |
+| `proc_buffer` / `expr_buffer` (`core/repl.c`, already `malloc`'d) | 4 KB × 2 | REPL line accumulation, typing speed | good candidate |
+| `gfx_buffer` (`devices/picocalc/screen.c`) | ~100 KB | rewritten every draw, blitted to LCD | **keep in SRAM** |
+| `global_op_stack` (`core/eval.c`) | per `LOGO_OP_STACK_DEPTH` | every eval step | **keep in SRAM** |
+| `frame_stack_memory` (`core/procedures.c`) | 32 KB | every procedure call | **keep in SRAM** |
+| atom/node `memory_block` (`core/memory.c`) | `LOGO_MEMORY_SIZE` | hottest interpreter path | **keep in SRAM** |
+
+The editor buffers (16 KB) are the clear win — touched only at human speed, so
+PSRAM latency is invisible. The REPL buffers (8 KB) are secondary. The hot
+interpreter stacks and the framebuffer must stay in SRAM.
+
+The catch: `editor_buffer`/`editor_proc_buffer` live in `core/`, which must not
+know about board PSRAM. So this needs the **same plumbing as Role B** — a
+device-supplied region passed into `core/` at init, with the buffers converted
+from `static` arrays to pointers that fall back to SRAM (or `malloc`) when no
+PSRAM is present, keeping host/test builds unchanged. Do Role C alongside Role B
+rather than inventing a second mechanism.
 
 ### PSRAM caveats (independent of role)
 
@@ -117,8 +168,11 @@ insecure-no-verify) is still an open decision for the HTTPS phase.
 
 ## 5. Open items to revisit
 
-- Role B (PSRAM-backed value storage): split atom arena from node pool if we
-  ever need multi-MB bodies as first-class Logo words.
+- Role B (PSRAM-backed value storage): add a PSRAM blob heap with its own GC and
+  a 15-bit handle/descriptor indirection — *not* a relocated atom arena, which
+  hits the 32 KB in-cell offset wall and the never-freed-atoms leak.
+- Role C (cold static buffers): move the editor (and possibly REPL) buffers to
+  PSRAM via the same device-supplied region as Role B.
 - The 64 K-node cap will bound any future "parse response into a list" feature;
   widening cons-cell indices is a separate, larger change.
 - HTTPS: mbedTLS/`altcp_tls` enablement, SRAM budget during handshake, and CA

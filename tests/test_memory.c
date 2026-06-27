@@ -97,6 +97,37 @@ void test_atom_content(void)
     TEST_ASSERT_EQUAL_STRING_LEN("hello", mem_word_ptr(word), 5);
 }
 
+void test_atom_max_length(void)
+{
+    // 255 bytes is the largest atom the 1-byte length prefix can hold; it must
+    // be stored in full, not truncated.
+    char buf[255];
+    memset(buf, 'a', sizeof(buf));
+    Node word = mem_atom(buf, sizeof(buf));
+    TEST_ASSERT_TRUE(mem_is_word(word));
+    TEST_ASSERT_EQUAL(255, mem_word_len(word));
+}
+
+void test_atom_too_long_is_error(void)
+{
+    // A word longer than 255 bytes cannot be encoded. It must fail (NIL),
+    // never be silently truncated to 255.
+    char buf[256];
+    memset(buf, 'a', sizeof(buf));
+    Node word = mem_atom(buf, sizeof(buf));
+    TEST_ASSERT_TRUE(mem_is_nil(word));
+}
+
+void test_atom_unescape_too_long_is_error(void)
+{
+    // The unescape path must also error rather than truncate. Build a string
+    // whose unescaped length exceeds 255.
+    char buf[300];
+    memset(buf, 'a', sizeof(buf));
+    Node word = mem_atom_unescape(buf, sizeof(buf));
+    TEST_ASSERT_TRUE(mem_is_nil(word));
+}
+
 void test_atom_cstr(void)
 {
     Node word = mem_atom_cstr("world");
@@ -909,6 +940,9 @@ int main(void)
     // Atoms/Words
     RUN_TEST(test_create_atom);
     RUN_TEST(test_atom_content);
+    RUN_TEST(test_atom_max_length);
+    RUN_TEST(test_atom_too_long_is_error);
+    RUN_TEST(test_atom_unescape_too_long_is_error);
     RUN_TEST(test_atom_cstr);
     RUN_TEST(test_atom_interning);
     RUN_TEST(test_atom_interning_case_insensitive);

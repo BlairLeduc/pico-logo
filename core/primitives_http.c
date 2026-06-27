@@ -430,6 +430,11 @@ static Result http_request(const char *method, const char *url,
     // but keep the body bytes valid in g_io until copied out).
     Node body_node = mem_atom(body_ptr, (size_t)final_len);
 
+    // A non-empty body that cannot be interned (atom length cap or out of
+    // memory) is an error, never a silent truncation/empty result.
+    if (final_len > 0 && mem_is_nil(body_node))
+        return result_error_arg(ERR_FILE_TOO_BIG, NULL, NULL);
+
     // Commit the response metadata now that the request fully succeeded.
     memcpy(g_headers, parsed_headers, (size_t)hdr_len);
     g_headers[hdr_len] = '\0';

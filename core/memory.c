@@ -430,10 +430,11 @@ static size_t find_atom(const char *str, size_t len)
 // Each entry is aligned to 4-byte boundary: [len:1][chars:len][nul:1][padding]
 Node mem_atom(const char *str, size_t len)
 {
-    // Limit atom length to 255 (1 byte length prefix)
+    // Atom length is capped at 255 by the 1-byte length prefix. Refuse rather
+    // than silently truncate, so callers can surface an error.
     if (len > 255)
     {
-        len = 255;
+        return NODE_NIL;
     }
 
     // Check if atom already exists
@@ -491,10 +492,11 @@ Node mem_atom_unescape(const char *str, size_t len)
         return mem_atom(str, len);
     }
 
-    // Limit atom length to 255 (1 byte length prefix)
+    // Atom length is capped at 255 by the 1-byte length prefix. Refuse rather
+    // than silently truncate, so callers can surface an error.
     if (unescaped_len > 255)
     {
-        unescaped_len = 255;
+        return NODE_NIL;
     }
 
     // Build unescaped string on stack (max 255 chars)
