@@ -876,6 +876,12 @@ void mock_device_reset(void)
     mock_state.network.ping_result_ms = -1;  // Default to ping failure
     mock_state.network.last_ping_ip[0] = '\0';
 
+    // Initialize TCP state (memset already zeroed buffers/lengths)
+    mock_state.tcp.connect_success = true;   // Default to a successful connect
+    mock_state.tcp.timeout_after = -1;       // Timeout trigger disabled
+    mock_state.tcp.close_after = -1;         // Mid-stream close trigger disabled
+    mock_state.tcp.read_chunk = 0;           // Unlimited bytes per read
+
     // Initialize time state to defaults
     mock_state.time.year = 2025;
     mock_state.time.month = 1;
@@ -1330,6 +1336,199 @@ bool mock_network_ntp(const char *server, float timezone_offset)
     mock_state.network.last_ntp_timezone = timezone_offset;
 
     return mock_state.network.ntp_success;
+}
+
+//
+// TCP test helpers
+//
+
+void mock_device_set_tcp_connect_result(bool success)
+{
+    mock_state.tcp.connect_success = success;
+}
+
+void mock_device_set_tcp_response(const char *bytes, size_t len)
+{
+    if (len > sizeof(mock_state.tcp.response))
+    {
+        len = sizeof(mock_state.tcp.response);
+    }
+    if (bytes && len > 0)
+    {
+        memcpy(mock_state.tcp.response, bytes, len);
+    }
+    mock_state.tcp.response_len = (int)len;
+    mock_state.tcp.read_pos = 0;
+}
+
+void mock_device_set_tcp_read_chunk(int max_bytes_per_read)
+{
+    mock_state.tcp.read_chunk = max_bytes_per_read;
+}
+
+void mock_device_set_tcp_write_chunk(int max_bytes_per_write)
+{
+    mock_state.tcp.write_chunk = max_bytes_per_write;
+}
+
+void mock_device_set_tcp_timeout_after(int bytes)
+{
+    mock_state.tcp.timeout_after = bytes;
+}
+
+void mock_device_set_tcp_close_after(int bytes)
+{
+    mock_state.tcp.close_after = bytes;
+}
+
+const char *mock_device_get_tcp_request(void)
+{
+    return mock_state.tcp.request;
+}
+
+size_t mock_device_get_tcp_request_len(void)
+{
+    return (size_t)mock_state.tcp.request_len;
+}
+
+const char *mock_device_get_last_tcp_ip(void)
+{
+    return mock_state.tcp.last_ip;
+}
+
+uint16_t mock_device_get_last_tcp_port(void)
+{
+    return mock_state.tcp.last_port;
+}
+
+//
+// Mock TCP operations (honour the contracts in devices/hardware.h)
+//
+
+void *mock_network_tcp_connect(const char *ip_address, uint16_t port, int timeout_ms)
+{
+    (void)timeout_ms;
+
+    if (ip_address)
+    {
+        strncpy(mock_state.tcp.last_ip, ip_address, sizeof(mock_state.tcp.last_ip) - 1);
+        mock_state.tcp.last_ip[sizeof(mock_state.tcp.last_ip) - 1] = '\0';
+    }
+    else
+    {
+        mock_state.tcp.last_ip[0] = '\0';
+    }
+    mock_state.tcp.last_port = port;
+
+    if (!mock_state.tcp.connect_success)
+    {
+        return NULL;
+    }
+
+    mock_state.tcp.open = true;
+    // Return an opaque, non-NULL handle. The address of the state suffices.
+    return &mock_state.tcp;
+}
+
+void mock_network_tcp_close(void *connection)
+{
+    (void)connection;
+    mock_state.tcp.open = false;
+}
+
+int mock_network_tcp_read(void *connection, char *buffer, int count, int timeout_ms)
+{
+    (void)timeout_ms;
+
+    if (!connection || !mock_state.tcp.open || !buffer || count <= 0)
+    {
+        return -1;
+    }
+
+    int pos = mock_state.tcp.read_pos;
+
+    // Mid-stream close trigger fires once the cursor reaches close_after.
+    if (mock_state.tcp.close_after >= 0 && pos >= mock_state.tcp.close_after)
+    {
+        return -1;
+    }
+    // Timeout trigger fires once the cursor reaches timeout_after.
+    if (mock_state.tcp.timeout_after >= 0 && pos >= mock_state.tcp.timeout_after)
+    {
+        return 0;
+    }
+
+    int available = mock_state.tcp.response_len - pos;
+    if (available <= 0)
+    {
+        // No more scripted data: peer closed the connection.
+        return -1;
+    }
+
+    int to_read = count;
+    if (to_read > available)
+    {
+        to_read = available;
+    }
+    if (mock_state.tcp.read_chunk > 0 && to_read > mock_state.tcp.read_chunk)
+    {
+        to_read = mock_state.tcp.read_chunk;
+    }
+    // Don't deliver past a pending trigger boundary, so the trigger fires after
+    // exactly that many bytes have been read.
+    if (mock_state.tcp.timeout_after >= 0 && pos < mock_state.tcp.timeout_after &&
+        pos + to_read > mock_state.tcp.timeout_after)
+    {
+        to_read = mock_state.tcp.timeout_after - pos;
+    }
+    if (mock_state.tcp.close_after >= 0 && pos < mock_state.tcp.close_after &&
+        pos + to_read > mock_state.tcp.close_after)
+    {
+        to_read = mock_state.tcp.close_after - pos;
+    }
+
+    memcpy(buffer, mock_state.tcp.response + pos, (size_t)to_read);
+    mock_state.tcp.read_pos += to_read;
+    return to_read;
+}
+
+int mock_network_tcp_write(void *connection, const char *data, int count)
+{
+    if (!connection || !mock_state.tcp.open || !data || count < 0)
+    {
+        return -1;
+    }
+
+    int space = (int)sizeof(mock_state.tcp.request) - 1 - mock_state.tcp.request_len;
+    int to_store = count;
+    if (to_store > space)
+    {
+        to_store = space;
+    }
+    // Optionally force a short write so callers must loop (exercises the
+    // client's short-write handling).
+    if (mock_state.tcp.write_chunk > 0 && to_store > mock_state.tcp.write_chunk)
+    {
+        to_store = mock_state.tcp.write_chunk;
+    }
+    if (to_store <= 0)
+    {
+        return -1; // No room to store any bytes -> write error (per hardware.h)
+    }
+    memcpy(mock_state.tcp.request + mock_state.tcp.request_len, data, (size_t)to_store);
+    mock_state.tcp.request_len += to_store;
+    mock_state.tcp.request[mock_state.tcp.request_len] = '\0';
+    // Report the actual number of bytes stored (contract: bytes written).
+    return to_store;
+}
+
+bool mock_network_tcp_can_read(void *connection)
+{
+    if (!connection || !mock_state.tcp.open)
+    {
+        return false;
+    }
+    return mock_state.tcp.read_pos < mock_state.tcp.response_len;
 }
 
 //

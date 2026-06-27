@@ -232,12 +232,15 @@ static Token read_word(Lexer *lexer)
 // Plus the file-path exception (§3807):
 //   "You can use '/' in file names without escaping it, and Logo will
 //    treat it as a normal character."
+// And the identifier exception, for hyphenated names such as HTTP header
+// fields (e.g. "Content-Type) and host names:
+//   '-' is always literal inside a quoted word.
 // So the rules implemented here are:
 //   * brackets ([, ]) ALWAYS terminate a quoted word unless escaped,
 //     even at the first position;
 //   * any other delimiter at the first position is taken literally;
 //   * any other delimiter at a subsequent position terminates the word,
-//     EXCEPT '/' which is always literal (file-path exception);
+//     EXCEPT '/' and '-' which are always literal;
 //   * a backslash escapes the following character;
 //   * any whitespace terminates the word.
 static Token read_quoted(Lexer *lexer)
@@ -272,9 +275,11 @@ static Token read_quoted(Lexer *lexer)
             // Space ends the quoted word
             break;
         }
-        else if (!first_char && is_delimiter(*lexer->current) && *lexer->current != '/')
+        else if (!first_char && is_delimiter(*lexer->current) &&
+                 *lexer->current != '/' && *lexer->current != '-')
         {
-            // Non-first delimiter ends the word (except / for file paths)
+            // Non-first delimiter ends the word, except '/' (file paths) and
+            // '-' (hyphenated identifiers such as HTTP header names).
             break;
         }
         else

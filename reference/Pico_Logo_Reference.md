@@ -345,7 +345,6 @@ _Parentheses_, `(` `)`, are necessary to group things in ways that Logo ordinari
 
 A _backslash_, `\`, tells Logo to interpret the character that follows it literally _as a character_, rather than keeping some special meaning it might have. For instance, suppose you wanted to use `3[a]b` as a single _word_. You need to type `3\[a\]b` in order to avoid Logo’s usual interpretation of the brackets as the envelope around a list. You have to backslash `[`,`(`,`]`,`)`,`+`,`-`,`*`,`/` and `\` itself. 
 
-
 ===
 
 # Difference from other Logo interpreters
@@ -5428,6 +5427,109 @@ true
 
 
 ===
+# HTTP Operations
+
+These operations fetch and send data over the web. They require that the device is connected to a WiFi network (see [`wifi.connect`](#wifi-connect-wificonnect)); an error occurs if WiFi is not available or not connected.
+
+A _url_ is a word beginning with `http://`, for example `"http://example.com/index.html` or `"http://example.com:8080/api`. If no port is given, port 80 is used. Only the `http://` scheme is supported at this time; a _url_ beginning with `https://` produces an error.
+
+Request headers are supplied as extra inputs in name/value pairs, using the parenthesised form of the operation, for example `(http.get "http://example.com/ "Accept "text/plain)`. Each name and value is a word. Recall that a quoted word may contain `-` and `/` without a backslash (so `"Content-Type` and `"text/plain` are each a single word); a value that contains spaces cannot be written as a quoted word.
+
+Each operation performs one complete request: it opens a connection, sends the request, reads the whole response, and closes the connection. The connection is not left open and does not appear in [`allopen`](#allopen). The read timeout is governed by [`.settimeout`](#-settimeout); if the server does not respond in time, the operation produces an error.
+
+A request can **fail to complete** (the host cannot be resolved, the connection is refused, the request times out, or the response is larger than the device can hold). In these cases the operation produces an error, which you can trap with [`catch`](#catch). A request that **completes** produces a result even when the server reports a problem: a "404 Not Found" response is not an error; the operation outputs the server's response body, and [`http.status`](#http-status) outputs `404`.
+
+The response body is held as a single word. There is a fixed maximum size; a response whose body exceeds it produces an error rather than a truncated result.
+
+After any successful request, [`http.status`](#http-status) and [`http.header`](#http-header) describe the **most recent** request. Making another request replaces this information.
+
+
+## http.get
+
+http.get _url_  
+(http.get _url_ _name1_ _value1_ _name2_ _value2_ ...)  
+
+`operation`
+
+The `http.get` operation sends an HTTP GET request to _url_ and outputs the response body as a word.
+
+In the second form, the extra inputs are request headers given as name/value word pairs, for example `(http.get "http://example.com/ "Accept "text/plain "User-Agent "PicoLogo)`. An odd number of header inputs (a name with no value) produces an error.
+
+If the request cannot be completed, an error occurs. If the request completes, use [`http.status`](#http-status) to find out whether the server reported success.
+
+**Example**:
+
+```logo
+?pr http.get "http://example.com/menu.txt
+Today's special is poutine.
+?pr http.status
+200
+```
+
+
+## http.post
+
+http.post _url_ _data_  
+(http.post _url_ _data_ _name1_ _value1_ _name2_ _value2_ ...)  
+
+`operation`
+
+The `http.post` operation sends an HTTP POST request to _url_ with _data_ as the request body, and outputs the response body as a word. _data_ may be a word or a list; a list is sent as its members separated by spaces, with no outer brackets.
+
+In the second form, the extra inputs are request headers given as name/value word pairs, in the same way as [`http.get`](#http-get).
+
+If the request cannot be completed, an error occurs. If the request completes, use [`http.status`](#http-status) to find out whether the server reported success.
+
+**Example**:
+
+```logo
+?pr (http.post "http://example.com/orders [pierogi fries] "Content-Type "text/plain)
+Order received.
+?pr http.status
+201
+```
+
+
+## http.status
+
+http.status  
+
+`operation`
+
+The `http.status` operation outputs the numeric HTTP status code of the most recently completed request made by [`http.get`](#http-get) or [`http.post`](#http-post), for example `200` for success or `404` for "Not Found". If no request has been made, it outputs the empty list.
+
+**Example**:
+
+```logo
+?pr http.get "http://example.com/missing.txt
+Not Found
+?pr http.status
+404
+```
+
+
+## http.header
+
+http.header _name_  
+
+`operation`
+
+The `http.header` operation outputs the value of the response header named _name_ from the most recently completed request, as a word. The _name_ is matched without regard to upper and lower case. If the most recent response did not include that header, or if no request has been made, it outputs the empty list.
+
+**Example**:
+
+```logo
+?pr http.get "http://example.com/menu.txt
+Today's special is poutine.
+?pr http.header "Content-Type
+text/plain
+?pr http.header "X-Not-Present
+[]
+```
+
+
+
+===
 # Property Lists
 
 ## erprops
@@ -5711,8 +5813,8 @@ And if you define a procedure to contain a line in the first form, you will see 
 To treat any of the characters mentioned above as a normal alphabetic character, put a backslash "`\`" before it. For example: 
 
 ```logo
-?print "Good\-bye
-Good-bye
+?print "fish\+chips
+fish+chips
 ?print "butter\ tart
 butter tart
 ```
@@ -5721,11 +5823,13 @@ Note that the quotation mark character (") and the colon (:not word delimiters.
 
 You can also have an empty word, which is a word with elements. You type in the empty word by typing `"`.
 
-One exception is the use of '/' in quoted words. You can use '/' in file names without escaping it, and Logo will treat it as a normal character. For example:
+Two delimiters are exceptions inside a quoted word: '/' and '-'. You can use them without a backslash and Logo treats them as normal characters. The '/' is convenient for file names and URLs, and '-' for hyphenated names such as HTTP header fields. For example:
 
 ```logo
 ?print "my/file/name
 my/file/name
+?print "Content-Type
+Content-Type
 ```
 
 ## Infix Procedures 
@@ -5801,6 +5905,8 @@ If a delimiter occupies any position but the first one after the quotation mark,
 ?print "****
 Not enough inputs to *
 ```
+
+The exceptions are '/' and '-', which are always treated as normal characters in a quoted word (see [Delimiters and Spacing](#delimiters-and-spacing)), so `"my/file/name` and `"Content-Type` are each a single word.
 
 The only exception to the above general rule is brackets (`[` `]`). If you want to put a quotation mark before a bracket, you must always include a backslash between the quotation mark and the bracket. For example: 
 

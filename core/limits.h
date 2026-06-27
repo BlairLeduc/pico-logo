@@ -54,6 +54,27 @@ extern "C" {
 // affected).
 #define MAX_CURRENT_PROC_DEPTH 32
 
+// Maximum size, in bytes, of an HTTP request or response body for `http.get` /
+// `http.post`. The effective cap is chosen at runtime by the active transfer
+// buffer (see core/primitives_http.c):
+//   - HTTP_MAX_BODY (SRAM fallback): used when no aux/PSRAM region is present.
+//     Kept small because the RP2350's SRAM is largely consumed by the Logo
+//     arena, the LCD frame buffer, and the operand stack.
+//   - HTTP_MAX_BODY_PSRAM: used when an aux region backs the transfer buffer,
+//     so the body (returned as a blob word) can be far larger.
+//
+// OVERFLOW: a response whose declared `Content-Length` (or decoded chunked
+// length) exceeds the active limit produces `ERR_FILE_TOO_BIG` rather than a
+// truncated word.
+#define HTTP_MAX_BODY 2048
+#define HTTP_MAX_BODY_PSRAM (512 * 1024)
+
+// Maximum size, in bytes, of the HTTP response header block (status line plus
+// header lines) that `http.get` / `http.post` will buffer and parse.
+//
+// OVERFLOW: headers exceeding this limit produce `ERR_NETWORK_ERROR`.
+#define HTTP_MAX_HEADERS 1024
+
 #ifdef __cplusplus
 }
 #endif

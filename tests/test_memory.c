@@ -11,6 +11,17 @@
 #include <stdio.h>
 #include <string.h>
 
+// A static, 8-byte-aligned region used to back the blob heap in blob tests.
+// 1 MB is enough to exercise large blobs and the descriptor table.
+_Alignas(8) static uint8_t test_blob_region[1u << 20];
+
+// Enable the blob heap over the static test region. Call inside a test (after
+// the setUp() logo_mem_init, which clears any region).
+static void enable_blob_region(void)
+{
+    logo_mem_set_aux_region(test_blob_region, sizeof(test_blob_region));
+}
+
 void setUp(void)
 {
     logo_mem_init();
@@ -95,6 +106,180 @@ void test_atom_content(void)
     Node word = mem_atom("hello", 5);
     TEST_ASSERT_EQUAL(5, mem_word_len(word));
     TEST_ASSERT_EQUAL_STRING_LEN("hello", mem_word_ptr(word), 5);
+}
+
+void test_atom_max_length(void)
+{
+    // 255 bytes is the largest atom the 1-byte length prefix can hold; it must
+    // be stored in full, not truncated.
+    char buf[255];
+    memset(buf, 'a', sizeof(buf));
+    Node word = mem_atom(buf, sizeof(buf));
+    TEST_ASSERT_TRUE(mem_is_word(word));
+    TEST_ASSERT_EQUAL(255, mem_word_len(word));
+}
+
+void test_atom_too_long_is_error(void)
+{
+    // A word longer than 255 bytes cannot be encoded. It must fail (NIL),
+    // never be silently truncated to 255.
+    char buf[256];
+    memset(buf, 'a', sizeof(buf));
+    Node word = mem_atom(buf, sizeof(buf));
+    TEST_ASSERT_TRUE(mem_is_nil(word));
+}
+
+void test_atom_unescape_too_long_is_error(void)
+{
+    // The unescape path must also error rather than truncate. Build a string
+    // whose unescaped length exceeds 255.
+    char buf[300];
+    memset(buf, 'a', sizeof(buf));
+    Node word = mem_atom_unescape(buf, sizeof(buf));
+    TEST_ASSERT_TRUE(mem_is_nil(word));
+}
+
+//============================================================================
+// Blob Tests (PSRAM-backed large values)
+//============================================================================
+
+void test_blob_no_region_returns_nil(void)
+{
+    // Without an aux region, large values are unavailable.
+    char buf[300];
+    memset(buf, 'x', sizeof(buf));
+    Node b = mem_blob(buf, sizeof(buf));
+    TEST_ASSERT_TRUE(mem_is_nil(b));
+}
+
+void test_blob_basic_exceeds_atom_limit(void)
+{
+    enable_blob_region();
+    char buf[1000];
+    memset(buf, 'z', sizeof(buf));
+    Node b = mem_blob(buf, sizeof(buf));
+
+    TEST_ASSERT_FALSE(mem_is_nil(b));
+    TEST_ASSERT_TRUE(mem_is_word(b));   // a blob is still a word to the outside
+    TEST_ASSERT_TRUE(mem_is_blob(b));
+    TEST_ASSERT_EQUAL(1000, mem_word_len(b));
+    TEST_ASSERT_EQUAL_STRING_LEN(buf, mem_word_ptr(b), 1000);
+    // mem_word_ptr is NUL-terminated for C-string safety.
+    TEST_ASSERT_EQUAL('\0', mem_word_ptr(b)[1000]);
+    TEST_ASSERT_EQUAL(1, mem_blob_used());
+}
+
+void test_blob_not_storable_in_cell(void)
+{
+    enable_blob_region();
+    char buf[300];
+    memset(buf, 'q', sizeof(buf));
+    Node b = mem_blob(buf, sizeof(buf));
+    TEST_ASSERT_TRUE(mem_is_blob(b));
+
+    // A blob cannot be packed into a cons cell; mem_cons rejects it.
+    TEST_ASSERT_TRUE(mem_is_nil(mem_cons(b, NODE_NIL)));
+    TEST_ASSERT_TRUE(mem_is_nil(mem_cons(NODE_NIL, b)));
+}
+
+void test_blob_survives_gc_when_rooted(void)
+{
+    enable_blob_region();
+    char buf[400];
+    memset(buf, 'r', sizeof(buf));
+    Node b = mem_blob(buf, sizeof(buf));
+    TEST_ASSERT_EQUAL(1, mem_blob_used());
+
+    Node roots[1] = {b};
+    mem_gc(roots, 1);
+
+    // Still alive, same handle, still readable.
+    TEST_ASSERT_EQUAL(1, mem_blob_used());
+    TEST_ASSERT_EQUAL(400, mem_word_len(b));
+    TEST_ASSERT_EQUAL_STRING_LEN(buf, mem_word_ptr(b), 400);
+}
+
+void test_blob_collected_when_unreferenced(void)
+{
+    enable_blob_region();
+    size_t free_before = mem_blob_free_bytes();
+
+    char buf[400];
+    memset(buf, 's', sizeof(buf));
+    Node b = mem_blob(buf, sizeof(buf));
+    (void)b;
+    TEST_ASSERT_EQUAL(1, mem_blob_used());
+    TEST_ASSERT_TRUE(mem_blob_free_bytes() < free_before);
+
+    // No roots -> the blob is unreachable and must be reclaimed.
+    mem_gc(NULL, 0);
+    TEST_ASSERT_EQUAL(0, mem_blob_used());
+    TEST_ASSERT_EQUAL(free_before, mem_blob_free_bytes());
+}
+
+void test_blob_equals_atom_by_content(void)
+{
+    enable_blob_region();
+    Node atom = mem_atom("abc", 3);
+    Node blob = mem_blob("abc", 3);
+    Node other = mem_blob("abd", 3);
+
+    TEST_ASSERT_TRUE(mem_words_equal(atom, blob));  // content match across kinds
+    TEST_ASSERT_TRUE(mem_words_equal(blob, atom));
+    TEST_ASSERT_FALSE(mem_words_equal(blob, other));
+}
+
+void test_blob_table_full(void)
+{
+    enable_blob_region();
+    // Allocate LOGO_MAX_BLOBS small blobs, then one more must fail.
+    int created = 0;
+    for (int i = 0; i < 4096; i++)
+    {
+        Node b = mem_blob("a", 1);
+        if (mem_is_nil(b))
+        {
+            break;
+        }
+        created++;
+    }
+    // The table cap (not the 1 MB region) is the limit for tiny blobs.
+    TEST_ASSERT_EQUAL(LOGO_MAX_BLOBS, created);
+    TEST_ASSERT_TRUE(mem_is_nil(mem_blob("a", 1)));
+}
+
+void test_blob_region_full(void)
+{
+    enable_blob_region();
+    // A blob larger than the whole region cannot be allocated.
+    static char big[(1u << 20) + 16];
+    memset(big, 'b', sizeof(big));
+    Node b = mem_blob(big, sizeof(big));
+    TEST_ASSERT_TRUE(mem_is_nil(b));
+}
+
+void test_region_alloc_no_region_returns_null(void)
+{
+    // Without an aux region, pinned allocation fails so callers fall back.
+    TEST_ASSERT_NULL(mem_region_alloc(64));
+}
+
+void test_region_alloc_pinned_survives_gc(void)
+{
+    enable_blob_region();
+    size_t free_before = mem_blob_free_bytes();
+
+    char *buf = (char *)mem_region_alloc(256);
+    TEST_ASSERT_NOT_NULL(buf);
+    memset(buf, 'k', 256); // writable
+    size_t free_after_alloc = mem_blob_free_bytes();
+    TEST_ASSERT_TRUE(free_after_alloc < free_before);
+
+    // A pinned region allocation is never reclaimed by GC.
+    mem_gc(NULL, 0);
+    TEST_ASSERT_EQUAL(free_after_alloc, mem_blob_free_bytes());
+    TEST_ASSERT_EQUAL('k', buf[0]);
+    TEST_ASSERT_EQUAL('k', buf[255]);
 }
 
 void test_atom_cstr(void)
@@ -909,6 +1094,19 @@ int main(void)
     // Atoms/Words
     RUN_TEST(test_create_atom);
     RUN_TEST(test_atom_content);
+    RUN_TEST(test_atom_max_length);
+    RUN_TEST(test_atom_too_long_is_error);
+    RUN_TEST(test_atom_unescape_too_long_is_error);
+    RUN_TEST(test_blob_no_region_returns_nil);
+    RUN_TEST(test_blob_basic_exceeds_atom_limit);
+    RUN_TEST(test_blob_not_storable_in_cell);
+    RUN_TEST(test_blob_survives_gc_when_rooted);
+    RUN_TEST(test_blob_collected_when_unreferenced);
+    RUN_TEST(test_blob_equals_atom_by_content);
+    RUN_TEST(test_blob_table_full);
+    RUN_TEST(test_blob_region_full);
+    RUN_TEST(test_region_alloc_no_region_returns_null);
+    RUN_TEST(test_region_alloc_pinned_survives_gc);
     RUN_TEST(test_atom_cstr);
     RUN_TEST(test_atom_interning);
     RUN_TEST(test_atom_interning_case_insensitive);

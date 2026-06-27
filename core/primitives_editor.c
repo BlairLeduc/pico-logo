@@ -17,18 +17,42 @@
 #include "devices/io.h"
 #include "devices/stream.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 
-// Static editor buffer (8KB default as specified in reference)
+// Editor buffers (8KB each by default, as specified in reference). They are
+// only touched at human-editing speed, so primitives_editor_init() places them
+// in the aux/PSRAM region when available (relieving SRAM), falling back to a
+// one-time heap allocation otherwise. They are deliberately NOT static arrays:
+// reserving them in BSS would keep the SRAM even when PSRAM backs them.
 #ifndef LOGO_EDITOR_BUFFER_SIZE
 #define LOGO_EDITOR_BUFFER_SIZE 8192
 #endif
-static char editor_buffer[LOGO_EDITOR_BUFFER_SIZE];
 
-// Static buffer for assembling procedure definitions from editor output.
-// Safe as static because the editor is a blocking UI operation (no reentrancy).
-static char editor_proc_buffer[LOGO_EDITOR_BUFFER_SIZE];
+// Active buffers (valid after primitives_editor_init()).
+static char *editor_buffer = NULL;
+static char *editor_proc_buffer = NULL;
+
+// Process-lifetime heap fallbacks, allocated once and reused across re-inits so
+// repeated init (e.g. across tests) never leaks.
+static char *editor_buffer_heap = NULL;
+static char *editor_proc_buffer_heap = NULL;
+
+// Pick a buffer: PSRAM region if available, else the cached heap fallback.
+static char *editor_pick_buffer(char **heap_cache)
+{
+    char *p = (char *)mem_region_alloc(LOGO_EDITOR_BUFFER_SIZE);
+    if (p != NULL)
+    {
+        return p;
+    }
+    if (*heap_cache == NULL)
+    {
+        *heap_cache = (char *)malloc(LOGO_EDITOR_BUFFER_SIZE);
+    }
+    return *heap_cache;
+}
 
 // `to`-line and `end`-line detection are shared with the REPL; see
 // repl_line_starts_with_to / repl_line_is_end in core/repl.h.
@@ -775,6 +799,12 @@ static Result prim_editfile(Evaluator *eval, int argc, Value *args)
 
 void primitives_editor_init(void)
 {
+    // Place the editor buffers in the aux/PSRAM region when one is available,
+    // else in a one-time heap fallback. Re-selected on each init; a fresh
+    // region (logo_mem_set_aux_region) resets any prior region block.
+    editor_buffer = editor_pick_buffer(&editor_buffer_heap);
+    editor_proc_buffer = editor_pick_buffer(&editor_proc_buffer_heap);
+
     primitive_register("edit", 1, prim_edit);  // 1 argument, (edit) for none
     primitive_register("ed", 1, prim_edit);    // Abbreviation
     primitive_register("edall", 0, prim_edall);

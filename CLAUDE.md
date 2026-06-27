@@ -1,6 +1,6 @@
 # Project
 
-- This project is a **Logo interpreter written in C**, targeting Raspberry Pi Pico 2 boards (RP2350) using the **Pico C/C++ SDK**.
+- This project is a **Logo interpreter written in C**, targeting Pimoroni Pico Plus 2 W board (RP2350, 16MB Flash, 8MB PSRAM) using the **Pico C/C++ SDK**.
 - The interpreter aims to be strictly compatible with the semantics described in [Pico_Language_reference](../reference/Pico_Logo_Reference.md).
 
 # Expected Behaviour

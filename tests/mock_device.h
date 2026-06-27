@@ -247,6 +247,24 @@ extern "C"
             float last_ntp_timezone;         // Last timezone offset passed to network_ntp
         } network;
 
+        // TCP connection state tracking
+        struct
+        {
+            bool connect_success;            // Whether tcp_connect should succeed
+            bool open;                       // Is a connection currently open
+            char last_ip[16];                // Last IP passed to tcp_connect
+            uint16_t last_port;              // Last port passed to tcp_connect
+            char response[8192];             // Scripted bytes the "server" returns
+            int response_len;                // Length of scripted response
+            int read_pos;                    // Read cursor into response
+            int read_chunk;                  // Max bytes per read (0 = unlimited)
+            int timeout_after;               // read returns 0 (timeout) once read_pos reaches this (-1 = never)
+            int close_after;                 // read returns -1 (closed) once read_pos reaches this (-1 = never)
+            char request[8192];              // Bytes the client wrote (the request)
+            int request_len;
+            int write_chunk;                 // Max bytes per write (0 = unlimited; forces short writes)
+        } tcp;
+
         // Time state tracking
         struct
         {
@@ -358,6 +376,25 @@ extern "C"
     float mock_network_ping(const char *ip_address);
     bool mock_network_resolve(const char *hostname, char *ip_buffer, size_t buffer_size);
     bool mock_network_ntp(const char *server, float timezone_offset);
+
+    // TCP helpers for testing
+    void mock_device_set_tcp_connect_result(bool success);
+    void mock_device_set_tcp_response(const char *bytes, size_t len);
+    void mock_device_set_tcp_read_chunk(int max_bytes_per_read);  // 0 = unlimited
+    void mock_device_set_tcp_write_chunk(int max_bytes_per_write); // 0 = unlimited (forces short writes)
+    void mock_device_set_tcp_timeout_after(int bytes);            // -1 = never
+    void mock_device_set_tcp_close_after(int bytes);              // -1 = never
+    const char *mock_device_get_tcp_request(void);
+    size_t mock_device_get_tcp_request_len(void);
+    const char *mock_device_get_last_tcp_ip(void);
+    uint16_t mock_device_get_last_tcp_port(void);
+
+    // Mock TCP operations (for use by test_scaffold in mock_hardware_ops)
+    void *mock_network_tcp_connect(const char *ip_address, uint16_t port, int timeout_ms);
+    void mock_network_tcp_close(void *connection);
+    int mock_network_tcp_read(void *connection, char *buffer, int count, int timeout_ms);
+    int mock_network_tcp_write(void *connection, const char *data, int count);
+    bool mock_network_tcp_can_read(void *connection);
 
     // Time helpers for testing
     void mock_device_set_time(int year, int month, int day, int hour, int minute, int second);
