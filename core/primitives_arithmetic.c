@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Arithmetic primitives: sum, difference, product, quotient, random,
 //                         arctan, cos, sin, int, intquotient, remainder, round, sqrt, form
@@ -23,7 +23,7 @@
 // abs - outputs absolute value of number
 static Result prim_abs(Evaluator *eval, int argc, Value *args)
 {
-    UNUSED(eval); UNUSED(argc); UNUSED(args);
+    UNUSED(eval); UNUSED(argc);
     REQUIRE_NUMBER(args[0], n);
 
     return result_ok(value_number(fabsf(n)));
@@ -250,14 +250,17 @@ static Result prim_form(Evaluator *eval, int argc, Value *args)
     int width = (int)width_f;
     int decimalplaces = (int)decimalplaces_f;
 
+    // Buffer for formatting - must hold the padded result plus null terminator.
+    // FORM_MAX_WIDTH bounds the user-requested field width to avoid stack
+    // buffer overflow when padding is computed as (width - fmt_len).
+    #define FORM_MAX_WIDTH 255
+    char buf[FORM_MAX_WIDTH + 1];
+
     // Validate inputs
-    if (width <= 0)
+    if (width <= 0 || width > FORM_MAX_WIDTH)
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
     if (decimalplaces < 0)
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[2]));
-
-    // Buffer for formatting - enough for any reasonable number
-    char buf[64];
 
     // Round the number to the specified decimal places
     float multiplier = 1.0f;
@@ -279,6 +282,14 @@ static Result prim_form(Evaluator *eval, int argc, Value *args)
     {
         // Format with specified decimal places
         fmt_len = snprintf(fmt_buf, sizeof(fmt_buf), "%.*f", decimalplaces, (double)rounded);
+    }
+
+    // snprintf returns the number of bytes that *would* have been written
+    // (excluding the null terminator). If the formatted number is too large
+    // to fit in fmt_buf, refuse rather than truncate silently.
+    if (fmt_len < 0 || (size_t)fmt_len >= sizeof(fmt_buf))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
 
     // If the formatted number fits in width, pad with leading spaces

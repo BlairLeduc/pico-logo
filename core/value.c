@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 
 #include "value.h"
@@ -217,7 +217,11 @@ Node value_to_node(Value v)
     return NODE_NIL;
 }
 
-bool value_extract_xy(Value list, float *x, float *y, Result *error)
+// Extract `count` numeric elements from a Logo list value into `out`.
+// On failure, fills *error with the appropriate Logo error and returns false.
+// Used by value_extract_xy and value_extract_rgb (and any future N-tuple
+// extractor) so the list-walking and conversion logic lives in one place.
+static bool extract_number_list(Value list, float *out, size_t count, Result *error)
 {
     if (list.type != VALUE_LIST)
     {
@@ -226,99 +230,57 @@ bool value_extract_xy(Value list, float *x, float *y, Result *error)
     }
 
     Node node = list.as.node;
-    if (mem_is_nil(node))
+    for (size_t i = 0; i < count; i++)
     {
-        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, NULL, value_to_string(list));
+        if (mem_is_nil(node))
+        {
+            *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, NULL, value_to_string(list));
+            return false;
+        }
+
+        Node elem = mem_car(node);
+        Value elem_val = mem_is_word(elem) ? value_word(elem) : value_list(elem);
+        if (!value_to_number(elem_val, &out[i]))
+        {
+            *error = result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(list));
+            return false;
+        }
+
+        node = mem_cdr(node);
+    }
+    return true;
+}
+
+bool value_extract_xy(Value list, float *x, float *y, Result *error)
+{
+    float out[2];
+    if (!extract_number_list(list, out, 2, error))
+    {
         return false;
     }
-
-    Node x_node = mem_car(node);
-    node = mem_cdr(node);
-    
-    if (mem_is_nil(node))
-    {
-        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, NULL, value_to_string(list));
-        return false;
-    }
-    
-    Node y_node = mem_car(node);
-
-    // Convert to numbers
-    Value x_val = mem_is_word(x_node) ? value_word(x_node) : value_list(x_node);
-    Value y_val = mem_is_word(y_node) ? value_word(y_node) : value_list(y_node);
-    
-    float x_num, y_num;
-    if (!value_to_number(x_val, &x_num) || !value_to_number(y_val, &y_num))
-    {
-        *error = result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(list));
-        return false;
-    }
-
-    *x = x_num;
-    *y = y_num;
+    *x = out[0];
+    *y = out[1];
     return true;
 }
 
 bool value_extract_rgb(Value list, uint8_t *r, uint8_t *g, uint8_t *b, Result *error)
 {
-    if (list.type != VALUE_LIST)
+    float out[3];
+    if (!extract_number_list(list, out, 3, error))
     {
-        *error = result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(list));
-        return false;
-    }
-
-    Node node = list.as.node;
-    if (mem_is_nil(node))
-    {
-        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, NULL, value_to_string(list));
-        return false;
-    }
-
-    Node r_node = mem_car(node);
-    node = mem_cdr(node);
-    
-    if (mem_is_nil(node))
-    {
-        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, NULL, value_to_string(list));
-        return false;
-    }
-    
-    Node g_node = mem_car(node);
-    node = mem_cdr(node);
-    
-    if (mem_is_nil(node))
-    {
-        *error = result_error_arg(ERR_TOO_FEW_ITEMS_LIST, NULL, value_to_string(list));
-        return false;
-    }
-    
-    Node b_node = mem_car(node);
-
-    // Convert to numbers
-    Value r_val = mem_is_word(r_node) ? value_word(r_node) : value_list(r_node);
-    Value g_val = mem_is_word(g_node) ? value_word(g_node) : value_list(g_node);
-    Value b_val = mem_is_word(b_node) ? value_word(b_node) : value_list(b_node);
-    
-    float r_num, g_num, b_num;
-    if (!value_to_number(r_val, &r_num) || 
-        !value_to_number(g_val, &g_num) || 
-        !value_to_number(b_val, &b_num))
-    {
-        *error = result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(list));
         return false;
     }
 
     // Clamp to 0-255 range
-    if (r_num < 0) r_num = 0;
-    if (r_num > 255) r_num = 255;
-    if (g_num < 0) g_num = 0;
-    if (g_num > 255) g_num = 255;
-    if (b_num < 0) b_num = 0;
-    if (b_num > 255) b_num = 255;
+    for (int i = 0; i < 3; i++)
+    {
+        if (out[i] < 0)   out[i] = 0;
+        if (out[i] > 255) out[i] = 255;
+    }
 
-    *r = (uint8_t)r_num;
-    *g = (uint8_t)g_num;
-    *b = (uint8_t)b_num;
+    *r = (uint8_t)out[0];
+    *g = (uint8_t)out[1];
+    *b = (uint8_t)out[2];
     return true;
 }
 

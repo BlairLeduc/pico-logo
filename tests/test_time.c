@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Unit tests for time management primitives: date, time, setdate, settime
 //
@@ -203,7 +203,7 @@ void test_setdate_rejects_invalid_month_high(void)
 {
     mock_device_set_time(2025, 1, 1, 12, 0, 0);
 
-    Result r = run_string("setdate [2025 13 1]");
+    Result r = run_string("setdate [2026 13 1]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
@@ -211,7 +211,7 @@ void test_setdate_rejects_invalid_month_low(void)
 {
     mock_device_set_time(2025, 1, 1, 12, 0, 0);
 
-    Result r = run_string("setdate [2025 0 1]");
+    Result r = run_string("setdate [2026 0 1]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
@@ -219,7 +219,7 @@ void test_setdate_rejects_invalid_day_high(void)
 {
     mock_device_set_time(2025, 1, 1, 12, 0, 0);
 
-    Result r = run_string("setdate [2025 2 32]");
+    Result r = run_string("setdate [2026 2 32]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
@@ -227,7 +227,7 @@ void test_setdate_rejects_invalid_day_low(void)
 {
     mock_device_set_time(2025, 1, 1, 12, 0, 0);
 
-    Result r = run_string("setdate [2025 2 0]");
+    Result r = run_string("setdate [2026 2 0]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
@@ -245,13 +245,13 @@ void test_setdate_rejects_empty_list(void)
 
 void test_setdate_rejects_too_few_elements(void)
 {
-    Result r = run_string("setdate [2025 1]");
+    Result r = run_string("setdate [2026 1]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
 void test_setdate_rejects_too_many_elements(void)
 {
-    Result r = run_string("setdate [2025 1 1 1]");
+    Result r = run_string("setdate [2026 1 1 1]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
@@ -265,7 +265,7 @@ void test_setdate_error_when_not_available(void)
 {
     mock_device_set_time_enabled(true, true, false, true);
 
-    Result r = run_string("setdate [2025 1 1]");
+    Result r = run_string("setdate [2026 1 1]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 

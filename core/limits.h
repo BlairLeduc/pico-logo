@@ -1,0 +1,59 @@
+//
+//  Pico Logo
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
+//
+//  Centralised compile-time limits for the interpreter.
+//
+//  These were previously scattered as bare `#define`s near the top of
+//  individual `.c` files (procedures.c, variables.c) and one in
+//  procedures.h. Consolidating them here makes it possible to reason
+//  about static memory footprint in one place and gives every limit a
+//  documented rationale and overflow story.
+//
+//  All limits here are FIXED-CAPACITY arrays sized at compile time.
+//  Pico-class targets (RP2040 / RP2350) have ~264 KB of SRAM and we
+//  prefer a predictable static layout over a dynamically grown one.
+//
+
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Maximum number of user-defined procedures (slots in `procedures[]`).
+//
+// OVERFLOW: `proc_define` returns `false` when no slot is available;
+// callers (`prim_define`, `proc_define_from_text`, the REPL `to ... end`
+// path) surface this as `ERR_OUT_OF_SPACE` via `error_context`.
+#define MAX_PROCEDURES 128
+
+// Maximum parameters per procedure body. Bounds the per-procedure
+// `params[]` array and the per-call argument-collection arrays in
+// `eval_expr.c` and the list-processing primitives.
+//
+// OVERFLOW: `proc_define_from_text` rejects definitions with too many
+// parameters; primitives like `apply` / `map` / `crossmap` reject
+// lambdas whose `param_count > MAX_PROC_PARAMS` with
+// `ERR_TOO_MANY_INPUTS` (see P5b-009 / P4-011).
+#define MAX_PROC_PARAMS 16
+
+// Maximum global variable slots.
+//
+// OVERFLOW: `var_set` returns `false` when the table is full; callers
+// surface this as `ERR_OUT_OF_SPACE`.
+#define MAX_GLOBAL_VARIABLES 128
+
+// Maximum depth of the "currently executing procedure" name stack used
+// for the pause prompt and trace output. This is independent of the
+// frame stack (which is sized in bytes by `FRAME_STACK_SIZE`); it only
+// limits how deep the *display* stack can grow.
+//
+// OVERFLOW: `proc_push_current` silently drops names beyond the limit
+// (the frame stack still grows correctly; only the prompt label is
+// affected).
+#define MAX_CURRENT_PROC_DEPTH 32
+
+#ifdef __cplusplus
+}
+#endif

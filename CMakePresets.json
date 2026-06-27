@@ -7,33 +7,6 @@
     },
     "configurePresets": [
         {
-            "name": "pico",
-            "displayName": "Raspberry Pi Pico",
-            "description": "Cross-compile for Raspberry Pi Pico (RP2040)",
-            "generator": "Ninja",
-            "binaryDir": "${sourceDir}/build-pico",
-            "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Release",
-                "CMAKE_MAKE_PROGRAM": "$env{HOME}/.pico-sdk/ninja/v1.12.1/ninja",
-                "PICO_BOARD": "pico",
-                "PICO_STACK_SIZE": "4096",
-                "LOGO_MEMORY_SIZE": "32768",
-                "LOGO_EDITOR_BUFFER_SIZE": "8192",
-                "LOGO_COPY_BUFFER_SIZE": "1024",
-                "LOGO_OP_STACK_DEPTH": "128",
-                "BUILD_TESTING": "OFF"
-            }
-        },
-        {
-            "name": "pico-debug",
-            "inherits": "pico",
-            "displayName": "Raspberry Pi Pico (Debug)",
-            "description": "Cross-compile for Pico with debug symbols",
-            "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Debug"
-            }
-        },
-        {
             "name": "pico2",
             "displayName": "Raspberry Pi Pico 2",
             "description": "Cross-compile for Raspberry Pi Pico 2 (RP2350)",
@@ -163,14 +136,6 @@
         }
     ],
     "buildPresets": [
-        {
-            "name": "pico",
-            "configurePreset": "pico"
-        },
-        {
-            "name": "pico-debug",
-            "configurePreset": "pico-debug"
-        },
         {
             "name": "pico2",
             "configurePreset": "pico2"

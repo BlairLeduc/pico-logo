@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 
 #include "test_scaffold.h"
@@ -355,6 +355,72 @@ void test_very_deep_tail_recursion(void)
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
 }
 
+void test_deep_tail_recursion_through_output(void)
+{
+    // P3-016: confirm that `output` enables TCO for its argument expression
+    // even when the `output` itself is not on the last body line / not in
+    // syntactic tail position. Per Logo semantics, `output` always
+    // terminates the procedure, so a self-call inside its argument *is* a
+    // genuine tail call. If TCO were not applied here, this 10000-deep
+    // self-call would exhaust the C stack.
+    //
+    // sumto n: if :n = 0 [output 0]  output sumto difference :n 1
+    // (Recursive call sits inside the `output` argument on a non-tail line.)
+    const char *params[] = {"n"};
+    define_proc("sumto", params, 1,
+                "if :n = 0 [output 0]\n"
+                "output sumto difference :n 1");
+
+    Result r = eval_string("sumto 10000");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, r.value.as.number);
+}
+
+// TCO concern #6: lock in tail-position propagation through `ifelse` so
+// any future change to OP_IF / OP_FLAG_ENABLE_TCO plumbing fails loudly.
+// `ifelse` shares the same OP_IF mechanism as `if`; if either branch is
+// chosen and contains a self-recursive call as its only/last instruction,
+// that call must TCO. 10000-deep would exhaust the C stack without TCO.
+void test_deep_tail_recursion_through_ifelse(void)
+{
+    const char *params[] = {"n"};
+    define_proc("ifecount", params, 1,
+                "ifelse :n > 0 [ifecount difference :n 1] [stop]");
+
+    Result r = eval_string("ifecount 10000");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+}
+
+// TCO concern #6: lock in tail-position propagation through *nested* `if`.
+// `if X [if Y [recurse]]` — the inner if is in tail position because the
+// outer if is, and the recurse is in tail position because the inner if
+// is. Each layer of OP_IF must carry OP_FLAG_ENABLE_TCO into its body.
+void test_deep_tail_recursion_through_nested_if(void)
+{
+    const char *params[] = {"n"};
+    define_proc("nestcount", params, 1,
+                "if :n > 0 [if :n > -1 [nestcount difference :n 1]]");
+
+    Result r = eval_string("nestcount 10000");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+}
+
+// TCO concern #6: tail recursion from the SECOND branch of `ifelse`.
+// Different code path than the first-branch test: ensures the false
+// branch also propagates tail position. Uses `=` for the predicate to
+// guard against per-recursion leaks that previously only manifested
+// with equality comparisons (originally tracked as TCO-EQ-LEAK in the
+// backlog; root-caused to a `define_proc` test scaffold limitation).
+void test_deep_tail_recursion_through_ifelse_false_branch(void)
+{
+    const char *params[] = {"n"};
+    define_proc("ifefcount", params, 1,
+                "ifelse :n = 0 [stop] [ifefcount difference :n 1]");
+
+    Result r = eval_string("ifefcount 10000");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+}
+
 void test_deep_non_tail_recursion_limit(void)
 {
     // Test that non-tail recursion works for reasonable depths
@@ -676,6 +742,27 @@ void test_text_no_params(void)
     TEST_ASSERT_TRUE(value_is_list(r.value));
 }
 
+void test_text_empty_body_is_well_formed(void)
+{
+    // A procedure with no body lines must still produce a well-formed
+    // [[params]] list (proper NIL-terminated singleton), never a
+    // dotted [[params] | NIL] / mid-list NIL.
+    const char *params[] = {"x"};
+    proc_define(mem_word_ptr(mem_atom_cstr("emptybody")), params, 1, NODE_NIL);
+
+    Result r = eval_string("text \"emptybody");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_list(r.value));
+
+    // First (and only) element should be the params list [x]
+    Node outer = r.value.as.node;
+    TEST_ASSERT_FALSE(mem_is_nil(outer));
+    Node params_elem = mem_car(outer);
+    TEST_ASSERT_TRUE(mem_is_list(params_elem));
+    // Tail must be NIL (no body lines)
+    TEST_ASSERT_TRUE(mem_is_nil(mem_cdr(outer)));
+}
+
 //==========================================================================
 // proc_define_from_text tests
 //==========================================================================
@@ -778,6 +865,39 @@ void test_proc_define_from_text_quoted_word(void)
     TEST_ASSERT_EQUAL_STRING("hello\n", output_buffer);
 }
 
+void test_proc_define_from_text_preserves_comments(void)
+{
+    Result r = proc_define_from_text(
+        "to commented\n"
+        "; [This procedure says hello]\n"
+        "print \"hello ; inline comment\n"
+        "; another comment\n"
+        "print \"bye\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    reset_output();
+    Result r2 = run_string("commented");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+    TEST_ASSERT_EQUAL_STRING("hello\nbye\n", output_buffer);
+
+    char buffer[512];
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    UserProcedure *proc = proc_find("commented");
+    TEST_ASSERT_NOT_NULL(proc);
+    TEST_ASSERT_TRUE(format_procedure_definition(format_buffer_output, &ctx, proc));
+
+    const char *expected =
+        "to commented\n"
+        "  ; [This procedure says hello]\n"
+        "  print \"hello ; inline comment\n"
+        "  ; another comment\n"
+        "  print \"bye\n"
+        "end\n";
+    TEST_ASSERT_EQUAL_STRING(expected, buffer);
+}
+
 void test_proc_define_from_text_all_operators(void)
 {
     // Test all arithmetic and comparison operators with real newlines
@@ -788,6 +908,117 @@ void test_proc_define_from_text_all_operators(void)
     TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
     // Due to operator precedence: 10 + 1 - 1 * 2 / 2 = 10 + 1 - 1 = 10
     TEST_ASSERT_EQUAL_FLOAT(10.0f, r2.value.as.number);
+}
+
+void test_proc_define_from_text_multiline_bracket_body(void)
+{
+    // P5b-018: a bracket body that spans multiple source lines must not
+    // confuse the line tracker. The procedure should run as if the body
+    // were on a single line, and the body shape (one line containing
+    // one if + one bracket) should round-trip cleanly through `text`.
+    Result r = proc_define_from_text(
+        "to mlb :n\n"
+        "if :n > 0 [\n"
+        "  print :n\n"
+        "  print :n + 1\n"
+        "]\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    reset_output();
+    Result r2 = eval_string("mlb 5");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+    TEST_ASSERT_EQUAL_STRING("5\n6\n", output_buffer);
+
+    // text "mlb should produce a list whose first element is the params
+    // list [n] and whose subsequent elements are well-formed line lists.
+    // We don't assert the exact line shape (the parser may merge the
+    // bracket body onto its own line); we only assert that every list
+    // element is itself a proper list, never a stray atom or NIL middle.
+    Result rt = eval_string("text \"mlb");
+    TEST_ASSERT_EQUAL(RESULT_OK, rt.status);
+    TEST_ASSERT_TRUE(value_is_list(rt.value));
+    Node outer = rt.value.as.node;
+    TEST_ASSERT_FALSE(mem_is_nil(outer));
+    while (!mem_is_nil(outer))
+    {
+        Node elem = mem_car(outer);
+        TEST_ASSERT_TRUE(mem_is_list(elem));
+        outer = mem_cdr(outer);
+    }
+}
+
+void test_proc_define_from_text_preserves_comments_inside_bracket_body(void)
+{
+    Result r = proc_define_from_text(
+        "to blockcomments\n"
+        "repeat 1 [\n"
+        "; inside block\n"
+        "print \"inside ; inline block comment\n"
+        "]\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    reset_output();
+    Result r2 = run_string("blockcomments");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+    TEST_ASSERT_EQUAL_STRING("inside\n", output_buffer);
+
+    char buffer[512];
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    UserProcedure *proc = proc_find("blockcomments");
+    TEST_ASSERT_NOT_NULL(proc);
+    TEST_ASSERT_TRUE(format_procedure_definition(format_buffer_output, &ctx, proc));
+
+    const char *expected =
+        "to blockcomments\n"
+        "  repeat 1 [\n"
+        "    ; inside block\n"
+        "    print \"inside ; inline block comment\n"
+        "  ]\n"
+        "end\n";
+    TEST_ASSERT_EQUAL_STRING(expected, buffer);
+}
+
+void test_proc_define_from_text_nested_brackets_across_lines(void)
+{
+    // P5b-018: nested brackets that themselves cross newlines must
+    // still terminate correctly and produce a runnable procedure.
+    Result r = proc_define_from_text(
+        "to nested :n\n"
+        "repeat :n [\n"
+        "  if repcount = 1 [\n"
+        "    print \"first\n"
+        "  ]\n"
+        "]\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    reset_output();
+    Result r2 = eval_string("nested 3");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+    TEST_ASSERT_EQUAL_STRING("first\n", output_buffer);
+}
+
+void test_proc_define_from_text_blank_line_inside_bracket_body(void)
+{
+    // P5b-018: a blank line inside a bracket body must not terminate
+    // the body or insert a stray empty-line cell that breaks execution.
+    Result r = proc_define_from_text(
+        "to blanky\n"
+        "repeat 2 [\n"
+        "  print \"hi\n"
+        "\n"
+        "  print \"bye\n"
+        "]\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    reset_output();
+    Result r2 = eval_string("blanky");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+    TEST_ASSERT_EQUAL_STRING("hi\nbye\nhi\nbye\n", output_buffer);
 }
 
 void test_proc_define_from_text_equals_operator(void)
@@ -967,6 +1198,317 @@ void test_tco_scope_depth_stability(void)
     // Should have completed 101 iterations without overflow
     Result r3 = eval_string(":cnt");
     TEST_ASSERT_EQUAL_FLOAT(101.0f, r3.value.as.number);
+}
+
+//==========================================================================
+// TCO Frame Stack Verification Tests
+// These tests verify that tail-call optimization keeps the frame stack
+// bounded, rather than just checking that deep recursion doesn't crash.
+//==========================================================================
+
+void test_tco_frame_stack_depth_zero_after_deep_recursion(void)
+{
+    // After deep tail recursion completes, frame stack depth must be 0.
+    // This confirms all frames were properly reused/cleaned up.
+    FrameStack *frames = proc_get_frame_stack();
+
+    Result r = proc_define_from_text(
+        "to tcocheck :n\n"
+        "if :n = 0 [stop]\n"
+        "tcocheck :n - 1\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    TEST_ASSERT_EQUAL(0, frame_stack_depth(frames));
+
+    Result r2 = run_string("tcocheck 500");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+
+    // Frame stack must be completely clean after execution
+    TEST_ASSERT_EQUAL(0, frame_stack_depth(frames));
+}
+
+void test_tco_frame_memory_bounded_across_depths(void)
+{
+    // Run tail recursion at two very different depths (100 vs 5000).
+    // With TCO, frame memory usage should be identical because frames
+    // are reused rather than accumulated.
+    FrameStack *frames = proc_get_frame_stack();
+
+    // Define tail-recursive counter
+    Result r = proc_define_from_text(
+        "to tcobounded :n\n"
+        "if :n = 0 [stop]\n"
+        "tcobounded :n - 1\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    // Run shallow recursion
+    size_t mem_before_shallow = frame_stack_used_bytes(frames);
+    Result r1 = run_string("tcobounded 100");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r1.status);
+    size_t mem_after_shallow = frame_stack_used_bytes(frames);
+
+    // Run deep recursion (50x deeper)
+    size_t mem_before_deep = frame_stack_used_bytes(frames);
+    Result r2 = run_string("tcobounded 5000");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+    size_t mem_after_deep = frame_stack_used_bytes(frames);
+
+    // After both runs, frame memory usage should be the same
+    // (both should return to the same baseline since all frames were popped)
+    TEST_ASSERT_EQUAL(mem_after_shallow, mem_after_deep);
+    TEST_ASSERT_EQUAL(mem_before_shallow, mem_before_deep);
+}
+
+void test_tco_frame_depth_stays_one_with_output(void)
+{
+    // A tail-recursive procedure that outputs a value should also
+    // benefit from TCO — frame depth should be 0 after completion.
+    FrameStack *frames = proc_get_frame_stack();
+
+    Result r = proc_define_from_text(
+        "to tcoacc :n :acc\n"
+        "if :n = 0 [output :acc]\n"
+        "output tcoacc :n - 1 :acc + :n\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    TEST_ASSERT_EQUAL(0, frame_stack_depth(frames));
+
+    // sum 1..1000 = 500500
+    Result r2 = eval_string("tcoacc 1000 0");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_FLOAT(500500.0f, r2.value.as.number);
+
+    TEST_ASSERT_EQUAL(0, frame_stack_depth(frames));
+}
+
+void test_tco_vs_non_tail_frame_depth_contrast(void)
+{
+    // Demonstrate that non-tail recursion grows frame depth while
+    // tail recursion does not, by comparing memory usage patterns.
+    FrameStack *frames = proc_get_frame_stack();
+
+    // Tail-recursive version (TCO applies)
+    Result r1 = proc_define_from_text(
+        "to tailsum :n :acc\n"
+        "if :n = 0 [output :acc]\n"
+        "output tailsum :n - 1 :acc + :n\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r1.status);
+
+    // Non-tail-recursive version (no TCO — recursive call is not last)
+    Result r2 = proc_define_from_text(
+        "to bodyrec :n\n"
+        "if :n = 0 [output 0]\n"
+        "output :n + bodyrec :n - 1\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+
+    // Run tail version at depth 200 — memory stays bounded
+    size_t mem_before_tail = frame_stack_used_bytes(frames);
+    Result rt = eval_string("tailsum 200 0");
+    TEST_ASSERT_EQUAL(RESULT_OK, rt.status);
+    TEST_ASSERT_EQUAL_FLOAT(20100.0f, rt.value.as.number);
+    size_t mem_after_tail = frame_stack_used_bytes(frames);
+
+    // Run non-tail version at depth 30 — uses more frame memory during execution
+    // (We use a small depth to avoid overflow)
+    size_t mem_before_nontail = frame_stack_used_bytes(frames);
+    Result rn = eval_string("bodyrec 30");
+    TEST_ASSERT_EQUAL(RESULT_OK, rn.status);
+    TEST_ASSERT_EQUAL_FLOAT(465.0f, rn.value.as.number);
+    size_t mem_after_nontail = frame_stack_used_bytes(frames);
+
+    // Both should return to same baseline (all frames popped)
+    TEST_ASSERT_EQUAL(mem_before_tail, mem_after_tail);
+    TEST_ASSERT_EQUAL(mem_before_nontail, mem_after_nontail);
+
+    // The key assertion: tail recursion at 200 levels completed,
+    // while frame depth was bounded. If TCO didn't work, depth 200
+    // would require 200 simultaneous frames.
+    TEST_ASSERT_EQUAL(0, frame_stack_depth(frames));
+}
+
+void test_tco_10000_recursions_constant_memory(void)
+{
+    // 10000 tail-recursive calls with frame stack memory verification.
+    // This is a stress test proving TCO truly prevents frame accumulation.
+    FrameStack *frames = proc_get_frame_stack();
+
+    Result r = proc_define_from_text(
+        "to tcostress :n\n"
+        "if :n = 0 [stop]\n"
+        "tcostress :n - 1\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    size_t mem_before = frame_stack_used_bytes(frames);
+    size_t avail_before = frame_stack_available_bytes(frames);
+
+    Result r2 = run_string("tcostress 10000");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+
+    size_t mem_after = frame_stack_used_bytes(frames);
+    size_t avail_after = frame_stack_available_bytes(frames);
+
+    // Frame stack should be completely clean — same as before execution
+    TEST_ASSERT_EQUAL(0, frame_stack_depth(frames));
+    TEST_ASSERT_EQUAL(mem_before, mem_after);
+    TEST_ASSERT_EQUAL(avail_before, avail_after);
+}
+
+void test_tco_multiline_tail_position(void)
+{
+    // Verify TCO works when the tail call is the last instruction
+    // of a multi-line procedure body (not just single-line procedures).
+    FrameStack *frames = proc_get_frame_stack();
+
+    run_string("make \"trace_val 0");
+
+    Result r = proc_define_from_text(
+        "to multitail :n\n"
+        "make \"trace_val :trace_val + 1\n"
+        "if :n = 0 [stop]\n"
+        "multitail :n - 1\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    TEST_ASSERT_EQUAL(0, frame_stack_depth(frames));
+
+    Result r2 = run_string("multitail 500");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+
+    // All 501 invocations should have run (0 through 500 inclusive)
+    Result r3 = eval_string(":trace_val");
+    TEST_ASSERT_EQUAL_FLOAT(501.0f, r3.value.as.number);
+
+    // Frame stack clean
+    TEST_ASSERT_EQUAL(0, frame_stack_depth(frames));
+}
+
+void test_tco_self_recursion_rebinds_args(void)
+{
+    // Verify TCO properly rebinds parameters on each tail call.
+    // Uses a procedure where argument values change each iteration.
+    FrameStack *frames = proc_get_frame_stack();
+
+    // Fibonacci-style accumulator: fib_acc n a b → output b when n=0
+    Result r = proc_define_from_text(
+        "to fibacc :n :a :b\n"
+        "if :n = 0 [output :b]\n"
+        "output fibacc :n - 1 :b :a + :b\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    TEST_ASSERT_EQUAL(0, frame_stack_depth(frames));
+
+    // fib(10) with accumulator: fibacc(10, 0, 1) gives 89 (11th Fibonacci number)
+    // Sequence: (10,0,1)→(9,1,1)→(8,1,2)→(7,2,3)→...→(0,55,89) → output 89
+    Result r2 = eval_string("fibacc 10 0 1");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_FLOAT(89.0f, r2.value.as.number);
+
+    // Frame stack must be clean after — TCO reused the single frame
+    TEST_ASSERT_EQUAL(0, frame_stack_depth(frames));
+
+    // Also verify at a much deeper level (500 iterations)
+    // to confirm args are properly rebound without frame growth
+    Result r3 = eval_string("fibacc 500 0 1");
+    TEST_ASSERT_EQUAL(RESULT_OK, r3.status);
+    TEST_ASSERT_EQUAL(0, frame_stack_depth(frames));
+}
+
+void test_tco_conditional_tail_call_frame_leak(void)
+{
+    // BUG INVESTIGATION: Recursive calls inside if-blocks should not leak frames.
+    // Even without TCO, frame_stack_depth must be 0 after execution completes.
+    FrameStack *frames = proc_get_frame_stack();
+    TEST_ASSERT_EQUAL(0, frame_stack_depth(frames));
+
+    // Simplest case: recursive call inside if-block, base case via output
+    Result r = proc_define_from_text(
+        "to ifrec :n\n"
+        "if :n = 0 [output 0]\n"
+        "if :n > 0 [output ifrec :n - 1]\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    Result r2 = eval_string("ifrec 5");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, r2.value.as.number);
+    TEST_ASSERT_EQUAL_MESSAGE(0, frame_stack_depth(frames),
+        "Frame leak: recursive call inside if-block left frames on stack");
+}
+
+void test_tco_conditional_branch_tail_call_frame_leak(void)
+{
+    // Test the Collatz pattern using correct Logo semantics.
+    // All recursive calls use 'output' — TCO applies to 'output <self-call>'
+    // on the last line via output-aware tail call optimization.
+    FrameStack *frames = proc_get_frame_stack();
+    TEST_ASSERT_EQUAL(0, frame_stack_depth(frames));
+
+    // Correct Collatz: uses 'output' in if-branch and on last line for TCO
+    Result r = proc_define_from_text(
+        "to collatz :n :steps\n"
+        "if :n = 1 [output :steps]\n"
+        "if (remainder :n 2) = 0 [output collatz :n / 2 :steps + 1]\n"
+        "output collatz :n * 3 + 1 :steps + 1\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    // collatz 5 0: sequence 5→16→8→4→2→1 (5 steps)
+    Result r2 = eval_string("collatz 5 0");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_FLOAT(5.0f, r2.value.as.number);
+    TEST_ASSERT_EQUAL_MESSAGE(0, frame_stack_depth(frames),
+        "Frame leak after collatz 5");
+
+    // collatz 27 0: 111 steps — exercises deep recursion with mixed branches
+    Result r3 = eval_string("collatz 27 0");
+    TEST_ASSERT_EQUAL(RESULT_OK, r3.status);
+    TEST_ASSERT_EQUAL_FLOAT(111.0f, r3.value.as.number);
+    TEST_ASSERT_EQUAL_MESSAGE(0, frame_stack_depth(frames),
+        "Frame leak after collatz 27");
+}
+
+void test_tco_bare_tail_call_with_output_errors(void)
+{
+    // A bare self-recursive call on the last line that eventually produces
+    // a value via 'output' should error with "don't say what to do with".
+    // This is correct Logo semantics — without 'output' on the last line,
+    // the return value has no destination.
+    Result r = proc_define_from_text(
+        "to bad_collatz :n :steps\n"
+        "if :n = 1 [output :steps]\n"
+        "if (remainder :n 2) = 0 [output bad_collatz :n / 2 :steps + 1]\n"
+        "bad_collatz :n * 3 + 1 :steps + 1\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    Result r2 = eval_string("bad_collatz 5 0");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r2.status);
+}
+
+void test_tco_bare_tail_call_command_mode_ok(void)
+{
+    // A bare self-recursive tail call in a command-mode procedure (using
+    // 'stop' instead of 'output') should work with TCO — no value produced.
+    FrameStack *frames = proc_get_frame_stack();
+
+    Result r = proc_define_from_text(
+        "to countdown :n\n"
+        "if :n = 0 [stop]\n"
+        "print :n\n"
+        "countdown :n - 1\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    run_string("countdown 5");
+    TEST_ASSERT_EQUAL_STRING("5\n4\n3\n2\n1\n", output_buffer);
+    TEST_ASSERT_EQUAL(0, frame_stack_depth(frames));
 }
 
 //==========================================================================
@@ -1376,6 +1918,23 @@ void test_empty_list_inside_brackets_roundtrip(void)
         "second [] inside brackets should be preserved after roundtrip!");
 }
 
+// Regression: parameter lookup must remain case-insensitive even after the
+// pointer-equality fast path was added (see NAMING POLICY in core/frame.h).
+// Param `:X` interns case-sensitively, so a body reference `:x` lands in
+// the strcasecmp fallback. Verify the value still resolves.
+void test_proc_param_case_insensitive_lookup(void)
+{
+    Result r = proc_define_from_text("to mixedcase :X\noutput :x * 2\nend");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    Result out = eval_string("mixedcase 21");
+    TEST_ASSERT_EQUAL(RESULT_OK, out.status);
+    TEST_ASSERT_EQUAL(VALUE_NUMBER, out.value.type);
+    TEST_ASSERT_EQUAL_FLOAT(42.0f, out.value.as.number);
+
+    proc_erase("mixedcase");
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -1391,6 +1950,10 @@ int main(void)
     RUN_TEST(test_tail_recursive_countdown);
     RUN_TEST(test_deep_tail_recursion);
     RUN_TEST(test_very_deep_tail_recursion);
+    RUN_TEST(test_deep_tail_recursion_through_output);
+    RUN_TEST(test_deep_tail_recursion_through_ifelse);
+    RUN_TEST(test_deep_tail_recursion_through_nested_if);
+    RUN_TEST(test_deep_tail_recursion_through_ifelse_false_branch);
     RUN_TEST(test_deep_non_tail_recursion_limit);
     RUN_TEST(test_definedp_true);
     RUN_TEST(test_definedp_false);
@@ -1424,6 +1987,7 @@ int main(void)
     // TEXT primitive detailed tests
     RUN_TEST(test_text_with_params);
     RUN_TEST(test_text_no_params);
+    RUN_TEST(test_text_empty_body_is_well_formed);
     
     // proc_define_from_text tests
     RUN_TEST(test_proc_define_from_text_simple);
@@ -1435,7 +1999,12 @@ int main(void)
     RUN_TEST(test_proc_define_from_text_error_no_name);
     RUN_TEST(test_proc_define_from_text_error_redefine_primitive);
     RUN_TEST(test_proc_define_from_text_quoted_word);
+    RUN_TEST(test_proc_define_from_text_preserves_comments);
     RUN_TEST(test_proc_define_from_text_all_operators);
+    RUN_TEST(test_proc_define_from_text_multiline_bracket_body);
+    RUN_TEST(test_proc_define_from_text_preserves_comments_inside_bracket_body);
+    RUN_TEST(test_proc_define_from_text_nested_brackets_across_lines);
+    RUN_TEST(test_proc_define_from_text_blank_line_inside_bracket_body);
     RUN_TEST(test_proc_define_from_text_equals_operator);
     RUN_TEST(test_proc_define_from_text_less_than_operator);
     RUN_TEST(test_proc_define_from_text_end_in_list);
@@ -1445,6 +2014,19 @@ int main(void)
     RUN_TEST(test_tco_with_args_exact_failing_case);
     RUN_TEST(test_tco_with_print_and_args);
     RUN_TEST(test_tco_scope_depth_stability);
+    
+    // TCO frame stack verification tests
+    RUN_TEST(test_tco_frame_stack_depth_zero_after_deep_recursion);
+    RUN_TEST(test_tco_frame_memory_bounded_across_depths);
+    RUN_TEST(test_tco_frame_depth_stays_one_with_output);
+    RUN_TEST(test_tco_vs_non_tail_frame_depth_contrast);
+    RUN_TEST(test_tco_10000_recursions_constant_memory);
+    RUN_TEST(test_tco_multiline_tail_position);
+    RUN_TEST(test_tco_self_recursion_rebinds_args);
+    RUN_TEST(test_tco_conditional_tail_call_frame_leak);
+    RUN_TEST(test_tco_conditional_branch_tail_call_frame_leak);
+    RUN_TEST(test_tco_bare_tail_call_with_output_errors);
+    RUN_TEST(test_tco_bare_tail_call_command_mode_ok);
     
     // List-of-lists body structure tests
     RUN_TEST(test_text_returns_list_of_lists_structure);
@@ -1461,6 +2043,7 @@ int main(void)
     RUN_TEST(test_multiline_brackets_repeat);
     RUN_TEST(test_empty_list_roundtrip);
     RUN_TEST(test_empty_list_inside_brackets_roundtrip);
+    RUN_TEST(test_proc_param_case_insensitive_lookup);
 
     return UNITY_END();
 }

@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  List processing primitives: apply, foreach, map, filter, find, reduce, crossmap
 //
@@ -8,6 +8,19 @@
 //  1. Procedure name (word): "sum, "double
 //  2. Lambda expression: [[x] :x + 1]
 //  3. Procedure text: [[x y] [output :x + :y]]
+//
+//  Heap allocation contract (P5b-007):
+//  Several primitives below (`map`, `filter`, `reduce`, `crossmap`) heap-allocate
+//  scratch buffers (`result_word` for word output, `elements`/`element_storage`
+//  for cached arguments) before invoking a user callback. Every early return
+//  from these functions after the allocation point — including `RESULT_ERROR`,
+//  `RESULT_THROW`, `RESULT_STOP`, the non-bool/non-word/non-number value
+//  classification errors, and `realloc` failure — must `free` the buffer first.
+//  `free(NULL)` is well-defined, so it is safe (and we do) call `free` on the
+//  word buffer in the list-output paths where it was never allocated.
+//  The error-path regression tests in
+//  `tests/test_primitives_list_processing.c` (test_*_callback_error_*)
+//  pin this behaviour. Run the test suite under ASan to validate.
 //
 
 #include "primitives.h"
@@ -200,6 +213,14 @@ static Result invoke_proc_spec(Evaluator *eval, ProcSpec *spec, int argc, Value 
         if (argc > spec->as.lambda.param_count)
         {
             return result_error_arg(ERR_TOO_MANY_INPUTS, NULL, NULL);
+        }
+        // The save/restore arrays below are sized at MAX_PROC_PARAMS;
+        // if the lambda was constructed with more parameters than that
+        // (defence in depth — parse_proc_spec should have rejected it)
+        // we would silently corrupt the stack. Fail loudly instead.
+        if (spec->as.lambda.param_count > MAX_PROC_PARAMS)
+        {
+            return result_error(ERR_TOO_MANY_INPUTS);
         }
         
         // For lambda expressions, we create local bindings and evaluate
@@ -1394,6 +1415,15 @@ static Result prim_find(Evaluator *eval, int argc, Value *args)
 //==========================================================================
 // reduce procedure data
 //==========================================================================
+//
+// Per the reference: "the last two members of `data` are provided as
+// inputs to `procedure`, and the output of `procedure` is then combined
+// with the previous member of `data` by calling `procedure` again."
+// In other words, `reduce` is a right-fold:
+//   reduce f [a b c d]  ==  f(a, f(b, f(c, d)))
+// not a left-fold (`f(f(f(a, b), c), d)`). For commutative procedures
+// (`sum`, `product`) the distinction is invisible; for non-commutative
+// ones (e.g. `word`) it matters and is pinned by `test_reduce_word_is_right_fold`.
 
 static Result prim_reduce(Evaluator *eval, int argc, Value *args)
 {

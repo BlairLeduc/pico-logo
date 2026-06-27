@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 
 #include "test_scaffold.h"
@@ -410,104 +410,22 @@ Result run_string(const char *input)
 
 void define_proc(const char *name, const char **params, int param_count, const char *body_str)
 {
-    // Build body list from string
-    Lexer lexer;
-    lexer_init(&lexer, body_str);
-    
-    // Build body as list-of-lists: [[line1-tokens]]
-    // For test helper, we put all tokens on a single line
-    Node line = NODE_NIL;
-    Node line_tail = NODE_NIL;
-    
-    while (true)
+    // Synthesize a `to NAME :p1 :p2 ...\nBODY\nend` source string and
+    // hand it to `proc_define_from_text` so brackets in the body are
+    // parsed into nested list nodes (matching production semantics).
+    // The previous flat-token storage caused per-iteration `parse_list`
+    // calls in tail-recursive bodies, exhausting the cell pool.
+    char buf[1024];
+    int n = snprintf(buf, sizeof(buf), "to %s", name);
+    for (int i = 0; i < param_count && n < (int)sizeof(buf); i++)
     {
-        Token t = lexer_next_token(&lexer);
-        if (t.type == TOKEN_EOF)
-            break;
-        
-        Node item = NODE_NIL;
-        if (t.type == TOKEN_WORD || t.type == TOKEN_NUMBER)
-        {
-            item = mem_atom(t.start, t.length);
-        }
-        else if (t.type == TOKEN_QUOTED)
-        {
-            item = mem_atom(t.start, t.length);
-        }
-        else if (t.type == TOKEN_COLON)
-        {
-            item = mem_atom(t.start, t.length);
-        }
-        else if (t.type == TOKEN_PLUS)
-        {
-            item = mem_atom("+", 1);
-        }
-        else if (t.type == TOKEN_MINUS)
-        {
-            item = mem_atom("-", 1);
-        }
-        else if (t.type == TOKEN_MULTIPLY)
-        {
-            item = mem_atom("*", 1);
-        }
-        else if (t.type == TOKEN_DIVIDE)
-        {
-            item = mem_atom("/", 1);
-        }
-        else if (t.type == TOKEN_EQUALS)
-        {
-            item = mem_atom("=", 1);
-        }
-        else if (t.type == TOKEN_LESS_THAN)
-        {
-            item = mem_atom("<", 1);
-        }
-        else if (t.type == TOKEN_GREATER_THAN)
-        {
-            item = mem_atom(">", 1);
-        }
-        else if (t.type == TOKEN_LEFT_BRACKET)
-        {
-            // Parse nested list
-            item = mem_atom("[", 1);
-        }
-        else if (t.type == TOKEN_RIGHT_BRACKET)
-        {
-            item = mem_atom("]", 1);
-        }
-        else if (t.type == TOKEN_LEFT_PAREN)
-        {
-            item = mem_atom("(", 1);
-        }
-        else if (t.type == TOKEN_RIGHT_PAREN)
-        {
-            item = mem_atom(")", 1);
-        }
-        
-        if (!mem_is_nil(item))
-        {
-            Node new_cons = mem_cons(item, NODE_NIL);
-            if (mem_is_nil(line))
-            {
-                line = new_cons;
-                line_tail = new_cons;
-            }
-            else
-            {
-                mem_set_cdr(line_tail, new_cons);
-                line_tail = new_cons;
-            }
-        }
+        n += snprintf(buf + n, sizeof(buf) - n, " :%s", params[i]);
     }
-    
-    // Wrap line in outer list to create [[line-tokens]]
-    // Mark line as a list type
-    Node line_marked = mem_is_nil(line) ? NODE_NIL : NODE_MAKE_LIST(NODE_GET_INDEX(line));
-    Node body = mem_cons(line_marked, NODE_NIL);
-    Node name_atom = mem_atom(name, strlen(name));
-    const char *interned_name = mem_word_ptr(name_atom);
-    
-    proc_define(interned_name, params, param_count, body);
+    if (n < (int)sizeof(buf))
+    {
+        n += snprintf(buf + n, sizeof(buf) - n, "\n%s\nend", body_str);
+    }
+    proc_define_from_text(buf);
 }
 
 // ============================================================================

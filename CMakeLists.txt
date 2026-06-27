@@ -69,6 +69,8 @@ add_custom_command(
 add_library(logo_core
     core/error.c
     core/eval.c
+    core/eval_expr.c
+    core/eval_steps.c
     core/eval_ops.c
     core/format.c
     core/frame.c
@@ -84,6 +86,8 @@ add_library(logo_core
     core/primitives_editor.c
     core/primitives_exceptions.c
     core/primitives_files.c
+    core/primitives_files_directory.c
+    core/primitives_files_load_save.c
     core/primitives_hardware.c
     core/primitives_logical.c
     core/primitives_bitwise.c
@@ -100,6 +104,7 @@ add_library(logo_core
     core/primitives_wifi.c
     core/primitives_network.c
     core/primitives.c
+    core/parse_list.c
     core/procedures.c
     core/properties.c
     core/repl.c
@@ -191,11 +196,6 @@ target_link_libraries(pico-logo
         hardware_spi
 )
 
-# Link hardware_rtc for RP2040 (RTC support)
-if(PICO_RP2040)
-    target_link_libraries(pico-logo hardware_rtc)
-endif()
-
 # Link WiFi libraries if WiFi support is enabled
 if(LOGO_HAS_WIFI)
     # Add the directory containing lwipopts.h to include path
@@ -265,6 +265,8 @@ if(BUILD_FOR_HOST)
     add_library(logo_core
         core/error.c
         core/eval.c
+        core/eval_expr.c
+        core/eval_steps.c
         core/eval_ops.c
         core/format.c
         core/frame.c
@@ -280,6 +282,8 @@ if(BUILD_FOR_HOST)
         core/primitives_editor.c
         core/primitives_exceptions.c
         core/primitives_files.c
+        core/primitives_files_directory.c
+        core/primitives_files_load_save.c
         core/primitives_hardware.c
         core/primitives_logical.c
         core/primitives_bitwise.c
@@ -296,6 +300,7 @@ if(BUILD_FOR_HOST)
         core/primitives_wifi.c
         core/primitives_network.c
         core/primitives.c
+        core/parse_list.c
         core/procedures.c
         core/properties.c
         core/repl.c
@@ -397,6 +402,8 @@ if(BUILD_TESTING)
     add_library(logo_core
         ${CMAKE_CURRENT_SOURCE_DIR}/core/error.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/eval.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/eval_expr.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/eval_steps.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/eval_ops.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/format.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/frame.c
@@ -412,6 +419,8 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_editor.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_exceptions.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_files.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_files_directory.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_files_load_save.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_hardware.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_logical.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_bitwise.c
@@ -428,6 +437,7 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_wifi.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_network.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/parse_list.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/procedures.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/properties.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/repl.c

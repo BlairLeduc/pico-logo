@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 
 #include "test_scaffold.h"
@@ -374,6 +374,80 @@ void test_format_procedure_definition_nested_parens(void)
         "  output (sum 1 2 (sum 3 4))\n"
         "end\n";
     TEST_ASSERT_EQUAL_STRING(expected, buffer);
+}
+
+// P6-004: a procedure containing a quoted word that *looks like* a bracket
+// (e.g. `print "\[hello\]`) must SAVE→LOAD round-trip cleanly. The
+// formatter must not be fooled into re-indenting on these tokens, and the
+// emitted text must re-parse to a procedure whose body matches the
+// original.
+void test_format_procedure_definition_round_trip_quoted_bracket(void)
+{
+    char buffer[512];
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+
+    Result r = proc_define_from_text(
+        "to brackets\n"
+        "print \"\\[hello\\]\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    UserProcedure *proc = proc_find("brackets");
+    TEST_ASSERT_NOT_NULL(proc);
+
+    TEST_ASSERT_TRUE(format_procedure_definition(format_buffer_output, &ctx, proc));
+
+    // Body indent should be exactly 2 spaces (the `\[` / `\]` in the
+    // quoted word must not influence bracket_depth).
+    const char *expected =
+        "to brackets\n"
+        "  print \"\\[hello\\]\n"
+        "end\n";
+    TEST_ASSERT_EQUAL_STRING(expected, buffer);
+
+    // Re-parse the emitted text and confirm it produces a working proc.
+    proc_erase("brackets");
+    Result r2 = proc_define_from_text(buffer);
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_NOT_NULL(proc_find("brackets"));
+}
+
+void test_format_procedure_definition_round_trip_quoted_bracket_in_loop(void)
+{
+    // Same idea but the quoted-bracket sits inside a multi-line bracket
+    // body. The structural brackets are nested-list tokens; the quoted
+    // brackets are a single quoted-word atom. Indentation must come only
+    // from the structural ones.
+    char buffer[512];
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+
+    Result r = proc_define_from_text(
+        "to loopy\n"
+        "repeat 2 [\n"
+        "print \"\\[x\\]\n"
+        "]\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    UserProcedure *proc = proc_find("loopy");
+    TEST_ASSERT_NOT_NULL(proc);
+
+    TEST_ASSERT_TRUE(format_procedure_definition(format_buffer_output, &ctx, proc));
+
+    const char *expected =
+        "to loopy\n"
+        "  repeat 2 [\n"
+        "    print \"\\[x\\]\n"
+        "  ]\n"
+        "end\n";
+    TEST_ASSERT_EQUAL_STRING(expected, buffer);
+
+    proc_erase("loopy");
+    Result r2 = proc_define_from_text(buffer);
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_NOT_NULL(proc_find("loopy"));
 }
 
 //==========================================================================
@@ -775,6 +849,8 @@ int main(void)
     RUN_TEST(test_format_procedure_definition_bracket_single_token_last_line);
     RUN_TEST(test_format_procedure_definition_with_parens);
     RUN_TEST(test_format_procedure_definition_nested_parens);
+    RUN_TEST(test_format_procedure_definition_round_trip_quoted_bracket);
+    RUN_TEST(test_format_procedure_definition_round_trip_quoted_bracket_in_loop);
     
     // format_variable tests
     RUN_TEST(test_format_variable_number);

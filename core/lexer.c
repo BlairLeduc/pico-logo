@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Lexer implementation for tokenizing Logo input.
 //
@@ -112,23 +112,51 @@ void lexer_init(Lexer *lexer, const char *source)
     lexer->had_whitespace = true; // Start of input acts like whitespace
     lexer->had_newline = true;    // Start of input acts like start of line
     lexer->newline_count = 1;     // Start of input counts as one newline
+    lexer->preserve_comments = false;
 }
 
-// Skip whitespace and track if any was found
+void lexer_set_preserve_comments(Lexer *lexer, bool preserve)
+{
+    lexer->preserve_comments = preserve;
+}
+
+// Skip whitespace and line comments (everything after `;` to end of line),
+// tracking whether any whitespace and how many newlines were consumed.
+// Per the language reference ("; comment"), a semicolon outside a quoted
+// word marks the rest of the line as a comment that the lexer must discard.
 static void skip_whitespace(Lexer *lexer)
 {
     lexer->had_whitespace = false;
     lexer->had_newline = false;
     lexer->newline_count = 0;
-    while (*lexer->current && is_space(*lexer->current))
+    for (;;)
     {
-        if (*lexer->current == '\n')
+        // Eat ordinary whitespace.
+        while (*lexer->current && is_space(*lexer->current))
         {
-            lexer->had_newline = true;
-            lexer->newline_count++;
+            if (*lexer->current == '\n')
+            {
+                lexer->had_newline = true;
+                lexer->newline_count++;
+            }
+            lexer->had_whitespace = true;
+            lexer->current++;
         }
-        lexer->had_whitespace = true;
-        lexer->current++;
+
+        // A semicolon at this position starts a line comment. Skip every
+        // character up to (but not including) the terminating newline so
+        // the next loop iteration counts the newline normally.
+        if (!lexer->preserve_comments && *lexer->current == ';')
+        {
+            lexer->had_whitespace = true;
+            while (*lexer->current && *lexer->current != '\n')
+            {
+                lexer->current++;
+            }
+            continue;
+        }
+
+        break;
     }
 }
 
@@ -165,8 +193,10 @@ static Token read_word(Lexer *lexer)
                 lexer->current++;
             }
         }
-        else if (is_space(*lexer->current) || is_delimiter(*lexer->current))
+        else if (is_space(*lexer->current) || is_delimiter(*lexer->current) || *lexer->current == ';')
         {
+            // `;` terminates an unquoted word so that `foo;comment` lexes
+            // as `foo` followed by the comment (consumed in skip_whitespace).
             break;
         }
         else
@@ -187,6 +217,29 @@ static Token read_word(Lexer *lexer)
 }
 
 // Read a quoted word (starts with ")
+//
+// Reference (Pico_Logo_Reference.md §3873-3895, "Quotation Marks and
+// Delimiters"):
+//   "Normally, you have to put a backslash (\) before the characters
+//    [, ], (, ), and \ itself. But the first character after a
+//    quotation mark (") does not need to have a backslash preceding it."
+//   "If a delimiter occupies any position but the first one after the
+//    quotation mark, it must have a backslash preceding it."
+//   "The only exception to the above general rule is brackets ([ ]).
+//    If you want to put a quotation mark before a bracket, you must
+//    always include a backslash between the quotation mark and the
+//    bracket."
+// Plus the file-path exception (§3807):
+//   "You can use '/' in file names without escaping it, and Logo will
+//    treat it as a normal character."
+// So the rules implemented here are:
+//   * brackets ([, ]) ALWAYS terminate a quoted word unless escaped,
+//     even at the first position;
+//   * any other delimiter at the first position is taken literally;
+//   * any other delimiter at a subsequent position terminates the word,
+//     EXCEPT '/' which is always literal (file-path exception);
+//   * a backslash escapes the following character;
+//   * any whitespace terminates the word.
 static Token read_quoted(Lexer *lexer)
 {
     // Skip the quote character
@@ -219,9 +272,9 @@ static Token read_quoted(Lexer *lexer)
             // Space ends the quoted word
             break;
         }
-        else if (!first_char && is_delimiter(*lexer->current))
+        else if (!first_char && is_delimiter(*lexer->current) && *lexer->current != '/')
         {
-            // Non-first delimiter ends the word
+            // Non-first delimiter ends the word (except / for file paths)
             break;
         }
         else
@@ -233,6 +286,17 @@ static Token read_quoted(Lexer *lexer)
 
     size_t length = lexer->current - start;
     return make_token(lexer, TOKEN_QUOTED, start, length);
+}
+
+// Read a line comment (starts with ;), preserving the semicolon.
+static Token read_comment(Lexer *lexer)
+{
+    const char *start = lexer->current;
+    while (*lexer->current && *lexer->current != '\n')
+    {
+        lexer->current++;
+    }
+    return make_token(lexer, TOKEN_COMMENT, start, (size_t)(lexer->current - start));
 }
 
 // Read a variable reference (starts with :)
@@ -252,8 +316,9 @@ static Token read_colon(Lexer *lexer)
                 lexer->current++;
             }
         }
-        else if (is_space(*lexer->current) || is_delimiter(*lexer->current))
+        else if (is_space(*lexer->current) || is_delimiter(*lexer->current) || *lexer->current == ';')
         {
+            // `;` ends a variable reference (`:foo;cmt` -> :foo + comment).
             break;
         }
         else
@@ -315,6 +380,9 @@ static bool looks_like_number(const char *p)
         return false;
     }
     
+    bool has_dot = false;
+    bool has_exp = false;
+
     // Scan ahead to see if this is a pure number
     while (*p)
     {
@@ -328,15 +396,20 @@ static bool looks_like_number(const char *p)
             // Hit a delimiter - it's a number
             return true;
         }
-        if (!is_digit(*p) && *p != '.' && 
-            *p != 'e' && *p != 'E' && *p != 'n' && *p != 'N')
+        if (*p == '.')
         {
-            // Non-number character without being a delimiter - it's a word
-            return false;
+            if (has_dot || has_exp)
+                return false; // Multiple dots or dot after exponent
+            has_dot = true;
+            p++;
+            continue;
         }
         // Handle exponent
         if (*p == 'e' || *p == 'E' || *p == 'n' || *p == 'N')
         {
+            if (has_exp)
+                return false; // Multiple exponents
+            has_exp = true;
             bool is_n = (*p == 'n' || *p == 'N');
             p++;
             if (!is_n && (*p == '+' || *p == '-'))
@@ -350,58 +423,114 @@ static bool looks_like_number(const char *p)
             }
             continue;
         }
+        if (!is_digit(*p))
+        {
+            // Non-number character without being a delimiter - it's a word
+            return false;
+        }
         p++;
     }
     return true;  // End of string - it's a number
 }
 
-// Determine if minus should be unary based on context
-// According to the reference:
-// - If "-" immediately precedes a word/variable/paren and follows delimiter except ), it's unary
-// - If "-" immediately precedes a number and follows delimiter except ), it's a negative number
-// - Space counts as a delimiter
-// Key: "immediately precedes" means no space between - and what follows
+// Determine whether a `-` token should be parsed as unary/negative
+// (TOKEN_UNARY_MINUS or a negative TOKEN_NUMBER) versus binary
+// subtraction (TOKEN_MINUS).
+//
+// The reference (`Pico Logo Reference`, "The Minus Sign") defines
+// three rules. We quote them verbatim and then document the one
+// place this implementation deviates:
+//
+//   1. If the "-" immediately precedes a number, and follows any
+//      delimiter except right parenthesis ")", the number is parsed
+//      as a negative number. Examples:
+//        print sum 20-20    -> 20 minus 20
+//        print 3*-4         -> 3 times -4
+//        print (3+4)-5      -> 3 plus 4 minus 5
+//        first [-3 4]       -> -3
+//
+//   2. If the "-" immediately precedes a word or left parenthesis "(",
+//      and follows any delimiter except right parenthesis, it is the
+//      unary-minus procedure. Examples:
+//        setpos list :x -:y
+//        setpos list ycor -xcor
+//
+//   3. In all other cases, "-" is binary subtraction. Examples:
+//        print 3-4          -> binary
+//        print 3 - 4        -> binary
+//        print - 3 4        -> binary applied prefix
+//
+// "Immediately precedes" means no whitespace between `-` and what
+// follows.
+//
+// CONVENTION (deliberate deviation from a strict literal reading of
+// rules 1+2): the right-paren exception is CHARACTER-adjacent, not
+// token-adjacent. That is, `)-X` triggers the exception (rule 3
+// applies, binary), but `) -X` does NOT — once whitespace separates
+// `)` from `-`, the space itself counts as the delimiter for rules
+// 1/2 and the `-X` parses as unary/negative. So `(5+3) -2` tokenises
+// as `( 5 + 3 ) -2`, not `( 5 + 3 ) - 2`. This matches established
+// Logo convention; changing it would silently break existing user
+// programs and other Logo implementations.
+//
+// The previous-token kinds we treat as VALUE-PRODUCING (i.e. they
+// could be the left operand of a binary `-` when no whitespace
+// separates them from the `-`):
+//   TOKEN_NUMBER, TOKEN_WORD, TOKEN_COLON, TOKEN_QUOTED, TOKEN_RIGHT_PAREN
+// Everything else is a delimiter (operators, brackets, EOF, etc.).
 static bool should_be_unary_minus(const Lexer *lexer)
 {
-    TokenType prev = lexer->previous.type;
-    char after = lexer->current[1];
-    
-    // Check: does minus immediately precede something (no space after)?
-    bool immediately_precedes = !is_space(after) && after != '\0';
-    
-    // If there was whitespace before the minus, it follows a delimiter
+    const TokenType prev = lexer->previous.type;
+    const char after = lexer->current[1];
+
+    // "Immediately precedes" — true iff no whitespace (and not EOF)
+    // separates `-` from the next token.
+    const bool immediately_precedes = !is_space(after) && after != '\0';
+
+    // Whitespace before `-` always counts as a delimiter (per the
+    // CONVENTION above, this is true even when the previous TOKEN was
+    // `)`). So once we have leading whitespace, only what immediately
+    // follows decides:
+    //   * something immediately follows -> unary/negative (rules 1/2)
+    //   * whitespace also follows         -> binary (rule 3)
     if (lexer->had_whitespace)
     {
-        // Whitespace before AND immediately precedes something = unary/negative
-        // e.g., "print 3 * -4", "[-1 -2 -3]", "(5+3) -2"
-        if (immediately_precedes)
-            return true;
-        // Whitespace both before and after = binary
-        // e.g., "7 - 3", "(5+3) - 2"
-        return false;
+        return immediately_precedes;
     }
-    
-    // No whitespace before: binary minus after ), NUMBER, or QUOTED
-    if (prev == TOKEN_RIGHT_PAREN || prev == TOKEN_NUMBER || prev == TOKEN_QUOTED)
-        return false;
-    
-    // No whitespace before: After WORD or COLON (value-producing tokens)
-    // e.g., "xcor-ycor" parses as xcor minus ycor (binary)
-    if (prev == TOKEN_WORD || prev == TOKEN_COLON)
-        return false;
-    
-    // For operators, opening brackets, and start of input: unary minus
-    return prev == TOKEN_EOF ||
-           prev == TOKEN_LEFT_BRACKET ||
-           prev == TOKEN_LEFT_PAREN ||
-           prev == TOKEN_PLUS ||
-           prev == TOKEN_MINUS ||
-           prev == TOKEN_UNARY_MINUS ||
-           prev == TOKEN_MULTIPLY ||
-           prev == TOKEN_DIVIDE ||
-           prev == TOKEN_EQUALS ||
-           prev == TOKEN_LESS_THAN ||
-           prev == TOKEN_GREATER_THAN;
+
+    // No whitespace before `-`. Now the previous token decides:
+    //   * a value-producing token to the left -> binary (rule 3)
+    //   * a delimiter token to the left      -> unary (rules 1/2)
+    // `]` is treated like `)` for symmetry (a closer of a value).
+    // `TOKEN_ERROR` keeps the previous behaviour of defaulting to
+    // binary so a single bad token doesn't cascade into surprising
+    // unary parses.
+    switch (prev)
+    {
+    case TOKEN_NUMBER:
+    case TOKEN_WORD:
+    case TOKEN_COLON:
+    case TOKEN_QUOTED:
+    case TOKEN_RIGHT_PAREN:   // The literal right-paren exception
+    case TOKEN_RIGHT_BRACKET:
+    case TOKEN_ERROR:
+    case TOKEN_COMMENT:
+        return false;          // -> binary
+    case TOKEN_EOF:
+    case TOKEN_LEFT_BRACKET:
+    case TOKEN_LEFT_PAREN:
+    case TOKEN_PLUS:
+    case TOKEN_MINUS:
+    case TOKEN_UNARY_MINUS:
+    case TOKEN_MULTIPLY:
+    case TOKEN_DIVIDE:
+    case TOKEN_EQUALS:
+    case TOKEN_LESS_THAN:
+    case TOKEN_GREATER_THAN:
+        return true;           // -> unary/negative (rules 1/2)
+    }
+    // Unreachable for known token kinds; keep prior default.
+    return false;
 }
 
 Token lexer_next_token(Lexer *lexer)
@@ -482,6 +611,9 @@ Token lexer_next_token(Lexer *lexer)
     case ':':
         return read_colon(lexer);
 
+    case ';':
+        return read_comment(lexer);
+
     default:
         // Check for number - but only if it looks like a pure number
         if (is_digit(c) && looks_like_number(lexer->current))
@@ -513,9 +645,21 @@ bool lexer_is_at_end(const Lexer *lexer)
 {
     // Skip whitespace to check for actual end
     const char *p = lexer->current;
-    while (*p && is_space(*p))
+    while (*p)
     {
-        p++;
+        while (*p && is_space(*p))
+        {
+            p++;
+        }
+        if (!lexer->preserve_comments && *p == ';')
+        {
+            while (*p && *p != '\n')
+            {
+                p++;
+            }
+            continue;
+        }
+        break;
     }
     return *p == '\0';
 }
@@ -580,6 +724,8 @@ const char *lexer_token_type_name(TokenType type)
         return "LESS_THAN";
     case TOKEN_GREATER_THAN:
         return "GREATER_THAN";
+    case TOKEN_COMMENT:
+        return "COMMENT";
     case TOKEN_ERROR:
         return "ERROR";
     default:

@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  REPL (Read-Eval-Print Loop) shared implementation
 //
@@ -19,6 +19,7 @@
 #include "core/memory.h"
 #include "core/primitives.h"
 #include "core/procedures.h"
+#include "core/syntax_highlight.h"
 #include "devices/stream.h"
 
 // Forward declaration for pause continue check
@@ -98,6 +99,11 @@ int repl_count_bracket_balance(const char *line)
     return balance;
 }
 
+int repl_next_bracket_depth(int current_depth, const char *line)
+{
+    return syntax_highlight_text_depth(line, current_depth);
+}
+
 // Initialize REPL state
 bool repl_init(ReplState *state, LogoIO *io, ReplFlags flags, const char *proc_prefix)
 {
@@ -167,7 +173,7 @@ static Result repl_evaluate_line(ReplState *state, const char *input)
                 // Top-level: reset everything
                 proc_reset_execution_state();
             }
-            logo_io_write_line(state->io, error_format(r));
+            logo_io_write_error_line(state->io, error_format(r));
             return result_none();  // Error handled, continue REPL
         }
         else if (r.status == RESULT_THROW)
@@ -191,7 +197,7 @@ static Result repl_evaluate_line(ReplState *state, const char *input)
                 }
                 char msg[128];
                 snprintf(msg, sizeof(msg), "Can't find a catch for %s", r.throw_tag);
-                logo_io_write_line(state->io, msg);
+                logo_io_write_error_line(state->io, msg);
                 return result_none();  // Error handled, continue REPL
             }
         }
@@ -218,7 +224,7 @@ static Result repl_evaluate_line(ReplState *state, const char *input)
             char msg[128];
             snprintf(msg, sizeof(msg), "I don't know what to do with %s", 
                      value_to_string(r.value));
-            logo_io_write_line(state->io, msg);
+            logo_io_write_error_line(state->io, msg);
             return result_none();  // Error handled, continue REPL
         }
         // RESULT_NONE, RESULT_STOP, RESULT_OUTPUT - continue evaluation
@@ -251,6 +257,11 @@ Result repl_run(ReplState *state)
         logo_io_console_write(state->io, prompt);
         logo_io_flush(state->io);
 
+        if (state->io && state->io->console)
+        {
+            state->io->console->input_syntax_depth = state->in_procedure_def ? 0 : state->bracket_depth;
+        }
+
         // Read input line
         int len = logo_stream_read_line(&state->io->console->input, state->line, sizeof(state->line));
         
@@ -263,7 +274,7 @@ Result repl_run(ReplState *state)
                 proc_reset_execution_state();
             }
             // During pause: don't reset - preserve caller's frames
-            logo_io_write_line(state->io, "Stopped!");
+            logo_io_write_error_line(state->io, "Stopped!");
             continue;
         }
         
@@ -297,7 +308,7 @@ Result repl_run(ReplState *state)
             {
                 // Can't redefine a primitive
                 Result r = result_error_arg(ERR_IS_PRIMITIVE, proc_name, NULL);
-                logo_io_write_line(state->io, error_format(r));
+                logo_io_write_error_line(state->io, error_format(r));
                 continue;
             }
             
@@ -315,7 +326,7 @@ Result repl_run(ReplState *state)
             }
             else
             {
-                logo_io_write_line(state->io, "Procedure too long");
+                logo_io_write_error_line(state->io, "Procedure too long");
                 state->in_procedure_def = false;
                 state->proc_len = 0;
             }
@@ -340,7 +351,7 @@ Result repl_run(ReplState *state)
                 Result r = proc_define_from_text(state->proc_buffer);
                 if (r.status == RESULT_ERROR)
                 {
-                    logo_io_write_line(state->io, error_format(r));
+                    logo_io_write_error_line(state->io, error_format(r));
                 }
                 else if (r.status == RESULT_OK)
                 {
@@ -364,7 +375,7 @@ Result repl_run(ReplState *state)
                 }
                 else
                 {
-                    logo_io_write_line(state->io, "Procedure too long");
+                    logo_io_write_error_line(state->io, "Procedure too long");
                     state->in_procedure_def = false;
                     state->proc_len = 0;
                 }
@@ -383,7 +394,8 @@ Result repl_run(ReplState *state)
                 state->expr_len += line_len + 1;
                 state->expr_buffer[state->expr_len] = '\0';
                 
-                state->bracket_depth += repl_count_bracket_balance(state->line);
+                state->bracket_depth = repl_next_bracket_depth(state->bracket_depth,
+                                                               state->line);
                 
                 if (state->bracket_depth <= 0)
                 {
@@ -401,7 +413,7 @@ Result repl_run(ReplState *state)
             }
             else
             {
-                logo_io_write_line(state->io, "Expression too long");
+                logo_io_write_error_line(state->io, "Expression too long");
                 state->bracket_depth = 0;
                 state->expr_len = 0;
             }
@@ -411,10 +423,10 @@ Result repl_run(ReplState *state)
         // Check if this line starts a multi-line bracket expression
         if (state->flags & REPL_FLAG_ALLOW_CONTINUATION)
         {
-            int line_balance = repl_count_bracket_balance(state->line);
-            if (line_balance > 0)
+            int next_depth = repl_next_bracket_depth(0, state->line);
+            if (next_depth > 0)
             {
-                state->bracket_depth = line_balance;
+                state->bracket_depth = next_depth;
                 state->expr_len = 0;
                 
                 size_t line_len = strlen(state->line);
@@ -427,7 +439,7 @@ Result repl_run(ReplState *state)
                 }
                 else
                 {
-                    logo_io_write_line(state->io, "Expression too long");
+                    logo_io_write_error_line(state->io, "Expression too long");
                     state->bracket_depth = 0;
                     state->expr_len = 0;
                 }

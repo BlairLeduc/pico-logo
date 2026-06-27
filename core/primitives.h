@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Primitive procedure registration and lookup.
 //
@@ -131,6 +131,8 @@ extern "C"
     void primitives_exceptions_init(void);
     void primitives_editor_init(void);
     void primitives_files_init(void);
+    void primitives_files_directory_init(void);
+    void primitives_files_load_save_init(void);
     void primitives_hardware_init(void);
     void primitives_logical_init(void);
     void primitives_bitwise_init(void);

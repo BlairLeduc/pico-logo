@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Help system: binary search over sorted help entries.
 //
@@ -8,6 +8,18 @@
 #include "help.h"
 #include <stddef.h>
 #include <strings.h>
+
+bool help_check_sorted(void)
+{
+    for (int i = 1; i < help_entry_count; i++)
+    {
+        if (strcasecmp(help_entries[i - 1].name, help_entries[i].name) >= 0)
+        {
+            return false;
+        }
+    }
+    return true;
+}
 
 const char *help_lookup(const char *name)
 {

@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 
 #include "frame_arena.h"
@@ -16,6 +16,15 @@ bool arena_init(FrameArena *arena, void *memory, size_t size_bytes)
 
     // Check alignment (must be word-aligned)
     if ((uintptr_t)memory % sizeof(uint32_t) != 0)
+    {
+        return false;
+    }
+
+    // Reject sizes that cannot hold even a single word; otherwise the
+    // arena would appear initialised but every allocation would silently
+    // fail and callers would have no way to distinguish "out of memory"
+    // from "misconfigured".
+    if (size_bytes < sizeof(uint32_t))
     {
         return false;
     }

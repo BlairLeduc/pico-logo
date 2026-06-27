@@ -133,7 +133,7 @@ This is an expression, but it is not a Logo instruction.
 
 Everything that can be done in Logo can be done using formal Logo. But we have allowed some other idioms, either to make the language feel more natural or to eliminate large amounts of typing.
 
-Here we list some important relaxations of Logo. Others are mentioned in the body of the manual. See also [Parsing](#parsing). 
+Here we list some important relaxations of Logo. Others are mentioned in the body of the manual. See also [Parsing](#appendix-b-parsing). 
 
 **Numbers:** In formal Logo, all words used as direct inputs, including numbers, must be quoted. In relaxed Logo, numbers are self-quoting: the quote marks are unnecessary. For example, 
 
@@ -361,15 +361,7 @@ Pico Logo does not support the `if predicate list1 list2` form. Use `(if predica
 ===
 # Processor Limits
 
-The following lists the capabilities of the different supported processors.
-
-**RP2040** (Pico 1 family of devices):
-
-- 8192 nodes for procedure and variable storage
-- 8192 characters of editor buffer
-- 1024 characters in the copy buffer
-- 32 levels of recursion
-- Software floating-point operations
+The following lists the capabilities of the supported processor.
 
 **RP2350** (Pico 2 family of devices):
 
@@ -514,6 +506,14 @@ Starts the Pico Logo Editor. Starts the Logo Editor with the procedure named _na
 
 If `edit` does not have an input the current contents of the buffer are used.
 
+**Example**:
+
+```logo
+?to rink  pr [Zamboni break]  end
+?edit "rink
+; Opens the editor with the rink procedure
+```
+
 
 ## edall
 
@@ -522,6 +522,15 @@ edall
 `command`
 
 Starts the Pico Logo Editor with all procedures and variables. Procedures are formatted using [`to`](#to)/[`end`](#end) syntax, variables as [`make`](#make) commands, and property lists as [`pprop`](#pprop) commands. This is the same output as [`poall`](#poall). The format ensures that when you exit the editor, all definitions can be re-executed to recreate the workspace state.
+
+**Example**:
+
+```logo
+?make "snack "butter\ tart
+?to pack  pr [Packed:] pr :snack  end
+?edall
+; Opens the editor with all procedures and variables
+```
 
 
 ## edn
@@ -534,6 +543,14 @@ edn _namelist_
 
 Stands for `ed`it `n`ame (name must be quoted). Starts the Logo Editor with the variable named _name_ (or variables in the list _namelist_) and their values in it. This is the same output as [`pon`](#pon). When you exit the editor the [`make`](#make) are run, so whatever variables and values have been changed in the editor are changed in Logo.
 
+**Example**:
+
+```logo
+?make "snack "ketchup\ chips
+?edn "snack
+; Opens the editor with: make "snack "ketchup\ chips
+```
+
 
 ## edns
 
@@ -542,6 +559,15 @@ edns
 `command`
 
 Stands for `ed`it `n`ame`s`. Starts the Logo Editor with all the names and their values in it. This is the same output as [`pons`](#pons). When you exit the editor the [`make`](#make) are run, so whatever variables and values have been changed in the editor are changed in Logo.
+
+**Example**:
+
+```logo
+?make "snack "ketchup\ chips
+?make "temp -17
+?edns
+; Opens the editor with all variables
+```
 
 
 ## to
@@ -576,6 +602,16 @@ end
 
 `end` is necessary, when you are using [`to`](#to), to tell Logo that you are done defining a procedure. It must be on a line by itself. `end` also must be used to separate procedures when defining multiple procedures in the Logo Editor.
 
+**Example**:
+
+```logo
+?to announce :thing
+>pr se [Freshly zambonied] :thing
+>end
+?announce "ice
+Freshly zambonied ice
+```
+
 
 
 ===
@@ -595,6 +631,12 @@ bk _distance_
 
 The `back` command moves the turtle _distance_ steps back. Its heading does not change. If the pen is down, Logo draws a line the specified _distance_.
 
+**Example**:
+
+```logo
+?bk 50
+```
+
 
 ## clearscreen (cs)
 
@@ -605,6 +647,12 @@ cs
 
 `clearscreen` erases the graphics screen, puts the turtle in the center of the screen, and sets the turtle's heading too (north). The center of the screen is position [0 0] and is called the **home position**.
 
+**Example**:
+
+```logo
+?cs
+```
+
 
 ## forward (fd)
 
@@ -614,6 +662,13 @@ fd _distance_
 `command`
 
 `forward` moves the turtle forward _distance_ steps in the direction in which it is heading. If the pen is down, Logo draws a line the specified _distance_.
+
+**Example**:
+
+```logo
+; Draw a maple-leaf stem
+?fd 100
+```
 
 
 ## getsh
@@ -641,6 +696,13 @@ ht
 
 `hideturtle` makes the turtle invisible. (The turtle draws faster when it is hidden.)
 
+**Example**:
+
+```logo
+?ht
+?repeat 4 [fd 50 rt 90]
+```
+
 
 ## home
 
@@ -664,6 +726,13 @@ lt _degrees_
 `command`
 
 The `left` command turns the turtle left (counterclockwise) the specified number of degrees. The number of degrees must not be greater than approximately 3.4e38, the maximum value for a (32-bit) IEEE 754 floating point number.
+
+**Example**:
+
+```logo
+; Turn to face west
+?lt 90
+```
 
 
 ## putsh
@@ -691,6 +760,13 @@ rt _degrees_
 
 The `right` command turns the turtle right (clockwise) the specified number of degrees. The number of degrees must not be greater than than approximately 3.4e38, the maximum value for a (32-bit) IEEE 754 floating point number.
 
+**Example**:
+
+```logo
+; Draw an equilateral triangle
+?repeat 3 [fd 80 rt 120]
+```
+
 
 ## setheading (seth)
 
@@ -701,6 +777,14 @@ seth _degrees_
 
 `setheading` turns the turtle so that it is heading in the direction _degrees_, which can be any decimal number less than than approximately 3.4e38, the maximum value for a (32-bit) IEEE 754 floating point number. Positive numbers are clockwise from north, negative numbers are counterclockwise from north. Note that [`right`](#right-rt) and [`left`](#left-lt) do relative motion, but `setheading` does absolute motion.
 
+**Example**:
+
+```logo
+; Face west (towards British Columbia from Ontario)
+?seth 270
+?fd 100
+```
+
 
 ## setpos 
 
@@ -709,6 +793,15 @@ setpos [_xcor_ _ycor_]
 `command`
 
 The `setpos` (for set position) command moves the turtle to the indicated coordinates. If the pen is down, Logo draws a line to the new position.
+
+**Example**:
+
+```logo
+; Move to the top of the screen (representing north)
+?pu
+?setpos [0 100]
+?pd
+```
 
 
 ## setsh
@@ -719,6 +812,12 @@ setsh _shapenumber_
 
 Stands for `set sh`ape. Sets the shape of the current turtle to the shape specified by _shapenumber_ which must be in the range 1 to 15. You can create your own shape using [`putsh`](#putsh). Shapes 1 through 15 are blank when Logo starts.
 
+**Example**:
+
+```logo
+?setsh 1
+```
+
 
 ## setx
 
@@ -727,6 +826,15 @@ setx _xcor_
 `command`
 
 `setx` moves the turtle horizontally to a point with x-coordinate _xcor_. The y-coordinate is unchanged. If the pen is down, Logo draws a line to the new position.
+
+**Example**:
+
+```logo
+; Draw a horizontal line across the centre of the screen
+?setpos [-159 0]
+?pd
+?setx 160
+```
 
 
 ## sety
@@ -737,6 +845,15 @@ sety _ycor_
 
 `sety` moves the turtle vertically to a point with y-coordinate _ycor_. The x-coordinate is unchanged. If the pen is down, Logo draws a line to the new position.
 
+**Example**:
+
+```logo
+; Draw a vertical line (like a flagpole)
+?setpos [0 -100]
+?pd
+?sety 100
+```
+
 
 ## shape
 
@@ -745,6 +862,13 @@ shape
 `operation`
 
 Output the shape number of the current turtle. The normal turtle shape is 0. 
+
+**Example**:
+
+```logo
+?pr shape
+0
+```
 
 
 ## showturtle (st)
@@ -756,6 +880,14 @@ st
 
 `showturtle` makes the turtle visible. See [`hideturtle`](#hideturtle-ht). 
 
+**Example**:
+
+```logo
+?ht
+?repeat 4 [fd 50 rt 90]
+?st
+```
+
 
 ## heading
 
@@ -765,6 +897,14 @@ heading
 
 `heading` outputs the turtle's heading, a decimal number greater than or equal to 0 and less than 360. Logo follows the compass system where north is a heading of 0 degrees, east 90, south 180, and west 270. When you start up Logo, the turtle has a heading of 0 (straight up).
 
+**Example**:
+
+```logo
+?seth 90
+?pr heading
+90
+```
+
 
 ## pos
 
@@ -773,6 +913,14 @@ pos
 `operation`
 
 `pos` (for position) outputs the coordinates of the current position of the turtle in the form of a list `[xcor ycor]`. When you start up Logo, the turtle is at `[0 0]`, the centre of the turtle field.
+
+**Example**:
+
+```logo
+?setpos [50 80]
+?show pos
+[50 80]
+```
 
 
 ## shown? (shownp)
@@ -784,6 +932,16 @@ shownp
 
 `shown?` outputs `true` if the turtle is not hidden, `false` otherwise.
 
+**Example**:
+
+```logo
+?pr shown?
+true
+?ht
+?pr shown?
+false
+```
+
 
 ## towards
 
@@ -792,6 +950,15 @@ towards [_xcor_ _ycor_]
 `operation`
 
 `towards` outputs a heading that would make the turtle face in the direction indicated by [_xcor_ _ycor_].
+
+**Example**:
+
+```logo
+; What heading points from home toward the west coast ferry?
+?home
+?pr towards [-100 0]
+270
+```
 
 
 ## xcor
@@ -802,6 +969,14 @@ xcor
 
 `xcor` outputs the x-coordinate of the current position of the turtle.
 
+**Example**:
+
+```logo
+?setpos [45 80]
+?pr xcor
+45
+```
+
 
 ## ycor
 
@@ -810,6 +985,14 @@ ycor
 `operation`
 
 `ycor` outputs the y-coordinate of the current position of the turtle.
+
+**Example**:
+
+```logo
+?setpos [45 80]
+?pr ycor
+80
+```
 
 
 ## clean
@@ -820,6 +1003,13 @@ clean
 
 The `clean` command erases the graphics screen but doesn't affect the turtle.
 
+**Example**:
+
+```logo
+?repeat 4 [fd 60 rt 90]
+?clean
+```
+
 
 ## dot
 
@@ -828,6 +1018,13 @@ dot [_xcor_ _ycor_]
 `command`
 
 The `dot` command puts a dot of the current pen colour at the specified coordinates, without moving the turtle. It does not draw a line, even if the pen is down.
+
+**Example**:
+
+```logo
+; Mark the centre of the screen (home position)
+?dot [0 0]
+```
 
 
 ## fence
@@ -840,6 +1037,14 @@ The `fence` command fences in the turtle within the edges of the screen. If you 
 
 See [`window`](#window) and [`wrap`](#wrap).
 
+**Example**:
+
+```logo
+?fence
+?fd 1000
+Turtle out of bounds
+```
+
 
 ## fill
 
@@ -848,6 +1053,15 @@ fill
 `command`
 
 The `fill` command fills the shape outlined by the current pen colour with the current pen colour. If the turtle is not enclosed, the background is filled with the current pen colour. Logo ignores lines of colours other than the current pen colour when determining what to fill.
+
+**Example**:
+
+```logo
+; Draw and fill a square (like a red maple leaf background)
+?setpc 4
+?repeat 4 [fd 60 rt 90]
+?fill
+```
 
 
 ## pendown (pd)
@@ -859,6 +1073,15 @@ pd
 
 The `pendown` command puts the turtle's pen down. When the turtle moves, it draws lines in the current pen colour. When you start up Logo, the pen is down.
 
+**Example**:
+
+```logo
+?pu
+?setpos [0 0]
+?pd
+?fd 80
+```
+
 
 ## penerase (pe)
 
@@ -868,6 +1091,16 @@ pe
 `command`
 
 `penerase` puts the turtle's eraser down. When the turtle moves, it erases lines it passes over. To take away the eraser, use either [`pendown`](#pendown-pd) or [`penup`](#penup-pu).
+
+**Example**:
+
+```logo
+; Draw then erase part of a line
+?fd 80
+?pe
+?bk 40
+?pd
+```
 
 
 ## penreverse (px)
@@ -879,6 +1112,14 @@ px
 
 `penreverse` puts the reversing pen down. When the turtle moves, it tries to interchange the pen colour and background colour, drawing where there aren't lines and erasing where there are. The exact effect of this reversal is complex; what it looks like on the screen depends on the pen colour, background colour, and whether lines are horizontal or vertical. The best results are on a black background.
 
+**Example**:
+
+```logo
+?px
+?repeat 4 [fd 60 rt 90]
+?pd
+```
+
 
 ## penup (pu)
 
@@ -889,6 +1130,15 @@ pu
 
 The `penup` command lifts the pen up: when the turtle moves, it does not draw lines. The turtle cannot draw until the pen is put down again.
 
+**Example**:
+
+```logo
+; Reposition turtle without drawing
+?pu
+?setpos [50 50]
+?pd
+```
+
 
 ## setbg
 
@@ -896,16 +1146,21 @@ setbg _colournumber_
 
 `command`
 
-The `setbg` (for set background) command sets the background colour to the colour represented by _colournumber_, where _colournumber_ is a value between 0 and 253.
+The `setbg` (for set background) command sets the background colour to the colour represented by _colournumber_, where _colournumber_ is a value between 0 and 254. The backgound colour is used for the background of the full graphics screen and not for the text screen. To set the background colour for text see [`settextcolor`](#settextcolor-settc).
 
-The background colour number is 255 and the text colour number is 254. The text colour is chosen to be in the same hue as the set background colour with a contrasting shade.
-
-The default background colour number is 74.
+The background colour number is 255. The default background colour number is 0.
 
 See [Colours](#appendix-e-colour-palette-for-pico-logo) for the default palette.
 
+**Example**:
 
-## setpc
+```logo
+; Set a red background for the stop sign you nearly missed
+?setbg 4
+```
+
+
+## setpc (setpencolor)
 
 setpc _colournumber_  
 
@@ -914,6 +1169,34 @@ setpc _colournumber_
 The `setpc` (for set pencolor) command sets the color of the pen to _colourumber_, where _colournumber_ is a value between 0 and 255. 
 
 See [Colours](#appendix-e-colour-palette-for-pico-logo) for the default palette.
+
+**Example**:
+
+```logo
+; Draw in red (maple leaf red)
+?setpc 4
+?repeat 4 [fd 60 rt 90]
+```
+
+
+## settextcolor (settc)
+
+settextcolor [_foreground_ _background_]  
+settc [_foreground_ _background_]
+
+`command`
+
+The `settextcolor` command sets the _foreground_ and _background_ colours for text. The input is a list of two colour numbers, where each colour number is a value between 0 and 15. 
+
+See [Colours](#appendix-e-colour-palette-for-pico-logo) for the default palette.
+
+**Example**:
+
+```logo
+; White text on red background
+?settc [15 4]
+?pr [Depot open at dawn]
+```
 
 
 ## setpalette
@@ -924,25 +1207,15 @@ setpalette _colournumber_ _list_
 
 `setpalette` sets the actual colour corresponding to a given _colournumber_ and _colournumber_ must be an integer greater than or equal to 0. The second input is a list of three nonnegative numbers less than 256 specifying the saturation of red, green, and blue in the desired colour.
 
-The first 128 colour numbers are the default palette for Pico Logo, and changing these colour numbers should be avoided. Colour numbers 254 and 255 are the foreground text and background colour numbers.
+See [Colours](#appendix-e-colour-palette-for-pico-logo) for the default palette.
 
-The following colour numbers are used by the Logo Editor for syntax colouring. You can change these to customise the editor's appearance:
+**Example**:
 
-| Colour Number | Purpose |
-|---|---|
-| 240 | Default text |
-| 241 | Comments |
-| 242 | Keywords (`to`, `end`) |
-| 243 | Functions (word after `to`) |
-| 244 | Variables (`:name`) |
-| 245 | Strings (`"word`) |
-| 246 | Numbers |
-| 247 | Commands |
-| 248–249 | _Reserved for future use_ |
-| 250 | Bracket depth 1 |
-| 251 | Bracket depth 2 |
-| 252 | Bracket depth 3 |
-| 253 | Editor background |
+```logo
+; Define colour 16 as maple-leaf red
+?setpalette 16 [196 30 58]
+?setpc 16
+```
 
 
 ## palette
@@ -955,6 +1228,13 @@ palette _colournumber_
 
 Colour numbers 254 and 255 are the foreground text and background colours.
 
+**Example**:
+
+```logo
+?show palette 4
+[170 0 0]
+```
+
 
 ## restorepalette
 
@@ -963,6 +1243,13 @@ restorepalette
 `command`
 
 Restores the palette's default colours. This command only restores colour numbers 0 through 127.
+
+**Example**:
+
+```logo
+?setpalette 4 [255 0 0]
+?restorepalette
+```
 
 
 ## window
@@ -977,6 +1264,14 @@ Changing `window` to [`fence`](#fence) or [`wrap`](#wrap) when the turtle is off
 
 See [`fence`](#fence) and [`wrap`](#wrap).
 
+**Example**:
+
+```logo
+; Allow the turtle to wander off screen
+?window
+?fd 500
+```
+
 
 ## wrap
 
@@ -987,6 +1282,14 @@ wrap
 The `wrap` command makes the turtle field wrap around the edges of the screen: if the turtle moves beyond one edge of the screen, it continues from the opposite edge. The turtle never leaves the visible bounds of the screen; when it tries to, it wraps around to the other side.
 
 See [`fence`](#fence) and [`window`](#window).
+
+**Example**:
+
+```logo
+; The turtle wraps around from right to left edge
+?wrap
+?fd 1000
+```
 
 
 ## background (bg)
@@ -1000,6 +1303,14 @@ bg
 
 See [Colours](#appendix-e-colour-palette-for-pico-logo) for the default palette.
 
+**Example**:
+
+```logo
+?setbg 4
+?pr background
+4
+```
+
 
 ## dot? (dotp)
 
@@ -1010,6 +1321,14 @@ dotp [_xcor_ _ycor_]
 
 The `dot?` operation outputs `true` if there is a dot on the screen at the indicated coordinates. If there is no dot, `dot?` outputs `false`.
 
+**Example**:
+
+```logo
+?dot [0 0]
+?pr dot? [0 0]
+true
+```
+
 
 ## pen
 
@@ -1018,6 +1337,16 @@ pen
 `operation`
 
 `pen` outputs the current state of the turtle's pen. The states are `pendown`, `penerase`, `penup`, and `penreverse`. When the turtle first starts up, `pen` outputs `pendown`.
+
+**Example**:
+
+```logo
+?pr pen
+pendown
+?pu
+?pr pen
+penup
+```
 
 
 ## pencolor (pc)
@@ -1031,6 +1360,33 @@ pc
 
 See [Colours](#appendix-e-colour-palette-for-pico-logo) for the default palette.
 
+**Example**:
+
+```logo
+?setpc 4
+?pr pencolor
+4
+```
+
+
+## textcolor (tc)
+
+textcolor  
+tc
+
+`operation`
+
+`textcolor` outputs a list of two colour numbers representing the foreground and background colours for text. Each colour number is a value between 0 and 15.
+
+See [Colours](#appendix-e-colour-palette-for-pico-logo) for the default palette.
+
+**Example**:
+
+```logo
+?settc [15 4]
+?show textcolor
+[15 4]
+```
 
 
 ===
@@ -1055,6 +1411,13 @@ ct
 
 `cleartext` clears the entire screen and puts the cursor at the upper-left corner of the text part of the screen. If you have been using the split screen, the cursor is on the eighth line from the bottom.
 
+**Example**:
+
+```logo
+?pr [Snow route starts at midnight]
+?ct
+```
+
 
 ## cursor
 
@@ -1065,6 +1428,14 @@ cursor
 `cursor` outputs a list of the column and line numbers of the cursor position. The upper-left corner of the screen is `[0 0]`. The upper-right is `[39 0]`.
 
 See [`setcursor`](#setcursor).
+
+**Example**:
+
+```logo
+?setcursor [10 5]
+?show cursor
+[10 5]
+```
 
 
 ## fullscreen (fs)
@@ -1078,6 +1449,14 @@ The `fullscreen` command devotes the entire screen to graphics. Only the turtle 
 
 If Logo needs to display an error message while you are using the full graphics screen, Logo splits the screen.
 
+**Example**:
+
+```logo
+?fs
+?repeat 4 [fd 80 rt 90]
+?ts
+```
+
 
 ## setcursor
 
@@ -1086,6 +1465,14 @@ setcursor [_columnnumber_ _linenumber_]
 `command`
 
 `setcursor` sets the cursor to the position indicated by _columnnumber_ and _linenumber_. Lines on the screen are numbered from 0 to 31. Character positions (columns) are numbered from 0 to 39.
+
+**Example**:
+
+```logo
+; Position the cursor near the centre of the screen
+?setcursor [20 15]
+?type "Curling
+```
 
 
 ## splitscreen (ss)
@@ -1097,6 +1484,12 @@ ss
 
 `splitscreen` devotes the top 24 lines of the screen to graphics and the bottom eight lines to text.
 
+**Example**:
+
+```logo
+?ss
+?repeat 4 [fd 80 rt 90]
+```
 
 
 ## textscreen (ts)
@@ -1108,6 +1501,14 @@ ts
 
 `textscreen` devotes the entire screen to text; the graphics screen is invisible to you until a graphics procedure is run.
 
+**Example**:
+
+```logo
+?fs
+?repeat 4 [fd 80 rt 90]
+?ts
+?pr [Back to text mode]
+```
 
 
 
@@ -1625,6 +2026,20 @@ local _list_
 
 The `local` command makes its input(s) local to the procedure within which the `local` occurs. A local variable is accessible only to that procedure and to procedures it calls; in this regard it resembles inputs to the procedure.
 
+**Example**:
+
+```logo
+?to greet
+>local "snack
+>make "snack "butter\ tart
+>pr se [Saved for later:] :snack
+>end
+?greet
+Saved for later: butter tart
+?pr name? "snack
+false
+```
+
 
 ## make
 
@@ -1633,6 +2048,14 @@ make _name_ _object_
 `command`
 
 The `make` command puts _object_ in _name_'s container, that is, it gives the variable name the value object.
+
+**Example**:
+
+```logo
+?make "team "house\ league
+?pr :team
+house league
+```
 
 
 ## name
@@ -1645,6 +2068,14 @@ The `name` command puts _object_ in _name_'s container, that is, it gives the va
 
 `name` is equivalent to [`make`](#make) with the order of the inputs reversed. Thus `name "welder "job` has the same effect as `make "job "welder`.
 
+**Example**:
+
+```logo
+?name "double\ double "order
+?pr :order
+double double
+```
+
 
 ## name? (namep)
 
@@ -1655,6 +2086,16 @@ namep _word_
 
 `name?` outputs `true` if _word_ has a value, that is, if `:word` exists; it outputs `false` otherwise.
 
+**Example**:
+
+```logo
+?make "permit "yes
+?pr name? "permit
+true
+?pr name? "ticket
+false
+```
+
 
 ## thing
 
@@ -1663,6 +2104,16 @@ thing _name_
 `operation`
 
 `thing` outputs the thing in the container _name_, that is, the value of the variable _name_. `thing "any` is equivalent to `:any`.
+
+**Example**:
+
+```logo
+?make "forecast "flurries
+?pr thing "forecast
+flurries
+?pr :forecast
+flurries
+```
 
 
 
@@ -1684,7 +2135,15 @@ abs _number_
 
 `operation`
 
-Outputs the absolute _number_. If _number_ less than zero the negative of _number is returned.
+Outputs the absolute _number_. If _number_ less than zero the negative of _number_ is returned.
+
+**Example**:
+
+```logo
+; Absolute value of a wind-chill complaint
+?pr abs -40
+40
+```
 
 
 ## arctan
@@ -1695,6 +2154,13 @@ arctan _number_
 
 Outputs the arctangent of _number_ in degrees.
 
+**Example**:
+
+```logo
+?pr arctan 1
+45
+```
+
 
 ## cos
 
@@ -1703,6 +2169,15 @@ cos _number_
 `operation`
 
 Outputs the cosine of _number_ in degrees.
+
+**Examples**:
+
+```logo
+?pr cos 0
+1
+?pr cos 60
+0.5
+```
 
 
 ## difference
@@ -1713,6 +2188,14 @@ difference _number1_ _number2_
 
 Outputs _number2_ subtracted from _number1_.
 
+**Example**:
+
+```logo
+; Difference between two snow-route ticket numbers
+?pr difference 705 416
+289
+```
+
 
 ## exp
 
@@ -1721,6 +2204,13 @@ exp _exponent_
 `operation`
 
 Outputs _e_ raised to the power of _exponent_.
+
+**Example**:
+
+```logo
+?pr exp 1
+2.71828
+```
 
 
 ## form
@@ -1735,6 +2225,16 @@ If _number_ is negative, the minus sign takes up one position in the field. If _
 
 If _width_ is less than or equal to zero, or if _decimalplaces_ is less than zero, an error occurs.
 
+**Examples**:
+
+```logo
+; Format the total after a farmers market pierogi run
+?pr word "$ form 1234.56 10 2
+$   1234.56
+?pr form -17.8 6 1
+-17.8
+```
+
 
 ## int
 
@@ -1743,6 +2243,16 @@ int _number_
 `operation`
 
 Returns the integer part of _number_; any decimal part is stripped off. No rounding occurs when `int` is used (contrast this with the [`round`](#round) operation described later in this chapter).
+
+**Examples**:
+
+```logo
+; Truncate a temperature reading
+?pr int -17.8
+-17
+?pr int 3.9
+3
+```
 
 
 ## intquotient
@@ -1753,6 +2263,14 @@ intquotient _integer1_ _integer2_
 
 `intquotient` outputs the result of dividing _integer1_ by _integer2_, truncated to an integer. An error occurs if _integer2_ is zero. If either input is a decimal number, it is truncated.
 
+**Example**:
+
+```logo
+; How many full four-person curling teams from 18 players?
+?pr intquotient 18 4
+4
+```
+
 
 ## ln
 
@@ -1761,6 +2279,15 @@ ln _number_
 `operation`
 
 Outputs natural logarithm of _number_. An error is returned if _number_ is less than or equal to zero.
+
+**Example**:
+
+```logo
+?pr ln 1
+0
+?pr ln exp 1
+1
+```
 
 
 ## log
@@ -1771,6 +2298,15 @@ log _number_
 
 Outputs the base-10 logarithm of _number_. An error is returned if _number_ is less than or equal to zero.
 
+**Example**:
+
+```logo
+?pr log 100
+2
+?pr log 1000
+3
+```
+
 ## product
 
 product _number1_ _number2_  
@@ -1779,6 +2315,14 @@ product _number1_ _number2_
 `operation`
 
 Outputs the product of its inputs. It is equivalent to the `*` infix-form operation. With one input, `product` outputs its input.
+
+**Example**:
+
+```logo
+; Approximate area of a curling sheet in square metres
+?pr product 5 45
+225
+```
 
 
 ## pwr
@@ -1789,6 +2333,13 @@ pwr _base_ _exponent_
 
 Outputs _base_ raised to the power of _exponent_.
 
+**Example**:
+
+```logo
+?pr pwr 2 10
+1024
+```
+
 
 ## quotient
 
@@ -1797,6 +2348,14 @@ quotient _number1_ _number2_
 `operation`
 
 Outputs the result of dividing _number1_ by _number2_. It is equivalent to the `/` infix-form operation. _Number2_ must not be zero. If it is, an error occurs.
+
+**Example**:
+
+```logo
+; How many 250 ml cups are in a 1 litre carton of chocolate milk?
+?pr quotient 1000 250
+4
+```
 
 
 ## random
@@ -1807,6 +2366,14 @@ random _integer_
 
 Outputs a random non-negative integer less than _integer_.
 
+**Example**:
+
+```logo
+; Pick a random seat row at the community rink
+?pr random 20
+7
+```
+
 
 ## remainder
 
@@ -1816,6 +2383,14 @@ remainder _integer1_ _integer2_
 
 Outputs the remainder obtained when _integer1_ is divided by _integer2_. The remainder is always an integer. If _integer1_ and _integer2_ are integers, this is _integer1_ mod _integer2_. If _integer1_ and _integer2_ are not integers, they are truncated. _Integer2_ must not be zero. If it is, an error occurs.
 
+**Example**:
+
+```logo
+; What is the remainder when dividing 17 by 5?
+?pr remainder 17 5
+2
+```
+
 ## round
 
 round _number_  
@@ -1824,6 +2399,16 @@ round _number_
 
 Outputs _number_ rounded off to the nearest integer. The maximum integer is 2,147,483,647.
 
+**Examples**:
+
+```logo
+; Round a temperature in Celsius
+?pr round -17.3
+-17
+?pr round -17.6
+-18
+```
+
 
 ## sin
 
@@ -1831,7 +2416,16 @@ sin _number_
 
 `operation`
 
-Outputs the csine of _number_ in degrees.
+Outputs the cosine of _number_ in degrees.
+
+**Examples**:
+
+```logo
+?pr sin 30
+0.5
+?pr sin 90
+1
+```
 
 
 ## sqrt
@@ -1841,6 +2435,14 @@ sqrt _number_
 `operation`
 
 Outputs the square root of _number_. The value _number_ must not be negative or an error will occur.
+
+**Example**:
+
+```logo
+; Square root of a 13 by 13 scarf pattern
+?pr sqrt 169
+13
+```
 
 
 ## sum
@@ -1852,6 +2454,15 @@ sum _number1_ _number2_
 
 Outputs the sum of its inputs. `sum` is equivalent to the `+` infix-form operation. With one input, `sum` outputs its input.
 
+**Examples**:
+
+```logo
+; Coffee plus a maple dip
+?pr sum 2.15 1.45
+3.6
+?pr (sum 1 2 3 4 5 6 7 8 9 10)
+55
+```
 
 ===
 # Conditionals and Control of Flow
@@ -1867,6 +2478,15 @@ true
 
 Outputs `"true`. In Logo, boolean truth is represented by the word `true`. 
 
+**Example**:
+
+```logo
+?pr true
+true
+?pr equal? true true
+true
+```
+
 
 ## false
 
@@ -1875,6 +2495,15 @@ false
 `operation`
 
 Outputs `"false`. In Logo, boolean false is represented by the word `false`.
+
+**Example**:
+
+```logo
+?pr false
+false
+?pr equal? true false
+false
+```
 
 
 ## ;
@@ -1943,8 +2572,6 @@ end
 ```
 
 
-
-
 ## iffalse (iff)
 
 iffalse _list_  
@@ -1953,6 +2580,20 @@ iff _list_
 `command`
 
 `iffalse` runs _list_ if the result of the most recent [`test`](#test) was `false`, otherwise it does nothing. Note that if [`test`](#test) has not been run in the same procedure or a superprocedure, or from top level, `iffalse` does nothing.
+
+**Example**:
+
+```logo
+?to check.rink :status
+>test equal? :status "open
+>iftrue [pr [Sharpen your skates]]
+>iffalse [pr [Try again after the thaw]]
+>end
+?check.rink "open
+Sharpen your skates
+?check.rink "soft
+Try again after the thaw
+```
 
 
 ## iftrue (ift)
@@ -1964,6 +2605,13 @@ ift _list_
 
 `iftrue` runs _list_ if the result of the most recent [`test`](#test) was `true`, otherwise it does nothing. Note that if [`test`](#test) has not been run in the same procedure or a superprocedure, or from top level, `iftrue` does nothing.
 
+**Example**:
+
+```logo
+?test name? "team
+?ift [pr :team]
+```
+
 
 ## test
 
@@ -1972,6 +2620,15 @@ test _predicate_
 `command`
 
 `test` remembers whether _predicate_ is `true` or `false` for subsequent use by [`iftrue`](#iftrue-ift) or [`iffalse`](#iffalse-iff). Each `test` is local to the procedure in which it occurs.
+
+**Example**:
+
+```logo
+?make "score 7
+?test :score > 5
+?ift [pr [Good draw, skip!]]
+Good draw, skip!
+```
 
 
 ## ignore
@@ -1982,6 +2639,13 @@ ignore _object_
 
 The `ignore` command does nothing. It is useful when you want to call a procedure for its side effects only.
 
+**Example**:
+
+```logo
+; Call random for a side effect, ignore the result
+?ignore random 100
+```
+
 
 ## co
 
@@ -1990,6 +2654,22 @@ co
 `command`
 
 The `co` (for continue) command resumes running of a procedure after a [`pause`](#pause) or `ESC`, continuing from wherever the procedure paused.
+
+**Example**:
+
+```logo
+?to survey
+>pr [Enter rink snack:]
+>pause
+>pr [Thank you!]
+>end
+?survey
+Enter rink snack:
+survey? pr "fries
+fries
+survey? co
+Thank you!
+```
 
 
 ## output (op)
@@ -2000,6 +2680,21 @@ op _object_
 `command`
 
 The `output` command is meaningful only when it is within a procedure, not at top level. It makes _object_ the output of your procedure and returns control to the caller. Note that although `output` is itself a command, the procedure containing it is an operation because it has an output. Compare with [`stop`](#stop).
+
+**Example**:
+
+```logo
+?to topping :snack
+>if equal? :snack "fries [output "gravy]
+>if equal? :snack "pierogi [output "sour\ cream]
+>if equal? :snack "toast [output "peameal]
+>output "Unknown
+>end
+?pr topping "fries
+gravy
+?pr topping "pierogi
+sour cream
+```
 
 
 ## pause
@@ -2012,6 +2707,22 @@ The `pause` command is meaningful only when it is within a procedure, not at top
 
 The procedure may be resumed by typing [`co`](#co).
 
+**Example**:
+
+```logo
+?to inspect
+>pr [Pausing for inspection...]
+>pause
+>pr [Resumed!]
+>end
+?inspect
+Pausing for inspection...
+inspect? pr "debugging
+debugging
+inspect? co
+Resumed!
+```
+
 
 ## stop
 
@@ -2021,6 +2732,19 @@ stop
 
 The `stop` command stops the procedure that is running and returns control to the caller. This command is meaningful only when it is within a procedure—not at top level. Note that a procedure containing `stop` is a command. Compare `stop` with [`output`](#output-op).
 
+**Example**:
+
+```logo
+?to check.temp :celsius
+>if :celsius > 0 [pr [Above freezing - no parka needed] stop]
+>pr [Below freezing - wear your toque!]
+>end
+?check.temp 5
+Above freezing - no parka needed
+?check.temp -20
+Below freezing - wear your toque!
+```
+
 
 ## wait
 
@@ -2029,6 +2753,15 @@ wait _integer_
 `command`
 
 `wait` tells Logo to wait for _integer_ 10ths of a second.
+
+**Example**:
+
+```logo
+; Pause for 1 second between messages
+?pr [Kettle on...]
+?wait 10
+?pr [Tea is steeped!]
+```
 
 
 ## catch
@@ -2040,6 +2773,21 @@ catch _name_ _list_
 `catch` runs _list_. If a [`throw`](#throw) _name_ command is called while _list_ is run, control returns to the first statement after the `catch`. The _name_ is used to match up a [`throw`](#throw) with a `catch`. For instance, `catch "chair [whatever]` catches a `throw "chair` but not a `throw "table`.
 
 There is one special case. `catch "error` catches an error that would otherwise print an error message and return to top level. If an error is caught, the message that Logo would normally print isn't printed. See the explanation of [`error`](#error) in this section to find out how to tell what the error was.
+
+**Example**:
+
+```logo
+?to safe.divide :a :b
+>catch "error [output :a / :b]
+>pr se [Error:] item 2 error
+>output 0
+>end
+?pr safe.divide 10 2
+5
+?pr safe.divide 10 0
+Error: Division by zero
+0
+```
 
 
 ## error
@@ -2057,7 +2805,15 @@ error
 
 Logo runs `throw "error [whenever]` an error occurs during the execution of a procedure. Control passes to top level unless a `catch "error` has been run. When an error is caught in this way, no error message is printed, and you can design your own.
 
-Refer to the reference document [Error Messages](#appendix-d-error-messages) for a complete list of error messages and their meanings.
+Refer to [Error Messages](#appendix-d-error-messages) for a complete list of error messages and their meanings.
+
+**Example**:
+
+```logo
+?catch "error [make "x 1/0]
+?show error
+[6 [Division by zero] quotient []]
+```
 
 
 ## go
@@ -2068,6 +2824,24 @@ go _word_
 
 The `go` command transfers control to the instruction following [`label`](#label) _word_ in the same procedure.
 
+**Example**:
+
+```logo
+?to count.loonies
+>make "n 0
+>label "loop
+>make "n :n + 1
+>pr :n
+>if :n < 5 [go "loop]
+>end
+?count.loonies
+1
+2
+3
+4
+5
+```
+
 
 ## label
 
@@ -2076,6 +2850,19 @@ label _word_
 `command`
 
 The `label` command itself does nothing. However, a [`go`](#go) _word_ passes control to the instruction following it. Note that _word_ must always be a literal word (that is, it must be preceded by a quotation mark).
+
+**Example**:
+
+```logo
+?to countdown
+>make "n 10
+>label "start
+>pr :n
+>make "n :n - 1
+>if :n > 0 [go "start]
+>pr [Zamboni doors closed]
+>end
+```
 
 
 ## for
@@ -2106,6 +2893,17 @@ do.while _list_ _predicatelist_
 
 `do.while` runs _list_ repeatedly as long as _predicatelist_ is `true`. An error occurs if _predicatelist_ is not `true` or `false`. A `do.while` loop can be exited early by a [`throw`](#throw) or [`stop`](#stop) command. _list_ is always run at least once.
 
+**Example**:
+
+```logo
+; Count ferry boarding calls
+?make "call 1
+?do.while [pr se [Call:] :call  make "call :call + 1] [:call <= 3]
+Call: 1
+Call: 2
+Call: 3
+```
+
 
 ## while
 
@@ -2114,6 +2912,17 @@ while _predicatelist_ _list_
 `command`
 
 `while` tests _predicatelist_ and, if it is `true`, runs _list_. It then repeats this process until _predicatelist_ is `false`. An error occurs if _predicatelist_ is not `true` or `false`. A `while` loop can be exited early by a [`throw`](#throw) or [`stop`](#stop) command. _list_ may not be run at all if _predicatelist_ is initially `false`.
+
+**Example**:
+
+```logo
+; Count days below freezing
+?make "temp -17
+?make "days 0
+?while [:temp < 0] [make "days :days + 1  make "temp :temp + 3]
+?pr :days
+6
+```
 
 
 ## do.until
@@ -2124,6 +2933,19 @@ do.until _list_ _predicatelist_
 
 `do.until` runs _list_ repeatedly until _predicatelist_ is `true`. An error occurs if _predicatelist_ is not `true` or `false`. A `do.until` loop can be exited early by a [`throw`](#throw) or [`stop`](#stop) command. _list_ is always run at least once.
 
+**Example**:
+
+```logo
+; Print ticks until the kettle boils
+?make "ticks 0
+?do.until [make "ticks :ticks + 1  pr :ticks] [:ticks = 5]
+1
+2
+3
+4
+5
+```
+
 
 ## until
 
@@ -2132,6 +2954,16 @@ until _predicatelist_ _list_
 `command`
 
 `until` tests _predicatelist_ and, if it is `false`, runs _list_. It then repeats this process until _predicatelist_ is `true`. An error occurs if _predicatelist_ is not `true` or `false`. An `until` loop can be exited early by a [`throw`](#throw) or [`stop`](#stop) command. _list_ may not be run at all if _predicatelist_ is initially `true`.
+
+**Example**:
+
+```logo
+; Count loonies to ten
+?make "score 0
+?until [:score = 10] [make "score :score + 1]
+?pr :score
+10
+```
 
 
 ## forever
@@ -2142,6 +2974,15 @@ forever _list_
 
 `forever` runs _list_ repeatedly until interrupted by `Brk`, `F4` or `F9`. A `forever` loop can also be exited by a [`throw`](#throw) or [`stop`](#stop) command.
 
+**Example**:
+
+```logo
+; Flash a warning until Brk is pressed
+?to blink.warning
+>forever [pr [Check ice conditions!]  wait 10]
+>end
+```
+
 
 ## repeat
 
@@ -2150,6 +2991,13 @@ repeat _integer_ _list_
 `command`
 
 `repeat` runs _list_ _integer_ times. An error occurs if _integer_ is negative can can be interrupted by `Brk`, `F4` or `F9`. A `repeat` loop can be exited early by a [`throw`](#throw) or [`stop`](#stop) command.
+
+**Example**:
+
+```logo
+; Draw a square
+?repeat 4 [fd 50 rt 90]
+```
 
 
 ## repcount
@@ -2160,6 +3008,16 @@ repcount
 
 `recount` outputs the repetition count of the innermost current [`repeat`](#repeat) or [`forever`](#forever), starting from 1. If no [`repeat`](#repeat) or [`forever`](#forever) is active, outputs –1.
 
+**Example**:
+
+```logo
+; Number three butter tart batches
+?repeat 3 [pr se [Batch] repcount]
+Batch 1
+Batch 2
+Batch 3
+```
+
 
 ## run
 
@@ -2168,6 +3026,16 @@ run _list_
 `command` or `operation`
 
 The `run` command runs _list_ as if typed in directly. If _list_ is an operation, then `run` outputs whatever _list_ outputs.
+
+**Example**:
+
+```logo
+?run [pr [Mind the slush]]
+Mind the slush
+?make "action [pr "sorry]
+?run :action
+sorry
+```
 
 
 ## throw
@@ -2180,6 +3048,22 @@ The `throw` command is meaningful only within the range of the [`catch`](#catch)
 
 See [`catch`](#catch). 
 
+**Example**:
+
+```logo
+?to find.snack :list :target
+>catch "found [
+>  foreach :list [[p]
+>    if equal? :p :target [pr se [Found:] :p  throw "found]
+>  ]
+>  pr [Snack not found]
+>]
+>end
+?find.snack [chips squares nanaimo] "nanaimo
+Found: nanaimo
+```
+
+
 ## toplevel
 
 toplevel
@@ -2187,6 +3071,15 @@ toplevel
 `operation`
 
 Outputs `"toplevel`. [`throw`](#throw) `toplevel` to return control to the top level.
+
+**Example**:
+
+```logo
+?to emergency.exit
+>pr [Returning to top level!]
+>throw toplevel
+>end
+```
 
 
 ## step
@@ -2198,6 +3091,18 @@ step _list_
 
 The `step` command takes the procedure indicated by _name_ or _list_ as input and lets you run them line by line. `step` pauses at each line of execution and continues only when you press any key on the keyboard.
 
+**Example**:
+
+```logo
+?to greet
+>pr [Hello]
+>pr [from the rink]
+>end
+?step "greet
+?greet
+; Execution pauses after each line, press any key to continue
+```
+
 
 ## trace
 
@@ -2207,6 +3112,19 @@ trace _list_
 `command`
 
 The `trace` command takes the procedures indicated by _name_ or _list_ as input and causes them to print tracing information when executed. It does not interrupt the execution of the procedure, but allows you to see the depth of the procedure stack during execution. `trace` is useful in understanding recursive procedures or complex programs with many subprocedures.
+
+**Example**:
+
+```logo
+?to greet :name
+>pr se [Hello] :name
+>end
+?trace "greet
+?greet "Riley
+==> greet [Riley]
+Hello Riley
+<== greet
+```
 
 
 ## unstep
@@ -2218,6 +3136,15 @@ unstep _list_
 
 `unstep` restores the procedure(s) indicated by _name_ or _list_ back to their original states. After you step through a procedure (with [`step`](#step)), you must use `unstep` so that it will execute normally again.
 
+**Example**:
+
+```logo
+?step "greet
+; ... step through greet ...
+?unstep "greet
+; greet now runs at normal speed again
+```
+
 
 ## untrace
 
@@ -2227,6 +3154,19 @@ untrace _list_
 `command`
 
 `untrace` stops the tracing of procedure _name_ and causes it to execute normally again.
+
+**Example**:
+
+```logo
+?trace "greet
+?greet "Casey
+==> greet [Casey]
+Hello Casey
+<== greet
+?untrace "greet
+?greet "Casey
+Hello Casey
+```
 
 
 
@@ -2366,6 +3306,19 @@ Outputs a list formed by evaluating the _procedure_ repeatedly and concatenating
 
 Each data list provides one input to _procedure_ at each evaluation. Thus, if there are two data lists, _procedure_ must have two inputs; if there are three data lists, _procedure_ must have three inputs; and so on.
 
+**Example**:
+
+```logo
+; Expand rink-counter shorthand to full orders
+?to expand :abbrev
+>if equal? :abbrev "DD [output [double double]]
+>if equal? :abbrev "KD [output [macaroni dinner]]
+>output (list :abbrev)
+>end
+?show map.se "expand [DD KD PB]
+[double double macaroni dinner PB]
+```
+
 
 ## filter
 
@@ -2502,6 +3455,15 @@ copydef _name_ _newname_
 
 `copydef` copies the definition of _name_, making it the definition of _newname_ as well.
 
+**Example**:
+
+```logo
+?to kettle  pr [Tea is ready]  end
+?copydef "kettle "thermos
+?thermos
+Tea is ready
+```
+
 
 ## define
 
@@ -2515,6 +3477,14 @@ If _name_ has no inputs, this must be the empty list. Each subsequent element is
 
 The second input to `define` has the same form as the output from [`text`](#text). `define` can redefine an existing procedure.
 
+**Example**:
+
+```logo
+?define "notice [[item] [pr se [Found by the rink door:] :item]]
+?notice "mitts
+Found by the rink door: mitts
+```
+
 
 ## defined? (definedp)
 
@@ -2524,6 +3494,16 @@ definedp _word_
 `operation`
 
 `defined?` outputs `true` if word is the name of a user-defined procedure, `false` otherwise.
+
+**Example**:
+
+```logo
+?to maple  pr [Leaf!]  end
+?pr defined? "maple
+true
+?pr defined? "oak
+false
+```
 
 
 ## primitive? (primitivep)
@@ -2535,6 +3515,15 @@ primitivep _name_
 
 `primitive?` outputs `true` if name is the name of a primitive, `false` otherwise.
 
+**Example**:
+
+```logo
+?pr primitive? "print
+true
+?pr primitive? "greet
+false
+```
+
 
 ## text
 
@@ -2544,6 +3533,16 @@ text _name_
 
 The `text` primitive outputs the definition of _name_ as a list of lists, suitable for input to [`define`](#define).
 
+**Example**:
+
+```logo
+?to notice :item
+>pr se [Found by the rink door:] :item
+>end
+?show text "notice
+[[item] [pr se [Found by the rink door:] :item]]
+```
+
 
 ## primitives
 
@@ -2552,6 +3551,15 @@ primitives
 `operation`
 
 `primitives` outputs a list of the names of all primitives, in alphabetical order. This list includes the names of all operations and commands described in this reference, as well as some additional primitives that are not described here but are available for use in your programs. The list does not include the names of user-defined procedures.
+
+**Example**:
+
+```logo
+?pr member? "print primitives
+true
+?pr member? "greet primitives
+false
+```
 
 
 ## help
@@ -2595,6 +3603,19 @@ and _predicate1_ _predicate2_
 
 Outputs `true` if all of its inputs are `true`. All inputs are evaluated.
 
+**Example**:
+
+```logo
+?pr and true true
+true
+?make "sidewalk "icy
+?make "salted true
+?pr and equal? :sidewalk "icy :salted
+true
+?pr and true false
+false
+```
+
 
 ## not
 
@@ -2604,6 +3625,18 @@ not _predicate_
 
 Outputs `true` if _predicate_ is `false`.  
 Outputs `false` if _predicate_ is `true`.
+
+**Example**:
+
+```logo
+?pr not true
+false
+?pr not false
+true
+?make "snowing false
+?if not :snowing [pr [Patio season declared]]
+Patio season declared
+```
 
 
 ## or
@@ -2615,6 +3648,18 @@ or _predicate1_ _predicate2_
 
 Outputs `true` if any of its inputs are `true`. All inputs are evaluated.
 
+**Example**:
+
+```logo
+?pr or false false
+false
+?pr or false true
+true
+?make "snack "butter\ tart
+?if or equal? :snack "butter\ tart equal? :snack "nanaimo\ bar [pr [Dessert table approved]]
+Dessert table approved
+```
+
 
 
 ===
@@ -2625,7 +3670,18 @@ Outputs `true` if any of its inputs are `true`. All inputs are evaluated.
 bitand _num1_ _num2_  
 (bitand _num1_ _num2_ _num3_ ...)
 
+`operation`
+
 Outputs the bitwise AND of its inputs, which must be integers.
+
+**Example**:
+
+```logo
+?pr bitand 12 10
+8
+?pr bitand 255 15
+15
+```
 
 
 ## bitor
@@ -2633,7 +3689,18 @@ Outputs the bitwise AND of its inputs, which must be integers.
 bitor _num1_ _num2_  
 (bitor _num1_ _num2_ _num3_ ...)
 
+`operation`
+
 Outputs the bitwise OR of its inputs, which must be integers.
+
+**Example**:
+
+```logo
+?pr bitor 12 10
+14
+?pr bitor 4 3
+7
+```
 
 
 ## bitxor
@@ -2641,28 +3708,76 @@ Outputs the bitwise OR of its inputs, which must be integers.
 bitxor _num1_ _num2_  
 (bitxor _num1_ _num2_ _num3_ ...)
 
+`operation`
+
 Outputs the bitwise exclusive OR of its inputs, which must be integers.
+
+**Example**:
+
+```logo
+?pr bitxor 12 10
+6
+?pr bitxor 255 170
+85
+```
 
 
 ## bitnot
 
 bitnot _num_  
 
+`operation`
+
 Outputs the bitwise NOT of its input, which must be an integer.
+
+**Example**:
+
+```logo
+?pr bitnot 0
+-1
+?pr bitnot 12
+-13
+```
 
 
 ## ashift
 
 ashift _num1_ _num2_  
 
+`operation`
+
 Outputs _num1_ arithmetic-shifted to the left by _num2_ bits. If _num2_ is negative, the shift is to the right with sign extension. The inputs must be integers.
+
+**Example**:
+
+```logo
+?pr ashift 1 4
+16
+?pr ashift 16 -2
+4
+?pr ashift -8 -1
+-4
+```
 
 
 ## lshift
 
 lshift _num1_ _num2_  
 
+`operation`
+
 Outputs _num1_ logical-shifted to the left by _num2_ bits. If _num2_ is negative, the shift is to the right with zero fill. The inputs must be integers.
+
+**Example**:
+
+```logo
+?pr lshift 1 4
+16
+?pr lshift 16 -2
+4
+?pr lshift -8 -1
+2147483644
+```
 
 
 
@@ -2677,6 +3792,16 @@ keyp
 `operation`
 
 `key?` outputs `true` if there is at least one character waiting to be read—that is, one that has been typed on the keyboard and not yet picked up by [`readchar`](#readchar-rc) or [`readlist`](#readlist-rl). `key?` outputs `false` if there are no such characters.
+
+**Example**:
+
+```logo
+?to wait.for.key
+>pr [Press any key to continue...]
+>until [key?] []
+>ignore rc
+>end
+```
 
 
 ## readchar (rc)
@@ -2693,6 +3818,17 @@ rc
 If reading from a network connection and the read times out before a character is available, `readchar` outputs an empty list.  `readchar` will also output an empty list if the network connection is closed before a character is available.
 
 If you are reading from the keyboard, you can set the high bit of the character being read by holding down either `Alt` key a you type the character. Setting the high bit adds 128 to the character.
+
+**Example**:
+
+```logo
+?to get.answer
+>pr [Press Y for Yes or N for No:]
+>make "key rc
+>if equal? :key "Y [pr [Oui!]  stop]
+>pr [Non!]
+>end
+```
 
 
 ## readchars (rcs)
@@ -2714,6 +3850,16 @@ Remember that a carriage return is read as a character.
 
 If you are reading from the keyboard, you can set the high bit of the character being read by holding down either `Alt` key as you type the character. Setting the high bit adds 128 to character.
 
+**Example**:
+
+```logo
+?to read.postal
+>pr [Enter first 3 chars of postal code:]
+>make "prefix rcs 3
+>pr se [Prefix:] :prefix
+>end
+```
+
 
 ## readlist (rl)
 
@@ -2727,6 +3873,20 @@ The `readlist` operation reads a line of information from the current file or ne
 If you are reading from a file where the end-of-file position has already been reached, `readlist` outputs the empty word.
 
 If you are reading from a network connection and the read times out before a line is available, `readlist` outputs the characters read up to that point. If the network connection was closed before `readlist` was called, `readlist` outputs an empty list.
+
+**Example**:
+
+```logo
+?to ask.order
+>pr [Enter rink snack order:]
+>make "input rl
+>pr se [You entered:] :input
+>end
+?ask.order
+Enter rink snack order:
+fries gravy
+You entered: fries gravy
+```
 
 
 ## readword (rw)
@@ -2744,6 +3904,20 @@ If you are reading from a network connection and the read times out before a lin
 
 See [`readlist`](#readlist-rl), [`readchar`](#readchar-rc), [`readchars`](#readchars-rcs), and [`setread`](#setread).
 
+**Example**:
+
+```logo
+?to ask.toque
+>pr [Enter toque colour:]
+>make "shade rw
+>pr se [Toque:] :shade
+>end
+?ask.toque
+Enter toque colour:
+red
+Toque: red
+```
+
 
 ## print (pr)
 
@@ -2758,6 +3932,17 @@ The `print` command prints its inputs followed by a carriage return on the scree
 
 Compare with [`type`](#type) and [`show`](#show).
 
+**Example**:
+
+```logo
+?pr [Snow route starts at midnight]
+Snow route starts at midnight
+?pr "sorry
+sorry
+?(pr "loonie "toonie "hydro)
+loonie toonie hydro
+```
+
 
 ## show
 
@@ -2768,6 +3953,15 @@ show _object_
 The `show` command prints _object_ followed by a carriage return on the screen, unless the destination has been changed by [`setwrite`](#setwrite). If object is a list, Logo leaves brackets around it. A space is printed between the inputs if there is more than one.
 
 Compare with [`type`](#type) and [`print`](#print-pr).
+
+**Example**:
+
+```logo
+?show [loonie toonie hydro]
+[loonie toonie hydro]
+?show "sorry
+sorry
+```
 
 
 ## type
@@ -2781,6 +3975,15 @@ The `type` command prints its inputs without a carriage return on the screen, un
 
 Compare with [`print`](#print-pr) and [`show`](#show).
 
+**Example**:
+
+```logo
+?type "Rink
+?type ": 
+?type "closed
+Rink: closed
+```
+
 
 ## standout
 
@@ -2789,6 +3992,15 @@ standout _object_
 `operation`
 
 outputs _object_ in standout mode. In standout mode, text is displayed in reverse video. If the display does not support reverse video, the text is displayed normally. The outermost brackets of lists are not printed.
+
+**Example**:
+
+```logo
+?pr standout "Caution
+Caution
+?pr standout [Slush at door]
+Slush at door
+```
 
 
 ## toot
@@ -2806,6 +4018,17 @@ If one frequency is provided the same tone is produced on both left and right ch
 
 > The actual frequency range is 100Hz to 2000Hz. If the input is outside this range, no tone is produced and but `toot` behaves as if a rest is requested. By convention, a rest is produced using a frequency of 0Hz.
 
+**Example**:
+
+```logo
+; Play A440 for 500ms (like a school gym scoreboard buzzer)
+?toot 500 440
+; Play two notes: a rising interval
+?toot 250 440
+?toot 250 523
+; Play different tones on left and right channels
+?(toot 1000 440 523)
+```
 
 
 ===
@@ -2819,6 +4042,14 @@ nodes
 
 `nodes` outputs the number of free nodes. This gives you an idea of how much space you have in your workspace for procedures, variables, properties, and the running of procedures. `nodes` is most useful if run immediately after [`recycle`](#recycle).
 
+**Example**:
+
+```logo
+?recycle
+?pr nodes
+14253
+```
+
 
 ## recycle
 
@@ -2827,6 +4058,15 @@ recycle
 `command`
 
 The `recycle` command frees up as many nodes as possible, performing what is called a garbage collection. When you don't use `recycle`, garbage collections happen automatically whenever necessary, but each one takes at least one second. Running `recycle` before a time-dependent activity prevents the automatic garbage collector from slowing things down at an awkward time.
+
+**Example**:
+
+```logo
+; Free memory before starting the main loop
+?recycle
+?pr nodes
+14253
+```
 
 
 ## po
@@ -2838,6 +4078,18 @@ po _list_
 
 The `po` (for print out) command prints the definition(s) of the named procedure(s).
 
+**Example**:
+
+```logo
+?to notice :item
+>pr se [Found in lost and found:] :item
+>end
+?po "notice
+to notice :item
+pr se [Found in lost and found:] :item
+end
+```
+
 
 ## poall
 
@@ -2846,6 +4098,18 @@ poall
 `command`
 
 The `poall` (for print out all) command prints the definition of every procedure and the value of every variable in the workspace.
+
+**Example**:
+
+```logo
+?make "snack "ketchup\ chips
+?to hello  pr [Hi]  end
+?poall
+make "snack "ketchup\ chips
+to hello
+pr [Hi]
+end
+```
 
 
 ## pon
@@ -2857,6 +4121,14 @@ pon _list_
 
 `pon` (for print out name) prints the name and value of the named variable(s).
 
+**Example**:
+
+```logo
+?make "snowbank "tall
+?pon "snowbank
+make "snowbank "tall
+```
+
 
 ## pons
 
@@ -2865,6 +4137,16 @@ pons
 `command`
 
 `pons` (for print out names) prints the name and value of every variable in the workspace.
+
+**Example**:
+
+```logo
+?make "snack "ketchup\ chips
+?make "temp -17
+?pons
+make "snack "ketchup\ chips
+make "temp -17
+```
 
 
 ## pops
@@ -2877,6 +4159,16 @@ pops
 
 See [`bury`](#bury) for exceptions.
 
+**Example**:
+
+```logo
+?to weather  pr [Chance of flurries]  end
+?pops
+to weather
+pr [Chance of flurries]
+end
+```
+
 
 ## pot
 
@@ -2886,6 +4178,16 @@ pot _list_
 `command`
 
 The `pot` (for print out title) command prints the title line of the named procedure(s) in the workspace.
+
+**Example**:
+
+```logo
+?to label :item :shelf
+>pr (se [Put] :item [on] :shelf)
+>end
+?pot "label
+to label :item :shelf
+```
 
 
 ## pots
@@ -2898,6 +4200,16 @@ pots
 
 See [`bury`](#bury) for exceptions.
 
+**Example**:
+
+```logo
+?to maple  end
+?to leaf  end
+?pots
+to maple
+to leaf
+```
+
 
 ## erall
 
@@ -2908,6 +4220,16 @@ erall
 `erall` erases all procedures, variables, and properties from the workspace.
 
 See [`bury`](#bury) for exceptions.
+
+**Example**:
+
+```logo
+?make "route "snow
+?to hello  pr [Hi]  end
+?erall
+?pr name? "route
+false
+```
 
 
 ## erase (er)
@@ -2921,6 +4243,17 @@ er _list_
 
 The `erase` command erases the named procedure(s) from the workspace.
 
+**Example**:
+
+```logo
+?to hello  pr [Hello]  end
+?defined? "hello
+true
+?erase "hello
+?defined? "hello
+false
+```
+
 
 ## ern
 
@@ -2930,6 +4263,17 @@ ern _list_
 `command`
 
 The `ern` (for erase name) command erases the named variable(s) from the workspace.
+
+**Example**:
+
+```logo
+?make "toque "red
+?pr name? "toque
+true
+?ern "toque
+?pr name? "toque
+false
+```
 
 
 ## erns
@@ -2942,6 +4286,16 @@ erns
 
 See [`bury`](#bury) for exceptions.
 
+**Example**:
+
+```logo
+?make "snack "ketchup\ chips
+?make "temp -17
+?erns
+?pr name? "snack
+false
+```
+
 
 ## erps
 
@@ -2953,6 +4307,15 @@ The `erps` (for erase procedures) command erases all procedures from the workspa
 
 See [`bury`](#bury) for exceptions.
 
+**Example**:
+
+```logo
+?to pancake  pr [Needs syrup]  end
+?erps
+?defined? "pancake
+false
+```
+
 
 ## bury 
 
@@ -2962,6 +4325,15 @@ bury _list_
 `command`
 
 The `bury` command buries the procedure(s) in its input. Certain commands ([`erall`](#erall), [`erps`](#erps), [`poall`](#poall), [`pops`](#pops), [`pots`](#pots), and [`save`](#save)) act on everything in the workspace except procedures and names that are buried. 
+
+**Example**:
+
+```logo
+?to startup  pr [Welcome to Pico Logo!]  end
+?bury "startup
+?pots
+; startup is not listed
+```
 
 
 ## buryall 
@@ -2974,6 +4346,16 @@ The `buryall` command buries all the procedures and variable names in the worksp
 
 Once `buryall` is run, there are no procedure titles or names visible. 
 
+**Example**:
+
+```logo
+?to greet  pr [Fresh coffee]  end
+?make "snack "butter\ tart
+?buryall
+?pots
+; nothing listed
+```
+
 
 ## buryname
 
@@ -2984,6 +4366,15 @@ buryname _list_
 
 `buryname` buries the variable name(s) in its input.
 
+**Example**:
+
+```logo
+?make "population 38000000
+?buryname "population
+?pons
+; population is not listed
+```
+
 
 ## unbury 
 
@@ -2993,6 +4384,15 @@ unbury _list_
 `command`
 
 The `unbury` command unburies the named procedure(s). 
+
+**Example**:
+
+```logo
+?bury "startup
+?unbury "startup
+?pots
+to startup
+```
 
 
 ## unburyall 
@@ -3005,6 +4405,15 @@ unburyall
 
 Once `unburyall` is run, the procedures and variable names are visible. 
 
+**Example**:
+
+```logo
+?buryall
+?unburyall
+?pots
+; all procedures visible again
+```
+
 
 ## unburyname 
 
@@ -3015,6 +4424,14 @@ unburyname _list_
 
 `unburyname` unburies the variable name(s) in its input. 
 
+**Example**:
+
+```logo
+?buryname "ticket
+?unburyname "ticket
+?pons
+make "ticket "snow\ route
+```
 
 
 
@@ -3030,6 +4447,15 @@ files
 
 Outputs a list of file names in the currect directory. If _ext_ is present, the file names are limited to those with the _ext_ extension. If _ext_ is "*" then all files are output.
 
+**Example**:
+
+```logo
+?pr files
+[startup.lgo rink.lgo readme.txt]
+?pr (files "lgo")
+[startup.lgo rink.lgo]
+```
+
 
 ## directories
 
@@ -3039,6 +4465,13 @@ directories
 
 Outputs a list of directory names in the current directory.
 
+**Example**:
+
+```logo
+?pr directories
+[Logo sketches snacks]
+```
+
 
 ## createdir
 
@@ -3047,6 +4480,14 @@ createdir _pathname_
 `command`
 
 `createdir` creates the subdirectory indicated by _pathname_. The last file name in _pathname_ is the subdirectory to be created, and preceding names indicate where it should be placed.
+
+**Example**:
+
+```logo
+?createdir "sketches
+?pr directories
+[sketches]
+```
 
 
 ## setprefix
@@ -3085,6 +4526,17 @@ prefix
 
 Outputs the current file prefix, or `[]` if there is no prefix.
 
+**Example**:
+
+```logo
+?setprefix "/Logo
+?pr prefix
+/Logo/
+?setprefix []
+?pr prefix
+[]
+```
+
 
 ## editfile
 
@@ -3102,6 +4554,14 @@ If you exit the editor with `Brk`, the file remains unchanged.
 
 When exiting the editor, the contents of the buffer are not run.
 
+**Example**:
+
+```logo
+?editfile "storm_notes.lgo
+; Opens the editor with storm_notes.lgo contents
+; After saving and exiting, the file is updated
+```
+
 
 ## erasefile (erf)
 
@@ -3112,6 +4572,16 @@ erf _pathname_
 
 Stands for erase file. Erases any type of file. The input must be the name of a file in the current directory or a full _pathname_.
 
+**Example**:
+
+```logo
+?pr file? "old_data.lgo
+true
+?erasefile "old_data.lgo
+?pr file? "old_data.lgo
+false
+```
+
 
 ## erasedir
 
@@ -3120,6 +4590,15 @@ erasedir _pathname_
 `command`
 
 Stands for erase directory. Erases a directory. The directory must be empty or this command will result in an error.
+
+**Example**:
+
+```logo
+?createdir "temp
+?erasedir "temp
+?pr dir? "temp
+false
+```
 
 
 ## catalog
@@ -3133,6 +4612,15 @@ Prints a list of files and directories in the current directory. Directories hav
 
 `catalog` prints to the screen but not to the current writer.
 
+**Example**:
+
+```logo
+?catalog
+startup.lgo
+rink.lgo
+sketches/
+```
+
 
 ## file? (filep)
 
@@ -3142,6 +4630,15 @@ filep _pathname_
 `operation`
 
 Outputs `true` if the file exists, otherwise `false`.
+
+**Example**:
+
+```logo
+?pr file? "startup.lgo
+true
+?pr file? "missing.lgo
+false
+```
 
 
 ## dir? (dirp)
@@ -3153,6 +4650,15 @@ dirp _pathname_
 
 Outputs `true` if the directory exists, otherwise `false`.
 
+**Example**:
+
+```logo
+?pr dir? "sketches
+true
+?pr dir? "snacks
+false
+```
+
 
 ## rename
 
@@ -3161,6 +4667,14 @@ rename _pathname1_ _pathname2_
 `operation`
 
 Renames the file or directory from _pathname1_ to _pathname2_. A file or directory can be moved if the paths are different.
+
+**Example**:
+
+```logo
+?rename "draft.lgo "pancake_final.lgo
+?pr file? "pancake_final.lgo
+true
+```
 
 
 ## pofile
@@ -3172,6 +4686,15 @@ pofile _pathname_
 `pofile` (for print out file) prints out the contents of the file indicated by _pathname_. Logo prints the contents to the screen. An error occurs if you try to use `pofile` on a file that is already open.
 
 `pofile` prints to the screen but not to the current writer.
+
+**Example**:
+
+```logo
+?pofile "winter.lgo
+to greet
+pr [Mitts are in the hall]
+end
+```
 
 
 
@@ -3188,6 +4711,13 @@ The `load` command loads the contents of the file indicated by _pathname_ into t
 
 After Logo loads the contents of a file, it looks for a variable called `startup`. If one exists, Logo executes its contents.
 
+**Example**:
+
+```logo
+?load "winter.lgo
+; Loads all procedures and variables from winter.lgo
+```
+
 
 ## save
 
@@ -3196,6 +4726,14 @@ save _pathname_
 `command`
 
 The `save` command creates a file and saves in it all unburied procedures and variables and all properties in the workspace. An error occurs if the file you name already exists. In this case, you should first either erase the existing file using [`erasefile`](#erasefile-erf) or rename it using [`rename`](#rename).
+
+**Example**:
+
+```logo
+?to greet  pr [Fresh coffee]  end
+?save "winter.lgo
+; Saves all procedures and variables to winter.lgo
+```
 
 
 ## savel
@@ -3207,6 +4745,15 @@ savel _namelist_ _pathname_
 
 The `savel` command saves the procedures named in _name_ or _namelist_, and all the unburied variables and properties in the workspace to _pathname_. An error occurs if any of the procedures named in _name_ or _namelist_ do not exist in the workspace, or if the file you name already exists. In this case, you should first either erase the existing file using [`erasefile`](#erasefile-erf) or rename it using [`rename`](#rename). This command is useful for saving a portion of your workspace onto a SD Card. Compare it with [`save`](#save).
 
+**Example**:
+
+```logo
+?to greet  pr [Hello]  end
+?to farewell  pr [Goodbye]  end
+?savel [greet farewell] "greetings.lgo
+; Saves only greet and farewell procedures
+```
+
 
 ## loadpic
 
@@ -3215,6 +4762,13 @@ loadpic _pathname_
 `command`
 
 The `loadpic` command loads the picture named by _pathname_ onto the graphics screen. Logo will only load 8-bit indexed color BMP onto the graphics screen. The palette will be changed to match that in the BMP file.
+
+**Example**:
+
+```logo
+; Load a grey jay image onto the graphics screen
+?loadpic "greyjay.bmp
+```
 
 
 ## savepic
@@ -3225,6 +4779,14 @@ savepic _pathname_
 
 `savepic` saves the graphics screen into the file indicated by _pathname_. You can retrieve the screen later using [`loadpic`](#loadpic). The image is saved as a 8-bit indexed color BMP (.bmp) file.
 
+**Example**:
+
+```logo
+; Draw something then save the screen
+?repeat 4 [fd 50 rt 90]
+?savepic "rink.bmp
+```
+
 
 ## dribble
 
@@ -3234,6 +4796,16 @@ dribble _file_
 
 `dribble` starts the process of sending a copy of the characters displayed on the text screen to _file_. `dribble` records interactions between the PicoCalc and the person at the keyboard. `dribble` automatically opens file. `nodribble` stops the process of dribbling. You cannot use [`setread`](#setread) or [`setwrite`](#setwrite) with a dribble file while still dribbling. However, once a dribble file on disk has been closed with [`nodribble`](#nodribble), you can treat it like any other file. You can then open it, read from it, or write to it. Note that only one dribble file can be open at one time.
 
+**Example**:
+
+```logo
+?dribble "session.txt
+?pr [Hello from the rink!]
+Hello from the rink!
+?nodribble
+; session.txt now contains the interaction
+```
+
 
 ## nodribble
 
@@ -3242,6 +4814,14 @@ nodribble
 `command`
 
 `nodribble` turns off the dribble feature so a copy of the characters from the screen will no longer be sent to the file or device named previously by the [`dribble`](#dribble) command.
+
+**Example**:
+
+```logo
+?dribble "log.txt
+?pr [Logging session...]
+?nodribble
+```
 
 
 
@@ -3263,6 +4843,15 @@ allopen
 
 `allopen` outputs a list of all files and network connections currently open. The [`open`](#open) command opens a file or a network connection.
 
+**Example**:
+
+```logo
+?open "notes.lgo
+?open "log.txt
+?show allopen
+[notes.lgo log.txt]
+```
+
 
 ## close
 
@@ -3272,6 +4861,16 @@ close _target_
 `command`
 
 The `close` command closes the named file or network connection that is currently [`open`](#open). See [`open`](#open) to open a file or network connection. An error occurs if you try to use [`close`](#close) with a file or network connection that is not open. An error also occurs if you try to use [`close`](#close) with a file or network connection that is opened by the [`dribble`](#dribble) command.
+
+**Example**:
+
+```logo
+?open "log.txt
+?setwrite "log.txt
+?pr [Session started after snow clearing]
+?setwrite []
+?close "log.txt
+```
 
 
 ## closeall
@@ -3284,6 +4883,16 @@ The `closeall` command closes all files and network connections that are current
 
 See [`nodribble`](#nodribble) for closing dribble files.
 
+**Example**:
+
+```logo
+?open "data.txt
+?open "log.txt
+?closeall
+?show allopen
+[]
+```
+
 
 ## filelen
 
@@ -3294,6 +4903,15 @@ filelen _file_
 `filelen` outputs the length in bytes of the contents of the file indicated by _file_. The file must be open to use this primitive. An error occurs if the file is not open.
 
 This procedure returns an error if the file is a network connection.
+
+**Example**:
+
+```logo
+?open "notes.lgo
+?pr filelen "notes.lgo
+1024
+?close "notes.lgo
+```
 
 
 ## open
@@ -3312,6 +4930,15 @@ Once a file or network connection is open, you use [`setread`](#setread) and [`s
 
 When you finish using Logo, you must close all files and network connections that are open, see the [`close`](#close), [`closeall`](#closeall) and [`goodbye`](#goodbye) commands.
 
+**Example**:
+
+```logo
+?open "log.txt
+?setwrite "log.txt
+?pr [Logging from the basement workbench]
+?setwrite []
+?close "log.txt
+```
 
 
 ## reader
@@ -3322,6 +4949,17 @@ reader
 
 `reader` outputs the current file or network connection that is open for reading. You can change the current read file with the [`setread`](#setread) primitive. `reader` returns the name of the file, the network connection or the empty list if the current reader is the keyboard.
 
+**Example**:
+
+```logo
+?pr reader
+[]
+?open "recipes.txt
+?setread "recipes.txt
+?pr reader
+recipes.txt
+```
+
 
 ## readpos
 
@@ -3330,6 +4968,18 @@ readpos
 `operation`
 
 `readpos` (for `read` `pos`ition) outputs the position in the current reader. An error occurs if the current reader is a network connection or the keyboard. To set the position in the read file, see the [`setreadpos`](#setreadpos) command.
+
+**Example**:
+
+```logo
+?open "notes.lgo
+?setread "notes.lgo
+?pr readpos
+0
+?ignore readword
+?pr readpos
+12
+```
 
 
 ## setread
@@ -3345,6 +4995,17 @@ Before you use `setread`, you must open the file or network connection with the 
 
 To set the current reader back to the keyboard, give `setread` the empty list as input.
 
+**Example**:
+
+```logo
+?open "recipes.txt
+?setread "recipes.txt
+?pr readword
+buttertarts
+?setread []
+; back to reading from keyboard
+```
+
 
 ## setreadpos
 
@@ -3355,6 +5016,16 @@ setreadpos _integer_
 `setreadpos` sets the read position in the current reader. The _integer_ should be a number between 0 and the current length of the file. An error occurs if it is not in this range. An error also occurs if the current reader is a network connection or the keyboard.
 
 See [`readpos`](#readpos) for more information about the `setreadpos` command.
+
+**Example**:
+
+```logo
+?open "notes.lgo
+?setread "notes.lgo
+?setreadpos 0
+?pr readpos
+0
+```
 
 
 ## setwrite
@@ -3371,6 +5042,16 @@ To restore the screen as the current writer, use the `setwrite` command with the
 
 > The commands [`po`](#po), [`poall`](#poall), [`pon`](#pon), [`pons`](#pons), [`pops`](#pops), [`pot`](#pot), [`pots`](#pots), and [`pofile`](#pofile) all print to the screen but not to the current writer.
 
+**Example**:
+
+```logo
+?open "log.txt
+?setwrite "log.txt
+?pr [Logged from the rink]
+?setwrite []
+?close "log.txt
+```
+
 
 ## setwritepos
 
@@ -3382,6 +5063,19 @@ setwritepos _integer_
 
 To check the current position, use the [`writepos`](#writepos) command.
 
+**Example**:
+
+```logo
+?open "log.txt
+?setwrite "log.txt
+?pr [line one]
+?pr writepos
+9
+?setwritepos 0
+?pr writepos
+0
+```
+
 
 ## writepos
 
@@ -3390,6 +5084,16 @@ writepos
 `operation`
 
 `writepos` (for write position) outputs where in the current write file the the next character will be written. An error occurs if the current writer is the screen or a network connection.
+
+**Example**:
+
+```logo
+?open "log.txt
+?setwrite "log.txt
+?pr [Hydro]
+?pr writepos
+6
+```
 
 
 ## writer
@@ -3400,6 +5104,18 @@ writer
 
 `writer` outputs the current file, network connection, or the empty list if the current writer is the screen. Compare this with the [`allopen`](#allopen) operation.
 
+**Example**:
+
+```logo
+?pr writer
+[]
+?open "log.txt
+?setwrite "log.txt
+?pr writer
+log.txt
+?setwrite []
+```
+
 
 ## .timeout
 
@@ -3409,6 +5125,16 @@ writer
 
 `timeout` outputs the current timeout value in 10ths of a second for network operations. A timeout value of 0 indicates that there is no timeout.
 
+**Example**:
+
+```logo
+?pr .timeout
+0
+?.settimeout 50
+?pr .timeout
+50
+```
+
 
 ## .settimeout
 
@@ -3417,6 +5143,15 @@ writer
 `command`
 
 The `settimeout` command sets the timeout value for network operations to _integer_ 10ths of a second. A timeout value of 0 indicates that there is no timeout. If a network operation does not complete within the specified time, it fails with an error.
+
+**Example**:
+
+```logo
+; Set 5 second timeout for network operations
+?.settimeout 50
+?pr .timeout
+50
+```
 
 
 
@@ -3431,6 +5166,17 @@ date
 
 `date` outputs the current date as a list in the form `[year month day]`, where year is the full year (e.g., 2026), month is a number from 1 to 12, and day is a number from 1 to 31.
 
+**Example**:
+
+```logo
+?show date
+[2026 7 1]
+; July 1, after the fireworks are swept up
+?make "d date
+?pr se [Year:] item 1 :d
+Year: 2026
+```
+
 
 ## time
 
@@ -3439,6 +5185,17 @@ time
 `operation`
 
 `time` outputs the current time as a list in the form `[hour minute second]`, where hour is a number from 0 to 23, minute is a number from 0 to 59, and second is a number from 0 to 59.
+
+**Example**:
+
+```logo
+?show time
+[14 30 0]
+; 2:30 PM Eastern Time
+?make "t time
+?pr se [Hour:] item 1 :t
+Hour: 14
+```
 
 
 ## setdate
@@ -3449,6 +5206,15 @@ setdate [_year_ _month_ _day_]
 
 The `setdate` command sets the current date to the specified _year_, _month_, and _day_. An error occurs if the date is not valid.
 
+**Example**:
+
+```logo
+; Set date to a long-weekend morning
+?setdate [2026 7 1]
+?show date
+[2026 7 1]
+```
+
 
 ## settime
 
@@ -3458,6 +5224,15 @@ settime [_hour_ _minute_ _second_]
 
 The `settime` command sets the current time to the specified _hour_, _minute_, and _second_. An error occurs if the time is not valid.
 
+**Example**:
+
+```logo
+; Set time to noon
+?settime [12 0 0]
+?show time
+[12 0 0]
+```
+
 
 
 ===
@@ -3465,13 +5240,23 @@ The `settime` command sets the current time to the specified _hour_, _minute_, a
 
 These procedures allow you to manage the WiFi connection of the device.
 
-## wifi?
+## wifi? (wifip)
 
 wifi?
 
 `operation`
 
 `wifi?` outputs `true` if the WiFi is connected, otherwise it outputs `false`.
+
+**Example**:
+
+```logo
+?pr wifi?
+false
+?wifi.connect "TimHortonsWiFi "double-double
+?pr wifi?
+true
+```
 
 
 ## wifi.mac
@@ -3498,6 +5283,17 @@ wifi.connect _ssid_ _password_
 
 The `wifi.connect` command connects to the WiFi network with the given _ssid_ and _password_. If the connection is successful, `wifi?` will output `true`. If the connection fails, an error message is displayed.
 
+**Example**:
+
+```logo
+?wifi.connect "TimHortonsWiFi "double-double
+?pr wifi?
+true
+?pr wifi.ssid
+TimHortonsWiFi
+```
+
+
 ## wifi.ip
 
 wifi.ip
@@ -3505,6 +5301,14 @@ wifi.ip
 `operation`
 
 `wifi.ip` outputs the current IP address assigned to the device by the WiFi network. If the device is not connected to a WiFi network, `wifi.ip` outputs the empty list.
+
+**Example**:
+
+```logo
+?wifi.connect "TimHortonsWiFi "double-double
+?pr wifi.ip
+192.168.1.42
+```
 
 
 ## wifi.ssid
@@ -3515,6 +5319,14 @@ wifi.ssid
 
 `wifi.ssid` outputs the SSID of the WiFi network to which the device is currently connected. If the device is not connected to a WiFi network, `wifi.ssid` outputs the empty list.
 
+**Example**:
+
+```logo
+?pr wifi.ssid
+TimHortonsWiFi
+```
+
+
 ## wifi.disconnect
 
 wifi.disconnect
@@ -3522,6 +5334,16 @@ wifi.disconnect
 `command`
 
 The `wifi.disconnect` command disconnects the device from the current WiFi network. After executing this command, `wifi?` will output `false`.
+
+**Example**:
+
+```logo
+?pr wifi?
+true
+?wifi.disconnect
+?pr wifi?
+false
+```
 
 
 ## wifi.scan
@@ -3531,6 +5353,13 @@ wifi.scan
 `operation`
 
 `wifi.scan` outputs a list of available WiFi networks. Each network is represented as a sublist containing the SSID and signal strength.
+
+**Example**:
+
+```logo
+?show wifi.scan
+[[TimHortonsWiFi -65] [HarveysWiFi -72] [HomeNetwork -48]]
+```
 
 
 
@@ -3546,6 +5375,15 @@ network.ping _ipaddress_
 
 The `network.ping` operation sends a ping request to the specified _ipaddress_. It outputs the number of milliseconds it took for the response if a response is received, otherwise it outputs -1. The _ipaddress_ should be in standard dotted-decimal notation (e.g., "192.168.1.1").
 
+**Example**:
+
+```logo
+?pr network.ping "8.8.8.8
+14
+?pr network.ping "192.168.1.1
+2
+```
+
 
 ## network.resolve
 
@@ -3554,6 +5392,13 @@ network.resolve _hostname_
 `operation`
 
 The `network.resolve` operation takes a _hostname_ (e.g., "www.example.com") and outputs its corresponding IP address in dotted-decimal notation. If the hostname cannot be resolved, it outputs the empty list.
+
+**Example**:
+
+```logo
+?pr network.resolve "canada.ca
+192.197.168.105
+```
 
 
 ## network.ntp
@@ -3570,6 +5415,16 @@ If the synchronization succeeds, the device's date and time are updated to match
 
 The default NTP server is "pool.ntp.org". You can specify a different server by providing its _serveraddress_ as an argument.
 
+**Example**:
+
+```logo
+; Sync time with EST timezone (UTC-5)
+?pr (network.ntp -5)
+true
+?show time
+[14 30 0]
+```
+
 
 
 ===
@@ -3583,6 +5438,15 @@ erprops
 
 `erprops` (for erase properties) erases all properties from the workspace. To check which property lists are currently in the workspace, use [`pps`](#pps). Use [`remprop`](#remprop) to remove properties one at a time from the workspace.
 
+**Example**:
+
+```logo
+?pprop "loonie "value "one
+?erprops
+?pr gprop "loonie "value
+[]
+```
+
 
 ## gprop
 
@@ -3591,6 +5455,17 @@ gprop _name_ _property_
 `operation`
 
 `gprop` (for get property) outputs the value of _property_ of _name_. If there is no such property, `gprop` outputs the empty list.
+
+**Example**:
+
+```logo
+?pprop "toque "season "winter
+?pprop "toque "drawer "hall
+?pr gprop "toque "season
+winter
+?pr gprop "toque "pom
+[]
+```
 
 
 ## plist
@@ -3601,6 +5476,15 @@ plist _name_
 
 `plist` outputs the property list associated with _name_. This is a list of property names paired with their values, in the form `[prop1 vall prop2 val2 ...]`.
 
+**Example**:
+
+```logo
+?pprop "ferry "status "delayed
+?pprop "ferry "dock "three
+?show plist "ferry
+[status delayed dock three]
+```
+
 
 ## pprop
 
@@ -3610,6 +5494,17 @@ pprop _name_ _property_ _object_
 
 The `pprop` (for put property) command gives _name_ _property_ with value _object_. Note that [`erall`](#erall) erases procedures, variables, and properties. Use [`remprop`](#remprop) to erase properties one at a time or [`erprops`](#erprops) to erase them all at once.
 
+**Example**:
+
+```logo
+?pprop "buttertart "filling "raisins
+?pprop "buttertart "debate "lively
+?pr gprop "buttertart "filling
+raisins
+?show plist "buttertart
+[filling raisins debate lively]
+```
+
 
 ## pps
 
@@ -3618,6 +5513,17 @@ pps
 `command`
 
 The `pps` (for print properties) command prints the property lists of everything in the workspace.
+
+**Example**:
+
+```logo
+?pprop "loonie "value "one
+?pprop "toonie "value "two
+?pps
+plist "loonie [value one]
+plist "toonie [value two]
+```
+
 
 ## remprop
 
@@ -3630,6 +5536,15 @@ The `remprop` (for remove property) command removes _property_ from the property
 
 See [`pprop`](#pprop) and [`gprop`](#gprop).
 
+**Example**:
+
+```logo
+?pprop "snowroute "starts "midnight
+?pprop "snowroute "zone "blue
+?remprop "snowroute "zone
+?show plist "snowroute
+[starts midnight]
+```
 
 
 
@@ -3644,6 +5559,15 @@ battery
 
 The `battery` operation returns a list where the first value is the percent remaining in the battery and the second value is `true` if the battery is currently charging.
 
+**Example**:
+
+```logo
+?show battery
+[78 false]
+?pr se [Battery:] item 1 battery
+Battery: 78
+```
+
 
 ## goodbye
 
@@ -3652,6 +5576,15 @@ goodbye
 `operation`
 
 `goodbye` closes all open files and powers off the device. If the device does not support this capability, an error is displayed.
+
+**Example**:
+
+```logo
+; Safely shut down the PicoCalc
+?pr [Saving workspace...]
+?save "session.lgo
+?goodbye
+```
 
 
 
@@ -3780,13 +5713,20 @@ To treat any of the characters mentioned above as a normal alphabetic character,
 ```logo
 ?print "Good\-bye
 Good-bye
-?print "San\ Francisco
-San Francisco
+?print "butter\ tart
+butter tart
 ```
 
 Note that the quotation mark character (") and the colon (:not word delimiters.
 
 You can also have an empty word, which is a word with elements. You type in the empty word by typing `"`.
+
+One exception is the use of '/' in quoted words. You can use '/' in file names without escaping it, and Logo will treat it as a normal character. For example:
+
+```logo
+?print "my/file/name
+my/file/name
+```
 
 ## Infix Procedures 
 
@@ -4035,8 +5975,38 @@ end
 ===
 # Appendix E: Colour Palette for Pico Logo
 
-The following is the colour palette for Pico Logo. The palette contains 256 colours with the first 128 colours (0-127) being the standard palette and the next 128 colours can be customized by the user. The standard palette includes a range of colors from black to white, as well as various shades of red, green, blue, cyan, magenta, and yellow.
+This is the colour palette for Pico Logo. The palette contains 256 colour numbers. The standard palette includes a range of colours across hues and includes greyscale colours.
 
-The background colour is palette 255, and the text foreground colour is palette 254.
+The first 16 colour numbers are the used by the text screen. Each character on the text screen has a foreground colour and a background colour, each of which is a colour number. The colour used for the foreground and background can be changed using [`settextcolor`](#textcolor-tc). The default foreground colour number is 3 (white) and the default background colour number is 4 (dark background).
+
+These colour numbers are assigned to the following purposes. You can change the colour stored in these colour numbers to customise the the text screen and editor's appearance:
+
+| Colour Number | Purpose |
+|---|---|
+| 0 | Text foreground (0%) |
+| 1 | Text foreground (33%) |
+| 2 | Text foreground (66%) |
+| 3 | Text foreground (100%) |
+| 4 | Text background |
+| 5 | Error messages|
+| 6 | Strings (`"word`) |
+| 7 | Commands |
+| 8 | Procedure name (word after `to`) |
+| 9 | Numbers |
+| 10 | Comments |
+| 11 | Variables (`:name`) |
+| 12 | Keywords (`to`, `end`) |
+| 13 | Bracket depth 1 |
+| 14 | Bracket depth 2 |
+| 15 | Bracket depth 3 |
+
+The following 160 colour numbers are the default palette for Pico Logo, and changing these colour numbers should be avoided.
+
+Colour numbers 176 through 247 are unallocated and can be used for your own purposes. You can change the colour stored in these colour numbers to create your own palette.
+
+Colour numbers 248 through 253 hold the primary and secondary colours. Changing this range of colour numbers should be avoided.
+
+Colour number 254 is used as the default pen colour. Colour number 255 contains the current background colour used on the graphics screen and is set using [`setbg`](#setbg). 
+
 
 ![Colour Palette for Pico Logo](./Colours.svg)

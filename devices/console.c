@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Implements the LogoConsole initialization and helper functions.
 //
@@ -38,6 +38,8 @@ void logo_console_init(LogoConsole *console,
     console->text = NULL;
     console->screen = NULL;
     console->editor = NULL;
+    console->input_syntax_depth = 0;
+    console->error_output.ops = NULL;
     console->context = context;
 }
 

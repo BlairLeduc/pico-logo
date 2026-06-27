@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  PicoCalc input handling
 //
@@ -8,4 +8,4 @@
 #pragma once
 
 // Function prototypes
-int picocalc_read_line(char *buf, int size);
+int picocalc_read_line(char *buf, int size, int initial_depth);

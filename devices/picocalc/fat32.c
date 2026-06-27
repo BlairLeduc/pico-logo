@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 ////
 //  PicoCalc SD Card driver for FAT32 formatted SD cards
 //
@@ -47,7 +47,7 @@
 // Global state
 static bool fat32_mounted = false;
 static fat32_error_t mount_status = FAT32_OK; // Error code for mount operation
-bool fat32_initialised = false;               // Set to true after successful file system initialization
+static bool fat32_initialised = false;        // Set to true after successful file system initialization
 
 // FAT32 file system state
 static fat32_boot_sector_t boot_sector;
@@ -88,6 +88,20 @@ static inline fat32_error_t write_sector(uint32_t sector, const uint8_t *buffer)
     return sd_write_block(volume_start_block + sector, buffer);
 }
 
+// Returns a FAT date encoding (year-1980 in bits 9-15, month 1-12 in bits 5-8,
+// day 1-31 in bits 0-4).  The driver does not yet have a wall-clock source,
+// so we use a fixed valid date (2026-01-01) instead of the illegal all-zeros
+// stamp that confuses dosfsck and Windows Explorer.
+static inline uint16_t fat_default_date(void)
+{
+    return (uint16_t)(((2026 - 1980) << 9) | (1 << 5) | 1);
+}
+
+static inline uint16_t fat_default_time(void)
+{
+    return 0; // 00:00:00 — valid (hour=0, minute=0, second/2=0)
+}
+
 //
 // FAT32 file system functions
 //
@@ -100,14 +114,34 @@ static bool is_sector_mbr(const uint8_t *sector)
         return false;
     }
 
-    // Check for valid partition type in partition table
+    // Check for valid partition type in partition table.  We require BOTH a
+    // recognised type and a non-zero start_lba/size, because raw boot-sector
+    // bootstrap code routinely contains stray non-zero bytes at offset
+    // 446+i*16+4 that would otherwise be mis-read as a "partition type".
     for (int i = 0; i < 4; i++)
     {
-        uint8_t part_type = sector[446 + i * 16 + 4];
-        if (part_type != 0x00)
+        const uint8_t *pe = sector + 446 + i * 16;
+        uint8_t boot_ind  = pe[0];
+        uint8_t part_type = pe[4];
+        uint32_t start_lba = (uint32_t)pe[8] | ((uint32_t)pe[9] << 8) |
+                             ((uint32_t)pe[10] << 16) | ((uint32_t)pe[11] << 24);
+        uint32_t size_lba  = (uint32_t)pe[12] | ((uint32_t)pe[13] << 8) |
+                             ((uint32_t)pe[14] << 16) | ((uint32_t)pe[15] << 24);
+
+        // boot_indicator must be 0x00 or 0x80
+        if (boot_ind != 0x00 && boot_ind != 0x80)
         {
-            return true; // At least one valid partition
+            continue;
         }
+        if (part_type == 0x00)
+        {
+            continue;
+        }
+        if (start_lba == 0 || size_lba == 0)
+        {
+            continue;
+        }
+        return true;
     }
     return false;
 }
@@ -126,9 +160,12 @@ static bool is_sector_boot_sector(const uint8_t *sector)
         return false;
     }
 
-    // Check for reasonable bytes per sector (should be 512, 1024, 2048, or 4096)
+    // We only support 512-byte sectors throughout the driver, so reject
+    // anything else early.  is_valid_fat32_boot_sector also enforces this,
+    // but failing here makes the MBR-vs-BPB heuristic stricter and avoids
+    // mis-classifying random data as a boot sector.
     uint16_t bps = sector[11] | (sector[12] << 8);
-    if (bps != 512 && bps != 1024 && bps != 2048 && bps != 4096)
+    if (bps != FAT32_SECTOR_SIZE)
     {
         return false;
     }
@@ -183,6 +220,22 @@ static fat32_error_t is_valid_fat32_boot_sector(const fat32_boot_sector_t *bs)
     // FAT32 info sector (if present) must be within reserved sectors
     if (bs->fat32_info != 0 && bs->fat32_info != 0xFFFF &&
         bs->fat32_info >= bs->reserved_sectors)
+    {
+        return FAT32_ERROR_INVALID_FORMAT;
+    }
+
+    // Boot signature should be 0x29 when extended fields are present.
+    // We require the extended BPB so we can rely on file_system_type, but
+    // accept either signature byte that fatgen103 documents (0x28 or 0x29).
+    if (bs->boot_signature != 0x28 && bs->boot_signature != 0x29)
+    {
+        return FAT32_ERROR_INVALID_FORMAT;
+    }
+
+    // file_system_type should start with "FAT32".  This is informational
+    // per the spec but real-world tools rely on it; rejecting mismatches
+    // catches mis-formatted media early.
+    if (memcmp(bs->file_system_type, "FAT32", 5) != 0)
     {
         return FAT32_ERROR_INVALID_FORMAT;
     }
@@ -323,7 +376,10 @@ static fat32_error_t release_cluster_chain(uint32_t start_cluster)
     }
 
     uint32_t cluster = start_cluster;
-    while (is_valid_data_cluster(cluster))
+    // Bound iterations by cluster_count to defend against circular FAT
+    // chains caused by corrupted media.
+    uint32_t iter = 0;
+    while (is_valid_data_cluster(cluster) && iter <= cluster_count)
     {
         uint32_t next_cluster;
         RETURN_ON_ERROR(read_cluster_fat_entry(cluster, &next_cluster));
@@ -338,6 +394,7 @@ static fat32_error_t release_cluster_chain(uint32_t start_cluster)
             break; // End of chain
         }
         cluster = next_cluster;
+        iter++;
     }
 
     // Update FSInfo, guarding against unknown (0xFFFFFFFF) free count
@@ -399,6 +456,11 @@ static fat32_error_t clear_cluster(uint32_t cluster)
 static fat32_error_t seek_to_cluster(uint32_t start_cluster, uint32_t offset, uint32_t *result_cluster)
 {
     uint32_t cluster = start_cluster;
+    // Bound iterations by cluster_count to defend against circular FAT chains.
+    if (offset > cluster_count)
+    {
+        return FAT32_ERROR_INVALID_POSITION;
+    }
     for (uint32_t i = 0; i < offset; i++)
     {
         uint32_t next_cluster;
@@ -455,8 +517,17 @@ fat32_error_t fat32_mount(void)
     // Read boot sector
     RETURN_ON_ERROR(sd_read_block(0, sector_buffer));
 
-    // Is this a Master Boot Record (MBR)?
-    if (is_sector_mbr(sector_buffer))
+    // Check for a FAT BPB first.  A valid BPB has a very specific signature
+    // (jump instruction at byte 0 plus a valid bytes-per-sector field), so
+    // it is far less likely to false-positive than the loose MBR heuristic.
+    // Only fall through to MBR partition handling when the disk's first
+    // sector is clearly not a boot sector.
+    if (is_sector_boot_sector(sector_buffer))
+    {
+        // Superfloppy / no partition table
+        volume_start_block = 0;
+    }
+    else if (is_sector_mbr(sector_buffer))
     {
         volume_start_block = 0; // Set to zero to detect if no partitions are acceptable
 
@@ -486,13 +557,12 @@ fat32_error_t fat32_mount(void)
         {
             return FAT32_ERROR_INVALID_FORMAT; // No valid FAT32 partition found
         }
-    }
-    else if (is_sector_boot_sector(sector_buffer))
-    {
-        // No partition table, treat the entire disk as a single partition
-        volume_start_block = 0;
 
-        // We already have the boot sector in sector_buffer, no fat32_read_block needed
+        // Verify the selected partition actually starts with a FAT BPB
+        if (!is_sector_boot_sector(sector_buffer))
+        {
+            return FAT32_ERROR_INVALID_FORMAT;
+        }
     }
     else
     {
@@ -551,6 +621,7 @@ fat32_error_t fat32_mount(void)
     }
 
     fat32_mounted = true;
+    mount_status = FAT32_OK;
     return FAT32_OK;
 }
 
@@ -690,7 +761,8 @@ fat32_error_t fat32_get_volume_name(char *name, size_t name_len)
     {
         if (entry.attr & FAT32_ATTR_VOLUME_ID)
         {
-            // Found a volume label entry
+            // Found a volume label entry — already raw (no implicit dot,
+            // case preserved) thanks to fat32_dir_read's special handling.
             strncpy(name, entry.filename, name_len - 1);
             name[name_len - 1] = '\0'; // Ensure null-termination
             return FAT32_OK;
@@ -877,19 +949,62 @@ static uint8_t filename_to_lfn(const char *filename)
 
 static bool shortname_exists(const char *shortname, fat32_file_t *dir)
 {
-    fat32_file_t scan = *dir;
-    fat32_entry_t entry;
-    scan.position = 0;
-    while (fat32_dir_read(&scan, &entry) == FAT32_OK && entry.filename[0])
+    // We must compare against the on-disk 11-byte 8.3 name field, not the
+    // reconstructed long filename returned by fat32_dir_read.  Otherwise
+    // collisions with auto-generated "~N" names will not be detected.
+    //
+    // NOTE: this clobbers the shared sector_buffer.  It is only called from
+    // unique_shortname() before link_entry() begins its own buffered scan,
+    // so reusing the global buffer is safe in that call context.
+    uint32_t cluster = dir->start_cluster;
+    uint32_t pos = 0;
+    while (true)
     {
-        char entry83[12];
-        filename_to_shortname(entry.filename, entry83);
-        if (memcmp(entry83, shortname, 11) == 0)
+        uint32_t cluster_off = pos % bytes_per_cluster;
+        uint32_t sector_in_cluster = cluster_off / FAT32_SECTOR_SIZE;
+        uint32_t sector = cluster_to_sector(cluster) + sector_in_cluster;
+
+        if (read_sector(sector, sector_buffer) != FAT32_OK)
         {
-            return true;
+            return false;
+        }
+
+        for (uint32_t off = 0; off < FAT32_SECTOR_SIZE; off += 32)
+        {
+            fat32_dir_entry_t *e = (fat32_dir_entry_t *)(sector_buffer + off);
+            if (e->shortname[0] == FAT32_DIR_ENTRY_END_MARKER)
+            {
+                return false;
+            }
+            if (e->shortname[0] == FAT32_DIR_ENTRY_FREE)
+            {
+                continue;
+            }
+            if (e->attr == FAT32_ATTR_LONG_NAME)
+            {
+                continue;
+            }
+            if (memcmp(e->shortname, shortname, 11) == 0)
+            {
+                return true;
+            }
+        }
+
+        pos += FAT32_SECTOR_SIZE;
+        if ((pos % bytes_per_cluster) == 0)
+        {
+            uint32_t next_cluster;
+            if (read_cluster_fat_entry(cluster, &next_cluster) != FAT32_OK)
+            {
+                return false;
+            }
+            if (is_chain_end_or_invalid(next_cluster))
+            {
+                return false;
+            }
+            cluster = next_cluster;
         }
     }
-    return false;
 }
 
 static fat32_error_t unique_shortname(fat32_file_t *dir, const char *longname, char *shortname)
@@ -1031,6 +1146,14 @@ static void lfn_to_str(fat32_lfn_entry_t *lfn_entry, char *buffer)
 {
     // Convert up to 13 UTF-16 slots to ASCII, stopping at NUL (0x0000) or
     // padding (0xFFFF) so we never write garbage past the actual name.
+    //
+    // IMPORTANT: this function is used to assemble LFN parts into a single
+    // filename buffer at arbitrary offsets, in any order.  We MUST NOT write
+    // an unconditional NUL terminator at the end of our slot, or a part
+    // that happens to be a "full" 13-character segment will truncate the
+    // name when an adjacent later-numbered part has not yet been written.
+    // Only write the terminator when we hit a real stop character — that
+    // marks the actual end of the long name.
     uint16_t chars[13] = {
         lfn_entry->name1[0], lfn_entry->name1[1], lfn_entry->name1[2],
         lfn_entry->name1[3], lfn_entry->name1[4],
@@ -1042,10 +1165,13 @@ static void lfn_to_str(fat32_lfn_entry_t *lfn_entry, char *buffer)
     {
         if (chars[i] == 0x0000 || chars[i] == 0xFFFF)
         {
-            break;
+            *buffer = '\0'; // Real end of long name
+            return;
         }
         *buffer++ = utf16_to_utf8(chars[i]);
     }
+    // No stop character in this part — caller's buffer must already be
+    // zero-filled (fat32_dir_read clears it before assembly).
 }
 
 static fat32_error_t find_entry(fat32_entry_t *dir_entry, const char *path)
@@ -1149,6 +1275,18 @@ static fat32_error_t unlink_entry(fat32_entry_t *entry)
     // LFN entries that precede this 8.3 entry.  We use dir_start_cluster +
     // dir_pos (populated by fat32_dir_read / find_entry) so we can cross
     // sector and cluster boundaries correctly.
+    //
+    // Compute the 8.3 checksum so we only erase LFN entries whose checksum
+    // field matches.  This avoids accidentally erasing an orphaned LFN run
+    // from a different (already-deleted) entry that happens to sit
+    // immediately before.
+    uint8_t expected_checksum;
+    {
+        RETURN_ON_ERROR(read_sector(entry->sector, sector_buffer));
+        fat32_dir_entry_t *raw83 = (fat32_dir_entry_t *)(sector_buffer + entry->offset);
+        expected_checksum = shortname_checksum(raw83->shortname);
+    }
+
     if (entry->dir_start_cluster != 0 && entry->dir_pos > 0)
     {
         int32_t back_pos = (int32_t)entry->dir_pos - 32;
@@ -1167,7 +1305,8 @@ static fat32_error_t unlink_entry(fat32_entry_t *entry)
 
             if (raw->attr == FAT32_ATTR_LONG_NAME &&
                 raw->shortname[0] != FAT32_DIR_ENTRY_FREE &&
-                raw->shortname[0] != FAT32_DIR_ENTRY_END_MARKER)
+                raw->shortname[0] != FAT32_DIR_ENTRY_END_MARKER &&
+                ((fat32_lfn_entry_t *)raw)->checksum == expected_checksum)
             {
                 raw->shortname[0] = FAT32_DIR_ENTRY_FREE;
                 RETURN_ON_ERROR(write_sector(e_sector, sector_buffer));
@@ -1175,7 +1314,7 @@ static fat32_error_t unlink_entry(fat32_entry_t *entry)
             }
             else
             {
-                break; // Reached a non-LFN entry, stop
+                break; // Reached a non-LFN or non-matching entry, stop
             }
         }
     }
@@ -1194,7 +1333,8 @@ static fat32_error_t unlink_entry(fat32_entry_t *entry)
                 break;
             }
             fat32_dir_entry_t *lfn_entry = (fat32_dir_entry_t *)(sector_buffer + offset - i * 32);
-            if (lfn_entry->attr == FAT32_ATTR_LONG_NAME)
+            if (lfn_entry->attr == FAT32_ATTR_LONG_NAME &&
+                ((fat32_lfn_entry_t *)lfn_entry)->checksum == expected_checksum)
             {
                 lfn_entry->shortname[0] = FAT32_DIR_ENTRY_FREE;
             }
@@ -1401,12 +1541,12 @@ static fat32_error_t link_entry(fat32_entry_t *entry, const char *path)
     dir_entry.attr          = entry->attr;
     dir_entry.nt_res        = 0;
     dir_entry.crt_time_tenth = 0;
-    dir_entry.crt_time      = 0;
-    dir_entry.crt_date      = 0;
-    dir_entry.lst_acc_date  = 0;
+    dir_entry.crt_time      = fat_default_time();
+    dir_entry.crt_date      = fat_default_date();
+    dir_entry.lst_acc_date  = fat_default_date();
     dir_entry.fst_clus_hi   = entry->start_cluster >> 16;
-    dir_entry.wrt_time      = 0;
-    dir_entry.wrt_date      = 0;
+    dir_entry.wrt_time      = fat_default_time();
+    dir_entry.wrt_date      = fat_default_date();
     dir_entry.fst_clus_lo   = entry->start_cluster & 0xFFFF;
     dir_entry.file_size     = entry->size;
 
@@ -1451,6 +1591,9 @@ static fat32_error_t new_entry(fat32_file_t *file, const char *path, uint8_t att
     file->attributes = entry.attr;
     file->dir_entry_sector = entry.sector;
     file->dir_entry_offset = entry.offset;
+    // The 8.3 entry was already written by link_entry with the correct
+    // size and start cluster — no need to flush again on close.
+    file->dirty = false;
 
     return FAT32_OK; // Successfully created new file
 }
@@ -1553,9 +1696,10 @@ fat32_error_t fat32_close(fat32_file_t *file)
         return FAT32_OK;
     }
 
-    // Sync the directory entry with the current file size and start cluster
-    // This ensures any modifications made during the file's lifetime are persisted
-    if (file->dir_entry_sector && file->dir_entry_offset < FAT32_SECTOR_SIZE)
+    // Only sync the directory entry when something actually changed.
+    // Avoids needless flash wear when the file was opened read-only.
+    if (file->dirty &&
+        file->dir_entry_sector && file->dir_entry_offset < FAT32_SECTOR_SIZE)
     {
         fat32_error_t result = read_sector(file->dir_entry_sector, sector_buffer);
         if (result == FAT32_OK)
@@ -1713,6 +1857,9 @@ fat32_error_t fat32_write(fat32_file_t *file, const void *buffer, size_t size, s
                 fsinfo.free_count--;
             }
             update_fsinfo();
+            // Zero the freshly allocated cluster so any unwritten bytes
+            // do not leak previous on-disk contents to the caller.
+            RETURN_ON_ERROR(clear_cluster(first_cluster));
             file->start_cluster   = first_cluster;
             file->current_cluster = first_cluster;
             current_clusters      = 1;
@@ -1728,7 +1875,47 @@ fat32_error_t fat32_write(fat32_file_t *file, const void *buffer, size_t size, s
             {
                 uint32_t new_cluster = 0;
                 RETURN_ON_ERROR(allocate_and_link_cluster(last_cluster, &new_cluster));
+                // Zero the new cluster (see comment above).
+                RETURN_ON_ERROR(clear_cluster(new_cluster));
                 last_cluster = new_cluster;
+            }
+        }
+    }
+
+    // If the write begins past the current end-of-file, zero the gap
+    // between old EOF and file->position so the unwritten region is not
+    // exposed as stale on-disk data.  Newly-allocated clusters above are
+    // already zeroed; we only need to zero the tail of the last "old"
+    // cluster that previously held file_size's partial data.
+    if (file->position > old_file_size && old_file_size > 0)
+    {
+        uint32_t gap_start = old_file_size;
+        uint32_t gap_end   = file->position;
+        uint32_t cluster_idx = gap_start / bytes_per_cluster;
+        uint32_t off_in_cluster = gap_start % bytes_per_cluster;
+        uint32_t cluster_end = (cluster_idx + 1) * (uint32_t)bytes_per_cluster;
+        uint32_t zero_to    = (gap_end < cluster_end) ? gap_end : cluster_end;
+        if (off_in_cluster != 0 && zero_to > gap_start)
+        {
+            uint32_t gap_cluster = 0;
+            RETURN_ON_ERROR(seek_to_cluster(file->start_cluster,
+                                            cluster_idx, &gap_cluster));
+            uint32_t bytes_left = zero_to - gap_start;
+            uint32_t cur_off = off_in_cluster;
+            while (bytes_left > 0)
+            {
+                uint32_t sector_in_cluster = cur_off / FAT32_SECTOR_SIZE;
+                uint32_t byte_in_sector    = cur_off % FAT32_SECTOR_SIZE;
+                uint32_t sector = cluster_to_sector(gap_cluster) + sector_in_cluster;
+                uint32_t chunk  = FAT32_SECTOR_SIZE - byte_in_sector;
+                if (chunk > bytes_left) chunk = bytes_left;
+
+                RETURN_ON_ERROR(read_sector(sector, sector_buffer));
+                memset(sector_buffer + byte_in_sector, 0, chunk);
+                RETURN_ON_ERROR(write_sector(sector, sector_buffer));
+
+                cur_off    += chunk;
+                bytes_left -= chunk;
             }
         }
     }
@@ -1784,45 +1971,16 @@ fat32_error_t fat32_write(fat32_file_t *file, const void *buffer, size_t size, s
     {
         file->file_size = file->position;
     }
+    file->dirty = true; // Mark for flush on close
 
     if (bytes_written)
     {
         *bytes_written = total_written;
     }
 
-    // Truncate cluster chain if the file shrank (write at position < size)
-    if (file->file_size < old_file_size)
-    {
-        uint32_t n_needed = (file->file_size == 0)
-                                ? 0
-                                : (file->file_size + bytes_per_cluster - 1) / bytes_per_cluster;
-        uint32_t n_current = (old_file_size == 0)
-                                 ? 0
-                                 : (old_file_size + bytes_per_cluster - 1) / bytes_per_cluster;
-
-        if (n_needed < n_current && is_valid_data_cluster(file->start_cluster))
-        {
-            if (n_needed == 0)
-            {
-                release_cluster_chain(file->start_cluster);
-                file->start_cluster = 0;
-            }
-            else
-            {
-                uint32_t last_keep = 0;
-                if (seek_to_cluster(file->start_cluster, n_needed - 1, &last_keep) == FAT32_OK)
-                {
-                    uint32_t first_free = 0;
-                    if (read_cluster_fat_entry(last_keep, &first_free) == FAT32_OK &&
-                        is_valid_data_cluster(first_free))
-                    {
-                        write_cluster_fat_entry(last_keep, FAT32_FAT_ENTRY_EOC);
-                        release_cluster_chain(first_free);
-                    }
-                }
-            }
-        }
-    }
+    // NOTE: fat32_write only ever extends a file; there is no truncation
+    // path, so no shrink logic is needed here.  If a public truncate API
+    // is added later, do the chain shortening in that helper.
 
     // Flush the directory entry: update both file size and start cluster
     // (start cluster may have changed if this was the first write to an
@@ -1846,6 +2004,14 @@ fat32_error_t fat32_seek(fat32_file_t *file, uint32_t position)
     if (!file || !file->is_open)
     {
         return FAT32_ERROR_INVALID_PARAMETER;
+    }
+
+    // Disallow seeking past the FAT32 4 GiB-1 file-size limit.  This also
+    // prevents subsequent fat32_write overflow checks from being needed at
+    // every call site.
+    if (position == 0xFFFFFFFFu)
+    {
+        return FAT32_ERROR_INVALID_POSITION;
     }
 
     file->position = position;
@@ -1913,6 +2079,35 @@ fat32_error_t fat32_rename(const char *old_path, const char *new_path)
     fat32_entry_t new_entry = entry;
     RETURN_ON_ERROR(link_entry(&new_entry, new_path));
 
+    // If we moved a directory between parents, its ".." entry must be
+    // updated to point to the new parent (or 0 when the new parent is
+    // the root).  Otherwise the directory's parent link becomes a
+    // dangling reference and chkdsk will report cross-link errors.
+    if ((entry.attr & FAT32_ATTR_DIRECTORY) &&
+        is_valid_data_cluster(entry.start_cluster) &&
+        new_entry.dir_start_cluster != entry.dir_start_cluster)
+    {
+        uint32_t new_parent = new_entry.dir_start_cluster;
+        if (new_parent == boot_sector.root_cluster)
+        {
+            new_parent = 0; // Spec: ".." cluster of a root child is 0
+        }
+
+        // The ".." entry is the second 32-byte slot of the directory's
+        // first cluster.
+        uint32_t first_sector = cluster_to_sector(entry.start_cluster);
+        RETURN_ON_ERROR(read_sector(first_sector, sector_buffer));
+        fat32_dir_entry_t *dotdot =
+            (fat32_dir_entry_t *)(sector_buffer + 32);
+        // Sanity-check that this really is the ".." entry before we patch it.
+        if (dotdot->shortname[0] == '.' && dotdot->shortname[1] == '.')
+        {
+            dotdot->fst_clus_hi = (uint16_t)(new_parent >> 16);
+            dotdot->fst_clus_lo = (uint16_t)(new_parent & 0xFFFF);
+            RETURN_ON_ERROR(write_sector(first_sector, sector_buffer));
+        }
+    }
+
     // Only remove the old entry after the new one is safely written
     RETURN_ON_ERROR(unlink_entry(&entry));
 
@@ -1938,6 +2133,12 @@ fat32_error_t fat32_set_current_dir(const char *path)
     // If we can open the directory, it exists
     fat32_file_t dir;
     RETURN_ON_ERROR(fat32_open(&dir, path));
+
+    if (!(dir.attributes & FAT32_ATTR_DIRECTORY))
+    {
+        fat32_close(&dir);
+        return FAT32_ERROR_NOT_A_DIRECTORY;
+    }
 
     // Update current directory cluster and name
     current_dir_cluster = dir.start_cluster;
@@ -1966,8 +2167,11 @@ fat32_error_t fat32_get_current_dir(char *path, size_t path_len)
         return FAT32_OK;
     }
 
-    // Walk up the tree, collecting names
-    char components[16][FAT32_MAX_FILENAME_LEN + 1]; // Up to 16 levels deep
+    // Walk up the tree, collecting names.  Each component is bounded by a
+    // small cap to avoid blowing the stack on the RP2040 (default 4 KB).
+    // 64 bytes/component × 16 levels = 1 KB, well within budget.
+    #define FAT32_PATH_COMPONENT_MAX 64
+    char components[16][FAT32_PATH_COMPONENT_MAX];
     int depth = 0;
     uint32_t cluster = current_dir_cluster;
 
@@ -2021,8 +2225,8 @@ fat32_error_t fat32_get_current_dir(char *path, size_t path_len)
             if ((entry.attr & FAT32_ATTR_DIRECTORY) && entry.start_cluster == cluster &&
                 strcmp(entry.filename, ".") != 0 && strcmp(entry.filename, "..") != 0)
             {
-                memcpy(components[depth], entry.filename, FAT32_MAX_FILENAME_LEN);
-                components[depth][FAT32_MAX_FILENAME_LEN] = '\0';
+                strncpy(components[depth], entry.filename, FAT32_PATH_COMPONENT_MAX - 1);
+                components[depth][FAT32_PATH_COMPONENT_MAX - 1] = '\0';
                 found_name = true;
                 break;
             }
@@ -2116,26 +2320,47 @@ fat32_error_t fat32_dir_read(fat32_file_t *dir, fat32_entry_t *dir_entry)
         {
             // Populate long filename buffer with this entry's name contents
             fat32_lfn_entry_t *lfn_entry = (fat32_lfn_entry_t *)entry;
-            if (lfn_entry->seq & 0x40)
-            {
-                // This is the last entry for the long filename and the first entry of the sequence
-                // We are starting to build a new long filename, clear the filename buffer
-                memset(filename, 0, sizeof(filename));
-                expected_checksum = lfn_entry->checksum; // Save checksum for later comparison
-            }
+            uint8_t seq_num = lfn_entry->seq & 0x3F;
 
-            if (lfn_entry->checksum == expected_checksum)
+            // Reject malformed sequence numbers up front to avoid out-of-
+            // bounds writes via (seq - 1) * 13 indexing.
+            if (seq_num == 0 || seq_num > MAX_LFN_PART)
             {
-                // Copy this entry's part of the long filename into the filename buffer
-                int offset = ((lfn_entry->seq & 0x3F) - 1) * FAT32_DIR_LFN_PART_SIZE;
-                lfn_to_str(lfn_entry, filename + offset);
+                filename[0] = '\0';
+            }
+            else
+            {
+                if (lfn_entry->seq & 0x40)
+                {
+                    // First entry of a new LFN sequence (highest seq number)
+                    memset(filename, 0, sizeof(filename));
+                    expected_checksum = lfn_entry->checksum;
+                }
+
+                if (lfn_entry->checksum == expected_checksum)
+                {
+                    int offset = (seq_num - 1) * FAT32_DIR_LFN_PART_SIZE;
+                    lfn_to_str(lfn_entry, filename + offset);
+                }
             }
         }
         else if (entry->shortname[0] != FAT32_DIR_ENTRY_FREE)
         {
             uint8_t checksum = shortname_checksum(entry->shortname);
+            // Volume labels are 11 raw bytes (no implicit dot, preserve case).
+            // Treat them specially so callers see the actual label text.
+            if (entry->attr & FAT32_ATTR_VOLUME_ID)
+            {
+                memcpy(dir_entry->filename, entry->shortname, 11);
+                dir_entry->filename[11] = '\0';
+                // Trim trailing spaces
+                for (int i = 10; i >= 0 && dir_entry->filename[i] == ' '; i--)
+                {
+                    dir_entry->filename[i] = '\0';
+                }
+            }
             // Now check to see if this is the entry we are looking for
-            if (filename[0] != '\0' && expected_checksum == checksum)
+            else if (filename[0] != '\0' && expected_checksum == checksum)
             {
                 strcpy(dir_entry->filename, filename);
             }
@@ -2228,6 +2453,11 @@ fat32_error_t fat32_dir_create(fat32_file_t *dir, const char *path)
     memset(dot_entry.shortname, ' ', 11);
     dot_entry.shortname[0] = '.';
     dot_entry.attr = FAT32_ATTR_DIRECTORY;
+    dot_entry.crt_time = fat_default_time();
+    dot_entry.crt_date = fat_default_date();
+    dot_entry.lst_acc_date = fat_default_date();
+    dot_entry.wrt_time = fat_default_time();
+    dot_entry.wrt_date = fat_default_date();
     dot_entry.fst_clus_hi = (dir->start_cluster >> 16) & 0xFFFF;
     dot_entry.fst_clus_lo = dir->start_cluster & 0xFFFF;
     dot_entry.file_size = 0;
@@ -2238,6 +2468,11 @@ fat32_error_t fat32_dir_create(fat32_file_t *dir, const char *path)
     dotdot_entry.shortname[0] = '.';
     dotdot_entry.shortname[1] = '.';
     dotdot_entry.attr = FAT32_ATTR_DIRECTORY;
+    dotdot_entry.crt_time = fat_default_time();
+    dotdot_entry.crt_date = fat_default_date();
+    dotdot_entry.lst_acc_date = fat_default_date();
+    dotdot_entry.wrt_time = fat_default_time();
+    dotdot_entry.wrt_date = fat_default_date();
     // For root directory parent, cluster should be 0
     if (parent_cluster == boot_sector.root_cluster)
     {

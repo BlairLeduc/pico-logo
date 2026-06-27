@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Tests for control flow primitives: run, repeat, repcount, stop, output, while, do.while
 //
@@ -55,6 +55,31 @@ void test_repcount_used_in_expression(void)
     // repcount can be used in arithmetic expressions
     run_string("repeat 3 [print repcount * 10]");
     TEST_ASSERT_EQUAL_STRING("10\n20\n30\n", output_buffer);
+}
+
+void test_repeat_arg_collection_does_not_leak_past_bracket(void)
+{
+    // P3-012 regression: argument collection inside [ ... ] must not
+    // over-consume past the closing ']'. `sum` defaults to 2 inputs;
+    // here it appears as the last expression inside the repeat body.
+    // If the bracket bound were leaked, `sum` would steal `]` (or the
+    // tokens after) and either error out or print something other than
+    // "5\n5\n5\n".
+    reset_output();
+    run_string("repeat 3 [print sum 2 3]");
+    TEST_ASSERT_EQUAL_STRING("5\n5\n5\n", output_buffer);
+}
+
+void test_repeat_inner_arg_collection_stops_at_closing_bracket(void)
+{
+    // P3-012 regression: nested case. The inner `print sum 2 3` ends
+    // exactly at the inner `]`; the outer `repeat` must still see the
+    // tokens after the outer `]` consumed correctly (here: nothing,
+    // followed by EOF). A leaky bound would see `print` swallow the
+    // outer `]` and produce wrong output or an error.
+    reset_output();
+    run_string("repeat 2 [repeat 1 [print sum 1 2]]");
+    TEST_ASSERT_EQUAL_STRING("3\n3\n", output_buffer);
 }
 
 void test_forever_with_stop(void)
@@ -292,26 +317,29 @@ void test_do_until_invalid_predicate(void)
 //==========================================================================
 // Comment (;) Tests
 //==========================================================================
+//
+// Per the language reference, `;` introduces a comment that runs to the
+// end of the line. The lexer strips it before tokens reach the evaluator,
+// so a line that contains only a comment produces no instructions.
 
 void test_comment_with_list(void)
 {
-    // ; with a list should be ignored
-    Result r = eval_string("; [This is a comment]");
+    // ; followed by a list should be ignored — entire line is comment.
+    Result r = run_string("; [This is a comment]");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
 }
 
 void test_comment_with_word(void)
 {
-    // ; with a word should be ignored
-    Result r = eval_string("; \"comment");
+    // ; followed by a word should be ignored.
+    Result r = run_string("; \"comment");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
 }
 
 void test_comment_in_procedure(void)
 {
-    // ; should work inside procedures
-    // Use define primitive to create a procedure with a comment
-    run_string("define \"test.comment [[] [; [comment] print 42]]");
+    // ; should work inside procedures.
+    run_string("define \"test.comment [[] [print 42 ; trailing comment]]");
     reset_output();
     run_string("test.comment");
     TEST_ASSERT_EQUAL_STRING("42\n", output_buffer);
@@ -319,8 +347,9 @@ void test_comment_in_procedure(void)
 
 void test_comment_inline(void)
 {
-    // ; can be used inline with other commands
-    run_string("print 1 ; [comment after print]");
+    // ; can be used inline with other commands.
+    reset_output();
+    run_string("print 1 ; trailing comment");
     TEST_ASSERT_EQUAL_STRING("1\n", output_buffer);
 }
 
@@ -442,6 +471,15 @@ void test_for_non_word_varname(void)
     // Variable name must be a word, not a list
     Result r = eval_string("for [[i] 1 10] [print 1]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_for_step_zero(void)
+{
+    // step=0 should be an error (infinite loop)
+    Result r = eval_string("for [i 1 10 0] [print :i]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    // Body should not execute
+    TEST_ASSERT_EQUAL_STRING("", output_buffer);
 }
 
 // Deep nesting: user procedures called inside repeat via run
@@ -605,6 +643,8 @@ int main(void)
     RUN_TEST(test_repcount_no_repeat);
     RUN_TEST(test_repcount_nested);
     RUN_TEST(test_repcount_used_in_expression);
+    RUN_TEST(test_repeat_arg_collection_does_not_leak_past_bracket);
+    RUN_TEST(test_repeat_inner_arg_collection_stops_at_closing_bracket);
     RUN_TEST(test_forever_with_stop);
     RUN_TEST(test_forever_repcount);
     RUN_TEST(test_forever_repcount_nested_in_repeat);
@@ -648,6 +688,7 @@ int main(void)
     RUN_TEST(test_for_too_few_items);
     RUN_TEST(test_for_too_many_items);
     RUN_TEST(test_for_non_word_varname);
+    RUN_TEST(test_for_step_zero);
     RUN_TEST(test_deep_nested_proc_in_repeat);
     RUN_TEST(test_proc_call_in_repeat_within_procedure);
     RUN_TEST(test_proc_expr_in_run_within_procedure);

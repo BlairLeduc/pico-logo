@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  User-defined procedure storage and execution.
 //
@@ -23,6 +23,7 @@
 
 #include "value.h"
 #include "frame.h"
+#include "limits.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -32,8 +33,7 @@ extern "C"
     // Forward declaration
     typedef struct Evaluator Evaluator;
 
-    // Maximum parameters per procedure
-    #define MAX_PROC_PARAMS 16
+    // (MAX_PROC_PARAMS is defined in limits.h)
 
     // User-defined procedure
     typedef struct UserProcedure
@@ -51,6 +51,7 @@ extern "C"
     typedef struct TailCall
     {
         bool is_tail_call;          // True if this is a tail call
+        bool is_output_call;        // True if TCO triggered from output's argument
         const char *proc_name;      // Name of procedure to call
         Value args[MAX_PROC_PARAMS]; // Arguments for tail call
         int arg_count;              // Number of arguments
@@ -127,7 +128,14 @@ extern "C"
     // Mark all procedure bodies as GC roots
     void proc_gc_mark_all(void);
 
-    // Get the global frame stack (for passing to evaluator)
+    // Get the global frame stack (for passing to evaluator).
+    //
+    // OWNERSHIP: the frame stack is owned (allocated and zeroed) by
+    // procedures.c. It is shared, not duplicated: variables.c, frame.c,
+    // and the evaluator all read and mutate it through this single
+    // accessor. There is exactly one frame stack per interpreter
+    // instance; there is no notion of multiple concurrent stacks.
+    // Callers MUST NOT free or replace the returned pointer.
     FrameStack *proc_get_frame_stack(void);
 
 #ifdef __cplusplus

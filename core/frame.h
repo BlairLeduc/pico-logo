@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Frame System - Procedure call frames for the Logo interpreter.
 //
@@ -235,6 +235,27 @@ extern "C"
 
     //==========================================================================
     // Binding Operations
+    //
+    // NAMING POLICY: Binding names (and the global-variable table names in
+    // variables.c) SHOULD be interned atom pointers obtained from
+    // `mem_word_ptr(mem_atom(...))` / `mem_atom_unescape(...)` /
+    // `mem_atom_cstr(...)`. The lookup helpers (`frame_find_binding`,
+    // `find_global`) take a pointer-equality fast path, so callers that
+    // pass the same interned pointer for both binding and lookup get O(1)
+    // per binding instead of an O(name length) `strcasecmp`.
+    //
+    // The fallback is a case-insensitive `strcasecmp`, which preserves
+    // correctness for two cases that legitimately bypass interning:
+    //   * C string literals at call sites (e.g. `var_get(\"startup\", ...)`)
+    //     where the cost of interning would dwarf the lookup itself.
+    //   * Cross-case references such as `make \"X 5` followed by `print :x`,
+    //     since `mem_atom` interning is case-SENSITIVE (it preserves the
+    //     original case for display). Logo semantics require case-insensitive
+    //     variable matching, so the slow path is mandatory there.
+    //
+    // The procedure-define path in primitives_procedures.c re-interns the
+    // suffix after stripping a leading `:` so that `params[i]` is always a
+    // canonical atom key, never an interior pointer into a larger atom.
     //==========================================================================
 
     // Get all bindings for a frame (params followed by locals)

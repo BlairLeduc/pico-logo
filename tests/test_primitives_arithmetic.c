@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 
 #include "test_scaffold.h"
@@ -62,6 +62,30 @@ void test_product_variadic_parens(void)
     Result r = eval_string("(product 2 3 4)");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     TEST_ASSERT_EQUAL_FLOAT(24.0f, r.value.as.number);
+}
+
+void test_product_single_arg_parens(void)
+{
+    // (product 7) returns the single argument unchanged.
+    Result r = eval_string("(product 7)");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(7.0f, r.value.as.number);
+}
+
+void test_sum_zero_args_parens(void)
+{
+    // (sum) returns the additive identity.
+    Result r = eval_string("(sum)");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, r.value.as.number);
+}
+
+void test_product_zero_args_parens(void)
+{
+    // (product) returns the multiplicative identity.
+    Result r = eval_string("(product)");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(1.0f, r.value.as.number);
 }
 
 void test_quotient(void)
@@ -619,6 +643,84 @@ void test_form_decimal_places_negative_error(void)
     TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
 }
 
+void test_form_width_too_large_error(void)
+{
+    // form with extreme width must not write past the internal buffer.
+    // Reject widths that exceed the supported maximum rather than silently
+    // overflowing the stack buffer.
+    Result r = eval_string("form 1.5 1000 2");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+//==========================================================================
+// Text-mode vs list-mode (run [...]) parity for minus.
+// The lexer (text mode) and the NodeIterator (list mode, used by `run`)
+// classify minus differently; these tests pin the user-visible behaviour
+// so any future drift between the two paths is caught immediately.
+//==========================================================================
+
+void test_minus_text_vs_list_binary_with_spaces(void)
+{
+    // `5 - 3` is binary subtraction in both modes.
+    Result a = eval_string("5 - 3");
+    TEST_ASSERT_EQUAL(RESULT_OK, a.status);
+    TEST_ASSERT_EQUAL_FLOAT(2.0f, a.value.as.number);
+
+    Result b = eval_string("run [5 - 3]");
+    TEST_ASSERT_EQUAL(RESULT_OK, b.status);
+    TEST_ASSERT_EQUAL_FLOAT(2.0f, b.value.as.number);
+}
+
+void test_minus_text_vs_list_after_paren(void)
+{
+    // `(2 + 1) - 3` => 0 in both modes (binary minus after `)`).
+    Result a = eval_string("(2 + 1) - 3");
+    TEST_ASSERT_EQUAL(RESULT_OK, a.status);
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, a.value.as.number);
+
+    Result b = eval_string("run [(2 + 1) - 3]");
+    TEST_ASSERT_EQUAL(RESULT_OK, b.status);
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, b.value.as.number);
+}
+
+void test_minus_text_vs_list_negative_literal(void)
+{
+    // Leading `-` on a number must produce -3 in both modes.
+    Result a = eval_string("sum 0 -3");
+    TEST_ASSERT_EQUAL(RESULT_OK, a.status);
+    TEST_ASSERT_EQUAL_FLOAT(-3.0f, a.value.as.number);
+
+    Result b = eval_string("run [sum 0 -3]");
+    TEST_ASSERT_EQUAL(RESULT_OK, b.status);
+    TEST_ASSERT_EQUAL_FLOAT(-3.0f, b.value.as.number);
+}
+
+void test_minus_text_vs_list_unary_after_operator(void)
+{
+    // `4 * -2` => -8 (unary minus after `*`); same for run [...].
+    Result a = eval_string("4 * -2");
+    TEST_ASSERT_EQUAL(RESULT_OK, a.status);
+    TEST_ASSERT_EQUAL_FLOAT(-8.0f, a.value.as.number);
+
+    Result b = eval_string("run [4 * -2]");
+    TEST_ASSERT_EQUAL(RESULT_OK, b.status);
+    TEST_ASSERT_EQUAL_FLOAT(-8.0f, b.value.as.number);
+}
+
+void test_minus_text_vs_list_with_variable(void)
+{
+    // `:x - 2` with :x = 5 must yield 3 in both modes.
+    run_string("make \"x 5");
+    Result a = eval_string(":x - 2");
+    TEST_ASSERT_EQUAL(RESULT_OK, a.status);
+    TEST_ASSERT_EQUAL_FLOAT(3.0f, a.value.as.number);
+
+    Result b = eval_string("run [:x - 2]");
+    TEST_ASSERT_EQUAL(RESULT_OK, b.status);
+    TEST_ASSERT_EQUAL_FLOAT(3.0f, b.value.as.number);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -629,6 +731,9 @@ int main(void)
     RUN_TEST(test_difference);
     RUN_TEST(test_product);
     RUN_TEST(test_product_variadic_parens);
+    RUN_TEST(test_product_single_arg_parens);
+    RUN_TEST(test_sum_zero_args_parens);
+    RUN_TEST(test_product_zero_args_parens);
     RUN_TEST(test_quotient);
     RUN_TEST(test_divide_by_zero);
     RUN_TEST(test_error_divide_by_zero_msg);
@@ -694,6 +799,13 @@ int main(void)
     RUN_TEST(test_form_width_zero_error);
     RUN_TEST(test_form_width_negative_error);
     RUN_TEST(test_form_decimal_places_negative_error);
+    RUN_TEST(test_form_width_too_large_error);
+
+    RUN_TEST(test_minus_text_vs_list_binary_with_spaces);
+    RUN_TEST(test_minus_text_vs_list_after_paren);
+    RUN_TEST(test_minus_text_vs_list_negative_literal);
+    RUN_TEST(test_minus_text_vs_list_unary_after_operator);
+    RUN_TEST(test_minus_text_vs_list_with_variable);
 
     return UNITY_END();
 }

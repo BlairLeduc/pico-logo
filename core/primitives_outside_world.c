@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Outside World primitives: keyp, readchar, readchars, readlist, readword,
 //                            print, show, type, standout
@@ -14,6 +14,7 @@
 #include "eval.h"
 #include "lexer.h"
 #include "format.h"
+#include "parse_list.h"
 #include "devices/io.h"
 #include "devices/stream.h"
 #include <stdio.h>
@@ -146,159 +147,7 @@ static Result prim_readchars(Evaluator *eval, int argc, Value *args)
 }
 
 // Helper result for parse_line_to_list
-typedef struct {
-    Node node;
-    bool success;
-} ParseResult;
-
-// Helper: Parse a line into a list of words
-// This is similar to what the lexer does but returns a list structure
-// Returns success=false if memory allocation fails
-static ParseResult parse_line_to_list(const char *line)
-{
-    Lexer lexer;
-    lexer_init(&lexer, line);
-
-    // Build list in reverse, then reverse it at the end
-    Node result = NODE_NIL;
-    Node *tail = &result;
-
-    for (;;)
-    {
-        Token tok = lexer_next_token(&lexer);
-        if (tok.type == TOKEN_EOF || tok.type == TOKEN_ERROR)
-        {
-            break;
-        }
-
-        Node element = NODE_NIL;
-
-        switch (tok.type)
-        {
-        case TOKEN_WORD:
-        case TOKEN_QUOTED:
-        case TOKEN_NUMBER:
-        case TOKEN_COLON:
-        {
-            // Copy token text - token already includes quote/colon prefix if present
-            char buf[256];
-            size_t len = tok.length;
-            if (len >= sizeof(buf))
-                len = sizeof(buf) - 1;
-            memcpy(buf, tok.start, len);
-            buf[len] = '\0';
-
-            // Token text already includes the prefix (", :), just use it directly
-            element = mem_atom(buf, len);
-            break;
-        }
-
-        case TOKEN_LEFT_BRACKET:
-        {
-            // Parse nested list recursively
-            // Find matching right bracket
-            int depth = 1;
-            const char *list_start = lexer.current;
-            while (depth > 0 && !lexer_is_at_end(&lexer))
-            {
-                Token inner = lexer_next_token(&lexer);
-                if (inner.type == TOKEN_LEFT_BRACKET)
-                    depth++;
-                else if (inner.type == TOKEN_RIGHT_BRACKET)
-                    depth--;
-                else if (inner.type == TOKEN_EOF)
-                    break;
-            }
-            // list_start to current position (minus the ] we just consumed) forms the inner list
-            // For simplicity, recursively parse
-            size_t inner_len = lexer.current - list_start - 1; // Exclude the ]
-            if (inner_len > 0)
-            {
-                char *inner_str = (char *)malloc(inner_len + 1);
-                if (!inner_str)
-                {
-                    return (ParseResult){.node = NODE_NIL, .success = false};
-                }
-                memcpy(inner_str, list_start, inner_len);
-                inner_str[inner_len] = '\0';
-                ParseResult inner_result = parse_line_to_list(inner_str);
-                free(inner_str);
-                if (!inner_result.success)
-                {
-                    return inner_result;
-                }
-                element = inner_result.node;
-                // Wrap in list type
-                element = NODE_MAKE_LIST(NODE_GET_INDEX(element)) | (NODE_TYPE_LIST << NODE_TYPE_SHIFT);
-            }
-            else
-            {
-                element = NODE_NIL; // Empty list
-            }
-            // Mark as list value
-            Node new_cell = mem_cons(element, NODE_NIL);
-            *tail = new_cell;
-            tail = &((Node *)&new_cell)[0]; // This won't work directly, need different approach
-            continue; // Skip the normal append below
-        }
-
-        case TOKEN_RIGHT_BRACKET:
-            // Shouldn't happen at top level, ignore
-            continue;
-
-        case TOKEN_PLUS:
-            element = mem_atom_cstr("+");
-            break;
-        case TOKEN_MINUS:
-        case TOKEN_UNARY_MINUS:
-            element = mem_atom_cstr("-");
-            break;
-        case TOKEN_MULTIPLY:
-            element = mem_atom_cstr("*");
-            break;
-        case TOKEN_DIVIDE:
-            element = mem_atom_cstr("/");
-            break;
-        case TOKEN_EQUALS:
-            element = mem_atom_cstr("=");
-            break;
-        case TOKEN_LESS_THAN:
-            element = mem_atom_cstr("<");
-            break;
-        case TOKEN_GREATER_THAN:
-            element = mem_atom_cstr(">");
-            break;
-        case TOKEN_LEFT_PAREN:
-            element = mem_atom_cstr("(");
-            break;
-        case TOKEN_RIGHT_PAREN:
-            element = mem_atom_cstr(")");
-            break;
-
-        default:
-            continue;
-        }
-
-        // Append element to list
-        Node new_cell = mem_cons(element, NODE_NIL);
-        if (mem_is_nil(result))
-        {
-            result = new_cell;
-        }
-        else
-        {
-            // Find end of list and append
-            Node current = result;
-            while (!mem_is_nil(mem_cdr(current)))
-            {
-                current = mem_cdr(current);
-            }
-            mem_set_cdr(current, new_cell);
-        }
-    }
-
-    return (ParseResult){.node = result, .success = true};
-}
+// (now provided by core/parse_list.[ch])
 
 // readlist (rl) - reads a line of input and outputs it as a list
 // Echoes the input. Returns empty word if at EOF.
@@ -325,7 +174,7 @@ static Result prim_readlist(Evaluator *eval, int argc, Value *args)
     }
 
     // Parse the line into a list
-    ParseResult parse_result = parse_line_to_list(buffer);
+    ParseListResult parse_result = parse_list_from_string(buffer);
     if (!parse_result.success)
     {
         return result_error(ERR_OUT_OF_SPACE);

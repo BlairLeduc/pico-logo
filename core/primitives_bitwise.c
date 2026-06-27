@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Bitwise primitives: bitand, bitor, bitxor, bitnot, ashift, lshift
 //
@@ -8,14 +8,19 @@
 #include "primitives.h"
 #include "error.h"
 #include "eval.h"
+#include <math.h>
 #include <stdint.h>
 
-// Helper macro to extract integer from argument
+// Helper macro to extract integer from argument.
+// Rejects non-finite values and values outside the int32_t range to avoid
+// undefined behaviour from the float -> int32_t conversion.
 #define REQUIRE_INTEGER(arg, var) \
     int32_t var; \
     do { \
         float f; \
         if (!value_to_number(arg, &f)) \
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(arg)); \
+        if (!isfinite(f) || f < -2147483648.0f || f > 2147483647.0f) \
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(arg)); \
         var = (int32_t)f; \
     } while(0)

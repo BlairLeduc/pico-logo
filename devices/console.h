@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Defines the LogoConsole interface for physical keyboard/screen devices.
 //  A console provides streams for keyboard input and screen output,
@@ -130,6 +130,12 @@ extern "C"
         // Cursor position (column 0 = left, row 0 = top)
         void (*set_cursor)(uint8_t column, uint8_t row);
         void (*get_cursor)(uint8_t *column, uint8_t *row);
+
+        // Text color indices (0-15, referencing text palette slots)
+        void (*set_foreground)(uint8_t index);
+        uint8_t (*get_foreground)(void);
+        void (*set_background)(uint8_t index);
+        uint8_t (*get_background)(void);
     } LogoConsoleText;
 
     //
@@ -183,6 +189,9 @@ extern "C"
         // Screen output as a stream (always available)
         LogoStream output;
 
+        // Error output as a stream (optional — falls back to output if NULL ops)
+        LogoStream error_output;
+
         // Optional turtle graphics (NULL if no graphics support)
         const LogoConsoleTurtle *turtle;
 
@@ -194,6 +203,11 @@ extern "C"
 
         // Optional editor operations (NULL if no editor support)
         const LogoConsoleEditor *editor;
+
+        // Carried syntax depth for line-oriented console input.
+        // Devices that support live input highlighting can use this to render
+        // a continued line relative to already-open brackets from prior lines.
+        int input_syntax_depth;
 
         // Private context for the console implementation
         void *context;

@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Evaluator operation stack for explicit control flow.
 //
@@ -77,6 +77,7 @@ extern "C"
     typedef struct
     {
         Node chosen_branch;  // The branch to execute (already chosen by primitive)
+        uint8_t phase;       // 0 = push branch, 1 = branch completed
     } IfState;
 
     typedef struct
@@ -133,11 +134,17 @@ extern "C"
         int phase;
     } CatchState;
 
+    // TCO mode tracking for proc calls
+    #define TCO_MODE_NONE   0  // No TCO has occurred
+    #define TCO_MODE_BARE   1  // TCO from bare self-call (no output)
+    #define TCO_MODE_OUTPUT 2  // TCO from output <self-call>
+
     typedef struct
     {
         struct UserProcedure *proc;  // The procedure being executed
         Node current_line;           // Current body line cursor
         uint8_t phase;               // 0 = push first line, 1+ = handle line result
+        uint8_t tco_mode;            // TCO_MODE_NONE/BARE/OUTPUT
     } ProcCallState;
 
     // Maximum pending binary operator nesting in expressions.
@@ -161,9 +168,15 @@ extern "C"
         uint8_t phase;                    // 0 = waiting for proc call result
     } ExprEvalState;
 
-    // Maximum staged arguments for deferred primitive calls.
-    // Covers all common primitives (output=1, sum=2, setxy=2, etc.)
+    // Maximum arguments accepted by parenthesized primitive calls.
+    #define MAX_PRIM_ARGS 16
+
+    // Inline staged arguments for fixed-arity deferred primitive calls.
+    // Variadic parenthesized calls use the OpStack spill area below so every
+    // EvalOp does not pay for the full MAX_PRIM_ARGS storage.
     #define MAX_PRIM_STAGED_ARGS 4
+    #define MAX_PRIM_ARG_SPILL_CALLS 8
+    #define MAX_PRIM_ARG_SPILL_VALUES (MAX_PRIM_ARGS * MAX_PRIM_ARG_SPILL_CALLS)
 
     // State for OP_PRIM_CALL: deferred call to a primitive.
     // When a primitive's arg expression contains a user proc call, we push this op
@@ -173,9 +186,15 @@ extern "C"
         const struct Primitive *prim;  // The primitive to call
         const char *user_name;         // User's name for error messages (interned)
         Value args[MAX_PRIM_STAGED_ARGS]; // Arguments collected so far
+        int arg_base;                  // Spill base, or -1 for inline args[]
+        int arg_capacity;              // Capacity of selected arg storage
         int argc;                      // Number of arguments collected
         int total_args;                // Total arguments expected
         int current_arg;               // Index of the argument being evaluated
+        bool saved_in_tail_position;   // Caller's in_tail_position at deferral time.
+                                       // For output/op this stays true so the
+                                       // tail-position exception survives the
+                                       // deferred resume in step_prim_call.
     } PrimCallState;
 
     //==========================================================================
@@ -228,7 +247,9 @@ extern "C"
     typedef struct
     {
         EvalOp ops[MAX_OP_STACK_DEPTH];
+        Value prim_arg_spill[MAX_PRIM_ARG_SPILL_VALUES];
         int top;              // Index of next free slot (0 = empty)
+        int prim_arg_top;     // Next free slot in prim_arg_spill[]
     } OpStack;
 
     // Initialize operation stack
@@ -252,6 +273,10 @@ extern "C"
     // Swap the top two operations on the stack.
     // Used to ensure correct execution order when pushing continuation + operation.
     void op_stack_swap_top(OpStack *stack);
+
+    // Transient storage for variadic deferred primitive arguments.
+    int op_stack_alloc_prim_args(OpStack *stack, int capacity);
+    Value *op_stack_get_prim_args(OpStack *stack, int base);
 
 #ifdef __cplusplus
 }

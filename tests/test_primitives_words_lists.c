@@ -1,9 +1,12 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 
 #include "test_scaffold.h"
+#include "core/parse_list.h"
+#include <string.h>
+#include <stdio.h>
 
 void setUp(void)
 {
@@ -120,6 +123,28 @@ void test_item_number(void)
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
     TEST_ASSERT_EQUAL_STRING("2", mem_word_ptr(r.value.as.node));
+}
+
+void test_item_is_one_indexed(void)
+{
+    // The reference defines `item` as 1-indexed: `item 1 [a b c]` -> a.
+    // Pin this with a list and a word.
+    Result r1 = eval_string("item 1 [a b c]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r1.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r1.value.type);
+    TEST_ASSERT_EQUAL_STRING("a", mem_word_ptr(r1.value.as.node));
+
+    Result r2 = eval_string("item 1 \"abc");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r2.value.type);
+    TEST_ASSERT_EQUAL_STRING("a", mem_word_ptr(r2.value.as.node));
+}
+
+void test_item_zero_index_errors(void)
+{
+    // 0 is below the valid range; should error per 1-indexed semantics.
+    Result r = eval_string("item 0 [a b c]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
 //==========================================================================
@@ -327,6 +352,38 @@ void test_word_operation(void)
     TEST_ASSERT_EQUAL_STRING("helloworld", mem_word_ptr(r.value.as.node));
 }
 
+void test_word_overflow_returns_error(void)
+{
+    // Atom interner caps at 255 chars; concatenating beyond that must
+    // raise ERR_OUT_OF_SPACE rather than silently truncating.
+    // Build a 200-char word and concatenate it with itself => 400 chars.
+    char big[256];
+    memset(big, 'a', 200);
+    big[200] = '\0';
+
+    char src[600];
+    snprintf(src, sizeof(src), "(word \"%s \"%s)", big, big);
+
+    Result r = eval_string(src);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_word_at_atom_limit_succeeds(void)
+{
+    // Exactly 255 chars total must still succeed (the cap is inclusive).
+    char a[200];
+    memset(a, 'a', 199); a[199] = '\0';
+    char b[60];
+    memset(b, 'b', 56); b[56] = '\0'; // 199 + 56 = 255
+
+    char src[600];
+    snprintf(src, sizeof(src), "(word \"%s \"%s)", a, b);
+    Result r = eval_string(src);
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_size_t(255, mem_word_len(r.value.as.node));
+}
+
 void test_parse(void)
 {
     // parse "hello world" should give [hello world]
@@ -336,6 +393,72 @@ void test_parse(void)
     // Should be [hello]
     Node first = mem_car(r.value.as.node);
     TEST_ASSERT_EQUAL_STRING("hello", mem_word_ptr(first));
+}
+
+// Direct exercise of the shared parser used by both `parse` and `readlist`.
+// This is the cleanest regression for the previous "parse drops brackets"
+// bug because Logo's quoted-word syntax stops at `[` and `]`, so the
+// `parse` primitive itself can't easily be handed a bracket-containing
+// word from a Logo source line.
+void test_parse_list_from_string_nested(void)
+{
+    ParseListResult r = parse_list_from_string("a [b c] d");
+    TEST_ASSERT_TRUE(r.success);
+
+    Node first = mem_car(r.node);
+    TEST_ASSERT_TRUE(mem_is_word(first));
+    TEST_ASSERT_EQUAL_STRING("a", mem_word_ptr(first));
+
+    Node second_cell = mem_cdr(r.node);
+    Node sub = mem_car(second_cell);
+    TEST_ASSERT_TRUE(mem_is_list(sub));
+    TEST_ASSERT_EQUAL_STRING("b", mem_word_ptr(mem_car(sub)));
+    TEST_ASSERT_EQUAL_STRING("c", mem_word_ptr(mem_car(mem_cdr(sub))));
+    TEST_ASSERT_TRUE(mem_is_nil(mem_cdr(mem_cdr(sub))));
+
+    Node third_cell = mem_cdr(second_cell);
+    TEST_ASSERT_EQUAL_STRING("d", mem_word_ptr(mem_car(third_cell)));
+    TEST_ASSERT_TRUE(mem_is_nil(mem_cdr(third_cell)));
+}
+
+void test_parse_list_from_string_deeply_nested(void)
+{
+    ParseListResult r = parse_list_from_string("[a [b [c]]]");
+    TEST_ASSERT_TRUE(r.success);
+
+    // One outer element: the [a [b [c]]] sublist.
+    Node outer = mem_car(r.node);
+    TEST_ASSERT_TRUE(mem_is_list(outer));
+    TEST_ASSERT_TRUE(mem_is_nil(mem_cdr(r.node)));
+
+    TEST_ASSERT_EQUAL_STRING("a", mem_word_ptr(mem_car(outer)));
+    Node level1 = mem_car(mem_cdr(outer));
+    TEST_ASSERT_TRUE(mem_is_list(level1));
+
+    TEST_ASSERT_EQUAL_STRING("b", mem_word_ptr(mem_car(level1)));
+    Node level2 = mem_car(mem_cdr(level1));
+    TEST_ASSERT_TRUE(mem_is_list(level2));
+
+    TEST_ASSERT_EQUAL_STRING("c", mem_word_ptr(mem_car(level2)));
+    TEST_ASSERT_TRUE(mem_is_nil(mem_cdr(level2)));
+}
+
+// Empty bracketed group must be encoded so it survives mem_is_list checks.
+void test_parse_list_from_string_empty_sublist(void)
+{
+    ParseListResult r = parse_list_from_string("x [] y");
+    TEST_ASSERT_TRUE(r.success);
+
+    TEST_ASSERT_EQUAL_STRING("x", mem_word_ptr(mem_car(r.node)));
+
+    Node empty_cell = mem_cdr(r.node);
+    Node empty_sub = mem_car(empty_cell);
+    TEST_ASSERT_TRUE(mem_is_list(empty_sub));
+    TEST_ASSERT_TRUE(mem_is_nil(empty_sub));
+
+    Node y_cell = mem_cdr(empty_cell);
+    TEST_ASSERT_EQUAL_STRING("y", mem_word_ptr(mem_car(y_cell)));
+    TEST_ASSERT_TRUE(mem_is_nil(mem_cdr(y_cell)));
 }
 
 //==========================================================================
@@ -554,6 +677,85 @@ void test_memberp_list_false(void)
     TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
 }
 
+//---- member/memberp edge cases ----
+
+void test_member_empty_needle_in_word_returns_empty(void)
+{
+    // Empty needle in word context yields empty word ("not found"
+    // sentinel for the word-overload), not the whole haystack.
+    Result r = eval_string("member \"|| \"abc");  // || is empty word literal
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("", mem_word_ptr(r.value.as.node));
+}
+
+void test_member_multichar_substring_in_word(void)
+{
+    // Multi-character needle should be found as substring.
+    Result r = eval_string("member \"bc \"abcd");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("bcd", mem_word_ptr(r.value.as.node));
+}
+
+void test_member_word_is_case_insensitive(void)
+{
+    Result r = eval_string("member \"B \"abc");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    // Tail starts at position of 'b' in haystack
+    TEST_ASSERT_EQUAL_STRING("bc", mem_word_ptr(r.value.as.node));
+}
+
+void test_member_list_in_word_returns_empty(void)
+{
+    // List argument cannot be a member of a word; expect empty word.
+    Result r = eval_string("member [a] \"abc");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("", mem_word_ptr(r.value.as.node));
+}
+
+void test_member_number_in_list(void)
+{
+    Result r = eval_string("member 2 [1 2 3]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
+    Node first = mem_car(r.value.as.node);
+    TEST_ASSERT_EQUAL_STRING("2", mem_word_ptr(first));
+}
+
+void test_memberp_empty_needle_word(void)
+{
+    // The predicate form should be `false` when member returns the
+    // empty-word sentinel.
+    Result r = eval_string("member? \"|| \"abc");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
+}
+
+void test_member_whitespace_needle_in_word(void)
+{
+    // Whitespace inside a word should match verbatim as a substring.
+    // Build needle "  " (two spaces) and haystack "a  b" using `char`.
+    Result r = eval_string(
+        "member (word char 32 char 32) (word \"a char 32 char 32 \"b)");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("  b", mem_word_ptr(r.value.as.node));
+}
+
+void test_memberp_whitespace_needle_in_word_agrees_with_member(void)
+{
+    // member returning non-empty implies memberp is true.
+    Result r = eval_string(
+        "member? (word char 32 char 32) (word \"a char 32 char 32 \"b)");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -574,6 +776,8 @@ int main(void)
     RUN_TEST(test_item_word);
     RUN_TEST(test_item_list);
     RUN_TEST(test_item_number);
+    RUN_TEST(test_item_is_one_indexed);
+    RUN_TEST(test_item_zero_index_errors);
     
     // Replace
     RUN_TEST(test_replace_word);
@@ -603,7 +807,12 @@ int main(void)
     
     // Word operations
     RUN_TEST(test_word_operation);
+    RUN_TEST(test_word_overflow_returns_error);
+    RUN_TEST(test_word_at_atom_limit_succeeds);
     RUN_TEST(test_parse);
+    RUN_TEST(test_parse_list_from_string_nested);
+    RUN_TEST(test_parse_list_from_string_deeply_nested);
+    RUN_TEST(test_parse_list_from_string_empty_sublist);
     
     // Character operations
     RUN_TEST(test_ascii);
@@ -638,6 +847,15 @@ int main(void)
     RUN_TEST(test_memberp_word_true);
     RUN_TEST(test_memberp_list_true);
     RUN_TEST(test_memberp_list_false);
+    RUN_TEST(test_member_empty_needle_in_word_returns_empty);
+    RUN_TEST(test_member_multichar_substring_in_word);
+    RUN_TEST(test_member_word_is_case_insensitive);
+    RUN_TEST(test_member_list_in_word_returns_empty);
+    RUN_TEST(test_member_number_in_list);
+    RUN_TEST(test_memberp_empty_needle_word);
+
+    RUN_TEST(test_member_whitespace_needle_in_word);
+    RUN_TEST(test_memberp_whitespace_needle_in_word_agrees_with_member);
 
     return UNITY_END();
 }

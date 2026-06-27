@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Tests for Outside World primitives: keyp, readchar, readchars, readlist,
 //  readword, print, show, type, standout
@@ -454,6 +454,84 @@ void test_readlist_with_numbers(void)
     TEST_ASSERT_EQUAL_STRING("1", mem_word_ptr(first));
 }
 
+void test_readlist_with_nested_list(void)
+{
+    // Nested brackets must produce a sublist as the second element.
+    set_mock_input("a [b c] d\n");
+    Result r = eval_string("readlist");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_list(r.value));
+
+    Node list = r.value.as.node;
+    TEST_ASSERT_FALSE(mem_is_nil(list));
+
+    // First element is the word "a"
+    Node first = mem_car(list);
+    TEST_ASSERT_TRUE(mem_is_word(first));
+    TEST_ASSERT_EQUAL_STRING("a", mem_word_ptr(first));
+
+    // Second element must be the sublist [b c]
+    Node second_cell = mem_cdr(list);
+    TEST_ASSERT_FALSE(mem_is_nil(second_cell));
+    Node second = mem_car(second_cell);
+    TEST_ASSERT_TRUE(mem_is_list(second));
+
+    Node sub_first = mem_car(second);
+    TEST_ASSERT_TRUE(mem_is_word(sub_first));
+    TEST_ASSERT_EQUAL_STRING("b", mem_word_ptr(sub_first));
+    Node sub_rest = mem_cdr(second);
+    TEST_ASSERT_FALSE(mem_is_nil(sub_rest));
+    Node sub_second = mem_car(sub_rest);
+    TEST_ASSERT_TRUE(mem_is_word(sub_second));
+    TEST_ASSERT_EQUAL_STRING("c", mem_word_ptr(sub_second));
+    TEST_ASSERT_TRUE(mem_is_nil(mem_cdr(sub_rest)));
+
+    // Third element is the word "d"
+    Node third_cell = mem_cdr(second_cell);
+    TEST_ASSERT_FALSE(mem_is_nil(third_cell));
+    Node third = mem_car(third_cell);
+    TEST_ASSERT_TRUE(mem_is_word(third));
+    TEST_ASSERT_EQUAL_STRING("d", mem_word_ptr(third));
+    TEST_ASSERT_TRUE(mem_is_nil(mem_cdr(third_cell)));
+}
+
+void test_readlist_with_deeply_nested_list(void)
+{
+    // Deeply nested brackets must be matched correctly.
+    set_mock_input("[[a b] [c [d]]]\n");
+    Result r = eval_string("readlist");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_list(r.value));
+
+    Node outer = r.value.as.node;
+    TEST_ASSERT_FALSE(mem_is_nil(outer));
+    // Outer list has exactly one element which is the [[a b] [c [d]]] list
+    TEST_ASSERT_TRUE(mem_is_nil(mem_cdr(outer)));
+    Node l1 = mem_car(outer);
+    TEST_ASSERT_TRUE(mem_is_list(l1));
+
+    // l1 = [[a b] [c [d]]]
+    Node ab = mem_car(l1);
+    TEST_ASSERT_TRUE(mem_is_list(ab));
+    Node ab_a = mem_car(ab);
+    TEST_ASSERT_EQUAL_STRING("a", mem_word_ptr(ab_a));
+
+    Node cd_cell = mem_cdr(l1);
+    TEST_ASSERT_FALSE(mem_is_nil(cd_cell));
+    Node cd = mem_car(cd_cell);
+    TEST_ASSERT_TRUE(mem_is_list(cd));
+
+    // cd = [c [d]]
+    Node c = mem_car(cd);
+    TEST_ASSERT_EQUAL_STRING("c", mem_word_ptr(c));
+    Node d_cell = mem_cdr(cd);
+    TEST_ASSERT_FALSE(mem_is_nil(d_cell));
+    Node d_list = mem_car(d_cell);
+    TEST_ASSERT_TRUE(mem_is_list(d_list));
+    Node d = mem_car(d_list);
+    TEST_ASSERT_EQUAL_STRING("d", mem_word_ptr(d));
+}
+
 //==========================================================================
 // Main
 //==========================================================================
@@ -521,6 +599,7 @@ int main(void)
     RUN_TEST(test_readlist_empty_line_returns_empty_list);
     RUN_TEST(test_readlist_eof_returns_empty_word);
     RUN_TEST(test_readlist_with_numbers);
-    
+    RUN_TEST(test_readlist_with_nested_list);
+    RUN_TEST(test_readlist_with_deeply_nested_list);
     return UNITY_END();
 }

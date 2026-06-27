@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Tests for conditional primitives: if, true, false, test, iftrue, iffalse
 //
@@ -558,6 +558,50 @@ void test_test_nested_procedures(void)
     run_string("erase \"inner");
 }
 
+void test_if_zero_args_via_parens(void)
+{
+    // (if) reaches the primitive via the variadic-call path with argc=0.
+    // Without an explicit guard, args[0] would be UB.
+    Result r = eval_string("(if)");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NOT_ENOUGH_INPUTS, r.error_code);
+}
+
+void test_if_one_arg_via_parens(void)
+{
+    Result r = eval_string("(if \"true)");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NOT_ENOUGH_INPUTS, r.error_code);
+}
+
+void test_if_three_args_requires_parens(void)
+{
+    // Without parens, `if pred [t] [f]` is parsed as `if pred [t]` followed
+    // by `[f]` as a separate statement. The 2-argument `if` form ignores
+    // the third list entirely; only the first list runs when pred is true.
+    // This pins the documented behaviour that the 3-argument form requires
+    // `(if ...)`.
+    reset_output();
+    run_string("if \"true [print 1] [print 2]");
+    // Only the `[print 1]` ran; `[print 2]` was a separate value statement.
+    TEST_ASSERT_EQUAL_STRING("1\n", output_buffer);
+
+    // And with a false predicate, neither list should run — the second
+    // `[print 2]` is *not* picked up as an else clause.
+    reset_output();
+    run_string("if \"false [print 1] [print 2]");
+    TEST_ASSERT_EQUAL_STRING("", output_buffer);
+}
+
+void test_if_three_args_with_parens_runs_else(void)
+{
+    // Parenthesised 3-arg form: false predicate runs the else list.
+    reset_output();
+    Result r = run_string("(if \"false [print 1] [print 2])");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("2\n", output_buffer);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -624,6 +668,11 @@ int main(void)
     RUN_TEST(test_test_local_to_procedure);
     RUN_TEST(test_test_inherited_by_subprocedure);
     RUN_TEST(test_test_nested_procedures);
+
+    RUN_TEST(test_if_zero_args_via_parens);
+    RUN_TEST(test_if_one_arg_via_parens);
+    RUN_TEST(test_if_three_args_requires_parens);
+    RUN_TEST(test_if_three_args_with_parens_runs_else);
 
     return UNITY_END();
 }

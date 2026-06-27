@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Tests for debug control primitives: pause, co, go, label, wait
 //
@@ -466,6 +466,38 @@ void test_pause_uncaught_throw_preserves_local_variables(void)
     TEST_ASSERT_NOT_NULL(strstr(output_buffer, "6\n"));
 }
 
+// Regression for P3-017: pausing during a tail-recursive call must not
+// disturb the parent Evaluator's TCO state. The pause REPL runs on a
+// fresh Evaluator (in_tail_position = false, proc_depth = 0); the
+// parent's tail-position survives on the C stack and resumes after `co`.
+// If TCO degraded into stack growth, a deep recursion would overflow
+// the op stack or the C stack. Here we just want to confirm the run
+// completes and produces the expected output after a mid-run pause.
+void test_pause_resumes_tail_recursion(void)
+{
+    // Simple tail-recursive countdown that prints each value.
+    proc_define_from_text(
+        "to countdown :n\n"
+        "  if :n = 0 [stop]\n"
+        "  print :n\n"
+        "  countdown :n - 1\n"
+        "end");
+
+    set_mock_input("co\n");
+    mock_pause_requested = true;
+
+    Result r = run_string("countdown 50");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    // Pause REPL ran exactly once (only one F9 was queued).
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "Pausing..."));
+
+    // Recursion ran to completion both before and after the pause.
+    // The first iteration prints "50", the last "1". Both must appear.
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "50\n"));
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "1\n"));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -506,6 +538,7 @@ int main(void)
     RUN_TEST(test_pause_error_preserves_local_variables);
     RUN_TEST(test_pause_error_preserves_variables_f9);
     RUN_TEST(test_pause_uncaught_throw_preserves_local_variables);
+    RUN_TEST(test_pause_resumes_tail_recursion);
 
     return UNITY_END();
 }

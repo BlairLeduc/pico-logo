@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Network primitives: network.ping, network.resolve, network.open, network.ntp
 //
@@ -98,6 +98,12 @@ static Result prim_ntp(Evaluator *eval, int argc, Value *args)
     if (argc >= 1)
     {
         if (!value_to_number(args[0], &timezone_offset))
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+        }
+        // Real-world UTC offsets span [-12, +14] hours; reject anything outside
+        // this band rather than passing nonsense to the NTP backend.
+        if (!(timezone_offset >= -12.0f && timezone_offset <= 14.0f))
         {
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
         }

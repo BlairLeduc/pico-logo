@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Unit tests for the token source abstraction.
 //
@@ -730,6 +730,201 @@ void test_mixed_content_list(void)
 }
 
 //============================================================================
+// Sublist Detection Tests
+//============================================================================
+
+void test_has_sublist_false_for_lexer(void)
+{
+    Lexer lexer;
+    lexer_init(&lexer, "forward 100");
+    
+    TokenSource ts;
+    token_source_init_lexer(&ts, &lexer);
+    
+    // Lexer sources never have sublists
+    TEST_ASSERT_FALSE(token_source_has_sublist(&ts));
+    token_source_next(&ts);
+    TEST_ASSERT_FALSE(token_source_has_sublist(&ts));
+}
+
+void test_has_sublist_true_after_nested_list(void)
+{
+    // Create: [hello [world]]
+    Node hello = mem_atom("hello", 5);
+    Node world = mem_atom("world", 5);
+    Node inner = mem_cons(world, NODE_NIL);  // [world]
+    Node list = mem_cons(hello, mem_cons(inner, NODE_NIL));
+    
+    TokenSource ts;
+    token_source_init_list(&ts, list);
+    
+    // Before reading nested list
+    TEST_ASSERT_FALSE(token_source_has_sublist(&ts));
+    
+    // Read "hello" word
+    token_source_next(&ts);
+    TEST_ASSERT_FALSE(token_source_has_sublist(&ts));
+    
+    // Read the LEFT_BRACKET for inner list
+    Token t = token_source_next(&ts);
+    TEST_ASSERT_EQUAL(TOKEN_LEFT_BRACKET, t.type);
+    TEST_ASSERT_TRUE(token_source_has_sublist(&ts));
+    
+    // Consume the sublist
+    token_source_consume_sublist(&ts);
+    TEST_ASSERT_FALSE(token_source_has_sublist(&ts));
+}
+
+//============================================================================
+// Position Save/Restore Tests
+//============================================================================
+
+void test_get_position_returns_nil_for_lexer(void)
+{
+    Lexer lexer;
+    lexer_init(&lexer, "forward 100");
+    
+    TokenSource ts;
+    token_source_init_lexer(&ts, &lexer);
+    
+    // Lexer sources return NIL for position
+    Node pos = token_source_get_position(&ts);
+    TEST_ASSERT_TRUE(mem_is_nil(pos));
+}
+
+void test_get_position_for_node_iter(void)
+{
+    // Create: [a b c]
+    Node a = mem_atom("a", 1);
+    Node b = mem_atom("b", 1);
+    Node c = mem_atom("c", 1);
+    Node list = mem_cons(a, mem_cons(b, mem_cons(c, NODE_NIL)));
+    
+    TokenSource ts;
+    token_source_init_list(&ts, list);
+    
+    // Position at start should be the full list
+    Node pos_start = token_source_get_position(&ts);
+    TEST_ASSERT_FALSE(mem_is_nil(pos_start));
+    
+    // Read 'a', then position should advance
+    token_source_next(&ts);
+    Node pos_after_a = token_source_get_position(&ts);
+    
+    // Read 'b'
+    token_source_next(&ts);
+    Node pos_after_b = token_source_get_position(&ts);
+    
+    // Read 'c'
+    token_source_next(&ts);
+    Node pos_after_c = token_source_get_position(&ts);
+    TEST_ASSERT_TRUE(mem_is_nil(pos_after_c));
+    
+    // Positions should differ
+    TEST_ASSERT_NOT_EQUAL(pos_start, pos_after_a);
+    TEST_ASSERT_NOT_EQUAL(pos_after_a, pos_after_b);
+}
+
+void test_set_position_restores_state(void)
+{
+    // Create: [a b c]
+    Node a = mem_atom("a", 1);
+    Node b = mem_atom("b", 1);
+    Node c = mem_atom("c", 1);
+    Node list = mem_cons(a, mem_cons(b, mem_cons(c, NODE_NIL)));
+    
+    TokenSource ts;
+    token_source_init_list(&ts, list);
+    
+    // Read 'a'
+    assert_token(token_source_next(&ts), TOKEN_WORD, "a");
+    
+    // Save position (should be at 'b')
+    Node saved = token_source_get_position(&ts);
+    
+    // Read 'b' and 'c'
+    assert_token(token_source_next(&ts), TOKEN_WORD, "b");
+    assert_token(token_source_next(&ts), TOKEN_WORD, "c");
+    assert_token_type(token_source_next(&ts), TOKEN_EOF);
+    
+    // Restore position back to 'b'
+    token_source_set_position(&ts, saved);
+    
+    // Should read 'b' again
+    assert_token(token_source_next(&ts), TOKEN_WORD, "b");
+    assert_token(token_source_next(&ts), TOKEN_WORD, "c");
+    assert_token_type(token_source_next(&ts), TOKEN_EOF);
+}
+
+void test_set_position_noop_for_lexer(void)
+{
+    Lexer lexer;
+    lexer_init(&lexer, "forward 100");
+    
+    TokenSource ts;
+    token_source_init_lexer(&ts, &lexer);
+    
+    // set_position on lexer source should be a no-op (not crash)
+    token_source_set_position(&ts, NODE_NIL);
+    
+    // Should still work normally
+    assert_token(token_source_next(&ts), TOKEN_WORD, "forward");
+}
+
+//============================================================================
+// Number classification — alignment with lexer's is_valid_number
+//============================================================================
+//
+// `is_number_word` (used when re-tokenising lists) and the lexer's
+// `is_valid_number` MUST agree on what counts as a number, otherwise the
+// same atom is parsed differently depending on whether it came from raw
+// source text or from a list literal. These tests pin the contract.
+
+void test_classify_rejects_trailing_e(void)
+{
+    // "1e" is not a number — needs a digit after the exponent marker.
+    Node w = mem_atom("1e", 2);
+    Node list = mem_cons(w, NODE_NIL);
+    TokenSource ts;
+    token_source_init_list(&ts, list);
+    Token t = token_source_next(&ts);
+    assert_token(t, TOKEN_WORD, "1e");
+}
+
+void test_classify_rejects_trailing_e_with_sign(void)
+{
+    // "1e+" is not a number — sign without following digits.
+    Node w = mem_atom("1e+", 3);
+    Node list = mem_cons(w, NODE_NIL);
+    TokenSource ts;
+    token_source_init_list(&ts, list);
+    Token t = token_source_next(&ts);
+    assert_token(t, TOKEN_WORD, "1e+");
+}
+
+void test_classify_rejects_trailing_n(void)
+{
+    // "1n" is not a number — n notation also requires digits after.
+    Node w = mem_atom("1n", 2);
+    Node list = mem_cons(w, NODE_NIL);
+    TokenSource ts;
+    token_source_init_list(&ts, list);
+    Token t = token_source_next(&ts);
+    assert_token(t, TOKEN_WORD, "1n");
+}
+
+void test_classify_rejects_n_with_sign(void)
+{
+    // n notation may NOT be followed by an explicit sign.
+    Node w = mem_atom("1n+4", 4);
+    Node list = mem_cons(w, NODE_NIL);
+    TokenSource ts;
+    token_source_init_list(&ts, list);
+    Token t = token_source_next(&ts);
+    assert_token(t, TOKEN_WORD, "1n+4");
+}
+
+//============================================================================
 // Main
 //============================================================================
 
@@ -783,6 +978,22 @@ int main(void)
     RUN_TEST(test_consume_sublist_on_lexer_source);
     RUN_TEST(test_deeply_nested_lists);
     RUN_TEST(test_mixed_content_list);
+    
+    // Sublist detection
+    RUN_TEST(test_has_sublist_false_for_lexer);
+    RUN_TEST(test_has_sublist_true_after_nested_list);
+    
+    // Position save/restore
+    RUN_TEST(test_get_position_returns_nil_for_lexer);
+    RUN_TEST(test_get_position_for_node_iter);
+    RUN_TEST(test_set_position_restores_state);
+    RUN_TEST(test_set_position_noop_for_lexer);
+
+    // Number classification — must agree with lexer's is_valid_number
+    RUN_TEST(test_classify_rejects_trailing_e);
+    RUN_TEST(test_classify_rejects_trailing_e_with_sign);
+    RUN_TEST(test_classify_rejects_trailing_n);
+    RUN_TEST(test_classify_rejects_n_with_sign);
     
     return UNITY_END();
 }

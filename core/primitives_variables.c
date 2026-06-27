@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Variable primitives: make, thing, local, name, namep
 //
@@ -21,6 +21,12 @@ static Result prim_make(Evaluator *eval, int argc, Value *args)
     return result_none();
 }
 
+// thing "name
+// Outputs the value of the variable named by its argument
+// (`thing "any` is equivalent to `:any`, per reference §1665).
+// The reference does not pin the unknown-name case; we report
+// ERR_NO_VALUE with the variable name as the offending argument so
+// `thing "x` and `:x` behave identically when `x` is unbound.
 static Result prim_thing(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);

@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 
 #include "token_source.h"
@@ -40,18 +40,30 @@ static bool is_number_word(const char *str, size_t len)
         }
     }
     
-    // Exponent part (e/E for standard, n/N for negative exponent)
+    // Exponent part (e/E for standard, n/N for negative exponent).
+    // Must mirror the lexer's `is_valid_number` rules so the same word is
+    // classified the same whether it comes from raw source or from a list:
+    //   - exponent only allowed when the mantissa contained a digit
+    //   - n/N may not be followed by a sign (the n itself implies negative)
+    //   - at least one digit is required after the exponent
     if (i < len && (str[i] == 'e' || str[i] == 'E' || str[i] == 'n' || str[i] == 'N'))
     {
+        if (!has_digit)
+            return false;
+
         bool is_n_notation = (str[i] == 'n' || str[i] == 'N');
         i++;
-        // Only allow signs after e/E, not after n/N
         if (!is_n_notation && i < len && (str[i] == '-' || str[i] == '+'))
             i++;
+
+        // Require at least one digit after the exponent marker.
+        if (i >= len || !isdigit((unsigned char)str[i]))
+            return false;
+
         while (i < len && isdigit((unsigned char)str[i]))
             i++;
     }
-    
+
     return has_digit && i == len;
 }
 
@@ -182,6 +194,14 @@ static bool is_delimiter_token(TokenType type)
     }
 }
 
+static bool is_comment_node(Node element)
+{
+    if (!mem_is_word(element))
+        return false;
+    const char *str = mem_word_ptr(element);
+    return str && str[0] == ';';
+}
+
 // Initialize token source from a Lexer
 void token_source_init_lexer(TokenSource *ts, Lexer *lexer)
 {
@@ -218,6 +238,20 @@ static Token node_iter_next(NodeIterator *iter)
     while (!mem_is_nil(iter->current))
     {
         Node element = mem_car(iter->current);
+        if (is_comment_node(element))
+        {
+            iter->current = mem_cdr(iter->current);
+            while (!mem_is_nil(iter->current))
+            {
+                Node skipped = mem_car(iter->current);
+                iter->current = mem_cdr(iter->current);
+                if (mem_is_newline(skipped))
+                {
+                    break;
+                }
+            }
+            continue;
+        }
         if (!mem_is_newline(element))
         {
             break;

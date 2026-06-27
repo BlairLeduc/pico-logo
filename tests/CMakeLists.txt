@@ -26,17 +26,20 @@ macro(add_logo_test TEST_NAME)
 endmacro()
 
 # Core tests
+add_logo_test(test_eval_ops)
 add_logo_test(test_frame)
 add_logo_test(test_frame_arena)
 add_logo_test(test_lexer)
 add_logo_test(test_token_source)
 add_logo_test(test_memory)
 add_logo_test(test_value)
+add_logo_test(test_variables)
 add_logo_test(test_eval)
 add_logo_test(test_error)
 add_logo_test(test_mock_device)
 add_logo_test(test_format)
-
+add_logo_test(test_help)
+add_logo_test(test_primitive_help_coverage)
 # Primitive tests
 add_logo_test(test_primitives_arithmetic)
 add_logo_test(test_primitives_bitwise)
@@ -54,6 +57,8 @@ add_logo_test(test_primitives_outside_world)
 add_logo_test(test_primitives_properties)
 add_logo_test(test_primitives_debug)
 add_logo_test(test_primitives_files)
+add_logo_test(test_primitives_files_directory)
+add_logo_test(test_primitives_files_load_save)
 add_logo_test(test_primitives_text)
 add_logo_test(test_primitives_turtle)
 add_logo_test(test_primitives_hardware)
@@ -65,3 +70,22 @@ add_logo_test(test_io)
 add_logo_test(test_stream)
 add_logo_test(test_repl)
 add_logo_test(test_syntax_highlight)
+
+# FAT32 driver test — compiles devices/picocalc/fat32.c on the host with a
+# mock SD-card backend and tiny Pico SDK shim headers.  Independent of
+# logo_core / test_utils because fat32.c has no Logo runtime dependencies.
+add_executable(test_fat32
+    test_fat32.c
+    fat32_image.c
+    mock_sdcard.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/fat32.c
+    unity.c
+)
+target_include_directories(test_fat32 BEFORE PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/mocks
+)
+target_include_directories(test_fat32 PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/devices/picocalc
+)
+add_test(NAME test_fat32 COMMAND test_fat32)

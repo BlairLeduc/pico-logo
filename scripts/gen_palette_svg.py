@@ -1,0 +1,122 @@
+#!/usr/bin/env python3
+"""Generate Colours.svg showing the full 256-colour palette as a 16x16 grid."""
+
+import os
+
+palette_24bit = [
+    0x000000, 0x555555, 0xAAAAAA, 0xFFFFFF, 0x18181E, 0xEA4747, 0xFF9650, 0xFFD250,
+    0xFFF064, 0x82F082, 0x50C850, 0x50D2FF, 0xE664FF, 0xEA47C1, 0xFFDC14, 0x14B4FF,
+    0x7F1D1D, 0x991B1B, 0xB91C1C, 0xDC2626, 0xEF4444, 0xF87171, 0xFCA5A5, 0xFECACA,
+    0x7C2D12, 0x9A3412, 0xC2410C, 0xEA580C, 0xF97316, 0xFB923C, 0xFDBA74, 0xFED7AA,
+    0x78350F, 0x92400E, 0xB45309, 0xD97706, 0xF59E0B, 0xFBBF24, 0xFCD34D, 0xFDE68A,
+    0x713F12, 0x854D0E, 0xA16207, 0xCA8A04, 0xEAB308, 0xFACC15, 0xFDE047, 0xFEF08A,
+    0x365314, 0x3F6212, 0x4D7C0F, 0x65A30D, 0x84CC16, 0xA3E635, 0xBEF264, 0xD9F99D,
+    0x14532D, 0x166534, 0x15803D, 0x16A34A, 0x22C55E, 0x4ADE80, 0x86EFAC, 0xBBF7D0,
+    0x064E3B, 0x065F46, 0x047857, 0x059669, 0x10B981, 0x34D399, 0x6EE7B7, 0xA7F3D0,
+    0x134E4A, 0x115E59, 0x0F766E, 0x0D9488, 0x14B8A6, 0x2DD4BF, 0x5EEAD4, 0x99F6E4,
+    0x164E63, 0x155E75, 0x0E7490, 0x0891B2, 0x06B6D4, 0x22D3EE, 0x67E8F9, 0xA5F3FC,
+    0x0C4A6E, 0x075985, 0x0369A1, 0x0284C7, 0x0EA5E9, 0x38BDF8, 0x7DD3FC, 0xBAE6FD,
+    0x1E3A8A, 0x1E40AF, 0x1D4ED8, 0x2563EB, 0x3B82F6, 0x60A5FA, 0x93C5FD, 0xBFDBFE,
+    0x312E81, 0x3730A3, 0x4338CA, 0x4F46E5, 0x6366F1, 0x818CF8, 0xA5B4FC, 0xC7D2FE,
+    0x4C1D95, 0x5B21B6, 0x6D28D9, 0x7C3AED, 0x8B5CF6, 0xA78BFA, 0xC4B5FD, 0xDDD6FE,
+    0x581C87, 0x6B21A8, 0x7E22CE, 0x9333EA, 0xA855F7, 0xC084FC, 0xD8B4FE, 0xE9D5FF,
+    0x701A75, 0x86198F, 0xA21CAF, 0xC026D3, 0xD946EF, 0xE879F9, 0xF0ABFC, 0xF5D0FE,
+    0x831843, 0x9D174D, 0xBE185D, 0xDB2777, 0xEC4899, 0xF472B6, 0xF9A8D4, 0xFBCFE8,
+    0x881337, 0x9F1239, 0xBE123C, 0xE11D48, 0xF43F5E, 0xFB7185, 0xFDA4AF, 0xFECDD3,
+    0x0F172A, 0x1E293B, 0x334155, 0x475569, 0x64748B, 0x94A3B8, 0xCBD5E1, 0xE2E8F0,
+    0x171717, 0x262626, 0x404040, 0x525252, 0x737373, 0xA3A3A3, 0xD4D4D4, 0xE5E5E5,
+    0x1C1917, 0x292524, 0x44403C, 0x57534E, 0x78716C, 0xA8A29E, 0xD6D3D1, 0xE7E5E4,
+    0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000,
+    0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000,
+    0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000,
+    0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000,
+    0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000,
+    0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000,
+    0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000,
+    0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000,
+    0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000,
+    0xFF0000, 0x00FF00, 0x0000FF, 0xFFFF00, 0x00FFFF, 0xFF00FF, 0xFFFFFF, 0x000000,
+]
+
+row_labels = [
+    'Text palette (0-7)',
+    'Text palette (8-15)',
+    'Red',
+    'Orange',
+    'Amber',
+    'Yellow',
+    'Lime',
+    'Green',
+    'Emerald',
+    'Teal',
+    'Cyan',
+    'Sky',
+    'Blue',
+    'Indigo',
+    'Violet',
+    'Purple',
+    'Fuchsia',
+    'Pink',
+    'Rose',
+    'Slate',
+    'Neutral',
+    'Stone',
+    'Unallocated',
+    'Unallocated',
+    'Unallocated',
+    'Unallocated',
+    'Unallocated',
+    'Unallocated',
+    'Unallocated',
+    'Unallocated',
+    'Unallocated',
+    'Primaries + BG',
+]
+
+cols = 8
+rows = 32
+cw = 72   # cell width
+ch = 24   # cell height
+width = cols * cw   # 576
+height = rows * ch  # 768
+
+
+def luminance(rgb24):
+    r = (rgb24 >> 16) & 0xFF
+    g = (rgb24 >> 8) & 0xFF
+    b = rgb24 & 0xFF
+    return 0.299 * r + 0.587 * g + 0.114 * b
+
+
+lines = []
+lines.append('<?xml version="1.0" encoding="utf-8"?>')
+lines.append('<!-- Pico Logo full 256-colour palette as an 8\u00d732 grid. Each cell shows the palette index. -->')
+lines.append(f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-label="Colour Palette for Pico Logo">')
+lines.append('  <style>')
+lines.append('    .idx-d { font-family: monospace, monospace; font-size:10px; font-weight:700; fill: #000000; }')
+lines.append('    .idx-l { font-family: monospace, monospace; font-size:10px; font-weight:700; fill: #ffffff; }')
+lines.append('  </style>')
+
+for row in range(rows):
+    start = row * cols
+    end = start + cols - 1
+    lines.append(f'  <!-- Row {row}: {start}..{end} ({row_labels[row]}) -->')
+    for col in range(cols):
+        idx = row * cols + col
+        rgb = palette_24bit[idx]
+        hex_color = f'#{rgb:06x}'
+        x = col * cw
+        y = row * ch
+        tx = x + cw // 2
+        ty = y + ch // 2 + 4
+        lum = luminance(rgb)
+        cls = 'idx-d' if lum > 128 else 'idx-l'
+        lines.append(f'  <rect x="{x}" y="{y}" width="{cw}" height="{ch}" fill="{hex_color}"/>'
+                     f'<text x="{tx}" y="{ty}" text-anchor="middle" class="{cls}">{idx}</text>')
+
+lines.append('</svg>')
+
+out_path = os.path.join(os.path.dirname(__file__), '..', 'reference', 'Colours.svg')
+with open(out_path, 'w') as f:
+    f.write('\n'.join(lines) + '\n')
+print(f"Wrote {len(lines)} lines to {os.path.abspath(out_path)}")

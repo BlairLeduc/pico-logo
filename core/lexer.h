@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Lexer for tokenizing Logo input.
 //
@@ -35,6 +35,7 @@ extern "C"
         TOKEN_EQUALS,       // =
         TOKEN_LESS_THAN,    // <
         TOKEN_GREATER_THAN, // >
+        TOKEN_COMMENT,      // ; through end of line (when preserving comments)
         TOKEN_ERROR,        // Lexer error
     } TokenType;
 
@@ -55,6 +56,7 @@ extern "C"
         bool had_whitespace; // Whitespace before current token
         bool had_newline;    // Newline in whitespace before current token
         int newline_count;   // Number of newlines in whitespace (for empty line detection)
+        bool preserve_comments; // If true, return comments instead of discarding them
     } Lexer;
 
     // Initialize the lexer with source input
@@ -63,6 +65,10 @@ extern "C"
     // Get the next token from the input
     // Tokens are produced on demand (pull-based)
     Token lexer_next_token(Lexer *lexer);
+
+    // Control whether semicolon comments are returned as TOKEN_COMMENT.
+    // The default is false, so comments are ignored during normal evaluation.
+    void lexer_set_preserve_comments(Lexer *lexer, bool preserve);
 
     // Peek at the next token without consuming it
     Token lexer_peek_token(Lexer *lexer);

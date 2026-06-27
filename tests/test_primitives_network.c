@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Tests for network primitives: network.ping, network.resolve
 //
@@ -319,6 +319,21 @@ void test_ntp_server_requires_word(void)
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
+void test_ntp_rejects_out_of_range_timezone(void)
+{
+    mock_device_set_ntp_result(true);
+
+    // Real-world UTC offsets span [-12, +14] hours; values outside that band
+    // are nonsense and must error rather than silently passing through.
+    Result r = eval_string("(network.ntp 25)");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+
+    Result r2 = eval_string("(network.ntp -20)");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r2.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r2.error_code);
+}
+
 // ============================================================================
 // Test runner
 // ============================================================================
@@ -356,6 +371,7 @@ int main(void)
     RUN_TEST(test_ntp_with_timezone_only);
     RUN_TEST(test_ntp_no_args_default_timezone_is_zero);
     RUN_TEST(test_ntp_server_requires_word);
+    RUN_TEST(test_ntp_rejects_out_of_range_timezone);
     
     return UNITY_END();
 }

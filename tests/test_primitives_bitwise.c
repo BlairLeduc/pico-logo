@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 
 #include "test_scaffold.h"
@@ -53,6 +53,15 @@ void test_bitand_error_not_number(void)
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
     TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
     TEST_ASSERT_EQUAL_STRING("bitand", r.error_proc);
+}
+
+void test_bitand_error_out_of_range(void)
+{
+    // Values outside int32_t range must be rejected, not silently truncated
+    // (the float -> int32_t conversion is undefined behaviour otherwise).
+    Result r = eval_string("bitand 1e10 1");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
 }
 
 //==========================================================================
@@ -341,6 +350,7 @@ int main(void)
     RUN_TEST(test_bitand_variadic);
     RUN_TEST(test_bitand_negative);
     RUN_TEST(test_bitand_error_not_number);
+    RUN_TEST(test_bitand_error_out_of_range);
 
     // BITOR tests
     RUN_TEST(test_bitor_basic);

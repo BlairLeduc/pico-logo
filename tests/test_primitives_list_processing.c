@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Tests for list processing primitives: apply, foreach, map, filter, find, reduce, crossmap
 //
@@ -334,6 +334,25 @@ void test_reduce_empty_list_error(void)
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
+void test_reduce_word_is_right_fold(void)
+{
+    // For a non-commutative operation we can detect fold direction.
+    // `mark :x :y` outputs `word :x "L :y "R`, which brackets :y in
+    // L..R. With a right fold of [a b c d]:
+    //   inner f(c,d) -> "cLdR"
+    //   then  f(b, "cLdR") -> "bLcLdRR"
+    //   then  f(a, "bLcLdRR") -> "aLbLcLdRRR"
+    // A left fold would give a different shape, so this pins direction.
+    // Note: `to ... end` is REPL-level syntax, not an evaluator primitive,
+    // so we register `mark` directly via the test scaffold helper.
+    const char *params[] = {"x", "y"};
+    define_proc("mark", params, 2, "output (word :x \"L :y \"R)");
+    Result r = eval_string("reduce \"mark [a b c d]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("aLbLcLdRRR", mem_word_ptr(r.value.as.node));
+}
+
 //==========================================================================
 // crossmap tests
 //==========================================================================
@@ -616,6 +635,108 @@ void test_crossmap_listlist_with_word(void)
 }
 
 //==========================================================================
+// P5b-007: error paths must not leak / crash
+//
+// These tests force `map`/`filter`/`reduce`/`crossmap` to take an error
+// branch *after* their internal heap buffers have been allocated. Each
+// test runs the failing call repeatedly and then a follow-up call to
+// confirm the interpreter is still healthy. Run under ASan to validate
+// no leaks.
+//==========================================================================
+
+void test_map_callback_error_word_output_freed(void)
+{
+    // Word input -> primitive pre-allocates `result_word`, then callback
+    // throws before the loop completes.
+    const char *params[] = {"c"};
+    define_proc("boom_char", params, 1, "throw \"error");
+    for (int i = 0; i < 5; i++)
+    {
+        Result r = eval_string("map \"boom_char \"hello");
+        TEST_ASSERT_EQUAL(RESULT_THROW, r.status);
+    }
+    // Interpreter still functional after the throws.
+    Result ok = eval_string("sum 2 3");
+    TEST_ASSERT_EQUAL(RESULT_OK, ok.status);
+    TEST_ASSERT_EQUAL_FLOAT(5.0f, ok.value.as.number);
+}
+
+void test_map_callback_returns_list_into_word_output(void)
+{
+    // Word input forces word-output mode; callback returning a list is a
+    // "lists cannot be concatenated into a word" error path that frees
+    // `result_word` before returning ERR_DOESNT_LIKE_INPUT.
+    const char *params[] = {"c"};
+    define_proc("char_to_list", params, 1, "output (list :c)");
+    for (int i = 0; i < 5; i++)
+    {
+        Result r = eval_string("map \"char_to_list \"abc");
+        TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    }
+    Result ok = eval_string("sum 1 1");
+    TEST_ASSERT_EQUAL(RESULT_OK, ok.status);
+}
+
+void test_filter_callback_non_bool_freed(void)
+{
+    // Word input pre-allocates `result_word`; non-bool callback result
+    // takes the ERR_NOT_BOOL path which must free the buffer.
+    const char *params[] = {"c"};
+    define_proc("not_bool", params, 1, "output 42");
+    for (int i = 0; i < 5; i++)
+    {
+        Result r = eval_string("filter \"not_bool \"hello");
+        TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    }
+    Result ok = eval_string("sum 7 3");
+    TEST_ASSERT_EQUAL(RESULT_OK, ok.status);
+    TEST_ASSERT_EQUAL_FLOAT(10.0f, ok.value.as.number);
+}
+
+void test_filter_callback_throw_freed(void)
+{
+    const char *params[] = {"c"};
+    define_proc("boom_filter", params, 1, "throw \"error");
+    for (int i = 0; i < 5; i++)
+    {
+        Result r = eval_string("filter \"boom_filter \"abc");
+        TEST_ASSERT_EQUAL(RESULT_THROW, r.status);
+    }
+    Result ok = eval_string("sum 1 2");
+    TEST_ASSERT_EQUAL(RESULT_OK, ok.status);
+}
+
+void test_reduce_callback_throw_freed(void)
+{
+    // `reduce` allocates `elements` array up front then invokes callback.
+    const char *params[] = {"a", "b"};
+    define_proc("boom_reduce", params, 2, "throw \"error");
+    for (int i = 0; i < 5; i++)
+    {
+        Result r = eval_string("reduce \"boom_reduce [1 2 3 4 5]");
+        TEST_ASSERT_EQUAL(RESULT_THROW, r.status);
+    }
+    Result ok = eval_string("sum 10 5");
+    TEST_ASSERT_EQUAL(RESULT_OK, ok.status);
+    TEST_ASSERT_EQUAL_FLOAT(15.0f, ok.value.as.number);
+}
+
+void test_crossmap_callback_throw_freed(void)
+{
+    // `crossmap` allocates `element_storage` for cached arguments.
+    const char *params[] = {"a", "b"};
+    define_proc("boom_cross", params, 2, "throw \"error");
+    for (int i = 0; i < 5; i++)
+    {
+        Result r = eval_string("(crossmap \"boom_cross [1 2 3] [a b c])");
+        TEST_ASSERT_EQUAL(RESULT_THROW, r.status);
+    }
+    Result ok = eval_string("sum 4 4");
+    TEST_ASSERT_EQUAL(RESULT_OK, ok.status);
+    TEST_ASSERT_EQUAL_FLOAT(8.0f, ok.value.as.number);
+}
+
+//==========================================================================
 // Main
 //==========================================================================
 
@@ -675,6 +796,7 @@ int main(void)
     RUN_TEST(test_reduce_single_element);
     RUN_TEST(test_reduce_with_primitive);
     RUN_TEST(test_reduce_empty_list_error);
+    RUN_TEST(test_reduce_word_is_right_fold);
     RUN_TEST(test_reduce_with_word);
     
     // crossmap tests
@@ -687,6 +809,14 @@ int main(void)
     // Lambda scoping tests
     RUN_TEST(test_lambda_doesnt_clobber_variables);
     RUN_TEST(test_nested_lambda_scoping);
-    
+
+    // P5b-007: error-path safety
+    RUN_TEST(test_map_callback_error_word_output_freed);
+    RUN_TEST(test_map_callback_returns_list_into_word_output);
+    RUN_TEST(test_filter_callback_non_bool_freed);
+    RUN_TEST(test_filter_callback_throw_freed);
+    RUN_TEST(test_reduce_callback_throw_freed);
+    RUN_TEST(test_crossmap_callback_throw_freed);
+
     return UNITY_END();
 }

@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Value and Result types for Logo evaluation.
 //
@@ -8,6 +8,7 @@
 #pragma once
 
 #include "memory.h"
+#include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -159,6 +160,78 @@ extern "C"
 
     bool result_is_ok(Result r);
     bool result_is_returnable(Result r); // RESULT_OK or RESULT_OUTPUT
+
+    //==========================================================================
+    // Strict (tag-checked) accessors                                  (P1-010)
+    //
+    // The `Value` and `Result` payloads are stored in a C union, which the
+    // compiler cannot tag-check for you. Two families exist for reading the
+    // payload, and they have different contracts:
+    //
+    //   * `value_to_*` / `value_*` predicates and the existing `value_to_node`
+    //     are COERCING: they tolerate the wrong tag and either return a
+    //     fall-back (e.g. `NODE_NIL`) or convert (`value_to_number` parses
+    //     a numeric word). Use these on UNTRUSTED values arriving at a
+    //     primitive boundary, where you intend to recover from a mismatch.
+    //
+    //   * `value_get_*` / `result_get_*` (this section) are STRICT: they
+    //     `assert()` that the tag matches and return the raw payload.
+    //     Use these in INTERNAL code where you have already established
+    //     the tag (e.g. inside an `if (value_is_number(v))` branch, or
+    //     immediately after a `REQUIRE_NUMBER(args[0])` macro). The
+    //     assertion catches programming mistakes (e.g. a refactor that
+    //     dropped the type check) early in debug builds; the call compiles
+    //     to a bare field read in release builds.
+    //
+    // Reading the wrong union field is undefined behaviour in C. These
+    // accessors are the project's escape hatch from that hazard.
+    //==========================================================================
+
+    static inline float value_get_number(Value v)
+    {
+        assert(v.type == VALUE_NUMBER);
+        return v.as.number;
+    }
+
+    // Strict accessor for the node payload of a VALUE_WORD or VALUE_LIST.
+    // Use `value_to_node` (in value.c) instead if you need a coercing read
+    // that returns NODE_NIL on type mismatch.
+    static inline Node value_get_node(Value v)
+    {
+        assert(v.type == VALUE_WORD || v.type == VALUE_LIST);
+        return v.as.node;
+    }
+
+    static inline Value result_get_value(Result r)
+    {
+        assert(r.status == RESULT_OK || r.status == RESULT_OUTPUT ||
+               r.status == RESULT_THROW);
+        return r.value;
+    }
+
+    static inline int result_get_error_code(Result r)
+    {
+        assert(r.status == RESULT_ERROR);
+        return r.error_code;
+    }
+
+    static inline const char *result_get_throw_tag(Result r)
+    {
+        assert(r.status == RESULT_THROW);
+        return r.throw_tag;
+    }
+
+    static inline const char *result_get_pause_proc(Result r)
+    {
+        assert(r.status == RESULT_PAUSE);
+        return r.pause_proc;
+    }
+
+    static inline const char *result_get_goto_label(Result r)
+    {
+        assert(r.status == RESULT_GOTO);
+        return r.goto_label;
+    }
 
 #ifdef __cplusplus
 }

@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Unit tests for the value system.
 //
@@ -1036,6 +1036,292 @@ void test_value_extract_rgb_fails_on_non_numeric(void)
 }
 
 //============================================================================
+// value_newline / value_is_newline Tests
+//============================================================================
+
+void test_value_newline_type(void)
+{
+    Value v = value_newline();
+    TEST_ASSERT_EQUAL(VALUE_NEWLINE, v.type);
+}
+
+void test_value_is_newline_true(void)
+{
+    Value v = value_newline();
+    TEST_ASSERT_TRUE(value_is_newline(v));
+}
+
+void test_value_is_newline_false_for_none(void)
+{
+    TEST_ASSERT_FALSE(value_is_newline(value_none()));
+}
+
+void test_value_is_newline_false_for_number(void)
+{
+    TEST_ASSERT_FALSE(value_is_newline(value_number(42)));
+}
+
+void test_value_is_newline_false_for_word(void)
+{
+    Node w = mem_atom("hello", 5);
+    TEST_ASSERT_FALSE(value_is_newline(value_word(w)));
+}
+
+void test_value_is_newline_false_for_list(void)
+{
+    TEST_ASSERT_FALSE(value_is_newline(value_list(NODE_NIL)));
+}
+
+void test_value_to_string_newline(void)
+{
+    Value v = value_newline();
+    TEST_ASSERT_EQUAL_STRING("", value_to_string(v));
+}
+
+//============================================================================
+// values_equal Tests
+//============================================================================
+
+void test_values_equal_numbers_same(void)
+{
+    TEST_ASSERT_TRUE(values_equal(value_number(42), value_number(42)));
+}
+
+void test_values_equal_numbers_different(void)
+{
+    TEST_ASSERT_FALSE(values_equal(value_number(42), value_number(43)));
+}
+
+void test_values_equal_words_same(void)
+{
+    Node a = mem_atom("hello", 5);
+    Node b = mem_atom("hello", 5);
+    TEST_ASSERT_TRUE(values_equal(value_word(a), value_word(b)));
+}
+
+void test_values_equal_words_different(void)
+{
+    Node a = mem_atom("hello", 5);
+    Node b = mem_atom("world", 5);
+    TEST_ASSERT_FALSE(values_equal(value_word(a), value_word(b)));
+}
+
+void test_values_equal_empty_lists(void)
+{
+    TEST_ASSERT_TRUE(values_equal(value_list(NODE_NIL), value_list(NODE_NIL)));
+}
+
+void test_values_equal_lists_same_content(void)
+{
+    Node a1 = mem_atom("x", 1);
+    Node a2 = mem_atom("y", 1);
+    Node list_a = mem_cons(a1, mem_cons(a2, NODE_NIL));
+    
+    Node b1 = mem_atom("x", 1);
+    Node b2 = mem_atom("y", 1);
+    Node list_b = mem_cons(b1, mem_cons(b2, NODE_NIL));
+    
+    TEST_ASSERT_TRUE(values_equal(value_list(list_a), value_list(list_b)));
+}
+
+void test_values_equal_lists_different_content(void)
+{
+    Node a1 = mem_atom("x", 1);
+    Node list_a = mem_cons(a1, NODE_NIL);
+    
+    Node b1 = mem_atom("y", 1);
+    Node list_b = mem_cons(b1, NODE_NIL);
+    
+    TEST_ASSERT_FALSE(values_equal(value_list(list_a), value_list(list_b)));
+}
+
+void test_values_equal_lists_different_length(void)
+{
+    Node a1 = mem_atom("x", 1);
+    Node list_a = mem_cons(a1, NODE_NIL);
+    
+    Node b1 = mem_atom("x", 1);
+    Node b2 = mem_atom("y", 1);
+    Node list_b = mem_cons(b1, mem_cons(b2, NODE_NIL));
+    
+    TEST_ASSERT_FALSE(values_equal(value_list(list_a), value_list(list_b)));
+}
+
+void test_values_equal_different_types(void)
+{
+    Node w = mem_atom("hello", 5);
+    TEST_ASSERT_FALSE(values_equal(value_number(42), value_word(w)));
+}
+
+void test_values_equal_number_word_numeric_match(void)
+{
+    // Number 42 should equal word "42"
+    Node w = mem_atom("42", 2);
+    TEST_ASSERT_TRUE(values_equal(value_number(42), value_word(w)));
+}
+
+void test_values_equal_word_number_numeric_match(void)
+{
+    // Word "42" should equal number 42
+    Node w = mem_atom("42", 2);
+    TEST_ASSERT_TRUE(values_equal(value_word(w), value_number(42)));
+}
+
+void test_values_equal_number_word_non_numeric(void)
+{
+    // Number should not equal non-numeric word
+    Node w = mem_atom("hello", 5);
+    TEST_ASSERT_FALSE(values_equal(value_number(42), value_word(w)));
+}
+
+void test_values_equal_none_none(void)
+{
+    // NONE is not a valid Logo object, so two NONEs should not be equal
+    TEST_ASSERT_FALSE(values_equal(value_none(), value_none()));
+}
+
+void test_values_equal_nested_lists(void)
+{
+    // [1 [2 3]] == [1 [2 3]]
+    Node n2a = mem_atom("2", 1);
+    Node n3a = mem_atom("3", 1);
+    Node inner_a = mem_cons(n2a, mem_cons(n3a, NODE_NIL));
+    Node n1a = mem_atom("1", 1);
+    Node list_a = mem_cons(n1a, mem_cons(inner_a, NODE_NIL));
+    
+    Node n2b = mem_atom("2", 1);
+    Node n3b = mem_atom("3", 1);
+    Node inner_b = mem_cons(n2b, mem_cons(n3b, NODE_NIL));
+    Node n1b = mem_atom("1", 1);
+    Node list_b = mem_cons(n1b, mem_cons(inner_b, NODE_NIL));
+    
+    TEST_ASSERT_TRUE(values_equal(value_list(list_a), value_list(list_b)));
+}
+
+//============================================================================
+// Additional Result Constructor Tests
+//============================================================================
+
+void test_result_pause_status(void)
+{
+    Result r = result_pause("myproc");
+    TEST_ASSERT_EQUAL(RESULT_PAUSE, r.status);
+}
+
+void test_result_pause_proc(void)
+{
+    Result r = result_pause("myproc");
+    TEST_ASSERT_EQUAL_STRING("myproc", r.pause_proc);
+}
+
+void test_result_goto_status(void)
+{
+    Result r = result_goto("loop");
+    TEST_ASSERT_EQUAL(RESULT_GOTO, r.status);
+}
+
+void test_result_goto_label(void)
+{
+    Result r = result_goto("loop");
+    TEST_ASSERT_EQUAL_STRING("loop", r.goto_label);
+}
+
+void test_result_eof_status(void)
+{
+    Result r = result_eof();
+    TEST_ASSERT_EQUAL(RESULT_EOF, r.status);
+}
+
+void test_result_set_error_proc_sets_proc(void)
+{
+    Result r = result_error(1);
+    TEST_ASSERT_NULL(r.error_proc);
+    
+    r = result_set_error_proc(r, "myproc");
+    TEST_ASSERT_EQUAL_STRING("myproc", r.error_proc);
+}
+
+void test_result_set_error_proc_preserves_existing(void)
+{
+    Result r = result_error_arg(1, "original", NULL);
+    TEST_ASSERT_EQUAL_STRING("original", r.error_proc);
+    
+    r = result_set_error_proc(r, "new_proc");
+    // Should preserve the original proc name
+    TEST_ASSERT_EQUAL_STRING("original", r.error_proc);
+}
+
+void test_result_set_error_proc_noop_for_non_error(void)
+{
+    Result r = result_none();
+    r = result_set_error_proc(r, "myproc");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+}
+
+//============================================================================
+// Strict Accessor Tests (P1-010)
+//============================================================================
+
+void test_value_get_number_returns_payload(void)
+{
+    Value v = value_number(3.14f);
+    TEST_ASSERT_EQUAL_FLOAT(3.14f, value_get_number(v));
+}
+
+void test_value_get_node_word(void)
+{
+    Node atom = mem_atom_cstr("hello");
+    Value v = value_word(atom);
+    TEST_ASSERT_EQUAL(atom, value_get_node(v));
+}
+
+void test_value_get_node_list(void)
+{
+    Node atom = mem_atom_cstr("a");
+    Node list = mem_cons(atom, NODE_NIL);
+    Value v = value_list(list);
+    TEST_ASSERT_EQUAL(list, value_get_node(v));
+}
+
+void test_result_get_value_ok(void)
+{
+    Result r = result_ok(value_number(42));
+    Value v = result_get_value(r);
+    TEST_ASSERT_EQUAL(VALUE_NUMBER, v.type);
+    TEST_ASSERT_EQUAL_FLOAT(42.0f, v.as.number);
+}
+
+void test_result_get_value_output(void)
+{
+    Result r = result_output(value_number(7));
+    TEST_ASSERT_EQUAL_FLOAT(7.0f, value_get_number(result_get_value(r)));
+}
+
+void test_result_get_error_code(void)
+{
+    Result r = result_error(123);
+    TEST_ASSERT_EQUAL(123, result_get_error_code(r));
+}
+
+void test_result_get_throw_tag(void)
+{
+    Result r = result_throw("toplevel");
+    TEST_ASSERT_EQUAL_STRING("toplevel", result_get_throw_tag(r));
+}
+
+void test_result_get_pause_proc(void)
+{
+    Result r = result_pause("myproc");
+    TEST_ASSERT_EQUAL_STRING("myproc", result_get_pause_proc(r));
+}
+
+void test_result_get_goto_label(void)
+{
+    Result r = result_goto("loop");
+    TEST_ASSERT_EQUAL_STRING("loop", result_get_goto_label(r));
+}
+
+//============================================================================
 // Main
 //============================================================================
 
@@ -1185,6 +1471,52 @@ int main(void)
     RUN_TEST(test_value_extract_rgb_fails_on_empty_list);
     RUN_TEST(test_value_extract_rgb_fails_on_two_element_list);
     RUN_TEST(test_value_extract_rgb_fails_on_non_numeric);
+
+    // value_newline / value_is_newline Tests
+    RUN_TEST(test_value_newline_type);
+    RUN_TEST(test_value_is_newline_true);
+    RUN_TEST(test_value_is_newline_false_for_none);
+    RUN_TEST(test_value_is_newline_false_for_number);
+    RUN_TEST(test_value_is_newline_false_for_word);
+    RUN_TEST(test_value_is_newline_false_for_list);
+    RUN_TEST(test_value_to_string_newline);
+
+    // values_equal Tests
+    RUN_TEST(test_values_equal_numbers_same);
+    RUN_TEST(test_values_equal_numbers_different);
+    RUN_TEST(test_values_equal_words_same);
+    RUN_TEST(test_values_equal_words_different);
+    RUN_TEST(test_values_equal_empty_lists);
+    RUN_TEST(test_values_equal_lists_same_content);
+    RUN_TEST(test_values_equal_lists_different_content);
+    RUN_TEST(test_values_equal_lists_different_length);
+    RUN_TEST(test_values_equal_different_types);
+    RUN_TEST(test_values_equal_number_word_numeric_match);
+    RUN_TEST(test_values_equal_word_number_numeric_match);
+    RUN_TEST(test_values_equal_number_word_non_numeric);
+    RUN_TEST(test_values_equal_none_none);
+    RUN_TEST(test_values_equal_nested_lists);
+
+    // Additional Result Constructor Tests
+    RUN_TEST(test_result_pause_status);
+    RUN_TEST(test_result_pause_proc);
+    RUN_TEST(test_result_goto_status);
+    RUN_TEST(test_result_goto_label);
+    RUN_TEST(test_result_eof_status);
+    RUN_TEST(test_result_set_error_proc_sets_proc);
+    RUN_TEST(test_result_set_error_proc_preserves_existing);
+    RUN_TEST(test_result_set_error_proc_noop_for_non_error);
+
+    // Strict accessors (P1-010)
+    RUN_TEST(test_value_get_number_returns_payload);
+    RUN_TEST(test_value_get_node_word);
+    RUN_TEST(test_value_get_node_list);
+    RUN_TEST(test_result_get_value_ok);
+    RUN_TEST(test_result_get_value_output);
+    RUN_TEST(test_result_get_error_code);
+    RUN_TEST(test_result_get_throw_tag);
+    RUN_TEST(test_result_get_pause_proc);
+    RUN_TEST(test_result_get_goto_label);
 
     return UNITY_END();
 }

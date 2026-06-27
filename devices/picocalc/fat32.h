@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Defines FAT32 file system interface for PicoCalc device.
 //
@@ -66,6 +66,7 @@ typedef struct
 {
     bool is_open;
     bool last_entry_read;
+    bool dirty;                // Set when file_size or start_cluster changed
     uint8_t attributes;
     uint32_t start_cluster;
     uint32_t current_cluster;

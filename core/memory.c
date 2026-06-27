@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Memory management implementation.
 //
@@ -21,8 +21,61 @@
 
 #include "core/memory.h"
 
+#include <assert.h>
 #include <ctype.h>
 #include <string.h>
+
+// Compile-time invariant:
+//   The high bit of a 16-bit cell index is reserved as the "word" marker
+//   (0x8000) and 0x7FFF is reserved as the empty-list marker. List pool
+//   indices must therefore fall in [1, 0x7FFE]. With 4-byte cells, the
+//   maximum addressable pool size is 0x7FFE * 4 bytes; the rest of the
+//   memory block is reserved for the atom table.
+_Static_assert(LOGO_MEMORY_SIZE % 4 == 0,
+    "LOGO_MEMORY_SIZE must be a multiple of cell size (4 bytes)");
+
+//==========================================================================
+// Cell encoding constants
+//==========================================================================
+//
+// Each cons cell stores two 16-bit references (car and cdr). A reference
+// encodes either a list index, a word reference, NIL, or the empty list.
+// The encoding uses the upper bits of the 16-bit word as type tags:
+//
+//   reference == 0x0000             -> NODE_NIL (no reference)
+//   reference == CELL_EMPTY_LIST    -> the empty list ([])
+//   (reference & CELL_WORD_MARKER)  -> word reference; low 15 bits are the
+//                                      atom offset within the atom table
+//   otherwise                       -> list pool index in [1, MAX_LIST_INDEX]
+//
+// These markers must be kept in sync with mem_atom() (which caps atom
+// offsets at LOGO_ATOM_LIMIT) and alloc_cell() (which caps pool indices
+// at MAX_LIST_INDEX).
+
+// High bit set => the reference points to an interned word (atom).
+#define CELL_WORD_MARKER  0x8000u
+
+// Mask for extracting the 15-bit atom offset from a word reference.
+#define CELL_WORD_MASK    0x7FFFu
+
+// Reserved sentinel meaning "the empty list" (distinct from NIL).
+// Equal to CELL_WORD_MASK so we get one free bit pattern for the marker.
+#define CELL_EMPTY_LIST   0x7FFFu
+
+// Maximum valid pool index for a list reference (avoids the empty-list
+// sentinel and the word-reference marker bit).
+#define MAX_LIST_INDEX    0x7FFEu
+
+// Upper bound on the atom table size in bytes. Atom offsets must fit in
+// the 15-bit CELL_WORD_MASK so that a word reference fits in a 16-bit cell.
+#define LOGO_ATOM_LIMIT   ((size_t)CELL_WORD_MASK + 1u)  // 0x8000 = 32768
+
+_Static_assert(CELL_EMPTY_LIST == CELL_WORD_MASK,
+    "CELL_EMPTY_LIST must equal CELL_WORD_MASK so encodings remain disjoint");
+_Static_assert(MAX_LIST_INDEX < CELL_EMPTY_LIST,
+    "MAX_LIST_INDEX must leave room for the empty-list sentinel");
+_Static_assert(LOGO_ATOM_LIMIT <= LOGO_MEMORY_SIZE,
+    "Atom table cannot exceed the total memory pool");
 
 // Align value up to 4-byte boundary
 #define ALIGN4(x) (((x) + 3) & ~3)
@@ -73,7 +126,6 @@ static inline uint32_t *get_node_ptr(uint16_t index)
     {
         return NULL;
     }
-    
     // Calculate byte offset from top of memory
     // Each node is 4 bytes, index 1 is at the very top
     size_t byte_offset = LOGO_MEMORY_SIZE - (index * 4);
@@ -101,12 +153,12 @@ static inline uint16_t get_node_index(const uint32_t *ptr)
     
     // Calculate index from top
     size_t index = (LOGO_MEMORY_SIZE - byte_offset) / 4;
-    
-    if (index > 0xFFFF)
+
+    if (index > MAX_LIST_INDEX)
     {
         return 0;
     }
-    
+
     return (uint16_t)index;
 }
 
@@ -116,11 +168,27 @@ static inline uint16_t get_max_node_index(void)
     return (uint16_t)((LOGO_MEMORY_SIZE - atom_next) / 4);
 }
 
+// Would allocating `extra` more bytes from one allocator overlap the other?
+// The atom table grows upward from offset 0; the node pool grows downward
+// from LOGO_MEMORY_SIZE. Both allocators share this single memory block, so
+// they collide when atom_next + extra exceeds node_bottom.
+static inline bool mem_would_collide(size_t extra)
+{
+    return atom_next + extra > node_bottom;
+}
+
 //==========================================================================
 // Initialization
 //==========================================================================
 
-// Newline marker - initialized in logo_mem_init()
+// Newline marker.
+//
+// This is an interned atom (initialised once in `logo_mem_init`) used as a
+// sentinel inside list bodies returned by `text` and friends to preserve
+// source-line boundaries. Because it lives in the atom region and not the
+// cell region, the sweep phase cannot reclaim it; it is effectively a
+// permanent GC root. `mem_gc()` marks it unconditionally so callers do not
+// need to remember to add it to their root set.
 Node mem_newline_marker = NODE_NIL;
 
 // Initialize the memory system.
@@ -170,7 +238,7 @@ static uint16_t alloc_cell(void)
     // Check if we have space (need 4 bytes for a new node)
     // After allocation: node_bottom will be node_bottom - 4
     // This must not overlap with atom_next
-    if (node_bottom <= atom_next + 4)
+    if (node_bottom < 4 || mem_would_collide(0) || (node_bottom - 4) < atom_next)
     {
         return 0; // Out of memory - would collide with atom table
     }
@@ -182,8 +250,9 @@ static uint16_t alloc_cell(void)
     // Calculate the index for this new node
     uint16_t index = (uint16_t)((LOGO_MEMORY_SIZE - node_bottom) / 4);
     
-    // Check if index fits in 16 bits
-    if (index == 0 || index > 0xFFFF)
+    // Reject indices that would collide with the empty-list (0x7FFF) or
+    // word-reference (0x8000+) marker bits used inside cell storage.
+    if (index == 0 || index > MAX_LIST_INDEX)
     {
         // Restore state and fail
         node_bottom += 4;
@@ -199,10 +268,9 @@ static uint16_t alloc_cell(void)
 //==========================================================================
 
 // Convert a Node value to an index for storage in a cell's car/cdr.
-// Words use high bit (0x8000) + atom offset.
+// Words use the high bit (CELL_WORD_MARKER) plus the atom offset.
 // Lists use the pool index directly.
-// Empty list (NODE_MAKE_LIST(0)) uses special marker 0x7FFF.
-#define CELL_EMPTY_LIST_MARKER 0x7FFF
+// Empty list (NODE_MAKE_LIST(0)) uses the special CELL_EMPTY_LIST sentinel.
 
 static uint16_t node_to_index(Node n)
 {
@@ -220,7 +288,7 @@ static uint16_t node_to_index(Node n)
         // Empty list (index 0) needs special marker to distinguish from NODE_NIL
         if (index == 0)
         {
-            return CELL_EMPTY_LIST_MARKER;
+            return CELL_EMPTY_LIST;
         }
         return (uint16_t)index;
     }
@@ -228,9 +296,9 @@ static uint16_t node_to_index(Node n)
     {
         // Word - encode with high bit set
         uint32_t offset = NODE_GET_INDEX(n);
-        if (offset < 0x8000)
+        if (offset < LOGO_ATOM_LIMIT)
         {
-            return (uint16_t)(0x8000 | offset);
+            return (uint16_t)(CELL_WORD_MARKER | offset);
         }
         // Atom offset too large
         return 0;
@@ -248,15 +316,15 @@ static Node index_to_node(uint16_t index)
     }
 
     // Check for empty list marker
-    if (index == CELL_EMPTY_LIST_MARKER)
+    if (index == CELL_EMPTY_LIST)
     {
         return NODE_MAKE_LIST(0);
     }
 
     // Check if this is a word reference (high bit set)
-    if (index & 0x8000)
+    if (index & CELL_WORD_MARKER)
     {
-        uint32_t offset = index & 0x7FFF;
+        uint32_t offset = index & CELL_WORD_MASK;
         return NODE_MAKE_WORD(offset);
     }
 
@@ -269,17 +337,25 @@ static Node index_to_node(uint16_t index)
 //==========================================================================
 
 // Create a cons cell (list node) with car and cdr.
-// Returns NODE_NIL if out of memory.
+// Returns NODE_NIL if out of memory or if either operand cannot be encoded
+// in 16 bits (e.g. an atom whose offset is >= LOGO_ATOM_LIMIT).
 Node mem_cons(Node car, Node cdr)
 {
+    // Encode operands first so allocation isn't wasted on an unencodable cell.
+    // node_to_index returns 0 for NIL *and* for out-of-range references; we
+    // must distinguish these cases to avoid silently corrupting the cell.
+    uint16_t car_idx = node_to_index(car);
+    uint16_t cdr_idx = node_to_index(cdr);
+    if ((car != NODE_NIL && car_idx == 0) || (cdr != NODE_NIL && cdr_idx == 0))
+    {
+        return NODE_NIL; // Operand reference would be lost in 16-bit cell encoding
+    }
+
     uint16_t index = alloc_cell();
     if (index == 0)
     {
         return NODE_NIL; // Out of memory
     }
-
-    uint16_t car_idx = node_to_index(car);
-    uint16_t cdr_idx = node_to_index(cdr);
 
     uint32_t *cell_ptr = get_node_ptr(index);
     if (cell_ptr == NULL)
@@ -373,13 +449,13 @@ Node mem_atom(const char *str, size_t len)
     size_t entry_size = ALIGN4(1 + len + 1);
 
     // Need to add new atom - check for collision with node region
-    if (atom_next + entry_size > node_bottom)
+    if (mem_would_collide(entry_size))
     {
         return NODE_NIL; // Out of atom space - would collide with nodes
     }
 
     // Check offset fits in our encoding (15 bits = 32KB max)
-    if (atom_next >= 0x8000)
+    if (atom_next >= LOGO_ATOM_LIMIT)
     {
         return NODE_NIL; // Atom table too large
     }
@@ -734,6 +810,14 @@ static void gc_mark_index(uint16_t index)
     // Only car branches recurse (bounded by list nesting depth, not length).
     while (index != 0)
     {
+        // Reject sentinel/word-tagged values that should never reach the GC
+        // marker — they indicate either a corrupted reference or a caller
+        // that forgot to strip the type bits before calling us.
+        if (index > MAX_LIST_INDEX)
+        {
+            return;
+        }
+
         // Validate that the index is within our allocated node region
         uint32_t *cell_ptr = get_node_ptr(index);
         if (cell_ptr == NULL)
@@ -765,13 +849,13 @@ static void gc_mark_index(uint16_t index)
         uint16_t cdr_idx = CELL_GET_CDR(cell);
 
         // Mark car recursively (only for nested lists, not words)
-        if (car_idx != 0 && !(car_idx & 0x8000))
+        if (car_idx != 0 && !(car_idx & CELL_WORD_MARKER))
         {
             gc_mark_index(car_idx);
         }
 
         // Follow cdr iteratively (tail-call elimination)
-        if (cdr_idx == 0 || (cdr_idx & 0x8000))
+        if (cdr_idx == 0 || (cdr_idx & CELL_WORD_MARKER))
         {
             return;
         }
@@ -828,6 +912,10 @@ void mem_gc(Node *roots, size_t num_roots)
 {
     // Clear mark bits
     memset(gc_marks, 0, sizeof(gc_marks));
+
+    // Always mark the newline sentinel — callers must never have to
+    // remember it, and forgetting would corrupt list outputs from `text`.
+    mem_gc_mark(mem_newline_marker);
 
     // Mark phase
     for (size_t i = 0; i < num_roots; i++)

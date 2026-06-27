@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Text screen primitives: cleartext, cursor, fullscreen, setcursor,
 //                          setwidth, splitscreen, textscreen, width
@@ -118,8 +118,10 @@ static Result prim_setcursor(Evaluator *eval, int argc, Value *args)
     int column = (int)col_num;
     int row = (int)row_num;
 
-    // Validate range
-    if (column < 0 || row < 0)
+    // Validate range. Reference defines the screen as 40 columns × 32 rows
+    // (columns 0..39, rows 0..31). Reject out-of-range coordinates rather
+    // than silently truncating to uint8_t at the device boundary.
+    if (column < 0 || column >= 40 || row < 0 || row >= 32)
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
@@ -169,6 +171,72 @@ static Result prim_textscreen(Evaluator *eval, int argc, Value *args)
 }
 
 //==========================================================================
+// settextcolor (settc) [fg bg] - Set text foreground and background colors
+//==========================================================================
+
+static Result prim_settextcolor(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
+
+    // Extract fg and bg from [fg bg] list
+    float fg_num, bg_num;
+    Result error;
+    if (!value_extract_xy(args[0], &fg_num, &bg_num, &error))
+    {
+        return error;
+    }
+
+    int fg = (int)fg_num;
+    int bg = (int)bg_num;
+
+    // Validate range: 0-15 (text palette slots)
+    if (fg < 0 || fg > 15 || bg < 0 || bg > 15)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
+
+    const LogoConsoleText *text = get_text_ops();
+    if (text)
+    {
+        if (text->set_foreground) text->set_foreground((uint8_t)fg);
+        if (text->set_background) text->set_background((uint8_t)bg);
+    }
+
+    return result_none();
+}
+
+//==========================================================================
+// textcolor (tc) - Report current text foreground and background colors
+//==========================================================================
+
+static Result prim_textcolor(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
+
+    const LogoConsoleText *text = get_text_ops();
+
+    uint8_t fg = 0, bg = 0;
+    if (text)
+    {
+        if (text->get_foreground) fg = text->get_foreground();
+        if (text->get_background) bg = text->get_background();
+    }
+
+    // Build list [fg bg]
+    char fg_buf[8], bg_buf[8];
+    snprintf(fg_buf, sizeof(fg_buf), "%d", fg);
+    snprintf(bg_buf, sizeof(bg_buf), "%d", bg);
+
+    Node fg_atom = mem_atom(fg_buf, strlen(fg_buf));
+    Node bg_atom = mem_atom(bg_buf, strlen(bg_buf));
+
+    Node list = mem_cons(fg_atom, mem_cons(bg_atom, NODE_NIL));
+
+    return result_ok(value_list(list));
+}
+
+//==========================================================================
 // Registration
 //==========================================================================
 
@@ -179,6 +247,9 @@ void primitives_text_init(void)
     primitive_register("ct", 0, prim_cleartext);
     
     primitive_register("setcursor", 1, prim_setcursor);
+    
+    primitive_register("settextcolor", 1, prim_settextcolor);
+    primitive_register("settc", 1, prim_settextcolor);
     
     // Screen mode commands
     primitive_register("fullscreen", 0, prim_fullscreen);
@@ -192,4 +263,7 @@ void primitives_text_init(void)
     
     // Operations (queries)
     primitive_register("cursor", 0, prim_cursor);
+    
+    primitive_register("textcolor", 0, prim_textcolor);
+    primitive_register("tc", 0, prim_textcolor);
 }

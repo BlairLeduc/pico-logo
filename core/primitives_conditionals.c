@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Conditional primitives: if, true, false, test, iftrue, iffalse
 //
@@ -21,20 +21,24 @@
 // If predicate is false and list2 provided, run list2
 static Result prim_if(Evaluator *eval, int argc, Value *args)
 {
+    // Guard the variadic-call path: `(if)` or `(if x)` reaches the primitive
+    // with argc < 2; without this check the args[0]/args[1] reads below
+    // would be undefined behaviour.
+    if (argc < 2)
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, NULL, NULL);
+
     REQUIRE_BOOL(args[0], condition);
     REQUIRE_LIST(args[1]);
     
     if (condition)
     {
-        // Use eval_run_list_expr so if can act as an operation
-        return eval_run_list_expr(eval, args[1].as.node);
+        return eval_push_if(eval, args[1].as.node, true);
     }
     else if (argc >= 3)
     {
         REQUIRE_LIST(args[2]);
 
-        // Use eval_run_list_expr so if can act as an operation
-        return eval_run_list_expr(eval, args[2].as.node);
+        return eval_push_if(eval, args[2].as.node, true);
     }
     
     return result_none();
@@ -55,11 +59,11 @@ static Result prim_ifelse(Evaluator *eval, int argc, Value *args)
     
     if (condition)
     {
-        return eval_run_list_expr(eval, args[1].as.node);
+        return eval_push_if(eval, args[1].as.node, true);
     }
     else
     {
-        return eval_run_list_expr(eval, args[2].as.node);
+        return eval_push_if(eval, args[2].as.node, true);
     }
 }
 
@@ -101,13 +105,17 @@ static Result prim_iftrue(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(argc);
     REQUIRE_LIST(args[0]);
-    
+
+    // Per reference: "if test has not been run in the same procedure or a
+    // superprocedure, or from top level, iftrue does nothing." `var_get_test`
+    // returns false when no test is in scope, which makes the && short-circuit
+    // to the no-op path below.
     bool test_value;
     if (var_get_test(&test_value) && test_value)
     {
-        return eval_run_list(eval, args[0].as.node);
+        return eval_push_if(eval, args[0].as.node, false);
     }
-    
+
     return result_none();
 }
 
@@ -115,18 +123,25 @@ static Result prim_iffalse(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(argc);
     REQUIRE_LIST(args[0]);
-    
+
+    // Per reference: same "no-op when no test has run" semantics as iftrue.
     bool test_value;
     if (var_get_test(&test_value) && !test_value)
     {
-        return eval_run_list(eval, args[0].as.node);
+        return eval_push_if(eval, args[0].as.node, false);
     }
-    
+
     return result_none();
 }
 
 void primitives_conditionals_init(void)
 {
+// `if` is registered with `default_args=2` (the predicate plus a list).
+// Per the reference, the optional 3-argument form `if pred [t] [f]` is
+// only accepted when the call is parenthesised: `(if pred [t] [f])`.
+// Without parens the third list is parsed as a separate statement and
+// the primitive is invoked with argc==2. The varargs path provides
+// argc==3 only via the `(if ...)` syntax; see `test_if_three_args_requires_parens`.
     primitive_register("if", 2, prim_if);
     primitive_register("ifelse", 3, prim_ifelse);
     

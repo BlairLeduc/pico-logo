@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Procedure definition primitives: to, define, end
 //
@@ -61,6 +61,8 @@ static Node token_to_atom(Token *t)
             return mem_atom("<", 1);
         case TOKEN_GREATER_THAN:
             return mem_atom(">", 1);
+        case TOKEN_COMMENT:
+            return mem_atom(t->start, t->length);
         default:
             return NODE_NIL;
     }
@@ -185,6 +187,15 @@ static Result prim_define(Evaluator *eval, int argc, Value *args)
                 if (pname[0] == ':')
                 {
                     pname++;  // Skip the colon
+                    // Re-intern the suffix so the stored pointer is a
+                    // canonical atom key, not an interior pointer into
+                    // the original `:x` atom. This lets variable lookup
+                    // (`frame_find_binding`, `find_global`) take its
+                    // pointer-equality fast path against names that
+                    // arrive from `mem_atom_unescape("x", 1)` at
+                    // `:x` references in the body.
+                    Node clean = mem_atom_cstr(pname);
+                    pname = mem_word_ptr(clean);
                 }
                 params[param_count++] = pname;
             }
@@ -213,6 +224,7 @@ Result proc_define_from_text(const char *text)
 {
     Lexer lexer;
     lexer_init(&lexer, text);
+    lexer_set_preserve_comments(&lexer, true);
     
     // Skip 'to'
     Token t = lexer_next_token(&lexer);
@@ -487,7 +499,13 @@ static Result prim_text(Evaluator *eval, int argc, Value *args)
     Node params_list = mem_is_nil(params) ? params : NODE_MAKE_LIST(NODE_GET_INDEX(params));
     
     // Body is already stored as list-of-lists [[line1] [line2] ...]
-    // Prepend params to create [[params] [line1] [line2] ...]
+    // Prepend params to create [[params] [line1] [line2] ...].
+    //
+    // Empty body case: proc->body is NODE_NIL, so mem_cons(params_list,
+    // NODE_NIL) yields the well-formed singleton [[params]] (proper NIL
+    // termination). This matches the reference's representation of a
+    // procedure with no instructions and is consumed cleanly by `define`
+    // for round-tripping.
     Node result = mem_cons(params_list, proc->body);
     
     return result_ok(value_list(result));

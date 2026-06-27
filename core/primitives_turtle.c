@@ -1,6 +1,6 @@
 //
 //  Pico Logo
-//  Copyright 2025 Blair Leduc. See LICENSE for details.
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Turtle graphics primitives
 //
@@ -14,6 +14,16 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+
+// Normalize a heading in degrees to the half-open range [0, 360).
+// Used so that HEADING and SETHEADING expose canonical angles regardless
+// of how many full turns the underlying device accumulates.
+static float normalize_heading(float h)
+{
+    h = fmodf(h, 360.0f);
+    if (h < 0.0f) h += 360.0f;
+    return h;
+}
 
 //==========================================================================
 // Core palette state
@@ -235,7 +245,7 @@ static Result prim_setheading(Evaluator *eval, int argc, Value *args)
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_heading)
     {
-        turtle->set_heading(degrees);
+        turtle->set_heading(normalize_heading(degrees));
     }
     
     return result_none();
@@ -258,7 +268,7 @@ static Result prim_heading(Evaluator *eval, int argc, Value *args)
         heading = turtle->get_heading();
     }
 
-    return result_ok(value_number(heading));
+    return result_ok(value_number(normalize_heading(heading)));
 }
 
 // pos - Output current position as [x y]
@@ -338,12 +348,10 @@ static Result prim_towards(Evaluator *eval, int argc, Value *args)
     // atan2 gives angle from positive x-axis (counterclockwise)
     // Convert to Logo heading (clockwise from north)
     float angle = atan2f(dx, dy) * (180.0f / 3.14159265358979f);
-    
-    // Normalize to [0, 360)
-    while (angle < 0.0f) angle += 360.0f;
-    while (angle >= 360.0f) angle -= 360.0f;
 
-    return result_ok(value_number(angle));
+    // Normalize to [0, 360). atan2f always returns a value in [-pi, pi]
+    // so a single conditional add is sufficient (no loops needed).
+    return result_ok(value_number(normalize_heading(angle)));
 }
 
 //==========================================================================
@@ -480,6 +488,11 @@ static Result prim_setbg(Evaluator *eval, int argc, Value *args)
     UNUSED(eval);
     REQUIRE_ARGC(1);
     REQUIRE_NUMBER(args[0], colour);
+
+    if (colour < 0 || colour > 254)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_bg_colour)
@@ -795,13 +808,13 @@ static Result prim_palette(Evaluator *eval, int argc, Value *args)
         core_palette[slot].r, core_palette[slot].g, core_palette[slot].b));
 }
 
-// restorepalette - Restore default palette (slots 0-127)
+// restorepalette - Restore default palette (slots 0-254)
 static Result prim_restorepalette(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc); UNUSED(args);
 
-    // Restore core palette slots 0-127 from defaults
-    for (int i = 0; i < 128; i++)
+    // Restore core palette slots 0-254 from defaults (slot 255 is user BG)
+    for (int i = 0; i < 255; i++)
     {
         uint32_t rgb = palette_24bit[i];
         core_palette[i].r = (rgb >> 16) & 0xFF;
