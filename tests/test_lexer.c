@@ -261,6 +261,26 @@ void test_quoted_word_slash_in_middle(void)
     assert_token(&lexer, TOKEN_EOF, "");
 }
 
+void test_quoted_word_hyphen_in_middle(void)
+{
+    // Hyphen is literal in a quoted word (hyphenated identifiers / header
+    // names such as "Content-Type), like the slash file-path exception.
+    Lexer lexer;
+    lexer_init(&lexer, "\"Content-Type");
+    assert_token(&lexer, TOKEN_QUOTED, "\"Content-Type");
+    assert_token(&lexer, TOKEN_EOF, "");
+}
+
+void test_quoted_word_hyphen_does_not_affect_words(void)
+{
+    // Unquoted words still treat - as a delimiter.
+    Lexer lexer;
+    lexer_init(&lexer, "xcor-ycor");
+    assert_token(&lexer, TOKEN_WORD, "xcor");
+    assert_token(&lexer, TOKEN_MINUS, "-");
+    assert_token(&lexer, TOKEN_WORD, "ycor");
+}
+
 void test_quoted_word_slash_does_not_affect_numbers(void)
 {
     // Self-quoting numbers still use / as division
@@ -1831,6 +1851,8 @@ int main(void)
     RUN_TEST(test_print_heading_example);
     RUN_TEST(test_quoted_word_with_slash);
     RUN_TEST(test_quoted_word_slash_in_middle);
+    RUN_TEST(test_quoted_word_hyphen_in_middle);
+    RUN_TEST(test_quoted_word_hyphen_does_not_affect_words);
     RUN_TEST(test_quoted_word_slash_does_not_affect_numbers);
     RUN_TEST(test_quoted_word_slash_does_not_affect_words);
     RUN_TEST(test_quoted_escaped_slash_first_char);

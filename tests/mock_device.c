@@ -1469,6 +1469,18 @@ int mock_network_tcp_read(void *connection, char *buffer, int count, int timeout
     {
         to_read = mock_state.tcp.read_chunk;
     }
+    // Don't deliver past a pending trigger boundary, so the trigger fires after
+    // exactly that many bytes have been read.
+    if (mock_state.tcp.timeout_after >= 0 && pos < mock_state.tcp.timeout_after &&
+        pos + to_read > mock_state.tcp.timeout_after)
+    {
+        to_read = mock_state.tcp.timeout_after - pos;
+    }
+    if (mock_state.tcp.close_after >= 0 && pos < mock_state.tcp.close_after &&
+        pos + to_read > mock_state.tcp.close_after)
+    {
+        to_read = mock_state.tcp.close_after - pos;
+    }
 
     memcpy(buffer, mock_state.tcp.response + pos, (size_t)to_read);
     mock_state.tcp.read_pos += to_read;

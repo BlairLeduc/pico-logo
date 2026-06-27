@@ -121,7 +121,7 @@ void test_http_get_sends_custom_headers(void)
 {
     script_response("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
 
-    eval_string("(http.get \"http://example.com/ [[Accept text/plain] [User-Agent PicoLogo]])");
+    eval_string("(http.get \"http://example.com/ \"Accept \"text/plain \"User-Agent \"PicoLogo)");
 
     const char *req = mock_device_get_tcp_request();
     TEST_ASSERT_NOT_NULL(strstr(req, "Accept: text/plain"));
@@ -313,9 +313,29 @@ void test_http_post_returns_response_body(void)
     TEST_ASSERT_EQUAL_STRING("Order received", mem_word_ptr(r.value.as.node));
 }
 
+void test_http_post_sends_custom_headers(void)
+{
+    script_response("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+
+    eval_string("(http.post \"http://example.com/orders \"x \"Content-Type \"text/plain)");
+
+    const char *req = mock_device_get_tcp_request();
+    TEST_ASSERT_NOT_NULL(strstr(req, "Content-Type: text/plain"));
+}
+
 void test_http_post_requires_two_arguments(void)
 {
     Result r = eval_string("http.post \"http://example.com/");
+
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_http_get_rejects_odd_header_args(void)
+{
+    script_response("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+
+    // A header name with no value is a malformed (odd) pair list.
+    Result r = eval_string("(http.get \"http://example.com/ \"Accept)");
 
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
@@ -433,7 +453,9 @@ int main(void)
     RUN_TEST(test_http_post_sends_method_and_body);
     RUN_TEST(test_http_post_list_body_joined);
     RUN_TEST(test_http_post_returns_response_body);
+    RUN_TEST(test_http_post_sends_custom_headers);
     RUN_TEST(test_http_post_requires_two_arguments);
+    RUN_TEST(test_http_get_rejects_odd_header_args);
 
     // http.status / http.header
     RUN_TEST(test_http_status_empty_before_any_request);

@@ -55,6 +55,7 @@ void primitives_init(void)
     primitives_list_processing_init();
     primitives_wifi_init();
     primitives_network_init();
+    primitives_http_init();
     primitives_time_init();
 }
 
