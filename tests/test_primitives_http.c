@@ -35,6 +35,20 @@ static void script_response(const char *raw)
     mock_device_set_tcp_response(raw, strlen(raw));
 }
 
+// Aux region used to back the blob heap for large-body tests.
+_Alignas(8) static uint8_t http_blob_region[1u << 20];
+
+// Script a 200 response whose body is `n` bytes of 'A', then run http.get.
+static Result get_body_of_size(int n)
+{
+    static char resp[4096];
+    int off = snprintf(resp, sizeof(resp),
+                       "HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\n", n);
+    memset(resp + off, 'A', (size_t)n);
+    mock_device_set_tcp_response(resp, (size_t)(off + n));
+    return eval_string("http.get \"http://example.com/big.txt");
+}
+
 // ============================================================================
 // http.get - happy path and request framing
 // ============================================================================
@@ -247,6 +261,46 @@ void test_http_get_requires_wifi(void)
     Result r = eval_string("http.get \"http://example.com/");
 
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_http_get_large_body_becomes_blob(void)
+{
+    // With an aux region the transfer buffer comes from PSRAM, raising the body
+    // cap well above the SRAM fallback (HTTP_MAX_BODY = 2048). A 4000-byte body
+    // therefore succeeds and returns intact as a blob word.
+    logo_mem_set_aux_region(http_blob_region, sizeof(http_blob_region));
+
+    Result r = get_body_of_size(4000);
+
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL(4000, mem_word_len(r.value.as.node));
+    TEST_ASSERT_TRUE(mem_is_blob(r.value.as.node));
+}
+
+void test_http_get_large_body_without_region_errors(void)
+{
+    // No aux region (reset by setUp): a body over 255 bytes cannot become a
+    // word and must error rather than truncate.
+    Result r = get_body_of_size(500);
+
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_http_get_print_large_body(void)
+{
+    // End-to-end: printing a large (blob) body must not error. Mirrors the
+    // interactive `pr (http.get "http://example.com)`.
+    logo_mem_set_aux_region(http_blob_region, sizeof(http_blob_region));
+
+    static char resp[4096];
+    int off = snprintf(resp, sizeof(resp),
+                       "HTTP/1.1 200 OK\r\nContent-Length: 500\r\n\r\n");
+    memset(resp + off, 'A', 500);
+    mock_device_set_tcp_response(resp, (size_t)(off + 500));
+
+    Result r = eval_string("pr (http.get \"http://example.com)");
+    TEST_ASSERT_NOT_EQUAL(RESULT_ERROR, r.status);
 }
 
 void test_http_get_rejects_https_url(void)
@@ -463,6 +517,9 @@ int main(void)
     RUN_TEST(test_http_header_is_case_insensitive);
     RUN_TEST(test_http_header_absent_returns_empty_list);
     RUN_TEST(test_http_metadata_replaced_by_next_request);
+    RUN_TEST(test_http_get_large_body_becomes_blob);
+    RUN_TEST(test_http_get_large_body_without_region_errors);
+    RUN_TEST(test_http_get_print_large_body);
 
     return UNITY_END();
 }

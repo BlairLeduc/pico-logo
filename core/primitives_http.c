@@ -37,9 +37,43 @@
 
 // One scratch buffer holds the request while it is built and sent, then is
 // reused to receive the response (the request bytes are no longer needed once
-// network_tcp_write returns). Must fit the larger of the two: a response is at
-// most HTTP_MAX_HEADERS + HTTP_MAX_BODY bytes.
-static char g_io[HTTP_MAX_HEADERS + HTTP_MAX_BODY + 64];
+// network_tcp_write returns). It is allocated from the aux/PSRAM region when
+// available (raising the body cap to HTTP_MAX_BODY_PSRAM); otherwise it falls
+// back to a one-time SRAM heap buffer (cap HTTP_MAX_BODY). It is deliberately
+// not a static array so PSRAM-backed builds do not reserve the SRAM.
+#define HTTP_IO_OVERHEAD (HTTP_MAX_HEADERS + 64)
+#define HTTP_IO_SRAM_CAP (HTTP_IO_OVERHEAD + HTTP_MAX_BODY)
+static char *g_io = NULL;        // active transfer buffer
+static size_t g_io_cap = 0;      // capacity of g_io
+static size_t g_body_max = 0;    // max body bytes the active buffer can hold
+static char *g_io_heap = NULL;   // process-lifetime SRAM fallback, reused
+
+// Choose the transfer buffer: PSRAM if a region is available, else the cached
+// SRAM heap fallback. Re-selectable after primitives_http_init() clears g_io.
+static void http_io_init(void)
+{
+    if (g_io != NULL)
+    {
+        return;
+    }
+    size_t psram_cap = HTTP_IO_OVERHEAD + (size_t)HTTP_MAX_BODY_PSRAM;
+    char *p = (char *)mem_region_alloc(psram_cap);
+    if (p != NULL)
+    {
+        g_io = p;
+        g_io_cap = psram_cap;
+    }
+    else
+    {
+        if (g_io_heap == NULL)
+        {
+            g_io_heap = (char *)malloc(HTTP_IO_SRAM_CAP);
+        }
+        g_io = g_io_heap;
+        g_io_cap = (g_io_heap != NULL) ? HTTP_IO_SRAM_CAP : 0;
+    }
+    g_body_max = (g_io_cap > HTTP_IO_OVERHEAD) ? (g_io_cap - HTTP_IO_OVERHEAD) : 0;
+}
 
 // Most-recent-response state (for http.status / http.header).
 static bool g_has_response = false;
@@ -239,6 +273,11 @@ static Result http_request(const char *method, const char *url,
         !ops->network_tcp_write || !ops->network_tcp_close)
         return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
 
+    // Select the transfer buffer (PSRAM if available, else SRAM) on first use.
+    http_io_init();
+    if (g_io == NULL)
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
+
     // If the device reports WiFi status, require a connection.
     if (ops->wifi_is_connected && !ops->wifi_is_connected())
         return result_error_arg(ERR_CANT_OPEN_NETWORK, NULL, NULL);
@@ -255,7 +294,7 @@ static Result http_request(const char *method, const char *url,
     {
         size_t bl = 0;
         format_value(count_output, &bl, *body);
-        if (bl > HTTP_MAX_BODY)
+        if (bl > g_body_max)
             return result_error_arg(ERR_FILE_TOO_BIG, NULL, NULL);
         body_len = (int)bl;
     }
@@ -281,27 +320,27 @@ static Result http_request(const char *method, const char *url,
 
     // Build the request into the shared buffer.
     int n = 0;
-    bool ok = buf_appendf(g_io, sizeof(g_io), &n, "%s %s HTTP/1.1\r\n", method, path);
+    bool ok = buf_appendf(g_io, g_io_cap, &n, "%s %s HTTP/1.1\r\n", method, path);
     if (port == 80)
-        ok = ok && buf_appendf(g_io, sizeof(g_io), &n, "Host: %s\r\n", host);
+        ok = ok && buf_appendf(g_io, g_io_cap, &n, "Host: %s\r\n", host);
     else
-        ok = ok && buf_appendf(g_io, sizeof(g_io), &n, "Host: %s:%u\r\n", host, (unsigned)port);
+        ok = ok && buf_appendf(g_io, g_io_cap, &n, "Host: %s:%u\r\n", host, (unsigned)port);
 
     for (int i = 0; ok && i + 1 < hdr_argc; i += 2)
     {
         const char *hname = mem_word_ptr(hdr_args[i].as.node);
         const char *hval = mem_word_ptr(hdr_args[i + 1].as.node);
-        ok = ok && buf_appendf(g_io, sizeof(g_io), &n, "%s: %s\r\n", hname, hval);
+        ok = ok && buf_appendf(g_io, g_io_cap, &n, "%s: %s\r\n", hname, hval);
     }
 
     if (body)
-        ok = ok && buf_appendf(g_io, sizeof(g_io), &n, "Content-Length: %d\r\n", body_len);
-    ok = ok && buf_appendf(g_io, sizeof(g_io), &n, "Connection: close\r\n\r\n");
+        ok = ok && buf_appendf(g_io, g_io_cap, &n, "Content-Length: %d\r\n", body_len);
+    ok = ok && buf_appendf(g_io, g_io_cap, &n, "Connection: close\r\n\r\n");
 
     if (ok && body)
     {
         FormatBufferContext bctx;
-        format_buffer_init(&bctx, g_io + n, sizeof(g_io) - (size_t)n);
+        format_buffer_init(&bctx, g_io + n, g_io_cap - (size_t)n);
         if (format_value_to_buffer(&bctx, *body))
             n += (int)format_buffer_pos(&bctx);
         else
@@ -324,9 +363,9 @@ static Result http_request(const char *method, const char *url,
     // close, so the peer closes when done).
     int total = 0;
     bool timed_out = false;
-    while (total < (int)sizeof(g_io))
+    while (total < (int)g_io_cap)
     {
-        int r = ops->network_tcp_read(conn, g_io + total, (int)sizeof(g_io) - total, timeout_ms);
+        int r = ops->network_tcp_read(conn, g_io + total, (int)g_io_cap - total, timeout_ms);
         if (r > 0) { total += r; continue; }
         if (r == 0) { timed_out = true; break; }
         break; // r < 0: peer closed / EOF
@@ -393,7 +432,7 @@ static Result http_request(const char *method, const char *url,
 
     if (chunked)
     {
-        int decoded_len = decode_chunked(g_io + body_start, body_avail, HTTP_MAX_BODY);
+        int decoded_len = decode_chunked(g_io + body_start, body_avail, (int)g_body_max);
         if (decoded_len == -1)
             return result_error_arg(ERR_FILE_TOO_BIG, NULL, NULL);
         if (decoded_len < 0)
@@ -409,7 +448,7 @@ static Result http_request(const char *method, const char *url,
             long declared = atol(cl);
             if (declared < 0)
                 return result_error_arg(ERR_NETWORK_ERROR, NULL, NULL);
-            if (declared > HTTP_MAX_BODY)
+            if (declared > (long)g_body_max)
                 return result_error_arg(ERR_FILE_TOO_BIG, NULL, NULL);
             if (body_avail < declared)
                 return result_error_arg(ERR_LOST_CONNECTION, NULL, NULL);
@@ -419,16 +458,17 @@ static Result http_request(const char *method, const char *url,
         else
         {
             // No length framing: the body is everything until the close.
-            if (body_avail > HTTP_MAX_BODY)
+            if (body_avail > (int)g_body_max)
                 return result_error_arg(ERR_FILE_TOO_BIG, NULL, NULL);
             body_ptr = g_io + body_start;
             final_len = body_avail;
         }
     }
 
-    // Intern the body before committing metadata (interning may move nothing,
-    // but keep the body bytes valid in g_io until copied out).
-    Node body_node = mem_atom(body_ptr, (size_t)final_len);
+    // Turn the body into a word before committing metadata (keep the body bytes
+    // valid in g_io until copied out). Large bodies (> 255 bytes) become blobs
+    // in the aux region; small ones are interned atoms.
+    Node body_node = mem_word(body_ptr, (size_t)final_len);
 
     // A non-empty body that cannot be interned (atom length cap or out of
     // memory) is an error, never a silent truncation/empty result.
@@ -532,6 +572,12 @@ void primitives_http_init(void)
     g_has_response = false;
     g_status_code = 0;
     g_headers[0] = '\0';
+
+    // Re-select the transfer buffer on next request: a previous run may have
+    // chosen a PSRAM buffer from an aux region that has since been reset.
+    g_io = NULL;
+    g_io_cap = 0;
+    g_body_max = 0;
 
     primitive_register("http.get", 1, prim_http_get);
     primitive_register("http.post", 2, prim_http_post);

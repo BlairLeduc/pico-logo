@@ -48,6 +48,12 @@ extern "C"
 #define LOGO_MEMORY_SIZE 131072 // Total memory block (128KB)
 #endif
 
+    // Maximum number of live blobs (large values in the auxiliary/PSRAM region).
+    // Each descriptor is small; blobs are few and large, so this cap is modest.
+#ifndef LOGO_MAX_BLOBS
+#define LOGO_MAX_BLOBS 128
+#endif
+
     //==========================================================================
     // Node Representation
     //==========================================================================
@@ -58,9 +64,19 @@ extern "C"
     //
     // 1. NODE_NIL (0x00000000) - the empty list []
     //
-    // 2. Word reference:
-    //    Bits 31-30: 10 (NODE_TYPE_WORD)
-    //    Bits 29-0:  Atom table offset (30 bits, max 1GB)
+    // 2. Word reference. Two sub-kinds share NODE_TYPE_WORD, distinguished by
+    //    bit 29 (NODE_WORD_BLOB_BIT):
+    //    a) Atom (bit 29 == 0):
+    //       Bits 31-30: 10 (NODE_TYPE_WORD)
+    //       Bit  29:    0
+    //       Bits 28-0:  Atom table offset (atom offsets are always well below
+    //                   2^29, so they never collide with the blob bit)
+    //    b) Blob (bit 29 == 1): a large value held in the PSRAM blob heap.
+    //       Bits 31-30: 10 (NODE_TYPE_WORD)
+    //       Bit  29:    1
+    //       Bits 28-0:  Blob handle (index into the blob descriptor table)
+    //    To the outside world a blob is still a word (mem_is_word is true);
+    //    mem_word_ptr/mem_word_len read its bytes transparently.
     //
     // 3. List reference (index into node pool):
     //    Bits 31-30: 01 (NODE_TYPE_LIST) 
@@ -93,6 +109,14 @@ extern "C"
 #define NODE_MAKE_WORD(offset) (((uint32_t)NODE_TYPE_WORD << NODE_TYPE_SHIFT) | (offset))
 #define NODE_MAKE_LIST(index) (((uint32_t)NODE_TYPE_LIST << NODE_TYPE_SHIFT) | (index))
 
+    // Blob sub-encoding within NODE_TYPE_WORD (see comment above).
+    // Bit 29 of the 30-bit payload marks a blob; the low 29 bits are the handle.
+#define NODE_WORD_BLOB_BIT (1u << 29)
+#define NODE_MAKE_BLOB(handle) NODE_MAKE_WORD(NODE_WORD_BLOB_BIT | (handle))
+#define NODE_WORD_IS_BLOB(n) \
+    ((NODE_GET_TYPE(n) == NODE_TYPE_WORD) && (NODE_GET_INDEX(n) & NODE_WORD_BLOB_BIT))
+#define NODE_GET_BLOB_HANDLE(n) (NODE_GET_INDEX(n) & ~NODE_WORD_BLOB_BIT)
+
     // Cons cell macros (for cells stored in node pool)
 #define CELL_GET_CAR(cell) ((cell) >> 16)
 #define CELL_GET_CDR(cell) ((cell) & 0xFFFF)
@@ -105,6 +129,21 @@ extern "C"
     // Initialize the memory system.
     // Must be called before any other memory functions.
     void logo_mem_init(void);
+
+    // Provide an auxiliary memory region (e.g. PSRAM) used to back the blob
+    // heap for large values. Call once, after logo_mem_init(), before any blob
+    // allocation. If never called, blob allocation fails gracefully (mem_blob
+    // returns NODE_NIL) and the interpreter is limited to interned atoms.
+    // Passing base == NULL or size == 0 clears any region.
+    void logo_mem_set_aux_region(void *base, size_t size);
+
+    // Allocate a permanent (never-freed, never-GC'd) raw buffer from the
+    // auxiliary region. Intended for long-lived device buffers that we want to
+    // keep off scarce SRAM (e.g. the HTTP transfer buffer, editor buffers).
+    // Returns NULL if there is no aux region or it is out of space, so callers
+    // must fall back to a static/SRAM buffer. Must be called after
+    // logo_mem_set_aux_region().
+    void *mem_region_alloc(size_t size);
 
     // Create a cons cell (list node) with car and cdr.
     // Returns NODE_NIL if out of memory.
@@ -122,6 +161,20 @@ extern "C"
 
     // Convenience: intern a null-terminated string
     Node mem_atom_cstr(const char *str);
+
+    // Allocate a large value (blob) in the auxiliary region and return it as a
+    // word node. Unlike atoms, blobs are not interned, are garbage-collected,
+    // and can exceed 255 bytes. The bytes are copied in and NUL-terminated.
+    // Returns NODE_NIL if there is no aux region, the descriptor table is full,
+    // or the region is out of space. A blob word cannot be stored inside a cons
+    // cell (mem_cons returns NODE_NIL for a blob operand).
+    Node mem_blob(const char *str, size_t len);
+
+    // Create a word of any length: interns as an atom when len <= 255, otherwise
+    // allocates a blob in the aux region. Returns NODE_NIL on failure (e.g. a
+    // long value with no aux region available). Use this for values that may
+    // exceed the 255-byte atom limit, such as network responses.
+    Node mem_word(const char *str, size_t len);
 
     // Get the car (first element) of a list node.
     // Returns NODE_NIL if node is not a list.
@@ -147,6 +200,10 @@ extern "C"
 
     // Check if a node is a word.
     bool mem_is_word(Node n);
+
+    // Check if a node is a blob (a large word held in the PSRAM blob heap).
+    // A blob is also a word, so mem_is_word(n) is true whenever mem_is_blob(n) is.
+    bool mem_is_blob(Node n);
 
     //==========================================================================
     // Newline Marker
@@ -206,6 +263,12 @@ extern "C"
 
     // Get the total size of the atom table in bytes.
     size_t mem_total_atoms(void);
+
+    // Get the number of blob descriptors currently in use.
+    size_t mem_blob_used(void);
+
+    // Get the number of free bytes remaining in the blob (aux) region.
+    size_t mem_blob_free_bytes(void);
 
 #ifdef __cplusplus
 }

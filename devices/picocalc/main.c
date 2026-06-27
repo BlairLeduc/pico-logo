@@ -18,6 +18,7 @@
 #include "devices/picocalc/picocalc_storage.h"
 #include "devices/picocalc/picocalc_hardware.h"
 #include "devices/picocalc/picocalc.h"
+#include "devices/picocalc/picocalc_psram.h"
 #include "core/memory.h"
 #include "core/lexer.h"
 #include "core/eval.h"
@@ -123,6 +124,20 @@ int main(void)
     
     // Initialize Logo subsystems
     logo_mem_init();
+
+    // Bring up external PSRAM and hand it to the memory system as the aux region
+    // (backs the blob heap and relocates large buffers off SRAM). Must run
+    // before primitives_init() so the editor buffers can be placed in it. If no
+    // PSRAM is detected, the interpreter runs SRAM-only.
+    size_t psram_size = 0;
+#ifdef PIMORONI_PICO_PLUS2_W_PSRAM_CS_PIN
+    psram_size = picocalc_psram_init(PIMORONI_PICO_PLUS2_W_PSRAM_CS_PIN);
+    if (psram_size > 0)
+    {
+        logo_mem_set_aux_region((void *)PICOCALC_PSRAM_BASE, psram_size);
+    }
+#endif
+
     primitives_init();
     procedures_init();
     variables_init();
@@ -145,6 +160,17 @@ int main(void)
     // Print welcome banner
     logo_io_write_line(&io, "Copyright 2025-2026 Blair Leduc");
     logo_io_write_line(&io, "Welcome to Pico Logo.");
+
+    // Report PSRAM availability (it backs large values and the editor buffers).
+    {
+        char psram_msg[48];
+        if (psram_size > 0)
+            snprintf(psram_msg, sizeof(psram_msg), "PSRAM: %u KB",
+                     (unsigned)(psram_size / 1024));
+        else
+            snprintf(psram_msg, sizeof(psram_msg), "PSRAM: unavailable (using SRAM)");
+        logo_io_write_line(&io, psram_msg);
+    }
     
     // Warn user if default directory is missing
     if (!default_dir_exists)

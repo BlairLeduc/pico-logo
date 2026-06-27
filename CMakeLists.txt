@@ -162,6 +162,7 @@ add_executable(pico-logo
     devices/picocalc/main.c
     devices/picocalc/picocalc_console.c
     devices/picocalc/picocalc_hardware.c
+    devices/picocalc/picocalc_psram.c
     devices/picocalc/picocalc_storage.c
     devices/picocalc/picocalc.c
     devices/picocalc/screen.c

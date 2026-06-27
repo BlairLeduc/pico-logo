@@ -106,6 +106,167 @@ static size_t node_bottom;
 static size_t node_count;
 
 //==========================================================================
+// Blob Heap (auxiliary region, e.g. PSRAM)
+//==========================================================================
+//
+// Large values that do not fit the 255-byte interned-atom limit live here.
+// Blobs are NOT interned, ARE garbage-collected, and are referenced by a
+// handle (descriptor index) encoded in a NODE_TYPE_WORD with NODE_WORD_BLOB_BIT
+// set. Because a blob cannot be packed into a 16-bit cell, blob words are never
+// stored inside cons cells (mem_cons rejects them) and are therefore only
+// reachable through the GC root set, never through cell walks.
+//
+// The region is managed by a simple first-fit free-list allocator with
+// boundary coalescing. It is non-moving, so pointers from mem_word_ptr remain
+// valid across GC (consistent with the documented contract).
+
+#define BLOB_ALIGN 8u
+#define BLOB_ALIGN_UP(x) (((x) + (BLOB_ALIGN - 1)) & ~((size_t)BLOB_ALIGN - 1))
+
+// A free block in the region. Allocated blocks share the same leading `size`
+// field; only free blocks use `next`. `size` is the total block size in bytes
+// including this header. The header is padded to BLOB_ALIGN so payloads align.
+typedef struct FreeBlock
+{
+    size_t size;
+    struct FreeBlock *next; // address-ascending free list (free blocks only)
+} FreeBlock;
+
+#define BLOB_HDR BLOB_ALIGN_UP(sizeof(FreeBlock))
+
+typedef struct
+{
+    void *ptr;     // pointer to payload within the region (NULL = free slot)
+    uint32_t len;  // payload length in bytes (excludes the NUL terminator)
+} BlobDesc;
+
+static BlobDesc blob_table[LOGO_MAX_BLOBS];
+static uint8_t blob_mark[(LOGO_MAX_BLOBS + 7) / 8];
+
+static uint8_t *blob_region;       // base of the aux region, NULL if none
+static size_t blob_region_size;    // total bytes of the aux region
+static FreeBlock *blob_free_list;  // head of the free list
+
+// Reset the blob subsystem (called from logo_mem_init and set_aux_region).
+static void blob_reset(void)
+{
+    memset(blob_table, 0, sizeof(blob_table));
+    memset(blob_mark, 0, sizeof(blob_mark));
+    blob_free_list = NULL;
+    if (blob_region == NULL)
+    {
+        return;
+    }
+
+    // Align the start up and the size down so every block header is aligned
+    // and all block sizes stay multiples of BLOB_ALIGN.
+    uintptr_t base = (uintptr_t)blob_region;
+    uintptr_t aligned = BLOB_ALIGN_UP(base);
+    size_t adjust = (size_t)(aligned - base);
+    if (blob_region_size <= adjust)
+    {
+        return;
+    }
+    size_t usable = (blob_region_size - adjust) & ~((size_t)BLOB_ALIGN - 1);
+    if (usable >= BLOB_HDR + BLOB_ALIGN)
+    {
+        FreeBlock *first = (FreeBlock *)aligned;
+        first->size = usable;
+        first->next = NULL;
+        blob_free_list = first;
+    }
+}
+
+// First-fit allocation of `len` payload bytes from the region.
+// Returns a payload pointer, or NULL if no region / out of space.
+static void *blob_alloc(size_t len)
+{
+    if (blob_region == NULL)
+    {
+        return NULL;
+    }
+
+    size_t need = BLOB_ALIGN_UP(BLOB_HDR + len);
+    if (need < BLOB_HDR + BLOB_ALIGN)
+    {
+        need = BLOB_HDR + BLOB_ALIGN; // ensure a split remainder can hold a header
+    }
+
+    FreeBlock *prev = NULL;
+    FreeBlock *cur = blob_free_list;
+    while (cur != NULL)
+    {
+        if (cur->size >= need)
+        {
+            size_t remainder = cur->size - need;
+            if (remainder >= BLOB_HDR + BLOB_ALIGN)
+            {
+                // Split: shrink cur to `need`, create a free block after it.
+                FreeBlock *rest = (FreeBlock *)((uint8_t *)cur + need);
+                rest->size = remainder;
+                rest->next = cur->next;
+                cur->size = need;
+                if (prev != NULL)
+                    prev->next = rest;
+                else
+                    blob_free_list = rest;
+            }
+            else
+            {
+                // Take the whole block.
+                if (prev != NULL)
+                    prev->next = cur->next;
+                else
+                    blob_free_list = cur->next;
+            }
+            return (uint8_t *)cur + BLOB_HDR;
+        }
+        prev = cur;
+        cur = cur->next;
+    }
+    return NULL;
+}
+
+// Return a previously allocated payload to the free list, coalescing with
+// physically adjacent free blocks.
+static void blob_free(void *payload)
+{
+    if (payload == NULL)
+    {
+        return;
+    }
+
+    FreeBlock *block = (FreeBlock *)((uint8_t *)payload - BLOB_HDR);
+
+    // Insert into the address-ascending free list.
+    FreeBlock *prev = NULL;
+    FreeBlock *cur = blob_free_list;
+    while (cur != NULL && cur < block)
+    {
+        prev = cur;
+        cur = cur->next;
+    }
+    block->next = cur;
+    if (prev != NULL)
+        prev->next = block;
+    else
+        blob_free_list = block;
+
+    // Coalesce with the next block if physically adjacent.
+    if (cur != NULL && (uint8_t *)block + block->size == (uint8_t *)cur)
+    {
+        block->size += cur->size;
+        block->next = cur->next;
+    }
+    // Coalesce with the previous block if physically adjacent.
+    if (prev != NULL && (uint8_t *)prev + prev->size == (uint8_t *)block)
+    {
+        prev->size += block->size;
+        prev->next = block->next;
+    }
+}
+
+//==========================================================================
 // Node Indexing Helpers
 //==========================================================================
 
@@ -207,9 +368,31 @@ void logo_mem_init(void)
     // Initialize free list as empty
     free_list = 0;
     free_count = 0;
-    
+
+    // Drop any blob region: a fresh interpreter has no PSRAM until the device
+    // (or a test) supplies one via logo_mem_set_aux_region().
+    blob_region = NULL;
+    blob_region_size = 0;
+    blob_reset();
+
     // Create the newline marker atom (SOH character, non-printable)
     mem_newline_marker = mem_atom("\x01", 1);
+}
+
+// Provide an auxiliary memory region (e.g. PSRAM) to back the blob heap.
+void logo_mem_set_aux_region(void *base, size_t size)
+{
+    blob_region = (uint8_t *)base;
+    blob_region_size = (base != NULL) ? size : 0;
+    blob_reset();
+}
+
+// Permanent raw allocation from the aux region (never freed, never GC'd).
+// Shares the blob free-list allocator; the block simply has no descriptor and
+// is never returned, so the sweep never touches it.
+void *mem_region_alloc(size_t size)
+{
+    return blob_alloc(size);
 }
 
 //==========================================================================
@@ -526,6 +709,73 @@ Node mem_atom_cstr(const char *str)
 }
 
 //==========================================================================
+// Blobs (large values in the auxiliary region)
+//==========================================================================
+
+// Allocate a large value in the blob heap and return it as a word node.
+Node mem_blob(const char *str, size_t len)
+{
+    if (blob_region == NULL)
+    {
+        return NODE_NIL; // No aux region: large values are unavailable
+    }
+
+    // Find a free descriptor slot.
+    int handle = -1;
+    for (int i = 0; i < LOGO_MAX_BLOBS; i++)
+    {
+        if (blob_table[i].ptr == NULL)
+        {
+            handle = i;
+            break;
+        }
+    }
+    if (handle < 0)
+    {
+        return NODE_NIL; // Descriptor table full
+    }
+
+    // Allocate payload plus a NUL terminator so mem_word_ptr stays C-string safe.
+    void *p = blob_alloc(len + 1);
+    if (p == NULL)
+    {
+        return NODE_NIL; // Region out of space
+    }
+
+    memcpy(p, str, len);
+    ((char *)p)[len] = '\0';
+    blob_table[handle].ptr = p;
+    blob_table[handle].len = (uint32_t)len;
+
+    return NODE_MAKE_BLOB((uint32_t)handle);
+}
+
+// Create a word of any length: atom if it fits the interned limit, else a blob.
+Node mem_word(const char *str, size_t len)
+{
+    if (len <= 255)
+    {
+        return mem_atom(str, len);
+    }
+    return mem_blob(str, len);
+}
+
+// Resolve a blob node to its descriptor, or NULL if invalid.
+static BlobDesc *blob_desc(Node n)
+{
+    if (!NODE_WORD_IS_BLOB(n))
+    {
+        return NULL;
+    }
+    uint32_t handle = NODE_GET_BLOB_HANDLE(n);
+    if (handle >= LOGO_MAX_BLOBS || blob_table[handle].ptr == NULL)
+    {
+        return NULL;
+    }
+    return &blob_table[handle];
+}
+
+//==========================================================================
 // Node Access
 //==========================================================================
 
@@ -691,6 +941,12 @@ bool mem_is_word(Node n)
     return NODE_GET_TYPE(n) == NODE_TYPE_WORD;
 }
 
+// Check if a node is a blob (a large word held in the PSRAM blob heap).
+bool mem_is_blob(Node n)
+{
+    return NODE_WORD_IS_BLOB(n);
+}
+
 // Check if a node is the newline marker.
 bool mem_is_newline(Node n)
 {
@@ -709,6 +965,12 @@ const char *mem_word_ptr(Node n)
     if (NODE_GET_TYPE(n) != NODE_TYPE_WORD)
     {
         return NULL;
+    }
+
+    if (NODE_WORD_IS_BLOB(n))
+    {
+        BlobDesc *d = blob_desc(n);
+        return d ? (const char *)d->ptr : NULL;
     }
 
     uint32_t offset = NODE_GET_INDEX(n);
@@ -730,6 +992,12 @@ size_t mem_word_len(Node n)
         return 0;
     }
 
+    if (NODE_WORD_IS_BLOB(n))
+    {
+        BlobDesc *d = blob_desc(n);
+        return d ? d->len : 0;
+    }
+
     uint32_t offset = NODE_GET_INDEX(n);
     if (offset >= atom_next)
     {
@@ -748,14 +1016,12 @@ bool mem_word_eq(Node n, const char *str, size_t len)
         return false;
     }
 
-    uint32_t offset = NODE_GET_INDEX(n);
-    if (offset >= atom_next)
+    const char *p = mem_word_ptr(n);
+    if (p == NULL)
     {
         return false;
     }
-
-    uint8_t atom_len = memory_block[offset];
-    return str_eq_nocase(str, len, (const char *)&memory_block[offset + 1], atom_len);
+    return str_eq_nocase(str, len, p, mem_word_len(n));
 }
 
 // Compare two word nodes for equality.
@@ -767,8 +1033,21 @@ bool mem_words_equal(Node a, Node b)
         return false;
     }
 
-    // Since atoms are interned, same offset means same word
-    return NODE_GET_INDEX(a) == NODE_GET_INDEX(b);
+    // Interned atoms dedup by offset: same offset means same word. Blobs are
+    // not interned, so when either side is a blob we must compare by content
+    // (case-sensitive, matching atom interning semantics).
+    if (!NODE_WORD_IS_BLOB(a) && !NODE_WORD_IS_BLOB(b))
+    {
+        return NODE_GET_INDEX(a) == NODE_GET_INDEX(b);
+    }
+
+    const char *pa = mem_word_ptr(a);
+    const char *pb = mem_word_ptr(b);
+    if (pa == NULL || pb == NULL)
+    {
+        return false;
+    }
+    return str_eq(pa, mem_word_len(a), pb, mem_word_len(b));
 }
 
 //==========================================================================
@@ -792,9 +1071,18 @@ static void gc_mark_node(Node n)
 
     NodeType type = NODE_GET_TYPE(n);
 
-    // Words don't need marking (atoms are never freed)
     if (type == NODE_TYPE_WORD)
     {
+        // Atoms are never freed, so they need no marking. Blobs ARE collected:
+        // mark the reachable descriptor so the sweep keeps it.
+        if (NODE_WORD_IS_BLOB(n))
+        {
+            uint32_t handle = NODE_GET_BLOB_HANDLE(n);
+            if (handle < LOGO_MAX_BLOBS && blob_table[handle].ptr != NULL)
+            {
+                blob_mark[handle / 8] |= (uint8_t)(1u << (handle % 8));
+            }
+        }
         return;
     }
 
@@ -904,8 +1192,25 @@ void mem_gc_sweep(void)
         }
     }
 
-    // Clear any remaining marks
+    // Sweep the blob heap: free any descriptor not reached during marking.
+    for (int i = 0; i < LOGO_MAX_BLOBS; i++)
+    {
+        if (blob_table[i].ptr == NULL)
+        {
+            continue; // free slot
+        }
+        if (blob_mark[i / 8] & (uint8_t)(1u << (i % 8)))
+        {
+            continue; // reachable, keep
+        }
+        blob_free(blob_table[i].ptr);
+        blob_table[i].ptr = NULL;
+        blob_table[i].len = 0;
+    }
+
+    // Clear any remaining marks (nodes and blobs)
     memset(gc_marks, 0, sizeof(gc_marks));
+    memset(blob_mark, 0, sizeof(blob_mark));
 }
 
 // Run garbage collection.
@@ -986,4 +1291,29 @@ size_t mem_free_atoms(void)
 size_t mem_total_atoms(void)
 {
     return LOGO_MEMORY_SIZE;
+}
+
+// Get the number of blob descriptors currently in use.
+size_t mem_blob_used(void)
+{
+    size_t count = 0;
+    for (int i = 0; i < LOGO_MAX_BLOBS; i++)
+    {
+        if (blob_table[i].ptr != NULL)
+        {
+            count++;
+        }
+    }
+    return count;
+}
+
+// Get the number of free bytes remaining in the blob (aux) region.
+size_t mem_blob_free_bytes(void)
+{
+    size_t total = 0;
+    for (FreeBlock *b = blob_free_list; b != NULL; b = b->next)
+    {
+        total += b->size;
+    }
+    return total;
 }

@@ -51,6 +51,36 @@ tokens) is additionally limited to ~64 K cells no matter how much memory we add.
 
 ## 2. PSRAM on the Pico Plus 2 W (8 MB)
 
+> **Implementation status (memory rework).** The core-side mechanism is now
+> implemented and host-tested behind an auxiliary-region seam:
+> `logo_mem_set_aux_region(base, size)` hands `core/` a region (NULL/absent on
+> host + tests → graceful SRAM-only fallback). On top of it:
+> - **Role B (blob heap):** done. `mem_blob` / `mem_word` store >255-byte values
+>   in a GC'd, non-moving free-list heap in the region; blobs are `Node`-level
+>   words (not cell-storable). `core/memory.c`, tests in `tests/test_memory.c`.
+> - **Role A (HTTP transfer buffer):** done. `g_io` is allocated from the region
+>   when present (cap `HTTP_MAX_BODY_PSRAM`), else a small static SRAM buffer
+>   (cap `HTTP_MAX_BODY`). `core/primitives_http.c`.
+> - **Role C (editor buffers):** done for the two editor buffers (24 KB each on
+>   the W presets → 48 KB) via `mem_region_alloc`, with a lazy heap fallback (not
+>   a static array, so PSRAM builds genuinely reclaim the SRAM).
+>   `core/primitives_editor.c`. REPL buffers were **deferred** — they are
+>   transient (a pause sub-REPL is created/freed repeatedly), so the never-freed
+>   pinned allocator would leak; they stay `malloc`'d.
+> - **Device bring-up:** done and **verified on hardware**.
+>   `devices/picocalc/picocalc_psram.c` probes the APS6404 over QMI direct mode,
+>   **enters QPI mode (`0x35`)**, programs the all-quad read (`0xEB`)/write
+>   (`0x38`) formats, and maps it writable at `0x11000000`; `main.c` calls
+>   `logo_mem_set_aux_region` before `primitives_init`. **Result: device SRAM use
+>   dropped from 89.2% → 79.3% (~51 KB freed)**, and `pr (http.get ...)` of a
+>   multi-KB body works. Gotchas learned: (1) the all-quad format requires
+>   entering QPI first — without `0x35` the quad commands are misinterpreted and
+>   data never round-trips; (2) bring-up is gated by a **cache-bypassing
+>   read-back self-test** so a wrong QMI config degrades to SRAM-only instead of
+>   hardfaulting the allocator on a non-functional region. Known minor issue: the
+>   id probe reports 4096 KB on the 8 MB board (under-detection is safe — we just
+>   use 4 MB); a write/read-back size probe could recover the full size later.
+
 There are two distinct roles PSRAM could play. They are not the same project.
 
 ### Role A — transient transfer / scratch buffer (recommended for v1)
