@@ -29,6 +29,7 @@
 #include "value.h"
 #include "error.h"
 #include "format.h"
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -217,15 +218,23 @@ static int utf8_encode(unsigned cp, char *out)
         out[1] = (char)(0x80 | (cp & 0x3F));
         return 2;
     }
-    out[0] = (char)(0xE0 | (cp >> 12));
-    out[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
-    out[2] = (char)(0x80 | (cp & 0x3F));
-    return 3;
+    if (cp < 0x10000)
+    {
+        out[0] = (char)(0xE0 | (cp >> 12));
+        out[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
+        out[2] = (char)(0x80 | (cp & 0x3F));
+        return 3;
+    }
+    out[0] = (char)(0xF0 | (cp >> 18));
+    out[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
+    out[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
+    out[3] = (char)(0x80 | (cp & 0x3F));
+    return 4;
 }
 
 // Unescape a JSON string body [start,end) into out. Output is never longer than
-// the input, so out must hold at least (end - start) bytes. \uXXXX is decoded
-// for the basic multilingual plane (surrogate pairs are not combined).
+// the input, so out must hold at least (end - start) bytes. \uXXXX is decoded,
+// combining a high/low surrogate pair into one code point (4-byte UTF-8).
 static size_t json_unescape(const char *start, const char *end, char *out)
 {
     char *o = out;
@@ -257,8 +266,25 @@ static size_t json_unescape(const char *start, const char *end, char *out)
                     (h2 = hex_val(p[2])) >= 0 && (h3 = hex_val(p[3])) >= 0)
                 {
                     unsigned cp = (unsigned)((h0 << 12) | (h1 << 8) | (h2 << 4) | h3);
-                    o += utf8_encode(cp, o);
                     p += 4;
+                    // Combine a UTF-16 surrogate pair (\uD800-\uDBFF followed by
+                    // \uDC00-\uDFFF) into a single code point.
+                    if (cp >= 0xD800 && cp <= 0xDBFF && end - p >= 6 &&
+                        p[0] == '\\' && p[1] == 'u')
+                    {
+                        int l0 = hex_val(p[2]), l1 = hex_val(p[3]);
+                        int l2 = hex_val(p[4]), l3 = hex_val(p[5]);
+                        if (l0 >= 0 && l1 >= 0 && l2 >= 0 && l3 >= 0)
+                        {
+                            unsigned lo = (unsigned)((l0 << 12) | (l1 << 8) | (l2 << 4) | l3);
+                            if (lo >= 0xDC00 && lo <= 0xDFFF)
+                            {
+                                cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
+                                p += 6;
+                            }
+                        }
+                    }
+                    o += utf8_encode(cp, o);
                 }
                 else
                 {
@@ -330,7 +356,8 @@ static Result extract_value(Scan *s)
     // Bare scalar: number, true, false, or null.
     const char *v_start = s->p;
     Scan tmp = *s;
-    skip_value(&tmp);
+    if (!skip_value(&tmp) || tmp.p == v_start)
+        return result_ok(value_list(NODE_NIL)); // malformed / on a delimiter
     size_t len = (size_t)(tmp.p - v_start);
 
     if (len == 4 && memcmp(v_start, "null", 4) == 0)
@@ -545,7 +572,7 @@ static bool is_json_number(const char *s, size_t len)
 // rewritten to 'e-'. Returns false for nan/inf, which JSON cannot represent.
 static bool json_format_number(float n, char *buf, size_t size)
 {
-    if (n != n || n > 3.4e38f || n < -3.4e38f)
+    if (!isfinite(n)) // nan/inf cannot be represented in JSON
         return false;
     char tmp[32];
     format_number(tmp, sizeof(tmp), n);
@@ -718,7 +745,12 @@ static void render_value(StrBuf *b, Value v)
             if (!first)
                 sb_putc(b, ',');
             first = false;
-            sb_put_string(b, mem_word_ptr(key), mem_word_len(key));
+            // Keys from json.object are always words; guard a hand-fabricated
+            // AST so a non-word key cannot deref a NULL mem_word_ptr.
+            if (mem_is_word(key))
+                sb_put_string(b, mem_word_ptr(key), mem_word_len(key));
+            else
+                render_node(b, key);
             sb_putc(b, ':');
             render_node(b, val);
             p = mem_is_nil(rest) ? rest : mem_cdr(rest);

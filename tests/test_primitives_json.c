@@ -482,6 +482,53 @@ void test_make_invalid_number_word_is_string(void)
     assert_word(eval_string("json.make \"007"), "\"007\"");
 }
 
+void test_get_unescapes_bmp_escape(void)
+{
+    // {"c":"é"} -> é (UTF-8 C3 A9)
+    static const char doc[] = "{\"c\":\"\\u00e9\"}";
+    Node n = mem_word(doc, sizeof(doc) - 1);
+    TEST_ASSERT_TRUE(var_set("acc", value_word(n)));
+    Result r = eval_string("json.get :acc [c]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_word(r.value));
+    TEST_ASSERT_EQUAL_STRING("\xC3\xA9", mem_word_ptr(r.value.as.node));
+}
+
+void test_get_unescapes_surrogate_pair(void)
+{
+    // {"e":"😀"} -> U+1F600 emoji as 4-byte UTF-8 (F0 9F 98 80)
+    static const char doc[] = "{\"e\":\"\\uD83D\\uDE00\"}";
+    Node n = mem_word(doc, sizeof(doc) - 1);
+    TEST_ASSERT_TRUE(var_set("emoji", value_word(n)));
+    Result r = eval_string("json.get :emoji [e]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_word(r.value));
+    TEST_ASSERT_EQUAL_STRING("\xF0\x9F\x98\x80", mem_word_ptr(r.value.as.node));
+}
+
+void test_get_malformed_value_is_empty(void)
+{
+    // A member with no value ({"a":}) must yield the empty list, not an empty
+    // word interned from a non-advancing scan.
+    static const char doc[] = "{\"a\":}";
+    Node n = mem_word(doc, sizeof(doc) - 1);
+    TEST_ASSERT_TRUE(var_set("m", value_word(n)));
+    assert_empty(eval_string("json.get :m [a]"));
+}
+
+void test_make_tolerates_non_word_key(void)
+{
+    // Fabricate a tagged-object AST whose key is a list rather than a word, and
+    // ensure json.make does not dereference a NULL key pointer.
+    Node tag = mem_atom("\x01o", 2);
+    Node key = mem_cons(mem_atom_cstr("x"), NODE_NIL); // [x] -- not a word
+    Node ast = mem_cons(tag, mem_cons(key, mem_cons(mem_atom_cstr("v"), NODE_NIL)));
+    TEST_ASSERT_TRUE(var_set("bad", value_list(ast)));
+    Result r = eval_string("json.make :bad");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_word(r.value));
+}
+
 void test_object_rejects_blob_value(void)
 {
     // A value over the 255-byte atom limit is a blob, which cannot live in a
@@ -551,6 +598,10 @@ int main(void)
     RUN_TEST(test_make_small_number_in_object_is_valid_json);
     RUN_TEST(test_make_negative_number);
     RUN_TEST(test_make_invalid_number_word_is_string);
+    RUN_TEST(test_get_unescapes_bmp_escape);
+    RUN_TEST(test_get_unescapes_surrogate_pair);
+    RUN_TEST(test_get_malformed_value_is_empty);
+    RUN_TEST(test_make_tolerates_non_word_key);
     RUN_TEST(test_object_rejects_blob_value);
 
     RUN_TEST(test_make_simple_object);

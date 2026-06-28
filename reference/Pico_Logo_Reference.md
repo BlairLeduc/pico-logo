@@ -5655,7 +5655,7 @@ See [`pprop`](#pprop) and [`gprop`](#gprop).
 ===
 # JSON
 
-A JSON document is held as text — typically the word returned by [`http.get`](#httpget). `json.get` reads values straight out of that text, so even a large response (which is kept in PSRAM) can be queried without copying the whole document into the workspace.
+A JSON document is held as text — typically the word returned by [`http.get`](#http-get). `json.get` reads values straight out of that text, so even a large response (which is kept in PSRAM) can be queried without copying the whole document into the workspace.
 
 ## json.get
 
