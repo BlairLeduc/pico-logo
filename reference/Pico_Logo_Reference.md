@@ -5682,6 +5682,59 @@ Ottawa
 ```
 
 
+## json.object
+
+(json.object _key1_ _value1_ _key2_ _value2_ ...)  
+
+`operation`
+
+`json.object` builds a JSON object from the given _key_/_value_ pairs. Each _key_ must be a word. A _value_ may be a word (output as a JSON string), a number, the words `true` or `false`, the empty list (output as `null`), a list (output as a JSON array), or another `json.object` or `json.array`. The result is passed to [`json.make`](#json-make) to produce JSON text. Give the inputs as quoted words rather than inside a list, so values containing `/`, `-` or spaces are kept intact.
+
+See [`json.array`](#json-array) and [`json.make`](#json-make).
+
+**Example**:
+
+```logo
+?show json.make (json.object "name "Blair "age 42)
+{"name":"Blair","age":42}
+```
+
+
+## json.array
+
+(json.array _value1_ _value2_ ...)  
+
+`operation`
+
+`json.array` builds a JSON array from the given values, each encoded in the same way as a `json.object` value. The result is passed to [`json.make`](#json-make) to produce JSON text. An empty array is `(json.array)`.
+
+See [`json.object`](#json-object) and [`json.make`](#json-make).
+
+**Example**:
+
+```logo
+?show json.make (json.array "logo "c "rp2350)
+["logo","c","rp2350"]
+```
+
+
+## json.make
+
+json.make _value_  
+
+`operation`
+
+`json.make` outputs the JSON text for _value_. _Value_ is usually built with [`json.object`](#json-object) and [`json.array`](#json-array), but may also be a plain Logo value: a word becomes a JSON string (a word that looks like a number becomes a JSON number, and `true`/`false` become JSON booleans), a number becomes a JSON number, a list becomes a JSON array, and the empty list becomes `null`. String values are escaped as required by JSON.
+
+**Example**:
+
+```logo
+?show json.make (json.object "name "Blair "tags (json.array "logo "c))
+{"name":"Blair","tags":["logo","c"]}
+?pr (http.post "http://example.com/people json.make (json.object "name "Blair) "Content-Type "application/json)
+```
+
+
 ===
 # Device Specific
 

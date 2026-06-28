@@ -240,6 +240,109 @@ void test_path_step_must_be_a_word(void)
     TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
 }
 
+//==========================================================================
+// Building: json.object / json.array / json.make
+//==========================================================================
+
+void test_make_simple_object(void)
+{
+    assert_word(eval_string("json.make (json.object \"name \"Blair \"age 42)"),
+                "{\"name\":\"Blair\",\"age\":42}");
+}
+
+void test_make_empty_object(void)
+{
+    assert_word(eval_string("json.make (json.object)"), "{}");
+}
+
+void test_make_simple_array(void)
+{
+    assert_word(eval_string("json.make (json.array \"logo \"c)"), "[\"logo\",\"c\"]");
+}
+
+void test_make_empty_array(void)
+{
+    assert_word(eval_string("json.make (json.array)"), "[]");
+}
+
+void test_make_nested_object(void)
+{
+    assert_word(eval_string("json.make (json.object \"addr (json.object \"city \"Ottawa))"),
+                "{\"addr\":{\"city\":\"Ottawa\"}}");
+}
+
+void test_make_object_with_array(void)
+{
+    assert_word(eval_string("json.make (json.object \"tags (json.array \"logo \"c))"),
+                "{\"tags\":[\"logo\",\"c\"]}");
+}
+
+void test_make_boolean_value(void)
+{
+    assert_word(eval_string("json.make (json.object \"active \"true \"hidden \"false)"),
+                "{\"active\":true,\"hidden\":false}");
+}
+
+void test_make_number_value_is_unquoted(void)
+{
+    assert_word(eval_string("json.make (json.object \"age 42)"), "{\"age\":42}");
+}
+
+void test_make_special_chars_in_value_survive(void)
+{
+    // The whole point of quoted-word builders: '/' is preserved (a list literal
+    // would split text/plain).
+    assert_word(eval_string("json.make (json.object \"type \"text/plain)"),
+                "{\"type\":\"text/plain\"}");
+}
+
+void test_make_escapes_quote_and_newline(void)
+{
+    // Value a"b (quote via char 34).
+    assert_word(eval_string("json.make (json.object \"q (word \"a char 34 \"b))"),
+                "{\"q\":\"a\\\"b\"}");
+    // Value a<newline>b (char 10).
+    assert_word(eval_string("json.make (json.object \"n (word \"a char 10 \"b))"),
+                "{\"n\":\"a\\nb\"}");
+}
+
+void test_make_plain_list_is_array(void)
+{
+    assert_word(eval_string("json.make [1 2 3]"), "[1,2,3]");
+}
+
+void test_make_empty_list_is_null(void)
+{
+    assert_word(eval_string("json.make []"), "null");
+}
+
+void test_make_top_level_scalars(void)
+{
+    assert_word(eval_string("json.make \"hello"), "\"hello\"");
+    assert_word(eval_string("json.make 42"), "42");
+}
+
+void test_make_then_get_round_trips(void)
+{
+    run_string("make \"doc json.make (json.object \"name \"Blair \"age 42)");
+    assert_word(eval_string("json.get :doc [name]"), "Blair");
+    assert_word(eval_string("json.get :doc [age]"), "42");
+}
+
+void test_object_requires_even_args(void)
+{
+    Result r = run_string("print json.make (json.object \"name)");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NOT_ENOUGH_INPUTS, r.error_code);
+}
+
+void test_object_key_must_be_word(void)
+{
+    Result r = run_string("print json.make (json.object 5 \"v)");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -273,6 +376,23 @@ int main(void)
     RUN_TEST(test_document_must_be_a_word);
     RUN_TEST(test_path_must_be_a_list);
     RUN_TEST(test_path_step_must_be_a_word);
+
+    RUN_TEST(test_make_simple_object);
+    RUN_TEST(test_make_empty_object);
+    RUN_TEST(test_make_simple_array);
+    RUN_TEST(test_make_empty_array);
+    RUN_TEST(test_make_nested_object);
+    RUN_TEST(test_make_object_with_array);
+    RUN_TEST(test_make_boolean_value);
+    RUN_TEST(test_make_number_value_is_unquoted);
+    RUN_TEST(test_make_special_chars_in_value_survive);
+    RUN_TEST(test_make_escapes_quote_and_newline);
+    RUN_TEST(test_make_plain_list_is_array);
+    RUN_TEST(test_make_empty_list_is_null);
+    RUN_TEST(test_make_top_level_scalars);
+    RUN_TEST(test_make_then_get_round_trips);
+    RUN_TEST(test_object_requires_even_args);
+    RUN_TEST(test_object_key_must_be_word);
 
     return UNITY_END();
 }

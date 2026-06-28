@@ -2,14 +2,13 @@
 //  Pico Logo
 //  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
-//  JSON access primitive: json.get
+//  JSON primitives: json.get (read), json.object / json.array / json.make (build)
 //
-//  A JSON document is kept as text (a word; large responses are PSRAM blobs).
-//  json.get scans that text in place, following a path, and allocates only the
-//  one value it extracts -- the document is never materialised into a tree, so
-//  querying a 100 KB response costs no more node-pool memory than a tiny one.
-//
-//  A path is a list of steps: a word selects an object member by key
+//  Reading: a JSON document is kept as text (a word; large responses are PSRAM
+//  blobs). json.get scans that text in place, following a path, and allocates
+//  only the one value it extracts -- the document is never materialised into a
+//  tree, so querying a 100 KB response costs no more node-pool memory than a
+//  tiny one. A path is a list of steps: a word selects an object member by key
 //  (case-sensitive, per the JSON spec); a number selects an array element by
 //  position (1-based, like item). A scalar is returned as a Logo value (string
 //  unescaped to a word, number as a numeric word, true/false as words, null as
@@ -17,11 +16,19 @@
 //  which can be passed straight back into json.get. Any step that does not
 //  match yields the empty list.
 //
+//  Building: json.object and json.array assemble a tagged Logo structure, which
+//  json.make renders to JSON text. Builders take quoted-word arguments (so
+//  values containing '/', '-' or spaces survive the reader, unlike list
+//  literals) and nest, so json.make (json.object ...) produces text ready for
+//  http.post.
+//
 
 #include "primitives.h"
 #include "memory.h"
 #include "value.h"
 #include "error.h"
+#include "format.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -363,7 +370,269 @@ static Result prim_json_get(Evaluator *eval, int argc, Value *args)
     return extract_value(&s);
 }
 
+//==========================================================================
+// Building: json.object, json.array, json.make
+//==========================================================================
+//
+// json.object / json.array assemble a tagged AST so that nesting stays
+// unambiguous: an object is cons(OBJ_TAG, [k1 v1 k2 v2 ...]) and an array is
+// cons(ARR_TAG, [v1 v2 ...]). The tags begin with a control byte that the Logo
+// reader cannot produce, so they never collide with user data. A plain Logo
+// list renders as an array, and the empty list renders as null (so it
+// round-trips json.get, which returns the empty list for JSON null).
+
+#define JSON_OBJ_TAG "\x01o"
+#define JSON_ARR_TAG "\x01a"
+#define JSON_TAG_LEN 2
+
+static bool node_has_tag(Node n, const char *tag)
+{
+    return mem_is_word(n) && mem_word_len(n) == JSON_TAG_LEN &&
+           memcmp(mem_word_ptr(n), tag, JSON_TAG_LEN) == 0;
+}
+
+// Coerce a builder argument to the node stored in the AST. Numbers become
+// numeric words; words and lists are stored as-is (a list may be a nested
+// builder result or a plain array).
+static bool value_to_json_node(Value v, Node *out)
+{
+    if (value_is_number(v))
+    {
+        *out = number_to_word(v.as.number);
+        return true;
+    }
+    if (value_is_word(v) || value_is_list(v))
+    {
+        *out = v.as.node;
+        return true;
+    }
+    return false;
+}
+
+// A growable text buffer for rendering. oom latches on allocation failure.
+typedef struct
+{
+    char *buf;
+    size_t len;
+    size_t cap;
+    bool oom;
+} StrBuf;
+
+static bool sb_reserve(StrBuf *b, size_t extra)
+{
+    if (b->oom)
+        return false;
+    if (b->len + extra + 1 <= b->cap)
+        return true;
+    size_t ncap = b->cap ? b->cap : 64;
+    while (ncap < b->len + extra + 1)
+        ncap *= 2;
+    char *n = realloc(b->buf, ncap);
+    if (!n)
+    {
+        b->oom = true;
+        return false;
+    }
+    b->buf = n;
+    b->cap = ncap;
+    return true;
+}
+
+static void sb_putc(StrBuf *b, char c)
+{
+    if (sb_reserve(b, 1))
+        b->buf[b->len++] = c;
+}
+
+static void sb_put(StrBuf *b, const char *s, size_t n)
+{
+    if (sb_reserve(b, n))
+    {
+        memcpy(b->buf + b->len, s, n);
+        b->len += n;
+    }
+}
+
+// Append s as a quoted, escaped JSON string.
+static void sb_put_string(StrBuf *b, const char *s, size_t len)
+{
+    sb_putc(b, '"');
+    for (size_t i = 0; i < len; i++)
+    {
+        unsigned char c = (unsigned char)s[i];
+        switch (c)
+        {
+            case '"':  sb_put(b, "\\\"", 2); break;
+            case '\\': sb_put(b, "\\\\", 2); break;
+            case '\n': sb_put(b, "\\n", 2); break;
+            case '\t': sb_put(b, "\\t", 2); break;
+            case '\r': sb_put(b, "\\r", 2); break;
+            case '\b': sb_put(b, "\\b", 2); break;
+            case '\f': sb_put(b, "\\f", 2); break;
+            default:
+                if (c < 0x20)
+                {
+                    char esc[7];
+                    snprintf(esc, sizeof(esc), "\\u%04x", c);
+                    sb_put(b, esc, 6);
+                }
+                else
+                {
+                    sb_putc(b, (char)c);
+                }
+        }
+    }
+    sb_putc(b, '"');
+}
+
+static void render_value(StrBuf *b, Value v);
+
+static void render_node(StrBuf *b, Node n)
+{
+    render_value(b, mem_is_word(n) ? value_word(n) : value_list(n));
+}
+
+static void render_value(StrBuf *b, Value v)
+{
+    if (value_is_number(v))
+    {
+        Node w = number_to_word(v.as.number);
+        sb_put(b, mem_word_ptr(w), mem_word_len(w));
+        return;
+    }
+
+    if (value_is_word(v))
+    {
+        const char *s = mem_word_ptr(v.as.node);
+        size_t len = mem_word_len(v.as.node);
+        if (len == 4 && memcmp(s, "true", 4) == 0)
+            sb_put(b, "true", 4);
+        else if (len == 5 && memcmp(s, "false", 5) == 0)
+            sb_put(b, "false", 5);
+        else
+        {
+            float num;
+            if (value_to_number(v, &num))
+                sb_put(b, s, len); // numeric word -> JSON number
+            else
+                sb_put_string(b, s, len);
+        }
+        return;
+    }
+
+    // List: tagged object, tagged array, empty (null), or plain array.
+    Node list = v.as.node;
+    if (mem_is_nil(list))
+    {
+        sb_put(b, "null", 4);
+        return;
+    }
+
+    Node head = mem_car(list);
+    if (node_has_tag(head, JSON_OBJ_TAG))
+    {
+        sb_putc(b, '{');
+        bool first = true;
+        for (Node p = mem_cdr(list); !mem_is_nil(p);)
+        {
+            Node key = mem_car(p);
+            Node rest = mem_cdr(p);
+            Node val = mem_is_nil(rest) ? NODE_NIL : mem_car(rest);
+            if (!first)
+                sb_putc(b, ',');
+            first = false;
+            sb_put_string(b, mem_word_ptr(key), mem_word_len(key));
+            sb_putc(b, ':');
+            render_node(b, val);
+            p = mem_is_nil(rest) ? rest : mem_cdr(rest);
+        }
+        sb_putc(b, '}');
+        return;
+    }
+
+    bool tagged_array = node_has_tag(head, JSON_ARR_TAG);
+    sb_putc(b, '[');
+    bool first = true;
+    for (Node p = tagged_array ? mem_cdr(list) : list; !mem_is_nil(p); p = mem_cdr(p))
+    {
+        if (!first)
+            sb_putc(b, ',');
+        first = false;
+        render_node(b, mem_car(p));
+    }
+    sb_putc(b, ']');
+}
+
+// (json.object key1 value1 key2 value2 ...)
+static Result prim_json_object(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    if (argc % 2 != 0)
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, NULL, NULL);
+
+    Node list = NODE_NIL;
+    for (int i = argc - 2; i >= 0; i -= 2)
+    {
+        if (!value_is_word(args[i]))
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[i]));
+        Node val;
+        if (!value_to_json_node(args[i + 1], &val))
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[i + 1]));
+        list = mem_cons(val, list);
+        list = mem_cons(args[i].as.node, list);
+    }
+
+    Node tagged = mem_cons(mem_atom(JSON_OBJ_TAG, JSON_TAG_LEN), list);
+    if (mem_is_nil(tagged))
+        return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
+    return result_ok(value_list(tagged));
+}
+
+// (json.array value1 value2 ...)
+static Result prim_json_array(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+
+    Node list = NODE_NIL;
+    for (int i = argc - 1; i >= 0; i--)
+    {
+        Node val;
+        if (!value_to_json_node(args[i], &val))
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[i]));
+        list = mem_cons(val, list);
+    }
+
+    Node tagged = mem_cons(mem_atom(JSON_ARR_TAG, JSON_TAG_LEN), list);
+    if (mem_is_nil(tagged))
+        return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
+    return result_ok(value_list(tagged));
+}
+
+// json.make value
+static Result prim_json_make(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
+
+    StrBuf b = { NULL, 0, 0, false };
+    render_value(&b, args[0]);
+    if (b.oom)
+    {
+        free(b.buf);
+        return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
+    }
+
+    Node w = mem_word(b.buf ? b.buf : "", b.len);
+    free(b.buf);
+    if (mem_is_nil(w) && b.len > 0)
+        return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
+    return result_ok(value_word(w));
+}
+
 void primitives_json_init(void)
 {
     primitive_register("json.get", 2, prim_json_get);
+    primitive_register("json.object", 0, prim_json_object);
+    primitive_register("json.array", 0, prim_json_array);
+    primitive_register("json.make", 1, prim_json_make);
 }
