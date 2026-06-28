@@ -5,7 +5,7 @@
 
 # Build & Test
 
-Tests run natively on the host; do **not** use the host device to develop or debug new functionality — write a test instead.
+Tests run natively on the host; do **not** rely on the interactive host REPL to develop or debug new functionality — write a test instead.
 
 ```bash
 cmake --preset=tests        # configure
