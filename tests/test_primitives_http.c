@@ -372,9 +372,13 @@ void test_http_get_chunked_oversize_chunk_errors(void)
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
-void test_http_get_rejects_https_url(void)
+void test_http_get_errors_when_https_unsupported(void)
 {
+    // A device without a TLS transport must reject https rather than fall back
+    // to plaintext. Restore the op afterwards so other tests are unaffected.
+    mock_hardware_ops.network_tls_connect = NULL;
     Result r = eval_string("http.get \"https://example.com/");
+    mock_hardware_ops.network_tls_connect = mock_network_tls_connect;
 
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
@@ -384,6 +388,108 @@ void test_http_get_rejects_non_http_url(void)
     Result r = eval_string("http.get \"example.com/");
 
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+// ============================================================================
+// https - scheme dispatch (real TLS is device-only; here we verify the client
+// routes https through network_tls_connect and otherwise behaves like http)
+// ============================================================================
+
+void test_https_get_returns_body_on_200(void)
+{
+    script_response(
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Length: 12\r\n"
+        "\r\n"
+        "Hello World!");
+
+    Result r = eval_string("http.get \"https://example.com/menu.txt");
+
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("Hello World!", mem_word_ptr(r.value.as.node));
+}
+
+void test_https_get_uses_tls_connect_with_hostname(void)
+{
+    script_response("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+
+    eval_string("http.get \"https://example.com/menu.txt");
+
+    // TLS connect receives the hostname (for SNI / cert verification), not the
+    // resolved IP that the plaintext path passes to network_tcp_connect.
+    TEST_ASSERT_EQUAL_STRING("example.com", mock_device_get_last_tls_host());
+}
+
+void test_https_get_uses_default_port_443(void)
+{
+    script_response("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+
+    eval_string("http.get \"https://example.com/");
+
+    TEST_ASSERT_EQUAL_UINT16(443, mock_device_get_last_tcp_port());
+}
+
+void test_https_get_uses_explicit_port(void)
+{
+    script_response("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+
+    eval_string("http.get \"https://example.com:8443/x");
+
+    TEST_ASSERT_EQUAL_UINT16(8443, mock_device_get_last_tcp_port());
+}
+
+void test_https_get_omits_default_port_in_host_header(void)
+{
+    script_response("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+
+    eval_string("http.get \"https://example.com/");
+
+    const char *req = mock_device_get_tcp_request();
+    TEST_ASSERT_NOT_NULL(strstr(req, "Host: example.com\r\n"));
+}
+
+void test_https_get_includes_explicit_port_in_host_header(void)
+{
+    script_response("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+
+    eval_string("http.get \"https://example.com:8443/");
+
+    const char *req = mock_device_get_tcp_request();
+    TEST_ASSERT_NOT_NULL(strstr(req, "Host: example.com:8443\r\n"));
+}
+
+void test_http_get_still_uses_plain_connect(void)
+{
+    // Regression: http:// must not touch the TLS path; it resolves to an IP and
+    // connects plaintext, leaving the TLS hostname capture empty.
+    mock_device_set_resolve_result("10.1.2.3", true);
+    script_response("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+
+    eval_string("http.get \"http://example.com/");
+
+    TEST_ASSERT_EQUAL_STRING("10.1.2.3", mock_device_get_last_tcp_ip());
+    TEST_ASSERT_EQUAL_STRING("", mock_device_get_last_tls_host());
+}
+
+void test_connect_path_tracking_not_stale_across_calls(void)
+{
+    // An https request records the TLS hostname; a following http request must
+    // clear it (and vice versa) so the most-recent-connect path is unambiguous.
+    script_response("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+    eval_string("http.get \"https://secure.example.com/");
+    TEST_ASSERT_EQUAL_STRING("secure.example.com", mock_device_get_last_tls_host());
+
+    mock_device_set_resolve_result("10.1.2.3", true);
+    script_response("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+    eval_string("http.get \"http://plain.example.com/");
+    TEST_ASSERT_EQUAL_STRING("", mock_device_get_last_tls_host());
+    TEST_ASSERT_EQUAL_STRING("10.1.2.3", mock_device_get_last_tcp_ip());
+
+    script_response("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+    eval_string("http.get \"https://again.example.com/");
+    TEST_ASSERT_EQUAL_STRING("again.example.com", mock_device_get_last_tls_host());
+    TEST_ASSERT_EQUAL_STRING("", mock_device_get_last_tcp_ip());
 }
 
 void test_http_get_requires_one_argument(void)
@@ -567,8 +673,16 @@ int main(void)
     RUN_TEST(test_http_get_dns_failure_errors);
     RUN_TEST(test_http_get_closed_midstream_errors);
     RUN_TEST(test_http_get_requires_wifi);
-    RUN_TEST(test_http_get_rejects_https_url);
+    RUN_TEST(test_http_get_errors_when_https_unsupported);
     RUN_TEST(test_http_get_rejects_non_http_url);
+    RUN_TEST(test_https_get_returns_body_on_200);
+    RUN_TEST(test_https_get_uses_tls_connect_with_hostname);
+    RUN_TEST(test_https_get_uses_default_port_443);
+    RUN_TEST(test_https_get_uses_explicit_port);
+    RUN_TEST(test_https_get_omits_default_port_in_host_header);
+    RUN_TEST(test_https_get_includes_explicit_port_in_host_header);
+    RUN_TEST(test_http_get_still_uses_plain_connect);
+    RUN_TEST(test_connect_path_tracking_not_stale_across_calls);
     RUN_TEST(test_http_get_requires_one_argument);
     RUN_TEST(test_http_get_requires_word_argument);
 

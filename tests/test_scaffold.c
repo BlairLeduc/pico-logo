@@ -244,6 +244,7 @@ LogoHardwareOps mock_hardware_ops = {
     .network_ntp = mock_network_ntp,
     // TCP operations (scripted via the mock TCP backend)
     .network_tcp_connect = mock_network_tcp_connect,
+    .network_tls_connect = mock_network_tls_connect,
     .network_tcp_close = mock_network_tcp_close,
     .network_tcp_read = mock_network_tcp_read,
     .network_tcp_write = mock_network_tcp_write,

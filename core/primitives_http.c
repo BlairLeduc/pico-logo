@@ -10,8 +10,11 @@
 //  Status code and response headers of the most recently completed request are
 //  retained for http.status / http.header.
 //
-//  HTTP only; https:// URLs are rejected. See the "HTTP Operations" section of
-//  reference/Pico_Logo_Reference.md for the language-level contract.
+//  Both http:// and https:// URLs are supported. https:// requests are opened
+//  through the device's TLS connect op (network_tls_connect); the transport is
+//  otherwise opaque, so request building and response parsing are shared. See
+//  the "HTTP Operations" section of reference/Pico_Logo_Reference.md for the
+//  language-level contract.
 //
 //  Memory: the RP2350's SRAM is largely spoken for (Logo arena, LCD frame
 //  buffer, operand stack), so this client keeps a tiny static footprint -- a
@@ -158,14 +161,30 @@ static bool header_value(const char *headers, const char *name,
 // URL parsing
 //==========================================================================
 
-// Parse an "http://host[:port][/path]" URL. Returns false for any other scheme
-// (including https://) or a malformed authority/port.
+// Parse an "http://host[:port][/path]" or "https://host[:port][/path]" URL.
+// Sets *secure for https (default port 443) vs http (default port 80). Returns
+// false for any other scheme or a malformed authority/port.
 static bool parse_http_url(const char *url, char *host, size_t host_size,
-                           uint16_t *port, char *path, size_t path_size)
+                           uint16_t *port, char *path, size_t path_size,
+                           bool *secure)
 {
-    if (strncmp(url, "http://", 7) != 0) return false;
+    size_t scheme_len;
+    if (strncmp(url, "http://", 7) == 0)
+    {
+        *secure = false;
+        scheme_len = 7;
+    }
+    else if (strncmp(url, "https://", 8) == 0)
+    {
+        *secure = true;
+        scheme_len = 8;
+    }
+    else
+    {
+        return false;
+    }
 
-    const char *authority = url + 7;
+    const char *authority = url + scheme_len;
     const char *slash = strchr(authority, '/');
     size_t auth_len = slash ? (size_t)(slash - authority) : strlen(authority);
 
@@ -174,7 +193,7 @@ static bool parse_http_url(const char *url, char *host, size_t host_size,
     memcpy(authbuf, authority, auth_len);
     authbuf[auth_len] = '\0';
 
-    uint16_t p = 80;
+    uint16_t p = *secure ? 443 : 80;
     char *colon = strchr(authbuf, ':');
     if (colon)
     {
@@ -322,8 +341,13 @@ static Result http_request(const char *method, const char *url,
     char host[LOGO_STREAM_NAME_MAX];
     char path[256];
     uint16_t port;
-    if (!parse_http_url(url, host, sizeof(host), &port, path, sizeof(path)))
+    bool secure;
+    if (!parse_http_url(url, host, sizeof(host), &port, path, sizeof(path), &secure))
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, url);
+
+    // https requires the device's TLS transport.
+    if (secure && !ops->network_tls_connect)
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
 
     // Determine the body length up front (Content-Length precedes the body).
     int body_len = 0;
@@ -336,29 +360,38 @@ static Result http_request(const char *method, const char *url,
         body_len = (int)bl;
     }
 
-    // Resolve the host to an IP if the device provides a resolver.
-    char ip[16];
-    if (ops->network_resolve)
+    int timeout_ms = io->network_timeout * 100;
+
+    void *conn;
+    if (secure)
     {
-        if (!ops->network_resolve(host, ip, sizeof(ip)))
-            return result_error_arg(ERR_CANT_OPEN_NETWORK, NULL, NULL);
+        // TLS needs the hostname (for SNI and certificate verification), so we
+        // hand it the host directly; the device resolves it internally.
+        conn = ops->network_tls_connect(host, port, timeout_ms);
     }
     else
     {
-        strncpy(ip, host, sizeof(ip) - 1);
-        ip[sizeof(ip) - 1] = '\0';
+        // Resolve the host to an IP if the device provides a resolver.
+        char ip[16];
+        if (ops->network_resolve)
+        {
+            if (!ops->network_resolve(host, ip, sizeof(ip)))
+                return result_error_arg(ERR_CANT_OPEN_NETWORK, NULL, NULL);
+        }
+        else
+        {
+            strncpy(ip, host, sizeof(ip) - 1);
+            ip[sizeof(ip) - 1] = '\0';
+        }
+        conn = ops->network_tcp_connect(ip, port, timeout_ms);
     }
-
-    int timeout_ms = io->network_timeout * 100;
-
-    void *conn = ops->network_tcp_connect(ip, port, timeout_ms);
     if (!conn)
         return result_error_arg(ERR_CANT_OPEN_NETWORK, NULL, NULL);
 
     // Build the request into the shared buffer.
     int n = 0;
     bool ok = buf_appendf(g_io, g_io_cap, &n, "%s %s HTTP/1.1\r\n", method, path);
-    if (port == 80)
+    if (port == (secure ? 443 : 80))
         ok = ok && buf_appendf(g_io, g_io_cap, &n, "Host: %s\r\n", host);
     else
         ok = ok && buf_appendf(g_io, g_io_cap, &n, "Host: %s:%u\r\n", host, (unsigned)port);

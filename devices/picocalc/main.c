@@ -133,7 +133,20 @@ int main(void)
     size_t psram_size = picocalc_psram_init(PIMORONI_PICO_PLUS2_W_PSRAM_CS_PIN);
     if (psram_size > 0)
     {
-        logo_mem_set_aux_region((void *)PICOCALC_PSRAM_BASE, psram_size);
+        size_t aux_size = psram_size;
+#ifdef LOGO_HAS_WIFI
+        // Carve a slice off the top of PSRAM to back mbedTLS allocations during
+        // the HTTPS handshake, keeping them off the tight SRAM heap. The rest
+        // backs the Logo blob heap / relocated buffers.
+        const size_t tls_heap_size = 1024 * 1024; // 1 MB
+        if (psram_size >= tls_heap_size + (1024 * 1024))
+        {
+            aux_size = psram_size - tls_heap_size;
+            picocalc_tls_heap_setup((void *)(PICOCALC_PSRAM_BASE + aux_size),
+                                    tls_heap_size);
+        }
+#endif
+        logo_mem_set_aux_region((void *)PICOCALC_PSRAM_BASE, aux_size);
     }
 #endif
 
