@@ -5653,6 +5653,110 @@ See [`pprop`](#pprop) and [`gprop`](#gprop).
 
 
 ===
+# JSON
+
+A JSON document is held as text — typically the word returned by [`http.get`](#http-get). `json.get` reads values straight out of that text, so even a large response (which is kept in PSRAM) can be queried without copying the whole document into the workspace.
+
+## json.get
+
+json.get _document_ _path_  
+
+`operation`
+
+`json.get` outputs the value found by following _path_ into _document_. _Document_ is a word containing JSON text. _Path_ is a list of steps: a word selects a member of an object by key (case-sensitive, as in JSON), and a number selects an element of an array by position (1-based, like [`item`](#item)).
+
+A string value is output as a word with its JSON escapes resolved; a number is output as a numeric word (usable directly in arithmetic); `true` and `false` are output as the words `true` and `false`; and `null` is output as the empty list. A nested object or array is output as its raw JSON text, which can be passed back to `json.get` to read further. If any step does not match, `json.get` outputs the empty list. An empty _path_ outputs the whole _document_.
+
+**Example**:
+
+```logo
+?make "person json.get http.get "https\://example.com/me []
+?show json.get :person [name]
+Blair
+?show json.get :person [tags 2]
+c
+?show json.get :person [address city]
+Ottawa
+?show json.get :person [missing]
+[]
+```
+
+
+## json.count
+
+json.count _value_  
+
+`operation`
+
+`json.count` outputs the number of elements in a JSON array, or the number of members in a JSON object, where _value_ is a word containing that JSON text. A scalar value outputs `0`, and the empty list — the result of [`json.get`](#json-get) for a missing path or JSON `null` — also outputs `0`, so `json.count json.get ...` can be used directly as a loop bound.
+
+**Example**:
+
+```logo
+?make "person json.get http.get "https\://example.com/me []
+?show json.count json.get :person [tags]
+3
+?for [i 1 [json.count json.get :person [tags]]] [pr json.get :person (list "tags :i)]
+logo
+c
+rp2350
+```
+
+
+## json.object
+
+(json.object _key1_ _value1_ _key2_ _value2_ ...)  
+
+`operation`
+
+`json.object` builds a JSON object from the given _key_/_value_ pairs. Each _key_ must be a word. A _value_ may be a word (output as a JSON string), a number, the words `true` or `false`, the empty list (output as `null`), a list (output as a JSON array), or another `json.object` or `json.array`. The result is passed to [`json.make`](#json-make) to produce JSON text. Give the inputs as quoted words rather than inside a list, so values containing `/`, `-` or spaces are kept intact.
+
+See [`json.array`](#json-array) and [`json.make`](#json-make).
+
+**Example**:
+
+```logo
+?show json.make (json.object "name "Blair "age 42)
+{"name":"Blair","age":42}
+```
+
+
+## json.array
+
+(json.array _value1_ _value2_ ...)  
+
+`operation`
+
+`json.array` builds a JSON array from the given values, each encoded in the same way as a `json.object` value. The result is passed to [`json.make`](#json-make) to produce JSON text. An empty array is `(json.array)`.
+
+See [`json.object`](#json-object) and [`json.make`](#json-make).
+
+**Example**:
+
+```logo
+?show json.make (json.array "logo "c "rp2350)
+["logo","c","rp2350"]
+```
+
+
+## json.make
+
+json.make _value_  
+
+`operation`
+
+`json.make` outputs the JSON text for _value_. _Value_ is usually built with [`json.object`](#json-object) and [`json.array`](#json-array), but may also be a plain Logo value: a word becomes a JSON string (a word that is a valid JSON number becomes a number, and `true`/`false` become JSON booleans), a number becomes a JSON number, a list becomes a JSON array, and the empty list becomes `null`. String values are escaped as required by JSON, and numbers JSON cannot represent (infinities and NaN) become `null`.
+
+**Example**:
+
+```logo
+?show json.make (json.object "name "Blair "tags (json.array "logo "c))
+{"name":"Blair","tags":["logo","c"]}
+?pr (http.post "http://example.com/people json.make (json.object "name "Blair) "Content-Type "application/json)
+```
+
+
+===
 # Device Specific
 
 ## battery
