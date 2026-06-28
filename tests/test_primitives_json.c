@@ -40,6 +40,9 @@ static void make_doc(void)
     TEST_ASSERT_TRUE(var_set("doc", value_word(n)));
 }
 
+// Aux region so blob words (values over the 255-byte atom limit) can exist.
+_Alignas(8) static uint8_t json_blob_region[1u << 16];
+
 static void assert_word(Result r, const char *expected)
 {
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
@@ -422,6 +425,80 @@ void test_object_key_must_be_word(void)
     TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
 }
 
+//==========================================================================
+// Corrections from code review
+//==========================================================================
+
+void test_get_numeric_object_key(void)
+{
+    // Object keys that look like numbers must still be reachable.
+    run_string("make \"d json.make (json.object \"1 \"one \"2 \"two)");
+    assert_word(eval_string("json.get :d [1]"), "one");
+    assert_word(eval_string("json.get :d [2]"), "two");
+}
+
+void test_get_integer_index_still_works(void)
+{
+    run_string("make \"arr json.make (json.array 10 20 30)");
+    assert_word(eval_string("json.get :arr (list 2)"), "20");
+}
+
+void test_get_fractional_index_rejected(void)
+{
+    // A non-integer index must not silently truncate and select an element.
+    run_string("make \"arr json.make (json.array 10 20 30)");
+    assert_empty(eval_string("json.get :arr (list 1.5)"));
+}
+
+void test_make_small_number_is_valid_json(void)
+{
+    // Negative exponents must use JSON 'e-' syntax, not format_number's 'n'.
+    Result r = eval_string("json.make 0.0000015");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_word(r.value));
+    const char *s = mem_word_ptr(r.value.as.node);
+    TEST_ASSERT_NOT_NULL(strstr(s, "e-"));
+    TEST_ASSERT_NULL(strstr(s, "n"));
+}
+
+void test_make_small_number_in_object_is_valid_json(void)
+{
+    Result r = eval_string("json.make (json.object \"x 0.0000015)");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    const char *s = mem_word_ptr(r.value.as.node);
+    TEST_ASSERT_NOT_NULL(strstr(s, "e-"));
+    TEST_ASSERT_NULL(strstr(s, "n"));
+}
+
+void test_make_negative_number(void)
+{
+    assert_word(eval_string("json.make (json.object \"t -5)"), "{\"t\":-5}");
+}
+
+void test_make_invalid_number_word_is_string(void)
+{
+    // A numeric-looking word that is not valid JSON (leading zero) is emitted
+    // as a string, never as a malformed bare number.
+    assert_word(eval_string("json.make \"007"), "\"007\"");
+}
+
+void test_object_rejects_blob_value(void)
+{
+    // A value over the 255-byte atom limit is a blob, which cannot live in a
+    // cons cell; the builder must error rather than silently drop it.
+    logo_mem_set_aux_region(json_blob_region, sizeof(json_blob_region));
+    char big[400];
+    memset(big, 'x', sizeof(big) - 1);
+    big[sizeof(big) - 1] = '\0';
+    Node blob = mem_word(big, sizeof(big) - 1);
+    TEST_ASSERT_FALSE(mem_is_nil(blob));
+    TEST_ASSERT_TRUE(var_set("big", value_word(blob)));
+
+    Result r = run_string("print json.make (json.object \"k :big)");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -466,6 +543,15 @@ int main(void)
     RUN_TEST(test_count_missing_is_zero);
     RUN_TEST(test_count_drives_iteration);
     RUN_TEST(test_count_rejects_non_empty_list);
+
+    RUN_TEST(test_get_numeric_object_key);
+    RUN_TEST(test_get_integer_index_still_works);
+    RUN_TEST(test_get_fractional_index_rejected);
+    RUN_TEST(test_make_small_number_is_valid_json);
+    RUN_TEST(test_make_small_number_in_object_is_valid_json);
+    RUN_TEST(test_make_negative_number);
+    RUN_TEST(test_make_invalid_number_word_is_string);
+    RUN_TEST(test_object_rejects_blob_value);
 
     RUN_TEST(test_make_simple_object);
     RUN_TEST(test_make_empty_object);

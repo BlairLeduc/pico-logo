@@ -5665,7 +5665,7 @@ json.get _document_ _path_
 
 `json.get` outputs the value found by following _path_ into _document_. _Document_ is a word containing JSON text. _Path_ is a list of steps: a word selects a member of an object by key (case-sensitive, as in JSON), and a number selects an element of an array by position (1-based, like [`item`](#item)).
 
-A string value is output as a word with its JSON escapes resolved; a number is output as a number; `true` and `false` are output as the words `true` and `false`; and `null` is output as the empty list. A nested object or array is output as its raw JSON text, which can be passed back to `json.get` to read further. If any step does not match, `json.get` outputs the empty list. An empty _path_ outputs the whole _document_.
+A string value is output as a word with its JSON escapes resolved; a number is output as a numeric word (usable directly in arithmetic); `true` and `false` are output as the words `true` and `false`; and `null` is output as the empty list. A nested object or array is output as its raw JSON text, which can be passed back to `json.get` to read further. If any step does not match, `json.get` outputs the empty list. An empty _path_ outputs the whole _document_.
 
 **Example**:
 
@@ -5745,7 +5745,7 @@ json.make _value_
 
 `operation`
 
-`json.make` outputs the JSON text for _value_. _Value_ is usually built with [`json.object`](#json-object) and [`json.array`](#json-array), but may also be a plain Logo value: a word becomes a JSON string (a word that looks like a number becomes a JSON number, and `true`/`false` become JSON booleans), a number becomes a JSON number, a list becomes a JSON array, and the empty list becomes `null`. String values are escaped as required by JSON.
+`json.make` outputs the JSON text for _value_. _Value_ is usually built with [`json.object`](#json-object) and [`json.array`](#json-array), but may also be a plain Logo value: a word becomes a JSON string (a word that is a valid JSON number becomes a number, and `true`/`false` become JSON booleans), a number becomes a JSON number, a list becomes a JSON array, and the empty list becomes `null`. String values are escaped as required by JSON, and numbers JSON cannot represent (infinities and NaN) become `null`.
 
 **Example**:
 

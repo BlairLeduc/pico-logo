@@ -339,6 +339,26 @@ static Result extract_value(Scan *s)
     return word_from_bytes(v_start, len); // number / true / false as a word
 }
 
+// Parse a step word as a non-negative array index (a run of digits). Returns
+// false for anything else, so fractional or non-numeric steps do not silently
+// select an element.
+static bool step_as_index(Node step, int *out)
+{
+    const char *s = mem_word_ptr(step);
+    size_t len = mem_word_len(step);
+    if (len == 0)
+        return false;
+    int v = 0;
+    for (size_t i = 0; i < len; i++)
+    {
+        if (s[i] < '0' || s[i] > '9')
+            return false;
+        v = v * 10 + (s[i] - '0');
+    }
+    *out = v;
+    return true;
+}
+
 // json.get document path
 static Result prim_json_get(Evaluator *eval, int argc, Value *args)
 {
@@ -357,12 +377,26 @@ static Result prim_json_get(Evaluator *eval, int argc, Value *args)
         if (!mem_is_word(step_node))
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
 
+        // Dispatch on the container type, not the step: a key into an object
+        // (so numeric keys are reachable), an index into an array.
+        skip_ws(&s);
+        if (s.p >= s.end)
+            return result_ok(value_list(NODE_NIL));
+
         bool ok;
-        float index_f;
-        if (value_to_number(value_word(step_node), &index_f))
-            ok = enter_array(&s, (int)index_f);
-        else
+        if (*s.p == '{')
+        {
             ok = enter_object(&s, mem_word_ptr(step_node), mem_word_len(step_node));
+        }
+        else if (*s.p == '[')
+        {
+            int index;
+            ok = step_as_index(step_node, &index) && enter_array(&s, index);
+        }
+        else
+        {
+            ok = false; // a scalar cannot be descended into
+        }
 
         if (!ok)
             return result_ok(value_list(NODE_NIL));
@@ -467,14 +501,82 @@ static bool node_has_tag(Node n, const char *tag)
            memcmp(mem_word_ptr(n), tag, JSON_TAG_LEN) == 0;
 }
 
-// Coerce a builder argument to the node stored in the AST. Numbers become
-// numeric words; words and lists are stored as-is (a list may be a nested
-// builder result or a plain array).
+// True if s is a syntactically valid JSON number, so it can be emitted as a
+// bare number rather than a quoted string. Rejects Logo-only spellings such as
+// leading zeros (007), a leading plus (+1), and the negative-exponent marker
+// 'n' that format_number uses (1n5).
+static bool is_json_number(const char *s, size_t len)
+{
+    size_t i = 0;
+    if (i < len && s[i] == '-')
+        i++;
+    if (i >= len)
+        return false;
+    if (s[i] == '0')
+        i++; // a leading zero must stand alone
+    else if (s[i] >= '1' && s[i] <= '9')
+        while (i < len && s[i] >= '0' && s[i] <= '9')
+            i++;
+    else
+        return false;
+    if (i < len && s[i] == '.')
+    {
+        i++;
+        if (i >= len || s[i] < '0' || s[i] > '9')
+            return false;
+        while (i < len && s[i] >= '0' && s[i] <= '9')
+            i++;
+    }
+    if (i < len && (s[i] == 'e' || s[i] == 'E'))
+    {
+        i++;
+        if (i < len && (s[i] == '+' || s[i] == '-'))
+            i++;
+        if (i >= len || s[i] < '0' || s[i] > '9')
+            return false;
+        while (i < len && s[i] >= '0' && s[i] <= '9')
+            i++;
+    }
+    return i == len;
+}
+
+// Format a finite number into JSON syntax. format_number renders negative
+// exponents with a Logo-specific 'n' marker (e.g. 1.5n6 for 1.5e-6), so that is
+// rewritten to 'e-'. Returns false for nan/inf, which JSON cannot represent.
+static bool json_format_number(float n, char *buf, size_t size)
+{
+    if (n != n || n > 3.4e38f || n < -3.4e38f)
+        return false;
+    char tmp[32];
+    format_number(tmp, sizeof(tmp), n);
+    size_t o = 0;
+    for (size_t i = 0; tmp[i] != '\0' && o + 2 < size; i++)
+    {
+        if (tmp[i] == 'n')
+        {
+            buf[o++] = 'e';
+            buf[o++] = '-';
+        }
+        else
+        {
+            buf[o++] = tmp[i];
+        }
+    }
+    buf[o] = '\0';
+    return true;
+}
+
+// Coerce a builder argument to the node stored in the AST. Numbers are
+// formatted as JSON numbers up front (nan/inf become null); words and lists are
+// stored as-is (a list may be a nested builder result or a plain array).
 static bool value_to_json_node(Value v, Node *out)
 {
     if (value_is_number(v))
     {
-        *out = number_to_word(v.as.number);
+        char buf[40];
+        *out = json_format_number(v.as.number, buf, sizeof(buf))
+                   ? mem_atom_cstr(buf)
+                   : NODE_NIL; // nan/inf -> null
         return true;
     }
     if (value_is_word(v) || value_is_list(v))
@@ -572,8 +674,11 @@ static void render_value(StrBuf *b, Value v)
 {
     if (value_is_number(v))
     {
-        Node w = number_to_word(v.as.number);
-        sb_put(b, mem_word_ptr(w), mem_word_len(w));
+        char buf[40];
+        if (json_format_number(v.as.number, buf, sizeof(buf)))
+            sb_put(b, buf, strlen(buf));
+        else
+            sb_put(b, "null", 4); // nan/inf -> null
         return;
     }
 
@@ -585,14 +690,10 @@ static void render_value(StrBuf *b, Value v)
             sb_put(b, "true", 4);
         else if (len == 5 && memcmp(s, "false", 5) == 0)
             sb_put(b, "false", 5);
+        else if (is_json_number(s, len))
+            sb_put(b, s, len); // bare JSON number
         else
-        {
-            float num;
-            if (value_to_number(v, &num))
-                sb_put(b, s, len); // numeric word -> JSON number
-            else
-                sb_put_string(b, s, len);
-        }
+            sb_put_string(b, s, len); // anything else is a string
         return;
     }
 
@@ -639,6 +740,25 @@ static void render_value(StrBuf *b, Value v)
     sb_putc(b, ']');
 }
 
+// Prepend car to *list. Returns false on allocation failure -- mem_cons yields
+// NODE_NIL both for OOM and for an operand that cannot live in a cons cell (a
+// blob word, e.g. a string value longer than the 255-byte atom limit).
+static bool json_cons(Node car, Node *list)
+{
+    Node n = mem_cons(car, *list);
+    if (mem_is_nil(n))
+        return false;
+    *list = n;
+    return true;
+}
+
+// Prepend the tag word for a builder result.
+static bool json_cons_tag(const char *tag, Node *list)
+{
+    Node t = mem_atom(tag, JSON_TAG_LEN);
+    return !mem_is_nil(t) && json_cons(t, list);
+}
+
 // (json.object key1 value1 key2 value2 ...)
 static Result prim_json_object(Evaluator *eval, int argc, Value *args)
 {
@@ -654,14 +774,13 @@ static Result prim_json_object(Evaluator *eval, int argc, Value *args)
         Node val;
         if (!value_to_json_node(args[i + 1], &val))
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[i + 1]));
-        list = mem_cons(val, list);
-        list = mem_cons(args[i].as.node, list);
+        if (!json_cons(val, &list) || !json_cons(args[i].as.node, &list))
+            return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
     }
 
-    Node tagged = mem_cons(mem_atom(JSON_OBJ_TAG, JSON_TAG_LEN), list);
-    if (mem_is_nil(tagged))
+    if (!json_cons_tag(JSON_OBJ_TAG, &list))
         return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
-    return result_ok(value_list(tagged));
+    return result_ok(value_list(list));
 }
 
 // (json.array value1 value2 ...)
@@ -675,13 +794,13 @@ static Result prim_json_array(Evaluator *eval, int argc, Value *args)
         Node val;
         if (!value_to_json_node(args[i], &val))
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[i]));
-        list = mem_cons(val, list);
+        if (!json_cons(val, &list))
+            return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
     }
 
-    Node tagged = mem_cons(mem_atom(JSON_ARR_TAG, JSON_TAG_LEN), list);
-    if (mem_is_nil(tagged))
+    if (!json_cons_tag(JSON_ARR_TAG, &list))
         return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
-    return result_ok(value_list(tagged));
+    return result_ok(value_list(list));
 }
 
 // json.make value
