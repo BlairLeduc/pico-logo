@@ -1,40 +1,56 @@
-# Project
+# GitHub Copilot Instructions
 
-- This project is a **Logo interpreter written in C**, targeting Raspberry Pi Pico 2 boards (RP2350) using the **Pico C/C++ SDK**.
-- The interpreter aims to be strictly compatible with the semantics described in [Pico_Language_reference](../reference/Pico_Logo_Reference.md).
+This repository is a **Logo interpreter written in C (C11)** for the Pimoroni Pico
+Plus 2 W (RP2350, 16MB Flash, 8MB PSRAM), built with the Pico C/C++ SDK. Interpreter
+behaviour must match [Pico_Logo_Reference](../reference/Pico_Logo_Reference.md).
 
-# Development
-- The code should be written in standard C (C11 or later) to ensure compatibility with the Pico SDK and ease of cross-compilation.
-- The project must use **CMake** with presets for building and managing dependencies.
-- The interpreter should be efficient and lightweight, suitable for running on resource-constrained hardware like the Raspberry Pi Pico 2.
-  - Only use single-precision floating point (32-bit) for numerical calculations. The RP2350 supports single-precision natively in hardware.
-- Only use the test framework when developing. Do not use the host device for developing new functionality or fixing bugs.
-- Avoid introducing unnecessary dependencies; keep the project lightweight and focused on C and the Pico SDK.
+You are reviewing pull requests. Comment only on concrete problems visible in the
+diff. Prefer a few high-confidence findings over many speculative ones. Review the
+diff as given — do not ask the author to "run the tests" or "write tests first".
 
-## Code Structure
+## PR Review Checklist (CRITICAL)
+<!-- KEEP THIS SECTION UNDER 4000 CHARS - Copilot only reads first ~4000 -->
 
-- Core interpreter files live in `core/`. Primatives are defined in `core/primitives_<topic>.c`.
-- Device-specific code lives in `devices/`. Each device has its own subdirectory (e.g. `devices/host/`, `devices/picocalc/`). The host device uses standard input/output for the REPL and does not implement graphics or sound.
+## What to flag (in priority order)
 
-# Testing
+### 1. Floating point — single precision only
+- The RP2350 has hardware **single-precision** float only. Flag any `double`,
+  `long double`, or `%lf` format specifier in interpreter code.
+- Flag double-precision libm calls where an `f` variant exists: `sqrt`→`sqrtf`,
+  `sin`→`sinf`, `cos`→`cosf`, `fabs`→`fabsf`, `pow`→`powf`, `atan`→`atanf`, etc.
+- Flag float literals without an `f` suffix in numeric code (e.g. `1.0` → `1.0f`),
+  since an un-suffixed literal promotes the whole expression to double.
 
-- Unit tests live in `tests/` and use **Unity**.
-- Tests will use CMake for building and running, **ctest**.
-- Test files are named `test_*.c` and should match the source files they test (e.g. `test_eval.c` tests `core/eval.c`).
-- Each test file should include setup and teardown functions as needed with a `main()` function to run the tests in that file.
-- If we find a bug while working on a feature, we should write a test that reproduces the bug first, then fix the bug.
-- Never change a test just to make it pass without understanding why it failed. If a test fails, investigate the failure and fix the underlying issue.
-- Tests should cover both typical use cases and edge cases.
-- Tests should be easy to read and understand, with clear assertions and descriptive names.
-- Tests should use the mock device and the mock device should be updated as needed to support testing.
-- We aim for high test coverage of core interpreter logic and primitives.
-- After you complete a feature or fix a bug, **run all tests** to ensure nothing is broken.
-- **Tests run natively on the host system**; you cannot test memory safety or hardware-specific features on the target device.
-- Only use the test framework when testing. Do not use the host device for testing new functionality or fixing bugs.
+### 2. Static memory footprint
+- SRAM (~520 KB) is nearly full. Oversized static/global buffers can crash
+  `repl_init` with an out-of-memory panic. Flag new large fixed-size static or
+  global arrays, and large stack buffers on recursive or evaluation paths.
+- Capacities live in `core/limits.h`. Flag new bare `#define` size limits added
+  inside `.c` files instead of `limits.h`, and any fixed-capacity array indexed
+  without bounds-checking against its limit.
 
-# How I’d like you (the assistant) to behave
+### 3. Error handling conventions
+- Primitives return `Result`; they must not `exit()`, `abort()`, or print error
+  text directly. Flag error paths that bypass `Result` / the `ERR_*` codes.
+- Flag missing argument validation in new primitives (use `REQUIRE_NUMBER` and
+  the other `REQUIRE_*` macros) and any unchecked allocation result.
 
-- When adding new features or fixing bugs:
-  - Propose or update **unit tests first or alongside** the code changes.
-- Work incrementally toward the larger goal of Logo semantics, focusing on small, testable changes.
-- Prioritize code **clarity**, **maintainability**, **simplicity of implementation**, and adherence to Logo semantics. Refactor code as needed to improve these aspects, even if it means changing existing code. However, do not ignore performance considerations, especially for core interpreter logic.
+### 4. Logo semantics
+- Flag behaviour that contradicts the language reference: operator precedence,
+  truthiness, list-vs-word handling, 1-based indexing, and error message wording.
+
+### 5. Project conventions
+- New primitives belong in `core/primitives_<topic>.c` and must be registered.
+- A source file `core/foo.c` should have matching tests in `tests/test_foo.c`.
+  Flag new primitives or behaviour changes that arrive with no test coverage.
+- Tests use **Unity** and the **mock device** (`tests/mock_device.*`); they must
+  not touch real hardware, the network, or the filesystem outside the mocks.
+- Device-specific code belongs under `devices/<device>/`; the `host` device has
+  no graphics or sound. Flag hardware assumptions leaking into `core/`.
+- Standard C only (C11+). Flag new third-party dependencies and non-portable
+  constructs that would not cross-compile under the Pico SDK.
+
+## What NOT to comment on
+- Pure style or formatting that already matches the surrounding code.
+- Pre-existing issues outside the diff.
+- Requests to run tests, build, or add tests before merging — review the diff itself.
