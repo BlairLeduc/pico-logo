@@ -54,6 +54,13 @@ static void assert_empty(Result r)
     TEST_ASSERT_TRUE(mem_is_nil(r.value.as.node));
 }
 
+static void assert_number(Result r, float expected)
+{
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_number(r.value));
+    TEST_ASSERT_EQUAL_FLOAT(expected, r.value.as.number);
+}
+
 //==========================================================================
 // Scalar extraction
 //==========================================================================
@@ -241,6 +248,78 @@ void test_path_step_must_be_a_word(void)
 }
 
 //==========================================================================
+// Counting: json.count
+//==========================================================================
+
+void test_count_array_from_doc(void)
+{
+    make_doc();
+    // tags is ["logo","c","rp2350"]
+    assert_number(eval_string("json.count json.get :doc [tags]"), 3);
+}
+
+void test_count_array_of_objects(void)
+{
+    make_doc();
+    // users is two objects; commas inside the objects must not be counted.
+    assert_number(eval_string("json.count json.get :doc [users]"), 2);
+}
+
+void test_count_object_members(void)
+{
+    make_doc();
+    // address has city and zip.
+    assert_number(eval_string("json.count json.get :doc [address]"), 2);
+}
+
+void test_count_empty_array(void)
+{
+    assert_number(eval_string("json.count json.make (json.array)"), 0);
+}
+
+void test_count_nested_arrays_counts_top_level(void)
+{
+    // [[1,2],[3,4,5]] -> 2 top-level elements
+    assert_number(eval_string("json.count json.make (json.array (json.array 1 2) (json.array 3 4 5))"), 2);
+}
+
+void test_count_ignores_separators_inside_strings(void)
+{
+    // ["a,b","c"] -> 2 (the comma inside the first string must not split).
+    assert_number(eval_string("json.count json.make (json.array (word \"a char 44 \"b) \"c)"), 2);
+}
+
+void test_count_scalar_is_zero(void)
+{
+    make_doc();
+    assert_number(eval_string("json.count json.get :doc [name]"), 0);
+}
+
+void test_count_missing_is_zero(void)
+{
+    make_doc();
+    // json.get of a missing path is the empty list; counting it is 0.
+    assert_number(eval_string("json.count json.get :doc [missing]"), 0);
+}
+
+void test_count_drives_iteration(void)
+{
+    make_doc();
+    // Use json.count as a loop bound to pull each user's name.
+    reset_output();
+    run_string("for [i 1 [json.count json.get :doc [users]]] "
+               "[type json.get :doc (list \"users :i \"name)]");
+    TEST_ASSERT_EQUAL_STRING("AnnBob", output_buffer);
+}
+
+void test_count_rejects_non_empty_list(void)
+{
+    Result r = run_string("print json.count [a b c]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+//==========================================================================
 // Building: json.object / json.array / json.make
 //==========================================================================
 
@@ -376,6 +455,17 @@ int main(void)
     RUN_TEST(test_document_must_be_a_word);
     RUN_TEST(test_path_must_be_a_list);
     RUN_TEST(test_path_step_must_be_a_word);
+
+    RUN_TEST(test_count_array_from_doc);
+    RUN_TEST(test_count_array_of_objects);
+    RUN_TEST(test_count_object_members);
+    RUN_TEST(test_count_empty_array);
+    RUN_TEST(test_count_nested_arrays_counts_top_level);
+    RUN_TEST(test_count_ignores_separators_inside_strings);
+    RUN_TEST(test_count_scalar_is_zero);
+    RUN_TEST(test_count_missing_is_zero);
+    RUN_TEST(test_count_drives_iteration);
+    RUN_TEST(test_count_rejects_non_empty_list);
 
     RUN_TEST(test_make_simple_object);
     RUN_TEST(test_make_empty_object);

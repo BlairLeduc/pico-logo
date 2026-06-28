@@ -5682,6 +5682,27 @@ Ottawa
 ```
 
 
+## json.count
+
+json.count _value_  
+
+`operation`
+
+`json.count` outputs the number of elements in a JSON array, or the number of members in a JSON object, where _value_ is a word containing that JSON text. A scalar value outputs `0`, and the empty list — the result of [`json.get`](#json-get) for a missing path or JSON `null` — also outputs `0`, so `json.count json.get ...` can be used directly as a loop bound.
+
+**Example**:
+
+```logo
+?make "person json.get http.get "https\://example.com/me []
+?show json.count json.get :person [tags]
+3
+?for [i 1 [json.count json.get :person [tags]]] [pr json.get :person (list "tags :i)]
+logo
+c
+rp2350
+```
+
+
 ## json.object
 
 (json.object _key1_ _value1_ _key2_ _value2_ ...)  

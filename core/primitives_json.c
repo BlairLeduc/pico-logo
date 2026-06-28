@@ -2,7 +2,8 @@
 //  Pico Logo
 //  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
-//  JSON primitives: json.get (read), json.object / json.array / json.make (build)
+//  JSON primitives: json.get / json.count (read), json.object / json.array /
+//  json.make (build)
 //
 //  Reading: a JSON document is kept as text (a word; large responses are PSRAM
 //  blobs). json.get scans that text in place, following a path, and allocates
@@ -370,6 +371,81 @@ static Result prim_json_get(Evaluator *eval, int argc, Value *args)
     return extract_value(&s);
 }
 
+// json.count value
+// Counts the elements of a JSON array, or the members of a JSON object, held in
+// value (a word). A scalar counts as 0, and the empty list -- json.get's result
+// for a missing path or JSON null -- counts as 0, so `json.count json.get ...`
+// is safe to use directly as a loop bound.
+static Result prim_json_count(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
+
+    if (value_is_list(args[0]))
+    {
+        if (mem_is_nil(args[0].as.node))
+            return result_ok(value_number(0));
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
+    REQUIRE_WORD(args[0]);
+
+    const char *text = mem_word_ptr(args[0].as.node);
+    size_t text_len = mem_word_len(args[0].as.node);
+    Scan s = { text, text + text_len };
+
+    skip_ws(&s);
+    if (s.p >= s.end)
+        return result_ok(value_number(0));
+
+    char open = *s.p;
+    if (open != '[' && open != '{')
+        return result_ok(value_number(0)); // a scalar is not a collection
+
+    char close = (open == '[') ? ']' : '}';
+    s.p++;
+    skip_ws(&s);
+    if (s.p < s.end && *s.p == close)
+        return result_ok(value_number(0)); // empty collection
+
+    // Count top-level separators: one more than the number of commas that are
+    // not inside a nested container or a string.
+    int count = 1;
+    int depth = 0;
+    while (s.p < s.end)
+    {
+        char c = *s.p;
+        if (c == '"')
+        {
+            if (!skip_string(&s))
+                break;
+            continue;
+        }
+        if (c == '[' || c == '{')
+        {
+            depth++;
+            s.p++;
+        }
+        else if (c == ']' || c == '}')
+        {
+            if (depth == 0)
+                break;
+            depth--;
+            s.p++;
+        }
+        else if (c == ',' && depth == 0)
+        {
+            count++;
+            s.p++;
+        }
+        else
+        {
+            s.p++;
+        }
+    }
+
+    return result_ok(value_number((float)count));
+}
+
 //==========================================================================
 // Building: json.object, json.array, json.make
 //==========================================================================
@@ -632,6 +708,7 @@ static Result prim_json_make(Evaluator *eval, int argc, Value *args)
 void primitives_json_init(void)
 {
     primitive_register("json.get", 2, prim_json_get);
+    primitive_register("json.count", 1, prim_json_count);
     primitive_register("json.object", 0, prim_json_object);
     primitive_register("json.array", 0, prim_json_array);
     primitive_register("json.make", 1, prim_json_make);
