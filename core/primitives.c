@@ -44,6 +44,7 @@ void primitives_init(void)
     primitives_workspace_init();
     primitives_outside_world_init();
     primitives_properties_init();
+    primitives_json_init();
     primitives_debug_init();
     primitives_editor_init();
     primitives_files_init();

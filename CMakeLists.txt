@@ -94,6 +94,7 @@ add_library(logo_core
     core/primitives_outside_world.c
     core/primitives_procedures.c
     core/primitives_properties.c
+    core/primitives_json.c
     core/primitives_text.c
     core/primitives_time.c
     core/primitives_turtle.c
@@ -301,6 +302,7 @@ if(BUILD_FOR_HOST)
         core/primitives_outside_world.c
         core/primitives_procedures.c
         core/primitives_properties.c
+        core/primitives_json.c
         core/primitives_text.c
         core/primitives_time.c
         core/primitives_turtle.c
@@ -439,6 +441,7 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_outside_world.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_procedures.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_properties.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_json.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_text.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_time.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_turtle.c

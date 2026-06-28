@@ -5653,6 +5653,36 @@ See [`pprop`](#pprop) and [`gprop`](#gprop).
 
 
 ===
+# JSON
+
+A JSON document is held as text — typically the word returned by [`http.get`](#httpget). `json.get` reads values straight out of that text, so even a large response (which is kept in PSRAM) can be queried without copying the whole document into the workspace.
+
+## json.get
+
+json.get _document_ _path_  
+
+`operation`
+
+`json.get` outputs the value found by following _path_ into _document_. _Document_ is a word containing JSON text. _Path_ is a list of steps: a word selects a member of an object by key (case-sensitive, as in JSON), and a number selects an element of an array by position (1-based, like [`item`](#item)).
+
+A string value is output as a word with its JSON escapes resolved; a number is output as a number; `true` and `false` are output as the words `true` and `false`; and `null` is output as the empty list. A nested object or array is output as its raw JSON text, which can be passed back to `json.get` to read further. If any step does not match, `json.get` outputs the empty list. An empty _path_ outputs the whole _document_.
+
+**Example**:
+
+```logo
+?make "person json.get http.get "https\://example.com/me []
+?show json.get :person [name]
+Blair
+?show json.get :person [tags 2]
+c
+?show json.get :person [address city]
+Ottawa
+?show json.get :person [missing]
+[]
+```
+
+
+===
 # Device Specific
 
 ## battery
