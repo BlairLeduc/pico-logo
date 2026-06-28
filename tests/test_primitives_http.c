@@ -472,6 +472,26 @@ void test_http_get_still_uses_plain_connect(void)
     TEST_ASSERT_EQUAL_STRING("", mock_device_get_last_tls_host());
 }
 
+void test_connect_path_tracking_not_stale_across_calls(void)
+{
+    // An https request records the TLS hostname; a following http request must
+    // clear it (and vice versa) so the most-recent-connect path is unambiguous.
+    script_response("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+    eval_string("http.get \"https://secure.example.com/");
+    TEST_ASSERT_EQUAL_STRING("secure.example.com", mock_device_get_last_tls_host());
+
+    mock_device_set_resolve_result("10.1.2.3", true);
+    script_response("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+    eval_string("http.get \"http://plain.example.com/");
+    TEST_ASSERT_EQUAL_STRING("", mock_device_get_last_tls_host());
+    TEST_ASSERT_EQUAL_STRING("10.1.2.3", mock_device_get_last_tcp_ip());
+
+    script_response("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+    eval_string("http.get \"https://again.example.com/");
+    TEST_ASSERT_EQUAL_STRING("again.example.com", mock_device_get_last_tls_host());
+    TEST_ASSERT_EQUAL_STRING("", mock_device_get_last_tcp_ip());
+}
+
 void test_http_get_requires_one_argument(void)
 {
     Result r = eval_string("http.get");
@@ -662,6 +682,7 @@ int main(void)
     RUN_TEST(test_https_get_omits_default_port_in_host_header);
     RUN_TEST(test_https_get_includes_explicit_port_in_host_header);
     RUN_TEST(test_http_get_still_uses_plain_connect);
+    RUN_TEST(test_connect_path_tracking_not_stale_across_calls);
     RUN_TEST(test_http_get_requires_one_argument);
     RUN_TEST(test_http_get_requires_word_argument);
 

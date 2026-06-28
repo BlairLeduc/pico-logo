@@ -54,6 +54,13 @@ void *tls_heap_malloc(size_t nbytes)
         return NULL;
     }
 
+    // Reject sizes so large that rounding up to whole units would overflow
+    // size_t (which could otherwise wrap to a tiny allocation).
+    if (nbytes > (size_t)-1 - sizeof(tls_header_t))
+    {
+        return NULL;
+    }
+
     // Units needed: payload rounded up, plus one unit for the block header.
     size_t nunits = (nbytes + sizeof(tls_header_t) - 1) / sizeof(tls_header_t) + 1;
 
@@ -84,9 +91,9 @@ void *tls_heap_malloc(size_t nbytes)
 
 void tls_heap_free(void *ap)
 {
-    if (ap == NULL)
+    if (ap == NULL || !initialized)
     {
-        return;
+        return; // nothing to free / no free list to walk
     }
 
     tls_header_t *bp = (tls_header_t *)ap - 1; // block header

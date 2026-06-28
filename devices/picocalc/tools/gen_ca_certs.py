@@ -67,6 +67,8 @@ def subject_cn(pem):
 
 
 def main():
+    if len(sys.argv) < 2:
+        sys.exit("usage: gen_ca_certs.py <pem-bundle> > ../ca_certs.c")
     with open(sys.argv[1]) as f:
         text = f.read()
 

@@ -15,7 +15,9 @@
 #include <stddef.h>
 
 // Initialise the allocator over [region, region+bytes). Replaces any prior
-// state (so it can be re-init in tests). The region must outlive all use.
+// state (so it can be re-init in tests). The region must outlive all use and
+// must be aligned to max_align_t (it is cast to the block-header type); an
+// under-aligned region is undefined behaviour.
 void tls_heap_init(void *region, size_t bytes);
 
 // malloc/free/calloc over the region. calloc has the signature mbedTLS expects

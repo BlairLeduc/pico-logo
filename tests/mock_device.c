@@ -1423,6 +1423,9 @@ void *mock_network_tcp_connect(const char *ip_address, uint16_t port, int timeou
     {
         mock_state.tcp.last_ip[0] = '\0';
     }
+    // Clear the TLS hostname so tests can tell the most recent connect went the
+    // plaintext path, not a stale value from a prior HTTPS call.
+    mock_state.tcp.last_tls_host[0] = '\0';
     mock_state.tcp.last_port = port;
 
     if (!mock_state.tcp.connect_success)
@@ -1448,6 +1451,8 @@ void *mock_network_tls_connect(const char *hostname, uint16_t port, int timeout_
     {
         mock_state.tcp.last_tls_host[0] = '\0';
     }
+    // Clear the plaintext IP so the most-recent-connect path is unambiguous.
+    mock_state.tcp.last_ip[0] = '\0';
     mock_state.tcp.last_port = port;
 
     if (!mock_state.tcp.connect_success)
