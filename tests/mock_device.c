@@ -1396,6 +1396,11 @@ const char *mock_device_get_last_tcp_ip(void)
     return mock_state.tcp.last_ip;
 }
 
+const char *mock_device_get_last_tls_host(void)
+{
+    return mock_state.tcp.last_tls_host;
+}
+
 uint16_t mock_device_get_last_tcp_port(void)
 {
     return mock_state.tcp.last_port;
@@ -1427,6 +1432,31 @@ void *mock_network_tcp_connect(const char *ip_address, uint16_t port, int timeou
 
     mock_state.tcp.open = true;
     // Return an opaque, non-NULL handle. The address of the state suffices.
+    return &mock_state.tcp;
+}
+
+void *mock_network_tls_connect(const char *hostname, uint16_t port, int timeout_ms)
+{
+    (void)timeout_ms;
+
+    if (hostname)
+    {
+        strncpy(mock_state.tcp.last_tls_host, hostname, sizeof(mock_state.tcp.last_tls_host) - 1);
+        mock_state.tcp.last_tls_host[sizeof(mock_state.tcp.last_tls_host) - 1] = '\0';
+    }
+    else
+    {
+        mock_state.tcp.last_tls_host[0] = '\0';
+    }
+    mock_state.tcp.last_port = port;
+
+    if (!mock_state.tcp.connect_success)
+    {
+        return NULL;
+    }
+
+    mock_state.tcp.open = true;
+    // TLS connections share the same opaque handle and read/write/close path.
     return &mock_state.tcp;
 }
 

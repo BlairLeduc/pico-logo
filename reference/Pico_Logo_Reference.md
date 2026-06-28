@@ -5431,7 +5431,9 @@ true
 
 These operations fetch and send data over the web. They require that the device is connected to a WiFi network (see [`wifi.connect`](#wifi-connect-wificonnect)); an error occurs if WiFi is not available or not connected.
 
-A _url_ is a word beginning with `http://`, for example `"http://example.com/index.html` or `"http://example.com:8080/api`. If no port is given, port 80 is used. Only the `http://` scheme is supported at this time; a _url_ beginning with `https://` produces an error.
+A _url_ is a word beginning with `http://` or `https://`, for example `"http://example.com/index.html`, `"https://example.com/index.html`, or `"http://example.com:8080/api`. If no port is given, port 80 is used for `http://` and port 443 for `https://`.
+
+For an `https://` _url_ the connection is encrypted with TLS, and the server's certificate is verified: its chain must lead to one of the certificate authorities built into Pico Logo, and the certificate must match the host name in the _url_. If verification fails, the request **fails to complete** (an error you can trap with [`catch`](#catch)), exactly like a refused connection. Only a trimmed set of common certificate authorities is built in, so a host using an uncommon authority may not be trusted even though it is otherwise valid. Certificate expiry is not checked, because the device has no reliable clock at the time of the request.
 
 Request headers are supplied as extra inputs in name/value pairs, using the parenthesised form of the operation, for example `(http.get "http://example.com/ "Accept "text/plain)`. Each name and value is a word. Recall that a quoted word may contain `-` and `/` without a backslash (so `"Content-Type` and `"text/plain` are each a single word); a value that contains spaces cannot be written as a quoted word.
 

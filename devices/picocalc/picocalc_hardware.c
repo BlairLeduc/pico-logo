@@ -32,6 +32,12 @@
 #include <lwip/pbuf.h>
 #include <lwip/udp.h>
 #include <lwip/tcp.h>
+#include <lwip/altcp.h>
+#include <lwip/altcp_tcp.h>
+#include <lwip/altcp_tls.h>
+#include <mbedtls/ssl.h>
+#include "ca_certs.h"
+#include "tls_heap.h"
 #include <time.h>
 
 // WiFi state tracking
@@ -912,7 +918,7 @@ static bool picocalc_network_ntp(const char *server, float timezone_offset)
 
 // TCP connection state structure
 typedef struct {
-    struct tcp_pcb *pcb;             // lwIP protocol control block
+    struct altcp_pcb *pcb;           // lwIP application-layered PCB (plain or TLS)
     uint8_t recv_buffer[TCP_RECV_BUFFER_SIZE];  // Circular receive buffer
     volatile int recv_head;          // Write position in buffer
     volatile int recv_tail;          // Read position in buffer
@@ -924,10 +930,10 @@ typedef struct {
 } TcpClientState;
 
 // Forward declarations for callbacks
-static err_t tcp_client_connected_cb(void *arg, struct tcp_pcb *tpcb, err_t err);
-static err_t tcp_client_recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
+static err_t tcp_client_connected_cb(void *arg, struct altcp_pcb *tpcb, err_t err);
+static err_t tcp_client_recv_cb(void *arg, struct altcp_pcb *tpcb, struct pbuf *p, err_t err);
 static void tcp_client_err_cb(void *arg, err_t err);
-static err_t tcp_client_poll_cb(void *arg, struct tcp_pcb *tpcb);
+static err_t tcp_client_poll_cb(void *arg, struct altcp_pcb *tpcb);
 
 // Poll for lwIP events with user interrupt checking
 static void poll_lwip_with_timeout(int timeout_ms, volatile bool *completion_flag)
@@ -954,7 +960,7 @@ static void poll_lwip_with_timeout(int timeout_ms, volatile bool *completion_fla
 }
 
 // Connected callback - called when TCP connection is established
-static err_t tcp_client_connected_cb(void *arg, struct tcp_pcb *tpcb, err_t err)
+static err_t tcp_client_connected_cb(void *arg, struct altcp_pcb *tpcb, err_t err)
 {
     TcpClientState *state = (TcpClientState *)arg;
     (void)tpcb;
@@ -973,7 +979,7 @@ static err_t tcp_client_connected_cb(void *arg, struct tcp_pcb *tpcb, err_t err)
 }
 
 // Receive callback - called when data arrives
-static err_t tcp_client_recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
+static err_t tcp_client_recv_cb(void *arg, struct altcp_pcb *tpcb, struct pbuf *p, err_t err)
 {
     TcpClientState *state = (TcpClientState *)arg;
     
@@ -1010,7 +1016,7 @@ static err_t tcp_client_recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p,
     }
     
     // Acknowledge received data
-    tcp_recved(tpcb, p->tot_len);
+    altcp_recved(tpcb, p->tot_len);
     pbuf_free(p);
     
     return ERR_OK;
@@ -1028,7 +1034,7 @@ static void tcp_client_err_cb(void *arg, err_t err)
 }
 
 // Poll callback - called periodically by lwIP
-static err_t tcp_client_poll_cb(void *arg, struct tcp_pcb *tpcb)
+static err_t tcp_client_poll_cb(void *arg, struct altcp_pcb *tpcb)
 {
     (void)arg;
     (void)tpcb;
@@ -1058,25 +1064,14 @@ static void tcp_dns_callback(const char *name, const ip_addr_t *ipaddr, void *ca
     tcp_dns_complete = true;
 }
 
-static void *picocalc_network_tcp_connect(const char *ip_address, uint16_t port, int timeout_ms)
+// Allocate and zero-initialise a fresh connection state.
+static TcpClientState *tcp_state_alloc(void)
 {
-    if (!ensure_wifi_initialized() || !picocalc_wifi_is_connected())
-    {
-        return NULL;
-    }
-    
-    if (!ip_address || port == 0)
-    {
-        return NULL;
-    }
-    
-    // Allocate connection state
     TcpClientState *state = (TcpClientState *)calloc(1, sizeof(TcpClientState));
     if (!state)
     {
         return NULL;
     }
-    
     state->recv_head = 0;
     state->recv_tail = 0;
     state->connected = false;
@@ -1084,104 +1079,214 @@ static void *picocalc_network_tcp_connect(const char *ip_address, uint16_t port,
     state->connect_error = ERR_OK;
     state->closed = false;
     state->last_error = ERR_OK;
-    
-    // Resolve hostname/IP address
-    ip_addr_t target_addr;
-    
-    // First try to parse as IP address
+    return state;
+}
+
+// Resolve a numeric IP or hostname into target_addr. Returns false on failure.
+static bool tcp_resolve_addr(const char *host, ip_addr_t *target_addr, int timeout_ms)
+{
+    // First try to parse as a literal IPv4 address.
     ip4_addr_t test_addr;
-    if (ip4addr_aton(ip_address, &test_addr))
+    if (ip4addr_aton(host, &test_addr))
     {
-        // It's already an IP address
-        ip_addr_copy_from_ip4(target_addr, test_addr);
+        ip_addr_copy_from_ip4(*target_addr, test_addr);
+        return true;
     }
-    else
-    {
-        // Need to resolve hostname
-        tcp_dns_complete = false;
-        tcp_dns_success = false;
-        ip_addr_set_zero(&tcp_dns_resolved_addr);
-        
-        cyw43_arch_lwip_begin();
-        err_t dns_err = dns_gethostbyname(ip_address, &target_addr, tcp_dns_callback, NULL);
-        cyw43_arch_lwip_end();
-        
-        if (dns_err == ERR_OK)
-        {
-            // Address was cached
-        }
-        else if (dns_err == ERR_INPROGRESS)
-        {
-            // Wait for DNS resolution
-            poll_lwip_with_timeout(timeout_ms > 0 ? timeout_ms : 10000, &tcp_dns_complete);
-            
-            if (!tcp_dns_success)
-            {
-                free(state);
-                return NULL;
-            }
-            ip_addr_copy(target_addr, tcp_dns_resolved_addr);
-        }
-        else
-        {
-            free(state);
-            return NULL;
-        }
-    }
-    
-    // Create TCP PCB
+
+    // Otherwise resolve the hostname via DNS.
+    tcp_dns_complete = false;
+    tcp_dns_success = false;
+    ip_addr_set_zero(&tcp_dns_resolved_addr);
+
     cyw43_arch_lwip_begin();
-    state->pcb = tcp_new_ip_type(IPADDR_TYPE_V4);
+    err_t dns_err = dns_gethostbyname(host, target_addr, tcp_dns_callback, NULL);
     cyw43_arch_lwip_end();
-    
-    if (!state->pcb)
+
+    if (dns_err == ERR_OK)
     {
-        free(state);
-        return NULL;
+        return true;  // Address was cached
     }
-    
-    // Set up callbacks
+    if (dns_err == ERR_INPROGRESS)
+    {
+        poll_lwip_with_timeout(timeout_ms > 0 ? timeout_ms : 10000, &tcp_dns_complete);
+        if (!tcp_dns_success)
+        {
+            return false;
+        }
+        ip_addr_copy(*target_addr, tcp_dns_resolved_addr);
+        return true;
+    }
+    return false;
+}
+
+// Wire callbacks on an already-created pcb (state->pcb), initiate the connection
+// to target_addr:port, and poll until it is established. On any failure the pcb
+// is aborted and state freed; returns the state on success, NULL otherwise.
+static void *tcp_connect_and_wait(TcpClientState *state, ip_addr_t *target_addr,
+                                  uint16_t port, int timeout_ms)
+{
     cyw43_arch_lwip_begin();
-    tcp_arg(state->pcb, state);
-    tcp_recv(state->pcb, tcp_client_recv_cb);
-    tcp_err(state->pcb, tcp_client_err_cb);
-    tcp_poll(state->pcb, tcp_client_poll_cb, 10);  // Poll every 5 seconds (10 * 500ms)
-    
-    // Initiate connection
-    err_t err = tcp_connect(state->pcb, &target_addr, port, tcp_client_connected_cb);
+    altcp_arg(state->pcb, state);
+    altcp_recv(state->pcb, tcp_client_recv_cb);
+    altcp_err(state->pcb, tcp_client_err_cb);
+    altcp_poll(state->pcb, tcp_client_poll_cb, 10);  // Poll every 5 seconds (10 * 500ms)
+
+    err_t err = altcp_connect(state->pcb, target_addr, port, tcp_client_connected_cb);
     cyw43_arch_lwip_end();
-    
+
     if (err != ERR_OK)
     {
         cyw43_arch_lwip_begin();
-        tcp_abort(state->pcb);
+        altcp_abort(state->pcb);
         cyw43_arch_lwip_end();
         free(state);
         return NULL;
     }
-    
-    // Wait for connection with timeout
+
+    // Wait for connection (or, for TLS, the handshake) to complete.
     poll_lwip_with_timeout(timeout_ms > 0 ? timeout_ms : 30000, &state->connect_complete);
-    
-    // Check if connection succeeded
+
     if (!state->connect_complete || !state->connected)
     {
-        // Connection timed out or failed
         if (state->pcb)
         {
             cyw43_arch_lwip_begin();
-            tcp_arg(state->pcb, NULL);
-            tcp_recv(state->pcb, NULL);
-            tcp_err(state->pcb, NULL);
-            tcp_poll(state->pcb, NULL, 0);
-            tcp_abort(state->pcb);
+            altcp_arg(state->pcb, NULL);
+            altcp_recv(state->pcb, NULL);
+            altcp_err(state->pcb, NULL);
+            altcp_poll(state->pcb, NULL, 0);
+            altcp_abort(state->pcb);
             cyw43_arch_lwip_end();
         }
         free(state);
         return NULL;
     }
-    
+
     return state;
+}
+
+static void *picocalc_network_tcp_connect(const char *ip_address, uint16_t port, int timeout_ms)
+{
+    if (!ensure_wifi_initialized() || !picocalc_wifi_is_connected())
+    {
+        return NULL;
+    }
+
+    if (!ip_address || port == 0)
+    {
+        return NULL;
+    }
+
+    TcpClientState *state = tcp_state_alloc();
+    if (!state)
+    {
+        return NULL;
+    }
+
+    ip_addr_t target_addr;
+    if (!tcp_resolve_addr(ip_address, &target_addr, timeout_ms))
+    {
+        free(state);
+        return NULL;
+    }
+
+    // Create a plain (non-TLS) layered PCB.
+    cyw43_arch_lwip_begin();
+    state->pcb = altcp_tcp_new_ip_type(IPADDR_TYPE_V4);
+    cyw43_arch_lwip_end();
+
+    if (!state->pcb)
+    {
+        free(state);
+        return NULL;
+    }
+
+    return tcp_connect_and_wait(state, &target_addr, port, timeout_ms);
+}
+
+// mbedTLS time backend (MBEDTLS_PLATFORM_MS_TIME_ALT). A monotonic millisecond
+// clock since boot is all mbedTLS needs here (DRBG reseed timing, session
+// lifetime); it does not require wall-clock time.
+mbedtls_ms_time_t mbedtls_ms_time(void)
+{
+    return (mbedtls_ms_time_t)to_ms_since_boot(get_absolute_time());
+}
+
+// Route all mbedTLS allocations to a PSRAM-backed heap so the TLS config and
+// handshake (tens of KB, transiently) do not compete for the tight SRAM heap.
+// Call once at boot with a region carved from PSRAM. mbedTLS calloc/free are
+// bound to tls_heap_* at compile time (MBEDTLS_PLATFORM_CALLOC_MACRO), so if
+// this is never called the heap stays uninitialised and every mbedTLS
+// allocation fails -- i.e. HTTPS requires PSRAM, while plain HTTP is unaffected.
+void picocalc_tls_heap_setup(void *base, size_t size)
+{
+    // mbedTLS calloc/free are bound to tls_heap_* at compile time via
+    // MBEDTLS_PLATFORM_CALLOC_MACRO; here we just initialise the region.
+    tls_heap_init(base, size);
+}
+
+// Build (once) the TLS client config that verifies servers against the bundled
+// CA roots. Returns NULL if the config cannot be created.
+static struct altcp_tls_config *tls_client_config(void)
+{
+    static struct altcp_tls_config *config = NULL;
+    if (config == NULL)
+    {
+        config = altcp_tls_create_config_client(
+            (const u8_t *)ca_certs_pem, ca_certs_pem_len);
+    }
+    return config;
+}
+
+static void *picocalc_network_tls_connect(const char *hostname, uint16_t port, int timeout_ms)
+{
+    if (!ensure_wifi_initialized() || !picocalc_wifi_is_connected())
+    {
+        return NULL;
+    }
+
+    if (!hostname || port == 0)
+    {
+        return NULL;
+    }
+
+    struct altcp_tls_config *config = tls_client_config();
+    if (!config)
+    {
+        return NULL;
+    }
+
+    TcpClientState *state = tcp_state_alloc();
+    if (!state)
+    {
+        return NULL;
+    }
+
+    ip_addr_t target_addr;
+    if (!tcp_resolve_addr(hostname, &target_addr, timeout_ms))
+    {
+        free(state);
+        return NULL;
+    }
+
+    // Create a TLS layered PCB and set the SNI / verification hostname so the
+    // handshake checks the certificate against this name.
+    cyw43_arch_lwip_begin();
+    state->pcb = altcp_tls_new(config, IPADDR_TYPE_V4);
+    if (state->pcb)
+    {
+        mbedtls_ssl_set_hostname((mbedtls_ssl_context *)altcp_tls_context(state->pcb),
+                                 hostname);
+    }
+    cyw43_arch_lwip_end();
+
+    if (!state->pcb)
+    {
+        free(state);
+        return NULL;
+    }
+
+    return tcp_connect_and_wait(state, &target_addr, port, timeout_ms);
 }
 
 static void picocalc_network_tcp_close(void *connection)
@@ -1198,18 +1303,18 @@ static void picocalc_network_tcp_close(void *connection)
         cyw43_arch_lwip_begin();
         
         // Clear callbacks first
-        tcp_arg(state->pcb, NULL);
-        tcp_recv(state->pcb, NULL);
-        tcp_err(state->pcb, NULL);
-        tcp_poll(state->pcb, NULL, 0);
-        tcp_sent(state->pcb, NULL);
-        
+        altcp_arg(state->pcb, NULL);
+        altcp_recv(state->pcb, NULL);
+        altcp_err(state->pcb, NULL);
+        altcp_poll(state->pcb, NULL, 0);
+        altcp_sent(state->pcb, NULL);
+
         // Attempt graceful close
-        err_t err = tcp_close(state->pcb);
+        err_t err = altcp_close(state->pcb);
         if (err != ERR_OK)
         {
             // If close fails, abort the connection
-            tcp_abort(state->pcb);
+            altcp_abort(state->pcb);
         }
         
         cyw43_arch_lwip_end();
@@ -1305,14 +1410,14 @@ static int picocalc_network_tcp_write(void *connection, const char *data, int co
         cyw43_arch_lwip_begin();
         
         // Check available space in send buffer
-        u16_t available = tcp_sndbuf(state->pcb);
+        u16_t available = altcp_sndbuf(state->pcb);
         if (available == 0)
         {
             cyw43_arch_lwip_end();
-            
+
             // Wait for buffer space with timeout
             absolute_time_t timeout = make_timeout_time_ms(5000);
-            while (tcp_sndbuf(state->pcb) == 0)
+            while (altcp_sndbuf(state->pcb) == 0)
             {
                 if (time_reached(timeout))
                 {
@@ -1338,16 +1443,16 @@ static int picocalc_network_tcp_write(void *connection, const char *data, int co
         u16_t to_write = (remaining < available) ? (u16_t)remaining : available;
         
         // Write to TCP
-        err_t err = tcp_write(state->pcb, data + total_written, to_write, TCP_WRITE_FLAG_COPY);
-        
+        err_t err = altcp_write(state->pcb, data + total_written, to_write, TCP_WRITE_FLAG_COPY);
+
         if (err != ERR_OK)
         {
             cyw43_arch_lwip_end();
             return total_written > 0 ? total_written : -1;
         }
-        
+
         // Flush the output
-        err = tcp_output(state->pcb);
+        err = altcp_output(state->pcb);
         cyw43_arch_lwip_end();
         
         if (err != ERR_OK)
@@ -1408,6 +1513,7 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .network_resolve = picocalc_network_resolve,
     .network_ntp = picocalc_network_ntp,
     .network_tcp_connect = picocalc_network_tcp_connect,
+    .network_tls_connect = picocalc_network_tls_connect,
     .network_tcp_close = picocalc_network_tcp_close,
     .network_tcp_read = picocalc_network_tcp_read,
     .network_tcp_write = picocalc_network_tcp_write,
@@ -1424,6 +1530,7 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .network_resolve = NULL,
     .network_ntp = NULL,
     .network_tcp_connect = NULL,
+    .network_tls_connect = NULL,
     .network_tcp_close = NULL,
     .network_tcp_read = NULL,
     .network_tcp_write = NULL,

@@ -23,15 +23,26 @@
 #define LWIP_UDP                        1
 #define LWIP_RAW                        1
 
+// Application-layered TCP with TLS (mbedTLS) for the HTTPS client
+#define LWIP_ALTCP                      1
+#define LWIP_ALTCP_TLS                  1
+#define LWIP_ALTCP_TLS_MBEDTLS          1
+
+// Enforce server certificate verification (lwIP defaults this to OPTIONAL, which
+// would complete the handshake even for an untrusted/mismatched certificate).
+#define ALTCP_MBEDTLS_AUTHMODE          MBEDTLS_SSL_VERIFY_REQUIRED
+
 // Enable hostname for DHCP
 #define LWIP_NETIF_HOSTNAME             1
 
 // Enable network interface status callbacks (for connection status)
 #define LWIP_NETIF_STATUS_CALLBACK      1
 
-// Memory configuration - conservative for Pico
+// Memory configuration - conservative for Pico. The lwIP heap also backs the
+// altcp_tls config + entropy/DRBG structs created for each HTTPS client config,
+// so it needs headroom beyond the base networking needs.
 #define MEM_ALIGNMENT                   4
-#define MEM_SIZE                        (8 * 1024)
+#define MEM_SIZE                        (16 * 1024)
 
 // Buffer pool sizes - keep small for memory efficiency
 #define MEMP_NUM_PBUF                   10

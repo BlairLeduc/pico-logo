@@ -90,3 +90,16 @@ target_include_directories(test_fat32 PRIVATE
     ${CMAKE_SOURCE_DIR}/devices/picocalc
 )
 add_test(NAME test_fat32 COMMAND test_fat32)
+
+# TLS heap allocator test — compiles devices/picocalc/tls_heap.c on the host.
+# Portable (no Pico SDK / Logo runtime dependencies).
+add_executable(test_tls_heap
+    test_tls_heap.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/tls_heap.c
+    unity.c
+)
+target_include_directories(test_tls_heap PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/devices/picocalc
+)
+add_test(NAME test_tls_heap COMMAND test_tls_heap)

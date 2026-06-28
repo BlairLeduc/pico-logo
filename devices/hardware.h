@@ -129,6 +129,14 @@ extern "C"
         // timeout_ms is the connection timeout in milliseconds
         void *(*network_tcp_connect)(const char *ip_address, uint16_t port, int timeout_ms);
 
+        // Open a TLS (HTTPS) connection to the specified hostname and port.
+        // The hostname (not a resolved IP) is required for SNI and certificate
+        // hostname verification; the device resolves it internally.
+        // Returns an opaque connection handle on success, NULL on failure (which
+        // includes a failed handshake or certificate verification).
+        // The handle is used with the same network_tcp_read/write/close ops.
+        void *(*network_tls_connect)(const char *hostname, uint16_t port, int timeout_ms);
+
         // Close a TCP connection
         void (*network_tcp_close)(void *connection);
 

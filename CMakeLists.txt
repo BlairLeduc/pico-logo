@@ -200,12 +200,21 @@ target_link_libraries(pico-logo
 
 # Link WiFi libraries if WiFi support is enabled
 if(LOGO_HAS_WIFI)
-    # Add the directory containing lwipopts.h to include path
+    # Add the directory containing lwipopts.h and mbedtls_config.h to include path
     target_include_directories(pico-logo PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/picocalc
     )
+    # HTTPS: TLS transport (mbedTLS via lwIP altcp) plus the bundled CA roots.
+    # pico_mbedtls sets MBEDTLS_CONFIG_FILE=pico_mbedtls_config.h, which in turn
+    # #includes our devices/picocalc/mbedtls_config.h from the include path above.
+    target_sources(pico-logo PRIVATE
+        devices/picocalc/ca_certs.c
+        devices/picocalc/tls_heap.c
+    )
     target_link_libraries(pico-logo
         pico_cyw43_arch_lwip_threadsafe_background
+        pico_lwip_mbedtls
+        pico_mbedtls
     )
 endif()
 

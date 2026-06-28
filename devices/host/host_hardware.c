@@ -470,6 +470,7 @@ static LogoHardwareOps host_hardware_ops = {
     .network_resolve = NULL,
     .network_ntp = NULL,
     .network_tcp_connect = host_network_tcp_connect,
+    .network_tls_connect = NULL,  // Host device has no TLS support
     .network_tcp_close = host_network_tcp_close,
     .network_tcp_read = host_network_tcp_read,
     .network_tcp_write = host_network_tcp_write,

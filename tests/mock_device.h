@@ -253,6 +253,7 @@ extern "C"
             bool connect_success;            // Whether tcp_connect should succeed
             bool open;                       // Is a connection currently open
             char last_ip[16];                // Last IP passed to tcp_connect
+            char last_tls_host[256];         // Last hostname passed to tls_connect
             uint16_t last_port;              // Last port passed to tcp_connect
             char response[8192];             // Scripted bytes the "server" returns
             int response_len;                // Length of scripted response
@@ -387,10 +388,12 @@ extern "C"
     const char *mock_device_get_tcp_request(void);
     size_t mock_device_get_tcp_request_len(void);
     const char *mock_device_get_last_tcp_ip(void);
+    const char *mock_device_get_last_tls_host(void);
     uint16_t mock_device_get_last_tcp_port(void);
 
     // Mock TCP operations (for use by test_scaffold in mock_hardware_ops)
     void *mock_network_tcp_connect(const char *ip_address, uint16_t port, int timeout_ms);
+    void *mock_network_tls_connect(const char *hostname, uint16_t port, int timeout_ms);
     void mock_network_tcp_close(void *connection);
     int mock_network_tcp_read(void *connection, char *buffer, int count, int timeout_ms);
     int mock_network_tcp_write(void *connection, const char *data, int count);
