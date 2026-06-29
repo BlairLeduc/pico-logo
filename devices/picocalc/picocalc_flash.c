@@ -32,6 +32,15 @@
 
 #include <string.h>
 
+// The reserved region is carved off the top of flash and must leave room for
+// the firmware below it. We cannot know the exact firmware size here, but we can
+// at least require the region to be sector-aligned and strictly smaller than the
+// board's total flash. (Per-board sizing lives in CMakePresets.json.)
+_Static_assert(PICOCALC_FLASH_LFS_SIZE % PICOCALC_FLASH_SECTOR_SIZE == 0,
+               "PICOCALC_FLASH_LFS_SIZE must be a multiple of the sector size");
+_Static_assert(PICOCALC_FLASH_LFS_SIZE < PICO_FLASH_SIZE_BYTES,
+               "PICOCALC_FLASH_LFS_SIZE must be smaller than the board's flash");
+
 void picocalc_flash_read(uint32_t offset, void *dst, size_t len)
 {
     if (!dst || offset > PICOCALC_FLASH_LFS_SIZE ||

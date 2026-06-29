@@ -72,8 +72,11 @@ image out of it.
 - `LFS_FLASH_OFFSET` and `LFS_FLASH_SIZE` become named constants. Per project
   convention, sizes that affect footprint belong in `core/limits.h` (or a new
   `devices/picocalc` flash-map header if device-specific is cleaner).
-- **Decided: reserve the top 4 MB** (`LFS_FLASH_SIZE = 4 MB`,
-  `LFS_FLASH_OFFSET = 12 MB`); firmware keeps the lower ~12 MB.
+- **Decided: reserve the top of flash, sized per board** via
+  `PICOCALC_FLASH_LFS_SIZE` (8 MB on the 16 MB Pico Plus 2 W, 2 MB on a 4 MB
+  Pico 2 / 2 W). `PICOCALC_FLASH_LFS_OFFSET = PICO_FLASH_SIZE_BYTES - size`, so
+  the region stays anchored to the top of whatever flash the board has; firmware
+  keeps the bottom (~0.73 MB) with a large unused gap between.
 - Start simple with a **fixed constant**. The RP2350 partition-table / bootrom
   feature is a later option if picotool-managed partitions become desirable — not
   needed for a single-user board.
@@ -209,7 +212,8 @@ configured PSRAM.** Phase 1 may proceed.
   - `erase` → safe-write recipe (sector erase; RP2350 flash erase granularity).
   - `sync`  → no-op (writes are synchronous).
 - **Geometry:** `block_size` = flash sector size (4 KB); `block_count` =
-  `LFS_FLASH_SIZE / block_size` (4 MB / 4 KB = 1024 blocks).
+  `PICOCALC_FLASH_LFS_SIZE / block_size` (e.g. 8 MB / 4 KB = 2048 blocks on the
+  Pico Plus 2 W). RAM buffers don't scale with `block_count`.
 
 ### SRAM budget (measured)
 From the current `pico+2w` build (`arm-none-eabi-size`):
@@ -349,8 +353,14 @@ Largely already present; keep behind the `/sd` route:
 
 ## 12. Decisions (resolved)
 
-1. **Flash partition size:** **4 MB** for LittleFS (firmware keeps the remaining
-   ~12 MB).
+1. **Flash partition size:** **per board, via the `PICOCALC_FLASH_LFS_SIZE` CMake
+   cache variable** (set in `CMakePresets.json`): **8 MB** on the Pico Plus 2 W
+   (16 MB flash), **2 MB** on a plain Pico 2 / 2 W (4 MB flash). The region is
+   anchored to the top of flash (offset = `PICO_FLASH_SIZE_BYTES - size`), so it
+   tracks the board's flash size; firmware (~0.73 MB) sits at the bottom with a
+   large gap between. `picocalc_flash.c` static-asserts the size is sector-aligned
+   and smaller than the board's flash. (Changing the size changes `block_count`,
+   so an existing on-device filesystem reformats on the next boot.)
 2. **Vendor `littlefs`:** **yes** — copy the ~4 upstream files into the tree.
 3. **LittleFS buffer placement:** **SRAM** — buffers are ~0.5–2 KB against ~90 KB
    of headroom (see §5 SRAM budget). `LOGO_MEMORY_SIZE` is *not* reduced for them;

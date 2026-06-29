@@ -27,11 +27,19 @@ extern "C"
 {
 #endif
 
-    // Size of the reserved filesystem region (top 4 MB of the 16 MB flash).
+    // Size of the reserved filesystem region, carved off the TOP of flash.
+    // Overridable per board via the PICOCALC_FLASH_LFS_SIZE CMake cache variable
+    // (set in CMakePresets.json) — the Pico Plus 2 W has 16 MB of flash, a plain
+    // Pico 2 / 2 W only 4 MB, so the right size differs by board. Defaults to
+    // 4 MB. Must be a multiple of the sector size and smaller than the board's
+    // total flash (asserted in picocalc_flash.c).
+#ifndef PICOCALC_FLASH_LFS_SIZE
 #define PICOCALC_FLASH_LFS_SIZE (4u * 1024u * 1024u)
+#endif
 
     // Byte offset of the region from the start of flash (i.e. from XIP_BASE).
-    // PICO_FLASH_SIZE_BYTES is provided by the board header (16 MB here).
+    // PICO_FLASH_SIZE_BYTES is provided by the board header, so the region stays
+    // anchored to the top of whatever flash the board has.
 #define PICOCALC_FLASH_LFS_OFFSET (PICO_FLASH_SIZE_BYTES - PICOCALC_FLASH_LFS_SIZE)
 
     // Erase granularity (flash sector) and program granularity (flash page).

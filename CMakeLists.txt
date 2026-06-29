@@ -258,6 +258,12 @@ if(DEFINED LOGO_COPY_BUFFER_SIZE)
     target_compile_definitions(pico-logo PRIVATE LOGO_COPY_BUFFER_SIZE=${LOGO_COPY_BUFFER_SIZE})
 endif()
 
+# Size (in bytes) of the internal LittleFS region, reserved off the top of flash.
+# Set per board in CMakePresets.json (16 MB boards can spare more than 4 MB ones).
+if(DEFINED PICOCALC_FLASH_LFS_SIZE)
+    target_compile_definitions(pico-logo PRIVATE PICOCALC_FLASH_LFS_SIZE=${PICOCALC_FLASH_LFS_SIZE})
+endif()
+
 # Set C stack size (default Pico SDK is 0x800 = 2KB)
 # Default to 4KB. With the explicit operation stack, C stack usage is minimal.
 if(DEFINED PICO_STACK_SIZE)
