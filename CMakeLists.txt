@@ -164,6 +164,7 @@ add_executable(pico-logo
     devices/picocalc/picocalc_console.c
     devices/picocalc/picocalc_flash.c
     devices/picocalc/picocalc_hardware.c
+    devices/picocalc/picocalc_lfs.c
     devices/picocalc/picocalc_psram.c
     devices/picocalc/picocalc_storage.c
     devices/picocalc/picocalc.c
@@ -171,6 +172,16 @@ add_executable(pico-logo
     devices/picocalc/screensaver.c
     devices/picocalc/sdcard.c
     devices/picocalc/southbridge.c
+    third_party/littlefs/lfs.c
+    third_party/littlefs/lfs_util.c
+)
+
+# LittleFS build config: silence its printf-based logging (we surface status via
+# return codes / the selftest). Applies only to the littlefs translation units.
+set_source_files_properties(
+    third_party/littlefs/lfs.c
+    third_party/littlefs/lfs_util.c
+    PROPERTIES COMPILE_DEFINITIONS "LFS_NO_DEBUG;LFS_NO_WARN;LFS_NO_ERROR"
 )
 
 pico_set_program_name(pico-logo "pico-logo")
@@ -206,6 +217,14 @@ target_link_libraries(pico-logo
 option(PICOCALC_FLASH_SPIKE "Run the Phase-0 flash/PSRAM-QMI spike at boot" OFF)
 if(PICOCALC_FLASH_SPIKE)
     target_compile_definitions(pico-logo PRIVATE PICOCALC_FLASH_SPIKE)
+endif()
+
+# Phase-1 LittleFS bring-up self-test: build with -DPICOCALC_LFS_SELFTEST=ON to
+# mount/format the internal FS and bump a persistent boot counter at boot. Off
+# by default.
+option(PICOCALC_LFS_SELFTEST "Run the Phase-1 LittleFS bring-up self-test at boot" OFF)
+if(PICOCALC_LFS_SELFTEST)
+    target_compile_definitions(pico-logo PRIVATE PICOCALC_LFS_SELFTEST)
 endif()
 
 # Link WiFi libraries if WiFi support is enabled

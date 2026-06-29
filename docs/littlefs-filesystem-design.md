@@ -311,9 +311,13 @@ Largely already present; keep behind the `/sd` route:
   `picocalc_psram.c`); all four §4 criteria validated on hardware. Finding: the
   QMI/PSRAM window is robust (rearm is insurance), but a sector erase is ~47 ms of
   interrupts-off time — see §4 results and the 47 ms decision.
-- **Phase 1 — LittleFS block device + format/mount.** Reserve the flash region,
-  wire the block device to the safe-write path, format-on-first-boot, basic
-  read/write of one file. Confirm it survives a flash-and-debug cycle.
+- **Phase 1 — LittleFS block device + format/mount. ✅ DONE / PASSED.** Vendored
+  littlefs v2.11.3 (`third_party/littlefs/`); block device over the safe-write
+  path + mount-with-format-on-first-boot (`picocalc_lfs.{c,h}`); static SRAM
+  buffers (256+256+32 B). Validated on host (RAM bd, format-once + persist) and on
+  hardware via the `PICOCALC_LFS_SELFTEST` boot counter: first boot formats,
+  follow-up boots persist, and the count **survives a firmware reflash** — the
+  reserved region is outside the firmware image as designed.
 - **Phase 2 — VFS router + LittleFS as root.** Two backends, router dispatch,
   `io.prefix`/startup changes, `/` listing shows `sd`. FAT moves behind `/sd`.
 - **Phase 3 — cross-FS copy/move + hot-swap hardening.** Cross-backend

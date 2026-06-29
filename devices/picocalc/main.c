@@ -20,6 +20,7 @@
 #include "devices/picocalc/picocalc.h"
 #include "devices/picocalc/picocalc_psram.h"
 #include "devices/picocalc/picocalc_flash.h"
+#include "devices/picocalc/picocalc_lfs.h"
 #include "core/memory.h"
 #include "core/lexer.h"
 #include "core/eval.h"
@@ -157,6 +158,12 @@ int main(void)
 #endif
         logo_mem_set_aux_region((void *)PICOCALC_PSRAM_BASE, aux_size);
     }
+#endif
+
+#ifdef PICOCALC_LFS_SELFTEST
+    // Phase-1 bring-up: mount/format the internal LittleFS and bump a persistent
+    // boot counter (survives power cycles and firmware re-flashes).
+    picocalc_lfs_selftest();
 #endif
 
     primitives_init();
