@@ -659,7 +659,7 @@ bool logo_picocalc_list_directory(const char *pathname, LogoDirCallback callback
 }
 
 static bool logo_picocalc_free_blocks(const char *pathname, uint32_t *free_blocks,
-                                      uint32_t *total_blocks)
+                                      uint32_t *block_size)
 {
     (void)pathname;
     uint32_t cluster = fat32_get_cluster_size();
@@ -667,9 +667,8 @@ static bool logo_picocalc_free_blocks(const char *pathname, uint32_t *free_block
     {
         return false; // not mounted
     }
-    uint64_t free_bytes = 0, total_bytes = 0;
-    if (fat32_get_free_space(&free_bytes) != FAT32_OK ||
-        fat32_get_total_space(&total_bytes) != FAT32_OK)
+    uint64_t free_bytes = 0;
+    if (fat32_get_free_space(&free_bytes) != FAT32_OK)
     {
         return false;
     }
@@ -677,9 +676,9 @@ static bool logo_picocalc_free_blocks(const char *pathname, uint32_t *free_block
     {
         *free_blocks = (uint32_t)(free_bytes / cluster);
     }
-    if (total_blocks)
+    if (block_size)
     {
-        *total_blocks = (uint32_t)(total_bytes / cluster);
+        *block_size = cluster;
     }
     return true;
 }

@@ -198,17 +198,23 @@ void test_rename_file(void)
 
 void test_free_reports_blocks(void)
 {
-    // The mock filesystem reports 100 free blocks.
+    // The mock filesystem reports 100 free blocks of 512 bytes each.
     Result r = eval_string("free");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
-    TEST_ASSERT_EQUAL_FLOAT(100.0f, r.value.as.number);
+    TEST_ASSERT_TRUE(value_is_list(r.value));
+    // Expect the list [100 512].
+    Node list = value_to_node(r.value);
+    TEST_ASSERT_EQUAL_STRING("100", mem_word_ptr(mem_car(list)));
+    TEST_ASSERT_EQUAL_STRING("512", mem_word_ptr(mem_car(mem_cdr(list))));
 }
 
 void test_free_with_pathname(void)
 {
     Result r = eval_string("(free \"/anywhere)");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
-    TEST_ASSERT_EQUAL_FLOAT(100.0f, r.value.as.number);
+    TEST_ASSERT_TRUE(value_is_list(r.value));
+    Node list = value_to_node(r.value);
+    TEST_ASSERT_EQUAL_STRING("100", mem_word_ptr(mem_car(list)));
 }
 
 void test_setprefix_and_prefix(void)

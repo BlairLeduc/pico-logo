@@ -375,18 +375,18 @@ static bool mock_storage_list_directory(const char *pathname, LogoDirCallback ca
     return true;
 }
 
-// Fixed, deterministic free/total block counts for tests of the `free` reporter.
+// Fixed, deterministic free-block count and block size for tests of `free`.
 static bool mock_storage_free_blocks(const char *pathname, uint32_t *free_blocks,
-                                     uint32_t *total_blocks)
+                                     uint32_t *block_size)
 {
     (void)pathname;
     if (free_blocks)
     {
         *free_blocks = 100;
     }
-    if (total_blocks)
+    if (block_size)
     {
-        *total_blocks = 128;
+        *block_size = 512;
     }
     return true;
 }

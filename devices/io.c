@@ -998,7 +998,7 @@ bool logo_io_list_directory(const LogoIO *io, const char *pathname,
 }
 
 bool logo_io_free_blocks(const LogoIO *io, const char *pathname,
-                         uint32_t *free_blocks, uint32_t *total_blocks)
+                         uint32_t *free_blocks, uint32_t *block_size)
 {
     if (!io || !io->storage || !pathname || !io->storage->ops->free_blocks)
     {
@@ -1010,7 +1010,7 @@ bool logo_io_free_blocks(const LogoIO *io, const char *pathname,
     {
         return false;
     }
-    return io->storage->ops->free_blocks(full_path, free_blocks, total_blocks);
+    return io->storage->ops->free_blocks(full_path, free_blocks, block_size);
 }
 
 bool logo_io_mount_available(const LogoIO *io, const char *pathname)

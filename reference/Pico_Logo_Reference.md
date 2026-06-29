@@ -4637,7 +4637,7 @@ free
 
 `operation`
 
-Outputs the number of free allocation blocks on the filesystem that holds the current directory, or — if _pathname_ is given — the filesystem that holds _pathname_. A block is the filesystem's own allocation unit (a flash block on the internal `/` filesystem, a cluster on the `/sd` card), so the counts for two different volumes are not directly comparable.
+Outputs a two-element list `[free_blocks block_size]` describing the filesystem that holds the current directory, or — if _pathname_ is given — the filesystem that holds _pathname_. `free_blocks` is the number of free allocation blocks; `block_size` is the size of one block in bytes. A block is the filesystem's own allocation unit (a flash block on the internal `/` filesystem, a cluster on the `/sd` card), so block sizes differ between volumes — multiply the two to get free bytes and compare across volumes.
 
 Reports `There is no SD card` if asked about `/sd` when no card is present.
 
@@ -4645,9 +4645,11 @@ Reports `There is no SD card` if asked about `/sd` when no card is present.
 
 ```logo
 ?pr free
-1018
-?pr (free "/sd)
-981250
+1018 4096
+?show (free "/sd)
+[1962500 8192]
+?pr product first free last free
+4169728
 ```
 
 

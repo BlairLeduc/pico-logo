@@ -593,7 +593,7 @@ static bool logo_host_list_directory(const char *pathname, LogoDirCallback callb
 // Storage operations table
 //
 static bool logo_host_free_blocks(const char *pathname, uint32_t *free_blocks,
-                                  uint32_t *total_blocks)
+                                  uint32_t *block_size)
 {
     struct statvfs st;
     const char *target = (pathname && pathname[0]) ? pathname : ".";
@@ -608,9 +608,9 @@ static bool logo_host_free_blocks(const char *pathname, uint32_t *free_blocks,
     {
         *free_blocks = (uint32_t)st.f_bavail;
     }
-    if (total_blocks)
+    if (block_size)
     {
-        *total_blocks = (uint32_t)st.f_blocks;
+        *block_size = (uint32_t)st.f_frsize;
     }
     return true;
 }

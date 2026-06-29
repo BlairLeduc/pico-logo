@@ -8,6 +8,7 @@
 
 #include "primitives.h"
 #include "error.h"
+#include "format.h"
 #include "devices/io.h"
 #include <stdio.h>
 #include <string.h>
@@ -496,10 +497,11 @@ static Result prim_createdir(Evaluator *eval, int argc, Value *args)
     return result_none();
 }
 
-// free [pathname] - outputs the number of free allocation blocks on the
-// filesystem backing `pathname`, or the current prefix's filesystem when no
-// argument is given. Blocks are the filesystem's own allocation unit, so the
-// count is not directly comparable between volumes (e.g. `/` vs `/sd`).
+// free [pathname] - outputs a two-element list [free_blocks block_size] for the
+// filesystem backing `pathname` (or the current prefix's filesystem when no
+// argument is given): the number of free allocation blocks and the size of one
+// block in bytes. Block sizes differ between volumes (e.g. `/` vs `/sd`), so the
+// unit size lets you convert to bytes: `free_blocks * block_size`.
 static Result prim_free(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
@@ -516,13 +518,16 @@ static Result prim_free(Evaluator *eval, int argc, Value *args)
         path = mem_word_ptr(args[0].as.node);
     }
 
-    uint32_t free_blocks = 0;
-    if (!logo_io_free_blocks(io, path, &free_blocks, NULL))
+    uint32_t free_blocks = 0, block_size = 0;
+    if (!logo_io_free_blocks(io, path, &free_blocks, &block_size))
     {
         // Most commonly: no SD card for a /sd path.
         return result_error(ERR_NO_SD_CARD);
     }
-    return result_ok(value_number((float)free_blocks));
+
+    Node list = mem_cons(number_to_word((float)free_blocks),
+                         mem_cons(number_to_word((float)block_size), NODE_NIL));
+    return result_ok(value_list(list));
 }
 
 //==========================================================================

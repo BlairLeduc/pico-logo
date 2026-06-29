@@ -203,11 +203,12 @@ extern "C"
                                 LogoDirCallback callback, void *user_data,
                                 const char *filter);
 
-    // Report the free/total allocation blocks of the filesystem backing
-    // `pathname` (blocks are that filesystem's own allocation unit). Returns
-    // false if unavailable or unsupported. Either out-pointer may be NULL.
+    // Report the number of free allocation blocks of the filesystem backing
+    // `pathname`, and the size of one block in bytes (blocks are that
+    // filesystem's own allocation unit). Returns false if unavailable or
+    // unsupported. Either out-pointer may be NULL.
     bool logo_io_free_blocks(const LogoIO *io, const char *pathname,
-                             uint32_t *free_blocks, uint32_t *total_blocks);
+                             uint32_t *free_blocks, uint32_t *block_size);
 
     // Report whether the filesystem backing `pathname` is currently available
     // (e.g. an SD card is present). True when the backend cannot report.

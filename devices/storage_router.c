@@ -220,7 +220,7 @@ static bool router_list_directory(const char *pathname, LogoDirCallback callback
 }
 
 static bool router_free_blocks(const char *pathname, uint32_t *free_blocks,
-                               uint32_t *total_blocks)
+                               uint32_t *block_size)
 {
     const char *sub = sd_subpath(pathname);
     const LogoStorageOps *ops = sub ? g_sd_ops : g_root_ops;
@@ -228,7 +228,7 @@ static bool router_free_blocks(const char *pathname, uint32_t *free_blocks,
     {
         return false;
     }
-    return ops->free_blocks(sub ? sub : pathname, free_blocks, total_blocks);
+    return ops->free_blocks(sub ? sub : pathname, free_blocks, block_size);
 }
 
 static bool router_mount_available(const char *pathname)

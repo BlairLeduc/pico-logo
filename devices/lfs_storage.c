@@ -425,7 +425,7 @@ static bool lfs_storage_list_directory(const char *pathname,
 }
 
 static bool lfs_storage_free_blocks(const char *pathname, uint32_t *free_blocks,
-                                    uint32_t *total_blocks)
+                                    uint32_t *block_size)
 {
     (void)pathname;
     if (!g_lfs)
@@ -448,9 +448,9 @@ static bool lfs_storage_free_blocks(const char *pathname, uint32_t *free_blocks,
                            ? (uint32_t)(info.block_count - (lfs_size_t)used)
                            : 0;
     }
-    if (total_blocks)
+    if (block_size)
     {
-        *total_blocks = (uint32_t)info.block_count;
+        *block_size = (uint32_t)info.block_size;
     }
     return true;
 }
