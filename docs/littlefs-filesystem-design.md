@@ -326,8 +326,16 @@ Largely already present; keep behind the `/sd` route:
   card is present. 25 host tests (router + backend over a RAM bd); verified on
   hardware (save/catalog/createdir on `/`, `/sd` lists the card, `sd` appears only
   with a card inserted). Cross-mount rename is rejected here (Phase 3).
-- **Phase 3 — cross-FS copy/move + hot-swap hardening.** Cross-backend
-  move-as-copy+delete, stale-handle invalidation on card removal.
+- **Phase 3 — cross-FS copy/move + hot-swap hardening. ✅ DONE / PASSED.**
+  Router cross-mount rename now does streamed copy+delete (files only; rejects
+  directories and a missing source; rolls back a partial destination). FAT
+  hot-swap safety via a generation counter bumped on unmount: open FAT handles
+  refuse to read/write/flush when it changes (`fat32.c` + `picocalc_storage.c`).
+  Also fixed a latent bug exposed here: the FAT `open` left `LogoStream.write_error`
+  uninitialised, which made content cross-FS moves spuriously fail. Tests: cross-FS
+  move (7, incl. rollback + the write_error regression), FAT generation (1),
+  multi-write lfs round-trip (1); full suite 50/50. Verified on hardware:
+  content and empty moves both directions, hot-swap does not crash.
 - **Phase 4 — polish.** Free-space reporting per mount, error messages, docs,
   reference-manual updates.
 

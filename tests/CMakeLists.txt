@@ -72,6 +72,7 @@ add_logo_test(test_io)
 add_logo_test(test_stream)
 add_logo_test(test_storage_router)
 add_logo_test(test_lfs_storage)
+add_logo_test(test_cross_fs_move)
 add_logo_test(test_repl)
 add_logo_test(test_syntax_highlight)
 

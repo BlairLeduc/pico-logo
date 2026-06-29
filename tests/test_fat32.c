@@ -602,12 +602,30 @@ static void test_circular_fat_chain_terminates(void)
 }
 
 //
+// Hot-swap safety: the generation counter bumps on every unmount, so an open
+// handle can detect that the card was removed/swapped underneath it.
+//
+
+static void test_generation_bumps_on_unmount(void)
+{
+    uint32_t g0 = fat32_get_generation();
+    TEST_ASSERT_EQUAL_INT(FAT32_OK, fat32_mount());
+    fat32_unmount();
+    TEST_ASSERT_EQUAL_UINT32(g0 + 1, fat32_get_generation());
+
+    TEST_ASSERT_EQUAL_INT(FAT32_OK, fat32_mount());
+    fat32_unmount();
+    TEST_ASSERT_EQUAL_UINT32(g0 + 2, fat32_get_generation());
+}
+
+//
 // Run all tests
 //
 
 int main(void)
 {
     UNITY_BEGIN();
+    RUN_TEST(test_generation_bumps_on_unmount);
     RUN_TEST(test_mount_superfloppy_succeeds);
     RUN_TEST(test_mount_mbr_succeeds);
     RUN_TEST(test_mount_superfloppy_with_busy_bootstrap_succeeds);

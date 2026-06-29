@@ -102,6 +102,30 @@ static void test_write_then_read_back(void)
     free(s);
 }
 
+// `save` writes many small chunks in one open session, then closes, then a
+// later `load` reopens and reads. Reproduce that exact pattern.
+static void test_many_writes_one_session_then_reopen(void)
+{
+    LogoStream *s = storage.ops->open("/proc.lgo");
+    TEST_ASSERT_NOT_NULL(s);
+    s->ops->write(s, "to hello\n");
+    s->ops->write(s, "  pr \"hello\n");
+    s->ops->write(s, "end\n");
+    s->ops->close(s);
+    free(s);
+
+    // The file must now exist and read back exactly what was written.
+    TEST_ASSERT_TRUE(storage.ops->file_exists("/proc.lgo"));
+    LogoStream *r = storage.ops->open("/proc.lgo");
+    TEST_ASSERT_NOT_NULL(r);
+    char buf[128];
+    int n = r->ops->read_chars(r, buf, sizeof(buf) - 1);
+    buf[n > 0 ? n : 0] = '\0';
+    TEST_ASSERT_EQUAL_STRING("to hello\n  pr \"hello\nend\n", buf);
+    r->ops->close(r);
+    free(r);
+}
+
 static void test_file_exists_and_size(void)
 {
     write_file("/a.txt", "12345");
@@ -256,6 +280,7 @@ int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_write_then_read_back);
+    RUN_TEST(test_many_writes_one_session_then_reopen);
     RUN_TEST(test_file_exists_and_size);
     RUN_TEST(test_read_and_write_positions_independent);
     RUN_TEST(test_read_line);

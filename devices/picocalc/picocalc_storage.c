@@ -23,7 +23,16 @@ typedef struct FileContext
     fat32_file_t *file;
     long read_pos;   // Separate read position
     long write_pos;  // Separate write position (starts at end of file)
+    uint32_t gen;    // fat32 generation at open; mismatch => card was swapped
 } FileContext;
+
+// True if the SD card has been removed/swapped since this file was opened, in
+// which case the handle's cluster/sector numbers refer to a card that may no
+// longer be present. Operations must then fail rather than touch the new card.
+static bool file_context_stale(const FileContext *ctx)
+{
+    return ctx->gen != fat32_get_generation();
+}
 
 //
 // Stream operation implementations
@@ -41,6 +50,11 @@ static int picocalc_file_read_char(LogoStream *stream)
     if (!ctx->file)
     {
         return -1;
+    }
+
+    if (file_context_stale(ctx))
+    {
+        return -1; // SD card removed/swapped since open
     }
 
     // Seek to read position
@@ -68,6 +82,11 @@ static int picocalc_file_read_chars(LogoStream *stream, char *buffer, int count)
         return -1;
     }
 
+    if (file_context_stale(ctx))
+    {
+        return -1; // SD card removed/swapped since open
+    }
+
     // Seek to read position
     fat32_seek(ctx->file, (uint32_t)ctx->read_pos);
     
@@ -92,6 +111,11 @@ static int picocalc_file_read_line(LogoStream *stream, char *buffer, size_t size
     if (!ctx->file)
     {
         return -1;
+    }
+
+    if (file_context_stale(ctx))
+    {
+        return -1; // SD card removed/swapped since open
     }
 
     // Seek to read position
@@ -132,6 +156,11 @@ static bool picocalc_file_can_read(LogoStream *stream)
         return false;
     }
 
+    if (file_context_stale(ctx))
+    {
+        return false; // SD card removed/swapped since open
+    }
+
     // Check if read position is at or past end of file
     return ctx->read_pos < (long)fat32_size(ctx->file);
 }
@@ -146,6 +175,12 @@ static void picocalc_file_write(LogoStream *stream, const char *text)
     FileContext *ctx = (FileContext *)stream->context;
     if (!ctx->file)
     {
+        return;
+    }
+
+    if (file_context_stale(ctx))
+    {
+        stream->write_error = true; // SD card removed/swapped since open
         return;
     }
 
@@ -293,6 +328,12 @@ static void picocalc_file_close(LogoStream *stream)
     FileContext *ctx = (FileContext *)stream->context;
     if (ctx->file)
     {
+        if (file_context_stale(ctx))
+        {
+            // The card was removed/swapped; do not flush this handle's dirty
+            // directory entry — it would write to a different card's sectors.
+            ctx->file->dirty = false;
+        }
         fat32_close(ctx->file);
         free(ctx->file);
         ctx->file = NULL;
@@ -371,6 +412,7 @@ static LogoStream *logo_picocalc_file_open(const char *pathname)
     ctx->file = file;
     ctx->read_pos = 0;  // Read position starts at beginning of file
     ctx->write_pos = (long)fat32_size(file);  // Write position starts at end of file
+    ctx->gen = fat32_get_generation();  // Card generation at open time
 
     // Allocate stream
     LogoStream *stream = (LogoStream *)malloc(sizeof(LogoStream));
@@ -387,6 +429,7 @@ static LogoStream *logo_picocalc_file_open(const char *pathname)
     stream->ops = &picocalc_stream_ops;
     stream->context = ctx;
     stream->is_open = true;
+    stream->write_error = false; // stream is malloc'd, not zeroed
 
     // Copy pathname to stream name
     strncpy(stream->name, pathname, LOGO_STREAM_NAME_MAX - 1);

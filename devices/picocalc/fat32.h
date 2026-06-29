@@ -183,6 +183,12 @@ bool fat32_is_ready(void);
 fat32_error_t fat32_mount(void);
 void fat32_unmount(void);
 bool fat32_is_mounted(void);
+
+// A counter bumped on every unmount (card removal/swap). A file opened while the
+// counter held value G is operating on the card mounted then; if the counter has
+// since changed, the card may have been swapped and the handle must not be used
+// to read, write, or flush (it would hit a different card's clusters/sectors).
+uint32_t fat32_get_generation(void);
 fat32_error_t fat32_get_status(void);
 fat32_error_t fat32_get_free_space(uint64_t *free_space);
 fat32_error_t fat32_get_total_space(uint64_t *total_space);

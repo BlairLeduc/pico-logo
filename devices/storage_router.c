@@ -8,6 +8,7 @@
 #include "storage_router.h"
 #include "stream.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 // Module state: the two backends and the SD availability predicate.
@@ -97,15 +98,92 @@ static bool router_dir_delete(const char *pathname)
     return sub ? g_sd_ops->dir_delete(sub) : g_root_ops->dir_delete(pathname);
 }
 
+// Move a single file from one backend to another by streamed copy, then delete
+// the source. Files only — cross-filesystem directory moves are not supported
+// (decision #6). On any failure the source is left intact and a partial
+// destination is removed, so the move is all-or-nothing from the user's view.
+static bool cross_fs_move(const LogoStorageOps *src_ops, const char *src,
+                          const LogoStorageOps *dst_ops, const char *dst)
+{
+    // The source must be an existing regular file. file_exists() is false for a
+    // missing path and for a directory, so this both reports "not found" for a
+    // bad source and rejects directory moves — and it stops the backend's
+    // create-on-open from silently fabricating an empty source.
+    if (!src_ops->file_exists(src))
+    {
+        return false;
+    }
+    if (dst_ops->dir_exists(dst))
+    {
+        return false; // never overwrite a directory with a file
+    }
+    // Overwrite an existing destination file cleanly (open() would otherwise
+    // position writes at end-of-file and append).
+    if (dst_ops->file_exists(dst))
+    {
+        dst_ops->file_delete(dst);
+    }
+
+    LogoStream *in = src_ops->open(src);
+    if (!in)
+    {
+        return false;
+    }
+    LogoStream *out = dst_ops->open(dst);
+    if (!out)
+    {
+        logo_stream_close(in);
+        free(in);
+        return false;
+    }
+    // Start from a known-clean write-error state: a freshly opened stream may
+    // carry a stale flag from a backend that does not initialise it, and we use
+    // this flag below to detect a failed copy.
+    logo_stream_clear_write_error(out);
+
+    char buf[257];
+    bool ok = true;
+    int n;
+    while ((n = logo_stream_read_chars(in, buf, (int)sizeof(buf) - 1)) > 0)
+    {
+        buf[n] = '\0';
+        logo_stream_write(out, buf);
+        if (logo_stream_has_write_error(out))
+        {
+            ok = false;
+            break;
+        }
+    }
+    if (n < 0)
+    {
+        ok = false; // read error mid-copy
+    }
+    logo_stream_flush(out);
+    logo_stream_close(in);
+    free(in);
+    logo_stream_close(out);
+    free(out);
+
+    if (!ok)
+    {
+        dst_ops->file_delete(dst); // roll back the partial destination
+        return false;
+    }
+    return src_ops->file_delete(src); // remove source only after a clean copy
+}
+
 static bool router_rename(const char *old_path, const char *new_path)
 {
     const char *o = sd_subpath(old_path);
     const char *n = sd_subpath(new_path);
     if ((o != NULL) != (n != NULL))
     {
-        // Cross-mount move: rejected here. The cross-filesystem copy+delete is a
-        // later phase (see docs section 7).
-        return false;
+        // Cross-mount move: copy across filesystems then delete the source.
+        const LogoStorageOps *src_ops = o ? g_sd_ops : g_root_ops;
+        const LogoStorageOps *dst_ops = n ? g_sd_ops : g_root_ops;
+        const char *src = o ? o : old_path;
+        const char *dst = n ? n : new_path;
+        return cross_fs_move(src_ops, src, dst_ops, dst);
     }
     if (o)
     {
