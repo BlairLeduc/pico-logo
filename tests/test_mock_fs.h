@@ -375,6 +375,22 @@ static bool mock_storage_list_directory(const char *pathname, LogoDirCallback ca
     return true;
 }
 
+// Fixed, deterministic free-block count and block size for tests of `free`.
+static bool mock_storage_free_blocks(const char *pathname, uint32_t *free_blocks,
+                                     uint32_t *block_size)
+{
+    (void)pathname;
+    if (free_blocks)
+    {
+        *free_blocks = 100;
+    }
+    if (block_size)
+    {
+        *block_size = 512;
+    }
+    return true;
+}
+
 static LogoStorageOps mock_storage_ops = {
     .open = mock_storage_open,
     .file_exists = mock_storage_file_exists,
@@ -384,7 +400,8 @@ static LogoStorageOps mock_storage_ops = {
     .dir_delete = mock_storage_dir_delete,
     .rename = mock_storage_rename,
     .file_size = mock_storage_file_size,
-    .list_directory = mock_storage_list_directory
+    .list_directory = mock_storage_list_directory,
+    .free_blocks = mock_storage_free_blocks,
 };
 
 static LogoStorage mock_storage;

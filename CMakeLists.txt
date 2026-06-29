@@ -118,6 +118,8 @@ add_library(logo_core
     devices/hardware.c
     devices/io.c
     devices/storage.c
+    devices/storage_router.c
+    devices/lfs_storage.c
     devices/stream.c
     core/help.c
     ${HELP_DATA_C}
@@ -162,7 +164,9 @@ add_executable(pico-logo
     devices/picocalc/lcd.c
     devices/picocalc/main.c
     devices/picocalc/picocalc_console.c
+    devices/picocalc/picocalc_flash.c
     devices/picocalc/picocalc_hardware.c
+    devices/picocalc/picocalc_lfs.c
     devices/picocalc/picocalc_psram.c
     devices/picocalc/picocalc_storage.c
     devices/picocalc/picocalc.c
@@ -170,6 +174,16 @@ add_executable(pico-logo
     devices/picocalc/screensaver.c
     devices/picocalc/sdcard.c
     devices/picocalc/southbridge.c
+    third_party/littlefs/lfs.c
+    third_party/littlefs/lfs_util.c
+)
+
+# LittleFS build config: silence its printf-based logging (we surface status via
+# return codes / the selftest). Applies only to the littlefs translation units.
+set_source_files_properties(
+    third_party/littlefs/lfs.c
+    third_party/littlefs/lfs_util.c
+    PROPERTIES COMPILE_DEFINITIONS "LFS_NO_DEBUG;LFS_NO_WARN;LFS_NO_ERROR"
 )
 
 pico_set_program_name(pico-logo "pico-logo")
@@ -193,11 +207,27 @@ target_link_libraries(pico-logo
         pico_float
         pico_rand
         hardware_clocks
+        hardware_flash
         hardware_gpio
         hardware_i2c
         hardware_pio
         hardware_spi
 )
+
+# Phase-0 flash/PSRAM-QMI spike: build with -DPICOCALC_FLASH_SPIKE=ON to run the
+# acceptance self-test at boot (prints PASS/FAIL to the LCD). Off by default.
+option(PICOCALC_FLASH_SPIKE "Run the Phase-0 flash/PSRAM-QMI spike at boot" OFF)
+if(PICOCALC_FLASH_SPIKE)
+    target_compile_definitions(pico-logo PRIVATE PICOCALC_FLASH_SPIKE)
+endif()
+
+# Phase-1 LittleFS bring-up self-test: build with -DPICOCALC_LFS_SELFTEST=ON to
+# mount/format the internal FS and bump a persistent boot counter at boot. Off
+# by default.
+option(PICOCALC_LFS_SELFTEST "Run the Phase-1 LittleFS bring-up self-test at boot" OFF)
+if(PICOCALC_LFS_SELFTEST)
+    target_compile_definitions(pico-logo PRIVATE PICOCALC_LFS_SELFTEST)
+endif()
 
 # Link WiFi libraries if WiFi support is enabled
 if(LOGO_HAS_WIFI)
@@ -228,6 +258,12 @@ if(DEFINED LOGO_COPY_BUFFER_SIZE)
     target_compile_definitions(pico-logo PRIVATE LOGO_COPY_BUFFER_SIZE=${LOGO_COPY_BUFFER_SIZE})
 endif()
 
+# Size (in bytes) of the internal LittleFS region, reserved off the top of flash.
+# Set per board in CMakePresets.json (16 MB boards can spare more than 4 MB ones).
+if(DEFINED PICOCALC_FLASH_LFS_SIZE)
+    target_compile_definitions(pico-logo PRIVATE PICOCALC_FLASH_LFS_SIZE=${PICOCALC_FLASH_LFS_SIZE})
+endif()
+
 # Set C stack size (default Pico SDK is 0x800 = 2KB)
 # Default to 4KB. With the explicit operation stack, C stack usage is minimal.
 if(DEFINED PICO_STACK_SIZE)
@@ -254,7 +290,16 @@ if(BUILD_FOR_HOST)
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/hardware.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/io.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/storage.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/devices/storage_router.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/devices/lfs_storage.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/stream.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/littlefs/lfs.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/littlefs/lfs_util.c
+    )
+    set_source_files_properties(
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/littlefs/lfs.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/littlefs/lfs_util.c
+        PROPERTIES COMPILE_DEFINITIONS "LFS_NO_DEBUG;LFS_NO_WARN;LFS_NO_ERROR"
     )
 
     target_include_directories(logo_devices PUBLIC
@@ -394,7 +439,16 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/hardware.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/io.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/storage.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/devices/storage_router.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/devices/lfs_storage.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/stream.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/littlefs/lfs.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/littlefs/lfs_util.c
+    )
+    set_source_files_properties(
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/littlefs/lfs.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/littlefs/lfs_util.c
+        PROPERTIES COMPILE_DEFINITIONS "LFS_NO_DEBUG;LFS_NO_WARN;LFS_NO_ERROR"
     )
 
     target_include_directories(logo_devices PUBLIC

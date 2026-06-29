@@ -8,6 +8,7 @@
 
 #include "primitives.h"
 #include "error.h"
+#include "format.h"
 #include "devices/io.h"
 #include <stdio.h>
 #include <string.h>
@@ -324,6 +325,12 @@ static Result prim_setprefix(Evaluator *eval, int argc, Value *args)
     
     if (!exists)
     {
+        // Distinguish "the volume isn't there" (e.g. no SD card under /sd) from
+        // "the directory doesn't exist on a mounted volume".
+        if (!logo_io_mount_available(io, final_prefix))
+        {
+            return result_error(ERR_NO_SD_CARD);
+        }
         return result_error_arg(ERR_SUBDIR_NOT_FOUND, prefix, NULL);
     }
 
@@ -458,6 +465,13 @@ static Result prim_rename(Evaluator *eval, int argc, Value *args)
 
     if (!logo_io_rename(io, old_name, new_name))
     {
+        // A directory source that fails to rename means a cross-filesystem
+        // directory move, which is not supported (files only). Report the type
+        // mismatch rather than a misleading "file not found".
+        if (logo_io_dir_exists(io, old_name))
+        {
+            return result_error(ERR_FILE_WRONG_TYPE);
+        }
         return result_error_arg(ERR_FILE_NOT_FOUND, "", old_name);
     }
     return result_none();
@@ -483,6 +497,39 @@ static Result prim_createdir(Evaluator *eval, int argc, Value *args)
     return result_none();
 }
 
+// free [pathname] - outputs a two-element list [free_blocks block_size] for the
+// filesystem backing `pathname` (or the current prefix's filesystem when no
+// argument is given): the number of free allocation blocks and the size of one
+// block in bytes. Block sizes differ between volumes (e.g. `/` vs `/sd`), so the
+// unit size lets you convert to bytes: `free_blocks * block_size`.
+static Result prim_free(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
+    }
+
+    const char *path = "."; // current prefix's volume by default
+    if (argc >= 1)
+    {
+        REQUIRE_WORD(args[0]);
+        path = mem_word_ptr(args[0].as.node);
+    }
+
+    uint32_t free_blocks = 0, block_size = 0;
+    if (!logo_io_free_blocks(io, path, &free_blocks, &block_size))
+    {
+        // Most commonly: no SD card for a /sd path.
+        return result_error(ERR_NO_SD_CARD);
+    }
+
+    Node list = mem_cons(number_to_word((float)free_blocks),
+                         mem_cons(number_to_word((float)block_size), NODE_NIL));
+    return result_ok(value_list(list));
+}
+
 //==========================================================================
 // Registration
 //==========================================================================
@@ -491,6 +538,7 @@ void primitives_files_directory_init(void)
 {
     // Directory listing
     primitive_register("files", 0, prim_files);
+    primitive_register("free", 0, prim_free);
     primitive_register("directories", 0, prim_directories);
     primitive_register("catalog", 0, prim_catalog);
     primitive_register("setprefix", 1, prim_setprefix);

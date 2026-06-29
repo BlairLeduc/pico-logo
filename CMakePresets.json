@@ -21,6 +21,7 @@
                 "LOGO_EDITOR_BUFFER_SIZE": "24576",
                 "LOGO_COPY_BUFFER_SIZE": "8192",
                 "LOGO_OP_STACK_DEPTH": "768",
+                "PICOCALC_FLASH_LFS_SIZE": "2097152",
                 "BUILD_TESTING": "OFF"
             }
         },
@@ -49,6 +50,7 @@
                 "LOGO_COPY_BUFFER_SIZE": "8192",
                 "LOGO_OP_STACK_DEPTH": "256",
                 "LOGO_HAS_WIFI": "ON",
+                "PICOCALC_FLASH_LFS_SIZE": "2097152",
                 "BUILD_TESTING": "OFF"
             }
         },
@@ -77,6 +79,7 @@
                 "LOGO_COPY_BUFFER_SIZE": "8192",
                 "LOGO_OP_STACK_DEPTH": "256",
                 "LOGO_HAS_WIFI": "ON",
+                "PICOCALC_FLASH_LFS_SIZE": "8388608",
                 "BUILD_TESTING": "OFF"
             }
         },

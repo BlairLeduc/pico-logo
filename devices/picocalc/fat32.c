@@ -49,6 +49,12 @@ static bool fat32_mounted = false;
 static fat32_error_t mount_status = FAT32_OK; // Error code for mount operation
 static bool fat32_initialised = false;        // Set to true after successful file system initialization
 
+// Bumped on every unmount (i.e. whenever the card is removed or swapped). Open
+// file handles record the value at open time; callers compare against the
+// current value to detect that the card changed underneath them. See
+// fat32_get_generation().
+static uint32_t fat32_generation_counter = 0;
+
 // FAT32 file system state
 static fat32_boot_sector_t boot_sector;
 static fat32_fsinfo_t fsinfo;
@@ -627,6 +633,10 @@ fat32_error_t fat32_mount(void)
 
 void fat32_unmount(void)
 {
+    // Invalidate any open handles: after this, their recorded generation no
+    // longer matches, so they will refuse to touch a (possibly different) card.
+    fat32_generation_counter++;
+
     fat32_mounted = false;
     fsinfo_valid = false;
     mount_status = FAT32_ERROR_NO_CARD;
@@ -641,6 +651,11 @@ void fat32_unmount(void)
 bool fat32_is_mounted(void)
 {
     return fat32_mounted;
+}
+
+uint32_t fat32_get_generation(void)
+{
+    return fat32_generation_counter;
 }
 
 bool fat32_is_ready(void)

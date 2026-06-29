@@ -13,8 +13,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <unistd.h>
 #include <dirent.h>
+#include <stdint.h>
 #include <strings.h>  // for strcasecmp
 
 //
@@ -590,6 +592,29 @@ static bool logo_host_list_directory(const char *pathname, LogoDirCallback callb
 //
 // Storage operations table
 //
+static bool logo_host_free_blocks(const char *pathname, uint32_t *free_blocks,
+                                  uint32_t *block_size)
+{
+    struct statvfs st;
+    const char *target = (pathname && pathname[0]) ? pathname : ".";
+    if (statvfs(target, &st) != 0)
+    {
+        if (statvfs(".", &st) != 0)
+        {
+            return false;
+        }
+    }
+    if (free_blocks)
+    {
+        *free_blocks = (uint32_t)st.f_bavail;
+    }
+    if (block_size)
+    {
+        *block_size = (uint32_t)st.f_frsize;
+    }
+    return true;
+}
+
 static const LogoStorageOps host_storage_ops = {
     .open = logo_host_file_open,
     .file_exists = logo_host_file_exists,
@@ -600,6 +625,8 @@ static const LogoStorageOps host_storage_ops = {
     .rename = logo_host_rename,
     .file_size = logo_host_file_size,
     .list_directory = logo_host_list_directory,
+    .free_blocks = logo_host_free_blocks,
+    // mount_available left NULL: the host filesystem is always available.
 };
 
 //
