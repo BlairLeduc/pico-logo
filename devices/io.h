@@ -202,6 +202,17 @@ extern "C"
     bool logo_io_list_directory(const LogoIO *io, const char *pathname,
                                 LogoDirCallback callback, void *user_data,
                                 const char *filter);
+
+    // Report the free/total allocation blocks of the filesystem backing
+    // `pathname` (blocks are that filesystem's own allocation unit). Returns
+    // false if unavailable or unsupported. Either out-pointer may be NULL.
+    bool logo_io_free_blocks(const LogoIO *io, const char *pathname,
+                             uint32_t *free_blocks, uint32_t *total_blocks);
+
+    // Report whether the filesystem backing `pathname` is currently available
+    // (e.g. an SD card is present). True when the backend cannot report.
+    bool logo_io_mount_available(const LogoIO *io, const char *pathname);
+
     //
     // Reader/writer control
     //

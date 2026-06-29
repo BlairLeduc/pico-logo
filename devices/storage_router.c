@@ -219,6 +219,29 @@ static bool router_list_directory(const char *pathname, LogoDirCallback callback
     return g_root_ops->list_directory(pathname, callback, user_data, filter);
 }
 
+static bool router_free_blocks(const char *pathname, uint32_t *free_blocks,
+                               uint32_t *total_blocks)
+{
+    const char *sub = sd_subpath(pathname);
+    const LogoStorageOps *ops = sub ? g_sd_ops : g_root_ops;
+    if (!ops->free_blocks)
+    {
+        return false;
+    }
+    return ops->free_blocks(sub ? sub : pathname, free_blocks, total_blocks);
+}
+
+static bool router_mount_available(const char *pathname)
+{
+    const char *sub = sd_subpath(pathname);
+    const LogoStorageOps *ops = sub ? g_sd_ops : g_root_ops;
+    if (!ops->mount_available)
+    {
+        return true; // optional capability: assume available
+    }
+    return ops->mount_available(sub ? sub : pathname);
+}
+
 static const LogoStorageOps router_ops = {
     .open = router_open,
     .file_exists = router_file_exists,
@@ -229,6 +252,8 @@ static const LogoStorageOps router_ops = {
     .rename = router_rename,
     .file_size = router_file_size,
     .list_directory = router_list_directory,
+    .free_blocks = router_free_blocks,
+    .mount_available = router_mount_available,
 };
 
 void logo_storage_router_init(LogoStorage *router,

@@ -336,8 +336,14 @@ Largely already present; keep behind the `/sd` route:
   move (7, incl. rollback + the write_error regression), FAT generation (1),
   multi-write lfs round-trip (1); full suite 50/50. Verified on hardware:
   content and empty moves both directions, hot-swap does not crash.
-- **Phase 4 — polish.** Free-space reporting per mount, error messages, docs,
-  reference-manual updates.
+- **Phase 4 — polish. ✅ DONE.** New `free` reporter (free allocation blocks of a
+  volume; optional `(free "/sd)`) via a `free_blocks` storage op on both backends
+  + router + host/mock. `setprefix "/sd` with no card now reports "There is no SD
+  card" (new `ERR_NO_SD_CARD` + optional `mount_available` storage op) instead of
+  "Subdirectory not found". Reference manual updated: File Management overview of
+  the `/` + `/sd` layout, default prefix `/` (was `/Logo/`), cross-FS move
+  semantics on `rename`, and refreshed `setprefix`/archive examples. Host tests
+  for `free`; full suite 50/50.
 
 ## 12. Decisions (resolved)
 

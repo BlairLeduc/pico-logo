@@ -8,6 +8,7 @@
 #include "../storage.h"
 #include "picocalc_storage.h"
 #include "fat32.h"
+#include "sdcard.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -657,6 +658,38 @@ bool logo_picocalc_list_directory(const char *pathname, LogoDirCallback callback
     return true;
 }
 
+static bool logo_picocalc_free_blocks(const char *pathname, uint32_t *free_blocks,
+                                      uint32_t *total_blocks)
+{
+    (void)pathname;
+    uint32_t cluster = fat32_get_cluster_size();
+    if (cluster == 0)
+    {
+        return false; // not mounted
+    }
+    uint64_t free_bytes = 0, total_bytes = 0;
+    if (fat32_get_free_space(&free_bytes) != FAT32_OK ||
+        fat32_get_total_space(&total_bytes) != FAT32_OK)
+    {
+        return false;
+    }
+    if (free_blocks)
+    {
+        *free_blocks = (uint32_t)(free_bytes / cluster);
+    }
+    if (total_blocks)
+    {
+        *total_blocks = (uint32_t)(total_bytes / cluster);
+    }
+    return true;
+}
+
+static bool logo_picocalc_mount_available(const char *pathname)
+{
+    (void)pathname;
+    return sd_card_present();
+}
+
 static const LogoStorageOps picocalc_storage_ops = {
     .open = logo_picocalc_file_open,
     .file_exists = logo_picocalc_file_exists,
@@ -667,6 +700,8 @@ static const LogoStorageOps picocalc_storage_ops = {
     .rename = logo_picocalc_rename,
     .file_size = logo_picocalc_file_size,
     .list_directory = logo_picocalc_list_directory,
+    .free_blocks = logo_picocalc_free_blocks,
+    .mount_available = logo_picocalc_mount_available,
 };
 
 

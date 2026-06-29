@@ -77,6 +77,7 @@ static const char *error_templates[] = {
     [ERR_INVALID_NETWORK_OP] = "Invalid network operation",
     [ERR_STACK_OVERFLOW] = "Too many nested operations",
     [ERR_DONT_KNOW_ABOUT] = "I don't know about %s",
+    [ERR_NO_SD_CARD] = "There is no SD card",
 };
 
 #define NUM_ERRORS (sizeof(error_templates) / sizeof(error_templates[0]))

@@ -69,6 +69,19 @@ extern "C"
         bool (*list_directory)(const char *pathname, LogoDirCallback callback,
                                void *user_data, const char *filter);
 
+        // Report the free and total allocation-block counts of the filesystem
+        // backing `pathname`. "Blocks" are the filesystem's own allocation unit
+        // (e.g. a LittleFS block or a FAT cluster), so the block size differs
+        // between volumes. Returns false if the volume is unavailable (e.g. no SD
+        // card). Optional: NULL if the backend cannot report free space.
+        bool (*free_blocks)(const char *pathname, uint32_t *free_blocks,
+                            uint32_t *total_blocks);
+
+        // Report whether the filesystem backing `pathname` is currently mounted
+        // and usable (e.g. an SD card is present and mounted). Optional: a NULL
+        // pointer means the backend is always considered available.
+        bool (*mount_available)(const char *pathname);
+
     } LogoStorageOps;
 
     typedef struct LogoStorage

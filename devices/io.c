@@ -997,6 +997,41 @@ bool logo_io_list_directory(const LogoIO *io, const char *pathname,
     return io->storage->ops->list_directory(pathname, callback, user_data, filter);
 }
 
+bool logo_io_free_blocks(const LogoIO *io, const char *pathname,
+                         uint32_t *free_blocks, uint32_t *total_blocks)
+{
+    if (!io || !io->storage || !pathname || !io->storage->ops->free_blocks)
+    {
+        return false;
+    }
+    char resolved[LOGO_STREAM_NAME_MAX];
+    char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
+    if (!full_path)
+    {
+        return false;
+    }
+    return io->storage->ops->free_blocks(full_path, free_blocks, total_blocks);
+}
+
+bool logo_io_mount_available(const LogoIO *io, const char *pathname)
+{
+    if (!io || !io->storage || !pathname)
+    {
+        return true;
+    }
+    if (!io->storage->ops->mount_available)
+    {
+        return true; // backend does not distinguish availability
+    }
+    char resolved[LOGO_STREAM_NAME_MAX];
+    char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
+    if (!full_path)
+    {
+        return true;
+    }
+    return io->storage->ops->mount_available(full_path);
+}
+
 //
 // Reader/writer control
 //

@@ -424,6 +424,43 @@ static bool lfs_storage_list_directory(const char *pathname,
     return true;
 }
 
+static bool lfs_storage_free_blocks(const char *pathname, uint32_t *free_blocks,
+                                    uint32_t *total_blocks)
+{
+    (void)pathname;
+    if (!g_lfs)
+    {
+        return false;
+    }
+    lfs_ssize_t used = lfs_fs_size(g_lfs);
+    if (used < 0)
+    {
+        return false;
+    }
+    struct lfs_fsinfo info;
+    if (lfs_fs_stat(g_lfs, &info) < 0)
+    {
+        return false;
+    }
+    if (free_blocks)
+    {
+        *free_blocks = (info.block_count > (lfs_size_t)used)
+                           ? (uint32_t)(info.block_count - (lfs_size_t)used)
+                           : 0;
+    }
+    if (total_blocks)
+    {
+        *total_blocks = (uint32_t)info.block_count;
+    }
+    return true;
+}
+
+static bool lfs_storage_mount_available(const char *pathname)
+{
+    (void)pathname;
+    return g_lfs != NULL;
+}
+
 static const LogoStorageOps lfs_storage_ops = {
     .open = lfs_storage_open,
     .file_exists = lfs_storage_file_exists,
@@ -434,6 +471,8 @@ static const LogoStorageOps lfs_storage_ops = {
     .rename = lfs_storage_rename,
     .file_size = lfs_storage_file_size,
     .list_directory = lfs_storage_list_directory,
+    .free_blocks = lfs_storage_free_blocks,
+    .mount_available = lfs_storage_mount_available,
 };
 
 void logo_lfs_storage_init(LogoStorage *storage, lfs_t *lfs)

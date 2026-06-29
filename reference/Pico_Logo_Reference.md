@@ -378,7 +378,7 @@ The following lists the capabilities of the supported processor.
 
 This section describes the feature of Logo that lets you automatically load a file into your workspace when you start up Logo. You must call the file `startup`. There can be only one file with the name `startup`, although it can include commands to load other files.
 
-The default prefix is `/Logo/`. On the SD card, the `startup` file is located at `/Logo/startup`. You can change the `startup` file, with [`editfile`](#editfile).
+The default prefix is `/`, the root of the device's internal storage, so the `startup` file is located at `/startup`. You can change the `startup` file, with [`editfile`](#editfile).
 
 ```logo
 >editfile "startup
@@ -4437,6 +4437,15 @@ make "ticket "snow\ route
 ===
 # File Management
 
+Pico Logo presents a single directory tree with two filesystems mounted in it:
+
+- **`/`** — the root is the device's internal flash storage. It is always present and is where files are saved by default (the default prefix is `/`). Your `startup` file lives here as `/startup`.
+- **`/sd`** — the FAT32 SD card, mounted under `/sd`. It appears in a listing of `/` only while a card is inserted, and is re-read automatically when a card is removed and another inserted. Asking about `/sd` with no card present reports `There is no SD card`.
+
+Paths may be absolute (beginning with `/`) or relative to the current prefix (see [`setprefix`](#setprefix)). [`rename`](#rename) moves a **file** between the two filesystems by copying it and deleting the original; moving a **directory** across filesystems is not supported and reports `File is the wrong type`.
+
+Use [`free`](#free) to see how much space remains on a filesystem.
+
 ## files
 
 files  
@@ -4497,23 +4506,23 @@ setprefix _pathname_
 
 Sets a prefix that will be used as the implicit beginning of filenames in [`open`](#open), [`load`](#load), and [`save`](#save) commands. The input to `setprefix` must be a word, unless it is the empty list, to indicate that there should be no prefix.
 
-The _pathname_ can include parent directory references ("`..`") to navigate up the directory tree. For example, if the current prefix is `/Logo/apple/`, then `setprefix ".."` will change the prefix to `/Logo/`, and `setprefix "..\/banana"` will change it to `/Logo/banana/`.
+The _pathname_ can include parent directory references ("`..`") to navigate up the directory tree. For example, if the current prefix is `/sketches/apple/`, then `setprefix ".."` will change the prefix to `/sketches/`, and `setprefix "..\/banana"` will change it to `/sketches/banana/`.
 
 **Examples**:
 
 ```logo
-?setprefix "/Logo
+?setprefix "/sketches
 ?pr prefix
-/Logo/
+/sketches/
 ?setprefix "apple
 ?pr prefix
-/Logo/apple/
+/sketches/apple/
 ?setprefix "..
 ?pr prefix
-/Logo/
+/sketches/
 ?setprefix "..\/banana
 ?pr prefix
-/Logo/banana/
+/sketches/banana/
 ```
 
 
@@ -4528,9 +4537,9 @@ Outputs the current file prefix, or `[]` if there is no prefix.
 **Example**:
 
 ```logo
-?setprefix "/Logo
+?setprefix "/sketches
 ?pr prefix
-/Logo/
+/sketches/
 ?setprefix []
 ?pr prefix
 []
@@ -4621,6 +4630,27 @@ sketches/
 ```
 
 
+## free
+
+free  
+(free _pathname_)  
+
+`operation`
+
+Outputs the number of free allocation blocks on the filesystem that holds the current directory, or — if _pathname_ is given — the filesystem that holds _pathname_. A block is the filesystem's own allocation unit (a flash block on the internal `/` filesystem, a cluster on the `/sd` card), so the counts for two different volumes are not directly comparable.
+
+Reports `There is no SD card` if asked about `/sd` when no card is present.
+
+**Example**:
+
+```logo
+?pr free
+1018
+?pr (free "/sd)
+981250
+```
+
+
 ## file? (filep)
 
 file? _pathname_  
@@ -4665,7 +4695,7 @@ rename _pathname1_ _pathname2_
 
 `operation`
 
-Renames the file or directory from _pathname1_ to _pathname2_. A file or directory can be moved if the paths are different.
+Renames the file or directory from _pathname1_ to _pathname2_. A file or directory can be moved if the paths are different. A **file** may be moved between the internal storage and the `/sd` card (it is copied, then the original is deleted); moving a **directory** across the two filesystems is not supported and reports `File is the wrong type`.
 
 **Example**:
 
@@ -5799,7 +5829,7 @@ goodbye
 ===
 # Appendix A: Useful Tools
 
-The procedures presented here are for your convenience when constructing your own procedures. Some of them were defined as examples for primitives and others appear here for the first time. These procedures are in the logo archive in the release. You can extract the contents of the archive into the `/Logo` directory on your SD Card. A sample `startup` file is also included to load these tools.
+The procedures presented here are for your convenience when constructing your own procedures. Some of them were defined as examples for primitives and others appear here for the first time. These procedures are in the logo archive in the release. You can copy the contents of the archive into the root directory of the device's internal storage (or onto a `/sd` card and copy them across). A sample `startup` file is also included to load these tools.
 
 ## Graphics Tools
 
@@ -6063,7 +6093,7 @@ The parser tries to be clever about this potential ambiguity and figure out whic
 
 This Appendix contains procedures that are not primitives but are useful for various purposes. You can use these procedures as they are or modify them to suit your needs.
 
-You can add these procedures to your `startup` file so they are always available when you start Logo. To do this, copy and paste the code into a file named `startup` and save it in the `/Logo` directory on your SD Card.
+You can add these procedures to your `startup` file so they are always available when you start Logo. To do this, copy and paste the code into a file named `startup` and save it (`save "startup`) in the root directory of the device's internal storage.
 
 ## File Navigation
 

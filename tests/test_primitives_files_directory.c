@@ -196,6 +196,21 @@ void test_rename_file(void)
     TEST_ASSERT_TRUE(mock_storage_file_exists("new.txt"));
 }
 
+void test_free_reports_blocks(void)
+{
+    // The mock filesystem reports 100 free blocks.
+    Result r = eval_string("free");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(100.0f, r.value.as.number);
+}
+
+void test_free_with_pathname(void)
+{
+    Result r = eval_string("(free \"/anywhere)");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(100.0f, r.value.as.number);
+}
+
 void test_setprefix_and_prefix(void)
 {
     // Create the directory first
@@ -392,6 +407,8 @@ int main(void)
     RUN_TEST(test_dirp_true);
     RUN_TEST(test_dirp_false);
     RUN_TEST(test_rename_file);
+    RUN_TEST(test_free_reports_blocks);
+    RUN_TEST(test_free_with_pathname);
     RUN_TEST(test_setprefix_and_prefix);
     RUN_TEST(test_setprefix_nonexistent_directory);
     RUN_TEST(test_setprefix_root_directory);
