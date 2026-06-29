@@ -27,9 +27,15 @@ static const char *sd_subpath(const char *path)
     {
         return NULL;
     }
-    char c1 = path[1], c2 = path[2];
-    bool is_sd = (c1 == 's' || c1 == 'S') && (c2 == 'd' || c2 == 'D');
-    if (!is_sd)
+    // Read each character only after confirming the previous one is non-NUL, so
+    // a short path like "/" never reads past its terminator.
+    char c1 = path[1];
+    if (c1 != 's' && c1 != 'S')
+    {
+        return NULL;
+    }
+    char c2 = path[2];
+    if (c2 != 'd' && c2 != 'D')
     {
         return NULL;
     }

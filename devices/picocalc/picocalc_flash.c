@@ -260,8 +260,10 @@ bool picocalc_flash_selftest(void)
            loop_ok ? "returned" : "BAD ARGS", (long long)us, (long long)(us / 8));
     printf("    -> verify keyboard still responds and no crash followed.\n");
 
-    bool all = crit2 && crit3 && data_ok && psram_ok && loop_ok &&
-               (psram ? wm1_after || true : true); // wm1 cleared is OK if rearm fixes it
+    // Note: a cleared WRITABLE_M1 after the raw op (wm1_after) is NOT a failure
+    // — the recipe's psram_rearm_qmi() restores it, which [1c] confirms. So the
+    // pass criteria are the register/pin checks plus the functional read-backs.
+    bool all = crit2 && crit3 && data_ok && psram_ok && loop_ok;
     printf("=== Phase 0 automated result: %s ===\n\n", all ? "PASS" : "FAIL");
     return all;
 }

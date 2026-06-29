@@ -294,7 +294,10 @@ static void test_nonroot_dir_does_not_inject_sd(void)
 }
 
 //============================================================================
-// rename: same-backend delegates, cross-mount is rejected
+// rename: same-backend delegates natively; cross-mount goes through
+// cross_fs_move (copy+delete), exercised against real backends in
+// test_cross_fs_move.c — here we only check the router does not call a native
+// rename for a cross-mount move.
 //============================================================================
 
 static void test_rename_within_root(void)
@@ -313,8 +316,13 @@ static void test_rename_within_sd_strips_both(void)
     TEST_ASSERT_EQUAL_STRING("/b", sd_spy.last2);
 }
 
-static void test_cross_mount_rename_rejected(void)
+static void test_cross_mount_rename_not_native(void)
 {
+    // A cross-mount rename is dispatched to cross_fs_move, not to either
+    // backend's native rename. With these spies the move bails out early (the
+    // destination is reported as a directory), so it returns false — but the
+    // point here is that no native rename runs. The actual copy+delete behaviour
+    // is covered by test_cross_fs_move.c against real backends.
     TEST_ASSERT_FALSE(router.ops->rename("/sd/a", "/b"));
     TEST_ASSERT_FALSE(router.ops->rename("/a", "/sd/b"));
     TEST_ASSERT_EQUAL_INT(0, root_spy.rename);
@@ -339,6 +347,6 @@ int main(void)
     RUN_TEST(test_nonroot_dir_does_not_inject_sd);
     RUN_TEST(test_rename_within_root);
     RUN_TEST(test_rename_within_sd_strips_both);
-    RUN_TEST(test_cross_mount_rename_rejected);
+    RUN_TEST(test_cross_mount_rename_not_native);
     return UNITY_END();
 }

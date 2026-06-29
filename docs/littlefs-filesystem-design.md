@@ -1,6 +1,6 @@
 # Design: LittleFS internal filesystem + `/sd` FAT32 mount
 
-Status: **Draft / research** (no code yet)
+Status: **Implemented** — Phases 0–4 complete (see §11 for per-phase results)
 Target: Pimoroni Pico Plus 2 W (RP2350, 16 MB flash, 8 MB PSRAM), PicoCalc device
 Author: design notes for review
 

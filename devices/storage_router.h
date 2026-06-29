@@ -32,9 +32,9 @@ extern "C"
     //   "/sd" or "/sd/..."  -> sd_ops, with the "/sd" prefix stripped
     //                          ("/sd" -> "/", "/sd/foo" -> "/foo")
     //   anything else        -> root_ops, path unchanged
-    // The "sd" segment is matched case-insensitively. A cross-mount rename
-    // (one side under /sd, the other not) is rejected here; the cross-filesystem
-    // move-as-copy+delete is a later phase.
+    // The "sd" segment is matched case-insensitively. A cross-mount rename (one
+    // side under /sd, the other not) moves a file by streamed copy + delete;
+    // cross-mount directory moves are rejected.
     void logo_storage_router_init(LogoStorage *router,
                                   const LogoStorageOps *root_ops,
                                   const LogoStorageOps *sd_ops,
