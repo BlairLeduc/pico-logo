@@ -162,6 +162,7 @@ add_executable(pico-logo
     devices/picocalc/lcd.c
     devices/picocalc/main.c
     devices/picocalc/picocalc_console.c
+    devices/picocalc/picocalc_flash.c
     devices/picocalc/picocalc_hardware.c
     devices/picocalc/picocalc_psram.c
     devices/picocalc/picocalc_storage.c
@@ -193,11 +194,19 @@ target_link_libraries(pico-logo
         pico_float
         pico_rand
         hardware_clocks
+        hardware_flash
         hardware_gpio
         hardware_i2c
         hardware_pio
         hardware_spi
 )
+
+# Phase-0 flash/PSRAM-QMI spike: build with -DPICOCALC_FLASH_SPIKE=ON to run the
+# acceptance self-test at boot (prints PASS/FAIL to the LCD). Off by default.
+option(PICOCALC_FLASH_SPIKE "Run the Phase-0 flash/PSRAM-QMI spike at boot" OFF)
+if(PICOCALC_FLASH_SPIKE)
+    target_compile_definitions(pico-logo PRIVATE PICOCALC_FLASH_SPIKE)
+endif()
 
 # Link WiFi libraries if WiFi support is enabled
 if(LOGO_HAS_WIFI)

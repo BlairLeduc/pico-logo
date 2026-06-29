@@ -36,9 +36,13 @@ FAT on the internal flash; a generic mount-table (only two fixed mounts: `/` and
 - **No flash writes exist anywhere today** — flash is read-only XIP. This is
   greenfield.
 - **Threading model (important, see §4):** effectively **single-core** (no
-  `multicore_launch_core1`), **polled networking** (`cyw43_arch_poll`,
-  `picocalc_hardware.c:478`), with several **flash-resident repeating-timer ISRs**
-  (keyboard 100 ms `keyboard.c:238`, SD-detect 500 ms `fat32.c:2583`).
+  `multicore_launch_core1`), but **background/IRQ-driven networking** —
+  `pico_cyw43_arch_lwip_threadsafe_background` (`CMakeLists.txt:216`) services
+  lwIP/cyw43 from a low-priority IRQ + alarm on core0 (the `cyw43_arch_poll()` at
+  `picocalc_hardware.c:478` is belt-and-suspenders, not the primary driver). Plus
+  several **flash-resident repeating-timer ISRs** (keyboard 100 ms
+  `keyboard.c:238`, SD-detect 500 ms `fat32.c:2583`). So a flash write must run
+  with interrupts disabled, and criterion 4 (no dropped CYW43 event) matters.
 
 ## 3. Flash layout — surviving flash-and-debug
 
@@ -121,8 +125,8 @@ at risk is **QMI controller M1 state + the shared XIP cache** (SRAM-side).
     buffers live there, so an ISR brushing them mid-write corrupts data). The
     CYW43 GPIO IRQ is SDK/library code in flash — invasive to relocate. The payoff
     is only avoiding a bounded, benign stall (keyboard MCU buffers keystrokes;
-    SD-detect is a 500 ms timer; networking is polled, so we won't be mid-transfer
-    during a file save).
+    SD-detect is a 500 ms timer; the cyw43 background IRQ is on core0 and its chip
+    GPIO IRQ is latched, so a few-ms window defers — not drops — its servicing).
 - **Instead, run stop-the-world but chunk it.** Erase **one sector at a time,
   re-enabling interrupts between sectors**, so the worst-case interrupts-off
   window is a single ~few-ms sector erase rather than a whole multi-sector commit.
@@ -131,24 +135,25 @@ at risk is **QMI controller M1 state + the shared XIP cache** (SRAM-side).
   only the `m[1]` window registers + re-asserts `XIP_CTRL_WRITABLE_M1`. It must
   **not** re-run `psram_enter_qpi()` (the chip is already in QPI; re-issuing `0x35`
   would be wrong). The detected size and chip-side QPI mode are preserved.
-- Single-core + polled networking means **no core-lockout needed**: build with
+- Single-core (no second core) means **no core-lockout needed**: build with
   `PICO_FLASH_ASSUME_CORE0_SAFE=1` (or bracket in a critical section) rather than
-  the full `flash_safe_execute` multicore dance. Ensure no `cyw43_arch_poll()` is
-  in flight.
+  the full `flash_safe_execute` multicore dance. The cyw43/lwIP background
+  servicing is a core0 IRQ, so disabling interrupts for the op inherently pauses
+  it; just avoid issuing a write while holding a networking lock.
 
 ### Safe-write recipe (per single sector erase / per program)
 Operate **one sector at a time** so the interrupts-off window stays bounded; a
 multi-sector erase loops over this, re-enabling interrupts between iterations.
-1. Quiesce networking (no `cyw43_arch_poll()` mid-flight).
-2. `xip_cache_clean_all()` — write back dirty PSRAM lines.
-3. `save_and_disable_interrupts()`.
-4. `flash_range_erase` (one sector) / `flash_range_program` (bootrom path, RAM).
-5. `psram_rearm_qmi()` — restore `m[1]` regs + WRITABLE_M1.
-6. `xip_cache_invalidate_all()`.
-7. `restore_interrupts()`.
+1. `save_and_disable_interrupts()` (this also pauses the core0 cyw43/lwIP IRQ).
+2. `xip_cache_clean_all()` — write back dirty PSRAM lines (XIP still up).
+3. `flash_range_erase` (one sector) / `flash_range_program` (bootrom path, RAM).
+4. `psram_rearm_qmi()` — restore `m[1]` regs + WRITABLE_M1.
+5. `xip_cache_invalidate_all()`.
+6. `restore_interrupts()`.
 
-Per-iteration the window is one ~few-ms sector op. LittleFS batches writes and
-lets us control commit timing, so commits are infrequent and off the hot path.
+Per-iteration the interrupts-off window is one flash op: **~47 ms for a sector
+erase** (measured, Phase 0), sub-ms for a page program. LittleFS batches writes
+and lets us control commit timing, so commits are infrequent and off the hot path.
 
 ### Spike acceptance criteria (Phase 0)
 1. After `picocalc_psram_init`, a `flash_range_program` to the reserved region
@@ -156,11 +161,41 @@ lets us control commit timing, so commits are infrequent and off the hot path.
    step 5 restores it).
 2. `m[1]` registers unchanged across the bootrom path (read before/after).
 3. PSRAM CS pin function survives `connect_internal_flash`.
-4. A single-sector (~few-ms) interrupts-off window does not break keyboard /
-   SD-detect recovery or drop a CYW43 event; and a multi-sector erase looped with
-   interrupts re-enabled between sectors behaves the same.
+4. A single-sector interrupts-off window does not break keyboard / SD-detect
+   recovery or drop a CYW43 event; and a multi-sector erase looped with interrupts
+   re-enabled between sectors behaves the same.
 
-If these hold, the rest of the plan is safe to build.
+### Phase 0 results — VALIDATED (2026, SDK 2.2.0, Pico Plus 2 W)
+Ran via the `PICOCALC_FLASH_SPIKE` boot self-test (`picocalc_flash.c`). All
+criteria passed:
+- `[1]` **WRITABLE_M1 survives the raw flash op** (1→1) — the bootrom does **not**
+  clear it on this silicon/SDK. Hazard #2 did not materialize.
+- `[2]` **M1 window registers unchanged** by the bootrom path. Hazard #3 (regs)
+  did not materialize.
+- `[3]` **PSRAM CS pin function unchanged** (9 = `GPIO_FUNC_XIP_CS1`) across
+  `connect_internal_flash`. Hazard #3 (pin) did not materialize.
+- `[1b]` flash program+readback **integrity PASS**; `[1c]` PSRAM **writable after
+  the full recipe PASS**.
+- `[4]` 8-sector chunked erase returned cleanly; **keyboard stayed responsive, no
+  crash**.
+
+**Consequences for the design:**
+- The QMI/PSRAM window is **robust to flash writes** — none of the register/pin
+  hazards occurred. `psram_rearm_qmi()` is therefore **insurance, not a
+  load-bearing fix**: keep it (idempotent, cheap), but correctness no longer
+  depends on it. The shared-cache clean/invalidate in the recipe still matters
+  (hazard #1) and is retained.
+- **Timing correction (important):** a 4 KB sector erase takes **~47 ms**
+  (measured 47,140 µs/sector), not "a few ms" as earlier drafts said. The recipe
+  holds **interrupts disabled for that full ~47 ms** (the bootrom busy-polls the
+  chip with XIP down). Per-sector chunking re-enables interrupts **between**
+  sectors, so a multi-sector commit is 47 ms windows with gaps (cyw43/lwIP IRQ
+  serviced in the gaps), **worst-case single stall ≈ 47 ms**. Keyboard tolerates
+  this (MCU buffers); see decision below on whether to accept it or add an
+  interruptible erase.
+
+The core design assumption holds: **flash writes coexist safely with the
+configured PSRAM.** Phase 1 may proceed.
 
 ## 5. LittleFS block device + configuration
 
@@ -271,9 +306,11 @@ Largely already present; keep behind the `/sd` route:
 
 ## 11. Phased plan
 
-- **Phase 0 — PSRAM/QMI flash-write spike (gating).** Implement the safe-write
-  recipe + `psram_rearm_qmi()`; validate the four acceptance criteria in §4 on
-  hardware. Nothing else proceeds until this passes.
+- **Phase 0 — PSRAM/QMI flash-write spike (gating). ✅ DONE / PASSED.** Safe-write
+  recipe + `psram_rearm_qmi()` implemented (`picocalc_flash.{c,h}`,
+  `picocalc_psram.c`); all four §4 criteria validated on hardware. Finding: the
+  QMI/PSRAM window is robust (rearm is insurance), but a sector erase is ~47 ms of
+  interrupts-off time — see §4 results and the 47 ms decision.
 - **Phase 1 — LittleFS block device + format/mount.** Reserve the flash region,
   wire the block device to the safe-write path, format-on-first-boot, basic
   read/write of one file. Confirm it survives a flash-and-debug cycle.
@@ -299,4 +336,10 @@ Largely already present; keep behind the `/sd` route:
    (copy+delete); directory moves across FS error out.
 7. **Default save location:** **LittleFS root `/`** directly (no default subdir);
    consistent with "start directory is `/`".
+8. **47 ms erase stall (from Phase 0):** **accept for v1.** Worst-case single
+   interrupts-off window is one sector erase (~47 ms); chunking re-enables
+   interrupts between sectors so cyw43/lwIP is serviced in the gaps. Guidance:
+   don't write to flash mid network transfer. Interruptible erase (microsecond
+   stalls, but needs RAM-resident ISRs — the fragile "Category B" work) is
+   deferred; revisit only if networking-during-save proves a problem.
 ```

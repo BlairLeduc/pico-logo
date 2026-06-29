@@ -117,7 +117,12 @@ static void __no_inline_not_in_flash_func(psram_enter_qpi)(void)
 }
 
 // Program the QMI M1 read/write formats + timing for the APS6404.
-static void __no_inline_not_in_flash_func(psram_configure_qmi)(void)
+//
+// Public so the flash-write path can re-run it after an erase/program (the
+// bootrom flash path can clear WRITABLE_M1). It only touches controller-side
+// M1 registers + the XIP WRITABLE_M1 bit, never the chip's QPI state, so it is
+// safe to call repeatedly and with interrupts already disabled.
+void __no_inline_not_in_flash_func(picocalc_psram_rearm_qmi)(void)
 {
     uint32_t save = save_and_disable_interrupts();
 
@@ -241,7 +246,7 @@ size_t picocalc_psram_init(uint32_t cs_pin)
     }
 
     psram_enter_qpi();
-    psram_configure_qmi();
+    picocalc_psram_rearm_qmi();
 
     if (!psram_selftest())
     {

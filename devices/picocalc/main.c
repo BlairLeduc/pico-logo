@@ -19,6 +19,7 @@
 #include "devices/picocalc/picocalc_hardware.h"
 #include "devices/picocalc/picocalc.h"
 #include "devices/picocalc/picocalc_psram.h"
+#include "devices/picocalc/picocalc_flash.h"
 #include "core/memory.h"
 #include "core/lexer.h"
 #include "core/eval.h"
@@ -131,6 +132,14 @@ int main(void)
     // PSRAM is detected, the interpreter runs SRAM-only.
 #ifdef PIMORONI_PICO_PLUS2_W_PSRAM_CS_PIN
     size_t psram_size = picocalc_psram_init(PIMORONI_PICO_PLUS2_W_PSRAM_CS_PIN);
+
+#ifdef PICOCALC_FLASH_SPIKE
+    // Phase-0 gating spike: validate the flash-write vs PSRAM/QMI interaction
+    // while PSRAM is up but not yet handed to the allocator (the spike scribbles
+    // into PSRAM and erases/programs the reserved flash region).
+    picocalc_flash_selftest();
+#endif
+
     if (psram_size > 0)
     {
         size_t aux_size = psram_size;
