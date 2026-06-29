@@ -458,6 +458,13 @@ static Result prim_rename(Evaluator *eval, int argc, Value *args)
 
     if (!logo_io_rename(io, old_name, new_name))
     {
+        // A directory source that fails to rename means a cross-filesystem
+        // directory move, which is not supported (files only). Report the type
+        // mismatch rather than a misleading "file not found".
+        if (logo_io_dir_exists(io, old_name))
+        {
+            return result_error(ERR_FILE_WRONG_TYPE);
+        }
         return result_error_arg(ERR_FILE_NOT_FOUND, "", old_name);
     }
     return result_none();
