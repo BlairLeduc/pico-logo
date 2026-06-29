@@ -318,8 +318,14 @@ Largely already present; keep behind the `/sd` route:
   hardware via the `PICOCALC_LFS_SELFTEST` boot counter: first boot formats,
   follow-up boots persist, and the count **survives a firmware reflash** — the
   reserved region is outside the firmware image as designed.
-- **Phase 2 — VFS router + LittleFS as root.** Two backends, router dispatch,
-  `io.prefix`/startup changes, `/` listing shows `sd`. FAT moves behind `/sd`.
+- **Phase 2 — VFS router + LittleFS as root. ✅ DONE / PASSED.** Storage router
+  (`devices/storage_router.{c,h}`) dispatching `/sd[/...]` → FAT, else → the
+  device-independent LittleFS backend (`devices/lfs_storage.{c,h}`); `main.c`
+  mounts LittleFS as `/`, builds the router over both backends, default prefix
+  `/`, loads `startup` from root; `/` listing injects a synthetic `sd` only when a
+  card is present. 25 host tests (router + backend over a RAM bd); verified on
+  hardware (save/catalog/createdir on `/`, `/sd` lists the card, `sd` appears only
+  with a card inserted). Cross-mount rename is rejected here (Phase 3).
 - **Phase 3 — cross-FS copy/move + hot-swap hardening.** Cross-backend
   move-as-copy+delete, stale-handle invalidation on card removal.
 - **Phase 4 — polish.** Free-space reporting per mount, error messages, docs,

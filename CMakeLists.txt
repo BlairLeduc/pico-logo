@@ -118,6 +118,8 @@ add_library(logo_core
     devices/hardware.c
     devices/io.c
     devices/storage.c
+    devices/storage_router.c
+    devices/lfs_storage.c
     devices/stream.c
     core/help.c
     ${HELP_DATA_C}
@@ -282,7 +284,16 @@ if(BUILD_FOR_HOST)
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/hardware.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/io.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/storage.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/devices/storage_router.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/devices/lfs_storage.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/stream.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/littlefs/lfs.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/littlefs/lfs_util.c
+    )
+    set_source_files_properties(
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/littlefs/lfs.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/littlefs/lfs_util.c
+        PROPERTIES COMPILE_DEFINITIONS "LFS_NO_DEBUG;LFS_NO_WARN;LFS_NO_ERROR"
     )
 
     target_include_directories(logo_devices PUBLIC
@@ -422,7 +433,16 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/hardware.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/io.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/storage.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/devices/storage_router.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/devices/lfs_storage.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/stream.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/littlefs/lfs.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/littlefs/lfs_util.c
+    )
+    set_source_files_properties(
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/littlefs/lfs.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/littlefs/lfs_util.c
+        PROPERTIES COMPILE_DEFINITIONS "LFS_NO_DEBUG;LFS_NO_WARN;LFS_NO_ERROR"
     )
 
     target_include_directories(logo_devices PUBLIC

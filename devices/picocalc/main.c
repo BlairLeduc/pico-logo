@@ -13,6 +13,8 @@
 #include "devices/console.h"
 #include "devices/io.h"
 #include "devices/storage.h"
+#include "devices/storage_router.h"
+#include "devices/lfs_storage.h"
 #include "devices/stream.h"
 #include "devices/picocalc/picocalc_console.h"
 #include "devices/picocalc/picocalc_storage.h"
@@ -21,6 +23,7 @@
 #include "devices/picocalc/picocalc_psram.h"
 #include "devices/picocalc/picocalc_flash.h"
 #include "devices/picocalc/picocalc_lfs.h"
+#include "devices/picocalc/sdcard.h"
 #include "core/memory.h"
 #include "core/lexer.h"
 #include "core/eval.h"
@@ -87,14 +90,6 @@ int main(void)
         return EXIT_FAILURE;
     }
 
-    // Initialise the storage for file I/O
-    LogoStorage *storage = logo_picocalc_storage_create();
-    if (!storage)
-    {
-        fprintf(stderr, "Failed to create storage\n");
-        return EXIT_FAILURE;
-    }
-
     // Initialise the hardware (abstraction layer)
     LogoHardware *hardware = logo_picocalc_hardware_create();
     if (!hardware)
@@ -103,27 +98,12 @@ int main(void)
         return EXIT_FAILURE;
     }
 
-    // Initialize the I/O manager
+    // The I/O manager is wired up further below, after PSRAM is brought up and
+    // the filesystems are mounted: the LittleFS root lives on flash, and
+    // mounting/formatting it issues flash writes that must run after the
+    // PSRAM/QMI is configured.
     LogoIO io;
-    logo_io_init(&io, console, storage, hardware);
-    
-    // Check if the default directory exists
-    bool default_dir_exists = false;
-    if (storage && storage->ops->dir_exists)
-    {
-        default_dir_exists = storage->ops->dir_exists("/Logo");
-    }
-    
-    // Set prefix based on whether default directory exists
-    if (default_dir_exists)
-    {
-        strcpy(io.prefix, "/Logo/");
-    }
-    else
-    {
-        strcpy(io.prefix, "/");
-    }
-    
+
     // Initialize Logo subsystems
     logo_mem_init();
 
@@ -166,13 +146,35 @@ int main(void)
     picocalc_lfs_selftest();
 #endif
 
+    // Mount the internal LittleFS (formatting on first boot) as the root `/`,
+    // then present the FAT32 SD card under `/sd` via the storage router.
+    bool lfs_ok = (picocalc_lfs_mount() == 0);
+
+    static LogoStorage lfs_root_storage;
+    logo_lfs_storage_init(&lfs_root_storage, picocalc_lfs());
+
+    LogoStorage *sd_storage = logo_picocalc_storage_create();
+    if (!sd_storage)
+    {
+        fprintf(stderr, "Failed to create SD storage\n");
+        return EXIT_FAILURE;
+    }
+
+    static LogoStorage root_storage;
+    logo_storage_router_init(&root_storage, lfs_root_storage.ops,
+                             sd_storage->ops, sd_card_present);
+
+    // Wire up the I/O manager on the routed storage, starting at the root.
+    logo_io_init(&io, console, &root_storage, hardware);
+    strcpy(io.prefix, "/");
+
     primitives_init();
     procedures_init();
     variables_init();
     primitives_set_io(&io);
 
-    // Load startup file if it exists (only if default directory exists)
-    if (default_dir_exists && logo_io_file_exists(&io, "startup"))
+    // Load the startup file from the root filesystem if present.
+    if (lfs_ok && logo_io_file_exists(&io, "startup"))
     {
         Lexer startup_lexer;
         Evaluator startup_eval;
@@ -189,10 +191,10 @@ int main(void)
     logo_io_write_line(&io, "Copyright 2025-2026 Blair Leduc");
     logo_io_write_line(&io, "Welcome to Pico Logo.");
 
-    // Warn user if default directory is missing
-    if (!default_dir_exists)
+    // Warn if the internal filesystem could not be mounted/formatted.
+    if (!lfs_ok)
     {
-        logo_io_write_line(&io, "I cannot find the default directory /Logo/");
+        logo_io_write_line(&io, "Internal filesystem unavailable.");
     }
 
     // Run the main REPL in a loop (empty prefix for top level)
