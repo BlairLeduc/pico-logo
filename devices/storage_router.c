@@ -228,6 +228,25 @@ static bool router_mount_available(const char *pathname)
     return ops->mount_available(sub ? sub : pathname);
 }
 
+// A path is "external" to the imageable root precisely when it routes to the
+// SD mount. This keeps a whole-filesystem backup/restore off the very volume
+// being reflashed.
+static bool router_is_external(const char *pathname)
+{
+    return sd_subpath(pathname) != NULL;
+}
+
+// Whole-filesystem imaging always targets the internal root backend.
+static bool router_fs_image_backup(LogoStream *out)
+{
+    return g_root_ops->fs_image_backup && g_root_ops->fs_image_backup(out);
+}
+
+static bool router_fs_image_restore(LogoStream *in)
+{
+    return g_root_ops->fs_image_restore && g_root_ops->fs_image_restore(in);
+}
+
 static const LogoStorageOps router_ops = {
     .open = router_open,
     .file_exists = router_file_exists,
@@ -240,6 +259,9 @@ static const LogoStorageOps router_ops = {
     .list_directory = router_list_directory,
     .free_blocks = router_free_blocks,
     .mount_available = router_mount_available,
+    .is_external = router_is_external,
+    .fs_image_backup = router_fs_image_backup,
+    .fs_image_restore = router_fs_image_restore,
 };
 
 void logo_storage_router_init(LogoStorage *router,

@@ -78,8 +78,10 @@ extern "C"
     #define ERR_NETWORK_TIMEOUT        65
     #define ERR_INVALID_NETWORK_OP     66
     #define ERR_STACK_OVERFLOW         67
-    #define ERR_DONT_KNOW_ABOUT       68
-    #define ERR_NO_SD_CARD            69
+    #define ERR_DONT_KNOW_ABOUT        68
+    #define ERR_NO_SD_CARD             69
+    #define ERR_BACKUP_LOCATION        70
+    #define ERR_BACKUP_INVALID         71
 
     // Format an error message from a Result
     // Returns pointer to static buffer - do not free

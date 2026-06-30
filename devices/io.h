@@ -202,6 +202,19 @@ extern "C"
     // no-op. Returns false on failure (and removes any partial destination).
     bool logo_io_copy_file(const LogoIO *io, const char *src_path, const char *dst_path);
 
+    // True if `pathname` lives on removable storage (the SD card) rather than the
+    // internal/imageable root volume. Used by backup/restore to keep the image
+    // file off the volume being reflashed.
+    bool logo_io_is_external_path(const LogoIO *io, const char *pathname);
+
+    // Write a sparse whole-filesystem image of the internal root volume to the
+    // open binary stream `out`. Returns false on failure or if unsupported.
+    bool logo_io_fs_image_backup(const LogoIO *io, LogoStream *out);
+
+    // Reflash the internal root volume from the image in the open stream `in`.
+    // Returns false on failure or if unsupported.
+    bool logo_io_fs_image_restore(const LogoIO *io, LogoStream *in);
+
     // Get file size, returns -1 on error
     long logo_io_file_size(const LogoIO *io, const char *pathname);
     

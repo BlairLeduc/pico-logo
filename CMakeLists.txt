@@ -120,6 +120,7 @@ add_library(logo_core
     devices/storage.c
     devices/storage_router.c
     devices/lfs_storage.c
+    devices/lfs_backup.c
     devices/stream.c
     core/help.c
     ${HELP_DATA_C}
@@ -292,6 +293,7 @@ if(BUILD_FOR_HOST)
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/storage.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/storage_router.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/lfs_storage.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/devices/lfs_backup.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/stream.c
         ${CMAKE_CURRENT_SOURCE_DIR}/third_party/littlefs/lfs.c
         ${CMAKE_CURRENT_SOURCE_DIR}/third_party/littlefs/lfs_util.c
@@ -441,6 +443,7 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/storage.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/storage_router.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/lfs_storage.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/devices/lfs_backup.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/stream.c
         ${CMAKE_CURRENT_SOURCE_DIR}/third_party/littlefs/lfs.c
         ${CMAKE_CURRENT_SOURCE_DIR}/third_party/littlefs/lfs_util.c

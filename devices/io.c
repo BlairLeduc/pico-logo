@@ -1038,6 +1038,39 @@ bool logo_io_copy_file(const LogoIO *io, const char *src_path, const char *dst_p
     return true;
 }
 
+bool logo_io_is_external_path(const LogoIO *io, const char *pathname)
+{
+    if (!io || !io->storage || !pathname || !io->storage->ops->is_external)
+    {
+        return false; // no external volume configured
+    }
+    char resolved[LOGO_STREAM_NAME_MAX];
+    char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
+    if (!full_path)
+    {
+        return false;
+    }
+    return io->storage->ops->is_external(full_path);
+}
+
+bool logo_io_fs_image_backup(const LogoIO *io, LogoStream *out)
+{
+    if (!io || !io->storage || !out || !io->storage->ops->fs_image_backup)
+    {
+        return false;
+    }
+    return io->storage->ops->fs_image_backup(out);
+}
+
+bool logo_io_fs_image_restore(const LogoIO *io, LogoStream *in)
+{
+    if (!io || !io->storage || !in || !io->storage->ops->fs_image_restore)
+    {
+        return false;
+    }
+    return io->storage->ops->fs_image_restore(in);
+}
+
 long logo_io_file_size(const LogoIO *io, const char *pathname)
 {
     if (!io || !io->storage || !pathname)

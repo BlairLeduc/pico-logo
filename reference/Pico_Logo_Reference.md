@@ -4444,7 +4444,7 @@ Pico Logo presents a single directory tree with two filesystems mounted in it:
 
 Paths may be absolute (beginning with `/`) or relative to the current prefix (see [`setprefix`](#setprefix)). [`rename`](#rename) moves a **file** between the two filesystems by copying it and deleting the original, while [`copyfile`](#copyfile) leaves the original in place. Both work on **files** only; moving or copying a **directory** across filesystems is not supported and reports `File is the wrong type`. Both are binary-safe, so images and other binary files are copied without corruption.
 
-Use [`free`](#free) to see how much space remains on a filesystem.
+Use [`free`](#free) to see how much space remains on a filesystem. The whole internal filesystem can be saved to and reloaded from an SD-card file with [`backup`](#backup) and [`.restore`](#restore).
 
 ## files
 
@@ -4722,6 +4722,42 @@ Copies the **file** _pathname1_ to _pathname2_, leaving the original in place. I
 ?copyfile "/sd/logo.bmp "/logo.bmp
 ?pr file? "/logo.bmp
 true
+```
+
+
+## backup
+
+backup _pathname_
+
+`command`
+
+Writes a complete image of the internal filesystem (`/`) to _pathname_, which must be on the SD card (for example `backup "/sd/2026-06-30.bak`). Only the blocks that actually hold data are written, so the backup file stays small. The image survives re-flashing the firmware, so a backup made before an update can be restored afterwards with [`.restore`](#restore).
+
+The backup file must live on the SD card, not on the internal filesystem it is imaging; otherwise Logo reports `Backup file must be on the SD card`.
+
+**Example**:
+
+```logo
+?backup "/sd/2026-06-30.bak
+?pr file? "/sd/2026-06-30.bak
+true
+```
+
+
+## .restore
+
+.restore _pathname_
+
+`command`
+
+**Dangerous.** Erases the entire internal filesystem (`/`) and replaces it with the image stored in _pathname_ (which must be on the SD card). Every file currently in internal storage is lost. The leading period marks `.restore` as a dangerous operation, following Logo convention — there is no undo. All open files are closed before the restore begins.
+
+The image may come from a device with a smaller internal filesystem than this one; the restored filesystem is grown to fill the available space. An image from a *larger* filesystem cannot be restored onto a smaller one and reports `Backup file is not valid for this device`. The image is fully checked before any storage is erased, so a corrupt or incompatible backup leaves the existing filesystem untouched.
+
+**Example**:
+
+```logo
+?.restore "/sd/2026-06-30.bak
 ```
 
 

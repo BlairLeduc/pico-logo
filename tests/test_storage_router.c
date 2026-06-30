@@ -316,6 +316,28 @@ static void test_rename_within_sd_strips_both(void)
     TEST_ASSERT_EQUAL_STRING("/b", sd_spy.last2);
 }
 
+//============================================================================
+// Backup/restore routing: is_external marks the SD mount, and whole-filesystem
+// imaging is unsupported here because the spy root backend provides no
+// fs_image_* ops (exercised against a real backend in test_lfs_backup.c).
+//============================================================================
+
+static void test_is_external_marks_sd_mount(void)
+{
+    TEST_ASSERT_TRUE(router.ops->is_external("/sd"));
+    TEST_ASSERT_TRUE(router.ops->is_external("/sd/backups/x.bak"));
+    TEST_ASSERT_FALSE(router.ops->is_external("/x.bak"));
+    TEST_ASSERT_FALSE(router.ops->is_external("/sdcard")); // not the mount
+}
+
+static void test_fs_image_ops_unsupported_without_root_backend(void)
+{
+    // The spy root backend defines no fs_image_backup/restore, so the router
+    // reports the operation as unavailable rather than crashing.
+    TEST_ASSERT_FALSE(router.ops->fs_image_backup(NULL));
+    TEST_ASSERT_FALSE(router.ops->fs_image_restore(NULL));
+}
+
 static void test_cross_mount_rename_not_native(void)
 {
     // A cross-mount rename is dispatched to cross_fs_move, not to either
@@ -347,6 +369,8 @@ int main(void)
     RUN_TEST(test_nonroot_dir_does_not_inject_sd);
     RUN_TEST(test_rename_within_root);
     RUN_TEST(test_rename_within_sd_strips_both);
+    RUN_TEST(test_is_external_marks_sd_mount);
+    RUN_TEST(test_fs_image_ops_unsupported_without_root_backend);
     RUN_TEST(test_cross_mount_rename_not_native);
     return UNITY_END();
 }

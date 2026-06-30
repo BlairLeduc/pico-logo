@@ -7,6 +7,7 @@
 
 #include "lfs_storage.h"
 #include "stream.h"
+#include "lfs_backup.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -470,6 +471,16 @@ static bool lfs_storage_mount_available(const char *pathname)
     return g_lfs != NULL;
 }
 
+static bool lfs_storage_fs_image_backup(LogoStream *out)
+{
+    return g_lfs != NULL && logo_lfs_backup(g_lfs, out);
+}
+
+static bool lfs_storage_fs_image_restore(LogoStream *in)
+{
+    return g_lfs != NULL && logo_lfs_restore(g_lfs, in);
+}
+
 static const LogoStorageOps lfs_storage_ops = {
     .open = lfs_storage_open,
     .file_exists = lfs_storage_file_exists,
@@ -482,6 +493,8 @@ static const LogoStorageOps lfs_storage_ops = {
     .list_directory = lfs_storage_list_directory,
     .free_blocks = lfs_storage_free_blocks,
     .mount_available = lfs_storage_mount_available,
+    .fs_image_backup = lfs_storage_fs_image_backup,
+    .fs_image_restore = lfs_storage_fs_image_restore,
 };
 
 void logo_lfs_storage_init(LogoStorage *storage, lfs_t *lfs)

@@ -507,6 +507,85 @@ static Result prim_copyfile(Evaluator *eval, int argc, Value *args)
     return result_none();
 }
 
+// backup pathname - writes a sparse image of the internal filesystem to
+// `pathname`, which must be on the SD card (the image cannot live on the volume
+// it is imaging). Only blocks in use are stored, so the file stays small.
+static Result prim_backup(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD(args[0]);
+
+    const char *path = mem_word_ptr(args[0].as.node);
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
+    }
+    if (!logo_io_is_external_path(io, path))
+    {
+        return result_error(ERR_BACKUP_LOCATION);
+    }
+    // Overwrite any previous backup cleanly (open would otherwise append).
+    if (logo_io_file_exists(io, path))
+    {
+        logo_io_file_delete(io, path);
+    }
+    LogoStream *out = logo_io_open(io, path);
+    if (!out)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+    bool ok = logo_io_fs_image_backup(io, out);
+    logo_io_close(io, path);
+    if (!ok)
+    {
+        logo_io_file_delete(io, path); // remove the partial image
+        return result_error(ERR_DISK_TROUBLE);
+    }
+    return result_none();
+}
+
+// .restore pathname - DANGEROUS. Erases the internal filesystem and replaces it
+// with the image in `pathname` (which must be on the SD card). Tolerates an
+// image from a smaller device, growing to fill this one. The leading "." marks
+// it as a dangerous operation, per Logo convention.
+static Result prim_restore(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD(args[0]);
+
+    const char *path = mem_word_ptr(args[0].as.node);
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
+    }
+    if (!logo_io_file_exists(io, path))
+    {
+        return result_error_arg(ERR_FILE_NOT_FOUND, "", path);
+    }
+    // The image must be on the SD card: restore unmounts and reflashes the root
+    // volume, so an image stored there would vanish mid-restore.
+    if (!logo_io_is_external_path(io, path))
+    {
+        return result_error(ERR_BACKUP_LOCATION);
+    }
+    // Close every open file before the root volume is unmounted and reflashed.
+    logo_io_close_all(io);
+    LogoStream *in = logo_io_open(io, path);
+    if (!in)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+    bool ok = logo_io_fs_image_restore(io, in);
+    logo_io_close(io, path);
+    if (!ok)
+    {
+        return result_error(ERR_BACKUP_INVALID);
+    }
+    return result_none();
+}
+
 // Create a new directory
 static Result prim_createdir(Evaluator *eval, int argc, Value *args)
 {
@@ -583,4 +662,6 @@ void primitives_files_directory_init(void)
     primitive_register("dirp", 1, prim_dirp);
     primitive_register("rename", 2, prim_rename);
     primitive_register("copyfile", 2, prim_copyfile);
+    primitive_register("backup", 1, prim_backup);
+    primitive_register(".restore", 1, prim_restore);
 }
