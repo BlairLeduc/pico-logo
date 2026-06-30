@@ -106,6 +106,54 @@ void logo_stream_write(LogoStream *stream, const char *text)
     stream->ops->write(stream, text);
 }
 
+void logo_stream_write_bytes(LogoStream *stream, const char *buffer, size_t len)
+{
+    if (!stream || !stream->is_open || !stream->ops || !buffer)
+    {
+        return;
+    }
+
+    if (!stream->ops->write_bytes)
+    {
+        // No binary-safe write on this backend: refuse rather than risk a
+        // NUL-truncated text write that would silently corrupt the data.
+        stream->write_error = true;
+        return;
+    }
+
+    stream->ops->write_bytes(stream, buffer, len);
+}
+
+bool logo_stream_copy(LogoStream *in, LogoStream *out)
+{
+    if (!in || !out || !out->ops || !out->ops->write_bytes)
+    {
+        return false;
+    }
+
+    // A freshly opened stream may carry a stale write-error flag from a backend
+    // that does not initialise it; start clean so the flag means "this copy
+    // failed".
+    logo_stream_clear_write_error(out);
+
+    char buf[256];
+    int n;
+    while ((n = logo_stream_read_chars(in, buf, (int)sizeof(buf))) > 0)
+    {
+        logo_stream_write_bytes(out, buf, (size_t)n);
+        if (logo_stream_has_write_error(out))
+        {
+            return false;
+        }
+    }
+    if (n < 0)
+    {
+        return false; // read error mid-copy
+    }
+    logo_stream_flush(out);
+    return true;
+}
+
 void logo_stream_write_line(LogoStream *stream, const char *text)
 {
     if (!stream || !stream->is_open)

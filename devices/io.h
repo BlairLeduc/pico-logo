@@ -195,7 +195,13 @@ extern "C"
     
     // Rename a file or directory
     bool logo_io_rename(const LogoIO *io, const char *old_path, const char *new_path);
-    
+
+    // Copy a regular file (binary-safe). Works within or across the mounted
+    // filesystems. Replaces an existing destination file; refuses to copy a
+    // directory or to overwrite a directory. Copying a file onto itself is a
+    // no-op. Returns false on failure (and removes any partial destination).
+    bool logo_io_copy_file(const LogoIO *io, const char *src_path, const char *dst_path);
+
     // Get file size, returns -1 on error
     long logo_io_file_size(const LogoIO *io, const char *pathname);
     

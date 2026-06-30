@@ -117,9 +117,9 @@ static bool lfs_stream_can_read(LogoStream *stream)
     return ctx->read_pos < (long)lfs_file_size(g_lfs, &ctx->file);
 }
 
-static void lfs_stream_write(LogoStream *stream, const char *text)
+static void lfs_stream_write_bytes(LogoStream *stream, const char *buffer, size_t len)
 {
-    if (!g_lfs || !stream || !stream->context || !text)
+    if (!g_lfs || !stream || !stream->context || !buffer)
     {
         return;
     }
@@ -130,8 +130,7 @@ static void lfs_stream_write(LogoStream *stream, const char *text)
         stream->write_error = true;
         return;
     }
-    size_t len = strlen(text);
-    lfs_ssize_t n = lfs_file_write(g_lfs, &ctx->file, text, (lfs_size_t)len);
+    lfs_ssize_t n = lfs_file_write(g_lfs, &ctx->file, buffer, (lfs_size_t)len);
     if (n < 0)
     {
         stream->write_error = true;
@@ -142,6 +141,15 @@ static void lfs_stream_write(LogoStream *stream, const char *text)
     {
         stream->write_error = true;
     }
+}
+
+static void lfs_stream_write(LogoStream *stream, const char *text)
+{
+    if (!text)
+    {
+        return;
+    }
+    lfs_stream_write_bytes(stream, text, strlen(text));
 }
 
 static void lfs_stream_flush(LogoStream *stream)
@@ -233,6 +241,7 @@ static const LogoStreamOps lfs_stream_ops = {
     .read_line = lfs_stream_read_line,
     .can_read = lfs_stream_can_read,
     .write = lfs_stream_write,
+    .write_bytes = lfs_stream_write_bytes,
     .flush = lfs_stream_flush,
     .get_read_pos = lfs_stream_get_read_pos,
     .set_read_pos = lfs_stream_set_read_pos,

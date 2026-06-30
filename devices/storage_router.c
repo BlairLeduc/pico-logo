@@ -142,29 +142,9 @@ static bool cross_fs_move(const LogoStorageOps *src_ops, const char *src,
         free(in);
         return false;
     }
-    // Start from a known-clean write-error state: a freshly opened stream may
-    // carry a stale flag from a backend that does not initialise it, and we use
-    // this flag below to detect a failed copy.
-    logo_stream_clear_write_error(out);
-
-    char buf[257];
-    bool ok = true;
-    int n;
-    while ((n = logo_stream_read_chars(in, buf, (int)sizeof(buf) - 1)) > 0)
-    {
-        buf[n] = '\0';
-        logo_stream_write(out, buf);
-        if (logo_stream_has_write_error(out))
-        {
-            ok = false;
-            break;
-        }
-    }
-    if (n < 0)
-    {
-        ok = false; // read error mid-copy
-    }
-    logo_stream_flush(out);
+    // Binary-safe copy: read_chars/write_bytes preserve embedded NUL bytes, so a
+    // moved image or other binary file is not truncated at the first zero.
+    bool ok = logo_stream_copy(in, out);
     logo_stream_close(in);
     free(in);
     logo_stream_close(out);

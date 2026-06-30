@@ -51,6 +51,10 @@ extern "C"
 
         // Writing operations (NULL if read-only)
         void (*write)(LogoStream *stream, const char *text);
+        // Length-counted write: copies `len` raw bytes (may contain NUL), so it
+        // is binary-safe where `write` (NUL-terminated) is not. NULL on backends
+        // that cannot store binary content (e.g. console, network).
+        void (*write_bytes)(LogoStream *stream, const char *buffer, size_t len);
         void (*flush)(LogoStream *stream);
 
         // Position operations (NULL if not seekable, e.g., keyboard/screen/serial)
@@ -87,8 +91,16 @@ extern "C"
 
     // Writing operations
     void logo_stream_write(LogoStream *stream, const char *text);
+    // Binary-safe write of `len` bytes; falls back to nothing (sets write_error)
+    // if the stream cannot do length-counted writes.
+    void logo_stream_write_bytes(LogoStream *stream, const char *buffer, size_t len);
     void logo_stream_write_line(LogoStream *stream, const char *text);
     void logo_stream_flush(LogoStream *stream);
+
+    // Copy all remaining bytes from `in` to `out` (binary-safe, via write_bytes).
+    // Returns false on a read error, a write error, or if `out` cannot do
+    // length-counted writes. `out`'s write-error flag is cleared at the start.
+    bool logo_stream_copy(LogoStream *in, LogoStream *out);
 
     // Write error checking
     bool logo_stream_has_write_error(LogoStream *stream);

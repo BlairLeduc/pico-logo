@@ -477,6 +477,36 @@ static Result prim_rename(Evaluator *eval, int argc, Value *args)
     return result_none();
 }
 
+// copyfile source destination - copies a file (binary-safe, so images and other
+// binary files copy intact). Works within or across filesystems (e.g. /sd to /).
+static Result prim_copyfile(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD(args[0]);
+    REQUIRE_WORD(args[1]);
+
+    const char *src = mem_word_ptr(args[0].as.node);
+    const char *dst = mem_word_ptr(args[1].as.node);
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
+    }
+
+    if (!logo_io_copy_file(io, src, dst))
+    {
+        // Mirror rename's diagnostics: a directory source can't be copied (files
+        // only), and an existing directory at the destination is a type clash;
+        // otherwise the source was not found.
+        if (logo_io_dir_exists(io, src) || logo_io_dir_exists(io, dst))
+        {
+            return result_error(ERR_FILE_WRONG_TYPE);
+        }
+        return result_error_arg(ERR_FILE_NOT_FOUND, "", src);
+    }
+    return result_none();
+}
+
 // Create a new directory
 static Result prim_createdir(Evaluator *eval, int argc, Value *args)
 {
@@ -552,4 +582,5 @@ void primitives_files_directory_init(void)
     primitive_register("dir?", 1, prim_dirp);
     primitive_register("dirp", 1, prim_dirp);
     primitive_register("rename", 2, prim_rename);
+    primitive_register("copyfile", 2, prim_copyfile);
 }

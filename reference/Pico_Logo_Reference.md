@@ -4442,7 +4442,7 @@ Pico Logo presents a single directory tree with two filesystems mounted in it:
 - **`/`** — the root is the device's internal flash storage. It is always present and is where files are saved by default (the default prefix is `/`). Your `startup` file lives here as `/startup`.
 - **`/sd`** — the FAT32 SD card, mounted under `/sd`. It appears in a listing of `/` only while a card is inserted, and is re-read automatically when a card is removed and another inserted. Asking about `/sd` with no card present reports `There is no SD card`.
 
-Paths may be absolute (beginning with `/`) or relative to the current prefix (see [`setprefix`](#setprefix)). [`rename`](#rename) moves a **file** between the two filesystems by copying it and deleting the original; moving a **directory** across filesystems is not supported and reports `File is the wrong type`.
+Paths may be absolute (beginning with `/`) or relative to the current prefix (see [`setprefix`](#setprefix)). [`rename`](#rename) moves a **file** between the two filesystems by copying it and deleting the original, while [`copyfile`](#copyfile) leaves the original in place. Both work on **files** only; moving or copying a **directory** across filesystems is not supported and reports `File is the wrong type`. Both are binary-safe, so images and other binary files are copied without corruption.
 
 Use [`free`](#free) to see how much space remains on a filesystem.
 
@@ -4704,6 +4704,23 @@ Renames the file or directory from _pathname1_ to _pathname2_. A file or directo
 ```logo
 ?rename "draft.lgo "pancake_final.lgo
 ?pr file? "pancake_final.lgo
+true
+```
+
+
+## copyfile
+
+copyfile _pathname1_ _pathname2_
+
+`command`
+
+Copies the **file** _pathname1_ to _pathname2_, leaving the original in place. If _pathname2_ already exists it is replaced. The copy is binary-safe, so images and other binary files are copied without corruption, and it may cross between the internal storage and the `/sd` card (for example `copyfile "/sd/turtle.bmp "/turtle.bmp`). _pathname1_ must be a file; copying a directory, or copying onto an existing directory, reports `File is the wrong type`. Copying a file onto itself has no effect.
+
+**Example**:
+
+```logo
+?copyfile "/sd/logo.bmp "/logo.bmp
+?pr file? "/logo.bmp
 true
 ```
 
