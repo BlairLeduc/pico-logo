@@ -81,10 +81,11 @@ static char tmp_root[256];
 void setUp(void)
 {
     memset(ram, 0xff, sizeof(ram));
-    // Unique temp directory for this test's source tree and image.
-    snprintf(tmp_root, sizeof(tmp_root), "%s/mklfsimg_%d",
-             getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp", (int)getpid());
-    mkdir(tmp_root, 0777);
+    // A fresh, unique temp directory per test via mkdtemp, so contents never
+    // leak between tests (a fixed name would be reused on the second setUp).
+    snprintf(tmp_root, sizeof(tmp_root), "%s/mklfsimg_XXXXXX",
+             getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp");
+    TEST_ASSERT_NOT_NULL(mkdtemp(tmp_root));
 }
 
 void tearDown(void) {}

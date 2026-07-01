@@ -55,6 +55,10 @@ diff as given — do not ask the author to "run the tests" or "write tests first
   degrade to an `ERR_*`, not crash.
 - Standard C only (C11+). Flag new third-party dependencies and non-portable
   constructs that would not cross-compile under the Pico SDK.
+- LittleFS restore (`logo_lfs_restore`) is intentionally **sparse**: it rewrites
+  only in-use blocks. littlefs replaces the whole filesystem from the restored
+  superblock and erases free blocks on demand, so this is a full logical replace
+  — do not flag it as "incomplete erasure" or ask for a whole-volume erase.
 
 ## What NOT to comment on
 - Pure style or formatting that already matches the surrounding code.

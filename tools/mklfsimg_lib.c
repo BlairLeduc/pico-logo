@@ -191,8 +191,11 @@ static bool copy_tree(lfs_t *lfs, const char *host_dir, const char *lfs_dir,
             break;
         }
 
+        // lstat (not stat) so a symlink reports as a symlink rather than the
+        // type of its target -- symlinks are skipped below, and this also keeps
+        // a link from redirecting the copy outside the source tree.
         struct stat st;
-        if (stat(host_path, &st) != 0)
+        if (lstat(host_path, &st) != 0)
         {
             set_err(errbuf, errbuf_len, "cannot stat %s", host_path);
             ok = false;

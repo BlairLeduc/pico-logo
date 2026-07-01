@@ -1006,10 +1006,11 @@ bool logo_io_copy_file(const LogoIO *io, const char *src_path, const char *dst_p
         return false; // never overwrite a directory with a file
     }
     // Replace an existing destination cleanly: without this, open() positions
-    // writes at end-of-file and would append / leave a stale tail.
-    if (ops->file_exists(full_dst))
+    // writes at end-of-file and would append / leave a stale tail. If the
+    // destination cannot be removed, fail rather than append to it.
+    if (ops->file_exists(full_dst) && !ops->file_delete(full_dst))
     {
-        ops->file_delete(full_dst);
+        return false;
     }
 
     LogoStream *in = ops->open(full_src);
