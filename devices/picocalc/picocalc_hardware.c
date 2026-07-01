@@ -381,9 +381,19 @@ static bool picocalc_wifi_connect(const char *ssid, const char *password)
         // Store the SSID for later retrieval
         strncpy(current_ssid, ssid, sizeof(current_ssid) - 1);
         current_ssid[sizeof(current_ssid) - 1] = '\0';
+
+        // DHCP normally supplies a DNS server (applied at index 0). Some
+        // networks omit the DNS option, which would leave name resolution with
+        // no server at all. Register a public fallback as the secondary
+        // resolver (index 1) so lookups degrade gracefully; the DHCP-provided
+        // server stays preferred.
+        ip_addr_t dns_fallback;
+        IP_ADDR4(&dns_fallback, 1, 1, 1, 1); // Cloudflare 1.1.1.1
+        dns_setserver(1, &dns_fallback);
+
         return true;
     }
-    
+
     return false;
 }
 
