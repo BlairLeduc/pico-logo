@@ -345,9 +345,12 @@ static Result http_request(const char *method, const char *url,
     if (!parse_http_url(url, host, sizeof(host), &port, path, sizeof(path), &secure))
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, url);
 
-    // https requires the device's TLS transport.
+    // https requires the device's TLS transport. Name "https" (not the http.get
+    // command, which works over http://) so the message is not misleading on a
+    // WiFi-but-no-TLS board; pre-setting error_proc keeps the evaluator from
+    // overwriting it with the command name.
     if (secure && !ops->network_tls_connect)
-        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "https", NULL);
 
     // Determine the body length up front (Content-Length precedes the body).
     int body_len = 0;

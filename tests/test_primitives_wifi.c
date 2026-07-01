@@ -60,6 +60,43 @@ void test_wifip_alias_works(void)
 }
 
 // ============================================================================
+// tls? tests
+// ============================================================================
+
+void test_tls_supported_returns_true_when_device_has_tls(void)
+{
+    // The mock wires network_tls_connect, standing in for a PSRAM board.
+    Result r = eval_string("tls?");
+
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+}
+
+void test_tls_supported_returns_false_without_tls_transport(void)
+{
+    // A radio-but-no-PSRAM board (e.g. Pico 2 W) has no TLS transport.
+    mock_hardware_ops.network_tls_connect = NULL;
+
+    Result r = eval_string("tls?");
+
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
+}
+
+void test_tlsp_alias_works(void)
+{
+    mock_hardware_ops.network_tls_connect = NULL;
+
+    Result r = eval_string("tlsp");
+
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
+}
+
+// ============================================================================
 // wifi.connect tests
 // ============================================================================
 
@@ -82,13 +119,26 @@ void test_wifi_connect_fails(void)
 {
     mock_device_set_wifi_connected(false);
     mock_device_set_wifi_connect_result(1);  // Failure
-    
+
     Result r = eval_string("wifi.connect \"TestSSID \"password123");
-    
+
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
     // Verify state was not updated
     const MockDeviceState *state = mock_device_get_state();
     TEST_ASSERT_FALSE(state->wifi.connected);
+}
+
+void test_wifi_connect_errors_message_when_no_wifi_hardware(void)
+{
+    // A board with no radio (e.g. Pico 2) has no wifi_connect op; the error must
+    // name the command.
+    mock_hardware_ops.wifi_connect = NULL;
+
+    Result r = eval_string("wifi.connect \"TestSSID \"password123");
+
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL_STRING("I can't run wifi.connect on this device",
+                             error_format(r));
 }
 
 void test_wifi_connect_requires_two_args(void)
@@ -214,11 +264,12 @@ void test_wifi_mac_returns_all_255(void)
 
 void test_wifi_mac_returns_empty_list_when_no_wifi_hardware(void)
 {
-    // Simulate a device with no WiFi hardware
+    // Simulate a device with no WiFi hardware. The scaffold restores the ops
+    // table each setUp, so nulling an op here does not leak into later tests.
     mock_hardware_ops.wifi_get_mac = NULL;
-    
+
     Result r = eval_string("wifi.mac");
-    
+
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
     TEST_ASSERT_TRUE(mem_is_nil(r.value.as.node));
@@ -367,10 +418,15 @@ int main(void)
     RUN_TEST(test_wifi_connected_returns_false_when_not_connected);
     RUN_TEST(test_wifi_connected_returns_true_when_connected);
     RUN_TEST(test_wifip_alias_works);
+
+    RUN_TEST(test_tls_supported_returns_true_when_device_has_tls);
+    RUN_TEST(test_tls_supported_returns_false_without_tls_transport);
+    RUN_TEST(test_tlsp_alias_works);
     
     // wifi.connect tests
     RUN_TEST(test_wifi_connect_succeeds);
     RUN_TEST(test_wifi_connect_fails);
+    RUN_TEST(test_wifi_connect_errors_message_when_no_wifi_hardware);
     RUN_TEST(test_wifi_connect_requires_two_args);
     RUN_TEST(test_wifi_connect_requires_words);
     

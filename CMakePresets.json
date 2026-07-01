@@ -79,6 +79,7 @@
                 "LOGO_COPY_BUFFER_SIZE": "8192",
                 "LOGO_OP_STACK_DEPTH": "256",
                 "LOGO_HAS_WIFI": "ON",
+                "LOGO_HAS_TLS": "ON",
                 "PICOCALC_FLASH_LFS_SIZE": "8388608",
                 "BUILD_TESTING": "OFF"
             }

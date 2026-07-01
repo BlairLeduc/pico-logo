@@ -375,12 +375,25 @@ void test_http_get_chunked_oversize_chunk_errors(void)
 void test_http_get_errors_when_https_unsupported(void)
 {
     // A device without a TLS transport must reject https rather than fall back
-    // to plaintext. Restore the op afterwards so other tests are unaffected.
+    // to plaintext. The scaffold restores the ops table each setUp.
     mock_hardware_ops.network_tls_connect = NULL;
     Result r = eval_string("http.get \"https://example.com/");
-    mock_hardware_ops.network_tls_connect = mock_network_tls_connect;
 
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    // The message must name https, not the http.get command (which works over
+    // http://), so the failure is not misleading on a WiFi-but-no-TLS board.
+    TEST_ASSERT_EQUAL_STRING("I can't run https on this device", error_format(r));
+}
+
+void test_http_get_errors_when_no_network_transport(void)
+{
+    // A board with no radio (e.g. Pico 2) has no TCP transport at all. The
+    // scaffold restores the ops table each setUp.
+    mock_hardware_ops.network_tcp_connect = NULL;
+    Result r = eval_string("http.get \"http://example.com/");
+
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL_STRING("I can't run http.get on this device", error_format(r));
 }
 
 void test_http_get_rejects_non_http_url(void)
@@ -674,6 +687,7 @@ int main(void)
     RUN_TEST(test_http_get_closed_midstream_errors);
     RUN_TEST(test_http_get_requires_wifi);
     RUN_TEST(test_http_get_errors_when_https_unsupported);
+    RUN_TEST(test_http_get_errors_when_no_network_transport);
     RUN_TEST(test_http_get_rejects_non_http_url);
     RUN_TEST(test_https_get_returns_body_on_200);
     RUN_TEST(test_https_get_uses_tls_connect_with_hostname);

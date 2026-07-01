@@ -285,6 +285,22 @@ bool was_mock_power_off_called(void)
 
 void test_scaffold_setUp(void)
 {
+    // Restore the hardware ops table to its pristine state each run. Neither
+    // mock_device_reset() nor anything else here touches it, so a test that
+    // nulls an op (to simulate absent hardware, e.g. a no-radio board) would
+    // otherwise leak that NULL into every later test. Snapshot on first use.
+    static LogoHardwareOps mock_hardware_ops_pristine;
+    static bool mock_hardware_ops_captured = false;
+    if (!mock_hardware_ops_captured)
+    {
+        mock_hardware_ops_pristine = mock_hardware_ops;
+        mock_hardware_ops_captured = true;
+    }
+    else
+    {
+        mock_hardware_ops = mock_hardware_ops_pristine;
+    }
+
     logo_mem_init();
     primitives_init();
     procedures_init();

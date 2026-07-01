@@ -5343,6 +5343,23 @@ true
 ```
 
 
+## tls? (tlsp)
+
+tls?
+
+`operation`
+
+`tls?` outputs `true` if this board can open `https://` connections, otherwise it outputs `false`. TLS needs PSRAM to hold the handshake buffers, so a board with WiFi but no PSRAM (such as the Pico 2 W) can still use `http.get` on `http://` URLs while `tls?` outputs `false`. Unlike `wifi?`, this reports a fixed hardware capability rather than the live connection state.
+
+**Example**:
+
+```logo
+?pr tls?
+true
+?if tls? [pr http.get "https://example.com/] [pr [no https on this board]]
+```
+
+
 ## wifi.mac
 
 wifi.mac

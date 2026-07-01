@@ -187,6 +187,22 @@ static Result prim_wifi_scan(Evaluator *eval, int argc, Value *args)
     return result_ok(value_list(NODE_NIL));
 }
 
+// tls?
+// Returns true if the device supports TLS/HTTPS (requires WiFi + PSRAM), false
+// otherwise. Unlike wifi? this reports a hardware/build capability, not the
+// live connection state: boards with a radio but no PSRAM (e.g. Pico 2 W) do
+// WiFi and plain http:// but cannot open https:// URLs.
+static Result prim_tls_supported(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
+
+    LogoIO *io = primitives_get_io();
+    bool supported = io && io->hardware && io->hardware->ops &&
+                     io->hardware->ops->network_tls_connect;
+    return result_ok(value_word(mem_atom(supported ? "true" : "false",
+                                         supported ? 4 : 5)));
+}
+
 void primitives_wifi_init(void)
 {
     primitive_register("wifi?", 0, prim_wifi_connected);
@@ -197,4 +213,6 @@ void primitives_wifi_init(void)
     primitive_register("wifi.mac", 0, prim_wifi_mac);
     primitive_register("wifi.ssid", 0, prim_wifi_ssid);
     primitive_register("wifi.scan", 0, prim_wifi_scan);
+    primitive_register("tls?", 0, prim_tls_supported);
+    primitive_register("tlsp", 0, prim_tls_supported);  // Alias
 }
