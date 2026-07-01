@@ -1,8 +1,11 @@
 #!/bin/sh
 set -e
 
-PRESETS="pico2 pico2w"
+PRESETS="pico2 pico2w pico+2w"
 
+# Start each dist from a clean slate so artifacts from a previous run (e.g. a
+# uf2 for a preset that was since removed) do not linger in the output.
+rm -rf dist
 mkdir -p dist
 
 for preset in $PRESETS; do
@@ -13,9 +16,15 @@ for preset in $PRESETS; do
     echo "=== Built dist/logo-$preset.uf2 ==="
 done
 
-echo "=== Creating logo.zip ==="
-(cd logo && zip -r ../dist/logo.zip .)
-echo "=== Created dist/logo.zip ==="
+echo "=== Building mklfsimg ==="
+# Configure the host build fresh. A build-host cache from a previous Xcode SDK
+# can pin a now-deleted CMAKE_OSX_SYSROOT and warn on every subsequent run.
+rm -rf build-host
+cmake --preset=host
+cmake --build --preset=host --target mklfsimg
+echo "=== Creating logo.img (LittleFS restore image) ==="
+./build-host/mklfsimg logo dist/logo.img
+echo "=== Created dist/logo.img ==="
 
 echo "=== Generating Pico_Logo_Reference.pdf ==="
 rsvg-convert -f pdf -o dist/Colours.pdf reference/Colours.svg
@@ -58,4 +67,4 @@ echo "=== Generated dist/Pico_Logo_Reference.pdf ==="
 
 echo ""
 echo "All builds complete:"
-ls -lh dist/logo-*.uf2 dist/logo.zip dist/Pico_Logo_Reference.pdf
+ls -lh dist/logo-*.uf2 dist/logo.img dist/Pico_Logo_Reference.pdf

@@ -5531,7 +5531,7 @@ true
 ===
 # HTTP Operations
 
-These operations fetch and send data over the web. They require that the device is connected to a WiFi network (see [`wifi.connect`](#wifi-connect-wificonnect)); an error occurs if WiFi is not available or not connected.
+These operations fetch and send data over the web. They require that the device is connected to a WiFi network (see [`wifi.connect`](#wifi.connect)); an error occurs if WiFi is not available or not connected.
 
 A _url_ is a word beginning with `http://` or `https://`, for example `"http://example.com/index.html`, `"https://example.com/index.html`, or `"http://example.com:8080/api`. If no port is given, port 80 is used for `http://` and port 443 for `https://`.
 
@@ -5539,13 +5539,13 @@ For an `https://` _url_ the connection is encrypted with TLS, and the server's c
 
 Request headers are supplied as extra inputs in name/value pairs, using the parenthesised form of the operation, for example `(http.get "http://example.com/ "Accept "text/plain)`. Each name and value is a word. Recall that a quoted word may contain `-` and `/` without a backslash (so `"Content-Type` and `"text/plain` are each a single word); a value that contains spaces cannot be written as a quoted word.
 
-Each operation performs one complete request: it opens a connection, sends the request, reads the whole response, and closes the connection. The connection is not left open and does not appear in [`allopen`](#allopen). The read timeout is governed by [`.settimeout`](#-settimeout); if the server does not respond in time, the operation produces an error.
+Each operation performs one complete request: it opens a connection, sends the request, reads the whole response, and closes the connection. The connection is not left open and does not appear in [`allopen`](#allopen). The read timeout is governed by [`.settimeout`](#settimeout); if the server does not respond in time, the operation produces an error.
 
-A request can **fail to complete** (the host cannot be resolved, the connection is refused, the request times out, or the response is larger than the device can hold). In these cases the operation produces an error, which you can trap with [`catch`](#catch). A request that **completes** produces a result even when the server reports a problem: a "404 Not Found" response is not an error; the operation outputs the server's response body, and [`http.status`](#http-status) outputs `404`.
+A request can **fail to complete** (the host cannot be resolved, the connection is refused, the request times out, or the response is larger than the device can hold). In these cases the operation produces an error, which you can trap with [`catch`](#catch). A request that **completes** produces a result even when the server reports a problem: a "404 Not Found" response is not an error; the operation outputs the server's response body, and [`http.status`](#http.status) outputs `404`.
 
 The response body is held as a single word. There is a fixed maximum size; a response whose body exceeds it produces an error rather than a truncated result.
 
-After any successful request, [`http.status`](#http-status) and [`http.header`](#http-header) describe the **most recent** request. Making another request replaces this information.
+After any successful request, [`http.status`](#http.status) and [`http.header`](#http.header) describe the **most recent** request. Making another request replaces this information.
 
 
 ## http.get
@@ -5559,7 +5559,7 @@ The `http.get` operation sends an HTTP GET request to _url_ and outputs the resp
 
 In the second form, the extra inputs are request headers given as name/value word pairs, for example `(http.get "http://example.com/ "Accept "text/plain "User-Agent "PicoLogo)`. An odd number of header inputs (a name with no value) produces an error.
 
-If the request cannot be completed, an error occurs. If the request completes, use [`http.status`](#http-status) to find out whether the server reported success.
+If the request cannot be completed, an error occurs. If the request completes, use [`http.status`](#http.status) to find out whether the server reported success.
 
 **Example**:
 
@@ -5580,9 +5580,9 @@ http.post _url_ _data_
 
 The `http.post` operation sends an HTTP POST request to _url_ with _data_ as the request body, and outputs the response body as a word. _data_ may be a word or a list; a list is sent as its members separated by spaces, with no outer brackets.
 
-In the second form, the extra inputs are request headers given as name/value word pairs, in the same way as [`http.get`](#http-get).
+In the second form, the extra inputs are request headers given as name/value word pairs, in the same way as [`http.get`](#http.get).
 
-If the request cannot be completed, an error occurs. If the request completes, use [`http.status`](#http-status) to find out whether the server reported success.
+If the request cannot be completed, an error occurs. If the request completes, use [`http.status`](#http.status) to find out whether the server reported success.
 
 **Example**:
 
@@ -5600,7 +5600,7 @@ http.status
 
 `operation`
 
-The `http.status` operation outputs the numeric HTTP status code of the most recently completed request made by [`http.get`](#http-get) or [`http.post`](#http-post), for example `200` for success or `404` for "Not Found". If no request has been made, it outputs the empty list.
+The `http.status` operation outputs the numeric HTTP status code of the most recently completed request made by [`http.get`](#http.get) or [`http.post`](#http.post), for example `200` for success or `404` for "Not Found". If no request has been made, it outputs the empty list.
 
 **Example**:
 
@@ -5757,7 +5757,7 @@ See [`pprop`](#pprop) and [`gprop`](#gprop).
 ===
 # JSON
 
-A JSON document is held as text — typically the word returned by [`http.get`](#http-get). `json.get` reads values straight out of that text, so even a large response (which is kept in PSRAM) can be queried without copying the whole document into the workspace.
+A JSON document is held as text — typically the word returned by [`http.get`](#http.get). `json.get` reads values straight out of that text, so even a large response (which is kept in PSRAM) can be queried without copying the whole document into the workspace.
 
 ## json.get
 
@@ -5790,7 +5790,7 @@ json.count _value_
 
 `operation`
 
-`json.count` outputs the number of elements in a JSON array, or the number of members in a JSON object, where _value_ is a word containing that JSON text. A scalar value outputs `0`, and the empty list — the result of [`json.get`](#json-get) for a missing path or JSON `null` — also outputs `0`, so `json.count json.get ...` can be used directly as a loop bound.
+`json.count` outputs the number of elements in a JSON array, or the number of members in a JSON object, where _value_ is a word containing that JSON text. A scalar value outputs `0`, and the empty list — the result of [`json.get`](#json.get) for a missing path or JSON `null` — also outputs `0`, so `json.count json.get ...` can be used directly as a loop bound.
 
 **Example**:
 
@@ -5811,9 +5811,9 @@ rp2350
 
 `operation`
 
-`json.object` builds a JSON object from the given _key_/_value_ pairs. Each _key_ must be a word. A _value_ may be a word (output as a JSON string), a number, the words `true` or `false`, the empty list (output as `null`), a list (output as a JSON array), or another `json.object` or `json.array`. The result is passed to [`json.make`](#json-make) to produce JSON text. Give the inputs as quoted words rather than inside a list, so values containing `/`, `-` or spaces are kept intact.
+`json.object` builds a JSON object from the given _key_/_value_ pairs. Each _key_ must be a word. A _value_ may be a word (output as a JSON string), a number, the words `true` or `false`, the empty list (output as `null`), a list (output as a JSON array), or another `json.object` or `json.array`. The result is passed to [`json.make`](#json.make) to produce JSON text. Give the inputs as quoted words rather than inside a list, so values containing `/`, `-` or spaces are kept intact.
 
-See [`json.array`](#json-array) and [`json.make`](#json-make).
+See [`json.array`](#json.array) and [`json.make`](#json.make).
 
 **Example**:
 
@@ -5829,9 +5829,9 @@ See [`json.array`](#json-array) and [`json.make`](#json-make).
 
 `operation`
 
-`json.array` builds a JSON array from the given values, each encoded in the same way as a `json.object` value. The result is passed to [`json.make`](#json-make) to produce JSON text. An empty array is `(json.array)`.
+`json.array` builds a JSON array from the given values, each encoded in the same way as a `json.object` value. The result is passed to [`json.make`](#json.make) to produce JSON text. An empty array is `(json.array)`.
 
-See [`json.object`](#json-object) and [`json.make`](#json-make).
+See [`json.object`](#json.object) and [`json.make`](#json.make).
 
 **Example**:
 
@@ -5847,7 +5847,7 @@ json.make _value_
 
 `operation`
 
-`json.make` outputs the JSON text for _value_. _Value_ is usually built with [`json.object`](#json-object) and [`json.array`](#json-array), but may also be a plain Logo value: a word becomes a JSON string (a word that is a valid JSON number becomes a number, and `true`/`false` become JSON booleans), a number becomes a JSON number, a list becomes a JSON array, and the empty list becomes `null`. String values are escaped as required by JSON, and numbers JSON cannot represent (infinities and NaN) become `null`.
+`json.make` outputs the JSON text for _value_. _Value_ is usually built with [`json.object`](#json.object) and [`json.array`](#json.array), but may also be a plain Logo value: a word becomes a JSON string (a word that is a valid JSON number becomes a number, and `true`/`false` become JSON booleans), a number becomes a JSON number, a list becomes a JSON array, and the empty list becomes `null`. String values are escaped as required by JSON, and numbers JSON cannot represent (infinities and NaN) become `null`.
 
 **Example**:
 

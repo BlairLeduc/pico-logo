@@ -418,6 +418,18 @@ if(BUILD_FOR_HOST)
     if(DEFINED LOGO_OP_STACK_DEPTH)
         target_compile_definitions(logo_core PUBLIC MAX_OP_STACK_DEPTH=${LOGO_OP_STACK_DEPTH})
     endif()
+
+    # mklfsimg: build a LittleFS backup image from a host directory tree. Only
+    # needs the shared backup code + littlefs, all bundled in logo_devices.
+    add_executable(mklfsimg
+        tools/mklfsimg.c
+        tools/mklfsimg_lib.c
+    )
+    target_link_libraries(mklfsimg logo_devices)
+    target_include_directories(mklfsimg PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tools
+    )
 endif()
 
 # ============================================================================
