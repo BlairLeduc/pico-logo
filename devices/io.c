@@ -967,6 +967,111 @@ bool logo_io_rename(const LogoIO *io, const char *old_path, const char *new_path
     return io->storage->ops->rename(full_old_path, full_new_path);
 }
 
+bool logo_io_copy_file(const LogoIO *io, const char *src_path, const char *dst_path)
+{
+    if (!io || !io->storage || !src_path || !dst_path)
+    {
+        return false;
+    }
+
+    char resolved_src[LOGO_STREAM_NAME_MAX];
+    char *full_src = logo_io_resolve_path(io, src_path, resolved_src, sizeof(resolved_src));
+    if (!full_src)
+    {
+        return false;
+    }
+    char resolved_dst[LOGO_STREAM_NAME_MAX];
+    char *full_dst = logo_io_resolve_path(io, dst_path, resolved_dst, sizeof(resolved_dst));
+    if (!full_dst)
+    {
+        return false;
+    }
+
+    const LogoStorageOps *ops = io->storage->ops;
+
+    // Source must be an existing regular file. file_exists() is false for both a
+    // missing path and a directory, so this rejects "copy a directory" too.
+    if (!ops->file_exists(full_src))
+    {
+        return false;
+    }
+    // Copying a file onto itself is a no-op (and deleting the destination first
+    // would otherwise destroy the source).
+    if (strcmp(full_src, full_dst) == 0)
+    {
+        return true;
+    }
+    if (ops->dir_exists(full_dst))
+    {
+        return false; // never overwrite a directory with a file
+    }
+    // Replace an existing destination cleanly: without this, open() positions
+    // writes at end-of-file and would append / leave a stale tail. If the
+    // destination cannot be removed, fail rather than append to it.
+    if (ops->file_exists(full_dst) && !ops->file_delete(full_dst))
+    {
+        return false;
+    }
+
+    LogoStream *in = ops->open(full_src);
+    if (!in)
+    {
+        return false;
+    }
+    LogoStream *out = ops->open(full_dst);
+    if (!out)
+    {
+        logo_stream_close(in);
+        free(in);
+        return false;
+    }
+    bool ok = logo_stream_copy(in, out);
+    logo_stream_close(in);
+    free(in);
+    logo_stream_close(out);
+    free(out);
+
+    if (!ok)
+    {
+        ops->file_delete(full_dst); // roll back the partial destination
+        return false;
+    }
+    return true;
+}
+
+bool logo_io_is_external_path(const LogoIO *io, const char *pathname)
+{
+    if (!io || !io->storage || !pathname || !io->storage->ops->is_external)
+    {
+        return false; // no external volume configured
+    }
+    char resolved[LOGO_STREAM_NAME_MAX];
+    char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
+    if (!full_path)
+    {
+        return false;
+    }
+    return io->storage->ops->is_external(full_path);
+}
+
+bool logo_io_fs_image_backup(const LogoIO *io, LogoStream *out)
+{
+    if (!io || !io->storage || !out || !io->storage->ops->fs_image_backup)
+    {
+        return false;
+    }
+    return io->storage->ops->fs_image_backup(out);
+}
+
+bool logo_io_fs_image_restore(const LogoIO *io, LogoStream *in)
+{
+    if (!io || !io->storage || !in || !io->storage->ops->fs_image_restore)
+    {
+        return false;
+    }
+    return io->storage->ops->fs_image_restore(in);
+}
+
 long logo_io_file_size(const LogoIO *io, const char *pathname)
 {
     if (!io || !io->storage || !pathname)

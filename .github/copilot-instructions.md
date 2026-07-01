@@ -1,8 +1,9 @@
 # GitHub Copilot Instructions
 
-This repository is a **Logo interpreter written in C (C11)** for the Pimoroni Pico
-Plus 2 W (RP2350, 16MB Flash, 8MB PSRAM), built with the Pico C/C++ SDK. Interpreter
-behaviour must match [Pico_Logo_Reference](../reference/Pico_Logo_Reference.md).
+This repository is a **Logo interpreter written in C (C11)** for three RP2350 boards,
+built with the Pico C/C++ SDK: the Raspberry Pi **Pico 2** (no radio), the Raspberry Pi
+**Pico 2 W** (WiFi, no PSRAM), and the Pimoroni **Pico Plus 2 W** (16MB Flash, 8MB PSRAM,
+WiFi). Interpreter behaviour must match [Pico_Logo_Reference](../reference/Pico_Logo_Reference.md).
 
 You are reviewing pull requests. Comment only on concrete problems visible in the
 diff. Prefer a few high-confidence findings over many speculative ones. Review the
@@ -47,8 +48,17 @@ diff as given — do not ask the author to "run the tests" or "write tests first
   not touch real hardware, the network, or the filesystem outside the mocks.
 - Device-specific code belongs under `devices/<device>/`; the `host` device has
   no graphics or sound. Flag hardware assumptions leaking into `core/`.
+- Networking is board-gated: `LOGO_HAS_WIFI` (radio → WiFi/HTTP) and
+  `LOGO_HAS_TLS` (PSRAM → HTTPS). Flag networking code that assumes WiFi or TLS
+  is always present, or that gates TLS-only pieces on `LOGO_HAS_WIFI` instead of
+  `LOGO_HAS_TLS`. A missing device op (e.g. `network_tls_connect == NULL`) must
+  degrade to an `ERR_*`, not crash.
 - Standard C only (C11+). Flag new third-party dependencies and non-portable
   constructs that would not cross-compile under the Pico SDK.
+- LittleFS restore (`logo_lfs_restore`) is intentionally **sparse**: it rewrites
+  only in-use blocks. littlefs replaces the whole filesystem from the restored
+  superblock and erases free blocks on demand, so this is a full logical replace
+  — do not flag it as "incomplete erasure" or ask for a whole-volume erase.
 
 ## What NOT to comment on
 - Pure style or formatting that already matches the surrounding code.

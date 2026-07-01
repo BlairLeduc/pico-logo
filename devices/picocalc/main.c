@@ -124,7 +124,7 @@ int main(void)
     if (psram_size > 0)
     {
         size_t aux_size = psram_size;
-#ifdef LOGO_HAS_WIFI
+#ifdef LOGO_HAS_TLS
         // Carve a slice off the top of PSRAM to back mbedTLS allocations during
         // the HTTPS handshake, keeping them off the tight SRAM heap. The rest
         // backs the Logo blob heap / relocated buffers.

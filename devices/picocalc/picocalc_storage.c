@@ -166,9 +166,9 @@ static bool picocalc_file_can_read(LogoStream *stream)
     return ctx->read_pos < (long)fat32_size(ctx->file);
 }
 
-static void picocalc_file_write(LogoStream *stream, const char *text)
+static void picocalc_file_write_bytes(LogoStream *stream, const char *buffer, size_t len)
 {
-    if (!stream || !stream->context || !text)
+    if (!stream || !stream->context || !buffer)
     {
         return;
     }
@@ -187,17 +187,25 @@ static void picocalc_file_write(LogoStream *stream, const char *text)
 
     // Seek to write position
     fat32_seek(ctx->file, (uint32_t)ctx->write_pos);
-    
-    size_t len = strlen(text);
+
     size_t written;
-    fat32_write(ctx->file, text, len, &written);
+    fat32_write(ctx->file, buffer, len, &written);
     ctx->write_pos += (long)written;
-    
+
     // Check for partial write (disk full or other error)
     if (written < len)
     {
         stream->write_error = true;
     }
+}
+
+static void picocalc_file_write(LogoStream *stream, const char *text)
+{
+    if (!text)
+    {
+        return;
+    }
+    picocalc_file_write_bytes(stream, text, strlen(text));
 }
 
 static void picocalc_file_flush(LogoStream *stream)
@@ -355,6 +363,7 @@ static const LogoStreamOps picocalc_stream_ops = {
     .read_line = picocalc_file_read_line,
     .can_read = picocalc_file_can_read,
     .write = picocalc_file_write,
+    .write_bytes = picocalc_file_write_bytes,
     .flush = picocalc_file_flush,
     .get_read_pos = picocalc_file_get_read_pos,
     .set_read_pos = picocalc_file_set_read_pos,

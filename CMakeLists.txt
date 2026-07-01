@@ -120,6 +120,7 @@ add_library(logo_core
     devices/storage.c
     devices/storage_router.c
     devices/lfs_storage.c
+    devices/lfs_backup.c
     devices/stream.c
     core/help.c
     ${HELP_DATA_C}
@@ -146,11 +147,24 @@ if(DEFINED LOGO_OP_STACK_DEPTH)
     target_compile_definitions(logo_core PUBLIC MAX_OP_STACK_DEPTH=${LOGO_OP_STACK_DEPTH})
 endif()
 
-# WiFi support (only for Pico W boards)
+# WiFi support (only for Pico W boards). Gates all networking: WiFi, DNS/NTP/
+# ping, and plain HTTP. Cheap enough to run from SRAM alone.
 option(LOGO_HAS_WIFI "Enable WiFi support for Pico W boards" OFF)
 if(LOGO_HAS_WIFI)
     message(STATUS "WiFi support enabled")
     target_compile_definitions(logo_core PUBLIC LOGO_HAS_WIFI=1)
+endif()
+
+# TLS/HTTPS support. Separate from WiFi because mbedTLS's handshake heap (tens of
+# KB, transiently) is routed to PSRAM (see tls_heap.c); boards with a radio but
+# no PSRAM (e.g. Pico 2 W) can do WiFi + plain HTTP but not HTTPS. Implies WiFi.
+option(LOGO_HAS_TLS "Enable TLS/HTTPS support (requires WiFi and PSRAM)" OFF)
+if(LOGO_HAS_TLS)
+    if(NOT LOGO_HAS_WIFI)
+        message(FATAL_ERROR "LOGO_HAS_TLS requires LOGO_HAS_WIFI")
+    endif()
+    message(STATUS "TLS/HTTPS support enabled")
+    target_compile_definitions(logo_core PUBLIC LOGO_HAS_TLS=1)
 endif()
 
 add_executable(pico-logo
@@ -235,6 +249,14 @@ if(LOGO_HAS_WIFI)
     target_include_directories(pico-logo PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/picocalc
     )
+    # Plain networking (WiFi, DNS/NTP/ping, HTTP) needs the lwIP stack only.
+    target_link_libraries(pico-logo
+        pico_cyw43_arch_lwip_threadsafe_background
+    )
+endif()
+
+# Link TLS libraries only when HTTPS is enabled (PSRAM boards).
+if(LOGO_HAS_TLS)
     # HTTPS: TLS transport (mbedTLS via lwIP altcp) plus the bundled CA roots.
     # pico_mbedtls sets MBEDTLS_CONFIG_FILE=pico_mbedtls_config.h, which in turn
     # #includes our devices/picocalc/mbedtls_config.h from the include path above.
@@ -243,7 +265,6 @@ if(LOGO_HAS_WIFI)
         devices/picocalc/tls_heap.c
     )
     target_link_libraries(pico-logo
-        pico_cyw43_arch_lwip_threadsafe_background
         pico_lwip_mbedtls
         pico_mbedtls
     )
@@ -292,6 +313,7 @@ if(BUILD_FOR_HOST)
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/storage.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/storage_router.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/lfs_storage.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/devices/lfs_backup.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/stream.c
         ${CMAKE_CURRENT_SOURCE_DIR}/third_party/littlefs/lfs.c
         ${CMAKE_CURRENT_SOURCE_DIR}/third_party/littlefs/lfs_util.c
@@ -396,6 +418,18 @@ if(BUILD_FOR_HOST)
     if(DEFINED LOGO_OP_STACK_DEPTH)
         target_compile_definitions(logo_core PUBLIC MAX_OP_STACK_DEPTH=${LOGO_OP_STACK_DEPTH})
     endif()
+
+    # mklfsimg: build a LittleFS backup image from a host directory tree. Only
+    # needs the shared backup code + littlefs, all bundled in logo_devices.
+    add_executable(mklfsimg
+        tools/mklfsimg.c
+        tools/mklfsimg_lib.c
+    )
+    target_link_libraries(mklfsimg logo_devices)
+    target_include_directories(mklfsimg PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tools
+    )
 endif()
 
 # ============================================================================
@@ -441,6 +475,7 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/storage.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/storage_router.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/lfs_storage.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/devices/lfs_backup.c
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/stream.c
         ${CMAKE_CURRENT_SOURCE_DIR}/third_party/littlefs/lfs.c
         ${CMAKE_CURRENT_SOURCE_DIR}/third_party/littlefs/lfs_util.c

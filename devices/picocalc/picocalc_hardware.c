@@ -34,10 +34,12 @@
 #include <lwip/tcp.h>
 #include <lwip/altcp.h>
 #include <lwip/altcp_tcp.h>
+#ifdef LOGO_HAS_TLS
 #include <lwip/altcp_tls.h>
 #include <mbedtls/ssl.h>
 #include "ca_certs.h"
 #include "tls_heap.h"
+#endif // LOGO_HAS_TLS
 #include <time.h>
 
 // WiFi state tracking
@@ -379,9 +381,19 @@ static bool picocalc_wifi_connect(const char *ssid, const char *password)
         // Store the SSID for later retrieval
         strncpy(current_ssid, ssid, sizeof(current_ssid) - 1);
         current_ssid[sizeof(current_ssid) - 1] = '\0';
+
+        // DHCP normally supplies a DNS server (applied at index 0). Some
+        // networks omit the DNS option, which would leave name resolution with
+        // no server at all. Register a public fallback as the secondary
+        // resolver (index 1) so lookups degrade gracefully; the DHCP-provided
+        // server stays preferred.
+        ip_addr_t dns_fallback;
+        IP_ADDR4(&dns_fallback, 1, 1, 1, 1); // Cloudflare 1.1.1.1
+        dns_setserver(1, &dns_fallback);
+
         return true;
     }
-    
+
     return false;
 }
 
@@ -1204,6 +1216,7 @@ static void *picocalc_network_tcp_connect(const char *ip_address, uint16_t port,
     return tcp_connect_and_wait(state, &target_addr, port, timeout_ms);
 }
 
+#ifdef LOGO_HAS_TLS
 // mbedTLS time backend (MBEDTLS_PLATFORM_MS_TIME_ALT). A monotonic millisecond
 // clock since boot is all mbedTLS needs here (DRBG reseed timing, session
 // lifetime); it does not require wall-clock time.
@@ -1288,6 +1301,7 @@ static void *picocalc_network_tls_connect(const char *hostname, uint16_t port, i
 
     return tcp_connect_and_wait(state, &target_addr, port, timeout_ms);
 }
+#endif // LOGO_HAS_TLS
 
 static void picocalc_network_tcp_close(void *connection)
 {
@@ -1513,7 +1527,11 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .network_resolve = picocalc_network_resolve,
     .network_ntp = picocalc_network_ntp,
     .network_tcp_connect = picocalc_network_tcp_connect,
+#ifdef LOGO_HAS_TLS
     .network_tls_connect = picocalc_network_tls_connect,
+#else
+    .network_tls_connect = NULL,
+#endif
     .network_tcp_close = picocalc_network_tcp_close,
     .network_tcp_read = picocalc_network_tcp_read,
     .network_tcp_write = picocalc_network_tcp_write,

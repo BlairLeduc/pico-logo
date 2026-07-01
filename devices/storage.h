@@ -84,6 +84,24 @@ extern "C"
         // pointer means the backend is always considered available.
         bool (*mount_available)(const char *pathname);
 
+        // Report whether `pathname` lives on a filesystem *other* than the
+        // internal/imageable root (i.e. removable storage such as the SD card).
+        // Used to ensure a whole-filesystem backup is not written to — nor a
+        // restore read from — the very volume being reflashed. Optional: NULL
+        // means "no external volume" (treat every path as internal).
+        bool (*is_external)(const char *pathname);
+
+        // Write a sparse whole-filesystem image of the internal (root) volume to
+        // `out`. Implemented only by the imageable root backend. Optional: NULL
+        // means backup is unsupported on this backend.
+        bool (*fs_image_backup)(LogoStream *out);
+
+        // Reflash the internal (root) volume from a whole-filesystem image read
+        // from `in` (validated before erasing; grows to fill a larger device).
+        // Implemented only by the imageable root backend. Optional: NULL means
+        // restore is unsupported on this backend.
+        bool (*fs_image_restore)(LogoStream *in);
+
     } LogoStorageOps;
 
     typedef struct LogoStorage

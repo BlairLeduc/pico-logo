@@ -131,9 +131,9 @@ static bool host_file_can_read(LogoStream *stream)
     return true;
 }
 
-static void host_file_write(LogoStream *stream, const char *text)
+static void host_file_write_bytes(LogoStream *stream, const char *buffer, size_t len)
 {
-    if (!stream || !stream->context || !text)
+    if (!stream || !stream->context || !buffer)
     {
         return;
     }
@@ -146,16 +146,24 @@ static void host_file_write(LogoStream *stream, const char *text)
 
     // Seek to write position
     fseek(ctx->file, ctx->write_pos, SEEK_SET);
-    
-    size_t len = strlen(text);
-    size_t written = fwrite(text, 1, len, ctx->file);
+
+    size_t written = fwrite(buffer, 1, len, ctx->file);
     ctx->write_pos += (long)written;
-    
+
     // Check for partial write (disk full or other error)
     if (written < len)
     {
         stream->write_error = true;
     }
+}
+
+static void host_file_write(LogoStream *stream, const char *text)
+{
+    if (!text)
+    {
+        return;
+    }
+    host_file_write_bytes(stream, text, strlen(text));
 }
 
 static void host_file_flush(LogoStream *stream)
@@ -340,6 +348,7 @@ static const LogoStreamOps host_file_ops = {
     .read_line = host_file_read_line,
     .can_read = host_file_can_read,
     .write = host_file_write,
+    .write_bytes = host_file_write_bytes,
     .flush = host_file_flush,
     .get_read_pos = host_file_get_read_pos,
     .set_read_pos = host_file_set_read_pos,

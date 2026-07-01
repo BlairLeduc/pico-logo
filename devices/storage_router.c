@@ -142,29 +142,9 @@ static bool cross_fs_move(const LogoStorageOps *src_ops, const char *src,
         free(in);
         return false;
     }
-    // Start from a known-clean write-error state: a freshly opened stream may
-    // carry a stale flag from a backend that does not initialise it, and we use
-    // this flag below to detect a failed copy.
-    logo_stream_clear_write_error(out);
-
-    char buf[257];
-    bool ok = true;
-    int n;
-    while ((n = logo_stream_read_chars(in, buf, (int)sizeof(buf) - 1)) > 0)
-    {
-        buf[n] = '\0';
-        logo_stream_write(out, buf);
-        if (logo_stream_has_write_error(out))
-        {
-            ok = false;
-            break;
-        }
-    }
-    if (n < 0)
-    {
-        ok = false; // read error mid-copy
-    }
-    logo_stream_flush(out);
+    // Binary-safe copy: read_chars/write_bytes preserve embedded NUL bytes, so a
+    // moved image or other binary file is not truncated at the first zero.
+    bool ok = logo_stream_copy(in, out);
     logo_stream_close(in);
     free(in);
     logo_stream_close(out);
@@ -248,6 +228,25 @@ static bool router_mount_available(const char *pathname)
     return ops->mount_available(sub ? sub : pathname);
 }
 
+// A path is "external" to the imageable root precisely when it routes to the
+// SD mount. This keeps a whole-filesystem backup/restore off the very volume
+// being reflashed.
+static bool router_is_external(const char *pathname)
+{
+    return sd_subpath(pathname) != NULL;
+}
+
+// Whole-filesystem imaging always targets the internal root backend.
+static bool router_fs_image_backup(LogoStream *out)
+{
+    return g_root_ops->fs_image_backup && g_root_ops->fs_image_backup(out);
+}
+
+static bool router_fs_image_restore(LogoStream *in)
+{
+    return g_root_ops->fs_image_restore && g_root_ops->fs_image_restore(in);
+}
+
 static const LogoStorageOps router_ops = {
     .open = router_open,
     .file_exists = router_file_exists,
@@ -260,6 +259,9 @@ static const LogoStorageOps router_ops = {
     .list_directory = router_list_directory,
     .free_blocks = router_free_blocks,
     .mount_available = router_mount_available,
+    .is_external = router_is_external,
+    .fs_image_backup = router_fs_image_backup,
+    .fs_image_restore = router_fs_image_restore,
 };
 
 void logo_storage_router_init(LogoStorage *router,

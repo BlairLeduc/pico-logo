@@ -1,0 +1,34 @@
+to pathcat :dir :name
+  ; Build an absolute path from a directory and a filename,
+  ; handling the root ("/) case so we never produce "//name.
+  if equalp :dir "/ [output word "/ :name]
+  output (word :dir "/ :name)
+end
+
+to copydir :srcdir :dstdir
+  ; Recursively copy files and subdirectories from :srcdir to :dstdir.
+  ; Creates :dstdir if it does not yet exist.
+  ; Both arguments must be absolute paths.
+  if not dir? :dstdir [createdir :dstdir]
+  local "saved
+  make "saved prefix
+  setprefix :srcdir
+  local "flist
+  local "dlist
+  make "flist files
+  make "dlist directories
+  setprefix :saved
+  foreach :flist [[name]
+    copyfile (pathcat :srcdir :name) (pathcat :dstdir :name)
+  ]
+  foreach :dlist [[name]
+    copydir (pathcat :srcdir :name) (pathcat :dstdir :name)
+  ]
+end
+
+to migrate
+  ; Copy everything from /sd/Logo to the internal flash root /.
+  print "Migrating...
+  copydir "/sd/Logo "/
+  print "Done.
+end

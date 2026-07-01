@@ -23,14 +23,19 @@
 #define LWIP_UDP                        1
 #define LWIP_RAW                        1
 
-// Application-layered TCP with TLS (mbedTLS) for the HTTPS client
+// Application-layered TCP. The plain-TCP path (http://) uses altcp too, so this
+// is always on; the TLS layer (mbedTLS) is only pulled in on TLS-capable boards
+// -- otherwise lwip/altcp_tls.h would #include <mbedtls/ssl.h>, which is not on
+// the include path when pico_mbedtls is not linked.
 #define LWIP_ALTCP                      1
+#ifdef LOGO_HAS_TLS
 #define LWIP_ALTCP_TLS                  1
 #define LWIP_ALTCP_TLS_MBEDTLS          1
 
 // Enforce server certificate verification (lwIP defaults this to OPTIONAL, which
 // would complete the handshake even for an untrusted/mismatched certificate).
 #define ALTCP_MBEDTLS_AUTHMODE          MBEDTLS_SSL_VERIFY_REQUIRED
+#endif // LOGO_HAS_TLS
 
 // Enable hostname for DHCP
 #define LWIP_NETIF_HOSTNAME             1

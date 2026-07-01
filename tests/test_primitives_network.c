@@ -152,8 +152,21 @@ void test_network_resolve_returns_empty_list_on_failure(void)
 void test_network_resolve_requires_one_argument(void)
 {
     Result r = eval_string("network.resolve");
-    
+
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_network_resolve_errors_message_when_unsupported(void)
+{
+    // A board with no radio (e.g. Pico 2) has no network_resolve op; the error
+    // must name the command.
+    mock_hardware_ops.network_resolve = NULL;
+
+    Result r = eval_string("network.resolve \"www.example.com");
+
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL_STRING("I can't run network.resolve on this device",
+                             error_format(r));
 }
 
 void test_network_resolve_requires_word_argument(void)
@@ -356,6 +369,7 @@ int main(void)
     RUN_TEST(test_network_resolve_returns_ip_on_success);
     RUN_TEST(test_network_resolve_returns_empty_list_on_failure);
     RUN_TEST(test_network_resolve_requires_one_argument);
+    RUN_TEST(test_network_resolve_errors_message_when_unsupported);
     RUN_TEST(test_network_resolve_requires_word_argument);
     RUN_TEST(test_network_resolve_with_ip_address);
     RUN_TEST(test_network_resolve_with_localhost);

@@ -78,6 +78,8 @@ static const char *error_templates[] = {
     [ERR_STACK_OVERFLOW] = "Too many nested operations",
     [ERR_DONT_KNOW_ABOUT] = "I don't know about %s",
     [ERR_NO_SD_CARD] = "There is no SD card",
+    [ERR_BACKUP_LOCATION] = "Backup file must be on the SD card",
+    [ERR_BACKUP_INVALID] = "Backup file is not valid for this device",
 };
 
 #define NUM_ERRORS (sizeof(error_templates) / sizeof(error_templates[0]))

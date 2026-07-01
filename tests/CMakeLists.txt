@@ -73,6 +73,7 @@ add_logo_test(test_stream)
 add_logo_test(test_storage_router)
 add_logo_test(test_lfs_storage)
 add_logo_test(test_cross_fs_move)
+add_logo_test(test_lfs_backup)
 add_logo_test(test_repl)
 add_logo_test(test_syntax_highlight)
 
@@ -107,3 +108,19 @@ target_include_directories(test_tls_heap PRIVATE
     ${CMAKE_SOURCE_DIR}/devices/picocalc
 )
 add_test(NAME test_tls_heap COMMAND test_tls_heap)
+
+# mklfsimg round-trip test — builds an image from a host tree and restores it.
+# Reuses the tool's core (tools/mklfsimg_lib.c) and the shared backup/restore +
+# littlefs bundled in logo_devices.
+add_executable(test_mklfsimg
+    test_mklfsimg.c
+    ${CMAKE_SOURCE_DIR}/tools/mklfsimg_lib.c
+    unity.c
+)
+target_include_directories(test_mklfsimg PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/tools
+)
+target_link_libraries(test_mklfsimg logo_devices)
+add_test(NAME test_mklfsimg COMMAND test_mklfsimg)

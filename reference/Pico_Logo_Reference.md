@@ -1,6 +1,8 @@
 # Pico Logo
 
-From the [Releases](https://github.com/BlairLeduc/pico-logo/releases) page, download the UF2 file for your device and the `logo.zip` file. On your SD Card, extract the `logo.zip` file to a subdirectory on the root named `Logo`.  
+## Installation
+
+From the [Releases](https://github.com/BlairLeduc/pico-logo/releases) page, download the UF2 file for your device and the `logo.img` file. On your SD Card, copy the `logo.img` file into the root folder.  
 
 Flash the PicoCalc with the latest release and reboot your PicoCalc:
 
@@ -20,7 +22,19 @@ Welcome to Pico Logo.
 
 The question mark, `?` is the _prompt_. When the prompt is on the screen, you can type something. The flashing underscore, `_` is the _cursor_. It appears when Logo wants you to type something and shows where the next character you type will appear.
 
-The following reference material is collected from:
+## Restore the default filesystem
+
+At the prompt, enter:
+
+```
+.restore "/sd/logo.img
+```
+
+This will format and restore the factory filesystem contents. You can now remove the `logo.img` file from the SD Card.
+
+## References
+
+This reference manual contains content that is collected from:
 
 - [Apple Logo Reference Manual](https://archive.org/details/apple-logo-reference-manual)
 - [Apple Logo II Reference Manual](https://archive.org/details/Apple_Logo_II_Reference_Manual_HiRes)
@@ -358,18 +372,40 @@ Pico Logo does not support the `if predicate list1 list2` form. Use `(if predica
 
 
 ===
-# Processor Limits
+# Supported Pico Boards
 
-The following lists the capabilities of the supported processor.
+Pico Logo runs on three RP2350-based boards. The interpreter and its limits are
+identical on every board; what differs is networking — which needs a wireless
+radio — and storage capacity, which depends on the flash and PSRAM fitted.
 
-**RP2350** (Pico 2 family of devices):
+**Shared by every board** (the RP2350 processor):
 
 - 32768 nodes for procedure and variable storage
 - 24576 characters of editor buffer
 - 8192 characters in the copy buffer
-- 192 levels of recursion (128 levels for W variants)
 - Hardware floating-point operations
-- WiFi supported on W variants
+
+**Raspberry Pi Pico 2** — 4 MB flash, no radio.
+
+- 192 levels of recursion
+- 2 MB internal filesystem
+- No networking
+
+**Raspberry Pi Pico 2 W** — 4 MB flash, WiFi, no PSRAM.
+
+- 128 levels of recursion
+- 2 MB internal filesystem
+- WiFi (`wifi.connect`, `wifi.scan`, …) with `network.resolve`, `network.ntp` and `network.ping`
+- `http.get` and `http.post` over `http://` only; `https://` is not available, so `tls?` outputs `false`
+- HTTP responses are limited to about 2 KB (there is no PSRAM to hold a larger body)
+
+**Pimoroni Pico Plus 2 W** — 16 MB flash, 8 MB PSRAM, WiFi.
+
+- 128 levels of recursion
+- 8 MB internal filesystem
+- WiFi (`wifi.connect`, `wifi.scan`, …) with `network.resolve`, `network.ntp` and `network.ping`
+- `http.get` and `http.post` over both `http://` and `https://`, so `tls?` outputs `true`
+- HTTP responses up to about 512 KB, held in PSRAM
 
 
 
@@ -4442,9 +4478,9 @@ Pico Logo presents a single directory tree with two filesystems mounted in it:
 - **`/`** — the root is the device's internal flash storage. It is always present and is where files are saved by default (the default prefix is `/`). Your `startup` file lives here as `/startup`.
 - **`/sd`** — the FAT32 SD card, mounted under `/sd`. It appears in a listing of `/` only while a card is inserted, and is re-read automatically when a card is removed and another inserted. Asking about `/sd` with no card present reports `There is no SD card`.
 
-Paths may be absolute (beginning with `/`) or relative to the current prefix (see [`setprefix`](#setprefix)). [`rename`](#rename) moves a **file** between the two filesystems by copying it and deleting the original; moving a **directory** across filesystems is not supported and reports `File is the wrong type`.
+Paths may be absolute (beginning with `/`) or relative to the current prefix (see [`setprefix`](#setprefix)). [`rename`](#rename) moves a **file** between the two filesystems by copying it and deleting the original, while [`copyfile`](#copyfile) leaves the original in place. Both work on **files** only; moving or copying a **directory** across filesystems is not supported and reports `File is the wrong type`. Both are binary-safe, so images and other binary files are copied without corruption.
 
-Use [`free`](#free) to see how much space remains on a filesystem.
+Use [`free`](#free) to see how much space remains on a filesystem. The whole internal filesystem can be saved to and reloaded from an SD-card file with [`backup`](#backup) and [`.restore`](#restore).
 
 ## files
 
@@ -4705,6 +4741,59 @@ Renames the file or directory from _pathname1_ to _pathname2_. A file or directo
 ?rename "draft.lgo "pancake_final.lgo
 ?pr file? "pancake_final.lgo
 true
+```
+
+
+## copyfile
+
+copyfile _pathname1_ _pathname2_
+
+`command`
+
+Copies the **file** _pathname1_ to _pathname2_, leaving the original in place. If _pathname2_ already exists it is replaced. The copy is binary-safe, so images and other binary files are copied without corruption, and it may cross between the internal storage and the `/sd` card (for example `copyfile "/sd/turtle.bmp "/turtle.bmp`). _pathname1_ must be a file; copying a directory, or copying onto an existing directory, reports `File is the wrong type`. Copying a file onto itself has no effect.
+
+**Example**:
+
+```logo
+?copyfile "/sd/logo.bmp "/logo.bmp
+?pr file? "/logo.bmp
+true
+```
+
+
+## backup
+
+backup _pathname_
+
+`command`
+
+Writes a complete image of the internal filesystem (`/`) to _pathname_, which must be on the SD card (for example `backup "/sd/2026-06-30.bak`). Only the blocks that actually hold data are written, so the backup file stays small. The image survives re-flashing the firmware, so a backup made before an update can be restored afterwards with [`.restore`](#restore).
+
+The backup file must live on the SD card, not on the internal filesystem it is imaging; otherwise Logo reports `Backup file must be on the SD card`.
+
+**Example**:
+
+```logo
+?backup "/sd/2026-06-30.bak
+?pr file? "/sd/2026-06-30.bak
+true
+```
+
+
+## .restore
+
+.restore _pathname_
+
+`command`
+
+**Dangerous.** Erases the entire internal filesystem (`/`) and replaces it with the image stored in _pathname_ (which must be on the SD card). Every file currently in internal storage is lost. The leading period marks `.restore` as a dangerous operation, following Logo convention — there is no undo. All open files are closed before the restore begins.
+
+The image may come from a device with a smaller internal filesystem than this one; the restored filesystem is grown to fill the available space. An image from a *larger* filesystem cannot be restored onto a smaller one and reports `Backup file is not valid for this device`. The image is fully checked before any storage is erased, so a corrupt or incompatible backup leaves the existing filesystem untouched.
+
+**Example**:
+
+```logo
+?.restore "/sd/2026-06-30.bak
 ```
 
 
@@ -5290,6 +5379,23 @@ true
 ```
 
 
+## tls? (tlsp)
+
+tls?
+
+`operation`
+
+`tls?` outputs `true` if this board can open `https://` connections, otherwise it outputs `false`. TLS needs PSRAM to hold the handshake buffers, so a board with WiFi but no PSRAM (such as the Pico 2 W) can still use `http.get` on `http://` URLs while `tls?` outputs `false`. Unlike `wifi?`, this reports a fixed hardware capability rather than the live connection state.
+
+**Example**:
+
+```logo
+?pr tls?
+true
+?if tls? [pr http.get "https://example.com/] [pr [no https on this board]]
+```
+
+
 ## wifi.mac
 
 wifi.mac
@@ -5461,7 +5567,7 @@ true
 ===
 # HTTP Operations
 
-These operations fetch and send data over the web. They require that the device is connected to a WiFi network (see [`wifi.connect`](#wifi-connect-wificonnect)); an error occurs if WiFi is not available or not connected.
+These operations fetch and send data over the web. They require that the device is connected to a WiFi network (see [`wifi.connect`](#wifi.connect)); an error occurs if WiFi is not available or not connected.
 
 A _url_ is a word beginning with `http://` or `https://`, for example `"http://example.com/index.html`, `"https://example.com/index.html`, or `"http://example.com:8080/api`. If no port is given, port 80 is used for `http://` and port 443 for `https://`.
 
@@ -5469,13 +5575,13 @@ For an `https://` _url_ the connection is encrypted with TLS, and the server's c
 
 Request headers are supplied as extra inputs in name/value pairs, using the parenthesised form of the operation, for example `(http.get "http://example.com/ "Accept "text/plain)`. Each name and value is a word. Recall that a quoted word may contain `-` and `/` without a backslash (so `"Content-Type` and `"text/plain` are each a single word); a value that contains spaces cannot be written as a quoted word.
 
-Each operation performs one complete request: it opens a connection, sends the request, reads the whole response, and closes the connection. The connection is not left open and does not appear in [`allopen`](#allopen). The read timeout is governed by [`.settimeout`](#-settimeout); if the server does not respond in time, the operation produces an error.
+Each operation performs one complete request: it opens a connection, sends the request, reads the whole response, and closes the connection. The connection is not left open and does not appear in [`allopen`](#allopen). The read timeout is governed by [`.settimeout`](#settimeout); if the server does not respond in time, the operation produces an error.
 
-A request can **fail to complete** (the host cannot be resolved, the connection is refused, the request times out, or the response is larger than the device can hold). In these cases the operation produces an error, which you can trap with [`catch`](#catch). A request that **completes** produces a result even when the server reports a problem: a "404 Not Found" response is not an error; the operation outputs the server's response body, and [`http.status`](#http-status) outputs `404`.
+A request can **fail to complete** (the host cannot be resolved, the connection is refused, the request times out, or the response is larger than the device can hold). In these cases the operation produces an error, which you can trap with [`catch`](#catch). A request that **completes** produces a result even when the server reports a problem: a "404 Not Found" response is not an error; the operation outputs the server's response body, and [`http.status`](#http.status) outputs `404`.
 
 The response body is held as a single word. There is a fixed maximum size; a response whose body exceeds it produces an error rather than a truncated result.
 
-After any successful request, [`http.status`](#http-status) and [`http.header`](#http-header) describe the **most recent** request. Making another request replaces this information.
+After any successful request, [`http.status`](#http.status) and [`http.header`](#http.header) describe the **most recent** request. Making another request replaces this information.
 
 
 ## http.get
@@ -5489,7 +5595,7 @@ The `http.get` operation sends an HTTP GET request to _url_ and outputs the resp
 
 In the second form, the extra inputs are request headers given as name/value word pairs, for example `(http.get "http://example.com/ "Accept "text/plain "User-Agent "PicoLogo)`. An odd number of header inputs (a name with no value) produces an error.
 
-If the request cannot be completed, an error occurs. If the request completes, use [`http.status`](#http-status) to find out whether the server reported success.
+If the request cannot be completed, an error occurs. If the request completes, use [`http.status`](#http.status) to find out whether the server reported success.
 
 **Example**:
 
@@ -5510,9 +5616,9 @@ http.post _url_ _data_
 
 The `http.post` operation sends an HTTP POST request to _url_ with _data_ as the request body, and outputs the response body as a word. _data_ may be a word or a list; a list is sent as its members separated by spaces, with no outer brackets.
 
-In the second form, the extra inputs are request headers given as name/value word pairs, in the same way as [`http.get`](#http-get).
+In the second form, the extra inputs are request headers given as name/value word pairs, in the same way as [`http.get`](#http.get).
 
-If the request cannot be completed, an error occurs. If the request completes, use [`http.status`](#http-status) to find out whether the server reported success.
+If the request cannot be completed, an error occurs. If the request completes, use [`http.status`](#http.status) to find out whether the server reported success.
 
 **Example**:
 
@@ -5530,7 +5636,7 @@ http.status
 
 `operation`
 
-The `http.status` operation outputs the numeric HTTP status code of the most recently completed request made by [`http.get`](#http-get) or [`http.post`](#http-post), for example `200` for success or `404` for "Not Found". If no request has been made, it outputs the empty list.
+The `http.status` operation outputs the numeric HTTP status code of the most recently completed request made by [`http.get`](#http.get) or [`http.post`](#http.post), for example `200` for success or `404` for "Not Found". If no request has been made, it outputs the empty list.
 
 **Example**:
 
@@ -5687,7 +5793,7 @@ See [`pprop`](#pprop) and [`gprop`](#gprop).
 ===
 # JSON
 
-A JSON document is held as text — typically the word returned by [`http.get`](#http-get). `json.get` reads values straight out of that text, so even a large response (which is kept in PSRAM) can be queried without copying the whole document into the workspace.
+A JSON document is held as text — typically the word returned by [`http.get`](#http.get). `json.get` reads values straight out of that text, so even a large response (which is kept in PSRAM) can be queried without copying the whole document into the workspace.
 
 ## json.get
 
@@ -5720,7 +5826,7 @@ json.count _value_
 
 `operation`
 
-`json.count` outputs the number of elements in a JSON array, or the number of members in a JSON object, where _value_ is a word containing that JSON text. A scalar value outputs `0`, and the empty list — the result of [`json.get`](#json-get) for a missing path or JSON `null` — also outputs `0`, so `json.count json.get ...` can be used directly as a loop bound.
+`json.count` outputs the number of elements in a JSON array, or the number of members in a JSON object, where _value_ is a word containing that JSON text. A scalar value outputs `0`, and the empty list — the result of [`json.get`](#json.get) for a missing path or JSON `null` — also outputs `0`, so `json.count json.get ...` can be used directly as a loop bound.
 
 **Example**:
 
@@ -5741,9 +5847,9 @@ rp2350
 
 `operation`
 
-`json.object` builds a JSON object from the given _key_/_value_ pairs. Each _key_ must be a word. A _value_ may be a word (output as a JSON string), a number, the words `true` or `false`, the empty list (output as `null`), a list (output as a JSON array), or another `json.object` or `json.array`. The result is passed to [`json.make`](#json-make) to produce JSON text. Give the inputs as quoted words rather than inside a list, so values containing `/`, `-` or spaces are kept intact.
+`json.object` builds a JSON object from the given _key_/_value_ pairs. Each _key_ must be a word. A _value_ may be a word (output as a JSON string), a number, the words `true` or `false`, the empty list (output as `null`), a list (output as a JSON array), or another `json.object` or `json.array`. The result is passed to [`json.make`](#json.make) to produce JSON text. Give the inputs as quoted words rather than inside a list, so values containing `/`, `-` or spaces are kept intact.
 
-See [`json.array`](#json-array) and [`json.make`](#json-make).
+See [`json.array`](#json.array) and [`json.make`](#json.make).
 
 **Example**:
 
@@ -5759,9 +5865,9 @@ See [`json.array`](#json-array) and [`json.make`](#json-make).
 
 `operation`
 
-`json.array` builds a JSON array from the given values, each encoded in the same way as a `json.object` value. The result is passed to [`json.make`](#json-make) to produce JSON text. An empty array is `(json.array)`.
+`json.array` builds a JSON array from the given values, each encoded in the same way as a `json.object` value. The result is passed to [`json.make`](#json.make) to produce JSON text. An empty array is `(json.array)`.
 
-See [`json.object`](#json-object) and [`json.make`](#json-make).
+See [`json.object`](#json.object) and [`json.make`](#json.make).
 
 **Example**:
 
@@ -5777,7 +5883,7 @@ json.make _value_
 
 `operation`
 
-`json.make` outputs the JSON text for _value_. _Value_ is usually built with [`json.object`](#json-object) and [`json.array`](#json-array), but may also be a plain Logo value: a word becomes a JSON string (a word that is a valid JSON number becomes a number, and `true`/`false` become JSON booleans), a number becomes a JSON number, a list becomes a JSON array, and the empty list becomes `null`. String values are escaped as required by JSON, and numbers JSON cannot represent (infinities and NaN) become `null`.
+`json.make` outputs the JSON text for _value_. _Value_ is usually built with [`json.object`](#json.object) and [`json.array`](#json.array), but may also be a plain Logo value: a word becomes a JSON string (a word that is a valid JSON number becomes a number, and `true`/`false` become JSON booleans), a number becomes a JSON number, a list becomes a JSON array, and the empty list becomes `null`. String values are escaped as required by JSON, and numbers JSON cannot represent (infinities and NaN) become `null`.
 
 **Example**:
 
@@ -6213,6 +6319,10 @@ end
 |65|Network timeout occurred
 |66|Invalid network operation
 |67|Too many nested operations
+|68|I don't know about (procedure)
+|69|There is no SD card
+|70|Backup file must be on the SD card
+|71|Backup file is not valid for this device
 ||!!! LOGO SYSTEM BUG !!! _Should not occur. Please let me know._
 
 
