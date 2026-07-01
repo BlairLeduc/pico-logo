@@ -583,6 +583,97 @@ void test_http_get_rejects_odd_header_args(void)
 }
 
 // ============================================================================
+// http.put / http.patch / http.delete
+// ============================================================================
+
+void test_http_put_sends_method_and_body(void)
+{
+    script_response("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok");
+
+    eval_string("http.put \"http://example.com/orders/1 \"pierogi");
+
+    const char *req = mock_device_get_tcp_request();
+    TEST_ASSERT_NOT_NULL(strstr(req, "PUT /orders/1 HTTP/1."));
+    TEST_ASSERT_NOT_NULL(strstr(req, "Content-Length: 7"));
+    TEST_ASSERT_NOT_NULL(strstr(req, "pierogi"));
+}
+
+void test_http_put_sends_custom_headers(void)
+{
+    script_response("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+
+    eval_string("(http.put \"http://example.com/orders/1 \"x \"Content-Type \"text/plain)");
+
+    const char *req = mock_device_get_tcp_request();
+    TEST_ASSERT_NOT_NULL(strstr(req, "Content-Type: text/plain"));
+}
+
+void test_http_put_requires_two_arguments(void)
+{
+    Result r = eval_string("http.put \"http://example.com/");
+
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_http_patch_sends_method_and_body(void)
+{
+    script_response("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok");
+
+    eval_string("http.patch \"http://example.com/orders/1 \"fries");
+
+    const char *req = mock_device_get_tcp_request();
+    TEST_ASSERT_NOT_NULL(strstr(req, "PATCH /orders/1 HTTP/1."));
+    TEST_ASSERT_NOT_NULL(strstr(req, "Content-Length: 5"));
+    TEST_ASSERT_NOT_NULL(strstr(req, "fries"));
+}
+
+void test_http_patch_requires_two_arguments(void)
+{
+    Result r = eval_string("http.patch \"http://example.com/");
+
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_http_delete_sends_method_no_body(void)
+{
+    script_response("HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n");
+
+    eval_string("http.delete \"http://example.com/orders/1");
+
+    const char *req = mock_device_get_tcp_request();
+    TEST_ASSERT_NOT_NULL(strstr(req, "DELETE /orders/1 HTTP/1."));
+    // No body was supplied, so no Content-Length header is sent.
+    TEST_ASSERT_NULL(strstr(req, "Content-Length:"));
+}
+
+void test_http_delete_sends_custom_headers(void)
+{
+    script_response("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+
+    eval_string("(http.delete \"http://example.com/orders/1 \"Authorization \"Bearer)");
+
+    const char *req = mock_device_get_tcp_request();
+    TEST_ASSERT_NOT_NULL(strstr(req, "Authorization: Bearer"));
+}
+
+void test_http_delete_sets_status(void)
+{
+    script_response("HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n");
+
+    eval_string("http.delete \"http://example.com/orders/1");
+    Result r = eval_string("http.status");
+
+    TEST_ASSERT_EQUAL_STRING("204", mem_word_ptr(r.value.as.node));
+}
+
+void test_http_delete_requires_one_argument(void)
+{
+    Result r = eval_string("http.delete");
+
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+// ============================================================================
 // http.status / http.header
 // ============================================================================
 
@@ -707,6 +798,17 @@ int main(void)
     RUN_TEST(test_http_post_sends_custom_headers);
     RUN_TEST(test_http_post_requires_two_arguments);
     RUN_TEST(test_http_get_rejects_odd_header_args);
+
+    // http.put / http.patch / http.delete
+    RUN_TEST(test_http_put_sends_method_and_body);
+    RUN_TEST(test_http_put_sends_custom_headers);
+    RUN_TEST(test_http_put_requires_two_arguments);
+    RUN_TEST(test_http_patch_sends_method_and_body);
+    RUN_TEST(test_http_patch_requires_two_arguments);
+    RUN_TEST(test_http_delete_sends_method_no_body);
+    RUN_TEST(test_http_delete_sends_custom_headers);
+    RUN_TEST(test_http_delete_sets_status);
+    RUN_TEST(test_http_delete_requires_one_argument);
 
     // http.status / http.header
     RUN_TEST(test_http_status_empty_before_any_request);

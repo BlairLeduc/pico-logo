@@ -2,7 +2,8 @@
 //  Pico Logo
 //  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
-//  HTTP primitives: http.get, http.post, http.status, http.header
+//  HTTP primitives: http.get, http.post, http.put, http.patch, http.delete,
+//  http.status, http.header
 //
 //  A high-level, blocking HTTP/1.1 client built on the device TCP ops. Each
 //  request operation opens a connection, sends the request, reads the whole
@@ -606,11 +607,11 @@ static Result prim_http_get(Evaluator *eval, int argc, Value *args)
     return http_request("GET", url, NULL, hdr_argc, hdr_args);
 }
 
-// http.post url data
-// (http.post url data name1 value1 name2 value2 ...)
-static Result prim_http_post(Evaluator *eval, int argc, Value *args)
+// Shared implementation for the body-carrying methods (POST, PUT, PATCH):
+//   method url data
+//   (method url data name1 value1 name2 value2 ...)
+static Result http_body_method(int argc, Value *args, const char *method)
 {
-    UNUSED(eval);
     REQUIRE_ARGC(2);
     REQUIRE_WORD(args[0]);
     const char *url = mem_word_ptr(args[0].as.node);
@@ -623,7 +624,48 @@ static Result prim_http_post(Evaluator *eval, int argc, Value *args)
     Result chk = check_header_args(hdr_argc, hdr_args);
     if (chk.status != RESULT_OK) return chk;
 
-    return http_request("POST", url, &args[1], hdr_argc, hdr_args);
+    return http_request(method, url, &args[1], hdr_argc, hdr_args);
+}
+
+// http.post url data
+// (http.post url data name1 value1 name2 value2 ...)
+static Result prim_http_post(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    return http_body_method(argc, args, "POST");
+}
+
+// http.put url data
+// (http.put url data name1 value1 name2 value2 ...)
+static Result prim_http_put(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    return http_body_method(argc, args, "PUT");
+}
+
+// http.patch url data
+// (http.patch url data name1 value1 name2 value2 ...)
+static Result prim_http_patch(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    return http_body_method(argc, args, "PATCH");
+}
+
+// http.delete url
+// (http.delete url name1 value1 name2 value2 ...)
+static Result prim_http_delete(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
+    REQUIRE_WORD(args[0]);
+    const char *url = mem_word_ptr(args[0].as.node);
+
+    int hdr_argc = argc - 1;
+    Value *hdr_args = args + 1;
+    Result chk = check_header_args(hdr_argc, hdr_args);
+    if (chk.status != RESULT_OK) return chk;
+
+    return http_request("DELETE", url, NULL, hdr_argc, hdr_args);
 }
 
 // http.status
@@ -668,6 +710,9 @@ void primitives_http_init(void)
 
     primitive_register("http.get", 1, prim_http_get);
     primitive_register("http.post", 2, prim_http_post);
+    primitive_register("http.put", 2, prim_http_put);
+    primitive_register("http.patch", 2, prim_http_patch);
+    primitive_register("http.delete", 1, prim_http_delete);
     primitive_register("http.status", 0, prim_http_status);
     primitive_register("http.header", 1, prim_http_header);
 }

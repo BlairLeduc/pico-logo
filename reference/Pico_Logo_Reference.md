@@ -5630,13 +5630,82 @@ Order received.
 ```
 
 
+## http.put
+
+http.put _url_ _data_  
+(http.put _url_ _data_ _name1_ _value1_ _name2_ _value2_ ...)  
+
+`operation`
+
+The `http.put` operation sends an HTTP PUT request to _url_ with _data_ as the request body, and outputs the response body as a word. It behaves exactly like [`http.post`](#http.post) apart from the request method: _data_ may be a word or a list, and the parenthesised form takes request headers as name/value word pairs.
+
+PUT is normally used to create or replace the resource at _url_ with the supplied _data_.
+
+If the request cannot be completed, an error occurs. If the request completes, use [`http.status`](#http.status) to find out whether the server reported success.
+
+**Example**:
+
+```logo
+?pr (http.put "http://example.com/orders/17 [pierogi fries] "Content-Type "text/plain)
+Order updated.
+?pr http.status
+200
+```
+
+
+## http.patch
+
+http.patch _url_ _data_  
+(http.patch _url_ _data_ _name1_ _value1_ _name2_ _value2_ ...)  
+
+`operation`
+
+The `http.patch` operation sends an HTTP PATCH request to _url_ with _data_ as the request body, and outputs the response body as a word. It behaves exactly like [`http.post`](#http.post) apart from the request method: _data_ may be a word or a list, and the parenthesised form takes request headers as name/value word pairs.
+
+PATCH is normally used to apply a partial update to the resource at _url_.
+
+If the request cannot be completed, an error occurs. If the request completes, use [`http.status`](#http.status) to find out whether the server reported success.
+
+**Example**:
+
+```logo
+?pr (http.patch "http://example.com/orders/17 [fries] "Content-Type "text/plain)
+Order updated.
+?pr http.status
+200
+```
+
+
+## http.delete
+
+http.delete _url_  
+(http.delete _url_ _name1_ _value1_ _name2_ _value2_ ...)  
+
+`operation`
+
+The `http.delete` operation sends an HTTP DELETE request to _url_ and outputs the response body as a word. It sends no request body; in the parenthesised form the extra inputs are request headers given as name/value word pairs, in the same way as [`http.get`](#http.get).
+
+DELETE is normally used to remove the resource at _url_.
+
+If the request cannot be completed, an error occurs. If the request completes, use [`http.status`](#http.status) to find out whether the server reported success.
+
+**Example**:
+
+```logo
+?pr http.delete "http://example.com/orders/17
+Order deleted.
+?pr http.status
+204
+```
+
+
 ## http.status
 
 http.status  
 
 `operation`
 
-The `http.status` operation outputs the numeric HTTP status code of the most recently completed request made by [`http.get`](#http.get) or [`http.post`](#http.post), for example `200` for success or `404` for "Not Found". If no request has been made, it outputs the empty list.
+The `http.status` operation outputs the numeric HTTP status code of the most recently completed request made by [`http.get`](#http.get), [`http.post`](#http.post), [`http.put`](#http.put), [`http.patch`](#http.patch), or [`http.delete`](#http.delete), for example `200` for success or `404` for "Not Found". If no request has been made, it outputs the empty list.
 
 **Example**:
 

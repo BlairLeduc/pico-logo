@@ -1,6 +1,6 @@
 # Pico Logo
 
-Pico Logo is a lightweight, modular Logo interpreter written in C, designed for the Raspberry Pi Pico 2 (RP2350). The project aims for compatibility with classic LCSI Logo semantics, _although is influenced by classic MIT Logo semantics_, focusing on clarity, maintainability, and resource efficiency.
+Pico Logo is a lightweight, modular Logo interpreter written in C, designed for RP2350-based boards: the Raspberry Pi Pico 2, the Raspberry Pi Pico 2 W, and the Pimoroni Pico Plus 2 W. The project aims for compatibility with classic LCSI Logo semantics, _although it is influenced by classic MIT Logo semantics_, focusing on clarity, maintainability, and resource efficiency.
 
 ![sqiral](assets/sqiral.png)
 
@@ -24,9 +24,10 @@ repeat 220 [ fd repcount rt 88 ]
 - **Multi-line Input:** Supports procedure definitions spanning multiple lines.
 - **Basic Constructs:** Variables, procedures, control structures (`if`, `repeat`), lists, arithmetic, and logical operations.
 - **Device Abstraction:** Core logic separated from device-specific code for portability.
-- **Host & Pico Support:** Runs on desktop for development; designed for easy porting to Raspberry Pi Pico hardware.
+- **Host & Pico Support:** Runs on desktop for development; targets three RP2350 boards (Pico 2, Pico 2 W, Pico Plus 2 W).
 - **Single-Precision Math:** Uses 32-bit floats for numerical calculations, with fallback for integer-only hardware.
-- **File I/O:** Manage files (`catalog`, `setprefix`, `erasefile`) and `load` and `save` Logo programs.
+- **File I/O:** Manage files (`catalog`, `setprefix`, `erasefile`) and `load` and `save` Logo programs, backed by an internal LittleFS filesystem at `/` and a FAT32 SD card mounted at `/sd`.
+- **Networking (WiFi boards):** WiFi (`wifi.connect`, `wifi.scan`), DNS resolution, NTP time, `ping`, and an HTTP client (`http.get`, `http.post`, `http.put`, `http.patch`, `http.delete`) with JSON read/build primitives. Plain `http://` works on all WiFi boards; `https://` requires a TLS-capable (PSRAM) board.
 - **Unit Testing:** Uses Unity and CMake for isolated, maintainable tests.
 
 
@@ -41,7 +42,10 @@ repeat 220 [ fd repcount rt 88 ]
 
 ## Recommended Requirements
 
-- Raspberry Pi Pico 2 or compatible board (RP2350) for additional working memory and hardware supported floating-point
+- One of the supported RP2350 boards, for hardware-supported floating-point:
+  - **Raspberry Pi Pico 2** (4 MB flash, no radio) — offline
+  - **Raspberry Pi Pico 2 W** (4 MB flash, WiFi) — adds networking and plain `http://`
+  - **Pimoroni Pico Plus 2 W** (16 MB flash, 8 MB PSRAM, WiFi) — adds `https://` and larger responses
 - PicoCalc device with the latest firmware
 
 
@@ -115,6 +119,7 @@ The [CMake Tools](https://marketplace.visualstudio.com/items?itemName=ms-vscode.
 - `devices/` — Device-specific code (`host/`, `picocalc/`)
 - `reference/` — Language reference, error messages, and documentation
 - `tests/` — Unit tests (Unity framework)
+- `tools/` — Host-side utilities (e.g. `mklfsimg`, the LittleFS image builder)
 
 ## Building and Running
 
@@ -150,12 +155,18 @@ For coverage builds, use the `tests-coverage` preset instead of `tests`.
 
 ### Pico firmware (RP2350)
 
+Choose the preset for your board:
+
+- `pico2` — Raspberry Pi Pico 2 (offline)
+- `pico2w` — Raspberry Pi Pico 2 W (WiFi, `http://` only)
+- `pico+2w` — Pimoroni Pico Plus 2 W (WiFi + PSRAM, `https://`)
+
 ```sh
-cmake --preset=pico2
-cmake --build --preset=pico2
+cmake --preset=pico2w
+cmake --build --preset=pico2w
 ```
 
-This produces `build/pico-logo.uf2`, which you can flash with `picotool` or by copying to the Pico’s USB mass‑storage device.
+This produces `build-pico2w/pico-logo.uf2` (each preset builds into its own `build-<preset>` directory), which you can flash with `picotool` or by copying to the Pico’s USB mass‑storage device.
 
 ## Scripts
 
@@ -181,6 +192,10 @@ A helper script to create a release files of the project, including documentatio
 - [History of Logo](https://escholarship.org/uc/item/1623m1p3) by Cynthia Solomon, Brian Harvey, Ken Kahn, Henry Lieberman, Mark L. Miller, Margaret Minsky, Artemis Papert, Brian Silverman
 - [Logo Philosophy and Implementation](http://www.microworlds.com/support/logo-philosophy-implementation.html) by Seymour Papert, Clotilde Fonseca, Geraldine Kozberg and Michael Tempel, Sergei Soprunov and Elena Yakovleva, Horacio C. Reggini, Jeff Richardson, Maria Elizabeth B. Almeida, David Cavallo
 - [Logo Tree project](https://web.archive.org/web/20180820132053/http://elica.net/download/papers/LogoTreeProject.pdf) by Pavel Boytchev
+
+## Credits
+
+Pico Logo was created by an experienced software engineer collaborating with [Claude Code](https://claude.com/claude-code).
 
 ## License
 
