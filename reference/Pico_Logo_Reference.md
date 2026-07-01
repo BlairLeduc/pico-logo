@@ -1,6 +1,8 @@
 # Pico Logo
 
-From the [Releases](https://github.com/BlairLeduc/pico-logo/releases) page, download the UF2 file for your device and the `logo.zip` file. On your SD Card, extract the `logo.zip` file to a subdirectory on the root named `Logo`.  
+## Installation
+
+From the [Releases](https://github.com/BlairLeduc/pico-logo/releases) page, download the UF2 file for your device and the `logo.img` file. On your SD Card, copy the `logo.img` file into the root folder.  
 
 Flash the PicoCalc with the latest release and reboot your PicoCalc:
 
@@ -20,7 +22,19 @@ Welcome to Pico Logo.
 
 The question mark, `?` is the _prompt_. When the prompt is on the screen, you can type something. The flashing underscore, `_` is the _cursor_. It appears when Logo wants you to type something and shows where the next character you type will appear.
 
-The following reference material is collected from:
+## Restore the default filesystem
+
+At the prompt, enter:
+
+```
+.restore "/sd/logo.img
+```
+
+This will format and restore the factory filesystem contents. You can now remove the `logo.img` file from the SD Card.
+
+## References
+
+This reference manual contains content that is collected from:
 
 - [Apple Logo Reference Manual](https://archive.org/details/apple-logo-reference-manual)
 - [Apple Logo II Reference Manual](https://archive.org/details/Apple_Logo_II_Reference_Manual_HiRes)
@@ -358,18 +372,40 @@ Pico Logo does not support the `if predicate list1 list2` form. Use `(if predica
 
 
 ===
-# Processor Limits
+# Supported Pico Boards
 
-The following lists the capabilities of the supported processor.
+Pico Logo runs on three RP2350-based boards. The interpreter and its limits are
+identical on every board; what differs is networking — which needs a wireless
+radio — and storage capacity, which depends on the flash and PSRAM fitted.
 
-**RP2350** (Pico 2 family of devices):
+**Shared by every board** (the RP2350 processor):
 
 - 32768 nodes for procedure and variable storage
 - 24576 characters of editor buffer
 - 8192 characters in the copy buffer
-- 192 levels of recursion (128 levels for W variants)
 - Hardware floating-point operations
-- WiFi supported on W variants
+
+**Raspberry Pi Pico 2** — 4 MB flash, no radio.
+
+- 192 levels of recursion
+- 2 MB internal filesystem
+- No networking
+
+**Raspberry Pi Pico 2 W** — 4 MB flash, WiFi, no PSRAM.
+
+- 128 levels of recursion
+- 2 MB internal filesystem
+- WiFi (`wifi.connect`, `wifi.scan`, …) with `network.resolve`, `network.ntp` and `network.ping`
+- `http.get` and `http.post` over `http://` only; `https://` is not available, so `tls?` outputs `false`
+- HTTP responses are limited to about 2 KB (there is no PSRAM to hold a larger body)
+
+**Pimoroni Pico Plus 2 W** — 16 MB flash, 8 MB PSRAM, WiFi.
+
+- 128 levels of recursion
+- 8 MB internal filesystem
+- WiFi (`wifi.connect`, `wifi.scan`, …) with `network.resolve`, `network.ntp` and `network.ping`
+- `http.get` and `http.post` over both `http://` and `https://`, so `tls?` outputs `true`
+- HTTP responses up to about 512 KB, held in PSRAM
 
 
 
@@ -6283,6 +6319,10 @@ end
 |65|Network timeout occurred
 |66|Invalid network operation
 |67|Too many nested operations
+|68|I don't know about (procedure)
+|69|There is no SD card
+|70|Backup file must be on the SD card
+|71|Backup file is not valid for this device
 ||!!! LOGO SYSTEM BUG !!! _Should not occur. Please let me know._
 
 
