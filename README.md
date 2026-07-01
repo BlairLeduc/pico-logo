@@ -1,6 +1,6 @@
 # Pico Logo
 
-Pico Logo is a lightweight, modular Logo interpreter written in C, designed for RP2350-based boards: the Raspberry Pi Pico 2, the Raspberry Pi Pico 2 W, and the Pimoroni Pico Plus 2 W. The project aims for compatibility with classic LCSI Logo semantics, _although is influenced by classic MIT Logo semantics_, focusing on clarity, maintainability, and resource efficiency.
+Pico Logo is a lightweight, modular Logo interpreter written in C, designed for RP2350-based boards: the Raspberry Pi Pico 2, the Raspberry Pi Pico 2 W, and the Pimoroni Pico Plus 2 W. The project aims for compatibility with classic LCSI Logo semantics, _although it is influenced by classic MIT Logo semantics_, focusing on clarity, maintainability, and resource efficiency.
 
 ![sqiral](assets/sqiral.png)
 
@@ -27,7 +27,7 @@ repeat 220 [ fd repcount rt 88 ]
 - **Host & Pico Support:** Runs on desktop for development; targets three RP2350 boards (Pico 2, Pico 2 W, Pico Plus 2 W).
 - **Single-Precision Math:** Uses 32-bit floats for numerical calculations, with fallback for integer-only hardware.
 - **File I/O:** Manage files (`catalog`, `setprefix`, `erasefile`) and `load` and `save` Logo programs, backed by an internal LittleFS filesystem at `/` and a FAT32 SD card mounted at `/sd`.
-- **Networking (WiFi boards):** WiFi (`wifi.connect`, `wifi.scan`), DNS resolution, NTP time, `ping`, and an HTTP/HTTPS client (`http.get`, `http.post`, `http.put`, `http.patch`, `http.delete`) with JSON read/build primitives.
+- **Networking (WiFi boards):** WiFi (`wifi.connect`, `wifi.scan`), DNS resolution, NTP time, `ping`, and an HTTP client (`http.get`, `http.post`, `http.put`, `http.patch`, `http.delete`) with JSON read/build primitives. Plain `http://` works on all WiFi boards; `https://` requires a TLS-capable (PSRAM) board.
 - **Unit Testing:** Uses Unity and CMake for isolated, maintainable tests.
 
 
