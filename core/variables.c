@@ -439,8 +439,9 @@ void var_gc_mark_all(void)
         }
     }
     
-    // Note: Local variables in frames are marked via frame_gc_mark_all()
-    // which is called from memory.c's garbage collector
+    // Note: Local variables in frames are NOT marked here. Whoever runs a
+    // collection (see prim_recycle in primitives_workspace.c) must also call
+    // frame_gc_mark_all() and op_stack_gc_mark() to cover live evaluation state.
 }
 
 //==========================================================================

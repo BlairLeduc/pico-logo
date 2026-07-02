@@ -93,6 +93,10 @@ extern "C"
     // For CPS continuation: restore position from saved Node
     void token_source_set_position(TokenSource *ts, Node position);
 
+    // GC root support: mark the list position this source will resume from.
+    // Lexer sources read raw text and hold no nodes, so they are a no-op.
+    void token_source_gc_mark(const TokenSource *ts);
+
 #ifdef __cplusplus
 }
 #endif

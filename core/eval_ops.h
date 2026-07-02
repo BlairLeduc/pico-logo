@@ -278,6 +278,13 @@ extern "C"
     int op_stack_alloc_prim_args(OpStack *stack, int capacity);
     Value *op_stack_get_prim_args(OpStack *stack, int base);
 
+    // Mark every node reachable from in-flight operations as a GC root:
+    // saved token-source positions, loop bodies/predicates, staged argument
+    // values, pending expression operands, and inter-phase result values.
+    // Must be called (along with the frame stack and workspace roots) before
+    // mem_gc_sweep() whenever evaluation may be in progress.
+    void op_stack_gc_mark(OpStack *stack);
+
 #ifdef __cplusplus
 }
 #endif

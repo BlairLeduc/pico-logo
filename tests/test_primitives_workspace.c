@@ -618,6 +618,33 @@ void test_recycle_preserves_live_data(void)
     TEST_ASSERT_EQUAL_STRING("hello\n", output_buffer);
 }
 
+void test_recycle_inside_repeat_body(void)
+{
+    // The repeat body list is only reachable from the op stack; recycle
+    // must not sweep it mid-loop.
+    reset_output();
+    Result r = eval_string("repeat 3 [recycle print \"hello]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("hello\nhello\nhello\n", output_buffer);
+}
+
+void test_recycle_preserves_procedure_locals(void)
+{
+    // A local bound to a runtime-built list is only reachable through the
+    // frame stack; recycle must mark frame bindings. The junk allocations
+    // after recycle reuse any wrongly-freed cells, exposing the corruption.
+    Result r = eval_string(
+        "define \"f [[] [local \"x] [make \"x list 1 2] [recycle] "
+        "[make \"junk1 [9 9 9 9 9 9]] [make \"junk2 [8 8 8 8 8 8]] "
+        "[output :x]]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    reset_output();
+    r = eval_string("print f");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("1 2\n", output_buffer);
+}
+
 //==========================================================================
 // Erase Tests (erall, erase, ern, erns, erps)
 //==========================================================================
@@ -1200,6 +1227,8 @@ int main(void)
     RUN_TEST(test_recycle_runs_without_error);
     RUN_TEST(test_recycle_frees_memory);
     RUN_TEST(test_recycle_preserves_live_data);
+    RUN_TEST(test_recycle_inside_repeat_body);
+    RUN_TEST(test_recycle_preserves_procedure_locals);
 
     // primitives operation tests
     RUN_TEST(test_primitives_returns_list);
