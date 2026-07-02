@@ -392,6 +392,54 @@ void test_negative_number_as_atom(void)
 // Cons/List Tests
 //============================================================================
 
+// Exhaust the node pool, returning the head of the garbage chain so it
+// stays "allocated" for the duration of the test.
+static Node exhaust_node_pool(void)
+{
+    Node chain = NODE_NIL;
+    for (;;)
+    {
+        Node c = mem_cons(NODE_NIL, chain);
+        if (mem_is_nil(c))
+        {
+            return chain;
+        }
+        chain = c;
+    }
+}
+
+void test_list_append_builds_list(void)
+{
+    Node head = NODE_NIL;
+    Node tail = NODE_NIL;
+
+    TEST_ASSERT_TRUE(mem_list_append(&head, &tail, mem_atom_cstr("a")));
+    TEST_ASSERT_TRUE(mem_list_append(&head, &tail, mem_atom_cstr("b")));
+
+    TEST_ASSERT_TRUE(mem_word_eq(mem_car(head), "a", 1));
+    TEST_ASSERT_TRUE(mem_word_eq(mem_car(mem_cdr(head)), "b", 1));
+    TEST_ASSERT_TRUE(mem_is_nil(mem_cdr(mem_cdr(head))));
+}
+
+void test_list_append_fails_when_pool_exhausted(void)
+{
+    Node head = NODE_NIL;
+    Node tail = NODE_NIL;
+    Node item = mem_atom_cstr("a");
+
+    TEST_ASSERT_TRUE(mem_list_append(&head, &tail, item));
+    Node head_before = head;
+    Node tail_before = tail;
+
+    exhaust_node_pool();
+
+    // Append must report failure and leave the list untouched.
+    TEST_ASSERT_FALSE(mem_list_append(&head, &tail, item));
+    TEST_ASSERT_EQUAL(head_before, head);
+    TEST_ASSERT_EQUAL(tail_before, tail);
+    TEST_ASSERT_TRUE(mem_is_nil(mem_cdr(head)));
+}
+
 void test_cons_creates_list(void)
 {
     Node word = mem_atom("a", 1);
@@ -1120,6 +1168,8 @@ int main(void)
     RUN_TEST(test_negative_number_as_atom);
 
     // Cons/Lists
+    RUN_TEST(test_list_append_builds_list);
+    RUN_TEST(test_list_append_fails_when_pool_exhausted);
     RUN_TEST(test_cons_creates_list);
     RUN_TEST(test_cons_uses_node);
     RUN_TEST(test_car_of_list);

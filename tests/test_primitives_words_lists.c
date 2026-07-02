@@ -502,6 +502,56 @@ void test_uppercase(void)
 }
 
 //==========================================================================
+// Out-of-Nodes Error Tests
+//==========================================================================
+
+// Exhaust the node pool so any further mem_cons fails. The garbage chain
+// is reclaimed when the scaffold re-inits memory in tearDown.
+static void exhaust_node_pool(void)
+{
+    Node chain = NODE_NIL;
+    for (;;)
+    {
+        Node c = mem_cons(NODE_NIL, chain);
+        if (mem_is_nil(c))
+        {
+            return;
+        }
+        chain = c;
+    }
+}
+
+void test_fput_out_of_nodes_errors(void)
+{
+    run_string("make \"l [2 3]");
+    exhaust_node_pool();
+
+    Result r = eval_string("fput 1 :l");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+}
+
+void test_butlast_out_of_nodes_errors(void)
+{
+    // The copy loop must report the failure, not return a truncated list.
+    run_string("make \"l [1 2 3 4]");
+    exhaust_node_pool();
+
+    Result r = eval_string("butlast :l");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+}
+
+void test_list_literal_out_of_nodes_errors(void)
+{
+    exhaust_node_pool();
+
+    Result r = eval_string("print [a b c]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+}
+
+//==========================================================================
 // Comparison Tests (before?, equal?)
 //==========================================================================
 
@@ -829,6 +879,9 @@ int main(void)
     RUN_TEST(test_equalp_words_false);
     RUN_TEST(test_equalp_numbers);
     RUN_TEST(test_equalp_lists);
+    RUN_TEST(test_fput_out_of_nodes_errors);
+    RUN_TEST(test_butlast_out_of_nodes_errors);
+    RUN_TEST(test_list_literal_out_of_nodes_errors);
     
     // Type predicates
     RUN_TEST(test_listp_true);

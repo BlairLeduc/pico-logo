@@ -146,8 +146,10 @@ static float parse_number(const char *str, size_t len)
     return strtof(buf, NULL);
 }
 
-// Parse a list from tokens until ]
-static Node parse_list(Evaluator *eval)
+// Parse a list from tokens until ].
+// Returns false on out-of-memory (node pool exhausted); *out receives the
+// parsed list on success.
+static bool parse_list(Evaluator *eval, Node *out)
 {
     Node list = NODE_NIL;
     Node tail = NODE_NIL;
@@ -167,7 +169,8 @@ static Node parse_list(Evaluator *eval)
         if (t.type == TOKEN_LEFT_BRACKET)
         {
             advance(eval);
-            item = parse_list(eval);
+            if (!parse_list(eval, &item))
+                return false;
             // Wrap in list marker for later
             item = NODE_MAKE_LIST(NODE_GET_INDEX(item));
         }
@@ -211,19 +214,13 @@ static Node parse_list(Evaluator *eval)
             continue;
         }
 
-        Node new_cons = mem_cons(item, NODE_NIL);
-        if (mem_is_nil(list))
+        if (!mem_list_append(&list, &tail, item))
         {
-            list = new_cons;
-            tail = new_cons;
-        }
-        else
-        {
-            mem_set_cdr(tail, new_cons);
-            tail = new_cons;
+            return false;
         }
     }
-    return list;
+    *out = list;
+    return true;
 }
 
 // Evaluate a primary expression
@@ -286,7 +283,11 @@ Result eval_primary(Evaluator *eval)
         }
         
         // For Lexer OR NodeIterator with flat [ ] tokens: parse tokens until ]
-        Node list = parse_list(eval);
+        Node list;
+        if (!parse_list(eval, &list))
+        {
+            return result_error(ERR_OUT_OF_SPACE);
+        }
         return result_ok(value_list(list));
     }
 

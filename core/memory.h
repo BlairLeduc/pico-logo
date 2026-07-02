@@ -147,7 +147,21 @@ extern "C"
 
     // Create a cons cell (list node) with car and cdr.
     // Returns NODE_NIL if out of memory.
+    //
+    // OVERFLOW: the node pool is a fixed region shared with the atom table;
+    // when it is exhausted (or an operand cannot be encoded in a 16-bit
+    // cell), mem_cons returns NODE_NIL. Callers building lists must check
+    // for this — silently consing NODE_NIL produces a truncated or empty
+    // list that looks valid. Use mem_list_append for the common
+    // build-with-tail-pointer loop; it reports the failure.
     Node mem_cons(Node car, Node cdr);
+
+    // Append `item` as the next element of a list under construction,
+    // maintaining *head and *tail. Start with *head == *tail == NODE_NIL.
+    // Returns false if cell allocation failed (the list built so far is
+    // unchanged); callers should surface ERR_OUT_OF_SPACE rather than
+    // return a truncated list.
+    bool mem_list_append(Node *head, Node *tail, Node item);
 
     // Intern a word (string) in the atom table.
     // If the word already exists, returns the existing node.

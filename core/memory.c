@@ -551,6 +551,28 @@ Node mem_cons(Node car, Node cdr)
     return NODE_MAKE_LIST(index);
 }
 
+// Append `item` to a list under construction (head/tail pointer pattern).
+// Returns false when the node pool is exhausted so callers can surface
+// ERR_OUT_OF_SPACE instead of silently truncating the result.
+bool mem_list_append(Node *head, Node *tail, Node item)
+{
+    Node new_cell = mem_cons(item, NODE_NIL);
+    if (mem_is_nil(new_cell))
+    {
+        return false;
+    }
+    if (mem_is_nil(*head))
+    {
+        *head = new_cell;
+    }
+    else
+    {
+        mem_set_cdr(*tail, new_cell);
+    }
+    *tail = new_cell;
+    return true;
+}
+
 //==========================================================================
 // Atom Table (Interned Words)
 //==========================================================================

@@ -252,16 +252,9 @@ static Result prim_butlast(Evaluator *eval, int argc, Value *args)
         Node tail = NODE_NIL;
         while (!mem_is_nil(mem_cdr(list)))
         {
-            Node new_cons = mem_cons(mem_car(list), NODE_NIL);
-            if (mem_is_nil(result))
+            if (!mem_list_append(&result, &tail, mem_car(list)))
             {
-                result = new_cons;
-                tail = new_cons;
-            }
-            else
-            {
-                mem_set_cdr(tail, new_cons);
-                tail = new_cons;
+                return result_error(ERR_OUT_OF_SPACE);
             }
             list = mem_cdr(list);
         }
@@ -540,17 +533,10 @@ static Result prim_replace(Evaluator *eval, int argc, Value *args)
             {
                 element = mem_car(list);
             }
-            
-            Node new_cons = mem_cons(element, NODE_NIL);
-            if (mem_is_nil(result))
+
+            if (!mem_list_append(&result, &tail, element))
             {
-                result = new_cons;
-                tail = new_cons;
-            }
-            else
-            {
-                mem_set_cdr(tail, new_cons);
-                tail = new_cons;
+                return result_error(ERR_OUT_OF_SPACE);
             }
             list = mem_cdr(list);
             pos++;
@@ -688,6 +674,10 @@ static Result prim_fput(Evaluator *eval, int argc, Value *args)
     }
     
     Node result = mem_cons(obj_node, list_val.as.node);
+    if (mem_is_nil(result))
+    {
+        return result_error(ERR_OUT_OF_SPACE);
+    }
     return result_ok(value_list(result));
 }
 
@@ -719,6 +709,10 @@ static Result prim_list(Evaluator *eval, int argc, Value *args)
             continue;
         }
         result = mem_cons(obj_node, result);
+        if (mem_is_nil(result))
+        {
+            return result_error(ERR_OUT_OF_SPACE);
+        }
     }
     return result_ok(value_list(result));
 }
@@ -755,37 +749,25 @@ static Result prim_lput(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
     }
     
-    // If list is empty, just return single-element list
-    if (mem_is_nil(list_val.as.node))
-    {
-        Node result = mem_cons(obj_node, NODE_NIL);
-        return result_ok(value_list(result));
-    }
-    
     // Copy list and add object at end
     Node result = NODE_NIL;
     Node tail = NODE_NIL;
     Node list = list_val.as.node;
     while (!mem_is_nil(list))
     {
-        Node new_cons = mem_cons(mem_car(list), NODE_NIL);
-        if (mem_is_nil(result))
+        if (!mem_list_append(&result, &tail, mem_car(list)))
         {
-            result = new_cons;
-            tail = new_cons;
-        }
-        else
-        {
-            mem_set_cdr(tail, new_cons);
-            tail = new_cons;
+            return result_error(ERR_OUT_OF_SPACE);
         }
         list = mem_cdr(list);
     }
-    
+
     // Add object at end
-    Node last = mem_cons(obj_node, NODE_NIL);
-    mem_set_cdr(tail, last);
-    
+    if (!mem_list_append(&result, &tail, obj_node))
+    {
+        return result_error(ERR_OUT_OF_SPACE);
+    }
+
     return result_ok(value_list(result));
 }
 
@@ -840,16 +822,9 @@ static Result prim_sentence(Evaluator *eval, int argc, Value *args)
             Node list = args[i].as.node;
             while (!mem_is_nil(list))
             {
-                Node new_cons = mem_cons(mem_car(list), NODE_NIL);
-                if (mem_is_nil(result))
+                if (!mem_list_append(&result, &tail, mem_car(list)))
                 {
-                    result = new_cons;
-                    tail = new_cons;
-                }
-                else
-                {
-                    mem_set_cdr(tail, new_cons);
-                    tail = new_cons;
+                    return result_error(ERR_OUT_OF_SPACE);
                 }
                 list = mem_cdr(list);
             }
@@ -870,21 +845,14 @@ static Result prim_sentence(Evaluator *eval, int argc, Value *args)
             {
                 continue;
             }
-            
-            Node new_cons = mem_cons(obj_node, NODE_NIL);
-            if (mem_is_nil(result))
+
+            if (!mem_list_append(&result, &tail, obj_node))
             {
-                result = new_cons;
-                tail = new_cons;
-            }
-            else
-            {
-                mem_set_cdr(tail, new_cons);
-                tail = new_cons;
+                return result_error(ERR_OUT_OF_SPACE);
             }
         }
     }
-    
+
     return result_ok(value_list(result));
 }
 

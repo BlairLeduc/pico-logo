@@ -23,7 +23,8 @@ extern "C"
 
     // Put a property value on a name's property list
     // pprop name property value
-    void prop_put(const char *name, const char *property, Value value);
+    // Returns false if the node pool is exhausted (nothing is modified).
+    bool prop_put(const char *name, const char *property, Value value);
 
     // Get a property value from a name's property list
     // Returns true if found, false if not (out is empty list if not found)
