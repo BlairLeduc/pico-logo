@@ -39,6 +39,11 @@ Value value_newline(void)
     return (Value){.type = VALUE_NEWLINE, .as.node = mem_newline_marker};
 }
 
+Value value_bool(bool b)
+{
+    return value_word(b ? mem_true_node : mem_false_node);
+}
+
 //==========================================================================
 // Value Predicates
 //==========================================================================

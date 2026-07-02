@@ -303,8 +303,8 @@ static Result prim_emptyp(Evaluator *eval, int argc, Value *args)
     UNUSED(eval); UNUSED(argc);
     
     Value obj = args[0];
-    Node true_word = mem_atom_cstr("true");
-    Node false_word = mem_atom_cstr("false");
+    Node true_word = mem_true_node;
+    Node false_word = mem_false_node;
     
     if (value_is_word(obj))
     {
@@ -996,7 +996,7 @@ static Result prim_beforep(Evaluator *eval, int argc, Value *args)
     // Case-sensitive comparison (uppercase comes before lowercase in ASCII)
     int cmp = strcmp(str1, str2);
     
-    Node result = mem_atom_cstr(cmp < 0 ? "true" : "false");
+    Node result = (cmp < 0) ? mem_true_node : mem_false_node;
     return result_ok(value_word(result));
 }
 
@@ -1025,7 +1025,7 @@ static Result prim_equalp(Evaluator *eval, int argc, Value *args)
     UNUSED(eval); UNUSED(argc);
     
     bool equal = values_equal(args[0], args[1]);
-    Node result = mem_atom_cstr(equal ? "true" : "false");
+    Node result = (equal) ? mem_true_node : mem_false_node;
     return result_ok(value_word(result));
 }
 
@@ -1036,7 +1036,7 @@ static Result prim_listp(Evaluator *eval, int argc, Value *args)
     UNUSED(eval); UNUSED(argc);
     
     bool is_list = value_is_list(args[0]);
-    Node result = mem_atom_cstr(is_list ? "true" : "false");
+    Node result = (is_list) ? mem_true_node : mem_false_node;
     return result_ok(value_word(result));
 }
 
@@ -1058,7 +1058,7 @@ static Result prim_memberp(Evaluator *eval, int argc, Value *args)
         if (!value_as_word_str(obj1, &str1, &len1))
         {
             // List is never an element of a word.
-            return result_ok(value_word(mem_atom_cstr("false")));
+            return result_ok(value_bool(false));
         }
 
         const char *str2;
@@ -1076,7 +1076,7 @@ static Result prim_memberp(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj2));
     }
 
-    return result_ok(value_word(mem_atom_cstr(found ? "true" : "false")));
+    return result_ok(value_bool(found));
 }
 
 // number? object
@@ -1093,7 +1093,7 @@ static Result prim_numberp(Evaluator *eval, int argc, Value *args)
         is_number = value_to_number(args[0], &n);
     }
     
-    Node result = mem_atom_cstr(is_number ? "true" : "false");
+    Node result = (is_number) ? mem_true_node : mem_false_node;
     return result_ok(value_word(result));
 }
 
@@ -1105,7 +1105,7 @@ static Result prim_wordp(Evaluator *eval, int argc, Value *args)
     
     // Numbers are also words (self-quoting)
     bool is_word = value_is_word(args[0]) || value_is_number(args[0]);
-    Node result = mem_atom_cstr(is_word ? "true" : "false");
+    Node result = (is_word) ? mem_true_node : mem_false_node;
     return result_ok(value_word(result));
 }
 

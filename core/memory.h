@@ -227,6 +227,13 @@ extern "C"
     // This allows preserving line breaks inside brackets for pretty-printing.
     extern Node mem_newline_marker;
 
+    // The words "true" and "false", interned once at init. Predicates and
+    // comparisons run constantly; use these (or value_bool) instead of
+    // re-interning the strings. Atoms are never swept, so no GC rooting is
+    // needed.
+    extern Node mem_true_node;
+    extern Node mem_false_node;
+
     // Check if a node is the newline marker.
     bool mem_is_newline(Node n);
 

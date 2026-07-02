@@ -424,9 +424,9 @@ static Result prim_filep(Evaluator *eval, int argc, Value *args)
 
     if (logo_io_file_exists(io, filename))
     {
-        return result_ok(value_word(mem_atom("true", 4)));
+        return result_ok(value_bool(true));
     }
-    return result_ok(value_word(mem_atom("false", 5)));
+    return result_ok(value_bool(false));
 } 
 
 // Check if directory exists
@@ -443,9 +443,9 @@ static Result prim_dirp(Evaluator *eval, int argc, Value *args)
 
     if (logo_io_dir_exists(io, dirname))
     {
-        return result_ok(value_word(mem_atom("true", 4)));
+        return result_ok(value_bool(true));
     }
-    return result_ok(value_word(mem_atom("false", 5)));
+    return result_ok(value_bool(false));
 }
 
 // Rename a file or directory

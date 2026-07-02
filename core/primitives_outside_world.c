@@ -59,15 +59,15 @@ static Result prim_keyp(Evaluator *eval, int argc, Value *args)
     LogoIO *io = primitives_get_io();
     if (!io)
     {
-        return result_ok(value_word(mem_atom_cstr("false")));
+        return result_ok(value_bool(false));
     }
 
     bool available = logo_io_key_available(io);
     if (available)
     {
-        return result_ok(value_word(mem_atom_cstr("true")));
+        return result_ok(value_bool(true));
     }
-    return result_ok(value_word(mem_atom_cstr("false")));
+    return result_ok(value_bool(false));
 }
 
 // readchar (rc) - outputs the first character typed at the keyboard

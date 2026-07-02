@@ -105,6 +105,12 @@ static size_t node_bottom;
 // Number of nodes currently allocated in the node region
 static size_t node_count;
 
+// Heads of the per-bucket atom hash chains (atom offsets; ATOM_CHAIN_END =
+// empty). See the Atom Table section for the entry layout and rationale.
+#define ATOM_BUCKET_COUNT 256
+#define ATOM_CHAIN_END 0xFFFFu
+static uint16_t atom_buckets[ATOM_BUCKET_COUNT];
+
 //==========================================================================
 // Blob Heap (auxiliary region, e.g. PSRAM)
 //==========================================================================
@@ -352,6 +358,15 @@ static inline bool mem_would_collide(size_t extra)
 // need to remember to add it to their root set.
 Node mem_newline_marker = NODE_NIL;
 
+// Cached boolean atoms.
+//
+// Every predicate and comparison produces the word `true` or `false`;
+// interning them once at init lets those hot paths reuse the Node instead
+// of re-hashing the string per call. Like all atoms they are never swept,
+// so no GC rooting is needed.
+Node mem_true_node = NODE_NIL;
+Node mem_false_node = NODE_NIL;
+
 // Initialize the memory system.
 // Must be called before any other memory functions.
 void logo_mem_init(void)
@@ -359,7 +374,8 @@ void logo_mem_init(void)
     // Initialize atom table (grows upward from 0)
     atom_next = 0;
     memset(memory_block, 0, LOGO_MEMORY_SIZE);
-    
+    memset(atom_buckets, 0xFF, sizeof(atom_buckets)); // all chains empty
+
     // Initialize node region (grows downward from top)
     // Start with no nodes allocated
     node_bottom = LOGO_MEMORY_SIZE;
@@ -377,6 +393,10 @@ void logo_mem_init(void)
 
     // Create the newline marker atom (SOH character, non-printable)
     mem_newline_marker = mem_atom("\x01", 1);
+
+    // Intern the boolean words once for the predicate/comparison hot paths
+    mem_true_node = mem_atom("true", 4);
+    mem_false_node = mem_atom("false", 5);
 }
 
 // Provide an auxiliary memory region (e.g. PSRAM) to back the blob heap.
@@ -576,6 +596,40 @@ bool mem_list_append(Node *head, Node *tail, Node item)
 //==========================================================================
 // Atom Table (Interned Words)
 //==========================================================================
+//
+// Each atom entry is aligned to a 4-byte boundary and laid out as:
+//     [next:2][len:1][chars:len][nul:1][padding]
+// `next` chains entries whose names hash to the same bucket (0xFFFF ends
+// the chain), so interning is O(chain length) instead of a linear scan of
+// the whole table — mem_atom runs for every quoted word, list element,
+// and character extraction, making it a hot path. The hash is
+// case-SENSITIVE to match the interner's exact-match semantics (case
+// variants intern as distinct atoms; see find_atom).
+
+// FNV-1a over the atom's bytes, folded to a bucket index.
+static uint8_t atom_hash(const char *str, size_t len)
+{
+    uint32_t h = 2166136261u;
+    for (size_t i = 0; i < len; i++)
+    {
+        h ^= (uint8_t)str[i];
+        h *= 16777619u;
+    }
+    return (uint8_t)(h ^ (h >> 8) ^ (h >> 16) ^ (h >> 24));
+}
+
+// Read/write the 2-byte chain link at the start of an atom entry.
+static uint16_t atom_entry_next(size_t offset)
+{
+    uint16_t next;
+    memcpy(&next, &memory_block[offset], sizeof(next));
+    return next;
+}
+
+static void atom_entry_set_next(size_t offset, uint16_t next)
+{
+    memcpy(&memory_block[offset], &next, sizeof(next));
+}
 
 // Case-insensitive string comparison
 static bool str_eq_nocase(const char *a, size_t alen, const char *b, size_t blen)
@@ -613,26 +667,23 @@ static bool str_eq(const char *a, size_t alen, const char *b, size_t blen)
 
 // Find an existing atom in the table (case-sensitive for exact match)
 // Returns the offset if found, or SIZE_MAX if not found
-// Each atom entry is aligned to 4-byte boundary: [len:1][chars:len][nul:1][padding]
 static size_t find_atom(const char *str, size_t len)
 {
-    size_t offset = 0;
-    while (offset < atom_next)
+    uint16_t offset = atom_buckets[atom_hash(str, len)];
+    while (offset != ATOM_CHAIN_END)
     {
-        uint8_t atom_len = memory_block[offset];
+        uint8_t atom_len = memory_block[offset + 2];
         // Use case-sensitive comparison to preserve original case
-        if (str_eq(str, len, (const char *)&memory_block[offset + 1], atom_len))
+        if (str_eq(str, len, (const char *)&memory_block[offset + 3], atom_len))
         {
             return offset;
         }
-        // Advance to next aligned entry (includes null terminator)
-        offset += ALIGN4(1 + atom_len + 1);
+        offset = atom_entry_next(offset);
     }
     return SIZE_MAX; // Not found
 }
 
 // Intern a word in the atom table
-// Each entry is aligned to 4-byte boundary: [len:1][chars:len][nul:1][padding]
 Node mem_atom(const char *str, size_t len)
 {
     // Atom length is capped at 255 by the 1-byte length prefix. Refuse rather
@@ -650,9 +701,9 @@ Node mem_atom(const char *str, size_t len)
         return NODE_MAKE_WORD(offset);
     }
 
-    // Calculate aligned size for this entry
-    // Include space for null terminator: [len:1][chars:len][nul:1][padding]
-    size_t entry_size = ALIGN4(1 + len + 1);
+    // Calculate aligned size for this entry:
+    // [next:2][len:1][chars:len][nul:1][padding]
+    size_t entry_size = ALIGN4(2 + 1 + len + 1);
 
     // Need to add new atom - check for collision with node region
     if (mem_would_collide(entry_size))
@@ -667,9 +718,12 @@ Node mem_atom(const char *str, size_t len)
     }
 
     offset = atom_next;
-    memory_block[atom_next] = (uint8_t)len;
-    memcpy(&memory_block[atom_next + 1], str, len);
-    memory_block[atom_next + 1 + len] = '\0';  // Null terminator
+    uint8_t bucket = atom_hash(str, len);
+    atom_entry_set_next(offset, atom_buckets[bucket]);
+    memory_block[offset + 2] = (uint8_t)len;
+    memcpy(&memory_block[offset + 3], str, len);
+    memory_block[offset + 3 + len] = '\0';  // Null terminator
+    atom_buckets[bucket] = (uint16_t)offset;
     atom_next += entry_size;
 
     return NODE_MAKE_WORD(offset);
@@ -1001,8 +1055,8 @@ const char *mem_word_ptr(Node n)
         return NULL;
     }
 
-    // Return pointer to the string (after length byte)
-    return (const char *)&memory_block[offset + 1];
+    // Return pointer to the string (after chain link and length byte)
+    return (const char *)&memory_block[offset + 3];
 }
 
 // Get the length of a word node's string.
@@ -1026,7 +1080,7 @@ size_t mem_word_len(Node n)
         return 0;
     }
 
-    return memory_block[offset];
+    return memory_block[offset + 2];
 }
 
 // Compare a word node to a given string (case-insensitive).

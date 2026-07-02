@@ -24,7 +24,7 @@ Result apply_binary_op(TokenType op_type, Value left, Value right)
     if (op_type == TOKEN_EQUALS)
     {
         bool equal = values_equal(left, right);
-        return result_ok(value_word(mem_atom_cstr(equal ? "true" : "false")));
+        return result_ok(value_bool(equal));
     }
 
     float left_n, right_n;
@@ -62,9 +62,9 @@ Result apply_binary_op(TokenType op_type, Value left, Value right)
             return result_error(ERR_DIVIDE_BY_ZERO);
         return result_ok(value_number(left_n / right_n));
     case TOKEN_LESS_THAN:
-        return result_ok(value_word(mem_atom_cstr((left_n < right_n) ? "true" : "false")));
+        return result_ok(value_bool(left_n < right_n));
     case TOKEN_GREATER_THAN:
-        return result_ok(value_word(mem_atom_cstr((left_n > right_n) ? "true" : "false")));
+        return result_ok(value_bool(left_n > right_n));
     default:
         return result_error_arg(ERR_DONT_KNOW_WHAT, NULL, op_name);
     }
@@ -358,7 +358,7 @@ Result eval_primary(Evaluator *eval)
                             if (op.type == TOKEN_EQUALS)
                             {
                                 bool equal = values_equal(lhs.value, rhs.value);
-                                lhs = result_ok(value_word(mem_atom_cstr(equal ? "true" : "false")));
+                                lhs = result_ok(value_bool(equal));
                                 continue;
                             }
                             
@@ -411,10 +411,10 @@ Result eval_primary(Evaluator *eval)
                                 result = left_n / right_n;
                                 break;
                             case TOKEN_LESS_THAN:
-                                lhs = result_ok(value_word(mem_atom_cstr((left_n < right_n) ? "true" : "false")));
+                                lhs = result_ok(value_bool(left_n < right_n));
                                 continue;
                             case TOKEN_GREATER_THAN:
-                                lhs = result_ok(value_word(mem_atom_cstr((left_n > right_n) ? "true" : "false")));
+                                lhs = result_ok(value_bool(left_n > right_n));
                                 continue;
                             default:
                                 eval->paren_depth--;

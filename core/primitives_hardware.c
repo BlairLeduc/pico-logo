@@ -33,11 +33,11 @@ static Result prim_battery_level(Evaluator *eval, int argc, Value *args)
 
     if (charging)
     {
-        list = mem_cons(mem_atom("true", 4), list);
+        list = mem_cons(mem_true_node, list);
     }
     else
     {
-        list = mem_cons(mem_atom("false", 5), list);
+        list = mem_cons(mem_false_node, list);
     }
     
     char buf[32];
