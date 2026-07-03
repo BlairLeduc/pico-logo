@@ -92,6 +92,10 @@ static Result prim_last(Evaluator *eval, int argc, Value *args)
     {
         Node word = number_to_word(obj.as.number);
         const char *str = mem_word_ptr(word);
+        if (str == NULL)
+        {
+            return result_error(ERR_OUT_OF_SPACE); // atom table exhausted
+        }
         size_t len = strlen(str);
         if (len == 0)
         {
@@ -150,6 +154,10 @@ static Result prim_butfirst(Evaluator *eval, int argc, Value *args)
     {
         Node word = number_to_word(obj.as.number);
         const char *str = mem_word_ptr(word);
+        if (str == NULL)
+        {
+            return result_error(ERR_OUT_OF_SPACE); // atom table exhausted
+        }
         size_t len = strlen(str);
         if (len == 0)
         {
@@ -205,6 +213,10 @@ static Result prim_butlast(Evaluator *eval, int argc, Value *args)
     {
         Node word = number_to_word(obj.as.number);
         const char *str = mem_word_ptr(word);
+        if (str == NULL)
+        {
+            return result_error(ERR_OUT_OF_SPACE); // atom table exhausted
+        }
         size_t len = strlen(str);
         if (len == 0)
         {
@@ -275,7 +287,12 @@ static Result prim_count(Evaluator *eval, int argc, Value *args)
     if (value_is_number(obj))
     {
         Node word = number_to_word(obj.as.number);
-        return result_ok(value_number((float)strlen(mem_word_ptr(word))));
+        const char *str = mem_word_ptr(word);
+        if (str == NULL)
+        {
+            return result_error(ERR_OUT_OF_SPACE); // atom table exhausted
+        }
+        return result_ok(value_number((float)strlen(str)));
     }
     else if (value_is_word(obj))
     {
@@ -350,6 +367,10 @@ static Result prim_item(Evaluator *eval, int argc, Value *args)
     {
         Node word = number_to_word(obj.as.number);
         const char *str = mem_word_ptr(word);
+        if (str == NULL)
+        {
+            return result_error(ERR_OUT_OF_SPACE); // atom table exhausted
+        }
         size_t len = strlen(str);
         if ((size_t)index > len)
         {
@@ -796,6 +817,10 @@ static Result prim_parse(Evaluator *eval, int argc, Value *args)
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
     }
+    if (str == NULL)
+    {
+        return result_error(ERR_OUT_OF_SPACE); // atom table exhausted
+    }
 
     ParseListResult parsed = parse_list_from_string(str);
     if (!parsed.success)
@@ -874,7 +899,12 @@ static Result prim_word(Evaluator *eval, int argc, Value *args)
         if (value_is_number(args[i]))
         {
             Node word = number_to_word(args[i].as.number);
-            total_len += strlen(mem_word_ptr(word));
+            const char *str = mem_word_ptr(word);
+            if (str == NULL)
+            {
+                return result_error(ERR_OUT_OF_SPACE); // atom table exhausted
+            }
+            total_len += strlen(str);
         }
         else if (value_is_word(args[i]))
         {
@@ -904,6 +934,10 @@ static Result prim_word(Evaluator *eval, int argc, Value *args)
         {
             Node word = number_to_word(args[i].as.number);
             str = mem_word_ptr(word);
+            if (str == NULL)
+            {
+                return result_error(ERR_OUT_OF_SPACE); // atom table exhausted
+            }
             len = strlen(str);
         }
         else
@@ -918,6 +952,10 @@ static Result prim_word(Evaluator *eval, int argc, Value *args)
     *p = '\0';
 
     Node result = mem_atom_cstr(buffer);
+    if (mem_is_nil(result))
+    {
+        return result_error(ERR_OUT_OF_SPACE); // atom table exhausted
+    }
     return result_ok(value_word(result));
 }
 

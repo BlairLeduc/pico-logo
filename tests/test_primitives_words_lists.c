@@ -551,6 +551,54 @@ void test_list_literal_out_of_nodes_errors(void)
     TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
 }
 
+// Exhaust the atom table so further interning fails. Atoms needed by the
+// test itself must be interned before calling this.
+static void exhaust_atom_table(void)
+{
+    char buf[16];
+    for (int i = 0;; i++)
+    {
+        int len = snprintf(buf, sizeof(buf), "a%d", i);
+        if (mem_is_nil(mem_atom(buf, (size_t)len)))
+        {
+            return;
+        }
+    }
+}
+
+void test_word_of_numbers_out_of_atoms_errors(void)
+{
+    // number_to_word interns the formatted number; on atom exhaustion it
+    // returns NIL and word must error, not crash on a NULL string.
+    exhaust_atom_table();
+
+    Result r = eval_string("word 12345 678");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+}
+
+void test_word_result_out_of_atoms_errors(void)
+{
+    // Inputs are interned ahead of time; only the concatenated result is
+    // new, so its interning is the failure point.
+    mem_atom_cstr("qq");
+    mem_atom_cstr("rr");
+    exhaust_atom_table();
+
+    Result r = eval_string("word \"qq \"rr");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+}
+
+void test_count_of_number_out_of_atoms_errors(void)
+{
+    exhaust_atom_table();
+
+    Result r = eval_string("count 98765");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+}
+
 //==========================================================================
 // Comparison Tests (before?, equal?)
 //==========================================================================
@@ -879,6 +927,9 @@ int main(void)
     RUN_TEST(test_equalp_words_false);
     RUN_TEST(test_equalp_numbers);
     RUN_TEST(test_equalp_lists);
+    RUN_TEST(test_word_of_numbers_out_of_atoms_errors);
+    RUN_TEST(test_word_result_out_of_atoms_errors);
+    RUN_TEST(test_count_of_number_out_of_atoms_errors);
     RUN_TEST(test_fput_out_of_nodes_errors);
     RUN_TEST(test_butlast_out_of_nodes_errors);
     RUN_TEST(test_list_literal_out_of_nodes_errors);
