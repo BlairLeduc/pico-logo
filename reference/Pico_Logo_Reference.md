@@ -464,7 +464,7 @@ When you press `Enter`, the cursor (and any text that comes after it) moves to t
 
 You can have more characters on a line of text than fit across the screen. When you get to the end of the line on the screen, just continue typing without pressing `Enter`. The screen will scroll horizontally to show the rest of the line.
 
-The Editor has an auxiliary line buffer called the copy buffer. You can use it to move text in a procedure or to repeat them in different places. The copy buffer can hold a [`limited number of characters`](#processor-limits). While this is true for the copy buffer, the length of a line is limited only by the [`length of the edit buffer`](#processor-limits).
+The Editor has an auxiliary line buffer called the copy buffer. You can use it to move text in a procedure or to repeat them in different places. The copy buffer can hold a [`limited number of characters`](#supported-pico-boards). While this is true for the copy buffer, the length of a line is limited only by the [`length of the edit buffer`](#supported-pico-boards).
 
 ## Editing actions
 
@@ -1910,7 +1910,7 @@ equalp _object1_ _object2_
 
 `equal?` outputs `true` if _object1_ and _object2_ are equal numbers, identical words, or identical lists; otherwise `equal?` outputs `false`. This operation is equivalent to the equal sign (`=`).
 
-Words are compared without regard to case, just as Logo treats names: `equal? "Hello "hello` outputs `true`. Lists are compared element by element under the same rule. (To compare words by their exact character codes, use [`before?`](#before), which compares ASCII values.)
+Words are compared without regard to case, just as Logo treats names: `equal? "Hello "hello` outputs `true`. Lists are compared element by element under the same rule. (To compare words by their exact character codes, use [`before?`](#before-beforep), which compares ASCII values.)
 
 **Examples**:
 
@@ -4598,7 +4598,7 @@ editfile _pathname_
 
 You can use `editfile` on any file, whether it exists or not. If it does not exist, the editor buffer is erased and Logo creates the file when you save the contents of the edit buffer.
 
-The edit buffer is limited based on [`Processor Limits`](#processor-limits). If the file you try to edit contains more than this, Logo displays an error message and does not let you edit the file.
+The edit buffer is limited based on [`Supported Pico Boards`](#supported-pico-boards). If the file you try to edit contains more than this, Logo displays an error message and does not let you edit the file.
 
 If you exit the editor with `Brk`, the file remains unchanged.
 
