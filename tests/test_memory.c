@@ -386,11 +386,12 @@ void test_words_equal(void)
     Node word2 = mem_atom("test", 4); // Same case, same atom
     Node word3 = mem_atom("TEST", 4); // Different case, different atom
     Node word4 = mem_atom("other", 5);
-    
+
     // Same atom nodes are equal
     TEST_ASSERT_TRUE(mem_words_equal(word1, word2));
-    // Different atoms (even just case difference) are not equal at atom level
-    TEST_ASSERT_FALSE(mem_words_equal(word1, word3));
+    // Case variants intern as distinct atoms but compare equal, matching
+    // classic Logo equal? semantics
+    TEST_ASSERT_TRUE(mem_words_equal(word1, word3));
     TEST_ASSERT_FALSE(mem_words_equal(word1, word4));
 }
 

@@ -1910,10 +1910,14 @@ equalp _object1_ _object2_
 
 `equal?` outputs `true` if _object1_ and _object2_ are equal numbers, identical words, or identical lists; otherwise `equal?` outputs `false`. This operation is equivalent to the equal sign (`=`).
 
+Words are compared without regard to case, just as Logo treats names: `equal? "Hello "hello` outputs `true`. Lists are compared element by element under the same rule. (To compare words by their exact character codes, use [`before?`](#before), which compares ASCII values.)
+
 **Examples**:
 
 ```logo
 ?pr equal? "hello "hello
+true
+?pr equal? "Hello "hello
 true
 ?pr equal? [a b c] [a b c]
 true
@@ -4077,6 +4081,8 @@ nodes
 
 `nodes` outputs the number of free nodes. This gives you an idea of how much space you have in your workspace for procedures, variables, properties, and the running of procedures. `nodes` is most useful if run immediately after [`recycle`](#recycle).
 
+Note that the space used to store words is permanent: every distinct word Logo encounters — including each character extracted with `first` or `item`, each number turned into a word, and each intermediate result of building words with `word` — is remembered for the rest of the session and is not returned by `recycle`. A program that builds many different words will see `nodes` gradually decline and eventually run out of word space. Lists, on the other hand, are fully reclaimed by `recycle` once nothing refers to them.
+
 **Example**:
 
 ```logo
@@ -4092,7 +4098,7 @@ recycle
 
 `command`
 
-The `recycle` command frees up as many nodes as possible, performing what is called a garbage collection. When you don't use `recycle`, garbage collections happen automatically whenever necessary, but each one takes at least one second. Running `recycle` before a time-dependent activity prevents the automatic garbage collector from slowing things down at an awkward time.
+The `recycle` command frees up as many nodes as possible, performing what is called a garbage collection. Logo does not collect garbage on its own: if you run out of nodes, the current instruction stops with an `out of space` error, and you must run `recycle` (typically at a convenient point in your program, such as the top of a main loop) to reclaim the space held by lists that are no longer in use. Space used by words is permanent and is not reclaimed (see [`nodes`](#nodes)).
 
 **Example**:
 
@@ -6263,6 +6269,13 @@ The parser tries to be clever about this potential ambiguity and figure out whic
   - `print 3-4` (parses as 3 minus 4)
   - `print 3 - 4` (parses exactly like the previous example) 
   - `print - 3 4` (procedurally the same as the previous example) 
+
+The right-parenthesis exception in rules 1 and 2 applies only when the ”`)`” is directly adjacent to the ”`-`” with no space between them. Once whitespace separates them, the space itself counts as the delimiter, so what follows the ”`-`” decides:
+
+  - `print (5+3)-2` (parses as 8 minus 2 — the ”`-`” touches the ”`)`”)
+  - `print (5+3) -2` (parses as the two values 8 and -2 — the space before ”`-`” and the digit touching it make -2 a negative number)
+
+This whitespace-sensitive reading matches established Logo convention: `-` glued to what follows it (but not to what precedes it) is negative or unary, while `-` surrounded by values on both sides is subtraction.
 
 
 ===

@@ -643,6 +643,42 @@ void test_equalp_numbers(void)
     TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
 }
 
+void test_equalp_words_case_insensitive(void)
+{
+    // Word comparison ignores case (classic Logo semantics)
+    Result r = eval_string("equal? \"Hello \"hello");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("true", value_to_string(r.value));
+
+    r = eval_string("equal? \"TRUE \"true");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("true", value_to_string(r.value));
+}
+
+void test_equals_operator_case_insensitive(void)
+{
+    Result r = eval_string("\"A = \"a");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("true", value_to_string(r.value));
+}
+
+void test_equalp_list_elements_case_insensitive(void)
+{
+    Result r = eval_string("equal? [Alpha Beta] [alpha beta]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("true", value_to_string(r.value));
+}
+
+void test_beforep_stays_case_sensitive(void)
+{
+    // before? compares ASCII codes per the reference: all uppercase letters
+    // come before all lowercase letters. Case-insensitive equal? must not
+    // leak into it.
+    Result r = eval_string("before? \"ZEBRA \"apple");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("true", value_to_string(r.value));
+}
+
 void test_equalp_lists(void)
 {
     Result r = eval_string("equal? [a b] [a b]");
@@ -927,6 +963,10 @@ int main(void)
     RUN_TEST(test_equalp_words_false);
     RUN_TEST(test_equalp_numbers);
     RUN_TEST(test_equalp_lists);
+    RUN_TEST(test_equalp_words_case_insensitive);
+    RUN_TEST(test_equals_operator_case_insensitive);
+    RUN_TEST(test_equalp_list_elements_case_insensitive);
+    RUN_TEST(test_beforep_stays_case_sensitive);
     RUN_TEST(test_word_of_numbers_out_of_atoms_errors);
     RUN_TEST(test_word_result_out_of_atoms_errors);
     RUN_TEST(test_count_of_number_out_of_atoms_errors);

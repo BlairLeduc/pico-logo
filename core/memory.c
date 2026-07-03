@@ -1109,12 +1109,15 @@ bool mem_words_equal(Node a, Node b)
         return false;
     }
 
-    // Interned atoms dedup by offset: same offset means same word. Blobs are
-    // not interned, so when either side is a blob we must compare by content
-    // (case-sensitive, matching atom interning semantics).
-    if (!NODE_WORD_IS_BLOB(a) && !NODE_WORD_IS_BLOB(b))
+    // Word equality is case-INSENSITIVE, matching classic Logo `equal?`
+    // semantics (interning stays case-sensitive so words print in the case
+    // they were typed). Same-offset atoms are trivially equal; otherwise
+    // (case-variant atoms, or blobs, which are not interned) compare by
+    // content, ignoring case.
+    if (!NODE_WORD_IS_BLOB(a) && !NODE_WORD_IS_BLOB(b) &&
+        NODE_GET_INDEX(a) == NODE_GET_INDEX(b))
     {
-        return NODE_GET_INDEX(a) == NODE_GET_INDEX(b);
+        return true;
     }
 
     const char *pa = mem_word_ptr(a);
@@ -1123,7 +1126,7 @@ bool mem_words_equal(Node a, Node b)
     {
         return false;
     }
-    return str_eq(pa, mem_word_len(a), pb, mem_word_len(b));
+    return str_eq_nocase(pa, mem_word_len(a), pb, mem_word_len(b));
 }
 
 //==========================================================================
