@@ -502,6 +502,138 @@ void test_uppercase(void)
 }
 
 //==========================================================================
+// pick / reverse / shuffle Tests
+//==========================================================================
+// The mock device's random() returns a fixed 42, so pick is deterministic:
+// the chosen index is 42 % count.
+
+void test_pick_list(void)
+{
+    // 42 % 3 = 0 -> first element
+    Result r = eval_string("pick [a b c]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("a", mem_word_ptr(r.value.as.node));
+
+    // 42 % 4 = 2 -> third element
+    r = eval_string("pick [a b c d]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("c", mem_word_ptr(r.value.as.node));
+}
+
+void test_pick_list_element_can_be_list(void)
+{
+    // 42 % 4 = 2 -> third element, a sublist
+    Result r = eval_string("pick [a b [c d] e]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
+}
+
+void test_pick_word(void)
+{
+    // 42 % 3 = 0 -> first character
+    Result r = eval_string("pick \"xyz");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("x", mem_word_ptr(r.value.as.node));
+}
+
+void test_pick_number(void)
+{
+    // Numbers are words: 42 % 3 = 0 -> first digit
+    Result r = eval_string("pick 987");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("9", mem_word_ptr(r.value.as.node));
+}
+
+void test_pick_empty_errors(void)
+{
+    Result r = eval_string("pick []");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_TOO_FEW_ITEMS, r.error_code);
+
+    r = eval_string("pick \"");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_TOO_FEW_ITEMS, r.error_code);
+}
+
+void test_reverse_list(void)
+{
+    reset_output();
+    run_string("show reverse [a b c d]");
+    TEST_ASSERT_EQUAL_STRING("[d c b a]\n", output_buffer);
+}
+
+void test_reverse_list_keeps_sublists_intact(void)
+{
+    reset_output();
+    run_string("show reverse [a [b c] d]");
+    TEST_ASSERT_EQUAL_STRING("[d [b c] a]\n", output_buffer);
+}
+
+void test_reverse_word(void)
+{
+    Result r = eval_string("reverse \"stressed");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("desserts", mem_word_ptr(r.value.as.node));
+}
+
+void test_reverse_number(void)
+{
+    Result r = eval_string("reverse 123");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("321", mem_word_ptr(r.value.as.node));
+}
+
+void test_reverse_empty(void)
+{
+    Result r = eval_string("reverse []");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
+    TEST_ASSERT_TRUE(mem_is_nil(r.value.as.node));
+
+    r = eval_string("reverse \"");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(0, mem_word_len(r.value.as.node));
+}
+
+void test_shuffle_list_is_permutation(void)
+{
+    reset_output();
+    run_string("make \"s shuffle [a b c d e]");
+    run_string("print count :s");
+    TEST_ASSERT_EQUAL_STRING("5\n", output_buffer);
+
+    // Every original element is still present
+    reset_output();
+    run_string("print member? \"a :s");
+    run_string("print member? \"b :s");
+    run_string("print member? \"c :s");
+    run_string("print member? \"d :s");
+    run_string("print member? \"e :s");
+    TEST_ASSERT_EQUAL_STRING("true\ntrue\ntrue\ntrue\ntrue\n", output_buffer);
+}
+
+void test_shuffle_word_is_permutation(void)
+{
+    Result r = eval_string("shuffle \"abc");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(3, mem_word_len(r.value.as.node));
+
+    reset_output();
+    run_string("make \"w shuffle \"abc");
+    run_string("print member? \"a :w");
+    run_string("print member? \"b :w");
+    run_string("print member? \"c :w");
+    TEST_ASSERT_EQUAL_STRING("true\ntrue\ntrue\n", output_buffer);
+}
+
+void test_shuffle_empty(void)
+{
+    Result r = eval_string("shuffle []");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(mem_is_nil(r.value.as.node));
+}
+
+//==========================================================================
 // Out-of-Nodes Error Tests
 //==========================================================================
 
@@ -547,6 +679,16 @@ void test_list_literal_out_of_nodes_errors(void)
     exhaust_node_pool();
 
     Result r = eval_string("print [a b c]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+}
+
+void test_reverse_out_of_nodes_errors(void)
+{
+    run_string("make \"l [1 2 3 4]");
+    exhaust_node_pool();
+
+    Result r = eval_string("reverse :l");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
     TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
 }
@@ -970,6 +1112,20 @@ int main(void)
     RUN_TEST(test_word_of_numbers_out_of_atoms_errors);
     RUN_TEST(test_word_result_out_of_atoms_errors);
     RUN_TEST(test_count_of_number_out_of_atoms_errors);
+    RUN_TEST(test_pick_list);
+    RUN_TEST(test_pick_list_element_can_be_list);
+    RUN_TEST(test_pick_word);
+    RUN_TEST(test_pick_number);
+    RUN_TEST(test_pick_empty_errors);
+    RUN_TEST(test_reverse_list);
+    RUN_TEST(test_reverse_list_keeps_sublists_intact);
+    RUN_TEST(test_reverse_word);
+    RUN_TEST(test_reverse_number);
+    RUN_TEST(test_reverse_empty);
+    RUN_TEST(test_reverse_out_of_nodes_errors);
+    RUN_TEST(test_shuffle_list_is_permutation);
+    RUN_TEST(test_shuffle_word_is_permutation);
+    RUN_TEST(test_shuffle_empty);
     RUN_TEST(test_fput_out_of_nodes_errors);
     RUN_TEST(test_butlast_out_of_nodes_errors);
     RUN_TEST(test_list_literal_out_of_nodes_errors);

@@ -21,9 +21,9 @@ Companion documents:
 
 | Item | Dialect precedent | Status | Notes |
 |---|---|---|---|
-| `pick` (random element of word/list) | UCB | todo | Planned: [P2](#p2--list-utilities-pick-reverse-shuffle) |
-| `reverse` (word or list) | UCB | todo | Planned: [P2](#p2--list-utilities-pick-reverse-shuffle) |
-| `shuffle` | UCB (library) | todo | Planned: [P2](#p2--list-utilities-pick-reverse-shuffle) |
+| `pick` (random element of word/list) | UCB | done | [P2](#p2--list-utilities-pick-reverse-shuffle) |
+| `reverse` (word or list) | UCB | done | [P2](#p2--list-utilities-pick-reverse-shuffle) |
+| `shuffle` | UCB (library) | done | [P2](#p2--list-utilities-pick-reverse-shuffle) |
 | `rerandom` / seedable RNG | UCB, Apple | todo | Planned: [P3](#p3--rerandom-and-a-core-prng) |
 | `arc` | UCB | todo | Planned: [P4](#p4--arc-and-setpensize) |
 | `setpensize` / `pensize` | UCB, FMSLogo | todo | Planned: [P4](#p4--arc-and-setpensize) |
@@ -214,3 +214,4 @@ device (no graphics) degrades cleanly.
 |---|---|---|
 | 2026-07-03 | (all) | Roadmap created; P1–P5 planned, backlog triaged |
 | 2026-07-03 | P1 | Done: host REPL EOF/prompt fixes, e2e golden tests (`tests/e2e/`), CI workflow, anchor checker |
+| 2026-07-03 | P2 | Done: `pick`, `reverse`, `shuffle` primitives with reference sections and tests |

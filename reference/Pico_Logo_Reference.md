@@ -1692,6 +1692,60 @@ xample
 ```
 
 
+## pick
+
+pick _object_
+
+`operation`
+
+`pick` outputs a randomly chosen element of _object_: an element of a list, or a character of a word. An error occurs if _object_ is empty.
+
+**Examples**:
+
+```logo
+?pr pick [butter\ tart nanaimo\ bar beavertail]
+nanaimo bar
+?pr pick "abcdef
+d
+```
+
+
+## reverse
+
+reverse _object_
+
+`operation`
+
+`reverse` outputs _object_ with its elements in the opposite order: the elements of a list, or the characters of a word. Elements that are themselves lists are not reversed internally.
+
+**Examples**:
+
+```logo
+?show reverse [a b c d]
+[d c b a]
+?pr reverse "stressed
+desserts
+?show reverse [a [b c] d]
+[d [b c] a]
+```
+
+
+## shuffle
+
+shuffle _object_
+
+`operation`
+
+`shuffle` outputs _object_ with its elements rearranged in random order: the elements of a list, or the characters of a word. Every element of the input appears exactly once in the output.
+
+**Example**:
+
+```logo
+?show shuffle [1 2 3 4 5]
+[3 1 5 2 4]
+```
+
+
 ## fput
 
 fput _object_ _list_

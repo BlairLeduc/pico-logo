@@ -13,11 +13,13 @@
 #include "eval.h"
 #include "lexer.h"
 #include "parse_list.h"
+#include "devices/io.h"
 #include <assert.h>
 #include <string.h>
 #include <strings.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <ctype.h>
 
 //==========================================================================
@@ -604,6 +606,203 @@ static Result prim_member(Evaluator *eval, int argc, Value *args)
 // List/word construction: fput, list, lput, parse, sentence, word
 //==========================================================================
 
+// pick object
+// Outputs a randomly chosen element of object (a character for a word).
+static Result prim_pick(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+
+    Value obj = args[0];
+    if (!normalize_to_word(&obj))
+    {
+        return result_error(ERR_OUT_OF_SPACE);
+    }
+
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
+    }
+
+    if (value_is_word(obj))
+    {
+        const char *str = mem_word_ptr(obj.as.node);
+        size_t len = mem_word_len(obj.as.node);
+        if (len == 0)
+        {
+            return result_error_arg(ERR_TOO_FEW_ITEMS, NULL, value_to_string(obj));
+        }
+        Node ch = mem_atom(str + (logo_io_random(io) % len), 1);
+        if (mem_is_nil(ch))
+        {
+            return result_error(ERR_OUT_OF_SPACE);
+        }
+        return result_ok(value_word(ch));
+    }
+    else if (value_is_list(obj))
+    {
+        size_t count = 0;
+        for (Node n = obj.as.node; !mem_is_nil(n); n = mem_cdr(n))
+        {
+            count++;
+        }
+        if (count == 0)
+        {
+            return result_error_arg(ERR_TOO_FEW_ITEMS, NULL, "[]");
+        }
+
+        Node list = obj.as.node;
+        for (size_t i = logo_io_random(io) % count; i > 0; i--)
+        {
+            list = mem_cdr(list);
+        }
+        Node item = mem_car(list);
+        if (mem_is_word(item))
+        {
+            return result_ok(value_word(item));
+        }
+        return result_ok(value_list(item));
+    }
+
+    return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
+}
+
+// reverse object
+// Outputs object with its elements (characters for a word) in reverse order.
+static Result prim_reverse(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+
+    Value obj = args[0];
+    if (!normalize_to_word(&obj))
+    {
+        return result_error(ERR_OUT_OF_SPACE);
+    }
+
+    if (value_is_word(obj))
+    {
+        const char *str = mem_word_ptr(obj.as.node);
+        size_t len = mem_word_len(obj.as.node);
+        char buf[256];
+        for (size_t i = 0; i < len; i++)
+        {
+            buf[i] = str[len - 1 - i];
+        }
+        Node rev = mem_atom(buf, len);
+        if (mem_is_nil(rev))
+        {
+            return result_error(ERR_OUT_OF_SPACE);
+        }
+        return result_ok(value_word(rev));
+    }
+    else if (value_is_list(obj))
+    {
+        // Prepending naturally reverses; no tail pointer needed.
+        Node result = NODE_NIL;
+        for (Node n = obj.as.node; !mem_is_nil(n); n = mem_cdr(n))
+        {
+            result = mem_cons(mem_car(n), result);
+            if (mem_is_nil(result))
+            {
+                return result_error(ERR_OUT_OF_SPACE);
+            }
+        }
+        return result_ok(value_list(result));
+    }
+
+    return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
+}
+
+// shuffle object
+// Outputs object with its elements (characters for a word) in random order.
+static Result prim_shuffle(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+
+    Value obj = args[0];
+    if (!normalize_to_word(&obj))
+    {
+        return result_error(ERR_OUT_OF_SPACE);
+    }
+
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
+    }
+
+    if (value_is_word(obj))
+    {
+        const char *str = mem_word_ptr(obj.as.node);
+        size_t len = mem_word_len(obj.as.node);
+        char buf[256];
+        memcpy(buf, str, len);
+        // Fisher-Yates
+        for (size_t i = len; i > 1; i--)
+        {
+            size_t j = logo_io_random(io) % i;
+            char tmp = buf[i - 1];
+            buf[i - 1] = buf[j];
+            buf[j] = tmp;
+        }
+        Node shuffled = mem_atom(buf, len);
+        if (mem_is_nil(shuffled))
+        {
+            return result_error(ERR_OUT_OF_SPACE);
+        }
+        return result_ok(value_word(shuffled));
+    }
+    else if (value_is_list(obj))
+    {
+        size_t count = 0;
+        for (Node n = obj.as.node; !mem_is_nil(n); n = mem_cdr(n))
+        {
+            count++;
+        }
+        if (count == 0)
+        {
+            return result_ok(value_list(NODE_NIL));
+        }
+
+        // Collect elements into a temporary array (the reduce/crossmap
+        // precedent for bounded scratch space), shuffle, rebuild.
+        Node *elements = malloc(count * sizeof(Node));
+        if (!elements)
+        {
+            return result_error(ERR_OUT_OF_SPACE);
+        }
+        size_t idx = 0;
+        for (Node n = obj.as.node; !mem_is_nil(n); n = mem_cdr(n))
+        {
+            elements[idx++] = mem_car(n);
+        }
+
+        // Fisher-Yates
+        for (size_t i = count; i > 1; i--)
+        {
+            size_t j = logo_io_random(io) % i;
+            Node tmp = elements[i - 1];
+            elements[i - 1] = elements[j];
+            elements[j] = tmp;
+        }
+
+        Node result = NODE_NIL;
+        Node tail = NODE_NIL;
+        for (size_t i = 0; i < count; i++)
+        {
+            if (!mem_list_append(&result, &tail, elements[i]))
+            {
+                free(elements);
+                return result_error(ERR_OUT_OF_SPACE);
+            }
+        }
+        free(elements);
+        return result_ok(value_list(result));
+    }
+
+    return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
+}
+
 // fput object list
 // Outputs a new list with object at the beginning.
 static Result prim_fput(Evaluator *eval, int argc, Value *args)
@@ -1182,6 +1381,9 @@ void primitives_words_lists_init(void)
     primitive_register("item", 2, prim_item);
     primitive_register("replace", 3, prim_replace);
     primitive_register("member", 2, prim_member);
+    primitive_register("pick", 1, prim_pick);
+    primitive_register("reverse", 1, prim_reverse);
+    primitive_register("shuffle", 1, prim_shuffle);
     
     // List construction
     primitive_register("fput", 2, prim_fput);
