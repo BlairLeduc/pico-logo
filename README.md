@@ -197,6 +197,8 @@ A helper script to create a release files of the project, including documentatio
 
 Pico Logo was created by an experienced software engineer collaborating with [Claude Code](https://claude.com/claude-code).
 
+This is my safe, side open-source project where I experiment with agentic engineering. I am not making a point on what can be or not be done in this new world where we find ourselves. This is not an example of vibe coding. I am applying engineering principles vigoroursly.
+
 ## License
 
 Copyright 2026 Blair Leduc  
