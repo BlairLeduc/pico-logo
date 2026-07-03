@@ -111,20 +111,11 @@ void op_stack_gc_mark(OpStack *stack)
             mem_gc_mark(op->if_state.chosen_branch);
             break;
         case OP_WHILE:
-            mem_gc_mark(op->while_state.predicate);
-            mem_gc_mark(op->while_state.body);
-            break;
         case OP_UNTIL:
-            mem_gc_mark(op->until_state.predicate);
-            mem_gc_mark(op->until_state.body);
-            break;
         case OP_DO_WHILE:
-            mem_gc_mark(op->do_while.predicate);
-            mem_gc_mark(op->do_while.body);
-            break;
         case OP_DO_UNTIL:
-            mem_gc_mark(op->do_until.predicate);
-            mem_gc_mark(op->do_until.body);
+            mem_gc_mark(op->loop.predicate);
+            mem_gc_mark(op->loop.body);
             break;
         case OP_FOR:
             mem_gc_mark(op->for_state.body);

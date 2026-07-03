@@ -204,19 +204,10 @@ Result eval_trampoline(Evaluator *eval, int base_depth)
             break;
 
         case OP_WHILE:
-            r = step_while(eval, op);
-            break;
-
         case OP_UNTIL:
-            r = step_until(eval, op);
-            break;
-
         case OP_DO_WHILE:
-            r = step_do_while(eval, op);
-            break;
-
         case OP_DO_UNTIL:
-            r = step_do_until(eval, op);
+            r = step_loop(eval, op);
             break;
 
         case OP_CATCH:
@@ -408,72 +399,43 @@ Result eval_push_forever(Evaluator *eval, Node body)
     return eval_trampoline(eval, base_depth);
 }
 
-Result eval_push_while(Evaluator *eval, Node predicate, Node body)
+// Shared push helper for the four predicate-driven loops (see step_loop).
+static Result eval_push_loop(Evaluator *eval, EvalOpKind kind,
+                             Node predicate, Node body)
 {
     OpStack *stack = eval->op_stack;
     int base_depth = op_stack_depth(stack);
     EvalOp *op = op_stack_push(stack);
     if (!op)
         return result_error(ERR_STACK_OVERFLOW);
-    op->kind = OP_WHILE;
+    op->kind = kind;
     op->flags = OP_FLAG_NONE;
-    op->while_state.predicate = predicate;
-    op->while_state.body = body;
-    op->while_state.phase = 0;
+    op->loop.predicate = predicate;
+    op->loop.body = body;
+    op->loop.phase = 0;
     if (base_depth > 0)
         return result_none();
     return eval_trampoline(eval, base_depth);
+}
+
+Result eval_push_while(Evaluator *eval, Node predicate, Node body)
+{
+    return eval_push_loop(eval, OP_WHILE, predicate, body);
 }
 
 Result eval_push_until(Evaluator *eval, Node predicate, Node body)
 {
-    OpStack *stack = eval->op_stack;
-    int base_depth = op_stack_depth(stack);
-    EvalOp *op = op_stack_push(stack);
-    if (!op)
-        return result_error(ERR_STACK_OVERFLOW);
-    op->kind = OP_UNTIL;
-    op->flags = OP_FLAG_NONE;
-    op->until_state.predicate = predicate;
-    op->until_state.body = body;
-    op->until_state.phase = 0;
-    if (base_depth > 0)
-        return result_none();
-    return eval_trampoline(eval, base_depth);
+    return eval_push_loop(eval, OP_UNTIL, predicate, body);
 }
 
 Result eval_push_do_while(Evaluator *eval, Node body, Node predicate)
 {
-    OpStack *stack = eval->op_stack;
-    int base_depth = op_stack_depth(stack);
-    EvalOp *op = op_stack_push(stack);
-    if (!op)
-        return result_error(ERR_STACK_OVERFLOW);
-    op->kind = OP_DO_WHILE;
-    op->flags = OP_FLAG_NONE;
-    op->do_while.body = body;
-    op->do_while.predicate = predicate;
-    op->do_while.phase = 0;
-    if (base_depth > 0)
-        return result_none();
-    return eval_trampoline(eval, base_depth);
+    return eval_push_loop(eval, OP_DO_WHILE, predicate, body);
 }
 
 Result eval_push_do_until(Evaluator *eval, Node body, Node predicate)
 {
-    OpStack *stack = eval->op_stack;
-    int base_depth = op_stack_depth(stack);
-    EvalOp *op = op_stack_push(stack);
-    if (!op)
-        return result_error(ERR_STACK_OVERFLOW);
-    op->kind = OP_DO_UNTIL;
-    op->flags = OP_FLAG_NONE;
-    op->do_until.body = body;
-    op->do_until.predicate = predicate;
-    op->do_until.phase = 0;
-    if (base_depth > 0)
-        return result_none();
-    return eval_trampoline(eval, base_depth);
+    return eval_push_loop(eval, OP_DO_UNTIL, predicate, body);
 }
 
 Result eval_push_for(Evaluator *eval, const char *varname, float start,

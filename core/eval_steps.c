@@ -20,81 +20,6 @@
 #include <ctype.h>
 
 //==========================================================================
-// Serialization helpers (currently unused but retained for future use)
-//==========================================================================
-
-// Forward declaration for recursive serialization
-static int serialize_node_to_buffer(Node element, char *buffer, int max_len, bool needs_space);
-
-static int serialize_list_to_buffer(Node list, char *buffer, int max_len)
-{
-    int pos = 0;
-    Node node = list;
-    
-    while (!mem_is_nil(node) && pos < max_len - 5)
-    {
-        Node element = mem_car(node);
-        
-        int written = serialize_node_to_buffer(element, buffer + pos, max_len - pos, pos > 0);
-        pos += written;
-        
-        node = mem_cdr(node);
-    }
-    buffer[pos] = '\0';
-    return pos;
-}
-
-// Serialize a single node (word or list) to buffer
-static int serialize_node_to_buffer(Node element, char *buffer, int max_len, bool needs_space)
-{
-    int pos = 0;
-    
-    if (mem_is_word(element))
-    {
-        const char *str = mem_word_ptr(element);
-        size_t len = mem_word_len(element);
-        
-        if (pos + (int)len + 1 < max_len)
-        {
-            if (needs_space)
-                buffer[pos++] = ' ';
-            memcpy(buffer + pos, str, len);
-            pos += len;
-        }
-    }
-    else if (mem_is_nil(element))
-    {
-        // Empty list []
-        if (needs_space)
-            buffer[pos++] = ' ';
-        buffer[pos++] = '[';
-        buffer[pos++] = ']';
-    }
-    else if (mem_is_list(element))
-    {
-        // Serialize nested list recursively
-        if (needs_space)
-            buffer[pos++] = ' ';
-        buffer[pos++] = '[';
-        
-        // Iterate through inner list elements
-        Node inner = element;
-        bool first_in_list = true;
-        while (!mem_is_nil(inner) && pos < max_len - 3)
-        {
-            Node inner_elem = mem_car(inner);
-            int written = serialize_node_to_buffer(inner_elem, buffer + pos, max_len - pos, !first_in_list);
-            pos += written;
-            first_in_list = false;
-            inner = mem_cdr(inner);
-        }
-        buffer[pos++] = ']';
-    }
-    
-    return pos;
-}
-
-//==========================================================================
 // Skip/peek helpers for tail-call lookahead (no execution)
 //==========================================================================
 
@@ -250,82 +175,6 @@ static bool skip_instruction(Evaluator *eval)
         return false;
     
     return skip_expr_bp(eval, BP_NONE);
-}
-
-// Find position in buffer after a label instruction with given name
-// Returns -1 if not found
-static int find_label_position(const char *buffer, const char *label_name)
-{
-    const char *pos = buffer;
-    while (*pos)
-    {
-        // Skip whitespace
-        while (*pos && isspace((unsigned char)*pos))
-            pos++;
-        
-        if (!*pos)
-            break;
-        
-        // Check for "label" keyword (case-insensitive)
-        if (strncasecmp(pos, "label", 5) == 0 && 
-            (isspace((unsigned char)pos[5]) || pos[5] == '"'))
-        {
-            const char *after_label = pos + 5;
-            
-            // Skip whitespace between label and its argument
-            while (*after_label && isspace((unsigned char)*after_label))
-                after_label++;
-            
-            // Check for quoted word: "labelname
-            if (*after_label == '"')
-            {
-                after_label++; // skip quote
-                const char *name_start = after_label;
-                
-                // Find end of label name (word boundary)
-                while (*after_label && !isspace((unsigned char)*after_label) && 
-                       *after_label != '[' && *after_label != ']')
-                    after_label++;
-                
-                size_t name_len = after_label - name_start;
-                
-                // Compare label names (case-insensitive)
-                if (name_len == strlen(label_name) && 
-                    strncasecmp(name_start, label_name, name_len) == 0)
-                {
-                    // Found! Return position after the label instruction
-                    return (int)(after_label - buffer);
-                }
-            }
-            
-            // Move past this label instruction
-            pos = after_label;
-        }
-        else
-        {
-            // Skip to next whitespace or special char
-            while (*pos && !isspace((unsigned char)*pos))
-            {
-                if (*pos == '[')
-                {
-                    // Skip nested list
-                    int depth = 1;
-                    pos++;
-                    while (*pos && depth > 0)
-                    {
-                        if (*pos == '[') depth++;
-                        else if (*pos == ']') depth--;
-                        pos++;
-                    }
-                }
-                else
-                {
-                    pos++;
-                }
-            }
-        }
-    }
-    return -1; // Not found
 }
 
 //==========================================================================
@@ -598,311 +447,124 @@ Result step_forever(Evaluator *eval, EvalOp *op)
     return result_none();
 }
 
-// Step function for OP_WHILE.
-Result step_while(Evaluator *eval, EvalOp *op)
+//==========================================================================
+// Predicate-driven loops (while / until / do.while / do.until)
+//==========================================================================
+
+#define LOOP_PHASE_START     0  // Nothing run yet
+#define LOOP_PHASE_PREDICATE 1  // Predicate child is running
+#define LOOP_PHASE_BODY      2  // Body child is running
+
+// Interpret a predicate child result as a boolean word. Returns RESULT_NONE
+// with *out set on success; otherwise the error Result to propagate.
+static Result read_predicate_bool(Result child_r, const char *name, bool *out)
 {
-    WhileState *st = &op->while_state;
-
-    if (st->phase == 1)
+    if (child_r.status == RESULT_ERROR)
     {
-        // Predicate completed
-        Result child_r = op->result;
-        op->result = result_none();
-
-        if (child_r.status == RESULT_ERROR)
-        {
-            op_stack_pop(eval->op_stack);
-            return child_r;
-        }
-        if (child_r.status != RESULT_OK)
-        {
-            op_stack_pop(eval->op_stack);
-            return result_error_arg(ERR_NOT_BOOL, "while", NULL);
-        }
-        if (!value_is_word(child_r.value))
-        {
-            op_stack_pop(eval->op_stack);
-            return result_error_arg(ERR_NOT_BOOL, "while", value_to_string(child_r.value));
-        }
-        const char *str = value_to_string(child_r.value);
-        if (strcasecmp(str, "true") == 0)
-        {
-            // Predicate true: run body
-            st->phase = 2;
-            EvalOp *body_op = op_stack_push(eval->op_stack);
-            if (!body_op) { op_stack_pop(eval->op_stack); return result_error(ERR_STACK_OVERFLOW); }
-            body_op->kind = OP_RUN_LIST;
-            body_op->flags = OP_FLAG_NONE;
-            body_op->saved_source = eval->token_source;
-            token_source_init_list(&eval->token_source, st->body);
-            return result_none();
-        }
-        else if (strcasecmp(str, "false") == 0)
-        {
-            op_stack_pop(eval->op_stack);
-            return result_none();
-        }
-        else
-        {
-            op_stack_pop(eval->op_stack);
-            return result_error_arg(ERR_NOT_BOOL, "while", str);
-        }
+        return child_r;
     }
-
-    if (st->phase == 2)
+    if (child_r.status != RESULT_OK)
     {
-        // Body completed
-        Result child_r = op->result;
-        op->result = result_none();
-
-        if (child_r.status != RESULT_NONE && child_r.status != RESULT_OK)
-        {
-            op_stack_pop(eval->op_stack);
-            return child_r;
-        }
-        // Fall through to push predicate again
+        return result_error_arg(ERR_NOT_BOOL, name, NULL);
     }
-
-    // Phase 0 (initial) or after body: push predicate
-    st->phase = 1;
-    EvalOp *pred_op = op_stack_push(eval->op_stack);
-    if (!pred_op) { op_stack_pop(eval->op_stack); return result_error(ERR_STACK_OVERFLOW); }
-    pred_op->kind = OP_RUN_LIST_EXPR;
-    pred_op->flags = OP_FLAG_NONE;
-    pred_op->saved_source = eval->token_source;
-    token_source_init_list(&eval->token_source, st->predicate);
-    return result_none();
-}
-
-// Step function for OP_UNTIL.
-Result step_until(Evaluator *eval, EvalOp *op)
-{
-    UntilState *st = &op->until_state;
-
-    if (st->phase == 1)
+    if (!value_is_word(child_r.value))
     {
-        // Predicate completed
-        Result child_r = op->result;
-        op->result = result_none();
-
-        if (child_r.status == RESULT_ERROR)
-        {
-            op_stack_pop(eval->op_stack);
-            return child_r;
-        }
-        if (child_r.status != RESULT_OK)
-        {
-            op_stack_pop(eval->op_stack);
-            return result_error_arg(ERR_NOT_BOOL, "until", NULL);
-        }
-        if (!value_is_word(child_r.value))
-        {
-            op_stack_pop(eval->op_stack);
-            return result_error_arg(ERR_NOT_BOOL, "until", value_to_string(child_r.value));
-        }
-        const char *str = value_to_string(child_r.value);
-        if (strcasecmp(str, "true") == 0)
-        {
-            // Predicate true: stop looping
-            op_stack_pop(eval->op_stack);
-            return result_none();
-        }
-        else if (strcasecmp(str, "false") == 0)
-        {
-            // Predicate false: run body
-            st->phase = 2;
-            EvalOp *body_op = op_stack_push(eval->op_stack);
-            if (!body_op) { op_stack_pop(eval->op_stack); return result_error(ERR_STACK_OVERFLOW); }
-            body_op->kind = OP_RUN_LIST;
-            body_op->flags = OP_FLAG_NONE;
-            body_op->saved_source = eval->token_source;
-            token_source_init_list(&eval->token_source, st->body);
-            return result_none();
-        }
-        else
-        {
-            op_stack_pop(eval->op_stack);
-            return result_error_arg(ERR_NOT_BOOL, "until", str);
-        }
+        return result_error_arg(ERR_NOT_BOOL, name, value_to_string(child_r.value));
     }
-
-    if (st->phase == 2)
+    const char *str = value_to_string(child_r.value);
+    if (strcasecmp(str, "true") == 0)
     {
-        // Body completed
-        Result child_r = op->result;
-        op->result = result_none();
-
-        if (child_r.status != RESULT_NONE && child_r.status != RESULT_OK)
-        {
-            op_stack_pop(eval->op_stack);
-            return child_r;
-        }
-        // Fall through to push predicate again
-    }
-
-    // Phase 0 (initial) or after body: push predicate
-    st->phase = 1;
-    EvalOp *pred_op = op_stack_push(eval->op_stack);
-    if (!pred_op) { op_stack_pop(eval->op_stack); return result_error(ERR_STACK_OVERFLOW); }
-    pred_op->kind = OP_RUN_LIST_EXPR;
-    pred_op->flags = OP_FLAG_NONE;
-    pred_op->saved_source = eval->token_source;
-    token_source_init_list(&eval->token_source, st->predicate);
-    return result_none();
-}
-
-// Step function for OP_DO_WHILE.
-Result step_do_while(Evaluator *eval, EvalOp *op)
-{
-    DoWhileState *st = &op->do_while;
-
-    if (st->phase == 1)
-    {
-        // Body completed
-        Result child_r = op->result;
-        op->result = result_none();
-
-        if (child_r.status != RESULT_NONE && child_r.status != RESULT_OK)
-        {
-            op_stack_pop(eval->op_stack);
-            return child_r;
-        }
-        // Push predicate
-        st->phase = 2;
-        EvalOp *pred_op = op_stack_push(eval->op_stack);
-        if (!pred_op) { op_stack_pop(eval->op_stack); return result_error(ERR_STACK_OVERFLOW); }
-        pred_op->kind = OP_RUN_LIST_EXPR;
-        pred_op->flags = OP_FLAG_NONE;
-        pred_op->saved_source = eval->token_source;
-        token_source_init_list(&eval->token_source, st->predicate);
+        *out = true;
         return result_none();
     }
-
-    if (st->phase == 2)
+    if (strcasecmp(str, "false") == 0)
     {
-        // Predicate completed
-        Result child_r = op->result;
-        op->result = result_none();
-
-        if (child_r.status == RESULT_ERROR)
-        {
-            op_stack_pop(eval->op_stack);
-            return child_r;
-        }
-        if (child_r.status != RESULT_OK)
-        {
-            op_stack_pop(eval->op_stack);
-            return result_error_arg(ERR_NOT_BOOL, "do.while", NULL);
-        }
-        if (!value_is_word(child_r.value))
-        {
-            op_stack_pop(eval->op_stack);
-            return result_error_arg(ERR_NOT_BOOL, "do.while", value_to_string(child_r.value));
-        }
-        const char *str = value_to_string(child_r.value);
-        if (strcasecmp(str, "false") == 0)
-        {
-            // Done
-            op_stack_pop(eval->op_stack);
-            return result_none();
-        }
-        else if (strcasecmp(str, "true") == 0)
-        {
-            // Continue looping: fall through to push body
-        }
-        else
-        {
-            op_stack_pop(eval->op_stack);
-            return result_error_arg(ERR_NOT_BOOL, "do.while", str);
-        }
+        *out = false;
+        return result_none();
     }
+    return result_error_arg(ERR_NOT_BOOL, name, str);
+}
 
-    // Phase 0 (initial) or continue from phase 2: push body
-    st->phase = 1;
-    EvalOp *body_op = op_stack_push(eval->op_stack);
-    if (!body_op) { op_stack_pop(eval->op_stack); return result_error(ERR_STACK_OVERFLOW); }
-    body_op->kind = OP_RUN_LIST;
-    body_op->flags = OP_FLAG_NONE;
-    body_op->saved_source = eval->token_source;
-    token_source_init_list(&eval->token_source, st->body);
+// Push a child op that runs `list`, saving the current token source.
+// On stack overflow, pops the loop op itself and returns the error.
+static Result push_loop_child(Evaluator *eval, EvalOpKind kind, Node list)
+{
+    EvalOp *child = op_stack_push(eval->op_stack);
+    if (!child)
+    {
+        op_stack_pop(eval->op_stack);
+        return result_error(ERR_STACK_OVERFLOW);
+    }
+    child->kind = kind;
+    child->flags = OP_FLAG_NONE;
+    child->saved_source = eval->token_source;
+    token_source_init_list(&eval->token_source, list);
     return result_none();
 }
 
-// Step function for OP_DO_UNTIL.
-Result step_do_until(Evaluator *eval, EvalOp *op)
+// Shared step function for OP_WHILE, OP_UNTIL, OP_DO_WHILE, and OP_DO_UNTIL.
+// while/until evaluate the predicate before the first body run; the do.*
+// forms run the body once first. while/do.while keep looping as long as the
+// predicate is true; until/do.until stop as soon as it becomes true.
+Result step_loop(Evaluator *eval, EvalOp *op)
 {
-    DoUntilState *st = &op->do_until;
+    LoopState *st = &op->loop;
 
-    if (st->phase == 1)
+    const char *name;
+    bool body_first;
+    bool continue_on;
+    switch (op->kind)
     {
-        // Body completed
+    case OP_WHILE:    name = "while";    body_first = false; continue_on = true;  break;
+    case OP_UNTIL:    name = "until";    body_first = false; continue_on = false; break;
+    case OP_DO_WHILE: name = "do.while"; body_first = true;  continue_on = true;  break;
+    default:          name = "do.until"; body_first = true;  continue_on = false; break;
+    }
+
+    if (st->phase == LOOP_PHASE_PREDICATE)
+    {
         Result child_r = op->result;
         op->result = result_none();
 
+        bool pred;
+        Result br = read_predicate_bool(child_r, name, &pred);
+        if (br.status != RESULT_NONE)
+        {
+            op_stack_pop(eval->op_stack);
+            return br;
+        }
+        if (pred != continue_on)
+        {
+            // Loop finished
+            op_stack_pop(eval->op_stack);
+            return result_none();
+        }
+        st->phase = LOOP_PHASE_BODY;
+        return push_loop_child(eval, OP_RUN_LIST, st->body);
+    }
+
+    if (st->phase == LOOP_PHASE_BODY)
+    {
+        Result child_r = op->result;
+        op->result = result_none();
+
+        // Propagate stop/output/error/throw from the body
         if (child_r.status != RESULT_NONE && child_r.status != RESULT_OK)
         {
             op_stack_pop(eval->op_stack);
             return child_r;
         }
-        // Push predicate
-        st->phase = 2;
-        EvalOp *pred_op = op_stack_push(eval->op_stack);
-        if (!pred_op) { op_stack_pop(eval->op_stack); return result_error(ERR_STACK_OVERFLOW); }
-        pred_op->kind = OP_RUN_LIST_EXPR;
-        pred_op->flags = OP_FLAG_NONE;
-        pred_op->saved_source = eval->token_source;
-        token_source_init_list(&eval->token_source, st->predicate);
-        return result_none();
+        // Body completed: fall through to evaluate the predicate.
     }
-
-    if (st->phase == 2)
+    else if (body_first)
     {
-        // Predicate completed
-        Result child_r = op->result;
-        op->result = result_none();
-
-        if (child_r.status == RESULT_ERROR)
-        {
-            op_stack_pop(eval->op_stack);
-            return child_r;
-        }
-        if (child_r.status != RESULT_OK)
-        {
-            op_stack_pop(eval->op_stack);
-            return result_error_arg(ERR_NOT_BOOL, "do.until", NULL);
-        }
-        if (!value_is_word(child_r.value))
-        {
-            op_stack_pop(eval->op_stack);
-            return result_error_arg(ERR_NOT_BOOL, "do.until", value_to_string(child_r.value));
-        }
-        const char *str = value_to_string(child_r.value);
-        if (strcasecmp(str, "true") == 0)
-        {
-            // Predicate true: stop
-            op_stack_pop(eval->op_stack);
-            return result_none();
-        }
-        else if (strcasecmp(str, "false") == 0)
-        {
-            // Continue looping: fall through to push body
-        }
-        else
-        {
-            op_stack_pop(eval->op_stack);
-            return result_error_arg(ERR_NOT_BOOL, "do.until", str);
-        }
+        // LOOP_PHASE_START for do.while / do.until: run the body once first.
+        st->phase = LOOP_PHASE_BODY;
+        return push_loop_child(eval, OP_RUN_LIST, st->body);
     }
 
-    // Phase 0 (initial) or continue from phase 2: push body
-    st->phase = 1;
-    EvalOp *body_op = op_stack_push(eval->op_stack);
-    if (!body_op) { op_stack_pop(eval->op_stack); return result_error(ERR_STACK_OVERFLOW); }
-    body_op->kind = OP_RUN_LIST;
-    body_op->flags = OP_FLAG_NONE;
-    body_op->saved_source = eval->token_source;
-    token_source_init_list(&eval->token_source, st->body);
-    return result_none();
+    st->phase = LOOP_PHASE_PREDICATE;
+    return push_loop_child(eval, OP_RUN_LIST_EXPR, st->predicate);
 }
 
 // Helper: restore variable state and pop the for op

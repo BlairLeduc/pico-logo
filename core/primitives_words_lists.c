@@ -24,6 +24,23 @@
 // Element access: first, last, butfirst, butlast, item, replace, member
 //==========================================================================
 
+// Numbers are words in Logo: convert a numeric argument to its word form so
+// the word branch of an element primitive handles both. Returns false when
+// the atom table is exhausted (callers surface ERR_OUT_OF_SPACE).
+static bool normalize_to_word(Value *obj)
+{
+    if (value_is_number(*obj))
+    {
+        Node word = number_to_word(obj->as.number);
+        if (mem_is_nil(word))
+        {
+            return false;
+        }
+        *obj = value_word(word);
+    }
+    return true;
+}
+
 // first object
 // Outputs the first element of object.
 // For a word: outputs the first character as a word
@@ -31,23 +48,14 @@
 static Result prim_first(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
-    
+
     Value obj = args[0];
-    
-    if (value_is_number(obj))
+    if (!normalize_to_word(&obj))
     {
-        // Convert number to word first
-        Node word = number_to_word(obj.as.number);
-        const char *str = mem_word_ptr(word);
-        if (str == NULL || str[0] == '\0')
-        {
-            return result_error_arg(ERR_TOO_FEW_ITEMS, NULL, value_to_string(obj));
-        }
-        // Return first character as a word
-        Node first_char = mem_atom(str, 1);
-        return result_ok(value_word(first_char));
+        return result_error(ERR_OUT_OF_SPACE);
     }
-    else if (value_is_word(obj))
+
+    if (value_is_word(obj))
     {
         const char *str = mem_word_ptr(obj.as.node);
         if (str == NULL || str[0] == '\0')
@@ -85,26 +93,14 @@ static Result prim_first(Evaluator *eval, int argc, Value *args)
 static Result prim_last(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
-    
+
     Value obj = args[0];
-    
-    if (value_is_number(obj))
+    if (!normalize_to_word(&obj))
     {
-        Node word = number_to_word(obj.as.number);
-        const char *str = mem_word_ptr(word);
-        if (str == NULL)
-        {
-            return result_error(ERR_OUT_OF_SPACE); // atom table exhausted
-        }
-        size_t len = strlen(str);
-        if (len == 0)
-        {
-            return result_error_arg(ERR_TOO_FEW_ITEMS, NULL, value_to_string(obj));
-        }
-        Node last_char = mem_atom(str + len - 1, 1);
-        return result_ok(value_word(last_char));
+        return result_error(ERR_OUT_OF_SPACE);
     }
-    else if (value_is_word(obj))
+
+    if (value_is_word(obj))
     {
         const char *str = mem_word_ptr(obj.as.node);
         size_t len = mem_word_len(obj.as.node);
@@ -147,32 +143,14 @@ static Result prim_last(Evaluator *eval, int argc, Value *args)
 static Result prim_butfirst(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
-    
+
     Value obj = args[0];
-    
-    if (value_is_number(obj))
+    if (!normalize_to_word(&obj))
     {
-        Node word = number_to_word(obj.as.number);
-        const char *str = mem_word_ptr(word);
-        if (str == NULL)
-        {
-            return result_error(ERR_OUT_OF_SPACE); // atom table exhausted
-        }
-        size_t len = strlen(str);
-        if (len == 0)
-        {
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
-        }
-        if (len == 1)
-        {
-            // Return empty word
-            Node empty = mem_atom("", 0);
-            return result_ok(value_word(empty));
-        }
-        Node rest = mem_atom(str + 1, len - 1);
-        return result_ok(value_word(rest));
+        return result_error(ERR_OUT_OF_SPACE);
     }
-    else if (value_is_word(obj))
+
+    if (value_is_word(obj))
     {
         const char *str = mem_word_ptr(obj.as.node);
         size_t len = mem_word_len(obj.as.node);
@@ -206,31 +184,14 @@ static Result prim_butfirst(Evaluator *eval, int argc, Value *args)
 static Result prim_butlast(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
-    
+
     Value obj = args[0];
-    
-    if (value_is_number(obj))
+    if (!normalize_to_word(&obj))
     {
-        Node word = number_to_word(obj.as.number);
-        const char *str = mem_word_ptr(word);
-        if (str == NULL)
-        {
-            return result_error(ERR_OUT_OF_SPACE); // atom table exhausted
-        }
-        size_t len = strlen(str);
-        if (len == 0)
-        {
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
-        }
-        if (len == 1)
-        {
-            Node empty = mem_atom("", 0);
-            return result_ok(value_word(empty));
-        }
-        Node rest = mem_atom(str, len - 1);
-        return result_ok(value_word(rest));
+        return result_error(ERR_OUT_OF_SPACE);
     }
-    else if (value_is_word(obj))
+
+    if (value_is_word(obj))
     {
         const char *str = mem_word_ptr(obj.as.node);
         size_t len = mem_word_len(obj.as.node);
@@ -283,18 +244,12 @@ static Result prim_count(Evaluator *eval, int argc, Value *args)
     UNUSED(eval); UNUSED(argc);
     
     Value obj = args[0];
-    
-    if (value_is_number(obj))
+    if (!normalize_to_word(&obj))
     {
-        Node word = number_to_word(obj.as.number);
-        const char *str = mem_word_ptr(word);
-        if (str == NULL)
-        {
-            return result_error(ERR_OUT_OF_SPACE); // atom table exhausted
-        }
-        return result_ok(value_number((float)strlen(str)));
+        return result_error(ERR_OUT_OF_SPACE);
     }
-    else if (value_is_word(obj))
+
+    if (value_is_word(obj))
     {
         return result_ok(value_number((float)mem_word_len(obj.as.node)));
     }
@@ -362,24 +317,12 @@ static Result prim_item(Evaluator *eval, int argc, Value *args)
     }
     
     Value obj = args[1];
-    
-    if (value_is_number(obj))
+    if (!normalize_to_word(&obj))
     {
-        Node word = number_to_word(obj.as.number);
-        const char *str = mem_word_ptr(word);
-        if (str == NULL)
-        {
-            return result_error(ERR_OUT_OF_SPACE); // atom table exhausted
-        }
-        size_t len = strlen(str);
-        if ((size_t)index > len)
-        {
-            return result_error_arg(ERR_TOO_FEW_ITEMS, NULL, value_to_string(obj));
-        }
-        Node item_char = mem_atom(str + index - 1, 1);
-        return result_ok(value_word(item_char));
+        return result_error(ERR_OUT_OF_SPACE);
     }
-    else if (value_is_word(obj))
+
+    if (value_is_word(obj))
     {
         const char *str = mem_word_ptr(obj.as.node);
         size_t len = mem_word_len(obj.as.node);
