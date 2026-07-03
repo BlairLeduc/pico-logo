@@ -112,15 +112,24 @@ static Result prim_rerandom(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
 
+    if (argc > 1)
+    {
+        return result_error_arg(ERR_TOO_MANY_INPUTS, "rerandom", NULL);
+    }
+
     uint32_t seed = 0;
-    if (argc >= 1)
+    if (argc == 1)
     {
         float n;
-        if (!value_to_number(args[0], &n))
+        if (!value_to_number(args[0], &n) || !isfinite(n))
         {
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
         }
-        seed = (uint32_t)(int64_t)n;
+        // Reduce into (-2^32, 2^32) first (fmodf is exact for floats), so
+        // the integer conversions below are fully defined for any finite
+        // input; the uint32_t conversion then wraps negatives mod 2^32.
+        float m = fmodf(n, 4294967296.0f);
+        seed = (uint32_t)(int64_t)m;
     }
     logo_random_seed(seed);
     return result_none();

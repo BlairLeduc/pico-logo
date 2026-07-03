@@ -162,6 +162,8 @@ void test_rerandom_makes_random_reproducible(void)
     run_string("(rerandom 7)");
     Result b1 = eval_string("random 1000");
     Result b2 = eval_string("random 1000");
+    TEST_ASSERT_EQUAL(RESULT_OK, b1.status);
+    TEST_ASSERT_EQUAL(RESULT_OK, b2.status);
 
     TEST_ASSERT_EQUAL_FLOAT(a1.value.as.number, b1.value.as.number);
     TEST_ASSERT_EQUAL_FLOAT(a2.value.as.number, b2.value.as.number);
@@ -173,6 +175,8 @@ void test_rerandom_no_input_is_reproducible(void)
     Result a = eval_string("random 1000");
     run_string("rerandom");
     Result b = eval_string("random 1000");
+    TEST_ASSERT_EQUAL(RESULT_OK, a.status);
+    TEST_ASSERT_EQUAL(RESULT_OK, b.status);
     TEST_ASSERT_EQUAL_FLOAT(a.value.as.number, b.value.as.number);
 }
 
@@ -184,7 +188,25 @@ void test_rerandom_different_seeds_differ(void)
     Result a = eval_string("random 1000000");
     run_string("(rerandom 2)");
     Result b = eval_string("random 1000000");
+    TEST_ASSERT_EQUAL(RESULT_OK, a.status);
+    TEST_ASSERT_EQUAL(RESULT_OK, b.status);
     TEST_ASSERT_TRUE(a.value.as.number != b.value.as.number);
+}
+
+void test_rerandom_rejects_extra_inputs(void)
+{
+    Result r = eval_string("(rerandom 1 2)");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_TOO_MANY_INPUTS, r.error_code);
+}
+
+void test_rerandom_rejects_non_finite_seed(void)
+{
+    // 1e99 overflows strtof to infinity; the float-to-integer cast of a
+    // non-finite value would be undefined behaviour, so it must error.
+    Result r = eval_string("(rerandom 1e99)");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
 }
 
 void test_rerandom_bounds_respected(void)
@@ -825,6 +847,8 @@ int main(void)
     RUN_TEST(test_rerandom_bounds_respected);
     RUN_TEST(test_rerandom_affects_pick_and_shuffle);
     RUN_TEST(test_rerandom_rejects_non_number);
+    RUN_TEST(test_rerandom_rejects_extra_inputs);
+    RUN_TEST(test_rerandom_rejects_non_finite_seed);
     RUN_TEST(test_arctan);
     RUN_TEST(test_arctan_zero);
     RUN_TEST(test_cos);
