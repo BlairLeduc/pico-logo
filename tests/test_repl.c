@@ -260,25 +260,44 @@ void test_repl_run_simple_print(void)
     Result r = repl_run(&state);
     repl_cleanup(&state);
     
-    // Should return RESULT_NONE on EOF
-    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    // Should return RESULT_EOF on EOF
+    TEST_ASSERT_EQUAL(RESULT_EOF, r.status);
     
     // Check that the prompt was shown and output was printed
     // Output includes: "?" prompt, then "42\n"
     TEST_ASSERT_TRUE(strstr(output_buffer, "42") != NULL);
 }
 
+void test_repl_non_interactive_suppresses_prompt(void)
+{
+    ReplState state;
+
+    // A non-interactive console (host stdin is a pipe/file) must not print
+    // prompts, so scripted output is clean and diffable.
+    set_mock_input("print 7\n");
+    mock_console.interactive = false;
+
+    repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
+    Result r = repl_run(&state);
+    repl_cleanup(&state);
+    mock_console.interactive = true;
+
+    TEST_ASSERT_EQUAL(RESULT_EOF, r.status);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "7") != NULL);
+    TEST_ASSERT_TRUE(strchr(output_buffer, '?') == NULL);
+}
+
 void test_repl_run_multiple_lines(void)
 {
     ReplState state;
-    
+
     set_mock_input("print 1\nprint 2\nprint 3\n");
     
     repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
     Result r = repl_run(&state);
     repl_cleanup(&state);
     
-    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL(RESULT_EOF, r.status);
     TEST_ASSERT_TRUE(strstr(output_buffer, "1") != NULL);
     TEST_ASSERT_TRUE(strstr(output_buffer, "2") != NULL);
     TEST_ASSERT_TRUE(strstr(output_buffer, "3") != NULL);
@@ -294,7 +313,7 @@ void test_repl_run_empty_lines_skipped(void)
     Result r = repl_run(&state);
     repl_cleanup(&state);
     
-    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL(RESULT_EOF, r.status);
     TEST_ASSERT_TRUE(strstr(output_buffer, "99") != NULL);
 }
 
@@ -308,7 +327,7 @@ void test_repl_run_with_proc_prefix(void)
     Result r = repl_run(&state);
     repl_cleanup(&state);
     
-    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL(RESULT_EOF, r.status);
     // The prompt should be "myproc?" - check it's in output
     TEST_ASSERT_TRUE(strstr(output_buffer, "myproc?") != NULL);
 }
@@ -339,7 +358,7 @@ void test_repl_run_error_handling(void)
     Result r = repl_run(&state);
     repl_cleanup(&state);
     
-    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL(RESULT_EOF, r.status);
     // Error should be printed but REPL continues
     TEST_ASSERT_TRUE(strstr(output_buffer, "don't know how to") != NULL);
     // After error, should continue and print 42
@@ -357,7 +376,7 @@ void test_repl_run_uncaught_throw_error(void)
     Result r = repl_run(&state);
     repl_cleanup(&state);
     
-    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL(RESULT_EOF, r.status);
     // Should print "Can't find a catch for myerror" and continue
     TEST_ASSERT_TRUE(strstr(output_buffer, "Can't find a catch") != NULL);
     TEST_ASSERT_TRUE(strstr(output_buffer, "1") != NULL);
@@ -374,7 +393,7 @@ void test_repl_run_value_without_consumer(void)
     Result r = repl_run(&state);
     repl_cleanup(&state);
     
-    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL(RESULT_EOF, r.status);
     // Should print "I don't know what to do with 3"
     TEST_ASSERT_TRUE(strstr(output_buffer, "don't know what to do") != NULL);
 }
@@ -393,7 +412,7 @@ void test_repl_run_define_procedure(void)
     Result r = repl_run(&state);
     repl_cleanup(&state);
     
-    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL(RESULT_EOF, r.status);
     // Should show "square defined"
     TEST_ASSERT_TRUE(strstr(output_buffer, "square defined") != NULL);
     
@@ -428,7 +447,7 @@ void test_repl_run_define_primitive_error(void)
     Result r = repl_run(&state);
     repl_cleanup(&state);
     
-    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL(RESULT_EOF, r.status);
     // Should show error about primitive
     TEST_ASSERT_TRUE(strstr(output_buffer, "primitive") != NULL);
 }
@@ -444,7 +463,7 @@ void test_repl_run_proc_def_in_pause(void)
     Result r = repl_run(&state);
     repl_cleanup(&state);
     
-    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL(RESULT_EOF, r.status);
     // Should show "myproc defined"
     TEST_ASSERT_TRUE(strstr(output_buffer, "myproc defined") != NULL);
     // Should show the ">" prompt during definition (prefixed with proc name)
@@ -471,7 +490,7 @@ void test_repl_run_bracket_continuation(void)
     Result r = repl_run(&state);
     repl_cleanup(&state);
     
-    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL(RESULT_EOF, r.status);
     // Should show "~" continuation prompt
     TEST_ASSERT_TRUE(strstr(output_buffer, "~") != NULL);
     // Should execute the repeat
@@ -493,7 +512,7 @@ void test_repl_run_continuation_in_pause(void)
     Result r = repl_run(&state);
     repl_cleanup(&state);
     
-    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL(RESULT_EOF, r.status);
     // Should show "~" continuation prompt (prefixed with proc name)
     TEST_ASSERT_TRUE(strstr(output_buffer, "test~") != NULL);
     // Should execute the repeat - count occurrences of "1\n"
@@ -513,7 +532,7 @@ void test_repl_run_continuation_ignores_brackets_in_comments(void)
     Result r = repl_run(&state);
     repl_cleanup(&state);
 
-    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL(RESULT_EOF, r.status);
     TEST_ASSERT_TRUE(strstr(output_buffer, "~") != NULL);
 }
 
@@ -584,6 +603,7 @@ int main(void)
     
     // REPL run tests
     RUN_TEST(test_repl_run_simple_print);
+    RUN_TEST(test_repl_non_interactive_suppresses_prompt);
     RUN_TEST(test_repl_run_multiple_lines);
     RUN_TEST(test_repl_run_empty_lines_skipped);
     RUN_TEST(test_repl_run_with_proc_prefix);

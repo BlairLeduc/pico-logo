@@ -209,6 +209,11 @@ extern "C"
         // a continued line relative to already-open brackets from prior lines.
         int input_syntax_depth;
 
+        // True when a person is at the console (default). The host device
+        // clears this when stdin is not a terminal (pipe/file), which
+        // suppresses REPL prompts so scripted output is clean and diffable.
+        bool interactive;
+
         // Private context for the console implementation
         void *context;
     } LogoConsole;

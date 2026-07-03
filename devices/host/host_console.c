@@ -16,7 +16,10 @@
 #include <stdbool.h>
 #include <time.h>
 
-#ifndef _WIN32
+#ifdef _WIN32
+#include <conio.h> // _getch, _kbhit
+#include <io.h>    // _isatty, _fileno
+#else
 #include <termios.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -280,7 +283,15 @@ LogoConsole *logo_host_console_create(void)
 #endif
 
     logo_console_init(console, &host_input_ops, &host_output_ops, context);
-    
+
+    // Piped/redirected stdin means a script is driving the session:
+    // suppress prompts so the output is clean and diffable.
+#ifdef _WIN32
+    console->interactive = _isatty(_fileno(stdin)) != 0;
+#else
+    console->interactive = isatty(fileno(stdin)) != 0;
+#endif
+
     return console;
 }
 

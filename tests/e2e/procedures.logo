@@ -1,0 +1,16 @@
+to countdown :n
+if :n = 0 [stop]
+print :n
+countdown :n - 1
+end
+countdown 3
+to fact :n
+if :n = 1 [output 1]
+output :n * fact :n - 1
+end
+print fact 7
+to loop :n
+if :n = 0 [output "done]
+output loop :n - 1
+end
+print loop 100000
