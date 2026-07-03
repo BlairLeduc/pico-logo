@@ -142,6 +142,19 @@ bool prop_put(const char *name, const char *property, Value value)
     Node prop_atom = mem_atom_cstr(property);
     Node val_node = prop_value_to_node(value);
 
+    // Atom-table exhaustion: interning the name/property (or formatting a
+    // numeric value into a word) can fail. Storing NODE_NIL in their place
+    // would silently corrupt the property list, so fail instead. A NIL
+    // val_node from a LIST value is the legitimate empty list, not an error.
+    if (mem_is_nil(name_atom) || mem_is_nil(prop_atom))
+    {
+        return false;
+    }
+    if (mem_is_nil(val_node) && value_is_number(value))
+    {
+        return false;
+    }
+
     // Find existing entry for this name
     Node entry = find_entry(name);
 

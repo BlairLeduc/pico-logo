@@ -97,6 +97,11 @@ void op_stack_gc_mark(OpStack *stack)
         EvalOp *op = &stack->ops[i];
 
         token_source_gc_mark(&op->saved_source);
+        // result.value is a plain field (not part of the Result union) and
+        // every Result comes from a value.c constructor whose compound
+        // literal zero-fills unset members, so .value.type is always a
+        // valid tag (VALUE_NONE when unset) and mark_value's tag check is
+        // safe for every status.
         mark_value(op->result.value);
 
         switch (op->kind)

@@ -311,6 +311,28 @@ void test_toot_stereo_word_rightfreq_error(void)
     TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
 }
 
+void test_battery_out_of_nodes_errors(void)
+{
+    // battery builds a two-element list; on node-pool exhaustion it must
+    // surface ERR_OUT_OF_SPACE rather than return a truncated list.
+    set_mock_battery(50, false);
+
+    Node chain = NODE_NIL;
+    for (;;)
+    {
+        Node c = mem_cons(NODE_NIL, chain);
+        if (mem_is_nil(c))
+        {
+            break;
+        }
+        chain = c;
+    }
+
+    Result r = eval_string("battery");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+}
+
 void test_toot_in_procedure(void)
 {
     // Test using toot within a procedure
@@ -392,6 +414,7 @@ int main(void)
     RUN_TEST(test_toot_negative_frequency_error);
     RUN_TEST(test_toot_stereo_negative_leftfreq_error);
     RUN_TEST(test_toot_stereo_negative_rightfreq_error);
+    RUN_TEST(test_battery_out_of_nodes_errors);
     RUN_TEST(test_toot_in_procedure);
     
     return UNITY_END();

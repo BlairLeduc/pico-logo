@@ -267,6 +267,29 @@ void test_remprop_requires_word_for_property(void)
     TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
 }
 
+// pprop of a numeric value must error, not silently store NIL, when the
+// atom table is too full to intern the formatted number. The name/property
+// words are interned first so only the value conversion fails.
+void test_pprop_number_out_of_atoms_errors(void)
+{
+    mem_atom_cstr("k");
+    mem_atom_cstr("p");
+
+    char buf[16];
+    for (int i = 0;; i++)
+    {
+        int len = snprintf(buf, sizeof(buf), "a%d", i);
+        if (mem_is_nil(mem_atom(buf, (size_t)len)))
+        {
+            break;
+        }
+    }
+
+    Result r = eval_string("pprop \"k \"p 123456");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+}
+
 // Case insensitivity tests
 void test_property_names_are_case_insensitive(void)
 {
@@ -319,6 +342,9 @@ int main(void)
     
     // Case insensitivity
     RUN_TEST(test_property_names_are_case_insensitive);
+
+    // Out-of-space handling
+    RUN_TEST(test_pprop_number_out_of_atoms_errors);
     
     return UNITY_END();
 }
