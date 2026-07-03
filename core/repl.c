@@ -256,7 +256,7 @@ Result repl_run(ReplState *state)
         }
         // Suppress prompts on non-interactive consoles (e.g. host stdin is a
         // pipe or file) so scripted output is clean and diffable.
-        if (!state->io || !state->io->console || state->io->console->interactive)
+        if (state->io->console->interactive)
         {
             logo_io_console_write(state->io, prompt);
         }

@@ -16,7 +16,9 @@
 #include <stdbool.h>
 #include <time.h>
 
-#ifndef _WIN32
+#ifdef _WIN32
+#include <io.h>
+#else
 #include <termios.h>
 #include <unistd.h>
 #include <fcntl.h>

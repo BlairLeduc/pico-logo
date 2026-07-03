@@ -36,7 +36,8 @@ for script in "$dir"/*.logo; do
         echo "PASS $name"
     else
         echo "FAIL $name"
-        echo "$actual" | diff -u "$expected" - | sed 's/^/    /'
+        # printf, not echo: echo may mangle backslashes or a leading -n
+        printf '%s\n' "$actual" | diff -u "$expected" - | sed 's/^/    /'
         fail=1
     fi
 done
