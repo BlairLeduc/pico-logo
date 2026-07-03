@@ -13,6 +13,7 @@
 #include "eval.h"
 #include "lexer.h"
 #include "parse_list.h"
+#include "random.h"
 #include "devices/io.h"
 #include <assert.h>
 #include <string.h>
@@ -632,7 +633,7 @@ static Result prim_pick(Evaluator *eval, int argc, Value *args)
         {
             return result_error_arg(ERR_TOO_FEW_ITEMS, NULL, value_to_string(obj));
         }
-        Node ch = mem_atom(str + (logo_io_random(io) % len), 1);
+        Node ch = mem_atom(str + (logo_random_next(io) % len), 1);
         if (mem_is_nil(ch))
         {
             return result_error(ERR_OUT_OF_SPACE);
@@ -652,7 +653,7 @@ static Result prim_pick(Evaluator *eval, int argc, Value *args)
         }
 
         Node list = obj.as.node;
-        for (size_t i = logo_io_random(io) % count; i > 0; i--)
+        for (size_t i = logo_random_next(io) % count; i > 0; i--)
         {
             list = mem_cdr(list);
         }
@@ -770,7 +771,7 @@ static Result prim_shuffle(Evaluator *eval, int argc, Value *args)
         // Fisher-Yates
         for (size_t i = len; i > 1; i--)
         {
-            size_t j = logo_io_random(io) % i;
+            size_t j = logo_random_next(io) % i;
             char tmp = buf[i - 1];
             buf[i - 1] = buf[j];
             buf[j] = tmp;
@@ -814,7 +815,7 @@ static Result prim_shuffle(Evaluator *eval, int argc, Value *args)
         // Fisher-Yates
         for (size_t i = count; i > 1; i--)
         {
-            size_t j = logo_io_random(io) % i;
+            size_t j = logo_random_next(io) % i;
             Node tmp = elements[i - 1];
             elements[i - 1] = elements[j];
             elements[j] = tmp;

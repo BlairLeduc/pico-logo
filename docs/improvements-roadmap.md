@@ -24,7 +24,7 @@ Companion documents:
 | `pick` (random element of word/list) | UCB | done | [P2](#p2--list-utilities-pick-reverse-shuffle) |
 | `reverse` (word or list) | UCB | done | [P2](#p2--list-utilities-pick-reverse-shuffle) |
 | `shuffle` | UCB (library) | done | [P2](#p2--list-utilities-pick-reverse-shuffle) |
-| `rerandom` / seedable RNG | UCB, Apple | todo | Planned: [P3](#p3--rerandom-and-a-core-prng) |
+| `rerandom` / seedable RNG | UCB, Apple | done | [P3](#p3--rerandom-and-a-core-prng) (hybrid: TRNG default, PCG32 when seeded) |
 | `arc` | UCB | todo | Planned: [P4](#p4--arc-and-setpensize) |
 | `setpensize` / `pensize` | UCB, FMSLogo | todo | Planned: [P4](#p4--arc-and-setpensize) |
 | `remove`, `remdup` | UCB | todo | Backlog; trivial with `mem_list_append` |
@@ -140,20 +140,23 @@ firmware builds, and a reference link check automatically.
 
 ### P3 — `rerandom` and a core PRNG
 
-**Goal:** reproducible randomness, identical behaviour across boards and host.
+**Goal:** reproducible randomness on request, without giving up the RP2350's
+hardware TRNG for normal use.
 
-- **Design:** move randomness into core — a small PRNG (xorshift32 or PCG32,
-  ~10 lines, single-precision friendly) owned by the interpreter, seeded once
-  at startup from the device entropy source (existing hardware op). `random`
-  and `pick`/`shuffle` draw from it. Devices stop being consulted per call.
-- **`rerandom`**: reseeds with a fixed constant; `(rerandom n)` seeds with
-  `n`. Matches UCB semantics.
-- **Why core-side:** deterministic tests (seed, then assert exact sequences),
-  identical program behaviour on every board, one fewer per-call device hop.
-- **Watch for:** the mock device's current random stub — tests that relied on
-  it need migrating to `rerandom`-seeded expectations.
-- **Tests:** same seed → same sequence; different seeds differ; `random n`
-  bounds respected across the range; `rerandom` arity forms.
+- **Design (hybrid, determinism opt-in):** by default, every draw comes from
+  the device source exactly as before — the hardware TRNG on real boards.
+  Running `rerandom` switches a small core-side PCG32 into the path, and
+  `random`/`pick`/`shuffle` draw the reproducible stream until the next boot
+  (UCB semantics). A single `logo_random_next(io)` helper in `core/random.c`
+  routes `seeded ? pcg32() : logo_io_random(io)`; the device layer is
+  untouched. Rationale: a TRNG's virtue is unpredictability, not statistical
+  uniformity — the SDK's own `pico_rand` conditions TRNG entropy through a
+  xoroshiro generator for the same reason. Nothing is lost by default, and
+  determinism engages only when it is wanted (replays, classrooms, tests).
+- **`rerandom`**: fixed sequence; `(rerandom n)` selects among sequences.
+- **Tests:** same seed → same sequence (also through `pick`/`shuffle`);
+  different seeds differ; bounds respected; default mode still hits the
+  device op (mock's fixed value observed).
 - **Reference:** `rerandom` section + a reproducibility note under `random`.
 
 ### P4 — `arc` and `setpensize`
@@ -215,3 +218,4 @@ device (no graphics) degrades cleanly.
 | 2026-07-03 | (all) | Roadmap created; P1–P5 planned, backlog triaged |
 | 2026-07-03 | P1 | Done: host REPL EOF/prompt fixes, e2e golden tests (`tests/e2e/`), CI workflow, anchor checker |
 | 2026-07-03 | P2 | Done: `pick`, `reverse`, `shuffle` primitives with reference sections and tests |
+| 2026-07-04 | P3 | Done: `rerandom` + hybrid core PRNG (TRNG remains the default source; PCG32 only when seeded) |

@@ -9,6 +9,7 @@
 #include "primitives.h"
 #include "error.h"
 #include "eval.h"
+#include "random.h"
 #include "devices/io.h"
 #include <stdlib.h>
 #include <math.h>
@@ -99,8 +100,30 @@ static Result prim_random(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
     }
 
-    int result = logo_io_random(io) % limit;
+    int result = (int)(logo_random_next(io) % (uint32_t)limit);
     return result_ok(value_number((float)result));
+}
+
+// rerandom - makes subsequent random/pick/shuffle results reproducible.
+// With no input, selects a fixed sequence; (rerandom integer) selects
+// among different reproducible sequences. Until rerandom is run, results
+// come from the device's hardware random source.
+static Result prim_rerandom(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+
+    uint32_t seed = 0;
+    if (argc >= 1)
+    {
+        float n;
+        if (!value_to_number(args[0], &n))
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+        }
+        seed = (uint32_t)(int64_t)n;
+    }
+    logo_random_seed(seed);
+    return result_none();
 }
 
 // arctan - outputs arctangent of number in degrees
@@ -321,6 +344,7 @@ void primitives_arithmetic_init(void)
     primitive_register("product", 2, prim_product);
     primitive_register("quotient", 2, prim_quotient);
     primitive_register("random", 1, prim_random);
+    primitive_register("rerandom", 0, prim_rerandom);
     primitive_register("arctan", 1, prim_arctan);
     primitive_register("cos", 1, prim_cos);
     primitive_register("sin", 1, prim_sin);
