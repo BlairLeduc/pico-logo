@@ -9,6 +9,7 @@
 
 #include <stddef.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 // FAT32 constants
 #define FAT32_SECTOR_SIZE (SD_BLOCK_SIZE) // Standard sector size
