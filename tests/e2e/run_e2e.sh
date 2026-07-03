@@ -17,6 +17,9 @@ if [ ! -x "$logo" ]; then
     exit 2
 fi
 
+tmpdir=$(mktemp -d) || exit 2
+trap 'rm -rf "$tmpdir"' EXIT
+
 fail=0
 for script in "$dir"/*.logo; do
     name=$(basename "$script" .logo)
@@ -25,19 +28,21 @@ for script in "$dir"/*.logo; do
         echo "SKIP $name (no .expected file)"
         continue
     fi
-    actual=$("$logo" < "$script" 2>&1)
+    # Diff files, not shell variables: command substitution strips trailing
+    # newlines, which would hide a missing final newline in the output.
+    out="$tmpdir/$name.out"
+    "$logo" < "$script" > "$out" 2>&1
     status=$?
     if [ $status -ne 0 ]; then
         echo "FAIL $name (exit $status)"
         fail=1
         continue
     fi
-    if [ "$actual" = "$(cat "$expected")" ]; then
+    if diff -u "$expected" "$out" > "$tmpdir/$name.diff"; then
         echo "PASS $name"
     else
         echo "FAIL $name"
-        # printf, not echo: echo may mangle backslashes or a leading -n
-        printf '%s\n' "$actual" | diff -u "$expected" - | sed 's/^/    /'
+        sed 's/^/    /' "$tmpdir/$name.diff"
         fail=1
     fi
 done

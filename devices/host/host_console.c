@@ -17,7 +17,8 @@
 #include <time.h>
 
 #ifdef _WIN32
-#include <io.h>
+#include <conio.h> // _getch, _kbhit
+#include <io.h>    // _isatty, _fileno
 #else
 #include <termios.h>
 #include <unistd.h>
