@@ -90,10 +90,7 @@ extern "C"
     Result step_if(Evaluator *eval, EvalOp *op);
     Result step_repeat(Evaluator *eval, EvalOp *op);
     Result step_forever(Evaluator *eval, EvalOp *op);
-    Result step_while(Evaluator *eval, EvalOp *op);
-    Result step_until(Evaluator *eval, EvalOp *op);
-    Result step_do_while(Evaluator *eval, EvalOp *op);
-    Result step_do_until(Evaluator *eval, EvalOp *op);
+    Result step_loop(Evaluator *eval, EvalOp *op);
     Result step_for(Evaluator *eval, EvalOp *op);
     Result step_catch(Evaluator *eval, EvalOp *op);
     Result step_proc_call(Evaluator *eval, EvalOp *op);

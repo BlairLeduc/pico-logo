@@ -5,6 +5,8 @@
 
 #include "primitives.h"
 #include "devices/io.h"
+#include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 
@@ -12,6 +14,24 @@
 
 static Primitive primitives[MAX_PRIMITIVES];
 static int primitive_count = 0;
+
+// primitive_find runs for every word token evaluated, so a linear scan of
+// ~300 names was the interpreter's largest constant overhead. Lookups
+// binary-search `primitive_order`, a name-sorted (case-insensitive) array
+// of indices into `primitives[]`. The table itself stays append-only, so
+// `const Primitive *` pointers held by callers (e.g. staged OP_PRIM_CALLs)
+// remain valid even when `copydef` registers an alias mid-evaluation.
+// Sorting is deferred to the first lookup after a registration (lazy dirty
+// flag), so registration order carries no contract.
+static uint16_t primitive_order[MAX_PRIMITIVES];
+static bool primitives_sorted = false;
+
+static int primitive_order_compare(const void *a, const void *b)
+{
+    const Primitive *pa = &primitives[*(const uint16_t *)a];
+    const Primitive *pb = &primitives[*(const uint16_t *)b];
+    return strcasecmp(pa->name, pb->name);
+}
 
 // Shared I/O manager for all primitives (new)
 static LogoIO *shared_io = NULL;
@@ -29,6 +49,7 @@ LogoIO *primitives_get_io(void)
 void primitives_init(void)
 {
     primitive_count = 0;
+    primitives_sorted = false;
 
     // Initialize all primitive categories
     primitives_arithmetic_init();
@@ -69,15 +90,40 @@ void primitive_register(const char *name, int default_args, PrimitiveFunc func)
         .name = name,
         .default_args = default_args,
         .func = func};
+    primitives_sorted = false;
 }
 
 const Primitive *primitive_find(const char *name)
 {
-    for (int i = 0; i < primitive_count; i++)
+    if (!primitives_sorted)
     {
-        if (strcasecmp(primitives[i].name, name) == 0)
+        for (int i = 0; i < primitive_count; i++)
         {
-            return &primitives[i];
+            primitive_order[i] = (uint16_t)i;
+        }
+        qsort(primitive_order, (size_t)primitive_count,
+              sizeof(primitive_order[0]), primitive_order_compare);
+        primitives_sorted = true;
+    }
+
+    int lo = 0;
+    int hi = primitive_count - 1;
+    while (lo <= hi)
+    {
+        int mid = lo + (hi - lo) / 2;
+        const Primitive *p = &primitives[primitive_order[mid]];
+        int cmp = strcasecmp(name, p->name);
+        if (cmp == 0)
+        {
+            return p;
+        }
+        if (cmp < 0)
+        {
+            hi = mid - 1;
+        }
+        else
+        {
+            lo = mid + 1;
         }
     }
     return NULL;
@@ -94,6 +140,7 @@ bool primitive_register_alias(const char *alias_name, const Primitive *source)
         .name = alias_name,
         .default_args = source->default_args,
         .func = source->func};
+    primitives_sorted = false;
     return true;
 }
 

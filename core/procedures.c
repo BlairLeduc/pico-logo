@@ -13,6 +13,7 @@
 #include "frame.h"
 #include "limits.h"
 #include "devices/io.h"
+#include <ctype.h>
 #include <string.h>
 #include <strings.h>
 #include <stdio.h>
@@ -60,12 +61,18 @@ void procedures_init(void)
     frame_stack_init(&global_frame_stack, frame_stack_memory, sizeof(frame_stack_memory));
 }
 
-// Find procedure index, returns -1 if not found
+// Find procedure index, returns -1 if not found.
+// The table is small (MAX_PROCEDURES) but this runs for every unmatched
+// word token, so a cheap case-folded first-character check screens out
+// most slots before the full strcasecmp.
 static int find_procedure_index(const char *name)
 {
+    int first = tolower((unsigned char)name[0]);
     for (int i = 0; i < procedure_count; i++)
     {
-        if (procedures[i].name && strcasecmp(procedures[i].name, name) == 0)
+        const char *pname = procedures[i].name;
+        if (pname && tolower((unsigned char)pname[0]) == first &&
+            strcasecmp(pname, name) == 0)
         {
             return i;
         }

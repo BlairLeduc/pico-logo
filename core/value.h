@@ -92,6 +92,9 @@ extern "C"
     Value value_list(Node node);
     Value value_newline(void);
 
+    // The word "true" or "false" (cached atoms; no interning per call).
+    Value value_bool(bool b);
+
     //==========================================================================
     // Value Predicates
     //==========================================================================

@@ -37,8 +37,11 @@ static Result prim_pprop(Evaluator *eval, int argc, Value *args)
     REQUIRE_WORD_STR(args[0], name);
     REQUIRE_WORD_STR(args[1], property);
     
-    prop_put(name, property, args[2]);
-    
+    if (!prop_put(name, property, args[2]))
+    {
+        return result_error(ERR_OUT_OF_SPACE);
+    }
+
     return result_none();
 }
 

@@ -38,15 +38,20 @@ void tearDown(void)
 
 void test_init_free_nodes(void)
 {
-    // After init, should have all nodes free except node 0
-    TEST_ASSERT_EQUAL(mem_total_nodes(), mem_free_nodes());
+    // After init the only consumed space is the bootstrap atoms (newline
+    // marker, "true", "false"); every remaining word of the shared block
+    // is a potential node.
+    size_t init_atom_bytes = mem_total_atoms() - mem_free_atoms();
+    TEST_ASSERT_EQUAL(mem_total_nodes() + 1 - init_atom_bytes / 4,
+                      mem_free_nodes());
 }
 
 void test_init_free_atoms(void)
 {
-    // After init, atom table has the newline marker allocated (4 bytes: 1 char + null + 2 header)
-    // So free atoms should be total - 4
-    TEST_ASSERT_EQUAL(mem_total_atoms() - 4, mem_free_atoms());
+    // After init the atom table holds the bootstrap atoms — the newline
+    // marker (8 bytes), "true" (8), and "false" (12) — each laid out as
+    // [next:2][len:1][chars][nul][pad-to-4].
+    TEST_ASSERT_EQUAL(mem_total_atoms() - 28, mem_free_atoms());
 }
 
 void test_total_nodes(void)
@@ -339,9 +344,31 @@ void test_interned_atom_no_extra_memory(void)
     size_t free_before = mem_free_atoms();
     mem_atom("test", 4); // Same word
     size_t free_after = mem_free_atoms();
-    
+
     // Should not use more memory
     TEST_ASSERT_EQUAL(free_before, free_after);
+}
+
+void test_atom_intern_many_dedup(void)
+{
+    // 300 distinct atoms across 256 hash buckets guarantees multi-entry
+    // chains; re-interning must still find the exact original atoms.
+    char buf[16];
+    Node first_pass[300];
+    for (int i = 0; i < 300; i++)
+    {
+        int len = snprintf(buf, sizeof(buf), "w%d", i);
+        first_pass[i] = mem_atom(buf, (size_t)len);
+        TEST_ASSERT_TRUE(mem_is_word(first_pass[i]));
+    }
+
+    size_t free_before = mem_free_atoms();
+    for (int i = 0; i < 300; i++)
+    {
+        int len = snprintf(buf, sizeof(buf), "w%d", i);
+        TEST_ASSERT_EQUAL(first_pass[i], mem_atom(buf, (size_t)len));
+    }
+    TEST_ASSERT_EQUAL(free_before, mem_free_atoms());
 }
 
 void test_word_eq(void)
@@ -359,11 +386,12 @@ void test_words_equal(void)
     Node word2 = mem_atom("test", 4); // Same case, same atom
     Node word3 = mem_atom("TEST", 4); // Different case, different atom
     Node word4 = mem_atom("other", 5);
-    
+
     // Same atom nodes are equal
     TEST_ASSERT_TRUE(mem_words_equal(word1, word2));
-    // Different atoms (even just case difference) are not equal at atom level
-    TEST_ASSERT_FALSE(mem_words_equal(word1, word3));
+    // Case variants intern as distinct atoms but compare equal, matching
+    // classic Logo equal? semantics
+    TEST_ASSERT_TRUE(mem_words_equal(word1, word3));
     TEST_ASSERT_FALSE(mem_words_equal(word1, word4));
 }
 
@@ -391,6 +419,54 @@ void test_negative_number_as_atom(void)
 //============================================================================
 // Cons/List Tests
 //============================================================================
+
+// Exhaust the node pool, returning the head of the garbage chain so it
+// stays "allocated" for the duration of the test.
+static Node exhaust_node_pool(void)
+{
+    Node chain = NODE_NIL;
+    for (;;)
+    {
+        Node c = mem_cons(NODE_NIL, chain);
+        if (mem_is_nil(c))
+        {
+            return chain;
+        }
+        chain = c;
+    }
+}
+
+void test_list_append_builds_list(void)
+{
+    Node head = NODE_NIL;
+    Node tail = NODE_NIL;
+
+    TEST_ASSERT_TRUE(mem_list_append(&head, &tail, mem_atom_cstr("a")));
+    TEST_ASSERT_TRUE(mem_list_append(&head, &tail, mem_atom_cstr("b")));
+
+    TEST_ASSERT_TRUE(mem_word_eq(mem_car(head), "a", 1));
+    TEST_ASSERT_TRUE(mem_word_eq(mem_car(mem_cdr(head)), "b", 1));
+    TEST_ASSERT_TRUE(mem_is_nil(mem_cdr(mem_cdr(head))));
+}
+
+void test_list_append_fails_when_pool_exhausted(void)
+{
+    Node head = NODE_NIL;
+    Node tail = NODE_NIL;
+    Node item = mem_atom_cstr("a");
+
+    TEST_ASSERT_TRUE(mem_list_append(&head, &tail, item));
+    Node head_before = head;
+    Node tail_before = tail;
+
+    exhaust_node_pool();
+
+    // Append must report failure and leave the list untouched.
+    TEST_ASSERT_FALSE(mem_list_append(&head, &tail, item));
+    TEST_ASSERT_EQUAL(head_before, head);
+    TEST_ASSERT_EQUAL(tail_before, tail);
+    TEST_ASSERT_TRUE(mem_is_nil(mem_cdr(head)));
+}
 
 void test_cons_creates_list(void)
 {
@@ -668,22 +744,23 @@ void test_free_nodes_accurate(void)
     
     // Create an atom - this uses atom space but not node space
     Node word = mem_atom("x", 1);
-    // Note: atom allocation reduces potential_nodes by 1 (4 bytes = 1 node)
-    
+    // Note: the atom entry is ALIGN4(2+1+1+1) = 8 bytes, reducing
+    // potential_nodes by 2 (4 bytes = 1 node)
+
     // Create two cons cells
     mem_cons(word, NODE_NIL);
     mem_cons(word, NODE_NIL);
-    
-    // After creating 2 nodes and 1 atom (4 bytes), we should have:
+
+    // After creating 2 nodes and 1 atom (8 bytes), we should have:
     // - 2 fewer nodes (from cons cells)
-    // - 1 fewer potential node (from atom taking 4 bytes)
-    TEST_ASSERT_EQUAL(initial - 3, mem_free_nodes());
-    
+    // - 2 fewer potential nodes (from the atom entry)
+    TEST_ASSERT_EQUAL(initial - 4, mem_free_nodes());
+
     // After GC with no roots, both cons cells should be freed
-    // But the atom still takes space, so we get back 2 nodes, not 3
+    // But the atom still takes space, so we get back 2 nodes, not 4
     mem_gc(NULL, 0);
-    
-    TEST_ASSERT_EQUAL(initial - 1, mem_free_nodes());
+
+    TEST_ASSERT_EQUAL(initial - 2, mem_free_nodes());
 }
 
 //============================================================================
@@ -1113,6 +1190,7 @@ int main(void)
     RUN_TEST(test_different_atoms);
     RUN_TEST(test_atom_uses_memory);
     RUN_TEST(test_interned_atom_no_extra_memory);
+    RUN_TEST(test_atom_intern_many_dedup);
     RUN_TEST(test_word_eq);
     RUN_TEST(test_words_equal);
     RUN_TEST(test_empty_word);
@@ -1120,6 +1198,8 @@ int main(void)
     RUN_TEST(test_negative_number_as_atom);
 
     // Cons/Lists
+    RUN_TEST(test_list_append_builds_list);
+    RUN_TEST(test_list_append_fails_when_pool_exhausted);
     RUN_TEST(test_cons_creates_list);
     RUN_TEST(test_cons_uses_node);
     RUN_TEST(test_car_of_list);

@@ -17,8 +17,8 @@ diff as given — do not ask the author to "run the tests" or "write tests first
 ### 1. Floating point — single precision only
 - The RP2350 has hardware **single-precision** float only. Flag any `double`,
   `long double`, or `%lf` format specifier in interpreter code.
-- Flag double-precision libm calls where an `f` variant exists: `sqrt`→`sqrtf`,
-  `sin`→`sinf`, `cos`→`cosf`, `fabs`→`fabsf`, `pow`→`powf`, `atan`→`atanf`, etc.
+- Flag double-precision libm calls where an `f` variant exists
+  (`sqrt`→`sqrtf`, `sin`→`sinf`, `pow`→`powf`, `fabs`→`fabsf`, etc.).
 - Flag float literals without an `f` suffix in numeric code (e.g. `1.0` → `1.0f`),
   since an un-suffixed literal promotes the whole expression to double.
 
@@ -55,12 +55,14 @@ diff as given — do not ask the author to "run the tests" or "write tests first
   degrade to an `ERR_*`, not crash.
 - Standard C only (C11+). Flag new third-party dependencies and non-portable
   constructs that would not cross-compile under the Pico SDK.
-- LittleFS restore (`logo_lfs_restore`) is intentionally **sparse**: it rewrites
-  only in-use blocks. littlefs replaces the whole filesystem from the restored
-  superblock and erases free blocks on demand, so this is a full logical replace
-  — do not flag it as "incomplete erasure" or ask for a whole-volume erase.
+- LittleFS restore (`logo_lfs_restore`) is intentionally **sparse**: littlefs
+  replaces the filesystem from the restored superblock and erases free blocks
+  on demand — a full logical replace. Don't flag it as incomplete erasure.
 
 ## What NOT to comment on
 - Pure style or formatting that already matches the surrounding code.
 - Pre-existing issues outside the diff.
-- Requests to run tests, build, or add tests before merging — review the diff itself.
+- Requests to run/build/add tests before merging — review the diff itself.
+- `Result.value` sits outside the `Result` union; all constructors zero-fill
+  unset members, so `result.value.type` is a valid tag (`VALUE_NONE`) for any
+  status — defined behaviour, not uninitialized.

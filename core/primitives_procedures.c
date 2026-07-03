@@ -519,9 +519,9 @@ static Result prim_primitivep(Evaluator *eval, int argc, Value *args)
     
     if (primitive_find(name))
     {
-        return result_ok(value_word(mem_atom("true", 4)));
+        return result_ok(value_bool(true));
     }
-    return result_ok(value_word(mem_atom("false", 5)));
+    return result_ok(value_bool(false));
 }
 
 // definedp "name - outputs true if name is a user-defined procedure
@@ -532,9 +532,9 @@ static Result prim_definedp(Evaluator *eval, int argc, Value *args)
     
     if (proc_exists(name))
     {
-        return result_ok(value_word(mem_atom("true", 4)));
+        return result_ok(value_bool(true));
     }
-    return result_ok(value_word(mem_atom("false", 5)));
+    return result_ok(value_bool(false));
 }
 
 // copydef "name "newname - copies the definition of name to newname

@@ -23,11 +23,11 @@ static Result prim_wifi_connected(Evaluator *eval, int argc, Value *args)
     if (io && io->hardware && io->hardware->ops && io->hardware->ops->wifi_is_connected)
     {
         bool connected = io->hardware->ops->wifi_is_connected();
-        return result_ok(value_word(mem_atom(connected ? "true" : "false", connected ? 4 : 5)));
+        return result_ok(value_bool(connected));
     }
 
     // WiFi not available - return false
-    return result_ok(value_word(mem_atom("false", 5)));
+    return result_ok(value_bool(false));
 }
 
 // wifi.connect ssid password
@@ -199,8 +199,7 @@ static Result prim_tls_supported(Evaluator *eval, int argc, Value *args)
     LogoIO *io = primitives_get_io();
     bool supported = io && io->hardware && io->hardware->ops &&
                      io->hardware->ops->network_tls_connect;
-    return result_ok(value_word(mem_atom(supported ? "true" : "false",
-                                         supported ? 4 : 5)));
+    return result_ok(value_bool(supported));
 }
 
 void primitives_wifi_init(void)

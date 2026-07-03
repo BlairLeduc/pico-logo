@@ -75,7 +75,7 @@ static Result prim_true(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc); UNUSED(args);
 
-    Node true_word = mem_atom_cstr("true");
+    Node true_word = mem_true_node;
     return result_ok(value_word(true_word));
 }
 
@@ -83,7 +83,7 @@ static Result prim_false(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc); UNUSED(args);
 
-    Node false_word = mem_atom_cstr("false");
+    Node false_word = mem_false_node;
     return result_ok(value_word(false_word));
 }
 

@@ -502,6 +502,104 @@ void test_uppercase(void)
 }
 
 //==========================================================================
+// Out-of-Nodes Error Tests
+//==========================================================================
+
+// Exhaust the node pool so any further mem_cons fails. The garbage chain
+// is reclaimed when the scaffold re-inits memory in tearDown.
+static void exhaust_node_pool(void)
+{
+    Node chain = NODE_NIL;
+    for (;;)
+    {
+        Node c = mem_cons(NODE_NIL, chain);
+        if (mem_is_nil(c))
+        {
+            return;
+        }
+        chain = c;
+    }
+}
+
+void test_fput_out_of_nodes_errors(void)
+{
+    run_string("make \"l [2 3]");
+    exhaust_node_pool();
+
+    Result r = eval_string("fput 1 :l");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+}
+
+void test_butlast_out_of_nodes_errors(void)
+{
+    // The copy loop must report the failure, not return a truncated list.
+    run_string("make \"l [1 2 3 4]");
+    exhaust_node_pool();
+
+    Result r = eval_string("butlast :l");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+}
+
+void test_list_literal_out_of_nodes_errors(void)
+{
+    exhaust_node_pool();
+
+    Result r = eval_string("print [a b c]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+}
+
+// Exhaust the atom table so further interning fails. Atoms needed by the
+// test itself must be interned before calling this.
+static void exhaust_atom_table(void)
+{
+    char buf[16];
+    for (int i = 0;; i++)
+    {
+        int len = snprintf(buf, sizeof(buf), "a%d", i);
+        if (mem_is_nil(mem_atom(buf, (size_t)len)))
+        {
+            return;
+        }
+    }
+}
+
+void test_word_of_numbers_out_of_atoms_errors(void)
+{
+    // number_to_word interns the formatted number; on atom exhaustion it
+    // returns NIL and word must error, not crash on a NULL string.
+    exhaust_atom_table();
+
+    Result r = eval_string("word 12345 678");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+}
+
+void test_word_result_out_of_atoms_errors(void)
+{
+    // Inputs are interned ahead of time; only the concatenated result is
+    // new, so its interning is the failure point.
+    mem_atom_cstr("qq");
+    mem_atom_cstr("rr");
+    exhaust_atom_table();
+
+    Result r = eval_string("word \"qq \"rr");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+}
+
+void test_count_of_number_out_of_atoms_errors(void)
+{
+    exhaust_atom_table();
+
+    Result r = eval_string("count 98765");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+}
+
+//==========================================================================
 // Comparison Tests (before?, equal?)
 //==========================================================================
 
@@ -543,6 +641,42 @@ void test_equalp_numbers(void)
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
     TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+}
+
+void test_equalp_words_case_insensitive(void)
+{
+    // Word comparison ignores case (classic Logo semantics)
+    Result r = eval_string("equal? \"Hello \"hello");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("true", value_to_string(r.value));
+
+    r = eval_string("equal? \"TRUE \"true");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("true", value_to_string(r.value));
+}
+
+void test_equals_operator_case_insensitive(void)
+{
+    Result r = eval_string("\"A = \"a");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("true", value_to_string(r.value));
+}
+
+void test_equalp_list_elements_case_insensitive(void)
+{
+    Result r = eval_string("equal? [Alpha Beta] [alpha beta]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("true", value_to_string(r.value));
+}
+
+void test_beforep_stays_case_sensitive(void)
+{
+    // before? compares ASCII codes per the reference: all uppercase letters
+    // come before all lowercase letters. Case-insensitive equal? must not
+    // leak into it.
+    Result r = eval_string("before? \"ZEBRA \"apple");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("true", value_to_string(r.value));
 }
 
 void test_equalp_lists(void)
@@ -829,6 +963,16 @@ int main(void)
     RUN_TEST(test_equalp_words_false);
     RUN_TEST(test_equalp_numbers);
     RUN_TEST(test_equalp_lists);
+    RUN_TEST(test_equalp_words_case_insensitive);
+    RUN_TEST(test_equals_operator_case_insensitive);
+    RUN_TEST(test_equalp_list_elements_case_insensitive);
+    RUN_TEST(test_beforep_stays_case_sensitive);
+    RUN_TEST(test_word_of_numbers_out_of_atoms_errors);
+    RUN_TEST(test_word_result_out_of_atoms_errors);
+    RUN_TEST(test_count_of_number_out_of_atoms_errors);
+    RUN_TEST(test_fput_out_of_nodes_errors);
+    RUN_TEST(test_butlast_out_of_nodes_errors);
+    RUN_TEST(test_list_literal_out_of_nodes_errors);
     
     // Type predicates
     RUN_TEST(test_listp_true);

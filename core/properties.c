@@ -136,30 +136,62 @@ static Node find_property_in_entry(Node entry, const char *property)
     return NODE_NIL;
 }
 
-void prop_put(const char *name, const char *property, Value value)
+bool prop_put(const char *name, const char *property, Value value)
 {
     Node name_atom = mem_atom_cstr(name);
     Node prop_atom = mem_atom_cstr(property);
     Node val_node = prop_value_to_node(value);
-    
+
+    // Atom-table exhaustion: interning the name/property (or formatting a
+    // numeric value into a word) can fail. Storing NODE_NIL in their place
+    // would silently corrupt the property list, so fail instead. A NIL
+    // val_node from a LIST value is the legitimate empty list, not an error.
+    if (mem_is_nil(name_atom) || mem_is_nil(prop_atom))
+    {
+        return false;
+    }
+    if (mem_is_nil(val_node) && value_is_number(value))
+    {
+        return false;
+    }
+
     // Find existing entry for this name
     Node entry = find_entry(name);
-    
+
     if (mem_is_nil(entry))
     {
-        // Create new entry: [name property value]
+        // Create new entry: [name property value]. Check each cell: on node
+        // exhaustion we must fail without committing a malformed entry (or,
+        // worse, replacing property_lists with NODE_NIL and losing them all).
         Node new_entry = mem_cons(val_node, NODE_NIL);
+        if (mem_is_nil(new_entry))
+        {
+            return false;
+        }
         new_entry = mem_cons(prop_atom, new_entry);
+        if (mem_is_nil(new_entry))
+        {
+            return false;
+        }
         new_entry = mem_cons(name_atom, new_entry);
-        
+        if (mem_is_nil(new_entry))
+        {
+            return false;
+        }
+
         // Add to front of property_lists
-        property_lists = mem_cons(new_entry, property_lists);
+        Node new_head = mem_cons(new_entry, property_lists);
+        if (mem_is_nil(new_head))
+        {
+            return false;
+        }
+        property_lists = new_head;
     }
     else
     {
         // Entry exists, find or add property
         Node prop_cell = find_property_in_entry(entry, property);
-        
+
         if (!mem_is_nil(prop_cell))
         {
             // Property exists, update the value (next cell after prop_cell)
@@ -175,11 +207,20 @@ void prop_put(const char *name, const char *property, Value value)
             // Entry is [name existing_props...]
             // We insert [property value] after the name
             Node rest = mem_cdr(entry);
-            Node new_pair = mem_cons(val_node, rest);
-            new_pair = mem_cons(prop_atom, new_pair);
+            Node pair_tail = mem_cons(val_node, rest);
+            if (mem_is_nil(pair_tail))
+            {
+                return false;
+            }
+            Node new_pair = mem_cons(prop_atom, pair_tail);
+            if (mem_is_nil(new_pair))
+            {
+                return false;
+            }
             mem_set_cdr(entry, new_pair);
         }
     }
+    return true;
 }
 
 bool prop_get(const char *name, const char *property, Value *out)

@@ -29,20 +29,24 @@ static Result prim_battery_level(Evaluator *eval, int argc, Value *args)
         io->hardware->ops->get_battery_level(&level, &charging);
     }
 
-    Node list = NODE_NIL;
-
-    if (charging)
-    {
-        list = mem_cons(mem_atom("true", 4), list);
-    }
-    else
-    {
-        list = mem_cons(mem_atom("false", 5), list);
-    }
-    
     char buf[32];
     format_number(buf, sizeof(buf), level);
-    list = mem_cons(mem_atom_cstr(buf), list);
+    Node level_atom = mem_atom_cstr(buf);
+    if (mem_is_nil(level_atom))
+    {
+        return result_error(ERR_OUT_OF_SPACE); // atom table exhausted
+    }
+
+    Node list = mem_cons(charging ? mem_true_node : mem_false_node, NODE_NIL);
+    if (mem_is_nil(list))
+    {
+        return result_error(ERR_OUT_OF_SPACE);
+    }
+    list = mem_cons(level_atom, list);
+    if (mem_is_nil(list))
+    {
+        return result_error(ERR_OUT_OF_SPACE);
+    }
 
     return result_ok(value_list(list));
 }

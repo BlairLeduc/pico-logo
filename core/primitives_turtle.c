@@ -564,7 +564,7 @@ static Result prim_shownp(Evaluator *eval, int argc, Value *args)
         visible = turtle->get_visible();
     }
 
-    return result_ok(value_word(mem_atom(visible ? "true" : "false", visible ? 4 : 5)));
+    return result_ok(value_bool(visible));
 }
 
 //==========================================================================
@@ -671,7 +671,7 @@ static Result prim_dotp(Evaluator *eval, int argc, Value *args)
         has_dot = turtle->dot_at(x, y);
     }
 
-    return result_ok(value_word(mem_atom(has_dot ? "true" : "false", has_dot ? 4 : 5)));
+    return result_ok(value_bool(has_dot));
 }
 
 // fill - Fill enclosed area

@@ -101,9 +101,9 @@ static Result prim_namep(Evaluator *eval, int argc, Value *args)
     
     if (var_exists(name))
     {
-        return result_ok(value_word(mem_atom("true", 4)));
+        return result_ok(value_bool(true));
     }
-    return result_ok(value_word(mem_atom("false", 5)));
+    return result_ok(value_bool(false));
 }
 
 void primitives_variables_init(void)

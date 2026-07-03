@@ -382,6 +382,20 @@ Node token_source_get_position(TokenSource *ts)
     return NODE_NIL;
 }
 
+// Mark the list position this source will resume from (GC root support).
+// Lexer sources read raw text and hold no nodes.
+void token_source_gc_mark(const TokenSource *ts)
+{
+    if (ts->type == TOKEN_SOURCE_NODE_ITERATOR)
+    {
+        mem_gc_mark(ts->node_iter.current);
+        if (ts->node_iter.has_pending_sublist)
+        {
+            mem_gc_mark(ts->node_iter.pending_sublist);
+        }
+    }
+}
+
 // Restore position from saved Node (for CPS continuation)
 void token_source_set_position(TokenSource *ts, Node position)
 {

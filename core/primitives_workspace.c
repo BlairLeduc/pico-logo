@@ -13,6 +13,7 @@
 #include "memory.h"
 #include "error.h"
 #include "eval.h"
+#include "frame.h"
 #include "format.h"
 #include "help.h"
 #include "devices/io.h"
@@ -740,16 +741,39 @@ static Result prim_nodes(Evaluator *eval, int argc, Value *args)
 // Runs garbage collection to free up as many nodes as possible
 static Result prim_recycle(Evaluator *eval, int argc, Value *args)
 {
-    UNUSED(eval); UNUSED(argc); UNUSED(args);
-    
-    // Mark all roots: variables, procedure bodies, and property lists
+    UNUSED(argc); UNUSED(args);
+
+    // Mark the workspace roots: variables, procedure bodies, property lists
     var_gc_mark_all();
     proc_gc_mark_all();
     prop_gc_mark_all();
-    
+
+    // Mark everything the live evaluation still references: procedure
+    // frames (parameters and locals), in-flight operations on the op stack
+    // (loop bodies, saved token positions, staged arguments), the token
+    // source we are currently reading from, and any pending tail call.
+    // Suspended parent evaluators (e.g. across a pause) are covered too:
+    // their state lives on the shared op stack.
+    frame_gc_mark_all(proc_get_frame_stack());
+    op_stack_gc_mark(eval->op_stack);
+    token_source_gc_mark(&eval->token_source);
+
+    TailCall *tc = proc_get_tail_call();
+    if (tc->is_tail_call)
+    {
+        for (int i = 0; i < tc->arg_count; i++)
+        {
+            Value v = tc->args[i];
+            if (v.type == VALUE_WORD || v.type == VALUE_LIST)
+            {
+                mem_gc_mark(v.as.node);
+            }
+        }
+    }
+
     // Sweep unmarked nodes
     mem_gc_sweep();
-    
+
     return result_none();
 }
 

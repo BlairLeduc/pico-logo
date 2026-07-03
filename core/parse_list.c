@@ -15,28 +15,6 @@
 #include "lexer.h"
 #include "memory.h"
 
-// Append a freshly built element cell (a single-cell list whose car is the
-// element) to the list under construction. Updates *head and *tail as
-// needed. Returns false if cell allocation failed.
-static bool append_element(Node element, Node *head, Node *tail)
-{
-    Node new_cell = mem_cons(element, NODE_NIL);
-    if (mem_is_nil(new_cell))
-    {
-        return false;
-    }
-    if (mem_is_nil(*head))
-    {
-        *head = new_cell;
-    }
-    else
-    {
-        mem_set_cdr(*tail, new_cell);
-    }
-    *tail = new_cell;
-    return true;
-}
-
 // Parse a list body from the lexer up to a matching TOKEN_RIGHT_BRACKET,
 // TOKEN_EOF, or TOKEN_ERROR. Nested lists are parsed recursively against
 // the same lexer so bracket matching mirrors the main parser exactly.
@@ -124,7 +102,7 @@ static ParseListResult parse_list_body(Lexer *lexer)
         if (!have_element)
             continue;
 
-        if (!append_element(element, &head, &tail))
+        if (!mem_list_append(&head, &tail, element))
         {
             return (ParseListResult){.node = NODE_NIL, .success = false};
         }

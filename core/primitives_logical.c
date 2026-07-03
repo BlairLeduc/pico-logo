@@ -47,7 +47,7 @@ static Result prim_and(Evaluator *eval, int argc, Value *args)
         }
         result = result && b;
     }
-    return result_ok(value_word(mem_atom_cstr(result ? "true" : "false")));
+    return result_ok(value_bool(result));
 }
 
 // or - outputs true if any argument is true, false otherwise
@@ -64,7 +64,7 @@ static Result prim_or(Evaluator *eval, int argc, Value *args)
         }
         result = result || b;
     }
-    return result_ok(value_word(mem_atom_cstr(result ? "true" : "false")));
+    return result_ok(value_bool(result));
 }
 
 // not - outputs true if argument is false, false if argument is true

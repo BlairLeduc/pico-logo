@@ -43,7 +43,6 @@ extern "C"
         OP_DO_WHILE,      // do.while [body] [pred]
         OP_DO_UNTIL,      // do.until [body] [pred]
         OP_FOR,           // for [var start limit step] [body]
-        OP_RUN,           // run [list]
         OP_CATCH,         // catch "tag [body]
         OP_PROC_CALL,     // User procedure call (frame + body execution)
         OP_EXPR_EVAL,     // Expression evaluation resume after deferred proc call
@@ -80,33 +79,15 @@ extern "C"
         uint8_t phase;       // 0 = push branch, 1 = branch completed
     } IfState;
 
+    // Shared state for the four predicate-driven loops (OP_WHILE, OP_UNTIL,
+    // OP_DO_WHILE, OP_DO_UNTIL); the op kind selects body-first and
+    // continue-on-true behaviour in step_loop.
     typedef struct
     {
         Node predicate;
         Node body;
-        uint8_t phase;       // 0 = evaluate predicate, 1 = execute body
-    } WhileState;
-
-    typedef struct
-    {
-        Node predicate;
-        Node body;
-        uint8_t phase;       // 0 = evaluate predicate, 1 = execute body
-    } UntilState;
-
-    typedef struct
-    {
-        Node body;
-        Node predicate;
-        uint8_t phase;       // 0 = execute body, 1 = evaluate predicate
-    } DoWhileState;
-
-    typedef struct
-    {
-        Node body;
-        Node predicate;
-        uint8_t phase;       // 0 = execute body, 1 = evaluate predicate
-    } DoUntilState;
+        uint8_t phase;       // LOOP_PHASE_* in eval_steps.c
+    } LoopState;
 
     typedef struct
     {
@@ -121,11 +102,6 @@ extern "C"
         bool in_procedure;   // Whether we're in a procedure scope
         uint8_t phase;       // 0 = loop iteration, 1 = cleanup
     } ForState;
-
-    typedef struct
-    {
-        Node body;            // The list to run
-    } RunState;
 
     typedef struct
     {
@@ -227,12 +203,8 @@ extern "C"
             RepeatState repeat;
             ForeverState forever;
             IfState if_state;
-            WhileState while_state;
-            UntilState until_state;
-            DoWhileState do_while;
-            DoUntilState do_until;
+            LoopState loop;
             ForState for_state;
-            RunState run;
             CatchState catch_state;
             ProcCallState proc_call;
             ExprEvalState expr_eval;
@@ -277,6 +249,13 @@ extern "C"
     // Transient storage for variadic deferred primitive arguments.
     int op_stack_alloc_prim_args(OpStack *stack, int capacity);
     Value *op_stack_get_prim_args(OpStack *stack, int base);
+
+    // Mark every node reachable from in-flight operations as a GC root:
+    // saved token-source positions, loop bodies/predicates, staged argument
+    // values, pending expression operands, and inter-phase result values.
+    // Must be called (along with the frame stack and workspace roots) before
+    // mem_gc_sweep() whenever evaluation may be in progress.
+    void op_stack_gc_mark(OpStack *stack);
 
 #ifdef __cplusplus
 }

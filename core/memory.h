@@ -69,8 +69,10 @@ extern "C"
     //    a) Atom (bit 29 == 0):
     //       Bits 31-30: 10 (NODE_TYPE_WORD)
     //       Bit  29:    0
-    //       Bits 28-0:  Atom table offset (atom offsets are always well below
-    //                   2^29, so they never collide with the blob bit)
+    //       Bits 28-0:  Atom table offset. Atom offsets are capped at 32 KB
+    //                   (LOGO_ATOM_LIMIT in memory.c) so a word reference
+    //                   fits the 15-bit field of a 16-bit cell half; they
+    //                   never collide with the blob bit.
     //    b) Blob (bit 29 == 1): a large value held in the PSRAM blob heap.
     //       Bits 31-30: 10 (NODE_TYPE_WORD)
     //       Bit  29:    1
@@ -86,7 +88,10 @@ extern "C"
     //    Bits 31-16: Car index (16 bits) - index of car node in pool, or 0 for NIL
     //    Bits 15-0:  Cdr index (16 bits) - index of cdr node in pool, or 0 for NIL
     //
-    // With 16-bit indices, we can have up to 65535 nodes (256KB at 4 bytes each).
+    // Within a cell, the high bit of each 16-bit half marks a word reference
+    // and 0x7FFF is the empty-list sentinel (see memory.c), so pool indices
+    // are capped at 32766 nodes (~128KB at 4 bytes each) and atom offsets at
+    // 32KB. Of the LOGO_MEMORY_SIZE block, at most 32KB can ever be atoms.
     //
     typedef uint32_t Node;
 
@@ -147,7 +152,21 @@ extern "C"
 
     // Create a cons cell (list node) with car and cdr.
     // Returns NODE_NIL if out of memory.
+    //
+    // OVERFLOW: the node pool is a fixed region shared with the atom table;
+    // when it is exhausted (or an operand cannot be encoded in a 16-bit
+    // cell), mem_cons returns NODE_NIL. Callers building lists must check
+    // for this — silently consing NODE_NIL produces a truncated or empty
+    // list that looks valid. Use mem_list_append for the common
+    // build-with-tail-pointer loop; it reports the failure.
     Node mem_cons(Node car, Node cdr);
+
+    // Append `item` as the next element of a list under construction,
+    // maintaining *head and *tail. Start with *head == *tail == NODE_NIL.
+    // Returns false if cell allocation failed (the list built so far is
+    // unchanged); callers should surface ERR_OUT_OF_SPACE rather than
+    // return a truncated list.
+    bool mem_list_append(Node *head, Node *tail, Node item);
 
     // Intern a word (string) in the atom table.
     // If the word already exists, returns the existing node.
@@ -212,6 +231,13 @@ extern "C"
     // Special marker node used to represent newlines in procedure definitions.
     // This allows preserving line breaks inside brackets for pretty-printing.
     extern Node mem_newline_marker;
+
+    // The words "true" and "false", interned once at init. Predicates and
+    // comparisons run constantly; use these (or value_bool) instead of
+    // re-interning the strings. Atoms are never swept, so no GC rooting is
+    // needed.
+    extern Node mem_true_node;
+    extern Node mem_false_node;
 
     // Check if a node is the newline marker.
     bool mem_is_newline(Node n);

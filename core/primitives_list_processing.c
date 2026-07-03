@@ -842,21 +842,15 @@ static Result prim_map(Evaluator *eval, int argc, Value *args)
                 }
                 
                 // Append to result list
-                Node new_cell = mem_cons(result_node, NODE_NIL);
-                if (mem_is_nil(result_head))
+                if (!mem_list_append(&result_head, &result_tail, result_node))
                 {
-                    result_head = new_cell;
-                    result_tail = new_cell;
-                }
-                else
-                {
-                    mem_set_cdr(result_tail, new_cell);
-                    result_tail = new_cell;
+                    free(result_word);
+                    return result_error(ERR_OUT_OF_SPACE);
                 }
             }
         }
     }
-    
+
     if (output_word)
     {
         // Create result word from buffer
@@ -1066,16 +1060,9 @@ static Result prim_map_se(Evaluator *eval, int argc, Value *args)
                 Node list = r.value.as.node;
                 while (!mem_is_nil(list))
                 {
-                    Node new_cell = mem_cons(mem_car(list), NODE_NIL);
-                    if (mem_is_nil(result_head))
+                    if (!mem_list_append(&result_head, &result_tail, mem_car(list)))
                     {
-                        result_head = new_cell;
-                        result_tail = new_cell;
-                    }
-                    else
-                    {
-                        mem_set_cdr(result_tail, new_cell);
-                        result_tail = new_cell;
+                        return result_error(ERR_OUT_OF_SPACE);
                     }
                     list = mem_cdr(list);
                 }
@@ -1094,17 +1081,10 @@ static Result prim_map_se(Evaluator *eval, int argc, Value *args)
                 {
                     result_node = r.value.as.node;
                 }
-                
-                Node new_cell = mem_cons(result_node, NODE_NIL);
-                if (mem_is_nil(result_head))
+
+                if (!mem_list_append(&result_head, &result_tail, result_node))
                 {
-                    result_head = new_cell;
-                    result_tail = new_cell;
-                }
-                else
-                {
-                    mem_set_cdr(result_tail, new_cell);
-                    result_tail = new_cell;
+                    return result_error(ERR_OUT_OF_SPACE);
                 }
             }
             // None values and empty lists contribute nothing
@@ -1238,16 +1218,10 @@ static Result prim_filter(Evaluator *eval, int argc, Value *args)
                 else
                 {
                     // Append element to result list
-                    Node new_cell = mem_cons(elem, NODE_NIL);
-                    if (mem_is_nil(result_head))
+                    if (!mem_list_append(&result_head, &result_tail, elem))
                     {
-                        result_head = new_cell;
-                        result_tail = new_cell;
-                    }
-                    else
-                    {
-                        mem_set_cdr(result_tail, new_cell);
-                        result_tail = new_cell;
+                        free(result_word);
+                        return result_error(ERR_OUT_OF_SPACE);
                     }
                 }
             }
@@ -1860,19 +1834,13 @@ static Result prim_crossmap(Evaluator *eval, int argc, Value *args)
             }
             
             // Append to result list
-            Node new_cell = mem_cons(result_node, NODE_NIL);
-            if (mem_is_nil(result_head))
+            if (!mem_list_append(&result_head, &result_tail, result_node))
             {
-                result_head = new_cell;
-                result_tail = new_cell;
-            }
-            else
-            {
-                mem_set_cdr(result_tail, new_cell);
-                result_tail = new_cell;
+                free(element_storage);
+                return result_error(ERR_OUT_OF_SPACE);
             }
         }
-        
+
     next_combination:;
         // Advance to next combination (rightmost index first)
         int pos = data_count - 1;

@@ -618,6 +618,33 @@ void test_recycle_preserves_live_data(void)
     TEST_ASSERT_EQUAL_STRING("hello\n", output_buffer);
 }
 
+void test_recycle_inside_repeat_body(void)
+{
+    // The repeat body list is only reachable from the op stack; recycle
+    // must not sweep it mid-loop.
+    reset_output();
+    Result r = eval_string("repeat 3 [recycle print \"hello]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("hello\nhello\nhello\n", output_buffer);
+}
+
+void test_recycle_preserves_procedure_locals(void)
+{
+    // A local bound to a runtime-built list is only reachable through the
+    // frame stack; recycle must mark frame bindings. The junk allocations
+    // after recycle reuse any wrongly-freed cells, exposing the corruption.
+    Result r = eval_string(
+        "define \"f [[] [local \"x] [make \"x list 1 2] [recycle] "
+        "[make \"junk1 [9 9 9 9 9 9]] [make \"junk2 [8 8 8 8 8 8]] "
+        "[output :x]]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    reset_output();
+    r = eval_string("print f");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("1 2\n", output_buffer);
+}
+
 //==========================================================================
 // Erase Tests (erall, erase, ern, erns, erps)
 //==========================================================================
@@ -1097,6 +1124,47 @@ void test_primitives_includes_itself(void)
     TEST_ASSERT_EQUAL_STRING("true\n", output_buffer);
 }
 
+void test_primitive_find_all_registered(void)
+{
+    // Every registered name must resolve through the sorted lookup.
+    int count = primitive_get_count();
+    TEST_ASSERT_TRUE(count > 0);
+    for (int i = 0; i < count; i++)
+    {
+        const Primitive *p = primitive_get_by_index(i);
+        TEST_ASSERT_NOT_NULL(p);
+        const Primitive *found = primitive_find(p->name);
+        TEST_ASSERT_NOT_NULL(found);
+        TEST_ASSERT_EQUAL_STRING(p->name, found->name);
+        TEST_ASSERT_EQUAL_PTR(p->func, found->func);
+    }
+}
+
+void test_primitive_find_case_insensitive(void)
+{
+    const Primitive *lower = primitive_find("forward");
+    TEST_ASSERT_NOT_NULL(lower);
+    TEST_ASSERT_EQUAL_PTR(lower, primitive_find("FORWARD"));
+    TEST_ASSERT_EQUAL_PTR(lower, primitive_find("ForWard"));
+}
+
+void test_primitive_find_unknown_returns_null(void)
+{
+    TEST_ASSERT_NULL(primitive_find("no-such-primitive"));
+    // Probe names off both ends of the sorted order.
+    TEST_ASSERT_NULL(primitive_find("!"));
+    TEST_ASSERT_NULL(primitive_find("zzzzzz"));
+}
+
+void test_primitive_abbreviation_resolves_same_function(void)
+{
+    const Primitive *er = primitive_find("er");
+    const Primitive *erase = primitive_find("erase");
+    TEST_ASSERT_NOT_NULL(er);
+    TEST_ASSERT_NOT_NULL(erase);
+    TEST_ASSERT_EQUAL_PTR(erase->func, er->func);
+}
+
 //==========================================================================
 // Help Tests
 //==========================================================================
@@ -1200,6 +1268,8 @@ int main(void)
     RUN_TEST(test_recycle_runs_without_error);
     RUN_TEST(test_recycle_frees_memory);
     RUN_TEST(test_recycle_preserves_live_data);
+    RUN_TEST(test_recycle_inside_repeat_body);
+    RUN_TEST(test_recycle_preserves_procedure_locals);
 
     // primitives operation tests
     RUN_TEST(test_primitives_returns_list);
@@ -1208,6 +1278,10 @@ int main(void)
     RUN_TEST(test_primitives_list_is_sorted);
     RUN_TEST(test_primitives_excludes_user_procedures);
     RUN_TEST(test_primitives_includes_itself);
+    RUN_TEST(test_primitive_find_all_registered);
+    RUN_TEST(test_primitive_find_case_insensitive);
+    RUN_TEST(test_primitive_find_unknown_returns_null);
+    RUN_TEST(test_primitive_abbreviation_resolves_same_function);
     
     // Erase tests
     RUN_TEST(test_erase_removes_procedure);
