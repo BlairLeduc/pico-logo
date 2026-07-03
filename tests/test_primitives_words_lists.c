@@ -633,6 +633,64 @@ void test_shuffle_empty(void)
     TEST_ASSERT_TRUE(mem_is_nil(r.value.as.node));
 }
 
+// A PSRAM-backed region so blob words (longer than the 255-byte atom cap)
+// can be created; reverse/shuffle must handle them without overflowing
+// their word buffers.
+static _Alignas(8) uint8_t words_blob_region[64 * 1024];
+
+static void bind_long_blob_word(const char *varname, char *content, size_t len)
+{
+    logo_mem_set_aux_region(words_blob_region, sizeof(words_blob_region));
+    for (size_t i = 0; i < len; i++)
+    {
+        content[i] = (char)('a' + (i % 26));
+    }
+    Node blob = mem_word(content, len);
+    TEST_ASSERT_TRUE(mem_is_blob(blob));
+    TEST_ASSERT_TRUE(var_set(mem_word_ptr(mem_atom_cstr(varname)),
+                             value_word(blob)));
+}
+
+void test_reverse_long_blob_word(void)
+{
+    char content[300];
+    bind_long_blob_word("b", content, sizeof(content));
+
+    Result r = eval_string("reverse :b");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(sizeof(content), mem_word_len(r.value.as.node));
+    const char *rev = mem_word_ptr(r.value.as.node);
+    for (size_t i = 0; i < sizeof(content); i++)
+    {
+        TEST_ASSERT_EQUAL(content[sizeof(content) - 1 - i], rev[i]);
+    }
+}
+
+void test_shuffle_long_blob_word(void)
+{
+    char content[300];
+    bind_long_blob_word("b", content, sizeof(content));
+
+    Result r = eval_string("shuffle :b");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(value_is_word(r.value));
+    TEST_ASSERT_EQUAL(sizeof(content), mem_word_len(r.value.as.node));
+
+    // Permutation check: same character multiset as the input.
+    int want[26] = {0};
+    int got[26] = {0};
+    const char *out = mem_word_ptr(r.value.as.node);
+    for (size_t i = 0; i < sizeof(content); i++)
+    {
+        want[content[i] - 'a']++;
+        got[out[i] - 'a']++;
+    }
+    for (int c = 0; c < 26; c++)
+    {
+        TEST_ASSERT_EQUAL(want[c], got[c]);
+    }
+}
+
 //==========================================================================
 // Out-of-Nodes Error Tests
 //==========================================================================
@@ -1126,6 +1184,8 @@ int main(void)
     RUN_TEST(test_shuffle_list_is_permutation);
     RUN_TEST(test_shuffle_word_is_permutation);
     RUN_TEST(test_shuffle_empty);
+    RUN_TEST(test_reverse_long_blob_word);
+    RUN_TEST(test_shuffle_long_blob_word);
     RUN_TEST(test_fput_out_of_nodes_errors);
     RUN_TEST(test_butlast_out_of_nodes_errors);
     RUN_TEST(test_list_literal_out_of_nodes_errors);

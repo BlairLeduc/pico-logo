@@ -683,12 +683,29 @@ static Result prim_reverse(Evaluator *eval, int argc, Value *args)
     {
         const char *str = mem_word_ptr(obj.as.node);
         size_t len = mem_word_len(obj.as.node);
-        char buf[256];
+
+        // Blob words (PSRAM-backed) can exceed the 255-byte atom limit, so
+        // fall back to the heap for long inputs and build the result with
+        // mem_word, which blobs long outputs.
+        char stack_buf[256];
+        char *buf = stack_buf;
+        if (len > sizeof(stack_buf))
+        {
+            buf = malloc(len);
+            if (!buf)
+            {
+                return result_error(ERR_OUT_OF_SPACE);
+            }
+        }
         for (size_t i = 0; i < len; i++)
         {
             buf[i] = str[len - 1 - i];
         }
-        Node rev = mem_atom(buf, len);
+        Node rev = mem_word(buf, len);
+        if (buf != stack_buf)
+        {
+            free(buf);
+        }
         if (mem_is_nil(rev))
         {
             return result_error(ERR_OUT_OF_SPACE);
@@ -735,7 +752,20 @@ static Result prim_shuffle(Evaluator *eval, int argc, Value *args)
     {
         const char *str = mem_word_ptr(obj.as.node);
         size_t len = mem_word_len(obj.as.node);
-        char buf[256];
+
+        // Blob words (PSRAM-backed) can exceed the 255-byte atom limit, so
+        // fall back to the heap for long inputs and build the result with
+        // mem_word, which blobs long outputs.
+        char stack_buf[256];
+        char *buf = stack_buf;
+        if (len > sizeof(stack_buf))
+        {
+            buf = malloc(len);
+            if (!buf)
+            {
+                return result_error(ERR_OUT_OF_SPACE);
+            }
+        }
         memcpy(buf, str, len);
         // Fisher-Yates
         for (size_t i = len; i > 1; i--)
@@ -745,7 +775,11 @@ static Result prim_shuffle(Evaluator *eval, int argc, Value *args)
             buf[i - 1] = buf[j];
             buf[j] = tmp;
         }
-        Node shuffled = mem_atom(buf, len);
+        Node shuffled = mem_word(buf, len);
+        if (buf != stack_buf)
+        {
+            free(buf);
+        }
         if (mem_is_nil(shuffled))
         {
             return result_error(ERR_OUT_OF_SPACE);
