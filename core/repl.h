@@ -25,7 +25,7 @@ typedef enum {
     REPL_FLAG_NONE              = 0,
     REPL_FLAG_ALLOW_PROC_DEF    = 1 << 0,  // Allow "to...end" procedure definitions
     REPL_FLAG_ALLOW_CONTINUATION = 1 << 1,  // Allow multi-line bracket continuation
-    REPL_FLAG_EXIT_ON_EOF       = 1 << 2,  // Return RESULT_NONE on EOF instead of looping
+    REPL_FLAG_EXIT_ON_EOF       = 1 << 2,  // Return RESULT_EOF on EOF instead of looping
     REPL_FLAG_EXIT_ON_CO        = 1 << 3,  // Check for co (continue) flag and exit
 } ReplFlags;
 

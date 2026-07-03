@@ -1,0 +1,5 @@
+print thing "nope
+foo
+print 1 / 0
+print first []
+print 99

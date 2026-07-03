@@ -69,9 +69,9 @@ Companion documents:
 
 | Item | Status | Notes |
 |---|---|---|
-| Host REPL under piped stdin | todo | Planned: [P1](#p1--host-repl-stdin--ci) — currently hangs non-interactively |
-| CI: tests + firmware builds per PR | todo | Planned: [P1](#p1--host-repl-stdin--ci) |
-| Reference link/anchor checker | todo | Planned: [P1](#p1--host-repl-stdin--ci) — the 4 hand-fixed PDF hyperref warnings were this class of bug |
+| Host REPL under piped stdin | done | [P1](#p1--host-repl-stdin--ci): EOF now returns `RESULT_EOF`; prompts/banner suppressed when stdin is not a tty |
+| CI: tests + firmware builds per PR | done | [P1](#p1--host-repl-stdin--ci): `.github/workflows/ci.yml` — unit tests, e2e, 3 firmware presets, link check |
+| Reference link/anchor checker | done | [P1](#p1--host-repl-stdin--ci): `scripts/check_reference_anchors.py`; verified it catches the historical `#processor-limits` breaks |
 | Dependabot triage (16 alerts on default branch) | todo | Separate small task |
 | Lexer/parser fuzzing on host | todo | Backlog |
 
@@ -213,3 +213,4 @@ device (no graphics) degrades cleanly.
 | Date | Item | Change |
 |---|---|---|
 | 2026-07-03 | (all) | Roadmap created; P1–P5 planned, backlog triaged |
+| 2026-07-03 | P1 | Done: host REPL EOF/prompt fixes, e2e golden tests (`tests/e2e/`), CI workflow, anchor checker |

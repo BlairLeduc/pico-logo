@@ -254,7 +254,12 @@ Result repl_run(ReplState *state)
         {
             snprintf(prompt, sizeof(prompt), "%s?", state->proc_prefix);
         }
-        logo_io_console_write(state->io, prompt);
+        // Suppress prompts on non-interactive consoles (e.g. host stdin is a
+        // pipe or file) so scripted output is clean and diffable.
+        if (!state->io || !state->io->console || state->io->console->interactive)
+        {
+            logo_io_console_write(state->io, prompt);
+        }
         logo_io_flush(state->io);
 
         if (state->io && state->io->console)
@@ -280,10 +285,12 @@ Result repl_run(ReplState *state)
         
         if (len < 0)
         {
-            // EOF or error
+            // EOF or error. Return RESULT_EOF so callers can distinguish
+            // "input exhausted" (host: exit the process) from other exits
+            // like throw "toplevel (host: restart the REPL).
             if (state->flags & REPL_FLAG_EXIT_ON_EOF)
             {
-                return result_none();
+                return result_eof();
             }
             logo_io_write_line(state->io, "");
             continue;
