@@ -39,6 +39,7 @@ void logo_console_init(LogoConsole *console,
     console->screen = NULL;
     console->editor = NULL;
     console->input_syntax_depth = 0;
+    console->interactive = true;
     console->error_output.ops = NULL;
     console->context = context;
 }

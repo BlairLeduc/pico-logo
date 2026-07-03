@@ -1,0 +1,12 @@
+print 42
+print sum 1 2
+print 7 / 2
+print [a b c]
+show [a [b c]]
+print word "foo "bar
+print first [x y]
+print butfirst "hello
+print equal? "Hello "hello
+print count [1 2 3 4]
+make "x 10
+print :x * 2
