@@ -4,6 +4,7 @@
 //
 
 #include "primitives.h"
+#include "random.h"
 #include "devices/io.h"
 #include <stdint.h>
 #include <stdlib.h>
@@ -50,6 +51,7 @@ void primitives_init(void)
 {
     primitive_count = 0;
     primitives_sorted = false;
+    logo_random_reset(); // default (device/TRNG) randomness until rerandom
 
     // Initialize all primitive categories
     primitives_arithmetic_init();

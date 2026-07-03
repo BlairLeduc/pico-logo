@@ -109,6 +109,7 @@ add_library(logo_core
     core/parse_list.c
     core/procedures.c
     core/properties.c
+    core/random.c
     core/repl.c
     core/syntax_highlight.c
     core/token_source.c
@@ -384,6 +385,7 @@ if(BUILD_FOR_HOST)
         core/parse_list.c
         core/procedures.c
         core/properties.c
+        core/random.c
         core/repl.c
         core/syntax_highlight.c
         core/token_source.c
@@ -552,6 +554,7 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/core/parse_list.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/procedures.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/properties.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/random.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/repl.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/syntax_highlight.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/token_source.c

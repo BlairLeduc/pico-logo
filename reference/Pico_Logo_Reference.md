@@ -2457,7 +2457,7 @@ random _integer_
 
 `operation`
 
-Outputs a random non-negative integer less than _integer_.
+Outputs a random non-negative integer less than _integer_. Results come from the device's hardware random source, so every run is different; see [`rerandom`](#rerandom) to make them reproducible instead.
 
 **Example**:
 
@@ -2465,6 +2465,31 @@ Outputs a random non-negative integer less than _integer_.
 ; Pick a random seat row at the community rink
 ?pr random 20
 7
+```
+
+
+## rerandom
+
+rerandom  
+(rerandom _integer_)
+
+`command`
+
+Normally [`random`](#random), [`pick`](#pick), and [`shuffle`](#shuffle) draw from the device's hardware random source, so their results are unpredictable. `rerandom` switches them to a reproducible sequence: after running `rerandom`, the same sequence of results follows every time. Give an _integer_ input to select among different reproducible sequences. The effect lasts until the device is restarted.
+
+`rerandom` is useful for replaying a game or a bug exactly, and for producing the same results on every device in a classroom.
+
+**Example**:
+
+```logo
+?(rerandom 7)
+?pr random 100
+47
+?pr random 100
+92
+?(rerandom 7)
+?pr random 100
+47
 ```
 
 
