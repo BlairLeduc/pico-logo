@@ -397,6 +397,13 @@ if(BUILD_FOR_HOST)
         ${CMAKE_CURRENT_SOURCE_DIR}
     )
 
+    # core and devices are mutually dependent static libraries: core calls
+    # the device I/O layer, and devices/io.c calls core's syntax highlighter.
+    # Declaring the cycle makes CMake repeat the archives on the link line,
+    # which single-pass linkers (GNU ld) need.
+    target_link_libraries(logo_core logo_devices)
+    target_link_libraries(logo_devices logo_core)
+
     add_executable(logo
         devices/host/host_console.c
         devices/host/host_hardware.c
@@ -558,7 +565,13 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}
     )
 
+    # core and devices are mutually dependent static libraries: core calls
+    # the device I/O layer, and devices/io.c calls core's syntax highlighter.
+    # Declaring the cycle makes CMake repeat the archives on the link line,
+    # which single-pass linkers (GNU ld) need; Apple's linker is multi-pass
+    # and never noticed.
     target_link_libraries(logo_core logo_devices m)
+    target_link_libraries(logo_devices logo_core)
 
     # Allow LOGO_OP_STACK_DEPTH to be set via CMake cache variable
     if(DEFINED LOGO_OP_STACK_DEPTH)
