@@ -219,6 +219,23 @@ resumes:
 `touching?`, and Atari-style `when` demons. **Gate: a design doc PR before any
 implementation.**
 
+**Design doc:** [`multi-sprite-design.md`](multi-sprite-design.md) (draft v2
+for review). Scope grew twice:
+
+- The LCD update pipeline: the blocking CPU-paced blit and full-width
+  row-band dirty tracking cannot afford eight moving sprites, so M0 of the
+  design reworks the display path (tile dirty tracking, DMA-pipelined blit,
+  scanline sprite compositor, and a `setrefresh "auto|"manual` + `refresh`
+  policy) before any sprite work.
+- A survey of period/modern multi-turtle Logos (TI Logo, Atari Logo, TRS-80
+  Color Logo, LogoWriter/MicroWorlds, StarLogo/NetLogo, Scratch) from primary
+  sources, which reshaped the sprite model: full-colour variable-size
+  costumes (pool-backed, PSRAM tier), rotation styles + scaling, `setspeed`
+  autonomous motion with `freeze`/`thaw`, costume-list animation,
+  `stamp`/`snapsh`, `over?`/`colourunder`/`distance` sensing, and
+  expression-based `when` demons. Turtle-as-process (`launch`) is
+  explicitly designed-for but deferred to a P6 gate.
+
 The design doc must settle:
 - **Turtle model:** N turtles (SRAM budget suggests 8–16), per-turtle state
   (pos, heading, pen, shape, visibility, colour) — sized against the ~10%
@@ -256,3 +273,6 @@ device (no graphics) degrades cleanly.
 | 2026-07-04 | Backlog | Added help discoverability (keyword search, topic listing, "did you mean") |
 | 2026-07-04 | P4 | Rescoped: `setpensize`/`pensize` on hold (design notes preserved); help discoverability promoted into P4 alongside `arc` |
 | 2026-07-04 | P4 | Done: `arc` (segments via the device setpos path, no device changes); help keyword search + `(help)` category listing (chapter data from the generator); REPL "Did you mean" via bounded edit distance |
+| 2026-07-04 | P5 | Design draft: `multi-sprite-design.md` — scanline-composited sprites (8 turtles), tile dirty rects + DMA blit pipeline, refresh policy primitives, `touching?` masks in core, budgeted edge-triggered `when` demons; display-pipeline rework (M0) added as a prerequisite milestone |
+| 2026-07-04 | P5 | Design v2: prior-art survey from primary sources (TI Logo, Atari Logo, TRS-80 Color Logo manuals; LogoWriter/MicroWorlds, StarLogo, Scratch); modernized sprite model — colour costumes with rotation/scale, `setspeed`+`freeze`/`thaw`, `setanim`, `stamp`/`snapsh`, `over?`/`distance`, expression `when` demons; `launch` processes deferred to a P6 design gate |
+| 2026-07-04 | P5 | Open questions resolved with user: `tell` out-of-range errors; `over?`/`colourunder` first-active-only; demons stay armed at the REPL prompt (Atari-style); all four behaviour changes signed off (BMPs/`dot?` sprite-free, lowest-turtle queries, verbatim colour costumes) |
