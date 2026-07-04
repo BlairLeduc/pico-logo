@@ -500,16 +500,16 @@ static Result prim_savepic(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_FILE_EXISTS, "", pathname);
     }
 
-    // Resolve path with prefix for the actual save
-    char resolved[LOGO_STREAM_NAME_MAX];
-    char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
-    if (!full_path)
+    // Open through the I/O manager so the storage router picks the right
+    // filesystem (LittleFS root or /sd), then stream the BMP to it
+    LogoStream *stream = logo_io_open(io, pathname);
+    if (!stream)
     {
         return result_error(ERR_DISK_TROUBLE);
     }
 
-    // Call the turtle graphics save function
-    int err = turtle->gfx_save(full_path);
+    int err = turtle->gfx_save(stream);
+    logo_io_close(io, pathname);
     if (err != 0)
     {
         return result_error(ERR_DISK_TROUBLE);
@@ -544,16 +544,16 @@ static Result prim_loadpic(Evaluator *eval, int argc, Value *args)
         return result_error(ERR_FILE_NOT_FOUND);
     }
 
-    // Resolve path with prefix for the actual load
-    char resolved[LOGO_STREAM_NAME_MAX];
-    char *full_path = logo_io_resolve_path(io, pathname, resolved, sizeof(resolved));
-    if (!full_path)
+    // Open through the I/O manager so the storage router picks the right
+    // filesystem (LittleFS root or /sd), then read the BMP from it
+    LogoStream *stream = logo_io_open(io, pathname);
+    if (!stream)
     {
         return result_error(ERR_DISK_TROUBLE);
     }
 
-    // Call the turtle graphics load function
-    int err = turtle->gfx_load(full_path);
+    int err = turtle->gfx_load(stream);
+    logo_io_close(io, pathname);
     if (err != 0)
     {
         // Check for specific error codes

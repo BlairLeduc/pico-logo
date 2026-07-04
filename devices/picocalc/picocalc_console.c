@@ -860,14 +860,14 @@ static void turtle_fill(void)
     screen_gfx_update();
 }
 
-static int turtle_gfx_save(const char *filename)
+static int turtle_gfx_save(LogoStream *out)
 {
-    return screen_gfx_save(filename);
+    return screen_gfx_save(out);
 }
 
-static int turtle_gfx_load(const char *filename)
+static int turtle_gfx_load(LogoStream *in)
 {
-    int result = screen_gfx_load(filename);
+    int result = screen_gfx_load(in);
     screen_gfx_update();
     return result;
 }

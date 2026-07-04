@@ -83,13 +83,13 @@ extern "C"
         void (*set_window)(void);   // Turtle can go off-screen
         void (*set_wrap)(void);     // Turtle wraps around
 
-        // Save graphics screen to file
+        // Save graphics screen as a BMP to an open stream (caller closes)
         // Returns 0 on success, errno on failure
-        int (*gfx_save)(const char *filename);
+        int (*gfx_save)(LogoStream *out);
 
-        // Load graphics screen from file
-        // Returns 0 on success, errno on failure
-        int (*gfx_load)(const char *filename);
+        // Load graphics screen from a BMP read from an open stream (caller closes)
+        // Returns 0 on success, errno on failure (EINVAL = not a usable BMP)
+        int (*gfx_load)(LogoStream *in);
 
         // Palette functions
         // Set palette slot to RGB565 value (from 24-bit RGB components)

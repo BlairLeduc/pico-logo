@@ -16,7 +16,6 @@
 #include <pico/stdlib.h>
 
 #include "screen.h"
-#include "fat32.h"
 #include "dirty_tiles.h"
 #include "devices/font.h"
 #include "devices/logo-font.h"
@@ -902,17 +901,11 @@ bool screen_gfx_get_refresh_auto(void)
     return gfx_refresh_auto;
 }
 
-int screen_gfx_save(const char *filename)
+int screen_gfx_save(LogoStream *out)
 {
-    // Save the current graphics buffer to an 8-bit indexed color BMP file
-    fat32_file_t file;
-    fat32_error_t err = fat32_create(&file, filename);
-    if (err != FAT32_OK)
-    {
-        return (err == FAT32_ERROR_FILE_EXISTS) ? EEXIST : EIO;
-    }
-
-    size_t written;
+    // Save the current graphics buffer to an 8-bit indexed color BMP file.
+    // The caller opened the stream (via the storage router) and closes it.
+    logo_stream_clear_write_error(out);
 
     // --- BMP FILE HEADER ---
     uint8_t file_header[BMP_FILE_HEADER_SIZE] = {
@@ -927,7 +920,7 @@ int screen_gfx_save(const char *filename)
         (BMP_PIXEL_DATA_OFFSET >> 8) & 0xFF,
         (BMP_PIXEL_DATA_OFFSET >> 16) & 0xFF,
         (BMP_PIXEL_DATA_OFFSET >> 24) & 0xFF};
-    fat32_write(&file, file_header, BMP_FILE_HEADER_SIZE, &written);
+    logo_stream_write_bytes(out, (const char *)file_header, BMP_FILE_HEADER_SIZE);
 
     // --- DIB HEADER (BITMAPINFOHEADER) ---
     uint8_t dib_header[BMP_DIB_HEADER_SIZE] = {0};
@@ -956,7 +949,7 @@ int screen_gfx_save(const char *filename)
     dib_header[BMP_DIB_COLORS_USED_OFFSET] = 0;      // Colors used (0 = all)
     dib_header[BMP_DIB_IMPORTANT_COLORS_OFFSET] = 0; // Important colors (0 = all)
 
-    fat32_write(&file, dib_header, BMP_DIB_HEADER_SIZE, &written);
+    logo_stream_write_bytes(out, (const char *)dib_header, BMP_DIB_HEADER_SIZE);
 
     // --- COLOR PALETTE (256 entries, BGRA format) ---
     // Convert RGB565 palette to BGRA
@@ -976,7 +969,7 @@ int screen_gfx_save(const char *filename)
         
         // Write as BGRA
         uint8_t palette_entry[4] = {b8, g8, r8, 0};
-        fat32_write(&file, palette_entry, 4, &written);
+        logo_stream_write_bytes(out, (const char *)palette_entry, 4);
     }
 
     // --- PIXEL DATA (bottom-up, with row padding) ---
@@ -986,42 +979,33 @@ int screen_gfx_save(const char *filename)
     
     for (int y = SCREEN_HEIGHT - 1; y >= 0; y--)
     {
-        fat32_write(&file, gfx_buffer + y * SCREEN_WIDTH, SCREEN_WIDTH, &written);
+        logo_stream_write_bytes(out, (const char *)(gfx_buffer + y * SCREEN_WIDTH), SCREEN_WIDTH);
         if (padding_bytes > 0)
         {
-            fat32_write(&file, padding, padding_bytes, &written);
+            logo_stream_write_bytes(out, (const char *)padding, padding_bytes);
         }
     }
 
-    fat32_close(&file);
-    return 0;
+    logo_stream_flush(out);
+    return logo_stream_has_write_error(out) ? EIO : 0;
 }
 
-int screen_gfx_load(const char *filename)
+int screen_gfx_load(LogoStream *in)
 {
-    // Load an 8-bit indexed color BMP file into the graphics buffer and palette
-    fat32_file_t file;
-    fat32_error_t err = fat32_open(&file, filename);
-    if (err != FAT32_OK)
-    {
-        return (err == FAT32_ERROR_FILE_NOT_FOUND) ? ENOENT : EIO;
-    }
-
-    size_t bytes_read;
+    // Load an 8-bit indexed color BMP file into the graphics buffer and
+    // palette. The caller opened the stream (via the storage router) and
+    // closes it.
 
     // --- READ AND VALIDATE BMP FILE HEADER ---
     uint8_t file_header[BMP_FILE_HEADER_SIZE];
-    err = fat32_read(&file, file_header, BMP_FILE_HEADER_SIZE, &bytes_read);
-    if (err != FAT32_OK || bytes_read != BMP_FILE_HEADER_SIZE)
+    if (logo_stream_read_chars(in, (char *)file_header, BMP_FILE_HEADER_SIZE) != BMP_FILE_HEADER_SIZE)
     {
-        fat32_close(&file);
         return EIO;
     }
 
     // Check signature
     if (file_header[0] != 'B' || file_header[1] != 'M')
     {
-        fat32_close(&file);
         return EINVAL;
     }
 
@@ -1031,10 +1015,8 @@ int screen_gfx_load(const char *filename)
 
     // --- READ AND VALIDATE DIB HEADER ---
     uint8_t dib_header[BMP_DIB_HEADER_SIZE];
-    err = fat32_read(&file, dib_header, BMP_DIB_HEADER_SIZE, &bytes_read);
-    if (err != FAT32_OK || bytes_read != BMP_DIB_HEADER_SIZE)
+    if (logo_stream_read_chars(in, (char *)dib_header, BMP_DIB_HEADER_SIZE) != BMP_DIB_HEADER_SIZE)
     {
-        fat32_close(&file);
         return EIO;
     }
 
@@ -1048,16 +1030,13 @@ int screen_gfx_load(const char *filename)
     // Validate dimensions and format
     if (width != SCREEN_WIDTH || height != SCREEN_HEIGHT || bits_per_pixel != 8)
     {
-        fat32_close(&file);
         return EINVAL;
     }
 
     // --- READ COLOR PALETTE ---
     uint8_t palette_data[256 * 4];
-    err = fat32_read(&file, palette_data, 256 * 4, &bytes_read);
-    if (err != FAT32_OK || bytes_read != 256 * 4)
+    if (logo_stream_read_chars(in, (char *)palette_data, 256 * 4) != 256 * 4)
     {
-        fat32_close(&file);
         return EIO;
     }
 
@@ -1079,9 +1058,8 @@ int screen_gfx_load(const char *filename)
 
     // --- READ PIXEL DATA ---
     // Seek to pixel data offset
-    if (fat32_seek(&file, pixel_offset) != FAT32_OK)
+    if (!logo_stream_set_read_pos(in, (long)pixel_offset))
     {
-        fat32_close(&file);
         return EIO;
     }
 
@@ -1092,23 +1070,19 @@ int screen_gfx_load(const char *filename)
     // Read pixel data (bottom-up)
     for (int y = SCREEN_HEIGHT - 1; y >= 0; y--)
     {
-        err = fat32_read(&file, gfx_buffer + y * SCREEN_WIDTH, SCREEN_WIDTH, &bytes_read);
-        if (err != FAT32_OK || bytes_read != SCREEN_WIDTH)
+        if (logo_stream_read_chars(in, (char *)(gfx_buffer + y * SCREEN_WIDTH), SCREEN_WIDTH) != SCREEN_WIDTH)
         {
-            fat32_close(&file);
             return EIO;
         }
         if (padding_bytes > 0)
         {
-            if (fat32_read(&file, padding, padding_bytes, &bytes_read) != FAT32_OK || bytes_read != padding_bytes)
+            if (logo_stream_read_chars(in, (char *)padding, padding_bytes) != padding_bytes)
             {
-                fat32_close(&file);
                 return EIO;
             }
         }
     }
 
-    fat32_close(&file);
     screen_gfx_mark_all_dirty();  // Entire buffer was replaced
     return 0;
 }
