@@ -12,6 +12,7 @@
 #include "devices/io.h"
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>  // for strcasecmp
 
 //==========================================================================
 // Helper functions
@@ -171,6 +172,76 @@ static Result prim_textscreen(Evaluator *eval, int argc, Value *args)
 }
 
 //==========================================================================
+// setrefresh "auto | "manual - Select the display refresh policy
+//==========================================================================
+
+static Result prim_setrefresh(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
+
+    const char *mode = value_to_string(args[0]);
+    bool auto_mode;
+    if (strcasecmp(mode, "auto") == 0)
+    {
+        auto_mode = true;
+    }
+    else if (strcasecmp(mode, "manual") == 0)
+    {
+        auto_mode = false;
+    }
+    else
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, mode);
+    }
+
+    const LogoConsoleScreen *screen = get_screen_ops();
+    if (screen && screen->set_refresh_auto)
+    {
+        screen->set_refresh_auto(auto_mode);
+    }
+
+    return result_none();
+}
+
+//==========================================================================
+// refresh - Present pending drawing to the display now
+//==========================================================================
+
+static Result prim_refresh(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
+
+    const LogoConsoleScreen *screen = get_screen_ops();
+    if (screen && screen->refresh_now)
+    {
+        screen->refresh_now();
+    }
+
+    return result_none();
+}
+
+//==========================================================================
+// refreshmode - Output the current refresh policy (auto or manual)
+//==========================================================================
+
+static Result prim_refreshmode(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
+
+    const LogoConsoleScreen *screen = get_screen_ops();
+    bool auto_mode = true; // Devices without a screen are always "auto"
+    if (screen && screen->get_refresh_auto)
+    {
+        auto_mode = screen->get_refresh_auto();
+    }
+
+    const char *mode = auto_mode ? "auto" : "manual";
+    Node atom = mem_atom(mode, strlen(mode));
+    return result_ok(value_word(atom));
+}
+
+//==========================================================================
 // settextcolor (settc) [fg bg] - Set text foreground and background colors
 //==========================================================================
 
@@ -260,10 +331,16 @@ void primitives_text_init(void)
     
     primitive_register("textscreen", 0, prim_textscreen);
     primitive_register("ts", 0, prim_textscreen);
-    
+
+    // Refresh policy commands
+    primitive_register("setrefresh", 1, prim_setrefresh);
+    primitive_register("refresh", 0, prim_refresh);
+
     // Operations (queries)
     primitive_register("cursor", 0, prim_cursor);
-    
+
+    primitive_register("refreshmode", 0, prim_refreshmode);
+
     primitive_register("textcolor", 0, prim_textcolor);
     primitive_register("tc", 0, prim_textcolor);
 }

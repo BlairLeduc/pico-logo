@@ -38,17 +38,18 @@ static bool turtle_visible = TURTLE_DEFAULT_VISIBILITY; // Turtle visibility sta
 static uint16_t turtle_shapes[15][16];  // shapes[0] = shape 1, shapes[14] = shape 15
 static uint8_t turtle_current_shape = 0;
 
-// Background buffers for saving pixels under turtle before drawing
-// Shape 0 (line-drawn turtle) needs larger buffer due to rotation and line drawing
-// Shapes 1-15 (bitmap) use smaller 16x16 buffer
-#define SHAPE0_BG_SIZE 24
-#define BITMAP_BG_SIZE 16
-static uint8_t turtle_background_shape0[SHAPE0_BG_SIZE][SHAPE0_BG_SIZE];  // For shape 0
-static uint8_t turtle_background_bitmap[BITMAP_BG_SIZE][BITMAP_BG_SIZE];  // For shapes 1-15
-static int turtle_bg_saved_x;  // Screen X where background was saved (top-left)
-static int turtle_bg_saved_y;  // Screen Y where background was saved (top-left)
-static int turtle_bg_saved_size;  // Size of buffer that was saved (24 or 16)
-static bool turtle_bg_valid = false;  // Whether background has been saved
+// Rendered turtle raster for the screen compositor (screen_sprite_set).
+// The turtle glyph is never written into the canvas buffer; the screen
+// driver overlays this mask at blit time. Shape 0 (the line-drawn
+// triangle) rasterizes into 24x24 to accommodate rotation; bitmap shapes
+// 1-15 use 16x16. The raster is rebuilt lazily when the shape, the
+// heading (shape 0 only), or the shape data changes.
+#define SHAPE0_RASTER_SIZE 24
+#define BITMAP_RASTER_SIZE 16
+static uint8_t turtle_raster[SHAPE0_RASTER_SIZE * SHAPE0_RASTER_SIZE];
+static bool turtle_raster_valid = false;
+static uint8_t turtle_raster_shape = 0;   // shape the raster was built for
+static float turtle_raster_angle = 0.0f;  // heading it was built at (shape 0)
 
 // Boundary mode constants
 typedef enum {
@@ -270,6 +271,9 @@ static const LogoConsoleScreen picocalc_screen_ops = {
     .fullscreen = screen_fullscreen,
     .splitscreen = screen_splitscreen,
     .textscreen = screen_textscreen,
+    .set_refresh_auto = screen_gfx_set_refresh_auto,
+    .get_refresh_auto = screen_gfx_get_refresh_auto,
+    .refresh_now = screen_gfx_present,
 };
 
 //
@@ -325,14 +329,6 @@ static const LogoConsoleText picocalc_text_ops = {
 //  Turtle graphics functions
 //
 
-// Helper: wrap coordinate to screen bounds
-static inline int wrap_coord(int val, int max)
-{
-    val = val % max;
-    if (val < 0) val += max;
-    return val;
-}
-
 // Helper: check if turtle is visible on screen (for window mode)
 static bool turtle_should_draw(void)
 {
@@ -351,212 +347,158 @@ static bool turtle_should_draw(void)
     return true;
 }
 
-// Get the graphics frame buffer pointer
-static uint8_t *get_gfx_pixel(int x, int y)
+// Plot a line into the turtle raster with the same integer Bresenham as
+// screen_gfx_line, clipped to the raster bounds.
+static void raster_line(uint8_t *raster, int size, float fx1, float fy1,
+                        float fx2, float fy2)
 {
-    // Wrap coordinates
-    x = wrap_coord(x, SCREEN_WIDTH);
-    y = wrap_coord(y, SCREEN_HEIGHT);
-    return &screen_gfx_frame()[y * SCREEN_WIDTH + x];
+    int x1 = (int)(fx1 + 0.5f);
+    int y1 = (int)(fy1 + 0.5f);
+    int x2 = (int)(fx2 + 0.5f);
+    int y2 = (int)(fy2 + 0.5f);
+
+    int dx = x2 - x1;
+    int dy = y2 - y1;
+    int sx = (dx > 0) ? 1 : (dx < 0) ? -1 : 0;
+    int sy = (dy > 0) ? 1 : (dy < 0) ? -1 : 0;
+    dx = (dx < 0) ? -dx : dx;
+    dy = (dy < 0) ? -dy : dy;
+
+    int x = x1, y = y1;
+
+    #define RASTER_PLOT(px, py) do { \
+        if ((px) >= 0 && (px) < size && (py) >= 0 && (py) < size) \
+            raster[(py) * size + (px)] = 1; \
+    } while (0)
+
+    if (dx >= dy)
+    {
+        int err = 2 * dy - dx;
+        for (int i = 0; i <= dx; ++i)
+        {
+            RASTER_PLOT(x, y);
+            if (err > 0) { y += sy; err -= 2 * dx; }
+            err += 2 * dy;
+            x += sx;
+        }
+    }
+    else
+    {
+        int err = 2 * dx - dy;
+        for (int i = 0; i <= dy; ++i)
+        {
+            RASTER_PLOT(x, y);
+            if (err > 0) { x += sx; err -= 2 * dy; }
+            err += 2 * dx;
+            y += sy;
+        }
+    }
+
+    #undef RASTER_PLOT
 }
 
-// Save the background area under the turtle
-// For shape 0 (rotating): 24x24 centered at turtle position
-// For shapes 1-15 (non-rotating): 16x16 with bottom row at turtle_y
-static void turtle_save_background(void)
+// Rebuild the turtle raster if the shape, shape data, or (for shape 0)
+// the heading changed since it was last built.
+static void turtle_update_raster(void)
 {
-    // Shape 0 rotates, so we need larger buffer centered on turtle position
-    // Shapes 1-15 don't rotate, so smaller buffer extends above turtle position
+    if (turtle_raster_valid && turtle_raster_shape == turtle_current_shape &&
+        (turtle_current_shape != 0 || turtle_raster_angle == turtle_angle))
+    {
+        return;
+    }
+
     if (turtle_current_shape == 0)
     {
-        turtle_bg_saved_size = SHAPE0_BG_SIZE;
-        turtle_bg_saved_x = (int)turtle_x - SHAPE0_BG_SIZE / 2;
-        turtle_bg_saved_y = (int)turtle_y - SHAPE0_BG_SIZE / 2;  // Centered
-        
-        for (int row = 0; row < SHAPE0_BG_SIZE; row++)
-        {
-            for (int col = 0; col < SHAPE0_BG_SIZE; col++)
-            {
-                int sx = wrap_coord(turtle_bg_saved_x + col, SCREEN_WIDTH);
-                int sy = wrap_coord(turtle_bg_saved_y + row, SCREEN_HEIGHT);
-                turtle_background_shape0[row][col] = screen_gfx_frame()[sy * SCREEN_WIDTH + sx];
-            }
-        }
+        // Shape 0: the line-drawn turtle triangle, rotated to the heading.
+        // Base width 6 (half_base 3), height 7, position at centre of base;
+        // fits in 24x24 with the base centre at the raster centre.
+        memset(turtle_raster, 0, SHAPE0_RASTER_SIZE * SHAPE0_RASTER_SIZE);
+
+        float radians = turtle_angle * (float)(M_PI / 180.0);
+        float sin_a = sinf(radians);
+        float cos_a = cosf(radians);
+        float half_base = 3.0f;
+        float height = 7.0f;
+        float cx = SHAPE0_RASTER_SIZE / 2.0f;
+        float cy = SHAPE0_RASTER_SIZE / 2.0f;
+
+        // Base vertices perpendicular to the heading; tip along the heading
+        float x1 = cx + half_base * cos_a, y1 = cy + half_base * sin_a;
+        float x2 = cx - half_base * cos_a, y2 = cy - half_base * sin_a;
+        float x3 = cx + height * sin_a,    y3 = cy - height * cos_a;
+
+        raster_line(turtle_raster, SHAPE0_RASTER_SIZE, x1, y1, x2, y2);
+        raster_line(turtle_raster, SHAPE0_RASTER_SIZE, x2, y2, x3, y3);
+        raster_line(turtle_raster, SHAPE0_RASTER_SIZE, x3, y3, x1, y1);
     }
     else
     {
-        turtle_bg_saved_size = BITMAP_BG_SIZE;
-        turtle_bg_saved_x = (int)turtle_x - BITMAP_BG_SIZE / 2;
-        turtle_bg_saved_y = (int)turtle_y - 15; // Bottom row at turtle_y
-        
-        for (int row = 0; row < BITMAP_BG_SIZE; row++)
+        // Shapes 1-15: 16x16 bitmap (rows doubled from the user's 8 bits)
+        memset(turtle_raster, 0, BITMAP_RASTER_SIZE * BITMAP_RASTER_SIZE);
+
+        const uint16_t *shape = turtle_shapes[turtle_current_shape - 1];
+        for (int row = 0; row < 16; row++)
         {
-            for (int col = 0; col < BITMAP_BG_SIZE; col++)
+            uint16_t row_bits = shape[row];
+            if (row_bits == 0) continue;
+            for (int col = 0; col < 16; col++)
             {
-                int sx = wrap_coord(turtle_bg_saved_x + col, SCREEN_WIDTH);
-                int sy = wrap_coord(turtle_bg_saved_y + row, SCREEN_HEIGHT);
-                turtle_background_bitmap[row][col] = screen_gfx_frame()[sy * SCREEN_WIDTH + sx];
+                if (row_bits & (0x8000 >> col))
+                {
+                    turtle_raster[row * BITMAP_RASTER_SIZE + col] = 1;
+                }
             }
         }
     }
-    turtle_bg_valid = true;
+
+    turtle_raster_valid = true;
+    turtle_raster_shape = turtle_current_shape;
+    turtle_raster_angle = turtle_angle;
 }
 
-// Restore the saved background (erase turtle)
-static void turtle_erase(void)
-{
-    if (!turtle_bg_valid)
-        return;
-    
-    // Use the buffer size that was saved
-    if (turtle_bg_saved_size == SHAPE0_BG_SIZE)
-    {
-        for (int row = 0; row < SHAPE0_BG_SIZE; row++)
-        {
-            for (int col = 0; col < SHAPE0_BG_SIZE; col++)
-            {
-                int sx = wrap_coord(turtle_bg_saved_x + col, SCREEN_WIDTH);
-                int sy = wrap_coord(turtle_bg_saved_y + row, SCREEN_HEIGHT);
-                screen_gfx_frame()[sy * SCREEN_WIDTH + sx] = turtle_background_shape0[row][col];
-            }
-        }
-        // Mark the rows touched by the erased turtle region
-        {
-            int y0 = wrap_coord(turtle_bg_saved_y, SCREEN_HEIGHT);
-            int y1 = wrap_coord(turtle_bg_saved_y + SHAPE0_BG_SIZE - 1, SCREEN_HEIGHT);
-            if (y0 <= y1)
-                screen_gfx_mark_dirty(y0, y1);
-            else {
-                screen_gfx_mark_dirty(y0, SCREEN_HEIGHT - 1);
-                screen_gfx_mark_dirty(0, y1);
-            }
-        }
-    }
-    else
-    {
-        for (int row = 0; row < BITMAP_BG_SIZE; row++)
-        {
-            for (int col = 0; col < BITMAP_BG_SIZE; col++)
-            {
-                int sx = wrap_coord(turtle_bg_saved_x + col, SCREEN_WIDTH);
-                int sy = wrap_coord(turtle_bg_saved_y + row, SCREEN_HEIGHT);
-                screen_gfx_frame()[sy * SCREEN_WIDTH + sx] = turtle_background_bitmap[row][col];
-            }
-        }
-        // Mark the rows touched by the erased turtle region
-        {
-            int y0 = wrap_coord(turtle_bg_saved_y, SCREEN_HEIGHT);
-            int y1 = wrap_coord(turtle_bg_saved_y + BITMAP_BG_SIZE - 1, SCREEN_HEIGHT);
-            if (y0 <= y1)
-                screen_gfx_mark_dirty(y0, y1);
-            else {
-                screen_gfx_mark_dirty(y0, SCREEN_HEIGHT - 1);
-                screen_gfx_mark_dirty(0, y1);
-            }
-        }
-    }
-    turtle_bg_valid = false;
-}
-
-// Draw shape 0: the default line-drawn turtle triangle
-// Must fit within 16x16 centered on turtle position in any rotation
-// Max extent from center = 7 pixels
-static void turtle_draw_shape0(void)
-{
-    // Convert angle to radians
-    float radians = turtle_angle * (M_PI / 180.0f);
-    float sin_a = sinf(radians);
-    float cos_a = cosf(radians);
-    
-    // Triangle dimensions to fit in 16x16 centered area (max 7 pixels from center)
-    // Base width = 6 pixels (half_base = 3), height = 7 pixels
-    // Turtle position is at center of base
-    float half_base = 3.0f;
-    float height = 7.0f;
-    
-    // Calculate the three vertices of the triangle
-    // Base vertices: perpendicular to heading direction at turtle position
-    float x1 = turtle_x + half_base * cos_a;
-    float y1 = turtle_y + half_base * sin_a;
-    float x2 = turtle_x - half_base * cos_a;
-    float y2 = turtle_y - half_base * sin_a;
-    
-    // Tip vertex: in the direction of heading, 'height' pixels away
-    float x3 = turtle_x + height * sin_a;
-    float y3 = turtle_y - height * cos_a;
-    
-    // Draw the triangle using lines (non-XOR, with current pen color)
-    screen_gfx_line(x1, y1, x2, y2, turtle_colour, false);
-    screen_gfx_line(x2, y2, x3, y3, turtle_colour, false);
-    screen_gfx_line(x3, y3, x1, y1, turtle_colour, false);
-}
-
-// Draw shapes 1-15: bitmap shapes that don't rotate
-// Shape is 16 pixels wide (doubled from user's 8) x 16 pixels tall
-// Bottom row (row 15) is at turtle_y
-static void turtle_draw_bitmap_shape(void)
-{
-    uint16_t *shape = turtle_shapes[turtle_current_shape - 1];
-    int base_x = (int)turtle_x - 8;  // Center horizontally
-    int base_y = (int)turtle_y - 15; // Row 15 (bottom) at turtle_y
-    
-    for (int row = 0; row < 16; row++)
-    {
-        uint16_t row_bits = shape[row];
-        if (row_bits == 0) continue;  // Skip empty rows
-        
-        for (int col = 0; col < 16; col++)
-        {
-            // MSB is leftmost column
-            if (row_bits & (0x8000 >> col))
-            {
-                int sx = wrap_coord(base_x + col, SCREEN_WIDTH);
-                int sy = wrap_coord(base_y + row, SCREEN_HEIGHT);
-                screen_gfx_frame()[sy * SCREEN_WIDTH + sx] = turtle_colour;
-            }
-        }
-    }
-
-    // Mark dirty rows for the bitmap shape region
-    {
-        int y0 = wrap_coord(base_y, SCREEN_HEIGHT);
-        int y1 = wrap_coord(base_y + 15, SCREEN_HEIGHT);
-        if (y0 <= y1)
-            screen_gfx_mark_dirty(y0, y1);
-        else {
-            screen_gfx_mark_dirty(y0, SCREEN_HEIGHT - 1);
-            screen_gfx_mark_dirty(0, y1);
-        }
-    }
-}
-
-// Draw the turtle at the current position
+// Show the turtle sprite at the current position (or hide it when the
+// turtle is hidden / off-screen in window mode). The compositor takes it
+// from here — nothing is written into the canvas.
 static void turtle_draw(void)
 {
     if (!turtle_should_draw())
+    {
+        screen_sprite_hide(0);
         return;
-    
-    // Save background before drawing
-    turtle_save_background();
-    
-    // Draw the appropriate shape
+    }
+
+    turtle_update_raster();
+
+    ScreenSprite sprite = {
+        .visible = true,
+        .colour = turtle_colour,
+        .mask = turtle_raster,
+    };
+
     if (turtle_current_shape == 0)
     {
-        turtle_draw_shape0();
+        // Centred on the turtle position
+        sprite.w = SHAPE0_RASTER_SIZE;
+        sprite.h = SHAPE0_RASTER_SIZE;
+        sprite.x = (int16_t)((int)(turtle_x + 0.5f) - SHAPE0_RASTER_SIZE / 2);
+        sprite.y = (int16_t)((int)(turtle_y + 0.5f) - SHAPE0_RASTER_SIZE / 2);
     }
     else
     {
-        turtle_draw_bitmap_shape();
+        // Centred horizontally, bottom row at the turtle position
+        sprite.w = BITMAP_RASTER_SIZE;
+        sprite.h = BITMAP_RASTER_SIZE;
+        sprite.x = (int16_t)((int)turtle_x - BITMAP_RASTER_SIZE / 2);
+        sprite.y = (int16_t)((int)turtle_y - (BITMAP_RASTER_SIZE - 1));
     }
+
+    screen_sprite_set(0, &sprite);
 }
 
 // Clear the graphics buffer and reset the turtle to the home position
 static void turtle_clearscreen(void)
 {
     screen_show_field();
-
-    // Invalidate background buffer since screen is being cleared
-    turtle_bg_valid = false;
 
     // Clear the graphics buffer
     screen_gfx_clear();
@@ -576,9 +518,6 @@ static bool turtle_move(float distance)
 
     float old_x = turtle_x;
     float old_y = turtle_y;
-
-    // Erase turtle at current position
-    turtle_erase();
 
     // Calculate new position in screen coordinates
     float new_x = turtle_x + distance * sinf(turtle_angle * (M_PI / 180.0f));
@@ -657,9 +596,6 @@ static void turtle_home(void)
     float old_x = turtle_x;
     float old_y = turtle_y;
 
-    // Erase the turtle at the current position
-    turtle_erase();
-
     // Reset the turtle to the home position
     turtle_x = TURTLE_HOME_X;
     turtle_y = TURTLE_HOME_Y;
@@ -696,9 +632,6 @@ static bool turtle_set_position(float x, float y)
 
     float old_x = turtle_x;
     float old_y = turtle_y;
-
-    // Erase the turtle at current position
-    turtle_erase();
 
     // Convert Logo coordinates to screen coordinates:
     // - X: Logo 0 -> Screen center (SCREEN_WIDTH/2)
@@ -784,9 +717,6 @@ static void turtle_set_angle(float angle)
 {
     screen_show_field();
 
-    // Erase the turtle at current position before changing angle
-    turtle_erase();
-
     // Normalize the angle to [0, 360)
     turtle_angle = fmodf(angle, 360.0f);
     if (turtle_angle < 0.0f)
@@ -808,9 +738,6 @@ static float turtle_get_angle(void)
 static void turtle_set_colour(uint8_t colour)
 {
     screen_show_field();
-    
-    // Erase turtle at current position before changing color
-    turtle_erase();
 
     // Set the new turtle color
     turtle_colour = colour;
@@ -865,20 +792,11 @@ static void turtle_set_visibility(bool visible)
     }
 
     screen_show_field();
-    
-    if (turtle_visible)
-    {
-        // Currently visible, becoming hidden - erase it
-        turtle_erase();
-    }
-    
+
     turtle_visible = visible;
-    
-    if (turtle_visible)
-    {
-        // Now visible - draw it
-        turtle_draw();
-    }
+
+    // turtle_draw shows or hides the sprite to match the new visibility
+    turtle_draw();
 
     screen_gfx_update();
 }
@@ -935,21 +853,9 @@ static void turtle_fill(void)
 
     screen_show_field();
 
-    // Temporarily hide the turtle so it doesn't interfere with the fill
-    bool was_visible = turtle_visible;
-    if (was_visible)
-    {
-        turtle_erase();
-    }
-
-    // Perform the fill from the turtle's current position
+    // The turtle is composited over the canvas, never written into it,
+    // so the fill sees a clean canvas and needs no hide/restore dance.
     screen_gfx_fill(turtle_x, turtle_y, fill_colour);
-
-    // Restore turtle visibility
-    if (was_visible)
-    {
-        turtle_draw();
-    }
 
     screen_gfx_update();
 }
@@ -1004,7 +910,6 @@ static void turtle_set_fence(void)
     // If switching from window mode and turtle is off-screen, send to home
     if (turtle_boundary_mode == BOUNDARY_MODE_WINDOW && !turtle_is_on_screen())
     {
-        turtle_erase();  // Erase at old position (if any)
         turtle_x = TURTLE_HOME_X;
         turtle_y = TURTLE_HOME_Y;
         turtle_angle = TURTLE_DEFAULT_ANGLE;
@@ -1028,7 +933,6 @@ static void turtle_set_wrap(void)
     // If switching from window mode and turtle is off-screen, send to home
     if (turtle_boundary_mode == BOUNDARY_MODE_WINDOW && !turtle_is_on_screen())
     {
-        turtle_erase();  // Erase at old position (if any)
         turtle_x = TURTLE_HOME_X;
         turtle_y = TURTLE_HOME_Y;
         turtle_angle = TURTLE_DEFAULT_ANGLE;
@@ -1049,13 +953,10 @@ static void turtle_set_shape_num(uint8_t shape_num)
         return;
     
     screen_show_field();
-    
-    // Erase turtle with old shape
-    turtle_erase();
-    
-    // Change shape
+
+    // Change shape; the raster cache notices the shape mismatch
     turtle_current_shape = shape_num;
-    
+
     // Draw turtle with new shape
     turtle_draw();
     screen_gfx_update();
@@ -1132,15 +1033,18 @@ static bool turtle_put_shape_data(uint8_t shape_num, const uint8_t *data)
         shape[row] = result;
     }
     
-    // If we're currently using this shape, redraw
-    if (turtle_current_shape == shape_num && turtle_visible)
+    // If we're currently using this shape, rebuild the raster and redraw
+    if (turtle_current_shape == shape_num)
     {
-        screen_show_field();
-        turtle_erase();
-        turtle_draw();
-        screen_gfx_update();
+        turtle_raster_valid = false;
+        if (turtle_visible)
+        {
+            screen_show_field();
+            turtle_draw();
+            screen_gfx_update();
+        }
     }
-    
+
     return true;
 }
 

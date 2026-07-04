@@ -107,9 +107,11 @@ void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, boo
 void screen_gfx_fill(float x, float y, uint8_t colour);
 void screen_gfx_update(void);
 
-// Dirty rectangle tracking — mark a range of rows as needing re-blit.
-// y_min and y_max are inclusive row indices in [0, SCREEN_HEIGHT-1].
-// Callers that write directly to screen_gfx_frame() must call this.
+// Dirty-region tracking. Callers that write directly to screen_gfx_frame()
+// must mark what they touched. Prefer the rect form; the row form marks
+// full-width and is kept for callers that only know a y-range.
+// Coordinates are inclusive and clamped to the screen.
+void screen_gfx_mark_dirty_rect(int x0, int y0, int x1, int y1);
 void screen_gfx_mark_dirty(uint16_t y_min, uint16_t y_max);
 
 // Mark the entire graphics buffer as dirty (e.g. after palette change).
@@ -117,7 +119,38 @@ void screen_gfx_mark_all_dirty(void);
 
 // Flush any pending dirty region immediately, bypassing the 60 Hz rate
 // limiter. Call before blocking operations (sleep, keyboard wait, I/O).
+// No-op in manual refresh mode.
 void screen_gfx_flush(void);
+
+// Present pending drawing now, regardless of the refresh policy or the
+// rate limiter. Backs the Logo refresh primitive.
+void screen_gfx_present(void);
+
+// Refresh policy: automatic (default) presents as drawing happens;
+// manual accumulates until screen_gfx_present(). Switching back to
+// automatic presents anything pending.
+void screen_gfx_set_refresh_auto(bool auto_mode);
+bool screen_gfx_get_refresh_auto(void);
+
+//
+// Sprites — composited over the canvas at blit time. The graphics buffer
+// never contains sprite pixels; the compositor overlays each visible
+// sprite's mask (painted in its colour) as rows stream to the LCD.
+// Lower ids render on top. The mask memory belongs to the caller and must
+// stay valid while the sprite is visible (w*h bytes, nonzero = paint).
+//
+#define SCREEN_MAX_SPRITES 8
+
+typedef struct {
+    bool visible;
+    int16_t x, y;          // Top-left corner in screen coordinates
+    uint8_t w, h;          // Mask dimensions in pixels
+    uint8_t colour;        // Palette slot painted where the mask is set
+    const uint8_t *mask;   // w*h bytes, row-major, nonzero = paint
+} ScreenSprite;
+
+void screen_sprite_set(uint8_t id, const ScreenSprite *sprite);
+void screen_sprite_hide(uint8_t id);
 int screen_gfx_save(const char *filename);
 int screen_gfx_load(const char *filename);
 

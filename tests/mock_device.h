@@ -82,6 +82,9 @@ extern "C"
         MOCK_CMD_FULLSCREEN,
         MOCK_CMD_SPLITSCREEN,
         MOCK_CMD_TEXTSCREEN,
+        // Refresh policy
+        MOCK_CMD_SET_REFRESH,
+        MOCK_CMD_REFRESH_NOW,
         // Draw (redraw turtle)
         MOCK_CMD_DRAW
     } MockCommandType;
@@ -170,6 +173,10 @@ extern "C"
 
         // Screen mode
         MockScreenMode screen_mode;
+
+        // Refresh policy
+        bool refresh_auto;                   // Automatic presentation (default true)
+        int refresh_now_count;               // Number of refresh_now() calls
 
         // Graphics tracking
         struct

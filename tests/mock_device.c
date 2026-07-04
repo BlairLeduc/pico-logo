@@ -550,11 +550,31 @@ static void mock_screen_textscreen(void)
     record_command(MOCK_CMD_TEXTSCREEN);
 }
 
+static void mock_screen_set_refresh_auto(bool auto_mode)
+{
+    mock_state.refresh_auto = auto_mode;
+    record_command(MOCK_CMD_SET_REFRESH);
+}
+
+static bool mock_screen_get_refresh_auto(void)
+{
+    return mock_state.refresh_auto;
+}
+
+static void mock_screen_refresh_now(void)
+{
+    mock_state.refresh_now_count++;
+    record_command(MOCK_CMD_REFRESH_NOW);
+}
+
 // Screen mode operations structure
 static const LogoConsoleScreen mock_screen_ops = {
     .fullscreen = mock_screen_fullscreen,
     .splitscreen = mock_screen_splitscreen,
-    .textscreen = mock_screen_textscreen
+    .textscreen = mock_screen_textscreen,
+    .set_refresh_auto = mock_screen_set_refresh_auto,
+    .get_refresh_auto = mock_screen_get_refresh_auto,
+    .refresh_now = mock_screen_refresh_now
 };
 
 //
@@ -829,7 +849,11 @@ void mock_device_reset(void)
     
     // Initialize screen mode
     mock_state.screen_mode = MOCK_SCREEN_TEXT;
-    
+
+    // Refresh policy defaults to automatic
+    mock_state.refresh_auto = true;
+    mock_state.refresh_now_count = 0;
+
     // Clear graphics state
     mock_state.graphics.cleared = false;
     mock_state.graphics.dot_count = 0;

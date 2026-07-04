@@ -171,6 +171,7 @@ endif()
 add_executable(pico-logo
     devices/picocalc/clib.c
     devices/picocalc/audio.c
+    devices/picocalc/dirty_tiles.c
     devices/picocalc/editor.c
     devices/picocalc/fat32.c
     devices/picocalc/history.c
@@ -222,6 +223,7 @@ target_link_libraries(pico-logo
         pico_float
         pico_rand
         hardware_clocks
+        hardware_dma
         hardware_flash
         hardware_gpio
         hardware_i2c

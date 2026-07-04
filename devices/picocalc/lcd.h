@@ -118,6 +118,16 @@ void lcd_write16_buf(const uint16_t *buffer, size_t len);
 void lcd_blit(const uint8_t *pixels, uint16_t x, uint16_t y, uint16_t width, uint16_t height);
 void lcd_solid_rectangle(uint8_t colour, uint16_t x, uint16_t y, uint16_t width, uint16_t height);
 
+// Row-fed blit for callers that build each pixel row on the fly (e.g. the
+// screen driver's sprite compositor). Open a window with lcd_blit_begin,
+// feed exactly `height` rows of `width` palette indices with lcd_blit_row,
+// then close with lcd_blit_end. Rows are palette-expanded into a double
+// buffer and streamed by DMA, so building row n+1 overlaps sending row n.
+// Interrupts are disabled and chip select held between begin and end.
+void lcd_blit_begin(uint16_t x, uint16_t y, uint16_t width, uint16_t height);
+void lcd_blit_row(const uint8_t *row);
+void lcd_blit_end(void);
+
 // Text rendering with per-character attributes (packed uint16_t from TXT_PACK)
 void lcd_putc_attr(uint8_t column, uint8_t row, uint16_t packed);
 
