@@ -21,6 +21,26 @@ bool help_check_sorted(void)
     return true;
 }
 
+bool help_contains_nocase(const char *haystack, const char *needle)
+{
+    if (!haystack || !needle || !needle[0])
+    {
+        return false;
+    }
+
+    size_t nlen = 0;
+    while (needle[nlen]) nlen++;
+
+    for (const char *h = haystack; *h; h++)
+    {
+        if (strncasecmp(h, needle, nlen) == 0)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 const char *help_lookup(const char *name)
 {
     int lo = 0;

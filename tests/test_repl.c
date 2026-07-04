@@ -303,10 +303,52 @@ void test_repl_run_multiple_lines(void)
     TEST_ASSERT_TRUE(strstr(output_buffer, "3") != NULL);
 }
 
+void test_repl_suggests_similar_primitive(void)
+{
+    ReplState state;
+
+    set_mock_input("forwrd 10\n");
+
+    repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
+    repl_run(&state);
+    repl_cleanup(&state);
+
+    TEST_ASSERT_TRUE(strstr(output_buffer, "I don't know how to forwrd") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "Did you mean forward?") != NULL);
+}
+
+void test_repl_suggests_user_procedure(void)
+{
+    ReplState state;
+
+    set_mock_input("to greet\nprint \"hi\nend\ngret\n");
+
+    repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
+    repl_run(&state);
+    repl_cleanup(&state);
+
+    TEST_ASSERT_TRUE(strstr(output_buffer, "I don't know how to gret") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "Did you mean greet?") != NULL);
+}
+
+void test_repl_no_suggestion_when_nothing_close(void)
+{
+    ReplState state;
+
+    set_mock_input("zzqqxx\n");
+
+    repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
+    repl_run(&state);
+    repl_cleanup(&state);
+
+    TEST_ASSERT_TRUE(strstr(output_buffer, "I don't know how to zzqqxx") != NULL);
+    TEST_ASSERT_NULL(strstr(output_buffer, "Did you mean"));
+}
+
 void test_repl_run_empty_lines_skipped(void)
 {
     ReplState state;
-    
+
     set_mock_input("\n\nprint 99\n\n");
     
     repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
@@ -605,6 +647,9 @@ int main(void)
     RUN_TEST(test_repl_run_simple_print);
     RUN_TEST(test_repl_non_interactive_suppresses_prompt);
     RUN_TEST(test_repl_run_multiple_lines);
+    RUN_TEST(test_repl_suggests_similar_primitive);
+    RUN_TEST(test_repl_suggests_user_procedure);
+    RUN_TEST(test_repl_no_suggestion_when_nothing_close);
     RUN_TEST(test_repl_run_empty_lines_skipped);
     RUN_TEST(test_repl_run_with_proc_prefix);
     RUN_TEST(test_repl_run_throw_toplevel);
