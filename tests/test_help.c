@@ -48,6 +48,40 @@ void test_help_lookup_returns_null_for_unknown(void)
     TEST_ASSERT_NULL(help_lookup(""));
 }
 
+void test_help_categories_are_valid(void)
+{
+    TEST_ASSERT_TRUE(help_category_count > 0);
+    for (int i = 0; i < help_entry_count; i++)
+    {
+        TEST_ASSERT_TRUE_MESSAGE(help_entries[i].category < help_category_count,
+            "Entry category index out of range");
+    }
+}
+
+void test_help_entry_category_matches_chapter(void)
+{
+    // `forward` is documented in the Turtle Graphics chapter
+    for (int i = 0; i < help_entry_count; i++)
+    {
+        if (strcasecmp(help_entries[i].name, "forward") == 0)
+        {
+            TEST_ASSERT_EQUAL_STRING("Turtle Graphics",
+                help_categories[help_entries[i].category]);
+            return;
+        }
+    }
+    TEST_FAIL_MESSAGE("forward has no help entry");
+}
+
+void test_help_contains_nocase(void)
+{
+    TEST_ASSERT_TRUE(help_contains_nocase("rerandom", "rand"));
+    TEST_ASSERT_TRUE(help_contains_nocase("ReRandom", "RAND"));
+    TEST_ASSERT_TRUE(help_contains_nocase("abc", "abc"));
+    TEST_ASSERT_FALSE(help_contains_nocase("abc", "abcd"));
+    TEST_ASSERT_FALSE(help_contains_nocase("forward", "rand"));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -55,5 +89,8 @@ int main(void)
     RUN_TEST(test_help_lookup_returns_text_for_known_primitive);
     RUN_TEST(test_help_lookup_is_case_insensitive);
     RUN_TEST(test_help_lookup_returns_null_for_unknown);
+    RUN_TEST(test_help_categories_are_valid);
+    RUN_TEST(test_help_entry_category_matches_chapter);
+    RUN_TEST(test_help_contains_nocase);
     return UNITY_END();
 }

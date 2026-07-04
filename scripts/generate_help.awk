@@ -39,11 +39,15 @@ BEGIN {
 
 in_code_fence { next }
 
-# Section-level heading
+# Section-level heading — becomes the category for entries in the chapter
 /^# / {
     if (in_entry) flush_entry()
     if (index($0, "# Appendix") > 0) {
         in_appendix = 1
+    } else {
+        cur_chapter = $0
+        sub(/^# */, "", cur_chapter)
+        sub(/ *$/, "", cur_chapter)
     }
     next
 }
@@ -157,6 +161,7 @@ function flush_entry(    i, s, d) {
         entries_primary[entry_count] = cur_primary
         entries_alias[entry_count] = cur_alias
         entries_badge[entry_count] = cur_badge
+        entries_chapter[entry_count] = cur_chapter
 
         sigtext = ""
         for (i = 1; i <= sig_count; i++) {
@@ -239,7 +244,7 @@ function md_to_logo(s,    tmp, before, after) {
     return s
 }
 
-function emit_c_file(    i, j, n, varname, nnames, key_name, key_var) {
+function emit_c_file(    i, j, n, varname, nnames, key_name, key_var, key_cat, ncats, c) {
     print "// Auto-generated from Pico_Logo_Reference.md -- do not edit"
     print "#include \"core/help.h\""
     print ""
@@ -261,16 +266,29 @@ function emit_c_file(    i, j, n, varname, nnames, key_name, key_var) {
         printf ";\n\n"
     }
 
-    # Build sorted entries array
+    # Assign category indices in chapter (reference) order
+    ncats = 0
+    for (i = 1; i <= entry_count; i++) {
+        c = entries_chapter[i]
+        if (!(c in cat_index)) {
+            cat_index[c] = ncats
+            ncats++
+            cat_names[ncats] = c
+        }
+    }
+
+    # Build sorted entries array (aliases share the primary's category)
     nnames = 0
     for (i = 1; i <= entry_count; i++) {
         nnames++
         all_names[nnames] = tolower(entries_primary[i])
         all_varnames[nnames] = c_varname(entries_primary[i])
+        all_cats[nnames] = cat_index[entries_chapter[i]]
         if (entries_alias[i] != "") {
             nnames++
             all_names[nnames] = tolower(entries_alias[i])
             all_varnames[nnames] = c_varname(entries_primary[i])
+            all_cats[nnames] = cat_index[entries_chapter[i]]
         }
     }
 
@@ -278,20 +296,33 @@ function emit_c_file(    i, j, n, varname, nnames, key_name, key_var) {
     for (i = 2; i <= nnames; i++) {
         key_name = all_names[i]
         key_var = all_varnames[i]
+        key_cat = all_cats[i]
         j = i - 1
         while (j >= 1 && all_names[j] > key_name) {
             all_names[j + 1] = all_names[j]
             all_varnames[j + 1] = all_varnames[j]
+            all_cats[j + 1] = all_cats[j]
             j--
         }
         all_names[j + 1] = key_name
         all_varnames[j + 1] = key_var
+        all_cats[j + 1] = key_cat
     }
+
+    # Emit category names in reference order
+    print "const char *const help_categories[] = {"
+    for (c = 1; c <= ncats; c++) {
+        printf "    \"%s\",\n", c_escape(cat_names[c])
+    }
+    print "};"
+    print ""
+    printf "const int help_category_count = %d;\n", ncats
+    print ""
 
     # Emit sorted array
     print "const HelpEntry help_entries[] = {"
     for (i = 1; i <= nnames; i++) {
-        printf "    { \"%s\", %s },\n", c_escape(all_names[i]), all_varnames[i]
+        printf "    { \"%s\", %s, %d },\n", c_escape(all_names[i]), all_varnames[i], all_cats[i]
     }
     print "};"
     print ""

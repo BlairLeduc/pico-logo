@@ -25,8 +25,8 @@ Companion documents:
 | `reverse` (word or list) | UCB | done | [P2](#p2--list-utilities-pick-reverse-shuffle) |
 | `shuffle` | UCB (library) | done | [P2](#p2--list-utilities-pick-reverse-shuffle) |
 | `rerandom` / seedable RNG | UCB, Apple | done | [P3](#p3--rerandom-and-a-core-prng) (hybrid: TRNG default, PCG32 when seeded) |
-| `arc` | UCB | todo | Planned: [P4](#p4--arc-and-setpensize) |
-| `setpensize` / `pensize` | UCB, FMSLogo | todo | Planned: [P4](#p4--arc-and-setpensize) |
+| `arc` | UCB | done | [P4](#p4--arc-and-help-discoverability) |
+| `setpensize` / `pensize` | UCB, FMSLogo | on hold | Deferred 2026-07-04; stamped-disc design kept: [On hold](#on-hold--setpensize--pensize) |
 | `remove`, `remdup` | UCB | todo | Backlog; trivial with `mem_list_append` |
 | `localmake` | UCB | todo | Backlog; convenience wrapper |
 | `tan`, two-input `(arctan x y)` | UCB | todo | Backlog; `atan2f` already used internally by `towards` |
@@ -40,6 +40,7 @@ Companion documents:
 |---|---|---|
 | Long words via blobs on PSRAM boards | todo | `word` errors >255 chars even on Pico Plus 2 W; `mem_word` already blobs HTTP responses — unify |
 | `play [notes]` background melody | todo | Classic Atari/Apple territory; builds on `toot` |
+| Help discoverability | done | [P4](#p4--arc-and-help-discoverability): keyword search fallback in `help`, `(help)` topic listing, "did you mean" on unknown names |
 
 ### Language: big bets
 
@@ -159,9 +160,10 @@ hardware TRNG for normal use.
   device op (mock's fixed value observed).
 - **Reference:** `rerandom` section + a reproducibility note under `random`.
 
-### P4 — `arc` and `setpensize`
+### P4 — `arc` and help discoverability
 
-**Goal:** two small graphics primitives with outsized drawing value.
+**Goal:** one small graphics primitive with outsized drawing value, plus make
+the help system useful when you *don't* already know a primitive's name.
 
 - **`arc angle radius`** (`core/primitives_turtle.c`): draws an arc of
   `angle` degrees, radius `radius`, centred on the turtle, starting at the
@@ -169,16 +171,47 @@ hardware TRNG for normal use.
   Implemented as short line segments (fixed ~4° steps, or adaptive to radius)
   through the existing device line-drawing path, so pen colour/mode and
   wrap/fence clipping behave exactly like `forward`.
-- **`setpensize n` / `pensize`**: pen width for all line drawing. This one
-  touches the device layer: extend the line op (or add a width parameter) in
-  `devices/`, implement thickness in the PicoCalc LCD driver (perpendicular
-  offset strokes or a brush stamp per step), record-only in the mock, no-op on
-  host. Width state lives with the other pen state in core.
+- **Help keyword search**: when `help "name` finds no exact entry, fall back
+  to a case-insensitive search over `help_entries[]` (names first, then
+  section text) and list the matching primitive names instead of erroring
+  with "I don't know about". Exact lookups are untouched.
+- **Topic listing**: `(help)` with no inputs prints a categorised list of
+  primitives. Categories come from the reference's chapter headings — extend
+  `scripts/generate_help.awk` to record the enclosing `#` chapter for each
+  `##` section (a small `category` field per entry; string data lives in
+  flash, not SRAM).
+- **"Did you mean"**: when evaluation hits an unknown name
+  (`ERR_DONT_KNOW_HOW`), append the closest match (small edit distance or
+  shared prefix) from primitives + defined procedures to the error message.
+  Must not break existing error-format expectations in tests/reference —
+  check those first; if the format is load-bearing, print the suggestion as a
+  separate line.
 - **Tests:** mock-device assertions on segment counts/endpoints for `arc`
-  (quarter/full circles, negative angle), pen-size state round-trip,
-  drawing-op width recorded; OOM not applicable.
-- **Reference:** `arc`, `setpensize`, `pensize` sections; mention in the pen
-  overview.
+  (quarter/full circles, negative angle); help search hit/miss/multiple-hit
+  cases; `(help)` category output; did-you-mean suggestion and its absence
+  when nothing is close.
+- **Reference:** `arc` section; update the `help` section to document search
+  and the no-input form.
+
+### On hold — `setpensize` / `pensize`
+
+Deferred by user decision (2026-07-04). Design notes preserved for when it
+resumes:
+
+- Pen width for all line drawing; touches the device layer (extend the line
+  op or add a width parameter in `devices/`, record-only in the mock, no-op
+  on host). Width state lives with the other pen state in core.
+- **Algorithm: stamped disc.** At each Bresenham step, plot a filled disc of
+  diameter `pensize` instead of a single pixel. Solid by construction
+  (consecutive stamp centres are 1 px apart, so stamps always overlap — no
+  angle can open a gap), uniform apparent width at every angle, and round
+  caps/joins for free, which hides the seams between segmented curves like
+  `arc`. Rejected: parallel offset strokes (up to ~29 % thinner at 45°,
+  notched corners at every turtle turn).
+- **Caveat — reverse mode:** `penreverse` toggles pixels, so overlapping
+  stamps would toggle twice and speckle. Thick reverse lines must touch each
+  pixel exactly once (delta-stamp only the pixels not covered by the
+  previous stamp, or fill the thick segment as per-scanline spans).
 
 ### P5 — Multi-sprite turtles with collision (design first)
 
@@ -219,3 +252,7 @@ device (no graphics) degrades cleanly.
 | 2026-07-03 | P1 | Done: host REPL EOF/prompt fixes, e2e golden tests (`tests/e2e/`), CI workflow, anchor checker |
 | 2026-07-03 | P2 | Done: `pick`, `reverse`, `shuffle` primitives with reference sections and tests |
 | 2026-07-04 | P3 | Done: `rerandom` + hybrid core PRNG (TRNG remains the default source; PCG32 only when seeded) |
+| 2026-07-04 | P4 | Pen-size algorithm pinned: stamped disc (solid at all angles, round joins); reverse-mode dedup caveat noted |
+| 2026-07-04 | Backlog | Added help discoverability (keyword search, topic listing, "did you mean") |
+| 2026-07-04 | P4 | Rescoped: `setpensize`/`pensize` on hold (design notes preserved); help discoverability promoted into P4 alongside `arc` |
+| 2026-07-04 | P4 | Done: `arc` (segments via the device setpos path, no device changes); help keyword search + `(help)` category listing (chapter data from the generator); REPL "Did you mean" via bounded edit distance |

@@ -1030,6 +1030,27 @@ ycor
 ```
 
 
+## arc
+
+arc _angle_ _radius_  
+
+`command`
+
+The `arc` command draws an arc of a circle centred on the turtle, with the given _radius_. The arc starts at the turtle's heading and extends clockwise through _angle_ degrees (counterclockwise if _angle_ is negative). The turtle itself does not move.
+
+The arc is drawn with the current pen state and colour: with the pen up nothing is drawn, and [`penerase`](#penerase-pe) and [`penreverse`](#penreverse-px) work as they do for [`forward`](#forward-fd). An _angle_ beyond 360 draws one full circle. In [`fence`](#fence) mode, an arc that would cross the edge of the screen draws up to the boundary and then reports "Turtle out of bounds".
+
+**Example**:
+
+```logo
+; Draw a face: head, two eyes, and a smile
+?arc 360 80
+?pu setpos [-30 30] pd arc 360 8
+?pu setpos [30 30] pd arc 360 8
+?pu setpos [0 10] pd seth 90 arc 180 40
+```
+
+
 ## clean
 
 clean  
@@ -3682,29 +3703,23 @@ false
 
 ## help
 
-help _name_
+help _name_  
+(help)
 
 `command`
 
-`help` outputs a brief description of the primitive _name_. If _name_ is not the name of a primitive, an error occurs. The description includes the type of primitive (command or operation) and the number and types of inputs it takes. It also includes a brief description of what the primitive does. The description is not intended to be a complete explanation of the primitive, but rather a quick reminder of its purpose and use.
+`help` outputs a brief description of the primitive _name_: the type of primitive (command or operation), the inputs it takes, and a quick reminder of its purpose and use.
+
+If _name_ is not the name of a primitive, `help` searches instead: it lists the primitives whose names contain _name_, or failing that, the primitives whose descriptions mention it. An error occurs only when nothing matches.
+
+With no inputs, `(help)` lists every primitive, grouped by the chapters of this manual.
+
+**Example**:
 
 ```logo
-?help "help
-help :name
-(command)
-
-Outputs a brief description of the
-primitive :name. If :name is not the
-name of a primitive, an error occurs.
-The description includes the type of
-primitive (command or operation) and
-the number and types of inputs it
-takes. It also includes a brief
-description of what the primitive
-does. The description is not intended
-to be a complete explanation of the
-primitive, but rather a quick reminder
-of its purpose and use.
+?help "rand
+No help for rand. Related:
+  random rerandom
 ?
 ```
 
@@ -6414,6 +6429,8 @@ end
 
 ===
 # Appendix D: Error Messages
+
+When error 35 ("I don't know how to ...") is reported at the prompt, Logo also suggests the closest primitive or procedure name if one is similar, for example `Did you mean forward?`.
 
 |Number|Message|
 |---|---|

@@ -684,8 +684,68 @@ static Result prim_fill(Evaluator *eval, int argc, Value *args)
     {
         turtle->fill();
     }
-    
+
     return result_none();
+}
+
+// arc - Draw an arc centred on the turtle; the turtle does not move
+static Result prim_arc(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(2);
+    REQUIRE_NUMBER(args[0], angle);
+    REQUIRE_NUMBER(args[1], radius);
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (!turtle || !turtle->get_position || !turtle->set_position ||
+        !turtle->get_heading || !turtle->get_pen_state || !turtle->set_pen_state)
+    {
+        return result_none();
+    }
+
+    // Clamp the sweep to one full circle; the sign gives the direction
+    // (positive = clockwise from the turtle's heading).
+    float sweep = angle;
+    if (sweep > 360.0f) sweep = 360.0f;
+    if (sweep < -360.0f) sweep = -360.0f;
+    if (sweep == 0.0f)
+    {
+        return result_none();
+    }
+
+    float cx, cy;
+    turtle->get_position(&cx, &cy);
+    float heading = turtle->get_heading();
+    LogoPen pen = turtle->get_pen_state();
+
+    // One segment per ~4 degrees keeps the chord error under a pixel
+    // for any radius that fits on screen.
+    int segments = (int)ceilf(fabsf(sweep) / 4.0f);
+
+    // Jump (pen up) to the arc's start point, then sweep with the pen
+    // restored so colour/erase/reverse modes and wrap/fence behave exactly
+    // like setpos. In fence mode a segment past the boundary fails; the
+    // turtle is restored before the error is reported.
+    const float deg_to_rad = 3.14159265358979323846f / 180.0f;
+    float rad = heading * deg_to_rad;
+    turtle->set_pen_state(LOGO_PEN_UP);
+    bool ok = turtle->set_position(cx + radius * sinf(rad), cy + radius * cosf(rad));
+    if (ok)
+    {
+        turtle->set_pen_state(pen);
+        for (int i = 1; ok && i <= segments; i++)
+        {
+            rad = (heading + sweep * (float)i / (float)segments) * deg_to_rad;
+            ok = turtle->set_position(cx + radius * sinf(rad), cy + radius * cosf(rad));
+        }
+    }
+
+    // Return to the centre (always in bounds) and restore the pen.
+    turtle->set_pen_state(LOGO_PEN_UP);
+    turtle->set_position(cx, cy);
+    turtle->set_pen_state(pen);
+
+    return ok ? result_none() : result_error(ERR_TURTLE_BOUNDS);
 }
 
 //==========================================================================
@@ -1038,6 +1098,7 @@ void primitives_turtle_init(void)
     primitive_register("dot?", 1, prim_dotp);
     primitive_register("dotp", 1, prim_dotp);
     primitive_register("fill", 0, prim_fill);
+    primitive_register("arc", 2, prim_arc);
     
     // Boundary mode primitives
     primitive_register("fence", 0, prim_fence);

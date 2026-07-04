@@ -25,6 +25,101 @@
 // Forward declaration for pause continue check
 extern bool pause_check_continue(void);
 
+//==========================================================================
+// "Did you mean" suggestions for unknown names
+//==========================================================================
+
+// Case-insensitive Levenshtein distance, bounded by `limit`.
+// Returns limit + 1 as soon as the distance is known to exceed it.
+#define SUGGEST_MAX_NAME 64
+
+static int name_distance(const char *a, const char *b, int limit)
+{
+    int la = (int)strlen(a);
+    int lb = (int)strlen(b);
+    if (la > SUGGEST_MAX_NAME || lb > SUGGEST_MAX_NAME || abs(la - lb) > limit)
+    {
+        return limit + 1;
+    }
+
+    int prev[SUGGEST_MAX_NAME + 1];
+    int curr[SUGGEST_MAX_NAME + 1];
+    for (int j = 0; j <= lb; j++)
+        prev[j] = j;
+
+    for (int i = 1; i <= la; i++)
+    {
+        curr[0] = i;
+        int row_min = i;
+        for (int j = 1; j <= lb; j++)
+        {
+            int cost = (tolower((unsigned char)a[i - 1]) ==
+                        tolower((unsigned char)b[j - 1])) ? 0 : 1;
+            int d = prev[j - 1] + cost;
+            if (prev[j] + 1 < d) d = prev[j] + 1;
+            if (curr[j - 1] + 1 < d) d = curr[j - 1] + 1;
+            curr[j] = d;
+            if (d < row_min) row_min = d;
+        }
+        if (row_min > limit)
+        {
+            return limit + 1;
+        }
+        memcpy(prev, curr, sizeof(int) * (size_t)(lb + 1));
+    }
+    return prev[lb];
+}
+
+// Closest primitive or procedure name to `unknown`, or NULL if nothing
+// is close (distance <= 1 for short names, <= 2 otherwise).
+static const char *suggest_similar_name(const char *unknown)
+{
+    int limit = (strlen(unknown) <= 4) ? 1 : 2;
+    const char *best = NULL;
+    int best_dist = limit + 1;
+
+    int prims = primitive_get_count();
+    for (int i = 0; i < prims; i++)
+    {
+        const Primitive *p = primitive_get_by_index(i);
+        int d = name_distance(unknown, p->name, limit);
+        if (d < best_dist)
+        {
+            best_dist = d;
+            best = p->name;
+        }
+    }
+
+    int procs = proc_count(true);
+    for (int i = 0; i < procs; i++)
+    {
+        UserProcedure *p = proc_get_by_index(i);
+        if (!p)
+            continue;
+        int d = name_distance(unknown, p->name, limit);
+        if (d < best_dist)
+        {
+            best_dist = d;
+            best = p->name;
+        }
+    }
+    return best;
+}
+
+// Print "Did you mean X?" after an "I don't know how to" error
+static void repl_suggest_name(ReplState *state, Result r)
+{
+    if (r.error_code != ERR_DONT_KNOW_HOW || !r.error_proc)
+        return;
+    const char *suggestion = suggest_similar_name(r.error_proc);
+    if (suggestion)
+    {
+        char msg[96];
+        snprintf(msg, sizeof(msg), "Did you mean %s?", suggestion);
+        logo_io_write_error_line(state->io, msg);
+    }
+}
+
 // Helper functions
 
 bool repl_line_starts_with_to(const char *line)
@@ -174,6 +269,7 @@ static Result repl_evaluate_line(ReplState *state, const char *input)
                 proc_reset_execution_state();
             }
             logo_io_write_error_line(state->io, error_format(r));
+            repl_suggest_name(state, r);
             return result_none();  // Error handled, continue REPL
         }
         else if (r.status == RESULT_THROW)

@@ -778,12 +778,60 @@ static Result prim_recycle(Evaluator *eval, int argc, Value *args)
 }
 
 // -------------------------------------------------------------------------
-// help "name
+// help "name   |   (help)
 // -------------------------------------------------------------------------
+
+// Emit primitive names as wrapped lines (39-column budget, 2-space indent)
+static void help_list_add(LogoIO *io, char *line, size_t cap, size_t *len, const char *name)
+{
+    size_t nlen = strlen(name);
+    if (*len > 0 && *len + 1 + nlen > 39) {
+        logo_io_write_line(io, line);
+        *len = 0;
+    }
+    if (*len == 0) {
+        snprintf(line, cap, "  %s", name);
+        *len = 2 + nlen;
+    } else {
+        snprintf(line + *len, cap - *len, " %s", name);
+        *len += 1 + nlen;
+    }
+}
+
+static void help_list_flush(LogoIO *io, char *line, size_t *len)
+{
+    if (*len > 0) {
+        logo_io_write_line(io, line);
+        *len = 0;
+    }
+}
+
 static Result prim_help(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
-    REQUIRE_ARGC(1);
+    LogoIO *io = primitives_get_io();
+
+    if (argc == 0) {
+        // (help) with no inputs: list every primitive by category
+        if (io) {
+            char line[80];
+            size_t len = 0;
+            for (int c = 0; c < help_category_count; c++) {
+                logo_io_write_line(io, help_categories[c]);
+                for (int i = 0; i < help_entry_count; i++) {
+                    if (help_entries[i].category == c) {
+                        help_list_add(io, line, sizeof(line), &len, help_entries[i].name);
+                    }
+                }
+                help_list_flush(io, line, &len);
+            }
+        }
+        return result_none();
+    }
+
+    if (argc > 1) {
+        return result_error_arg(ERR_TOO_MANY_INPUTS, "help", NULL);
+    }
 
     if (!value_is_word(args[0])) {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
@@ -791,15 +839,43 @@ static Result prim_help(Evaluator *eval, int argc, Value *args)
 
     const char *name = mem_word_ptr(args[0].as.node);
     const char *text = help_lookup(name);
-    if (text == NULL) {
+    if (text != NULL) {
+        if (io) {
+            logo_io_write(io, text);
+        }
+        return result_none();
+    }
+
+    // No exact entry: keyword search, first over names, then over help text
+    int hits = 0;
+    bool by_text = false;
+    for (int i = 0; i < help_entry_count; i++) {
+        if (help_contains_nocase(help_entries[i].name, name)) hits++;
+    }
+    if (hits == 0) {
+        by_text = true;
+        for (int i = 0; i < help_entry_count; i++) {
+            if (help_contains_nocase(help_entries[i].text, name)) hits++;
+        }
+    }
+    if (hits == 0) {
         return result_error_arg(ERR_DONT_KNOW_ABOUT, name, NULL);
     }
 
-    LogoIO *io = primitives_get_io();
     if (io) {
-        logo_io_write(io, text);
+        char header[96];
+        snprintf(header, sizeof(header), "No help for %s. Related:", name);
+        logo_io_write_line(io, header);
+        char line[80];
+        size_t len = 0;
+        for (int i = 0; i < help_entry_count; i++) {
+            const char *hay = by_text ? help_entries[i].text : help_entries[i].name;
+            if (help_contains_nocase(hay, name)) {
+                help_list_add(io, line, sizeof(line), &len, help_entries[i].name);
+            }
+        }
+        help_list_flush(io, line, &len);
     }
-
     return result_none();
 }
 

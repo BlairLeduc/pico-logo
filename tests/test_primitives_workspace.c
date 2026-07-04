@@ -1225,6 +1225,55 @@ void test_help_shows_description(void)
     TEST_ASSERT_NULL(strstr(output_buffer, "(operation)"));
 }
 
+void test_help_no_input_lists_primitives_by_category(void)
+{
+    reset_output();
+    Result r = run_string("(help)");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    // Category headers come from the reference chapter titles
+    TEST_ASSERT_TRUE(strstr(output_buffer, "Turtle Graphics") != NULL);
+    // Names are listed indented under their category
+    TEST_ASSERT_TRUE(strstr(output_buffer, " arc") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, " forward") != NULL);
+}
+
+void test_help_search_matches_names(void)
+{
+    reset_output();
+    Result r = run_string("help \"rand");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "No help for rand") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "random") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "rerandom") != NULL);
+}
+
+void test_help_search_falls_back_to_text(void)
+{
+    // No primitive name contains "clockwise", but arc's help text does
+    reset_output();
+    Result r = run_string("help \"clockwise");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "No help for clockwise") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "arc") != NULL);
+}
+
+void test_help_exact_match_beats_search(void)
+{
+    // "pen" is a substring of many names but has its own entry
+    reset_output();
+    Result r = run_string("help \"pen");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_NULL(strstr(output_buffer, "No help for"));
+    TEST_ASSERT_TRUE(strstr(output_buffer, "pen") != NULL);
+}
+
+void test_help_too_many_inputs(void)
+{
+    Result r = run_string("(help \"a \"b)");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_TOO_MANY_INPUTS, r.error_code);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -1316,6 +1365,11 @@ int main(void)
     RUN_TEST(test_help_command_outputs_text);
     RUN_TEST(test_help_command_unknown_gives_error);
     RUN_TEST(test_help_shows_description);
+    RUN_TEST(test_help_no_input_lists_primitives_by_category);
+    RUN_TEST(test_help_search_matches_names);
+    RUN_TEST(test_help_search_falls_back_to_text);
+    RUN_TEST(test_help_exact_match_beats_search);
+    RUN_TEST(test_help_too_many_inputs);
 
     return UNITY_END();
 }

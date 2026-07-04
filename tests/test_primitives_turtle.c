@@ -1412,6 +1412,133 @@ void test_shape_primitives_registered(void)
 }
 
 //==========================================================================
+// Arc Tests
+//==========================================================================
+
+void test_arc_quarter_circle_segments(void)
+{
+    // 90 degrees at 4 degrees per segment -> ceil(90/4) = 23 segments
+    Result r = run_string("arc 90 100");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL(23, mock_device_line_count());
+
+    // Starts at the heading (north of centre), sweeps clockwise to east
+    const MockLine *first = mock_device_get_line(0);
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 0.0f, first->x1);
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 100.0f, first->y1);
+
+    const MockLine *last = mock_device_get_line(22);
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 100.0f, last->x2);
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 0.0f, last->y2);
+}
+
+void test_arc_full_circle_closes(void)
+{
+    Result r = run_string("arc 360 50");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL(90, mock_device_line_count());
+
+    // Last segment ends where the first began
+    const MockLine *first = mock_device_get_line(0);
+    const MockLine *last = mock_device_get_line(89);
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, first->x1, last->x2);
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, first->y1, last->y2);
+}
+
+void test_arc_negative_angle_counterclockwise(void)
+{
+    // -90 from heading 0 sweeps counterclockwise from north to west
+    Result r = run_string("arc -90 100");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL(23, mock_device_line_count());
+
+    const MockLine *last = mock_device_get_line(22);
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, -100.0f, last->x2);
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 0.0f, last->y2);
+}
+
+void test_arc_respects_heading(void)
+{
+    // Heading east: arc starts east of centre and sweeps clockwise to south
+    run_string("seth 90");
+    Result r = run_string("arc 90 100");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    const MockLine *first = mock_device_get_line(0);
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 100.0f, first->x1);
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 0.0f, first->y1);
+
+    const MockLine *last = mock_device_get_line(mock_device_line_count() - 1);
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 0.0f, last->x2);
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, -100.0f, last->y2);
+}
+
+void test_arc_does_not_move_turtle(void)
+{
+    run_string("setpos [30 40] seth 45");
+    Result r = run_string("arc 180 20");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    ASSERT_POSITION(30, 40);
+    ASSERT_HEADING(45);
+
+    // Pen is still down afterwards
+    r = run_string("pen");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("pendown", mem_word_ptr(r.value.as.node));
+}
+
+void test_arc_pen_up_draws_nothing(void)
+{
+    run_string("penup");
+    Result r = run_string("arc 360 50");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL(0, mock_device_line_count());
+
+    // Pen state restored to up
+    r = run_string("pen");
+    TEST_ASSERT_EQUAL_STRING("penup", mem_word_ptr(r.value.as.node));
+}
+
+void test_arc_angle_clamped_to_full_circle(void)
+{
+    Result r = run_string("arc 720 50");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL(90, mock_device_line_count());
+}
+
+void test_arc_zero_angle_draws_nothing(void)
+{
+    Result r = run_string("arc 0 50");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL(0, mock_device_line_count());
+    ASSERT_POSITION(0, 0);
+}
+
+void test_arc_fence_out_of_bounds(void)
+{
+    run_string("fence");
+    Result r = run_string("arc 360 1000");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_TURTLE_BOUNDS, r.error_code);
+
+    // Turtle restored to the centre with the pen back down
+    ASSERT_POSITION(0, 0);
+    r = run_string("pen");
+    TEST_ASSERT_EQUAL_STRING("pendown", mem_word_ptr(r.value.as.node));
+}
+
+void test_arc_requires_numbers(void)
+{
+    Result r = run_string("arc \"abc 10");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+
+    r = run_string("arc 90 \"abc");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+//==========================================================================
 // Main
 //==========================================================================
 
@@ -1577,6 +1704,18 @@ int main(void)
     RUN_TEST(test_getsh_requires_input);
     RUN_TEST(test_putsh_getsh_roundtrip);
     RUN_TEST(test_shape_primitives_registered);
+
+    // Arc tests
+    RUN_TEST(test_arc_quarter_circle_segments);
+    RUN_TEST(test_arc_full_circle_closes);
+    RUN_TEST(test_arc_negative_angle_counterclockwise);
+    RUN_TEST(test_arc_respects_heading);
+    RUN_TEST(test_arc_does_not_move_turtle);
+    RUN_TEST(test_arc_pen_up_draws_nothing);
+    RUN_TEST(test_arc_angle_clamped_to_full_circle);
+    RUN_TEST(test_arc_zero_angle_draws_nothing);
+    RUN_TEST(test_arc_fence_out_of_bounds);
+    RUN_TEST(test_arc_requires_numbers);
 
     return UNITY_END();
 }
