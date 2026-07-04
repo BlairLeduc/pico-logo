@@ -598,7 +598,7 @@ static Result prim_clearscreen(Evaluator *eval, int argc, Value *args)
             }
             
             turtle->home();
-            
+
             // Restore pen state
             if (turtle->set_pen_state)
             {
@@ -606,7 +606,16 @@ static Result prim_clearscreen(Evaluator *eval, int argc, Value *args)
             }
         }
     }
-    
+
+    // A full reset also restores the automatic refresh policy, so a program
+    // that left the screen in manual mode cannot leave it stale after cs.
+    LogoIO *io = primitives_get_io();
+    if (io && io->console && io->console->screen &&
+        io->console->screen->set_refresh_auto)
+    {
+        io->console->screen->set_refresh_auto(true);
+    }
+
     return result_none();
 }
 

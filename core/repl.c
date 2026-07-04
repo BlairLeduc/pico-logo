@@ -234,6 +234,19 @@ void repl_cleanup(ReplState *state)
     state->expr_buffer = NULL;
 }
 
+// Restore the automatic display refresh policy. Called when execution
+// unwinds to the toplevel REPL (error or throw "toplevel) so a program
+// that switched to manual refresh cannot leave the screen stale at the
+// prompt. Pause is excluded: a paused program may continue with co.
+static void repl_restore_refresh(ReplState *state)
+{
+    if (state->io && state->io->console && state->io->console->screen &&
+        state->io->console->screen->set_refresh_auto)
+    {
+        state->io->console->screen->set_refresh_auto(true);
+    }
+}
+
 // Handle a single line evaluation
 static Result repl_evaluate_line(ReplState *state, const char *input)
 {
@@ -267,6 +280,7 @@ static Result repl_evaluate_line(ReplState *state, const char *input)
             {
                 // Top-level: reset everything
                 proc_reset_execution_state();
+                repl_restore_refresh(state);
             }
             logo_io_write_error_line(state->io, error_format(r));
             repl_suggest_name(state, r);
@@ -278,6 +292,7 @@ static Result repl_evaluate_line(ReplState *state, const char *input)
             {
                 // throw "toplevel exits the REPL - reset execution state first
                 proc_reset_execution_state();
+                repl_restore_refresh(state);
                 return r;
             }
             else
@@ -290,6 +305,7 @@ static Result repl_evaluate_line(ReplState *state, const char *input)
                 else
                 {
                     proc_reset_execution_state();
+                    repl_restore_refresh(state);
                 }
                 char msg[128];
                 snprintf(msg, sizeof(msg), "Can't find a catch for %s", r.throw_tag);

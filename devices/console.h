@@ -152,6 +152,17 @@ extern "C"
 
         // Full-screen text mode
         void (*textscreen)(void);
+
+        // Refresh policy. In automatic mode (the default) graphics drawing
+        // is presented to the display as it happens; in manual mode drawing
+        // accumulates off-screen until refresh_now() presents it.
+        // Switching back to automatic mode presents any pending drawing.
+        void (*set_refresh_auto)(bool auto_mode);
+        bool (*get_refresh_auto)(void);
+
+        // Present pending drawing immediately, regardless of the refresh
+        // policy or any frame-rate limiting.
+        void (*refresh_now)(void);
     } LogoConsoleScreen;
 
     //

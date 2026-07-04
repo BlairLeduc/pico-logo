@@ -1514,6 +1514,41 @@ If Logo needs to display an error message while you are using the full graphics 
 ```
 
 
+## refresh
+
+refresh  
+
+`command`
+
+`refresh` presents any pending graphics drawing on the display immediately. Use it in manual refresh mode (see [setrefresh](#setrefresh)) to control exactly when each frame appears — for example, once per pass around a game loop, after all the drawing for that frame is done.
+
+`refresh` works in either refresh mode and does not change the mode. In automatic mode it is rarely needed, since drawing is presented as it happens.
+
+**Example**:
+
+```logo
+?setrefresh "manual
+?repeat 100 [fd 2 rt 3.6 refresh]
+?setrefresh "auto
+```
+
+
+## refreshmode
+
+refreshmode  
+
+`operation`
+
+`refreshmode` outputs the word `auto` or `manual`, naming the current display refresh policy (see [setrefresh](#setrefresh)).
+
+**Example**:
+
+```logo
+?print refreshmode
+auto
+```
+
+
 ## setcursor
 
 setcursor [_columnnumber_ _linenumber_]  
@@ -1528,6 +1563,30 @@ setcursor [_columnnumber_ _linenumber_]
 ; Position the cursor near the centre of the screen
 ?setcursor [20 15]
 ?type "Curling
+```
+
+
+## setrefresh
+
+setrefresh "auto  
+setrefresh "manual  
+
+`command`
+
+`setrefresh` selects how graphics drawing reaches the display.
+
+In `auto` mode (the default), Logo presents drawing on the display as it happens. In `manual` mode, drawing accumulates off-screen and nothing appears until you say [refresh](#refresh) — useful for building a complex picture that should appear all at once, or for pacing the frames of a game or animation yourself.
+
+So that a program cannot leave the screen out of date at the prompt, Logo restores `auto` mode when an error stops your program, when it runs `throw "toplevel`, or when you clear the screen with `cs`.
+
+**Example**:
+
+```logo
+; Draw a complex scene off-screen, then show it all at once
+?setrefresh "manual
+?repeat 36 [repeat 8 [fd 40 rt 45] rt 10]
+?refresh
+?setrefresh "auto
 ```
 
 

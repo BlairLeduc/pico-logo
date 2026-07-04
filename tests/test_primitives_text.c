@@ -451,6 +451,81 @@ void test_tc_is_alias(void)
 }
 
 // ============================================================================
+// Refresh policy tests (setrefresh / refresh / refreshmode)
+// ============================================================================
+
+void test_refreshmode_defaults_to_auto(void)
+{
+    Result r = eval_string("refreshmode");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("auto", value_to_string(r.value));
+}
+
+void test_setrefresh_manual_and_back(void)
+{
+    const MockDeviceState *state = mock_device_get_state();
+
+    run_string("setrefresh \"manual");
+    TEST_ASSERT_FALSE(state->refresh_auto);
+
+    Result r = eval_string("refreshmode");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("manual", value_to_string(r.value));
+
+    run_string("setrefresh \"auto");
+    TEST_ASSERT_TRUE(state->refresh_auto);
+}
+
+void test_setrefresh_is_case_insensitive(void)
+{
+    const MockDeviceState *state = mock_device_get_state();
+
+    run_string("setrefresh \"MANUAL");
+    TEST_ASSERT_FALSE(state->refresh_auto);
+
+    run_string("setrefresh \"Auto");
+    TEST_ASSERT_TRUE(state->refresh_auto);
+}
+
+void test_setrefresh_rejects_unknown_mode(void)
+{
+    Result r = run_string("setrefresh \"fast");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_refresh_presents_now(void)
+{
+    const MockDeviceState *state = mock_device_get_state();
+
+    TEST_ASSERT_EQUAL(0, state->refresh_now_count);
+    run_string("refresh");
+    TEST_ASSERT_EQUAL(1, state->refresh_now_count);
+}
+
+void test_refresh_does_not_change_mode(void)
+{
+    const MockDeviceState *state = mock_device_get_state();
+
+    run_string("setrefresh \"manual");
+    run_string("refresh");
+
+    TEST_ASSERT_FALSE(state->refresh_auto); // Still manual
+    TEST_ASSERT_EQUAL(1, state->refresh_now_count);
+}
+
+void test_cs_restores_auto_refresh(void)
+{
+    const MockDeviceState *state = mock_device_get_state();
+
+    run_string("setrefresh \"manual");
+    TEST_ASSERT_FALSE(state->refresh_auto);
+
+    run_string("cs");
+    TEST_ASSERT_TRUE(state->refresh_auto);
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -516,6 +591,15 @@ int main(void)
     RUN_TEST(test_textcolor_returns_defaults);
     RUN_TEST(test_textcolor_reflects_settextcolor);
     RUN_TEST(test_tc_is_alias);
-    
+
+    // Refresh policy tests
+    RUN_TEST(test_refreshmode_defaults_to_auto);
+    RUN_TEST(test_setrefresh_manual_and_back);
+    RUN_TEST(test_setrefresh_is_case_insensitive);
+    RUN_TEST(test_setrefresh_rejects_unknown_mode);
+    RUN_TEST(test_refresh_presents_now);
+    RUN_TEST(test_refresh_does_not_change_mode);
+    RUN_TEST(test_cs_restores_auto_refresh);
+
     return UNITY_END();
 }

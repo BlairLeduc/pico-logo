@@ -96,6 +96,19 @@ target_include_directories(test_fat32 PRIVATE
 )
 add_test(NAME test_fat32 COMMAND test_fat32)
 
+# Dirty-tile tracker test — compiles devices/picocalc/dirty_tiles.c on the
+# host. Portable (no Pico SDK / Logo runtime dependencies).
+add_executable(test_dirty_tiles
+    test_dirty_tiles.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/dirty_tiles.c
+    unity.c
+)
+target_include_directories(test_dirty_tiles PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/devices/picocalc
+)
+add_test(NAME test_dirty_tiles COMMAND test_dirty_tiles)
+
 # TLS heap allocator test — compiles devices/picocalc/tls_heap.c on the host.
 # Portable (no Pico SDK / Logo runtime dependencies).
 add_executable(test_tls_heap

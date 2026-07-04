@@ -17,10 +17,16 @@
 
 #include "screen.h"
 #include "fat32.h"
+#include "dirty_tiles.h"
 #include "devices/font.h"
 #include "devices/logo-font.h"
 #include "devices/console.h"
 #include "lcd.h"
+
+// The dirty-tile tracker is compiled for a fixed 320x320 screen.
+_Static_assert(DIRTY_TILES_WIDTH == SCREEN_WIDTH &&
+               DIRTY_TILES_HEIGHT == SCREEN_HEIGHT,
+               "dirty_tiles.h dimensions must match the screen");
 
 //
 //  Frame buffers for the screen
@@ -49,12 +55,22 @@ static uint8_t screen_mode = SCREEN_MODE_TXT;
 // Graphics boundary mode (for turtle graphics)
 static ScreenBoundaryMode screen_boundary_mode = SCREEN_BOUNDARY_WRAP;
 
-// Dirty rectangle tracking for efficient screen updates.
-// Only full-width row ranges are tracked (x is always 0..SCREEN_WIDTH-1).
-// When dirty is true, rows dirty_y_min..dirty_y_max (inclusive) need blitting.
-static bool gfx_dirty = false;
-static uint16_t dirty_y_min = 0;
-static uint16_t dirty_y_max = 0;
+// Dirty-region tracking for efficient screen updates: 16x16-pixel tiles
+// with one dirty span per tile row (see dirty_tiles.h).
+static DirtyTiles gfx_tiles;
+
+// Refresh policy. In automatic mode (default) screen_gfx_update() and
+// screen_gfx_flush() present dirty tiles; in manual mode drawing only
+// accumulates dirty state until screen_gfx_present() is called.
+static bool gfx_refresh_auto = true;
+
+// Sprites composited over the canvas at blit time. The canvas buffer never
+// contains sprite pixels; each outgoing row overlays the visible sprites'
+// mask pixels as it is streamed to the LCD. Lower ids render on top.
+static ScreenSprite sprites[SCREEN_MAX_SPRITES];
+
+// Scratch row for compositing (canvas segment + sprite overlay).
+static uint8_t compose_buf[SCREEN_WIDTH];
 
 // 60 Hz rate limiter: minimum microseconds between LCD blits.
 // screen_gfx_update() skips the blit if called again within this interval.
@@ -261,14 +277,14 @@ void screen_set_mode(uint8_t mode)
             lcd_erase_cursor();
             lcd_define_scrolling(0, 0); // No scrolling area in full-screen graphics mode
             screen_gfx_mark_all_dirty();  // Force full blit on mode switch
-            screen_gfx_flush();           // Bypass rate limiter so mode change is visible immediately
+            screen_gfx_present();         // Present even in manual refresh mode
         }
         else if (mode == SCREEN_MODE_SPLIT)
         {
             lcd_erase_cursor();
             lcd_define_scrolling(SCREEN_SPLIT_GFX_HEIGHT, 0); // Set scrolling area for text at the bottom
             screen_gfx_mark_all_dirty();  // Force full blit on mode switch
-            screen_gfx_flush();           // Bypass rate limiter so mode change is visible immediately
+            screen_gfx_present();         // Present even in manual refresh mode
             screen_txt_mark_all_dirty();         // Ensure first refresh fully syncs
             screen_txt_update();
         }
@@ -334,30 +350,107 @@ uint8_t *screen_gfx_frame()
     return gfx_buffer;
 }
 
-// Mark a range of rows as dirty (need re-blitting to LCD).
-// y_min and y_max are inclusive row indices in [0, SCREEN_HEIGHT-1].
+// Mark an inclusive pixel rectangle as dirty (needs re-blitting to LCD).
+void screen_gfx_mark_dirty_rect(int x0, int y0, int x1, int y1)
+{
+    dirty_tiles_mark_rect(&gfx_tiles, x0, y0, x1, y1);
+}
+
+// Mark a range of rows as dirty, full width. Kept for callers that only
+// know a y-range; prefer screen_gfx_mark_dirty_rect.
 void screen_gfx_mark_dirty(uint16_t y_min, uint16_t y_max)
 {
-    // Clamp to valid range
-    if (y_max >= SCREEN_HEIGHT) y_max = SCREEN_HEIGHT - 1;
-    if (y_min >= SCREEN_HEIGHT) return;  // Nothing to mark
-
-    if (!gfx_dirty) {
-        dirty_y_min = y_min;
-        dirty_y_max = y_max;
-        gfx_dirty = true;
-    } else {
-        if (y_min < dirty_y_min) dirty_y_min = y_min;
-        if (y_max > dirty_y_max) dirty_y_max = y_max;
-    }
+    dirty_tiles_mark_rect(&gfx_tiles, 0, y_min, SCREEN_WIDTH - 1, y_max);
 }
 
 // Mark the entire graphics buffer as dirty.
 void screen_gfx_mark_all_dirty(void)
 {
-    dirty_y_min = 0;
-    dirty_y_max = SCREEN_HEIGHT - 1;
-    gfx_dirty = true;
+    dirty_tiles_mark_all(&gfx_tiles);
+}
+
+//
+//  Sprite compositing
+//
+
+// Mark the tiles a sprite covers. Marked both clamped and wrapped so the
+// dirt is correct in every boundary mode (over-marking costs only a little
+// wire time; under-marking would leave stale pixels).
+static void sprite_mark(const ScreenSprite *s)
+{
+    dirty_tiles_mark_rect(&gfx_tiles, s->x, s->y,
+                          s->x + s->w - 1, s->y + s->h - 1);
+    dirty_tiles_mark_rect_wrap(&gfx_tiles, s->x, s->y, s->w, s->h);
+}
+
+// Place (or move/restyle) a sprite. Marks both the old and new locations
+// dirty so the next present erases the old image and draws the new one.
+void screen_sprite_set(uint8_t id, const ScreenSprite *sprite)
+{
+    if (id >= SCREEN_MAX_SPRITES)
+        return;
+
+    if (sprites[id].visible)
+    {
+        sprite_mark(&sprites[id]);
+    }
+    sprites[id] = *sprite;
+    if (sprites[id].visible)
+    {
+        sprite_mark(&sprites[id]);
+    }
+}
+
+// Hide a sprite, marking its last location for re-blit.
+void screen_sprite_hide(uint8_t id)
+{
+    if (id >= SCREEN_MAX_SPRITES || !sprites[id].visible)
+        return;
+
+    sprite_mark(&sprites[id]);
+    sprites[id].visible = false;
+}
+
+// Build one output row: the canvas segment [x0..x1] of row y with all
+// visible sprites overlaid. Higher ids first so lower ids end up on top.
+static void compose_row(int y, int x0, int x1)
+{
+    memcpy(compose_buf, &gfx_buffer[y * SCREEN_WIDTH + x0], (size_t)(x1 - x0 + 1));
+
+    bool wrap = (screen_boundary_mode == SCREEN_BOUNDARY_WRAP);
+
+    for (int id = SCREEN_MAX_SPRITES - 1; id >= 0; id--)
+    {
+        const ScreenSprite *s = &sprites[id];
+        if (!s->visible)
+            continue;
+
+        // Which sprite row lands on screen row y?
+        int dy = y - s->y;
+        if (wrap)
+        {
+            dy %= SCREEN_HEIGHT;
+            if (dy < 0) dy += SCREEN_HEIGHT;
+        }
+        if (dy < 0 || dy >= s->h)
+            continue;
+
+        const uint8_t *mask_row = &s->mask[dy * s->w];
+        for (int c = 0; c < s->w; c++)
+        {
+            if (!mask_row[c])
+                continue;
+            int sx = s->x + c;
+            if (wrap)
+            {
+                sx %= SCREEN_WIDTH;
+                if (sx < 0) sx += SCREEN_WIDTH;
+            }
+            if (sx < x0 || sx > x1)
+                continue;
+            compose_buf[sx - x0] = s->colour;
+        }
+    }
 }
 
 // Clear the graphics buffer
@@ -376,7 +469,17 @@ void screen_gfx_clear(void)
     }
 
     // Buffer and LCD are now in sync — reset dirty state
-    gfx_dirty = false;
+    dirty_tiles_clear(&gfx_tiles);
+
+    // Sprites were wiped from the LCD along with everything else; mark
+    // them so the next present redraws them over the cleared canvas.
+    for (int id = 0; id < SCREEN_MAX_SPRITES; id++)
+    {
+        if (sprites[id].visible)
+        {
+            sprite_mark(&sprites[id]);
+        }
+    }
 }
 
 // Draw a point in the graphics buffer
@@ -402,7 +505,7 @@ void screen_gfx_set_point(float x, float y, uint8_t colour)
     }
 
     gfx_buffer[pixel_y * SCREEN_WIDTH + pixel_x] = colour;
-    screen_gfx_mark_dirty(pixel_y, pixel_y);
+    screen_gfx_mark_dirty_rect(pixel_x, pixel_y, pixel_x, pixel_y);
 }
 
 uint8_t screen_gfx_get_point(float x, float y)
@@ -452,7 +555,7 @@ void screen_gfx_reverse_point(float x, float y)
 
     uint8_t *pixel = &gfx_buffer[pixel_y * SCREEN_WIDTH + pixel_x];
     *pixel = (*pixel == GFX_DEFAULT_BACKGROUND) ? foreground : GFX_DEFAULT_BACKGROUND;
-    screen_gfx_mark_dirty(pixel_y, pixel_y);
+    screen_gfx_mark_dirty_rect(pixel_x, pixel_y, pixel_x, pixel_y);
 }
 
 // Draw a line in the graphics buffer using Bresenham's algorithm
@@ -479,31 +582,12 @@ void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, boo
     int x = ix1;
     int y = iy1;
 
-    // Pre-compute y dirty range from endpoints.
-    // In wrap mode the actual pixel rows are computed per-pixel, so we may
-    // under-estimate; the PLOT_PIXEL macro handles the rest.
-    // In clip/fence mode we can clamp.
-    {
-        int y_lo = (iy1 < iy2) ? iy1 : iy2;
-        int y_hi = (iy1 > iy2) ? iy1 : iy2;
-        if (screen_boundary_mode == SCREEN_BOUNDARY_WRAP) {
-            // Wrapping may scatter pixels, but if the line fits on screen
-            // then the endpoint range is correct. For lines that wrap we
-            // fall back to marking per-pixel inside PLOT_PIXEL.
-            if (y_lo >= 0 && y_hi < SCREEN_HEIGHT) {
-                screen_gfx_mark_dirty(y_lo, y_hi);
-            } else {
-                // Line wraps — mark everything dirty
-                screen_gfx_mark_dirty(0, SCREEN_HEIGHT - 1);
-            }
-        } else {
-            if (y_lo < 0) y_lo = 0;
-            if (y_hi >= SCREEN_HEIGHT) y_hi = SCREEN_HEIGHT - 1;
-            if (y_lo <= y_hi) {
-                screen_gfx_mark_dirty(y_lo, y_hi);
-            }
-        }
-    }
+    // Accumulate the bounding box of the pixels actually plotted (after
+    // wrapping/clipping) and mark it dirty once at the end. A line that
+    // wraps yields a large box, but it is still bounded by the rows and
+    // columns it truly touched — never the whole screen by default.
+    int mark_x0 = SCREEN_WIDTH, mark_y0 = SCREEN_HEIGHT;
+    int mark_x1 = -1, mark_y1 = -1;
 
     // Helper macro to plot a pixel with boundary handling
     #define PLOT_PIXEL(px, py) do { \
@@ -511,27 +595,25 @@ void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, boo
         if (screen_boundary_mode == SCREEN_BOUNDARY_WINDOW || screen_boundary_mode == SCREEN_BOUNDARY_FENCE) { \
             if ((px) < 0 || (px) >= SCREEN_WIDTH || (py) < 0 || (py) >= SCREEN_HEIGHT) { \
                 /* Skip out-of-bounds pixels */ \
-            } else { \
-                plot_x = (px); \
-                plot_y = (py); \
-                uint8_t *pixel = &gfx_buffer[plot_y * SCREEN_WIDTH + plot_x]; \
-                if (reverse) { \
-                    *pixel = (*pixel == GFX_DEFAULT_BACKGROUND) ? colour : GFX_DEFAULT_BACKGROUND; \
-                } else { \
-                    *pixel = colour; \
-                } \
+                break; \
             } \
+            plot_x = (px); \
+            plot_y = (py); \
         } else { \
             /* Wrap mode */ \
             plot_x = (((px) % SCREEN_WIDTH) + SCREEN_WIDTH) % SCREEN_WIDTH; \
             plot_y = (((py) % SCREEN_HEIGHT) + SCREEN_HEIGHT) % SCREEN_HEIGHT; \
-            uint8_t *pixel = &gfx_buffer[plot_y * SCREEN_WIDTH + plot_x]; \
-            if (reverse) { \
-                *pixel = (*pixel == GFX_DEFAULT_BACKGROUND) ? colour : GFX_DEFAULT_BACKGROUND; \
-            } else { \
-                *pixel = colour; \
-            } \
         } \
+        uint8_t *pixel = &gfx_buffer[plot_y * SCREEN_WIDTH + plot_x]; \
+        if (reverse) { \
+            *pixel = (*pixel == GFX_DEFAULT_BACKGROUND) ? colour : GFX_DEFAULT_BACKGROUND; \
+        } else { \
+            *pixel = colour; \
+        } \
+        if (plot_x < mark_x0) mark_x0 = plot_x; \
+        if (plot_x > mark_x1) mark_x1 = plot_x; \
+        if (plot_y < mark_y0) mark_y0 = plot_y; \
+        if (plot_y > mark_y1) mark_y1 = plot_y; \
     } while(0)
 
     if (dx >= dy)
@@ -568,6 +650,11 @@ void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, boo
     }
 
     #undef PLOT_PIXEL
+
+    if (mark_x1 >= 0)
+    {
+        screen_gfx_mark_dirty_rect(mark_x0, mark_y0, mark_x1, mark_y1);
+    }
 }
 
 // Flood fill using scanline algorithm
@@ -619,7 +706,7 @@ void screen_gfx_fill(float x, float y, uint8_t colour)
     {
         row[i] = colour;
     }
-    screen_gfx_mark_dirty(start_y, start_y);
+    screen_gfx_mark_dirty_rect(left, start_y, right, start_y);
 
     // Push spans above and below to process
     if (start_y > 0)
@@ -678,7 +765,7 @@ void screen_gfx_fill(float x, float y, uint8_t colour)
             {
                 row[i] = colour;
             }
-            screen_gfx_mark_dirty(y, y);
+            screen_gfx_mark_dirty_rect(span_left, y, span_right, y);
 
             // Push span in same direction
             int next_y = y + dir;
@@ -706,68 +793,113 @@ void screen_gfx_fill(float x, float y, uint8_t colour)
     }
 }
 
-// Internal: blit the current dirty region to the LCD unconditionally.
-// Assumes gfx_dirty is true. Resets dirty state and records the blit timestamp.
+// Internal: blit the dirty tiles to the LCD unconditionally.
+// Each dirty tile-row span is composited (canvas + sprites) row by row
+// into the DMA-fed blit pipeline. Resets dirty state and records the
+// blit timestamp.
 static void screen_gfx_blit_dirty(void)
 {
-    uint16_t y_min = dirty_y_min;
-    uint16_t y_max = dirty_y_max;
-
-    // Reset dirty state before blitting (so new writes during blit are tracked)
-    gfx_dirty = false;
-
-    if (screen_mode == SCREEN_MODE_GFX)
+    if (screen_mode == SCREEN_MODE_TXT)
     {
-        // Clamp to screen bounds (should already be, but be safe)
-        if (y_max >= SCREEN_HEIGHT) y_max = SCREEN_HEIGHT - 1;
-        lcd_blit(gfx_buffer + y_min * SCREEN_WIDTH,
-                 0, y_min, SCREEN_WIDTH, y_max - y_min + 1);
-    }
-    else if (screen_mode == SCREEN_MODE_SPLIT)
-    {
-        // Only blit the graphics portion (top SCREEN_SPLIT_GFX_HEIGHT rows)
-        if (y_min >= SCREEN_SPLIT_GFX_HEIGHT)
-            return;  // Dirty region is entirely in the text area
-        if (y_max >= SCREEN_SPLIT_GFX_HEIGHT)
-            y_max = SCREEN_SPLIT_GFX_HEIGHT - 1;
-        lcd_blit(gfx_buffer + y_min * SCREEN_WIDTH,
-                 0, y_min, SCREEN_WIDTH, y_max - y_min + 1);
-    }
-    else
-    {
-        // In text mode, no blit occurs — don't update timestamp so the
-        // rate limiter won't suppress the first real blit after a mode switch.
+        // No graphics visible in text mode; keep the dirty state so the
+        // next mode switch (which marks all dirty anyway) repaints.
         return;
     }
 
-    last_blit_time_us = time_us_64();
+    // Snapshot and clear before sending, so writes during the blit are
+    // tracked for the next present.
+    DirtyTiles snapshot = gfx_tiles;
+    dirty_tiles_clear(&gfx_tiles);
+
+    int limit = (screen_mode == SCREEN_MODE_SPLIT) ? SCREEN_SPLIT_GFX_HEIGHT
+                                                   : SCREEN_HEIGHT;
+
+    int row_iter = 0;
+    int x0, y0, x1, y1;
+    bool sent = false;
+    while (dirty_tiles_next_span(&snapshot, &row_iter, &x0, &y0, &x1, &y1))
+    {
+        if (y0 >= limit)
+            break;  // Spans iterate top-down; the rest are in the text area
+        if (y1 >= limit)
+            y1 = limit - 1;
+
+        lcd_blit_begin((uint16_t)x0, (uint16_t)y0,
+                       (uint16_t)(x1 - x0 + 1), (uint16_t)(y1 - y0 + 1));
+        for (int y = y0; y <= y1; y++)
+        {
+            compose_row(y, x0, x1);
+            lcd_blit_row(compose_buf);
+        }
+        lcd_blit_end();
+        sent = true;
+    }
+
+    if (sent)
+    {
+        last_blit_time_us = time_us_64();
+    }
 }
 
-// Write the dirty region of the frame buffer to the LCD display.
-// Rate-limited to ~60 Hz: if called within GFX_FRAME_INTERVAL_US of the
-// last blit, the dirty state is preserved and the blit is deferred.
+// Present dirty tiles in automatic mode, rate-limited to ~60 Hz: if called
+// within GFX_FRAME_INTERVAL_US of the last blit, the dirty state is
+// preserved and the blit is deferred. No-op in manual refresh mode.
 void screen_gfx_update(void)
 {
-    if (!gfx_dirty)
+    if (!gfx_refresh_auto)
+        return;  // Manual mode: accumulate until screen_gfx_present()
+
+    if (!dirty_tiles_any(&gfx_tiles))
         return;  // Nothing changed since last update
 
     // Rate limit: skip this blit if we're within the frame interval
     uint64_t now = time_us_64();
     if ((now - last_blit_time_us) < GFX_FRAME_INTERVAL_US)
-        return;  // Too soon — dirty flag stays set for next call
+        return;  // Too soon — dirty state stays set for next call
 
     screen_gfx_blit_dirty();
 }
 
 // Flush any pending dirty region to the LCD immediately, bypassing the
 // 60 Hz rate limiter. Call this before blocking operations (sleep, I/O)
-// to ensure the user sees the latest frame.
+// to ensure the user sees the latest frame. Still a no-op in manual
+// refresh mode — the program controls its frames there.
 void screen_gfx_flush(void)
 {
-    if (!gfx_dirty)
+    if (!gfx_refresh_auto)
+        return;
+
+    if (!dirty_tiles_any(&gfx_tiles))
         return;
 
     screen_gfx_blit_dirty();
+}
+
+// Present pending drawing now, regardless of refresh policy or the rate
+// limiter. Backs the Logo refresh primitive and screen mode switches.
+void screen_gfx_present(void)
+{
+    if (!dirty_tiles_any(&gfx_tiles))
+        return;
+
+    screen_gfx_blit_dirty();
+}
+
+// Refresh policy selection. Switching back to automatic presents any
+// drawing that accumulated while in manual mode.
+void screen_gfx_set_refresh_auto(bool auto_mode)
+{
+    bool was_auto = gfx_refresh_auto;
+    gfx_refresh_auto = auto_mode;
+    if (auto_mode && !was_auto)
+    {
+        screen_gfx_present();
+    }
+}
+
+bool screen_gfx_get_refresh_auto(void)
+{
+    return gfx_refresh_auto;
 }
 
 int screen_gfx_save(const char *filename)
@@ -1401,6 +1533,9 @@ void screen_init()
 {
     // Initialize the display
     lcd_init();
+
+    // Reset dirty tracking (zero-initialised spans are not the clean state)
+    dirty_tiles_clear(&gfx_tiles);
 
     // Mark all text rows dirty so the first draw paints everything
     screen_txt_mark_all_dirty();

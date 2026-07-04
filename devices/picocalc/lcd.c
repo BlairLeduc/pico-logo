@@ -20,6 +20,7 @@
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
 #include "hardware/spi.h"
+#include "hardware/dma.h"
 
 #include "lcd.h"
 #include "devices/palette.h"
@@ -181,33 +182,47 @@ void lcd_write16_buf(const uint16_t *buffer, size_t len)
     spi_set_format(LCD_SPI, 8, 0, 0, SPI_MSB_FIRST);
 }
 
-// Write len bytes directly from src to the SPI, and discard any data received back
-// Each byte in src is treated as an 8-bit palette index into palette_16bit[]
-static int __not_in_flash_func(spi_write16_pixels_blocking)(spi_inst_t *spi, const uint8_t *src, size_t len) {
-    invalid_params_if(HARDWARE_SPI, 0 > (int)len);
-    // Deliberately overflow FIFO, then clean up afterward, to minimise amount
-    // of APB polling required per halfword
-    for (size_t i = 0; i < len; ++i) {
-        while (!spi_is_writable(spi))
-            tight_loop_contents();
-        spi_get_hw(spi)->dr = (uint32_t)palette[src[i]];
+//
+//  DMA-pipelined pixel streaming
+//
+//  Pixel rows are palette-expanded (8-bit index -> RGB565) into one of two
+//  line buffers while the DMA channel streams the other to the SPI TX FIFO
+//  at wire speed. The CPU therefore pays only for the expansion (~a few us
+//  per row) instead of pacing the SPI one pixel at a time (~68 us per full
+//  row). Between lcd_blit_begin() and lcd_blit_end() the chip select is
+//  held and interrupts are disabled, exactly as the old blocking blit did.
+//
+
+static void lcd_set_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1);
+
+static int lcd_dma_channel = -1;
+static uint16_t lcd_dma_line[2][WIDTH] __attribute__((aligned(4)));
+static int lcd_dma_next = 0;    // line buffer to expand into next
+static bool lcd_dma_busy = false;
+static uint16_t lcd_blit_width = 0;
+
+// Open a blit window and prepare the SPI/DMA for pixel rows.
+// Rows are then fed with lcd_blit_row(); close with lcd_blit_end().
+void lcd_blit_begin(uint16_t x, uint16_t y, uint16_t width, uint16_t height)
+{
+    lcd_disable_interrupts();
+    if (y >= lcd_scroll_top && y < HEIGHT - lcd_scroll_bottom)
+    {
+        // Adjust y for vertical scroll offset and wrap within memory height
+        uint16_t y_virtual = (lcd_y_offset + y) % lcd_memory_scroll_height;
+        uint16_t y_end = lcd_scroll_top + y_virtual + height - 1;
+        if (y_end >= lcd_scroll_top + lcd_memory_scroll_height)
+        {
+            y_end = lcd_scroll_top + lcd_memory_scroll_height - 1;
+        }
+        lcd_set_window(x, lcd_scroll_top + y_virtual, x + width - 1, y_end);
+    }
+    else
+    {
+        // No vertical scrolling, use the actual y-coordinate
+        lcd_set_window(x, y, x + width - 1, y + height - 1);
     }
 
-    while (spi_is_readable(spi))
-        (void)spi_get_hw(spi)->dr;
-    while (spi_get_hw(spi)->sr & SPI_SSPSR_BSY_BITS)
-        tight_loop_contents();
-    while (spi_is_readable(spi))
-        (void)spi_get_hw(spi)->dr;
-
-    // Don't leave overrun flag set
-    spi_get_hw(spi)->icr = SPI_SSPICR_RORIC_BITS;
-
-    return (int)len;
-}
-
-static void lcd_write_pixels_buf(const uint8_t *buffer, size_t len)
-{
     // DO NOT MOVE THE spi_set_format() OR THE gpio_put(LCD_DCX) CALLS!
     // They are placed before the gpio_put(LCD_CSX) to ensure that a minimum
     // chip select high pulse width is achieved (at least 40ns)
@@ -215,10 +230,56 @@ static void lcd_write_pixels_buf(const uint8_t *buffer, size_t len)
 
     gpio_put(LCD_DCX, 1); // Data
     gpio_put(LCD_CSX, 0);
-    spi_write16_pixels_blocking(LCD_SPI, buffer, len);
-    gpio_put(LCD_CSX, 1);
 
+    lcd_blit_width = width;
+    lcd_dma_busy = false;
+    lcd_dma_next = 0;
+}
+
+// Expand one row of palette indices and stream it. Expansion of this row
+// overlaps the DMA transfer of the previous one.
+void __not_in_flash_func(lcd_blit_row)(const uint8_t *row)
+{
+    uint16_t *buf = lcd_dma_line[lcd_dma_next];
+    for (uint16_t i = 0; i < lcd_blit_width; i++)
+    {
+        buf[i] = palette[row[i]];
+    }
+
+    if (lcd_dma_busy)
+    {
+        dma_channel_wait_for_finish_blocking(lcd_dma_channel);
+    }
+    dma_channel_set_read_addr(lcd_dma_channel, buf, false);
+    dma_channel_set_trans_count(lcd_dma_channel, lcd_blit_width, true);
+    lcd_dma_busy = true;
+    lcd_dma_next ^= 1;
+}
+
+// Wait out the final row, drain the SPI, and close the window.
+void lcd_blit_end(void)
+{
+    if (lcd_dma_busy)
+    {
+        dma_channel_wait_for_finish_blocking(lcd_dma_channel);
+        lcd_dma_busy = false;
+    }
+
+    // The DMA only fills the TX FIFO; wait for the wire to drain and
+    // discard whatever the full-duplex SPI clocked into the RX FIFO.
+    while (spi_is_readable(LCD_SPI))
+        (void)spi_get_hw(LCD_SPI)->dr;
+    while (spi_get_hw(LCD_SPI)->sr & SPI_SSPSR_BSY_BITS)
+        tight_loop_contents();
+    while (spi_is_readable(LCD_SPI))
+        (void)spi_get_hw(LCD_SPI)->dr;
+
+    // Don't leave overrun flag set
+    spi_get_hw(LCD_SPI)->icr = SPI_SSPICR_RORIC_BITS;
+
+    gpio_put(LCD_CSX, 1);
     spi_set_format(LCD_SPI, 8, 0, 0, SPI_MSB_FIRST);
+    lcd_enable_interrupts();
 }
 
 //
@@ -254,26 +315,12 @@ static void lcd_set_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
 
 void lcd_blit(const uint8_t *pixels, uint16_t x, uint16_t y, uint16_t width, uint16_t height)
 {
-    lcd_disable_interrupts();
-    if (y >= lcd_scroll_top && y < HEIGHT - lcd_scroll_bottom)
+    lcd_blit_begin(x, y, width, height);
+    for (uint16_t row = 0; row < height; row++)
     {
-        // Adjust y for vertical scroll offset and wrap within memory height
-        uint16_t y_virtual = (lcd_y_offset + y) % lcd_memory_scroll_height;
-        uint16_t y_end = lcd_scroll_top + y_virtual + height - 1;
-        if (y_end >= lcd_scroll_top + lcd_memory_scroll_height)
-        {
-            y_end = lcd_scroll_top + lcd_memory_scroll_height - 1;
-        }
-        lcd_set_window(x, lcd_scroll_top + y_virtual, x + width - 1, y_end);
+        lcd_blit_row(pixels + (size_t)row * width);
     }
-    else
-    {
-        // No vertical scrolling, use the actual y-coordinate
-        lcd_set_window(x, y, x + width - 1, y + height - 1);
-    }
-
-    lcd_write_pixels_buf(pixels, width * height);
-    lcd_enable_interrupts();
+    lcd_blit_end();
 }
 
 // Draw a solid rectangle on the display
@@ -707,6 +754,18 @@ void lcd_init()
     gpio_set_function(LCD_SCL, GPIO_FUNC_SPI);
     gpio_set_function(LCD_SDI, GPIO_FUNC_SPI);
     gpio_set_function(LCD_SDO, GPIO_FUNC_SPI);
+
+    // Claim a DMA channel for pixel streaming (see lcd_blit_begin/row/end).
+    // Configured once here; per-row transfers only set the read address and
+    // count. Paced by the SPI TX DREQ, 16 bits per transfer.
+    lcd_dma_channel = dma_claim_unused_channel(true);
+    dma_channel_config dma_cfg = dma_channel_get_default_config(lcd_dma_channel);
+    channel_config_set_transfer_data_size(&dma_cfg, DMA_SIZE_16);
+    channel_config_set_read_increment(&dma_cfg, true);
+    channel_config_set_write_increment(&dma_cfg, false);
+    channel_config_set_dreq(&dma_cfg, spi_get_dreq(LCD_SPI, true));
+    dma_channel_configure(lcd_dma_channel, &dma_cfg, &spi_get_hw(LCD_SPI)->dr,
+                          NULL, 0, false);
 
     gpio_put(LCD_CSX, 1);
     gpio_put(LCD_RST, 1);

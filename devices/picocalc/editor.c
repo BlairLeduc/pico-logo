@@ -1592,7 +1592,7 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                     // Use no_update to avoid unnecessary txt_buffer redraw
                     screen_set_mode_no_update(SCREEN_MODE_GFX);
                     screen_gfx_mark_all_dirty();  // Force full blit for preview
-                    screen_gfx_update();  // Just update graphics
+                    screen_gfx_present();  // System repaint: bypass refresh policy
                     editor.in_graphics_preview = true;
                 }
                 needs_cursor_update = false;

@@ -4,6 +4,7 @@
 //
 
 #include "test_scaffold.h"
+#include "mock_device.h"
 #include "core/repl.h"
 #include "core/error.h"
 #include <string.h>
@@ -301,6 +302,38 @@ void test_repl_run_multiple_lines(void)
     TEST_ASSERT_TRUE(strstr(output_buffer, "1") != NULL);
     TEST_ASSERT_TRUE(strstr(output_buffer, "2") != NULL);
     TEST_ASSERT_TRUE(strstr(output_buffer, "3") != NULL);
+}
+
+void test_repl_error_restores_auto_refresh(void)
+{
+    ReplState state;
+    const MockDeviceState *mock = mock_device_get_state();
+
+    // A program switches to manual refresh, then dies with an error.
+    // The unwind to the toplevel prompt must restore automatic refresh.
+    set_mock_input("setrefresh \"manual\nprint :nosuchthing\n");
+
+    repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
+    Result r = repl_run(&state);
+    repl_cleanup(&state);
+
+    TEST_ASSERT_EQUAL(RESULT_EOF, r.status);
+    TEST_ASSERT_TRUE(mock->refresh_auto);
+}
+
+void test_repl_throw_toplevel_restores_auto_refresh(void)
+{
+    ReplState state;
+    const MockDeviceState *mock = mock_device_get_state();
+
+    set_mock_input("setrefresh \"manual\nthrow \"toplevel\n");
+
+    repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
+    Result r = repl_run(&state);
+    repl_cleanup(&state);
+
+    TEST_ASSERT_EQUAL(RESULT_THROW, r.status);
+    TEST_ASSERT_TRUE(mock->refresh_auto);
 }
 
 void test_repl_suggests_similar_primitive(void)
@@ -645,6 +678,8 @@ int main(void)
     
     // REPL run tests
     RUN_TEST(test_repl_run_simple_print);
+    RUN_TEST(test_repl_error_restores_auto_refresh);
+    RUN_TEST(test_repl_throw_toplevel_restores_auto_refresh);
     RUN_TEST(test_repl_non_interactive_suppresses_prompt);
     RUN_TEST(test_repl_run_multiple_lines);
     RUN_TEST(test_repl_suggests_similar_primitive);

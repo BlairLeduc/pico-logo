@@ -153,7 +153,7 @@ static void refresh_display(void)
     if (mode == SCREEN_MODE_GFX || mode == SCREEN_MODE_SPLIT)
     {
         screen_gfx_mark_all_dirty();  // Palette changed — force full re-blit
-        screen_gfx_update();
+        screen_gfx_present();         // System repaint: bypass refresh policy
     }
     if (mode == SCREEN_MODE_TXT || mode == SCREEN_MODE_SPLIT)
     {
