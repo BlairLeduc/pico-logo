@@ -23,6 +23,11 @@ bool help_check_sorted(void)
 
 bool help_contains_nocase(const char *haystack, const char *needle)
 {
+    if (!haystack || !needle || !needle[0])
+    {
+        return false;
+    }
+
     size_t nlen = 0;
     while (needle[nlen]) nlen++;
 

@@ -40,7 +40,7 @@ const char *help_lookup(const char *name);
 bool help_check_sorted(void);
 
 // Case-insensitive substring test (portable strcasestr).
-// Used by the help keyword search; needle must be non-empty.
+// Used by the help keyword search; an empty or NULL needle matches nothing.
 bool help_contains_nocase(const char *haystack, const char *needle);
 
 #endif // LOGO_HELP_H

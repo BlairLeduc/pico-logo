@@ -80,6 +80,10 @@ void test_help_contains_nocase(void)
     TEST_ASSERT_TRUE(help_contains_nocase("abc", "abc"));
     TEST_ASSERT_FALSE(help_contains_nocase("abc", "abcd"));
     TEST_ASSERT_FALSE(help_contains_nocase("forward", "rand"));
+    // Empty needle matches nothing (an empty word must not list every entry)
+    TEST_ASSERT_FALSE(help_contains_nocase("abc", ""));
+    TEST_ASSERT_FALSE(help_contains_nocase("", "abc"));
+    TEST_ASSERT_FALSE(help_contains_nocase("", ""));
 }
 
 int main(void)
