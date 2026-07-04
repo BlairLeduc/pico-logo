@@ -151,8 +151,8 @@ typedef struct {
 
 void screen_sprite_set(uint8_t id, const ScreenSprite *sprite);
 void screen_sprite_hide(uint8_t id);
-int screen_gfx_save(const char *filename);
-int screen_gfx_load(const char *filename);
+int screen_gfx_save(LogoStream *out);
+int screen_gfx_load(LogoStream *in);
 
 // Text functions
 uint16_t *screen_txt_frame(void);

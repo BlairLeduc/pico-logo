@@ -336,26 +336,26 @@ static void mock_turtle_set_wrap(void)
     record_command(MOCK_CMD_SET_WRAP);
 }
 
-static int mock_turtle_gfx_save(const char *filename)
+static int mock_turtle_gfx_save(LogoStream *out)
 {
     // Track the call
     mock_state.gfx_io.gfx_save_call_count++;
-    if (filename)
+    if (out)
     {
-        strncpy(mock_state.gfx_io.last_save_filename, filename,
+        strncpy(mock_state.gfx_io.last_save_filename, out->name,
                 sizeof(mock_state.gfx_io.last_save_filename) - 1);
         mock_state.gfx_io.last_save_filename[sizeof(mock_state.gfx_io.last_save_filename) - 1] = '\0';
     }
     return mock_state.gfx_io.gfx_save_result;
 }
 
-static int mock_turtle_gfx_load(const char *filename)
+static int mock_turtle_gfx_load(LogoStream *in)
 {
     // Track the call
     mock_state.gfx_io.gfx_load_call_count++;
-    if (filename)
+    if (in)
     {
-        strncpy(mock_state.gfx_io.last_load_filename, filename,
+        strncpy(mock_state.gfx_io.last_load_filename, in->name,
                 sizeof(mock_state.gfx_io.last_load_filename) - 1);
         mock_state.gfx_io.last_load_filename[sizeof(mock_state.gfx_io.last_load_filename) - 1] = '\0';
     }

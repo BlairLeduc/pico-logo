@@ -160,7 +160,10 @@ static void lfs_stream_flush(LogoStream *stream)
         return;
     }
     LfsStreamContext *ctx = (LfsStreamContext *)stream->context;
-    lfs_file_sync(g_lfs, &ctx->file);
+    if (lfs_file_sync(g_lfs, &ctx->file) < 0)
+    {
+        stream->write_error = true;
+    }
 }
 
 static long lfs_stream_get_read_pos(LogoStream *stream)
