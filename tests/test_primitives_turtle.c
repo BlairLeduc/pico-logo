@@ -1539,6 +1539,204 @@ void test_arc_requires_numbers(void)
 }
 
 //==========================================================================
+// Multi-turtle addressing tests (tell / ask / each / who)
+//==========================================================================
+
+void test_tell_single_directs_commands(void)
+{
+    Result r = run_string("tell 3 forward 10");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 10.0f, mock_device_get_turtle(3)->y);
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 0.0f, mock_device_get_turtle(0)->y);
+}
+
+void test_tell_list_fans_out_ascending(void)
+{
+    Result r = run_string("tell [2 0] forward 25");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 25.0f, mock_device_get_turtle(0)->y);
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 0.0f, mock_device_get_turtle(1)->y);
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 25.0f, mock_device_get_turtle(2)->y);
+}
+
+void test_tell_collapses_duplicates(void)
+{
+    Result r = run_string("tell [2 2 2] show who");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(strstr(mock_device_get_output(), "2") != NULL);
+    TEST_ASSERT_TRUE(strstr(mock_device_get_output(), "[") == NULL);
+}
+
+void test_tell_out_of_range_errors(void)
+{
+    Result r = run_string("tell 5");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    r = run_string("tell 8");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+
+    r = run_string("tell [0 9]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+
+    r = run_string("tell [-1]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+
+    r = run_string("tell []");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+
+    // A failed tell leaves the previous set (turtle 5) in force
+    r = run_string("print who");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(strstr(mock_device_get_output(), "5") != NULL);
+}
+
+void test_tell_non_integer_errors(void)
+{
+    Result r = run_string("tell 1.5");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+
+    r = run_string("tell \"abc");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_queries_answer_for_lowest_active(void)
+{
+    Result r = run_string("tell 3 forward 44 tell [1 3] print ycor");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    // Turtle 1 (the lowest active) is still at home; if the query had
+    // answered for turtle 3 the output would be 44
+    TEST_ASSERT_TRUE(strstr(mock_device_get_output(), "44") == NULL);
+    TEST_ASSERT_TRUE(strstr(mock_device_get_output(), "0") != NULL);
+}
+
+void test_who_outputs_number_when_single(void)
+{
+    Result r = run_string("tell 5 print who");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(strstr(mock_device_get_output(), "5") != NULL);
+}
+
+void test_who_outputs_sorted_list(void)
+{
+    Result r = run_string("tell [5 2] show who");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(strstr(mock_device_get_output(), "[2 5]") != NULL);
+}
+
+void test_ask_runs_for_named_turtle_and_restores(void)
+{
+    Result r = run_string("ask 2 [forward 30] print who");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 30.0f, mock_device_get_turtle(2)->y);
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 0.0f, mock_device_get_turtle(0)->y);
+    TEST_ASSERT_TRUE(strstr(mock_device_get_output(), "0") != NULL);
+}
+
+void test_ask_restores_set_on_error(void)
+{
+    Result r = run_string("tell 1");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    r = run_string("ask 2 [forward \"abc]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+
+    r = run_string("print who");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(strstr(mock_device_get_output(), "1") != NULL);
+}
+
+void test_ask_restores_set_on_throw(void)
+{
+    Result r = run_string("tell 1 catch \"tag [ask 2 [throw \"tag]] print who");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(strstr(mock_device_get_output(), "1") != NULL);
+}
+
+void test_each_narrows_set_with_who(void)
+{
+    Result r = run_string("tell [0 1 2 3] each [setheading who * 90]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 0.0f, mock_device_get_turtle(0)->heading);
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 90.0f, mock_device_get_turtle(1)->heading);
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 180.0f, mock_device_get_turtle(2)->heading);
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 270.0f, mock_device_get_turtle(3)->heading);
+}
+
+void test_each_restores_set(void)
+{
+    Result r = run_string("tell [1 2] each [forward 5] show who");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(strstr(mock_device_get_output(), "[1 2]") != NULL);
+}
+
+void test_each_propagates_error_and_restores(void)
+{
+    Result r = run_string("tell [1 2]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    r = run_string("each [forward \"abc]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+
+    r = run_string("show who");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(strstr(mock_device_get_output(), "[1 2]") != NULL);
+}
+
+void test_pen_state_is_per_turtle(void)
+{
+    Result r = run_string("tell 1 penup tell 0");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    TEST_ASSERT_EQUAL(LOGO_PEN_UP, mock_device_get_turtle(1)->pen_state);
+    TEST_ASSERT_EQUAL(LOGO_PEN_DOWN, mock_device_get_turtle(0)->pen_state);
+}
+
+void test_clearscreen_resets_to_turtle_zero(void)
+{
+    Result r = run_string("tell [1 2] showturtle forward 15 clearscreen print who");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(strstr(mock_device_get_output(), "0") != NULL);
+
+    // Turtles 1-7 are re-hidden at home
+    TEST_ASSERT_FALSE(mock_device_get_turtle(1)->visible);
+    TEST_ASSERT_FALSE(mock_device_get_turtle(2)->visible);
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 0.0f, mock_device_get_turtle(1)->y);
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 0.0f, mock_device_get_turtle(2)->y);
+}
+
+void test_turtles_boot_hidden_except_zero(void)
+{
+    TEST_ASSERT_TRUE(mock_device_get_turtle(0)->visible);
+    for (int i = 1; i < MOCK_MAX_TURTLES; i++)
+    {
+        TEST_ASSERT_FALSE(mock_device_get_turtle(i)->visible);
+    }
+}
+
+void test_addressing_primitives_registered(void)
+{
+    // Verify primitives are registered by checking they don't produce
+    // "I don't know how to" errors
+    Result r = run_string("tell 0");
+    TEST_ASSERT_NOT_EQUAL(RESULT_ERROR, r.status);
+
+    r = run_string("ask 0 []");
+    TEST_ASSERT_NOT_EQUAL(RESULT_ERROR, r.status);
+
+    r = run_string("each []");
+    TEST_ASSERT_NOT_EQUAL(RESULT_ERROR, r.status);
+
+    r = run_string("show who");
+    TEST_ASSERT_NOT_EQUAL(RESULT_ERROR, r.status);
+}
+
+//==========================================================================
 // Main
 //==========================================================================
 
@@ -1716,6 +1914,26 @@ int main(void)
     RUN_TEST(test_arc_zero_angle_draws_nothing);
     RUN_TEST(test_arc_fence_out_of_bounds);
     RUN_TEST(test_arc_requires_numbers);
+
+    // Multi-turtle addressing tests
+    RUN_TEST(test_tell_single_directs_commands);
+    RUN_TEST(test_tell_list_fans_out_ascending);
+    RUN_TEST(test_tell_collapses_duplicates);
+    RUN_TEST(test_tell_out_of_range_errors);
+    RUN_TEST(test_tell_non_integer_errors);
+    RUN_TEST(test_queries_answer_for_lowest_active);
+    RUN_TEST(test_who_outputs_number_when_single);
+    RUN_TEST(test_who_outputs_sorted_list);
+    RUN_TEST(test_ask_runs_for_named_turtle_and_restores);
+    RUN_TEST(test_ask_restores_set_on_error);
+    RUN_TEST(test_ask_restores_set_on_throw);
+    RUN_TEST(test_each_narrows_set_with_who);
+    RUN_TEST(test_each_restores_set);
+    RUN_TEST(test_each_propagates_error_and_restores);
+    RUN_TEST(test_pen_state_is_per_turtle);
+    RUN_TEST(test_clearscreen_resets_to_turtle_zero);
+    RUN_TEST(test_turtles_boot_hidden_except_zero);
+    RUN_TEST(test_addressing_primitives_registered);
 
     return UNITY_END();
 }

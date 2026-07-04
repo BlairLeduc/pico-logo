@@ -54,6 +54,16 @@ extern "C" {
 // affected).
 #define MAX_CURRENT_PROC_DEPTH 32
 
+// Number of turtles (sprites). All eight are full turtles with pens;
+// turtle 0 boots visible as the classic single turtle, 1-7 boot hidden
+// at home. Z-order in the compositor: lower number on top. Kept modest
+// so worst-case compositor and collision costs stay flat; the design
+// doc (docs/multi-sprite-design.md §10) shows 16 is a one-line change.
+//
+// OVERFLOW: `tell` / `ask` reject turtle numbers >= MAX_TURTLES with
+// ERR_BAD_INPUT.
+#define MAX_TURTLES 8
+
 // Maximum size, in bytes, of an HTTP request or response body for `http.get` /
 // `http.post`. The effective cap is chosen at runtime by the active transfer
 // buffer (see core/primitives_http.c):

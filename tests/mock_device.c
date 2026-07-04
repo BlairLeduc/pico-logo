@@ -144,6 +144,40 @@ static bool mock_turtle_move(float distance)
     return true;  // Success
 }
 
+// Copy the working (selected) turtle state into its turtles[] slot
+static void turtle_slot_sync(void)
+{
+    MockTurtleState *t = &mock_state.turtles[mock_state.current_turtle];
+    t->x = mock_state.turtle.x;
+    t->y = mock_state.turtle.y;
+    t->heading = mock_state.turtle.heading;
+    t->pen_state = mock_state.turtle.pen_state;
+    t->pen_colour = mock_state.turtle.pen_colour;
+    t->visible = mock_state.turtle.visible;
+    t->shape = mock_state.shape.current_shape;
+}
+
+static void mock_turtle_select(uint8_t n)
+{
+    if (n >= MOCK_MAX_TURTLES || n == mock_state.current_turtle)
+    {
+        return;  // No-op selects aren't recorded (keeps history noise-free)
+    }
+    record_command_float(MOCK_CMD_SELECT, (float)n);
+
+    turtle_slot_sync();
+    mock_state.current_turtle = n;
+
+    const MockTurtleState *t = &mock_state.turtles[n];
+    mock_state.turtle.x = t->x;
+    mock_state.turtle.y = t->y;
+    mock_state.turtle.heading = t->heading;
+    mock_state.turtle.pen_state = t->pen_state;
+    mock_state.turtle.pen_colour = t->pen_colour;
+    mock_state.turtle.visible = t->visible;
+    mock_state.shape.current_shape = t->shape;
+}
+
 static void mock_turtle_home(void)
 {
     // Draw line to home if pen is down
@@ -420,6 +454,7 @@ static bool mock_turtle_put_shape_data(uint8_t shape_num, const uint8_t *data)
 
 // Turtle operations structure
 static const LogoConsoleTurtle mock_turtle_ops = {
+    .select = mock_turtle_select,
     .clear = mock_turtle_clear,
     .draw = mock_turtle_draw,
     .move = mock_turtle_move,
@@ -838,6 +873,19 @@ void mock_device_reset(void)
     mock_state.turtle.bg_colour = 0;   // Black background
     mock_state.turtle.visible = true;
     mock_state.turtle.boundary_mode = MOCK_BOUNDARY_WRAP;  // Default is wrap
+
+    // Multi-turtle slots: all boot at home, pen down; only turtle 0 visible
+    mock_state.current_turtle = 0;
+    for (int i = 0; i < MOCK_MAX_TURTLES; i++)
+    {
+        mock_state.turtles[i].x = 0.0f;
+        mock_state.turtles[i].y = 0.0f;
+        mock_state.turtles[i].heading = 0.0f;
+        mock_state.turtles[i].pen_state = LOGO_PEN_DOWN;
+        mock_state.turtles[i].pen_colour = 254;
+        mock_state.turtles[i].visible = (i == 0);
+        mock_state.turtles[i].shape = 0;
+    }
     
     // Initialize text screen to default state
     mock_state.text.cursor_col = 0;
@@ -922,6 +970,12 @@ void mock_device_reset(void)
 const MockDeviceState *mock_device_get_state(void)
 {
     return &mock_state;
+}
+
+const MockTurtleState *mock_device_get_turtle(uint8_t n)
+{
+    turtle_slot_sync();  // The selected turtle's slot may be stale
+    return &mock_state.turtles[n < MOCK_MAX_TURTLES ? n : 0];
 }
 
 LogoConsole *mock_device_get_console(void)

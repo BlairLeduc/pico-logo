@@ -31,6 +31,11 @@ extern "C"
     //
     typedef struct LogoConsoleTurtle
     {
+        // Route the stateful turtle ops below to turtle n (0-based).
+        // Devices without multi-turtle support may leave this NULL; core
+        // then addresses the single built-in turtle regardless of n.
+        void (*select)(uint8_t n);
+
         // Clear the graphics screen
         void (*clear)(void);
 

@@ -1445,6 +1445,85 @@ See [Colours](#appendix-e-colour-palette-for-pico-logo) for the default palette.
 ```
 
 
+## tell
+
+tell _turtlenumber_  
+tell _turtlenumberlist_
+
+`command`
+
+Pico Logo has eight turtles, numbered 0 to 7. `tell` chooses which of them your commands talk to. After `tell 3`, turtle commands such as `fd` and `rt` move turtle 3; after `tell [0 1 2]`, each command applies to turtles 0, 1, and 2 in that order. Operations such as `pos` and `heading` answer for the lowest-numbered turtle you are talking to. Duplicate numbers are ignored, and a number outside 0 to 7 causes an error.
+
+When Logo starts, and after [`clearscreen`](#clearscreen-cs), you are talking to turtle 0 only — programs written for one turtle work unchanged. Turtles 1 to 7 start hidden at the home position; use [`showturtle`](#showturtle-st) to reveal them. When turtles overlap on the screen, the lower-numbered turtle appears on top.
+
+Because `tell` accepts a list, you can name a group with a variable: `make "flock [1 2 3]` then `tell :flock`.
+
+**Example**:
+
+```logo
+?tell [0 1]
+?setsh 0
+?st
+?fd 40          ; both turtles move
+?tell 1
+?rt 90          ; only turtle 1 turns
+```
+
+
+## ask
+
+ask _turtlenumber_ _commandlist_  
+ask _turtlenumberlist_ _commandlist_
+
+`command`
+
+`ask` runs _commandlist_ with your commands temporarily redirected to the named turtle or turtles, then goes back to talking to the turtles you had before — even if the list stops with an error. It is the quick way to give one turtle an instruction without changing who you are talking to.
+
+**Example**:
+
+```logo
+?tell [0 1 2]
+?ask 1 [fd 20]      ; only turtle 1 moves
+?fd 10              ; turtles 0, 1 and 2 move
+```
+
+
+## each
+
+each _commandlist_
+
+`command`
+
+`each` runs _commandlist_ once for every turtle you are talking to, in ascending order, talking to just that one turtle each time. Inside the list, [`who`](#who) is the current turtle's number, so each turtle can behave differently.
+
+**Example**:
+
+```logo
+?tell [0 1 2 3]
+?each [seth who * 90 fd 50]   ; four turtles walk in four directions
+```
+
+
+## who
+
+who
+
+`operation`
+
+`who` outputs the turtle number you are talking to, or a list of numbers when you are talking to more than one turtle. Inside [`each`](#each), `who` is always the single turtle currently being addressed.
+
+**Example**:
+
+```logo
+?tell [2 5]
+?show who
+[2 5]
+?each [pr who]
+2
+5
+```
+
+
 ===
 # Text and Screen Commands
 
