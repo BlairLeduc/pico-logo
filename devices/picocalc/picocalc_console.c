@@ -414,7 +414,7 @@ static void turtle_update_raster(void)
         // fits in 24x24 with the base centre at the raster centre.
         memset(turtle_raster, 0, SHAPE0_RASTER_SIZE * SHAPE0_RASTER_SIZE);
 
-        float radians = turtle_angle * (M_PI / 180.0f);
+        float radians = turtle_angle * (float)(M_PI / 180.0);
         float sin_a = sinf(radians);
         float cos_a = cosf(radians);
         float half_base = 3.0f;
