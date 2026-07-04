@@ -225,7 +225,7 @@ for review). Scope grew twice:
 - The LCD update pipeline: the blocking CPU-paced blit and full-width
   row-band dirty tracking cannot afford eight moving sprites, so M0 of the
   design reworks the display path (tile dirty tracking, DMA-pipelined blit,
-  scanline sprite compositor, and a `setrefresh "auto|"manual` + `refresh`
+  scanline sprite compositor, and a `setrefresh "auto | "manual` + `refresh`
   policy) before any sprite work.
 - A survey of period/modern multi-turtle Logos (TI Logo, Atari Logo, TRS-80
   Color Logo, LogoWriter/MicroWorlds, StarLogo/NetLogo, Scratch) from primary

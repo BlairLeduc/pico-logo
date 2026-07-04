@@ -383,10 +383,14 @@ prebaked w×h image, so per-frame cost is independent of these features.
 Two inverses that make the canvas the costume editor:
 
 - `snapsh n w h` — capture the w×h canvas region centred on the (first
-  active) turtle into costume *n* as a colour costume; background pixels
-  become transparent. The Logo-native way to make a sprite: *draw it with
-  the pen you already know, then pick it up.* (Color Logo defined shapes
-  in turtle language; this is that idea without the 45° strokes.)
+  active) turtle into costume *n* as a colour costume. Transparency is
+  defined by palette index, not appearance: canvas pixels whose index
+  equals the current background slot at capture time map to the
+  transparent index (255); all other indices are copied verbatim.
+  (Corollary: changing the background colour later does not retroactively
+  alter captured costumes.) The Logo-native way to make a sprite: *draw
+  it with the pen you already know, then pick it up.* (Color Logo defined
+  shapes in turtle language; this is that idea without the 45° strokes.)
 - `stamp` — composite the current costume into the canvas at the
   turtle's position (LogoWriter). Scenery, trails of glyphs, particle
   effects — one primitive.
@@ -551,7 +555,9 @@ and nothing below assumes a single locus of execution.
 - Costume ops generalize: `put_shape_data`/`get_shape_data` keep their
   16-`uint8_t` mono form; add sized/colour variants
   (`put_costume(n, w, h, kind, pixels)` / `get_costume(...)`), plus
-  `stamp()` and `snap_costume(n, w, h)`.
+  `stamp()` (backs the `stamp` primitive) and `snap_costume(n, w, h)`
+  (backs `snapsh` — the C name spells out what the primitive
+  abbreviates).
 - Per-turtle setters already exist (`set_shape`, `set_visible`, …); new
   ones: `set_speed`, `set_rotation_style`, `set_scale`, `set_anim`.
 - Motion/animation tick: one device-driven `turtle_tick(dt)` invoked from
