@@ -658,8 +658,11 @@ static void editor_position_cursor(void)
     if (screen_row < EDITOR_FIRST_ROW) screen_row = EDITOR_FIRST_ROW;
     if (screen_row > EDITOR_LAST_ROW) screen_row = EDITOR_LAST_ROW;
     
-    // Update cursor character for block cursor style
-    // Get the character at cursor position (or space if at end of content)
+    screen_txt_set_cursor(screen_col, screen_row);
+
+    // Override the cursor character synced from txt_buffer: the editor draws
+    // directly to the LCD, so txt_buffer holds the stale text screen
+    // underneath, not the editor content the block cursor must render.
     uint8_t cursor_char = ' ';
     if (editor.cursor_pos < editor.content_length) {
         cursor_char = (uint8_t)editor.buffer[editor.cursor_pos];
@@ -668,8 +671,6 @@ static void editor_position_cursor(void)
         }
     }
     lcd_set_cursor_char(TXT_PACK(PALETTE_SYNTAX_DEFAULT, PALETTE_SYNTAX_BG, cursor_char));
-    
-    screen_txt_set_cursor(screen_col, screen_row);
 }
 
 //
@@ -1314,17 +1315,20 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
     // sees a valid cursor location (important when coming from splitscreen)
     editor_position_cursor();
     
-    // Now enable and draw cursor - cursor position is already set
+    // Now enable and draw cursor - cursor position is already set.
+    // Use the lcd_ cursor calls, not screen_txt_draw/erase_cursor: those
+    // re-sync the cursor character from txt_buffer, which holds the stale
+    // text screen underneath the editor.
     screen_txt_enable_cursor(true);
-    screen_txt_draw_cursor();  // Draw cursor immediately after enabling
-    
+    lcd_draw_cursor();  // Draw cursor immediately after enabling
+
     // Main editor loop
     while (true) {
         // Draw cursor before waiting for key (in case it was erased)
-        screen_txt_draw_cursor();
+        lcd_draw_cursor();
         char key = keyboard_get_key();
         // Erase cursor before modifying screen
-        screen_txt_erase_cursor();
+        lcd_erase_cursor();
         
         // Check if screen saver was just dismissed - need full redraw
         if (screensaver_dismissed) {
@@ -1349,8 +1353,9 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
         switch (key) {
             case KEY_ESC:
                 // Accept changes
-                screen_txt_erase_cursor();
+                lcd_erase_cursor();
                 screen_txt_enable_cursor(false);
+                lcd_set_cursor_style(LCD_CURSOR_UNDERLINE);  // May still be block if exiting mid-selection
                 input_active = false;  // Re-enable keyboard mode switching
                 // Restore foreground/background palette slots
                 lcd_set_foreground(PALETTE_FG);
@@ -1363,8 +1368,9 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                 
             case KEY_BREAK:
                 // Cancel changes - restore original buffer
-                screen_txt_erase_cursor();
+                lcd_erase_cursor();
                 screen_txt_enable_cursor(false);
+                lcd_set_cursor_style(LCD_CURSOR_UNDERLINE);  // May still be block if exiting mid-selection
                 input_active = false;  // Re-enable keyboard mode switching
                 // Restore foreground/background palette slots
                 lcd_set_foreground(PALETTE_FG);
