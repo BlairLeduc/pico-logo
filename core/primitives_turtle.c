@@ -1488,6 +1488,10 @@ static Result prim_setanim(Evaluator *eval, int argc, Value *args)
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[2]));
     }
+    if (first > last)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_anim)

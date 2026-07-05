@@ -567,24 +567,33 @@ static void mock_turtle_tick(uint32_t dt_ms)
             mock_turtle_move(t->speed * (float)dt_ms / 1000.0f);
         }
 
-        // Advance the animation frame(s) due this interval.
+        // Advance the animation frame(s) due this interval. Accumulate in a
+        // wide local so a large dt_ms can't wrap the uint16_t field, and
+        // step a local shape var (not t->shape, which mock_turtle_select
+        // only refreshes on an actual turtle change) so multiple frames due
+        // in one tick all advance instead of recomputing the same frame.
         if (t->anim_interval > 0)
         {
-            t->anim_accum = (uint16_t)(t->anim_accum + dt_ms);
-            while (t->anim_accum >= t->anim_interval)
+            uint32_t accum = (uint32_t)t->anim_accum + dt_ms;
+            uint8_t shape = t->shape;
+            while (accum >= t->anim_interval)
             {
-                t->anim_accum = (uint16_t)(t->anim_accum - t->anim_interval);
-                uint8_t next = t->shape;
-                if (next >= t->anim_last || next < t->anim_first)
+                accum -= t->anim_interval;
+                if (shape >= t->anim_last || shape < t->anim_first)
                 {
-                    next = t->anim_first;
+                    shape = t->anim_first;
                 }
                 else
                 {
-                    next = (uint8_t)(next + 1);
+                    shape = (uint8_t)(shape + 1);
                 }
+            }
+            t->anim_accum = (uint16_t)accum;
+            if (shape != t->shape)
+            {
                 mock_turtle_select(n);
-                mock_turtle_set_shape(next);  // keeps working shape in sync
+                mock_turtle_set_shape(shape);  // keeps working shape in sync
+                t->shape = shape;
             }
         }
     }

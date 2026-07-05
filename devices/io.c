@@ -145,6 +145,11 @@ uint32_t logo_io_ticks_ms(LogoIO *io)
     return io->hardware->ops->ticks_ms();
 }
 
+bool logo_io_has_ticks_ms(LogoIO *io)
+{
+    return io && io->hardware && io->hardware->ops && io->hardware->ops->ticks_ms;
+}
+
 uint32_t logo_io_random(LogoIO *io)
 {
     if (!io)

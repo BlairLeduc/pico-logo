@@ -1408,10 +1408,13 @@ static void turtle_tick(uint32_t dt_ms)
 
         if (t->anim_interval > 0)
         {
-            t->anim_accum = (uint16_t)(t->anim_accum + dt_ms);
-            while (t->anim_accum >= t->anim_interval)
+            // Accumulate in a wide local so a large dt_ms (e.g. after a long
+            // synchronous instruction) can't wrap the uint16_t field before
+            // the frame-stepping loop below drains it.
+            uint32_t accum = (uint32_t)t->anim_accum + dt_ms;
+            while (accum >= t->anim_interval)
             {
-                t->anim_accum = (uint16_t)(t->anim_accum - t->anim_interval);
+                accum -= t->anim_interval;
                 uint8_t next = t->shape;
                 if (next >= t->anim_last || next < t->anim_first)
                 {
@@ -1423,6 +1426,7 @@ static void turtle_tick(uint32_t dt_ms)
                 }
                 turtle_set_shape_num(next);
             }
+            t->anim_accum = (uint16_t)accum;
         }
     }
 

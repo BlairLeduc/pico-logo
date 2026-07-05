@@ -219,7 +219,8 @@ Result demons_poll(void)
         bool now_true = (cr.status == RESULT_OK) && value_is_true(cr.value, &ok);
         if (cr.status == RESULT_OK && !ok)
         {
-            r = result_error(ERR_NOT_BOOL);  // Condition is not a truth value
+            // Condition is not a truth value
+            r = result_error_arg(ERR_NOT_BOOL, NULL, value_to_string(cr.value));
             break;
         }
 
@@ -251,6 +252,14 @@ Result demons_maybe_poll(void)
     if (!io)
     {
         return result_none();
+    }
+
+    // Without a clock there's no way to budget, so poll every time rather
+    // than gating on a timestamp that never advances (which would arm the
+    // gate once and then suppress every poll thereafter).
+    if (!logo_io_has_ticks_ms(io))
+    {
+        return demons_poll();
     }
 
     uint32_t now = logo_io_ticks_ms(io);

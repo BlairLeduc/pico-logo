@@ -9,6 +9,7 @@
 #include "test_scaffold.h"
 #include "mock_device.h"
 #include "core/demons.h"
+#include <stdio.h>
 #include <string.h>
 
 void setUp(void)
