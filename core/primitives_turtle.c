@@ -1556,8 +1556,11 @@ static Result prim_each(Evaluator *eval, int argc, Value *args)
 static bool arg_turtle(Value v, uint8_t *out, Result *error)
 {
     float num;
-    if (!value_to_number(v, &num) || num != (float)(int)num ||
-        num < 0 || num >= MAX_TURTLES)
+    // Range-check before any integer conversion: a huge or non-finite
+    // input must be rejected without reaching an out-of-range (int) cast.
+    // floorf handles the integrality test (and NaN, which fails it).
+    if (!value_to_number(v, &num) || num < 0 || num >= MAX_TURTLES ||
+        num != floorf(num))
     {
         *error = result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(v));
         return false;

@@ -1075,7 +1075,11 @@ void mock_device_set_raster(uint8_t n, const LogoTurtleRaster *raster)
         return;
     }
     MockRaster *r = &mock_state.sensing.rasters[n];
-    if (!raster || !raster->mask || raster->w == 0 || raster->h == 0)
+    // Reject empty or oversized rasters: the device caps costumes at
+    // MOCK_RASTER_MAX, and storing a larger w/h would let core index past
+    // the fixed mask buffer.
+    if (!raster || !raster->mask || raster->w == 0 || raster->h == 0 ||
+        raster->w > MOCK_RASTER_MAX || raster->h > MOCK_RASTER_MAX)
     {
         r->set = false;
         return;
@@ -1089,12 +1093,7 @@ void mock_device_set_raster(uint8_t n, const LogoTurtleRaster *raster)
     r->h = raster->h;
     r->indexed = raster->indexed;
     r->visible = raster->visible;
-    size_t n_bytes = (size_t)raster->w * raster->h;
-    if (n_bytes > sizeof(r->mask))
-    {
-        n_bytes = sizeof(r->mask);
-    }
-    memcpy(r->mask, raster->mask, n_bytes);
+    memcpy(r->mask, raster->mask, (size_t)raster->w * raster->h);
 }
 
 void mock_device_set_canvas_point(int x, int y, uint8_t index)

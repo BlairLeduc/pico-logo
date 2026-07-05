@@ -39,8 +39,12 @@ extern "C"
     // coordinates are in screen pixels — the same space canvas_point reads.
     // The mask is w*h bytes, row-major; a pixel is solid where the byte is
     // nonzero (mono mask) or not the transparent index (indexed colour).
-    // The pointer is owned by the device and stays valid until the next
-    // turtle operation.
+    // The pointer is owned by the device. Each turtle's mask must be backed
+    // independently and stay valid until that same turtle's raster is next
+    // rebuilt (another get_raster for it, or a change to its shape/pose).
+    // Reading or selecting a *different* turtle must not invalidate it —
+    // touching? holds two turtles' masks at once, and over?/colourunder
+    // read the canvas while holding one.
     #define LOGO_RASTER_TRANSPARENT 255
 
     typedef struct LogoTurtleRaster
