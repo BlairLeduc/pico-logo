@@ -169,6 +169,28 @@ extern "C"
     } MockTurtleState;
 
     //
+    // Sensing fixtures (touching?/over?/colourunder). The device layer
+    // renders rasters and owns the canvas; the mock has neither, so tests
+    // stage them directly: mock_device_set_raster gives a turtle a mask,
+    // and the canvas helpers paint the drawing beneath it. All in the
+    // device's screen-pixel space (0,0 top-left, y down).
+    //
+    #define MOCK_SCREEN_WIDTH_PX  320
+    #define MOCK_SCREEN_HEIGHT_PX 320
+    #define MOCK_RASTER_MAX 32
+
+    typedef struct MockRaster
+    {
+        bool set;           // Tests staged a raster for this turtle
+        int16_t x, y;       // Mask top-left in screen pixels
+        int16_t cx, cy;     // Turtle anchor point
+        uint8_t w, h;       // Mask dimensions
+        bool indexed;       // Mask bytes are palette slots (255 transparent)
+        bool visible;       // Currently rendered
+        uint8_t mask[MOCK_RASTER_MAX * MOCK_RASTER_MAX];
+    } MockRaster;
+
+    //
     // Mock device state - all trackable state in one structure
     //
     typedef struct MockDeviceState
@@ -189,6 +211,13 @@ extern "C"
         // Multi-turtle snapshots plus the selected index
         MockTurtleState turtles[MOCK_MAX_TURTLES];
         uint8_t current_turtle;
+
+        // Sensing fixtures: per-turtle rasters and the canvas beneath them
+        struct
+        {
+            MockRaster rasters[MOCK_MAX_TURTLES];
+            uint8_t canvas[MOCK_SCREEN_WIDTH_PX * MOCK_SCREEN_HEIGHT_PX];
+        } sensing;
 
         // Costume capture tracking (snapsh)
         struct
@@ -346,6 +375,13 @@ extern "C"
 
     // Configure the result snap_costume returns (default true)
     void mock_device_set_snap_result(bool result);
+
+    // Sensing fixtures. Stage turtle n's rendered raster (mask copied from
+    // raster->mask, w*h bytes); pass NULL to clear it. Then paint the
+    // canvas beneath with palette indices. All in screen-pixel space.
+    void mock_device_set_raster(uint8_t n, const LogoTurtleRaster *raster);
+    void mock_device_set_canvas_point(int x, int y, uint8_t index);
+    void mock_device_paint_canvas(int x, int y, int w, int h, uint8_t index);
 
     // Get the mock console (to register with IO)
     LogoConsole *mock_device_get_console(void);

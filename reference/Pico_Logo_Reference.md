@@ -1598,6 +1598,75 @@ who
 ```
 
 
+## touching? (touchingp)
+
+touching? _turtlenumber_ _turtlenumber_
+
+`operation`
+
+`touching?` outputs `true` when the two named turtles overlap on the screen and `false` otherwise. The test is exact to the pixel: it compares the turtles' rendered shapes — including any rotation and magnification — not just the squares that hold them, so two turtles report a touch only when their actual glyphs meet. Both turtles must be shown; a hidden turtle never touches anything. In [`wrap`](#wrap) mode a turtle that straddles an edge is tested on both sides, so contact across the screen edge counts.
+
+**Example**:
+
+```logo
+?tell [0 1]
+?st
+?ask 1 [setpos [10 0]]
+?if touching? 0 1 [pr [crash!]]
+```
+
+
+## over? (overp)
+
+over? _colour_
+
+`operation`
+
+`over?` outputs `true` when any part of the turtle's shape lies over a canvas pixel drawn in palette slot _colour_, and `false` otherwise. It senses the drawing — lines, dots, fills and [`stamp`](#stamp) marks — not other turtles, which are never part of the canvas. When you are talking to more than one turtle, `over?` answers for the lowest-numbered one; address a specific turtle with [`ask`](#ask). Unlike [`touching?`](#touching-touchingp), `over?` reports for a hidden turtle too.
+
+**Example**:
+
+```logo
+?setpc 12  fd 50  bk 50     ; draw a line in colour 12
+?if over? 12 [pr [on the wall]]
+```
+
+
+## colourunder (colorunder)
+
+colourunder
+
+`operation`
+
+`colourunder` outputs the palette slot of the canvas pixel directly beneath the turtle's position. Like [`over?`](#over-overp) it sees only the drawing, never other turtles, and answers for the lowest-numbered turtle you are talking to. Where nothing has been drawn it outputs the background slot.
+
+**Example**:
+
+```logo
+?setpc 9  fill                ; flood the area under the turtle
+?pr colourunder
+9
+```
+
+
+## distance
+
+distance _turtlenumber_
+
+`operation`
+
+`distance` outputs the straight-line distance, in turtle steps, from the turtle you are talking to (the lowest-numbered one) to the turtle named _turtlenumber_. It complements [`towards`](#towards), which gives the heading between points.
+
+**Example**:
+
+```logo
+?tell [0 1]
+?ask 1 [setpos [30 40]]
+?pr distance 1
+50
+```
+
+
 ===
 # Text and Screen Commands
 

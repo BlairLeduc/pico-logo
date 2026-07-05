@@ -481,6 +481,51 @@ static bool mock_turtle_snap_costume(uint8_t slot, uint8_t w, uint8_t h)
     return mock_state.costume.snap_result;
 }
 
+//
+// Sensing ops. Tests stage rasters and the canvas; these just report
+// them so the core sensing logic (touching?/over?/colourunder) runs
+// against real data.
+//
+static bool mock_turtle_get_raster(LogoTurtleRaster *out)
+{
+    const MockRaster *r = &mock_state.sensing.rasters[mock_state.current_turtle];
+    if (!r->set)
+    {
+        return false;
+    }
+    out->x = r->x;
+    out->y = r->y;
+    out->cx = r->cx;
+    out->cy = r->cy;
+    out->w = r->w;
+    out->h = r->h;
+    out->indexed = r->indexed;
+    out->visible = r->visible;
+    out->mask = r->mask;
+    return true;
+}
+
+static uint8_t mock_turtle_canvas_point(int x, int y)
+{
+    if (mock_state.turtle.boundary_mode == MOCK_BOUNDARY_WRAP)
+    {
+        x = ((x % SCREEN_WIDTH) + SCREEN_WIDTH) % SCREEN_WIDTH;
+        y = ((y % SCREEN_HEIGHT) + SCREEN_HEIGHT) % SCREEN_HEIGHT;
+    }
+    else if (x < 0 || x >= SCREEN_WIDTH || y < 0 || y >= SCREEN_HEIGHT)
+    {
+        return 0;  // Background outside the canvas
+    }
+    return mock_state.sensing.canvas[y * SCREEN_WIDTH + x];
+}
+
+static void mock_turtle_sense_metrics(int *width, int *height, bool *wrap)
+{
+    if (width) *width = SCREEN_WIDTH;
+    if (height) *height = SCREEN_HEIGHT;
+    if (wrap) *wrap = (mock_state.turtle.boundary_mode == MOCK_BOUNDARY_WRAP);
+}
+
 // Turtle operations structure
 static const LogoConsoleTurtle mock_turtle_ops = {
     .select = mock_turtle_select,
@@ -518,7 +563,10 @@ static const LogoConsoleTurtle mock_turtle_ops = {
     .set_rotation_style = mock_turtle_set_rotation_style,
     .set_scale = mock_turtle_set_scale,
     .stamp = mock_turtle_stamp,
-    .snap_costume = mock_turtle_snap_costume
+    .snap_costume = mock_turtle_snap_costume,
+    .get_raster = mock_turtle_get_raster,
+    .canvas_point = mock_turtle_canvas_point,
+    .sense_metrics = mock_turtle_sense_metrics
 };
 
 //
@@ -1018,6 +1066,54 @@ const MockTurtleState *mock_device_get_turtle(uint8_t n)
 void mock_device_set_snap_result(bool result)
 {
     mock_state.costume.snap_result = result;
+}
+
+void mock_device_set_raster(uint8_t n, const LogoTurtleRaster *raster)
+{
+    if (n >= MOCK_MAX_TURTLES)
+    {
+        return;
+    }
+    MockRaster *r = &mock_state.sensing.rasters[n];
+    // Reject empty or oversized rasters: the device caps costumes at
+    // MOCK_RASTER_MAX, and storing a larger w/h would let core index past
+    // the fixed mask buffer.
+    if (!raster || !raster->mask || raster->w == 0 || raster->h == 0 ||
+        raster->w > MOCK_RASTER_MAX || raster->h > MOCK_RASTER_MAX)
+    {
+        r->set = false;
+        return;
+    }
+    r->set = true;
+    r->x = raster->x;
+    r->y = raster->y;
+    r->cx = raster->cx;
+    r->cy = raster->cy;
+    r->w = raster->w;
+    r->h = raster->h;
+    r->indexed = raster->indexed;
+    r->visible = raster->visible;
+    memcpy(r->mask, raster->mask, (size_t)raster->w * raster->h);
+}
+
+void mock_device_set_canvas_point(int x, int y, uint8_t index)
+{
+    if (x < 0 || x >= MOCK_SCREEN_WIDTH_PX || y < 0 || y >= MOCK_SCREEN_HEIGHT_PX)
+    {
+        return;
+    }
+    mock_state.sensing.canvas[y * MOCK_SCREEN_WIDTH_PX + x] = index;
+}
+
+void mock_device_paint_canvas(int x, int y, int w, int h, uint8_t index)
+{
+    for (int j = y; j < y + h; j++)
+    {
+        for (int i = x; i < x + w; i++)
+        {
+            mock_device_set_canvas_point(i, j, index);
+        }
+    }
 }
 
 LogoConsole *mock_device_get_console(void)
