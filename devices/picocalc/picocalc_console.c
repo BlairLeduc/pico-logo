@@ -1217,7 +1217,9 @@ static bool turtle_snap_costume(uint8_t slot, uint8_t w, uint8_t h)
         return false;
     }
 
-    uint8_t pixels[TURTLE_RASTER_MAX * TURTLE_RASTER_MAX];
+    // Static: 1 KB is too big a frame for the primitive call path, and
+    // snapsh is never re-entered
+    static uint8_t pixels[TURTLE_RASTER_MAX * TURTLE_RASTER_MAX];
     int x0 = (int)(cur->x + 0.5f) - w / 2;
     int y0 = (int)(cur->y + 0.5f) - h / 2;
     screen_gfx_snap(x0, y0, w, h, pixels);

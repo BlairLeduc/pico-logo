@@ -61,7 +61,7 @@ extern "C" {
 // doc (docs/multi-sprite-design.md §10) shows 16 is a one-line change.
 //
 // OVERFLOW: `tell` / `ask` reject turtle numbers >= MAX_TURTLES with
-// ERR_BAD_INPUT.
+// ERR_DOESNT_LIKE_INPUT.
 #define MAX_TURTLES 8
 
 // Maximum size, in bytes, of an HTTP request or response body for `http.get` /

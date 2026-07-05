@@ -159,9 +159,8 @@ void test_failed_put_keeps_pool_intact(void)
         TEST_ASSERT_TRUE(costume_put((uint8_t)slot, 32, 32, pixels));
     }
 
-    // Replacing slot 1 with a costume that can't fit after the release
-    // is still a failure, and slot 1's costume is gone (replace = delete
-    // then allocate) — but the other slots must be untouched.
+    // Adding a ninth costume to the full pool fails, and every existing
+    // slot must be untouched.
     TEST_ASSERT_FALSE(costume_put(9, 32, 32, pixels));
 
     const uint8_t *data;
@@ -170,6 +169,38 @@ void test_failed_put_keeps_pool_intact(void)
         TEST_ASSERT_TRUE(costume_get((uint8_t)slot, NULL, NULL, &data));
         TEST_ASSERT_EQUAL_MEMORY(pixels, data, sizeof(pixels));
     }
+}
+
+void test_failed_replace_empties_slot_preserves_others(void)
+{
+    uint8_t small[8 * 8];
+    fill_pattern(small, sizeof(small), 6);
+    uint8_t big[32 * 32];
+    fill_pattern(big, sizeof(big), 7);
+
+    // Slot 1 small (64 B), slots 2-8 32x32 (7168 B), slot 9 8x16 (128 B):
+    // 7360 used, 832 free
+    TEST_ASSERT_TRUE(costume_put(1, 8, 8, small));
+    for (int slot = 2; slot <= 8; slot++)
+    {
+        TEST_ASSERT_TRUE(costume_put((uint8_t)slot, 32, 32, big));
+    }
+    TEST_ASSERT_TRUE(costume_put(9, 8, 16, big));
+
+    // Replacing slot 1 with a 32x32 frees its 64 bytes first but still
+    // can't fit (1024 > 832 + 64): replace = delete then allocate, so
+    // the failure leaves slot 1 empty — and every other slot untouched
+    TEST_ASSERT_FALSE(costume_put(1, 32, 32, big));
+    TEST_ASSERT_FALSE(costume_get(1, NULL, NULL, NULL));
+
+    const uint8_t *data;
+    for (int slot = 2; slot <= 8; slot++)
+    {
+        TEST_ASSERT_TRUE(costume_get((uint8_t)slot, NULL, NULL, &data));
+        TEST_ASSERT_EQUAL_MEMORY(big, data, sizeof(big));
+    }
+    TEST_ASSERT_TRUE(costume_get(9, NULL, NULL, &data));
+    TEST_ASSERT_EQUAL_MEMORY(big, data, 8 * 16);
 }
 
 void test_clear_empties_all_slots(void)
@@ -200,6 +231,7 @@ int main(void)
     RUN_TEST(test_delete_compacts_and_preserves_others);
     RUN_TEST(test_pool_exhaustion_and_recovery);
     RUN_TEST(test_failed_put_keeps_pool_intact);
+    RUN_TEST(test_failed_replace_empties_slot_preserves_others);
     RUN_TEST(test_clear_empties_all_slots);
 
     return UNITY_END();
