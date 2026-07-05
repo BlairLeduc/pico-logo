@@ -75,6 +75,7 @@ void primitives_init(void)
     primitives_files_load_save_init();
     primitives_text_init();
     primitives_turtle_init();
+    primitives_events_init();
     primitives_hardware_init();
     primitives_list_processing_init();
     primitives_wifi_init();

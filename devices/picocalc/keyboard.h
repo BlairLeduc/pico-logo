@@ -72,9 +72,15 @@ extern volatile bool screensaver_dismissed;  // Set when screen saver just dismi
 // Callback function type for when a key becomes available
 typedef void (*keyboard_key_available_callback_t)(void);
 
+// Callback run repeatedly while blocked waiting for a key (the prompt idle
+// loop). The console uses it to poll `when` demons and advance autonomous
+// turtles so they stay live while the user is typing.
+typedef void (*keyboard_idle_callback_t)(void);
+
 // Keyboard Function prototypes
 void keyboard_init(void);
 void keyboard_set_key_available_callback(keyboard_key_available_callback_t callback);
+void keyboard_set_idle_callback(keyboard_idle_callback_t callback);
 void keyboard_set_background_poll(bool enable);
 void keyboard_poll(void);
 bool keyboard_key_available(void);

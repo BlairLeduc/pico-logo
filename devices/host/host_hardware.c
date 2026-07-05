@@ -52,6 +52,17 @@ static void host_hardware_sleep(int milliseconds)
 #endif
 }
 
+static uint32_t host_hardware_ticks_ms(void)
+{
+#ifdef _WIN32
+    return (uint32_t)GetTickCount();
+#else
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint32_t)(ts.tv_sec * 1000u + ts.tv_nsec / 1000000u);
+#endif
+}
+
 static uint32_t host_hardware_random(void)
 {
     static bool seeded = false;
@@ -450,6 +461,7 @@ static bool host_network_tcp_can_read(void *handle)
 
 static LogoHardwareOps host_hardware_ops = {
     .sleep = host_hardware_sleep,
+    .ticks_ms = host_hardware_ticks_ms,
     .random = host_hardware_random,
     .get_battery_level = host_hardware_get_battery_level,
     .power_off = NULL,

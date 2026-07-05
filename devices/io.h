@@ -80,7 +80,13 @@ extern "C"
 
     // Sleep for specified milliseconds
     void logo_io_sleep(LogoIO *io, int milliseconds);
-    
+
+    // Monotonic millisecond clock since boot (0 if the device has no clock)
+    uint32_t logo_io_ticks_ms(LogoIO *io);
+
+    // Whether the device provides a ticks_ms clock (false: demons poll budget is skipped)
+    bool logo_io_has_ticks_ms(LogoIO *io);
+
     // Get a random 32-bit number from the device
     uint32_t logo_io_random(LogoIO *io);
 

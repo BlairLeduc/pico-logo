@@ -67,6 +67,7 @@ add_custom_command(
 
 # Core Logo interpreter library
 add_library(logo_core
+    core/demons.c
     core/error.c
     core/eval.c
     core/eval_expr.c
@@ -84,6 +85,7 @@ add_library(logo_core
     core/primitives_debug_control.c
     core/primitives_debug.c
     core/primitives_editor.c
+    core/primitives_events.c
     core/primitives_exceptions.c
     core/primitives_files.c
     core/primitives_files_directory.c
@@ -346,6 +348,7 @@ if(BUILD_FOR_HOST)
     )
 
     add_library(logo_core
+        core/demons.c
         core/error.c
         core/eval.c
         core/eval_expr.c
@@ -363,6 +366,7 @@ if(BUILD_FOR_HOST)
         core/primitives_debug_control.c
         core/primitives_debug.c
         core/primitives_editor.c
+        core/primitives_events.c
         core/primitives_exceptions.c
         core/primitives_files.c
         core/primitives_files_directory.c
@@ -515,6 +519,7 @@ if(BUILD_TESTING)
     )
 
     add_library(logo_core
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/demons.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/error.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/eval.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/eval_expr.c
@@ -532,6 +537,7 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_debug_control.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_debug.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_editor.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_events.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_exceptions.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_files.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_files_directory.c

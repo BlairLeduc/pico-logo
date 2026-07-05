@@ -64,6 +64,22 @@ extern "C" {
 // ERR_DOESNT_LIKE_INPUT.
 #define MAX_TURTLES 8
 
+// Maximum number of armed `when` demons. Each demon holds two node
+// references (a condition expression and an action list) plus a couple of
+// flag bytes, so the table costs ~100 B — see docs/multi-sprite-design.md
+// §10. Kept small because demons are polled on a time budget and each poll
+// evaluates every armed condition.
+//
+// OVERFLOW: `when` returns ERR_OUT_OF_SPACE when the table is full and the
+// condition does not match an already-armed demon.
+#define MAX_DEMONS 8
+
+// Minimum wall-clock gap, in milliseconds, between two demon polls. The
+// poll point sits at the top of every instruction; without a budget a
+// tight loop would re-evaluate every condition on every step. ~20 ms (≈50
+// polls/second) keeps demons responsive while leaving tight loops untaxed.
+#define DEMON_POLL_MS 20
+
 // Maximum size, in bytes, of an HTTP request or response body for `http.get` /
 // `http.post`. The effective cap is chosen at runtime by the active transfer
 // buffer (see core/primitives_http.c):

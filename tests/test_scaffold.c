@@ -41,6 +41,10 @@ bool mock_power_off_called = false;
 // Flag to track if we're using mock_device for turtle/text testing
 bool use_mock_device = false;
 
+// Controllable monotonic clock for testing the demon poll budget and
+// autonomous turtle motion. Tests advance it with set_mock_ticks().
+uint32_t mock_ticks_value = 0;
+
 // Mock console (contains embedded streams)
 LogoConsole mock_console;
 
@@ -176,6 +180,11 @@ uint32_t mock_random(void)
     return 42; // Fixed value for testing
 }
 
+uint32_t mock_ticks_ms(void)
+{
+    return mock_ticks_value;
+}
+
 void mock_get_battery_level(int *level, bool *charging)
 {
     *level = mock_battery_level;
@@ -220,6 +229,7 @@ bool mock_power_off(void)
 
 LogoHardwareOps mock_hardware_ops = {
     .sleep = mock_sleep,
+    .ticks_ms = mock_ticks_ms,
     .random = mock_random,
     .get_battery_level = mock_get_battery_level,
     .power_off = NULL,  // Default: not available, use set_mock_power_off() to enable
@@ -264,6 +274,11 @@ void set_mock_battery(int level, bool charging)
 {
     mock_battery_level = level;
     mock_battery_charging = charging;
+}
+
+void set_mock_ticks(uint32_t ms)
+{
+    mock_ticks_value = ms;
 }
 
 void set_mock_power_off(bool available, bool result)
@@ -314,6 +329,7 @@ void test_scaffold_setUp(void)
     mock_user_interrupt = false;  // Reset user interrupt flag
     mock_pause_requested = false; // Reset pause request flag
     mock_freeze_requested = false; // Reset freeze request flag
+    mock_ticks_value = 0;         // Reset mock monotonic clock
     mock_battery_level = 100;     // Reset mock battery state
     mock_battery_charging = false;
     
@@ -355,7 +371,33 @@ void test_scaffold_setUp_with_device(void)
     
     // Set up mock I/O manager with the mock device's console
     logo_io_init(&mock_io, mock_device_get_console(), NULL, NULL);
-    
+
+    // Register I/O with primitives
+    primitives_set_io(&mock_io);
+}
+
+void test_scaffold_setUp_with_device_and_hardware(void)
+{
+    logo_mem_init();
+    primitives_init();
+    procedures_init();
+    variables_init();
+    properties_init();
+    output_buffer[0] = '\0';
+    output_pos = 0;
+    use_mock_device = true;
+    mock_ticks_value = 0;
+
+    // Initialize the mock device with turtle, text, and screen capabilities
+    mock_device_init();
+
+    // Wire the mock hardware too, so ticks_ms drives the demon poll budget
+    // and turtle_tick. (The plain device setup passes NULL hardware.)
+    mock_hardware_ops.ticks_ms = mock_ticks_ms;
+    logo_hardware_init(&mock_hardware, &mock_hardware_ops);
+
+    logo_io_init(&mock_io, mock_device_get_console(), NULL, &mock_hardware);
+
     // Register I/O with primitives
     primitives_set_io(&mock_io);
 }

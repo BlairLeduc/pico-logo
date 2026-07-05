@@ -27,6 +27,11 @@ extern "C"
         // Sleep for specified milliseconds
         void (*sleep)(int milliseconds);
 
+        // Monotonic millisecond clock since boot. Used to budget demon
+        // polling and to advance autonomous turtle motion/animation. May be
+        // NULL on devices without a clock; callers then get 0.
+        uint32_t (*ticks_ms)(void);
+
         // Get a random 32-bit number
         uint32_t (*random)(void);
 

@@ -166,6 +166,11 @@ extern "C"
         uint8_t shape;
         uint8_t rot_style;  // LogoRotationStyle
         uint8_t mag;        // 1 or 2
+        float speed;        // Autonomous speed, turtle steps/second (setspeed)
+        uint8_t anim_first; // Animation frame range (setanim)
+        uint8_t anim_last;
+        uint16_t anim_interval;  // ms per frame; 0 = not animating
+        uint16_t anim_accum;     // ms accumulated toward the next frame
     } MockTurtleState;
 
     //

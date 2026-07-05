@@ -1667,6 +1667,104 @@ distance _turtlenumber_
 ```
 
 
+## setspeed
+
+setspeed _speed_
+
+`command`
+
+`setspeed` sets how fast each turtle you are talking to moves on its own, in turtle steps per second. Once a turtle has a speed it glides forward along its heading all by itself — drawing with its pen and obeying [`wrap`](#wrap), [`window`](#window) and [`fence`](#fence) exactly as [`forward`](#forward-fd) would — while your program does other things or waits at the prompt. A speed of 0 stops the turtle. Autonomous motion is paused by [`freeze`](#freeze) and cleared by [`clearscreen`](#clearscreen-cs).
+
+**Example**:
+
+```logo
+?setspeed 30      ; glide forward 30 steps every second
+?seth 90          ; head east; it keeps moving as you type
+```
+
+
+## speed
+
+speed
+
+`operation`
+
+`speed` outputs the autonomous speed, in turtle steps per second, of the turtle you are talking to (the lowest-numbered one). It outputs 0 when the turtle is not moving on its own.
+
+**Example**:
+
+```logo
+?setspeed 45
+?pr speed
+45
+```
+
+
+## setanim
+
+setanim _first_ _last_ _interval_
+
+`command`
+
+`setanim` animates each turtle you are talking to by cycling its shape from _first_ through _last_ (shape numbers 0 to 15), advancing to the next frame every _interval_ milliseconds and looping back to _first_ after _last_. The frames flip on their own during a program and at the prompt, just like autonomous motion. An _interval_ of 0 stops the animation and leaves the current shape in place. Animation is paused by [`freeze`](#freeze) and cleared by [`clearscreen`](#clearscreen-cs).
+
+**Example**:
+
+```logo
+?setanim 1 4 100    ; walk cycle: shapes 1..4, 100 ms per frame
+?setspeed 20        ; stroll across the screen, legs moving
+```
+
+
+## when
+
+when _condition_ _action_
+
+`command`
+
+`when` arms a _demon_: a rule that runs _action_ the moment _condition_ becomes true. _condition_ and _action_ are both instruction lists. The condition is checked continually — while your program runs and while you type at the prompt — and its _action_ fires once each time the condition changes from false to true (so a collision fires once on contact, not over and over while the turtles stay touching). Give the same _condition_ an empty _action_ list to disarm that demon; the bare form `(when)` prints the demons currently armed. Up to eight demons can be armed at once. Demons are paused by [`freeze`](#freeze), resumed by [`thaw`](#thaw), and all cleared by [`clearscreen`](#clearscreen-cs) or when a program stops with an error.
+
+**Example**:
+
+```logo
+?when [touching? 0 1] [pr [crash!] setspeed 0]
+?when [over? 12] [seth heading + 90]
+?when [key?] []                ; disarm the key demon
+```
+
+
+## freeze
+
+freeze
+
+`command`
+
+`freeze` suspends all autonomous activity at once: [`when`](#when) demons stop firing and turtles given a [`setspeed`](#setspeed) or [`setanim`](#setanim) hold their position and frame. Use it to pause a game. Resume everything exactly where it left off with [`thaw`](#thaw).
+
+**Example**:
+
+```logo
+?freeze     ; the action holds still
+?thaw       ; and carries on
+```
+
+
+## thaw
+
+thaw
+
+`command`
+
+`thaw` resumes the autonomous activity suspended by [`freeze`](#freeze): [`when`](#when) demons are checked again and moving or animating turtles carry on from where they stopped. `thaw` when nothing is frozen does nothing.
+
+**Example**:
+
+```logo
+?freeze
+?thaw
+```
+
+
 ===
 # Text and Screen Commands
 

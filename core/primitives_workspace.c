@@ -7,6 +7,7 @@
 //
 
 #include "primitives.h"
+#include "demons.h"
 #include "procedures.h"
 #include "variables.h"
 #include "properties.h"
@@ -757,6 +758,7 @@ static Result prim_recycle(Evaluator *eval, int argc, Value *args)
     frame_gc_mark_all(proc_get_frame_stack());
     op_stack_gc_mark(eval->op_stack);
     token_source_gc_mark(&eval->token_source);
+    demons_gc_mark_all();
 
     TailCall *tc = proc_get_tail_call();
     if (tc->is_tail_call)

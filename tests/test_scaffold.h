@@ -76,6 +76,10 @@ void test_scaffold_setUp(void);
 // Setup with mock device - enables turtle/text/screen testing
 void test_scaffold_setUp_with_device(void);
 
+// Setup with mock device AND mock hardware - adds a controllable clock
+// (ticks_ms) so demon polling and autonomous turtle motion can be tested.
+void test_scaffold_setUp_with_device_and_hardware(void);
+
 // Teardown (currently empty but available for extension)
 void test_scaffold_tearDown(void);
 
@@ -112,6 +116,17 @@ void define_proc(const char *name, const char **params, int param_count, const c
 
 // Set mock battery level and charging state for testing
 void set_mock_battery(int level, bool charging);
+
+// ============================================================================
+// Mock Clock Helper
+// ============================================================================
+
+// The controllable monotonic clock backing mock_hardware_ops.ticks_ms.
+extern uint32_t mock_ticks_value;
+uint32_t mock_ticks_ms(void);
+
+// Set the mock monotonic clock (milliseconds) for demon/motion tests.
+void set_mock_ticks(uint32_t ms);
 
 // ============================================================================
 // Mock Power Off Helpers

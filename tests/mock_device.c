@@ -526,6 +526,81 @@ static void mock_turtle_sense_metrics(int *width, int *height, bool *wrap)
     if (wrap) *wrap = (mock_state.turtle.boundary_mode == MOCK_BOUNDARY_WRAP);
 }
 
+//
+// Autonomous motion and animation. speed/anim live in the per-turtle slots
+// (not the working state), so they survive select(). turtle_tick drives
+// each turtle through the real move op, so gliding honours boundary mode
+// and draws exactly like forward.
+//
+static void mock_turtle_set_speed(float steps_per_second)
+{
+    mock_state.turtles[mock_state.current_turtle].speed = steps_per_second;
+}
+
+static float mock_turtle_get_speed(void)
+{
+    return mock_state.turtles[mock_state.current_turtle].speed;
+}
+
+static void mock_turtle_set_anim(uint8_t first, uint8_t last, uint16_t interval_ms)
+{
+    MockTurtleState *t = &mock_state.turtles[mock_state.current_turtle];
+    t->anim_first = first;
+    t->anim_last = last;
+    t->anim_interval = interval_ms;
+    t->anim_accum = 0;
+}
+
+static void mock_turtle_tick(uint32_t dt_ms)
+{
+    uint8_t saved = mock_state.current_turtle;
+
+    for (uint8_t n = 0; n < MOCK_MAX_TURTLES; n++)
+    {
+        MockTurtleState *t = &mock_state.turtles[n];
+
+        // Advance autonomous motion through the real move op (needs the
+        // turtle selected so it operates on the working state).
+        if (t->speed > 0.0f)
+        {
+            mock_turtle_select(n);
+            mock_turtle_move(t->speed * (float)dt_ms / 1000.0f);
+        }
+
+        // Advance the animation frame(s) due this interval. Accumulate in a
+        // wide local so a large dt_ms can't wrap the uint16_t field, and
+        // step a local shape var (not t->shape, which mock_turtle_select
+        // only refreshes on an actual turtle change) so multiple frames due
+        // in one tick all advance instead of recomputing the same frame.
+        if (t->anim_interval > 0)
+        {
+            uint32_t accum = (uint32_t)t->anim_accum + dt_ms;
+            uint8_t shape = t->shape;
+            while (accum >= t->anim_interval)
+            {
+                accum -= t->anim_interval;
+                if (shape >= t->anim_last || shape < t->anim_first)
+                {
+                    shape = t->anim_first;
+                }
+                else
+                {
+                    shape = (uint8_t)(shape + 1);
+                }
+            }
+            t->anim_accum = (uint16_t)accum;
+            if (shape != t->shape)
+            {
+                mock_turtle_select(n);
+                mock_turtle_set_shape(shape);  // keeps working shape in sync
+                t->shape = shape;
+            }
+        }
+    }
+
+    mock_turtle_select(saved);
+}
+
 // Turtle operations structure
 static const LogoConsoleTurtle mock_turtle_ops = {
     .select = mock_turtle_select,
@@ -566,7 +641,11 @@ static const LogoConsoleTurtle mock_turtle_ops = {
     .snap_costume = mock_turtle_snap_costume,
     .get_raster = mock_turtle_get_raster,
     .canvas_point = mock_turtle_canvas_point,
-    .sense_metrics = mock_turtle_sense_metrics
+    .sense_metrics = mock_turtle_sense_metrics,
+    .set_speed = mock_turtle_set_speed,
+    .get_speed = mock_turtle_get_speed,
+    .set_anim = mock_turtle_set_anim,
+    .turtle_tick = mock_turtle_tick
 };
 
 //

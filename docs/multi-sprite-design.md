@@ -618,7 +618,15 @@ the help text).
   wrap-mode cases; rotation-aware masks. All on mock.
 - **M3 — autonomy + events:** `setspeed`/`speed`, `freeze`/`thaw`,
   `setanim`, `when` demons, idle-loop ticking, lifetime rules. Tests via
-  mock time source + scripted conditions.
+  mock time source + scripted conditions. **Landed:** `core/demons.c`
+  (edge-triggered table, `MAX_DEMONS` 8, `DEMON_POLL_MS` 20 budget, fresh
+  nested evaluator with re-entrancy suppression); poll at the instruction
+  point and the picocalc prompt idle loop; new device ops `set_speed`/
+  `get_speed`/`set_anim`/`turtle_tick` and a monotonic `ticks_ms` hardware
+  op; `cs`/error-unwind clear demons and stop motion. Decisions made where
+  the spec was open: speed is **turtle steps per second**, `setanim` is
+  `setanim first last interval_ms` (frame range + ms per frame, 0 stops),
+  and `freeze`/`thaw` suspend **both** demons and autonomous motion.
 - **(P6 candidate, own design gate):** `launch` processes + broadcast
   messages (§8).
 

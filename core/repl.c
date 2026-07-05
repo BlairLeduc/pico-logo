@@ -13,6 +13,7 @@
 #include <string.h>
 #include <strings.h>
 
+#include "core/demons.h"
 #include "core/error.h"
 #include "core/eval.h"
 #include "core/lexer.h"
@@ -234,10 +235,12 @@ void repl_cleanup(ReplState *state)
     state->expr_buffer = NULL;
 }
 
-// Restore the automatic display refresh policy. Called when execution
-// unwinds to the toplevel REPL (error or throw "toplevel) so a program
-// that switched to manual refresh cannot leave the screen stale at the
-// prompt. Pause is excluded: a paused program may continue with co.
+// Clean up autonomous state when execution unwinds to the toplevel REPL
+// (error or throw "toplevel): restore automatic display refresh so a
+// program that switched to manual refresh cannot leave the screen stale at
+// the prompt, and clear every `when` demon and stop autonomous turtle
+// motion — nothing acts on its own after a reset. Pause is excluded: a
+// paused program may continue with co.
 static void repl_restore_refresh(ReplState *state)
 {
     if (state->io && state->io->console && state->io->console->screen &&
@@ -245,6 +248,7 @@ static void repl_restore_refresh(ReplState *state)
     {
         state->io->console->screen->set_refresh_auto(true);
     }
+    demons_reset();
 }
 
 // Handle a single line evaluation

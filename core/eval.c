@@ -12,6 +12,7 @@
 #include "procedures.h"
 #include "repl.h"
 #include "frame.h"
+#include "demons.h"
 #include "devices/io.h"
 #include <string.h>
 
@@ -157,6 +158,15 @@ Result eval_instruction(Evaluator *eval)
             // Otherwise continue execution
         }
         // If not in a procedure, defer — flag stays set until we enter one
+    }
+
+    // Poll `when` demons and advance autonomous turtle motion. Budget-gated
+    // so tight loops aren't taxed; suppressed while a demon action runs. A
+    // demon action that errors or throws unwinds like any other instruction.
+    Result demon_r = demons_maybe_poll();
+    if (demon_r.status == RESULT_ERROR || demon_r.status == RESULT_THROW)
+    {
+        return demon_r;
     }
 
     if (eval_at_end(eval))

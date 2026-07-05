@@ -165,6 +165,32 @@ extern "C"
         // Optional.
         void (*set_scale)(uint8_t mag);
 
+        //
+        // Autonomous motion and animation (backs setspeed/speed/setanim).
+        // The device owns the moving state and advances it on turtle_tick;
+        // core only sets it and drives the tick from the demon poll. All
+        // optional; absent ops make the turtles stationary.
+        //
+
+        // Set the selected turtle's autonomous speed in turtle steps per
+        // second (0 stops it). The turtle glides along its heading, drawing
+        // and honouring the boundary mode exactly as forward would.
+        void (*set_speed)(float steps_per_second);
+
+        // Output the selected turtle's autonomous speed.
+        float (*get_speed)(void);
+
+        // Animate the selected turtle's costume: cycle its shape from
+        // `first` to `last` (inclusive), advancing one frame every
+        // `interval_ms`. interval_ms 0 stops animating and leaves the shape
+        // as it is.
+        void (*set_anim)(uint8_t first, uint8_t last, uint16_t interval_ms);
+
+        // Advance every turtle's autonomous motion and animation by dt
+        // milliseconds. Driven from the demon poll (during execution and at
+        // the prompt); the device owns all positions.
+        void (*turtle_tick)(uint32_t dt_ms);
+
         // Composite the turtle's current costume into the canvas at the
         // turtle's position (backs the stamp primitive). Optional.
         void (*stamp)(void);

@@ -1,0 +1,142 @@
+; M3 autonomy & events hardware demo (P5 M3)
+; Load with:  load "m3accept
+; Run all:    m3accept        (press a key to advance between steps)
+; Or run any step on its own: m3glide m3anim m3touch m3over m3freeze m3steer
+;
+; The heart of M3 is that things move and react ON THEIR OWN. Each step sets
+; something in motion, then waits for a key with `ignore rc`; while it waits,
+; the prompt idle loop keeps ticking -- so you WATCH the turtles glide,
+; animate, and fire their `when` demons during the pause, before you press a
+; key to move on.
+
+to m3pause
+  pr []
+  pr [--- watch the screen, then press any key ---]
+  ignore rc
+end
+
+to m3banner :text
+  cs ss              ; cs also disarms demons and stops autonomous motion
+  pr []
+  pr :text
+end
+
+; A dense solid 16x16 costume in slot 1, so touching?/over? have a real mask
+; (they are pixel-true; the line turtle is too sparse to register).
+to m3block
+  cs
+  setpc 15
+  pu setpos [-8 -8] seth 0 pd
+  repeat 4 [fd 16 rt 90]
+  pu setpos [0 0] pd fill
+  snapsh 1 16 16
+  cs
+end
+
+; Four spinner frames for setanim (8x16 mono bitmaps).
+to m3spinner
+  putsh 1 [24 24 24 24 24 24 24 24 24 24 24 24 24 24 24 24]           ; vertical
+  putsh 2 [128 128 64 64 32 32 16 16 8 8 4 4 2 2 1 1]                 ; "\"
+  putsh 3 [0 0 0 0 0 0 0 255 255 0 0 0 0 0 0 0]                       ; horizontal
+  putsh 4 [1 1 2 2 4 4 8 8 16 16 32 32 64 64 128 128]                 ; "/"
+end
+
+; Step 1: setspeed -- a turtle glides on its own
+to m3glide
+  m3banner [Step 1: setspeed -- autonomous motion]
+  pr [PASS: the turtle glides on its own and wraps]
+  pr [      around the screen while nothing runs]
+  wrap
+  tell 0 setsh 0 st pu home seth 60
+  setspeed 60
+  m3pause
+  setspeed 0
+end
+
+; Step 2: setanim -- the costume animates while it moves
+to m3anim
+  m3banner [Step 2: setanim -- costume animation]
+  m3spinner
+  pr [PASS: the turtle's shape cycles through four]
+  pr [      spinner frames as it glides]
+  wrap
+  tell 0 setsh 1 st pu home seth 90
+  setanim 1 4 120
+  setspeed 40
+  m3pause
+  setspeed 0 setanim 0 0 0
+end
+
+; Step 3: when + touching? -- a demon stops the chaser on contact
+to m3touch
+  m3block
+  m3banner [Step 3: when [touching? 0 1] -- collision demon]
+  pr [PASS: turtle 1 glides in and the demon halts]
+  pr [      it the instant the two blocks overlap]
+  tell [0 1] setsh 1 st
+  tell 0 pu home
+  tell 1 pu setpos [150 0] seth 270
+  when [touching? 0 1] [tell 1 setspeed 0  pr [   contact! demon fired]]
+  tell 1 setspeed 50
+  m3pause
+  tell 0 setspeed 0
+end
+
+; Step 4: when + over? -- a demon fires when the turtle crosses a drawing
+to m3over
+  m3block
+  m3banner [Step 4: when [over? 68] -- sensing the drawing]
+  pr [PASS: the turtle glides east and the demon]
+  pr [      fires as it reaches the red bar]
+  setpc 68
+  pu setpos [40 -80] pd setpos [40 80]
+  pu setpos [43 -80] pd setpos [43 80]
+  pu setpos [46 -80] pd setpos [46 80]
+  tell 0 setsh 1 st pu setpos [-90 0] seth 90
+  when [over? 68] [setspeed 0  pr [   on the red bar! demon fired]]
+  setspeed 40
+  m3pause
+  setspeed 0
+end
+
+; Step 5: freeze / thaw -- pause and resume all autonomous activity
+to m3freeze
+  m3banner [Step 5: freeze / thaw]
+  pr [PASS: the turtle glides, then FREEZE stops it]
+  pr [      dead, and THAW sets it going again]
+  wrap
+  tell 0 setsh 0 st pu home seth 90 setspeed 60
+  pr [] pr [gliding -- press a key to FREEZE]
+  ignore rc
+  freeze
+  pr [frozen (still) -- press a key to THAW]
+  ignore rc
+  thaw
+  pr [thawed -- press a key to finish]
+  ignore rc
+  setspeed 0
+end
+
+; Step 6: when + key? -- an interactive steering demon
+to m3steer
+  m3banner [Step 6: when [key?] -- interactive demon]
+  pr [PASS: each key you tap turns the turtle 45]
+  pr [      degrees; you have a few seconds. Go!]
+  tell 0 setsh 0 st pu home
+  when [key?] [tell 0 rt 45  ignore rc]
+  repeat 300 [wait 10]
+  when [key?] []             ; disarm the demon
+  pr [] pr [done -- demon disarmed]
+end
+
+to m3accept
+  m3glide   m3pause
+  m3anim    m3pause
+  m3touch   m3pause
+  m3over    m3pause
+  m3freeze
+  m3steer
+  cs
+  pr []
+  pr [M3 acceptance complete.]
+end
