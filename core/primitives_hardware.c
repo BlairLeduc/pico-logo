@@ -98,12 +98,8 @@ static Result prim_toot(Evaluator *eval, int argc, Value *args)
     }
 
     // Get duration (first argument)
-    if (args[0].type != VALUE_NUMBER)
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, 
-            args[0].type == VALUE_WORD ? mem_word_ptr(args[0].as.node) : "[]");
-    }
-    int duration_ms = (int)args[0].as.number;
+    REQUIRE_NUMBER(args[0], duration_f);
+    int duration_ms = (int)duration_f;
     if (duration_ms < 0)
     {
         char buf[32];
@@ -113,16 +109,12 @@ static Result prim_toot(Evaluator *eval, int argc, Value *args)
 
     // Get frequency/frequencies
     uint32_t left_freq, right_freq;
-    
+
     if (argc == 2)
     {
         // Single frequency for both channels
-        if (args[1].type != VALUE_NUMBER)
-        {
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, 
-                args[1].type == VALUE_WORD ? mem_word_ptr(args[1].as.node) : "[]");
-        }
-        int freq = (int)args[1].as.number;
+        REQUIRE_NUMBER(args[1], freq_f);
+        int freq = (int)freq_f;
         if (freq < 0)
         {
             char buf[32];
@@ -134,18 +126,10 @@ static Result prim_toot(Evaluator *eval, int argc, Value *args)
     else
     {
         // Separate frequencies for left and right channels
-        if (args[1].type != VALUE_NUMBER)
-        {
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, 
-                args[1].type == VALUE_WORD ? mem_word_ptr(args[1].as.node) : "[]");
-        }
-        if (args[2].type != VALUE_NUMBER)
-        {
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, 
-                args[2].type == VALUE_WORD ? mem_word_ptr(args[2].as.node) : "[]");
-        }
-        int lfreq = (int)args[1].as.number;
-        int rfreq = (int)args[2].as.number;
+        REQUIRE_NUMBER(args[1], lfreq_f);
+        REQUIRE_NUMBER(args[2], rfreq_f);
+        int lfreq = (int)lfreq_f;
+        int rfreq = (int)rfreq_f;
         if (lfreq < 0)
         {
             char buf[32];

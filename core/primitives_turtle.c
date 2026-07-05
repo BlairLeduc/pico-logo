@@ -1587,7 +1587,7 @@ static Result prim_ask(Evaluator *eval, int argc, Value *args)
         select_first_active(turtle);
     }
 
-    Result r = eval_run_list(eval, args[1].as.node);
+    Result r = eval_run_list_expr(eval, args[1].as.node);
 
     memcpy(active_set, saved, sizeof(saved));
     active_count = saved_count;

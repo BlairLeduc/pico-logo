@@ -1549,9 +1549,9 @@ Because `tell` accepts a list, you can name a group with a variable: `make "floc
 ask _turtlenumber_ _commandlist_  
 ask _turtlenumberlist_ _commandlist_
 
-`command`
+`command` or `operation`
 
-`ask` runs _commandlist_ with your commands temporarily redirected to the named turtle or turtles, then goes back to talking to the turtles you had before — even if the list stops with an error. It is the quick way to give one turtle an instruction without changing who you are talking to.
+`ask` runs _commandlist_ with your commands temporarily redirected to the named turtle or turtles, then goes back to talking to the turtles you had before — even if the list stops with an error. It is the quick way to give one turtle an instruction without changing who you are talking to. Like [`run`](#run), if _commandlist_ is an operation, `ask` outputs whatever it outputs — handy for reading one turtle's state (`ask 2 [xcor]`) without changing who you are talking to.
 
 **Example**:
 
@@ -1559,6 +1559,8 @@ ask _turtlenumberlist_ _commandlist_
 ?tell [0 1 2]
 ?ask 1 [fd 20]      ; only turtle 1 moves
 ?fd 10              ; turtles 0, 1 and 2 move
+?pr ask 1 [xcor]    ; read turtle 1's x without retelling
+20
 ```
 
 

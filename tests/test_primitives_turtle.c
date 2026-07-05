@@ -1657,6 +1657,43 @@ void test_ask_restores_set_on_throw(void)
     TEST_ASSERT_TRUE(strstr(mock_device_get_output(), "1") != NULL);
 }
 
+void test_ask_as_operation_outputs_value(void)
+{
+    Result r = run_string("ask 2 [forward 30]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    reset_output();
+    r = run_string("print ask 2 [ycor]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("30\n", mock_device_get_output());
+}
+
+void test_ask_as_operation_within_procedure(void)
+{
+    Result r = proc_define_from_text(
+        "to turtle.x :n\n"
+        "output ask :n [xcor]\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    r = run_string("tell 2 setx 15 tell 0");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    reset_output();
+    r = run_string("print turtle.x 2");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("15\n", mock_device_get_output());
+}
+
+void test_ask_still_works_as_plain_command(void)
+{
+    // A list whose last instruction is a command (not a value) must still
+    // behave exactly as before: ask outputs nothing usable as a command.
+    Result r = run_string("ask 2 [forward 12 forward 8]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 20.0f, mock_device_get_turtle(2)->y);
+}
+
 void test_each_narrows_set_with_who(void)
 {
     Result r = run_string("tell [0 1 2 3] each [setheading who * 90]");
@@ -2292,6 +2329,9 @@ int main(void)
     RUN_TEST(test_ask_runs_for_named_turtle_and_restores);
     RUN_TEST(test_ask_restores_set_on_error);
     RUN_TEST(test_ask_restores_set_on_throw);
+    RUN_TEST(test_ask_as_operation_outputs_value);
+    RUN_TEST(test_ask_as_operation_within_procedure);
+    RUN_TEST(test_ask_still_works_as_plain_command);
     RUN_TEST(test_each_narrows_set_with_who);
     RUN_TEST(test_each_restores_set);
     RUN_TEST(test_each_propagates_error_and_restores);
