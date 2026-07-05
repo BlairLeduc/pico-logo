@@ -34,6 +34,28 @@ extern "C"
         LOGO_ROT_FLIP,  // Costume mirrors left/right when facing west
     } LogoRotationStyle;
 
+    // A turtle's rendered raster, exactly as the compositor would overlay
+    // it (backs the sensing primitives touching?/over?/colourunder). All
+    // coordinates are in screen pixels — the same space canvas_point reads.
+    // The mask is w*h bytes, row-major; a pixel is solid where the byte is
+    // nonzero (mono mask) or not the transparent index (indexed colour).
+    // The pointer is owned by the device and stays valid until the next
+    // turtle operation.
+    #define LOGO_RASTER_TRANSPARENT 255
+
+    typedef struct LogoTurtleRaster
+    {
+        int16_t x, y;        // Mask top-left corner
+        int16_t cx, cy;      // Turtle anchor point (its position on screen)
+        uint8_t w, h;        // Mask dimensions
+        bool indexed;        // Mask bytes are palette slots (255 transparent);
+                             // otherwise mono (solid where nonzero)
+        bool visible;        // Currently rendered (shown and on-screen).
+                             // touching? requires it; over?/colourunder
+                             // sense the canvas under the turtle regardless.
+        const uint8_t *mask;
+    } LogoTurtleRaster;
+
     //
     // Turtle graphics operations (optional)
     // These are available on devices with graphics capability.
@@ -148,6 +170,29 @@ extern "C"
         // background slot become transparent (backs snapsh). Returns
         // false when the costume pool cannot hold the capture. Optional.
         bool (*snap_costume)(uint8_t slot, uint8_t w, uint8_t h);
+
+        //
+        // Sensing support (backs touching?/over?/colourunder). Core owns
+        // the geometry; the device only exposes the rendered rasters and
+        // the canvas beneath them, so the logic is fully testable on the
+        // mock. All optional; sensing degrades to false/0 when absent.
+        //
+
+        // Fill `out` with the selected turtle's rendered raster (see
+        // LogoTurtleRaster), including whether it is currently visible.
+        // Returns false only when the device cannot produce a raster.
+        bool (*get_raster)(LogoTurtleRaster *out);
+
+        // Canvas palette index the compositor would show at screen pixel
+        // (x, y), honouring the boundary mode: wrapped in wrap mode, the
+        // background slot outside the canvas otherwise. Reads the canvas
+        // only — never sprite pixels — so it senses drawings.
+        uint8_t (*canvas_point)(int x, int y);
+
+        // Screen pixel dimensions and whether wrap boundary mode is
+        // active, so core can fold edge-straddling contacts round the
+        // screen. When absent, core treats the surface as non-wrapping.
+        void (*sense_metrics)(int *width, int *height, bool *wrap);
     } LogoConsoleTurtle;
 
     //

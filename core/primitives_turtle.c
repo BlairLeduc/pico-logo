@@ -1543,6 +1543,208 @@ static Result prim_each(Evaluator *eval, int argc, Value *args)
 }
 
 //==========================================================================
+// Sensing and collision
+//
+// touching?/over?/colourunder work in the device's screen-pixel space:
+// the device exposes each turtle's rendered raster (get_raster) and the
+// canvas beneath it (canvas_point), and core does the geometry here so
+// the logic is device-independent and testable on the mock. distance is
+// pure geometry over the Logo-coordinate positions.
+//==========================================================================
+
+// Validate a single turtle-number argument (integer 0..MAX_TURTLES-1).
+static bool arg_turtle(Value v, uint8_t *out, Result *error)
+{
+    float num;
+    if (!value_to_number(v, &num) || num != (float)(int)num ||
+        num < 0 || num >= MAX_TURTLES)
+    {
+        *error = result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(v));
+        return false;
+    }
+    *out = (uint8_t)num;
+    return true;
+}
+
+// Is the raster's mask pixel at flat index i opaque?
+static inline bool raster_solid(const LogoTurtleRaster *r, int i)
+{
+    uint8_t v = r->mask[i];
+    return r->indexed ? (v != LOGO_RASTER_TRANSPARENT) : (v != 0);
+}
+
+// True when any opaque pixel of raster a coincides with one of raster b.
+// In wrap mode (sw/sh nonzero) b is also tested shifted by +/- the screen
+// size, so a contact that straddles an edge counts (the compositor draws
+// such a sprite on both sides).
+static bool rasters_overlap(const LogoTurtleRaster *a, const LogoTurtleRaster *b,
+                            int sw, int sh)
+{
+    for (int kx = (sw ? -1 : 0); kx <= (sw ? 1 : 0); kx++)
+    {
+        for (int ky = (sh ? -1 : 0); ky <= (sh ? 1 : 0); ky++)
+        {
+            int bx = b->x + kx * sw;
+            int by = b->y + ky * sh;
+
+            int x0 = a->x > bx ? a->x : bx;
+            int y0 = a->y > by ? a->y : by;
+            int x1 = (a->x + a->w) < (bx + b->w) ? (a->x + a->w) : (bx + b->w);
+            int y1 = (a->y + a->h) < (by + b->h) ? (a->y + a->h) : (by + b->h);
+
+            for (int y = y0; y < y1; y++)
+            {
+                for (int x = x0; x < x1; x++)
+                {
+                    int ai = (y - a->y) * a->w + (x - a->x);
+                    int bi = (y - by) * b->w + (x - bx);
+                    if (raster_solid(a, ai) && raster_solid(b, bi))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
+
+// touching? t1 t2 - true when the two turtles' rendered pixels overlap.
+// Both must be visible; the masks are AND-ed at their relative offset.
+static Result prim_touchingp(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(2);
+
+    uint8_t a, b;
+    Result error;
+    if (!arg_turtle(args[0], &a, &error)) return error;
+    if (!arg_turtle(args[1], &b, &error)) return error;
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (!turtle || !turtle->get_raster)
+    {
+        return result_ok(value_bool(false));
+    }
+
+    LogoTurtleRaster ra, rb;
+    select_turtle(turtle, a);
+    bool ga = turtle->get_raster(&ra);
+    select_turtle(turtle, b);
+    bool gb = turtle->get_raster(&rb);
+    select_first_active(turtle);
+
+    bool hit = false;
+    if (ga && gb && ra.visible && rb.visible)
+    {
+        int sw = 0, sh = 0;
+        bool wrap = false;
+        if (turtle->sense_metrics)
+        {
+            turtle->sense_metrics(&sw, &sh, &wrap);
+        }
+        hit = rasters_overlap(&ra, &rb, wrap ? sw : 0, wrap ? sh : 0);
+    }
+
+    return result_ok(value_bool(hit));
+}
+
+// over? colour - true when any canvas pixel under the first active
+// turtle's mask has palette index colour (senses drawings, not sprites).
+static Result prim_overp(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
+    REQUIRE_NUMBER(args[0], colour);
+
+    if (colour < 0 || colour > 255 || colour != (float)(int)colour)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (!turtle || !turtle->get_raster || !turtle->canvas_point)
+    {
+        return result_ok(value_bool(false));
+    }
+
+    select_first_active(turtle);
+
+    LogoTurtleRaster r;
+    bool found = false;
+    if (turtle->get_raster(&r))
+    {
+        uint8_t want = (uint8_t)colour;
+        for (int row = 0; row < r.h && !found; row++)
+        {
+            for (int col = 0; col < r.w; col++)
+            {
+                if (raster_solid(&r, row * r.w + col) &&
+                    turtle->canvas_point(r.x + col, r.y + row) == want)
+                {
+                    found = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    return result_ok(value_bool(found));
+}
+
+// colourunder - output the canvas palette index at the first active
+// turtle's position (the drawing beneath it, sprites excluded).
+static Result prim_colourunder(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (!turtle || !turtle->get_raster || !turtle->canvas_point)
+    {
+        return result_ok(value_number(0));
+    }
+
+    select_first_active(turtle);
+
+    LogoTurtleRaster r;
+    uint8_t idx = 0;
+    if (turtle->get_raster(&r))
+    {
+        idx = turtle->canvas_point(r.cx, r.cy);
+    }
+
+    return result_ok(value_number((float)idx));
+}
+
+// distance t - Euclidean distance from the first active turtle to turtle t
+static Result prim_distance(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
+
+    uint8_t target;
+    Result error;
+    if (!arg_turtle(args[0], &target, &error)) return error;
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (!turtle || !turtle->get_position)
+    {
+        return result_ok(value_number(0));
+    }
+
+    float x0 = 0.0f, y0 = 0.0f, x1 = 0.0f, y1 = 0.0f;
+    select_first_active(turtle);
+    turtle->get_position(&x0, &y0);
+    select_turtle(turtle, target);
+    turtle->get_position(&x1, &y1);
+    select_first_active(turtle);
+
+    float dx = x1 - x0;
+    float dy = y1 - y0;
+    return result_ok(value_number(sqrtf(dx * dx + dy * dy)));
+}
+
+//==========================================================================
 // Registration
 //==========================================================================
 
@@ -1642,4 +1844,13 @@ void primitives_turtle_init(void)
     primitive_register("ask", 2, prim_ask);
     primitive_register("each", 1, prim_each);
     primitive_register("who", 0, prim_who);
+
+    // Sensing and collision
+    primitive_register("touching?", 2, prim_touchingp);
+    primitive_register("touchingp", 2, prim_touchingp);
+    primitive_register("over?", 1, prim_overp);
+    primitive_register("overp", 1, prim_overp);
+    primitive_register("colourunder", 0, prim_colourunder);
+    primitive_register("colorunder", 0, prim_colourunder);
+    primitive_register("distance", 1, prim_distance);
 }

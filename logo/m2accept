@@ -1,0 +1,133 @@
+; M2 sensing & collision hardware demo (P5 M2)
+; Load with:  load "m2accept
+; Run all:    m2accept        (press a key to advance between steps)
+; Or run any step on its own: m2distance m2touch m2over m2under
+;
+; Every step first bakes a solid 16x16 block into costume slot 1 so the
+; turtles have dense masks (touching?/over? are pixel-true, so a sparse
+; triangle would rarely register a hit). colourunder needs no costume --
+; it reads the single pixel under the turtle's position.
+
+to m2pause
+  pr []
+  pr [--- check the screen, then press any key ---]
+  ignore rc
+end
+
+to m2banner :text
+  cs ss
+  pr []
+  pr :text
+end
+
+; Draw a filled 16x16 square centred on home and capture it as costume 1.
+; The block is colour 15; the background stays transparent, so worn as a
+; costume it round-trips as a solid square.
+to m2block
+  cs
+  setpc 15
+  pu setpos [-8 -8] seth 0 pd
+  repeat 4 [fd 16 rt 90]
+  pu setpos [0 0] pd fill
+  snapsh 1 16 16
+  cs
+end
+
+; Draw a filled square of side 2*:half centred on the current position,
+; in colour :col; leaves the turtle back at the centre, pen up.
+to m2box :half :col
+  local "x local "y
+  make "x xcor make "y ycor
+  setpc :col
+  pu setpos se :x - :half :y - :half
+  seth 0 pd
+  repeat 4 [fd 2 * :half rt 90]
+  pu setpos se :x :y pd fill
+  pu setpos se :x :y
+end
+
+; Step 1: distance is plain geometry between two turtles
+to m2distance
+  m2block
+  m2banner [Step 1: distance between two turtles]
+  pr [PASS: turtle 1 slides toward turtle 0 and the]
+  pr [      printed distance counts down toward 0]
+  tell [0 1] setsh 1 st
+  tell 0 pu home
+  ask 1 [pu setpos [120 0] seth towards [0 0]]
+  repeat 6 [ask 1 [pr sentence [distance:] distance 0  fd 20 wait 3]]
+  tell 0
+end
+
+; Step 2: touching? halts the chase on the first pixel of contact
+to m2close
+  if touching? 0 1 [pr [PASS: contact -- stopped on touch] stop]
+  ask 1 [fd 6]
+  wait 2
+  m2close
+end
+
+to m2touch
+  m2block
+  m2banner [Step 2: touching? stops on collision]
+  pr [PASS: turtle 1 advances until its block overlaps]
+  pr [      turtle 0, then halts on contact]
+  tell [0 1] setsh 1 st
+  tell 0 pu home
+  ask 1 [pu setpos [120 0] seth towards [0 0]]
+  m2close
+  tell 0
+end
+
+; Step 3: over? senses the drawing beneath the turtle's shape
+to m2crosswalk
+  if over? 68 [
+    pr [PASS: over? true -- reached the red bar]
+    fd 10
+    pr sentence [colourunder is now] colourunder
+    stop
+  ]
+  fd 6 wait 2
+  m2crosswalk
+end
+
+to m2over
+  m2block
+  m2banner [Step 3: over? senses the drawing]
+  pr [PASS: turtle walks east and reports when it]
+  pr [      crosses the red bar, then reads its colour]
+  setpc 68
+  pu setpos [40 -70] pd setpos [40 70]
+  pu setpos [43 -70] pd setpos [43 70]
+  pu setpos [46 -70] pd setpos [46 70]
+  tell 0 setsh 1 st pu setpos [-80 0] seth 90
+  m2crosswalk
+  tell 0
+end
+
+; Step 4: colourunder reads the exact pixel under the turtle
+to m2under
+  m2banner [Step 4: colourunder reads the pixel below]
+  pr [PASS: the turtle visits three patches and the]
+  pr [      printed index matches each patch colour,]
+  pr [      over empty canvas it reads the background]
+  cs
+  pu setpos [-60 0] m2box 12 68
+  pu setpos [0 0]   m2box 12 44
+  pu setpos [60 0]  m2box 12 20
+  setsh 0 st
+  pu setpos [-60 0] pr sentence [left  patch (expect 68):] colourunder
+  pu setpos [0 0]   pr sentence [mid   patch (expect 44):] colourunder
+  pu setpos [60 0]  pr sentence [right patch (expect 20):] colourunder
+  pu setpos [0 90]  pr sentence [empty area (expect bg):] colourunder
+  pu setpos [0 0]
+end
+
+to m2accept
+  m2distance  m2pause
+  m2touch     m2pause
+  m2over      m2pause
+  m2under
+  pr []
+  pr [M2 acceptance complete.]
+end

@@ -1845,13 +1845,270 @@ void test_addressing_primitives_registered(void)
 }
 
 //==========================================================================
+// Sensing and collision
+//==========================================================================
+
+// Stage turtle n's rendered raster in screen-pixel space. The anchor
+// (cx, cy) defaults to the mask centre.
+static void stage_raster(uint8_t n, int x, int y, int w, int h,
+                         bool indexed, bool visible, const uint8_t *mask)
+{
+    LogoTurtleRaster r;
+    memset(&r, 0, sizeof(r));
+    r.x = (int16_t)x;
+    r.y = (int16_t)y;
+    r.cx = (int16_t)(x + w / 2);
+    r.cy = (int16_t)(y + h / 2);
+    r.w = (uint8_t)w;
+    r.h = (uint8_t)h;
+    r.indexed = indexed;
+    r.visible = visible;
+    r.mask = mask;
+    mock_device_set_raster(n, &r);
+}
+
+static bool output_has(const char *needle)
+{
+    return strstr(mock_device_get_output(), needle) != NULL;
+}
+
+void test_distance_is_euclidean(void)
+{
+    // Turtle 0 at home (0,0); place turtle 1 at (30,40): distance 50.
+    run_string("tell 1 setpos [30 40] tell 0");
+    Result r = run_string("print distance 1");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(output_has("50"));
+}
+
+void test_distance_answers_for_first_active(void)
+{
+    // From turtle 2 (at 0,0 after we move it) to turtle 0.
+    run_string("tell 0 setpos [0 0] tell 2 setpos [0 0]");
+    run_string("tell 0 setpos [60 0]");
+    Result r = run_string("tell 2 print distance 0");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(output_has("60"));
+}
+
+void test_distance_rejects_bad_turtle(void)
+{
+    Result r = run_string("print distance 8");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_touching_true_when_masks_overlap(void)
+{
+    static uint8_t solid[8 * 8];
+    memset(solid, 1, sizeof(solid));
+    run_string("window");  // deterministic (no wrap fold)
+    stage_raster(0, 100, 100, 8, 8, false, true, solid);
+    stage_raster(1, 104, 104, 8, 8, false, true, solid);
+
+    Result r = run_string("print touching? 0 1");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(output_has("true"));
+}
+
+void test_touching_false_when_apart(void)
+{
+    static uint8_t solid[8 * 8];
+    memset(solid, 1, sizeof(solid));
+    run_string("window");
+    stage_raster(0, 100, 100, 8, 8, false, true, solid);
+    stage_raster(1, 150, 100, 8, 8, false, true, solid);
+
+    Result r = run_string("print touching? 0 1");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(output_has("false"));
+}
+
+void test_touching_is_pixel_precise(void)
+{
+    // Bounding boxes overlap, but the opaque pixels do not: turtle 0 is
+    // solid only in its left column, turtle 1 only in its right column.
+    static uint8_t left[8 * 8];
+    static uint8_t right[8 * 8];
+    memset(left, 0, sizeof(left));
+    memset(right, 0, sizeof(right));
+    for (int row = 0; row < 8; row++)
+    {
+        left[row * 8 + 0] = 1;
+        right[row * 8 + 7] = 1;
+    }
+    run_string("window");
+    stage_raster(0, 100, 100, 8, 8, false, true, left);
+    stage_raster(1, 102, 100, 8, 8, false, true, right);
+
+    Result r = run_string("print touching? 0 1");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(output_has("false"));
+}
+
+void test_touching_requires_both_visible(void)
+{
+    static uint8_t solid[8 * 8];
+    memset(solid, 1, sizeof(solid));
+    run_string("window");
+    stage_raster(0, 100, 100, 8, 8, false, true, solid);
+    stage_raster(1, 104, 104, 8, 8, false, false, solid);  // hidden
+
+    Result r = run_string("print touching? 0 1");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(output_has("false"));
+}
+
+void test_touching_wrap_edge_contact(void)
+{
+    static uint8_t solid[8 * 8];
+    memset(solid, 1, sizeof(solid));
+    run_string("wrap");
+    // Turtle 0 straddles the right edge; turtle 1 sits at the left edge.
+    // In wrap mode the compositor draws 0 on both sides, so they touch.
+    stage_raster(0, 316, 100, 8, 8, false, true, solid);  // 316..323
+    stage_raster(1, 0, 100, 8, 8, false, true, solid);    // 0..7
+
+    Result r = run_string("print touching? 0 1");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(output_has("true"));
+}
+
+void test_touching_indexed_transparency(void)
+{
+    // Two indexed rasters whose only overlapping cell is transparent in
+    // one of them: no contact.
+    static uint8_t a[8 * 8];
+    static uint8_t b[8 * 8];
+    memset(a, LOGO_RASTER_TRANSPARENT, sizeof(a));
+    memset(b, LOGO_RASTER_TRANSPARENT, sizeof(b));
+    a[0] = 12;                 // top-left opaque
+    b[7 * 8 + 7] = 12;         // bottom-right opaque
+    run_string("window");
+    stage_raster(0, 100, 100, 8, 8, true, true, a);
+    stage_raster(1, 101, 101, 8, 8, true, true, b);
+
+    Result r = run_string("print touching? 0 1");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(output_has("false"));
+}
+
+void test_touching_rejects_bad_turtle(void)
+{
+    Result r = run_string("print touching? 0 9");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_over_true_when_canvas_matches(void)
+{
+    static uint8_t solid[8 * 8];
+    memset(solid, 1, sizeof(solid));
+    run_string("window");
+    stage_raster(0, 100, 100, 8, 8, false, true, solid);
+    mock_device_paint_canvas(104, 104, 2, 2, 12);  // under the mask
+
+    Result r = run_string("print over? 12");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(output_has("true"));
+}
+
+void test_over_false_for_other_colour(void)
+{
+    static uint8_t solid[8 * 8];
+    memset(solid, 1, sizeof(solid));
+    run_string("window");
+    stage_raster(0, 100, 100, 8, 8, false, true, solid);
+    mock_device_paint_canvas(104, 104, 2, 2, 12);
+
+    Result r = run_string("print over? 9");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(output_has("false"));
+}
+
+void test_over_ignores_transparent_mask_pixels(void)
+{
+    // The matching colour lies only under a transparent mask cell.
+    static uint8_t mask[8 * 8];
+    memset(mask, 0, sizeof(mask));
+    mask[0] = 1;  // only top-left is opaque
+    run_string("window");
+    stage_raster(0, 100, 100, 8, 8, false, true, mask);
+    // Paint colour 12 away from the opaque cell (at 105,105).
+    mock_device_set_canvas_point(105, 105, 12);
+
+    Result r = run_string("print over? 12");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(output_has("false"));
+}
+
+void test_over_answers_for_first_active(void)
+{
+    static uint8_t solid[8 * 8];
+    memset(solid, 1, sizeof(solid));
+    run_string("window");
+    stage_raster(2, 100, 100, 8, 8, false, true, solid);
+    mock_device_paint_canvas(104, 104, 2, 2, 7);
+
+    Result r = run_string("tell [2 5] print over? 7");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(output_has("true"));
+}
+
+void test_over_rejects_bad_colour(void)
+{
+    Result r = run_string("print over? 300");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_colourunder_reads_turtle_position(void)
+{
+    static uint8_t solid[8 * 8];
+    memset(solid, 1, sizeof(solid));
+    run_string("window");
+    // Anchor is the mask centre: (100 + 4, 100 + 4) = (104, 104).
+    stage_raster(0, 100, 100, 8, 8, false, true, solid);
+    mock_device_set_canvas_point(104, 104, 42);
+
+    Result r = run_string("print colourunder");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(output_has("42"));
+}
+
+void test_colourunder_works_when_hidden(void)
+{
+    static uint8_t solid[8 * 8];
+    memset(solid, 1, sizeof(solid));
+    run_string("window");
+    stage_raster(0, 100, 100, 8, 8, false, false, solid);  // hidden
+    mock_device_set_canvas_point(104, 104, 9);
+
+    Result r = run_string("print colourunder");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(output_has("9"));
+}
+
+void test_sensing_primitives_registered(void)
+{
+    Result r = run_string("show touchingp 0 1");
+    TEST_ASSERT_NOT_EQUAL(RESULT_ERROR, r.status);
+    r = run_string("show overp 0");
+    TEST_ASSERT_NOT_EQUAL(RESULT_ERROR, r.status);
+    r = run_string("show colorunder");
+    TEST_ASSERT_NOT_EQUAL(RESULT_ERROR, r.status);
+    r = run_string("show distance 1");
+    TEST_ASSERT_NOT_EQUAL(RESULT_ERROR, r.status);
+}
+
+//==========================================================================
 // Main
 //==========================================================================
 
 int main(void)
 {
     UNITY_BEGIN();
-    
+
     // Movement tests
     RUN_TEST(test_forward_moves_turtle);
     RUN_TEST(test_fd_alias);
@@ -2053,6 +2310,26 @@ int main(void)
     RUN_TEST(test_setrot_case_insensitive);
     RUN_TEST(test_setmag_is_per_turtle);
     RUN_TEST(test_setmag_rejects_other_values);
+
+    // Sensing and collision tests
+    RUN_TEST(test_distance_is_euclidean);
+    RUN_TEST(test_distance_answers_for_first_active);
+    RUN_TEST(test_distance_rejects_bad_turtle);
+    RUN_TEST(test_touching_true_when_masks_overlap);
+    RUN_TEST(test_touching_false_when_apart);
+    RUN_TEST(test_touching_is_pixel_precise);
+    RUN_TEST(test_touching_requires_both_visible);
+    RUN_TEST(test_touching_wrap_edge_contact);
+    RUN_TEST(test_touching_indexed_transparency);
+    RUN_TEST(test_touching_rejects_bad_turtle);
+    RUN_TEST(test_over_true_when_canvas_matches);
+    RUN_TEST(test_over_false_for_other_colour);
+    RUN_TEST(test_over_ignores_transparent_mask_pixels);
+    RUN_TEST(test_over_answers_for_first_active);
+    RUN_TEST(test_over_rejects_bad_colour);
+    RUN_TEST(test_colourunder_reads_turtle_position);
+    RUN_TEST(test_colourunder_works_when_hidden);
+    RUN_TEST(test_sensing_primitives_registered);
 
     return UNITY_END();
 }

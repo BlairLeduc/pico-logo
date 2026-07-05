@@ -1307,6 +1307,55 @@ static bool turtle_put_shape_data(uint8_t shape_num, const uint8_t *data)
     return true;
 }
 
+//
+// Sensing support (touching?/over?/colourunder). Core owns the geometry;
+// these expose the selected turtle's rendered raster and the canvas
+// beneath it.
+//
+
+// Fill the selected turtle's rendered raster as the compositor sees it.
+static bool turtle_get_raster(LogoTurtleRaster *out)
+{
+    turtle_update_raster();
+
+    ScreenSprite sprite;
+    turtle_sprite_geometry(&sprite);
+
+    out->x = sprite.x;
+    out->y = sprite.y;
+    out->cx = (int16_t)(int)(cur->x + 0.5f);
+    out->cy = (int16_t)(int)(cur->y + 0.5f);
+    out->w = sprite.w;
+    out->h = sprite.h;
+    out->indexed = sprite.indexed;
+    out->visible = turtle_should_draw();
+    out->mask = sprite.mask;
+    return true;
+}
+
+// Canvas palette index at a screen pixel, honouring the boundary mode:
+// wrapped in wrap mode, the background slot outside the canvas otherwise.
+static uint8_t turtle_canvas_point(int x, int y)
+{
+    if (turtle_boundary_mode == BOUNDARY_MODE_WRAP)
+    {
+        x = ((x % SCREEN_WIDTH) + SCREEN_WIDTH) % SCREEN_WIDTH;
+        y = ((y % SCREEN_HEIGHT) + SCREEN_HEIGHT) % SCREEN_HEIGHT;
+    }
+    else if (x < 0 || x >= SCREEN_WIDTH || y < 0 || y >= SCREEN_HEIGHT)
+    {
+        return background_colour;
+    }
+    return screen_gfx_get_point((float)x, (float)y);
+}
+
+static void turtle_sense_metrics(int *width, int *height, bool *wrap)
+{
+    if (width) *width = SCREEN_WIDTH;
+    if (height) *height = SCREEN_HEIGHT;
+    if (wrap) *wrap = (turtle_boundary_mode == BOUNDARY_MODE_WRAP);
+}
+
 static const LogoConsoleTurtle picocalc_turtle_ops = {
     .select = turtle_op_select,
     .clear = turtle_clearscreen,
@@ -1344,6 +1393,9 @@ static const LogoConsoleTurtle picocalc_turtle_ops = {
     .set_scale = turtle_set_scale,
     .stamp = turtle_stamp,
     .snap_costume = turtle_snap_costume,
+    .get_raster = turtle_get_raster,
+    .canvas_point = turtle_canvas_point,
+    .sense_metrics = turtle_sense_metrics,
 };
 
 //
