@@ -7,6 +7,7 @@
 
 #include "picocalc_console.h"
 #include "core/limits.h"
+#include "costumes.h"
 #include "devices/console.h"
 #include "devices/stream.h"
 #include "editor.h"
@@ -26,9 +27,11 @@
 
 // Rendered turtle raster sizing for the screen compositor. Shape 0 (the
 // line-drawn triangle) rasterizes into 24x24 to accommodate rotation;
-// bitmap shapes 1-15 use 16x16.
+// mono bitmap shapes 1-15 use 16x16; colour costumes render at their
+// own size up to the raster cap of 32x32.
 #define SHAPE0_RASTER_SIZE 24
 #define BITMAP_RASTER_SIZE 16
+#define TURTLE_RASTER_MAX 32
 
 // Per-turtle state. The stateful console ops act on the turtle selected
 // by turtle_op_select() (the `cur` pointer); turtle `n` maps to sprite
@@ -45,7 +48,9 @@ typedef struct
     LogoPen pen_state;
     bool visible;
     uint8_t shape;          // Current shape number (0-15)
-    uint8_t raster[SHAPE0_RASTER_SIZE * SHAPE0_RASTER_SIZE];
+    uint8_t raster[TURTLE_RASTER_MAX * TURTLE_RASTER_MAX];
+    uint8_t raster_w, raster_h;
+    bool raster_indexed;    // Raster bytes are palette slots (colour costume)
     bool raster_valid;
     uint8_t raster_shape;   // shape the raster was built for
     float raster_angle;     // heading it was built at (shape 0)
@@ -86,6 +91,7 @@ static void turtles_init(void)
     }
     current_turtle = 0;
     cur = &picoturtles[0];
+    costumes_clear();
 }
 
 uint8_t background_colour = GFX_DEFAULT_BACKGROUND;     // Background color for graphics
@@ -451,6 +457,11 @@ static void turtle_update_raster(void)
         return;
     }
 
+    cur->raster_indexed = false;
+
+    uint8_t costume_w, costume_h;
+    const uint8_t *costume_pixels;
+
     if (cur->shape == 0)
     {
         // Shape 0: the line-drawn turtle triangle, rotated to the heading.
@@ -474,10 +485,22 @@ static void turtle_update_raster(void)
         raster_line(cur->raster, SHAPE0_RASTER_SIZE, x1, y1, x2, y2);
         raster_line(cur->raster, SHAPE0_RASTER_SIZE, x2, y2, x3, y3);
         raster_line(cur->raster, SHAPE0_RASTER_SIZE, x3, y3, x1, y1);
+
+        cur->raster_w = SHAPE0_RASTER_SIZE;
+        cur->raster_h = SHAPE0_RASTER_SIZE;
+    }
+    else if (costume_get(cur->shape, &costume_w, &costume_h, &costume_pixels))
+    {
+        // Colour costume: palette-indexed pixels copied verbatim
+        // (255 = transparent, handled by the compositor)
+        memcpy(cur->raster, costume_pixels, (size_t)(costume_w * costume_h));
+        cur->raster_w = costume_w;
+        cur->raster_h = costume_h;
+        cur->raster_indexed = true;
     }
     else
     {
-        // Shapes 1-15: 16x16 bitmap (rows doubled from the user's 8 bits)
+        // Shapes 1-15: 16x16 mono bitmap (rows doubled from the user's 8 bits)
         memset(cur->raster, 0, BITMAP_RASTER_SIZE * BITMAP_RASTER_SIZE);
 
         const uint16_t *shape = turtle_shapes[cur->shape - 1];
@@ -493,6 +516,9 @@ static void turtle_update_raster(void)
                 }
             }
         }
+
+        cur->raster_w = BITMAP_RASTER_SIZE;
+        cur->raster_h = BITMAP_RASTER_SIZE;
     }
 
     cur->raster_valid = true;
@@ -515,23 +541,24 @@ static void turtle_draw(void)
 
     ScreenSprite sprite = {
         .visible = true,
+        .indexed = cur->raster_indexed,
         .colour = cur->colour,
         .mask = cur->raster,
+        .w = cur->raster_w,
+        .h = cur->raster_h,
     };
 
-    if (cur->shape == 0)
+    if (cur->shape == 0 || cur->raster_indexed)
     {
-        // Centred on the turtle position
-        sprite.w = SHAPE0_RASTER_SIZE;
-        sprite.h = SHAPE0_RASTER_SIZE;
-        sprite.x = (int16_t)((int)(cur->x + 0.5f) - SHAPE0_RASTER_SIZE / 2);
-        sprite.y = (int16_t)((int)(cur->y + 0.5f) - SHAPE0_RASTER_SIZE / 2);
+        // Shape 0 and colour costumes: centred on the turtle position
+        // (snapsh captures centred, so snapsh -> wear round-trips exactly)
+        sprite.x = (int16_t)((int)(cur->x + 0.5f) - cur->raster_w / 2);
+        sprite.y = (int16_t)((int)(cur->y + 0.5f) - cur->raster_h / 2);
     }
     else
     {
-        // Centred horizontally, bottom row at the turtle position
-        sprite.w = BITMAP_RASTER_SIZE;
-        sprite.h = BITMAP_RASTER_SIZE;
+        // Mono bitmaps: centred horizontally, bottom row at the turtle
+        // position (the shape system's historical anchor)
         sprite.x = (int16_t)((int)cur->x - BITMAP_RASTER_SIZE / 2);
         sprite.y = (int16_t)((int)cur->y - (BITMAP_RASTER_SIZE - 1));
     }
@@ -1076,7 +1103,11 @@ static bool turtle_put_shape_data(uint8_t shape_num, const uint8_t *data)
         }
         shape[row] = result;
     }
-    
+
+    // putsh defines the slot's mono shape; a colour costume in the slot
+    // (from snapsh) would shadow it, so remove it
+    costume_delete(shape_num);
+
     // Rebuild the raster of every turtle wearing this shape and redraw
     // the visible ones
     uint8_t saved_turtle = current_turtle;

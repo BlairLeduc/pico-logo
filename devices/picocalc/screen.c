@@ -437,7 +437,8 @@ static void compose_row(int y, int x0, int x1)
         const uint8_t *mask_row = &s->mask[dy * s->w];
         for (int c = 0; c < s->w; c++)
         {
-            if (!mask_row[c])
+            uint8_t px = mask_row[c];
+            if (s->indexed ? (px == SCREEN_SPRITE_TRANSPARENT) : (px == 0))
                 continue;
             int sx = s->x + c;
             if (wrap)
@@ -447,7 +448,7 @@ static void compose_row(int y, int x0, int x1)
             }
             if (sx < x0 || sx > x1)
                 continue;
-            compose_buf[sx - x0] = s->colour;
+            compose_buf[sx - x0] = s->indexed ? px : s->colour;
         }
     }
 }

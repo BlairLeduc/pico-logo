@@ -171,6 +171,7 @@ endif()
 add_executable(pico-logo
     devices/picocalc/clib.c
     devices/picocalc/audio.c
+    devices/picocalc/costumes.c
     devices/picocalc/dirty_tiles.c
     devices/picocalc/editor.c
     devices/picocalc/fat32.c
