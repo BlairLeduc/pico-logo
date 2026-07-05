@@ -48,12 +48,17 @@ typedef struct
     LogoPen pen_state;
     bool visible;
     uint8_t shape;          // Current shape number (0-15)
+    uint8_t mag;            // Magnification 1 or 2 (setmag)
+    LogoRotationStyle rot_style;  // How the costume follows the heading
     uint8_t raster[TURTLE_RASTER_MAX * TURTLE_RASTER_MAX];
     uint8_t raster_w, raster_h;
     bool raster_indexed;    // Raster bytes are palette slots (colour costume)
     bool raster_valid;
     uint8_t raster_shape;   // shape the raster was built for
-    float raster_angle;     // heading it was built at (shape 0)
+    float raster_angle;     // heading it was built at (when it matters)
+    uint8_t raster_mag;     // magnification it was built at
+    uint8_t raster_rot;     // rotation style it was built with
+    bool raster_flipped;    // built mirrored (flip style facing west)
 } PicoTurtle;
 
 static PicoTurtle picoturtles[MAX_TURTLES];
@@ -87,6 +92,8 @@ static void turtles_init(void)
         t->pen_state = LOGO_PEN_DOWN;
         t->visible = (i == 0) && TURTLE_DEFAULT_VISIBILITY;
         t->shape = 0;
+        t->mag = 1;
+        t->rot_style = LOGO_ROT_FIXED;
         t->raster_valid = false;
     }
     current_turtle = 0;
@@ -447,83 +454,169 @@ static void raster_line(uint8_t *raster, int size, float fx1, float fy1,
     #undef RASTER_PLOT
 }
 
-// Rebuild the turtle raster if the shape, shape data, or (for shape 0)
-// the heading changed since it was last built.
+// Does a heading face west? (the flip rotation style mirrors then)
+static bool heading_faces_left(float angle)
+{
+    float a = fmodf(angle, 360.0f);
+    if (a < 0.0f) a += 360.0f;
+    return a > 180.0f;
+}
+
+// Rebuild the turtle raster if the shape, shape data, magnification,
+// rotation style, or (when the style follows it) the heading changed
+// since it was last built.
 static void turtle_update_raster(void)
 {
+    bool angle_matters = (cur->shape == 0 || cur->rot_style == LOGO_ROT_FULL);
+    bool flip_now = (cur->shape != 0 && cur->rot_style == LOGO_ROT_FLIP &&
+                     heading_faces_left(cur->angle));
+
     if (cur->raster_valid && cur->raster_shape == cur->shape &&
-        (cur->shape != 0 || cur->raster_angle == cur->angle))
+        cur->raster_mag == cur->mag && cur->raster_rot == cur->rot_style &&
+        cur->raster_flipped == flip_now &&
+        (!angle_matters || cur->raster_angle == cur->angle))
     {
         return;
     }
 
     cur->raster_indexed = false;
 
-    uint8_t costume_w, costume_h;
-    const uint8_t *costume_pixels;
-
     if (cur->shape == 0)
     {
-        // Shape 0: the line-drawn turtle triangle, rotated to the heading.
-        // Base width 6 (half_base 3), height 7, position at centre of base;
-        // fits in 24x24 with the base centre at the raster centre.
-        memset(cur->raster, 0, SHAPE0_RASTER_SIZE * SHAPE0_RASTER_SIZE);
+        // Shape 0: the line-drawn turtle triangle, rotated to the heading
+        // and scaled by mag directly (it's a vector shape). Base width
+        // 6*mag (half_base 3*mag), height 7*mag from the base centre, so
+        // even magnified it fits the raster at any rotation.
+        int size = (cur->mag == 2) ? TURTLE_RASTER_MAX : SHAPE0_RASTER_SIZE;
+        memset(cur->raster, 0, (size_t)(size * size));
 
         float radians = cur->angle * (float)(M_PI / 180.0);
         float sin_a = sinf(radians);
         float cos_a = cosf(radians);
-        float half_base = 3.0f;
-        float height = 7.0f;
-        float cx = SHAPE0_RASTER_SIZE / 2.0f;
-        float cy = SHAPE0_RASTER_SIZE / 2.0f;
+        float half_base = 3.0f * (float)cur->mag;
+        float height = 7.0f * (float)cur->mag;
+        float cx = size / 2.0f;
+        float cy = size / 2.0f;
 
         // Base vertices perpendicular to the heading; tip along the heading
         float x1 = cx + half_base * cos_a, y1 = cy + half_base * sin_a;
         float x2 = cx - half_base * cos_a, y2 = cy - half_base * sin_a;
         float x3 = cx + height * sin_a,    y3 = cy - height * cos_a;
 
-        raster_line(cur->raster, SHAPE0_RASTER_SIZE, x1, y1, x2, y2);
-        raster_line(cur->raster, SHAPE0_RASTER_SIZE, x2, y2, x3, y3);
-        raster_line(cur->raster, SHAPE0_RASTER_SIZE, x3, y3, x1, y1);
+        raster_line(cur->raster, size, x1, y1, x2, y2);
+        raster_line(cur->raster, size, x2, y2, x3, y3);
+        raster_line(cur->raster, size, x3, y3, x1, y1);
 
-        cur->raster_w = SHAPE0_RASTER_SIZE;
-        cur->raster_h = SHAPE0_RASTER_SIZE;
-    }
-    else if (costume_get(cur->shape, &costume_w, &costume_h, &costume_pixels))
-    {
-        // Colour costume: palette-indexed pixels copied verbatim
-        // (255 = transparent, handled by the compositor)
-        memcpy(cur->raster, costume_pixels, (size_t)(costume_w * costume_h));
-        cur->raster_w = costume_w;
-        cur->raster_h = costume_h;
-        cur->raster_indexed = true;
+        cur->raster_w = (uint8_t)size;
+        cur->raster_h = (uint8_t)size;
     }
     else
     {
-        // Shapes 1-15: 16x16 mono bitmap (rows doubled from the user's 8 bits)
-        memset(cur->raster, 0, BITMAP_RASTER_SIZE * BITMAP_RASTER_SIZE);
+        // Build the base image: a colour costume's pixels, or the mono
+        // 16x16 bitmap (rows doubled from the user's 8 bits)
+        static uint8_t base[TURTLE_RASTER_MAX * TURTLE_RASTER_MAX];
+        int bw, bh;
+        uint8_t blank;  // the transparent value for this raster kind
 
-        const uint16_t *shape = turtle_shapes[cur->shape - 1];
-        for (int row = 0; row < 16; row++)
+        uint8_t costume_w, costume_h;
+        const uint8_t *costume_pixels;
+        if (costume_get(cur->shape, &costume_w, &costume_h, &costume_pixels))
         {
-            uint16_t row_bits = shape[row];
-            if (row_bits == 0) continue;
-            for (int col = 0; col < 16; col++)
+            bw = costume_w;
+            bh = costume_h;
+            memcpy(base, costume_pixels, (size_t)(bw * bh));
+            blank = SCREEN_SPRITE_TRANSPARENT;
+            cur->raster_indexed = true;
+        }
+        else
+        {
+            bw = BITMAP_RASTER_SIZE;
+            bh = BITMAP_RASTER_SIZE;
+            memset(base, 0, BITMAP_RASTER_SIZE * BITMAP_RASTER_SIZE);
+
+            const uint16_t *shape = turtle_shapes[cur->shape - 1];
+            for (int row = 0; row < 16; row++)
             {
-                if (row_bits & (0x8000 >> col))
+                uint16_t row_bits = shape[row];
+                if (row_bits == 0) continue;
+                for (int col = 0; col < 16; col++)
                 {
-                    cur->raster[row * BITMAP_RASTER_SIZE + col] = 1;
+                    if (row_bits & (0x8000 >> col))
+                    {
+                        base[row * BITMAP_RASTER_SIZE + col] = 1;
+                    }
                 }
             }
+            blank = 0;
         }
 
-        cur->raster_w = BITMAP_RASTER_SIZE;
-        cur->raster_h = BITMAP_RASTER_SIZE;
+        // The raster cap makes magnification effective only up to 16x16
+        int m = cur->mag;
+        if (bw * m > TURTLE_RASTER_MAX || bh * m > TURTLE_RASTER_MAX)
+        {
+            m = 1;
+        }
+
+        if (cur->rot_style == LOGO_ROT_FULL)
+        {
+            // Rotate to the heading around the centre with nearest-
+            // neighbour inverse mapping. The square destination covers
+            // the rotated extent, cropped at the raster cap (a costume
+            // larger than ~22px loses corners at diagonal headings).
+            int dw = bw * m, dh = bh * m;
+            int d = (int)ceilf(sqrtf((float)(dw * dw + dh * dh)));
+            if (d > TURTLE_RASTER_MAX) d = TURTLE_RASTER_MAX;
+
+            float radians = cur->angle * (float)(M_PI / 180.0);
+            float sin_a = sinf(radians);
+            float cos_a = cosf(radians);
+            float dc = d / 2.0f;
+            float bcx = bw / 2.0f, bcy = bh / 2.0f;
+
+            for (int y = 0; y < d; y++)
+            {
+                for (int x = 0; x < d; x++)
+                {
+                    float dx = (x + 0.5f) - dc;
+                    float dy = (y + 0.5f) - dc;
+                    // Inverse of the clockwise heading rotation
+                    float sx = (dx * cos_a + dy * sin_a) / (float)m + bcx;
+                    float sy = (-dx * sin_a + dy * cos_a) / (float)m + bcy;
+                    int ix = (int)floorf(sx);
+                    int iy = (int)floorf(sy);
+                    cur->raster[y * d + x] =
+                        (ix >= 0 && ix < bw && iy >= 0 && iy < bh)
+                            ? base[iy * bw + ix] : blank;
+                }
+            }
+            cur->raster_w = (uint8_t)d;
+            cur->raster_h = (uint8_t)d;
+        }
+        else
+        {
+            // Fixed/flip: scale by m, mirroring columns when facing west
+            int dw = bw * m, dh = bh * m;
+            for (int y = 0; y < dh; y++)
+            {
+                for (int x = 0; x < dw; x++)
+                {
+                    int sx = x / m;
+                    int sy = y / m;
+                    if (flip_now) sx = bw - 1 - sx;
+                    cur->raster[y * dw + x] = base[sy * bw + sx];
+                }
+            }
+            cur->raster_w = (uint8_t)dw;
+            cur->raster_h = (uint8_t)dh;
+        }
     }
 
     cur->raster_valid = true;
     cur->raster_shape = cur->shape;
     cur->raster_angle = cur->angle;
+    cur->raster_mag = cur->mag;
+    cur->raster_rot = (uint8_t)cur->rot_style;
+    cur->raster_flipped = flip_now;
 }
 
 // Describe the selected turtle's rendered raster as a compositor sprite:
@@ -540,7 +633,8 @@ static void turtle_sprite_geometry(ScreenSprite *sprite)
     sprite->w = cur->raster_w;
     sprite->h = cur->raster_h;
 
-    if (cur->shape == 0 || cur->raster_indexed)
+    if (cur->shape == 0 || cur->raster_indexed ||
+        cur->raster_w != BITMAP_RASTER_SIZE || cur->raster_h != BITMAP_RASTER_SIZE)
     {
         sprite->x = (int16_t)((int)(cur->x + 0.5f) - cur->raster_w / 2);
         sprite->y = (int16_t)((int)(cur->y + 0.5f) - cur->raster_h / 2);
@@ -1066,6 +1160,40 @@ static void refresh_shape_wearers(uint8_t shape_num)
     screen_gfx_update();
 }
 
+// Set how the selected turtle's costume follows its heading (setrot)
+static void turtle_set_rotation_style(LogoRotationStyle style)
+{
+    if (cur->rot_style == style)
+    {
+        return;
+    }
+    cur->rot_style = style;
+    cur->raster_valid = false;
+    if (cur->visible)
+    {
+        screen_show_field();
+        turtle_draw();
+        screen_gfx_update();
+    }
+}
+
+// Set the selected turtle's magnification (setmag)
+static void turtle_set_scale(uint8_t mag)
+{
+    if (mag < 1 || mag > 2 || cur->mag == mag)
+    {
+        return;
+    }
+    cur->mag = mag;
+    cur->raster_valid = false;
+    if (cur->visible)
+    {
+        screen_show_field();
+        turtle_draw();
+        screen_gfx_update();
+    }
+}
+
 // Composite the selected turtle's costume into the canvas at its
 // position (the stamp primitive)
 static void turtle_stamp(void)
@@ -1210,6 +1338,8 @@ static const LogoConsoleTurtle picocalc_turtle_ops = {
     .get_shape = turtle_get_shape_num,
     .get_shape_data = turtle_get_shape_data,
     .put_shape_data = turtle_put_shape_data,
+    .set_rotation_style = turtle_set_rotation_style,
+    .set_scale = turtle_set_scale,
     .stamp = turtle_stamp,
     .snap_costume = turtle_snap_costume,
 };

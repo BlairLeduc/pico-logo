@@ -88,6 +88,8 @@ extern "C"
 
         MOCK_CMD_SELECT,
         MOCK_CMD_STAMP,
+        MOCK_CMD_SET_ROT,
+        MOCK_CMD_SET_MAG,
         // Draw (redraw turtle)
         MOCK_CMD_DRAW
     } MockCommandType;
@@ -162,6 +164,8 @@ extern "C"
         uint16_t pen_colour;
         bool visible;
         uint8_t shape;
+        uint8_t rot_style;  // LogoRotationStyle
+        uint8_t mag;        // 1 or 2
     } MockTurtleState;
 
     //

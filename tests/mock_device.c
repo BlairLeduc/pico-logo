@@ -457,6 +457,20 @@ static void mock_turtle_stamp(void)
     record_command(MOCK_CMD_STAMP);
 }
 
+// rot/mag live only in the turtles[] slots (turtle_slot_sync doesn't
+// touch them), so write straight to the selected slot
+static void mock_turtle_set_rotation_style(LogoRotationStyle style)
+{
+    mock_state.turtles[mock_state.current_turtle].rot_style = (uint8_t)style;
+    record_command_float(MOCK_CMD_SET_ROT, (float)style);
+}
+
+static void mock_turtle_set_scale(uint8_t mag)
+{
+    mock_state.turtles[mock_state.current_turtle].mag = mag;
+    record_command_float(MOCK_CMD_SET_MAG, (float)mag);
+}
+
 static bool mock_turtle_snap_costume(uint8_t slot, uint8_t w, uint8_t h)
 {
     mock_state.costume.snap_count++;
@@ -501,6 +515,8 @@ static const LogoConsoleTurtle mock_turtle_ops = {
     .get_shape = mock_turtle_get_shape,
     .get_shape_data = mock_turtle_get_shape_data,
     .put_shape_data = mock_turtle_put_shape_data,
+    .set_rotation_style = mock_turtle_set_rotation_style,
+    .set_scale = mock_turtle_set_scale,
     .stamp = mock_turtle_stamp,
     .snap_costume = mock_turtle_snap_costume
 };
@@ -904,6 +920,8 @@ void mock_device_reset(void)
         mock_state.turtles[i].pen_colour = 254;
         mock_state.turtles[i].visible = (i == 0);
         mock_state.turtles[i].shape = 0;
+        mock_state.turtles[i].rot_style = 0;  // LOGO_ROT_FIXED
+        mock_state.turtles[i].mag = 1;
     }
     
     // Initialize text screen to default state

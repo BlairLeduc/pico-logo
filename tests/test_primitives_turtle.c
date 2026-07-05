@@ -1781,6 +1781,52 @@ void test_snapsh_reports_full_pool(void)
     TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
 }
 
+void test_setrot_is_per_turtle(void)
+{
+    Result r = run_string("tell [1 2] setrot \"full tell 0");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    TEST_ASSERT_EQUAL(1, mock_device_get_turtle(1)->rot_style);  // LOGO_ROT_FULL
+    TEST_ASSERT_EQUAL(1, mock_device_get_turtle(2)->rot_style);
+    TEST_ASSERT_EQUAL(0, mock_device_get_turtle(0)->rot_style);  // LOGO_ROT_FIXED
+}
+
+void test_setrot_rejects_unknown_style(void)
+{
+    Result r = run_string("setrot \"sideways");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_setrot_case_insensitive(void)
+{
+    Result r = run_string("setrot \"FLIP");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL(2, mock_device_get_turtle(0)->rot_style);  // LOGO_ROT_FLIP
+}
+
+void test_setmag_is_per_turtle(void)
+{
+    Result r = run_string("tell 3 setmag 2 tell 0");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    TEST_ASSERT_EQUAL(2, mock_device_get_turtle(3)->mag);
+    TEST_ASSERT_EQUAL(1, mock_device_get_turtle(0)->mag);
+}
+
+void test_setmag_rejects_other_values(void)
+{
+    Result r = run_string("setmag 3");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+
+    r = run_string("setmag 0");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+
+    r = run_string("setmag 1.5");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
 void test_addressing_primitives_registered(void)
 {
     // Verify primitives are registered by checking they don't produce
@@ -2002,6 +2048,11 @@ int main(void)
     RUN_TEST(test_snapsh_captures_for_first_active);
     RUN_TEST(test_snapsh_validates_inputs);
     RUN_TEST(test_snapsh_reports_full_pool);
+    RUN_TEST(test_setrot_is_per_turtle);
+    RUN_TEST(test_setrot_rejects_unknown_style);
+    RUN_TEST(test_setrot_case_insensitive);
+    RUN_TEST(test_setmag_is_per_turtle);
+    RUN_TEST(test_setmag_rejects_other_values);
 
     return UNITY_END();
 }

@@ -1445,6 +1445,44 @@ See [Colours](#appendix-e-colour-palette-for-pico-logo) for the default palette.
 ```
 
 
+## setmag
+
+setmag _magnification_
+
+`command`
+
+Stands for `set mag`nification. `setmag 2` draws the turtle you are talking to at double size; `setmag 1` returns it to normal. Magnification applies to the turtle's appearance on screen — the line-drawn turtle, bitmap shapes, and captured colour shapes alike — and to [`stamp`](#stamp). It does not change how far the turtle moves. The drawn turtle is limited to 32 by 32 pixels, so shapes larger than 16 by 16 always appear at normal size.
+
+**Example**:
+
+```logo
+?tell 1 st setmag 2   ; turtle 1 appears double size
+```
+
+
+## setrot
+
+setrot _style_
+
+`command`
+
+Stands for `set rot`ation style. Chooses how the turtle's shape follows its heading. The _style_ is one of three words:
+
+- `"fixed` — the shape never rotates (how shapes behaved on period machines; the default).
+- `"full` — the shape rotates smoothly to point along the heading.
+- `"flip` — the shape mirrors left or right depending on which way the turtle faces; most game characters are drawn side-on, and this makes them walk both directions with one picture.
+
+The rotation style applies to bitmap and captured colour shapes; shape 0, the line-drawn turtle, always rotates. Shapes larger than about 22 pixels may lose their corners at diagonal headings with `"full`, since the drawn turtle is limited to 32 by 32 pixels.
+
+**Example**:
+
+```logo
+?setsh 1 setrot "flip
+?seth 90 fd 40      ; facing east: shape as drawn
+?seth 270 fd 40     ; facing west: shape mirrored
+```
+
+
 ## snapsh
 
 snapsh _shapenumber_ _width_ _height_

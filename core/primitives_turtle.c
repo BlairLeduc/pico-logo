@@ -15,6 +15,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 
 // Normalize a heading in degrees to the half-open range [0, 360).
 // Used so that HEADING and SETHEADING expose canonical angles regardless
@@ -1289,6 +1290,71 @@ static Result prim_shape(Evaluator *eval, int argc, Value *args)
     return result_ok(value_number(shape));
 }
 
+// setrot "full | "flip | "fixed - How the costume follows the heading
+static Result prim_setrot(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
+
+    const char *style_name = value_to_string(args[0]);
+    LogoRotationStyle style;
+    if (strcasecmp(style_name, "fixed") == 0)
+    {
+        style = LOGO_ROT_FIXED;
+    }
+    else if (strcasecmp(style_name, "full") == 0)
+    {
+        style = LOGO_ROT_FULL;
+    }
+    else if (strcasecmp(style_name, "flip") == 0)
+    {
+        style = LOGO_ROT_FLIP;
+    }
+    else
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, style_name);
+    }
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->set_rotation_style)
+    {
+        for (int i = 0; i < active_count; i++)
+        {
+            select_turtle(turtle, active_set[i]);
+            turtle->set_rotation_style(style);
+        }
+        select_first_active(turtle);
+    }
+
+    return result_none();
+}
+
+// setmag 1 | 2 - Magnification of the rendered costume
+static Result prim_setmag(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
+    REQUIRE_NUMBER(args[0], mag);
+
+    if (mag != 1.0f && mag != 2.0f)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->set_scale)
+    {
+        for (int i = 0; i < active_count; i++)
+        {
+            select_turtle(turtle, active_set[i]);
+            turtle->set_scale((uint8_t)mag);
+        }
+        select_first_active(turtle);
+    }
+
+    return result_none();
+}
+
 // stamp - Composite the turtle's costume into the canvas at its position
 static Result prim_stamp(Evaluator *eval, int argc, Value *args)
 {
@@ -1568,6 +1634,8 @@ void primitives_turtle_init(void)
     primitive_register("shape", 0, prim_shape);
     primitive_register("stamp", 0, prim_stamp);
     primitive_register("snapsh", 3, prim_snapsh);
+    primitive_register("setrot", 1, prim_setrot);
+    primitive_register("setmag", 1, prim_setmag);
 
     // Multi-turtle addressing
     primitive_register("tell", 1, prim_tell);
