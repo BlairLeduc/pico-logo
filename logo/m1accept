@@ -1,0 +1,155 @@
+; M1 multi-turtle hardware acceptance (PR #97)
+; Load with:  load "m1accept
+; Run all:    m1accept        (press a key to advance between steps)
+; Or run any step on its own: m1single m1fanout m1each m1ask m1zorder
+;                             m1costume m1stamp m1rot m1mag m1reset
+
+to m1pause
+  pr []
+  pr [--- check the screen, then press any key ---]
+  ignore rc
+end
+
+to m1banner :text
+  cs ss
+  pr []
+  pr :text
+end
+
+; Step 1: single-turtle programs are byte-identical (no tell = turtle 0)
+to m1single
+  m1banner [Step 1: single turtle unchanged]
+  pr [PASS: one triangle draws a square, nothing else visible]
+  repeat 4 [fd 60 rt 90]
+end
+
+; Step 2: tell fans commands out; lower-numbered turtle on top
+to m1fanout
+  m1banner [Step 2: tell fans out over four turtles]
+  pr [PASS: four triangles walk N/E/S/W drawing a cross]
+  tell [0 1 2 3]
+  st
+  each [seth who * 90]
+  repeat 4 [fd 25 wait 2]
+end
+
+; Step 3: each + who differentiate turtles
+to m1each
+  m1banner [Step 3: each and who]
+  pr [PASS: four squares in different colours, one per quadrant]
+  tell [0 1 2 3]
+  st
+  each [seth who * 90 setpc 24 + who * 32 fd 30 repeat 4 [fd 30 rt 90]]
+  pr sentence [who reports:] who
+end
+
+; Step 4: ask addresses one turtle without changing who
+to m1ask
+  m1banner [Step 4: ask moves only turtle 2]
+  pr [PASS: one triangle walks away and who prints 0 both times]
+  tell 0 st
+  ask 2 [st seth 45]
+  pr sentence [who before ask:] who
+  ask 2 [repeat 3 [fd 30 wait 3]]
+  pr sentence [who after ask:] who
+end
+
+; Step 5: draw a badge with the pen, capture it with snapsh
+to m1badge
+  pu setpos [-7 -7] seth 0 pd
+  setpc 88
+  repeat 4 [fd 14 rt 90]
+  pu setpos [0 0] pd fill      ; solid box
+  setpc 152
+  pu setpos [-7 -7] pd setpos [7 7]   ; diagonal makes flips visible
+  pu setpos [0 0] seth 0
+end
+
+to m1costume
+  m1banner [Step 5: snapsh captures the canvas as a costume]
+  pr [PASS: three copies of the drawn badge fan out, and the]
+  pr [      background shows through around each of them]
+  m1badge
+  snapsh 1 16 16
+  cs
+  tell [1 2 3]
+  setsh 1 st
+  each [seth 30 * who fd 50]
+  tell 0
+end
+
+; Step 6: stamp bakes the costume into the picture
+to m1stamp
+  m1banner [Step 6: stamp leaves a ring of badges]
+  pr [PASS: eight badges remain after the turtle hides]
+  m1badge
+  snapsh 1 16 16
+  cs
+  setsh 1 st pu
+  fd 60
+  repeat 8 [stamp bk 60 rt 45 fd 60 wait 2]
+  ht
+  pr [turtle hidden -- the stamps are part of the drawing]
+end
+
+; Step 7: rotation styles
+to m1rot
+  m1banner [Step 7: setrot flip and full]
+  pr [PASS: badge mirrors walking west, then spins with heading]
+  m1badge
+  snapsh 1 16 16
+  cs
+  setsh 1 st pu
+  setrot "flip
+  pr [flip: east then west -- diagonal should mirror]
+  seth 90 repeat 4 [fd 20 wait 3]
+  seth 270 repeat 8 [fd 20 wait 3]
+  pu setpos [0 0]
+  setrot "full
+  pr [full: costume rotates with the heading]
+  repeat 12 [rt 30 fd 12 wait 3]
+  setrot "fixed
+end
+
+; Step 8: magnification
+to m1mag
+  m1banner [Step 8: setmag doubles turtles]
+  pr [PASS: triangle and badge double, then return to normal]
+  tell 0 st pu setpos [-60 0]
+  ask 1 [st pu setpos [30 0] setsh 1]
+  m1badge
+  snapsh 1 16 16
+  clean
+  wait 10
+  tell [0 1] setmag 2
+  pr [magnified x2]
+  wait 20
+  setmag 1
+  pr [back to normal]
+  tell 0
+end
+
+; Step 9: cs restores the single-turtle world
+to m1reset
+  m1banner [Step 9: cs goes back to turtle 0]
+  tell [0 1 2 3] st
+  each [seth who * 90 fd 40]
+  wait 10
+  cs
+  pr sentence [who after cs, expect 0 --] who
+  pr [PASS: only turtle 0 at home, turtles 1-3 hidden again]
+end
+
+to m1accept
+  m1single   m1pause
+  m1fanout   m1pause
+  m1each     m1pause
+  m1ask      m1pause
+  m1costume  m1pause
+  m1stamp    m1pause
+  m1rot      m1pause
+  m1mag      m1pause
+  m1reset
+  pr []
+  pr [M1 acceptance complete.]
+end

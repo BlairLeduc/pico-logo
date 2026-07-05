@@ -46,7 +46,7 @@ Companion documents:
 
 | Item | Status | Notes |
 |---|---|---|
-| Multiple turtles/sprites (`tell`/`ask`/`each`), `touching?`, `when` events | in progress | Design done; M0 display pipeline landed: [P5](#p5--multi-sprite-turtles-with-collision-design-first) |
+| Multiple turtles/sprites (`tell`/`ask`/`each`), `touching?`, `when` events | in progress | Design done; M0 pipeline + M1 sprite model landed: [P5](#p5--multi-sprite-turtles-with-collision-design-first) |
 | Arrays (`array`/`setitem`) | deferred | O(1) indexing; needs a new object kind (likely blob-backed). Wait for demonstrated need |
 | Atom reclamation / `erall` soft reset | deferred | See `memory-reclamation-design.md` |
 
@@ -277,3 +277,4 @@ device (no graphics) degrades cleanly.
 | 2026-07-04 | P5 | Design v2: prior-art survey from primary sources (TI Logo, Atari Logo, TRS-80 Color Logo manuals; LogoWriter/MicroWorlds, StarLogo, Scratch); modernized sprite model — colour costumes with rotation/scale, `setspeed`+`freeze`/`thaw`, `setanim`, `stamp`/`snapsh`, `over?`/`distance`, expression `when` demons; `launch` processes deferred to a P6 design gate |
 | 2026-07-04 | P5 | Open questions resolved with user: `tell` out-of-range errors; `over?`/`colourunder` first-active-only; demons stay armed at the REPL prompt (Atari-style); all four behaviour changes signed off (BMPs/`dot?` sprite-free, lowest-turtle queries, verbatim colour costumes) |
 | 2026-07-04 | P5 | M0 display pipeline: tile dirty tracking (`dirty_tiles.c` + tests), DMA-pipelined blit (`lcd_blit_begin/row/end`), scanline sprite compositor (turtle out of the canvas, save-under deleted), `setrefresh`/`refresh`/`refreshmode` with auto restored on `cs`/error/`throw "toplevel` |
+| 2026-07-04 | P5 | M1 sprite model + addressing: 8 turtles (per-turtle device state behind a `select` op, sprite id = turtle number, lower on top), `tell`/`ask`/`each`/`who` with command fan-out and lowest-active queries, colour costume pool (`costumes.c` + tests, 8 KB compact-on-free), indexed compositor sprites, `snapsh`/`stamp`, `setrot`/`setmag`; single-turtle programs unchanged (`cs` re-hides 1-7) |

@@ -25,12 +25,26 @@ extern "C"
         LOGO_PEN_REVERSE,
     } LogoPen;
 
+    // How a turtle's bitmap/colour costume follows its heading (setrot).
+    // Shape 0 (the line-drawn triangle) always rotates regardless.
+    typedef enum LogoRotationStyle
+    {
+        LOGO_ROT_FIXED, // Costume never rotates (period behaviour; default)
+        LOGO_ROT_FULL,  // Costume rotates to the heading
+        LOGO_ROT_FLIP,  // Costume mirrors left/right when facing west
+    } LogoRotationStyle;
+
     //
     // Turtle graphics operations (optional)
     // These are available on devices with graphics capability.
     //
     typedef struct LogoConsoleTurtle
     {
+        // Route the stateful turtle ops below to turtle n (0-based).
+        // Devices without multi-turtle support may leave this NULL; core
+        // then addresses the single built-in turtle regardless of n.
+        void (*select)(uint8_t n);
+
         // Clear the graphics screen
         void (*clear)(void);
 
@@ -116,6 +130,24 @@ extern "C"
         // Each byte represents one row, MSB = leftmost column
         // Returns false if shape_num is 0 or > 15
         bool (*put_shape_data)(uint8_t shape_num, const uint8_t *data);
+
+        // Rotation style for the turtle's costume (setrot). Optional.
+        void (*set_rotation_style)(LogoRotationStyle style);
+
+        // Integer magnification 1 or 2 for the rendered costume (setmag).
+        // Costumes larger than 16x16 always render at 1 (32x32 raster cap).
+        // Optional.
+        void (*set_scale)(uint8_t mag);
+
+        // Composite the turtle's current costume into the canvas at the
+        // turtle's position (backs the stamp primitive). Optional.
+        void (*stamp)(void);
+
+        // Capture the w x h canvas region centred on the turtle into
+        // colour costume slot (1-15); canvas pixels matching the current
+        // background slot become transparent (backs snapsh). Returns
+        // false when the costume pool cannot hold the capture. Optional.
+        bool (*snap_costume)(uint8_t slot, uint8_t w, uint8_t h);
     } LogoConsoleTurtle;
 
     //

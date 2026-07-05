@@ -6,6 +6,8 @@
 //
 
 #include "picocalc_console.h"
+#include "core/limits.h"
+#include "costumes.h"
 #include "devices/console.h"
 #include "devices/stream.h"
 #include "editor.h"
@@ -23,33 +25,88 @@
 #include <pico/stdlib.h>
 #include <pico/rand.h>
 
-// Turtle state
-float turtle_x = TURTLE_HOME_X;                         // Current x position for graphics
-float turtle_y = TURTLE_HOME_Y;                         // Current y position for graphics
-float turtle_angle = TURTLE_DEFAULT_ANGLE;              // Current angle for graphics
-uint8_t turtle_colour = TURTLE_DEFAULT_COLOUR;          // Turtle color for graphics
-uint8_t background_colour = GFX_DEFAULT_BACKGROUND;     // Background color for graphics
-static LogoPen turtle_pen_state = LOGO_PEN_DOWN;        // Pen state for graphics
-static bool turtle_visible = TURTLE_DEFAULT_VISIBILITY; // Turtle visibility state for graphics
+// Rendered turtle raster sizing for the screen compositor. Shape 0 (the
+// line-drawn triangle) rasterizes into 24x24 to accommodate rotation;
+// mono bitmap shapes 1-15 use 16x16; colour costumes render at their
+// own size up to the raster cap of 32x32.
+#define SHAPE0_RASTER_SIZE 24
+#define BITMAP_RASTER_SIZE 16
+#define TURTLE_RASTER_MAX 32
 
-// Shape system
+// Per-turtle state. The stateful console ops act on the turtle selected
+// by turtle_op_select() (the `cur` pointer); turtle `n` maps to sprite
+// id `n` in the compositor, so lower-numbered turtles composite on top.
+// The raster is the rendered glyph mask the compositor overlays at blit
+// time (the glyph is never written into the canvas); it is rebuilt
+// lazily when the shape, the heading (shape 0 only), or the shape data
+// changes.
+typedef struct
+{
+    float x, y;             // Position in screen coordinates
+    float angle;            // Heading in degrees (0 = north)
+    uint8_t colour;         // Pen colour
+    LogoPen pen_state;
+    bool visible;
+    uint8_t shape;          // Current shape number (0-15)
+    uint8_t mag;            // Magnification 1 or 2 (setmag)
+    LogoRotationStyle rot_style;  // How the costume follows the heading
+    uint8_t raster[TURTLE_RASTER_MAX * TURTLE_RASTER_MAX];
+    uint8_t raster_w, raster_h;
+    bool raster_indexed;    // Raster bytes are palette slots (colour costume)
+    bool raster_valid;
+    uint8_t raster_shape;   // shape the raster was built for
+    float raster_angle;     // heading it was built at (when it matters)
+    uint8_t raster_mag;     // magnification it was built at
+    uint8_t raster_rot;     // rotation style it was built with
+    bool raster_flipped;    // built mirrored (flip style facing west)
+} PicoTurtle;
+
+static PicoTurtle picoturtles[MAX_TURTLES];
+static uint8_t current_turtle = 0;
+static PicoTurtle *cur = &picoturtles[0];
+
+_Static_assert(MAX_TURTLES <= SCREEN_MAX_SPRITES,
+               "each turtle needs a compositor sprite slot");
+
+// Route the stateful turtle ops to turtle n (console select op)
+static void turtle_op_select(uint8_t n)
+{
+    if (n < MAX_TURTLES)
+    {
+        current_turtle = n;
+        cur = &picoturtles[n];
+    }
+}
+
+// Boot state: every turtle at home facing north, pen down, default
+// colour and shape; only turtle 0 visible.
+static void turtles_init(void)
+{
+    for (int i = 0; i < MAX_TURTLES; i++)
+    {
+        PicoTurtle *t = &picoturtles[i];
+        t->x = TURTLE_HOME_X;
+        t->y = TURTLE_HOME_Y;
+        t->angle = TURTLE_DEFAULT_ANGLE;
+        t->colour = TURTLE_DEFAULT_COLOUR;
+        t->pen_state = LOGO_PEN_DOWN;
+        t->visible = (i == 0) && TURTLE_DEFAULT_VISIBILITY;
+        t->shape = 0;
+        t->mag = 1;
+        t->rot_style = LOGO_ROT_FIXED;
+        t->raster_valid = false;
+    }
+    current_turtle = 0;
+    cur = &picoturtles[0];
+    costumes_clear();
+}
+
+uint8_t background_colour = GFX_DEFAULT_BACKGROUND;     // Background color for graphics
+
+// Shape system (shared by all turtles)
 // Shapes 1-15 stored internally as 16-bit rows (doubled from user's 8-bit)
 // Shape 0 is the line-drawn turtle and doesn't use this storage
 static uint16_t turtle_shapes[15][16];  // shapes[0] = shape 1, shapes[14] = shape 15
-static uint8_t turtle_current_shape = 0;
-
-// Rendered turtle raster for the screen compositor (screen_sprite_set).
-// The turtle glyph is never written into the canvas buffer; the screen
-// driver overlays this mask at blit time. Shape 0 (the line-drawn
-// triangle) rasterizes into 24x24 to accommodate rotation; bitmap shapes
-// 1-15 use 16x16. The raster is rebuilt lazily when the shape, the
-// heading (shape 0 only), or the shape data changes.
-#define SHAPE0_RASTER_SIZE 24
-#define BITMAP_RASTER_SIZE 16
-static uint8_t turtle_raster[SHAPE0_RASTER_SIZE * SHAPE0_RASTER_SIZE];
-static bool turtle_raster_valid = false;
-static uint8_t turtle_raster_shape = 0;   // shape the raster was built for
-static float turtle_raster_angle = 0.0f;  // heading it was built at (shape 0)
 
 // Boundary mode constants
 typedef enum {
@@ -332,14 +389,14 @@ static const LogoConsoleText picocalc_text_ops = {
 // Helper: check if turtle is visible on screen (for window mode)
 static bool turtle_should_draw(void)
 {
-    if (!turtle_visible)
+    if (!cur->visible)
         return false;
     
     // In window mode, don't draw if turtle center is off-screen
     if (turtle_boundary_mode == BOUNDARY_MODE_WINDOW)
     {
-        if (turtle_x < 0 || turtle_x >= SCREEN_WIDTH ||
-            turtle_y < 0 || turtle_y >= SCREEN_HEIGHT)
+        if (cur->x < 0 || cur->x >= SCREEN_WIDTH ||
+            cur->y < 0 || cur->y >= SCREEN_HEIGHT)
         {
             return false;
         }
@@ -397,63 +454,196 @@ static void raster_line(uint8_t *raster, int size, float fx1, float fy1,
     #undef RASTER_PLOT
 }
 
-// Rebuild the turtle raster if the shape, shape data, or (for shape 0)
-// the heading changed since it was last built.
+// Does a heading face west? (the flip rotation style mirrors then)
+static bool heading_faces_left(float angle)
+{
+    float a = fmodf(angle, 360.0f);
+    if (a < 0.0f) a += 360.0f;
+    return a > 180.0f;
+}
+
+// Rebuild the turtle raster if the shape, shape data, magnification,
+// rotation style, or (when the style follows it) the heading changed
+// since it was last built.
 static void turtle_update_raster(void)
 {
-    if (turtle_raster_valid && turtle_raster_shape == turtle_current_shape &&
-        (turtle_current_shape != 0 || turtle_raster_angle == turtle_angle))
+    bool angle_matters = (cur->shape == 0 || cur->rot_style == LOGO_ROT_FULL);
+    bool flip_now = (cur->shape != 0 && cur->rot_style == LOGO_ROT_FLIP &&
+                     heading_faces_left(cur->angle));
+
+    if (cur->raster_valid && cur->raster_shape == cur->shape &&
+        cur->raster_mag == cur->mag && cur->raster_rot == cur->rot_style &&
+        cur->raster_flipped == flip_now &&
+        (!angle_matters || cur->raster_angle == cur->angle))
     {
         return;
     }
 
-    if (turtle_current_shape == 0)
-    {
-        // Shape 0: the line-drawn turtle triangle, rotated to the heading.
-        // Base width 6 (half_base 3), height 7, position at centre of base;
-        // fits in 24x24 with the base centre at the raster centre.
-        memset(turtle_raster, 0, SHAPE0_RASTER_SIZE * SHAPE0_RASTER_SIZE);
+    cur->raster_indexed = false;
 
-        float radians = turtle_angle * (float)(M_PI / 180.0);
+    if (cur->shape == 0)
+    {
+        // Shape 0: the line-drawn turtle triangle, rotated to the heading
+        // and scaled by mag directly (it's a vector shape). Base width
+        // 6*mag (half_base 3*mag), height 7*mag from the base centre, so
+        // even magnified it fits the raster at any rotation.
+        int size = (cur->mag == 2) ? TURTLE_RASTER_MAX : SHAPE0_RASTER_SIZE;
+        memset(cur->raster, 0, (size_t)(size * size));
+
+        float radians = cur->angle * (float)(M_PI / 180.0);
         float sin_a = sinf(radians);
         float cos_a = cosf(radians);
-        float half_base = 3.0f;
-        float height = 7.0f;
-        float cx = SHAPE0_RASTER_SIZE / 2.0f;
-        float cy = SHAPE0_RASTER_SIZE / 2.0f;
+        float half_base = 3.0f * (float)cur->mag;
+        float height = 7.0f * (float)cur->mag;
+        float cx = size / 2.0f;
+        float cy = size / 2.0f;
 
         // Base vertices perpendicular to the heading; tip along the heading
         float x1 = cx + half_base * cos_a, y1 = cy + half_base * sin_a;
         float x2 = cx - half_base * cos_a, y2 = cy - half_base * sin_a;
         float x3 = cx + height * sin_a,    y3 = cy - height * cos_a;
 
-        raster_line(turtle_raster, SHAPE0_RASTER_SIZE, x1, y1, x2, y2);
-        raster_line(turtle_raster, SHAPE0_RASTER_SIZE, x2, y2, x3, y3);
-        raster_line(turtle_raster, SHAPE0_RASTER_SIZE, x3, y3, x1, y1);
+        raster_line(cur->raster, size, x1, y1, x2, y2);
+        raster_line(cur->raster, size, x2, y2, x3, y3);
+        raster_line(cur->raster, size, x3, y3, x1, y1);
+
+        cur->raster_w = (uint8_t)size;
+        cur->raster_h = (uint8_t)size;
     }
     else
     {
-        // Shapes 1-15: 16x16 bitmap (rows doubled from the user's 8 bits)
-        memset(turtle_raster, 0, BITMAP_RASTER_SIZE * BITMAP_RASTER_SIZE);
+        // Build the base image: a colour costume's pixels, or the mono
+        // 16x16 bitmap (rows doubled from the user's 8 bits)
+        static uint8_t base[TURTLE_RASTER_MAX * TURTLE_RASTER_MAX];
+        int bw, bh;
+        uint8_t blank;  // the transparent value for this raster kind
 
-        const uint16_t *shape = turtle_shapes[turtle_current_shape - 1];
-        for (int row = 0; row < 16; row++)
+        uint8_t costume_w, costume_h;
+        const uint8_t *costume_pixels;
+        if (costume_get(cur->shape, &costume_w, &costume_h, &costume_pixels))
         {
-            uint16_t row_bits = shape[row];
-            if (row_bits == 0) continue;
-            for (int col = 0; col < 16; col++)
+            bw = costume_w;
+            bh = costume_h;
+            memcpy(base, costume_pixels, (size_t)(bw * bh));
+            blank = SCREEN_SPRITE_TRANSPARENT;
+            cur->raster_indexed = true;
+        }
+        else
+        {
+            bw = BITMAP_RASTER_SIZE;
+            bh = BITMAP_RASTER_SIZE;
+            memset(base, 0, BITMAP_RASTER_SIZE * BITMAP_RASTER_SIZE);
+
+            const uint16_t *shape = turtle_shapes[cur->shape - 1];
+            for (int row = 0; row < 16; row++)
             {
-                if (row_bits & (0x8000 >> col))
+                uint16_t row_bits = shape[row];
+                if (row_bits == 0) continue;
+                for (int col = 0; col < 16; col++)
                 {
-                    turtle_raster[row * BITMAP_RASTER_SIZE + col] = 1;
+                    if (row_bits & (0x8000 >> col))
+                    {
+                        base[row * BITMAP_RASTER_SIZE + col] = 1;
+                    }
                 }
             }
+            blank = 0;
+        }
+
+        // The raster cap makes magnification effective only up to 16x16
+        int m = cur->mag;
+        if (bw * m > TURTLE_RASTER_MAX || bh * m > TURTLE_RASTER_MAX)
+        {
+            m = 1;
+        }
+
+        if (cur->rot_style == LOGO_ROT_FULL)
+        {
+            // Rotate to the heading around the centre with nearest-
+            // neighbour inverse mapping. The square destination covers
+            // the rotated extent, cropped at the raster cap (a costume
+            // larger than ~22px loses corners at diagonal headings).
+            int dw = bw * m, dh = bh * m;
+            int d = (int)ceilf(sqrtf((float)(dw * dw + dh * dh)));
+            if (d > TURTLE_RASTER_MAX) d = TURTLE_RASTER_MAX;
+
+            float radians = cur->angle * (float)(M_PI / 180.0);
+            float sin_a = sinf(radians);
+            float cos_a = cosf(radians);
+            float dc = d / 2.0f;
+            float bcx = bw / 2.0f, bcy = bh / 2.0f;
+
+            for (int y = 0; y < d; y++)
+            {
+                for (int x = 0; x < d; x++)
+                {
+                    float dx = (x + 0.5f) - dc;
+                    float dy = (y + 0.5f) - dc;
+                    // Inverse of the clockwise heading rotation
+                    float sx = (dx * cos_a + dy * sin_a) / (float)m + bcx;
+                    float sy = (-dx * sin_a + dy * cos_a) / (float)m + bcy;
+                    int ix = (int)floorf(sx);
+                    int iy = (int)floorf(sy);
+                    cur->raster[y * d + x] =
+                        (ix >= 0 && ix < bw && iy >= 0 && iy < bh)
+                            ? base[iy * bw + ix] : blank;
+                }
+            }
+            cur->raster_w = (uint8_t)d;
+            cur->raster_h = (uint8_t)d;
+        }
+        else
+        {
+            // Fixed/flip: scale by m, mirroring columns when facing west
+            int dw = bw * m, dh = bh * m;
+            for (int y = 0; y < dh; y++)
+            {
+                for (int x = 0; x < dw; x++)
+                {
+                    int sx = x / m;
+                    int sy = y / m;
+                    if (flip_now) sx = bw - 1 - sx;
+                    cur->raster[y * dw + x] = base[sy * bw + sx];
+                }
+            }
+            cur->raster_w = (uint8_t)dw;
+            cur->raster_h = (uint8_t)dh;
         }
     }
 
-    turtle_raster_valid = true;
-    turtle_raster_shape = turtle_current_shape;
-    turtle_raster_angle = turtle_angle;
+    cur->raster_valid = true;
+    cur->raster_shape = cur->shape;
+    cur->raster_angle = cur->angle;
+    cur->raster_mag = cur->mag;
+    cur->raster_rot = (uint8_t)cur->rot_style;
+    cur->raster_flipped = flip_now;
+}
+
+// Describe the selected turtle's rendered raster as a compositor sprite:
+// shape 0 and colour costumes centre on the turtle position (so a snapsh
+// capture worn as a costume round-trips exactly); mono bitmaps keep the
+// shape system's historical anchor (centred horizontally, bottom row at
+// the turtle). Caller must have run turtle_update_raster().
+static void turtle_sprite_geometry(ScreenSprite *sprite)
+{
+    sprite->visible = true;
+    sprite->indexed = cur->raster_indexed;
+    sprite->colour = cur->colour;
+    sprite->mask = cur->raster;
+    sprite->w = cur->raster_w;
+    sprite->h = cur->raster_h;
+
+    if (cur->shape == 0 || cur->raster_indexed ||
+        cur->raster_w != BITMAP_RASTER_SIZE || cur->raster_h != BITMAP_RASTER_SIZE)
+    {
+        sprite->x = (int16_t)((int)(cur->x + 0.5f) - cur->raster_w / 2);
+        sprite->y = (int16_t)((int)(cur->y + 0.5f) - cur->raster_h / 2);
+    }
+    else
+    {
+        sprite->x = (int16_t)((int)cur->x - BITMAP_RASTER_SIZE / 2);
+        sprite->y = (int16_t)((int)cur->y - (BITMAP_RASTER_SIZE - 1));
+    }
 }
 
 // Show the turtle sprite at the current position (or hide it when the
@@ -463,36 +653,15 @@ static void turtle_draw(void)
 {
     if (!turtle_should_draw())
     {
-        screen_sprite_hide(0);
+        screen_sprite_hide(current_turtle);
         return;
     }
 
     turtle_update_raster();
 
-    ScreenSprite sprite = {
-        .visible = true,
-        .colour = turtle_colour,
-        .mask = turtle_raster,
-    };
-
-    if (turtle_current_shape == 0)
-    {
-        // Centred on the turtle position
-        sprite.w = SHAPE0_RASTER_SIZE;
-        sprite.h = SHAPE0_RASTER_SIZE;
-        sprite.x = (int16_t)((int)(turtle_x + 0.5f) - SHAPE0_RASTER_SIZE / 2);
-        sprite.y = (int16_t)((int)(turtle_y + 0.5f) - SHAPE0_RASTER_SIZE / 2);
-    }
-    else
-    {
-        // Centred horizontally, bottom row at the turtle position
-        sprite.w = BITMAP_RASTER_SIZE;
-        sprite.h = BITMAP_RASTER_SIZE;
-        sprite.x = (int16_t)((int)turtle_x - BITMAP_RASTER_SIZE / 2);
-        sprite.y = (int16_t)((int)turtle_y - (BITMAP_RASTER_SIZE - 1));
-    }
-
-    screen_sprite_set(0, &sprite);
+    ScreenSprite sprite;
+    turtle_sprite_geometry(&sprite);
+    screen_sprite_set(current_turtle, &sprite);
 }
 
 // Clear the graphics buffer and reset the turtle to the home position
@@ -516,12 +685,12 @@ static bool turtle_move(float distance)
 {
     screen_show_field();
 
-    float old_x = turtle_x;
-    float old_y = turtle_y;
+    float old_x = cur->x;
+    float old_y = cur->y;
 
     // Calculate new position in screen coordinates
-    float new_x = turtle_x + distance * sinf(turtle_angle * (M_PI / 180.0f));
-    float new_y = turtle_y - distance * cosf(turtle_angle * (M_PI / 180.0f));
+    float new_x = cur->x + distance * sinf(cur->angle * (M_PI / 180.0f));
+    float new_y = cur->y - distance * cosf(cur->angle * (M_PI / 180.0f));
 
     // Convert to Logo coordinates (centered at origin) for boundary checking
     float logo_x = new_x - SCREEN_WIDTH / 2;
@@ -541,36 +710,36 @@ static bool turtle_move(float distance)
             turtle_draw();
             return false;  // Boundary error
         }
-        turtle_x = new_x;
-        turtle_y = new_y;
+        cur->x = new_x;
+        cur->y = new_y;
         break;
 
     case BOUNDARY_MODE_WINDOW:
         // Allow any position, no restrictions
-        turtle_x = new_x;
-        turtle_y = new_y;
+        cur->x = new_x;
+        cur->y = new_y;
         break;
 
     case BOUNDARY_MODE_WRAP:
         // Don't wrap yet - we need unwrapped coordinates for line drawing
         // so that pixel-by-pixel wrapping happens correctly in screen_gfx_line
-        turtle_x = new_x;
-        turtle_y = new_y;
+        cur->x = new_x;
+        cur->y = new_y;
         break;
     }
 
     // Draw line if pen is down
-    if (turtle_pen_state == LOGO_PEN_DOWN)
+    if (cur->pen_state == LOGO_PEN_DOWN)
     {
-        screen_gfx_line(old_x, old_y, turtle_x, turtle_y, turtle_colour, false);
+        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, false);
     }
-    else if (turtle_pen_state == LOGO_PEN_ERASE)
+    else if (cur->pen_state == LOGO_PEN_ERASE)
     {
-        screen_gfx_line(old_x, old_y, turtle_x, turtle_y, GFX_DEFAULT_BACKGROUND, false);
+        screen_gfx_line(old_x, old_y, cur->x, cur->y, GFX_DEFAULT_BACKGROUND, false);
     }
-    else if (turtle_pen_state == LOGO_PEN_REVERSE)
+    else if (cur->pen_state == LOGO_PEN_REVERSE)
     {
-        screen_gfx_line(old_x, old_y, turtle_x, turtle_y, turtle_colour, true);
+        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, true);
     }
     // else if LOGO_PEN_UP: do not draw anything
 
@@ -579,8 +748,8 @@ static bool turtle_move(float distance)
     {
         // Robust wrapping formula that handles any value (positive or negative)
         // Uses the same approach as wrap_and_round() in screen.c
-        turtle_x = turtle_x - floorf(turtle_x / SCREEN_WIDTH) * SCREEN_WIDTH;
-        turtle_y = turtle_y - floorf(turtle_y / SCREEN_HEIGHT) * SCREEN_HEIGHT;
+        cur->x = cur->x - floorf(cur->x / SCREEN_WIDTH) * SCREEN_WIDTH;
+        cur->y = cur->y - floorf(cur->y / SCREEN_HEIGHT) * SCREEN_HEIGHT;
     }
 
     turtle_draw();
@@ -593,26 +762,26 @@ static void turtle_home(void)
 {
     screen_show_field();
 
-    float old_x = turtle_x;
-    float old_y = turtle_y;
+    float old_x = cur->x;
+    float old_y = cur->y;
 
     // Reset the turtle to the home position
-    turtle_x = TURTLE_HOME_X;
-    turtle_y = TURTLE_HOME_Y;
-    turtle_angle = TURTLE_DEFAULT_ANGLE;
+    cur->x = TURTLE_HOME_X;
+    cur->y = TURTLE_HOME_Y;
+    cur->angle = TURTLE_DEFAULT_ANGLE;
 
     // Draw line if pen is down
-    if (turtle_pen_state == LOGO_PEN_DOWN)
+    if (cur->pen_state == LOGO_PEN_DOWN)
     {
-        screen_gfx_line(old_x, old_y, turtle_x, turtle_y, turtle_colour, false);
+        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, false);
     }
-    else if (turtle_pen_state == LOGO_PEN_ERASE)
+    else if (cur->pen_state == LOGO_PEN_ERASE)
     {
-        screen_gfx_line(old_x, old_y, turtle_x, turtle_y, GFX_DEFAULT_BACKGROUND, false);
+        screen_gfx_line(old_x, old_y, cur->x, cur->y, GFX_DEFAULT_BACKGROUND, false);
     }
-    else if (turtle_pen_state == LOGO_PEN_REVERSE)
+    else if (cur->pen_state == LOGO_PEN_REVERSE)
     {
-        screen_gfx_line(old_x, old_y, turtle_x, turtle_y, turtle_colour, true);
+        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, true);
     }
     // else if LOGO_PEN_UP: do not draw anything
 
@@ -630,8 +799,8 @@ static bool turtle_set_position(float x, float y)
 {
     screen_show_field();
 
-    float old_x = turtle_x;
-    float old_y = turtle_y;
+    float old_x = cur->x;
+    float old_y = cur->y;
 
     // Convert Logo coordinates to screen coordinates:
     // - X: Logo 0 -> Screen center (SCREEN_WIDTH/2)
@@ -651,44 +820,44 @@ static bool turtle_set_position(float x, float y)
             turtle_draw();
             return false;  // Boundary error
         }
-        turtle_x = new_x;
-        turtle_y = new_y;
+        cur->x = new_x;
+        cur->y = new_y;
         break;
 
     case BOUNDARY_MODE_WINDOW:
         // Allow any position, no restrictions
-        turtle_x = new_x;
-        turtle_y = new_y;
+        cur->x = new_x;
+        cur->y = new_y;
         break;
 
     case BOUNDARY_MODE_WRAP:
         // Don't wrap yet - we need unwrapped coordinates for line drawing
         // so that pixel-by-pixel wrapping happens correctly in screen_gfx_line
-        turtle_x = new_x;
-        turtle_y = new_y;
+        cur->x = new_x;
+        cur->y = new_y;
         break;
     }
 
     // Draw line if pen is down
-    if (turtle_pen_state == LOGO_PEN_DOWN)
+    if (cur->pen_state == LOGO_PEN_DOWN)
     {
-        screen_gfx_line(old_x, old_y, turtle_x, turtle_y, turtle_colour, false);
+        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, false);
     }
-    else if (turtle_pen_state == LOGO_PEN_ERASE)
+    else if (cur->pen_state == LOGO_PEN_ERASE)
     {
-        screen_gfx_line(old_x, old_y, turtle_x, turtle_y, GFX_DEFAULT_BACKGROUND, false);
+        screen_gfx_line(old_x, old_y, cur->x, cur->y, GFX_DEFAULT_BACKGROUND, false);
     }
-    else if (turtle_pen_state == LOGO_PEN_REVERSE)
+    else if (cur->pen_state == LOGO_PEN_REVERSE)
     {
-        screen_gfx_line(old_x, old_y, turtle_x, turtle_y, turtle_colour, true);
+        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, true);
     }
     // else if LOGO_PEN_UP: do not draw anything
 
     // Now wrap the turtle position after drawing (for wrap mode only)
     if (turtle_boundary_mode == BOUNDARY_MODE_WRAP)
     {
-        turtle_x = turtle_x - floorf(turtle_x / SCREEN_WIDTH) * SCREEN_WIDTH;
-        turtle_y = turtle_y - floorf(turtle_y / SCREEN_HEIGHT) * SCREEN_HEIGHT;
+        cur->x = cur->x - floorf(cur->x / SCREEN_WIDTH) * SCREEN_WIDTH;
+        cur->y = cur->y - floorf(cur->y / SCREEN_HEIGHT) * SCREEN_HEIGHT;
     }
 
     // Draw the turtle at the new position
@@ -703,12 +872,12 @@ static void turtle_get_position(float *x, float *y)
 {
     if (x)
     {
-        *x = turtle_x - SCREEN_WIDTH / 2;
+        *x = cur->x - SCREEN_WIDTH / 2;
     }
     if (y)
     {
         // Convert screen Y to Logo Y (flip the axis)
-        *y = -(turtle_y - SCREEN_HEIGHT / 2);
+        *y = -(cur->y - SCREEN_HEIGHT / 2);
     }
 }
 
@@ -718,10 +887,10 @@ static void turtle_set_angle(float angle)
     screen_show_field();
 
     // Normalize the angle to [0, 360)
-    turtle_angle = fmodf(angle, 360.0f);
-    if (turtle_angle < 0.0f)
+    cur->angle = fmodf(angle, 360.0f);
+    if (cur->angle < 0.0f)
     {
-        turtle_angle += 360.0f;
+        cur->angle += 360.0f;
     }
     turtle_draw();
 
@@ -731,7 +900,7 @@ static void turtle_set_angle(float angle)
 // Get the current turtle angle
 static float turtle_get_angle(void)
 {
-    return turtle_angle; // Return the current angle
+    return cur->angle; // Return the current angle
 }
 
 // Set the turtle color to the specified value
@@ -740,7 +909,7 @@ static void turtle_set_colour(uint8_t colour)
     screen_show_field();
 
     // Set the new turtle color
-    turtle_colour = colour;
+    cur->colour = colour;
 
     // Draw the turtle at the current position with the new color
     turtle_draw();
@@ -751,7 +920,7 @@ static void turtle_set_colour(uint8_t colour)
 // Get the current turtle color
 static uint8_t turtle_get_colour(void)
 {
-    return turtle_colour; // Return the current turtle color
+    return cur->colour; // Return the current turtle color
 }
 
 static void turtle_set_bg_colour(uint8_t slot)
@@ -774,26 +943,26 @@ static uint8_t turtle_get_bg_colour(void)
 static void turtle_set_pen_state(LogoPen state)
 {
     screen_show_field();
-    turtle_pen_state = state; // Set the pen state
+    cur->pen_state = state; // Set the pen state
 }
 
 // Get the current pen state (down or up)
 static LogoPen turtle_get_pen_state(void)
 {
-    return turtle_pen_state; // Return the current pen state
+    return cur->pen_state; // Return the current pen state
 }
 
 // Set the turtle visibility (visible or hidden)
 static void turtle_set_visibility(bool visible)
 {
-    if (turtle_visible == visible)
+    if (cur->visible == visible)
     {
         return; // No change in visibility
     }
 
     screen_show_field();
 
-    turtle_visible = visible;
+    cur->visible = visible;
 
     // turtle_draw shows or hides the sprite to match the new visibility
     turtle_draw();
@@ -804,7 +973,7 @@ static void turtle_set_visibility(bool visible)
 // Draw or erase the turtle based on visibility
 static bool turtle_get_visibility(void)
 {
-    return turtle_visible;
+    return cur->visible;
 }
 
 static void turtle_dot(float x, float y)
@@ -815,7 +984,7 @@ static void turtle_dot(float x, float y)
     // - Y: Logo 0 -> Screen center, but Y axis is flipped (Logo Y up, Screen Y down)
     float screen_x = x + SCREEN_WIDTH / 2;
     float screen_y = -y + SCREEN_HEIGHT / 2;
-    screen_gfx_set_point(screen_x, screen_y, turtle_colour);
+    screen_gfx_set_point(screen_x, screen_y, cur->colour);
     screen_gfx_update();
 }
 
@@ -838,10 +1007,10 @@ static void turtle_fill(void)
 {
     uint8_t fill_colour;
 
-    switch (turtle_pen_state)
+    switch (cur->pen_state)
     {
         case LOGO_PEN_DOWN:
-            fill_colour = turtle_colour;
+            fill_colour = cur->colour;
             break;
         case LOGO_PEN_ERASE:
             fill_colour = background_colour;
@@ -855,7 +1024,7 @@ static void turtle_fill(void)
 
     // The turtle is composited over the canvas, never written into it,
     // so the fill sees a clean canvas and needs no hide/restore dance.
-    screen_gfx_fill(turtle_x, turtle_y, fill_colour);
+    screen_gfx_fill(cur->x, cur->y, fill_colour);
 
     screen_gfx_update();
 }
@@ -900,8 +1069,8 @@ static void turtle_restore_palette(void)
 // Helper to check if turtle is within visible bounds (in screen coordinates)
 static bool turtle_is_on_screen(void)
 {
-    return turtle_x >= 0 && turtle_x < SCREEN_WIDTH &&
-           turtle_y >= 0 && turtle_y < SCREEN_HEIGHT;
+    return cur->x >= 0 && cur->x < SCREEN_WIDTH &&
+           cur->y >= 0 && cur->y < SCREEN_HEIGHT;
 }
 
 // Set fence boundary mode - turtle stops at boundary with error
@@ -910,9 +1079,9 @@ static void turtle_set_fence(void)
     // If switching from window mode and turtle is off-screen, send to home
     if (turtle_boundary_mode == BOUNDARY_MODE_WINDOW && !turtle_is_on_screen())
     {
-        turtle_x = TURTLE_HOME_X;
-        turtle_y = TURTLE_HOME_Y;
-        turtle_angle = TURTLE_DEFAULT_ANGLE;
+        cur->x = TURTLE_HOME_X;
+        cur->y = TURTLE_HOME_Y;
+        cur->angle = TURTLE_DEFAULT_ANGLE;
         turtle_draw();  // Draw at home
         screen_gfx_update();
     }
@@ -933,9 +1102,9 @@ static void turtle_set_wrap(void)
     // If switching from window mode and turtle is off-screen, send to home
     if (turtle_boundary_mode == BOUNDARY_MODE_WINDOW && !turtle_is_on_screen())
     {
-        turtle_x = TURTLE_HOME_X;
-        turtle_y = TURTLE_HOME_Y;
-        turtle_angle = TURTLE_DEFAULT_ANGLE;
+        cur->x = TURTLE_HOME_X;
+        cur->y = TURTLE_HOME_Y;
+        cur->angle = TURTLE_DEFAULT_ANGLE;
         turtle_draw();  // Draw at home
         screen_gfx_update();
     }
@@ -949,13 +1118,13 @@ static void turtle_set_shape_num(uint8_t shape_num)
     if (shape_num > 15)
         return;
     
-    if (shape_num == turtle_current_shape)
+    if (shape_num == cur->shape)
         return;
     
     screen_show_field();
 
     // Change shape; the raster cache notices the shape mismatch
-    turtle_current_shape = shape_num;
+    cur->shape = shape_num;
 
     // Draw turtle with new shape
     turtle_draw();
@@ -965,7 +1134,103 @@ static void turtle_set_shape_num(uint8_t shape_num)
 // Get the current turtle shape number
 static uint8_t turtle_get_shape_num(void)
 {
-    return turtle_current_shape;
+    return cur->shape;
+}
+
+// A slot's image changed (putsh or snapsh): rebuild the raster of every
+// turtle wearing it and redraw the visible ones
+static void refresh_shape_wearers(uint8_t shape_num)
+{
+    uint8_t saved_turtle = current_turtle;
+    for (uint8_t i = 0; i < MAX_TURTLES; i++)
+    {
+        if (picoturtles[i].shape != shape_num)
+        {
+            continue;
+        }
+        picoturtles[i].raster_valid = false;
+        if (picoturtles[i].visible)
+        {
+            turtle_op_select(i);
+            screen_show_field();
+            turtle_draw();
+        }
+    }
+    turtle_op_select(saved_turtle);
+    screen_gfx_update();
+}
+
+// Set how the selected turtle's costume follows its heading (setrot)
+static void turtle_set_rotation_style(LogoRotationStyle style)
+{
+    if (cur->rot_style == style)
+    {
+        return;
+    }
+    cur->rot_style = style;
+    cur->raster_valid = false;
+    if (cur->visible)
+    {
+        screen_show_field();
+        turtle_draw();
+        screen_gfx_update();
+    }
+}
+
+// Set the selected turtle's magnification (setmag)
+static void turtle_set_scale(uint8_t mag)
+{
+    if (mag < 1 || mag > 2 || cur->mag == mag)
+    {
+        return;
+    }
+    cur->mag = mag;
+    cur->raster_valid = false;
+    if (cur->visible)
+    {
+        screen_show_field();
+        turtle_draw();
+        screen_gfx_update();
+    }
+}
+
+// Composite the selected turtle's costume into the canvas at its
+// position (the stamp primitive)
+static void turtle_stamp(void)
+{
+    screen_show_field();
+    turtle_update_raster();
+
+    ScreenSprite sprite;
+    turtle_sprite_geometry(&sprite);
+    screen_gfx_stamp(&sprite);
+    screen_gfx_update();
+}
+
+// Capture the w x h canvas region centred on the selected turtle into
+// colour costume slot (the snapsh primitive). Background pixels become
+// transparent. Returns false when the costume pool is full.
+static bool turtle_snap_costume(uint8_t slot, uint8_t w, uint8_t h)
+{
+    if (w > TURTLE_RASTER_MAX || h > TURTLE_RASTER_MAX)
+    {
+        return false;
+    }
+
+    // Static: 1 KB is too big a frame for the primitive call path, and
+    // snapsh is never re-entered
+    static uint8_t pixels[TURTLE_RASTER_MAX * TURTLE_RASTER_MAX];
+    int x0 = (int)(cur->x + 0.5f) - w / 2;
+    int y0 = (int)(cur->y + 0.5f) - h / 2;
+    screen_gfx_snap(x0, y0, w, h, pixels);
+
+    if (!costume_put(slot, w, h, pixels))
+    {
+        return false;
+    }
+
+    refresh_shape_wearers(slot);
+    return true;
 }
 
 // Get shape data for shapes 1-15
@@ -1032,23 +1297,18 @@ static bool turtle_put_shape_data(uint8_t shape_num, const uint8_t *data)
         }
         shape[row] = result;
     }
-    
-    // If we're currently using this shape, rebuild the raster and redraw
-    if (turtle_current_shape == shape_num)
-    {
-        turtle_raster_valid = false;
-        if (turtle_visible)
-        {
-            screen_show_field();
-            turtle_draw();
-            screen_gfx_update();
-        }
-    }
+
+    // putsh defines the slot's mono shape; a colour costume in the slot
+    // (from snapsh) would shadow it, so remove it
+    costume_delete(shape_num);
+
+    refresh_shape_wearers(shape_num);
 
     return true;
 }
 
 static const LogoConsoleTurtle picocalc_turtle_ops = {
+    .select = turtle_op_select,
     .clear = turtle_clearscreen,
     .draw = turtle_draw,
     .move = turtle_move,
@@ -1080,6 +1340,10 @@ static const LogoConsoleTurtle picocalc_turtle_ops = {
     .get_shape = turtle_get_shape_num,
     .get_shape_data = turtle_get_shape_data,
     .put_shape_data = turtle_put_shape_data,
+    .set_rotation_style = turtle_set_rotation_style,
+    .set_scale = turtle_set_scale,
+    .stamp = turtle_stamp,
+    .snap_costume = turtle_snap_costume,
 };
 
 //
@@ -1111,6 +1375,7 @@ LogoConsole *logo_picocalc_console_create(void)
     console->turtle = &picocalc_turtle_ops;
     console->editor = picocalc_editor_get_ops();
 
+    turtles_init();
     turtle_set_bg_colour(0); // Set default background color (black)
     screen_gfx_clear();
     screen_txt_clear();

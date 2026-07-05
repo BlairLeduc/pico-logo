@@ -135,22 +135,28 @@ bool screen_gfx_get_refresh_auto(void);
 //
 // Sprites — composited over the canvas at blit time. The graphics buffer
 // never contains sprite pixels; the compositor overlays each visible
-// sprite's mask (painted in its colour) as rows stream to the LCD.
-// Lower ids render on top. The mask memory belongs to the caller and must
-// stay valid while the sprite is visible (w*h bytes, nonzero = paint).
+// sprite's mask as rows stream to the LCD. Lower ids render on top. The
+// mask memory belongs to the caller and must stay valid while the sprite
+// is visible (w*h bytes, row-major). Two kinds: mono (indexed false;
+// nonzero bytes painted in the sprite's colour) and indexed colour
+// (indexed true; bytes are palette slots, 255 = transparent).
 //
 #define SCREEN_MAX_SPRITES 8
+#define SCREEN_SPRITE_TRANSPARENT 255
 
 typedef struct {
     bool visible;
+    bool indexed;          // Mask bytes are palette slots (255 transparent)
     int16_t x, y;          // Top-left corner in screen coordinates
     uint8_t w, h;          // Mask dimensions in pixels
-    uint8_t colour;        // Palette slot painted where the mask is set
-    const uint8_t *mask;   // w*h bytes, row-major, nonzero = paint
+    uint8_t colour;        // Palette slot painted where a mono mask is set
+    const uint8_t *mask;
 } ScreenSprite;
 
 void screen_sprite_set(uint8_t id, const ScreenSprite *sprite);
 void screen_sprite_hide(uint8_t id);
+void screen_gfx_stamp(const ScreenSprite *sprite);
+void screen_gfx_snap(int x0, int y0, int w, int h, uint8_t *out);
 int screen_gfx_save(LogoStream *out);
 int screen_gfx_load(LogoStream *in);
 

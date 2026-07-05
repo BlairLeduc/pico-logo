@@ -85,6 +85,11 @@ extern "C"
         // Refresh policy
         MOCK_CMD_SET_REFRESH,
         MOCK_CMD_REFRESH_NOW,
+
+        MOCK_CMD_SELECT,
+        MOCK_CMD_STAMP,
+        MOCK_CMD_SET_ROT,
+        MOCK_CMD_SET_MAG,
         // Draw (redraw turtle)
         MOCK_CMD_DRAW
     } MockCommandType;
@@ -144,11 +149,32 @@ extern "C"
     #define MOCK_MAX_LINES 1024
 
     //
+    // Per-turtle state snapshot for multi-turtle addressing. The working
+    // state of the SELECTED turtle lives in MockDeviceState.turtle below;
+    // select() swaps it in and out of turtles[]. Read any turtle's current
+    // state in tests with mock_device_get_turtle(), which syncs first.
+    //
+    #define MOCK_MAX_TURTLES 8
+
+    typedef struct MockTurtleState
+    {
+        float x, y;
+        float heading;
+        LogoPen pen_state;
+        uint16_t pen_colour;
+        bool visible;
+        uint8_t shape;
+        uint8_t rot_style;  // LogoRotationStyle
+        uint8_t mag;        // 1 or 2
+    } MockTurtleState;
+
+    //
     // Mock device state - all trackable state in one structure
     //
     typedef struct MockDeviceState
     {
-        // Turtle state
+        // Turtle state (the currently selected turtle; bg_colour and
+        // boundary_mode are screen-global and not swapped by select)
         struct
         {
             float x, y;                      // Current position
@@ -159,6 +185,21 @@ extern "C"
             bool visible;                    // Is turtle visible?
             MockTurtleBoundaryMode boundary_mode;  // Fence/window/wrap
         } turtle;
+
+        // Multi-turtle snapshots plus the selected index
+        MockTurtleState turtles[MOCK_MAX_TURTLES];
+        uint8_t current_turtle;
+
+        // Costume capture tracking (snapsh)
+        struct
+        {
+            int snap_count;
+            uint8_t last_snap_slot;
+            uint8_t last_snap_w;
+            uint8_t last_snap_h;
+            uint8_t last_snap_turtle;  // selected turtle at capture time
+            bool snap_result;          // returned by snap_costume (default true)
+        } costume;
 
         // Text screen state
         struct
@@ -299,6 +340,12 @@ extern "C"
 
     // Get the current mock device state (read-only)
     const MockDeviceState *mock_device_get_state(void);
+
+    // Current state of turtle n (syncs the selected turtle's slot first)
+    const MockTurtleState *mock_device_get_turtle(uint8_t n);
+
+    // Configure the result snap_costume returns (default true)
+    void mock_device_set_snap_result(bool result);
 
     // Get the mock console (to register with IO)
     LogoConsole *mock_device_get_console(void);

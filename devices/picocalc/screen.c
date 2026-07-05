@@ -437,7 +437,8 @@ static void compose_row(int y, int x0, int x1)
         const uint8_t *mask_row = &s->mask[dy * s->w];
         for (int c = 0; c < s->w; c++)
         {
-            if (!mask_row[c])
+            uint8_t px = mask_row[c];
+            if (s->indexed ? (px == SCREEN_SPRITE_TRANSPARENT) : (px == 0))
                 continue;
             int sx = s->x + c;
             if (wrap)
@@ -447,7 +448,93 @@ static void compose_row(int y, int x0, int x1)
             }
             if (sx < x0 || sx > x1)
                 continue;
-            compose_buf[sx - x0] = s->colour;
+            compose_buf[sx - x0] = s->indexed ? px : s->colour;
+        }
+    }
+}
+
+// Write a sprite's pixels into the canvas at its position (the stamp
+// primitive): mono masks paint the sprite's colour, indexed masks copy
+// palette slots with 255 transparent. Wrap mode wraps; otherwise pixels
+// off the canvas are clipped.
+void screen_gfx_stamp(const ScreenSprite *s)
+{
+    bool wrap = (screen_boundary_mode == SCREEN_BOUNDARY_WRAP);
+
+    for (int r = 0; r < s->h; r++)
+    {
+        int py = s->y + r;
+        if (wrap)
+        {
+            py %= SCREEN_HEIGHT;
+            if (py < 0) py += SCREEN_HEIGHT;
+        }
+        else if (py < 0 || py >= SCREEN_HEIGHT)
+        {
+            continue;
+        }
+
+        for (int c = 0; c < s->w; c++)
+        {
+            uint8_t px = s->mask[r * s->w + c];
+            if (s->indexed ? (px == SCREEN_SPRITE_TRANSPARENT) : (px == 0))
+            {
+                continue;
+            }
+            int sx = s->x + c;
+            if (wrap)
+            {
+                sx %= SCREEN_WIDTH;
+                if (sx < 0) sx += SCREEN_WIDTH;
+            }
+            else if (sx < 0 || sx >= SCREEN_WIDTH)
+            {
+                continue;
+            }
+            gfx_buffer[py * SCREEN_WIDTH + sx] = s->indexed ? px : s->colour;
+        }
+    }
+
+    // Mark both clamped and wrapped extents (over-marking is cheap)
+    dirty_tiles_mark_rect(&gfx_tiles, s->x, s->y,
+                          s->x + s->w - 1, s->y + s->h - 1);
+    dirty_tiles_mark_rect_wrap(&gfx_tiles, s->x, s->y, s->w, s->h);
+}
+
+// Read a w x h canvas region with its top-left at (x0,y0) into out,
+// mapping background pixels to SCREEN_SPRITE_TRANSPARENT (the snapsh
+// primitive). Wrap mode reads wrapped; otherwise off-canvas pixels read
+// as transparent.
+void screen_gfx_snap(int x0, int y0, int w, int h, uint8_t *out)
+{
+    bool wrap = (screen_boundary_mode == SCREEN_BOUNDARY_WRAP);
+
+    for (int r = 0; r < h; r++)
+    {
+        for (int c = 0; c < w; c++)
+        {
+            int py = y0 + r;
+            int px = x0 + c;
+            uint8_t v = SCREEN_SPRITE_TRANSPARENT;
+
+            if (wrap)
+            {
+                py %= SCREEN_HEIGHT;
+                if (py < 0) py += SCREEN_HEIGHT;
+                px %= SCREEN_WIDTH;
+                if (px < 0) px += SCREEN_WIDTH;
+                v = gfx_buffer[py * SCREEN_WIDTH + px];
+            }
+            else if (py >= 0 && py < SCREEN_HEIGHT && px >= 0 && px < SCREEN_WIDTH)
+            {
+                v = gfx_buffer[py * SCREEN_WIDTH + px];
+            }
+
+            if (v == GFX_DEFAULT_BACKGROUND)
+            {
+                v = SCREEN_SPRITE_TRANSPARENT;
+            }
+            out[r * w + c] = v;
         }
     }
 }

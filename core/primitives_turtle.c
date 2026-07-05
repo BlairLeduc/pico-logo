@@ -9,11 +9,13 @@
 #include "format.h"
 #include "error.h"
 #include "eval.h"
+#include "limits.h"
 #include "devices/io.h"
 #include "devices/palette.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 
 // Normalize a heading in degrees to the half-open range [0, 360).
 // Used so that HEADING and SETHEADING expose canonical angles regardless
@@ -59,6 +61,115 @@ static const LogoConsoleTurtle *get_turtle_ops(void)
     return io->console->turtle;
 }
 
+//==========================================================================
+// Active turtle set
+//
+// `tell` selects which turtles subsequent turtle commands address. The
+// set is kept sorted ascending with no duplicates. Commands fan out over
+// the set in ascending order; queries answer for the lowest member.
+// Every fan-out loop leaves the device selected on the lowest active
+// turtle, so query primitives read the right turtle without changes.
+// Devices without a `select` op (host) always address their single
+// turtle regardless of the set.
+//==========================================================================
+
+static uint8_t active_set[MAX_TURTLES] = {0};
+static int active_count = 1;
+
+// Route subsequent stateful turtle ops to turtle n
+static void select_turtle(const LogoConsoleTurtle *turtle, uint8_t n)
+{
+    if (turtle->select)
+    {
+        turtle->select(n);
+    }
+}
+
+// Restore the invariant: device selected on the lowest active turtle
+static void select_first_active(const LogoConsoleTurtle *turtle)
+{
+    select_turtle(turtle, active_set[0]);
+}
+
+// Reset the active set to turtle 0 (boot state; also applied by cs)
+static void reset_active_set(void)
+{
+    active_set[0] = 0;
+    active_count = 1;
+}
+
+// Parse a turtle number or list of numbers into a sorted, deduplicated
+// set. Returns false with *error set on any non-integer, out-of-range,
+// or empty input.
+static bool parse_turtle_set(Value v, uint8_t *set, int *count, Result *error)
+{
+    *count = 0;
+
+    Node list = NODE_NIL;
+    bool single = (v.type != VALUE_LIST);
+    if (!single)
+    {
+        list = v.as.node;
+    }
+
+    while (true)
+    {
+        Value item;
+        if (single)
+        {
+            item = v;
+        }
+        else
+        {
+            if (mem_is_nil(list))
+            {
+                break;
+            }
+            Node node = mem_car(list);
+            item = mem_is_word(node) ? value_word(node) : value_list(node);
+            list = mem_cdr(list);
+        }
+
+        float num;
+        if (!value_to_number(item, &num) ||
+            num != (float)(int)num || num < 0 || num >= MAX_TURTLES)
+        {
+            *error = result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(v));
+            return false;
+        }
+
+        // Insert in ascending order, collapsing duplicates
+        int n = (int)num;
+        int pos = 0;
+        while (pos < *count && set[pos] < n)
+        {
+            pos++;
+        }
+        if (pos == *count || set[pos] != n)
+        {
+            for (int j = *count; j > pos; j--)
+            {
+                set[j] = set[j - 1];
+            }
+            set[pos] = (uint8_t)n;
+            (*count)++;
+        }
+
+        if (single)
+        {
+            break;
+        }
+    }
+
+    if (*count == 0)
+    {
+        *error = result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(v));
+        return false;
+    }
+
+    return true;
+}
+
 // Helper to build [x y] list from coordinates
 static Value make_position_list(float x, float y)
 {
@@ -86,12 +197,18 @@ static Result prim_back(Evaluator *eval, int argc, Value *args)
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->move)
     {
-        if (!turtle->move(-distance))  // Negative for backward
+        for (int i = 0; i < active_count; i++)
         {
-            return result_error(ERR_TURTLE_BOUNDS);
+            select_turtle(turtle, active_set[i]);
+            if (!turtle->move(-distance))  // Negative for backward
+            {
+                select_first_active(turtle);
+                return result_error(ERR_TURTLE_BOUNDS);
+            }
         }
+        select_first_active(turtle);
     }
-    
+
     return result_none();
 }
 
@@ -105,12 +222,18 @@ static Result prim_forward(Evaluator *eval, int argc, Value *args)
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->move)
     {
-        if (!turtle->move(distance))
+        for (int i = 0; i < active_count; i++)
         {
-            return result_error(ERR_TURTLE_BOUNDS);
+            select_turtle(turtle, active_set[i]);
+            if (!turtle->move(distance))
+            {
+                select_first_active(turtle);
+                return result_error(ERR_TURTLE_BOUNDS);
+            }
         }
+        select_first_active(turtle);
     }
-    
+
     return result_none();
 }
 
@@ -122,9 +245,14 @@ static Result prim_home(Evaluator *eval, int argc, Value *args)
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->home)
     {
-        turtle->home();
+        for (int i = 0; i < active_count; i++)
+        {
+            select_turtle(turtle, active_set[i]);
+            turtle->home();
+        }
+        select_first_active(turtle);
     }
-    
+
     return result_none();
 }
 
@@ -144,12 +272,18 @@ static Result prim_setpos(Evaluator *eval, int argc, Value *args)
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_position)
     {
-        if (!turtle->set_position(x, y))
+        for (int i = 0; i < active_count; i++)
         {
-            return result_error(ERR_TURTLE_BOUNDS);
+            select_turtle(turtle, active_set[i]);
+            if (!turtle->set_position(x, y))
+            {
+                select_first_active(turtle);
+                return result_error(ERR_TURTLE_BOUNDS);
+            }
         }
+        select_first_active(turtle);
     }
-    
+
     return result_none();
 }
 
@@ -163,14 +297,20 @@ static Result prim_setx(Evaluator *eval, int argc, Value *args)
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_position && turtle->get_position)
     {
-        float curr_x, curr_y;
-        turtle->get_position(&curr_x, &curr_y);
-        if (!turtle->set_position(x, curr_y))
+        for (int i = 0; i < active_count; i++)
         {
-            return result_error(ERR_TURTLE_BOUNDS);
+            select_turtle(turtle, active_set[i]);
+            float curr_x, curr_y;
+            turtle->get_position(&curr_x, &curr_y);
+            if (!turtle->set_position(x, curr_y))
+            {
+                select_first_active(turtle);
+                return result_error(ERR_TURTLE_BOUNDS);
+            }
         }
+        select_first_active(turtle);
     }
-    
+
     return result_none();
 }
 
@@ -184,14 +324,20 @@ static Result prim_sety(Evaluator *eval, int argc, Value *args)
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_position && turtle->get_position)
     {
-        float curr_x, curr_y;
-        turtle->get_position(&curr_x, &curr_y);
-        if (!turtle->set_position(curr_x, y))
+        for (int i = 0; i < active_count; i++)
         {
-            return result_error(ERR_TURTLE_BOUNDS);
+            select_turtle(turtle, active_set[i]);
+            float curr_x, curr_y;
+            turtle->get_position(&curr_x, &curr_y);
+            if (!turtle->set_position(curr_x, y))
+            {
+                select_first_active(turtle);
+                return result_error(ERR_TURTLE_BOUNDS);
+            }
         }
+        select_first_active(turtle);
     }
-    
+
     return result_none();
 }
 
@@ -209,11 +355,16 @@ static Result prim_left(Evaluator *eval, int argc, Value *args)
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->get_heading && turtle->set_heading)
     {
-        float heading = turtle->get_heading();
-        heading -= degrees;  // Left is counterclockwise (negative)
-        turtle->set_heading(heading);
+        for (int i = 0; i < active_count; i++)
+        {
+            select_turtle(turtle, active_set[i]);
+            float heading = turtle->get_heading();
+            heading -= degrees;  // Left is counterclockwise (negative)
+            turtle->set_heading(heading);
+        }
+        select_first_active(turtle);
     }
-    
+
     return result_none();
 }
 
@@ -227,11 +378,16 @@ static Result prim_right(Evaluator *eval, int argc, Value *args)
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->get_heading && turtle->set_heading)
     {
-        float heading = turtle->get_heading();
-        heading += degrees;  // Right is clockwise (positive)
-        turtle->set_heading(heading);
+        for (int i = 0; i < active_count; i++)
+        {
+            select_turtle(turtle, active_set[i]);
+            float heading = turtle->get_heading();
+            heading += degrees;  // Right is clockwise (positive)
+            turtle->set_heading(heading);
+        }
+        select_first_active(turtle);
     }
-    
+
     return result_none();
 }
 
@@ -245,9 +401,14 @@ static Result prim_setheading(Evaluator *eval, int argc, Value *args)
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_heading)
     {
-        turtle->set_heading(normalize_heading(degrees));
+        for (int i = 0; i < active_count; i++)
+        {
+            select_turtle(turtle, active_set[i]);
+            turtle->set_heading(normalize_heading(degrees));
+        }
+        select_first_active(turtle);
     }
-    
+
     return result_none();
 }
 
@@ -366,9 +527,14 @@ static Result prim_pendown(Evaluator *eval, int argc, Value *args)
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_pen_state)
     {
-        turtle->set_pen_state(LOGO_PEN_DOWN);
+        for (int i = 0; i < active_count; i++)
+        {
+            select_turtle(turtle, active_set[i]);
+            turtle->set_pen_state(LOGO_PEN_DOWN);
+        }
+        select_first_active(turtle);
     }
-    
+
     return result_none();
 }
 
@@ -382,10 +548,14 @@ static Result prim_penerase(Evaluator *eval, int argc, Value *args)
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_pen_state)
     {
-        turtle->set_pen_state(LOGO_PEN_ERASE);  // Pen is down, but in erase mode
-        // The device should track erase mode separately
+        for (int i = 0; i < active_count; i++)
+        {
+            select_turtle(turtle, active_set[i]);
+            turtle->set_pen_state(LOGO_PEN_ERASE);  // Pen is down, but in erase mode
+        }
+        select_first_active(turtle);
     }
-    
+
     return result_none();
 }
 
@@ -397,10 +567,14 @@ static Result prim_penreverse(Evaluator *eval, int argc, Value *args)
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_pen_state)
     {
-        turtle->set_pen_state(LOGO_PEN_REVERSE);  // Pen is down, but in reverse mode
-        // The device should track reverse mode separately
+        for (int i = 0; i < active_count; i++)
+        {
+            select_turtle(turtle, active_set[i]);
+            turtle->set_pen_state(LOGO_PEN_REVERSE);  // Pen is down, but in reverse mode
+        }
+        select_first_active(turtle);
     }
-    
+
     return result_none();
 }
 
@@ -412,9 +586,14 @@ static Result prim_penup(Evaluator *eval, int argc, Value *args)
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_pen_state)
     {
-        turtle->set_pen_state(LOGO_PEN_UP);
+        for (int i = 0; i < active_count; i++)
+        {
+            select_turtle(turtle, active_set[i]);
+            turtle->set_pen_state(LOGO_PEN_UP);
+        }
+        select_first_active(turtle);
     }
-    
+
     return result_none();
 }
 
@@ -460,9 +639,14 @@ static Result prim_setpc(Evaluator *eval, int argc, Value *args)
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_pen_colour)
     {
-        turtle->set_pen_colour((uint16_t)colour);
+        for (int i = 0; i < active_count; i++)
+        {
+            select_turtle(turtle, active_set[i]);
+            turtle->set_pen_colour((uint16_t)colour);
+        }
+        select_first_active(turtle);
     }
-    
+
     return result_none();
 }
 
@@ -531,9 +715,14 @@ static Result prim_hideturtle(Evaluator *eval, int argc, Value *args)
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_visible)
     {
-        turtle->set_visible(false);
+        for (int i = 0; i < active_count; i++)
+        {
+            select_turtle(turtle, active_set[i]);
+            turtle->set_visible(false);
+        }
+        select_first_active(turtle);
     }
-    
+
     return result_none();
 }
 
@@ -545,9 +734,14 @@ static Result prim_showturtle(Evaluator *eval, int argc, Value *args)
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_visible)
     {
-        turtle->set_visible(true);
+        for (int i = 0; i < active_count; i++)
+        {
+            select_turtle(turtle, active_set[i]);
+            turtle->set_visible(true);
+        }
+        select_first_active(turtle);
     }
-    
+
     return result_none();
 }
 
@@ -576,9 +770,14 @@ static Result prim_clearscreen(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc); UNUSED(args);
 
+    // cs restores the single-turtle world: only turtle 0 is addressed
+    // afterwards (the device's clear op re-hides turtles 1-7 at home).
+    reset_active_set();
+
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle)
     {
+        select_first_active(turtle);
         if (turtle->clear)
         {
             turtle->clear();
@@ -604,6 +803,33 @@ static Result prim_clearscreen(Evaluator *eval, int argc, Value *args)
             {
                 turtle->set_pen_state(saved_pen);
             }
+        }
+
+        // Re-hide turtles 1-7 at home so cs restores the boot state;
+        // multi-turtle stays strictly opt-in afterwards.
+        if (turtle->select)
+        {
+            for (int i = 1; i < MAX_TURTLES; i++)
+            {
+                turtle->select((uint8_t)i);
+                if (turtle->set_pen_state)
+                {
+                    turtle->set_pen_state(LOGO_PEN_UP);
+                }
+                if (turtle->home)
+                {
+                    turtle->home();
+                }
+                if (turtle->set_pen_state)
+                {
+                    turtle->set_pen_state(LOGO_PEN_DOWN);
+                }
+                if (turtle->set_visible)
+                {
+                    turtle->set_visible(false);
+                }
+            }
+            select_first_active(turtle);
         }
     }
 
@@ -653,9 +879,14 @@ static Result prim_dot(Evaluator *eval, int argc, Value *args)
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->dot)
     {
-        turtle->dot(x, y);
+        for (int i = 0; i < active_count; i++)
+        {
+            select_turtle(turtle, active_set[i]);
+            turtle->dot(x, y);
+        }
+        select_first_active(turtle);
     }
-    
+
     return result_none();
 }
 
@@ -691,7 +922,12 @@ static Result prim_fill(Evaluator *eval, int argc, Value *args)
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->fill)
     {
-        turtle->fill();
+        for (int i = 0; i < active_count; i++)
+        {
+            select_turtle(turtle, active_set[i]);
+            turtle->fill();
+        }
+        select_first_active(turtle);
     }
 
     return result_none();
@@ -722,39 +958,51 @@ static Result prim_arc(Evaluator *eval, int argc, Value *args)
         return result_none();
     }
 
-    float cx, cy;
-    turtle->get_position(&cx, &cy);
-    float heading = turtle->get_heading();
-    LogoPen pen = turtle->get_pen_state();
-
     // One segment per ~4 degrees keeps the chord error under a pixel
     // for any radius that fits on screen.
     int segments = (int)ceilf(fabsf(sweep) / 4.0f);
-
-    // Jump (pen up) to the arc's start point, then sweep with the pen
-    // restored so colour/erase/reverse modes and wrap/fence behave exactly
-    // like setpos. In fence mode a segment past the boundary fails; the
-    // turtle is restored before the error is reported.
     const float deg_to_rad = 3.14159265358979323846f / 180.0f;
-    float rad = heading * deg_to_rad;
-    turtle->set_pen_state(LOGO_PEN_UP);
-    bool ok = turtle->set_position(cx + radius * sinf(rad), cy + radius * cosf(rad));
-    if (ok)
+
+    for (int t = 0; t < active_count; t++)
     {
-        turtle->set_pen_state(pen);
-        for (int i = 1; ok && i <= segments; i++)
+        select_turtle(turtle, active_set[t]);
+
+        float cx, cy;
+        turtle->get_position(&cx, &cy);
+        float heading = turtle->get_heading();
+        LogoPen pen = turtle->get_pen_state();
+
+        // Jump (pen up) to the arc's start point, then sweep with the pen
+        // restored so colour/erase/reverse modes and wrap/fence behave exactly
+        // like setpos. In fence mode a segment past the boundary fails; the
+        // turtle is restored before the error is reported.
+        float rad = heading * deg_to_rad;
+        turtle->set_pen_state(LOGO_PEN_UP);
+        bool ok = turtle->set_position(cx + radius * sinf(rad), cy + radius * cosf(rad));
+        if (ok)
         {
-            rad = (heading + sweep * (float)i / (float)segments) * deg_to_rad;
-            ok = turtle->set_position(cx + radius * sinf(rad), cy + radius * cosf(rad));
+            turtle->set_pen_state(pen);
+            for (int i = 1; ok && i <= segments; i++)
+            {
+                rad = (heading + sweep * (float)i / (float)segments) * deg_to_rad;
+                ok = turtle->set_position(cx + radius * sinf(rad), cy + radius * cosf(rad));
+            }
+        }
+
+        // Return to the centre (always in bounds) and restore the pen.
+        turtle->set_pen_state(LOGO_PEN_UP);
+        turtle->set_position(cx, cy);
+        turtle->set_pen_state(pen);
+
+        if (!ok)
+        {
+            select_first_active(turtle);
+            return result_error(ERR_TURTLE_BOUNDS);
         }
     }
+    select_first_active(turtle);
 
-    // Return to the centre (always in bounds) and restore the pen.
-    turtle->set_pen_state(LOGO_PEN_UP);
-    turtle->set_position(cx, cy);
-    turtle->set_pen_state(pen);
-
-    return ok ? result_none() : result_error(ERR_TURTLE_BOUNDS);
+    return result_none();
 }
 
 //==========================================================================
@@ -1016,7 +1264,12 @@ static Result prim_setsh(Evaluator *eval, int argc, Value *args)
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->set_shape)
     {
-        turtle->set_shape((uint8_t)shape_num);
+        for (int i = 0; i < active_count; i++)
+        {
+            select_turtle(turtle, active_set[i]);
+            turtle->set_shape((uint8_t)shape_num);
+        }
+        select_first_active(turtle);
     }
 
     return result_none();
@@ -1037,6 +1290,258 @@ static Result prim_shape(Evaluator *eval, int argc, Value *args)
     return result_ok(value_number(shape));
 }
 
+// setrot "full | "flip | "fixed - How the costume follows the heading
+static Result prim_setrot(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
+
+    const char *style_name = value_to_string(args[0]);
+    LogoRotationStyle style;
+    if (strcasecmp(style_name, "fixed") == 0)
+    {
+        style = LOGO_ROT_FIXED;
+    }
+    else if (strcasecmp(style_name, "full") == 0)
+    {
+        style = LOGO_ROT_FULL;
+    }
+    else if (strcasecmp(style_name, "flip") == 0)
+    {
+        style = LOGO_ROT_FLIP;
+    }
+    else
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, style_name);
+    }
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->set_rotation_style)
+    {
+        for (int i = 0; i < active_count; i++)
+        {
+            select_turtle(turtle, active_set[i]);
+            turtle->set_rotation_style(style);
+        }
+        select_first_active(turtle);
+    }
+
+    return result_none();
+}
+
+// setmag 1 | 2 - Magnification of the rendered costume
+static Result prim_setmag(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
+    REQUIRE_NUMBER(args[0], mag);
+
+    if (mag != 1.0f && mag != 2.0f)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->set_scale)
+    {
+        for (int i = 0; i < active_count; i++)
+        {
+            select_turtle(turtle, active_set[i]);
+            turtle->set_scale((uint8_t)mag);
+        }
+        select_first_active(turtle);
+    }
+
+    return result_none();
+}
+
+// stamp - Composite the turtle's costume into the canvas at its position
+static Result prim_stamp(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->stamp)
+    {
+        for (int i = 0; i < active_count; i++)
+        {
+            select_turtle(turtle, active_set[i]);
+            turtle->stamp();
+        }
+        select_first_active(turtle);
+    }
+
+    return result_none();
+}
+
+// snapsh shapenumber width height - Capture the canvas region centred on
+// the (first active) turtle into a colour costume
+static Result prim_snapsh(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(3);
+    REQUIRE_NUMBER(args[0], shape_num);
+    REQUIRE_NUMBER(args[1], width);
+    REQUIRE_NUMBER(args[2], height);
+
+    if (shape_num < 1 || shape_num > 15 || shape_num != (float)(int)shape_num)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
+    if (width < 8 || width > 32 || width != (float)(int)width)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
+    }
+    if (height < 8 || height > 32 || height != (float)(int)height)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[2]));
+    }
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->snap_costume)
+    {
+        select_first_active(turtle);
+        if (!turtle->snap_costume((uint8_t)shape_num, (uint8_t)width, (uint8_t)height))
+        {
+            return result_error(ERR_OUT_OF_SPACE);
+        }
+    }
+
+    return result_none();
+}
+
+//==========================================================================
+// Multi-turtle addressing
+//==========================================================================
+
+// tell n | [n1 n2 ...] - Set the active turtle set
+static Result prim_tell(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
+
+    uint8_t set[MAX_TURTLES];
+    int count;
+    Result error;
+    if (!parse_turtle_set(args[0], set, &count, &error))
+    {
+        return error;
+    }
+
+    memcpy(active_set, set, (size_t)count);
+    active_count = count;
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle)
+    {
+        select_first_active(turtle);
+    }
+
+    return result_none();
+}
+
+// who - Output the active turtle set: a number when one turtle is
+// active, a list otherwise (so inside each, who is the current turtle)
+static Result prim_who(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
+
+    if (active_count == 1)
+    {
+        return result_ok(value_number((float)active_set[0]));
+    }
+
+    Node list = NODE_NIL;
+    for (int i = active_count - 1; i >= 0; i--)
+    {
+        char buf[8];
+        snprintf(buf, sizeof(buf), "%d", active_set[i]);
+        list = mem_cons(mem_atom(buf, strlen(buf)), list);
+    }
+    return result_ok(value_list(list));
+}
+
+// ask n | [list] [cmds] - Run cmds with the active set temporarily
+// replaced; the previous set is restored on every outcome, errors and
+// throws included (the pause save/restore discipline).
+static Result prim_ask(Evaluator *eval, int argc, Value *args)
+{
+    REQUIRE_ARGC(2);
+    REQUIRE_LIST(args[1]);
+
+    uint8_t set[MAX_TURTLES];
+    int count;
+    Result error;
+    if (!parse_turtle_set(args[0], set, &count, &error))
+    {
+        return error;
+    }
+
+    uint8_t saved[MAX_TURTLES];
+    int saved_count = active_count;
+    memcpy(saved, active_set, sizeof(saved));
+
+    memcpy(active_set, set, (size_t)count);
+    active_count = count;
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle)
+    {
+        select_first_active(turtle);
+    }
+
+    Result r = eval_run_list(eval, args[1].as.node);
+
+    memcpy(active_set, saved, sizeof(saved));
+    active_count = saved_count;
+    if (turtle)
+    {
+        select_first_active(turtle);
+    }
+
+    return r;
+}
+
+// each [cmds] - Run cmds once per active turtle in ascending order with
+// the set narrowed to that turtle; restores the set afterwards.
+static Result prim_each(Evaluator *eval, int argc, Value *args)
+{
+    REQUIRE_ARGC(1);
+    REQUIRE_LIST(args[0]);
+
+    uint8_t saved[MAX_TURTLES];
+    int saved_count = active_count;
+    memcpy(saved, active_set, sizeof(saved));
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+
+    Result r = result_none();
+    for (int i = 0; i < saved_count; i++)
+    {
+        active_set[0] = saved[i];
+        active_count = 1;
+        if (turtle)
+        {
+            select_first_active(turtle);
+        }
+
+        r = eval_run_list(eval, args[0].as.node);
+        if (r.status != RESULT_NONE)
+        {
+            break;  // Error, throw, stop, output: propagate to the caller
+        }
+    }
+
+    memcpy(active_set, saved, sizeof(saved));
+    active_count = saved_count;
+    if (turtle)
+    {
+        select_first_active(turtle);
+    }
+
+    return r;
+}
+
 //==========================================================================
 // Registration
 //==========================================================================
@@ -1045,6 +1550,9 @@ void primitives_turtle_init(void)
 {
     // Initialize the core 24-bit palette from default values
     core_palette_init();
+
+    // Boot addresses turtle 0 only
+    reset_active_set();
 
     // Movement primitives
     primitive_register("back", 1, prim_back);
@@ -1124,4 +1632,14 @@ void primitives_turtle_init(void)
     primitive_register("putsh", 2, prim_putsh);
     primitive_register("setsh", 1, prim_setsh);
     primitive_register("shape", 0, prim_shape);
+    primitive_register("stamp", 0, prim_stamp);
+    primitive_register("snapsh", 3, prim_snapsh);
+    primitive_register("setrot", 1, prim_setrot);
+    primitive_register("setmag", 1, prim_setmag);
+
+    // Multi-turtle addressing
+    primitive_register("tell", 1, prim_tell);
+    primitive_register("ask", 2, prim_ask);
+    primitive_register("each", 1, prim_each);
+    primitive_register("who", 0, prim_who);
 }

@@ -776,7 +776,7 @@ putsh _shapenumber_ _shapespec_
 
 `command`
 
-Gives _shapenumber_ the specified _shapespec_ as its shape. The output of [`getsh`](#getsh) can be the input of `putsh`. _shapenumber_ is in the range of 1 to 15. Shape 0 cannot be changed.
+Gives _shapenumber_ the specified _shapespec_ as its shape. The output of [`getsh`](#getsh) can be the input of `putsh`. _shapenumber_ is in the range of 1 to 15. Shape 0 cannot be changed. `putsh` defines the slot's bitmap shape, and removes any full-colour picture captured into the slot with [`snapsh`](#snapsh).
 
 ```logo
 >putsh 1 [8 28 28 8 93 127 62 127 127 127 127 127 62 62 93 65]
@@ -845,7 +845,7 @@ setsh _shapenumber_
 
 `command`
 
-Stands for `set sh`ape. Sets the shape of the current turtle to the shape specified by _shapenumber_ which must be in the range 1 to 15. You can create your own shape using [`putsh`](#putsh). Shapes 1 through 15 are blank when Logo starts.
+Stands for `set sh`ape. Sets the shape of each turtle you are talking to. _shapenumber_ 0 is the line-drawn turtle; slots 1 to 15 hold shapes you define — either a bitmap from [`putsh`](#putsh) or a full-colour picture captured with [`snapsh`](#snapsh); `setsh` wears whichever the slot holds. Shapes 1 through 15 are blank when Logo starts.
 
 **Example**:
 
@@ -1442,6 +1442,159 @@ See [Colours](#appendix-e-colour-palette-for-pico-logo) for the default palette.
 ?settc [15 4]
 ?show textcolor
 [15 4]
+```
+
+
+## setmag
+
+setmag _magnification_
+
+`command`
+
+Stands for `set mag`nification. `setmag 2` draws the turtle you are talking to at double size; `setmag 1` returns it to normal. Magnification applies to the turtle's appearance on screen — the line-drawn turtle, bitmap shapes, and captured colour shapes alike — and to [`stamp`](#stamp). It does not change how far the turtle moves. The drawn turtle is limited to 32 by 32 pixels, so shapes larger than 16 by 16 always appear at normal size.
+
+**Example**:
+
+```logo
+?tell 1 st setmag 2   ; turtle 1 appears double size
+```
+
+
+## setrot
+
+setrot _style_
+
+`command`
+
+Stands for `set rot`ation style. Chooses how the turtle's shape follows its heading. The _style_ is one of three words:
+
+- `"fixed` — the shape never rotates (how shapes behaved on period machines; the default).
+- `"full` — the shape rotates smoothly to point along the heading.
+- `"flip` — the shape mirrors left or right depending on which way the turtle faces; most game characters are drawn side-on, and this makes them walk both directions with one picture.
+
+The rotation style applies to bitmap and captured colour shapes; shape 0, the line-drawn turtle, always rotates. Shapes larger than about 22 pixels may lose their corners at diagonal headings with `"full`, since the drawn turtle is limited to 32 by 32 pixels.
+
+**Example**:
+
+```logo
+?setsh 1 setrot "flip
+?seth 90 fd 40      ; facing east: shape as drawn
+?seth 270 fd 40     ; facing west: shape mirrored
+```
+
+
+## snapsh
+
+snapsh _shapenumber_ _width_ _height_
+
+`command`
+
+Stands for `snap sh`ape. `snapsh` captures the rectangle of the graphics screen centred on the turtle — _width_ by _height_ pixels, each from 8 to 32 — and stores it as a full-colour shape in slot _shapenumber_ (1 to 15). Background pixels become transparent, so the captured image keeps its outline when worn as a shape or placed with [`stamp`](#stamp). Draw a picture with the pen you already know, pick it up with `snapsh`, and wear it with [`setsh`](#setsh).
+
+A full-colour shape replaces the slot's [`putsh`](#putsh) bitmap on screen until you define a new bitmap with `putsh`, which removes the captured image. When you are talking to several turtles, `snapsh` captures around the lowest-numbered one. Colour shapes are stored in a fixed memory pool; if the pool is full, Logo says it is out of space.
+
+**Example**:
+
+```logo
+?repeat 4 [fd 12 rt 90]     ; draw a small box
+?fill
+?snapsh 1 16 16             ; capture it as shape 1
+?cs setsh 1                 ; wear it
+```
+
+
+## stamp
+
+stamp
+
+`command`
+
+`stamp` copies the turtle's current shape into the picture at the turtle's position, exactly as it appears on screen. The turtle does not move, and the stamped image becomes part of the drawing — it stays when the turtle walks away, and [`savepic`](#savepic) saves it. Use it for scenery, repeated decorations, or particle trails. Each turtle you are talking to stamps its own shape.
+
+**Example**:
+
+```logo
+?setsh 1
+?repeat 6 [stamp fd 30]     ; a trail of shape 1
+```
+
+
+## tell
+
+tell _turtlenumber_  
+tell _turtlenumberlist_
+
+`command`
+
+Pico Logo has eight turtles, numbered 0 to 7. `tell` chooses which of them your commands talk to. After `tell 3`, turtle commands such as `fd` and `rt` move turtle 3; after `tell [0 1 2]`, each command applies to turtles 0, 1, and 2 in that order. Operations such as `pos` and `heading` answer for the lowest-numbered turtle you are talking to. Duplicate numbers are ignored, and a number outside 0 to 7 causes an error.
+
+When Logo starts, and after [`clearscreen`](#clearscreen-cs), you are talking to turtle 0 only — programs written for one turtle work unchanged. Turtles 1 to 7 start hidden at the home position; use [`showturtle`](#showturtle-st) to reveal them. When turtles overlap on the screen, the lower-numbered turtle appears on top.
+
+Because `tell` accepts a list, you can name a group with a variable: `make "flock [1 2 3]` then `tell :flock`.
+
+**Example**:
+
+```logo
+?tell [0 1]
+?setsh 0
+?st
+?fd 40          ; both turtles move
+?tell 1
+?rt 90          ; only turtle 1 turns
+```
+
+
+## ask
+
+ask _turtlenumber_ _commandlist_  
+ask _turtlenumberlist_ _commandlist_
+
+`command`
+
+`ask` runs _commandlist_ with your commands temporarily redirected to the named turtle or turtles, then goes back to talking to the turtles you had before — even if the list stops with an error. It is the quick way to give one turtle an instruction without changing who you are talking to.
+
+**Example**:
+
+```logo
+?tell [0 1 2]
+?ask 1 [fd 20]      ; only turtle 1 moves
+?fd 10              ; turtles 0, 1 and 2 move
+```
+
+
+## each
+
+each _commandlist_
+
+`command`
+
+`each` runs _commandlist_ once for every turtle you are talking to, in ascending order, talking to just that one turtle each time. Inside the list, [`who`](#who) is the current turtle's number, so each turtle can behave differently.
+
+**Example**:
+
+```logo
+?tell [0 1 2 3]
+?each [seth who * 90 fd 50]   ; four turtles walk in four directions
+```
+
+
+## who
+
+who
+
+`operation`
+
+`who` outputs the turtle number you are talking to, or a list of numbers when you are talking to more than one turtle. Inside [`each`](#each), `who` is always the single turtle currently being addressed.
+
+**Example**:
+
+```logo
+?tell [2 5]
+?show who
+[2 5]
+?each [pr who]
+2
+5
 ```
 
 
