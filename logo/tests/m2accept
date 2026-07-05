@@ -55,7 +55,7 @@ to m2distance
   tell [0 1] setsh 1 st
   tell 0 pu home
   ask 1 [pu setpos [120 0] seth towards [0 0]]
-  repeat 6 [ask 1 [pr sentence [distance:] distance 0  fd 20 wait 3]]
+  repeat 6 [ask 1 [pr sentence [distance:] distance 0  fd 20 wait 300]]
   tell 0
 end
 
@@ -63,7 +63,7 @@ end
 to m2close
   if touching? 0 1 [pr [PASS: contact -- stopped on touch] stop]
   ask 1 [fd 6]
-  wait 2
+  wait 200
   m2close
 end
 
@@ -87,7 +87,7 @@ to m2crosswalk
     pr sentence [colourunder is now] colourunder
     stop
   ]
-  fd 6 wait 2
+  fd 6 wait 200
   m2crosswalk
 end
 

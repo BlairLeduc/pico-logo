@@ -20,10 +20,10 @@
 static Result prim_wait(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
-    REQUIRE_NUMBER(args[0], tenths_f);
-    
-    int tenths = (int)tenths_f;
-    if (tenths < 0)
+    REQUIRE_NUMBER(args[0], ms_f);
+
+    int ms = (int)ms_f;
+    if (ms < 0)
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
@@ -33,18 +33,21 @@ static Result prim_wait(Evaluator *eval, int argc, Value *args)
     {
         return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
     }
-    
-    // Wait for tenths of a second (each tenth is 100 milliseconds)
-    // Check for user interrupt every 100ms to make the wait interruptible
-    for (int i = 0; i < tenths; i++)
+
+    // Wait for the requested number of milliseconds, sleeping in chunks of
+    // at most 100ms and checking for a user interrupt between chunks so the
+    // wait stays interruptible.
+    while (ms > 0)
     {
         if (logo_io_check_user_interrupt(io))
         {
             return result_error(ERR_STOPPED);
         }
-        logo_io_sleep(io, 100);
+        int chunk = ms < 100 ? ms : 100;
+        logo_io_sleep(io, chunk);
+        ms -= chunk;
     }
-    
+
     return result_none();
 }
 

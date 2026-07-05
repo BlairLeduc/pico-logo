@@ -619,19 +619,19 @@ void test_timeout_returns_default(void)
     reset_output();
     Result r = run_string("print .timeout");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
-    // Default is 100 (10 seconds in tenths)
-    TEST_ASSERT_EQUAL_STRING("100\n", output_buffer);
+    // Default is 10000 (10 seconds in milliseconds)
+    TEST_ASSERT_EQUAL_STRING("10000\n", output_buffer);
 }
 
 void test_settimeout_changes_timeout(void)
 {
     reset_output();
-    Result r = run_string(".settimeout 200 print .timeout");
+    Result r = run_string(".settimeout 2000 print .timeout");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
-    TEST_ASSERT_EQUAL_STRING("200\n", output_buffer);
-    
+    TEST_ASSERT_EQUAL_STRING("2000\n", output_buffer);
+
     // Restore default
-    run_string(".settimeout 100");
+    run_string(".settimeout 10000");
 }
 
 void test_settimeout_zero_allowed(void)
@@ -640,9 +640,9 @@ void test_settimeout_zero_allowed(void)
     Result r = run_string(".settimeout 0 print .timeout");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     TEST_ASSERT_EQUAL_STRING("0\n", output_buffer);
-    
+
     // Restore default
-    run_string(".settimeout 100");
+    run_string(".settimeout 10000");
 }
 
 void test_settimeout_negative_error(void)

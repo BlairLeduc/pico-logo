@@ -364,7 +364,7 @@ static Result http_request(const char *method, const char *url,
         body_len = (int)bl;
     }
 
-    int timeout_ms = io->network_timeout * 100;
+    int timeout_ms = io->network_timeout;
 
     void *conn;
     if (secure)

@@ -3270,14 +3270,14 @@ wait _integer_
 
 `command`
 
-`wait` tells Logo to wait for _integer_ 10ths of a second.
+`wait` tells Logo to wait for _integer_ milliseconds.
 
 **Example**:
 
 ```logo
 ; Pause for 1 second between messages
 ?pr [Kettle on...]
-?wait 10
+?wait 1000
 ?pr [Tea is steeped!]
 ```
 
@@ -3497,7 +3497,7 @@ forever _list_
 ```logo
 ; Flash a warning until Brk is pressed
 ?to blink.warning
->forever [pr [Check ice conditions!]  wait 10]
+>forever [pr [Check ice conditions!]  wait 1000]
 >end
 ```
 
@@ -5722,16 +5722,16 @@ log.txt
 
 `operation`
 
-`timeout` outputs the current timeout value in 10ths of a second for network operations. A timeout value of 0 indicates that there is no timeout.
+`timeout` outputs the current timeout value in milliseconds for network operations. A timeout value of 0 indicates that there is no timeout.
 
 **Example**:
 
 ```logo
 ?pr .timeout
 0
-?.settimeout 50
+?.settimeout 5000
 ?pr .timeout
-50
+5000
 ```
 
 
@@ -5741,15 +5741,15 @@ log.txt
 
 `command`
 
-The `settimeout` command sets the timeout value for network operations to _integer_ 10ths of a second. A timeout value of 0 indicates that there is no timeout. If a network operation does not complete within the specified time, it fails with an error.
+The `settimeout` command sets the timeout value for network operations to _integer_ milliseconds. A timeout value of 0 indicates that there is no timeout. If a network operation does not complete within the specified time, it fails with an error.
 
 **Example**:
 
 ```logo
 ; Set 5 second timeout for network operations
-?.settimeout 50
+?.settimeout 5000
 ?pr .timeout
-50
+5000
 ```
 
 

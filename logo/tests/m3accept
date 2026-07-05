@@ -124,7 +124,7 @@ to m3steer
   pr [      degrees; you have a few seconds. Go!]
   tell 0 setsh 0 st pu home
   when [key?] [tell 0 rt 45  ignore rc]
-  repeat 300 [wait 10]
+  repeat 300 [wait 1000]
   when [key?] []             ; disarm the demon
   pr [] pr [done -- demon disarmed]
 end

@@ -476,7 +476,7 @@ static Result prim_nodribble(Evaluator *eval, int argc, Value *args)
 // Network timeout primitives
 //==========================================================================
 
-// .timeout - outputs the current network timeout value (in tenths of a second)
+// .timeout - outputs the current network timeout value (in milliseconds)
 static Result prim_timeout(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc); UNUSED(args);
@@ -491,7 +491,7 @@ static Result prim_timeout(Evaluator *eval, int argc, Value *args)
     return result_ok(value_number((float)timeout));
 }
 
-// .settimeout integer - sets the network timeout value (in tenths of a second)
+// .settimeout integer - sets the network timeout value (in milliseconds)
 // A timeout value of 0 indicates no timeout
 static Result prim_settimeout(Evaluator *eval, int argc, Value *args)
 {
