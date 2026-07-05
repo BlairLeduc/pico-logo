@@ -96,6 +96,11 @@ static void picocalc_sleep(int milliseconds)
     sleep_ms((uint32_t)milliseconds);
 }
 
+static uint32_t picocalc_ticks_ms(void)
+{
+    return to_ms_since_boot(get_absolute_time());
+}
+
 static uint32_t picocalc_random(void)
 {
     return get_rand_32();
@@ -1505,6 +1510,7 @@ static bool picocalc_network_tcp_can_read(void *connection)
 
 static LogoHardwareOps picocalc_hardware_ops = {
     .sleep = picocalc_sleep,
+    .ticks_ms = picocalc_ticks_ms,
     .random = picocalc_random,
     .get_battery_level = picocalc_get_battery_level,
     .power_off = picocalc_power_off,

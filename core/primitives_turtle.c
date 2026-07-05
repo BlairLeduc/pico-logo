@@ -9,6 +9,7 @@
 #include "format.h"
 #include "error.h"
 #include "eval.h"
+#include "demons.h"
 #include "limits.h"
 #include "devices/io.h"
 #include "devices/palette.h"
@@ -774,6 +775,10 @@ static Result prim_clearscreen(Evaluator *eval, int argc, Value *args)
     // afterwards (the device's clear op re-hides turtles 1-7 at home).
     reset_active_set();
 
+    // A full reset also disarms every `when` demon and stops autonomous
+    // turtle motion/animation: nothing acts on its own after a reset.
+    demons_reset();
+
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle)
     {
@@ -1411,6 +1416,94 @@ static Result prim_snapsh(Evaluator *eval, int argc, Value *args)
 }
 
 //==========================================================================
+// Autonomous motion and animation
+//
+// The device owns the moving state and advances it on turtle_tick (driven
+// from the demon poll). These primitives just set it and read it back,
+// fanning out over the active set like the other turtle setters.
+//==========================================================================
+
+// setspeed n - Set the autonomous speed (turtle steps per second; 0 stops)
+static Result prim_setspeed(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
+    REQUIRE_NUMBER(args[0], speed);
+
+    if (speed < 0)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->set_speed)
+    {
+        for (int i = 0; i < active_count; i++)
+        {
+            select_turtle(turtle, active_set[i]);
+            turtle->set_speed(speed);
+        }
+        select_first_active(turtle);
+    }
+
+    return result_none();
+}
+
+// speed - Output the (first active) turtle's autonomous speed
+static Result prim_speed(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+
+    float speed = 0.0f;
+    if (turtle && turtle->get_speed)
+    {
+        select_first_active(turtle);
+        speed = turtle->get_speed();
+    }
+
+    return result_ok(value_number(speed));
+}
+
+// setanim first last interval - Cycle the costume from first to last,
+// advancing one frame every interval milliseconds (interval 0 stops)
+static Result prim_setanim(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(3);
+    REQUIRE_NUMBER(args[0], first);
+    REQUIRE_NUMBER(args[1], last);
+    REQUIRE_NUMBER(args[2], interval);
+
+    if (first < 0 || first > 15 || first != (float)(int)first)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
+    if (last < 0 || last > 15 || last != (float)(int)last)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
+    }
+    if (interval < 0 || interval > 65535 || interval != (float)(int)interval)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[2]));
+    }
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->set_anim)
+    {
+        for (int i = 0; i < active_count; i++)
+        {
+            select_turtle(turtle, active_set[i]);
+            turtle->set_anim((uint8_t)first, (uint8_t)last, (uint16_t)interval);
+        }
+        select_first_active(turtle);
+    }
+
+    return result_none();
+}
+
+//==========================================================================
 // Multi-turtle addressing
 //==========================================================================
 
@@ -1841,6 +1934,11 @@ void primitives_turtle_init(void)
     primitive_register("snapsh", 3, prim_snapsh);
     primitive_register("setrot", 1, prim_setrot);
     primitive_register("setmag", 1, prim_setmag);
+
+    // Autonomous motion and animation
+    primitive_register("setspeed", 1, prim_setspeed);
+    primitive_register("speed", 0, prim_speed);
+    primitive_register("setanim", 3, prim_setanim);
 
     // Multi-turtle addressing
     primitive_register("tell", 1, prim_tell);

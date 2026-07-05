@@ -6,6 +6,7 @@
 //
 
 #include "picocalc_console.h"
+#include "core/demons.h"
 #include "core/limits.h"
 #include "costumes.h"
 #include "devices/console.h"
@@ -59,6 +60,11 @@ typedef struct
     uint8_t raster_mag;     // magnification it was built at
     uint8_t raster_rot;     // rotation style it was built with
     bool raster_flipped;    // built mirrored (flip style facing west)
+    float speed;            // Autonomous speed, turtle steps/second (setspeed)
+    uint8_t anim_first;     // Animation frame range (setanim)
+    uint8_t anim_last;
+    uint16_t anim_interval; // ms per frame; 0 = not animating
+    uint16_t anim_accum;    // ms accumulated toward the next frame
 } PicoTurtle;
 
 static PicoTurtle picoturtles[MAX_TURTLES];
@@ -95,6 +101,11 @@ static void turtles_init(void)
         t->mag = 1;
         t->rot_style = LOGO_ROT_FIXED;
         t->raster_valid = false;
+        t->speed = 0.0f;
+        t->anim_first = 0;
+        t->anim_last = 0;
+        t->anim_interval = 0;
+        t->anim_accum = 0;
     }
     current_turtle = 0;
     cur = &picoturtles[0];
@@ -1356,6 +1367,68 @@ static void turtle_sense_metrics(int *width, int *height, bool *wrap)
     if (wrap) *wrap = (turtle_boundary_mode == BOUNDARY_MODE_WRAP);
 }
 
+// Autonomous motion and animation. speed/anim live per turtle and advance
+// on turtle_tick (driven from the demon poll). Motion reuses turtle_move,
+// so gliding draws and obeys the boundary mode exactly like forward.
+static void turtle_set_speed(float steps_per_second)
+{
+    cur->speed = steps_per_second;
+}
+
+static float turtle_get_speed(void)
+{
+    return cur->speed;
+}
+
+static void turtle_set_anim(uint8_t first, uint8_t last, uint16_t interval_ms)
+{
+    cur->anim_first = first;
+    cur->anim_last = last;
+    cur->anim_interval = interval_ms;
+    cur->anim_accum = 0;
+}
+
+static void turtle_tick(uint32_t dt_ms)
+{
+    uint8_t saved = current_turtle;
+
+    for (uint8_t n = 0; n < MAX_TURTLES; n++)
+    {
+        PicoTurtle *t = &picoturtles[n];
+        if (t->speed <= 0.0f && t->anim_interval == 0)
+        {
+            continue;
+        }
+        turtle_op_select(n);
+
+        if (t->speed > 0.0f)
+        {
+            turtle_move(t->speed * (float)dt_ms / 1000.0f);
+        }
+
+        if (t->anim_interval > 0)
+        {
+            t->anim_accum = (uint16_t)(t->anim_accum + dt_ms);
+            while (t->anim_accum >= t->anim_interval)
+            {
+                t->anim_accum = (uint16_t)(t->anim_accum - t->anim_interval);
+                uint8_t next = t->shape;
+                if (next >= t->anim_last || next < t->anim_first)
+                {
+                    next = t->anim_first;
+                }
+                else
+                {
+                    next = (uint8_t)(next + 1);
+                }
+                turtle_set_shape_num(next);
+            }
+        }
+    }
+
+    turtle_op_select(saved);
+}
+
 static const LogoConsoleTurtle picocalc_turtle_ops = {
     .select = turtle_op_select,
     .clear = turtle_clearscreen,
@@ -1396,11 +1469,28 @@ static const LogoConsoleTurtle picocalc_turtle_ops = {
     .get_raster = turtle_get_raster,
     .canvas_point = turtle_canvas_point,
     .sense_metrics = turtle_sense_metrics,
+    .set_speed = turtle_set_speed,
+    .get_speed = turtle_get_speed,
+    .set_anim = turtle_set_anim,
+    .turtle_tick = turtle_tick,
 };
 
 //
 // LogoConsole API
 //
+
+// Prompt idle hook: poll demons and advance autonomous turtles while the
+// console blocks waiting for a key. A demon action that errors at the
+// prompt clears the demons so it cannot storm.
+static void console_idle_poll(void)
+{
+    Result r = demons_maybe_poll();
+    if (r.status == RESULT_ERROR || r.status == RESULT_THROW)
+    {
+        demons_reset();
+    }
+    screen_gfx_flush();
+}
 
 LogoConsole *logo_picocalc_console_create(void)
 {
@@ -1433,6 +1523,9 @@ LogoConsole *logo_picocalc_console_create(void)
     screen_txt_clear();
     turtle_draw();
     screen_set_mode(SCREEN_MODE_TXT); // Start in split screen mode
+
+    // Keep demons and autonomous turtles live while idling at the prompt.
+    keyboard_set_idle_callback(console_idle_poll);
 
     return console;
 }

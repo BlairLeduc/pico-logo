@@ -26,6 +26,7 @@
 #include "screen.h"
 
 keyboard_key_available_callback_t keyboard_key_available_callback = NULL;
+static keyboard_idle_callback_t keyboard_idle_callback = NULL;
 
 static bool keyboard_initialised = false; // flag to indicate if the keyboard is initialised
 
@@ -206,6 +207,12 @@ char keyboard_get_key()
         }
         // Update screen saver (checks idle time, cycles palette if active)
         screensaver_update();
+        // Poll `when` demons and advance autonomous turtles while we idle at
+        // the prompt, so they stay live as the user types.
+        if (keyboard_idle_callback)
+        {
+            keyboard_idle_callback();
+        }
         tight_loop_contents();
     }
 
@@ -227,6 +234,11 @@ char keyboard_get_key()
 void keyboard_set_key_available_callback(keyboard_key_available_callback_t callback)
 {
     keyboard_key_available_callback = callback;
+}
+
+void keyboard_set_idle_callback(keyboard_idle_callback_t callback)
+{
+    keyboard_idle_callback = callback;
 }
 
 

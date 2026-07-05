@@ -135,6 +135,16 @@ void logo_io_sleep(LogoIO *io, int milliseconds)
     io->hardware->ops->sleep(milliseconds);
 }
 
+uint32_t logo_io_ticks_ms(LogoIO *io)
+{
+    if (!io || !io->hardware || !io->hardware->ops || !io->hardware->ops->ticks_ms)
+    {
+        return 0;
+    }
+
+    return io->hardware->ops->ticks_ms();
+}
+
 uint32_t logo_io_random(LogoIO *io)
 {
     if (!io)

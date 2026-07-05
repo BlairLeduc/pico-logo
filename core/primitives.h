@@ -142,6 +142,7 @@ extern "C"
     void primitives_json_init(void);
     void primitives_text_init(void);
     void primitives_turtle_init(void);
+    void primitives_events_init(void);
     void primitives_variables_init(void);
     void primitives_words_lists_init(void);
     void primitives_workspace_init(void);

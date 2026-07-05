@@ -46,7 +46,7 @@ Companion documents:
 
 | Item | Status | Notes |
 |---|---|---|
-| Multiple turtles/sprites (`tell`/`ask`/`each`), `touching?`, `when` events | in progress | Design done; M0 pipeline + M1 sprite model + M2 sensing landed: [P5](#p5--multi-sprite-turtles-with-collision-design-first) |
+| Multiple turtles/sprites (`tell`/`ask`/`each`), `touching?`, `when` events | in progress | Design done; M0 pipeline + M1 sprite model + M2 sensing + M3 autonomy/events landed: [P5](#p5--multi-sprite-turtles-with-collision-design-first) |
 | Arrays (`array`/`setitem`) | deferred | O(1) indexing; needs a new object kind (likely blob-backed). Wait for demonstrated need |
 | Atom reclamation / `erall` soft reset | deferred | See `memory-reclamation-design.md` |
 
@@ -279,3 +279,4 @@ device (no graphics) degrades cleanly.
 | 2026-07-04 | P5 | M0 display pipeline: tile dirty tracking (`dirty_tiles.c` + tests), DMA-pipelined blit (`lcd_blit_begin/row/end`), scanline sprite compositor (turtle out of the canvas, save-under deleted), `setrefresh`/`refresh`/`refreshmode` with auto restored on `cs`/error/`throw "toplevel` |
 | 2026-07-04 | P5 | M1 sprite model + addressing: 8 turtles (per-turtle device state behind a `select` op, sprite id = turtle number, lower on top), `tell`/`ask`/`each`/`who` with command fan-out and lowest-active queries, colour costume pool (`costumes.c` + tests, 8 KB compact-on-free), indexed compositor sprites, `snapsh`/`stamp`, `setrot`/`setmag`; single-turtle programs unchanged (`cs` re-hides 1-7) |
 | 2026-07-05 | P5 | M2 sensing: `touching?` (pixel-true mask AND, wrap-fold, both-visible), `over?`/`colourunder` (canvas beneath the mask, sprites excluded), `distance` (Euclidean); core-side geometry over new device ops `get_raster`/`canvas_point`/`sense_metrics`, mock rasters+canvas fixtures, 18 tests; host degrades to false/0 |
+| 2026-07-05 | P5 | M3 autonomy + events (`core/demons.c`): edge-triggered `when` demons (arm/`[]`-disarm/`(when)`-print, `MAX_DEMONS` 8), budgeted poll (`DEMON_POLL_MS` 20) at the instruction point and the picocalc prompt idle loop, actions in a fresh nested evaluator with re-entrancy suppression; `freeze`/`thaw`; `setspeed`/`speed`/`setanim` over new device ops `set_speed`/`get_speed`/`set_anim`/`turtle_tick`; new monotonic `ticks_ms` hardware op (host/picocalc/mock); lifetime — `cs` and toplevel error-unwind clear demons and stop motion/animation; 18 tests + `logo/m3accept`. Decisions: speed = steps/second, `setanim first last interval_ms`, `freeze` suspends demons *and* motion |
