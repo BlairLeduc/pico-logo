@@ -776,7 +776,7 @@ putsh _shapenumber_ _shapespec_
 
 `command`
 
-Gives _shapenumber_ the specified _shapespec_ as its shape. The output of [`getsh`](#getsh) can be the input of `putsh`. _shapenumber_ is in the range of 1 to 15. Shape 0 cannot be changed.
+Gives _shapenumber_ the specified _shapespec_ as its shape. The output of [`getsh`](#getsh) can be the input of `putsh`. _shapenumber_ is in the range of 1 to 15. Shape 0 cannot be changed. `putsh` defines the slot's bitmap shape, and removes any full-colour picture captured into the slot with [`snapsh`](#snapsh).
 
 ```logo
 >putsh 1 [8 28 28 8 93 127 62 127 127 127 127 127 62 62 93 65]
@@ -845,7 +845,7 @@ setsh _shapenumber_
 
 `command`
 
-Stands for `set sh`ape. Sets the shape of the current turtle to the shape specified by _shapenumber_ which must be in the range 1 to 15. You can create your own shape using [`putsh`](#putsh). Shapes 1 through 15 are blank when Logo starts.
+Stands for `set sh`ape. Sets the shape of each turtle you are talking to. _shapenumber_ 0 is the line-drawn turtle; slots 1 to 15 hold shapes you define — either a bitmap from [`putsh`](#putsh) or a full-colour picture captured with [`snapsh`](#snapsh); `setsh` wears whichever the slot holds. Shapes 1 through 15 are blank when Logo starts.
 
 **Example**:
 
