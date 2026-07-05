@@ -87,6 +87,7 @@ extern "C"
         MOCK_CMD_REFRESH_NOW,
 
         MOCK_CMD_SELECT,
+        MOCK_CMD_STAMP,
         // Draw (redraw turtle)
         MOCK_CMD_DRAW
     } MockCommandType;
@@ -184,6 +185,17 @@ extern "C"
         // Multi-turtle snapshots plus the selected index
         MockTurtleState turtles[MOCK_MAX_TURTLES];
         uint8_t current_turtle;
+
+        // Costume capture tracking (snapsh)
+        struct
+        {
+            int snap_count;
+            uint8_t last_snap_slot;
+            uint8_t last_snap_w;
+            uint8_t last_snap_h;
+            uint8_t last_snap_turtle;  // selected turtle at capture time
+            bool snap_result;          // returned by snap_costume (default true)
+        } costume;
 
         // Text screen state
         struct
@@ -327,6 +339,9 @@ extern "C"
 
     // Current state of turtle n (syncs the selected turtle's slot first)
     const MockTurtleState *mock_device_get_turtle(uint8_t n);
+
+    // Configure the result snap_costume returns (default true)
+    void mock_device_set_snap_result(bool result);
 
     // Get the mock console (to register with IO)
     LogoConsole *mock_device_get_console(void);

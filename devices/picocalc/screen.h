@@ -155,6 +155,8 @@ typedef struct {
 
 void screen_sprite_set(uint8_t id, const ScreenSprite *sprite);
 void screen_sprite_hide(uint8_t id);
+void screen_gfx_stamp(const ScreenSprite *sprite);
+void screen_gfx_snap(int x0, int y0, int w, int h, uint8_t *out);
 int screen_gfx_save(LogoStream *out);
 int screen_gfx_load(LogoStream *in);
 

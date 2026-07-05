@@ -121,6 +121,16 @@ extern "C"
         // Each byte represents one row, MSB = leftmost column
         // Returns false if shape_num is 0 or > 15
         bool (*put_shape_data)(uint8_t shape_num, const uint8_t *data);
+
+        // Composite the turtle's current costume into the canvas at the
+        // turtle's position (backs the stamp primitive). Optional.
+        void (*stamp)(void);
+
+        // Capture the w x h canvas region centred on the turtle into
+        // colour costume slot (1-15); canvas pixels matching the current
+        // background slot become transparent (backs snapsh). Returns
+        // false when the costume pool cannot hold the capture. Optional.
+        bool (*snap_costume)(uint8_t slot, uint8_t w, uint8_t h);
     } LogoConsoleTurtle;
 
     //

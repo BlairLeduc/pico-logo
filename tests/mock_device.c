@@ -452,6 +452,21 @@ static bool mock_turtle_put_shape_data(uint8_t shape_num, const uint8_t *data)
     return true;
 }
 
+static void mock_turtle_stamp(void)
+{
+    record_command(MOCK_CMD_STAMP);
+}
+
+static bool mock_turtle_snap_costume(uint8_t slot, uint8_t w, uint8_t h)
+{
+    mock_state.costume.snap_count++;
+    mock_state.costume.last_snap_slot = slot;
+    mock_state.costume.last_snap_w = w;
+    mock_state.costume.last_snap_h = h;
+    mock_state.costume.last_snap_turtle = mock_state.current_turtle;
+    return mock_state.costume.snap_result;
+}
+
 // Turtle operations structure
 static const LogoConsoleTurtle mock_turtle_ops = {
     .select = mock_turtle_select,
@@ -485,7 +500,9 @@ static const LogoConsoleTurtle mock_turtle_ops = {
     .set_shape = mock_turtle_set_shape,
     .get_shape = mock_turtle_get_shape,
     .get_shape_data = mock_turtle_get_shape_data,
-    .put_shape_data = mock_turtle_put_shape_data
+    .put_shape_data = mock_turtle_put_shape_data,
+    .stamp = mock_turtle_stamp,
+    .snap_costume = mock_turtle_snap_costume
 };
 
 //
@@ -874,6 +891,8 @@ void mock_device_reset(void)
     mock_state.turtle.visible = true;
     mock_state.turtle.boundary_mode = MOCK_BOUNDARY_WRAP;  // Default is wrap
 
+    mock_state.costume.snap_result = true;  // snap_costume succeeds by default
+
     // Multi-turtle slots: all boot at home, pen down; only turtle 0 visible
     mock_state.current_turtle = 0;
     for (int i = 0; i < MOCK_MAX_TURTLES; i++)
@@ -976,6 +995,11 @@ const MockTurtleState *mock_device_get_turtle(uint8_t n)
 {
     turtle_slot_sync();  // The selected turtle's slot may be stale
     return &mock_state.turtles[n < MOCK_MAX_TURTLES ? n : 0];
+}
+
+void mock_device_set_snap_result(bool result)
+{
+    mock_state.costume.snap_result = result;
 }
 
 LogoConsole *mock_device_get_console(void)

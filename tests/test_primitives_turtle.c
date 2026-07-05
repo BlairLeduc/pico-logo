@@ -1719,6 +1719,68 @@ void test_turtles_boot_hidden_except_zero(void)
     }
 }
 
+//==========================================================================
+// Costume tests (stamp / snapsh)
+//==========================================================================
+
+void test_stamp_fans_out_over_active_set(void)
+{
+    Result r = run_string("tell [1 3] stamp");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    // One stamp per active turtle
+    int stamps = 0;
+    const MockDeviceState *state = mock_device_get_state();
+    for (int i = 0; i < state->command_count; i++)
+    {
+        if (mock_device_get_command(i)->type == MOCK_CMD_STAMP)
+        {
+            stamps++;
+        }
+    }
+    TEST_ASSERT_EQUAL(2, stamps);
+}
+
+void test_snapsh_captures_for_first_active(void)
+{
+    Result r = run_string("tell [2 5] snapsh 3 16 24");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    const MockDeviceState *state = mock_device_get_state();
+    TEST_ASSERT_EQUAL(1, state->costume.snap_count);
+    TEST_ASSERT_EQUAL(3, state->costume.last_snap_slot);
+    TEST_ASSERT_EQUAL(16, state->costume.last_snap_w);
+    TEST_ASSERT_EQUAL(24, state->costume.last_snap_h);
+    TEST_ASSERT_EQUAL(2, state->costume.last_snap_turtle);
+}
+
+void test_snapsh_validates_inputs(void)
+{
+    // Slot out of range
+    Result r = run_string("snapsh 0 16 16");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    r = run_string("snapsh 16 16 16");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+
+    // Dimensions out of range
+    r = run_string("snapsh 1 7 16");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    r = run_string("snapsh 1 16 33");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+
+    // No capture happened
+    TEST_ASSERT_EQUAL(0, mock_device_get_state()->costume.snap_count);
+}
+
+void test_snapsh_reports_full_pool(void)
+{
+    mock_device_set_snap_result(false);
+
+    Result r = run_string("snapsh 1 16 16");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+}
+
 void test_addressing_primitives_registered(void)
 {
     // Verify primitives are registered by checking they don't produce
@@ -1934,6 +1996,12 @@ int main(void)
     RUN_TEST(test_clearscreen_resets_to_turtle_zero);
     RUN_TEST(test_turtles_boot_hidden_except_zero);
     RUN_TEST(test_addressing_primitives_registered);
+
+    // Costume tests
+    RUN_TEST(test_stamp_fans_out_over_active_set);
+    RUN_TEST(test_snapsh_captures_for_first_active);
+    RUN_TEST(test_snapsh_validates_inputs);
+    RUN_TEST(test_snapsh_reports_full_pool);
 
     return UNITY_END();
 }

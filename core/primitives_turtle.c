@@ -1289,6 +1289,61 @@ static Result prim_shape(Evaluator *eval, int argc, Value *args)
     return result_ok(value_number(shape));
 }
 
+// stamp - Composite the turtle's costume into the canvas at its position
+static Result prim_stamp(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->stamp)
+    {
+        for (int i = 0; i < active_count; i++)
+        {
+            select_turtle(turtle, active_set[i]);
+            turtle->stamp();
+        }
+        select_first_active(turtle);
+    }
+
+    return result_none();
+}
+
+// snapsh shapenumber width height - Capture the canvas region centred on
+// the (first active) turtle into a colour costume
+static Result prim_snapsh(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(3);
+    REQUIRE_NUMBER(args[0], shape_num);
+    REQUIRE_NUMBER(args[1], width);
+    REQUIRE_NUMBER(args[2], height);
+
+    if (shape_num < 1 || shape_num > 15 || shape_num != (float)(int)shape_num)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
+    if (width < 8 || width > 32 || width != (float)(int)width)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
+    }
+    if (height < 8 || height > 32 || height != (float)(int)height)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[2]));
+    }
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->snap_costume)
+    {
+        select_first_active(turtle);
+        if (!turtle->snap_costume((uint8_t)shape_num, (uint8_t)width, (uint8_t)height))
+        {
+            return result_error(ERR_OUT_OF_SPACE);
+        }
+    }
+
+    return result_none();
+}
+
 //==========================================================================
 // Multi-turtle addressing
 //==========================================================================
@@ -1511,6 +1566,8 @@ void primitives_turtle_init(void)
     primitive_register("putsh", 2, prim_putsh);
     primitive_register("setsh", 1, prim_setsh);
     primitive_register("shape", 0, prim_shape);
+    primitive_register("stamp", 0, prim_stamp);
+    primitive_register("snapsh", 3, prim_snapsh);
 
     // Multi-turtle addressing
     primitive_register("tell", 1, prim_tell);

@@ -1445,6 +1445,42 @@ See [Colours](#appendix-e-colour-palette-for-pico-logo) for the default palette.
 ```
 
 
+## snapsh
+
+snapsh _shapenumber_ _width_ _height_
+
+`command`
+
+Stands for `snap sh`ape. `snapsh` captures the rectangle of the graphics screen centred on the turtle — _width_ by _height_ pixels, each from 8 to 32 — and stores it as a full-colour shape in slot _shapenumber_ (1 to 15). Background pixels become transparent, so the captured image keeps its outline when worn as a shape or placed with [`stamp`](#stamp). Draw a picture with the pen you already know, pick it up with `snapsh`, and wear it with [`setsh`](#setsh).
+
+A full-colour shape replaces the slot's [`putsh`](#putsh) bitmap on screen until you define a new bitmap with `putsh`, which removes the captured image. When you are talking to several turtles, `snapsh` captures around the lowest-numbered one. Colour shapes are stored in a fixed memory pool; if the pool is full, Logo says it is out of space.
+
+**Example**:
+
+```logo
+?repeat 4 [fd 12 rt 90]     ; draw a small box
+?fill
+?snapsh 1 16 16             ; capture it as shape 1
+?cs setsh 1                 ; wear it
+```
+
+
+## stamp
+
+stamp
+
+`command`
+
+`stamp` copies the turtle's current shape into the picture at the turtle's position, exactly as it appears on screen. The turtle does not move, and the stamped image becomes part of the drawing — it stays when the turtle walks away, and [`savepic`](#savepic) saves it. Use it for scenery, repeated decorations, or particle trails. Each turtle you are talking to stamps its own shape.
+
+**Example**:
+
+```logo
+?setsh 1
+?repeat 6 [stamp fd 30]     ; a trail of shape 1
+```
+
+
 ## tell
 
 tell _turtlenumber_  

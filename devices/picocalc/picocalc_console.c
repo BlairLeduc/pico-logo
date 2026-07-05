@@ -526,6 +526,32 @@ static void turtle_update_raster(void)
     cur->raster_angle = cur->angle;
 }
 
+// Describe the selected turtle's rendered raster as a compositor sprite:
+// shape 0 and colour costumes centre on the turtle position (so a snapsh
+// capture worn as a costume round-trips exactly); mono bitmaps keep the
+// shape system's historical anchor (centred horizontally, bottom row at
+// the turtle). Caller must have run turtle_update_raster().
+static void turtle_sprite_geometry(ScreenSprite *sprite)
+{
+    sprite->visible = true;
+    sprite->indexed = cur->raster_indexed;
+    sprite->colour = cur->colour;
+    sprite->mask = cur->raster;
+    sprite->w = cur->raster_w;
+    sprite->h = cur->raster_h;
+
+    if (cur->shape == 0 || cur->raster_indexed)
+    {
+        sprite->x = (int16_t)((int)(cur->x + 0.5f) - cur->raster_w / 2);
+        sprite->y = (int16_t)((int)(cur->y + 0.5f) - cur->raster_h / 2);
+    }
+    else
+    {
+        sprite->x = (int16_t)((int)cur->x - BITMAP_RASTER_SIZE / 2);
+        sprite->y = (int16_t)((int)cur->y - (BITMAP_RASTER_SIZE - 1));
+    }
+}
+
 // Show the turtle sprite at the current position (or hide it when the
 // turtle is hidden / off-screen in window mode). The compositor takes it
 // from here — nothing is written into the canvas.
@@ -539,30 +565,8 @@ static void turtle_draw(void)
 
     turtle_update_raster();
 
-    ScreenSprite sprite = {
-        .visible = true,
-        .indexed = cur->raster_indexed,
-        .colour = cur->colour,
-        .mask = cur->raster,
-        .w = cur->raster_w,
-        .h = cur->raster_h,
-    };
-
-    if (cur->shape == 0 || cur->raster_indexed)
-    {
-        // Shape 0 and colour costumes: centred on the turtle position
-        // (snapsh captures centred, so snapsh -> wear round-trips exactly)
-        sprite.x = (int16_t)((int)(cur->x + 0.5f) - cur->raster_w / 2);
-        sprite.y = (int16_t)((int)(cur->y + 0.5f) - cur->raster_h / 2);
-    }
-    else
-    {
-        // Mono bitmaps: centred horizontally, bottom row at the turtle
-        // position (the shape system's historical anchor)
-        sprite.x = (int16_t)((int)cur->x - BITMAP_RASTER_SIZE / 2);
-        sprite.y = (int16_t)((int)cur->y - (BITMAP_RASTER_SIZE - 1));
-    }
-
+    ScreenSprite sprite;
+    turtle_sprite_geometry(&sprite);
     screen_sprite_set(current_turtle, &sprite);
 }
 
@@ -1039,6 +1043,66 @@ static uint8_t turtle_get_shape_num(void)
     return cur->shape;
 }
 
+// A slot's image changed (putsh or snapsh): rebuild the raster of every
+// turtle wearing it and redraw the visible ones
+static void refresh_shape_wearers(uint8_t shape_num)
+{
+    uint8_t saved_turtle = current_turtle;
+    for (uint8_t i = 0; i < MAX_TURTLES; i++)
+    {
+        if (picoturtles[i].shape != shape_num)
+        {
+            continue;
+        }
+        picoturtles[i].raster_valid = false;
+        if (picoturtles[i].visible)
+        {
+            turtle_op_select(i);
+            screen_show_field();
+            turtle_draw();
+        }
+    }
+    turtle_op_select(saved_turtle);
+    screen_gfx_update();
+}
+
+// Composite the selected turtle's costume into the canvas at its
+// position (the stamp primitive)
+static void turtle_stamp(void)
+{
+    screen_show_field();
+    turtle_update_raster();
+
+    ScreenSprite sprite;
+    turtle_sprite_geometry(&sprite);
+    screen_gfx_stamp(&sprite);
+    screen_gfx_update();
+}
+
+// Capture the w x h canvas region centred on the selected turtle into
+// colour costume slot (the snapsh primitive). Background pixels become
+// transparent. Returns false when the costume pool is full.
+static bool turtle_snap_costume(uint8_t slot, uint8_t w, uint8_t h)
+{
+    if (w > TURTLE_RASTER_MAX || h > TURTLE_RASTER_MAX)
+    {
+        return false;
+    }
+
+    uint8_t pixels[TURTLE_RASTER_MAX * TURTLE_RASTER_MAX];
+    int x0 = (int)(cur->x + 0.5f) - w / 2;
+    int y0 = (int)(cur->y + 0.5f) - h / 2;
+    screen_gfx_snap(x0, y0, w, h, pixels);
+
+    if (!costume_put(slot, w, h, pixels))
+    {
+        return false;
+    }
+
+    refresh_shape_wearers(slot);
+    return true;
+}
+
 // Get shape data for shapes 1-15
 // Returns 16 bytes representing 8 columns x 16 rows
 // Each byte is one row, MSB = leftmost column
@@ -1108,25 +1172,7 @@ static bool turtle_put_shape_data(uint8_t shape_num, const uint8_t *data)
     // (from snapsh) would shadow it, so remove it
     costume_delete(shape_num);
 
-    // Rebuild the raster of every turtle wearing this shape and redraw
-    // the visible ones
-    uint8_t saved_turtle = current_turtle;
-    for (uint8_t i = 0; i < MAX_TURTLES; i++)
-    {
-        if (picoturtles[i].shape != shape_num)
-        {
-            continue;
-        }
-        picoturtles[i].raster_valid = false;
-        if (picoturtles[i].visible)
-        {
-            turtle_op_select(i);
-            screen_show_field();
-            turtle_draw();
-        }
-    }
-    turtle_op_select(saved_turtle);
-    screen_gfx_update();
+    refresh_shape_wearers(shape_num);
 
     return true;
 }
@@ -1164,6 +1210,8 @@ static const LogoConsoleTurtle picocalc_turtle_ops = {
     .get_shape = turtle_get_shape_num,
     .get_shape_data = turtle_get_shape_data,
     .put_shape_data = turtle_put_shape_data,
+    .stamp = turtle_stamp,
+    .snap_costume = turtle_snap_costume,
 };
 
 //
