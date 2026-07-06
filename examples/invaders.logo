@@ -190,27 +190,41 @@ to alien.bottom.y
   output :formy - (:alien.rows - 1) * :rowgap
 end
 
-to draw.aliens
-  ; Walk the liveness list sequentially (first/butfirst share structure, so
-  ; no allocation) instead of an indexed gprop lookup per cell.
-  local "lst local "i
+to redraw.formation :sh :pc
+  ; Stamp shape :sh in colour :pc over every living cell in one pass. Walk the
+  ; liveness list with first/butfirst (shared structure, no allocation) and
+  ; carry each cell's x/y forward incrementally across the grid, so a full
+  ; formation redraw pays no per-cell division or helper-procedure calls.
+  ; This matters because a march step (erase + redraw of the whole block)
+  ; runs synchronously inside one game-loop iteration: while it stamps, the
+  ; loop reaches neither refresh nor check.shot/check.bombs, so an expensive
+  ; redraw both freezes the display and lets fast turtles tunnel past a
+  ; collision uncounted. Setting shape/colour once (outside the loop) and
+  ; dropping the four coordinate procedures per cell keeps the step short.
+  local "lst local "cx local "cy local "col
   make "lst :aliens
-  make "i 1
-  repeat :alien.rows * :alien.cols [
-    if 1 = first :lst [stamp.alien :i]
-    make "lst butfirst :lst
-    make "i :i + 1
+  make "cx :formx
+  make "cy :formy
+  make "col 1
+  ask 6 [
+    setsh :sh
+    setpc :pc
+    repeat :alien.rows * :alien.cols [
+      if 1 = first :lst [setx :cx sety :cy stamp]
+      make "lst butfirst :lst
+      make "cx :cx + :colgap
+      make "col :col + 1
+      if :col > :alien.cols [
+        make "col 1
+        make "cx :formx
+        make "cy :cy - :rowgap
+      ]
+    ]
   ]
 end
 
-to stamp.alien :idx
-  ask 6 [
-    setsh :alien.frame
-    setpc :alien.colour
-    setx alien.cell.x alien.col :idx
-    sety alien.cell.y alien.row :idx
-    stamp
-  ]
+to draw.aliens
+  redraw.formation :alien.frame :alien.colour
 end
 
 to erase.alien.cell :idx
@@ -231,14 +245,7 @@ to kill.alien :idx
 end
 
 to erase.all.aliens
-  local "lst local "i
-  make "lst :aliens
-  make "i 1
-  repeat :alien.rows * :alien.cols [
-    if 1 = first :lst [erase.alien.cell :i]
-    make "lst butfirst :lst
-    make "i :i + 1
-  ]
+  redraw.formation 3 :bg.colour
 end
 
 to step.formx
