@@ -217,6 +217,21 @@ void test_toot_stereo(void)
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
 }
 
+void test_toot_accepts_numeric_word_frequency(void)
+{
+    // Values pulled from a list (e.g. `item n list`) come back as numeric
+    // words, not VALUE_NUMBER; toot must coerce them like every other
+    // numeric primitive does (REQUIRE_NUMBER), not reject them outright.
+    Result r = eval_string("make \"freqs [220 196 174 164] toot 40 item 2 :freqs");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+}
+
+void test_toot_accepts_numeric_word_duration(void)
+{
+    Result r = eval_string("make \"durs [40 80] toot (item 1 :durs) 440");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+}
+
 void test_toot_zero_duration(void)
 {
     // Zero duration should work
@@ -399,6 +414,8 @@ int main(void)
     // Toot tests
     RUN_TEST(test_toot_basic);
     RUN_TEST(test_toot_stereo);
+    RUN_TEST(test_toot_accepts_numeric_word_frequency);
+    RUN_TEST(test_toot_accepts_numeric_word_duration);
     RUN_TEST(test_toot_zero_duration);
     RUN_TEST(test_toot_zero_frequency);
     RUN_TEST(test_toot_missing_frequency);

@@ -566,6 +566,129 @@ static Node find_element_in_list(Value obj, Node list)
     return NODE_NIL;
 }
 
+// Convert a member value (word, number, or list) to the node stored in a list
+// cell, matching how fput/list build cells. Returns false and sets *out_err on
+// an unstorable value (a non-object) or atom-table exhaustion. Shared by the
+// destructive setters below.
+static bool member_value_to_node(Value v, Node *out_node, Result *out_err)
+{
+    if (value_is_number(v))
+    {
+        Node w = number_to_word(v.as.number);
+        if (mem_is_nil(w))
+        {
+            *out_err = result_error(ERR_OUT_OF_SPACE); // atom table exhausted
+            return false;
+        }
+        *out_node = w;
+        return true;
+    }
+    if (value_is_word(v) || value_is_list(v))
+    {
+        *out_node = v.as.node;
+        return true;
+    }
+    *out_err = result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(v));
+    return false;
+}
+
+// .setfirst list value
+// Destructively replaces the first member (car) of a non-empty list, in place,
+// with value. Because lists share structure (butfirst returns the tail without
+// copying), this mutates every list that shares the affected cell — the point
+// is to update one element without allocating a fresh list. Dangerous, hence
+// the leading dot: overwriting a cell that other structure relies on, or
+// building a cyclic list, corrupts those references.
+static Result prim_dsetfirst(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+
+    Value list_val = args[0];
+    if (!value_is_list(list_val) || mem_is_nil(list_val.as.node))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(list_val));
+    }
+
+    Node value_node;
+    Result err;
+    if (!member_value_to_node(args[1], &value_node, &err))
+    {
+        return err;
+    }
+
+    mem_set_car(list_val.as.node, value_node);
+    return result_none();
+}
+
+// .setbf list value
+// Destructively replaces the butfirst (cdr) of a non-empty list with value, in
+// place; value must itself be a list, since the tail of a list is a list. Like
+// .setfirst this mutates every list that shares the cell and can build a
+// circular list if value points back into list — hence the leading dot.
+static Result prim_dsetbf(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+
+    Value list_val = args[0];
+    if (!value_is_list(list_val) || mem_is_nil(list_val.as.node))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(list_val));
+    }
+    if (!value_is_list(args[1]))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
+    }
+
+    mem_set_cdr(list_val.as.node, args[1].as.node);
+    return result_none();
+}
+
+// .setitem index list value
+// Destructively replaces the index-th member (1-based) of list with value, in
+// place. Equivalent to walking to the index-th cell and .setfirst-ing it, but
+// the walk happens in C. Errors like item: a non-positive index is bad input,
+// an index past the end is too few items. Dangerous for the same reason as the
+// other in-place setters.
+static Result prim_dsetitem(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+
+    float index_f;
+    if (!value_to_number(args[0], &index_f))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
+    int index = (int)index_f;
+    if (index < 1)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
+
+    if (!value_is_list(args[1]))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
+    }
+    Node cell = args[1].as.node;
+    for (int i = 1; i < index && !mem_is_nil(cell); i++)
+    {
+        cell = mem_cdr(cell);
+    }
+    if (mem_is_nil(cell))
+    {
+        return result_error_arg(ERR_TOO_FEW_ITEMS, NULL, "[]");
+    }
+
+    Node value_node;
+    Result err;
+    if (!member_value_to_node(args[2], &value_node, &err))
+    {
+        return err;
+    }
+
+    mem_set_car(cell, value_node);
+    return result_none();
+}
+
 // member object1 object2
 // Outputs the part of object2 starting with object1.
 static Result prim_member(Evaluator *eval, int argc, Value *args)
@@ -1415,6 +1538,9 @@ void primitives_words_lists_init(void)
     primitive_register("bl", 1, prim_butlast);
     primitive_register("item", 2, prim_item);
     primitive_register("replace", 3, prim_replace);
+    primitive_register(".setfirst", 2, prim_dsetfirst);
+    primitive_register(".setbf", 2, prim_dsetbf);
+    primitive_register(".setitem", 3, prim_dsetitem);
     primitive_register("member", 2, prim_member);
     primitive_register("pick", 1, prim_pick);
     primitive_register("reverse", 1, prim_reverse);

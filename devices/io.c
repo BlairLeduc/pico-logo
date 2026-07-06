@@ -339,13 +339,13 @@ bool logo_io_is_network_address(const char *target)
 // Network timeout management
 //
 
-void logo_io_set_timeout(LogoIO *io, int timeout_tenths)
+void logo_io_set_timeout(LogoIO *io, int timeout_ms)
 {
     if (!io)
     {
         return;
     }
-    io->network_timeout = timeout_tenths >= 0 ? timeout_tenths : 0;
+    io->network_timeout = timeout_ms >= 0 ? timeout_ms : 0;
 }
 
 int logo_io_get_timeout(const LogoIO *io)
@@ -1543,8 +1543,7 @@ static int network_stream_read_char(LogoStream *stream)
         return LOGO_STREAM_EOF;
     }
 
-    // Convert timeout from tenths of a second to milliseconds
-    int timeout_ms = ctx->io->network_timeout * 100;
+    int timeout_ms = ctx->io->network_timeout;
     
     char c;
     int result = ctx->io->hardware->ops->network_tcp_read(ctx->connection, &c, 1, timeout_ms);
@@ -1576,8 +1575,7 @@ static int network_stream_read_chars(LogoStream *stream, char *buffer, int count
         return -1;
     }
 
-    // Convert timeout from tenths of a second to milliseconds
-    int timeout_ms = ctx->io->network_timeout * 100;
+    int timeout_ms = ctx->io->network_timeout;
     
     return ctx->io->hardware->ops->network_tcp_read(ctx->connection, buffer, count, timeout_ms);
 }
@@ -1595,8 +1593,7 @@ static int network_stream_read_line(LogoStream *stream, char *buffer, size_t siz
         return -1;
     }
 
-    // Convert timeout from tenths of a second to milliseconds
-    int timeout_ms = ctx->io->network_timeout * 100;
+    int timeout_ms = ctx->io->network_timeout;
     
     // Read one character at a time until newline or timeout
     size_t pos = 0;
@@ -1726,8 +1723,7 @@ static LogoStream *create_network_stream(LogoIO *io, const char *ip_address, uin
         return NULL;
     }
 
-    // Convert timeout from tenths of a second to milliseconds
-    int timeout_ms = io->network_timeout * 100;
+    int timeout_ms = io->network_timeout;
 
     // Establish connection
     void *connection = io->hardware->ops->network_tcp_connect(ip_address, port, timeout_ms);

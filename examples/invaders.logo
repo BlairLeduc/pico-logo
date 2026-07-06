@@ -1,0 +1,672 @@
+; Space Invaders
+; See docs/space-invaders-design.md for the design behind this program.
+;
+; Load and play (from the directory containing this file, e.g. after
+; setprefix to it, or copy it beside "startup" on the SD card):
+;   load "invaders.logo
+;   invaders
+;
+; Note: the Logo lexer treats "-" and "/" as token delimiters, so a
+; pathname containing either (like "space-invaders.logo" or a
+; "dir/file" path) can't be typed as a plain quoted word without
+; backslash-escaping each one (e.g. "dir\/file). This file is named to
+; avoid that entirely.
+;
+; Turtles:
+;   0 cannon   1 player shot   2 UFO   3-5 bombs   6 alien-formation stamper
+;   7 spare (unused)
+; The 5x11 alien block and the 4 shields live on the canvas, not as
+; turtles; turtle 6 is a hidden helper used only to stamp/erase them.
+
+make "alien.colour  249   ; green
+make "shield.colour 252   ; cyan
+make "cannon.colour 254   ; white
+make "shot.colour   251   ; yellow
+make "ufo.colour     253  ; magenta
+make "bomb.colour    248  ; red
+make "bg.colour      255  ; current background slot
+
+;==========================================================================
+; Costumes
+;==========================================================================
+
+to setup.shapes
+  putsh 1 [0 0 0 0 60 126 255 219 255 36 90 165 0 0 0 0]
+  putsh 2 [0 0 0 0 60 126 255 219 255 36 165 90 0 0 0 0]
+  putsh 3 [255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255]
+  putsh 4 [0 0 0 0 0 24 24 60 60 126 126 255 255 255 255 255]
+  putsh 5 [0 0 60 126 255 255 255 126 60 0 0 0 0 0 0 0]
+  putsh 6 [0 0 60 126 231 231 255 126 60 0 0 0 0 0 0 0]
+  putsh 7 [0 0 0 0 0 0 24 24 60 60 126 255 126 60 24 0]
+  putsh 8 [0 0 24 24 24 24 24 24 24 24 24 24 24 24 0 0]
+end
+
+to invaders
+  init.game
+  forever [one.game]
+end
+
+to init.game
+  setup.shapes
+end
+
+to one.game
+  attract.screen
+  make "score 0
+  make "lives 3
+  make "level 1
+  make "playing true
+  make "freqs [220 196 174 164]
+  until [not :playing] [
+    play.level
+    ifelse :lives < 1 [
+      make "playing false
+    ] [
+      make "level :level + 1
+    ]
+  ]
+  show.game.over
+end
+
+to attract.screen
+  textscreen
+  ct
+  setcursor [12 10]
+  print [SPACE INVADERS]
+  setcursor [10 14]
+  print [PRESS SPACE TO PLAY]
+  wait.for.space
+end
+
+to wait.for.space
+  make "k 0
+  until [:k = 32] [
+    if key? [make "k ascii readchar]
+  ]
+end
+
+to show.game.over
+  textscreen
+  ct
+  setcursor [13 10]
+  print [GAME OVER]
+  setcursor [10 12]
+  (print [FINAL SCORE:] :score)
+  wait 2000
+end
+
+to setup.level
+  cs
+  splitscreen
+  make "dying false
+  make "paused false
+  make "march.counter 0
+  make "alien.frame 1
+  make "march.note.idx 0
+  ; A march step redraws the whole formation, which is far more work than one
+  ; frame's budget. Instead of doing it all at once (a visible hitch), render
+  ; :march.slice cells per frame across several frames (see march.render.slice).
+  make "march.rendering false
+  make "march.slice 6
+  ; HUD is repainted only when a value changes; seed with impossible values so
+  ; every field draws once on the first frame.
+  make "hud.score -1
+  make "hud.lives -1
+  make "hud.level -1
+  setup.turtles
+  setup.aliens
+  setup.shields
+  arm.demons
+end
+
+to setup.turtles
+  tell [0 1 2 3 4 5 6 7]
+  each [window]
+  tell 0 pu setsh 4 setpc :cannon.colour setrot "fixed setx 0 sety -70 seth 0 st
+  tell 1 pu setsh 8 setpc :shot.colour setrot "fixed ht
+  tell 2 pu setsh 5 setpc :ufo.colour setrot "fixed ht
+  tell 3 pu setsh 7 setpc :bomb.colour setrot "fixed ht
+  tell 4 pu setsh 7 setpc :bomb.colour setrot "fixed ht
+  tell 5 pu setsh 7 setpc :bomb.colour setrot "fixed ht
+  tell 6 pu setpc :alien.colour setrot "fixed ht
+  tell 0
+end
+
+to arm.demons
+  when [touching? 1 2] [ufo.hit]
+  when [touching? 0 3] [player.hit]
+  when [touching? 0 4] [player.hit]
+  when [touching? 0 5] [player.hit]
+  when [(alien.bottom.y) < -55] [invasion]
+end
+
+to make.ones :n
+  ; Build a flat list of :n ones (every alien alive). Allocated once per
+  ; level; thereafter the list is mutated in place (see set.alien) so a
+  ; level's worth of kills allocates nothing and never fills the arena.
+  local "lst
+  make "lst []
+  repeat :n [make "lst fput 1 :lst]
+  output :lst
+end
+
+to set.alien :idx :val
+  ; Flip one liveness flag in place -- no list is rebuilt, so kills allocate
+  ; nothing. .setitem walks to the idx-th cell in C and mutates it; because
+  ; the list is shared, :aliens itself changes.
+  .setitem :idx :aliens :val
+end
+
+to setup.aliens
+  make "alien.rows 5
+  make "alien.cols 11
+  ; Bitmap costumes render at 16x16
+  ; pixels regardless of the 8-column
+  ; putsh data format (see reference
+  ; "setmag": "shapes larger than 16 by
+  ; 16 always appear at normal size"
+  ; -- 16x16 is the native render size,
+  ; the user-facing 8-bit row is
+  ; doubled horizontally). A gap smaller
+  ; than 16 leaves adjacent aliens
+  ; touching or overlapping.
+  make "colgap 20
+  make "rowgap 20
+  make "formx -100
+  make "formy 140
+  make "formdir 1
+  make "alive :alien.rows * :alien.cols
+  make "aliens make.ones :alive
+  ; Living edges, tracked incrementally so the per-frame march wall-test and
+  ; invasion test never scan the formation. form.lo/form.hi are the live column
+  ; range (step.formx); form.bot is the lowest row still holding a live alien
+  ; (alien.bottom.y) -- kills can empty the bottom rows, so it is NOT just the
+  ; grid's bottom row.
+  make "form.lo 1
+  make "form.hi :alien.cols
+  make "form.bot :alien.rows
+  draw.aliens
+end
+
+to alien.row :idx
+  output (int ((:idx - 1) / :alien.cols)) + 1
+end
+
+to alien.col :idx
+  output (remainder (:idx - 1) :alien.cols) + 1
+end
+
+to alien.cell.x :col
+  output :formx + (:col - 1) * :colgap
+end
+
+to alien.cell.y :row
+  output :formy - (:row - 1) * :rowgap
+end
+
+to alien.bottom.y
+  ; The lowest LIVING row, not the grid's bottom row -- once the player clears
+  ; the bottom rows the formation can descend further before it counts as an
+  ; invasion.
+  output :formy - (:form.bot - 1) * :rowgap
+end
+
+to redraw.formation :sh :pc
+  ; Stamp shape :sh in colour :pc over every living cell in one pass. Walk the
+  ; liveness list with first/butfirst (shared structure, no allocation) and
+  ; carry each cell's x/y forward incrementally across the grid, so the draw
+  ; pays no per-cell division or helper-procedure calls, and shape/colour are
+  ; set once outside the loop. Used for the one-time initial draw of a level;
+  ; the marching redraw is spread over frames instead (see march.render.slice).
+  local "lst local "cx local "cy local "col
+  make "lst :aliens
+  make "cx :formx
+  make "cy :formy
+  make "col 1
+  ask 6 [
+    setsh :sh
+    setpc :pc
+    repeat :alien.rows * :alien.cols [
+      if 1 = first :lst [setx :cx sety :cy stamp]
+      make "lst butfirst :lst
+      make "cx :cx + :colgap
+      make "col :col + 1
+      if :col > :alien.cols [
+        make "col 1
+        make "cx :formx
+        make "cy :cy - :rowgap
+      ]
+    ]
+  ]
+end
+
+to draw.aliens
+  redraw.formation :alien.frame :alien.colour
+end
+
+to erase.alien.cell :idx
+  ; Blank the cell at its current (post-step) position. During a spread march
+  ; render, also blank its pre-step position -- :idx may not have been redrawn
+  ; there yet, so erasing only the new spot would leave a ghost behind.
+  local "cx local "cy
+  make "cx alien.cell.x alien.col :idx
+  make "cy alien.cell.y alien.row :idx
+  ask 6 [
+    setsh 3 setpc :bg.colour
+    setx :cx sety :cy stamp
+    if :march.rendering [
+      setx :cx - :march.dx sety :cy - :march.dy stamp
+    ]
+  ]
+end
+
+to kill.alien :idx
+  set.alien :idx 0
+  make "alive :alive - 1
+  erase.alien.cell :idx
+  ; Only an edge kill can move an edge, so skip the (list-walking) checks
+  ; otherwise.
+  local "c local "r
+  make "c alien.col :idx
+  make "r alien.row :idx
+  if or (:c = :form.lo) (:c = :form.hi) [shrink.edges]
+  if :r = :form.bot [shrink.bottom]
+  make "score :score + 10
+end
+
+to column.occupied? :c
+  ; True when any row of column :c still holds a living alien.
+  local "i
+  make "i :c
+  repeat :alien.rows [
+    if 1 = item :i :aliens [output true]
+    make "i :i + :alien.cols
+  ]
+  output false
+end
+
+to shrink.edges
+  ; Pull the live-edge columns (form.lo/form.hi) inward past any columns a
+  ; kill just emptied. Aliens only ever die, so the edges only move toward
+  ; the centre -- this is O(1) amortised across a level.
+  while [and (:form.lo < :form.hi) (not column.occupied? :form.lo)] [
+    make "form.lo :form.lo + 1
+  ]
+  while [and (:form.hi > :form.lo) (not column.occupied? :form.hi)] [
+    make "form.hi :form.hi - 1
+  ]
+end
+
+to row.occupied? :r
+  ; True when any column of row :r still holds a living alien.
+  local "lst local "c
+  make "lst :aliens
+  repeat (:r - 1) * :alien.cols [make "lst butfirst :lst]
+  make "c 1
+  repeat :alien.cols [
+    if 1 = first :lst [output true]
+    make "lst butfirst :lst
+    make "c :c + 1
+  ]
+  output false
+end
+
+to shrink.bottom
+  ; Raise the live bottom row (form.bot) past any bottom rows a kill emptied.
+  while [and (:form.bot > 1) (not row.occupied? :form.bot)] [
+    make "form.bot :form.bot - 1
+  ]
+end
+
+to step.formx
+  ; The living left/right edges are tracked incrementally (form.lo/form.hi),
+  ; so the wall test costs nothing per march -- the old version walked all 55
+  ; cells every step just to rediscover the edges.
+  local "leftx local "rightx
+  make "leftx alien.cell.x :form.lo
+  make "rightx alien.cell.x :form.hi
+  ifelse and (:formdir = 1) ((:rightx + :colgap) > 155) [drop.and.flip] [
+    ifelse and (:formdir = -1) ((:leftx - :colgap) < -155) [drop.and.flip] [
+      make "formx :formx + (4 * :formdir)
+    ]
+  ]
+end
+
+to drop.and.flip
+  make "formy :formy - 8
+  make "formdir 0 - :formdir
+end
+
+to toggle.alien.frame
+  ifelse :alien.frame = 1 [make "alien.frame 2] [make "alien.frame 1]
+end
+
+to march.note
+  make "march.note.idx remainder (:march.note.idx + 1) 4
+  toot 40 item (:march.note.idx + 1) :freqs
+end
+
+to march.interval
+  output 1 + int (:alive / 4)
+end
+
+to march.begin
+  ; Start one march step. The formation advances its logical position at once
+  ; (so collisions stay coherent), but the redraw is spread over the next few
+  ; frames by march.render.slice. formx.prev/formy.prev and march.dx/march.dy
+  ; remember the pre-step position so each cell can be erased where it was.
+  make "formx.prev :formx
+  make "formy.prev :formy
+  step.formx
+  make "march.dx :formx - :formx.prev
+  make "march.dy :formy - :formy.prev
+  toggle.alien.frame
+  march.note
+  make "march.k 1                 ; next grid cell to redraw (1..rows*cols)
+  make "march.lst :aliens         ; liveness tail at cell :march.k
+  make "march.cx :formx           ; new position of cell :march.k
+  make "march.cy :formy
+  make "march.col 1
+  make "march.rendering true
+  march.render.slice
+end
+
+to march.render.slice
+  ; Redraw up to :march.slice cells of the in-flight step: erase each living
+  ; cell where it was (new position minus the step delta) and stamp it at the
+  ; new position. The cursor carries across frames so the rest continue next
+  ; frame. Shape/colour alternate per cell (erase vs draw), so they can't be
+  ; hoisted, but selecting turtle 6 once (ask) still saves per-cell overhead.
+  local "n local "total
+  make "total :alien.rows * :alien.cols
+  make "n :march.slice
+  ask 6 [
+    until [or (:march.k > :total) (:n < 1)] [
+      if 1 = first :march.lst [
+        setsh 3 setpc :bg.colour
+        setx :march.cx - :march.dx sety :march.cy - :march.dy stamp
+        setsh :alien.frame setpc :alien.colour
+        setx :march.cx sety :march.cy stamp
+      ]
+      make "march.lst butfirst :march.lst
+      make "march.k :march.k + 1
+      make "march.col :march.col + 1
+      make "march.cx :march.cx + :colgap
+      if :march.col > :alien.cols [
+        make "march.col 1
+        make "march.cx :formx
+        make "march.cy :march.cy - :rowgap
+      ]
+      make "n :n - 1
+    ]
+  ]
+  if :march.k > :total [make "march.rendering false]
+end
+
+to march.if.due
+  ; Count every frame so the step cadence (march.interval) is unchanged, but
+  ; keep feeding an in-flight redraw until it finishes before starting another.
+  make "march.counter :march.counter + 1
+  ifelse :march.rendering [
+    march.render.slice
+  ] [
+    if not (:march.counter < march.interval) [
+      make "march.counter 0
+      march.begin
+    ]
+  ]
+end
+
+to draw.shield :cx :cy
+  ask 6 [
+    pu setx :cx - 12 sety :cy - 8 setpc :shield.colour pd
+    setx :cx + 12
+    sety :cy + 8
+    setx :cx - 12
+    sety :cy - 8
+    ; fill refuses to paint when the turtle starts on a pixel that's
+    ; already the fill colour (its own boundary-detection check), and
+    ; the turtle is sitting right back on the outline it just drew --
+    ; move to the centre (pen up, so no stray line) before filling.
+    pu setx :cx sety :cy
+    pd fill pu
+  ]
+end
+
+to setup.shields
+  draw.shield -90 -20
+  draw.shield -30 -20
+  draw.shield 30 -20
+  draw.shield 90 -20
+end
+
+to erode :x :y
+  ask 6 [setsh 3 setpc :bg.colour setx :x sety :y stamp]
+end
+
+to move.cannon :dx
+  local "nx
+  make "nx (xcor) + :dx
+  if :nx < -150 [make "nx -150]
+  if :nx > 150 [make "nx 150]
+  setx :nx
+end
+
+to shot.active?
+  output ask 1 [shown?]
+end
+
+to fire
+  if not shot.active? [
+    ask 1 [pu setx (ask 0 [xcor]) sety ((ask 0 [ycor]) + 10) seth 0 st setspeed 90]
+  ]
+end
+
+to check.shot
+  ask 1 [
+    if shown? [
+      if over? :alien.colour [hit.alien]
+      if over? :shield.colour [erode xcor ycor ht setspeed 0]
+    ]
+  ]
+end
+
+to locate.alien :x :y
+  ; The grid is regular, so invert the cell formula to jump straight to the
+  ; nearest cell instead of walking the whole formation (that full walk, with
+  ; four helper calls per living cell, spiked the frame on every hit).
+  ; Bitmap costumes anchor at their bottom row, so the shot's sensed pixels sit
+  ; a few px off the alien's nominal coordinate -- but centres are a 20-unit
+  ; colgap/rowgap apart, so at most one cell can be within the 10-unit
+  ; tolerance: the rounded cell is the only candidate. Confirm it's alive and
+  ; genuinely within tolerance before claiming the hit.
+  local "col local "row local "idx local "ax local "ay
+  make "col 1 + (round ((:x - :formx) / :colgap))
+  make "row 1 + (round ((:formy - :y) / :rowgap))
+  if or (:col < 1) (:col > :alien.cols) [output 0]
+  if or (:row < 1) (:row > :alien.rows) [output 0]
+  make "idx ((:row - 1) * :alien.cols) + :col
+  if not (1 = item :idx :aliens) [output 0]
+  make "ax alien.cell.x :col
+  make "ay alien.cell.y :row
+  if and ((abs (:ax - :x)) < 10) ((abs (:ay - :y)) < 10) [output :idx]
+  output 0
+end
+
+to hit.alien
+  local "idx
+  make "idx locate.alien xcor ycor
+  if not (:idx = 0) [
+    kill.alien :idx
+    ht setspeed 0
+  ]
+end
+
+to idle.bomb
+  if not (ask 3 [shown?]) [output 3]
+  if not (ask 4 [shown?]) [output 4]
+  if not (ask 5 [shown?]) [output 5]
+  output 0
+end
+
+to random.living.alien
+  if :alive = 0 [output 0]
+  ; Dart-throw: probe random cells first. While the board is dense (most of
+  ; the game) a live cell is found in a probe or two, avoiding the full walk
+  ; that spiked every bomb-launch frame. Fall back to an ordered scan only
+  ; when the board is sparse enough that probes keep missing.
+  local "total
+  make "total :alien.rows * :alien.cols
+  repeat 8 [
+    local "idx
+    make "idx 1 + random :total
+    if 1 = item :idx :aliens [output :idx]
+  ]
+  output nth.living.alien 1 + random :alive
+end
+
+to nth.living.alien :target
+  local "lst local "seen local "i
+  make "seen 0
+  make "lst :aliens
+  make "i 1
+  repeat :alien.rows * :alien.cols [
+    if 1 = first :lst [
+      make "seen :seen + 1
+      if :seen = :target [output :i]
+    ]
+    make "lst butfirst :lst
+    make "i :i + 1
+  ]
+  output 0
+end
+
+to launch.bomb :t
+  local "idx
+  make "idx random.living.alien
+  if not (:idx = 0) [
+    ask :t [
+      pu setx alien.cell.x alien.col :idx
+      sety alien.cell.y alien.row :idx
+      seth 180 st setspeed 40
+    ]
+  ]
+end
+
+to maybe.drop.bomb
+  local "t
+  make "t idle.bomb
+  if not (:t = 0) [
+    if (random 100) < 3 [launch.bomb :t]
+  ]
+end
+
+to check.bombs
+  ask 3 [if shown? [if over? :shield.colour [erode xcor ycor ht setspeed 0]]]
+  ask 4 [if shown? [if over? :shield.colour [erode xcor ycor ht setspeed 0]]]
+  ask 5 [if shown? [if over? :shield.colour [erode xcor ycor ht setspeed 0]]]
+end
+
+to maybe.launch.ufo
+  if not (ask 2 [shown?]) [
+    if (random 600) < 1 [launch.ufo]
+  ]
+end
+
+to launch.ufo
+  ask 2 [pu setx -150 sety 140 seth 90 st setanim 5 6 150 setspeed 50]
+end
+
+to recycle.ufo
+  ask 2 [if shown? [if (xcor) > 150 [ht setspeed 0]]]
+end
+
+to recycle.offscreen
+  ask 1 [if shown? [if (ycor) > 155 [ht setspeed 0]]]
+  ask 3 [if shown? [if (ycor) < -155 [ht setspeed 0]]]
+  ask 4 [if shown? [if (ycor) < -155 [ht setspeed 0]]]
+  ask 5 [if shown? [if (ycor) < -155 [ht setspeed 0]]]
+end
+
+to ufo.hit
+  ask 2 [ht setspeed 0]
+  make "score :score + 100
+  toot 30 900
+end
+
+to player.hit
+  freeze
+  ask [3 4 5] [ht setspeed 0]
+  make "lives :lives - 1
+  make "dying true
+end
+
+to invasion
+  freeze
+  make "lives 0
+  make "dying true
+end
+
+to handle.death
+  toot 200 100
+  wait 500
+  ask 0 [setx 0]
+  make "dying false
+  ifelse :lives < 1 [make "over true] [thaw]
+end
+
+to toggle.pause
+  ifelse :paused [thaw make "paused false] [freeze make "paused true]
+end
+
+to poll.input
+  if key? [
+    make "k ascii readchar
+    if :k = 180 [ask 0 [move.cannon -6]]
+    if :k = 183 [ask 0 [move.cannon 6]]
+    if :k = 32 [fire]
+    if :k = 112 [toggle.pause]
+  ]
+end
+
+to draw.hud
+  ; Repaint a line only when its value changes. Rewriting all of them every
+  ; frame re-blits ~160 glyphs over SPI (each row is drawn character by
+  ; character) and was the single biggest cost in an ordinary frame.
+  if not (:score = :hud.score) [
+    setcursor [0 0] (print [SCORE:] :score) make "hud.score :score
+  ]
+  if not (:lives = :hud.lives) [
+    setcursor [0 1] (print [LIVES:] :lives) make "hud.lives :lives
+  ]
+  if not (:level = :hud.level) [
+    setcursor [0 2] (print [LEVEL:] :level) make "hud.level :level
+  ]
+end
+
+to play.level
+  setup.level
+  ; sync mode paces the loop to a fixed 25 fps: sync (below) presents the
+  ; frame and waits for the next frame boundary, so the cadence stays even
+  ; regardless of how much work a frame did. Every frame must fit the 40 ms
+  ; budget -- the march redraw is spread over several frames to make that so.
+  (setrefresh "sync 25)
+  make "over false
+  until [:over] [
+    poll.input
+    if not :paused [
+      march.if.due
+      check.shot
+      check.bombs
+      maybe.drop.bomb
+      maybe.launch.ufo
+      recycle.offscreen
+      recycle.ufo
+    ]
+    draw.hud
+    sync
+    if :dying [handle.death]
+    if :alive = 0 [make "over true]
+  ]
+  setrefresh "auto
+end

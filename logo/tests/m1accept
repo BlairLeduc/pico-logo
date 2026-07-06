@@ -30,7 +30,7 @@ to m1fanout
   tell [0 1 2 3]
   st
   each [seth who * 90]
-  repeat 4 [fd 25 wait 2]
+  repeat 4 [fd 25 wait 200]
 end
 
 ; Step 3: each + who differentiate turtles
@@ -50,7 +50,7 @@ to m1ask
   tell 0 st
   ask 2 [st seth 45]
   pr sentence [who before ask:] who
-  ask 2 [repeat 3 [fd 30 wait 3]]
+  ask 2 [repeat 3 [fd 30 wait 300]]
   pr sentence [who after ask:] who
 end
 
@@ -87,7 +87,7 @@ to m1stamp
   cs
   setsh 1 st pu
   fd 60
-  repeat 8 [stamp bk 60 rt 45 fd 60 wait 2]
+  repeat 8 [stamp bk 60 rt 45 fd 60 wait 200]
   ht
   pr [turtle hidden -- the stamps are part of the drawing]
 end
@@ -102,12 +102,12 @@ to m1rot
   setsh 1 st pu
   setrot "flip
   pr [flip: east then west -- diagonal should mirror]
-  seth 90 repeat 4 [fd 20 wait 3]
-  seth 270 repeat 8 [fd 20 wait 3]
+  seth 90 repeat 4 [fd 20 wait 300]
+  seth 270 repeat 8 [fd 20 wait 300]
   pu setpos [0 0]
   setrot "full
   pr [full: costume rotates with the heading]
-  repeat 12 [rt 30 fd 12 wait 3]
+  repeat 12 [rt 30 fd 12 wait 300]
   setrot "fixed
 end
 
@@ -120,10 +120,10 @@ to m1mag
   m1badge
   snapsh 1 16 16
   clean
-  wait 10
+  wait 1000
   tell [0 1] setmag 2
   pr [magnified x2]
-  wait 20
+  wait 2000
   setmag 1
   pr [back to normal]
   tell 0
@@ -134,7 +134,7 @@ to m1reset
   m1banner [Step 9: cs goes back to turtle 0]
   tell [0 1 2 3] st
   each [seth who * 90 fd 40]
-  wait 10
+  wait 1000
   cs
   pr sentence [who after cs, expect 0 --] who
   pr [PASS: only turtle 0 at home, turtles 1-3 hidden again]

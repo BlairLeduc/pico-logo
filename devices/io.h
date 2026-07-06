@@ -25,8 +25,8 @@ extern "C"
     // File prefix maximum length
     #define LOGO_PREFIX_MAX 64
 
-    // Default network timeout in tenths of a second (0 = no timeout)
-    #define LOGO_DEFAULT_NETWORK_TIMEOUT 100  // 10 seconds
+    // Default network timeout in milliseconds (0 = no timeout)
+    #define LOGO_DEFAULT_NETWORK_TIMEOUT 10000  // 10 seconds
 
     //
     // LogoIO manages the I/O state for the Logo interpreter
@@ -59,7 +59,7 @@ extern "C"
         // Current file prefix (for relative pathnames)
         char prefix[LOGO_PREFIX_MAX];
 
-        // Network timeout in tenths of a second (0 = no timeout)
+        // Network timeout in milliseconds (0 = no timeout)
         int network_timeout;
     } LogoIO;
 
@@ -143,10 +143,10 @@ extern "C"
     // Network timeout management
     //
 
-    // Set network timeout in tenths of a second (0 = no timeout)
-    void logo_io_set_timeout(LogoIO *io, int timeout_tenths);
+    // Set network timeout in milliseconds (0 = no timeout)
+    void logo_io_set_timeout(LogoIO *io, int timeout_ms);
 
-    // Get network timeout in tenths of a second
+    // Get network timeout in milliseconds
     int logo_io_get_timeout(const LogoIO *io);
 
     //
