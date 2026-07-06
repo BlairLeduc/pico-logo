@@ -41,10 +41,6 @@ to setup.shapes
   putsh 8 [0 0 24 24 24 24 24 24 24 24 24 24 24 24 0 0]
 end
 
-;==========================================================================
-; One-time setup and the attract/game-over screens
-;==========================================================================
-
 to invaders
   init.game
   forever [one.game]
@@ -60,9 +56,14 @@ to one.game
   make "lives 3
   make "level 1
   make "playing true
+  make "freqs [220 196 174 164]
   until [not :playing] [
     play.level
-    ifelse :lives < 1 [make "playing false] [make "level :level + 1]
+    ifelse :lives < 1 [
+      make "playing false
+    ] [
+      make "level :level + 1
+    ]
   ]
   show.game.over
 end
@@ -70,9 +71,9 @@ end
 to attract.screen
   textscreen
   ct
-  setcursor [10 10]
+  setcursor [12 10]
   print [SPACE INVADERS]
-  setcursor [6 14]
+  setcursor [10 14]
   print [PRESS SPACE TO PLAY]
   wait.for.space
 end
@@ -90,13 +91,9 @@ to show.game.over
   setcursor [13 10]
   print [GAME OVER]
   setcursor [10 12]
-  print se [FINAL SCORE:] :score
+  (print [FINAL SCORE:] :score)
   wait 2000
 end
-
-;==========================================================================
-; Per-level setup
-;==========================================================================
 
 to setup.level
   cs
@@ -133,23 +130,43 @@ to arm.demons
   when [(alien.bottom.y) < -55] [invasion]
 end
 
-;==========================================================================
-; The alien formation (canvas, stamped by turtle 6)
-;==========================================================================
+to alien.key :idx
+  output word "a :idx
+end
+
+to alien.alive? :idx
+  local "v
+  make "v gprop "aliens alien.key :idx
+  output :v = 1
+end
+
+to set.alien :idx :val
+  pprop "aliens (alien.key :idx) :val
+end
 
 to setup.aliens
   make "alien.rows 5
   make "alien.cols 11
-  make "colgap 14
-  make "rowgap 16
-  make "formx -70
+  ; Bitmap costumes render at 16x16
+  ; pixels regardless of the 8-column
+  ; putsh data format (see reference
+  ; "setmag": "shapes larger than 16 by
+  ; 16 always appear at normal size"
+  ; -- 16x16 is the native render size,
+  ; the user-facing 8-bit row is
+  ; doubled horizontally). A gap smaller
+  ; than 16 leaves adjacent aliens
+  ; touching or overlapping.
+  make "colgap 20
+  make "rowgap 20
+  make "formx -100
   make "formy 140
   make "formdir 1
   make "alive :alien.rows * :alien.cols
-  local "cells
-  make "cells []
-  repeat :alive [make "cells lput 1 :cells]
-  make "aliens :cells
+  local "i
+  make "i 1
+  repeat :alive [
+    set.alien :i 1 make "i :i + 1]
   draw.aliens
 end
 
@@ -177,7 +194,7 @@ to draw.aliens
   local "i
   make "i 1
   repeat :alien.rows * :alien.cols [
-    if (item :i :aliens) = 1 [stamp.alien :i]
+    if alien.alive? :i [stamp.alien :i]
     make "i :i + 1
   ]
 end
@@ -186,7 +203,8 @@ to stamp.alien :idx
   ask 6 [
     setsh :alien.frame
     setpc :alien.colour
-    setpos (list (alien.cell.x alien.col :idx) (alien.cell.y alien.row :idx))
+    setx alien.cell.x alien.col :idx
+    sety alien.cell.y alien.row :idx
     stamp
   ]
 end
@@ -195,27 +213,17 @@ to erase.alien.cell :idx
   ask 6 [
     setsh 3
     setpc :bg.colour
-    setpos (list (alien.cell.x alien.col :idx) (alien.cell.y alien.row :idx))
+    setx alien.cell.x alien.col :idx
+    sety alien.cell.y alien.row :idx
     stamp
   ]
 end
 
 to kill.alien :idx
-  make "aliens aliens.without :idx
+  set.alien :idx 0
   make "alive :alive - 1
   erase.alien.cell :idx
   make "score :score + 10
-end
-
-to aliens.without :idx
-  local "result local "i
-  make "result []
-  make "i 1
-  repeat :alien.rows * :alien.cols [
-    ifelse :i = :idx [make "result lput 0 :result] [make "result lput (item :i :aliens) :result]
-    make "i :i + 1
-  ]
-  output :result
 end
 
 to formation.left.col
@@ -223,7 +231,7 @@ to formation.left.col
   make "c 12
   make "i 1
   repeat :alien.rows * :alien.cols [
-    if (item :i :aliens) = 1 [if (alien.col :i) < :c [make "c alien.col :i]]
+    if alien.alive? :i [if (alien.col :i) < :c [make "c alien.col :i]]
     make "i :i + 1
   ]
   output :c
@@ -234,7 +242,7 @@ to formation.right.col
   make "c 0
   make "i 1
   repeat :alien.rows * :alien.cols [
-    if (item :i :aliens) = 1 [if (alien.col :i) > :c [make "c alien.col :i]]
+    if alien.alive? :i [if (alien.col :i) > :c [make "c alien.col :i]]
     make "i :i + 1
   ]
   output :c
@@ -244,7 +252,7 @@ to erase.all.aliens
   local "i
   make "i 1
   repeat :alien.rows * :alien.cols [
-    if (item :i :aliens) = 1 [erase.alien.cell :i]
+    if alien.alive? :i [erase.alien.cell :i]
     make "i :i + 1
   ]
 end
@@ -271,8 +279,6 @@ end
 
 to march.note
   make "march.note.idx remainder (:march.note.idx + 1) 4
-  local "freqs
-  make "freqs [220 196 174 164]
   toot 40 item (:march.note.idx + 1) :freqs
 end
 
@@ -286,6 +292,10 @@ to march.step
   draw.aliens
   toggle.alien.frame
   march.note
+  ; march.note's frequency table is a list literal, rebuilt fresh every
+  ; call, and this Logo has no automatic garbage collection -- reclaim
+  ; it here (once per march step) rather than never.
+  ;recycle
 end
 
 to march.if.due
@@ -296,19 +306,19 @@ to march.if.due
   ]
 end
 
-;==========================================================================
-; Shields (canvas, drawn once per level)
-;==========================================================================
-
 to draw.shield :cx :cy
   ask 6 [
-    pu setpos (list (:cx - 12) (:cy - 8)) setpc :shield.colour pd
-    setpos (list (:cx + 12) (:cy - 8))
-    setpos (list (:cx + 12) (:cy + 8))
-    setpos (list (:cx - 12) (:cy + 8))
-    setpos (list (:cx - 12) (:cy - 8))
-    fill
-    pu
+    pu setx :cx - 12 sety :cy - 8 setpc :shield.colour pd
+    setx :cx + 12
+    sety :cy + 8
+    setx :cx - 12
+    sety :cy - 8
+    ; fill refuses to paint when the turtle starts on a pixel that's
+    ; already the fill colour (its own boundary-detection check), and
+    ; the turtle is sitting right back on the outline it just drew --
+    ; move to the centre (pen up, so no stray line) before filling.
+    pu setx :cx sety :cy
+    pd fill pu
   ]
 end
 
@@ -320,12 +330,8 @@ to setup.shields
 end
 
 to erode :x :y
-  ask 6 [setsh 3 setpc :bg.colour setpos (list :x :y) stamp]
+  ask 6 [setsh 3 setpc :bg.colour setx :x sety :y stamp]
 end
-
-;==========================================================================
-; Cannon, shot, bombs, UFO
-;==========================================================================
 
 to move.cannon :dx
   local "nx
@@ -336,17 +342,12 @@ to move.cannon :dx
 end
 
 to shot.active?
-  make "result false
-  ask 1 [if shown? [make "result true]]
-  output :result
+  output ask 1 [shown?]
 end
 
 to fire
   if not shot.active? [
-    make "cx 0
-    make "cy 0
-    ask 0 [make "cx xcor  make "cy ycor + 10]
-    ask 1 [pu setpos (list :cx :cy) seth 0 st setspeed 90]
+    ask 1 [pu setx (ask 0 [xcor]) sety ((ask 0 [ycor]) + 10) seth 0 st setspeed 90]
   ]
 end
 
@@ -354,19 +355,25 @@ to check.shot
   ask 1 [
     if shown? [
       if over? :alien.colour [hit.alien]
-      if over? :shield.colour [erode xcor ycor  ht setspeed 0]
+      if over? :shield.colour [erode xcor ycor ht setspeed 0]
     ]
   ]
 end
 
 to locate.alien :x :y
+  ; Bitmap costumes are anchored at their bottom row, not their centre, so
+  ; the shot's rendered/sensed pixels and the alien's rendered pixels are
+  ; each offset from their own turtle position -- over? can fire for a
+  ; shot position several pixels away from the alien's nominal grid
+  ; coordinate. Tolerance is widened to comfortably cover that (still well
+  ; under half of a 20-unit colgap/rowgap, so it can't match a neighbour).
   local "i local "ax local "ay
   make "i 1
   repeat :alien.rows * :alien.cols [
-    if (item :i :aliens) = 1 [
+    if alien.alive? :i [
       make "ax alien.cell.x alien.col :i
       make "ay alien.cell.y alien.row :i
-      if and ((abs (:ax - :x)) < 7) ((abs (:ay - :y)) < 8) [output :i]
+      if and ((abs (:ax - :x)) < 10) ((abs (:ay - :y)) < 10) [output :i]
     ]
     make "i :i + 1
   ]
@@ -383,11 +390,10 @@ to hit.alien
 end
 
 to idle.bomb
-  make "found 0
-  ask 3 [if not shown? [make "found 3]]
-  if :found = 0 [ask 4 [if not shown? [make "found 4]]]
-  if :found = 0 [ask 5 [if not shown? [make "found 5]]]
-  output :found
+  if not (ask 3 [shown?]) [output 3]
+  if not (ask 4 [shown?]) [output 4]
+  if not (ask 5 [shown?]) [output 5]
+  output 0
 end
 
 to random.living.alien
@@ -397,7 +403,7 @@ to random.living.alien
   make "seen 0
   make "i 1
   repeat :alien.rows * :alien.cols [
-    if (item :i :aliens) = 1 [
+    if alien.alive? :i [
       make "seen :seen + 1
       if :seen = :target [output :i]
     ]
@@ -411,7 +417,8 @@ to launch.bomb :t
   make "idx random.living.alien
   if not (:idx = 0) [
     ask :t [
-      pu setpos (list (alien.cell.x alien.col :idx) (alien.cell.y alien.row :idx))
+      pu setx alien.cell.x alien.col :idx
+      sety alien.cell.y alien.row :idx
       seth 180 st setspeed 40
     ]
   ]
@@ -426,21 +433,19 @@ to maybe.drop.bomb
 end
 
 to check.bombs
-  ask 3 [if shown? [if over? :shield.colour [erode xcor ycor  ht setspeed 0]]]
-  ask 4 [if shown? [if over? :shield.colour [erode xcor ycor  ht setspeed 0]]]
-  ask 5 [if shown? [if over? :shield.colour [erode xcor ycor  ht setspeed 0]]]
+  ask 3 [if shown? [if over? :shield.colour [erode xcor ycor ht setspeed 0]]]
+  ask 4 [if shown? [if over? :shield.colour [erode xcor ycor ht setspeed 0]]]
+  ask 5 [if shown? [if over? :shield.colour [erode xcor ycor ht setspeed 0]]]
 end
 
 to maybe.launch.ufo
-  make "ufo.idle false
-  ask 2 [if not shown? [make "ufo.idle true]]
-  if :ufo.idle [
+  if not (ask 2 [shown?]) [
     if (random 600) < 1 [launch.ufo]
   ]
 end
 
 to launch.ufo
-  ask 2 [pu setpos (list -150 150) seth 90 st setanim 5 6 150 setspeed 50]
+  ask 2 [pu setx -150 sety 140 seth 90 st setanim 5 6 150 setspeed 50]
 end
 
 to recycle.ufo
@@ -453,10 +458,6 @@ to recycle.offscreen
   ask 4 [if shown? [if (ycor) < -155 [ht setspeed 0]]]
   ask 5 [if shown? [if (ycor) < -155 [ht setspeed 0]]]
 end
-
-;==========================================================================
-; Demon actions and death handling
-;==========================================================================
 
 to ufo.hit
   ask 2 [ht setspeed 0]
@@ -485,10 +486,6 @@ to handle.death
   ifelse :lives < 1 [make "over true] [thaw]
 end
 
-;==========================================================================
-; Input
-;==========================================================================
-
 to toggle.pause
   ifelse :paused [thaw make "paused false] [freeze make "paused true]
 end
@@ -503,22 +500,14 @@ to poll.input
   ]
 end
 
-;==========================================================================
-; HUD
-;==========================================================================
-
 to draw.hud
   setcursor [0 25]
-  print se [SCORE:] :score
+  (print [SCORE:] :score)
   setcursor [0 26]
-  print se [LIVES:] :lives
+  (print [LIVES:] :lives)
   setcursor [0 27]
-  print se [LEVEL:] :level
+  (print [LEVEL:] :level)
 end
-
-;==========================================================================
-; Main loop
-;==========================================================================
 
 to play.level
   setup.level
@@ -536,7 +525,13 @@ to play.level
       recycle.ufo
     ]
     draw.hud
+    ; TEMPORARY diagnostic: live refresh-cost readout, to confirm/rule out
+    ; blit cost (pushing dirty tiles to the LCD) as the source of the
+    ; march-time pause. Remove once diagnosed.
+    make "t0 ticks
     refresh
+    setcursor [0 28]
+    (print [refresh ms:] (ticks - :t0) [          ])
     wait 33
     if :dying [handle.death]
     if :alive = 0 [make "over true]

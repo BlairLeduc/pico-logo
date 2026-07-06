@@ -823,7 +823,8 @@ seth _degrees_
 
 ## setpos 
 
-setpos [_xcor_ _ycor_]  
+setpos [_xcor_ _ycor_]
+(setpos _xcor_ _ycor_)
 
 `command`
 
@@ -5758,6 +5759,28 @@ The `settimeout` command sets the timeout value for network operations to _integ
 
 ===
 # Time Management
+
+## ticks
+
+ticks
+
+`operation`
+
+`ticks` outputs the number of milliseconds since the device started, as a plain number. It's a monotonic clock — it never jumps backward and isn't affected by `settime`/`setdate` — so it's the right tool for timing an interval: read it before and after, and subtract. It wraps around after about 49.7 days of continuous uptime.
+
+> Logo numbers are single-precision floating point, which represents integers exactly only up to 16,777,216. After about 4.66 hours of uptime, `ticks` can no longer distinguish every individual millisecond — fine for timing anything from a game frame to a long wait, but not for measuring uptime itself to the millisecond after that long.
+
+**Example**:
+
+```logo
+?make "start ticks
+?repeat 100000 [pr "tick]
+...
+?pr (ticks - :start)
+842
+; that repeat took 842 milliseconds
+```
+
 
 ## date
 
