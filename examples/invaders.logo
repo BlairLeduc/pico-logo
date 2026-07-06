@@ -103,6 +103,9 @@ to setup.level
   make "march.counter 0
   make "alien.frame 1
   make "march.note.idx 0
+  ; TEMP diagnostics: last march.step cost and worst per-frame work (ms).
+  make "march.ms 0
+  make "work.max 0
   setup.turtles
   setup.aliens
   setup.shields
@@ -296,10 +299,12 @@ to march.interval
 end
 
 to march.step
+  make "march.t0 ticks
   erase.all.aliens
   step.formx
   draw.aliens
   toggle.alien.frame
+  make "march.ms (ticks) - :march.t0   ; TEMP diagnostic
   march.note
   ; march.note's frequency table is a list literal, rebuilt fresh every
   ; call, and this Logo has no automatic garbage collection -- reclaim
@@ -520,13 +525,21 @@ to draw.hud
   (print [LIVES:] :lives)
   setcursor [0 2]
   (print [LEVEL:] :level)
+  setcursor [0 3]
+  (print [MR:] :march.ms [WK:] :work.max)   ; TEMP diagnostic
 end
 
 to play.level
   setup.level
-  setrefresh "manual
+  ; sync mode paces the loop to a fixed 30 fps: sync (below) presents the
+  ; frame and waits for the next frame boundary, so the cadence stays even
+  ; regardless of how much work a frame did -- unlike refresh + a fixed
+  ; wait, whose period grew with a heavy frame (e.g. a march step) and made
+  ; motion jerk.
+  (setrefresh "sync 30)
   make "over false
   until [:over] [
+    make "frame.t0 ticks                       ; TEMP diagnostic
     poll.input
     if not :paused [
       march.if.due
@@ -538,8 +551,9 @@ to play.level
       recycle.ufo
     ]
     draw.hud
-    refresh
-    wait 33
+    make "wk (ticks) - :frame.t0               ; TEMP diagnostic: work this
+    if :wk > :work.max [make "work.max :wk]     ; frame, excluding sync's sleep
+    sync
     if :dying [handle.death]
     if :alive = 0 [make "over true]
   ]

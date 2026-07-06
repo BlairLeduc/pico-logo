@@ -10,6 +10,7 @@
 #include "error.h"
 #include "eval.h"
 #include "demons.h"
+#include "frame_sync.h"
 #include "limits.h"
 #include "devices/io.h"
 #include "devices/palette.h"
@@ -839,13 +840,15 @@ static Result prim_clearscreen(Evaluator *eval, int argc, Value *args)
     }
 
     // A full reset also restores the automatic refresh policy, so a program
-    // that left the screen in manual mode cannot leave it stale after cs.
+    // that left the screen in manual or sync mode cannot leave it stale (or
+    // the prompt paced) after cs.
     LogoIO *io = primitives_get_io();
     if (io && io->console && io->console->screen &&
         io->console->screen->set_refresh_auto)
     {
         io->console->screen->set_refresh_auto(true);
     }
+    frame_sync_reset();
 
     return result_none();
 }

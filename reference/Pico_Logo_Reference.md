@@ -307,7 +307,7 @@ to poly :step :angle
 end 
 ```
 
-Whatever inputs you choose—for example, `50` and `90`—are put into the specified containers. The first input is always put in the container `step`; the second input is always put in the container `angle`. The first input variable, `step`, controls the size of the figure. The second input variable, `angle`, controls the shape of the figure. `poly 50 90` makes the turtle draw a square; `poly 50 144` makes the turtle draw a pentagram; `poly 50 120` makes the turtle draw a triangle. 
+Whatever inputs you choose-for example, `50` and `90`-are put into the specified containers. The first input is always put in the container `step`; the second input is always put in the container `angle`. The first input variable, `step`, controls the size of the figure. The second input variable, `angle`, controls the shape of the figure. `poly 50 90` makes the turtle draw a square; `poly 50 144` makes the turtle draw a pentagram; `poly 50 120` makes the turtle draw a triangle. 
 
 If the input containers already have objects in them when the procedure is run, the objects are removed but are saved. They are restored when the procedure is done. In other words, the procedure _borrows_ the container and leaves it in its original condition when done with it. This is what is meant by saying that a variable is _local_ to the procedure within which it occurs. 
 
@@ -375,8 +375,8 @@ Pico Logo does not support the `if predicate list1 list2` form. Use `(if predica
 # Supported Pico Boards
 
 Pico Logo runs on three RP2350-based boards. The interpreter and its limits are
-identical on every board; what differs is networking — which needs a wireless
-radio — and storage capacity, which depends on the flash and PSRAM fitted.
+identical on every board; what differs is networking - which needs a wireless
+radio - and storage capacity, which depends on the flash and PSRAM fitted.
 
 **Shared by every board** (the RP2350 processor):
 
@@ -385,13 +385,13 @@ radio — and storage capacity, which depends on the flash and PSRAM fitted.
 - 8192 characters in the copy buffer
 - Hardware floating-point operations
 
-**Raspberry Pi Pico 2** — 4 MB flash, no radio.
+**Raspberry Pi Pico 2** - 4 MB flash, no radio.
 
 - 192 levels of recursion
 - 2 MB internal filesystem
 - No networking
 
-**Raspberry Pi Pico 2 W** — 4 MB flash, WiFi, no PSRAM.
+**Raspberry Pi Pico 2 W** - 4 MB flash, WiFi, no PSRAM.
 
 - 128 levels of recursion
 - 2 MB internal filesystem
@@ -399,7 +399,7 @@ radio — and storage capacity, which depends on the flash and PSRAM fitted.
 - `http.get` and `http.post` over `http://` only; `https://` is not available, so `tls?` outputs `false`
 - HTTP responses are limited to about 2 KB (there is no PSRAM to hold a larger body)
 
-**Pimoroni Pico Plus 2 W** — 16 MB flash, 8 MB PSRAM, WiFi.
+**Pimoroni Pico Plus 2 W** - 16 MB flash, 8 MB PSRAM, WiFi.
 
 - 128 levels of recursion
 - 8 MB internal filesystem
@@ -846,7 +846,7 @@ setsh _shapenumber_
 
 `command`
 
-Stands for `set sh`ape. Sets the shape of each turtle you are talking to. _shapenumber_ 0 is the line-drawn turtle; slots 1 to 15 hold shapes you define — either a bitmap from [`putsh`](#putsh) or a full-colour picture captured with [`snapsh`](#snapsh); `setsh` wears whichever the slot holds. Shapes 1 through 15 are blank when Logo starts.
+Stands for `set sh`ape. Sets the shape of each turtle you are talking to. _shapenumber_ 0 is the line-drawn turtle; slots 1 to 15 hold shapes you define - either a bitmap from [`putsh`](#putsh) or a full-colour picture captured with [`snapsh`](#snapsh); `setsh` wears whichever the slot holds. Shapes 1 through 15 are blank when Logo starts.
 
 **Example**:
 
@@ -1452,7 +1452,7 @@ setmag _magnification_
 
 `command`
 
-Stands for `set mag`nification. `setmag 2` draws the turtle you are talking to at double size; `setmag 1` returns it to normal. Magnification applies to the turtle's appearance on screen — the line-drawn turtle, bitmap shapes, and captured colour shapes alike — and to [`stamp`](#stamp). It does not change how far the turtle moves. The drawn turtle is limited to 32 by 32 pixels, so shapes larger than 16 by 16 always appear at normal size.
+Stands for `set mag`nification. `setmag 2` draws the turtle you are talking to at double size; `setmag 1` returns it to normal. Magnification applies to the turtle's appearance on screen - the line-drawn turtle, bitmap shapes, and captured colour shapes alike - and to [`stamp`](#stamp). It does not change how far the turtle moves. The drawn turtle is limited to 32 by 32 pixels, so shapes larger than 16 by 16 always appear at normal size.
 
 **Example**:
 
@@ -1469,9 +1469,9 @@ setrot _style_
 
 Stands for `set rot`ation style. Chooses how the turtle's shape follows its heading. The _style_ is one of three words:
 
-- `"fixed` — the shape never rotates (how shapes behaved on period machines; the default).
-- `"full` — the shape rotates smoothly to point along the heading.
-- `"flip` — the shape mirrors left or right depending on which way the turtle faces; most game characters are drawn side-on, and this makes them walk both directions with one picture.
+- `"fixed` - the shape never rotates (how shapes behaved on period machines; the default).
+- `"full` - the shape rotates smoothly to point along the heading.
+- `"flip` - the shape mirrors left or right depending on which way the turtle faces; most game characters are drawn side-on, and this makes them walk both directions with one picture.
 
 The rotation style applies to bitmap and captured colour shapes; shape 0, the line-drawn turtle, always rotates. Shapes larger than about 22 pixels may lose their corners at diagonal headings with `"full`, since the drawn turtle is limited to 32 by 32 pixels.
 
@@ -1490,7 +1490,7 @@ snapsh _shapenumber_ _width_ _height_
 
 `command`
 
-Stands for `snap sh`ape. `snapsh` captures the rectangle of the graphics screen centred on the turtle — _width_ by _height_ pixels, each from 8 to 32 — and stores it as a full-colour shape in slot _shapenumber_ (1 to 15). Background pixels become transparent, so the captured image keeps its outline when worn as a shape or placed with [`stamp`](#stamp). Draw a picture with the pen you already know, pick it up with `snapsh`, and wear it with [`setsh`](#setsh).
+Stands for `snap sh`ape. `snapsh` captures the rectangle of the graphics screen centred on the turtle - _width_ by _height_ pixels, each from 8 to 32 - and stores it as a full-colour shape in slot _shapenumber_ (1 to 15). Background pixels become transparent, so the captured image keeps its outline when worn as a shape or placed with [`stamp`](#stamp). Draw a picture with the pen you already know, pick it up with `snapsh`, and wear it with [`setsh`](#setsh).
 
 A full-colour shape replaces the slot's [`putsh`](#putsh) bitmap on screen until you define a new bitmap with `putsh`, which removes the captured image. When you are talking to several turtles, `snapsh` captures around the lowest-numbered one. Colour shapes are stored in a fixed memory pool; if the pool is full, Logo says it is out of space.
 
@@ -1510,7 +1510,7 @@ stamp
 
 `command`
 
-`stamp` copies the turtle's current shape into the picture at the turtle's position, exactly as it appears on screen. The turtle does not move, and the stamped image becomes part of the drawing — it stays when the turtle walks away, and [`savepic`](#savepic) saves it. Use it for scenery, repeated decorations, or particle trails. Each turtle you are talking to stamps its own shape.
+`stamp` copies the turtle's current shape into the picture at the turtle's position, exactly as it appears on screen. The turtle does not move, and the stamped image becomes part of the drawing - it stays when the turtle walks away, and [`savepic`](#savepic) saves it. Use it for scenery, repeated decorations, or particle trails. Each turtle you are talking to stamps its own shape.
 
 **Example**:
 
@@ -1529,7 +1529,7 @@ tell _turtlenumberlist_
 
 Pico Logo has eight turtles, numbered 0 to 7. `tell` chooses which of them your commands talk to. After `tell 3`, turtle commands such as `fd` and `rt` move turtle 3; after `tell [0 1 2]`, each command applies to turtles 0, 1, and 2 in that order. Operations such as `pos` and `heading` answer for the lowest-numbered turtle you are talking to. Duplicate numbers are ignored, and a number outside 0 to 7 causes an error.
 
-When Logo starts, and after [`clearscreen`](#clearscreen-cs), you are talking to turtle 0 only — programs written for one turtle work unchanged. Turtles 1 to 7 start hidden at the home position; use [`showturtle`](#showturtle-st) to reveal them. When turtles overlap on the screen, the lower-numbered turtle appears on top.
+When Logo starts, and after [`clearscreen`](#clearscreen-cs), you are talking to turtle 0 only - programs written for one turtle work unchanged. Turtles 1 to 7 start hidden at the home position; use [`showturtle`](#showturtle-st) to reveal them. When turtles overlap on the screen, the lower-numbered turtle appears on top.
 
 Because `tell` accepts a list, you can name a group with a variable: `make "flock [1 2 3]` then `tell :flock`.
 
@@ -1552,7 +1552,7 @@ ask _turtlenumberlist_ _commandlist_
 
 `command` or `operation`
 
-`ask` runs _commandlist_ with your commands temporarily redirected to the named turtle or turtles, then goes back to talking to the turtles you had before — even if the list stops with an error. It is the quick way to give one turtle an instruction without changing who you are talking to. Like [`run`](#run), if _commandlist_ is an operation, `ask` outputs whatever it outputs — handy for reading one turtle's state (`ask 2 [xcor]`) without changing who you are talking to.
+`ask` runs _commandlist_ with your commands temporarily redirected to the named turtle or turtles, then goes back to talking to the turtles you had before - even if the list stops with an error. It is the quick way to give one turtle an instruction without changing who you are talking to. Like [`run`](#run), if _commandlist_ is an operation, `ask` outputs whatever it outputs - handy for reading one turtle's state (`ask 2 [xcor]`) without changing who you are talking to.
 
 **Example**:
 
@@ -1607,7 +1607,7 @@ touching? _turtlenumber_ _turtlenumber_
 
 `operation`
 
-`touching?` outputs `true` when the two named turtles overlap on the screen and `false` otherwise. The test is exact to the pixel: it compares the turtles' rendered shapes — including any rotation and magnification — not just the squares that hold them, so two turtles report a touch only when their actual glyphs meet. Both turtles must be shown; a hidden turtle never touches anything. In [`wrap`](#wrap) mode a turtle that straddles an edge is tested on both sides, so contact across the screen edge counts.
+`touching?` outputs `true` when the two named turtles overlap on the screen and `false` otherwise. The test is exact to the pixel: it compares the turtles' rendered shapes - including any rotation and magnification - not just the squares that hold them, so two turtles report a touch only when their actual glyphs meet. Both turtles must be shown; a hidden turtle never touches anything. In [`wrap`](#wrap) mode a turtle that straddles an edge is tested on both sides, so contact across the screen edge counts.
 
 **Example**:
 
@@ -1625,7 +1625,7 @@ over? _colour_
 
 `operation`
 
-`over?` outputs `true` when any part of the turtle's shape lies over a canvas pixel drawn in palette slot _colour_, and `false` otherwise. It senses the drawing — lines, dots, fills and [`stamp`](#stamp) marks — not other turtles, which are never part of the canvas. When you are talking to more than one turtle, `over?` answers for the lowest-numbered one; address a specific turtle with [`ask`](#ask). Unlike [`touching?`](#touching-touchingp), `over?` reports for a hidden turtle too.
+`over?` outputs `true` when any part of the turtle's shape lies over a canvas pixel drawn in palette slot _colour_, and `false` otherwise. It senses the drawing - lines, dots, fills and [`stamp`](#stamp) marks - not other turtles, which are never part of the canvas. When you are talking to more than one turtle, `over?` answers for the lowest-numbered one; address a specific turtle with [`ask`](#ask). Unlike [`touching?`](#touching-touchingp), `over?` reports for a hidden turtle too.
 
 **Example**:
 
@@ -1676,7 +1676,7 @@ setspeed _speed_
 
 `command`
 
-`setspeed` sets how fast each turtle you are talking to moves on its own, in turtle steps per second. Once a turtle has a speed it glides forward along its heading all by itself — drawing with its pen and obeying [`wrap`](#wrap), [`window`](#window) and [`fence`](#fence) exactly as [`forward`](#forward-fd) would — while your program does other things or waits at the prompt. A speed of 0 stops the turtle. Autonomous motion is paused by [`freeze`](#freeze) and cleared by [`clearscreen`](#clearscreen-cs).
+`setspeed` sets how fast each turtle you are talking to moves on its own, in turtle steps per second. Once a turtle has a speed it glides forward along its heading all by itself - drawing with its pen and obeying [`wrap`](#wrap), [`window`](#window) and [`fence`](#fence) exactly as [`forward`](#forward-fd) would - while your program does other things or waits at the prompt. A speed of 0 stops the turtle. Autonomous motion is paused by [`freeze`](#freeze) and cleared by [`clearscreen`](#clearscreen-cs).
 
 **Example**:
 
@@ -1725,7 +1725,7 @@ when _condition_ _action_
 
 `command`
 
-`when` arms a _demon_: a rule that runs _action_ the moment _condition_ becomes true. _condition_ and _action_ are both instruction lists. The condition is checked continually — while your program runs and while you type at the prompt — and its _action_ fires once each time the condition changes from false to true (so a collision fires once on contact, not over and over while the turtles stay touching). Give the same _condition_ an empty _action_ list to disarm that demon; the bare form `(when)` prints the demons currently armed. Up to eight demons can be armed at once. Demons are paused by [`freeze`](#freeze), resumed by [`thaw`](#thaw), and all cleared by [`clearscreen`](#clearscreen-cs) or when a program stops with an error.
+`when` arms a _demon_: a rule that runs _action_ the moment _condition_ becomes true. _condition_ and _action_ are both instruction lists. The condition is checked continually - while your program runs and while you type at the prompt - and its _action_ fires once each time the condition changes from false to true (so a collision fires once on contact, not over and over while the turtles stay touching). Give the same _condition_ an empty _action_ list to disarm that demon; the bare form `(when)` prints the demons currently armed. Up to eight demons can be armed at once. Demons are paused by [`freeze`](#freeze), resumed by [`thaw`](#thaw), and all cleared by [`clearscreen`](#clearscreen-cs) or when a program stops with an error.
 
 **Example**:
 
@@ -1843,7 +1843,7 @@ refresh
 
 `command`
 
-`refresh` presents any pending graphics drawing on the display immediately. Use it in manual refresh mode (see [setrefresh](#setrefresh)) to control exactly when each frame appears — for example, once per pass around a game loop, after all the drawing for that frame is done.
+`refresh` presents any pending graphics drawing on the display immediately. Use it in manual refresh mode (see [setrefresh](#setrefresh)) to control exactly when each frame appears - for example, once per pass around a game loop, after all the drawing for that frame is done.
 
 `refresh` works in either refresh mode and does not change the mode. In automatic mode it is rarely needed, since drawing is presented as it happens.
 
@@ -1862,7 +1862,7 @@ refreshmode
 
 `operation`
 
-`refreshmode` outputs the word `auto` or `manual`, naming the current display refresh policy (see [setrefresh](#setrefresh)).
+`refreshmode` outputs the word `auto`, `manual` or `sync`, naming the current display refresh policy (see [setrefresh](#setrefresh)).
 
 **Example**:
 
@@ -1893,14 +1893,18 @@ setcursor [_columnnumber_ _linenumber_]
 
 setrefresh "auto  
 setrefresh "manual  
+setrefresh "sync  
+(setrefresh "sync _rate_)  
 
 `command`
 
 `setrefresh` selects how graphics drawing reaches the display.
 
-In `auto` mode (the default), Logo presents drawing on the display as it happens. In `manual` mode, drawing accumulates off-screen and nothing appears until you say [refresh](#refresh) — useful for building a complex picture that should appear all at once, or for pacing the frames of a game or animation yourself.
+In `auto` mode (the default), Logo presents drawing on the display as it happens. In `manual` mode, drawing accumulates off-screen and nothing appears until you say [refresh](#refresh) - useful for building a complex picture that should appear all at once, or for pacing the frames of a game or animation yourself.
 
-So that a program cannot leave the screen out of date at the prompt, Logo restores `auto` mode when an error stops your program, when it runs `throw "toplevel`, or when you clear the screen with `cs`.
+`sync` mode is `manual` with an even cadence built in for games and animation. Drawing still accumulates off-screen, but each pass of your loop ends with [sync](#sync) instead of `refresh`: `sync` presents the frame and then waits until the next frame boundary, so the loop runs at a steady _rate_ (frames per second) no matter how much work any one frame did. Without a _rate_ the default is 30; supply your own with the parenthesised form, for example `(setrefresh "sync 25)`. Pacing to a fixed boundary - rather than sleeping a fixed amount after each frame with [wait](#wait) - is what keeps motion smooth, the way a game locked to the television's vertical blank did.
+
+So that a program cannot leave the screen out of date (or the prompt paced) after it stops, Logo restores `auto` mode when an error stops your program, when it runs `throw "toplevel`, or when you clear the screen with `cs`.
 
 **Example**:
 
@@ -1909,6 +1913,35 @@ So that a program cannot leave the screen out of date at the prompt, Logo restor
 ?setrefresh "manual
 ?repeat 36 [repeat 8 [fd 40 rt 45] rt 10]
 ?refresh
+?setrefresh "auto
+
+; Run a game loop at a steady 30 frames per second
+?setrefresh "sync
+?until [key?] [update.world  draw.world  sync]
+?setrefresh "auto
+```
+
+
+## sync
+
+sync  
+
+`command`
+
+`sync` presents any pending graphics drawing on the display (exactly like [refresh](#refresh)) and then, in `sync` refresh mode, waits until the next frame boundary so your loop keeps the steady rate set with [setrefresh](#setrefresh) `"sync`. Call it once per pass around a game or animation loop, after all the drawing for that frame is done.
+
+Because `sync` waits for a boundary measured from a fixed cadence - not for a fixed delay after variable work, as [wait](#wait) would - the loop advances at an even rate even when some frames do more work than others, so motion stays smooth. If a frame overruns its budget `sync` does not wait and does not try to catch up; the loop simply runs late from there.
+
+Outside `sync` mode (or on a device with no clock) `sync` just presents the frame and returns at once, so it is a safe drop-in for [refresh](#refresh).
+
+**Example**:
+
+```logo
+?setrefresh "sync           ; 30 frames per second
+?until [key?] [
+?  ask 0 [fd 3]
+?  sync
+?]
 ?setrefresh "auto
 ```
 
@@ -2043,7 +2076,7 @@ Hello
 
 `command`
 
-`.setfirst` destructively replaces the first member of _list_ with _value_, changing the list in place instead of returning a new one. _List_ must be a non-empty list. Because lists share structure — [`butfirst`](#butfirst-bf) returns the tail of a list without copying it — a cursor obtained with `butfirst` refers to the same cells as the original, and `.setfirst` through that cursor is visible in the original. This makes it possible to update one element of a long list without allocating a new list; unlike [`replace`](#replace), which builds and returns a fresh list, `.setfirst` outputs nothing.
+`.setfirst` destructively replaces the first member of _list_ with _value_, changing the list in place instead of returning a new one. _List_ must be a non-empty list. Because lists share structure - [`butfirst`](#butfirst-bf) returns the tail of a list without copying it - a cursor obtained with `butfirst` refers to the same cells as the original, and `.setfirst` through that cursor is visible in the original. This makes it possible to update one element of a long list without allocating a new list; unlike [`replace`](#replace), which builds and returns a fresh list, `.setfirst` outputs nothing.
 
 The leading dot marks `.setfirst` as dangerous: overwriting a cell that other structure depends on, or using it to build a circular list, corrupts those references. Prefer [`replace`](#replace) unless you specifically need in-place mutation.
 
@@ -2090,7 +2123,7 @@ The leading dot marks `.setbf` as dangerous: pointing the tail back into the sam
 
 `command`
 
-`.setitem` destructively replaces the member of _list_ at position _integer_ (counting from 1) with _value_, in place — the same result as walking to that member with [`butfirst`](#butfirst-bf) and applying [`.setfirst`](#setfirst), but the walk is done for you. An error occurs if _integer_ is less than 1 or greater than the length of _list_. Unlike [`replace`](#replace), which returns a fresh list, `.setitem` outputs nothing and allocates nothing, so it can update one member of a long list cheaply.
+`.setitem` destructively replaces the member of _list_ at position _integer_ (counting from 1) with _value_, in place - the same result as walking to that member with [`butfirst`](#butfirst-bf) and applying [`.setfirst`](#setfirst), but the walk is done for you. An error occurs if _integer_ is less than 1 or greater than the length of _list_. Unlike [`replace`](#replace), which returns a fresh list, `.setitem` outputs nothing and allocates nothing, so it can update one member of a long list cheaply.
 
 The leading dot marks `.setitem` as dangerous for the same reason as the other in-place setters: it overwrites a shared cell.
 
@@ -3318,7 +3351,7 @@ stop
 
 `command`
 
-The `stop` command stops the procedure that is running and returns control to the caller. This command is meaningful only when it is within a procedure—not at top level. Note that a procedure containing `stop` is a command. Compare `stop` with [`output`](#output-op).
+The `stop` command stops the procedure that is running and returns control to the caller. This command is meaningful only when it is within a procedure-not at top level. Note that a procedure containing `stop` is a command. Compare `stop` with [`output`](#output-op).
 
 **Example**:
 
@@ -4373,7 +4406,7 @@ keyp
 
 `operation`
 
-`key?` outputs `true` if there is at least one character waiting to be read—that is, one that has been typed on the keyboard and not yet picked up by [`readchar`](#readchar-rc) or [`readlist`](#readlist-rl). `key?` outputs `false` if there are no such characters.
+`key?` outputs `true` if there is at least one character waiting to be read-that is, one that has been typed on the keyboard and not yet picked up by [`readchar`](#readchar-rc) or [`readlist`](#readlist-rl). `key?` outputs `false` if there are no such characters.
 
 **Example**:
 
@@ -4624,7 +4657,7 @@ nodes
 
 `nodes` outputs the number of free nodes. This gives you an idea of how much space you have in your workspace for procedures, variables, properties, and the running of procedures. `nodes` is most useful if run immediately after [`recycle`](#recycle).
 
-Note that the space used to store words is permanent: every distinct word Logo encounters — including each character extracted with `first` or `item`, each number turned into a word, and each intermediate result of building words with `word` — is remembered for the rest of the session and is not returned by `recycle`. A program that builds many different words will see `nodes` gradually decline and eventually run out of word space. Lists, on the other hand, are fully reclaimed by `recycle` once nothing refers to them.
+Note that the space used to store words is permanent: every distinct word Logo encounters - including each character extracted with `first` or `item`, each number turned into a word, and each intermediate result of building words with `word` - is remembered for the rest of the session and is not returned by `recycle`. A program that builds many different words will see `nodes` gradually decline and eventually run out of word space. Lists, on the other hand, are fully reclaimed by `recycle` once nothing refers to them.
 
 **Example**:
 
@@ -5024,8 +5057,8 @@ make "ticket "snow\ route
 
 Pico Logo presents a single directory tree with two filesystems mounted in it:
 
-- **`/`** — the root is the device's internal flash storage. It is always present and is where files are saved by default (the default prefix is `/`). Your `startup` file lives here as `/startup`.
-- **`/sd`** — the FAT32 SD card, mounted under `/sd`. It appears in a listing of `/` only while a card is inserted, and is re-read automatically when a card is removed and another inserted. Asking about `/sd` with no card present reports `There is no SD card`.
+- **`/`** - the root is the device's internal flash storage. It is always present and is where files are saved by default (the default prefix is `/`). Your `startup` file lives here as `/startup`.
+- **`/sd`** - the FAT32 SD card, mounted under `/sd`. It appears in a listing of `/` only while a card is inserted, and is re-read automatically when a card is removed and another inserted. Asking about `/sd` with no card present reports `There is no SD card`.
 
 Paths may be absolute (beginning with `/`) or relative to the current prefix (see [`setprefix`](#setprefix)). [`rename`](#rename) moves a **file** between the two filesystems by copying it and deleting the original, while [`copyfile`](#copyfile) leaves the original in place. Both work on **files** only; moving or copying a **directory** across filesystems is not supported and reports `File is the wrong type`. Both are binary-safe, so images and other binary files are copied without corruption.
 
@@ -5222,7 +5255,7 @@ free
 
 `operation`
 
-Outputs a two-element list `[free_blocks block_size]` describing the filesystem that holds the current directory, or — if _pathname_ is given — the filesystem that holds _pathname_. `free_blocks` is the number of free allocation blocks; `block_size` is the size of one block in bytes. A block is the filesystem's own allocation unit (a flash block on the internal `/` filesystem, a cluster on the `/sd` card), so block sizes differ between volumes — multiply the two to get free bytes and compare across volumes.
+Outputs a two-element list `[free_blocks block_size]` describing the filesystem that holds the current directory, or - if _pathname_ is given - the filesystem that holds _pathname_. `free_blocks` is the number of free allocation blocks; `block_size` is the size of one block in bytes. A block is the filesystem's own allocation unit (a flash block on the internal `/` filesystem, a cluster on the `/sd` card), so block sizes differ between volumes - multiply the two to get free bytes and compare across volumes.
 
 Reports `There is no SD card` if asked about `/sd` when no card is present.
 
@@ -5335,7 +5368,7 @@ true
 
 `command`
 
-**Dangerous.** Erases the entire internal filesystem (`/`) and replaces it with the image stored in _pathname_ (which must be on the SD card). Every file currently in internal storage is lost. The leading period marks `.restore` as a dangerous operation, following Logo convention — there is no undo. All open files are closed before the restore begins.
+**Dangerous.** Erases the entire internal filesystem (`/`) and replaces it with the image stored in _pathname_ (which must be on the SD card). Every file currently in internal storage is lost. The leading period marks `.restore` as a dangerous operation, following Logo convention - there is no undo. All open files are closed before the restore begins.
 
 The image may come from a device with a smaller internal filesystem than this one; the restored filesystem is grown to fill the available space. An image from a *larger* filesystem cannot be restored onto a smaller one and reports `Backup file is not valid for this device`. The image is fully checked before any storage is erased, so a corrupt or incompatible backup leaves the existing filesystem untouched.
 
@@ -5833,9 +5866,9 @@ ticks
 
 `operation`
 
-`ticks` outputs the number of milliseconds since the device started, as a plain number. It's a monotonic clock — it never jumps backward and isn't affected by `settime`/`setdate` — so it's the right tool for timing an interval: read it before and after, and subtract. It wraps around after about 49.7 days of continuous uptime.
+`ticks` outputs the number of milliseconds since the device started, as a plain number. It's a monotonic clock - it never jumps backward and isn't affected by `settime`/`setdate` - so it's the right tool for timing an interval: read it before and after, and subtract. It wraps around after about 49.7 days of continuous uptime.
 
-> Logo numbers are single-precision floating point, which represents integers exactly only up to 16,777,216. After about 4.66 hours of uptime, `ticks` can no longer distinguish every individual millisecond — fine for timing anything from a game frame to a long wait, but not for measuring uptime itself to the millisecond after that long.
+> Logo numbers are single-precision floating point, which represents integers exactly only up to 16,777,216. After about 4.66 hours of uptime, `ticks` can no longer distinguish every individual millisecond - fine for timing anything from a game frame to a long wait, but not for measuring uptime itself to the millisecond after that long.
 
 **Example**:
 
@@ -6433,7 +6466,7 @@ See [`pprop`](#pprop) and [`gprop`](#gprop).
 ===
 # JSON
 
-A JSON document is held as text — typically the word returned by [`http.get`](#http.get). `json.get` reads values straight out of that text, so even a large response (which is kept in PSRAM) can be queried without copying the whole document into the workspace.
+A JSON document is held as text - typically the word returned by [`http.get`](#http.get). `json.get` reads values straight out of that text, so even a large response (which is kept in PSRAM) can be queried without copying the whole document into the workspace.
 
 ## json.get
 
@@ -6466,7 +6499,7 @@ json.count _value_
 
 `operation`
 
-`json.count` outputs the number of elements in a JSON array, or the number of members in a JSON object, where _value_ is a word containing that JSON text. A scalar value outputs `0`, and the empty list — the result of [`json.get`](#json.get) for a missing path or JSON `null` — also outputs `0`, so `json.count json.get ...` can be used directly as a loop bound.
+`json.count` outputs the number of elements in a JSON array, or the number of members in a JSON object, where _value_ is a word containing that JSON text. A scalar value outputs `0`, and the empty list - the result of [`json.get`](#json.get) for a missing path or JSON `null` - also outputs `0`, so `json.count json.get ...` can be used directly as a loop bound.
 
 **Example**:
 
@@ -6826,19 +6859,19 @@ The parser tries to be clever about this potential ambiguity and figure out whic
   - `print sum 20-20` (parses as 20 minus 20)
   - `print 3*-4` (parses as 3 times negative 4) 
   - `print (3+4)-5` (parses as 3 plus 4 minus 5) 
-  - `first [-3 4]` (outputs —3) 
+  - `first [-3 4]` (outputs -3) 
 2. If the ”`-`” immediately precedes a word or left parenthesis ”`(`”, and follows any delimiter except right parenthesis, it is parsed as the unary minus procedure:
   - `setpos list :x -:y`
   - `setpos list ycor -xcor`
-3. In all other cases, ”`-`” is parsed like the other infix characters—as a procedure with two inputs: 
+3. In all other cases, ”`-`” is parsed like the other infix characters-as a procedure with two inputs: 
   - `print 3-4` (parses as 3 minus 4)
   - `print 3 - 4` (parses exactly like the previous example) 
   - `print - 3 4` (procedurally the same as the previous example) 
 
 The right-parenthesis exception in rules 1 and 2 applies only when the ”`)`” is directly adjacent to the ”`-`” with no space between them. Once whitespace separates them, the space itself counts as the delimiter, so what follows the ”`-`” decides:
 
-  - `print (5+3)-2` (parses as 8 minus 2 — the ”`-`” touches the ”`)`”)
-  - `print (5+3) -2` (parses as the two values 8 and -2 — the space before ”`-`” and the digit touching it make -2 a negative number)
+  - `print (5+3)-2` (parses as 8 minus 2 - the ”`-`” touches the ”`)`”)
+  - `print (5+3) -2` (parses as the two values 8 and -2 - the space before ”`-`” and the digit touching it make -2 a negative number)
 
 This whitespace-sensitive reading matches established Logo convention: `-` glued to what follows it (but not to what precedes it) is negative or unary, while `-` surrounded by values on both sides is subtraction.
 

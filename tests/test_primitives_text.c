@@ -525,6 +525,60 @@ void test_cs_restores_auto_refresh(void)
     TEST_ASSERT_TRUE(state->refresh_auto);
 }
 
+void test_setrefresh_sync_reports_sync_and_accumulates(void)
+{
+    const MockDeviceState *state = mock_device_get_state();
+
+    run_string("setrefresh \"sync");
+    // Sync accumulates drawing like manual mode...
+    TEST_ASSERT_FALSE(state->refresh_auto);
+    // ...but reports itself as its own mode.
+    Result r = eval_string("refreshmode");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("sync", value_to_string(r.value));
+}
+
+void test_setrefresh_sync_accepts_rate(void)
+{
+    Result r = run_string("(setrefresh \"sync 25)");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("sync", value_to_string(eval_string("refreshmode").value));
+}
+
+void test_setrefresh_sync_rejects_bad_rate(void)
+{
+    Result r = run_string("(setrefresh \"sync 0)");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_sync_presents_frame(void)
+{
+    const MockDeviceState *state = mock_device_get_state();
+
+    run_string("(setrefresh \"sync 30)");
+    int before = state->refresh_now_count;
+    run_string("sync");
+    // sync presents like refresh (the mock clock does not advance, so the
+    // pacing sleep is a no-op here).
+    TEST_ASSERT_EQUAL(before + 1, state->refresh_now_count);
+}
+
+void test_setrefresh_auto_leaves_sync_mode(void)
+{
+    run_string("(setrefresh \"sync 30)");
+    run_string("setrefresh \"auto");
+    TEST_ASSERT_EQUAL_STRING("auto", value_to_string(eval_string("refreshmode").value));
+}
+
+void test_cs_restores_from_sync(void)
+{
+    run_string("(setrefresh \"sync 30)");
+    run_string("cs");
+    Result r = eval_string("refreshmode");
+    TEST_ASSERT_EQUAL_STRING("auto", value_to_string(r.value));
+}
+
 // ============================================================================
 // Main
 // ============================================================================
@@ -600,6 +654,12 @@ int main(void)
     RUN_TEST(test_refresh_presents_now);
     RUN_TEST(test_refresh_does_not_change_mode);
     RUN_TEST(test_cs_restores_auto_refresh);
+    RUN_TEST(test_setrefresh_sync_reports_sync_and_accumulates);
+    RUN_TEST(test_setrefresh_sync_accepts_rate);
+    RUN_TEST(test_setrefresh_sync_rejects_bad_rate);
+    RUN_TEST(test_sync_presents_frame);
+    RUN_TEST(test_setrefresh_auto_leaves_sync_mode);
+    RUN_TEST(test_cs_restores_from_sync);
 
     return UNITY_END();
 }

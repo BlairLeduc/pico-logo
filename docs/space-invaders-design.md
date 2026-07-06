@@ -91,9 +91,8 @@ make "formdir 1      ; +1 marching right, -1 left
   *rendered* sprite size, not the `putsh` data format, is what board
   layout has to be sized against.
 - **Marching** is discrete, driven by a frame counter rather than
-  wall-clock time (`march.if.due`/`march.interval`, paced by the main
-  loop's `wait 33` — there's no millisecond-resolution clock primitive
-  to drive it directly), a few times per second — the classic
+  wall-clock time (`march.if.due`/`march.interval`, counted in frames of
+  the main loop's fixed `sync` cadence), a few times per second — the classic
   "step, step, step" cadence, not smooth glide. Each step
   (`march.step`):
   1. erase every currently-alive cell at its old position
@@ -265,14 +264,19 @@ says so.
 
 ## 7. Main loop and game states
 
-`setrefresh "manual` + one `refresh` per frame gives a tear-free,
-batched present (engine design §2.3): all the frame's motion, stamps and
-erosions appear at once.
+`setrefresh "sync` + one `sync` per frame gives a tear-free, batched present
+(engine design §2.3) *and* an even cadence: all the frame's motion, stamps and
+erosions appear at once, and `sync` then waits to the next 30 fps frame
+boundary. This replaced an earlier `setrefresh "manual` + `refresh` + `wait 33`
+loop, whose period was *work + 33 ms* — so a heavy frame (a march step redraws
+the whole block) lengthened the frame and made motion jerk. Pacing to a fixed
+boundary instead of sleeping a fixed amount keeps the rate steady regardless of
+per-frame work, the way a game locked to the TV's vertical blank did.
 
 ```logo
 to play.level
   setup.level
-  setrefresh "manual
+  (setrefresh "sync 30)
   make "over false
   until [:over] [
     poll.input
@@ -286,8 +290,7 @@ to play.level
       recycle.ufo
     ]
     draw.hud
-    refresh
-    wait 33
+    sync
     if :dying [handle.death]
     if :alive = 0 [make "over true]
   ]

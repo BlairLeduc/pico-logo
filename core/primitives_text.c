@@ -9,10 +9,14 @@
 #include "primitives.h"
 #include "error.h"
 #include "eval.h"
+#include "frame_sync.h"
 #include "devices/io.h"
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>  // for strcasecmp
+
+// Default frame rate for setrefresh "sync when no rate is given.
+#define SYNC_DEFAULT_HZ 30.0f
 
 //==========================================================================
 // Helper functions
@@ -172,7 +176,7 @@ static Result prim_textscreen(Evaluator *eval, int argc, Value *args)
 }
 
 //==========================================================================
-// setrefresh "auto | "manual - Select the display refresh policy
+// setrefresh "auto | "manual | "sync [rate] - Select the display refresh policy
 //==========================================================================
 
 static Result prim_setrefresh(Evaluator *eval, int argc, Value *args)
@@ -182,6 +186,9 @@ static Result prim_setrefresh(Evaluator *eval, int argc, Value *args)
 
     const char *mode = value_to_string(args[0]);
     bool auto_mode;
+    bool sync_on = false;
+    uint32_t sync_period = 0;
+
     if (strcasecmp(mode, "auto") == 0)
     {
         auto_mode = true;
@@ -189,6 +196,28 @@ static Result prim_setrefresh(Evaluator *eval, int argc, Value *args)
     else if (strcasecmp(mode, "manual") == 0)
     {
         auto_mode = false;
+    }
+    else if (strcasecmp(mode, "sync") == 0)
+    {
+        // sync accumulates drawing like manual, but the `sync` primitive also
+        // paces the loop to a fixed rate (steps per second); (setrefresh
+        // "sync 25) overrides the default.
+        auto_mode = false;
+        sync_on = true;
+        float hz = SYNC_DEFAULT_HZ;
+        if (argc >= 2)
+        {
+            if (!value_to_number(args[1], &hz) || hz <= 0.0f)
+            {
+                return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL,
+                                        value_to_string(args[1]));
+            }
+        }
+        sync_period = (uint32_t)(1000.0f / hz + 0.5f);
+        if (sync_period < 1)
+        {
+            sync_period = 1;
+        }
     }
     else
     {
@@ -200,6 +229,7 @@ static Result prim_setrefresh(Evaluator *eval, int argc, Value *args)
     {
         screen->set_refresh_auto(auto_mode);
     }
+    frame_sync_set(sync_on, sync_period);
 
     return result_none();
 }
@@ -222,21 +252,73 @@ static Result prim_refresh(Evaluator *eval, int argc, Value *args)
 }
 
 //==========================================================================
-// refreshmode - Output the current refresh policy (auto or manual)
+// sync - Present the frame, then block until the next frame boundary
+//==========================================================================
+
+static Result prim_sync(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
+
+    // Present this frame, exactly like refresh.
+    const LogoConsoleScreen *screen = get_screen_ops();
+    if (screen && screen->refresh_now)
+    {
+        screen->refresh_now();
+    }
+
+    // Pace to the frame boundary only in sync mode with a clock to pace against;
+    // otherwise sync degrades to a plain present.
+    if (!frame_sync_active())
+    {
+        return result_none();
+    }
+    LogoIO *io = primitives_get_io();
+    if (!io || !logo_io_has_ticks_ms(io))
+    {
+        return result_none();
+    }
+
+    // Sleep the computed remainder in interruptible chunks, like wait, so a
+    // game loop can still be stopped with the interrupt key.
+    int ms = (int)frame_sync_wait_ms(logo_io_ticks_ms(io));
+    while (ms > 0)
+    {
+        if (logo_io_check_user_interrupt(io))
+        {
+            return result_error(ERR_STOPPED);
+        }
+        int chunk = ms < 100 ? ms : 100;
+        logo_io_sleep(io, chunk);
+        ms -= chunk;
+    }
+
+    return result_none();
+}
+
+//==========================================================================
+// refreshmode - Output the current refresh policy (auto, manual or sync)
 //==========================================================================
 
 static Result prim_refreshmode(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc); UNUSED(args);
 
-    const LogoConsoleScreen *screen = get_screen_ops();
-    bool auto_mode = true; // Devices without a screen are always "auto"
-    if (screen && screen->get_refresh_auto)
+    const char *mode;
+    if (frame_sync_active())
     {
-        auto_mode = screen->get_refresh_auto();
+        mode = "sync";
+    }
+    else
+    {
+        const LogoConsoleScreen *screen = get_screen_ops();
+        bool auto_mode = true; // Devices without a screen are always "auto"
+        if (screen && screen->get_refresh_auto)
+        {
+            auto_mode = screen->get_refresh_auto();
+        }
+        mode = auto_mode ? "auto" : "manual";
     }
 
-    const char *mode = auto_mode ? "auto" : "manual";
     Node atom = mem_atom(mode, strlen(mode));
     return result_ok(value_word(atom));
 }
@@ -335,6 +417,7 @@ void primitives_text_init(void)
     // Refresh policy commands
     primitive_register("setrefresh", 1, prim_setrefresh);
     primitive_register("refresh", 0, prim_refresh);
+    primitive_register("sync", 0, prim_sync);
 
     // Operations (queries)
     primitive_register("cursor", 0, prim_cursor);
