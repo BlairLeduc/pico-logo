@@ -130,18 +130,21 @@ to arm.demons
   when [(alien.bottom.y) < -55] [invasion]
 end
 
-to alien.key :idx
-  output word "a :idx
-end
-
-to alien.alive? :idx
-  local "v
-  make "v gprop "aliens alien.key :idx
-  output :v = 1
+to make.ones :n
+  ; Build a flat list of :n ones (every alien alive). Allocated once per
+  ; level; thereafter the list is mutated in place (see set.alien) so a
+  ; level's worth of kills allocates nothing and never fills the arena.
+  local "lst
+  make "lst []
+  repeat :n [make "lst fput 1 :lst]
+  output :lst
 end
 
 to set.alien :idx :val
-  pprop "aliens (alien.key :idx) :val
+  ; Flip one liveness flag in place -- no list is rebuilt, so kills allocate
+  ; nothing. .setitem walks to the idx-th cell in C and mutates it; because
+  ; the list is shared, :aliens itself changes.
+  .setitem :idx :aliens :val
 end
 
 to setup.aliens
@@ -163,10 +166,7 @@ to setup.aliens
   make "formy 140
   make "formdir 1
   make "alive :alien.rows * :alien.cols
-  local "i
-  make "i 1
-  repeat :alive [
-    set.alien :i 1 make "i :i + 1]
+  make "aliens make.ones :alive
   draw.aliens
 end
 
@@ -191,10 +191,14 @@ to alien.bottom.y
 end
 
 to draw.aliens
-  local "i
+  ; Walk the liveness list sequentially (first/butfirst share structure, so
+  ; no allocation) instead of an indexed gprop lookup per cell.
+  local "lst local "i
+  make "lst :aliens
   make "i 1
   repeat :alien.rows * :alien.cols [
-    if alien.alive? :i [stamp.alien :i]
+    if 1 = first :lst [stamp.alien :i]
+    make "lst butfirst :lst
     make "i :i + 1
   ]
 end
@@ -226,41 +230,39 @@ to kill.alien :idx
   make "score :score + 10
 end
 
-to formation.left.col
-  local "c local "i
-  make "c 12
-  make "i 1
-  repeat :alien.rows * :alien.cols [
-    if alien.alive? :i [if (alien.col :i) < :c [make "c alien.col :i]]
-    make "i :i + 1
-  ]
-  output :c
-end
-
-to formation.right.col
-  local "c local "i
-  make "c 0
-  make "i 1
-  repeat :alien.rows * :alien.cols [
-    if alien.alive? :i [if (alien.col :i) > :c [make "c alien.col :i]]
-    make "i :i + 1
-  ]
-  output :c
-end
-
 to erase.all.aliens
-  local "i
+  local "lst local "i
+  make "lst :aliens
   make "i 1
   repeat :alien.rows * :alien.cols [
-    if alien.alive? :i [erase.alien.cell :i]
+    if 1 = first :lst [erase.alien.cell :i]
+    make "lst butfirst :lst
     make "i :i + 1
   ]
 end
 
 to step.formx
+  ; Find the leftmost and rightmost occupied columns in a single walk over
+  ; the liveness list, tracking the column (1..alien.cols) as we go. This
+  ; replaces two separate full scans, each of which did an indexed lookup
+  ; per cell. :lo/:hi keep the old sentinels (12/0) for an empty formation.
+  local "lst local "c local "lo local "hi
+  make "lst :aliens
+  make "c 1
+  make "lo 12
+  make "hi 0
+  repeat :alien.rows * :alien.cols [
+    if 1 = first :lst [
+      if :c < :lo [make "lo :c]
+      if :c > :hi [make "hi :c]
+    ]
+    make "lst butfirst :lst
+    make "c :c + 1
+    if :c > :alien.cols [make "c 1]
+  ]
   local "leftx local "rightx
-  make "leftx alien.cell.x formation.left.col
-  make "rightx alien.cell.x formation.right.col
+  make "leftx alien.cell.x :lo
+  make "rightx alien.cell.x :hi
   ifelse and (:formdir = 1) ((:rightx + :colgap) > 155) [drop.and.flip] [
     ifelse and (:formdir = -1) ((:leftx - :colgap) < -155) [drop.and.flip] [
       make "formx :formx + (4 * :formdir)
@@ -367,14 +369,16 @@ to locate.alien :x :y
   ; shot position several pixels away from the alien's nominal grid
   ; coordinate. Tolerance is widened to comfortably cover that (still well
   ; under half of a 20-unit colgap/rowgap, so it can't match a neighbour).
-  local "i local "ax local "ay
+  local "lst local "i local "ax local "ay
+  make "lst :aliens
   make "i 1
   repeat :alien.rows * :alien.cols [
-    if alien.alive? :i [
+    if 1 = first :lst [
       make "ax alien.cell.x alien.col :i
       make "ay alien.cell.y alien.row :i
       if and ((abs (:ax - :x)) < 10) ((abs (:ay - :y)) < 10) [output :i]
     ]
+    make "lst butfirst :lst
     make "i :i + 1
   ]
   output 0
@@ -398,15 +402,17 @@ end
 
 to random.living.alien
   if :alive = 0 [output 0]
-  local "target local "seen local "i
+  local "lst local "target local "seen local "i
   make "target 1 + random :alive
   make "seen 0
+  make "lst :aliens
   make "i 1
   repeat :alien.rows * :alien.cols [
-    if alien.alive? :i [
+    if 1 = first :lst [
       make "seen :seen + 1
       if :seen = :target [output :i]
     ]
+    make "lst butfirst :lst
     make "i :i + 1
   ]
   output 0
@@ -501,11 +507,11 @@ to poll.input
 end
 
 to draw.hud
-  setcursor [0 25]
+  setcursor [0 0]
   (print [SCORE:] :score)
-  setcursor [0 26]
+  setcursor [0 1]
   (print [LIVES:] :lives)
-  setcursor [0 27]
+  setcursor [0 2]
   (print [LEVEL:] :level)
 end
 
@@ -525,13 +531,7 @@ to play.level
       recycle.ufo
     ]
     draw.hud
-    ; TEMPORARY diagnostic: live refresh-cost readout, to confirm/rule out
-    ; blit cost (pushing dirty tiles to the LCD) as the source of the
-    ; march-time pause. Remove once diagnosed.
-    make "t0 ticks
     refresh
-    setcursor [0 28]
-    (print [refresh ms:] (ticks - :t0) [          ])
     wait 33
     if :dying [handle.death]
     if :alive = 0 [make "over true]
