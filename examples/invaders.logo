@@ -103,9 +103,17 @@ to setup.level
   make "march.counter 0
   make "alien.frame 1
   make "march.note.idx 0
-  ; TEMP diagnostics: last march.step cost and worst per-frame work (ms).
-  make "march.ms 0
-  make "work.max 0
+  ; A march step redraws the whole formation, which is far more work than one
+  ; frame's budget. Instead of doing it all at once (a visible hitch), render
+  ; :march.slice cells per frame across several frames (see march.render.slice).
+  make "march.rendering false
+  make "march.slice 8
+  ; HUD is repainted only when a value changes; seed with impossible values so
+  ; every field draws once on the first frame.
+  make "hud.score -1
+  make "hud.lives -1
+  make "hud.level -1
+  make "wk.max 0                 ; TEMP diagnostic: worst frame work (ms)
   setup.turtles
   setup.aliens
   setup.shields
@@ -170,6 +178,10 @@ to setup.aliens
   make "formdir 1
   make "alive :alien.rows * :alien.cols
   make "aliens make.ones :alive
+  ; Living-edge columns, tracked incrementally so the march wall-test never
+  ; has to scan the formation (see step.formx / shrink.edges).
+  make "form.lo 1
+  make "form.hi :alien.cols
   draw.aliens
 end
 
@@ -196,14 +208,10 @@ end
 to redraw.formation :sh :pc
   ; Stamp shape :sh in colour :pc over every living cell in one pass. Walk the
   ; liveness list with first/butfirst (shared structure, no allocation) and
-  ; carry each cell's x/y forward incrementally across the grid, so a full
-  ; formation redraw pays no per-cell division or helper-procedure calls.
-  ; This matters because a march step (erase + redraw of the whole block)
-  ; runs synchronously inside one game-loop iteration: while it stamps, the
-  ; loop reaches neither refresh nor check.shot/check.bombs, so an expensive
-  ; redraw both freezes the display and lets fast turtles tunnel past a
-  ; collision uncounted. Setting shape/colour once (outside the loop) and
-  ; dropping the four coordinate procedures per cell keeps the step short.
+  ; carry each cell's x/y forward incrementally across the grid, so the draw
+  ; pays no per-cell division or helper-procedure calls, and shape/colour are
+  ; set once outside the loop. Used for the one-time initial draw of a level;
+  ; the marching redraw is spread over frames instead (see march.render.slice).
   local "lst local "cx local "cy local "col
   make "lst :aliens
   make "cx :formx
@@ -231,12 +239,18 @@ to draw.aliens
 end
 
 to erase.alien.cell :idx
+  ; Blank the cell at its current (post-step) position. During a spread march
+  ; render, also blank its pre-step position -- :idx may not have been redrawn
+  ; there yet, so erasing only the new spot would leave a ghost behind.
+  local "cx local "cy
+  make "cx alien.cell.x alien.col :idx
+  make "cy alien.cell.y alien.row :idx
   ask 6 [
-    setsh 3
-    setpc :bg.colour
-    setx alien.cell.x alien.col :idx
-    sety alien.cell.y alien.row :idx
-    stamp
+    setsh 3 setpc :bg.colour
+    setx :cx sety :cy stamp
+    if :march.rendering [
+      setx :cx - :march.dx sety :cy - :march.dy stamp
+    ]
   ]
 end
 
@@ -244,35 +258,43 @@ to kill.alien :idx
   set.alien :idx 0
   make "alive :alive - 1
   erase.alien.cell :idx
+  ; Only an edge-column kill can move an edge, so skip the check otherwise.
+  local "c
+  make "c alien.col :idx
+  if or (:c = :form.lo) (:c = :form.hi) [shrink.edges]
   make "score :score + 10
 end
 
-to erase.all.aliens
-  redraw.formation 3 :bg.colour
+to column.occupied? :c
+  ; True when any row of column :c still holds a living alien.
+  local "i
+  make "i :c
+  repeat :alien.rows [
+    if 1 = item :i :aliens [output true]
+    make "i :i + :alien.cols
+  ]
+  output false
+end
+
+to shrink.edges
+  ; Pull the live-edge columns (form.lo/form.hi) inward past any columns a
+  ; kill just emptied. Aliens only ever die, so the edges only move toward
+  ; the centre -- this is O(1) amortised across a level.
+  while [and (:form.lo < :form.hi) (not column.occupied? :form.lo)] [
+    make "form.lo :form.lo + 1
+  ]
+  while [and (:form.hi > :form.lo) (not column.occupied? :form.hi)] [
+    make "form.hi :form.hi - 1
+  ]
 end
 
 to step.formx
-  ; Find the leftmost and rightmost occupied columns in a single walk over
-  ; the liveness list, tracking the column (1..alien.cols) as we go. This
-  ; replaces two separate full scans, each of which did an indexed lookup
-  ; per cell. :lo/:hi keep the old sentinels (12/0) for an empty formation.
-  local "lst local "c local "lo local "hi
-  make "lst :aliens
-  make "c 1
-  make "lo 12
-  make "hi 0
-  repeat :alien.rows * :alien.cols [
-    if 1 = first :lst [
-      if :c < :lo [make "lo :c]
-      if :c > :hi [make "hi :c]
-    ]
-    make "lst butfirst :lst
-    make "c :c + 1
-    if :c > :alien.cols [make "c 1]
-  ]
+  ; The living left/right edges are tracked incrementally (form.lo/form.hi),
+  ; so the wall test costs nothing per march -- the old version walked all 55
+  ; cells every step just to rediscover the edges.
   local "leftx local "rightx
-  make "leftx alien.cell.x :lo
-  make "rightx alien.cell.x :hi
+  make "leftx alien.cell.x :form.lo
+  make "rightx alien.cell.x :form.hi
   ifelse and (:formdir = 1) ((:rightx + :colgap) > 155) [drop.and.flip] [
     ifelse and (:formdir = -1) ((:leftx - :colgap) < -155) [drop.and.flip] [
       make "formx :formx + (4 * :formdir)
@@ -298,25 +320,70 @@ to march.interval
   output 1 + int (:alive / 4)
 end
 
-to march.step
-  make "march.t0 ticks
-  erase.all.aliens
+to march.begin
+  ; Start one march step. The formation advances its logical position at once
+  ; (so collisions stay coherent), but the redraw is spread over the next few
+  ; frames by march.render.slice. formx.prev/formy.prev and march.dx/march.dy
+  ; remember the pre-step position so each cell can be erased where it was.
+  make "formx.prev :formx
+  make "formy.prev :formy
   step.formx
-  draw.aliens
+  make "march.dx :formx - :formx.prev
+  make "march.dy :formy - :formy.prev
   toggle.alien.frame
-  make "march.ms (ticks) - :march.t0   ; TEMP diagnostic
   march.note
-  ; march.note's frequency table is a list literal, rebuilt fresh every
-  ; call, and this Logo has no automatic garbage collection -- reclaim
-  ; it here (once per march step) rather than never.
-  ;recycle
+  make "march.k 1                 ; next grid cell to redraw (1..rows*cols)
+  make "march.lst :aliens         ; liveness tail at cell :march.k
+  make "march.cx :formx           ; new position of cell :march.k
+  make "march.cy :formy
+  make "march.col 1
+  make "march.rendering true
+  march.render.slice
+end
+
+to march.render.slice
+  ; Redraw up to :march.slice cells of the in-flight step: erase each living
+  ; cell where it was (new position minus the step delta) and stamp it at the
+  ; new position. The cursor carries across frames so the rest continue next
+  ; frame. Shape/colour alternate per cell (erase vs draw), so they can't be
+  ; hoisted, but selecting turtle 6 once (ask) still saves per-cell overhead.
+  local "n local "total
+  make "total :alien.rows * :alien.cols
+  make "n :march.slice
+  ask 6 [
+    until [or (:march.k > :total) (:n < 1)] [
+      if 1 = first :march.lst [
+        setsh 3 setpc :bg.colour
+        setx :march.cx - :march.dx sety :march.cy - :march.dy stamp
+        setsh :alien.frame setpc :alien.colour
+        setx :march.cx sety :march.cy stamp
+      ]
+      make "march.lst butfirst :march.lst
+      make "march.k :march.k + 1
+      make "march.col :march.col + 1
+      make "march.cx :march.cx + :colgap
+      if :march.col > :alien.cols [
+        make "march.col 1
+        make "march.cx :formx
+        make "march.cy :march.cy - :rowgap
+      ]
+      make "n :n - 1
+    ]
+  ]
+  if :march.k > :total [make "march.rendering false]
 end
 
 to march.if.due
+  ; Count every frame so the step cadence (march.interval) is unchanged, but
+  ; keep feeding an in-flight redraw until it finishes before starting another.
   make "march.counter :march.counter + 1
-  if not (:march.counter < march.interval) [
-    make "march.counter 0
-    march.step
+  ifelse :march.rendering [
+    march.render.slice
+  ] [
+    if not (:march.counter < march.interval) [
+      make "march.counter 0
+      march.begin
+    ]
   ]
 end
 
@@ -519,24 +586,32 @@ to poll.input
 end
 
 to draw.hud
-  setcursor [0 0]
-  (print [SCORE:] :score)
-  setcursor [0 1]
-  (print [LIVES:] :lives)
-  setcursor [0 2]
-  (print [LEVEL:] :level)
+  ; Repaint a line only when its value changes. Rewriting all of them every
+  ; frame re-blits ~160 glyphs over SPI (each row is drawn character by
+  ; character) and was the single biggest cost in an ordinary frame.
+  if not (:score = :hud.score) [
+    setcursor [0 0] (print [SCORE:] :score) make "hud.score :score
+  ]
+  if not (:lives = :hud.lives) [
+    setcursor [0 1] (print [LIVES:] :lives) make "hud.lives :lives
+  ]
+  if not (:level = :hud.level) [
+    setcursor [0 2] (print [LEVEL:] :level) make "hud.level :level
+  ]
+end
+
+to draw.wk
   setcursor [0 3]
-  (print [MR:] :march.ms [WK:] :work.max)   ; TEMP diagnostic
+  (print [WORST MS:] :wk.max)   ; TEMP diagnostic
 end
 
 to play.level
   setup.level
-  ; sync mode paces the loop to a fixed 30 fps: sync (below) presents the
+  ; sync mode paces the loop to a fixed 25 fps: sync (below) presents the
   ; frame and waits for the next frame boundary, so the cadence stays even
-  ; regardless of how much work a frame did -- unlike refresh + a fixed
-  ; wait, whose period grew with a heavy frame (e.g. a march step) and made
-  ; motion jerk.
-  (setrefresh "sync 30)
+  ; regardless of how much work a frame did. Every frame must fit the 40 ms
+  ; budget -- the march redraw is spread over several frames to make that so.
+  (setrefresh "sync 25)
   make "over false
   until [:over] [
     make "frame.t0 ticks                       ; TEMP diagnostic
@@ -551,8 +626,8 @@ to play.level
       recycle.ufo
     ]
     draw.hud
-    make "wk (ticks) - :frame.t0               ; TEMP diagnostic: work this
-    if :wk > :work.max [make "work.max :wk]     ; frame, excluding sync's sleep
+    make "wk (ticks) - :frame.t0               ; TEMP: worst frame work seen,
+    if :wk > :wk.max [make "wk.max :wk  draw.wk]  ; excluding sync's sleep.
     sync
     if :dying [handle.death]
     if :alive = 0 [make "over true]
