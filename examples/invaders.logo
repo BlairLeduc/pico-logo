@@ -107,13 +107,12 @@ to setup.level
   ; frame's budget. Instead of doing it all at once (a visible hitch), render
   ; :march.slice cells per frame across several frames (see march.render.slice).
   make "march.rendering false
-  make "march.slice 8
+  make "march.slice 6
   ; HUD is repainted only when a value changes; seed with impossible values so
   ; every field draws once on the first frame.
   make "hud.score -1
   make "hud.lives -1
   make "hud.level -1
-  make "wk.max 0                 ; TEMP diagnostic: worst frame work (ms)
   setup.turtles
   setup.aliens
   setup.shields
@@ -178,10 +177,14 @@ to setup.aliens
   make "formdir 1
   make "alive :alien.rows * :alien.cols
   make "aliens make.ones :alive
-  ; Living-edge columns, tracked incrementally so the march wall-test never
-  ; has to scan the formation (see step.formx / shrink.edges).
+  ; Living edges, tracked incrementally so the per-frame march wall-test and
+  ; invasion test never scan the formation. form.lo/form.hi are the live column
+  ; range (step.formx); form.bot is the lowest row still holding a live alien
+  ; (alien.bottom.y) -- kills can empty the bottom rows, so it is NOT just the
+  ; grid's bottom row.
   make "form.lo 1
   make "form.hi :alien.cols
+  make "form.bot :alien.rows
   draw.aliens
 end
 
@@ -202,7 +205,10 @@ to alien.cell.y :row
 end
 
 to alien.bottom.y
-  output :formy - (:alien.rows - 1) * :rowgap
+  ; The lowest LIVING row, not the grid's bottom row -- once the player clears
+  ; the bottom rows the formation can descend further before it counts as an
+  ; invasion.
+  output :formy - (:form.bot - 1) * :rowgap
 end
 
 to redraw.formation :sh :pc
@@ -258,10 +264,13 @@ to kill.alien :idx
   set.alien :idx 0
   make "alive :alive - 1
   erase.alien.cell :idx
-  ; Only an edge-column kill can move an edge, so skip the check otherwise.
-  local "c
+  ; Only an edge kill can move an edge, so skip the (list-walking) checks
+  ; otherwise.
+  local "c local "r
   make "c alien.col :idx
+  make "r alien.row :idx
   if or (:c = :form.lo) (:c = :form.hi) [shrink.edges]
+  if :r = :form.bot [shrink.bottom]
   make "score :score + 10
 end
 
@@ -285,6 +294,27 @@ to shrink.edges
   ]
   while [and (:form.hi > :form.lo) (not column.occupied? :form.hi)] [
     make "form.hi :form.hi - 1
+  ]
+end
+
+to row.occupied? :r
+  ; True when any column of row :r still holds a living alien.
+  local "lst local "c
+  make "lst :aliens
+  repeat (:r - 1) * :alien.cols [make "lst butfirst :lst]
+  make "c 1
+  repeat :alien.cols [
+    if 1 = first :lst [output true]
+    make "lst butfirst :lst
+    make "c :c + 1
+  ]
+  output false
+end
+
+to shrink.bottom
+  ; Raise the live bottom row (form.bot) past any bottom rows a kill emptied.
+  while [and (:form.bot > 1) (not row.occupied? :form.bot)] [
+    make "form.bot :form.bot - 1
   ]
 end
 
@@ -442,24 +472,24 @@ to check.shot
 end
 
 to locate.alien :x :y
-  ; Bitmap costumes are anchored at their bottom row, not their centre, so
-  ; the shot's rendered/sensed pixels and the alien's rendered pixels are
-  ; each offset from their own turtle position -- over? can fire for a
-  ; shot position several pixels away from the alien's nominal grid
-  ; coordinate. Tolerance is widened to comfortably cover that (still well
-  ; under half of a 20-unit colgap/rowgap, so it can't match a neighbour).
-  local "lst local "i local "ax local "ay
-  make "lst :aliens
-  make "i 1
-  repeat :alien.rows * :alien.cols [
-    if 1 = first :lst [
-      make "ax alien.cell.x alien.col :i
-      make "ay alien.cell.y alien.row :i
-      if and ((abs (:ax - :x)) < 10) ((abs (:ay - :y)) < 10) [output :i]
-    ]
-    make "lst butfirst :lst
-    make "i :i + 1
-  ]
+  ; The grid is regular, so invert the cell formula to jump straight to the
+  ; nearest cell instead of walking the whole formation (that full walk, with
+  ; four helper calls per living cell, spiked the frame on every hit).
+  ; Bitmap costumes anchor at their bottom row, so the shot's sensed pixels sit
+  ; a few px off the alien's nominal coordinate -- but centres are a 20-unit
+  ; colgap/rowgap apart, so at most one cell can be within the 10-unit
+  ; tolerance: the rounded cell is the only candidate. Confirm it's alive and
+  ; genuinely within tolerance before claiming the hit.
+  local "col local "row local "idx local "ax local "ay
+  make "col 1 + (round ((:x - :formx) / :colgap))
+  make "row 1 + (round ((:formy - :y) / :rowgap))
+  if or (:col < 1) (:col > :alien.cols) [output 0]
+  if or (:row < 1) (:row > :alien.rows) [output 0]
+  make "idx ((:row - 1) * :alien.cols) + :col
+  if not (1 = item :idx :aliens) [output 0]
+  make "ax alien.cell.x :col
+  make "ay alien.cell.y :row
+  if and ((abs (:ax - :x)) < 10) ((abs (:ay - :y)) < 10) [output :idx]
   output 0
 end
 
@@ -481,8 +511,22 @@ end
 
 to random.living.alien
   if :alive = 0 [output 0]
-  local "lst local "target local "seen local "i
-  make "target 1 + random :alive
+  ; Dart-throw: probe random cells first. While the board is dense (most of
+  ; the game) a live cell is found in a probe or two, avoiding the full walk
+  ; that spiked every bomb-launch frame. Fall back to an ordered scan only
+  ; when the board is sparse enough that probes keep missing.
+  local "total
+  make "total :alien.rows * :alien.cols
+  repeat 8 [
+    local "idx
+    make "idx 1 + random :total
+    if 1 = item :idx :aliens [output :idx]
+  ]
+  output nth.living.alien 1 + random :alive
+end
+
+to nth.living.alien :target
+  local "lst local "seen local "i
   make "seen 0
   make "lst :aliens
   make "i 1
@@ -600,11 +644,6 @@ to draw.hud
   ]
 end
 
-to draw.wk
-  setcursor [0 3]
-  (print [WORST MS:] :wk.max)   ; TEMP diagnostic
-end
-
 to play.level
   setup.level
   ; sync mode paces the loop to a fixed 25 fps: sync (below) presents the
@@ -614,7 +653,6 @@ to play.level
   (setrefresh "sync 25)
   make "over false
   until [:over] [
-    make "frame.t0 ticks                       ; TEMP diagnostic
     poll.input
     if not :paused [
       march.if.due
@@ -626,8 +664,6 @@ to play.level
       recycle.ufo
     ]
     draw.hud
-    make "wk (ticks) - :frame.t0               ; TEMP: worst frame work seen,
-    if :wk > :wk.max [make "wk.max :wk  draw.wk]  ; excluding sync's sleep.
     sync
     if :dying [handle.death]
     if :alive = 0 [make "over true]
