@@ -40,6 +40,29 @@ static bool valid_date(int year, int month, int day)
 
 
 //
+// ticks - outputs milliseconds since the device started, as a number.
+// Backed by the same monotonic clock the demon poll budget uses
+// (logo_io_ticks_ms); wraps at 2^32 ms (~49.7 days). Logo numbers are
+// single-precision floats, so exact integer millisecond values are only
+// guaranteed up to 2^24 (~4.66 hours) -- beyond that, ticks still
+// increases but successive milliseconds can round to the same value.
+//
+static Result prim_ticks(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(0);
+    (void)args;
+
+    LogoIO *io = primitives_get_io();
+    if (!io || !logo_io_has_ticks_ms(io))
+    {
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, "ticks", NULL);
+    }
+
+    return result_ok(value_number((float)logo_io_ticks_ms(io)));
+}
+
+//
 // date - outputs the current date as [year month day]
 //
 static Result prim_date(Evaluator *eval, int argc, Value *args)
@@ -274,6 +297,7 @@ static Result prim_settime(Evaluator *eval, int argc, Value *args)
 //
 void primitives_time_init(void)
 {
+    primitive_register("ticks", 0, prim_ticks);
     primitive_register("date", 0, prim_date);
     primitive_register("time", 0, prim_time);
     primitive_register("setdate", 1, prim_setdate);

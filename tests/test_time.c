@@ -19,6 +19,43 @@ void tearDown(void)
 }
 
 // ============================================================================
+// ticks primitive tests
+// ============================================================================
+
+void test_ticks_outputs_mock_value(void)
+{
+    set_mock_ticks(12345);
+
+    Result r = eval_string("ticks");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_NUMBER, r.value.type);
+    TEST_ASSERT_EQUAL_FLOAT(12345.0f, r.value.as.number);
+}
+
+void test_ticks_reflects_later_calls(void)
+{
+    set_mock_ticks(1000);
+    Result r = eval_string("ticks");
+    TEST_ASSERT_EQUAL_FLOAT(1000.0f, r.value.as.number);
+
+    set_mock_ticks(1033);
+    r = eval_string("ticks");
+    TEST_ASSERT_EQUAL_FLOAT(1033.0f, r.value.as.number);
+}
+
+void test_ticks_delta_usable_for_frame_timing(void)
+{
+    set_mock_ticks(500);
+    Result r = eval_string("make \"start ticks");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    set_mock_ticks(533);
+    r = eval_string("print ticks - :start");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("33\n", output_buffer);
+}
+
+// ============================================================================
 // date primitive tests
 // ============================================================================
 
@@ -457,6 +494,11 @@ void test_time_and_settime_roundtrip(void)
 int main(void)
 {
     UNITY_BEGIN();
+
+    // ticks tests
+    RUN_TEST(test_ticks_outputs_mock_value);
+    RUN_TEST(test_ticks_reflects_later_calls);
+    RUN_TEST(test_ticks_delta_usable_for_frame_timing);
 
     // date tests
     RUN_TEST(test_date_outputs_list_with_three_elements);
