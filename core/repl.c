@@ -16,6 +16,7 @@
 #include "core/demons.h"
 #include "core/error.h"
 #include "core/eval.h"
+#include "core/frame_sync.h"
 #include "core/lexer.h"
 #include "core/memory.h"
 #include "core/primitives.h"
@@ -236,11 +237,11 @@ void repl_cleanup(ReplState *state)
 }
 
 // Clean up autonomous state when execution unwinds to the toplevel REPL
-// (error or throw "toplevel): restore automatic display refresh so a
-// program that switched to manual refresh cannot leave the screen stale at
-// the prompt, and clear every `when` demon and stop autonomous turtle
-// motion — nothing acts on its own after a reset. Pause is excluded: a
-// paused program may continue with co.
+// (error or throw "toplevel): restore automatic display refresh (clearing any
+// sync-mode pacing) so a program that switched to manual or sync refresh
+// cannot leave the screen stale — or the prompt paced — at the prompt, and
+// clear every `when` demon and stop autonomous turtle motion — nothing acts on
+// its own after a reset. Pause is excluded: a paused program may continue with co.
 static void repl_restore_refresh(ReplState *state)
 {
     if (state->io && state->io->console && state->io->console->screen &&
@@ -248,6 +249,7 @@ static void repl_restore_refresh(ReplState *state)
     {
         state->io->console->screen->set_refresh_auto(true);
     }
+    frame_sync_reset();
     demons_reset();
 }
 

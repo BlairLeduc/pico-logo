@@ -118,11 +118,11 @@ non-magnified) mono bitmaps, they anchor identically, so the eraser's
 solid 16×16 footprint is a strict superset of whatever the alien costume
 touched at the same position.
 
-### Alive/dead tracking: a property list, not a Logo list
+### Alive/dead tracking: a flat list, mutated in place
 
 The design originally tracked the 55 alive/dead flags in a single Logo
-list (`item i :aliens`), rebuilt with 55 `lput` calls whenever an alien
-died (an `aliens.without` helper). **This does not work on real hardware
+list rebuilt with 55 `lput` calls whenever an alien died (an
+`aliens.without` helper). **This does not work on real hardware
 memory.** This Logo's cons-cell pool has no automatic garbage collector
 (see [Memory model](#memory-model)), and `lput` copies its *entire* input
 list before appending — rebuilding a *k*-element list costs *k+1* new
@@ -133,31 +133,33 @@ actually kept; the other ~1485 are instant garbage, on top of the old
 cells, that's "out of space" after well under one full level's worth of
 kills.
 
-The fix: alive/dead flags live in a **property list** instead
-(`pprop`/`gprop`), one property per cell, keyed by `word "a idx` (e.g.
-`"a23`):
+The fix: keep the flags in a single flat Logo list built **once** per
+level, then mutate the dying cell **in place** with the destructive
+setter `.setitem` (added in this branch alongside `.setfirst`/`.setbf`).
+`.setitem` walks to the *idx*-th cons cell in C and overwrites its value —
+no list is rebuilt, so a kill allocates **zero** cons cells:
 
 ```logo
-to alien.key :idx
-  output word "a :idx
-end
-
-to alien.alive? :idx
-  local "v
-  make "v gprop "aliens alien.key :idx
-  output :v = 1
+to make.ones :n
+  ; A flat list of :n ones, allocated once; thereafter mutated in place.
+  local "lst
+  make "lst []
+  repeat :n [make "lst fput 1 :lst]
+  output :lst
 end
 
 to set.alien :idx :val
-  pprop "aliens (alien.key :idx) :val
+  ; Flip one liveness flag in place. Because :aliens is shared, this call
+  ; mutates it directly -- no rebuild, no garbage.
+  .setitem :idx :aliens :val
 end
 ```
 
-`pprop` on an *existing* property overwrites its value cell in place —
-zero new cons cells per kill, instead of 1540. `setup.aliens` still needs
-one `pprop` per cell at level start, but that's the one-time cost of
-creating each property; every subsequent update (every kill, every level
-reset) is free.
+Reads that walk the whole formation (drawing, the initial layout) advance
+through the list with `first`/`butfirst`, which share structure and
+allocate nothing; the few random-access reads use `item`. `setup.aliens`
+pays the one-time `make.ones` cost at level start; every subsequent update
+(every kill, every level reset) is free.
 
 ## 4. Collision routing — demons vs. the game loop
 
@@ -386,8 +388,8 @@ on hardware:
 - `when` / `freeze` / `thaw` — collision demons and pause.
 - `stamp` — building and erasing the formation and shields.
 - `setrefresh` / `refresh` — the tear-free game loop.
-- `pprop` / `gprop` — mutable per-cell state that a rebuild-only Logo
-  list can't provide affordably.
+- `.setitem` — mutating a liveness flag in a flat list in place, which a
+  rebuild-only Logo list can't provide affordably.
 - `setx` / `sety` in preference to `setpos` — avoiding a per-call list
   allocation for every turtle move, the program's dominant memory cost
   until it was removed.
@@ -421,11 +423,11 @@ garbage that only `recycle` can reclaim. Two consequences that shaped
 this program:
 
 - **Prefer mutable-in-place structures over rebuild-only ones for
-  per-frame or per-cell state.** A Logo list can only be *rebuilt*
-  (`lput`/`fput` copy), never mutated element-in-place; a property list
-  (`pprop`/`gprop`) *is* mutable in place once a property exists. See §3's
-  `aliens.without` → property-list rewrite for the concrete cost
-  difference (1540 cons cells per kill → ~0).
+  per-frame or per-cell state.** Rebuilding a Logo list with `lput`/`fput`
+  copies it; the destructive setters (`.setitem` / `.setfirst` / `.setbf`)
+  overwrite a cons cell in place instead. See §3's `aliens.without` →
+  `.setitem` rewrite for the concrete cost difference (1540 cons cells per
+  kill → ~0).
 - **Prefer `setx`/`sety` over `setpos` for turtles that only ever move
   along the grid/one axis at a time.** `setpos` takes a 2-element list —
   a fresh `(list x y)` allocates cons cells on *every* call, and every

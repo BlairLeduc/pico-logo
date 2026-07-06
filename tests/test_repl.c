@@ -7,6 +7,7 @@
 #include "mock_device.h"
 #include "core/repl.h"
 #include "core/error.h"
+#include "core/frame_sync.h"
 #include <string.h>
 
 void setUp(void)
@@ -334,6 +335,37 @@ void test_repl_throw_toplevel_restores_auto_refresh(void)
 
     TEST_ASSERT_EQUAL(RESULT_THROW, r.status);
     TEST_ASSERT_TRUE(mock->refresh_auto);
+}
+
+void test_repl_error_clears_sync_refresh(void)
+{
+    ReplState state;
+
+    // sync refresh mode paces the loop; the unwind to the toplevel prompt must
+    // clear it too, or refreshmode keeps reporting "sync" and the prompt could
+    // stay paced.
+    set_mock_input("setrefresh \"sync\nprint :nosuchthing\n");
+
+    repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
+    Result r = repl_run(&state);
+    repl_cleanup(&state);
+
+    TEST_ASSERT_EQUAL(RESULT_EOF, r.status);
+    TEST_ASSERT_FALSE(frame_sync_active());
+}
+
+void test_repl_throw_toplevel_clears_sync_refresh(void)
+{
+    ReplState state;
+
+    set_mock_input("setrefresh \"sync\nthrow \"toplevel\n");
+
+    repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
+    Result r = repl_run(&state);
+    repl_cleanup(&state);
+
+    TEST_ASSERT_EQUAL(RESULT_THROW, r.status);
+    TEST_ASSERT_FALSE(frame_sync_active());
 }
 
 void test_repl_suggests_similar_primitive(void)
@@ -680,6 +712,8 @@ int main(void)
     RUN_TEST(test_repl_run_simple_print);
     RUN_TEST(test_repl_error_restores_auto_refresh);
     RUN_TEST(test_repl_throw_toplevel_restores_auto_refresh);
+    RUN_TEST(test_repl_error_clears_sync_refresh);
+    RUN_TEST(test_repl_throw_toplevel_clears_sync_refresh);
     RUN_TEST(test_repl_non_interactive_suppresses_prompt);
     RUN_TEST(test_repl_run_multiple_lines);
     RUN_TEST(test_repl_suggests_similar_primitive);
