@@ -228,6 +228,104 @@ void test_replace_invalid_index_negative(void)
 }
 
 //==========================================================================
+// .setfirst (destructive in-place car) Tests
+//==========================================================================
+
+void test_dsetfirst_mutates_in_place(void)
+{
+    // .setfirst mutates the same cell the variable holds, so :l changes
+    // without rebuilding the list.
+    run_string("make \"l [a b c]\n.setfirst :l \"x\nprint :l");
+    TEST_ASSERT_EQUAL_STRING("x b c\n", output_buffer);
+}
+
+void test_dsetfirst_number_value(void)
+{
+    // A numeric value is stored in word form, so it compares equal to a number.
+    run_string("make \"l [1 1 1]\n.setfirst :l 0\nprint first :l");
+    TEST_ASSERT_EQUAL_STRING("0\n", output_buffer);
+}
+
+void test_dsetfirst_affects_shared_tail(void)
+{
+    // A cursor obtained via butfirst shares structure; mutating through it
+    // is visible in the original list. This is the property invaders relies
+    // on to flip one alien's liveness flag with no allocation.
+    run_string("make \"l [1 1 1 1]\nmake \"c butfirst butfirst :l\n"
+               ".setfirst :c 0\nprint :l");
+    TEST_ASSERT_EQUAL_STRING("1 1 0 1\n", output_buffer);
+}
+
+void test_dsetfirst_empty_list_error(void)
+{
+    Result r = eval_string(".setfirst [] \"x");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_dsetfirst_non_list_error(void)
+{
+    Result r = eval_string(".setfirst \"abc \"x");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_dsetbf_replaces_tail(void)
+{
+    // .setbf swaps the whole tail in place, keeping the first member.
+    run_string("make \"l [a b c]\n.setbf :l [x y]\nprint :l");
+    TEST_ASSERT_EQUAL_STRING("a x y\n", output_buffer);
+}
+
+void test_dsetbf_truncates_with_empty_tail(void)
+{
+    // Setting the butfirst to [] turns the list into a single-element list.
+    run_string("make \"l [a b c]\n.setbf :l []\nprint :l");
+    TEST_ASSERT_EQUAL_STRING("a\n", output_buffer);
+}
+
+void test_dsetbf_requires_list_value(void)
+{
+    Result r = eval_string(".setbf [a b] \"x");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_dsetbf_empty_list_error(void)
+{
+    Result r = eval_string(".setbf [] [x]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+void test_dsetitem_mutates_nth(void)
+{
+    // .setitem sets the index-th member in place (1-based).
+    run_string("make \"l [a b c d]\n.setitem 3 :l \"x\nprint :l");
+    TEST_ASSERT_EQUAL_STRING("a b x d\n", output_buffer);
+}
+
+void test_dsetitem_number_value(void)
+{
+    run_string("make \"l [1 1 1]\n.setitem 2 :l 0\nprint item 2 :l");
+    TEST_ASSERT_EQUAL_STRING("0\n", output_buffer);
+}
+
+void test_dsetitem_index_out_of_bounds(void)
+{
+    Result r = eval_string(".setitem 5 [a b c] \"x");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_TOO_FEW_ITEMS, r.error_code);
+}
+
+void test_dsetitem_index_zero_error(void)
+{
+    Result r = eval_string(".setitem 0 [a b c] \"x");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
+//==========================================================================
 // Count and Empty Tests
 //==========================================================================
 
@@ -1123,6 +1221,19 @@ int main(void)
     RUN_TEST(test_replace_empty_list_error);
     RUN_TEST(test_replace_invalid_index_zero);
     RUN_TEST(test_replace_invalid_index_negative);
+    RUN_TEST(test_dsetfirst_mutates_in_place);
+    RUN_TEST(test_dsetfirst_number_value);
+    RUN_TEST(test_dsetfirst_affects_shared_tail);
+    RUN_TEST(test_dsetfirst_empty_list_error);
+    RUN_TEST(test_dsetfirst_non_list_error);
+    RUN_TEST(test_dsetbf_replaces_tail);
+    RUN_TEST(test_dsetbf_truncates_with_empty_tail);
+    RUN_TEST(test_dsetbf_requires_list_value);
+    RUN_TEST(test_dsetbf_empty_list_error);
+    RUN_TEST(test_dsetitem_mutates_nth);
+    RUN_TEST(test_dsetitem_number_value);
+    RUN_TEST(test_dsetitem_index_out_of_bounds);
+    RUN_TEST(test_dsetitem_index_zero_error);
     
     // Count and empty
     RUN_TEST(test_count_word);

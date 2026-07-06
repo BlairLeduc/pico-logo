@@ -2037,6 +2037,73 @@ Hello
 ```
 
 
+## .setfirst
+
+.setfirst _list_ _value_
+
+`command`
+
+`.setfirst` destructively replaces the first member of _list_ with _value_, changing the list in place instead of returning a new one. _List_ must be a non-empty list. Because lists share structure — [`butfirst`](#butfirst-bf) returns the tail of a list without copying it — a cursor obtained with `butfirst` refers to the same cells as the original, and `.setfirst` through that cursor is visible in the original. This makes it possible to update one element of a long list without allocating a new list; unlike [`replace`](#replace), which builds and returns a fresh list, `.setfirst` outputs nothing.
+
+The leading dot marks `.setfirst` as dangerous: overwriting a cell that other structure depends on, or using it to build a circular list, corrupts those references. Prefer [`replace`](#replace) unless you specifically need in-place mutation.
+
+**Examples**:
+
+```logo
+?make "l [a b c]
+?.setfirst :l "x
+?show :l
+[x b c]
+?make "flags [1 1 1 1]
+?.setfirst (butfirst butfirst :flags) 0
+?show :flags
+[1 1 0 1]
+```
+
+
+## .setbf
+
+.setbf _list_ _value_
+
+`command`
+
+`.setbf` destructively replaces the butfirst (the tail) of _list_ with _value_, in place. _List_ must be a non-empty list and _value_ must be a list, since the tail of a list is itself a list. Setting the tail to the empty list truncates _list_ to a single member. Like [`.setfirst`](#setfirst), `.setbf` outputs nothing and mutates every list that shares the affected cell.
+
+The leading dot marks `.setbf` as dangerous: pointing the tail back into the same list builds a circular list, which most list operations cannot handle.
+
+**Examples**:
+
+```logo
+?make "l [a b c]
+?.setbf :l [x y]
+?show :l
+[a x y]
+?.setbf :l []
+?show :l
+[a]
+```
+
+
+## .setitem
+
+.setitem _integer_ _list_ _value_
+
+`command`
+
+`.setitem` destructively replaces the member of _list_ at position _integer_ (counting from 1) with _value_, in place — the same result as walking to that member with [`butfirst`](#butfirst-bf) and applying [`.setfirst`](#setfirst), but the walk is done for you. An error occurs if _integer_ is less than 1 or greater than the length of _list_. Unlike [`replace`](#replace), which returns a fresh list, `.setitem` outputs nothing and allocates nothing, so it can update one member of a long list cheaply.
+
+The leading dot marks `.setitem` as dangerous for the same reason as the other in-place setters: it overwrites a shared cell.
+
+**Examples**:
+
+```logo
+?make "l [a b c d]
+?.setitem 3 :l "x
+?show :l
+[a b x d]
+```
+
+
 ## item
 
 item _integer_ _object_
