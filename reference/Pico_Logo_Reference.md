@@ -2,7 +2,7 @@
 
 ## Installation
 
-From the [Releases](https://github.com/BlairLeduc/pico-logo/releases) page, download the UF2 file for your device and the `logo.img` file. On your SD Card, copy the `logo.img` file into the root folder.  
+From the [Releases](https://github.com/BlairLeduc/pico-logo/releases) page, download the UF2 file for your device and the `logo.img` file. On your SD Card, copy the `logo.img` file into the root folder and insert it into the PicoCalc.  
 
 Flash the PicoCalc with the latest release and reboot your PicoCalc:
 
@@ -91,8 +91,8 @@ In formal Logo, every procedure requires a definite number of inputs. These inpu
 **Naming things:** The name of a procedure, input, or variable is a word. Logo does not care if a name is in lower or upper case. For example, the following are regarded as being the same:
 
 ```logo
-forward 100
-FORWARD 100
+forward "100
+FORWARD "100
 ```
 
 The name is remembered using the case that is used in the definition.
@@ -110,7 +110,7 @@ If this seems complicated, look at an example. `repeat` is a procedure that requ
 This is an expression:
 
 ```logo
-repeat "3 [fd 10] 
+repeat "3 [fd "10] 
 ```
 
 The following is also an expression:
