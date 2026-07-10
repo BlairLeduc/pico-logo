@@ -1,0 +1,823 @@
+; Galaxian
+; See docs/galaxian-design.md for the design behind this program (which in
+; turn builds on docs/space-invaders-design.md -- read that first).
+;
+; Load and play:
+;   load "galaxian
+;   galaxian
+;
+; Turtles:
+;   0 player ship   1 player shot   2 3 4 divers   5 7 enemy shots
+;   6 formation stamper (always hidden)
+; The 4x8 convoy lives on the canvas, not as turtles; turtle 6 is a hidden
+; helper used only to stamp/erase it. Divers move from the canvas onto a
+; turtle for the dive, then back (see steer.divers / rejoin.diver).
+
+; --- palette slots (all distinct so colourunder is an exact rank test) ---
+make "blue.colour     250   ; blue rank (row 4)
+make "purple.colour   253   ; purple rank (row 3), magenta slot
+make "red.colour      248   ; red rank (row 2)
+make "flagship.colour 251   ; flagship rank (row 1), yellow slot
+make "ship.colour     254   ; player ship (white)
+make "shot.colour     252   ; player shot (cyan)
+make "eshot.colour    249   ; enemy shot (green)
+make "bg.colour       255   ; current background slot
+
+; --- tuning constants (dive feel; see design section 11) ---
+make "diver.speed    55     ; steps/sec a diving turtle glides
+make "eshot.speed    45     ; steps/sec an enemy shot falls
+make "shot.speed     90     ; steps/sec the player shot rises
+make "peel.frames    20     ; frames spent in the outward peel arc
+make "peel.turn       6     ; deg/frame the peel turns toward straight down
+make "attack.turn     4     ; deg/frame the attack turns toward the player
+make "attack.frames 160     ; safety cap: force a rejoin if a dive runs long
+make "fire.chance     3     ; percent/frame an attacking diver drops a shot
+make "sway.slice      6     ; convoy cells re-stamped per frame during a sway
+make "sway.interval   6     ; frames between sway steps
+
+;==========================================================================
+; Costumes
+;==========================================================================
+
+to setup.shapes
+  ; 1,2 alien wing-flap A/B (mono, tinted per rank at stamp time)
+  putsh 1 [0 0 0 0 60 126 255 219 255 36 90 165 0 0 0 0]
+  putsh 2 [0 0 0 0 60 126 255 219 255 36 165 90 0 0 0 0]
+  ; 3 solid eraser block
+  putsh 3 [255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255]
+  ; 4,5 flagship A/B (wings up / down)
+  putsh 4 [0 24 60 90 126 255 255 126 60 165 195 66 0 0 0 0]
+  putsh 5 [0 24 60 90 126 255 255 126 60 66 195 165 0 0 0 0]
+  ; 6 player ship
+  putsh 6 [0 0 0 0 0 24 24 60 60 126 126 255 255 255 255 255]
+  ; 7 player shot
+  putsh 7 [0 0 24 24 24 24 24 24 24 24 24 24 24 24 0 0]
+  ; 8 enemy shot
+  putsh 8 [0 0 0 0 0 0 24 24 60 60 126 255 126 60 24 0]
+end
+
+;==========================================================================
+; Top-level game / state machine (iterative, bounded stack -- see Invaders)
+;==========================================================================
+
+to galaxian
+  init.game
+  forever [one.game]
+end
+
+to init.game
+  setup.shapes
+end
+
+to one.game
+  attract.screen
+  make "score 0
+  make "lives 3
+  make "level 1
+  make "playing true
+  until [not :playing] [
+    play.level
+    ifelse :lives < 1 [
+      make "playing false
+    ] [
+      make "level :level + 1
+    ]
+  ]
+  show.game.over
+end
+
+to attract.screen
+  textscreen
+  ct
+  setcursor [15 10]
+  print [GALAXIAN]
+  setcursor [10 14]
+  print [PRESS SPACE TO PLAY]
+  wait.for.space
+end
+
+to wait.for.space
+  make "k 0
+  until [:k = 32] [
+    if key? [make "k ascii readchar]
+  ]
+end
+
+to show.game.over
+  textscreen
+  ct
+  setcursor [13 10]
+  print [GAME OVER]
+  setcursor [10 12]
+  (print [FINAL SCORE:] :score)
+  wait 2000
+end
+
+;==========================================================================
+; Level setup
+;==========================================================================
+
+to setup.level
+  cs
+  splitscreen
+  make "dying false
+  make "paused false
+  make "frame.count 0
+  make "sway.counter 0
+  make "sway.note.idx 0
+  make "sway.rendering false
+  make "alien.frame 1
+  make "flank.side 0
+  make "shriek.p 700
+  ; Per-diver bookkeeping, indexed by (turtle - 1): idle == phase 0.
+  ; Shared 3-element lists, mutated in place with .setitem (zero allocation
+  ; per dive, same argument as the liveness list).
+  make "diver.cell  [0 0 0]
+  make "diver.phase [0 0 0]
+  make "diver.timer [0 0 0]
+  ; Scratch target point for towards, mutated in place each frame (no alloc).
+  make "ppos [0 0]
+  ; HUD is repainted only when a value changes; seed impossible values.
+  make "hud.score -1
+  make "hud.lives -1
+  make "hud.level -1
+  setup.turtles
+  setup.aliens
+  arm.demons
+end
+
+to setup.turtles
+  tell [0 1 2 3 4 5 6 7]
+  each [window]
+  tell 0 pu setsh 6 setpc :ship.colour setrot "fixed setx 0 sety -70 seth 0 st
+  tell 1 pu setsh 7 setpc :shot.colour setrot "fixed ht
+  tell 2 pu setrot "fixed ht
+  tell 3 pu setrot "fixed ht
+  tell 4 pu setrot "fixed ht
+  tell 5 pu setsh 8 setpc :eshot.colour setrot "fixed ht
+  tell 7 pu setsh 8 setpc :eshot.colour setrot "fixed ht
+  tell 6 pu setrot "fixed ht
+  tell 0
+end
+
+to arm.demons
+  ; Eight collision pairs, MAX_DEMONS is 8 -- exactly full (design section 3).
+  when [touching? 1 2] [diver.shot 2]   ; player shot hits a diver
+  when [touching? 1 3] [diver.shot 3]
+  when [touching? 1 4] [diver.shot 4]
+  when [touching? 0 2] [player.hit]     ; a diver rams the ship
+  when [touching? 0 3] [player.hit]
+  when [touching? 0 4] [player.hit]
+  when [touching? 0 5] [player.hit]     ; an enemy shot hits the ship
+  when [touching? 0 7] [player.hit]
+end
+
+;==========================================================================
+; The convoy (canvas)
+;==========================================================================
+
+to setup.aliens
+  make "conv.rows 4
+  make "conv.cols 8
+  ; Bitmap costumes render at 16x16 regardless of the 8-column putsh format
+  ; (see reference "setmag"); a gap of 20 leaves a visible 4px between cells.
+  make "colgap 20
+  make "rowgap 20
+  ; formx is column 1's centre; the convoy sways +/-40 about formx.base and
+  ; never descends, so formy is fixed.
+  make "formx.base -70
+  make "formx :formx.base
+  make "formy 140
+  make "swayx 0
+  make "swaydir 1
+  ; Liveness list: 0 dead/hole, 1 alive in convoy, 2 out diving. Built once
+  ; per level, thereafter mutated in place (set.alien) so kills/dives/rejoins
+  ; allocate nothing.
+  make "aliens make.convoy
+  make "alive 20
+  draw.convoy
+end
+
+to make.convoy
+  ; A flat 4x8 row-major liveness list with the rank pyramid's corner cells
+  ; initialised to 0 (permanent holes). Built prepending from the last cell so
+  ; index 1 ends up first.
+  local "lst local "idx
+  make "lst []
+  make "idx :conv.rows * :conv.cols
+  repeat :conv.rows * :conv.cols [
+    make "lst fput (cell.alive :idx) :lst
+    make "idx :idx - 1
+  ]
+  output :lst
+end
+
+to cell.alive :idx
+  ; Rank pyramid: row r (1=top) is occupied in columns (5-r)..(4+r).
+  ; row1 cols 4-5 (2 flagships), row2 3-6 (4 red), row3 2-7 (6 purple),
+  ; row4 1-8 (8 blue) -- 20 aliens.
+  local "r local "c
+  make "r alien.row :idx
+  make "c alien.col :idx
+  if :c < (5 - :r) [output 0]
+  if :c > (4 + :r) [output 0]
+  output 1
+end
+
+to set.alien :idx :val
+  .setitem :idx :aliens :val
+end
+
+to alien.row :idx
+  output (int ((:idx - 1) / :conv.cols)) + 1
+end
+
+to alien.col :idx
+  output (remainder (:idx - 1) :conv.cols) + 1
+end
+
+to alien.cell.x :col
+  output :formx + (:col - 1) * :colgap
+end
+
+to alien.cell.y :row
+  output :formy - (:row - 1) * :rowgap
+end
+
+to rank.colour :row
+  if :row = 1 [output :flagship.colour]
+  if :row = 2 [output :red.colour]
+  if :row = 3 [output :purple.colour]
+  output :blue.colour
+end
+
+to rank.shape :row
+  ; Flagship rank wears costumes 4/5, every other rank wears 1/2.
+  ifelse :row = 1 [output 3 + :alien.frame] [output :alien.frame]
+end
+
+to rank.score :row :diving
+  ; :diving is 1 (in convoy) or 2 (doubled in flight); the diving flagship is
+  ; a flat 300 rather than 2x its 60.
+  if and (:row = 1) (:diving = 2) [output 300]
+  local "base
+  if :row = 1 [make "base 60]
+  if :row = 2 [make "base 50]
+  if :row = 3 [make "base 40]
+  if :row = 4 [make "base 30]
+  output :base * :diving
+end
+
+to draw.convoy
+  ; One-time full draw at level start; the sway redraw is spread over frames
+  ; instead (sway.render.slice). Colour and shape change per row.
+  local "lst local "cx local "cy local "col local "row
+  make "lst :aliens
+  make "cx :formx
+  make "cy :formy
+  make "col 1
+  make "row 1
+  ask 6 [
+    repeat :conv.rows * :conv.cols [
+      if 1 = first :lst [
+        setsh rank.shape :row setpc rank.colour :row
+        setx :cx sety :cy stamp
+      ]
+      make "lst butfirst :lst
+      make "cx :cx + :colgap
+      make "col :col + 1
+      if :col > :conv.cols [
+        make "col 1
+        make "row :row + 1
+        make "cx :formx
+        make "cy :cy - :rowgap
+      ]
+    ]
+  ]
+end
+
+to erase.alien.cell :idx
+  ; Blank the cell at its current position; during a spread sway render also
+  ; blank its pre-step position so a mid-render kill leaves no ghost.
+  local "cx local "cy
+  make "cx alien.cell.x alien.col :idx
+  make "cy alien.cell.y alien.row :idx
+  ask 6 [
+    setsh 3 setpc :bg.colour
+    setx :cx sety :cy stamp
+    if :sway.rendering [
+      setx :cx - :sway.dx sety :cy stamp
+    ]
+  ]
+end
+
+to restamp.cell :idx
+  ; Re-draw one convoy cell at the current sway position (used on rejoin).
+  local "r
+  make "r alien.row :idx
+  ask 6 [
+    setsh rank.shape :r setpc rank.colour :r
+    setx alien.cell.x alien.col :idx sety alien.cell.y :r stamp
+  ]
+end
+
+to kill.alien :idx
+  ; A convoy alien shot dead: no edges to shrink (the sway walls are fixed).
+  set.alien :idx 0
+  make "alive :alive - 1
+  erase.alien.cell :idx
+  make "score :score + rank.score (alien.row :idx) 1
+  toot 20 500
+end
+
+;==========================================================================
+; Sway (the convoy's side-to-side motion) -- Invaders' sliced renderer, minus
+; the descent. The logical position advances at once; the stamping spreads
+; over frames at :sway.slice cells each.
+;==========================================================================
+
+to step.sway
+  make "swayx :swayx + (2 * :swaydir)
+  if or (:swayx > 40) (:swayx < -40) [make "swaydir 0 - :swaydir]
+end
+
+to toggle.alien.frame
+  ifelse :alien.frame = 1 [make "alien.frame 2] [make "alien.frame 1]
+end
+
+to sway.note
+  ifelse :sway.note.idx = 0 [
+    toot 40 200 make "sway.note.idx 1
+  ] [
+    toot 40 160 make "sway.note.idx 0
+  ]
+end
+
+to sway.begin
+  make "formx.prev :formx
+  step.sway
+  make "formx :formx.base + :swayx
+  make "sway.dx :formx - :formx.prev
+  toggle.alien.frame
+  sway.note
+  make "sway.k 1                ; next grid cell to redraw
+  make "sway.lst :aliens
+  make "sway.cx :formx
+  make "sway.cy :formy
+  make "sway.col 1
+  make "sway.row 1
+  make "sway.rendering true
+  sway.render.slice
+end
+
+to sway.render.slice
+  ; Redraw up to :sway.slice living cells: erase each where it was (new x minus
+  ; the step delta, same y) and stamp at the new position. A cell that is out
+  ; diving (liveness 2) has no canvas presence, so it is skipped entirely.
+  local "n local "total
+  make "total :conv.rows * :conv.cols
+  make "n :sway.slice
+  ask 6 [
+    until [or (:sway.k > :total) (:n < 1)] [
+      if 1 = first :sway.lst [
+        setsh 3 setpc :bg.colour
+        setx :sway.cx - :sway.dx sety :sway.cy stamp
+        setsh rank.shape :sway.row setpc rank.colour :sway.row
+        setx :sway.cx sety :sway.cy stamp
+      ]
+      make "sway.lst butfirst :sway.lst
+      make "sway.k :sway.k + 1
+      make "sway.col :sway.col + 1
+      make "sway.cx :sway.cx + :colgap
+      if :sway.col > :conv.cols [
+        make "sway.col 1
+        make "sway.row :sway.row + 1
+        make "sway.cx :formx
+        make "sway.cy :sway.cy - :rowgap
+      ]
+      make "n :n - 1
+    ]
+  ]
+  if :sway.k > :total [make "sway.rendering false]
+end
+
+to sway.if.due
+  make "sway.counter :sway.counter + 1
+  ifelse :sway.rendering [
+    sway.render.slice
+  ] [
+    if not (:sway.counter < :sway.interval) [
+      make "sway.counter 0
+      sway.begin
+    ]
+  ]
+end
+
+;==========================================================================
+; Divers -- the new mechanic. A dive moves an alien from the canvas to a
+; turtle and back.
+;==========================================================================
+
+to idle.diver
+  if 0 = item 1 :diver.phase [output 2]
+  if 0 = item 2 :diver.phase [output 3]
+  if 0 = item 3 :diver.phase [output 4]
+  output 0
+end
+
+to all.divers.idle?
+  if not (0 = item 1 :diver.phase) [output false]
+  if not (0 = item 2 :diver.phase) [output false]
+  if not (0 = item 3 :diver.phase) [output false]
+  output true
+end
+
+to find.flank :col :dir
+  ; A live convoy cell near column :col, walking inward by :dir past any empty
+  ; columns; prefer the front (bottom) rank so those peel first. 0 if none.
+  repeat :conv.cols [
+    local "r
+    make "r :conv.rows
+    repeat :conv.rows [
+      local "idx
+      make "idx ((:r - 1) * :conv.cols) + :col
+      if 1 = item :idx :aliens [output :idx]
+      make "r :r - 1
+    ]
+    make "col :col + :dir
+    if or (:col < 1) (:col > :conv.cols) [output 0]
+  ]
+  output 0
+end
+
+to launch.diver :t :idx :heading
+  ; Detach the convoy alien at :idx onto idle turtle :t.
+  set.alien :idx 2
+  erase.alien.cell :idx
+  local "i local "r
+  make "i :t - 1
+  make "r alien.row :idx
+  .setitem :i :diver.cell :idx
+  .setitem :i :diver.phase 1        ; peel
+  .setitem :i :diver.timer :peel.frames
+  ask :t [
+    pu
+    setx alien.cell.x alien.col :idx
+    sety alien.cell.y :r
+    setpc rank.colour :r
+    ifelse :r = 1 [setanim 4 5 150] [setanim 1 2 150]
+    seth :heading
+    st setspeed :diver.speed
+  ]
+end
+
+to maybe.launch.dive
+  ; One random roll per frame; the chance rises with the level.
+  if (random 1000) < (8 + (3 * :level)) [try.launch.dive]
+end
+
+to try.launch.dive
+  if flagship.dive.ready? [flagship.dive stop]
+  local "t
+  make "t idle.diver
+  if :t = 0 [stop]
+  ; Pull a flank alien, alternating sides; peel outward (away from centre).
+  local "idx local "hd
+  ifelse :flank.side = 0 [
+    make "idx find.flank 1 1
+    make "hd 240
+  ] [
+    make "idx find.flank :conv.cols (0 - 1)
+    make "hd 120
+  ]
+  make "flank.side 1 - :flank.side
+  if not (:idx = 0) [launch.diver :t :idx :hd]
+end
+
+to flagship.dive.ready?
+  ; A flagship (row 1, cols 4/5 -> idx 4/5) is alive and all divers are idle.
+  if not all.divers.idle? [output false]
+  output or (1 = item 4 :aliens) (1 = item 5 :aliens)
+end
+
+to flagship.dive
+  ; The signature move: the flagship plus up to two live red-rank escorts.
+  local "fidx
+  ifelse 1 = item 4 :aliens [make "fidx 4] [make "fidx 5]
+  launch.diver 2 :fidx 180
+  launch.escorts
+end
+
+to launch.escorts
+  ; Red rank is row 2 (idx 8+col); take up to two live cells from cols 3..6.
+  local "t local "c
+  make "t 3
+  make "c 3
+  repeat 4 [
+    if :t < 5 [
+      local "idx
+      make "idx :conv.cols + :c
+      if 1 = item :idx :aliens [
+        launch.diver :t :idx escort.heading :c
+        make "t :t + 1
+      ]
+    ]
+    make "c :c + 1
+  ]
+end
+
+to escort.heading :c
+  ; Bank outward: left escorts peel left, right escorts peel right.
+  ifelse :c < 5 [output 210] [output 150]
+end
+
+to turn.toward :h :t :m
+  ; Heading :h stepped toward :t by at most :m degrees, taking the short way
+  ; round (delta normalised to -180..180).
+  local "d
+  make "d :t - :h
+  make "d (remainder (:d + 540) 360) - 180
+  if :d > :m [make "d :m]
+  if :d < (0 - :m) [make "d 0 - :m]
+  output :h + :d
+end
+
+to steer.divers
+  ; Once per frame: aim every active diver. The target point (the player) is
+  ; the same for all divers, so build it once, mutated in place.
+  make "frame.count :frame.count + 1
+  .setitem 1 :ppos ask 0 [xcor]
+  .setitem 2 :ppos ask 0 [ycor]
+  steer.diver 2
+  steer.diver 3
+  steer.diver 4
+  if any.diver.attacking? [dive.shriek]
+end
+
+to steer.diver :t
+  local "i local "ph
+  make "i :t - 1
+  make "ph item :i :diver.phase
+  if :ph = 0 [stop]
+  ifelse :ph = 1 [
+    ; peel: swing toward straight down, counting the arc out
+    ask :t [seth turn.toward heading 180 :peel.turn]
+    local "tm
+    make "tm (item :i :diver.timer) - 1
+    .setitem :i :diver.timer :tm
+    if :tm < 1 [
+      .setitem :i :diver.phase 2
+      .setitem :i :diver.timer :attack.frames
+    ]
+  ] [
+    ; attack: home on the player, clamped -- the whole feel of the game
+    ask :t [seth turn.toward heading (towards :ppos) :attack.turn]
+    local "tm
+    make "tm (item :i :diver.timer) - 1
+    .setitem :i :diver.timer :tm
+    if :tm < 1 [rejoin.diver :t]        ; safety: never get stuck off-screen
+  ]
+end
+
+to any.diver.attacking?
+  if 2 = item 1 :diver.phase [output true]
+  if 2 = item 2 :diver.phase [output true]
+  if 2 = item 3 :diver.phase [output true]
+  output false
+end
+
+to dive.shriek
+  ; A coarse falling pitch stepped every other frame while any diver attacks.
+  if 0 = remainder :frame.count 2 [
+    make "shriek.p :shriek.p - 30
+    if :shriek.p < 300 [make "shriek.p 700]
+    toot 15 :shriek.p
+  ]
+end
+
+to maybe.diver.fire
+  fire.from.diver 2
+  fire.from.diver 3
+  fire.from.diver 4
+end
+
+to fire.from.diver :t
+  local "i
+  make "i :t - 1
+  if not (2 = item :i :diver.phase) [stop]      ; only attacking divers fire
+  if (random 100) < :fire.chance [
+    local "s
+    make "s idle.eshot
+    if not (:s = 0) [
+      local "hx local "hy
+      make "hx ask :t [xcor]
+      make "hy ask :t [ycor]
+      ask :s [pu setx :hx sety :hy seth towards :ppos st setspeed :eshot.speed]
+    ]
+  ]
+end
+
+to idle.eshot
+  if not (ask 5 [shown?]) [output 5]
+  if not (ask 7 [shown?]) [output 7]
+  output 0
+end
+
+to recycle.divers
+  check.diver.exit 2
+  check.diver.exit 3
+  check.diver.exit 4
+end
+
+to check.diver.exit :t
+  local "i
+  make "i :t - 1
+  if 0 = item :i :diver.phase [stop]
+  if (ask :t [ycor]) < -85 [rejoin.diver :t]
+end
+
+to rejoin.diver :t
+  ; Return a diving diver's alien to the convoy. Safe on an idle diver.
+  local "i
+  make "i :t - 1
+  if 0 = item :i :diver.phase [stop]
+  local "idx
+  make "idx item :i :diver.cell
+  ask :t [ht setspeed 0 setanim 1 1 0]
+  .setitem :i :diver.phase 0
+  .setitem :i :diver.cell 0
+  set.alien :idx 1
+  restamp.cell :idx
+end
+
+to diver.shot :t
+  ; A diver killed in flight (from the shot-vs-diver demon): score at the
+  ; diving (doubled) rate, recycle both turtles.
+  local "i
+  make "i :t - 1
+  if 0 = item :i :diver.phase [stop]
+  local "idx local "r
+  make "idx item :i :diver.cell
+  make "r alien.row :idx
+  ask :t [ht setspeed 0 setanim 1 1 0]
+  ask 1 [ht setspeed 0]
+  .setitem :i :diver.phase 0
+  .setitem :i :diver.cell 0
+  set.alien :idx 0
+  make "alive :alive - 1
+  make "score :score + rank.score :r 2
+  toot 30 700
+end
+
+;==========================================================================
+; Player shot vs. convoy (colourunder, not over? -- four rank colours)
+;==========================================================================
+
+to check.shot
+  ask 1 [if shown? [check.convoy.hit colourunder]]
+end
+
+to check.convoy.hit :slot
+  if is.rank.colour? :slot [hit.alien]
+end
+
+to is.rank.colour? :s
+  output or (or (:s = :blue.colour) (:s = :purple.colour)) (or (:s = :red.colour) (:s = :flagship.colour))
+end
+
+to locate.alien :x :y
+  ; Invert the regular cell formula to jump to the nearest cell; tolerance is
+  ; < 10 on both axes (covers the bitmap bottom-row anchor offset, still under
+  ; half the 20-unit gap so it can never match a neighbour). See Invaders.
+  local "col local "row local "idx local "ax local "ay
+  make "col 1 + (round ((:x - :formx) / :colgap))
+  make "row 1 + (round ((:formy - :y) / :rowgap))
+  if or (:col < 1) (:col > :conv.cols) [output 0]
+  if or (:row < 1) (:row > :conv.rows) [output 0]
+  make "idx ((:row - 1) * :conv.cols) + :col
+  if not (1 = item :idx :aliens) [output 0]
+  make "ax alien.cell.x :col
+  make "ay alien.cell.y :row
+  if and ((abs (:ax - :x)) < 10) ((abs (:ay - :y)) < 10) [output :idx]
+  output 0
+end
+
+to hit.alien
+  local "idx
+  make "idx locate.alien xcor ycor
+  if not (:idx = 0) [
+    kill.alien :idx
+    ht setspeed 0
+  ]
+end
+
+;==========================================================================
+; Input, player, recycling
+;==========================================================================
+
+to move.ship :dx
+  local "nx
+  make "nx (xcor) + :dx
+  if :nx < -150 [make "nx -150]
+  if :nx > 150 [make "nx 150]
+  setx :nx
+end
+
+to shot.active?
+  output ask 1 [shown?]
+end
+
+to fire
+  if not shot.active? [
+    ask 1 [pu setx (ask 0 [xcor]) sety ((ask 0 [ycor]) + 10) seth 0 st setspeed :shot.speed]
+  ]
+end
+
+to recycle.offscreen
+  ask 1 [if shown? [if (ycor) > 155 [ht setspeed 0]]]
+  ask 5 [if shown? [if (ycor) < -155 [ht setspeed 0]]]
+  ask 7 [if shown? [if (ycor) < -155 [ht setspeed 0]]]
+end
+
+to poll.input
+  if key? [
+    make "k ascii readchar
+    if :k = 180 [ask 0 [move.ship -6]]
+    if :k = 183 [ask 0 [move.ship 6]]
+    if :k = 32 [fire]
+    if :k = 112 [toggle.pause]
+  ]
+end
+
+to toggle.pause
+  ifelse :paused [thaw make "paused false] [freeze make "paused true]
+end
+
+;==========================================================================
+; Death / respawn
+;==========================================================================
+
+to player.hit
+  freeze
+  make "lives :lives - 1
+  make "dying true
+end
+
+to handle.death
+  toot 200 100
+  wait 500
+  reset.after.death
+  ask 0 [setx 0]
+  make "dying false
+  ifelse :lives < 1 [make "over true] [thaw]
+end
+
+to reset.after.death
+  ; Hide the shots, rejoin every mid-air diver (its liveness-2 cell flips back
+  ; to 1 and re-stamps), so the convoy is whole again on respawn.
+  ask [1 5 7] [ht setspeed 0]
+  rejoin.diver 2
+  rejoin.diver 3
+  rejoin.diver 4
+end
+
+;==========================================================================
+; HUD and main loop
+;==========================================================================
+
+to draw.hud
+  ; Repaint a line only when its value changes (re-blitting every glyph over
+  ; SPI each frame was the biggest ordinary-frame cost in Invaders).
+  if not (:score = :hud.score) [
+    setcursor [0 0] (print [SCORE:] :score) make "hud.score :score
+  ]
+  if not (:lives = :hud.lives) [
+    setcursor [0 1] (print [LIVES:] :lives) make "hud.lives :lives
+  ]
+  if not (:level = :hud.level) [
+    setcursor [0 2] (print [LEVEL:] :level) make "hud.level :level
+  ]
+end
+
+to play.level
+  setup.level
+  (setrefresh "sync 25)
+  make "over false
+  until [:over] [
+    poll.input
+    if not :paused [
+      sway.if.due
+      steer.divers
+      maybe.launch.dive
+      maybe.diver.fire
+      check.shot
+      recycle.offscreen
+      recycle.divers
+    ]
+    draw.hud
+    sync
+    if :dying [handle.death]
+    if :alive = 0 [make "over true]
+  ]
+  setrefresh "auto
+end
