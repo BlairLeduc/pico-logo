@@ -1,0 +1,318 @@
+# HTTP server (design)
+
+Status: **draft v2 for review** — this is the design gate for the HTTP
+server. The open questions in §9 were resolved with the user on
+2026-07-10; no open questions remain.
+
+v2 adds file transfer (§3 file primitives, the oversized-body pump rule
+in §4, milestone M5): upload/download of files of any size — including
+binary and files larger than the request buffer — streamed directly
+between the connection and storage, on both WiFi boards.
+
+Scope: plain **HTTP only**. HTTPS serving was considered and dropped
+(2026-07-10): a LAN device has no public hostname, so certificates would
+be self-signed and every browser would warn; the provisioning pain buys
+no real trust. The server needs only `LOGO_HAS_WIFI`, so it works on the
+Pico 2 W *and* the Pico Plus 2 W (the client's `LOGO_HAS_TLS` tiering is
+untouched).
+
+---
+
+## 1. Goal
+
+Let a Logo program answer HTTP requests from a browser or another
+program on the LAN — "control your PicoCalc from your phone" — with the
+same shape the rest of the language already has: dot-namespaced
+primitives, demon-driven events, tiny static memory footprint.
+
+What a working server looks like:
+
+```logo
+wifi.connect "TimHortonsWiFi "double-double
+http.listen 80
+when [http.request?] [
+  if equal? http.path "/forward [fd 20]
+  if equal? http.path "/right   [rt 90]
+  http.respond 200 sentence [heading is] heading
+]
+pr sentence [serving at] wifi.ip
+```
+
+The demon fires while the program runs *and while the user types at the
+prompt* — the same Atari-style liveness `when` already delivers. Demons
+are optional: `forever [if http.request? [...]]` works too, since
+`http.request?` is an ordinary predicate.
+
+## 2. What already exists
+
+- lwIP is configured for listening (`MEMP_NUM_TCP_PCB_LISTEN 4`,
+  `TCP_LISTEN_BACKLOG 1`), and all TCP flows through altcp.
+- The device ops (`devices/hardware.h`) have connect/read/write/close/
+  can-read for client connections; the picocalc implementation already
+  wraps an altcp PCB in a connection struct with receive buffering. A
+  server connection is the same struct born from `accept` instead of
+  `connect`.
+- The HTTP client (`core/primitives_http.c`) has request/response
+  header formatting and the tiered-buffer pattern (PSRAM region when
+  available, small SRAM heap fallback, sizes in `core/limits.h`).
+- The demon system (`core/demons.c`) provides the poll points — top of
+  `eval_instruction` plus the device idle loop — that the server pump
+  rides on.
+
+## 3. Primitive surface
+
+Commands and queries, all under the existing `http.` namespace:
+
+- `http.listen port` — start listening on *port* (1–65535). Error if
+  WiFi is not connected or already listening.
+- `http.unlisten` — stop listening, drop any pending connection.
+  (Naming mirrors `wifi.connect`/`wifi.disconnect`.)
+- `http.request?` — `true` when a complete, parsed request is waiting
+  for a response. The demon condition and the polling-loop predicate.
+
+Request accessors (error if no request is pending):
+
+- `http.method` — word: `GET`, `POST`, …
+- `http.path` — word: percent-decoded path, query string excluded.
+- `http.query` — word: the raw query string (`a=1&b=2`), empty word if
+  none. (Parameter parsing in Logo is a `parse`-able one-liner; a
+  `http.param` helper can come later if usage demands it.)
+- `http.body` — word: the request body (empty word for bodyless
+  methods).
+- `http.reqheader name` — word: value of a request header, empty list
+  if absent. (Named to avoid colliding with `http.header`, which
+  reports the client's last *response*.)
+- `http.remote` — word: the client's IP address, for logging/greeting.
+
+Response:
+
+- `http.respond status body` — send `HTTP/1.1 <status>`, default
+  `Content-Type: text/plain; charset=utf-8`, `Connection: close`, then
+  *body*; close the connection and clear the pending request.
+- `(http.respond status body name1 value1 ...)` — extra response
+  headers as name/value pairs, the same parenthesised convention as
+  `(http.get url name value ...)`. Supplying `Content-Type` overrides
+  the default (so `"text/html` pages work).
+
+File transfer (M5) — bytes move **connection ↔ storage directly**,
+never materializing as Logo words, so they are binary-safe (BMPs) and
+unbounded by the request buffer or the Logo arena:
+
+- `http.respondfile status path` — like `http.respond`, but the body
+  is the named file's contents, streamed in small chunks. Default
+  `Content-Type: application/octet-stream` (no extension sniffing);
+  override via the parenthesised header form. Missing file is an
+  ordinary Logo error — the handler decides whether that becomes a
+  `404`.
+- `http.savebody path` — stream the pending request's body to the
+  named file, whether the body was buffered or is still unread (§4).
+  The request stays pending; the handler still finishes with
+  `http.respond`.
+
+Both block until the transfer completes, the precedent `http.get`
+already set. Both take Logo file paths routed through the storage
+router like every other file primitive, and the C side rejects `..`
+segments — `http.path` is attacker-supplied.
+
+A file server is then three lines:
+
+```logo
+http.listen 80
+when [http.request?] [
+  if equal? http.method "GET [http.respondfile 200 http.path]
+  if equal? http.method "PUT [http.savebody http.path  http.respond 201 "saved]
+]
+```
+
+paired with `curl -T invaders http://<ip>/games/invaders` to upload and
+`curl -o` to download.
+
+## 4. Execution model: a poll-driven pump
+
+One connection at a time, fully buffered, strictly serial:
+
+```
+poll point (eval_instruction / idle loop, budget-gated like demons)
+  → no connection? accept one (non-blocking)
+  → connection? read available bytes, parse incrementally
+  → request complete? → http.request? becomes true → demon fires
+  → handler runs http.respond → write response, close, pump idle again
+```
+
+- **The pump never blocks.** Each poll does at most one non-blocking
+  accept or one bounded read. Parsing is an incremental state machine
+  (request line → headers → `Content-Length` body).
+- **Serial by design.** While a request is pending, no new connection
+  is accepted; `TCP_LISTEN_BACKLOG 1` holds one caller in the SYN
+  queue. Browsers open parallel connections (notably `favicon.ico`) —
+  they are simply served one after another.
+- **Protocol floor:** HTTP/1.1 responses, always `Connection: close`,
+  no keep-alive, no chunked transfer (a chunked request gets `411`).
+  This keeps the state machine small and every request self-contained.
+- **Oversized bodies fire unread (M5).** A body up to the buffer cap is
+  buffered before the event fires and read with `http.body`. A larger
+  `Content-Length` is not an error: the pump fires the event as soon as
+  the headers are parsed, with the body *unread* — in that state
+  `http.body` errors, and `http.savebody` drains the bytes straight to
+  a file through a small chunk buffer. A handler that responds without
+  draining costs nothing: `Connection: close` discards the rest.
+- **Auto-responses** (pump-generated, no Logo involvement): `400`
+  malformed request, `431` header block larger than its buffer, `408`
+  if the request stops arriving mid-parse, and `503` if a parsed
+  request is still unanswered after `HTTPD_RESPOND_MS` (proposed
+  10 s) — the safety valve for a handler that forgot `http.respond` or
+  for no handler being armed at all. (Until M5 lands, a body larger
+  than the buffer auto-responds `413`; M5 replaces that with the
+  fires-unread rule.)
+- **`freeze` / `thaw`** suspend the pump along with demons: no accepts,
+  and the pending-response deadline pauses. One rule for everything
+  autonomous.
+- **Lifetime:** the listener follows the demon lifetime — closed by
+  `cs`/`draw` and on error-unwind to toplevel. Rationale: the P5 rule
+  is *nothing acts on its own after a reset*, and a server whose
+  handler demons were just cleared (as `cs` already does) would only
+  `503` every caller; killing both together keeps the observable state
+  consistent. Decided (2026-07-10) — it does mean a serving program
+  that errors once stops serving; restart it by rerunning.
+
+## 5. Device interface changes (`devices/hardware.h`)
+
+Three new ops beside the existing TCP client ops; accepted connections
+reuse `network_tcp_read` / `network_tcp_write` / `network_tcp_close` /
+`network_tcp_can_read` unchanged:
+
+```c
+// Listen for TCP connections on a port.
+// Returns an opaque listener handle, NULL on failure.
+void *(*network_tcp_listen)(uint16_t port);
+
+// Stop listening and free the listener.
+void (*network_tcp_unlisten)(void *listener);
+
+// Accept a pending connection, if any (non-blocking).
+// Returns a connection handle usable with the tcp read/write/close
+// ops, or NULL when nothing is waiting. remote_ip (16 bytes) receives
+// the client address in dotted-decimal form.
+void *(*network_tcp_accept)(void *listener, char *remote_ip, size_t ip_size);
+```
+
+- **picocalc:** `altcp_new` + `altcp_bind` + `altcp_listen`; the accept
+  callback parks the new PCB (at most one) for `network_tcp_accept` to
+  claim; the claimed PCB is wrapped in the same connection struct the
+  client path uses, so read/write/close need no changes.
+- **mock:** scripted — `mock_httpd_queue_connection(request_bytes)`
+  queues an incoming connection whose reads return the scripted bytes
+  (with a dribble mode that returns them a few bytes per call);
+  everything written is recorded for assertions.
+- **host:** ops stay `NULL`; primitives raise the same no-network error
+  the client ops do.
+
+## 6. Core structure
+
+- `core/httpd.c` / `httpd.h` — the pump: listener handle, connection
+  state machine, request buffer, parsed-request fields, auto-response
+  logic, `httpd_poll_budgeted()` called from the same two poll sites as
+  `demons_poll_budgeted()`. Unit-testable against the mock without any
+  primitive involvement.
+- `core/primitives_httpd.c` — the Logo surface from §3, all thin
+  wrappers over `httpd.c` state.
+- **Buffers:** the server gets its own request buffer, deliberately
+  *not* shared with the client's `g_io` — a handler that calls
+  `http.get` to aggregate or proxy would otherwise clobber the pending
+  request. Same tiering as the client: `mem_region_alloc` (PSRAM) at a
+  generous cap when available, else a one-time SRAM heap fallback.
+  Proposed `core/limits.h` entries: `HTTPD_MAX_HEADERS` 1 KB,
+  `HTTPD_MAX_BODY` 4 KB (SRAM tier), `HTTPD_MAX_BODY_PSRAM` 64 KB.
+  Allocated lazily on first `http.listen`, so programs that never
+  serve pay nothing.
+- **Responses need no big buffer:** status line + headers are built in
+  a small stack buffer; the body is written straight from the Logo
+  word via `network_tcp_write`.
+
+SRAM budget: ~5 KB heap on the SRAM tier, only if `http.listen` is
+used; pump state well under 100 B; one extra TCP PCB within the
+existing `MEMP_NUM_TCP_PCB 5`. No new static arrays.
+
+## 7. Milestones
+
+Each independently shippable; gate = all tests green + all three
+firmware presets linking + reference sections for anything user-visible
+(they *are* the help text).
+
+- **M1 — TCP server device ops.** `network_tcp_listen` / `unlisten` /
+  `accept` in `hardware.h`; picocalc altcp implementation reusing the
+  client connection wrapper; mock scripted connections; host `NULL`.
+  Acceptance: mock tests cover listen → accept → read → write → close,
+  accept-when-empty, and unlisten-with-connection-pending; firmware
+  smoke test echoes one raw TCP connection on hardware.
+
+- **M2 — request pump and parser.** `core/httpd.c` state machine on
+  the demon poll sites; `http.listen` / `http.unlisten` /
+  `http.request?`; incremental parse of request line, headers, and
+  `Content-Length` body; percent-decoding; auto-responses (`400`,
+  `408`, `411`, `413`, `431`, `503` deadline); `Connection: close`
+  always; freeze/thaw and lifetime rules. Acceptance: mock tests for a
+  whole request in one read, byte-dribbled reads, oversize body and
+  header block, mid-request stall → `408`, unanswered request → `503`,
+  listener cleared on error-unwind.
+
+- **M3 — Logo handler surface.** `http.method` / `http.path` /
+  `http.query` / `http.body` / `http.reqheader` / `http.remote`;
+  `http.respond` with header pairs and Content-Type defaulting; demon
+  integration end-to-end. Acceptance: mock test scripts a full GET and
+  a POST → `when [http.request?]` handler fires via `demons_poll` →
+  response bytes (status line, headers, body) asserted; handler calling
+  `http.get` mid-request doesn't disturb the pending request; reference
+  gains an "HTTP Server" section documenting all §3 primitives.
+
+- **M4 — hardware validation and example.** Browser smoke test against
+  both WiFi boards (page load, form POST, the favicon double-connect);
+  an example program in `logo/` (proposed: `webturtle.logo` — drive the
+  turtle from a phone browser via links, serving a small HTML page);
+  roadmap progress-log entry.
+
+- **M5 — file transfer.** `http.respondfile` (stream file →
+  connection) and `http.savebody` (stream body → file), both through a
+  small chunk buffer, binary-safe, routed via the storage router with
+  `..` rejection; the oversized-body fires-unread pump rule replaces
+  the auto-`413`. Acceptance: mock round-trip of a binary payload
+  (containing NUL bytes) larger than the buffer cap — upload to a file,
+  download it back, byte-identical; `http.body` on an unread body
+  errors; a handler that responds without draining closes cleanly;
+  traversal paths (`/../secrets`) rejected. Hardware check: `curl -T` a
+  19 KB game onto a **Pico 2 W** (the 4 KB-buffer board) and fetch it
+  back byte-identical; reference sections for both primitives.
+
+## 8. Rejected alternatives
+
+| Alternative | Why not |
+|---|---|
+| HTTPS serving | Self-signed-cert warnings on every client; provisioning pain with no trust gained on a LAN. Client-side `https://` is unaffected. Revisit only against a concrete integration that demands it. |
+| Server as a Logo *stream* (`open "listen:8080` handing out connection streams) | The stream layer already does outbound TCP, but raw streams push HTTP parsing, timeouts, and error responses into every user program. HTTP-level primitives are the classroom-sized surface; a raw TCP listener could still be added to the stream layer later without conflict. |
+| Concurrent connections | Multiplies buffers and states on a machine with one thread of control and ~5 KB to spare; serial-with-backlog serves the browser use case. |
+| Keep-alive / chunked transfer | State-machine complexity for no benefit at LAN latencies; `Connection: close` makes every request self-contained. |
+| Sharing the client's `g_io` transfer buffer | A handler calling `http.get` (aggregate/proxy) would clobber the pending request. Separate lazily-allocated buffer costs nothing until used. |
+| Blocking `http.serve [instrs]` loop | Freezes the interpreter; the demon pump keeps the prompt and autonomous turtles alive while serving, and a blocking loop remains writable in Logo (`forever [if http.request? [...]]`). |
+| `multipart/form-data` upload parsing | Raw `PUT` bodies (`curl -T`) cover the transfer workflow without it; browser `<form>` file upload would drag multipart framing into the pump. Defer until a real page needs it. |
+| Content-Type sniffing by file extension in `http.respondfile` | A table to maintain for marginal gain; `application/octet-stream` downloads correctly everywhere, and a handler that cares passes the header explicitly. |
+
+## 9. Decisions (resolved with the user, 2026-07-10)
+
+1. **Lifetime on `cs`/error-unwind (§4):** the listener follows the
+   demon rule — closed by `cs`/`draw` and on error-unwind to toplevel.
+   One teachable rule: *nothing acts on its own after a reset.* A
+   serving program that errors stops serving; rerun it to restart.
+2. **`http.query` outputs the raw query string.** No parameter parsing
+   in M3; a `http.param name` helper can be added later without
+   breaking anything if usage demands it.
+3. **`http.listen` requires an explicit port** — no default. One fewer
+   hidden convention; examples show `http.listen 80` so browsers need
+   no port suffix.
+4. **`webturtle.logo` (M4) is the links page only** — forward/left/
+   right/clear links, each click a GET the handler maps to turtle
+   commands. A canvas-snapshot upgrade (`savepic` + `http.respondfile`)
+   is a natural follow-on once M5 lands, not an M4 deliverable.
+5. **Write protection stays in the handler, not the pump.** No auth in
+   C; the example and reference document the shared-secret pattern
+   (`if not equal? http.reqheader "X-Key :key [http.respond 403 "no]`).
+   Logo stays in control; classroom-appropriate.

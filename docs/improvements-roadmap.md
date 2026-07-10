@@ -46,7 +46,8 @@ Companion documents:
 
 | Item | Status | Notes |
 |---|---|---|
-| Multiple turtles/sprites (`tell`/`ask`/`each`), `touching?`, `when` events | in progress | Design done; M0 pipeline + M1 sprite model + M2 sensing + M3 autonomy/events landed: [P5](#p5--multi-sprite-turtles-with-collision-design-first) |
+| Multiple turtles/sprites (`tell`/`ask`/`each`), `touching?`, `when` events | done | All milestones landed (M0–M3); validated end-to-end by the Space Invaders game (#101/#102). `launch` processes remain gated behind a P6 design: [P5](#p5--multi-sprite-turtles-with-collision-design-first) |
+| HTTP server (`http.listen`, `when [http.request?]`, `http.respond`, file transfer) | todo | Design done (gate closed 2026-07-10), implementation not started: [P7](#p7--http-server-design-complete-implementation-not-started) |
 | Arrays (`array`/`setitem`) | deferred | O(1) indexing; needs a new object kind (likely blob-backed). Wait for demonstrated need |
 | Atom reclamation / `erall` soft reset | deferred | See `memory-reclamation-design.md` |
 
@@ -259,6 +260,32 @@ The design doc must settle:
 hook complexity (the trampoline's re-entrancy contract), and whether the host
 device (no graphics) degrades cleanly.
 
+### P7 — HTTP server (design complete, implementation not started)
+
+**Goal:** serve HTTP from Logo — browser-driven turtle control and cable-free
+file transfer (`curl -T`) on both WiFi boards. **Gate closed:**
+[`http-server-design.md`](http-server-design.md) (draft v2; all open
+questions resolved with the user 2026-07-10). Numbered P7 because P6 stays
+reserved for the `launch` process design flagged in the P5 doc.
+
+- Demon-driven surface: `http.listen 80` · `when [http.request?] [...]` ·
+  `http.respond`, with accessors (`http.method`/`path`/`query`/`body`/
+  `reqheader`/`remote`). Plain HTTP only (`LOGO_HAS_WIFI`); HTTPS serving
+  rejected (self-signed-cert pain, no trust gained on a LAN).
+- Non-blocking pump on the demon poll sites: one connection at a time, always
+  `Connection: close`, auto-responses for malformed/stalled/unanswered
+  requests; listener follows the demon lifetime (`cs`/error-unwind).
+- Three new device ops (`network_tcp_listen`/`unlisten`/`accept`) beside the
+  existing TCP client ops; accepted connections reuse the client
+  read/write/close path; mock gets scripted connections.
+- Milestones: M1 device ops → M2 pump/parser → M3 Logo surface →
+  M4 hardware validation + `webturtle.logo` → M5 file transfer
+  (`http.respondfile`/`http.savebody`; oversized bodies fire unread and
+  stream straight to storage — binary-safe, works on the 4 KB-buffer
+  Pico 2 W).
+- **Not started by user decision (2026-07-10):** another design is being
+  worked first.
+
 ---
 
 ## Progress log
@@ -280,3 +307,5 @@ device (no graphics) degrades cleanly.
 | 2026-07-04 | P5 | M1 sprite model + addressing: 8 turtles (per-turtle device state behind a `select` op, sprite id = turtle number, lower on top), `tell`/`ask`/`each`/`who` with command fan-out and lowest-active queries, colour costume pool (`costumes.c` + tests, 8 KB compact-on-free), indexed compositor sprites, `snapsh`/`stamp`, `setrot`/`setmag`; single-turtle programs unchanged (`cs` re-hides 1-7) |
 | 2026-07-05 | P5 | M2 sensing: `touching?` (pixel-true mask AND, wrap-fold, both-visible), `over?`/`colourunder` (canvas beneath the mask, sprites excluded), `distance` (Euclidean); core-side geometry over new device ops `get_raster`/`canvas_point`/`sense_metrics`, mock rasters+canvas fixtures, 18 tests; host degrades to false/0 |
 | 2026-07-05 | P5 | M3 autonomy + events (`core/demons.c`): edge-triggered `when` demons (arm/`[]`-disarm/`(when)`-print, `MAX_DEMONS` 8), budgeted poll (`DEMON_POLL_MS` 20) at the instruction point and the picocalc prompt idle loop, actions in a fresh nested evaluator with re-entrancy suppression; `freeze`/`thaw`; `setspeed`/`speed`/`setanim` over new device ops `set_speed`/`get_speed`/`set_anim`/`turtle_tick`; new monotonic `ticks_ms` hardware op (host/picocalc/mock); lifetime — `cs` and toplevel error-unwind clear demons and stop motion/animation; 18 tests + `logo/m3accept`. Decisions: speed = steps/second, `setanim first last interval_ms`, `freeze` suspends demons *and* motion |
+| 2026-07-10 | P5 | Done: Space Invaders game shipped (#101, 2026-07-06; migration tool #102, 2026-07-10) as the end-to-end exercise of the sprite stack — M0–M3 all validated in a real game. `launch` processes stay behind the P6 design gate |
+| 2026-07-10 | P7 | HTTP server design gate closed: `http-server-design.md` v2 — demon-driven server on the demon poll sites, three TCP server device ops, milestones M1–M5 incl. file transfer (`http.respondfile`/`http.savebody`, oversized bodies fire unread); HTTPS serving rejected; five open questions resolved with user (demon-rule lifetime, raw `http.query`, explicit port, links-only `webturtle.logo`, handler-side write auth). Implementation deferred — another design first |
