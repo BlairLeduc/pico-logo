@@ -4,7 +4,7 @@ Syntax highlighting for the Pico Logo programming language.
 
 ## Features
 
-- **Comments** — `; [comment text]` (including nested brackets)
+- **Comments** — `; comment text` (including nested brackets)
 - **Procedure definitions** — `to`/`end` blocks with procedure name and parameter highlighting
 - **Lists** — `[` and `]` bracket highlighting
 - **Quoted words** — `"word` string highlighting
