@@ -81,6 +81,23 @@ static Result prim_local(Evaluator *eval, int argc, Value *args)
     return result_none();
 }
 
+// localmake "name value - declares name local to the current procedure and
+// gives it value in one step; equivalent to `local "name` then `make "name value`.
+static Result prim_localmake(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_WORD_STR(args[0], name);
+    if (!var_declare_local(name))
+    {
+        return result_error(ERR_OUT_OF_SPACE);
+    }
+    if (!var_set(name, args[1]))
+    {
+        return result_error(ERR_OUT_OF_SPACE);
+    }
+    return result_none();
+}
+
 // name "value "varname - same as make but with reversed arguments
 static Result prim_name(Evaluator *eval, int argc, Value *args)
 {
@@ -109,6 +126,7 @@ static Result prim_namep(Evaluator *eval, int argc, Value *args)
 void primitives_variables_init(void)
 {
     primitive_register("make", 2, prim_make);
+    primitive_register("localmake", 2, prim_localmake);
     primitive_register("thing", 1, prim_thing);
     primitive_register("local", 1, prim_local);
     primitive_register("name", 2, prim_name);

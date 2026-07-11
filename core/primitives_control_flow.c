@@ -20,6 +20,16 @@ static Result prim_run(Evaluator *eval, int argc, Value *args)
     return eval_push_if(eval, args[0].as.node, true);
 }
 
+// runresult list - runs list as an instruction list; outputs a one-member
+// list [value] if it produced a value, or the empty list [] if it did not.
+static Result prim_runresult(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(argc);
+    REQUIRE_LIST(args[0]);
+
+    return eval_push_runresult(eval, args[0].as.node);
+}
+
 // forever - repeats the provided list indefinitely
 static Result prim_forever(Evaluator *eval, int argc, Value *args)
 {
@@ -262,6 +272,7 @@ static Result prim_for(Evaluator *eval, int argc, Value *args)
 void primitives_control_flow_init(void)
 {
     primitive_register("run", 1, prim_run);
+    primitive_register("runresult", 1, prim_runresult);
     primitive_register("forever", 1, prim_forever);
     primitive_register("repeat", 2, prim_repeat);
     primitive_register("repcount", 0, prim_repcount);

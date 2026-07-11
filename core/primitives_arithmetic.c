@@ -136,12 +136,36 @@ static Result prim_rerandom(Evaluator *eval, int argc, Value *args)
 }
 
 // arctan - outputs arctangent of number in degrees
+// arctan number            -> arctangent of number, in degrees
+// (arctan x y)             -> arctangent of y/x, in degrees, using the signs
+//                             of both inputs to place the result in the full
+//                             -180..180 range (atan2, UCB two-input form).
 static Result prim_arctan(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+
+    if (argc == 1)
+    {
+        REQUIRE_NUMBER(args[0], n);
+        return result_ok(value_number(atanf(n) * RAD_TO_DEG));
+    }
+    if (argc == 2)
+    {
+        REQUIRE_NUMBER(args[0], x);
+        REQUIRE_NUMBER(args[1], y);
+        return result_ok(value_number(atan2f(y, x) * RAD_TO_DEG));
+    }
+    return result_error_arg(argc < 1 ? ERR_NOT_ENOUGH_INPUTS : ERR_TOO_MANY_INPUTS,
+                            "arctan", NULL);
+}
+
+// tan - outputs tangent of number (in degrees)
+static Result prim_tan(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
     REQUIRE_NUMBER(args[0], n);
-    
-    return result_ok(value_number(atanf(n) * RAD_TO_DEG));
+
+    return result_ok(value_number(tanf(n * DEG_TO_RAD)));
 }
 
 // cos - outputs cosine of number (in degrees)
@@ -199,6 +223,28 @@ static Result prim_remainder(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_DIVIDE_BY_ZERO, NULL, NULL);
     
     return result_ok(value_number((float)(ia % ib)));
+}
+
+// modulo - outputs the remainder of integer1 / integer2 using floor division,
+// so the result takes the sign of integer2 (unlike remainder, which takes the
+// sign of integer1). modulo -7 3 is 2; remainder -7 3 is -1.
+static Result prim_modulo(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_NUMBER(args[0], a);
+    REQUIRE_NUMBER(args[1], b);
+
+    int ia = (int)a;
+    int ib = (int)b;
+    if (ib == 0)
+        return result_error_arg(ERR_DIVIDE_BY_ZERO, NULL, NULL);
+
+    int r = ia % ib;
+    // C's % takes the sign of the dividend; nudge toward the divisor's sign.
+    if (r != 0 && ((r < 0) != (ib < 0)))
+        r += ib;
+
+    return result_ok(value_number((float)r));
 }
 
 // round - rounds number to nearest integer
@@ -357,9 +403,11 @@ void primitives_arithmetic_init(void)
     primitive_register("arctan", 1, prim_arctan);
     primitive_register("cos", 1, prim_cos);
     primitive_register("sin", 1, prim_sin);
+    primitive_register("tan", 1, prim_tan);
     primitive_register("int", 1, prim_int);
     primitive_register("intquotient", 2, prim_intquotient);
     primitive_register("remainder", 2, prim_remainder);
+    primitive_register("modulo", 2, prim_modulo);
     primitive_register("round", 1, prim_round);
     primitive_register("sqrt", 1, prim_sqrt);
     primitive_register("log", 1, prim_log);

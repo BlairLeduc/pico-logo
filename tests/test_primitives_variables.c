@@ -160,6 +160,60 @@ void test_make_updates_local_in_scope(void)
     TEST_ASSERT_EQUAL_FLOAT(10.0f, r2.value.as.number);
 }
 
+void test_localmake_declares_and_sets(void)
+{
+    // Inside a scope, localmake declares a local and gives it a value in one
+    // step; it is visible while the scope is active and gone once it pops.
+    test_push_scope();
+    run_string("localmake \"temp 5");
+    Result r1 = eval_string(":temp");
+    TEST_ASSERT_EQUAL(RESULT_OK, r1.status);
+    TEST_ASSERT_EQUAL_FLOAT(5.0f, r1.value.as.number);
+
+    test_pop_scope();
+    Result r2 = eval_string(":temp");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r2.status);
+    TEST_ASSERT_EQUAL(ERR_NO_VALUE, r2.error_code);
+}
+
+void test_localmake_shadows_global(void)
+{
+    // A global x; localmake "x inside a scope shadows it without touching it.
+    run_string("make \"x 10");
+
+    test_push_scope();
+    run_string("localmake \"x 20");
+    Result r1 = eval_string(":x");
+    TEST_ASSERT_EQUAL(RESULT_OK, r1.status);
+    TEST_ASSERT_EQUAL_FLOAT(20.0f, r1.value.as.number);
+
+    test_pop_scope();
+    Result r2 = eval_string(":x");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_FLOAT(10.0f, r2.value.as.number);
+}
+
+void test_localmake_in_procedure(void)
+{
+    // End-to-end: a procedure's localmake leaves nothing behind.
+    Result rd = proc_define_from_text(
+        "to greet\n"
+        "localmake \"snack 42\n"
+        "make \"seen :snack\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, rd.status);
+
+    run_string("greet");
+
+    Result r1 = eval_string(":seen");
+    TEST_ASSERT_EQUAL(RESULT_OK, r1.status);
+    TEST_ASSERT_EQUAL_FLOAT(42.0f, r1.value.as.number);
+
+    Result r2 = eval_string(":snack");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r2.status);
+    TEST_ASSERT_EQUAL(ERR_NO_VALUE, r2.error_code);
+}
+
 void test_make_creates_global_when_no_local(void)
 {
     // Push scope
@@ -285,6 +339,9 @@ int main(void)
     RUN_TEST(test_local_variable_shadowing);
     RUN_TEST(test_local_variable_not_visible_after_scope);
     RUN_TEST(test_make_updates_local_in_scope);
+    RUN_TEST(test_localmake_declares_and_sets);
+    RUN_TEST(test_localmake_shadows_global);
+    RUN_TEST(test_localmake_in_procedure);
     RUN_TEST(test_make_creates_global_when_no_local);
     RUN_TEST(test_local_with_list);
     RUN_TEST(test_name_primitive);

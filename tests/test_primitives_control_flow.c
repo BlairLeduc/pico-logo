@@ -138,6 +138,60 @@ void test_run_list(void)
     TEST_ASSERT_EQUAL_STRING("42\n", output_buffer);
 }
 
+void test_runresult_with_value(void)
+{
+    // An expression that outputs a value becomes a one-member list.
+    reset_output();
+    run_string("show runresult [sum 2 3]");
+    TEST_ASSERT_EQUAL_STRING("[5]\n", output_buffer);
+}
+
+void test_runresult_without_value(void)
+{
+    // A command that outputs nothing becomes the empty list. (print runs
+    // first, so its output precedes show's.)
+    reset_output();
+    run_string("show runresult [print \"done]");
+    TEST_ASSERT_EQUAL_STRING("done\n[]\n", output_buffer);
+}
+
+void test_runresult_list_value(void)
+{
+    // A list-valued output is wrapped, not flattened.
+    reset_output();
+    run_string("show runresult [se \"a \"b]");
+    TEST_ASSERT_EQUAL_STRING("[[a b]]\n", output_buffer);
+}
+
+void test_runresult_empty_list_is_empty(void)
+{
+    // Running the empty list produces no value.
+    Result r = eval_string("runresult []");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
+    TEST_ASSERT_TRUE(mem_is_nil(r.value.as.node));
+}
+
+void test_runresult_stored_and_reused(void)
+{
+    // The idiomatic use: capture and inspect what a list did.
+    run_string("make \"r runresult [sum 40 2]");
+    reset_output();
+    run_string("show :r");
+    TEST_ASSERT_EQUAL_STRING("[42]\n", output_buffer);
+
+    reset_output();
+    run_string("show empty? runresult [make \"z 1]");
+    TEST_ASSERT_EQUAL_STRING("true\n", output_buffer);
+}
+
+void test_runresult_propagates_error(void)
+{
+    Result r = eval_string("runresult [sum 1 \"notanumber]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+}
+
 // Test infix subtraction inside lists - Logo evaluates infix operators when list is run
 void test_infix_minus_in_list(void)
 {
@@ -652,6 +706,12 @@ int main(void)
     RUN_TEST(test_output);
     RUN_TEST(test_output_in_if_expression_at_toplevel);
     RUN_TEST(test_run_list);
+    RUN_TEST(test_runresult_with_value);
+    RUN_TEST(test_runresult_without_value);
+    RUN_TEST(test_runresult_list_value);
+    RUN_TEST(test_runresult_empty_list_is_empty);
+    RUN_TEST(test_runresult_stored_and_reused);
+    RUN_TEST(test_runresult_propagates_error);
     RUN_TEST(test_infix_minus_in_list);
     RUN_TEST(test_while_basic);
     RUN_TEST(test_while_never_runs);

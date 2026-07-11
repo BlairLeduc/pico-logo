@@ -100,6 +100,10 @@ extern "C"
     // Push an OP_CATCH operation. Returns RESULT_NONE on success.
     Result eval_push_catch(Evaluator *eval, const char *tag, Node body);
 
+    // Push an OP_RUNRESULT operation. Runs body as an expression and outputs
+    // [value] if it produced one, or [] otherwise.
+    Result eval_push_runresult(Evaluator *eval, Node body);
+
     // Push an OP_PROC_CALL operation. Always uses sub-trampoline (synchronous).
     Result eval_push_proc_call(Evaluator *eval, struct UserProcedure *proc, int argc, Value *args);
 
