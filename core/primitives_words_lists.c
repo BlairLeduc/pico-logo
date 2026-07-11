@@ -521,8 +521,10 @@ static bool value_as_word_str(Value v, const char **out_str, size_t *out_len)
     if (value_is_number(v))
     {
         Node word = number_to_word(v.as.number);
+        if (mem_is_nil(word))
+            return false;  // atom table exhausted: mem_word_ptr would be NULL
         *out_str = mem_word_ptr(word);
-        *out_len = strlen(*out_str);
+        *out_len = mem_word_len(word);
         return true;
     }
     if (value_is_word(v))

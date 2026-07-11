@@ -3763,7 +3763,7 @@ runresult _list_
 
 `operation`
 
-The `runresult` command runs _list_ as if typed in directly, like [`run`](#run), but reports whether it produced a value rather than passing the value along. If _list_ outputs a value, `runresult` outputs a one-member list containing that value; if _list_ runs a command that outputs nothing, `runresult` outputs the empty list. It is most useful for running a list whose contents you do not control, where you cannot know in advance whether it will output.
+`runresult` runs _list_ as if typed in directly, like [`run`](#run), but reports whether it produced a value rather than passing the value along. If _list_ outputs a value, `runresult` outputs a one-member list containing that value; if _list_ runs a command that outputs nothing, `runresult` outputs the empty list. It is most useful for running a list whose contents you do not control, where you cannot know in advance whether it will output.
 
 **Example**:
 

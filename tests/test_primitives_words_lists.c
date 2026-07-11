@@ -1004,6 +1004,21 @@ void test_word_result_out_of_atoms_errors(void)
     TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
 }
 
+void test_remove_numeric_thing_out_of_atoms_no_crash(void)
+{
+    // Regression: a numeric thing routed through value_as_word_str must not
+    // dereference NULL when the atom table is exhausted (number_to_word
+    // returns NIL). The word obj is interned before exhaustion so the copy
+    // succeeds; under exhaustion the thing cannot be resolved, so nothing is
+    // removed and the word is returned unchanged.
+    run_string("make \"w \"12345");
+    exhaust_atom_table();
+
+    Result r = eval_string("remove 5 :w");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("12345", mem_word_ptr(r.value.as.node));
+}
+
 void test_count_of_number_out_of_atoms_errors(void)
 {
     exhaust_atom_table();
@@ -1396,6 +1411,7 @@ int main(void)
     RUN_TEST(test_beforep_stays_case_sensitive);
     RUN_TEST(test_word_of_numbers_out_of_atoms_errors);
     RUN_TEST(test_word_result_out_of_atoms_errors);
+    RUN_TEST(test_remove_numeric_thing_out_of_atoms_no_crash);
     RUN_TEST(test_count_of_number_out_of_atoms_errors);
     RUN_TEST(test_pick_list);
     RUN_TEST(test_pick_list_element_can_be_list);
