@@ -39,7 +39,7 @@ Companion documents:
 | Item | Status | Notes |
 |---|---|---|
 | Long words via blobs on PSRAM boards | todo | `word` errors >255 chars even on Pico Plus 2 W; `mem_word` already blobs HTTP responses — unify |
-| `play [notes]` background melody | todo | Classic Atari/Apple territory; builds on `toot` |
+| `play [notes]` background melody | in progress | Absorbed into the P8 sound design — a background sequencer over real voices, not a melody of `toot`s: [P8](#p8--sound-stereo-psg-synthesizer-design-first) |
 | Help discoverability | done | [P4](#p4--arc-and-help-discoverability): keyword search fallback in `help`, `(help)` topic listing, "did you mean" on unknown names |
 
 ### Language: big bets
@@ -284,7 +284,36 @@ reserved for the `launch` process design flagged in the P5 doc.
   stream straight to storage — binary-safe, works on the 4 KB-buffer
   Pico 2 W).
 - **Not started by user decision (2026-07-10):** another design is being
-  worked first.
+  worked first (the P8 sound design).
+
+### P8 — Sound: stereo PSG synthesizer (design first)
+
+**Goal:** replace the one-square-wave-per-ear PIO driver with a software
+synthesizer — per ear, 3 tone voices + 1 noise voice (the SN76489 layout,
+doubled) with ADSR envelopes, selectable waveforms, and a background music
+sequencer. **Gate closed:** [`sound-design.md`](sound-design.md) (v1; all
+open questions resolved with the user 2026-07-10 — voice map by ear with
+`tell`-style voice-list fan-out, note words only with `#`/`s` accidentals,
+`play` waits on a full queue, `stopsound` stop-only, music survives the
+prompt while BREAK/error silence, `sound` range 20 Hz–10 kHz).
+
+- Decided up front by the user: ADSR envelopes; rendering on core 0 in the
+  DMA IRQ (no core 1 — the engine module keeps that door open); 4 voices per
+  stereo channel, 3 tones + 1 noise.
+- Engine: samples mixed in software, output via hardware PWM slice 5
+  (GPIO 26/27 share it) + DMA ring at a 73.2 kHz carrier / 24.4 kHz mix
+  rate; ~4–5 % of core 0; frees both `pio0` state machines; ≈4.8 KB SRAM
+  (limits in `core/limits.h`).
+- Surface: `toot` unchanged; `sound` (immediate, Atari Logo `TOOT`
+  lineage), `setenv`/`env` + `setwave`/`wave` (timbre), `play` note-word
+  sequencer with append semantics (TI Logo II music buffer + Terrapin/MML
+  notation), `playing?`, `stopsound`.
+- Prior art surveyed from primary sources: Atari Logo (Antic v2n8), TI
+  Logo II manual ch. 9, LogoWriter, modern Terrapin, BBC/MSX/Atari BASIC,
+  Scratch.
+- Milestones: M1 engine swap (`toot`-compatible) → M2 immediate + timbre
+  surface → M3 `play` sequencer → M4 game validation (Space Invaders
+  retrofit, Galaxian needs).
 
 ---
 
@@ -309,3 +338,5 @@ reserved for the `launch` process design flagged in the P5 doc.
 | 2026-07-05 | P5 | M3 autonomy + events (`core/demons.c`): edge-triggered `when` demons (arm/`[]`-disarm/`(when)`-print, `MAX_DEMONS` 8), budgeted poll (`DEMON_POLL_MS` 20) at the instruction point and the picocalc prompt idle loop, actions in a fresh nested evaluator with re-entrancy suppression; `freeze`/`thaw`; `setspeed`/`speed`/`setanim` over new device ops `set_speed`/`get_speed`/`set_anim`/`turtle_tick`; new monotonic `ticks_ms` hardware op (host/picocalc/mock); lifetime — `cs` and toplevel error-unwind clear demons and stop motion/animation; 18 tests + `logo/m3accept`. Decisions: speed = steps/second, `setanim first last interval_ms`, `freeze` suspends demons *and* motion |
 | 2026-07-10 | P5 | Done: Space Invaders game shipped (#101, 2026-07-06; migration tool #102, 2026-07-10) as the end-to-end exercise of the sprite stack — M0–M3 all validated in a real game. `launch` processes stay behind the P6 design gate |
 | 2026-07-10 | P7 | HTTP server design gate closed: `http-server-design.md` v2 — demon-driven server on the demon poll sites, three TCP server device ops, milestones M1–M5 incl. file transfer (`http.respondfile`/`http.savebody`, oversized bodies fire unread); HTTPS serving rejected; five open questions resolved with user (demon-rule lifetime, raw `http.query`, explicit port, links-only `webturtle.logo`, handler-side write auth). Implementation deferred — another design first |
+| 2026-07-10 | P8 | Design draft: `sound-design.md` v1 — 2×(3 tone + 1 noise) software PSG with ADSR over PWM slice 5 + DMA on core 0 (user decisions: ADSR, core-0 IRQ, 8 fixed-ear voices); prior-art survey from primary sources (Atari Logo `TOOT`/`SETENV` via Antic v2n8, TI Logo II music system ch. 9, LogoWriter `tone`, Terrapin `PLAY` notation, BBC `ENVELOPE`, MSX MML, Scratch); surface: `toot` unchanged, `sound`, `setenv`/`setwave`, `play` append-sequencer, `playing?`; `play [notes]` backlog item absorbed; open questions Q1–Q6 pending user |
+| 2026-07-10 | P8 | Sound design gate closed: Q1–Q6 all resolved with user — voices by ear (0–3 L / 4–7 R, noise 3 & 7) with `tell`-style voice-list fan-out; note words only, `#` and `s` both accepted for sharp; `play` waits (BREAK-able) on a full queue; `stopsound` stops without resetting timbre; music keeps playing at the prompt, BREAK/toplevel-error silence, `cs` untouched; `sound` range 20 Hz–10 kHz. Implementation may begin at M1 |
