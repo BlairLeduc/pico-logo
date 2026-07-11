@@ -2213,6 +2213,42 @@ d
 ```
 
 
+## remdup
+
+remdup _object_
+
+`operation`
+
+`remdup` outputs a copy of _object_ with duplicate members removed: the elements of a list, or the characters of a word. When two or more members are equal, only the last one is kept, so the survivors appear in the order of their final occurrence. As with `equal?`, words are compared without regard to case.
+
+**Examples**:
+
+```logo
+?show remdup [a b a c b]
+[a c b]
+?pr remdup "mississippi
+mspi
+```
+
+
+## remove
+
+remove _thing_ _object_
+
+`operation`
+
+`remove` outputs a copy of _object_ with every member equal to _thing_ removed: the elements of a list, or the characters of a word. Because the members of a word are its characters, _thing_ removes characters only when it is itself a single character. As with `equal?`, the comparison ignores case.
+
+**Examples**:
+
+```logo
+?show remove "b [a b c b d]
+[a c d]
+?pr remove "l "hello\ world
+heo word
+```
+
+
 ## reverse
 
 reverse _object_
@@ -2637,6 +2673,28 @@ false
 ```
 
 
+## localmake
+
+localmake _name_ _object_  
+
+`command`
+
+The `localmake` command makes _name_ local to the procedure within which it occurs and gives it the value _object_, in one step. It is equivalent to `local "name` followed by `make "name object`.
+
+**Example**:
+
+```logo
+?to greet
+>localmake "snack "butter\ tart
+>pr se [Saved for later:] :snack
+>end
+?greet
+Saved for later: butter tart
+?pr name? "snack
+false
+```
+
+
 ## make
 
 make _name_ _object_  
@@ -2745,16 +2803,21 @@ Outputs the absolute _number_. If _number_ less than zero the negative of _numbe
 ## arctan
 
 arctan _number_  
+(arctan _x_ _y_)  
 
 `operation`
 
-Outputs the arctangent of _number_ in degrees.
+With one input, outputs the arctangent of _number_ in degrees.
 
-**Example**:
+With two inputs, `(arctan x y)` outputs the arctangent of _y_/_x_ in degrees, using the signs of both inputs to place the result in the full range from -180 to 180. Unlike the one-input form, it is defined when _x_ is zero.
+
+**Examples**:
 
 ```logo
 ?pr arctan 1
 45
+?pr (arctan -1 1)
+135
 ```
 
 
@@ -2902,6 +2965,25 @@ Outputs the base-10 logarithm of _number_. An error is returned if _number_ is l
 ?pr log 1000
 3
 ```
+
+
+## modulo
+
+modulo _integer1_ _integer2_  
+
+`operation`
+
+Outputs the remainder of dividing _integer1_ by _integer2_ using floor division, so the result takes the sign of _integer2_. This differs from [`remainder`](#remainder), whose result takes the sign of _integer1_. An error is returned if _integer2_ is zero.
+
+**Examples**:
+
+```logo
+?pr modulo -7 3
+2
+?pr remainder -7 3
+-1
+```
+
 
 ## product
 
@@ -3083,6 +3165,22 @@ Outputs the sum of its inputs. `sum` is equivalent to the `+` infix-form operati
 3.6
 ?pr (sum 1 2 3 4 5 6 7 8 9 10)
 55
+```
+
+
+## tan
+
+tan _number_  
+
+`operation`
+
+Outputs the tangent of _number_ in degrees.
+
+**Example**:
+
+```logo
+?pr tan 45
+1
 ```
 
 ===
@@ -3656,6 +3754,25 @@ Mind the slush
 ?make "action [pr "sorry]
 ?run :action
 sorry
+```
+
+
+## runresult
+
+runresult _list_  
+
+`operation`
+
+`runresult` runs _list_ as if typed in directly, like [`run`](#run), but reports whether it produced a value rather than passing the value along. If _list_ outputs a value, `runresult` outputs a one-member list containing that value; if _list_ runs a command that outputs nothing, `runresult` outputs the empty list. It is most useful for running a list whose contents you do not control, where you cannot know in advance whether it will output.
+
+**Example**:
+
+```logo
+?show runresult [sum 2 3]
+[5]
+?show runresult [pr "done]
+done
+[]
 ```
 
 

@@ -44,6 +44,7 @@ extern "C"
         OP_DO_UNTIL,      // do.until [body] [pred]
         OP_FOR,           // for [var start limit step] [body]
         OP_CATCH,         // catch "tag [body]
+        OP_RUNRESULT,     // runresult [body] -> [value] or []
         OP_PROC_CALL,     // User procedure call (frame + body execution)
         OP_EXPR_EVAL,     // Expression evaluation resume after deferred proc call
         OP_PRIM_CALL,     // Deferred primitive call (args collected via expression)
@@ -109,6 +110,12 @@ extern "C"
         Node body;            // The list to run under catch protection
         int phase;
     } CatchState;
+
+    typedef struct
+    {
+        Node body;           // The list to run as an expression
+        uint8_t phase;       // 0 = push body, 1 = body completed
+    } RunResultState;
 
     // TCO mode tracking for proc calls
     #define TCO_MODE_NONE   0  // No TCO has occurred
@@ -206,6 +213,7 @@ extern "C"
             LoopState loop;
             ForState for_state;
             CatchState catch_state;
+            RunResultState runresult;
             ProcCallState proc_call;
             ExprEvalState expr_eval;
             PrimCallState prim_call;

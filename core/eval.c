@@ -224,6 +224,10 @@ Result eval_trampoline(Evaluator *eval, int base_depth)
             r = step_catch(eval, op);
             break;
 
+        case OP_RUNRESULT:
+            r = step_runresult(eval, op);
+            break;
+
         case OP_FOR:
             r = step_for(eval, op);
             break;
@@ -503,6 +507,20 @@ Result eval_push_catch(Evaluator *eval, const char *tag, Node body)
     op->flags = OP_FLAG_NONE;
     op->catch_state.tag = tag;
     op->catch_state.body = body;
+    return eval_trampoline(eval, base_depth);
+}
+
+Result eval_push_runresult(Evaluator *eval, Node body)
+{
+    OpStack *stack = eval->op_stack;
+    int base_depth = op_stack_depth(stack);
+    EvalOp *op = op_stack_push(stack);
+    if (!op)
+        return result_error(ERR_STACK_OVERFLOW);
+    op->kind = OP_RUNRESULT;
+    op->flags = OP_FLAG_NONE;
+    op->runresult.body = body;
+    op->runresult.phase = 0;
     return eval_trampoline(eval, base_depth);
 }
 

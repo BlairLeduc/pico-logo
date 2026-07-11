@@ -731,6 +731,102 @@ void test_shuffle_empty(void)
     TEST_ASSERT_TRUE(mem_is_nil(r.value.as.node));
 }
 
+//==========================================================================
+// remove / remdup
+//==========================================================================
+
+void test_remove_list(void)
+{
+    reset_output();
+    run_string("show remove \"b [a b c b d]");
+    TEST_ASSERT_EQUAL_STRING("[a c d]\n", output_buffer);
+}
+
+void test_remove_list_no_match_copies(void)
+{
+    reset_output();
+    run_string("show remove \"z [a b c]");
+    TEST_ASSERT_EQUAL_STRING("[a b c]\n", output_buffer);
+}
+
+void test_remove_list_numbers(void)
+{
+    reset_output();
+    run_string("show remove 5 [1 5 3 5 2]");
+    TEST_ASSERT_EQUAL_STRING("[1 3 2]\n", output_buffer);
+}
+
+void test_remove_list_sublist_element(void)
+{
+    reset_output();
+    run_string("show remove [b c] [a [b c] d [b c]]");
+    TEST_ASSERT_EQUAL_STRING("[a d]\n", output_buffer);
+}
+
+void test_remove_word(void)
+{
+    Result r = eval_string("remove \"l \"hello");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("heo", mem_word_ptr(r.value.as.node));
+}
+
+void test_remove_word_is_case_insensitive(void)
+{
+    // equal? ignores case, so removing "l also removes "L.
+    Result r = eval_string("remove \"l \"heLlo");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("heo", mem_word_ptr(r.value.as.node));
+}
+
+void test_remove_word_multichar_thing_never_matches(void)
+{
+    // A word's members are single characters, so a two-character thing
+    // matches nothing and the word is copied unchanged.
+    Result r = eval_string("remove \"ll \"hello");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("hello", mem_word_ptr(r.value.as.node));
+}
+
+void test_remove_empty(void)
+{
+    Result r = eval_string("remove \"x []");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
+    TEST_ASSERT_TRUE(mem_is_nil(r.value.as.node));
+}
+
+void test_remdup_list_keeps_last(void)
+{
+    // When members are equal only the last is kept, so survivors appear in
+    // the order of their final occurrence.
+    reset_output();
+    run_string("show remdup [a b a c b]");
+    TEST_ASSERT_EQUAL_STRING("[a c b]\n", output_buffer);
+}
+
+void test_remdup_list_no_duplicates(void)
+{
+    reset_output();
+    run_string("show remdup [a b c]");
+    TEST_ASSERT_EQUAL_STRING("[a b c]\n", output_buffer);
+}
+
+void test_remdup_word(void)
+{
+    // Keeping the last of each character: m@0, s@6, p@9, i@10 -> "mspi".
+    Result r = eval_string("remdup \"mississippi");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("mspi", mem_word_ptr(r.value.as.node));
+}
+
+void test_remdup_empty(void)
+{
+    Result r = eval_string("remdup []");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
+    TEST_ASSERT_TRUE(mem_is_nil(r.value.as.node));
+}
+
 // A PSRAM-backed region so blob words (longer than the 255-byte atom cap)
 // can be created; reverse/shuffle must handle them without overflowing
 // their word buffers.
@@ -849,6 +945,26 @@ void test_reverse_out_of_nodes_errors(void)
     TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
 }
 
+void test_remove_out_of_nodes_errors(void)
+{
+    run_string("make \"l [1 2 3 4]");
+    exhaust_node_pool();
+
+    Result r = eval_string("remove 9 :l");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+}
+
+void test_remdup_out_of_nodes_errors(void)
+{
+    run_string("make \"l [1 2 3 4]");
+    exhaust_node_pool();
+
+    Result r = eval_string("remdup :l");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+}
+
 // Exhaust the atom table so further interning fails. Atoms needed by the
 // test itself must be interned before calling this.
 static void exhaust_atom_table(void)
@@ -886,6 +1002,21 @@ void test_word_result_out_of_atoms_errors(void)
     Result r = eval_string("word \"qq \"rr");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
     TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+}
+
+void test_remove_numeric_thing_out_of_atoms_no_crash(void)
+{
+    // Regression: a numeric thing routed through value_as_word_str must not
+    // dereference NULL when the atom table is exhausted (number_to_word
+    // returns NIL). The word obj is interned before exhaustion so the copy
+    // succeeds; under exhaustion the thing cannot be resolved, so nothing is
+    // removed and the word is returned unchanged.
+    run_string("make \"w \"12345");
+    exhaust_atom_table();
+
+    Result r = eval_string("remove 5 :w");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("12345", mem_word_ptr(r.value.as.node));
 }
 
 void test_count_of_number_out_of_atoms_errors(void)
@@ -1280,6 +1411,7 @@ int main(void)
     RUN_TEST(test_beforep_stays_case_sensitive);
     RUN_TEST(test_word_of_numbers_out_of_atoms_errors);
     RUN_TEST(test_word_result_out_of_atoms_errors);
+    RUN_TEST(test_remove_numeric_thing_out_of_atoms_no_crash);
     RUN_TEST(test_count_of_number_out_of_atoms_errors);
     RUN_TEST(test_pick_list);
     RUN_TEST(test_pick_list_element_can_be_list);
@@ -1297,6 +1429,20 @@ int main(void)
     RUN_TEST(test_shuffle_empty);
     RUN_TEST(test_reverse_long_blob_word);
     RUN_TEST(test_shuffle_long_blob_word);
+    RUN_TEST(test_remove_list);
+    RUN_TEST(test_remove_list_no_match_copies);
+    RUN_TEST(test_remove_list_numbers);
+    RUN_TEST(test_remove_list_sublist_element);
+    RUN_TEST(test_remove_word);
+    RUN_TEST(test_remove_word_is_case_insensitive);
+    RUN_TEST(test_remove_word_multichar_thing_never_matches);
+    RUN_TEST(test_remove_empty);
+    RUN_TEST(test_remove_out_of_nodes_errors);
+    RUN_TEST(test_remdup_list_keeps_last);
+    RUN_TEST(test_remdup_list_no_duplicates);
+    RUN_TEST(test_remdup_word);
+    RUN_TEST(test_remdup_empty);
+    RUN_TEST(test_remdup_out_of_nodes_errors);
     RUN_TEST(test_fput_out_of_nodes_errors);
     RUN_TEST(test_butlast_out_of_nodes_errors);
     RUN_TEST(test_list_literal_out_of_nodes_errors);

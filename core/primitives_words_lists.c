@@ -521,8 +521,10 @@ static bool value_as_word_str(Value v, const char **out_str, size_t *out_len)
     if (value_is_number(v))
     {
         Node word = number_to_word(v.as.number);
+        if (mem_is_nil(word))
+            return false;  // atom table exhausted: mem_word_ptr would be NULL
         *out_str = mem_word_ptr(word);
-        *out_len = strlen(*out_str);
+        *out_len = mem_word_len(word);
         return true;
     }
     if (value_is_word(v))
@@ -955,6 +957,169 @@ static Result prim_shuffle(Evaluator *eval, int argc, Value *args)
             }
         }
         free(elements);
+        return result_ok(value_list(result));
+    }
+
+    return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
+}
+
+// remove thing object
+// Outputs a copy of object with every member equal to thing removed. A word's
+// members are its characters, so thing only matches when it is that single
+// character (equal? is case-insensitive); a list's elements are compared with
+// equal? semantics.
+static Result prim_remove(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+
+    Value thing = args[0];
+    Value obj = args[1];
+    if (!normalize_to_word(&obj))
+    {
+        return result_error(ERR_OUT_OF_SPACE);
+    }
+
+    if (value_is_word(obj))
+    {
+        const char *str = mem_word_ptr(obj.as.node);
+        size_t len = mem_word_len(obj.as.node);
+
+        // A character matches thing only when thing is exactly that one
+        // character; a longer word or a list never matches a single char.
+        const char *tstr;
+        size_t tlen;
+        bool thing_is_char = value_as_word_str(thing, &tstr, &tlen) && tlen == 1;
+
+        char stack_buf[256];
+        char *buf = stack_buf;
+        if (len > sizeof(stack_buf))
+        {
+            buf = malloc(len);
+            if (!buf)
+            {
+                return result_error(ERR_OUT_OF_SPACE);
+            }
+        }
+        size_t out = 0;
+        for (size_t i = 0; i < len; i++)
+        {
+            if (thing_is_char && strncasecmp(&str[i], tstr, 1) == 0)
+                continue;
+            buf[out++] = str[i];
+        }
+        Node result = mem_word(buf, out);
+        if (buf != stack_buf)
+        {
+            free(buf);
+        }
+        if (mem_is_nil(result))
+        {
+            return result_error(ERR_OUT_OF_SPACE);
+        }
+        return result_ok(value_word(result));
+    }
+    else if (value_is_list(obj))
+    {
+        Node result = NODE_NIL;
+        Node tail = NODE_NIL;
+        for (Node n = obj.as.node; !mem_is_nil(n); n = mem_cdr(n))
+        {
+            Node car = mem_car(n);
+            Value car_val = mem_is_word(car) ? value_word(car) : value_list(car);
+            if (values_equal(thing, car_val))
+                continue;
+            if (!mem_list_append(&result, &tail, car))
+            {
+                return result_error(ERR_OUT_OF_SPACE);
+            }
+        }
+        return result_ok(value_list(result));
+    }
+
+    return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
+}
+
+// remdup object
+// Outputs a copy of object with duplicate members removed. When two or more
+// members are equal, only the last is kept (UCB semantics). A word's members
+// are its characters.
+static Result prim_remdup(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+
+    Value obj = args[0];
+    if (!normalize_to_word(&obj))
+    {
+        return result_error(ERR_OUT_OF_SPACE);
+    }
+
+    if (value_is_word(obj))
+    {
+        const char *str = mem_word_ptr(obj.as.node);
+        size_t len = mem_word_len(obj.as.node);
+
+        char stack_buf[256];
+        char *buf = stack_buf;
+        if (len > sizeof(stack_buf))
+        {
+            buf = malloc(len);
+            if (!buf)
+            {
+                return result_error(ERR_OUT_OF_SPACE);
+            }
+        }
+        size_t out = 0;
+        for (size_t i = 0; i < len; i++)
+        {
+            bool dup_later = false;
+            for (size_t j = i + 1; j < len; j++)
+            {
+                if (strncasecmp(&str[i], &str[j], 1) == 0)
+                {
+                    dup_later = true;
+                    break;
+                }
+            }
+            if (!dup_later)
+                buf[out++] = str[i];
+        }
+        Node result = mem_word(buf, out);
+        if (buf != stack_buf)
+        {
+            free(buf);
+        }
+        if (mem_is_nil(result))
+        {
+            return result_error(ERR_OUT_OF_SPACE);
+        }
+        return result_ok(value_word(result));
+    }
+    else if (value_is_list(obj))
+    {
+        Node result = NODE_NIL;
+        Node tail = NODE_NIL;
+        for (Node n = obj.as.node; !mem_is_nil(n); n = mem_cdr(n))
+        {
+            Node car = mem_car(n);
+            Value car_val = mem_is_word(car) ? value_word(car) : value_list(car);
+            bool dup_later = false;
+            for (Node m = mem_cdr(n); !mem_is_nil(m); m = mem_cdr(m))
+            {
+                Node c2 = mem_car(m);
+                Value v2 = mem_is_word(c2) ? value_word(c2) : value_list(c2);
+                if (values_equal(car_val, v2))
+                {
+                    dup_later = true;
+                    break;
+                }
+            }
+            if (dup_later)
+                continue;
+            if (!mem_list_append(&result, &tail, car))
+            {
+                return result_error(ERR_OUT_OF_SPACE);
+            }
+        }
         return result_ok(value_list(result));
     }
 
@@ -1545,6 +1710,8 @@ void primitives_words_lists_init(void)
     primitive_register("pick", 1, prim_pick);
     primitive_register("reverse", 1, prim_reverse);
     primitive_register("shuffle", 1, prim_shuffle);
+    primitive_register("remove", 2, prim_remove);
+    primitive_register("remdup", 1, prim_remdup);
     
     // List construction
     primitive_register("fput", 2, prim_fput);

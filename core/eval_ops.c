@@ -129,6 +129,9 @@ void op_stack_gc_mark(OpStack *stack)
         case OP_CATCH:
             mem_gc_mark(op->catch_state.body);
             break;
+        case OP_RUNRESULT:
+            mem_gc_mark(op->runresult.body);
+            break;
         case OP_PROC_CALL:
             // The body is marked via the procedure table; the cursor keeps
             // the old body alive if the procedure was redefined mid-call.

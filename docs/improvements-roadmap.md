@@ -27,12 +27,12 @@ Companion documents:
 | `rerandom` / seedable RNG | UCB, Apple | done | [P3](#p3--rerandom-and-a-core-prng) (hybrid: TRNG default, PCG32 when seeded) |
 | `arc` | UCB | done | [P4](#p4--arc-and-help-discoverability) |
 | `setpensize` / `pensize` | UCB, FMSLogo | on hold | Deferred 2026-07-04; stamped-disc design kept: [On hold](#on-hold--setpensize--pensize) |
-| `remove`, `remdup` | UCB | todo | Backlog; trivial with `mem_list_append` |
-| `localmake` | UCB | todo | Backlog; convenience wrapper |
-| `tan`, two-input `(arctan x y)` | UCB | todo | Backlog; `atan2f` already used internally by `towards` |
-| `modulo` (floor-division sign) | UCB | todo | Backlog; distinct from `remainder` |
-| `runresult` | UCB | todo | Backlog; outputs `[value]` or `[]` |
-| Graphics-screen text at turtle | UCB `label` | todo | Backlog; needs a different name (`label` is the `go` target here) |
+| `remove`, `remdup` | UCB | done | Landed 2026-07-11; word + list, `equal?` semantics, `remdup` keeps last |
+| `localmake` | UCB | done | Landed 2026-07-11; `local` + `make` in one step |
+| `tan`, two-input `(arctan x y)` | UCB | done | Landed 2026-07-11; two-input `arctan` is `atan2` |
+| `modulo` (floor-division sign) | UCB | done | Landed 2026-07-11; sign of divisor, distinct from `remainder` |
+| `runresult` | UCB | done | Landed 2026-07-11; new `OP_RUNRESULT` op; outputs `[value]` or `[]` |
+| Graphics-screen text at turtle | UCB `label` | todo | Backlog; needs a different name (`label` is the `go` target here) **and** a device-layer text op — not a core-only cheap win |
 
 ### Language: medium
 
@@ -339,4 +339,5 @@ prompt while BREAK/error silence, `sound` range 20 Hz–10 kHz).
 | 2026-07-10 | P5 | Done: Space Invaders game shipped (#101, 2026-07-06; migration tool #102, 2026-07-10) as the end-to-end exercise of the sprite stack — M0–M3 all validated in a real game. `launch` processes stay behind the P6 design gate |
 | 2026-07-10 | P7 | HTTP server design gate closed: `http-server-design.md` v2 — demon-driven server on the demon poll sites, three TCP server device ops, milestones M1–M5 incl. file transfer (`http.respondfile`/`http.savebody`, oversized bodies fire unread); HTTPS serving rejected; five open questions resolved with user (demon-rule lifetime, raw `http.query`, explicit port, links-only `webturtle.logo`, handler-side write auth). Implementation deferred — another design first |
 | 2026-07-10 | P8 | Design draft: `sound-design.md` v1 — 2×(3 tone + 1 noise) software PSG with ADSR over PWM slice 5 + DMA on core 0 (user decisions: ADSR, core-0 IRQ, 8 fixed-ear voices); prior-art survey from primary sources (Atari Logo `TOOT`/`SETENV` via Antic v2n8, TI Logo II music system ch. 9, LogoWriter `tone`, Terrapin `PLAY` notation, BBC `ENVELOPE`, MSX MML, Scratch); surface: `toot` unchanged, `sound`, `setenv`/`setwave`, `play` append-sequencer, `playing?`; `play [notes]` backlog item absorbed; open questions Q1–Q6 pending user |
+| 2026-07-11 | Cheap wins | Done: `remove`/`remdup` (word + list, `equal?` semantics, `remdup` keeps the last of equals), `localmake`, `tan` + two-input `(arctan x y)` (`atan2`), `modulo` (sign-of-divisor floor division), `runresult` (new `OP_RUNRESULT` trampoline op mirroring `catch`). Reference sections + Unity tests for each; 56/56 ctest green, pico2 links (RAM 93.5%). Graphics-screen text deferred by user — it needs a device text op, not just a core primitive |
 | 2026-07-10 | P8 | Sound design gate closed: Q1–Q6 all resolved with user — voices by ear (0–3 L / 4–7 R, noise 3 & 7) with `tell`-style voice-list fan-out; note words only, `#` and `s` both accepted for sharp; `play` waits (BREAK-able) on a full queue; `stopsound` stops without resetting timbre; music keeps playing at the prompt, BREAK/toplevel-error silence, `cs` untouched; `sound` range 20 Hz–10 kHz. Implementation may begin at M1 |

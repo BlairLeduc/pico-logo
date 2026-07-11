@@ -685,6 +685,60 @@ Result step_catch(Evaluator *eval, EvalOp *op)
     return result_none();
 }
 
+// Step function for OP_RUNRESULT.
+// Runs the body as an expression, then wraps the outcome: a value becomes a
+// one-member list [value]; a command list that produces nothing becomes [].
+Result step_runresult(Evaluator *eval, EvalOp *op)
+{
+    RunResultState *st = &op->runresult;
+
+    if (st->phase == 1)
+    {
+        // Body completed
+        Result child_r = op->result;
+        op->result = result_none();
+
+        op_stack_pop(eval->op_stack);
+
+        if (child_r.status == RESULT_OK)
+        {
+            // The body output a value: wrap it in a one-member list.
+            Node elem;
+            if (child_r.value.type == VALUE_NUMBER)
+            {
+                elem = number_to_word(child_r.value.as.number);
+                if (mem_is_nil(elem))
+                    return result_error(ERR_OUT_OF_SPACE);
+            }
+            else
+            {
+                elem = child_r.value.as.node;  // word or list node
+            }
+            Node cell = mem_cons(elem, NODE_NIL);
+            if (mem_is_nil(cell))
+                return result_error(ERR_OUT_OF_SPACE);
+            return result_ok(value_list(cell));
+        }
+        if (child_r.status == RESULT_NONE)
+        {
+            // The body ran commands but produced no value: the empty list.
+            return result_ok(value_list(NODE_NIL));
+        }
+        // stop / output / error / throw propagate unchanged.
+        return child_r;
+    }
+
+    // Phase 0: push body as an expression
+    st->phase = 1;
+    EvalOp *body_op = op_stack_push(eval->op_stack);
+    if (!body_op) { op_stack_pop(eval->op_stack); return result_error(ERR_STACK_OVERFLOW); }
+    body_op->kind = OP_RUN_LIST_EXPR;
+    body_op->flags = OP_FLAG_NONE;
+    body_op->saved_source = eval->token_source;
+    token_source_init_list(&eval->token_source, st->body);
+    return result_none();
+}
+
 //==========================================================================
 // Trace helpers
 //==========================================================================

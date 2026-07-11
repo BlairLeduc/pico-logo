@@ -93,6 +93,7 @@ extern "C"
     Result step_loop(Evaluator *eval, EvalOp *op);
     Result step_for(Evaluator *eval, EvalOp *op);
     Result step_catch(Evaluator *eval, EvalOp *op);
+    Result step_runresult(Evaluator *eval, EvalOp *op);
     Result step_proc_call(Evaluator *eval, EvalOp *op);
     Result step_expr_eval(Evaluator *eval, EvalOp *op);
     Result step_prim_call(Evaluator *eval, EvalOp *op);

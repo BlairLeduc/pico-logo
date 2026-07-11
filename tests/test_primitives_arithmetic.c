@@ -258,6 +258,86 @@ void test_arctan_zero(void)
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, r.value.as.number);
 }
 
+void test_arctan_two_input(void)
+{
+    // (arctan x y) outputs the arctangent of y/x, using both signs.
+    Result r = eval_string("(arctan 1 1)");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 45.0f, r.value.as.number);
+
+    // Second quadrant: x negative, y positive -> 135 degrees.
+    r = eval_string("(arctan -1 1)");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 135.0f, r.value.as.number);
+}
+
+void test_arctan_two_input_vertical(void)
+{
+    // Defined where the one-input form (y/x) would divide by zero.
+    Result r = eval_string("(arctan 0 1)");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 90.0f, r.value.as.number);
+}
+
+void test_arctan_too_many_inputs(void)
+{
+    Result r = eval_string("(arctan 1 2 3)");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_TOO_MANY_INPUTS, r.error_code);
+}
+
+void test_tan(void)
+{
+    Result r = eval_string("tan 45");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 1.0f, r.value.as.number);
+}
+
+void test_tan_zero(void)
+{
+    Result r = eval_string("tan 0");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, r.value.as.number);
+}
+
+void test_modulo_positive(void)
+{
+    Result r = eval_string("modulo 7 3");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(1.0f, r.value.as.number);
+}
+
+void test_modulo_takes_sign_of_divisor(void)
+{
+    // modulo follows floor division, so the result matches the divisor's sign
+    // (unlike remainder, which matches the dividend's sign).
+    Result r = eval_string("modulo -7 3");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(2.0f, r.value.as.number);
+
+    r = eval_string("modulo 7 -3");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(-2.0f, r.value.as.number);
+
+    r = eval_string("modulo -7 -3");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(-1.0f, r.value.as.number);
+}
+
+void test_modulo_exact_division_is_zero(void)
+{
+    Result r = eval_string("modulo -6 3");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, r.value.as.number);
+}
+
+void test_modulo_divide_by_zero(void)
+{
+    Result r = eval_string("modulo 10 0");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DIVIDE_BY_ZERO, r.error_code);
+}
+
 void test_cos(void)
 {
     // cos 0 should be 1
@@ -851,6 +931,11 @@ int main(void)
     RUN_TEST(test_rerandom_rejects_non_finite_seed);
     RUN_TEST(test_arctan);
     RUN_TEST(test_arctan_zero);
+    RUN_TEST(test_arctan_two_input);
+    RUN_TEST(test_arctan_two_input_vertical);
+    RUN_TEST(test_arctan_too_many_inputs);
+    RUN_TEST(test_tan);
+    RUN_TEST(test_tan_zero);
     RUN_TEST(test_cos);
     RUN_TEST(test_cos_90);
     RUN_TEST(test_cos_60);
@@ -866,6 +951,10 @@ int main(void)
     RUN_TEST(test_remainder);
     RUN_TEST(test_remainder_truncates_inputs);
     RUN_TEST(test_remainder_divide_by_zero);
+    RUN_TEST(test_modulo_positive);
+    RUN_TEST(test_modulo_takes_sign_of_divisor);
+    RUN_TEST(test_modulo_exact_division_is_zero);
+    RUN_TEST(test_modulo_divide_by_zero);
     RUN_TEST(test_round);
     RUN_TEST(test_round_up);
     RUN_TEST(test_round_half);
