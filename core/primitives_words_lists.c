@@ -1349,10 +1349,10 @@ static Result prim_sentence(Evaluator *eval, int argc, Value *args)
 // word word1 word2 ...
 // Outputs a word made by concatenating inputs.
 //
-// Atoms are limited to 255 characters by the interner (1-byte length
-// prefix). Rather than silently truncating an over-long concatenation
-// (which historically produced a corrupted-looking partial result),
-// return ERR_OUT_OF_SPACE so the user knows their data did not fit.
+// Short results (<=255 chars) intern as atoms. Longer results are built via
+// mem_word, which blobs them into the PSRAM aux region on boards that have it
+// (Pico Plus 2 W); on boards without PSRAM mem_word returns nil and we report
+// ERR_OUT_OF_SPACE, refusing rather than truncating.
 static Result prim_word(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
@@ -1381,15 +1381,21 @@ static Result prim_word(Evaluator *eval, int argc, Value *args)
         }
     }
 
-    // 255 is the hard atom-size limit; refuse rather than truncate.
-    if (total_len > 255)
+    // Short results fit the stack; long results (only creatable on PSRAM
+    // boards, where mem_word blobs them) go through the heap so we never
+    // overflow a fixed buffer.
+    char stack_buf[256];
+    char *buf = stack_buf;
+    if (total_len > sizeof(stack_buf))
     {
-        return result_error_arg(ERR_OUT_OF_SPACE, "word", NULL);
+        buf = malloc(total_len);
+        if (buf == NULL)
+        {
+            return result_error(ERR_OUT_OF_SPACE);
+        }
     }
 
-    char buffer[256];
-    char *p = buffer;
-
+    char *p = buf;
     for (int i = 0; i < argc; i++)
     {
         const char *str;
@@ -1401,6 +1407,10 @@ static Result prim_word(Evaluator *eval, int argc, Value *args)
             str = mem_word_ptr(word);
             if (str == NULL)
             {
+                if (buf != stack_buf)
+                {
+                    free(buf);
+                }
                 return result_error(ERR_OUT_OF_SPACE); // atom table exhausted
             }
             len = strlen(str);
@@ -1414,12 +1424,16 @@ static Result prim_word(Evaluator *eval, int argc, Value *args)
         memcpy(p, str, len);
         p += len;
     }
-    *p = '\0';
 
-    Node result = mem_atom_cstr(buffer);
+    Node result = mem_word(buf, total_len);
+    if (buf != stack_buf)
+    {
+        free(buf);
+    }
     if (mem_is_nil(result))
     {
-        return result_error(ERR_OUT_OF_SPACE); // atom table exhausted
+        // Atom table exhausted, or a >255 result on a board without PSRAM.
+        return result_error_arg(ERR_OUT_OF_SPACE, "word", NULL);
     }
     return result_ok(value_word(result));
 }
