@@ -8,6 +8,7 @@
 #include "mock_device.h"
 #include <string.h>
 #include <math.h>
+#include <stdio.h>
 
 // Screen dimensions (matches Pico Logo reference)
 #define SCREEN_WIDTH  320
@@ -457,6 +458,17 @@ static void mock_turtle_stamp(void)
     record_command(MOCK_CMD_STAMP);
 }
 
+static void mock_turtle_draw_text(const char *text)
+{
+    mock_state.label.count++;
+    mock_state.label.last_x = mock_state.turtle.x;
+    mock_state.label.last_y = mock_state.turtle.y;
+    mock_state.label.last_colour = mock_state.turtle.pen_colour;
+    mock_state.label.last_turtle = mock_state.current_turtle;
+    snprintf(mock_state.label.last_text, sizeof(mock_state.label.last_text), "%s", text ? text : "");
+    record_command(MOCK_CMD_WRITE);
+}
+
 // rot/mag live only in the turtles[] slots (turtle_slot_sync doesn't
 // touch them), so write straight to the selected slot
 static void mock_turtle_set_rotation_style(LogoRotationStyle style)
@@ -623,6 +635,7 @@ static const LogoConsoleTurtle mock_turtle_ops = {
     .dot = mock_turtle_dot,
     .dot_at = mock_turtle_dot_at,
     .fill = mock_turtle_fill,
+    .draw_text = mock_turtle_draw_text,
     .set_fence = mock_turtle_set_fence,
     .set_window = mock_turtle_set_window,
     .set_wrap = mock_turtle_set_wrap,

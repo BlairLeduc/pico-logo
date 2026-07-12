@@ -594,6 +594,53 @@ void screen_gfx_set_point(float x, float y, uint8_t colour)
     screen_gfx_mark_dirty_rect(pixel_x, pixel_y, pixel_x, pixel_y);
 }
 
+// Draw a string on the graphics canvas with its top-left at pixel (x, y),
+// upright and left-to-right, painting only each glyph's set pixels in
+// `colour` (the background shows through). Pixels that fall off-screen are
+// skipped. Backs the `write` primitive.
+void screen_gfx_text(int x, int y, const char *s, uint8_t colour)
+{
+    if (!s || !*s)
+    {
+        return;
+    }
+
+    int start_x = x;
+    for (const char *p = s; *p; p++, x += GLYPH_WIDTH)
+    {
+        const uint8_t *glyph = &screen_font->glyphs[((uint8_t)*p & 0x7F) * GLYPH_HEIGHT];
+        for (int row = 0; row < GLYPH_HEIGHT; row++)
+        {
+            int py = y + row;
+            if (py < 0 || py >= SCREEN_HEIGHT)
+            {
+                continue;
+            }
+            uint8_t bits = glyph[row];
+            for (int col = 0; col < GLYPH_WIDTH; col++)
+            {
+                int px = x + col;
+                if ((bits & (0x80 >> col)) && px >= 0 && px < SCREEN_WIDTH)
+                {
+                    gfx_buffer[py * SCREEN_WIDTH + px] = colour;
+                }
+            }
+        }
+    }
+
+    // Mark the drawn extent dirty (clamped to the screen).
+    int x0 = start_x < 0 ? 0 : start_x;
+    int x1 = x - 1;  // x now sits one past the last glyph
+    if (x1 >= SCREEN_WIDTH) x1 = SCREEN_WIDTH - 1;
+    int y0 = y < 0 ? 0 : y;
+    int y1 = y + GLYPH_HEIGHT - 1;
+    if (y1 >= SCREEN_HEIGHT) y1 = SCREEN_HEIGHT - 1;
+    if (x1 >= x0 && y1 >= y0)
+    {
+        screen_gfx_mark_dirty_rect(x0, y0, x1, y1);
+    }
+}
+
 uint8_t screen_gfx_get_point(float x, float y)
 {
     int pixel_x, pixel_y;

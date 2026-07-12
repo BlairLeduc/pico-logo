@@ -1040,6 +1040,17 @@ static void turtle_fill(void)
     screen_gfx_update();
 }
 
+// Draw text on the graphics screen at the turtle's position, in the current
+// pen colour, upright and left-to-right. The text starts at the turtle's x
+// and is centred vertically on the turtle's y. The turtle does not move
+// (backs the `write` primitive).
+static void turtle_draw_text(const char *text)
+{
+    screen_show_field();
+    screen_gfx_text((int)(cur->x + 0.5f), (int)(cur->y + 0.5f) - GLYPH_HEIGHT / 2, text, cur->colour);
+    screen_gfx_update();
+}
+
 static int turtle_gfx_save(LogoStream *out)
 {
     return screen_gfx_save(out);
@@ -1454,6 +1465,7 @@ static const LogoConsoleTurtle picocalc_turtle_ops = {
     .dot = turtle_dot,
     .dot_at = turtle_dot_at,
     .fill = turtle_fill,
+    .draw_text = turtle_draw_text,
     .set_fence = turtle_set_fence,
     .set_window = turtle_set_window,
     .set_wrap = turtle_set_wrap,

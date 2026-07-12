@@ -32,7 +32,7 @@ Companion documents:
 | `tan`, two-input `(arctan x y)` | UCB | done | Landed 2026-07-11; two-input `arctan` is `atan2` |
 | `modulo` (floor-division sign) | UCB | done | Landed 2026-07-11; sign of divisor, distinct from `remainder` |
 | `runresult` | UCB | done | Landed 2026-07-11; new `OP_RUNRESULT` op; outputs `[value]` or `[]` |
-| Graphics-screen text at turtle | UCB `label` | todo | Backlog; needs a different name (`label` is the `go` target here) **and** a device-layer text op — not a core-only cheap win |
+| Graphics-screen text at turtle | UCB `label` | done | Landed as `write` (`label` is the `go` target here); new `draw_text` device op, upright horizontal text at the turtle in pen colour, `print` formatting, fans out over the active set |
 
 ### Language: medium
 
