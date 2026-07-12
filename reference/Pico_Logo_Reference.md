@@ -6727,7 +6727,7 @@ Battery: 78
 
 goodbye
 
-`operation`
+`command`
 
 `goodbye` closes all open files and powers off the device. If the device does not support this capability, an error is displayed.
 
@@ -6738,6 +6738,22 @@ goodbye
 ?pr [Saving workspace...]
 ?save "session.lgo
 ?goodbye
+```
+
+
+## .bootsel
+
+.bootsel
+
+`command`
+
+`.bootsel` closes all open files and network connections and reboots the device into its USB bootloader (BOOTSEL mode), so a new firmware image can be copied onto it. The device disconnects from Logo immediately. If the device does not support this capability, an error is displayed.
+
+**Example**:
+
+```logo
+; Reboot into BOOTSEL to flash new firmware
+?.bootsel
 ```
 
 

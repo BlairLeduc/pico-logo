@@ -41,6 +41,11 @@ extern "C"
         // Power management functions
         bool (*power_off)(void);
 
+        // Reboot into the USB bootloader (BOOTSEL / mass-storage mode) so a new
+        // UF2 can be flashed. Does not return on real hardware. May be NULL on
+        // devices that cannot do this.
+        void (*reboot_bootloader)(void);
+
         // Check if user interrupt has been requested
         // Returns true if interrupt was requested
         bool (*check_user_interrupt)(void);

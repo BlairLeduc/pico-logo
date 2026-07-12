@@ -75,6 +75,26 @@ static Result prim_goodbye(Evaluator *eval, int argc, Value *args)
     return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
 }
 
+// .bootsel
+// Reboot the device into the USB bootloader (BOOTSEL mode) so a new firmware
+// UF2 can be dragged onto it. Does not return on real hardware; errors on
+// devices with no USB bootloader (e.g. the host).
+static Result prim_bootsel(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
+
+    LogoIO *io = primitives_get_io();
+    if (io && io->hardware && io->hardware->ops && io->hardware->ops->reboot_bootloader)
+    {
+        logo_io_close_all(io); // Flush/close I/O before the reset takes effect
+        io->hardware->ops->reboot_bootloader();
+        // Does not return on real hardware; if it does (e.g. in tests), succeed.
+        return result_none();
+    }
+
+    return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
+}
+
 // toot duration frequency
 // (toot duration leftfrequency rightfrequency)
 // Plays a tone for the specified duration.
@@ -161,5 +181,6 @@ void primitives_hardware_init(void)
 {
     primitive_register("battery", 0, prim_battery_level);
     primitive_register("goodbye", 0, prim_goodbye);
+    primitive_register(".bootsel", 0, prim_bootsel);
     primitive_register("toot", 2, prim_toot);
 }

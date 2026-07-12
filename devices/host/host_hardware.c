@@ -465,6 +465,7 @@ static LogoHardwareOps host_hardware_ops = {
     .random = host_hardware_random,
     .get_battery_level = host_hardware_get_battery_level,
     .power_off = NULL,
+    .reboot_bootloader = NULL,  // Host has no USB bootloader
     .check_user_interrupt = host_hardware_check_user_interrupt,
     .clear_user_interrupt = host_hardware_clear_user_interrupt,
     .check_pause_request = host_hardware_check_pause_request,
