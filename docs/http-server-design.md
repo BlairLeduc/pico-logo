@@ -1,8 +1,12 @@
 # HTTP server (design)
 
-Status: **draft v2 for review** — this is the design gate for the HTTP
-server. The open questions in §9 were resolved with the user on
-2026-07-10; no open questions remain.
+Status: **v3** — the design gate for the HTTP server closed 2026-07-10
+(the open questions in §10 were resolved with the user; none remain).
+
+v3 (2026-07-12) adds mDNS naming (§7, milestone M0): the device answers
+to `picologo.local` on the LAN, with `sethostname`/`hostname`
+primitives; the responder starts with `wifi.connect`, independent of
+the server.
 
 v2 adds file transfer (§3 file primitives, the oversized-body pump rule
 in §4, milestone M5): upload/download of files of any size — including
@@ -42,6 +46,10 @@ The demon fires while the program runs *and while the user types at the
 prompt* — the same Atari-style liveness `when` already delivers. Demons
 are optional: `forever [if http.request? [...]]` works too, since
 `http.request?` is an ordinary predicate.
+
+With mDNS naming (§7) the phone doesn't need the IP at all: the browser
+reaches the device at `http://picologo.local` (or whatever
+`sethostname` chose).
 
 ## 2. What already exists
 
@@ -233,11 +241,66 @@ SRAM budget: ~5 KB heap on the SRAM tier, only if `http.listen` is
 used; pump state well under 100 B; one extra TCP PCB within the
 existing `MEMP_NUM_TCP_PCB 5`. No new static arrays.
 
-## 7. Milestones
+## 7. mDNS naming (added 2026-07-12)
+
+Reach the device by name — `http://picologo.local` — instead of
+reading `wifi.ip` off the screen and typing an address into the phone.
+
+- **Responder, not resolver:** lwIP ships an mDNS responder app the
+  Pico SDK already builds (`pico_lwip_mdns`). It answers A-record
+  queries for `<hostname>.local` over multicast UDP. Config deltas in
+  `lwipopts.h`: `LWIP_MDNS_RESPONDER 1`, `LWIP_IGMP 1`, one
+  `LWIP_NUM_NETIF_CLIENT_DATA` slot, a few extra `MEMP_NUM_SYS_TIMEOUT`
+  entries, and one more UDP PCB. Footprint is code plus a handful of
+  timers — no meaningful SRAM.
+- **Lifecycle (decided 2026-07-12):** the responder starts inside
+  `wifi.connect` (once the interface is up) and stops on
+  `wifi.disconnect` — *not* tied to `http.listen`. The device is
+  findable on the LAN as soon as WiFi is up, which also serves
+  cable-free transfer and plain `ping picologo.local` from a laptop.
+- **Primitives** (beside the other WiFi primitives in
+  `core/primitives_wifi.c`, gated on `LOGO_HAS_WIFI`):
+  - `sethostname name` — set the device's network name. A word
+    following hostname-label rules: letters, digits, hyphens; no dots —
+    the name **excludes** `.local`, mDNS appends it. Length capped via
+    `core/limits.h` (proposed `HOSTNAME_MAX` 32). If WiFi is already
+    connected, the responder re-announces under the new name
+    immediately.
+  - `hostname` — outputs the current name (again without `.local`).
+- **Default `picologo`; no persistence (decided 2026-07-12):** the name
+  resets to `picologo` on boot; a custom name is one `sethostname` line
+  in the user's startup file. No flash writes involved.
+- **DHCP agrees:** the same name is passed as the lwIP netif hostname
+  (`LWIP_NETIF_HOSTNAME` is already on), so the router's device list
+  shows the same name mDNS answers to.
+- **Device interface:** one new op beside the WiFi ops; core owns the
+  name (so `hostname` reads it back and reconnects reuse it), the
+  device applies it:
+
+  ```c
+  // Set the device's network hostname (mDNS + DHCP). Takes effect
+  // immediately if the network is up, otherwise at the next connect.
+  void (*network_set_hostname)(const char *name);
+  ```
+
+  picocalc sets the netif hostname and (re)starts the mDNS responder;
+  mock records the name for assertions; host stays `NULL`.
+
+## 8. Milestones
 
 Each independently shippable; gate = all tests green + all three
 firmware presets linking + reference sections for anything user-visible
 (they *are* the help text).
+
+- **M0 — mDNS naming (§7).** Independent of the server pump — ships on
+  `wifi.connect` alone, in any order relative to M1–M5.
+  `network_set_hostname` device op; lwipopts/CMake enablement
+  (`pico_lwip_mdns`); `sethostname` / `hostname` with label validation
+  and `HOSTNAME_MAX`; responder start/stop with connect/disconnect and
+  re-announce on rename. Acceptance: mock tests for default name,
+  rename before and after connect, and label validation errors;
+  hardware check: `ping picologo.local` from a laptop, rename, ping the
+  new name; reference sections for both primitives.
 
 - **M1 — TCP server device ops.** `network_tcp_listen` / `unlisten` /
   `accept` in `hardware.h`; picocalc altcp implementation reusing the
@@ -283,7 +346,7 @@ firmware presets linking + reference sections for anything user-visible
   19 KB game onto a **Pico 2 W** (the 4 KB-buffer board) and fetch it
   back byte-identical; reference sections for both primitives.
 
-## 8. Rejected alternatives
+## 9. Rejected alternatives
 
 | Alternative | Why not |
 |---|---|
@@ -295,8 +358,13 @@ firmware presets linking + reference sections for anything user-visible
 | Blocking `http.serve [instrs]` loop | Freezes the interpreter; the demon pump keeps the prompt and autonomous turtles alive while serving, and a blocking loop remains writable in Logo (`forever [if http.request? [...]]`). |
 | `multipart/form-data` upload parsing | Raw `PUT` bodies (`curl -T`) cover the transfer workflow without it; browser `<form>` file upload would drag multipart framing into the pump. Defer until a real page needs it. |
 | Content-Type sniffing by file extension in `http.respondfile` | A table to maintain for marginal gain; `application/octet-stream` downloads correctly everywhere, and a handler that cares passes the header explicitly. |
+| mDNS *querying* (resolving other machines' `.local` names) | lwIP's responder answers queries but doesn't issue them; a querier is a separate component. `network.resolve` stays plain-DNS-only. |
+| DNS-SD service advertisement (`_http._tcp` when `http.listen` is active) | The hostname A record already covers the use case — type `http://picologo.local` into a browser; service *browsing* adds protocol surface and listener/responder coupling for no classroom gain. |
+| Persisting `sethostname` to flash | A startup-file line does the same job with no flash-write path; the name is one word of state (decided 2026-07-12). |
 
-## 9. Decisions (resolved with the user, 2026-07-10)
+## 10. Decisions (resolved with the user)
+
+Resolved 2026-07-10:
 
 1. **Lifetime on `cs`/error-unwind (§4):** the listener follows the
    demon rule — closed by `cs`/`draw` and on error-unwind to toplevel.
@@ -316,3 +384,12 @@ firmware presets linking + reference sections for anything user-visible
    C; the example and reference document the shared-secret pattern
    (`if not equal? http.reqheader "X-Key :key [http.respond 403 "no]`).
    Logo stays in control; classroom-appropriate.
+
+Resolved 2026-07-12 (mDNS, §7):
+
+6. **The responder starts with `wifi.connect`, not `http.listen`** —
+   the device is findable on the LAN as soon as WiFi is up, independent
+   of whether anything is being served.
+7. **Default hostname is `picologo`.**
+8. **No persistence across reboots** — a custom name is a `sethostname`
+   line in the user's startup file, not a flash setting.

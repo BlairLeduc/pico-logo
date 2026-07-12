@@ -47,7 +47,7 @@ Companion documents:
 | Item | Status | Notes |
 |---|---|---|
 | Multiple turtles/sprites (`tell`/`ask`/`each`), `touching?`, `when` events | done | All milestones landed (M0–M3); validated end-to-end by the Space Invaders game (#101/#102). `launch` processes remain gated behind a P6 design: [P5](#p5--multi-sprite-turtles-with-collision-design-first) |
-| HTTP server (`http.listen`, `when [http.request?]`, `http.respond`, file transfer) | todo | Design done (gate closed 2026-07-10), implementation not started: [P7](#p7--http-server-design-complete-implementation-not-started) |
+| HTTP server (`http.listen`, `when [http.request?]`, `http.respond`, file transfer) | todo | Design done (gate closed 2026-07-10), implementation not started: [P7](#p7--http-server-design-complete-implementation-not-started). Scope added 2026-07-12: mDNS (`picologo.local`) + `hostname`/`sethostname`, folded into the design as §7/M0 |
 | Arrays (`array`/`setitem`) | deferred | O(1) indexing; needs a new object kind (likely blob-backed). Wait for demonstrated need |
 | Atom reclamation / `erall` soft reset | deferred | See `memory-reclamation-design.md` |
 
@@ -264,7 +264,7 @@ device (no graphics) degrades cleanly.
 
 **Goal:** serve HTTP from Logo — browser-driven turtle control and cable-free
 file transfer (`curl -T`) on both WiFi boards. **Gate closed:**
-[`http-server-design.md`](http-server-design.md) (draft v2; all open
+[`http-server-design.md`](http-server-design.md) (v3; all open
 questions resolved with the user 2026-07-10). Numbered P7 because P6 stays
 reserved for the `launch` process design flagged in the P5 doc.
 
@@ -283,6 +283,16 @@ reserved for the `launch` process design flagged in the P5 doc.
   (`http.respondfile`/`http.savebody`; oversized bodies fire unread and
   stream straight to storage — binary-safe, works on the 4 KB-buffer
   Pico 2 W).
+- **Added scope (2026-07-12), folded into the design doc (v3, §7,
+  milestone M0):** mDNS responder so other machines on the LAN can reach
+  the server by name (`http://picologo.local` instead of an IP address) —
+  lwIP ships an mDNS responder app the Pico SDK already builds
+  (`pico_lwip_mdns`). Comes with `sethostname`/`hostname` primitives; the
+  hostname excludes the `.local` suffix (mDNS appends it). User decisions
+  (2026-07-12): the responder starts with `wifi.connect`, not
+  `http.listen` — the device is findable on the LAN as soon as WiFi is
+  up; default hostname `picologo`; no persistence across reboots — a
+  custom name goes in the user's startup file.
 - **Not started by user decision (2026-07-10):** another design is being
   worked first (the P8 sound design).
 
@@ -342,3 +352,4 @@ prompt while BREAK/error silence, `sound` range 20 Hz–10 kHz).
 | 2026-07-11 | Cheap wins | Done: `remove`/`remdup` (word + list, `equal?` semantics, `remdup` keeps the last of equals), `localmake`, `tan` + two-input `(arctan x y)` (`atan2`), `modulo` (sign-of-divisor floor division), `runresult` (new `OP_RUNRESULT` trampoline op mirroring `catch`). Reference sections + Unity tests for each; 56/56 ctest green, pico2 links (RAM 93.5%). Graphics-screen text deferred by user — it needs a device text op, not just a core primitive |
 | 2026-07-12 | Language: medium | Done: long words via blobs — `prim_word` now concatenates through a stack/heap buffer and finishes with `mem_word` instead of `mem_atom_cstr`, so a >255-char result blobs into PSRAM on the Pico Plus 2 W and still errors (rather than truncates) on non-PSRAM boards; unifies with the `mem_word` path already used for HTTP bodies and `reverse`/`shuffle`. Reference `word` + board sections updated, PSRAM success test added; 57/57 ctest, pico2 (RAM 93.5%) and pico+2w link |
 | 2026-07-10 | P8 | Sound design gate closed: Q1–Q6 all resolved with user — voices by ear (0–3 L / 4–7 R, noise 3 & 7) with `tell`-style voice-list fan-out; note words only, `#` and `s` both accepted for sharp; `play` waits (BREAK-able) on a full queue; `stopsound` stops without resetting timbre; music keeps playing at the prompt, BREAK/toplevel-error silence, `cs` untouched; `sound` range 20 Hz–10 kHz. Implementation may begin at M1 |
+| 2026-07-12 | P7 | Scope added and folded into `http-server-design.md` (v3, §7, milestone M0): mDNS responder so LAN machines reach the device by name (`http://picologo.local`) via lwIP's `pico_lwip_mdns`; `sethostname`/`hostname` primitives (label-validated, `.local` excluded, `HOSTNAME_MAX` in `core/limits.h`); new `network_set_hostname` device op also feeding the DHCP hostname. User decisions: responder starts with `wifi.connect`, not `http.listen`; default hostname `picologo`; no reboot persistence (custom names go in the startup file) |
