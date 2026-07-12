@@ -38,6 +38,10 @@ bool mock_power_off_available = false;
 bool mock_power_off_result = false;
 bool mock_power_off_called = false;
 
+// Mock reboot_bootloader state for testing
+bool mock_bootsel_available = false;
+bool mock_bootsel_called = false;
+
 // Flag to track if we're using mock_device for turtle/text testing
 bool use_mock_device = false;
 
@@ -227,12 +231,19 @@ bool mock_power_off(void)
     return mock_power_off_result;
 }
 
+void mock_reboot_bootloader(void)
+{
+    // On real hardware this never returns; in tests we just record the call.
+    mock_bootsel_called = true;
+}
+
 LogoHardwareOps mock_hardware_ops = {
     .sleep = mock_sleep,
     .ticks_ms = mock_ticks_ms,
     .random = mock_random,
     .get_battery_level = mock_get_battery_level,
     .power_off = NULL,  // Default: not available, use set_mock_power_off() to enable
+    .reboot_bootloader = NULL,  // Default: not available, use set_mock_bootsel() to enable
     .check_user_interrupt = mock_check_user_interrupt,
     .clear_user_interrupt = mock_clear_user_interrupt,
     .check_pause_request = mock_check_pause_request,
@@ -294,6 +305,18 @@ bool was_mock_power_off_called(void)
     return mock_power_off_called;
 }
 
+void set_mock_bootsel(bool available)
+{
+    mock_bootsel_available = available;
+    mock_bootsel_called = false;
+    mock_hardware_ops.reboot_bootloader = available ? mock_reboot_bootloader : NULL;
+}
+
+bool was_mock_bootsel_called(void)
+{
+    return mock_bootsel_called;
+}
+
 // ============================================================================
 // Test Setup/Teardown
 // ============================================================================
@@ -338,6 +361,11 @@ void test_scaffold_setUp(void)
     mock_power_off_result = false;
     mock_power_off_called = false;
     mock_hardware_ops.power_off = NULL;
+
+    // Reset mock reboot_bootloader state (default: not available)
+    mock_bootsel_available = false;
+    mock_bootsel_called = false;
+    mock_hardware_ops.reboot_bootloader = NULL;
 
     // Reset mock device state (initializes time, wifi, etc.)
     mock_device_reset();

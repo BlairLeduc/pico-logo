@@ -20,6 +20,7 @@
 
 #include <pico/stdlib.h>
 #include <pico/rand.h>
+#include <pico/bootrom.h>
 
 #ifdef LOGO_HAS_WIFI
 #include <pico/cyw43_arch.h>
@@ -124,6 +125,13 @@ static bool picocalc_power_off(void)
     }
 
     return false;
+}
+
+static void picocalc_reboot_bootloader(void)
+{
+    // Reset into the USB bootloader: (0, 0) => no activity LED, leave both the
+    // mass-storage and PICOBOOT interfaces enabled. This call does not return.
+    rom_reset_usb_boot(0, 0);
 }
 
 static bool picocalc_check_user_interrupt(void)
@@ -1514,6 +1522,7 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .random = picocalc_random,
     .get_battery_level = picocalc_get_battery_level,
     .power_off = picocalc_power_off,
+    .reboot_bootloader = picocalc_reboot_bootloader,
     .check_user_interrupt = picocalc_check_user_interrupt,
     .clear_user_interrupt = picocalc_clear_user_interrupt,
     .check_pause_request = picocalc_check_pause_request,

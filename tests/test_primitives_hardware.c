@@ -200,6 +200,36 @@ void test_poweroff_no_inputs(void)
 }
 
 //==========================================================================
+// .bootsel Primitive Tests
+//==========================================================================
+
+void test_bootsel_not_available(void)
+{
+    // Default: reboot_bootloader is NULL, so .bootsel should error
+    Result r = eval_string(".bootsel");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_UNSUPPORTED_ON_DEVICE, r.error_code);
+    TEST_ASSERT_FALSE(was_mock_bootsel_called());
+}
+
+void test_bootsel_calls_hardware_function(void)
+{
+    // When available, .bootsel calls the hardware function and succeeds
+    set_mock_bootsel(true);
+
+    Result r = eval_string(".bootsel");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(was_mock_bootsel_called());
+}
+
+void test_bootsel_no_inputs(void)
+{
+    // .bootsel takes no inputs - giving one causes an error
+    Result r = eval_string(".bootsel 1");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+//==========================================================================
 // Toot Primitive Tests
 //==========================================================================
 
@@ -410,7 +440,12 @@ int main(void)
     RUN_TEST(test_poweroff_calls_hardware_function);
     RUN_TEST(test_poweroff_reset_state_between_tests);
     RUN_TEST(test_poweroff_no_inputs);
-    
+
+    // .bootsel tests
+    RUN_TEST(test_bootsel_not_available);
+    RUN_TEST(test_bootsel_calls_hardware_function);
+    RUN_TEST(test_bootsel_no_inputs);
+
     // Toot tests
     RUN_TEST(test_toot_basic);
     RUN_TEST(test_toot_stereo);

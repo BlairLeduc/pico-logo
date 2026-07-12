@@ -51,6 +51,10 @@ extern bool mock_power_off_available;
 extern bool mock_power_off_result;
 extern bool mock_power_off_called;
 
+// Mock reboot_bootloader state for testing
+extern bool mock_bootsel_available;
+extern bool mock_bootsel_called;
+
 // Flag to track if we're using mock_device for turtle/text testing
 extern bool use_mock_device;
 
@@ -137,6 +141,12 @@ void set_mock_power_off(bool available, bool result);
 
 // Check if mock_power_off was called
 bool was_mock_power_off_called(void);
+
+// Configure mock reboot_bootloader for testing
+void set_mock_bootsel(bool available);
+
+// Check if mock reboot_bootloader was called
+bool was_mock_bootsel_called(void);
 
 // ============================================================================
 // Test Scope Helpers (for simulating procedure calls in tests)
