@@ -78,6 +78,12 @@ add_logo_test(test_cross_fs_move)
 add_logo_test(test_lfs_backup)
 add_logo_test(test_repl)
 add_logo_test(test_syntax_highlight)
+# Galaxian game test — loads logo/games/galaxian into the interpreter (proving
+# it parses and its init path runs on the mock device) and checks the game's
+# pure logic helpers. The source path is passed in as a compile definition.
+add_logo_test(test_galaxian)
+target_compile_definitions(test_galaxian PRIVATE
+    GALAXIAN_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/galaxian")
 
 # FAT32 driver test — compiles devices/picocalc/fat32.c on the host with a
 # mock SD-card backend and tiny Pico SDK shim headers.  Independent of

@@ -1,8 +1,11 @@
 # Galaxian in Pico Logo (design)
 
-Status: **design — not yet implemented.** Target deliverable is
-[`logo/games/galaxian`](../logo/games/galaxian) (`load "galaxian` then
-`galaxian`), a sibling of [`logo/games/invaders`](../logo/games/invaders).
+Status: **implemented.** See [`logo/games/galaxian`](../logo/games/galaxian)
+(`load "galaxian` then `galaxian`), a sibling of
+[`logo/games/invaders`](../logo/games/invaders). Its pure logic (the rank
+pyramid, cell↔position formulas, scoring table, clamped-turn steering, hit
+test) and its init/dive/kill paths on the mock device are covered by
+[`tests/test_galaxian.c`](../tests/test_galaxian.c).
 
 This document describes only what Galaxian *changes* relative to the
 Space Invaders port. Everything the two games share — the stamped-canvas
