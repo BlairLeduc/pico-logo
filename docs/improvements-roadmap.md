@@ -5,9 +5,23 @@ Tracks candidate improvements to Pico Logo, comparing the current implementation
 headings as of 2026-07-03) against the wider Logo family (Apple Logo II — the
 model dialect — plus UCB/Berkeley Logo, Atari Logo, Terrapin, FMSLogo).
 
-Companion documents:
+Companion documents (everything in `docs/`):
+- [`multi-sprite-design.md`](multi-sprite-design.md) — P5 sprites/collision/demons
+  (implemented, M0–M3).
+- [`launch-design.md`](launch-design.md) — P6 `launch` background processes
+  (design complete, implementation not started).
+- [`http-server-design.md`](http-server-design.md) — P7 HTTP server + mDNS
+  (design complete, implementation not started).
+- [`sound-design.md`](sound-design.md) — P8 stereo PSG synthesizer (design
+  complete, implementation may begin).
+- [`littlefs-filesystem-design.md`](littlefs-filesystem-design.md) — internal
+  LittleFS root + `/sd` FAT32 mount (implemented, PR #83, 2026-06-29 —
+  predates this roadmap).
 - [`memory-reclamation-design.md`](memory-reclamation-design.md) — atom GC /
   `erall` soft reset designs (deferred).
+- [`space-invaders-design.md`](space-invaders-design.md) /
+  [`galaxian-design.md`](galaxian-design.md) — shipped games (#101, #106) that
+  validate the sprite stack.
 - [`code-review-2026-07-02.md`](code-review-2026-07-02.md) — the review that
   produced PR #86; a few small refinements from it are tracked below.
 
@@ -46,10 +60,17 @@ Companion documents:
 
 | Item | Status | Notes |
 |---|---|---|
-| Multiple turtles/sprites (`tell`/`ask`/`each`), `touching?`, `when` events | done | All milestones landed (M0–M3); validated end-to-end by the Space Invaders game (#101/#102). `launch` processes remain gated behind a P6 design: [P5](#p5--multi-sprite-turtles-with-collision-design-first) |
+| Multiple turtles/sprites (`tell`/`ask`/`each`), `touching?`, `when` events | done | All milestones landed (M0–M3); validated end-to-end by the Space Invaders game (#101/#102). `launch` processes are the P6 design below |
+| `launch [instrs]` background processes | todo | Design done (gate closed 2026-07-12), implementation not started: [P6](#p6--launch-background-processes-design-first). `broadcast` deferred per Q3 |
 | HTTP server (`http.listen`, `when [http.request?]`, `http.respond`, file transfer) | todo | Design done (gate closed 2026-07-10), implementation not started: [P7](#p7--http-server-design-complete-implementation-not-started). Scope added 2026-07-12: mDNS (`picologo.local`) + `hostname`/`sethostname`, folded into the design as §7/M0 |
 | Arrays (`array`/`setitem`) | deferred | O(1) indexing; needs a new object kind (likely blob-backed). Wait for demonstrated need |
 | Atom reclamation / `erall` soft reset | deferred | See `memory-reclamation-design.md` |
+
+### Platform
+
+| Item | Status | Notes |
+|---|---|---|
+| LittleFS internal filesystem (root `/`) + `/sd` FAT32 mount | done | Landed 2026-06-29 (PR #83), before this roadmap existed; listed for completeness. Design: [`littlefs-filesystem-design.md`](littlefs-filesystem-design.md) |
 
 ### Documentation
 
@@ -260,13 +281,40 @@ The design doc must settle:
 hook complexity (the trampoline's re-entrancy contract), and whether the host
 device (no graphics) degrades cleanly.
 
+### P6 — `launch` background processes (design first)
+
+**Goal:** MicroWorlds-style `launch [instrs]` — run an instruction list as a
+background process, cooperatively scheduled beside the foreground program,
+composing with `tell`/demons/sound. The concurrency deferral from the P5 doc
+(§8). **Gate closed:** [`launch-design.md`](launch-design.md) (v1; Q1–Q6 all
+resolved with the user 2026-07-12 — every recommendation accepted).
+Implementation may begin at M0.
+
+- Model: a process is a paused evaluation — own `Evaluator`, own (shallow,
+  runtime-sized) op stack, own frame arena slice; suspended processes hold
+  zero C stack. Yields at op boundaries of the outermost trampoline
+  (`RESULT_YIELD` + step budget); nested sub-trampolines (`map` lambdas, arg
+  collection) run whole within a turn.
+- Scheduler: round-robin at the existing demon poll sites; `wait` in a
+  process sleeps that process only; shared re-entrancy guard with demons.
+- Surface: `launch`, `halt`, `(launch)` print form; `broadcast`/`message?`
+  designed but deferred (Q3). Lifetime: `cs`/error-unwind/BREAK halt all
+  processes; `freeze`/`thaw` suspend/resume.
+- The crux is SRAM (§5 of the doc): ~8 KB/process estimated on target
+  against ~34 KB free on pico2 — Q1 decided a uniform SRAM pool on all
+  boards (`MAX_PROCESSES` 2–4, count fixed by M0 target measurements).
+- Milestones: M0 evaluator groundwork (runtime-sized `OpStack`, yield) →
+  M1 table + scheduler + lifetime → M2 polish/broadcast → M3 hardware
+  validation + game retrofit.
+
 ### P7 — HTTP server (design complete, implementation not started)
 
 **Goal:** serve HTTP from Logo — browser-driven turtle control and cable-free
 file transfer (`curl -T`) on both WiFi boards. **Gate closed:**
 [`http-server-design.md`](http-server-design.md) (v3; all open
-questions resolved with the user 2026-07-10). Numbered P7 because P6 stays
-reserved for the `launch` process design flagged in the P5 doc.
+questions resolved with the user 2026-07-10). Numbered P7 because P6 was
+reserved for the `launch` process design flagged in the P5 doc (now drafted
+above).
 
 - Demon-driven surface: `http.listen 80` · `when [http.request?] [...]` ·
   `http.respond`, with accessors (`http.method`/`path`/`query`/`body`/
@@ -353,3 +401,6 @@ prompt while BREAK/error silence, `sound` range 20 Hz–10 kHz).
 | 2026-07-12 | Language: medium | Done: long words via blobs — `prim_word` now concatenates through a stack/heap buffer and finishes with `mem_word` instead of `mem_atom_cstr`, so a >255-char result blobs into PSRAM on the Pico Plus 2 W and still errors (rather than truncates) on non-PSRAM boards; unifies with the `mem_word` path already used for HTTP bodies and `reverse`/`shuffle`. Reference `word` + board sections updated, PSRAM success test added; 57/57 ctest, pico2 (RAM 93.5%) and pico+2w link |
 | 2026-07-10 | P8 | Sound design gate closed: Q1–Q6 all resolved with user — voices by ear (0–3 L / 4–7 R, noise 3 & 7) with `tell`-style voice-list fan-out; note words only, `#` and `s` both accepted for sharp; `play` waits (BREAK-able) on a full queue; `stopsound` stops without resetting timbre; music keeps playing at the prompt, BREAK/toplevel-error silence, `cs` untouched; `sound` range 20 Hz–10 kHz. Implementation may begin at M1 |
 | 2026-07-12 | P7 | Scope added and folded into `http-server-design.md` (v3, §7, milestone M0): mDNS responder so LAN machines reach the device by name (`http://picologo.local`) via lwIP's `pico_lwip_mdns`; `sethostname`/`hostname` primitives (label-validated, `.local` excluded, `HOSTNAME_MAX` in `core/limits.h`); new `network_set_hostname` device op also feeding the DHCP hostname. User decisions: responder starts with `wifi.connect`, not `http.listen`; default hostname `picologo`; no reboot persistence (custom names go in the startup file) |
+| 2026-07-12 | Roadmap | Synced with `docs/`: companion list now indexes every design doc; LittleFS filesystem (PR #83, 2026-06-29 — pre-roadmap) recorded under a new Platform table |
+| 2026-07-12 | P6 | Design draft: `launch-design.md` v1 — a process is a paused evaluation (own evaluator/op-stack/arena, zero C stack when suspended); yield-at-outermost-trampoline scheduling at the demon poll sites; evaluator audit shows proc bodies/loops are op-driven (suspendable) while `map`-style lambdas run whole per turn; measured budgets (host: `OpStack` 58 KB, `EvalOp` 224 B; pico2 ~34 KB free) drive the runtime-sized-OpStack + per-process-arena plan (~8 KB/process); `launch`/`halt`/`(launch)`, `wait` sleeps the process, lifetime = demons' rules; broadcast designed, recommended deferred; open questions Q1–Q6 pending user |
+| 2026-07-12 | P6 | Design gate closed: Q1–Q6 all resolved with user (every recommendation accepted) — uniform SRAM process pool on all boards (count fixed at M0), error in a process unwinds everything (demon rule), broadcast deferred, keyboard readers error in a process while `play` yields, `halt` stops processes only, `launch` inherits the launcher's active turtle set. Implementation may begin at M0 |

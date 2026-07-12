@@ -542,7 +542,8 @@ It is genuinely implementable here — and still deferred from P5:
   whole game culture; it never had processes at all.
 
 So: P5 ships the autonomous trio; `launch` becomes a P6 candidate with
-its own design doc once M1–M3 usage shows where it's needed. Scratch-
+its own design doc ([`launch-design.md`](launch-design.md), drafted
+2026-07-12) once M1–M3 usage shows where it's needed. Scratch-
 style `broadcast`/message demons belong to that future design (they are
 the inter-process mailbox; with one thread of control, demons on shared
 variables already cover it). This design keeps the door open: per-turtle
