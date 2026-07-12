@@ -338,7 +338,7 @@ end
 
 to step.sway
   make "swayx :swayx + (2 * :swaydir)
-  if or (:swayx > 40) (:swayx < -40) [make "swaydir 0 - :swaydir]
+  if or (:swayx > 39) (:swayx < -39) [make "swaydir 0 - :swaydir]
 end
 
 to toggle.alien.frame

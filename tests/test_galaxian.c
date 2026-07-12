@@ -60,6 +60,7 @@ static void load_galaxian(void)
         {
             if (repl_line_is_end(line))
             {
+                TEST_ASSERT_MESSAGE(proc_len + 4 <= sizeof(proc), "procedure exceeds load buffer");
                 memcpy(proc + proc_len, "end", 3);
                 proc[proc_len + 3] = '\0';
                 in_def = false;
@@ -68,6 +69,7 @@ static void load_galaxian(void)
             }
             else
             {
+                TEST_ASSERT_MESSAGE(proc_len + len + 1 < sizeof(proc), "procedure exceeds load buffer");
                 memcpy(proc + proc_len, line, len);
                 proc[proc_len + len] = '\n';
                 proc_len += len + 1;
