@@ -1391,10 +1391,22 @@ static Result prim_write(Evaluator *eval, int argc, Value *args)
     UNUSED(eval);
     REQUIRE_ARGC(1);
 
+    // Format the argument like `print` into a fixed buffer. A word can be
+    // blob-backed and longer than the buffer; format_value emits a word in a
+    // single call and would drop it whole rather than truncate, so copy words
+    // directly (snprintf truncates to WRITE_MAX_LEN - 1). Numbers and lists go
+    // through the shared formatter; an over-long list is truncated at the end.
     char text[WRITE_MAX_LEN];
-    FormatBufferContext ctx;
-    format_buffer_init(&ctx, text, sizeof(text));
-    format_value_to_buffer(&ctx, args[0]);  // truncates past the buffer
+    if (args[0].type == VALUE_WORD)
+    {
+        snprintf(text, sizeof(text), "%s", mem_word_ptr(value_get_node(args[0])));
+    }
+    else
+    {
+        FormatBufferContext ctx;
+        format_buffer_init(&ctx, text, sizeof(text));
+        format_value_to_buffer(&ctx, args[0]);
+    }
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle && turtle->draw_text)

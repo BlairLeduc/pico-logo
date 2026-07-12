@@ -9,6 +9,7 @@
 #include "mock_device.h"
 #include <math.h>
 #include <string.h>
+#include <stdio.h>
 
 //==========================================================================
 // Test setup/teardown
@@ -1816,6 +1817,21 @@ void test_write_does_not_move_turtle(void)
     ASSERT_POSITION(20, 30);
 }
 
+void test_write_draws_max_length_word(void)
+{
+    // A 255-char word (the atom limit) must draw fully, not get dropped
+    // whole by the formatter's all-or-nothing word write.
+    char word[256];
+    memset(word, 'a', 255);
+    word[255] = '\0';
+
+    char cmd[300];
+    snprintf(cmd, sizeof(cmd), "write \"%s", word);
+    Result r = run_string(cmd);
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL(255, (int)strlen(mock_device_get_state()->label.last_text));
+}
+
 void test_write_fans_out_over_active_set(void)
 {
     Result r = run_string("tell [1 3] write \"x");
@@ -2401,6 +2417,7 @@ int main(void)
     RUN_TEST(test_write_formats_list_without_brackets);
     RUN_TEST(test_write_draws_number);
     RUN_TEST(test_write_does_not_move_turtle);
+    RUN_TEST(test_write_draws_max_length_word);
     RUN_TEST(test_write_fans_out_over_active_set);
     RUN_TEST(test_snapsh_captures_for_first_active);
     RUN_TEST(test_snapsh_validates_inputs);
