@@ -3,6 +3,7 @@
 - This project is a **Logo interpreter written in C**, targeting three RP2350 boards using the **Pico C/C++ SDK**: the Raspberry Pi **Pico 2** (4MB Flash, no radio), the Raspberry Pi **Pico 2 W** (4MB Flash, WiFi, no PSRAM), and the Pimoroni **Pico Plus 2 W** (16MB Flash, 8MB PSRAM, WiFi).
 - Networking is tiered by hardware via two build flags: `LOGO_HAS_WIFI` (radio → WiFi, DNS/NTP/ping, plain `http://`) and `LOGO_HAS_TLS` (PSRAM → `https://`, since mbedTLS's handshake heap lives in PSRAM). So Pico 2 is offline, Pico 2 W does plain HTTP only, Pico Plus 2 W does HTTPS. Set per board in `CMakePresets.json`.
 - The interpreter aims to be strictly compatible with the semantics described in [Pico_Logo_Reference](reference/Pico_Logo_Reference.md).
+- Our roadmap is in [Improvements Roadmap](docs/improvements-roadmap.md).
 
 # Build & Test
 
