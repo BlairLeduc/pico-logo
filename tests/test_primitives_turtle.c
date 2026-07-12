@@ -1778,6 +1778,61 @@ void test_stamp_fans_out_over_active_set(void)
     TEST_ASSERT_EQUAL(2, stamps);
 }
 
+//==========================================================================
+// write tests (graphics-screen text at the turtle)
+//==========================================================================
+
+void test_write_draws_word_in_pen_colour(void)
+{
+    Result r = run_string("setpc 4 write \"hello");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    const MockDeviceState *state = mock_device_get_state();
+    TEST_ASSERT_EQUAL(1, state->label.count);
+    TEST_ASSERT_EQUAL_STRING("hello", state->label.last_text);
+    TEST_ASSERT_EQUAL(4, state->label.last_colour);
+}
+
+void test_write_formats_list_without_brackets(void)
+{
+    // Like print: a list loses its outer brackets, numbers are formatted.
+    Result r = run_string("write [score 42]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("score 42", mock_device_get_state()->label.last_text);
+}
+
+void test_write_draws_number(void)
+{
+    Result r = run_string("write 3.5");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("3.5", mock_device_get_state()->label.last_text);
+}
+
+void test_write_does_not_move_turtle(void)
+{
+    run_string("setpos [20 30]");
+    Result r = run_string("write \"hi");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    ASSERT_POSITION(20, 30);
+}
+
+void test_write_fans_out_over_active_set(void)
+{
+    Result r = run_string("tell [1 3] write \"x");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    int writes = 0;
+    const MockDeviceState *state = mock_device_get_state();
+    for (int i = 0; i < state->command_count; i++)
+    {
+        if (mock_device_get_command(i)->type == MOCK_CMD_WRITE)
+        {
+            writes++;
+        }
+    }
+    TEST_ASSERT_EQUAL(2, writes);
+}
+
 void test_snapsh_captures_for_first_active(void)
 {
     Result r = run_string("tell [2 5] snapsh 3 16 24");
@@ -2342,6 +2397,11 @@ int main(void)
 
     // Costume tests
     RUN_TEST(test_stamp_fans_out_over_active_set);
+    RUN_TEST(test_write_draws_word_in_pen_colour);
+    RUN_TEST(test_write_formats_list_without_brackets);
+    RUN_TEST(test_write_draws_number);
+    RUN_TEST(test_write_does_not_move_turtle);
+    RUN_TEST(test_write_fans_out_over_active_set);
     RUN_TEST(test_snapsh_captures_for_first_active);
     RUN_TEST(test_snapsh_validates_inputs);
     RUN_TEST(test_snapsh_reports_full_pool);

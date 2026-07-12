@@ -101,6 +101,13 @@ extern "C" {
 // OVERFLOW: headers exceeding this limit produce `ERR_NETWORK_ERROR`.
 #define HTTP_MAX_HEADERS 1024
 
+// Maximum length, in bytes, of the string `write` draws on the graphics
+// screen at the turtle. The argument is formatted like `print` (lists lose
+// their outer brackets) into a stack buffer of this size.
+//
+// OVERFLOW: text longer than this is silently truncated at the buffer.
+#define WRITE_MAX_LEN 256
+
 #ifdef __cplusplus
 }
 #endif

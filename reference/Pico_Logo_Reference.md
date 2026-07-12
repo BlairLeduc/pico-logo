@@ -1520,6 +1520,24 @@ stamp
 ```
 
 
+## write
+
+write _object_
+
+`command`
+
+`write` draws _object_ as text on the graphics screen at the turtle's position, in the current pen colour. The text is always upright and reads left to right: it begins at the turtle's x and is centred vertically on the turtle's y, so the turtle sits at the middle of the first letter's left edge. The turtle does not move and its heading is ignored. The letters become part of the drawing: they stay when the turtle walks away, and [`savepic`](#savepic) saves them. _object_ is written the same way [`print`](#print-pr) writes it, so a list loses its outer brackets and numbers appear in their usual form. Each turtle you are talking to writes at its own position.
+
+**Example**:
+
+```logo
+?setpc 2
+?write [Score: 100]        ; label the picture
+?pu setxy 0 60 pd
+?write count [a b c]       ; writes 3
+```
+
+
 ## tell
 
 tell _turtlenumber_  

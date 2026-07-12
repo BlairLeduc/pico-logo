@@ -118,6 +118,12 @@ extern "C"
         // Fill enclosed area with current pen color
         void (*fill)(void);
 
+        // Draw text on the graphics screen at the selected turtle's current
+        // position, in the current pen colour, upright and left-to-right.
+        // The turtle does not move and its heading is ignored (this is the
+        // horizontal-only cousin of UCB `label`). Optional.
+        void (*draw_text)(const char *text);
+
         // Boundary modes
         void (*set_fence)(void);    // Turtle stops at boundary
         void (*set_window)(void);   // Turtle can go off-screen

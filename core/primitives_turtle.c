@@ -1382,6 +1382,34 @@ static Result prim_stamp(Evaluator *eval, int argc, Value *args)
     return result_none();
 }
 
+// write object - Draw text on the graphics screen at the turtle's position,
+// in the current pen colour, upright and left-to-right. The turtle does not
+// move (the horizontal-only cousin of UCB `label`). The argument is
+// formatted like `print`: lists lose their outer brackets.
+static Result prim_write(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
+
+    char text[WRITE_MAX_LEN];
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, text, sizeof(text));
+    format_value_to_buffer(&ctx, args[0]);  // truncates past the buffer
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->draw_text)
+    {
+        for (int i = 0; i < active_count; i++)
+        {
+            select_turtle(turtle, active_set[i]);
+            turtle->draw_text(text);
+        }
+        select_first_active(turtle);
+    }
+
+    return result_none();
+}
+
 // snapsh shapenumber width height - Capture the canvas region centred on
 // the (first active) turtle into a colour costume
 static Result prim_snapsh(Evaluator *eval, int argc, Value *args)
@@ -1921,6 +1949,7 @@ void primitives_turtle_init(void)
     primitive_register("dotp", 1, prim_dotp);
     primitive_register("fill", 0, prim_fill);
     primitive_register("arc", 2, prim_arc);
+    primitive_register("write", 1, prim_write);
     
     // Boundary mode primitives
     primitive_register("fence", 0, prim_fence);

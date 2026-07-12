@@ -9,6 +9,7 @@
 #pragma once
 
 #include "devices/console.h"
+#include "core/limits.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -90,6 +91,7 @@ extern "C"
         MOCK_CMD_STAMP,
         MOCK_CMD_SET_ROT,
         MOCK_CMD_SET_MAG,
+        MOCK_CMD_WRITE,
         // Draw (redraw turtle)
         MOCK_CMD_DRAW
     } MockCommandType;
@@ -234,6 +236,16 @@ extern "C"
             uint8_t last_snap_turtle;  // selected turtle at capture time
             bool snap_result;          // returned by snap_costume (default true)
         } costume;
+
+        // Graphics-screen text tracking (write)
+        struct
+        {
+            int count;                 // Number of draw_text calls
+            char last_text[WRITE_MAX_LEN]; // Last text drawn
+            float last_x, last_y;      // Turtle position at draw time (Logo coords)
+            uint16_t last_colour;      // Pen colour at draw time
+            uint8_t last_turtle;       // Selected turtle at draw time
+        } label;
 
         // Text screen state
         struct
