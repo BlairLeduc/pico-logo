@@ -406,6 +406,7 @@ radio - and storage capacity, which depends on the flash and PSRAM fitted.
 - WiFi (`wifi.connect`, `wifi.scan`, …) with `network.resolve`, `network.ntp` and `network.ping`
 - `http.get` and `http.post` over both `http://` and `https://`, so `tls?` outputs `true`
 - HTTP responses up to about 512 KB, held in PSRAM
+- Words may exceed 255 characters (for example the result of [`word`](#word) or an HTTP response body), held in PSRAM
 
 
 
@@ -2399,6 +2400,11 @@ word _word1_ _word2_
 `operation`
 
 `word` outputs a word made up of its inputs.
+
+A word normally holds up to 255 characters. On a board with PSRAM (the
+Pimoroni Pico Plus 2 W) `word` may build a [`longer result`](#supported-pico-boards);
+on boards without PSRAM a result over 255 characters raises an out-of-space
+error rather than being truncated.
 
 **Examples**:
 

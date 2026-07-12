@@ -452,8 +452,9 @@ void test_word_operation(void)
 
 void test_word_overflow_returns_error(void)
 {
-    // Atom interner caps at 255 chars; concatenating beyond that must
-    // raise ERR_OUT_OF_SPACE rather than silently truncating.
+    // Without a PSRAM aux region (the default test setup, and the Pico 2 /
+    // Pico 2 W boards), a result beyond the 255-char atom cap cannot be
+    // blobbed, so it must raise ERR_OUT_OF_SPACE rather than truncate.
     // Build a 200-char word and concatenate it with itself => 400 chars.
     char big[256];
     memset(big, 'a', 200);
@@ -882,6 +883,32 @@ void test_shuffle_long_blob_word(void)
     for (int c = 0; c < 26; c++)
     {
         TEST_ASSERT_EQUAL(want[c], got[c]);
+    }
+}
+
+void test_word_long_blob_on_psram(void)
+{
+    // With a PSRAM aux region, `word` may exceed the 255-char atom cap by
+    // blobbing the result instead of erroring.
+    logo_mem_set_aux_region(words_blob_region, sizeof(words_blob_region));
+
+    char big[256];
+    memset(big, 'a', 200);
+    big[200] = '\0';
+
+    char src[600];
+    snprintf(src, sizeof(src), "(word \"%s \"%s)", big, big); // 400 chars
+
+    Result r = eval_string(src);
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_TRUE(mem_is_blob(r.value.as.node));
+    TEST_ASSERT_EQUAL_size_t(400, mem_word_len(r.value.as.node));
+
+    const char *out = mem_word_ptr(r.value.as.node);
+    for (size_t i = 0; i < 400; i++)
+    {
+        TEST_ASSERT_EQUAL('a', out[i]);
     }
 }
 
@@ -1429,6 +1456,7 @@ int main(void)
     RUN_TEST(test_shuffle_empty);
     RUN_TEST(test_reverse_long_blob_word);
     RUN_TEST(test_shuffle_long_blob_word);
+    RUN_TEST(test_word_long_blob_on_psram);
     RUN_TEST(test_remove_list);
     RUN_TEST(test_remove_list_no_match_copies);
     RUN_TEST(test_remove_list_numbers);
