@@ -236,6 +236,17 @@ void *(*network_tcp_accept)(void *listener, char *remote_ip, size_t ip_size);
   context. Backlog is one: a second connection while the slot is busy is
   aborted and the client retries; `close` on a server connection detaches
   the PCB but keeps the slot for reuse, and `unlisten` frees it.
+  Two reliability details, added 2026-07-16 after a large-upload failure
+  on hardware: (1) the receive callback applies **backpressure** — it
+  refuses (returns `ERR_MEM`) a segment that will not fit the receive ring
+  rather than dropping-and-ACKing the overflow, so a fast/large upload
+  throttles the sender instead of corrupting the stream; the ring is sized
+  above `TCP_WND` so a refusal can never deadlock. (2) a server connection
+  **abandoned without a response** (an upload that failed, or a teardown
+  mid-transfer) is closed with a RST rather than a graceful FIN, so its
+  local port frees immediately with no TIME_WAIT that would make a
+  re-`http.listen` on the same port fail; a connection that did send its
+  response still closes gracefully.
 - **mock:** scripted — `mock_httpd_queue_connection(request_bytes)`
   queues an incoming connection whose reads return the scripted bytes
   (with a dribble mode that returns them a few bytes per call);

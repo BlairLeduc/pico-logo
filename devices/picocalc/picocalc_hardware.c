@@ -1016,8 +1016,11 @@ static bool picocalc_network_ntp(const char *server, float timezone_offset)
 // TCP Client implementation using lwIP
 // ============================================================================
 
-// TCP connection buffer size
-#define TCP_RECV_BUFFER_SIZE 2048
+// TCP connection receive-ring size. Must exceed the advertised TCP window
+// (TCP_WND) so a full window's worth of coalesced data always fits, letting the
+// receive callback apply backpressure (refuse-when-full) without ever
+// deadlocking on a segment larger than the ring.
+#define TCP_RECV_BUFFER_SIZE 4096
 
 // TCP connection state structure
 typedef struct {
@@ -1031,6 +1034,7 @@ typedef struct {
     volatile bool closed;            // Connection closed by remote
     volatile err_t last_error;       // Last error code
     bool from_listener;              // Owned by a listener (server conn): close detaches, does not free
+    bool wrote_data;                 // A response was written (graceful close) vs. abandoned (abort)
 } TcpClientState;
 
 // Forward declarations for callbacks
@@ -1101,28 +1105,35 @@ static err_t tcp_client_recv_cb(void *arg, struct altcp_pcb *tpcb, struct pbuf *
         return err;
     }
     
-    // Copy data to circular buffer
     cyw43_arch_lwip_check();
-    
+
+    // Backpressure: only take the segment if it fully fits in the ring. If it
+    // does not, refuse it with ERR_MEM -- lwIP keeps the data, stops advancing
+    // the window (so the sender throttles), and re-delivers it once the
+    // application has drained enough room. This replaces the old drop-on-full
+    // behaviour, which silently discarded overflow bytes while still ACKing
+    // them, corrupting large uploads and desyncing the stream.
+    int used = (state->recv_head - state->recv_tail + TCP_RECV_BUFFER_SIZE) % TCP_RECV_BUFFER_SIZE;
+    int free_space = (TCP_RECV_BUFFER_SIZE - 1) - used;
+    if ((int)p->tot_len > free_space)
+    {
+        return ERR_MEM;  // Do not free or ACK: lwIP re-delivers this later.
+    }
+
     for (struct pbuf *q = p; q != NULL; q = q->next)
     {
         uint8_t *data = (uint8_t *)q->payload;
         for (u16_t i = 0; i < q->len; i++)
         {
-            int next_head = (state->recv_head + 1) % TCP_RECV_BUFFER_SIZE;
-            if (next_head != state->recv_tail)
-            {
-                state->recv_buffer[state->recv_head] = data[i];
-                state->recv_head = next_head;
-            }
-            // else: buffer full, discard data
+            state->recv_buffer[state->recv_head] = data[i];
+            state->recv_head = (state->recv_head + 1) % TCP_RECV_BUFFER_SIZE;
         }
     }
-    
+
     // Acknowledge received data
     altcp_recved(tpcb, p->tot_len);
     pbuf_free(p);
-    
+
     return ERR_OK;
 }
 
@@ -1415,11 +1426,18 @@ static void picocalc_network_tcp_close(void *connection)
         altcp_poll(state->pcb, NULL, 0);
         altcp_sent(state->pcb, NULL);
 
-        // Attempt graceful close
-        err_t err = altcp_close(state->pcb);
-        if (err != ERR_OK)
+        // A server connection that was abandoned without a response (e.g. an
+        // upload that failed or was torn down mid-transfer) is aborted with a
+        // RST: this frees the PCB and its local port immediately, with no
+        // lingering TIME_WAIT that would make a re-`http.listen` on the same
+        // port fail. A connection that did send its response is closed
+        // gracefully so the response is flushed first.
+        if (state->from_listener && !state->wrote_data)
         {
-            // If close fails, abort the connection
+            altcp_abort(state->pcb);
+        }
+        else if (altcp_close(state->pcb) != ERR_OK)
+        {
             altcp_abort(state->pcb);
         }
 
@@ -1580,7 +1598,10 @@ static int picocalc_network_tcp_write(void *connection, const char *data, int co
         
         total_written += to_write;
     }
-    
+
+    // Mark that a response was written so a server connection is closed
+    // gracefully (flushing the response) rather than aborted.
+    state->wrote_data = true;
     return total_written;
 }
 
@@ -1645,6 +1666,7 @@ static err_t tcp_listener_accept_cb(void *arg, struct altcp_pcb *newpcb, err_t e
     st->connect_error = ERR_OK;
     st->closed = false;
     st->last_error = ERR_OK;
+    st->wrote_data = false;
     st->pcb = newpcb;
     altcp_arg(newpcb, st);
     altcp_recv(newpcb, tcp_client_recv_cb);
