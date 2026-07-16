@@ -210,6 +210,7 @@ extern "C"
         bool in_use;         // Slot holds a queued or accepted connection
         bool accepted;       // Handed out by network_tcp_accept
         bool open;           // Open until network_tcp_close
+        bool stall;          // After bytes run out, read returns 0 (waiting) not -1 (closed)
         char request[MOCK_HTTPD_REQ_CAP];  // Bytes reads deliver
         int request_len;
         int read_pos;        // Read cursor into request
@@ -388,6 +389,7 @@ extern "C"
         {
             bool listening;                  // Is a listener open
             uint16_t port;                   // Port passed to network_tcp_listen
+            int last_queued;                 // Slot index the last queue filled (-1 if none)
             MockHttpdConn conns[MOCK_HTTPD_MAX_CONNS];  // Queued/accepted connections
         } httpd;
 
@@ -547,8 +549,13 @@ extern "C"
     void mock_httpd_queue_connection(const char *request, size_t len);
     void mock_httpd_queue_connection_ex(const char *request, size_t len,
                                         const char *remote_ip, int read_chunk);
+    // Like the above, but reads return 0 (client quiet, still connected) once the
+    // scripted bytes run out — drives the mid-parse stall timeout.
+    void mock_httpd_queue_connection_stalled(const char *request, size_t len);
     bool mock_httpd_is_listening(void);
     uint16_t mock_httpd_listen_port(void);
+    // The response bytes the pump/handler wrote on connection slot `index`.
+    const char *mock_httpd_conn_response(int index, int *len_out);
 
     // Mock TCP server operations (for use by test_scaffold in mock_hardware_ops)
     void *mock_network_tcp_listen(uint16_t port);

@@ -1,0 +1,55 @@
+//
+//  Pico Logo
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
+//
+//  HTTP server pump: a non-blocking, one-connection-at-a-time HTTP/1.1 request
+//  parser riding on the demon poll sites. See docs/http-server-design.md §4/§6.
+//
+//  The pump accepts a connection, reads and incrementally parses the request
+//  line, headers, and Content-Length body, then marks the request "pending"
+//  (http.request?). A handler answers with http.respond (M3); malformed,
+//  stalled, oversized, or unanswered requests are auto-responded by the pump.
+//
+
+#pragma once
+
+#include "error.h"
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+    // Start listening on `port` (backs http.listen). Errors if the device has
+    // no server ops, WiFi is not connected, or a listener is already open.
+    Result httpd_listen(uint16_t port);
+
+    // Stop listening and drop any connection (backs http.unlisten). A no-op when
+    // not listening.
+    void httpd_unlisten(void);
+
+    // True while a listener is open.
+    bool httpd_listening(void);
+
+    // True when a fully-parsed request is waiting for a response
+    // (backs http.request?).
+    bool httpd_request_pending(void);
+
+    // Advance the pump once: accept, or one bounded read + parse, or age the
+    // stall/response deadlines. Does nothing while frozen (demons_frozen()).
+    void httpd_poll(void);
+
+    // Budget-gated pump for the instruction poll point and the device idle loop:
+    // calls httpd_poll() at most once per HTTPD_POLL_MS.
+    void httpd_maybe_poll(void);
+
+    // Clear the listener and any connection. Applied by `cs` and on error-unwind
+    // to the toplevel REPL (the demon lifetime): nothing serves after a reset.
+    void httpd_reset(void);
+
+#ifdef __cplusplus
+}
+#endif

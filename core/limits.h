@@ -119,6 +119,38 @@ extern "C" {
 // ERR_DOESNT_LIKE_INPUT.
 #define HOSTNAME_MAX 32
 
+// HTTP server (core/httpd.c) buffer caps. The pump keeps one lazily-allocated
+// request buffer, chosen at runtime like the client's transfer buffer:
+//   - HTTPD_MAX_BODY (SRAM fallback): body cap when no aux/PSRAM region backs
+//     the buffer (e.g. the Pico 2 W).
+//   - HTTPD_MAX_BODY_PSRAM: body cap when an aux region is available.
+//   - HTTPD_MAX_HEADERS: cap on the request header block (request line plus
+//     header lines, up to the blank line).
+//
+// OVERFLOW (M2): a header block over HTTPD_MAX_HEADERS auto-responds `431`; a
+// declared body over the active body cap auto-responds `413` (M5 replaces the
+// `413` with the fires-unread streaming rule).
+#define HTTPD_MAX_HEADERS 1024
+#define HTTPD_MAX_BODY 4096
+#define HTTPD_MAX_BODY_PSRAM (64 * 1024)
+
+// Longest percent-decoded request path the pump records for `http.path`. A
+// longer target auto-responds `414`.
+#define HTTPD_PATH_MAX 512
+
+// Longest request method the pump records for `http.method` (GET, DELETE, ...).
+#define HTTPD_METHOD_MAX 16
+
+// Pump timing. HTTPD_POLL_MS budgets the pump at the demon poll sites (like
+// DEMON_POLL_MS). HTTPD_STALL_MS is how long a half-sent request may stall
+// mid-parse before the pump auto-responds `408`. HTTPD_RESPOND_MS is how long a
+// fully-parsed request may go unanswered (no handler, or a handler that forgot
+// `http.respond`) before the pump auto-responds `503` and closes. Both timers
+// pause while frozen.
+#define HTTPD_POLL_MS 20
+#define HTTPD_STALL_MS 5000
+#define HTTPD_RESPOND_MS 10000
+
 #ifdef __cplusplus
 }
 #endif

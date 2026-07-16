@@ -6525,6 +6525,83 @@ text/plain
 
 
 ===
+# HTTP Server
+
+These primitives let a Logo program *answer* HTTP requests — controlling the turtle from a phone browser, or transferring files without a cable — on the WiFi boards (the Pico 2 W and the Pico Plus 2 W).
+
+The server handles one request at a time. `http.listen` starts it; each request that arrives makes `http.request?` output `true`, and a handler answers it with `http.respond` (see the request accessors and `http.respond` that follow). The usual shape is a `when` demon, which keeps serving while the program runs *and* while you type at the prompt:
+
+```logo
+wifi.connect "TimHortonsWiFi "double-double
+http.listen 80
+when [http.request?] [
+  if equal? http.path "/forward [fd 20]
+  if equal? http.path "/right   [rt 90]
+  http.respond 200 sentence [heading is] heading
+]
+pr sentence [serving at] wifi.ip
+```
+
+With mDNS naming (see `sethostname`), the browser can reach the device at `http://picologo.local` instead of its IP address.
+
+The server closes automatically on a full reset — `clearscreen`, or when a running program stops with an error — so a serving program that errors stops serving; rerun it to restart. Requests that are malformed, that stall halfway, whose body is too large, or that no handler answers within ten seconds are given an automatic error response and closed, so a connection is never left hanging.
+
+
+## http.listen
+
+http.listen _port_
+
+`command`
+
+The `http.listen` command starts the HTTP server listening on _port_ (a whole number from 1 to 65535). A browser reaches a server on port 80 without a port suffix in the address. It is an error to `http.listen` when the WiFi is not connected or when the server is already listening.
+
+**Example**:
+
+```logo
+?wifi.connect "TimHortonsWiFi "double-double
+?http.listen 80
+?pr sentence [serving at] wifi.ip
+serving at 192.168.1.42
+```
+
+
+## http.unlisten
+
+http.unlisten
+
+`command`
+
+The `http.unlisten` command stops the HTTP server and drops any connection in progress. It does nothing if the server is not listening. The server is also stopped automatically by `clearscreen` and when a program unwinds to the prompt with an error.
+
+**Example**:
+
+```logo
+?http.unlisten
+```
+
+
+## http.request? (http.requestp)
+
+http.request?
+
+`operation`
+
+`http.request?` outputs `true` when a complete request has arrived and is waiting for a response, otherwise it outputs `false`. It is the condition of the serving `when` demon, and can equally drive an ordinary polling loop:
+
+```logo
+http.listen 80
+forever [if http.request? [http.respond 200 "hello]]
+```
+
+**Example**:
+
+```logo
+?pr http.request?
+false
+```
+
+
+===
 # Property Lists
 
 ## erprops

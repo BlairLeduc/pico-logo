@@ -83,6 +83,7 @@ void primitives_init(void)
     primitives_wifi_init();
     primitives_network_init();
     primitives_http_init();
+    primitives_httpd_init();
     primitives_time_init();
 }
 

@@ -108,6 +108,8 @@ add_library(logo_core
     core/primitives_wifi.c
     core/primitives_network.c
     core/primitives_http.c
+    core/httpd.c
+    core/primitives_httpd.c
     core/primitives.c
     core/parse_list.c
     core/procedures.c
@@ -393,6 +395,8 @@ if(BUILD_FOR_HOST)
         core/primitives_wifi.c
         core/primitives_network.c
         core/primitives_http.c
+        core/httpd.c
+        core/primitives_httpd.c
         core/primitives.c
         core/parse_list.c
         core/procedures.c
@@ -565,6 +569,8 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_wifi.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_network.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_http.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/httpd.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_httpd.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/parse_list.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/procedures.c

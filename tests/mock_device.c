@@ -1817,7 +1817,9 @@ static int httpd_conn_read(MockHttpdConn *c, char *buffer, int count)
     int available = c->request_len - c->read_pos;
     if (available <= 0)
     {
-        return -1;  // All scripted bytes delivered: peer closed.
+        // All scripted bytes delivered: 0 models a client that went quiet with
+        // the connection still open (drives the stall timeout), -1 a close.
+        return c->stall ? 0 : -1;
     }
     int to_read = count;
     if (to_read > available)
@@ -2004,6 +2006,7 @@ void mock_network_tcp_unlisten(void *listener)
         mock_state.httpd.conns[i].in_use = false;
         mock_state.httpd.conns[i].accepted = false;
         mock_state.httpd.conns[i].open = false;
+        mock_state.httpd.conns[i].stall = false;
     }
 }
 
@@ -2045,6 +2048,7 @@ void mock_httpd_queue_connection_ex(const char *request, size_t len,
             c->in_use = true;
             c->accepted = false;
             c->open = false;
+            c->stall = false;
             if (len > MOCK_HTTPD_REQ_CAP)
             {
                 len = MOCK_HTTPD_REQ_CAP;
@@ -2060,6 +2064,7 @@ void mock_httpd_queue_connection_ex(const char *request, size_t len,
             strncpy(c->remote_ip, remote_ip ? remote_ip : "0.0.0.0",
                     sizeof(c->remote_ip) - 1);
             c->remote_ip[sizeof(c->remote_ip) - 1] = '\0';
+            mock_state.httpd.last_queued = i;
             return;
         }
     }
@@ -2069,6 +2074,27 @@ void mock_httpd_queue_connection_ex(const char *request, size_t len,
 void mock_httpd_queue_connection(const char *request, size_t len)
 {
     mock_httpd_queue_connection_ex(request, len, "192.168.1.55", 0);
+}
+
+void mock_httpd_queue_connection_stalled(const char *request, size_t len)
+{
+    mock_httpd_queue_connection_ex(request, len, "192.168.1.55", 0);
+    int i = mock_state.httpd.last_queued;
+    if (i >= 0 && i < MOCK_HTTPD_MAX_CONNS)
+    {
+        mock_state.httpd.conns[i].stall = true;  // Reads return 0 once bytes run out.
+    }
+}
+
+const char *mock_httpd_conn_response(int index, int *len_out)
+{
+    if (index < 0 || index >= MOCK_HTTPD_MAX_CONNS)
+    {
+        if (len_out) *len_out = 0;
+        return "";
+    }
+    if (len_out) *len_out = mock_state.httpd.conns[index].response_len;
+    return mock_state.httpd.conns[index].response;
 }
 
 bool mock_httpd_is_listening(void)
