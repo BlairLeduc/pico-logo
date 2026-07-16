@@ -84,11 +84,22 @@ void test_listen_errors_when_wifi_not_connected(void)
     TEST_ASSERT_FALSE(httpd_listening());
 }
 
-void test_listen_errors_when_already_listening(void)
+void test_relisten_same_port_is_noop(void)
+{
+    eval_string("http.listen 80");
+    Result r = eval_string("http.listen 80");  // idempotent
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(httpd_listening());
+    TEST_ASSERT_EQUAL_UINT16(80, mock_httpd_listen_port());
+}
+
+void test_relisten_new_port_moves_listener(void)
 {
     eval_string("http.listen 80");
     Result r = eval_string("http.listen 8080");
-    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(httpd_listening());
+    TEST_ASSERT_EQUAL_UINT16(8080, mock_httpd_listen_port());
 }
 
 void test_listen_rejects_bad_port(void)
@@ -480,7 +491,8 @@ int main(void)
 
     RUN_TEST(test_listen_starts_the_server);
     RUN_TEST(test_listen_errors_when_wifi_not_connected);
-    RUN_TEST(test_listen_errors_when_already_listening);
+    RUN_TEST(test_relisten_same_port_is_noop);
+    RUN_TEST(test_relisten_new_port_moves_listener);
     RUN_TEST(test_listen_rejects_bad_port);
     RUN_TEST(test_unlisten_stops_the_server);
     RUN_TEST(test_unlisten_when_not_listening_is_noop);

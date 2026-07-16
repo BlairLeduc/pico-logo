@@ -75,6 +75,7 @@ static void httpd_buf_init(void)
 //==========================================================================
 
 static void *g_listener = NULL;   // Device listener handle, NULL if not listening
+static uint16_t g_port = 0;       // Port g_listener is bound to
 static void *g_conn = NULL;       // Current accepted connection, NULL if idle
 static bool g_pending = false;    // Request fully parsed, awaiting a response
 
@@ -542,9 +543,17 @@ Result httpd_listen(uint16_t port)
     {
         return result_error_arg(ERR_CANT_OPEN_NETWORK, NULL, "http server");
     }
+
+    // Idempotent: re-listening on the current port is a no-op, so a program can
+    // rerun without an "already listening" error; a different port moves the
+    // listener (dropping any connection in progress).
     if (g_listener != NULL)
     {
-        return result_error_arg(ERR_NETWORK_ALREADY_OPEN, NULL, "http server");
+        if (g_port == port)
+        {
+            return result_none();
+        }
+        httpd_unlisten();
     }
 
     httpd_buf_init();
@@ -559,6 +568,7 @@ Result httpd_listen(uint16_t port)
         return result_error_arg(ERR_CANT_OPEN_NETWORK, NULL, "http server");
     }
     g_listener = l;
+    g_port = port;
     reset_conn_state();
     g_have_last = false;
     g_have_budget = false;
@@ -577,6 +587,7 @@ void httpd_unlisten(void)
         ops->network_tcp_unlisten(g_listener);
     }
     g_listener = NULL;
+    g_port = 0;
     reset_conn_state();
 }
 

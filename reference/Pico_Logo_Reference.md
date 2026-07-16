@@ -6553,7 +6553,7 @@ http.listen _port_
 
 `command`
 
-The `http.listen` command starts the HTTP server listening on _port_ (a whole number from 1 to 65535). A browser reaches a server on port 80 without a port suffix in the address. It is an error to `http.listen` when the WiFi is not connected or when the server is already listening.
+The `http.listen` command starts the HTTP server listening on _port_ (a whole number from 1 to 65535). A browser reaches a server on port 80 without a port suffix in the address. It is an error to `http.listen` when the WiFi is not connected. Calling `http.listen` again on the same port does nothing, so a program that starts with it can be rerun freely; calling it on a different port moves the server to that port.
 
 **Example**:
 

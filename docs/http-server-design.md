@@ -72,7 +72,11 @@ reaches the device at `http://picologo.local` (or whatever
 Commands and queries, all under the existing `http.` namespace:
 
 - `http.listen port` — start listening on *port* (1–65535). Error if
-  WiFi is not connected or already listening.
+  WiFi is not connected. Idempotent (decided 2026-07-16): re-listening on
+  the current port is a no-op, so a program that opens with `http.listen`
+  reruns cleanly; a different port moves the listener. (Supersedes the
+  original "error if already listening", now that `cs` still closes the
+  listener — see §10.)
 - `http.unlisten` — stop listening, drop any pending connection.
   (Naming mirrors `wifi.connect`/`wifi.disconnect`.)
 - `http.request?` — `true` when a complete, parsed request is waiting
@@ -399,6 +403,17 @@ Resolved 2026-07-10:
    C; the example and reference document the shared-secret pattern
    (`if not equal? http.reqheader "X-Key :key [http.respond 403 "no]`).
    Logo stays in control; classroom-appropriate.
+
+Revisited 2026-07-16 (after M0–M4 shipped): the `cs` / error-unwind
+lifetime (decision 1) was reopened once serving was demon-integrated in
+practice. Kept as-is — a `cs` clears the handler demon anyway, so a
+listener surviving `cs` would only sit headless and `503`; closing both
+together stays the coherent rule. The re-run friction it existed to
+avoid is instead removed by making `http.listen` idempotent (§3), so a
+program no longer depends on `cs` closing the listener to rerun. (An
+in-handler screen clear uses `clean` / `clean home`, which leaves the
+demons and the pending connection intact — `cs` in a handler would
+disarm the handler and drop the connection.)
 
 Resolved 2026-07-12 (mDNS, §7):
 
