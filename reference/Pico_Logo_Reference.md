@@ -6244,43 +6244,43 @@ wifi.scan
 ```
 
 
-## sethostname
+## wifi.sethostname
 
-sethostname _name_
+wifi.sethostname _name_
 
 `command`
 
-The `sethostname` command sets the device's network name to _name_. Once WiFi is connected, other machines on the same network can reach the device by this name with `.local` added — for example `http://picologo.local` — instead of its numeric IP address. The same name is given to the router as the device's DHCP hostname.
+The `wifi.sethostname` command sets the device's network name to _name_. Once WiFi is connected, other machines on the same network can reach the device by this name with `.local` added — for example `http://picologo.local` — instead of its numeric IP address. The same name is given to the router as the device's DHCP hostname.
 
-_name_ must be a word of letters, digits, and hyphens (a hyphen may not be the first or last character), up to 32 characters long, and must not contain a dot: the `.local` part is added automatically. The default name is `picologo`, and it returns to `picologo` each time the device restarts, so put a `sethostname` line in your startup file to keep a custom name. If WiFi is already connected, the new name takes effect immediately.
+_name_ must be a word of letters, digits, and hyphens (a hyphen may not be the first or last character), up to 32 characters long, and must not contain a dot: the `.local` part is added automatically. The default name is `picologo`, and it returns to `picologo` each time the device restarts, so put a `wifi.sethostname` line in your startup file to keep a custom name. If WiFi is already connected, the new name takes effect immediately.
 
 **Example**:
 
 ```logo
-?sethostname "picocalc
+?wifi.sethostname "picocalc
 ?wifi.connect "TimHortonsWiFi "double-double
-?pr hostname
+?pr wifi.hostname
 picocalc
 ```
 
 Now `http://picocalc.local` reaches the device from a phone or laptop on the same network.
 
 
-## hostname
+## wifi.hostname
 
-hostname
+wifi.hostname
 
 `operation`
 
-`hostname` outputs the device's current network name (the name set by `sethostname`, without the `.local` suffix). The default is `picologo`.
+`wifi.hostname` outputs the device's current network name (the name set by `wifi.sethostname`, without the `.local` suffix). The default is `picologo`.
 
 **Example**:
 
 ```logo
-?pr hostname
+?pr wifi.hostname
 picologo
-?sethostname "myturtle
-?pr hostname
+?wifi.sethostname "myturtle
+?pr wifi.hostname
 myturtle
 ```
 
@@ -6542,7 +6542,7 @@ when [http.request?] [
 pr sentence [serving at] wifi.ip
 ```
 
-With mDNS naming (see `sethostname`), the browser can reach the device at `http://picologo.local` instead of its IP address.
+With mDNS naming (see `wifi.sethostname`), the browser can reach the device at `http://picologo.local` instead of its IP address.
 
 The server closes automatically on a full reset — `clearscreen`, or when a running program stops with an error — so a serving program that errors stops serving; rerun it to restart. Requests that are malformed, that stall halfway, whose body is too large, or that no handler answers within ten seconds are given an automatic error response and closed, so a connection is never left hanging.
 

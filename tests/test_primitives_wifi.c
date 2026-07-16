@@ -363,7 +363,7 @@ void test_wifi_scan_handles_scan_error(void)
 
 void test_hostname_default_is_picologo(void)
 {
-    Result r = eval_string("hostname");
+    Result r = eval_string("wifi.hostname");
 
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
@@ -372,17 +372,17 @@ void test_hostname_default_is_picologo(void)
 
 void test_sethostname_sets_name_and_reads_back(void)
 {
-    Result set = eval_string("sethostname \"picocalc");
+    Result set = eval_string("wifi.sethostname \"picocalc");
     TEST_ASSERT_EQUAL(RESULT_NONE, set.status);
 
-    Result r = eval_string("hostname");
+    Result r = eval_string("wifi.hostname");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     TEST_ASSERT_EQUAL_STRING("picocalc", mem_word_ptr(r.value.as.node));
 }
 
 void test_sethostname_pushes_name_to_device(void)
 {
-    eval_string("sethostname \"myturtle");
+    eval_string("wifi.sethostname \"myturtle");
 
     // The device op received the new name (for netif/mDNS).
     TEST_ASSERT_EQUAL_STRING("myturtle", mock_device_get_hostname());
@@ -390,56 +390,56 @@ void test_sethostname_pushes_name_to_device(void)
 
 void test_sethostname_accepts_digits_and_interior_hyphens(void)
 {
-    Result r = eval_string("sethostname \"pico-logo-2");
+    Result r = eval_string("wifi.sethostname \"pico-logo-2");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     TEST_ASSERT_EQUAL_STRING("pico-logo-2", mock_device_get_hostname());
 }
 
 void test_sethostname_rejects_empty(void)
 {
-    Result r = eval_string("sethostname \"");
+    Result r = eval_string("wifi.sethostname \"");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
     // Name unchanged, device not touched.
-    Result h = eval_string("hostname");
+    Result h = eval_string("wifi.hostname");
     TEST_ASSERT_EQUAL_STRING("picologo", mem_word_ptr(h.value.as.node));
 }
 
 void test_sethostname_rejects_dot(void)
 {
     // The `.local` suffix is added by mDNS; a dotted name is invalid.
-    Result r = eval_string("sethostname \"pico.local");
+    Result r = eval_string("wifi.sethostname \"pico.local");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
 void test_sethostname_rejects_leading_hyphen(void)
 {
-    Result r = eval_string("sethostname \"-pico");
+    Result r = eval_string("wifi.sethostname \"-pico");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
 void test_sethostname_rejects_trailing_hyphen(void)
 {
-    Result r = eval_string("sethostname \"pico-");
+    Result r = eval_string("wifi.sethostname \"pico-");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
 void test_sethostname_rejects_too_long(void)
 {
     // 33 characters, one over HOSTNAME_MAX (32).
-    Result r = eval_string("sethostname \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    Result r = eval_string("wifi.sethostname \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
 void test_sethostname_accepts_exactly_max(void)
 {
     // 32 characters, exactly HOSTNAME_MAX.
-    Result r = eval_string("sethostname \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    Result r = eval_string("wifi.sethostname \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
 }
 
 void test_sethostname_rejects_list(void)
 {
-    Result r = eval_string("sethostname [pico]");
+    Result r = eval_string("wifi.sethostname [pico]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 

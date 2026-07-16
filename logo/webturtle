@@ -47,6 +47,6 @@ to webturtle
   http.listen 80
   when [http.request?] [wt.handle]
   pr [Web turtle is serving.]
-  pr sentence [Open] (word "http:// hostname ".local)
+  pr sentence [Open] (word "http:// wifi.hostname ".local)
   pr sentence [or] (word "http:// wifi.ip)
 end

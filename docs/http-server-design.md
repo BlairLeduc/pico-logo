@@ -4,7 +4,7 @@ Status: **v3** — the design gate for the HTTP server closed 2026-07-10
 (the open questions in §10 were resolved with the user; none remain).
 
 v3 (2026-07-12) adds mDNS naming (§7, milestone M0): the device answers
-to `picologo.local` on the LAN, with `sethostname`/`hostname`
+to `picologo.local` on the LAN, with `wifi.sethostname`/`wifi.hostname`
 primitives; the responder starts with `wifi.connect`, independent of
 the server.
 
@@ -49,7 +49,7 @@ are optional: `forever [if http.request? [...]]` works too, since
 
 With mDNS naming (§7) the phone doesn't need the IP at all: the browser
 reaches the device at `http://picologo.local` (or whatever
-`sethostname` chose).
+`wifi.sethostname` chose).
 
 ## 2. What already exists
 
@@ -279,21 +279,21 @@ reading `wifi.ip` off the screen and typing an address into the phone.
   cable-free transfer and plain `ping picologo.local` from a laptop.
 - **Primitives** (beside the other WiFi primitives in
   `core/primitives_wifi.c`, gated on `LOGO_HAS_WIFI`):
-  - `sethostname name` — set the device's network name. A word
+  - `wifi.sethostname name` — set the device's network name. A word
     following hostname-label rules: letters, digits, hyphens; no dots —
     the name **excludes** `.local`, mDNS appends it. Length capped via
     `core/limits.h` (proposed `HOSTNAME_MAX` 32). If WiFi is already
     connected, the responder re-announces under the new name
     immediately.
-  - `hostname` — outputs the current name (again without `.local`).
+  - `wifi.hostname` — outputs the current name (again without `.local`).
 - **Default `picologo`; no persistence (decided 2026-07-12):** the name
-  resets to `picologo` on boot; a custom name is one `sethostname` line
+  resets to `picologo` on boot; a custom name is one `wifi.sethostname` line
   in the user's startup file. No flash writes involved.
 - **DHCP agrees:** the same name is passed as the lwIP netif hostname
   (`LWIP_NETIF_HOSTNAME` is already on), so the router's device list
   shows the same name mDNS answers to.
 - **Device interface:** one new op beside the WiFi ops; core owns the
-  name (so `hostname` reads it back and reconnects reuse it), the
+  name (so `wifi.hostname` reads it back and reconnects reuse it), the
   device applies it:
 
   ```c
@@ -314,7 +314,7 @@ firmware presets linking + reference sections for anything user-visible
 - **M0 — mDNS naming (§7).** Independent of the server pump — ships on
   `wifi.connect` alone, in any order relative to M1–M5.
   `network_set_hostname` device op; lwipopts/CMake enablement
-  (`pico_lwip_mdns`); `sethostname` / `hostname` with label validation
+  (`pico_lwip_mdns`); `wifi.sethostname` / `wifi.hostname` with label validation
   and `HOSTNAME_MAX`; responder start/stop with connect/disconnect and
   re-announce on rename. Acceptance: mock tests for default name,
   rename before and after connect, and label validation errors;
@@ -379,7 +379,7 @@ firmware presets linking + reference sections for anything user-visible
 | Content-Type sniffing by file extension in `http.respondfile` | A table to maintain for marginal gain; `application/octet-stream` downloads correctly everywhere, and a handler that cares passes the header explicitly. |
 | mDNS *querying* (resolving other machines' `.local` names) | lwIP's responder answers queries but doesn't issue them; a querier is a separate component. `network.resolve` stays plain-DNS-only. |
 | DNS-SD service advertisement (`_http._tcp` when `http.listen` is active) | The hostname A record already covers the use case — type `http://picologo.local` into a browser; service *browsing* adds protocol surface and listener/responder coupling for no classroom gain. |
-| Persisting `sethostname` to flash | A startup-file line does the same job with no flash-write path; the name is one word of state (decided 2026-07-12). |
+| Persisting `wifi.sethostname` to flash | A startup-file line does the same job with no flash-write path; the name is one word of state (decided 2026-07-12). |
 
 ## 10. Decisions (resolved with the user)
 
@@ -421,5 +421,5 @@ Resolved 2026-07-12 (mDNS, §7):
    the device is findable on the LAN as soon as WiFi is up, independent
    of whether anything is being served.
 7. **Default hostname is `picologo`.**
-8. **No persistence across reboots** — a custom name is a `sethostname`
+8. **No persistence across reboots** — a custom name is a `wifi.sethostname`
    line in the user's startup file, not a flash setting.

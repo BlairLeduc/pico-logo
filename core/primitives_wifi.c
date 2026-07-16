@@ -15,7 +15,7 @@
 #include <string.h>
 
 // The device network name, excluding the `.local` mDNS suffix. Core owns it so
-// `hostname` reads it back and reconnects reuse it; the device applies it. It
+// `wifi.hostname` reads it back and reconnects reuse it; the device applies it. It
 // resets to the default on init (no persistence across reboots).
 static char g_hostname[HOSTNAME_MAX + 1] = "picologo";
 
@@ -226,10 +226,10 @@ static Result prim_tls_supported(Evaluator *eval, int argc, Value *args)
     return result_ok(value_bool(supported));
 }
 
-// sethostname name
+// wifi.sethostname name
 // Sets the device's network name (mDNS `<name>.local` and DHCP), excluding the
 // `.local` suffix. The name must be a valid hostname label.
-static Result prim_sethostname(Evaluator *eval, int argc, Value *args)
+static Result prim_wifi_sethostname(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
     REQUIRE_ARGC(1);
@@ -242,7 +242,7 @@ static Result prim_sethostname(Evaluator *eval, int argc, Value *args)
     strcpy(g_hostname, name);  // Length checked by hostname_is_valid.
 
     // Apply to the device if it supports naming; a device without the op (or no
-    // radio at all) still tracks the name for `hostname`.
+    // radio at all) still tracks the name for `wifi.hostname`.
     LogoIO *io = primitives_get_io();
     if (io && io->hardware && io->hardware->ops && io->hardware->ops->network_set_hostname)
     {
@@ -251,9 +251,9 @@ static Result prim_sethostname(Evaluator *eval, int argc, Value *args)
     return result_none();
 }
 
-// hostname
+// wifi.hostname
 // Outputs the current device network name (without the `.local` suffix).
-static Result prim_hostname(Evaluator *eval, int argc, Value *args)
+static Result prim_wifi_hostname(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc); UNUSED(args);
     return result_ok(value_word(mem_atom_cstr(g_hostname)));
@@ -274,6 +274,6 @@ void primitives_wifi_init(void)
     primitive_register("wifi.scan", 0, prim_wifi_scan);
     primitive_register("tls?", 0, prim_tls_supported);
     primitive_register("tlsp", 0, prim_tls_supported);  // Alias
-    primitive_register("sethostname", 1, prim_sethostname);
-    primitive_register("hostname", 0, prim_hostname);
+    primitive_register("wifi.sethostname", 1, prim_wifi_sethostname);
+    primitive_register("wifi.hostname", 0, prim_wifi_hostname);
 }
