@@ -223,10 +223,19 @@ void (*network_tcp_unlisten)(void *listener);
 void *(*network_tcp_accept)(void *listener, char *remote_ip, size_t ip_size);
 ```
 
-- **picocalc:** `altcp_new` + `altcp_bind` + `altcp_listen`; the accept
-  callback parks the new PCB (at most one) for `network_tcp_accept` to
-  claim; the claimed PCB is wrapped in the same connection struct the
-  client path uses, so read/write/close need no changes.
+- **picocalc:** `altcp_new` + `altcp_bind` + `altcp_listen`. The listener
+  pre-allocates one connection struct (the same one the client path uses,
+  so read/write/close need no changes); the accept callback attaches the
+  new PCB to that slot **and wires its receive callback right there**,
+  then flags it ready for `network_tcp_accept` to hand over. Wiring recv
+  in the accept callback is load-bearing: lwIP *frees* inbound data
+  delivered to a PCB whose recv callback is still NULL, so a browser that
+  sends its whole request immediately after the handshake would otherwise
+  lose it and stall until the pump's `408`. Pre-allocating (in `listen`,
+  never in the callback) keeps `malloc` out of the lwIP background
+  context. Backlog is one: a second connection while the slot is busy is
+  aborted and the client retries; `close` on a server connection detaches
+  the PCB but keeps the slot for reuse, and `unlisten` frees it.
 - **mock:** scripted — `mock_httpd_queue_connection(request_bytes)`
   queues an incoming connection whose reads return the scripted bytes
   (with a dribble mode that returns them a few bytes per call);

@@ -1030,6 +1030,7 @@ typedef struct {
     volatile err_t connect_error;    // Error from connect callback
     volatile bool closed;            // Connection closed by remote
     volatile err_t last_error;       // Last error code
+    bool from_listener;              // Owned by a listener (server conn): close detaches, does not free
 } TcpClientState;
 
 // Forward declarations for callbacks
@@ -1402,11 +1403,11 @@ static void picocalc_network_tcp_close(void *connection)
     }
     
     TcpClientState *state = (TcpClientState *)connection;
-    
+
     if (state->pcb)
     {
         cyw43_arch_lwip_begin();
-        
+
         // Clear callbacks first
         altcp_arg(state->pcb, NULL);
         altcp_recv(state->pcb, NULL);
@@ -1421,10 +1422,22 @@ static void picocalc_network_tcp_close(void *connection)
             // If close fails, abort the connection
             altcp_abort(state->pcb);
         }
-        
+
+        // Clear the PCB inside the lock so the listener's accept callback never
+        // sees a stale pointer for a just-closed slot.
+        state->pcb = NULL;
         cyw43_arch_lwip_end();
     }
-    
+
+    // A listener-owned server connection is a reusable slot: detach the PCB but
+    // keep the struct so the listener's accept callback can reuse it for the
+    // next connection. The listener frees it in unlisten.
+    if (state->from_listener)
+    {
+        state->closed = true;
+        return;
+    }
+
     free(state);
 }
 
@@ -1592,16 +1605,23 @@ static bool picocalc_network_tcp_can_read(void *connection)
 // TCP server (listener) support
 // ----------------------------------------------------------------------------
 
-// A listener owns the listening PCB and parks at most one accepted-but-unclaimed
-// PCB (TCP_LISTEN_BACKLOG is 1). network_tcp_accept claims it and wraps it in the
-// same TcpClientState the client path uses, so read/write/close are unchanged.
+// A listener owns the listening PCB and one pre-allocated connection slot
+// (TCP_LISTEN_BACKLOG is 1, one connection at a time). The slot is a
+// TcpClientState like the client path uses, so read/write/close are unchanged;
+// it is allocated once in listen (never in the lwIP callback) and reused across
+// connections until unlisten frees it.
 typedef struct {
     struct altcp_pcb *listen_pcb;  // The listening PCB
-    struct altcp_pcb *pending_pcb; // One accepted PCB awaiting a claim, or NULL
-    ip_addr_t pending_remote;      // Remote address of pending_pcb
+    TcpClientState *conn;          // Pre-allocated connection slot (backlog 1)
+    volatile bool ready;           // conn is wired to an accepted PCB, awaiting a claim
+    ip_addr_t remote;              // Remote address of the accepted connection
 } TcpListenerState;
 
-// Accept callback: park the new connection for network_tcp_accept to claim.
+// Accept callback: attach the accepted PCB to the pre-allocated slot and wire
+// its receive callback immediately, so request bytes that arrive before the
+// pump claims the connection are buffered instead of dropped. (lwIP frees
+// inbound data delivered to a PCB whose recv callback is still NULL, which would
+// otherwise lose the whole request and leave the client waiting for a reply.)
 static err_t tcp_listener_accept_cb(void *arg, struct altcp_pcb *newpcb, err_t err)
 {
     TcpListenerState *ls = (TcpListenerState *)arg;
@@ -1610,23 +1630,37 @@ static err_t tcp_listener_accept_cb(void *arg, struct altcp_pcb *newpcb, err_t e
     {
         return ERR_VAL;
     }
-    // Backlog is one: if a connection is already parked, refuse this one.
-    if (ls == NULL || ls->pending_pcb != NULL)
+    // Backlog is one: refuse a new connection while the slot is occupied.
+    if (ls == NULL || ls->conn == NULL || ls->conn->pcb != NULL)
     {
         altcp_abort(newpcb);
         return ERR_ABRT;
     }
 
-    ls->pending_pcb = newpcb;
+    TcpClientState *st = ls->conn;
+    st->recv_head = 0;
+    st->recv_tail = 0;
+    st->connected = true;
+    st->connect_complete = true;
+    st->connect_error = ERR_OK;
+    st->closed = false;
+    st->last_error = ERR_OK;
+    st->pcb = newpcb;
+    altcp_arg(newpcb, st);
+    altcp_recv(newpcb, tcp_client_recv_cb);
+    altcp_err(newpcb, tcp_client_err_cb);
+    altcp_poll(newpcb, tcp_client_poll_cb, 10);
+
     ip_addr_t *remote = altcp_get_ip(newpcb, 0);  // 0 => remote address
     if (remote != NULL)
     {
-        ip_addr_copy(ls->pending_remote, *remote);
+        ip_addr_copy(ls->remote, *remote);
     }
     else
     {
-        ip_addr_set_zero(&ls->pending_remote);
+        ip_addr_set_zero(&ls->remote);
     }
+    ls->ready = true;
     return ERR_OK;
 }
 
@@ -1646,12 +1680,22 @@ static void *picocalc_network_tcp_listen(uint16_t port)
     {
         return NULL;
     }
+    // Allocate the connection slot up front (in the foreground; never in the
+    // lwIP accept callback, where malloc would be unsafe).
+    ls->conn = tcp_state_alloc();
+    if (!ls->conn)
+    {
+        free(ls);
+        return NULL;
+    }
+    ls->conn->from_listener = true;
 
     cyw43_arch_lwip_begin();
     struct altcp_pcb *pcb = altcp_tcp_new_ip_type(IPADDR_TYPE_V4);
     if (!pcb)
     {
         cyw43_arch_lwip_end();
+        free(ls->conn);
         free(ls);
         return NULL;
     }
@@ -1659,6 +1703,7 @@ static void *picocalc_network_tcp_listen(uint16_t port)
     {
         altcp_abort(pcb);
         cyw43_arch_lwip_end();
+        free(ls->conn);
         free(ls);
         return NULL;
     }
@@ -1669,6 +1714,7 @@ static void *picocalc_network_tcp_listen(uint16_t port)
     {
         altcp_abort(pcb);
         cyw43_arch_lwip_end();
+        free(ls->conn);
         free(ls);
         return NULL;
     }
@@ -1689,10 +1735,17 @@ static void picocalc_network_tcp_unlisten(void *listener)
     }
 
     cyw43_arch_lwip_begin();
-    if (ls->pending_pcb)
+    if (ls->conn && ls->conn->pcb)
     {
-        altcp_abort(ls->pending_pcb);
-        ls->pending_pcb = NULL;
+        altcp_arg(ls->conn->pcb, NULL);
+        altcp_recv(ls->conn->pcb, NULL);
+        altcp_err(ls->conn->pcb, NULL);
+        altcp_poll(ls->conn->pcb, NULL, 0);
+        if (altcp_close(ls->conn->pcb) != ERR_OK)
+        {
+            altcp_abort(ls->conn->pcb);
+        }
+        ls->conn->pcb = NULL;
     }
     if (ls->listen_pcb)
     {
@@ -1702,6 +1755,7 @@ static void picocalc_network_tcp_unlisten(void *listener)
     }
     cyw43_arch_lwip_end();
 
+    free(ls->conn);
     free(ls);
 }
 
@@ -1713,44 +1767,26 @@ static void *picocalc_network_tcp_accept(void *listener, char *remote_ip, size_t
         return NULL;
     }
 
-    // Drive lwIP so a queued SYN turns into an accept callback.
+    // Drive lwIP so a completed handshake turns into an accept callback.
     cyw43_arch_poll();
     sys_check_timeouts();
 
-    cyw43_arch_lwip_begin();
-    struct altcp_pcb *newpcb = ls->pending_pcb;
-    if (newpcb == NULL)
+    // The accept callback has already wired the slot's receive callback; nothing
+    // to do here but hand it over once a connection is ready.
+    if (!ls->ready)
     {
-        cyw43_arch_lwip_end();
         return NULL;
     }
-
-    // Wrap the accepted PCB in the same state the client path uses.
-    TcpClientState *state = tcp_state_alloc();
-    if (!state)
-    {
-        // Can't take it now; leave it parked to retry on the next accept.
-        cyw43_arch_lwip_end();
-        return NULL;
-    }
-    ls->pending_pcb = NULL;
-    state->pcb = newpcb;
-    state->connected = true;
-    state->connect_complete = true;
-    altcp_arg(newpcb, state);
-    altcp_recv(newpcb, tcp_client_recv_cb);
-    altcp_err(newpcb, tcp_client_err_cb);
-    altcp_poll(newpcb, tcp_client_poll_cb, 10);
-    cyw43_arch_lwip_end();
+    ls->ready = false;
 
     if (remote_ip && ip_size > 0)
     {
-        const char *s = ipaddr_ntoa(&ls->pending_remote);
+        const char *s = ipaddr_ntoa(&ls->remote);
         strncpy(remote_ip, s ? s : "", ip_size - 1);
         remote_ip[ip_size - 1] = '\0';
     }
 
-    return state;
+    return ls->conn;
 }
 
 #endif // LOGO_HAS_WIFI
