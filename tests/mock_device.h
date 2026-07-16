@@ -339,6 +339,7 @@ extern "C"
             bool ntp_success;                // Whether network_ntp should succeed
             char last_ntp_server[256];       // Last NTP server passed to network_ntp
             float last_ntp_timezone;         // Last timezone offset passed to network_ntp
+            char hostname[33];               // Last name passed to network_set_hostname (HOSTNAME_MAX + 1)
         } network;
 
         // TCP connection state tracking
@@ -479,11 +480,13 @@ extern "C"
     void mock_device_set_ntp_result(bool success);
     const char *mock_device_get_last_ntp_server(void);
     float mock_device_get_last_ntp_timezone(void);
+    const char *mock_device_get_hostname(void);  // Last name set via network_set_hostname
 
     // Mock network operations (for use by test_scaffold in mock_hardware_ops)
     float mock_network_ping(const char *ip_address);
     bool mock_network_resolve(const char *hostname, char *ip_buffer, size_t buffer_size);
     bool mock_network_ntp(const char *server, float timezone_offset);
+    void mock_network_set_hostname(const char *name);
 
     // TCP helpers for testing
     void mock_device_set_tcp_connect_result(bool success);

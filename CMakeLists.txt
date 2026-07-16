@@ -257,8 +257,11 @@ if(LOGO_HAS_WIFI)
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/picocalc
     )
     # Plain networking (WiFi, DNS/NTP/ping, HTTP) needs the lwIP stack only.
+    # pico_lwip_mdns adds the multicast-DNS responder so the device answers
+    # `<hostname>.local` on the LAN.
     target_link_libraries(pico-logo
         pico_cyw43_arch_lwip_threadsafe_background
+        pico_lwip_mdns
     )
 endif()
 

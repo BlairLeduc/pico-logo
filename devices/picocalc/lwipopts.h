@@ -40,6 +40,15 @@
 // Enable hostname for DHCP
 #define LWIP_NETIF_HOSTNAME             1
 
+// mDNS responder: answer `<hostname>.local` A-record queries on the LAN. Needs
+// IPv4 multicast (IGMP) and one per-netif client-data slot for the responder
+// state. The responder-only config advertises just the host A record (no
+// DNS-SD services).
+#define LWIP_MDNS_RESPONDER             1
+#define LWIP_IGMP                       1
+#define LWIP_NUM_NETIF_CLIENT_DATA      1
+#define MDNS_MAX_SERVICES               1
+
 // Enable network interface status callbacks (for connection status)
 #define LWIP_NETIF_STATUS_CALLBACK      1
 
@@ -51,11 +60,13 @@
 
 // Buffer pool sizes - keep small for memory efficiency
 #define MEMP_NUM_PBUF                   10
-#define MEMP_NUM_UDP_PCB                4
+// One UDP PCB beyond DHCP/DNS/NTP for the mDNS responder's multicast socket.
+#define MEMP_NUM_UDP_PCB                5
 #define MEMP_NUM_TCP_PCB                5
 #define MEMP_NUM_TCP_PCB_LISTEN         4
 #define MEMP_NUM_TCP_SEG                16
-#define MEMP_NUM_SYS_TIMEOUT            8
+// Extra timeout slots for the mDNS responder's announce/probe timers.
+#define MEMP_NUM_SYS_TIMEOUT            12
 #define PBUF_POOL_SIZE                  8
 
 // TCP configuration

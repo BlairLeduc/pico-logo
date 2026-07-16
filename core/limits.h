@@ -109,6 +109,16 @@ extern "C" {
 // OVERFLOW: text longer than WRITE_MAX_LEN - 1 is silently truncated.
 #define WRITE_MAX_LEN 256
 
+// Maximum length, in characters, of the device network hostname set by
+// `sethostname` (the name answered over mDNS as `<hostname>.local` and given to
+// DHCP). Excludes the `.local` suffix, which mDNS appends. 32 is comfortably
+// within the 63-character DNS label limit.
+//
+// OVERFLOW: `sethostname` rejects a name longer than HOSTNAME_MAX (or one that
+// is empty or contains anything but letters, digits, and interior hyphens) with
+// ERR_DOESNT_LIKE_INPUT.
+#define HOSTNAME_MAX 32
+
 #ifdef __cplusplus
 }
 #endif

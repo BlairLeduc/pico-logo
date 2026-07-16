@@ -8,10 +8,34 @@
 
 #include "primitives.h"
 #include "memory.h"
+#include "limits.h"
 #include "devices/io.h"
 
 #include <stdio.h>
 #include <string.h>
+
+// The device network name, excluding the `.local` mDNS suffix. Core owns it so
+// `hostname` reads it back and reconnects reuse it; the device applies it. It
+// resets to the default on init (no persistence across reboots).
+static char g_hostname[HOSTNAME_MAX + 1] = "picologo";
+
+// True if `name` is a valid hostname label: 1..HOSTNAME_MAX characters of
+// letters, digits, and hyphens, not starting or ending with a hyphen (so the
+// name is a legal DNS label once `.local` is appended).
+static bool hostname_is_valid(const char *name)
+{
+    size_t len = strlen(name);
+    if (len == 0 || len > HOSTNAME_MAX) return false;
+    if (name[0] == '-' || name[len - 1] == '-') return false;
+    for (size_t i = 0; i < len; i++)
+    {
+        char c = name[i];
+        bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                  (c >= '0' && c <= '9') || c == '-';
+        if (!ok) return false;
+    }
+    return true;
+}
 
 // wifi?
 // Returns true if WiFi is connected, false otherwise
@@ -202,8 +226,44 @@ static Result prim_tls_supported(Evaluator *eval, int argc, Value *args)
     return result_ok(value_bool(supported));
 }
 
+// sethostname name
+// Sets the device's network name (mDNS `<name>.local` and DHCP), excluding the
+// `.local` suffix. The name must be a valid hostname label.
+static Result prim_sethostname(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
+    REQUIRE_WORD(args[0]);
+
+    const char *name = mem_word_ptr(args[0].as.node);
+    if (!hostname_is_valid(name))
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, name);
+
+    strcpy(g_hostname, name);  // Length checked by hostname_is_valid.
+
+    // Apply to the device if it supports naming; a device without the op (or no
+    // radio at all) still tracks the name for `hostname`.
+    LogoIO *io = primitives_get_io();
+    if (io && io->hardware && io->hardware->ops && io->hardware->ops->network_set_hostname)
+    {
+        io->hardware->ops->network_set_hostname(g_hostname);
+    }
+    return result_none();
+}
+
+// hostname
+// Outputs the current device network name (without the `.local` suffix).
+static Result prim_hostname(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
+    return result_ok(value_word(mem_atom_cstr(g_hostname)));
+}
+
 void primitives_wifi_init(void)
 {
+    // No persistence across reboots: reset to the default name on init.
+    strcpy(g_hostname, "picologo");
+
     primitive_register("wifi?", 0, prim_wifi_connected);
     primitive_register("wifip", 0, prim_wifi_connected);  // Alias
     primitive_register("wifi.connect", 2, prim_wifi_connect);
@@ -214,4 +274,6 @@ void primitives_wifi_init(void)
     primitive_register("wifi.scan", 0, prim_wifi_scan);
     primitive_register("tls?", 0, prim_tls_supported);
     primitive_register("tlsp", 0, prim_tls_supported);  // Alias
+    primitive_register("sethostname", 1, prim_sethostname);
+    primitive_register("hostname", 0, prim_hostname);
 }

@@ -35,6 +35,7 @@
 #include <lwip/tcp.h>
 #include <lwip/altcp.h>
 #include <lwip/altcp_tcp.h>
+#include <lwip/apps/mdns.h>
 #ifdef LOGO_HAS_TLS
 #include <lwip/altcp_tls.h>
 #include <mbedtls/ssl.h>
@@ -46,6 +47,13 @@
 // WiFi state tracking
 static bool wifi_initialized = false;
 static char current_ssid[33] = {0};
+
+// Network name for mDNS (`<hostname>.local`) and DHCP. Core owns the canonical
+// value and pushes it via network_set_hostname; this copy is what the netif and
+// mDNS responder are configured with. Defaults to "picologo".
+static char current_hostname[33] = "picologo";
+static bool mdns_initialized = false;  // mdns_resp_init() called once
+static bool mdns_active = false;       // responder added to the netif
 
 // Scan results storage
 #define MAX_SCAN_RESULTS 20
@@ -374,6 +382,71 @@ static bool picocalc_wifi_is_connected(void)
     return link_status == CYW43_LINK_JOIN;
 }
 
+// Apply current_hostname to the netif (for DHCP) and (re)start the mDNS
+// responder so the device answers `<hostname>.local`. Called once the interface
+// is up (from wifi.connect) and again on rename; a no-op if there is no netif.
+static void mdns_start(void)
+{
+    struct netif *netif = netif_default;
+    if (netif == NULL)
+    {
+        return;
+    }
+
+    cyw43_arch_lwip_begin();
+    // netif_set_hostname stores the pointer, not a copy; current_hostname is
+    // static so it stays valid, and updating it in place updates DHCP too.
+    netif_set_hostname(netif, current_hostname);
+    if (!mdns_initialized)
+    {
+        mdns_resp_init();
+        mdns_initialized = true;
+    }
+    if (mdns_active)
+    {
+        mdns_resp_rename_netif(netif, current_hostname);
+    }
+    else if (mdns_resp_add_netif(netif, current_hostname) == ERR_OK)
+    {
+        mdns_active = true;
+    }
+    cyw43_arch_lwip_end();
+}
+
+// Stop answering mDNS queries (on wifi.disconnect).
+static void mdns_stop(void)
+{
+    if (!mdns_active)
+    {
+        return;
+    }
+    struct netif *netif = netif_default;
+    cyw43_arch_lwip_begin();
+    if (netif != NULL)
+    {
+        mdns_resp_remove_netif(netif);
+    }
+    cyw43_arch_lwip_end();
+    mdns_active = false;
+}
+
+// Set the device's network name (mDNS + DHCP). Takes effect immediately when the
+// interface is up, otherwise at the next wifi.connect.
+static void picocalc_network_set_hostname(const char *name)
+{
+    if (name == NULL)
+    {
+        return;
+    }
+    strncpy(current_hostname, name, sizeof(current_hostname) - 1);
+    current_hostname[sizeof(current_hostname) - 1] = '\0';
+
+    if (wifi_initialized && picocalc_wifi_is_connected())
+    {
+        mdns_start();
+    }
+}
+
 static bool picocalc_wifi_connect(const char *ssid, const char *password)
 {
     if (!ensure_wifi_initialized())
@@ -404,6 +477,10 @@ static bool picocalc_wifi_connect(const char *ssid, const char *password)
         IP_ADDR4(&dns_fallback, 1, 1, 1, 1); // Cloudflare 1.1.1.1
         dns_setserver(1, &dns_fallback);
 
+        // Findable on the LAN as `<hostname>.local` as soon as WiFi is up,
+        // independent of whether anything is being served.
+        mdns_start();
+
         return true;
     }
 
@@ -417,6 +494,7 @@ static void picocalc_wifi_disconnect(void)
         return;
     }
     
+    mdns_stop();
     cyw43_wifi_leave(&cyw43_state, CYW43_ITF_STA);
     current_ssid[0] = '\0';
 }
@@ -1538,6 +1616,7 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .wifi_get_ssid = picocalc_wifi_get_ssid,
     .wifi_get_mac = picocalc_wifi_get_mac,
     .wifi_scan = picocalc_wifi_scan,
+    .network_set_hostname = picocalc_network_set_hostname,
     .network_ping = picocalc_network_ping,
     .network_resolve = picocalc_network_resolve,
     .network_ntp = picocalc_network_ntp,
@@ -1559,6 +1638,7 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .wifi_get_ssid = NULL,
     .wifi_get_mac = NULL,
     .wifi_scan = NULL,
+    .network_set_hostname = NULL,
     .network_ping = NULL,
     .network_resolve = NULL,
     .network_ntp = NULL,

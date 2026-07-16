@@ -263,6 +263,7 @@ LogoHardwareOps mock_hardware_ops = {
     .network_ping = mock_network_ping,
     .network_resolve = mock_network_resolve,
     .network_ntp = mock_network_ntp,
+    .network_set_hostname = mock_network_set_hostname,
     // TCP operations (scripted via the mock TCP backend)
     .network_tcp_connect = mock_network_tcp_connect,
     .network_tls_connect = mock_network_tls_connect,

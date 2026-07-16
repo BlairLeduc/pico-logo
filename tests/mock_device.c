@@ -1607,6 +1607,25 @@ bool mock_network_resolve(const char *hostname, char *ip_buffer, size_t buffer_s
     return false;
 }
 
+void mock_network_set_hostname(const char *name)
+{
+    if (name)
+    {
+        strncpy(mock_state.network.hostname, name,
+                sizeof(mock_state.network.hostname) - 1);
+        mock_state.network.hostname[sizeof(mock_state.network.hostname) - 1] = '\0';
+    }
+    else
+    {
+        mock_state.network.hostname[0] = '\0';
+    }
+}
+
+const char *mock_device_get_hostname(void)
+{
+    return mock_state.network.hostname;
+}
+
 //
 // NTP test helpers
 //

@@ -108,6 +108,12 @@ extern "C"
         // Signal strength (RSSI in dBm, typically -30 to -90) stored in strengths[i]
         int (*wifi_scan)(char ssids[][33], int8_t strengths[], int max_networks);
 
+        // Set the device's network hostname (used for mDNS `<name>.local` and
+        // as the DHCP hostname). Core owns the name; the device applies it,
+        // taking effect immediately if the network is already up, otherwise at
+        // the next connect. May be NULL on devices without mDNS/DHCP naming.
+        void (*network_set_hostname)(const char *name);
+
         //
         // Network operations (require WiFi to be connected)
         //

@@ -6244,6 +6244,47 @@ wifi.scan
 ```
 
 
+## sethostname
+
+sethostname _name_
+
+`command`
+
+The `sethostname` command sets the device's network name to _name_. Once WiFi is connected, other machines on the same network can reach the device by this name with `.local` added — for example `http://picologo.local` — instead of its numeric IP address. The same name is given to the router as the device's DHCP hostname.
+
+_name_ must be a word of letters, digits, and hyphens (a hyphen may not be the first or last character), up to 32 characters long, and must not contain a dot: the `.local` part is added automatically. The default name is `picologo`, and it returns to `picologo` each time the device restarts, so put a `sethostname` line in your startup file to keep a custom name. If WiFi is already connected, the new name takes effect immediately.
+
+**Example**:
+
+```logo
+?sethostname "picocalc
+?wifi.connect "TimHortonsWiFi "double-double
+?pr hostname
+picocalc
+```
+
+Now `http://picocalc.local` reaches the device from a phone or laptop on the same network.
+
+
+## hostname
+
+hostname
+
+`operation`
+
+`hostname` outputs the device's current network name (the name set by `sethostname`, without the `.local` suffix). The default is `picologo`.
+
+**Example**:
+
+```logo
+?pr hostname
+picologo
+?sethostname "myturtle
+?pr hostname
+myturtle
+```
+
+
 
 
 ===
