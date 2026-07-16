@@ -50,11 +50,27 @@ extern "C"
     bool httpd_reqheader(const char *name, const char **val, int *len_out);
     const char *httpd_remote(void);
 
+    // True when the pending request's body was too large to buffer and fired
+    // unread: http.body then errors, and http.savebody must be used to stream it.
+    bool httpd_body_unread(void);
+
     // Send a response to the pending request and close (backs http.respond).
     // `body` is formatted like print; `hdr_args` are hdr_argc/2 name/value word
     // pairs (a Content-Type pair overrides the text/plain default). Errors when
     // no request is pending or a header token contains CR/LF.
     Result httpd_respond(int status, Value body, int hdr_argc, Value *hdr_args);
+
+    // Respond with the contents of file `path` as the body, streamed in chunks
+    // (backs http.respondfile). Default Content-Type application/octet-stream,
+    // overridable via header pairs. A missing file is an ordinary error, left
+    // for the handler to turn into a 404; the request stays pending in that case.
+    Result httpd_respondfile(int status, const char *path,
+                             int hdr_argc, Value *hdr_args);
+
+    // Stream the pending request's body to file `path`, whether it was buffered
+    // or fired unread (backs http.savebody). The request stays pending; the
+    // handler still finishes with http.respond.
+    Result httpd_savebody(const char *path);
 
     // Advance the pump once: accept, or one bounded read + parse, or age the
     // stall/response deadlines. Does nothing while frozen (demons_frozen()).

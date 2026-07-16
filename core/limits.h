@@ -127,12 +127,18 @@ extern "C" {
 //   - HTTPD_MAX_HEADERS: cap on the request header block (request line plus
 //     header lines, up to the blank line).
 //
-// OVERFLOW (M2): a header block over HTTPD_MAX_HEADERS auto-responds `431`; a
-// declared body over the active body cap auto-responds `413` (M5 replaces the
-// `413` with the fires-unread streaming rule).
+// OVERFLOW: a header block over HTTPD_MAX_HEADERS auto-responds `431`. A body
+// whose declared Content-Length exceeds the active body cap is not an error: the
+// request fires with the body left unread, `http.body` errors, and
+// `http.savebody` streams the bytes straight to a file (M5).
 #define HTTPD_MAX_HEADERS 1024
 #define HTTPD_MAX_BODY 4096
 #define HTTPD_MAX_BODY_PSRAM (64 * 1024)
+
+// Chunk buffer size for streaming files to/from a connection (http.respondfile /
+// http.savebody). A stack buffer, so kept modest; bytes move file <-> socket in
+// chunks of this size.
+#define HTTPD_CHUNK_MAX 512
 
 // Longest percent-decoded request path the pump records for `http.path`. A
 // longer target auto-responds `414`.

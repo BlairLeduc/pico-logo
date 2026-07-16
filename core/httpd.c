@@ -26,6 +26,7 @@
 #include "format.h"
 #include "value.h"
 #include "devices/io.h"
+#include "devices/stream.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -87,7 +88,9 @@ static char g_method[HTTPD_METHOD_MAX];
 static char g_path[HTTPD_PATH_MAX];  // Percent-decoded, query excluded
 static int g_query_off = 0, g_query_len = 0;  // Raw query string, offsets into g_buf
 static int g_hdr_off = 0, g_hdr_len = 0;      // Header lines region, offsets into g_buf
-static int g_body_off = 0, g_body_len = 0;    // Body region, offsets into g_buf
+static int g_body_off = 0;                    // Body start, offset into g_buf
+static int g_content_length = 0;              // Declared Content-Length (0 if none)
+static bool g_body_unread = false;            // Body too large to buffer; fired unread
 static char g_remote[16];
 
 // Timing. Deltas are accumulated only across active (unfrozen) polls, so the
@@ -126,7 +129,9 @@ static void reset_conn_state(void)
     g_path[0] = '\0';
     g_query_off = g_query_len = 0;
     g_hdr_off = g_hdr_len = 0;
-    g_body_off = g_body_len = 0;
+    g_body_off = 0;
+    g_content_length = 0;
+    g_body_unread = false;
     g_remote[0] = '\0';
     g_stall_ms = 0;
     g_pending_ms = 0;
@@ -351,7 +356,8 @@ static int parse_framing(void)
     }
 
     g_body_off = g_header_end + 4;
-    g_body_len = 0;
+    g_content_length = 0;
+    g_body_unread = false;
 
     if (header_find(g_hdr_off, g_hdr_len, "Content-Length", &val, &vl))
     {
@@ -364,10 +370,13 @@ static int parse_framing(void)
             if (c < '0' || c > '9') return 400;
             cl = cl * 10 + (c - '0');
             any = true;
-            if (cl > (long)g_body_max) return 413;  // M5 replaces with fires-unread
+            if (cl > 0x7fffffffL) return 400;  // absurd length
         }
         if (!any) return 400;
-        g_body_len = (int)cl;
+        g_content_length = (int)cl;
+        // Too large to buffer: fire the request with the body left in the
+        // socket. http.body will error; http.savebody streams it to a file.
+        if (cl > (long)g_body_max) g_body_unread = true;
     }
     return 0;
 }
@@ -413,20 +422,19 @@ static void parse_progress(void)
         if (code != 0)
         {
             const char *reason =
-                code == 400 ? "Bad Request" :
                 code == 411 ? "Length Required" :
-                code == 413 ? "Payload Too Large" :
                 code == 414 ? "URI Too Long" : "Bad Request";
             send_status(code, reason);
             return;
         }
     }
 
-    // Body: wait until Content-Length bytes have arrived.
-    if (g_body_len > 0)
+    // Body: an oversized body fires unread (streamed later by http.savebody);
+    // otherwise wait until the whole Content-Length has arrived.
+    if (!g_body_unread && g_content_length > 0)
     {
         int have = g_recv_len - g_body_off;
-        if (have < g_body_len) return;  // Need more body bytes.
+        if (have < g_content_length) return;  // Need more body bytes.
     }
     mark_complete();
 }
@@ -628,13 +636,20 @@ const char *httpd_query(int *len_out)
 
 const char *httpd_body(int *len_out)
 {
-    if (!g_pending)
+    // NULL when there is no request or the body fired unread (too large to
+    // buffer); the caller distinguishes via httpd_body_unread().
+    if (!g_pending || g_body_unread)
     {
         if (len_out) *len_out = 0;
         return NULL;
     }
-    if (len_out) *len_out = g_body_len;
+    if (len_out) *len_out = g_content_length;
     return g_buf + g_body_off;
+}
+
+bool httpd_body_unread(void)
+{
+    return g_pending && g_body_unread;
 }
 
 bool httpd_reqheader(const char *name, const char **val, int *len_out)
@@ -704,21 +719,11 @@ static bool token_safe(const char *s, int len)
     return true;
 }
 
-Result httpd_respond(int status, Value body, int hdr_argc, Value *hdr_args)
+// Validate header pairs for CR/LF injection and note whether Content-Type is
+// overridden. Returns an error result on a bad token, else result_none().
+static Result check_response_headers(int hdr_argc, Value *hdr_args, bool *have_ctype)
 {
-    if (!g_pending)
-    {
-        return result_error_arg(ERR_NETWORK_NOT_OPEN, NULL, NULL);
-    }
-    if (status < 100 || status > 599)
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, NULL);
-    }
-
-    // Validate header pairs and note whether Content-Type is overridden. We set
-    // Content-Length and Connection ourselves, so user copies of those are
-    // skipped to avoid duplicate framing headers.
-    bool have_ctype = false;
+    *have_ctype = false;
     for (int i = 0; i + 1 < hdr_argc; i += 2)
     {
         const char *nm = mem_word_ptr(hdr_args[i].as.node);
@@ -731,15 +736,19 @@ Result httpd_respond(int status, Value body, int hdr_argc, Value *hdr_args)
         }
         if ((size_t)nl == strlen("Content-Type") && ci_eq(nm, "Content-Type", nl))
         {
-            have_ctype = true;
+            *have_ctype = true;
         }
     }
+    return result_none();
+}
 
-    // Body length (Content-Length precedes the body).
-    size_t body_len = 0;
-    format_value(count_bytes, &body_len, body);
-
-    // Status line.
+// Write the status line, Content-Type (default unless overridden), the caller's
+// extra headers (minus the framing ones we own), then Content-Length and
+// Connection: close and the blank line. Shared by http.respond/http.respondfile.
+static void write_response_head(int status, const char *default_ctype,
+                                long content_length, int hdr_argc, Value *hdr_args,
+                                bool have_ctype)
+{
     char line[64];
     int n = snprintf(line, sizeof(line), "HTTP/1.1 %d %s\r\n",
                      status, reason_phrase(status));
@@ -747,10 +756,11 @@ Result httpd_respond(int status, Value body, int hdr_argc, Value *hdr_args)
 
     if (!have_ctype)
     {
-        write_cstr("Content-Type: text/plain; charset=utf-8\r\n");
+        write_cstr("Content-Type: ");
+        write_cstr(default_ctype);
+        write_cstr("\r\n");
     }
 
-    // Caller-supplied headers (skipping the ones we frame ourselves).
     for (int i = 0; i + 1 < hdr_argc; i += 2)
     {
         const char *nm = mem_word_ptr(hdr_args[i].as.node);
@@ -769,13 +779,175 @@ Result httpd_respond(int status, Value body, int hdr_argc, Value *hdr_args)
 
     char framing[64];
     n = snprintf(framing, sizeof(framing),
-                 "Content-Length: %zu\r\nConnection: close\r\n\r\n", body_len);
+                 "Content-Length: %ld\r\nConnection: close\r\n\r\n", content_length);
     write_all(framing, n);
+}
+
+// Reject a path containing a ".." segment (directory traversal); http.path is
+// attacker-supplied.
+static bool path_is_safe(const char *p)
+{
+    const char *seg = p;
+    while (*seg)
+    {
+        const char *slash = strchr(seg, '/');
+        size_t len = slash ? (size_t)(slash - seg) : strlen(seg);
+        if (len == 2 && seg[0] == '.' && seg[1] == '.') return false;
+        if (!slash) break;
+        seg = slash + 1;
+    }
+    return true;
+}
+
+Result httpd_respond(int status, Value body, int hdr_argc, Value *hdr_args)
+{
+    if (!g_pending)
+    {
+        return result_error_arg(ERR_NETWORK_NOT_OPEN, NULL, NULL);
+    }
+    if (status < 100 || status > 599)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, NULL);
+    }
+    bool have_ctype;
+    Result hc = check_response_headers(hdr_argc, hdr_args, &have_ctype);
+    if (hc.status == RESULT_ERROR) return hc;
+
+    size_t body_len = 0;
+    format_value(count_bytes, &body_len, body);
+
+    write_response_head(status, "text/plain; charset=utf-8", (long)body_len,
+                        hdr_argc, hdr_args, have_ctype);
 
     // Stream the body straight from the Logo value.
     format_value(write_chunk, NULL, body);
 
     close_conn();
+    return result_none();
+}
+
+Result httpd_respondfile(int status, const char *path, int hdr_argc, Value *hdr_args)
+{
+    if (!g_pending)
+    {
+        return result_error_arg(ERR_NETWORK_NOT_OPEN, NULL, NULL);
+    }
+    if (status < 100 || status > 599)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, NULL);
+    }
+    if (!path_is_safe(path))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, path);
+    }
+    bool have_ctype;
+    Result hc = check_response_headers(hdr_argc, hdr_args, &have_ctype);
+    if (hc.status == RESULT_ERROR) return hc;
+
+    LogoIO *io = primitives_get_io();
+    if (!io || !io->storage)
+    {
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
+    }
+    // A missing file is an ordinary error; the request stays pending so the
+    // handler can decide to respond 404.
+    if (!logo_io_file_exists(io, path))
+    {
+        return result_error_arg(ERR_FILE_NOT_FOUND, NULL, path);
+    }
+    long size = logo_io_file_size(io, path);
+    if (size < 0)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+    LogoStream *f = logo_io_open(io, path);
+    if (!f)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    write_response_head(status, "application/octet-stream", size,
+                        hdr_argc, hdr_args, have_ctype);
+
+    // Stream the file to the connection in chunks (binary-safe).
+    char chunk[HTTPD_CHUNK_MAX];
+    long remaining = size;
+    while (remaining > 0)
+    {
+        int want = remaining < (long)sizeof(chunk) ? (int)remaining : (int)sizeof(chunk);
+        int r = logo_stream_read_chars(f, chunk, want);
+        if (r <= 0) break;
+        write_all(chunk, r);
+        remaining -= r;
+    }
+    logo_io_close(io, path);
+
+    close_conn();
+    return result_none();
+}
+
+Result httpd_savebody(const char *path)
+{
+    if (!g_pending)
+    {
+        return result_error_arg(ERR_NETWORK_NOT_OPEN, NULL, NULL);
+    }
+    if (!path_is_safe(path))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, path);
+    }
+
+    LogoIO *io = primitives_get_io();
+    if (!io || !io->storage)
+    {
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
+    }
+
+    // Start a fresh file: the storage open is RDWR|CREAT (not truncating), so
+    // delete any existing file first to avoid a shorter body leaving an old tail.
+    if (logo_io_file_exists(io, path))
+    {
+        logo_io_file_delete(io, path);
+    }
+    LogoStream *f = logo_io_open(io, path);
+    if (!f)
+    {
+        return result_error(ERR_DISK_TROUBLE);
+    }
+
+    bool ok = true;
+
+    // 1) Body bytes already buffered alongside the headers.
+    int buffered = g_recv_len - g_body_off;
+    if (buffered < 0) buffered = 0;
+    if (buffered > g_content_length) buffered = g_content_length;
+    if (buffered > 0)
+    {
+        logo_stream_write_bytes(f, g_buf + g_body_off, (size_t)buffered);
+        if (f->write_error) ok = false;
+    }
+
+    // 2) If the body fired unread, drain the rest from the socket straight to the
+    //    file, up to the declared Content-Length.
+    if (ok && g_body_unread)
+    {
+        LogoHardwareOps *ops = httpd_ops();
+        long remaining = (long)g_content_length - buffered;
+        int timeout = io->network_timeout;
+        char chunk[HTTPD_CHUNK_MAX];
+        while (remaining > 0 && ops && ops->network_tcp_read && g_conn)
+        {
+            int want = remaining < (long)sizeof(chunk) ? (int)remaining : (int)sizeof(chunk);
+            int r = ops->network_tcp_read(g_conn, chunk, want, timeout);
+            if (r <= 0) break;  // peer closed or timed out
+            logo_stream_write_bytes(f, chunk, (size_t)r);
+            if (f->write_error) { ok = false; break; }
+            remaining -= r;
+        }
+    }
+
+    logo_io_close(io, path);
+    if (!ok) return result_error(ERR_DISK_TROUBLE);
     return result_none();
 }
 

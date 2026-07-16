@@ -86,12 +86,15 @@ static Result prim_http_query(Evaluator *eval, int argc, Value *args)
 }
 
 // http.body — the request body (empty word for bodyless methods) as a word.
+// Errors if the body was too large to buffer (fired unread) — use http.savebody.
 static Result prim_http_body(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc); UNUSED(args);
+    if (!httpd_request_pending()) return no_request();
+    if (httpd_body_unread())
+        return result_error_arg(ERR_FILE_TOO_BIG, NULL, NULL);
     int len = 0;
     const char *b = httpd_body(&len);
-    if (!b) return no_request();
     Node w = mem_word(b, (size_t)len);
     if (len > 0 && mem_is_nil(w))
         return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
@@ -145,6 +148,41 @@ static Result prim_http_respond(Evaluator *eval, int argc, Value *args)
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(hdr_args[i]));
 
     return httpd_respond(code, args[1], hdr_argc, hdr_args);
+}
+
+// http.respondfile status path
+// (http.respondfile status path name1 value1 ...)
+// Respond with the contents of a file as the body, streamed in chunks.
+static Result prim_http_respondfile(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(2);
+    REQUIRE_NUMBER(args[0], status);
+    int code = (int)status;
+    if ((float)code != status)
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    REQUIRE_WORD(args[1]);
+    const char *path = mem_word_ptr(args[1].as.node);
+
+    int hdr_argc = argc - 2;
+    Value *hdr_args = args + 2;
+    if (hdr_argc % 2 != 0)
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, NULL, NULL);
+    for (int i = 0; i < hdr_argc; i++)
+        if (!value_is_word(hdr_args[i]))
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(hdr_args[i]));
+
+    return httpd_respondfile(code, path, hdr_argc, hdr_args);
+}
+
+// http.savebody path
+// Stream the pending request's body to a file (the request stays pending).
+static Result prim_http_savebody(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
+    REQUIRE_WORD(args[0]);
+    return httpd_savebody(mem_word_ptr(args[0].as.node));
 }
 
 // Append `len` bytes to buf at *n, bounded by cap. Sets *ok false on overflow.
@@ -244,5 +282,7 @@ void primitives_httpd_init(void)
     primitive_register("http.reqheader", 1, prim_http_reqheader);
     primitive_register("http.remote", 0, prim_http_remote);
     primitive_register("http.respond", 2, prim_http_respond);
+    primitive_register("http.respondfile", 2, prim_http_respondfile);
+    primitive_register("http.savebody", 1, prim_http_savebody);
     primitive_register("http.element", 2, prim_http_element);
 }

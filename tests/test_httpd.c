@@ -9,6 +9,7 @@
 //
 
 #include "test_scaffold.h"
+#include "test_mock_fs.h"
 #include "core/httpd.h"
 #include "core/demons.h"
 #include <string.h>
@@ -17,6 +18,12 @@ void setUp(void)
 {
     test_scaffold_setUp();
     mock_device_init();
+    // Wire the mock filesystem too (for http.respondfile / http.savebody),
+    // keeping the device console and mock hardware from the scaffold.
+    mock_fs_reset();
+    logo_storage_init(&mock_storage, &mock_storage_ops);
+    logo_io_init(&mock_io, &mock_console, &mock_storage, &mock_hardware);
+    primitives_set_io(&mock_io);
     mock_device_set_wifi_connected(true);  // http.listen requires a connection
     set_mock_ticks(0);
 }
@@ -201,16 +208,18 @@ void test_oversize_header_block_gets_431(void)
     TEST_ASSERT_TRUE(responded(0, 431));
 }
 
-void test_oversize_body_gets_413(void)
+void test_oversize_body_fires_unread(void)
 {
     eval_string("http.listen 80");
-    // Content-Length beyond the SRAM body cap (HTTPD_MAX_BODY 4096).
+    // Content-Length beyond the body cap: the request fires with the body
+    // unread rather than auto-responding 413.
     const char *req = "POST /x HTTP/1.1\r\nContent-Length: 100000\r\n\r\n";
     mock_httpd_queue_connection(req, strlen(req));
 
     pump(3);
-    TEST_ASSERT_TRUE(responded(0, 413));
-    TEST_ASSERT_FALSE(httpd_request_pending());
+    TEST_ASSERT_TRUE(httpd_request_pending());
+    // http.body errors on an unread body.
+    TEST_ASSERT_EQUAL(RESULT_ERROR, eval_string("http.body").status);
 }
 
 void test_chunked_request_gets_411(void)
@@ -485,6 +494,103 @@ void test_element_rejects_non_word_tag(void)
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
+// ============================================================================
+// file transfer (M5): http.respondfile / http.savebody
+// ============================================================================
+
+void test_respondfile_streams_file_as_body(void)
+{
+    mock_fs_create_file("page.html", "<h1>hi</h1>");
+    serve("GET /page.html HTTP/1.1\r\n\r\n");
+
+    Result r = eval_string("http.respondfile 200 \"page.html");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    const char *resp = resp_str(0);
+    TEST_ASSERT_EQUAL_INT(0, strncmp(resp, "HTTP/1.1 200 OK\r\n", 17));
+    // Default content type for files, and the file bytes as the body.
+    TEST_ASSERT_NOT_NULL(strstr(resp, "Content-Type: application/octet-stream\r\n"));
+    TEST_ASSERT_NOT_NULL(strstr(resp, "Content-Length: 11\r\n"));
+    TEST_ASSERT_NOT_NULL(strstr(resp, "\r\n\r\n<h1>hi</h1>"));
+    TEST_ASSERT_FALSE(httpd_request_pending());
+}
+
+void test_respondfile_content_type_override(void)
+{
+    mock_fs_create_file("page.html", "<h1>hi</h1>");
+    serve("GET /page.html HTTP/1.1\r\n\r\n");
+    eval_string("(http.respondfile 200 \"page.html \"Content-Type \"text/html)");
+
+    const char *resp = resp_str(0);
+    TEST_ASSERT_NOT_NULL(strstr(resp, "Content-Type: text/html\r\n"));
+    TEST_ASSERT_NULL(strstr(resp, "application/octet-stream"));
+}
+
+void test_respondfile_missing_file_errors_and_stays_pending(void)
+{
+    serve("GET /nope HTTP/1.1\r\n\r\n");
+    Result r = eval_string("http.respondfile 200 \"nope");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    // The request is left pending so the handler can respond 404 instead.
+    TEST_ASSERT_TRUE(httpd_request_pending());
+    TEST_ASSERT_EQUAL(RESULT_NONE, eval_string("http.respond 404 \"gone").status);
+}
+
+void test_respondfile_rejects_traversal(void)
+{
+    serve("GET /x HTTP/1.1\r\n\r\n");
+    Result r = eval_string("http.respondfile 200 \"..\\/secret");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_savebody_writes_buffered_body(void)
+{
+    serve("PUT /note HTTP/1.1\r\nContent-Length: 11\r\n\r\nhello world");
+    Result r = eval_string("http.savebody \"note");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    // The request stays pending for the handler to answer.
+    TEST_ASSERT_TRUE(httpd_request_pending());
+
+    MockFile *f = mock_fs_get_file("note", false);
+    TEST_ASSERT_NOT_NULL(f);
+    TEST_ASSERT_EQUAL_INT(11, (int)f->size);
+    TEST_ASSERT_EQUAL_INT(0, memcmp(f->data, "hello world", 11));
+}
+
+void test_savebody_streams_unread_binary_body(void)
+{
+    // A body larger than the SRAM buffer cap (4096) fires unread; savebody must
+    // stream it (buffered head + drained tail) to the file, binary-safe.
+    const int N = 6000;
+    static char req[8192];
+    int hn = snprintf(req, sizeof(req),
+                      "PUT /blob HTTP/1.1\r\nContent-Length: %d\r\n\r\n", N);
+    // Body: a byte pattern that includes NUL bytes.
+    for (int i = 0; i < N; i++) req[hn + i] = (char)((i * 7 + 3) & 0xFF);
+    mock_httpd_queue_connection(req, (size_t)(hn + N));
+
+    eval_string("http.listen 80");
+    pump(3);
+    TEST_ASSERT_TRUE(httpd_request_pending());
+    TEST_ASSERT_EQUAL(RESULT_ERROR, eval_string("http.body").status);  // unread
+
+    Result r = eval_string("http.savebody \"blob");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    MockFile *f = mock_fs_get_file("blob", false);
+    TEST_ASSERT_NOT_NULL(f);
+    TEST_ASSERT_EQUAL_INT(N, (int)f->size);
+    TEST_ASSERT_EQUAL_INT(0, memcmp(f->data, req + hn, N));  // byte-identical
+}
+
+void test_savebody_rejects_traversal(void)
+{
+    serve("PUT /x HTTP/1.1\r\nContent-Length: 2\r\n\r\nhi");
+    Result r = eval_string("http.savebody \"..\\/secret");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -503,7 +609,7 @@ int main(void)
 
     RUN_TEST(test_unanswered_request_gets_503_after_deadline);
     RUN_TEST(test_oversize_header_block_gets_431);
-    RUN_TEST(test_oversize_body_gets_413);
+    RUN_TEST(test_oversize_body_fires_unread);
     RUN_TEST(test_chunked_request_gets_411);
     RUN_TEST(test_malformed_request_line_gets_400);
     RUN_TEST(test_stalled_request_gets_408);
@@ -534,6 +640,14 @@ int main(void)
     RUN_TEST(test_element_escaped_attribute_value);
     RUN_TEST(test_element_rejects_odd_attributes);
     RUN_TEST(test_element_rejects_non_word_tag);
+
+    RUN_TEST(test_respondfile_streams_file_as_body);
+    RUN_TEST(test_respondfile_content_type_override);
+    RUN_TEST(test_respondfile_missing_file_errors_and_stays_pending);
+    RUN_TEST(test_respondfile_rejects_traversal);
+    RUN_TEST(test_savebody_writes_buffered_body);
+    RUN_TEST(test_savebody_streams_unread_binary_body);
+    RUN_TEST(test_savebody_rejects_traversal);
 
     return UNITY_END();
 }

@@ -6658,7 +6658,7 @@ http.body
 
 `operation`
 
-`http.body` outputs the body of the pending request as a word, or the empty word for a request with no body (such as a `GET`). It is an error to use it when no request is pending.
+`http.body` outputs the body of the pending request as a word, or the empty word for a request with no body (such as a `GET`). It is an error to use it when no request is pending. It is also an error if the body was too large to hold in memory (a large upload); use `http.savebody` to stream such a body straight to a file instead.
 
 **Example**:
 
@@ -6730,6 +6730,53 @@ Serving HTML built with `http.element` (see below), overriding the content type:
 when [http.request?] [
   (http.respond 200 http.element "h1 [Hello from Pico Logo] "Content-Type "text/html)
 ]
+```
+
+
+## http.respondfile
+
+http.respondfile _status_ _path_  
+(http.respondfile _status_ _path_ _name1_ _value1_ ...)
+
+`command`
+
+The `http.respondfile` command answers the pending request with the contents of the file named _path_ as the response body, then closes the connection. The file is sent in small pieces, so it can be any size and may contain binary data (such as a picture) — nothing is limited by the size of memory. The response is sent with `Content-Type: application/octet-stream` unless you override it with a `Content-Type` header in the parenthesised form.
+
+If the file does not exist, `http.respondfile` reports an ordinary error and leaves the request pending, so a handler can catch it and answer with a `404` instead. A _path_ containing `..` is rejected. It is an error to use `http.respondfile` when no request is pending.
+
+**Example** — a tiny file server that also serves a not-found page:
+
+```logo
+when [http.request?] [
+  ifelse file? http.path ~
+    [http.respondfile 200 http.path] ~
+    [http.respond 404 [not found]]
+]
+```
+
+
+## http.savebody
+
+http.savebody _path_
+
+`command`
+
+The `http.savebody` command writes the body of the pending request to the file named _path_, streaming it straight to storage in small pieces. This is how you receive an uploaded file (for example from `curl -T`): the upload can be any size and may be binary, even larger than would fit in memory. The request stays pending afterwards, so the handler still finishes by answering with `http.respond`. A _path_ containing `..` is rejected, and it is an error to use `http.savebody` when no request is pending.
+
+**Example** — accept uploads with `PUT` and serve files with `GET`:
+
+```logo
+when [http.request?] [
+  if equal? http.method "PUT [http.savebody http.path  http.respond 201 "saved]
+  if equal? http.method "GET [http.respondfile 200 http.path]
+]
+```
+
+Upload and download from a computer on the same network:
+
+```
+curl -T invaders http://picologo.local/invaders
+curl -o copy.txt http://picologo.local/notes.txt
 ```
 
 

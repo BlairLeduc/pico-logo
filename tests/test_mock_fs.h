@@ -113,6 +113,23 @@ static void mock_file_write(LogoStream *stream, const char *text)
     ctx->file->data[ctx->file->size] = '\0';
 }
 
+// Binary-safe length-counted write (raw bytes, may contain NUL).
+static void mock_file_write_bytes(LogoStream *stream, const char *buffer, size_t len)
+{
+    MockFileContext *ctx = (MockFileContext *)stream->context;
+    if (!ctx || !ctx->file)
+        return;
+
+    for (size_t i = 0; i < len && ctx->write_pos < MOCK_FILE_SIZE; i++)
+    {
+        ctx->file->data[ctx->write_pos++] = buffer[i];
+    }
+    if (ctx->write_pos > ctx->file->size)
+    {
+        ctx->file->size = ctx->write_pos;
+    }
+}
+
 static void mock_file_flush(LogoStream *stream)
 {
     (void)stream;
@@ -174,6 +191,7 @@ static LogoStreamOps mock_file_ops = {
     .read_line = mock_file_read_line,
     .can_read = mock_file_can_read,
     .write = mock_file_write,
+    .write_bytes = mock_file_write_bytes,
     .flush = mock_file_flush,
     .get_read_pos = mock_file_get_read_pos,
     .set_read_pos = mock_file_set_read_pos,
@@ -229,6 +247,20 @@ static void mock_fs_create_file(const char *name, const char *content)
             len = MOCK_FILE_SIZE - 1;
         memcpy(file->data, content, len);
         file->data[len] = '\0';
+        file->size = len;
+        file->is_directory = false;
+    }
+}
+
+// Create a mock file with raw binary content (may contain NUL bytes).
+static void mock_fs_create_file_bytes(const char *name, const char *data, size_t len)
+{
+    MockFile *file = mock_fs_get_file(name, true);
+    if (file)
+    {
+        if (len > MOCK_FILE_SIZE)
+            len = MOCK_FILE_SIZE;
+        memcpy(file->data, data, len);
         file->size = len;
         file->is_directory = false;
     }
