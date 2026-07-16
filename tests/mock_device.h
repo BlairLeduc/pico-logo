@@ -197,6 +197,28 @@ extern "C"
         uint8_t mask[MOCK_RASTER_MAX * MOCK_RASTER_MAX];
     } MockRaster;
 
+    // A scripted server-side (accepted) TCP connection. network_tcp_accept hands
+    // out a pointer to one of these; reads deliver the queued request bytes and
+    // writes are recorded for assertions. Sized generously so file-transfer tests
+    // (M5) can script payloads larger than the request buffer.
+    #define MOCK_HTTPD_MAX_CONNS 2
+    #define MOCK_HTTPD_REQ_CAP   32768
+    #define MOCK_HTTPD_RESP_CAP  32768
+
+    typedef struct MockHttpdConn
+    {
+        bool in_use;         // Slot holds a queued or accepted connection
+        bool accepted;       // Handed out by network_tcp_accept
+        bool open;           // Open until network_tcp_close
+        char request[MOCK_HTTPD_REQ_CAP];  // Bytes reads deliver
+        int request_len;
+        int read_pos;        // Read cursor into request
+        int read_chunk;      // Dribble: max bytes per read (0 = unlimited)
+        char remote_ip[16];  // Client address reported by accept
+        char response[MOCK_HTTPD_RESP_CAP]; // Bytes the handler wrote
+        int response_len;
+    } MockHttpdConn;
+
     //
     // Mock device state - all trackable state in one structure
     //
@@ -361,6 +383,14 @@ extern "C"
             int write_chunk;                 // Max bytes per write (0 = unlimited; forces short writes)
         } tcp;
 
+        // TCP server (listener) state tracking
+        struct
+        {
+            bool listening;                  // Is a listener open
+            uint16_t port;                   // Port passed to network_tcp_listen
+            MockHttpdConn conns[MOCK_HTTPD_MAX_CONNS];  // Queued/accepted connections
+        } httpd;
+
         // Time state tracking
         struct
         {
@@ -508,6 +538,22 @@ extern "C"
     int mock_network_tcp_read(void *connection, char *buffer, int count, int timeout_ms);
     int mock_network_tcp_write(void *connection, const char *data, int count);
     bool mock_network_tcp_can_read(void *connection);
+
+    // TCP server helpers for testing.
+    // Queue an incoming connection whose reads deliver `request` (up to
+    // MOCK_HTTPD_REQ_CAP bytes) once accepted; writes are recorded in the
+    // connection's response buffer. The _ex form sets the reported remote IP and
+    // a read-dribble chunk (0 = whole thing per read).
+    void mock_httpd_queue_connection(const char *request, size_t len);
+    void mock_httpd_queue_connection_ex(const char *request, size_t len,
+                                        const char *remote_ip, int read_chunk);
+    bool mock_httpd_is_listening(void);
+    uint16_t mock_httpd_listen_port(void);
+
+    // Mock TCP server operations (for use by test_scaffold in mock_hardware_ops)
+    void *mock_network_tcp_listen(uint16_t port);
+    void mock_network_tcp_unlisten(void *listener);
+    void *mock_network_tcp_accept(void *listener, char *remote_ip, size_t ip_size);
 
     // Time helpers for testing
     void mock_device_set_time(int year, int month, int day, int hour, int minute, int second);

@@ -1588,6 +1588,171 @@ static bool picocalc_network_tcp_can_read(void *connection)
     return state->recv_head != state->recv_tail;
 }
 
+// ----------------------------------------------------------------------------
+// TCP server (listener) support
+// ----------------------------------------------------------------------------
+
+// A listener owns the listening PCB and parks at most one accepted-but-unclaimed
+// PCB (TCP_LISTEN_BACKLOG is 1). network_tcp_accept claims it and wraps it in the
+// same TcpClientState the client path uses, so read/write/close are unchanged.
+typedef struct {
+    struct altcp_pcb *listen_pcb;  // The listening PCB
+    struct altcp_pcb *pending_pcb; // One accepted PCB awaiting a claim, or NULL
+    ip_addr_t pending_remote;      // Remote address of pending_pcb
+} TcpListenerState;
+
+// Accept callback: park the new connection for network_tcp_accept to claim.
+static err_t tcp_listener_accept_cb(void *arg, struct altcp_pcb *newpcb, err_t err)
+{
+    TcpListenerState *ls = (TcpListenerState *)arg;
+
+    if (err != ERR_OK || newpcb == NULL)
+    {
+        return ERR_VAL;
+    }
+    // Backlog is one: if a connection is already parked, refuse this one.
+    if (ls == NULL || ls->pending_pcb != NULL)
+    {
+        altcp_abort(newpcb);
+        return ERR_ABRT;
+    }
+
+    ls->pending_pcb = newpcb;
+    ip_addr_t *remote = altcp_get_ip(newpcb, 0);  // 0 => remote address
+    if (remote != NULL)
+    {
+        ip_addr_copy(ls->pending_remote, *remote);
+    }
+    else
+    {
+        ip_addr_set_zero(&ls->pending_remote);
+    }
+    return ERR_OK;
+}
+
+static void *picocalc_network_tcp_listen(uint16_t port)
+{
+    if (!ensure_wifi_initialized() || !picocalc_wifi_is_connected())
+    {
+        return NULL;
+    }
+    if (port == 0)
+    {
+        return NULL;
+    }
+
+    TcpListenerState *ls = (TcpListenerState *)calloc(1, sizeof(TcpListenerState));
+    if (!ls)
+    {
+        return NULL;
+    }
+
+    cyw43_arch_lwip_begin();
+    struct altcp_pcb *pcb = altcp_tcp_new_ip_type(IPADDR_TYPE_V4);
+    if (!pcb)
+    {
+        cyw43_arch_lwip_end();
+        free(ls);
+        return NULL;
+    }
+    if (altcp_bind(pcb, IP_ANY_TYPE, port) != ERR_OK)
+    {
+        altcp_abort(pcb);
+        cyw43_arch_lwip_end();
+        free(ls);
+        return NULL;
+    }
+    // altcp_listen returns the (possibly reallocated) listening PCB; the passed
+    // PCB is consumed on success and must not be touched afterwards.
+    struct altcp_pcb *listen_pcb = altcp_listen(pcb);
+    if (!listen_pcb)
+    {
+        altcp_abort(pcb);
+        cyw43_arch_lwip_end();
+        free(ls);
+        return NULL;
+    }
+    ls->listen_pcb = listen_pcb;
+    altcp_arg(listen_pcb, ls);
+    altcp_accept(listen_pcb, tcp_listener_accept_cb);
+    cyw43_arch_lwip_end();
+
+    return ls;
+}
+
+static void picocalc_network_tcp_unlisten(void *listener)
+{
+    TcpListenerState *ls = (TcpListenerState *)listener;
+    if (!ls)
+    {
+        return;
+    }
+
+    cyw43_arch_lwip_begin();
+    if (ls->pending_pcb)
+    {
+        altcp_abort(ls->pending_pcb);
+        ls->pending_pcb = NULL;
+    }
+    if (ls->listen_pcb)
+    {
+        altcp_arg(ls->listen_pcb, NULL);
+        altcp_accept(ls->listen_pcb, NULL);
+        altcp_close(ls->listen_pcb);
+    }
+    cyw43_arch_lwip_end();
+
+    free(ls);
+}
+
+static void *picocalc_network_tcp_accept(void *listener, char *remote_ip, size_t ip_size)
+{
+    TcpListenerState *ls = (TcpListenerState *)listener;
+    if (!ls)
+    {
+        return NULL;
+    }
+
+    // Drive lwIP so a queued SYN turns into an accept callback.
+    cyw43_arch_poll();
+    sys_check_timeouts();
+
+    cyw43_arch_lwip_begin();
+    struct altcp_pcb *newpcb = ls->pending_pcb;
+    if (newpcb == NULL)
+    {
+        cyw43_arch_lwip_end();
+        return NULL;
+    }
+
+    // Wrap the accepted PCB in the same state the client path uses.
+    TcpClientState *state = tcp_state_alloc();
+    if (!state)
+    {
+        // Can't take it now; leave it parked to retry on the next accept.
+        cyw43_arch_lwip_end();
+        return NULL;
+    }
+    ls->pending_pcb = NULL;
+    state->pcb = newpcb;
+    state->connected = true;
+    state->connect_complete = true;
+    altcp_arg(newpcb, state);
+    altcp_recv(newpcb, tcp_client_recv_cb);
+    altcp_err(newpcb, tcp_client_err_cb);
+    altcp_poll(newpcb, tcp_client_poll_cb, 10);
+    cyw43_arch_lwip_end();
+
+    if (remote_ip && ip_size > 0)
+    {
+        const char *s = ipaddr_ntoa(&ls->pending_remote);
+        strncpy(remote_ip, s ? s : "", ip_size - 1);
+        remote_ip[ip_size - 1] = '\0';
+    }
+
+    return state;
+}
+
 #endif // LOGO_HAS_WIFI
 
 // ============================================================================
@@ -1630,6 +1795,9 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .network_tcp_read = picocalc_network_tcp_read,
     .network_tcp_write = picocalc_network_tcp_write,
     .network_tcp_can_read = picocalc_network_tcp_can_read,
+    .network_tcp_listen = picocalc_network_tcp_listen,
+    .network_tcp_unlisten = picocalc_network_tcp_unlisten,
+    .network_tcp_accept = picocalc_network_tcp_accept,
 #else
     .wifi_is_connected = NULL,
     .wifi_connect = NULL,
@@ -1648,6 +1816,9 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .network_tcp_read = NULL,
     .network_tcp_write = NULL,
     .network_tcp_can_read = NULL,
+    .network_tcp_listen = NULL,
+    .network_tcp_unlisten = NULL,
+    .network_tcp_accept = NULL,
 #endif
     .get_date = picocalc_get_date,
     .get_time = picocalc_get_time,

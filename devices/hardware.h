@@ -169,6 +169,25 @@ extern "C"
         bool (*network_tcp_can_read)(void *connection);
 
         //
+        // TCP server operations (require WiFi to be connected). Accepted
+        // connections are used with the network_tcp_read/write/close/can_read
+        // ops above, exactly like an outbound connection.
+        //
+
+        // Listen for TCP connections on a port (1-65535).
+        // Returns an opaque listener handle, NULL on failure.
+        void *(*network_tcp_listen)(uint16_t port);
+
+        // Stop listening and free the listener (dropping any pending connection).
+        void (*network_tcp_unlisten)(void *listener);
+
+        // Accept a pending connection, if any (non-blocking). Returns a
+        // connection handle usable with the tcp read/write/close ops, or NULL
+        // when nothing is waiting. remote_ip (at least ip_size bytes, 16 is
+        // enough) receives the client address in dotted-decimal form.
+        void *(*network_tcp_accept)(void *listener, char *remote_ip, size_t ip_size);
+
+        //
         // Time management operations
         //
 

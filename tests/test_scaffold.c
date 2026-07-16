@@ -271,6 +271,9 @@ LogoHardwareOps mock_hardware_ops = {
     .network_tcp_read = mock_network_tcp_read,
     .network_tcp_write = mock_network_tcp_write,
     .network_tcp_can_read = mock_network_tcp_can_read,
+    .network_tcp_listen = mock_network_tcp_listen,
+    .network_tcp_unlisten = mock_network_tcp_unlisten,
+    .network_tcp_accept = mock_network_tcp_accept,
     // Time operations (always available in tests)
     .get_date = mock_get_date,
     .get_time = mock_get_time,
