@@ -6724,13 +6724,36 @@ when [http.request?] [
 ]
 ```
 
-Serving HTML by overriding the content type. The angle brackets are written with backslashes so they stay inside the word:
+Serving HTML built with `http.element` (see below), overriding the content type:
 
 ```logo
 when [http.request?] [
-  (http.respond 200 "\<h1\>Hello\</h1\> "Content-Type "text/html)
+  (http.respond 200 http.element "h1 [Hello from Pico Logo] "Content-Type "text/html)
 ]
 ```
+
+
+## http.element
+
+http.element _tag_ _content_  
+(http.element _tag_ _content_ _name1_ _value1_ ...)
+
+`operation`
+
+`http.element` builds an HTML element as a word: `<`_tag_`>`_content_`</`_tag_`>`. _content_ is a word or a list; a list is formatted as `print` would show it (its spaces come through and its outer brackets are dropped), and because the result is a word, elements nest by passing one `http.element` as the _content_ of another.
+
+In the parenthesised form the extra inputs are _name_ / _value_ word pairs added as attributes, so `(http.element "a "forward "href "/forward)` builds `<a href=/forward>forward</a>`. This spares you from spelling out the angle brackets with `char 60` and `char 62`, which the Logo lexer would otherwise require. Attribute values are single words; because the lexer treats `=` and `:` as delimiters, escape them with a backslash inside a value (for example `"margin\=0`).
+
+**Example**:
+
+```logo
+?pr http.element "h1 [Pico Logo Turtle]
+<h1>Pico Logo Turtle</h1>
+?pr (http.element "p (http.element "a "left "href "/left))
+<p><a href=/left>left</a></p>
+```
+
+The inner element needs its own parentheses so its attribute pair belongs to it rather than to the outer element.
 
 
 ===

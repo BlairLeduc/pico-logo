@@ -151,6 +151,14 @@ extern "C" {
 #define HTTPD_STALL_MS 5000
 #define HTTPD_RESPOND_MS 10000
 
+// Largest HTML fragment `http.element` builds in one call (a stack buffer). A
+// single classroom element is far smaller; big pages are assembled by joining
+// several elements with `word`.
+//
+// OVERFLOW: an element whose markup would exceed this errors with
+// ERR_FILE_TOO_BIG rather than truncating.
+#define HTTPD_ELEMENT_MAX 1024
+
 #ifdef __cplusplus
 }
 #endif

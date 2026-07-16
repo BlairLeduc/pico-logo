@@ -13,6 +13,10 @@
 #include "httpd.h"
 #include "memory.h"
 #include "value.h"
+#include "format.h"
+#include "limits.h"
+
+#include <string.h>
 
 // http.listen port
 // Start listening for HTTP requests on the given port (1-65535).
@@ -143,6 +147,87 @@ static Result prim_http_respond(Evaluator *eval, int argc, Value *args)
     return httpd_respond(code, args[1], hdr_argc, hdr_args);
 }
 
+// Append `len` bytes to buf at *n, bounded by cap. Sets *ok false on overflow.
+static void el_append(char *buf, int cap, int *n, const char *s, int len, bool *ok)
+{
+    if (!*ok) return;
+    if (*n + len > cap) { *ok = false; return; }
+    memcpy(buf + *n, s, (size_t)len);
+    *n += len;
+}
+
+static void el_append_cstr(char *buf, int cap, int *n, const char *s, bool *ok)
+{
+    el_append(buf, cap, n, s, (int)strlen(s), ok);
+}
+
+static void el_append_word(char *buf, int cap, int *n, Value w, bool *ok)
+{
+    el_append(buf, cap, n, mem_word_ptr(w.as.node), (int)mem_word_len(w.as.node), ok);
+}
+
+// http.element tag content
+// (http.element tag content name1 value1 ...)
+// Builds "<tag name1=value1 ...>content</tag>" as a word. `content` is a word or
+// list formatted like print (so a list's spaces come through and nested
+// http.element results compose). Attribute names and values are words.
+static Result prim_http_element(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(2);
+    REQUIRE_WORD(args[0]);  // tag
+    if (!value_is_word(args[1]) && !value_is_list(args[1]))
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
+
+    int pair_argc = argc - 2;
+    Value *pairs = args + 2;
+    if (pair_argc % 2 != 0)
+        return result_error_arg(ERR_NOT_ENOUGH_INPUTS, NULL, NULL);
+    for (int i = 0; i < pair_argc; i++)
+        if (!value_is_word(pairs[i]))
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(pairs[i]));
+
+    char buf[HTTPD_ELEMENT_MAX];
+    int n = 0;
+    bool ok = true;
+
+    // <tag name=value ...>
+    el_append_cstr(buf, sizeof(buf), &n, "<", &ok);
+    el_append_word(buf, sizeof(buf), &n, args[0], &ok);
+    for (int i = 0; i + 1 < pair_argc; i += 2)
+    {
+        el_append_cstr(buf, sizeof(buf), &n, " ", &ok);
+        el_append_word(buf, sizeof(buf), &n, pairs[i], &ok);
+        el_append_cstr(buf, sizeof(buf), &n, "=", &ok);
+        el_append_word(buf, sizeof(buf), &n, pairs[i + 1], &ok);
+    }
+    el_append_cstr(buf, sizeof(buf), &n, ">", &ok);
+
+    // content (formatted like print)
+    if (ok)
+    {
+        FormatBufferContext fb;
+        format_buffer_init(&fb, buf + n, sizeof(buf) - (size_t)n);
+        if (format_value_to_buffer(&fb, args[1]))
+            n += (int)format_buffer_pos(&fb);
+        else
+            ok = false;
+    }
+
+    // </tag>
+    el_append_cstr(buf, sizeof(buf), &n, "</", &ok);
+    el_append_word(buf, sizeof(buf), &n, args[0], &ok);
+    el_append_cstr(buf, sizeof(buf), &n, ">", &ok);
+
+    if (!ok)
+        return result_error_arg(ERR_FILE_TOO_BIG, NULL, NULL);
+
+    Node w = mem_word(buf, (size_t)n);
+    if (n > 0 && mem_is_nil(w))
+        return result_error_arg(ERR_FILE_TOO_BIG, NULL, NULL);
+    return result_ok(value_word(w));
+}
+
 void primitives_httpd_init(void)
 {
     // Fresh interpreter: no listener open.
@@ -159,4 +244,5 @@ void primitives_httpd_init(void)
     primitive_register("http.reqheader", 1, prim_http_reqheader);
     primitive_register("http.remote", 0, prim_http_remote);
     primitive_register("http.respond", 2, prim_http_respond);
+    primitive_register("http.element", 2, prim_http_element);
 }

@@ -1,0 +1,52 @@
+; Web Turtle -- drive the turtle from a phone or laptop browser.
+;
+; On a WiFi board (Pico 2 W or Pico Plus 2 W):
+;   wifi.connect "your-ssid "your-password
+;   load "webturtle.logo
+;   webturtle
+; then open  http://picologo.local  (or the address it prints) in a
+; browser on the same network and tap the links to move the turtle.
+;
+; See docs/http-server-design.md (P7, milestone M4). The page is plain
+; links only; each tap is a GET the handler maps to a turtle command.
+; The markup is built with `http.element`, which spells out the angle
+; brackets so the program doesn't have to.
+
+; <a href=PATH>LABEL</a>
+to wt.link :path :label
+  op (http.element "a :label "href :path)
+end
+
+; The control page: a heading and four links, each in its own paragraph.
+; Built one line at a time so no parenthesised expression spans lines.
+to wt.page
+  local "h
+  make "h http.element "h1 [Pico Logo Turtle]
+  make "h word :h http.element "p wt.link "/forward "forward
+  make "h word :h http.element "p wt.link "/left "left
+  make "h word :h http.element "p wt.link "/right "right
+  make "h word :h http.element "p wt.link "/clean "clean
+  op :h
+end
+
+; Map the request path to a turtle command, then re-send the page. Use
+; `clean`, not `clearscreen`: clearscreen would also close the server
+; (nothing acts on its own after a full reset).
+to wt.handle
+  if equal? http.path "/forward [forward 20]
+  if equal? http.path "/left    [left 30]
+  if equal? http.path "/right   [right 30]
+  if equal? http.path "/clean   [clean]
+  (http.respond 200 wt.page "Content-Type "text/html)
+end
+
+; Start serving. Connect to WiFi first, then run `webturtle`.
+to webturtle
+  if not wifi? [pr [Connect to WiFi first, e.g. wifi.connect "ssid "password] stop]
+  clearscreen
+  http.listen 80
+  when [http.request?] [wt.handle]
+  pr [Web turtle is serving.]
+  pr sentence [Open] (word "http:// hostname ".local)
+  pr sentence [or] (word "http:// wifi.ip)
+end

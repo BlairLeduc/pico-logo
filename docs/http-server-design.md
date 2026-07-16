@@ -102,6 +102,21 @@ Response:
   `(http.get url name value ...)`. Supplying `Content-Type` overrides
   the default (so `"text/html` pages work).
 
+HTML helper (added 2026-07-16 during M4, user request): building markup
+by hand is painful because the Logo lexer treats `<`, `>`, `=`, and
+space as token delimiters, so a literal `<a href=...>` cannot be typed
+as a word.
+
+- `http.element tag content` / `(http.element tag content name1 value1
+  ...)` — builds `<tag name1=value1 ...>content</tag>` as a word.
+  *content* is a word or list (formatted like `print`, so a list's
+  spaces come through and its brackets drop); since the result is a
+  word, elements nest by passing one `http.element` as another's
+  content. Attribute values are single words (escape `=`/`:` with a
+  backslash). The HTML analog of the parenthesised name/value
+  convention; a pure string builder that touches no server state, so it
+  is usable outside a handler too.
+
 File transfer (M5) — bytes move **connection ↔ storage directly**,
 never materializing as Logo words, so they are binary-safe (BMPs) and
 unbounded by the request buffer or the Logo arena:

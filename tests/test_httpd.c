@@ -423,6 +423,57 @@ void test_client_get_does_not_disturb_pending_request(void)
     TEST_ASSERT_EQUAL_STRING("k", mem_word_ptr(eval_string("http.reqheader \"X-Key").value.as.node));
 }
 
+// ============================================================================
+// http.element (HTML building helper)
+// ============================================================================
+
+static const char *word_of(const char *expr)
+{
+    return mem_word_ptr(eval_string(expr).value.as.node);
+}
+
+void test_element_wraps_content(void)
+{
+    TEST_ASSERT_EQUAL_STRING("<h1>Hi</h1>", word_of("http.element \"h1 \"Hi"));
+}
+
+void test_element_list_content_formats_like_print(void)
+{
+    TEST_ASSERT_EQUAL_STRING("<h1>Pico Logo Turtle</h1>",
+                             word_of("http.element \"h1 [Pico Logo Turtle]"));
+}
+
+void test_element_with_attributes(void)
+{
+    TEST_ASSERT_EQUAL_STRING("<a href=/forward>forward</a>",
+                             word_of("(http.element \"a \"forward \"href \"/forward)"));
+}
+
+void test_element_nests(void)
+{
+    TEST_ASSERT_EQUAL_STRING("<p><a href=/left>left</a></p>",
+                             word_of("(http.element \"p (http.element \"a \"left \"href \"/left))"));
+}
+
+void test_element_escaped_attribute_value(void)
+{
+    // A backslash lets = survive the lexer inside the value word.
+    TEST_ASSERT_EQUAL_STRING("<div style=margin=0>hi</div>",
+                             word_of("(http.element \"div \"hi \"style \"margin\\=0)"));
+}
+
+void test_element_rejects_odd_attributes(void)
+{
+    Result r = eval_string("(http.element \"a \"x \"href)");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_element_rejects_non_word_tag(void)
+{
+    Result r = eval_string("http.element [a] \"x");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -463,6 +514,14 @@ int main(void)
 
     RUN_TEST(test_demon_handler_serves_request);
     RUN_TEST(test_client_get_does_not_disturb_pending_request);
+
+    RUN_TEST(test_element_wraps_content);
+    RUN_TEST(test_element_list_content_formats_like_print);
+    RUN_TEST(test_element_with_attributes);
+    RUN_TEST(test_element_nests);
+    RUN_TEST(test_element_escaped_attribute_value);
+    RUN_TEST(test_element_rejects_odd_attributes);
+    RUN_TEST(test_element_rejects_non_word_tag);
 
     return UNITY_END();
 }
