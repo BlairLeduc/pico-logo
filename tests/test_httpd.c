@@ -10,6 +10,7 @@
 
 #include "test_scaffold.h"
 #include "core/httpd.h"
+#include "core/demons.h"
 #include <string.h>
 
 void setUp(void)
@@ -39,6 +40,27 @@ static bool responded(int index, int code)
     int len = 0;
     const char *r = mock_httpd_conn_response(index, &len);
     return len >= plen && memcmp(r, prefix, (size_t)plen) == 0;
+}
+
+// NUL-terminated copy of connection slot `index`'s recorded response, for
+// substring assertions (responses are text and never contain embedded NULs).
+static const char *resp_str(int index)
+{
+    static char buf[4096];
+    int len = 0;
+    const char *r = mock_httpd_conn_response(index, &len);
+    if (len > (int)sizeof(buf) - 1) len = (int)sizeof(buf) - 1;
+    memcpy(buf, r, (size_t)len);
+    buf[len] = '\0';
+    return buf;
+}
+
+// Listen, queue one request, and pump until it is pending.
+static void serve(const char *req)
+{
+    eval_string("http.listen 80");
+    mock_httpd_queue_connection(req, strlen(req));
+    pump(3);
 }
 
 // ============================================================================
@@ -240,6 +262,167 @@ void test_clearscreen_closes_the_listener(void)
     TEST_ASSERT_FALSE(mock_httpd_is_listening());
 }
 
+// ============================================================================
+// request accessors (M3)
+// ============================================================================
+
+void test_accessors_report_request_fields(void)
+{
+    serve("GET /draw/line?colour=red&size=3 HTTP/1.1\r\n"
+          "Host: h\r\nX-Key: swordfish\r\n\r\n");
+    TEST_ASSERT_TRUE(httpd_request_pending());
+
+    TEST_ASSERT_EQUAL_STRING("GET", mem_word_ptr(eval_string("http.method").value.as.node));
+    TEST_ASSERT_EQUAL_STRING("/draw/line", mem_word_ptr(eval_string("http.path").value.as.node));
+    TEST_ASSERT_EQUAL_STRING("colour=red&size=3", mem_word_ptr(eval_string("http.query").value.as.node));
+    TEST_ASSERT_EQUAL_STRING("swordfish", mem_word_ptr(eval_string("http.reqheader \"X-Key").value.as.node));
+    TEST_ASSERT_EQUAL_STRING("192.168.1.55", mem_word_ptr(eval_string("http.remote").value.as.node));
+    // Header lookup is case-insensitive.
+    TEST_ASSERT_EQUAL_STRING("swordfish", mem_word_ptr(eval_string("http.reqheader \"x-key").value.as.node));
+}
+
+void test_path_is_percent_decoded(void)
+{
+    serve("GET /a%20b%2Fc HTTP/1.1\r\n\r\n");
+    TEST_ASSERT_EQUAL_STRING("/a b/c", mem_word_ptr(eval_string("http.path").value.as.node));
+}
+
+void test_query_empty_when_absent(void)
+{
+    serve("GET /x HTTP/1.1\r\n\r\n");
+    Result r = eval_string("http.query");
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("", mem_word_ptr(r.value.as.node));
+}
+
+void test_body_is_reported_for_post(void)
+{
+    serve("POST /x HTTP/1.1\r\nContent-Length: 11\r\n\r\nhello world");
+    TEST_ASSERT_EQUAL_STRING("hello world", mem_word_ptr(eval_string("http.body").value.as.node));
+}
+
+void test_reqheader_absent_is_empty_list(void)
+{
+    serve("GET /x HTTP/1.1\r\nHost: h\r\n\r\n");
+    Result r = eval_string("http.reqheader \"X-Missing");
+    TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
+    TEST_ASSERT_TRUE(mem_is_nil(r.value.as.node));
+}
+
+void test_accessors_error_when_no_request(void)
+{
+    eval_string("http.listen 80");  // Listening, but nothing pending.
+    TEST_ASSERT_EQUAL(RESULT_ERROR, eval_string("http.method").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, eval_string("http.path").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, eval_string("http.query").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, eval_string("http.body").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, eval_string("http.remote").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, eval_string("http.reqheader \"X").status);
+}
+
+// ============================================================================
+// http.respond (M3)
+// ============================================================================
+
+void test_respond_writes_status_headers_and_body(void)
+{
+    serve("GET / HTTP/1.1\r\n\r\n");
+    Result r = eval_string("http.respond 200 \"hello");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    const char *resp = resp_str(0);
+    TEST_ASSERT_EQUAL_INT(0, strncmp(resp, "HTTP/1.1 200 OK\r\n", 17));
+    TEST_ASSERT_NOT_NULL(strstr(resp, "Content-Type: text/plain; charset=utf-8\r\n"));
+    TEST_ASSERT_NOT_NULL(strstr(resp, "Content-Length: 5\r\n"));
+    TEST_ASSERT_NOT_NULL(strstr(resp, "Connection: close\r\n"));
+    TEST_ASSERT_NOT_NULL(strstr(resp, "\r\n\r\nhello"));
+
+    // Responding clears the pending request.
+    TEST_ASSERT_FALSE(httpd_request_pending());
+}
+
+void test_respond_content_type_override(void)
+{
+    serve("GET / HTTP/1.1\r\n\r\n");
+    // Backslash-escapes let a word carry the HTML angle brackets literally.
+    eval_string("(http.respond 200 \"\\<h1\\>hi\\</h1\\> \"Content-Type \"text/html)");
+
+    const char *resp = resp_str(0);
+    TEST_ASSERT_NOT_NULL(strstr(resp, "Content-Type: text/html\r\n"));
+    // The default text/plain is not also emitted.
+    TEST_ASSERT_NULL(strstr(resp, "text/plain"));
+    TEST_ASSERT_NOT_NULL(strstr(resp, "\r\n\r\n<h1>hi</h1>"));
+}
+
+void test_respond_list_body_formats_like_print(void)
+{
+    serve("GET / HTTP/1.1\r\n\r\n");
+    eval_string("http.respond 200 [heading is 90]");
+
+    const char *resp = resp_str(0);
+    // A list body loses its outer brackets, like print.
+    TEST_ASSERT_NOT_NULL(strstr(resp, "Content-Length: 13\r\n"));
+    TEST_ASSERT_NOT_NULL(strstr(resp, "\r\n\r\nheading is 90"));
+}
+
+void test_respond_custom_status(void)
+{
+    serve("GET /secret HTTP/1.1\r\n\r\n");
+    eval_string("http.respond 403 \"no");
+    TEST_ASSERT_EQUAL_INT(0, strncmp(resp_str(0), "HTTP/1.1 403 Forbidden\r\n", 24));
+}
+
+void test_respond_errors_when_no_request(void)
+{
+    eval_string("http.listen 80");
+    Result r = eval_string("http.respond 200 \"hello");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+// ============================================================================
+// end-to-end: a `when [http.request?]` handler
+// ============================================================================
+
+void test_demon_handler_serves_request(void)
+{
+    eval_string("http.listen 80");
+    eval_string("when [http.request?] [http.respond 200 http.path]");
+    mock_httpd_queue_connection("GET /hello HTTP/1.1\r\n\r\n",
+                                strlen("GET /hello HTTP/1.1\r\n\r\n"));
+
+    pump(3);  // request becomes pending
+    TEST_ASSERT_TRUE(httpd_request_pending());
+
+    Result r = demons_poll();  // the demon fires and responds
+    TEST_ASSERT(r.status == RESULT_OK || r.status == RESULT_NONE);
+
+    TEST_ASSERT_FALSE(httpd_request_pending());
+    TEST_ASSERT_EQUAL_INT(0, strncmp(resp_str(0), "HTTP/1.1 200 OK\r\n", 17));
+    TEST_ASSERT_NOT_NULL(strstr(resp_str(0), "\r\n\r\n/hello"));
+}
+
+// A handler that calls http.get mid-request must not clobber the pending
+// request: the server and client keep separate buffers.
+void test_client_get_does_not_disturb_pending_request(void)
+{
+    // Script a client response for http.get.
+    mock_device_set_tcp_connect_result(true);
+    const char *client_resp =
+        "HTTP/1.1 200 OK\r\nContent-Length: 3\r\nConnection: close\r\n\r\nabc";
+    mock_device_set_tcp_response(client_resp, strlen(client_resp));
+
+    serve("GET /page?x=1 HTTP/1.1\r\nX-Key: k\r\n\r\n");
+    TEST_ASSERT_EQUAL_STRING("/page", mem_word_ptr(eval_string("http.path").value.as.node));
+
+    // Aggregate from another server mid-handler.
+    eval_string("make \"got http.get \"http://example.com/data");
+
+    // The pending request's fields are intact.
+    TEST_ASSERT_EQUAL_STRING("/page", mem_word_ptr(eval_string("http.path").value.as.node));
+    TEST_ASSERT_EQUAL_STRING("x=1", mem_word_ptr(eval_string("http.query").value.as.node));
+    TEST_ASSERT_EQUAL_STRING("k", mem_word_ptr(eval_string("http.reqheader \"X-Key").value.as.node));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -264,6 +447,22 @@ int main(void)
 
     RUN_TEST(test_reset_closes_the_listener);
     RUN_TEST(test_clearscreen_closes_the_listener);
+
+    RUN_TEST(test_accessors_report_request_fields);
+    RUN_TEST(test_path_is_percent_decoded);
+    RUN_TEST(test_query_empty_when_absent);
+    RUN_TEST(test_body_is_reported_for_post);
+    RUN_TEST(test_reqheader_absent_is_empty_list);
+    RUN_TEST(test_accessors_error_when_no_request);
+
+    RUN_TEST(test_respond_writes_status_headers_and_body);
+    RUN_TEST(test_respond_content_type_override);
+    RUN_TEST(test_respond_list_body_formats_like_print);
+    RUN_TEST(test_respond_custom_status);
+    RUN_TEST(test_respond_errors_when_no_request);
+
+    RUN_TEST(test_demon_handler_serves_request);
+    RUN_TEST(test_client_get_does_not_disturb_pending_request);
 
     return UNITY_END();
 }

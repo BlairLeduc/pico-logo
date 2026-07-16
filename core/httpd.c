@@ -23,6 +23,8 @@
 #include "memory.h"
 #include "limits.h"
 #include "demons.h"
+#include "format.h"
+#include "value.h"
 #include "devices/io.h"
 
 #include <stdio.h>
@@ -586,6 +588,184 @@ bool httpd_listening(void)
 bool httpd_request_pending(void)
 {
     return g_pending;
+}
+
+//==========================================================================
+// Request accessors (valid only while a request is pending)
+//==========================================================================
+
+const char *httpd_method(void)
+{
+    return g_pending ? g_method : NULL;
+}
+
+const char *httpd_path(void)
+{
+    return g_pending ? g_path : NULL;
+}
+
+const char *httpd_query(int *len_out)
+{
+    if (!g_pending)
+    {
+        if (len_out) *len_out = 0;
+        return NULL;
+    }
+    if (len_out) *len_out = g_query_len;
+    return g_buf + g_query_off;
+}
+
+const char *httpd_body(int *len_out)
+{
+    if (!g_pending)
+    {
+        if (len_out) *len_out = 0;
+        return NULL;
+    }
+    if (len_out) *len_out = g_body_len;
+    return g_buf + g_body_off;
+}
+
+bool httpd_reqheader(const char *name, const char **val, int *len_out)
+{
+    if (!g_pending) return false;
+    return header_find(g_hdr_off, g_hdr_len, name, val, len_out);
+}
+
+const char *httpd_remote(void)
+{
+    return g_pending ? g_remote : NULL;
+}
+
+//==========================================================================
+// Response (http.respond)
+//==========================================================================
+
+// Reason phrase for a status code: a few common ones, else a class default.
+static const char *reason_phrase(int code)
+{
+    switch (code)
+    {
+    case 200: return "OK";
+    case 201: return "Created";
+    case 204: return "No Content";
+    case 301: return "Moved Permanently";
+    case 302: return "Found";
+    case 304: return "Not Modified";
+    case 400: return "Bad Request";
+    case 401: return "Unauthorized";
+    case 403: return "Forbidden";
+    case 404: return "Not Found";
+    case 405: return "Method Not Allowed";
+    case 500: return "Internal Server Error";
+    }
+    if (code >= 200 && code < 300) return "OK";
+    if (code >= 300 && code < 400) return "Redirect";
+    if (code >= 400 && code < 500) return "Client Error";
+    return "Server Error";
+}
+
+// FormatOutputFunc that counts output bytes.
+static bool count_bytes(void *ctx, const char *str)
+{
+    *(size_t *)ctx += strlen(str);
+    return true;
+}
+
+// FormatOutputFunc that streams output straight to the connection.
+static bool write_chunk(void *ctx, const char *str)
+{
+    (void)ctx;
+    write_all(str, (int)strlen(str));
+    return true;
+}
+
+static void write_cstr(const char *s)
+{
+    write_all(s, (int)strlen(s));
+}
+
+// Reject CR/LF in a header name or value (header injection).
+static bool token_safe(const char *s, int len)
+{
+    for (int i = 0; i < len; i++)
+        if (s[i] == '\r' || s[i] == '\n') return false;
+    return true;
+}
+
+Result httpd_respond(int status, Value body, int hdr_argc, Value *hdr_args)
+{
+    if (!g_pending)
+    {
+        return result_error_arg(ERR_NETWORK_NOT_OPEN, NULL, NULL);
+    }
+    if (status < 100 || status > 599)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, NULL);
+    }
+
+    // Validate header pairs and note whether Content-Type is overridden. We set
+    // Content-Length and Connection ourselves, so user copies of those are
+    // skipped to avoid duplicate framing headers.
+    bool have_ctype = false;
+    for (int i = 0; i + 1 < hdr_argc; i += 2)
+    {
+        const char *nm = mem_word_ptr(hdr_args[i].as.node);
+        const char *vl = mem_word_ptr(hdr_args[i + 1].as.node);
+        int nl = (int)mem_word_len(hdr_args[i].as.node);
+        int vll = (int)mem_word_len(hdr_args[i + 1].as.node);
+        if (!token_safe(nm, nl) || !token_safe(vl, vll))
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, NULL);
+        }
+        if ((size_t)nl == strlen("Content-Type") && ci_eq(nm, "Content-Type", nl))
+        {
+            have_ctype = true;
+        }
+    }
+
+    // Body length (Content-Length precedes the body).
+    size_t body_len = 0;
+    format_value(count_bytes, &body_len, body);
+
+    // Status line.
+    char line[64];
+    int n = snprintf(line, sizeof(line), "HTTP/1.1 %d %s\r\n",
+                     status, reason_phrase(status));
+    write_all(line, n);
+
+    if (!have_ctype)
+    {
+        write_cstr("Content-Type: text/plain; charset=utf-8\r\n");
+    }
+
+    // Caller-supplied headers (skipping the ones we frame ourselves).
+    for (int i = 0; i + 1 < hdr_argc; i += 2)
+    {
+        const char *nm = mem_word_ptr(hdr_args[i].as.node);
+        int nl = (int)mem_word_len(hdr_args[i].as.node);
+        if (((size_t)nl == strlen("Content-Length") && ci_eq(nm, "Content-Length", nl)) ||
+            ((size_t)nl == strlen("Connection") && ci_eq(nm, "Connection", nl)))
+        {
+            continue;
+        }
+        write_all(nm, nl);
+        write_cstr(": ");
+        write_all(mem_word_ptr(hdr_args[i + 1].as.node),
+                  (int)mem_word_len(hdr_args[i + 1].as.node));
+        write_cstr("\r\n");
+    }
+
+    char framing[64];
+    n = snprintf(framing, sizeof(framing),
+                 "Content-Length: %zu\r\nConnection: close\r\n\r\n", body_len);
+    write_all(framing, n);
+
+    // Stream the body straight from the Logo value.
+    format_value(write_chunk, NULL, body);
+
+    close_conn();
+    return result_none();
 }
 
 void httpd_reset(void)

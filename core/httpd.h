@@ -14,6 +14,7 @@
 #pragma once
 
 #include "error.h"
+#include "value.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -37,6 +38,23 @@ extern "C"
     // True when a fully-parsed request is waiting for a response
     // (backs http.request?).
     bool httpd_request_pending(void);
+
+    // Request accessors, valid only while a request is pending (they return
+    // NULL / false otherwise). Spans point into the request buffer and stay
+    // valid until http.respond / close. Back http.method / path / query / body /
+    // reqheader / remote.
+    const char *httpd_method(void);
+    const char *httpd_path(void);
+    const char *httpd_query(int *len_out);
+    const char *httpd_body(int *len_out);
+    bool httpd_reqheader(const char *name, const char **val, int *len_out);
+    const char *httpd_remote(void);
+
+    // Send a response to the pending request and close (backs http.respond).
+    // `body` is formatted like print; `hdr_args` are hdr_argc/2 name/value word
+    // pairs (a Content-Type pair overrides the text/plain default). Errors when
+    // no request is pending or a header token contains CR/LF.
+    Result httpd_respond(int status, Value body, int hdr_argc, Value *hdr_args);
 
     // Advance the pump once: accept, or one bounded read + parse, or age the
     // stall/response deadlines. Does nothing while frozen (demons_frozen()).

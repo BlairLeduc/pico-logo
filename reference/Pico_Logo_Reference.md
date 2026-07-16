@@ -6601,6 +6601,138 @@ false
 ```
 
 
+## http.method
+
+http.method
+
+`operation`
+
+`http.method` outputs the HTTP method of the pending request — `GET`, `POST`, `PUT`, and so on — as a word. It is an error to use it when no request is pending (see `http.request?`).
+
+**Example**:
+
+```logo
+when [http.request?] [
+  if equal? http.method "GET [http.respond 200 "hello]
+]
+```
+
+
+## http.path
+
+http.path
+
+`operation`
+
+`http.path` outputs the path of the pending request as a word, with any percent-escapes (such as `%20` for a space) decoded and the query string removed. For a request to `/turtle/forward?steps=20` it outputs `/turtle/forward`. It is an error to use it when no request is pending.
+
+**Example**:
+
+```logo
+when [http.request?] [
+  if equal? http.path "/forward [fd 20]
+  http.respond 200 "ok
+]
+```
+
+
+## http.query
+
+http.query
+
+`operation`
+
+`http.query` outputs the query string of the pending request — the part after the `?` — as a word, or the empty word if the request had no query string. For a request to `/draw?colour=red&size=3` it outputs `colour=red&size=3`. The parts can then be split apart in Logo. It is an error to use it when no request is pending.
+
+**Example**:
+
+```logo
+?pr http.query
+steps=20&turn=left
+```
+
+
+## http.body
+
+http.body
+
+`operation`
+
+`http.body` outputs the body of the pending request as a word, or the empty word for a request with no body (such as a `GET`). It is an error to use it when no request is pending.
+
+**Example**:
+
+```logo
+when [http.request?] [
+  if equal? http.method "POST [make "note http.body]
+  http.respond 200 "saved
+]
+```
+
+
+## http.reqheader
+
+http.reqheader _name_
+
+`operation`
+
+`http.reqheader` outputs the value of the request header named _name_ as a word, matching _name_ without regard to upper and lower case. If the pending request has no such header it outputs the empty list. It is an error to use it when no request is pending. This is how a handler reads a shared-secret header to protect against unwanted callers.
+
+**Example**:
+
+```logo
+when [http.request?] [
+  ifelse equal? http.reqheader "X-Key "swordfish ~
+    [http.respond 200 "welcome] ~
+    [http.respond 403 "no]
+]
+```
+
+
+## http.remote
+
+http.remote
+
+`operation`
+
+`http.remote` outputs the IP address of the client that made the pending request, as a word, useful for logging or greeting. It is an error to use it when no request is pending.
+
+**Example**:
+
+```logo
+?pr http.remote
+192.168.1.87
+```
+
+
+## http.respond
+
+http.respond _status_ _body_  
+(http.respond _status_ _body_ _name1_ _value1_ ...)
+
+`command`
+
+The `http.respond` command answers the pending request and closes the connection. _status_ is the HTTP status code (such as `200` for success or `404` for not found), and _body_ is a word or list sent as the response body, formatted as `print` would show it. The response is sent with `Content-Type: text/plain; charset=utf-8` unless you override it.
+
+In the parenthesised form, the extra inputs are _name_ / _value_ word pairs added as response headers — the same convention as `(http.get url name value ...)`. Supplying a `Content-Type` header replaces the default, so an HTML page displays correctly in a browser. It is an error to use `http.respond` when no request is pending.
+
+**Example**:
+
+```logo
+when [http.request?] [
+  http.respond 200 sentence [heading is] heading
+]
+```
+
+Serving HTML by overriding the content type. The angle brackets are written with backslashes so they stay inside the word:
+
+```logo
+when [http.request?] [
+  (http.respond 200 "\<h1\>Hello\</h1\> "Content-Type "text/html)
+]
+```
+
+
 ===
 # Property Lists
 
