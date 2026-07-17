@@ -584,6 +584,27 @@ void test_savebody_streams_unread_binary_body(void)
     TEST_ASSERT_EQUAL_INT(0, memcmp(f->data, req + hn, N));  // byte-identical
 }
 
+void test_savebody_errors_on_truncated_body(void)
+{
+    // The request declares an unread-sized Content-Length but the peer closes
+    // after sending only part of it. savebody must report the truncation as an
+    // error rather than confirming a partial upload as saved.
+    const int DECLARED = 6000;
+    const int SENT = 4500;  // fewer bytes than promised
+    static char req[8192];
+    int hn = snprintf(req, sizeof(req),
+                      "PUT /blob HTTP/1.1\r\nContent-Length: %d\r\n\r\n", DECLARED);
+    for (int i = 0; i < SENT; i++) req[hn + i] = (char)((i * 7 + 3) & 0xFF);
+    mock_httpd_queue_connection(req, (size_t)(hn + SENT));
+
+    eval_string("http.listen 80");
+    pump(3);
+    TEST_ASSERT_TRUE(httpd_request_pending());
+
+    Result r = eval_string("http.savebody \"blob");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
 void test_savebody_rejects_traversal(void)
 {
     serve("PUT /x HTTP/1.1\r\nContent-Length: 2\r\n\r\nhi");
@@ -647,6 +668,7 @@ int main(void)
     RUN_TEST(test_respondfile_rejects_traversal);
     RUN_TEST(test_savebody_writes_buffered_body);
     RUN_TEST(test_savebody_streams_unread_binary_body);
+    RUN_TEST(test_savebody_errors_on_truncated_body);
     RUN_TEST(test_savebody_rejects_traversal);
 
     return UNITY_END();

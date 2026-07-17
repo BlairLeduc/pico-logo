@@ -944,6 +944,9 @@ Result httpd_savebody(const char *path)
             if (f->write_error) { ok = false; break; }
             remaining -= r;
         }
+        // A short read (peer closed or timed out) leaves the file truncated;
+        // report that rather than confirming a partial upload as saved.
+        if (remaining > 0) ok = false;
     }
 
     logo_io_close(io, path);
