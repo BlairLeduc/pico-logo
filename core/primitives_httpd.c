@@ -4,9 +4,10 @@
 //
 //  HTTP server primitives: http.listen, http.unlisten, http.request?
 //
-//  Thin wrappers over the pump in core/httpd.c. The request accessors
-//  (http.method / path / query / body / reqheader / remote) and http.respond
-//  are added in M3. See docs/http-server-design.md §3.
+//  Thin wrappers over the pump in core/httpd.c: the request accessors
+//  (http.method / path / query / body / reqheader / remote), http.respond,
+//  the file-transfer primitives (http.respondfile / http.savebody) and the
+//  http.element HTML builder. See docs/http-server-design.md §3.
 //
 
 #include "primitives.h"

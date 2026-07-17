@@ -114,9 +114,9 @@ extern "C" {
 // DHCP). Excludes the `.local` suffix, which mDNS appends. 32 is comfortably
 // within the 63-character DNS label limit.
 //
-// OVERFLOW: `sethostname` rejects a name longer than HOSTNAME_MAX (or one that
-// is empty or contains anything but letters, digits, and interior hyphens) with
-// ERR_DOESNT_LIKE_INPUT.
+// OVERFLOW: `wifi.sethostname` rejects a name longer than HOSTNAME_MAX (or one
+// that is empty or contains anything but letters, digits, and interior hyphens)
+// with ERR_DOESNT_LIKE_INPUT.
 #define HOSTNAME_MAX 32
 
 // HTTP server (core/httpd.c) buffer caps. The pump keeps one lazily-allocated

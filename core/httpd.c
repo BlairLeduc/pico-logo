@@ -417,6 +417,15 @@ static void parse_progress(void)
             return;  // Need more header bytes.
         }
 
+        // Enforce the header cap here too: a single read can deliver an oversize
+        // header block together with the terminator, skipping the incremental
+        // check above (which only runs while the terminator is still unseen).
+        if (g_header_end > HTTPD_MAX_HEADERS)
+        {
+            send_status(431, "Request Header Fields Too Large");
+            return;
+        }
+
         int code = parse_request_line();
         if (code == 0) code = parse_framing();
         if (code != 0)

@@ -209,6 +209,22 @@ void test_oversize_header_block_gets_431(void)
     TEST_ASSERT_TRUE(responded(0, 431));
 }
 
+void test_oversize_header_block_with_terminator_gets_431(void)
+{
+    eval_string("http.listen 80");
+    // An oversize header block that DOES include the end-of-headers terminator,
+    // delivered in one read. The incremental cap check is skipped once the
+    // terminator is seen, so the cap must also be enforced after it is found.
+    static char req[4096];
+    int n = snprintf(req, sizeof(req), "GET / HTTP/1.1\r\n");
+    while (n < 2000) n += snprintf(req + n, sizeof(req) - n, "X-Pad: aaaaaaaaaa\r\n");
+    n += snprintf(req + n, sizeof(req) - n, "\r\n");  // terminator present
+    mock_httpd_queue_connection(req, (size_t)n);
+
+    pump(3);
+    TEST_ASSERT_TRUE(responded(0, 431));
+}
+
 void test_oversize_body_fires_unread(void)
 {
     eval_string("http.listen 80");
@@ -680,6 +696,7 @@ int main(void)
 
     RUN_TEST(test_unanswered_request_gets_503_after_deadline);
     RUN_TEST(test_oversize_header_block_gets_431);
+    RUN_TEST(test_oversize_header_block_with_terminator_gets_431);
     RUN_TEST(test_oversize_body_fires_unread);
     RUN_TEST(test_chunked_request_gets_411);
     RUN_TEST(test_malformed_request_line_gets_400);

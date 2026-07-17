@@ -25,7 +25,8 @@ extern "C"
 #endif
 
     // Start listening on `port` (backs http.listen). Errors if the device has
-    // no server ops, WiFi is not connected, or a listener is already open.
+    // no server ops or WiFi is not connected. Idempotent when already listening:
+    // the same port is a no-op, a different port moves the listener.
     Result httpd_listen(uint16_t port);
 
     // Stop listening and drop any connection (backs http.unlisten). A no-op when
