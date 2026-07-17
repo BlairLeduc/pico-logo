@@ -608,6 +608,53 @@ void test_savebody_errors_on_truncated_body(void)
     TEST_ASSERT_EQUAL(ERR_LOST_CONNECTION, result_get_error_code(r));
 }
 
+// Advance the mock clock by more than the whole response deadline on each body
+// read, so a handler that streams a large upload spends far longer than
+// HTTPD_RESPOND_MS servicing the request.
+static void slow_read_hook(void)
+{
+    set_mock_ticks(mock_ticks_value + HTTPD_RESPOND_MS + 1);
+}
+
+void test_slow_handler_keeps_its_connection(void)
+{
+    // A `when [http.request?]` handler owns the connection while it runs. Even
+    // if servicing the upload takes longer than the response deadline, the pump
+    // must not fire its own auto-503 and yank the connection out from under the
+    // handler (which would make http.respond see the connection closed).
+    const int N = 6000;  // > body cap, so it fires unread and savebody drains it
+    static char req[8192];
+    int hn = snprintf(req, sizeof(req),
+                      "PUT /blob HTTP/1.1\r\nContent-Length: %d\r\n\r\n", N);
+    for (int i = 0; i < N; i++) req[hn + i] = (char)((i * 7 + 3) & 0xFF);
+    // Small reads so the drain loops several times mid-handler.
+    mock_httpd_queue_connection_ex(req, (size_t)(hn + N), "192.168.1.55", 512);
+
+    eval_string("http.listen 80");
+    eval_string("when [http.request?] [http.savebody \"blob http.respond 201 [ok]]");
+    pump(3);
+    TEST_ASSERT_TRUE(httpd_request_pending());
+
+    // Only now make the body drain "slow": each read jumps the clock past the
+    // whole response deadline, so the handler runs far longer than
+    // HTTPD_RESPOND_MS. Firing the demon runs the action on a nested evaluator
+    // whose per-instruction httpd poll would, without the re-entrancy guard,
+    // auto-503 the very request it is servicing.
+    mock_httpd_set_read_hook(slow_read_hook);
+    demons_poll();
+
+    // The client sees the handler's 201, not an auto-503, and the whole body
+    // landed on disk.
+    int len = 0;
+    const char *resp = mock_httpd_conn_response(0, &len);
+    TEST_ASSERT_NOT_NULL(resp);
+    TEST_ASSERT_NOT_NULL(strstr(resp, "201"));
+    TEST_ASSERT_NULL(strstr(resp, "503"));
+    MockFile *f = mock_fs_get_file("blob", false);
+    TEST_ASSERT_NOT_NULL(f);
+    TEST_ASSERT_EQUAL_INT(N, (int)f->size);
+}
+
 void test_savebody_rejects_traversal(void)
 {
     serve("PUT /x HTTP/1.1\r\nContent-Length: 2\r\n\r\nhi");
@@ -672,6 +719,7 @@ int main(void)
     RUN_TEST(test_savebody_writes_buffered_body);
     RUN_TEST(test_savebody_streams_unread_binary_body);
     RUN_TEST(test_savebody_errors_on_truncated_body);
+    RUN_TEST(test_slow_handler_keeps_its_connection);
     RUN_TEST(test_savebody_rejects_traversal);
 
     return UNITY_END();

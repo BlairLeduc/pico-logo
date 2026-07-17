@@ -515,6 +515,13 @@ void httpd_poll(void)
 
 void httpd_maybe_poll(void)
 {
+    // Stand down while a demon action runs: a `when [http.request?]` handler
+    // owns the connection for its whole duration, so the pump must not read the
+    // socket or age the response deadline underneath it. Without this, a handler
+    // that legitimately takes longer than HTTPD_RESPOND_MS (a large upload to
+    // slow storage) would trip its own auto-503 and lose the connection.
+    if (demons_running()) return;
+
     LogoIO *io = primitives_get_io();
     if (!io) return;
 

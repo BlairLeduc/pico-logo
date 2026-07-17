@@ -1033,9 +1033,14 @@ void mock_device_init(void)
     mock_console.editor = &mock_editor_ops;
 }
 
+// Test hook: invoked after each successful server-connection read (see
+// mock_httpd_set_read_hook). Lets a test model slow I/O during a handler.
+static void (*mock_httpd_read_hook)(void) = NULL;
+
 void mock_device_reset(void)
 {
     memset(&mock_state, 0, sizeof(mock_state));
+    mock_httpd_read_hook = NULL;
     
     // Initialize turtle to default state
     mock_state.turtle.x = 0.0f;
@@ -1808,6 +1813,11 @@ static MockHttpdConn *as_httpd_conn(void *connection)
 
 // Server-connection read: deliver scripted request bytes (honouring the dribble
 // chunk); -1 once exhausted, modelling the client closing after its request.
+void mock_httpd_set_read_hook(void (*hook)(void))
+{
+    mock_httpd_read_hook = hook;
+}
+
 static int httpd_conn_read(MockHttpdConn *c, char *buffer, int count)
 {
     if (!c->open || !buffer || count <= 0)
@@ -1832,6 +1842,7 @@ static int httpd_conn_read(MockHttpdConn *c, char *buffer, int count)
     }
     memcpy(buffer, c->request + c->read_pos, (size_t)to_read);
     c->read_pos += to_read;
+    if (mock_httpd_read_hook) mock_httpd_read_hook();
     return to_read;
 }
 

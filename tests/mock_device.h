@@ -552,6 +552,10 @@ extern "C"
     // Like the above, but reads return 0 (client quiet, still connected) once the
     // scripted bytes run out — drives the mid-parse stall timeout.
     void mock_httpd_queue_connection_stalled(const char *request, size_t len);
+    // Callback invoked after every successful read from a server connection, so
+    // a test can model slow I/O (e.g. advance the mock clock) while a handler
+    // drains a request body. NULL (the default) disables it.
+    void mock_httpd_set_read_hook(void (*hook)(void));
     bool mock_httpd_is_listening(void);
     uint16_t mock_httpd_listen_port(void);
     // The response bytes the pump/handler wrote on connection slot `index`.
