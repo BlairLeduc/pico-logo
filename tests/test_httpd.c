@@ -12,6 +12,7 @@
 #include "test_mock_fs.h"
 #include "core/httpd.h"
 #include "core/demons.h"
+#include "core/error.h"
 #include <string.h>
 
 void setUp(void)
@@ -603,6 +604,8 @@ void test_savebody_errors_on_truncated_body(void)
 
     Result r = eval_string("http.savebody \"blob");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    // A cut-short upload is a lost connection, not a disk fault.
+    TEST_ASSERT_EQUAL(ERR_LOST_CONNECTION, result_get_error_code(r));
 }
 
 void test_savebody_rejects_traversal(void)

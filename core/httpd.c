@@ -915,7 +915,8 @@ Result httpd_savebody(const char *path)
         return result_error(ERR_DISK_TROUBLE);
     }
 
-    bool ok = true;
+    bool write_failed = false;   // a disk write returned short/error
+    bool truncated = false;      // the peer stopped before Content-Length
 
     // 1) Body bytes already buffered alongside the headers.
     int buffered = g_recv_len - g_body_off;
@@ -924,12 +925,12 @@ Result httpd_savebody(const char *path)
     if (buffered > 0)
     {
         logo_stream_write_bytes(f, g_buf + g_body_off, (size_t)buffered);
-        if (f->write_error) ok = false;
+        if (f->write_error) write_failed = true;
     }
 
     // 2) If the body fired unread, drain the rest from the socket straight to the
     //    file, up to the declared Content-Length.
-    if (ok && g_body_unread)
+    if (!write_failed && g_body_unread)
     {
         LogoHardwareOps *ops = httpd_ops();
         long remaining = (long)g_content_length - buffered;
@@ -941,16 +942,19 @@ Result httpd_savebody(const char *path)
             int r = ops->network_tcp_read(g_conn, chunk, want, timeout);
             if (r <= 0) break;  // peer closed or timed out
             logo_stream_write_bytes(f, chunk, (size_t)r);
-            if (f->write_error) { ok = false; break; }
+            if (f->write_error) { write_failed = true; break; }
             remaining -= r;
         }
-        // A short read (peer closed or timed out) leaves the file truncated;
-        // report that rather than confirming a partial upload as saved.
-        if (remaining > 0) ok = false;
+        // A short read (peer closed or timed out) leaves the file truncated:
+        // that is a lost connection, not a disk fault. Distinguish the two so
+        // the reported error points at the subsystem that actually failed.
+        if (!write_failed && remaining > 0) truncated = true;
     }
 
+    bool disk_full = f->disk_full;
     logo_io_close(io, path);
-    if (!ok) return result_error(ERR_DISK_TROUBLE);
+    if (write_failed) return result_error(disk_full ? ERR_DISK_FULL : ERR_DISK_TROUBLE);
+    if (truncated) return result_error(ERR_LOST_CONNECTION);
     return result_none();
 }
 

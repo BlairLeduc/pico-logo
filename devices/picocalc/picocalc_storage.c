@@ -189,13 +189,17 @@ static void picocalc_file_write_bytes(LogoStream *stream, const char *buffer, si
     fat32_seek(ctx->file, (uint32_t)ctx->write_pos);
 
     size_t written;
-    fat32_write(ctx->file, buffer, len, &written);
+    fat32_error_t err = fat32_write(ctx->file, buffer, len, &written);
     ctx->write_pos += (long)written;
 
     // Check for partial write (disk full or other error)
     if (written < len)
     {
         stream->write_error = true;
+        if (err == FAT32_ERROR_DISK_FULL)
+        {
+            stream->disk_full = true;
+        }
     }
 }
 
@@ -440,6 +444,7 @@ static LogoStream *logo_picocalc_file_open(const char *pathname)
     stream->context = ctx;
     stream->is_open = true;
     stream->write_error = false; // stream is malloc'd, not zeroed
+    stream->disk_full = false;
 
     // Copy pathname to stream name
     strncpy(stream->name, pathname, LOGO_STREAM_NAME_MAX - 1);

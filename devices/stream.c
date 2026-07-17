@@ -26,6 +26,7 @@ void logo_stream_init(LogoStream *stream, LogoStreamType type,
     stream->context = context;
     stream->is_open = true;
     stream->write_error = false;
+    stream->disk_full = false;
 
     if (name)
     {
@@ -196,6 +197,7 @@ void logo_stream_clear_write_error(LogoStream *stream)
     if (stream)
     {
         stream->write_error = false;
+        stream->disk_full = false;
     }
 }
 

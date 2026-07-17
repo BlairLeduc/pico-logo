@@ -143,12 +143,14 @@ static void lfs_stream_write_bytes(LogoStream *stream, const char *buffer, size_
     if (n < 0)
     {
         stream->write_error = true;
+        if (n == LFS_ERR_NOSPC) stream->disk_full = true;
         return;
     }
     ctx->write_pos += n;
     if ((size_t)n < len)
     {
         stream->write_error = true;
+        stream->disk_full = true;  // a short LittleFS write means the FS filled
     }
 }
 
@@ -305,6 +307,7 @@ static LogoStream *lfs_storage_open(const char *pathname)
     stream->context = ctx;
     stream->is_open = true;
     stream->write_error = false;
+    stream->disk_full = false;
     strncpy(stream->name, pathname, LOGO_STREAM_NAME_MAX - 1);
     stream->name[LOGO_STREAM_NAME_MAX - 1] = '\0';
     return stream;
