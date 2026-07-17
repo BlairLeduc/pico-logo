@@ -1105,19 +1105,20 @@ static err_t tcp_client_recv_cb(void *arg, struct altcp_pcb *tpcb, struct pbuf *
         return err;
     }
     
+    (void)tpcb;
     cyw43_arch_lwip_check();
 
-    // Backpressure: only take the segment if it fully fits in the ring. If it
-    // does not, refuse it with ERR_MEM -- lwIP keeps the data, stops advancing
-    // the window (so the sender throttles), and re-delivers it once the
-    // application has drained enough room. This replaces the old drop-on-full
-    // behaviour, which silently discarded overflow bytes while still ACKing
-    // them, corrupting large uploads and desyncing the stream.
+    // Flow control: the advertised receive window is only reopened as the
+    // application drains the ring (altcp_recved is deferred to the read path),
+    // so lwIP never delivers more than the ring can hold and a fast sender is
+    // throttled instead of overrunning us. The ring is sized above TCP_WND, so
+    // a delivery always fits; the ERR_MEM guard is a safety net that makes lwIP
+    // keep the data (re-delivered later) rather than us dropping it.
     int used = (state->recv_head - state->recv_tail + TCP_RECV_BUFFER_SIZE) % TCP_RECV_BUFFER_SIZE;
     int free_space = (TCP_RECV_BUFFER_SIZE - 1) - used;
     if ((int)p->tot_len > free_space)
     {
-        return ERR_MEM;  // Do not free or ACK: lwIP re-delivers this later.
+        return ERR_MEM;
     }
 
     for (struct pbuf *q = p; q != NULL; q = q->next)
@@ -1130,8 +1131,8 @@ static err_t tcp_client_recv_cb(void *arg, struct altcp_pcb *tpcb, struct pbuf *
         }
     }
 
-    // Acknowledge received data
-    altcp_recved(tpcb, p->tot_len);
+    // NB: do NOT altcp_recved() here -- the read path reopens the window as it
+    // consumes bytes, which is what keeps the window <= ring free space.
     pbuf_free(p);
 
     return ERR_OK;
@@ -1520,7 +1521,21 @@ static int picocalc_network_tcp_read(void *connection, char *buffer, int count, 
         buffer[bytes_read++] = state->recv_buffer[state->recv_tail];
         state->recv_tail = (state->recv_tail + 1) % TCP_RECV_BUFFER_SIZE;
     }
-    
+
+    // Reopen the receive window by what we just consumed (the receive callback
+    // deferred this), so the sender may send more -- continuous flow control
+    // that tracks how fast the application drains. Re-check the PCB inside the
+    // lock: a background error callback could have freed it.
+    if (bytes_read > 0)
+    {
+        cyw43_arch_lwip_begin();
+        if (state->pcb)
+        {
+            altcp_recved(state->pcb, (u16_t)bytes_read);
+        }
+        cyw43_arch_lwip_end();
+    }
+
     return bytes_read;
 }
 
