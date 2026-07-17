@@ -76,6 +76,7 @@ extern "C"
         char name[LOGO_STREAM_NAME_MAX];    // Pathname for files, device name for console
         bool is_open;
         bool write_error;                   // Set if a write operation failed (partial write)
+        bool disk_full;                     // Set when write_error was specifically out-of-space
     };
 
     //

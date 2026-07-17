@@ -6244,6 +6244,47 @@ wifi.scan
 ```
 
 
+## wifi.sethostname
+
+wifi.sethostname _name_
+
+`command`
+
+The `wifi.sethostname` command sets the device's network name to _name_. Once WiFi is connected, other machines on the same network can reach the device by this name with `.local` added — for example `http://picologo.local` — instead of its numeric IP address. The same name is given to the router as the device's DHCP hostname.
+
+_name_ must be a word of letters, digits, and hyphens (a hyphen may not be the first or last character), up to 32 characters long, and must not contain a dot: the `.local` part is added automatically. The default name is `picologo`, and it returns to `picologo` each time the device restarts, so put a `wifi.sethostname` line in your startup file to keep a custom name. If WiFi is already connected, the new name takes effect immediately.
+
+**Example**:
+
+```logo
+?wifi.sethostname "picocalc
+?wifi.connect "TimHortonsWiFi "double-double
+?pr wifi.hostname
+picocalc
+```
+
+Now `http://picocalc.local` reaches the device from a phone or laptop on the same network.
+
+
+## wifi.hostname
+
+wifi.hostname
+
+`operation`
+
+`wifi.hostname` outputs the device's current network name (the name set by `wifi.sethostname`, without the `.local` suffix). The default is `picologo`.
+
+**Example**:
+
+```logo
+?pr wifi.hostname
+picologo
+?wifi.sethostname "myturtle
+?pr wifi.hostname
+myturtle
+```
+
+
 
 
 ===
@@ -6481,6 +6522,285 @@ text/plain
 []
 ```
 
+
+
+===
+# HTTP Server
+
+These primitives let a Logo program *answer* HTTP requests — controlling the turtle from a phone browser, or transferring files without a cable — on the WiFi boards (the Pico 2 W and the Pico Plus 2 W).
+
+The server handles one request at a time. `http.listen` starts it; each request that arrives makes `http.request?` output `true`, and a handler answers it with `http.respond` (see the request accessors and `http.respond` that follow). The usual shape is a `when` demon, which keeps serving while the program runs *and* while you type at the prompt:
+
+```logo
+wifi.connect "TimHortonsWiFi "double-double
+http.listen 80
+when [http.request?] [
+  if equal? http.path "/forward [fd 20]
+  if equal? http.path "/right   [rt 90]
+  http.respond 200 sentence [heading is] heading
+]
+pr sentence [serving at] wifi.ip
+```
+
+With mDNS naming (see `wifi.sethostname`), the browser can reach the device at `http://picologo.local` instead of its IP address.
+
+The server closes automatically on a full reset — `clearscreen`, or when a running program stops with an error — so a serving program that errors stops serving; rerun it to restart. Requests that are malformed, that stall halfway, whose body is too large, or that no handler answers within ten seconds are given an automatic error response and closed, so a connection is never left hanging.
+
+
+## http.listen
+
+http.listen _port_
+
+`command`
+
+The `http.listen` command starts the HTTP server listening on _port_ (a whole number from 1 to 65535). A browser reaches a server on port 80 without a port suffix in the address. It is an error to `http.listen` when the WiFi is not connected. Calling `http.listen` again on the same port does nothing, so a program that starts with it can be rerun freely; calling it on a different port moves the server to that port.
+
+**Example**:
+
+```logo
+?wifi.connect "TimHortonsWiFi "double-double
+?http.listen 80
+?pr sentence [serving at] wifi.ip
+serving at 192.168.1.42
+```
+
+
+## http.unlisten
+
+http.unlisten
+
+`command`
+
+The `http.unlisten` command stops the HTTP server and drops any connection in progress. It does nothing if the server is not listening. The server is also stopped automatically by `clearscreen` and when a program unwinds to the prompt with an error.
+
+**Example**:
+
+```logo
+?http.unlisten
+```
+
+
+## http.request? (http.requestp)
+
+http.request?
+
+`operation`
+
+`http.request?` outputs `true` when a complete request has arrived and is waiting for a response, otherwise it outputs `false`. It is the condition of the serving `when` demon, and can equally drive an ordinary polling loop:
+
+```logo
+http.listen 80
+forever [if http.request? [http.respond 200 "hello]]
+```
+
+**Example**:
+
+```logo
+?pr http.request?
+false
+```
+
+
+## http.method
+
+http.method
+
+`operation`
+
+`http.method` outputs the HTTP method of the pending request — `GET`, `POST`, `PUT`, and so on — as a word. It is an error to use it when no request is pending (see `http.request?`).
+
+**Example**:
+
+```logo
+when [http.request?] [
+  if equal? http.method "GET [http.respond 200 "hello]
+]
+```
+
+
+## http.path
+
+http.path
+
+`operation`
+
+`http.path` outputs the path of the pending request as a word, with any percent-escapes (such as `%20` for a space) decoded and the query string removed. For a request to `/turtle/forward?steps=20` it outputs `/turtle/forward`. It is an error to use it when no request is pending.
+
+**Example**:
+
+```logo
+when [http.request?] [
+  if equal? http.path "/forward [fd 20]
+  http.respond 200 "ok
+]
+```
+
+
+## http.query
+
+http.query
+
+`operation`
+
+`http.query` outputs the query string of the pending request — the part after the `?` — as a word, or the empty word if the request had no query string. For a request to `/draw?colour=red&size=3` it outputs `colour=red&size=3`. The parts can then be split apart in Logo. It is an error to use it when no request is pending.
+
+**Example**:
+
+```logo
+?pr http.query
+steps=20&turn=left
+```
+
+
+## http.body
+
+http.body
+
+`operation`
+
+`http.body` outputs the body of the pending request as a word, or the empty word for a request with no body (such as a `GET`). It is an error to use it when no request is pending. It is also an error if the body was too large to hold in memory (a large upload); use `http.savebody` to stream such a body straight to a file instead.
+
+**Example**:
+
+```logo
+when [http.request?] [
+  if equal? http.method "POST [make "note http.body]
+  http.respond 200 "saved
+]
+```
+
+
+## http.reqheader
+
+http.reqheader _name_
+
+`operation`
+
+`http.reqheader` outputs the value of the request header named _name_ as a word, matching _name_ without regard to upper and lower case. If the pending request has no such header it outputs the empty list. It is an error to use it when no request is pending. This is how a handler reads a shared-secret header to protect against unwanted callers.
+
+**Example**:
+
+```logo
+when [http.request?] [
+  ifelse equal? http.reqheader "X-Key "swordfish ~
+    [http.respond 200 "welcome] ~
+    [http.respond 403 "no]
+]
+```
+
+
+## http.remote
+
+http.remote
+
+`operation`
+
+`http.remote` outputs the IP address of the client that made the pending request, as a word, useful for logging or greeting. It is an error to use it when no request is pending.
+
+**Example**:
+
+```logo
+?pr http.remote
+192.168.1.87
+```
+
+
+## http.respond
+
+http.respond _status_ _body_  
+(http.respond _status_ _body_ _name1_ _value1_ ...)
+
+`command`
+
+The `http.respond` command answers the pending request and closes the connection. _status_ is the HTTP status code (such as `200` for success or `404` for not found), and _body_ is a word or list sent as the response body, formatted as `print` would show it. The response is sent with `Content-Type: text/plain; charset=utf-8` unless you override it.
+
+In the parenthesised form, the extra inputs are _name_ / _value_ word pairs added as response headers — the same convention as `(http.get url name value ...)`. Supplying a `Content-Type` header replaces the default, so an HTML page displays correctly in a browser. It is an error to use `http.respond` when no request is pending.
+
+**Example**:
+
+```logo
+when [http.request?] [
+  http.respond 200 sentence [heading is] heading
+]
+```
+
+Serving HTML built with `http.element` (see below), overriding the content type:
+
+```logo
+when [http.request?] [
+  (http.respond 200 http.element "h1 [Hello from Pico Logo] "Content-Type "text/html)
+]
+```
+
+
+## http.respondfile
+
+http.respondfile _status_ _path_  
+(http.respondfile _status_ _path_ _name1_ _value1_ ...)
+
+`command`
+
+The `http.respondfile` command answers the pending request with the contents of the file named _path_ as the response body, then closes the connection. The file is sent in small pieces, so it can be any size and may contain binary data (such as a picture) — nothing is limited by the size of memory. The response is sent with `Content-Type: application/octet-stream` unless you override it with a `Content-Type` header in the parenthesised form.
+
+If the file does not exist, `http.respondfile` reports an ordinary error and leaves the request pending, so a handler can catch it and answer with a `404` instead. A _path_ containing `..` is rejected. It is an error to use `http.respondfile` when no request is pending.
+
+**Example** — a tiny file server that also serves a not-found page:
+
+```logo
+when [http.request?] [
+  ifelse file? http.path ~
+    [http.respondfile 200 http.path] ~
+    [http.respond 404 [not found]]
+]
+```
+
+
+## http.savebody
+
+http.savebody _path_
+
+`command`
+
+The `http.savebody` command writes the body of the pending request to the file named _path_, streaming it straight to storage in small pieces. This is how you receive an uploaded file (for example from `curl -T`): the upload can be any size and may be binary, even larger than would fit in memory. The request stays pending afterwards, so the handler still finishes by answering with `http.respond`. A _path_ containing `..` is rejected, and it is an error to use `http.savebody` when no request is pending.
+
+**Example** — accept uploads with `PUT` and serve files with `GET`:
+
+```logo
+when [http.request?] [
+  if equal? http.method "PUT [http.savebody http.path  http.respond 201 "saved]
+  if equal? http.method "GET [http.respondfile 200 http.path]
+]
+```
+
+Upload and download from a computer on the same network:
+
+```
+curl -T invaders http://picologo.local/invaders
+curl -o copy.txt http://picologo.local/notes.txt
+```
+
+
+## http.element
+
+http.element _tag_ _content_  
+(http.element _tag_ _content_ _name1_ _value1_ ...)
+
+`operation`
+
+`http.element` builds an HTML element as a word: `<`_tag_`>`_content_`</`_tag_`>`. _content_ is a word or a list; a list is formatted as `print` would show it (its spaces come through and its outer brackets are dropped), and because the result is a word, elements nest by passing one `http.element` as the _content_ of another.
+
+In the parenthesised form the extra inputs are _name_ / _value_ word pairs added as attributes, so `(http.element "a "forward "href "/forward)` builds `<a href=/forward>forward</a>`. This spares you from spelling out the angle brackets with `char 60` and `char 62`, which the Logo lexer would otherwise require. Attribute values are single words; because the lexer treats `=` and `:` as delimiters, escape them with a backslash inside a value (for example `"margin\=0`).
+
+**Example**:
+
+```logo
+?pr http.element "h1 [Pico Logo Turtle]
+<h1>Pico Logo Turtle</h1>
+?pr (http.element "p (http.element "a "left "href "/left))
+<p><a href=/left>left</a></p>
+```
+
+The inner element needs its own parentheses so its attribute pair belongs to it rather than to the outer element.
 
 
 ===

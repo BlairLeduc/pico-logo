@@ -108,6 +108,8 @@ add_library(logo_core
     core/primitives_wifi.c
     core/primitives_network.c
     core/primitives_http.c
+    core/httpd.c
+    core/primitives_httpd.c
     core/primitives.c
     core/parse_list.c
     core/procedures.c
@@ -257,8 +259,11 @@ if(LOGO_HAS_WIFI)
         ${CMAKE_CURRENT_SOURCE_DIR}/devices/picocalc
     )
     # Plain networking (WiFi, DNS/NTP/ping, HTTP) needs the lwIP stack only.
+    # pico_lwip_mdns adds the multicast-DNS responder so the device answers
+    # `<hostname>.local` on the LAN.
     target_link_libraries(pico-logo
         pico_cyw43_arch_lwip_threadsafe_background
+        pico_lwip_mdns
     )
 endif()
 
@@ -390,6 +395,8 @@ if(BUILD_FOR_HOST)
         core/primitives_wifi.c
         core/primitives_network.c
         core/primitives_http.c
+        core/httpd.c
+        core/primitives_httpd.c
         core/primitives.c
         core/parse_list.c
         core/procedures.c
@@ -562,6 +569,8 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_wifi.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_network.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_http.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/httpd.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_httpd.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/parse_list.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/procedures.c

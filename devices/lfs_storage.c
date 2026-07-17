@@ -126,21 +126,31 @@ static void lfs_stream_write_bytes(LogoStream *stream, const char *buffer, size_
     }
     LfsStreamContext *ctx = (LfsStreamContext *)stream->context;
 
-    if (lfs_file_seek(g_lfs, &ctx->file, ctx->write_pos, LFS_SEEK_SET) < 0)
+    // Only seek when the file is not already at write_pos. lfs_file_seek flushes
+    // the write cache, so seeking before every write (as a streamed upload does,
+    // one small chunk at a time) would force a flash flush per chunk -- slow and
+    // heavy on copy-on-write block churn. Skipping it for sequential writes lets
+    // LittleFS batch to block boundaries.
+    if (lfs_file_tell(g_lfs, &ctx->file) != (lfs_soff_t)ctx->write_pos)
     {
-        stream->write_error = true;
-        return;
+        if (lfs_file_seek(g_lfs, &ctx->file, ctx->write_pos, LFS_SEEK_SET) < 0)
+        {
+            stream->write_error = true;
+            return;
+        }
     }
     lfs_ssize_t n = lfs_file_write(g_lfs, &ctx->file, buffer, (lfs_size_t)len);
     if (n < 0)
     {
         stream->write_error = true;
+        if (n == LFS_ERR_NOSPC) stream->disk_full = true;
         return;
     }
     ctx->write_pos += n;
     if ((size_t)n < len)
     {
         stream->write_error = true;
+        stream->disk_full = true;  // a short LittleFS write means the FS filled
     }
 }
 
@@ -297,6 +307,7 @@ static LogoStream *lfs_storage_open(const char *pathname)
     stream->context = ctx;
     stream->is_open = true;
     stream->write_error = false;
+    stream->disk_full = false;
     strncpy(stream->name, pathname, LOGO_STREAM_NAME_MAX - 1);
     stream->name[LOGO_STREAM_NAME_MAX - 1] = '\0';
     return stream;

@@ -64,20 +64,21 @@ static void sd_spi_read_buf(uint8_t *dst, size_t len)
     spi_write_read_blocking(SD_SPI, dst, dst, len);
 }
 
+// Poll MISO until the card releases the busy signal (returns 0xFF). During a
+// sustained upload the card can stall for tens to a couple hundred milliseconds
+// doing internal wear-levelling/garbage collection, so this is time-based with
+// a generous ceiling rather than a fixed iteration count.
 static bool sd_wait_ready(void)
 {
-    uint8_t response;
-    uint32_t timeout = 10000; // Add timeout to prevent infinite loop
+    absolute_time_t deadline = make_timeout_time_ms(500);
     do
     {
-        response = sd_spi_write_read(0xFF);
-        timeout--;
-        if (timeout == 0)
+        if (sd_spi_write_read(0xFF) == 0xFF)
         {
-            return false; // Timeout occurred
+            return true; // Card is ready
         }
-    } while (response != 0xFF);
-    return true; // Success
+    } while (!time_reached(deadline));
+    return false; // Timeout occurred
 }
 
 static uint8_t sd_send_command(uint8_t cmd, uint32_t arg)
@@ -139,7 +140,7 @@ bool sd_is_sdhc(void)
 // Block-level read/write operations
 //
 
-sd_error_t sd_read_block(uint32_t block, uint8_t *buffer)
+static sd_error_t sd_read_block_once(uint32_t block, uint8_t *buffer)
 {
     int32_t addr = is_sdhc ? block : block * SD_BLOCK_SIZE;
     uint8_t response = sd_send_command(SD_CMD17, addr);
@@ -174,7 +175,7 @@ sd_error_t sd_read_block(uint32_t block, uint8_t *buffer)
     return SD_OK;
 }
 
-sd_error_t sd_write_block(uint32_t block, const uint8_t *buffer)
+static sd_error_t sd_write_block_once(uint32_t block, const uint8_t *buffer)
 {
     uint32_t addr = is_sdhc ? block : block * SD_BLOCK_SIZE;
     uint8_t response = sd_send_command(SD_CMD24, addr);
@@ -209,6 +210,45 @@ sd_error_t sd_write_block(uint32_t block, const uint8_t *buffer)
     sd_cs_deselect();
 
     return SD_OK;
+}
+
+// A single glitch on the SPI bus (a missed data token, a command sent while the
+// card was still busy) fails one block op. Over the thousands of blocks a large
+// upload writes, hitting one becomes near-certain, so retry a few times. Both
+// CMD17 (read) and CMD24 (single-block write) are idempotent, so re-issuing the
+// same block is safe. Between attempts, wait for the card to leave the busy
+// state so a "still programming" failure clears before we try again.
+#define SD_IO_RETRIES 5
+
+static void sd_recover(void)
+{
+    sd_cs_select();
+    sd_wait_ready();
+    sd_cs_deselect();
+}
+
+sd_error_t sd_read_block(uint32_t block, uint8_t *buffer)
+{
+    sd_error_t err = SD_ERROR_READ_FAILED;
+    for (int attempt = 0; attempt < SD_IO_RETRIES; attempt++)
+    {
+        err = sd_read_block_once(block, buffer);
+        if (err == SD_OK) return SD_OK;
+        sd_recover();
+    }
+    return err;
+}
+
+sd_error_t sd_write_block(uint32_t block, const uint8_t *buffer)
+{
+    sd_error_t err = SD_ERROR_WRITE_FAILED;
+    for (int attempt = 0; attempt < SD_IO_RETRIES; attempt++)
+    {
+        err = sd_write_block_once(block, buffer);
+        if (err == SD_OK) return SD_OK;
+        sd_recover();
+    }
+    return err;
 }
 
 sd_error_t sd_read_blocks(uint32_t start_block, uint32_t num_blocks, uint8_t *buffer)

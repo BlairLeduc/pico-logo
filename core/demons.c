@@ -134,6 +134,8 @@ void demons_thaw(void)
 
 bool demons_frozen(void) { return g_frozen; }
 
+bool demons_running(void) { return g_polling; }
+
 void demons_reset(void)
 {
     for (int i = 0; i < MAX_DEMONS; i++)

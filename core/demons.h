@@ -33,6 +33,13 @@ extern "C"
     void demons_thaw(void);
     bool demons_frozen(void);
 
+    // True while a demon action is executing. The HTTP pump uses this to stand
+    // down: a `when [http.request?]` handler owns the connection while it runs,
+    // so the pump must not read the socket or age the response deadline (and
+    // auto-503) underneath a handler that is legitimately slow (e.g. streaming
+    // a large upload to storage).
+    bool demons_running(void);
+
     // Clear every demon, reset the freeze/edge/timing state, and stop the
     // motion clock. Applied by `cs` and when execution unwinds to the
     // toplevel REPL (error or `throw "toplevel`): nothing acts on its own

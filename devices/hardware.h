@@ -108,6 +108,12 @@ extern "C"
         // Signal strength (RSSI in dBm, typically -30 to -90) stored in strengths[i]
         int (*wifi_scan)(char ssids[][33], int8_t strengths[], int max_networks);
 
+        // Set the device's network hostname (used for mDNS `<name>.local` and
+        // as the DHCP hostname). Core owns the name; the device applies it,
+        // taking effect immediately if the network is already up, otherwise at
+        // the next connect. May be NULL on devices without mDNS/DHCP naming.
+        void (*network_set_hostname)(const char *name);
+
         //
         // Network operations (require WiFi to be connected)
         //
@@ -161,6 +167,25 @@ extern "C"
 
         // Check if data is available to read without blocking
         bool (*network_tcp_can_read)(void *connection);
+
+        //
+        // TCP server operations (require WiFi to be connected). Accepted
+        // connections are used with the network_tcp_read/write/close/can_read
+        // ops above, exactly like an outbound connection.
+        //
+
+        // Listen for TCP connections on a port (1-65535).
+        // Returns an opaque listener handle, NULL on failure.
+        void *(*network_tcp_listen)(uint16_t port);
+
+        // Stop listening and free the listener (dropping any pending connection).
+        void (*network_tcp_unlisten)(void *listener);
+
+        // Accept a pending connection, if any (non-blocking). Returns a
+        // connection handle usable with the tcp read/write/close ops, or NULL
+        // when nothing is waiting. remote_ip (at least ip_size bytes, 16 is
+        // enough) receives the client address in dotted-decimal form.
+        void *(*network_tcp_accept)(void *listener, char *remote_ip, size_t ip_size);
 
         //
         // Time management operations

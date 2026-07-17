@@ -10,6 +10,7 @@
 #include "error.h"
 #include "eval.h"
 #include "demons.h"
+#include "httpd.h"
 #include "frame_sync.h"
 #include "limits.h"
 #include "devices/io.h"
@@ -777,8 +778,10 @@ static Result prim_clearscreen(Evaluator *eval, int argc, Value *args)
     reset_active_set();
 
     // A full reset also disarms every `when` demon and stops autonomous
-    // turtle motion/animation: nothing acts on its own after a reset.
+    // turtle motion/animation, and closes the HTTP server: nothing acts on its
+    // own after a reset.
     demons_reset();
+    httpd_reset();
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle)

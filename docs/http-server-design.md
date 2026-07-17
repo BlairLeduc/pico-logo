@@ -4,7 +4,7 @@ Status: **v3** — the design gate for the HTTP server closed 2026-07-10
 (the open questions in §10 were resolved with the user; none remain).
 
 v3 (2026-07-12) adds mDNS naming (§7, milestone M0): the device answers
-to `picologo.local` on the LAN, with `sethostname`/`hostname`
+to `picologo.local` on the LAN, with `wifi.sethostname`/`wifi.hostname`
 primitives; the responder starts with `wifi.connect`, independent of
 the server.
 
@@ -49,7 +49,7 @@ are optional: `forever [if http.request? [...]]` works too, since
 
 With mDNS naming (§7) the phone doesn't need the IP at all: the browser
 reaches the device at `http://picologo.local` (or whatever
-`sethostname` chose).
+`wifi.sethostname` chose).
 
 ## 2. What already exists
 
@@ -72,7 +72,11 @@ reaches the device at `http://picologo.local` (or whatever
 Commands and queries, all under the existing `http.` namespace:
 
 - `http.listen port` — start listening on *port* (1–65535). Error if
-  WiFi is not connected or already listening.
+  WiFi is not connected. Idempotent (decided 2026-07-16): re-listening on
+  the current port is a no-op, so a program that opens with `http.listen`
+  reruns cleanly; a different port moves the listener. (Supersedes the
+  original "error if already listening", now that `cs` still closes the
+  listener — see §10.)
 - `http.unlisten` — stop listening, drop any pending connection.
   (Naming mirrors `wifi.connect`/`wifi.disconnect`.)
 - `http.request?` — `true` when a complete, parsed request is waiting
@@ -101,6 +105,21 @@ Response:
   headers as name/value pairs, the same parenthesised convention as
   `(http.get url name value ...)`. Supplying `Content-Type` overrides
   the default (so `"text/html` pages work).
+
+HTML helper (added 2026-07-16 during M4, user request): building markup
+by hand is painful because the Logo lexer treats `<`, `>`, `=`, and
+space as token delimiters, so a literal `<a href=...>` cannot be typed
+as a word.
+
+- `http.element tag content` / `(http.element tag content name1 value1
+  ...)` — builds `<tag name1=value1 ...>content</tag>` as a word.
+  *content* is a word or list (formatted like `print`, so a list's
+  spaces come through and its brackets drop); since the result is a
+  word, elements nest by passing one `http.element` as another's
+  content. Attribute values are single words (escape `=`/`:` with a
+  backslash). The HTML analog of the parenthesised name/value
+  convention; a pure string builder that touches no server state, so it
+  is usable outside a handler too.
 
 File transfer (M5) — bytes move **connection ↔ storage directly**,
 never materializing as Logo words, so they are binary-safe (BMPs) and
@@ -204,10 +223,30 @@ void (*network_tcp_unlisten)(void *listener);
 void *(*network_tcp_accept)(void *listener, char *remote_ip, size_t ip_size);
 ```
 
-- **picocalc:** `altcp_new` + `altcp_bind` + `altcp_listen`; the accept
-  callback parks the new PCB (at most one) for `network_tcp_accept` to
-  claim; the claimed PCB is wrapped in the same connection struct the
-  client path uses, so read/write/close need no changes.
+- **picocalc:** `altcp_new` + `altcp_bind` + `altcp_listen`. The listener
+  pre-allocates one connection struct (the same one the client path uses,
+  so read/write/close need no changes); the accept callback attaches the
+  new PCB to that slot **and wires its receive callback right there**,
+  then flags it ready for `network_tcp_accept` to hand over. Wiring recv
+  in the accept callback is load-bearing: lwIP *frees* inbound data
+  delivered to a PCB whose recv callback is still NULL, so a browser that
+  sends its whole request immediately after the handshake would otherwise
+  lose it and stall until the pump's `408`. Pre-allocating (in `listen`,
+  never in the callback) keeps `malloc` out of the lwIP background
+  context. Backlog is one: a second connection while the slot is busy is
+  aborted and the client retries; `close` on a server connection detaches
+  the PCB but keeps the slot for reuse, and `unlisten` frees it.
+  Two reliability details, added 2026-07-16 after a large-upload failure
+  on hardware: (1) the receive callback applies **backpressure** — it
+  refuses (returns `ERR_MEM`) a segment that will not fit the receive ring
+  rather than dropping-and-ACKing the overflow, so a fast/large upload
+  throttles the sender instead of corrupting the stream; the ring is sized
+  above `TCP_WND` so a refusal can never deadlock. (2) a server connection
+  **abandoned without a response** (an upload that failed, or a teardown
+  mid-transfer) is closed with a RST rather than a graceful FIN, so its
+  local port frees immediately with no TIME_WAIT that would make a
+  re-`http.listen` on the same port fail; a connection that did send its
+  response still closes gracefully.
 - **mock:** scripted — `mock_httpd_queue_connection(request_bytes)`
   queues an incoming connection whose reads return the scripted bytes
   (with a dribble mode that returns them a few bytes per call);
@@ -260,21 +299,21 @@ reading `wifi.ip` off the screen and typing an address into the phone.
   cable-free transfer and plain `ping picologo.local` from a laptop.
 - **Primitives** (beside the other WiFi primitives in
   `core/primitives_wifi.c`, gated on `LOGO_HAS_WIFI`):
-  - `sethostname name` — set the device's network name. A word
+  - `wifi.sethostname name` — set the device's network name. A word
     following hostname-label rules: letters, digits, hyphens; no dots —
     the name **excludes** `.local`, mDNS appends it. Length capped via
     `core/limits.h` (proposed `HOSTNAME_MAX` 32). If WiFi is already
     connected, the responder re-announces under the new name
     immediately.
-  - `hostname` — outputs the current name (again without `.local`).
+  - `wifi.hostname` — outputs the current name (again without `.local`).
 - **Default `picologo`; no persistence (decided 2026-07-12):** the name
-  resets to `picologo` on boot; a custom name is one `sethostname` line
+  resets to `picologo` on boot; a custom name is one `wifi.sethostname` line
   in the user's startup file. No flash writes involved.
 - **DHCP agrees:** the same name is passed as the lwIP netif hostname
   (`LWIP_NETIF_HOSTNAME` is already on), so the router's device list
   shows the same name mDNS answers to.
 - **Device interface:** one new op beside the WiFi ops; core owns the
-  name (so `hostname` reads it back and reconnects reuse it), the
+  name (so `wifi.hostname` reads it back and reconnects reuse it), the
   device applies it:
 
   ```c
@@ -295,7 +334,7 @@ firmware presets linking + reference sections for anything user-visible
 - **M0 — mDNS naming (§7).** Independent of the server pump — ships on
   `wifi.connect` alone, in any order relative to M1–M5.
   `network_set_hostname` device op; lwipopts/CMake enablement
-  (`pico_lwip_mdns`); `sethostname` / `hostname` with label validation
+  (`pico_lwip_mdns`); `wifi.sethostname` / `wifi.hostname` with label validation
   and `HOSTNAME_MAX`; responder start/stop with connect/disconnect and
   re-announce on rename. Acceptance: mock tests for default name,
   rename before and after connect, and label validation errors;
@@ -360,7 +399,7 @@ firmware presets linking + reference sections for anything user-visible
 | Content-Type sniffing by file extension in `http.respondfile` | A table to maintain for marginal gain; `application/octet-stream` downloads correctly everywhere, and a handler that cares passes the header explicitly. |
 | mDNS *querying* (resolving other machines' `.local` names) | lwIP's responder answers queries but doesn't issue them; a querier is a separate component. `network.resolve` stays plain-DNS-only. |
 | DNS-SD service advertisement (`_http._tcp` when `http.listen` is active) | The hostname A record already covers the use case — type `http://picologo.local` into a browser; service *browsing* adds protocol surface and listener/responder coupling for no classroom gain. |
-| Persisting `sethostname` to flash | A startup-file line does the same job with no flash-write path; the name is one word of state (decided 2026-07-12). |
+| Persisting `wifi.sethostname` to flash | A startup-file line does the same job with no flash-write path; the name is one word of state (decided 2026-07-12). |
 
 ## 10. Decisions (resolved with the user)
 
@@ -385,11 +424,22 @@ Resolved 2026-07-10:
    (`if not equal? http.reqheader "X-Key :key [http.respond 403 "no]`).
    Logo stays in control; classroom-appropriate.
 
+Revisited 2026-07-16 (after M0–M4 shipped): the `cs` / error-unwind
+lifetime (decision 1) was reopened once serving was demon-integrated in
+practice. Kept as-is — a `cs` clears the handler demon anyway, so a
+listener surviving `cs` would only sit headless and `503`; closing both
+together stays the coherent rule. The re-run friction it existed to
+avoid is instead removed by making `http.listen` idempotent (§3), so a
+program no longer depends on `cs` closing the listener to rerun. (An
+in-handler screen clear uses `clean` / `clean home`, which leaves the
+demons and the pending connection intact — `cs` in a handler would
+disarm the handler and drop the connection.)
+
 Resolved 2026-07-12 (mDNS, §7):
 
 6. **The responder starts with `wifi.connect`, not `http.listen`** —
    the device is findable on the LAN as soon as WiFi is up, independent
    of whether anything is being served.
 7. **Default hostname is `picologo`.**
-8. **No persistence across reboots** — a custom name is a `sethostname`
+8. **No persistence across reboots** — a custom name is a `wifi.sethostname`
    line in the user's startup file, not a flash setting.

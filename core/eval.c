@@ -13,6 +13,7 @@
 #include "repl.h"
 #include "frame.h"
 #include "demons.h"
+#include "httpd.h"
 #include "devices/io.h"
 #include <string.h>
 
@@ -159,6 +160,11 @@ Result eval_instruction(Evaluator *eval)
         }
         // If not in a procedure, defer — flag stays set until we enter one
     }
+
+    // Advance the HTTP server pump (accept/read/parse) before demons, so a
+    // request that just completed is visible to a `when [http.request?]` handler
+    // in this same tick. The pump never runs Logo, so it cannot error here.
+    httpd_maybe_poll();
 
     // Poll `when` demons and advance autonomous turtle motion. Budget-gated
     // so tight loops aren't taxed; suppressed while a demon action runs. A

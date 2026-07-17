@@ -109,6 +109,62 @@ extern "C" {
 // OVERFLOW: text longer than WRITE_MAX_LEN - 1 is silently truncated.
 #define WRITE_MAX_LEN 256
 
+// Maximum length, in characters, of the device network hostname set by
+// `sethostname` (the name answered over mDNS as `<hostname>.local` and given to
+// DHCP). Excludes the `.local` suffix, which mDNS appends. 32 is comfortably
+// within the 63-character DNS label limit.
+//
+// OVERFLOW: `wifi.sethostname` rejects a name longer than HOSTNAME_MAX (or one
+// that is empty or contains anything but letters, digits, and interior hyphens)
+// with ERR_DOESNT_LIKE_INPUT.
+#define HOSTNAME_MAX 32
+
+// HTTP server (core/httpd.c) buffer caps. The pump keeps one lazily-allocated
+// request buffer, chosen at runtime like the client's transfer buffer:
+//   - HTTPD_MAX_BODY (SRAM fallback): body cap when no aux/PSRAM region backs
+//     the buffer (e.g. the Pico 2 W).
+//   - HTTPD_MAX_BODY_PSRAM: body cap when an aux region is available.
+//   - HTTPD_MAX_HEADERS: cap on the request header block (request line plus
+//     header lines, up to the blank line).
+//
+// OVERFLOW: a header block over HTTPD_MAX_HEADERS auto-responds `431`. A body
+// whose declared Content-Length exceeds the active body cap is not an error: the
+// request fires with the body left unread, `http.body` errors, and
+// `http.savebody` streams the bytes straight to a file (M5).
+#define HTTPD_MAX_HEADERS 1024
+#define HTTPD_MAX_BODY 4096
+#define HTTPD_MAX_BODY_PSRAM (64 * 1024)
+
+// Chunk buffer size for streaming files to/from a connection (http.respondfile /
+// http.savebody). A stack buffer, so kept modest; bytes move file <-> socket in
+// chunks of this size.
+#define HTTPD_CHUNK_MAX 512
+
+// Longest percent-decoded request path the pump records for `http.path`. A
+// longer target auto-responds `414`.
+#define HTTPD_PATH_MAX 512
+
+// Longest request method the pump records for `http.method` (GET, DELETE, ...).
+#define HTTPD_METHOD_MAX 16
+
+// Pump timing. HTTPD_POLL_MS budgets the pump at the demon poll sites (like
+// DEMON_POLL_MS). HTTPD_STALL_MS is how long a half-sent request may stall
+// mid-parse before the pump auto-responds `408`. HTTPD_RESPOND_MS is how long a
+// fully-parsed request may go unanswered (no handler, or a handler that forgot
+// `http.respond`) before the pump auto-responds `503` and closes. Both timers
+// pause while frozen.
+#define HTTPD_POLL_MS 20
+#define HTTPD_STALL_MS 5000
+#define HTTPD_RESPOND_MS 10000
+
+// Largest HTML fragment `http.element` builds in one call (a stack buffer). A
+// single classroom element is far smaller; big pages are assembled by joining
+// several elements with `word`.
+//
+// OVERFLOW: an element whose markup would exceed this errors with
+// ERR_FILE_TOO_BIG rather than truncating.
+#define HTTPD_ELEMENT_MAX 1024
+
 #ifdef __cplusplus
 }
 #endif

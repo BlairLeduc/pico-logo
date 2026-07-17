@@ -15,6 +15,7 @@
 
 #include "core/demons.h"
 #include "core/error.h"
+#include "core/httpd.h"
 #include "core/eval.h"
 #include "core/frame_sync.h"
 #include "core/lexer.h"
@@ -251,6 +252,7 @@ static void repl_restore_refresh(ReplState *state)
     }
     frame_sync_reset();
     demons_reset();
+    httpd_reset();
 }
 
 // Handle a single line evaluation

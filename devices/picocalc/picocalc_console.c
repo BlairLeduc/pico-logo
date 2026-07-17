@@ -7,7 +7,11 @@
 
 #include "picocalc_console.h"
 #include "core/demons.h"
+#include "core/error.h"
+#include "core/httpd.h"
 #include "core/limits.h"
+#include "core/primitives.h"
+#include "devices/io.h"
 #include "costumes.h"
 #include "devices/console.h"
 #include "devices/stream.h"
@@ -1500,10 +1504,22 @@ static const LogoConsoleTurtle picocalc_turtle_ops = {
 // prompt clears the demons so it cannot storm.
 static void console_idle_poll(void)
 {
+    httpd_maybe_poll();
     Result r = demons_maybe_poll();
     if (r.status == RESULT_ERROR || r.status == RESULT_THROW)
     {
+        // Surface why the demon failed: without this the screen stays silent
+        // and a server handler that errors (e.g. http.savebody hitting a full
+        // disk) looks like an unexplained connection reset to the client.
+        LogoIO *io = primitives_get_io();
+        if (io && r.status == RESULT_ERROR)
+        {
+            logo_io_write_error_line(io, error_format(r));
+        }
+        // A demon action that errored at the prompt clears the demons (so it
+        // cannot storm) and the server with them (its handler demons are gone).
         demons_reset();
+        httpd_reset();
     }
     screen_gfx_flush();
 }

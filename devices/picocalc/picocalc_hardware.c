@@ -35,6 +35,7 @@
 #include <lwip/tcp.h>
 #include <lwip/altcp.h>
 #include <lwip/altcp_tcp.h>
+#include <lwip/apps/mdns.h>
 #ifdef LOGO_HAS_TLS
 #include <lwip/altcp_tls.h>
 #include <mbedtls/ssl.h>
@@ -46,6 +47,13 @@
 // WiFi state tracking
 static bool wifi_initialized = false;
 static char current_ssid[33] = {0};
+
+// Network name for mDNS (`<hostname>.local`) and DHCP. Core owns the canonical
+// value and pushes it via network_set_hostname; this copy is what the netif and
+// mDNS responder are configured with. Defaults to "picologo".
+static char current_hostname[33] = "picologo";
+static bool mdns_initialized = false;  // mdns_resp_init() called once
+static bool mdns_active = false;       // responder added to the netif
 
 // Scan results storage
 #define MAX_SCAN_RESULTS 20
@@ -374,6 +382,71 @@ static bool picocalc_wifi_is_connected(void)
     return link_status == CYW43_LINK_JOIN;
 }
 
+// Apply current_hostname to the netif (for DHCP) and (re)start the mDNS
+// responder so the device answers `<hostname>.local`. Called once the interface
+// is up (from wifi.connect) and again on rename; a no-op if there is no netif.
+static void mdns_start(void)
+{
+    struct netif *netif = netif_default;
+    if (netif == NULL)
+    {
+        return;
+    }
+
+    cyw43_arch_lwip_begin();
+    // netif_set_hostname stores the pointer, not a copy; current_hostname is
+    // static so it stays valid, and updating it in place updates DHCP too.
+    netif_set_hostname(netif, current_hostname);
+    if (!mdns_initialized)
+    {
+        mdns_resp_init();
+        mdns_initialized = true;
+    }
+    if (mdns_active)
+    {
+        mdns_resp_rename_netif(netif, current_hostname);
+    }
+    else if (mdns_resp_add_netif(netif, current_hostname) == ERR_OK)
+    {
+        mdns_active = true;
+    }
+    cyw43_arch_lwip_end();
+}
+
+// Stop answering mDNS queries (on wifi.disconnect).
+static void mdns_stop(void)
+{
+    if (!mdns_active)
+    {
+        return;
+    }
+    struct netif *netif = netif_default;
+    cyw43_arch_lwip_begin();
+    if (netif != NULL)
+    {
+        mdns_resp_remove_netif(netif);
+    }
+    cyw43_arch_lwip_end();
+    mdns_active = false;
+}
+
+// Set the device's network name (mDNS + DHCP). Takes effect immediately when the
+// interface is up, otherwise at the next wifi.connect.
+static void picocalc_network_set_hostname(const char *name)
+{
+    if (name == NULL)
+    {
+        return;
+    }
+    strncpy(current_hostname, name, sizeof(current_hostname) - 1);
+    current_hostname[sizeof(current_hostname) - 1] = '\0';
+
+    if (wifi_initialized && picocalc_wifi_is_connected())
+    {
+        mdns_start();
+    }
+}
+
 static bool picocalc_wifi_connect(const char *ssid, const char *password)
 {
     if (!ensure_wifi_initialized())
@@ -404,6 +477,10 @@ static bool picocalc_wifi_connect(const char *ssid, const char *password)
         IP_ADDR4(&dns_fallback, 1, 1, 1, 1); // Cloudflare 1.1.1.1
         dns_setserver(1, &dns_fallback);
 
+        // Findable on the LAN as `<hostname>.local` as soon as WiFi is up,
+        // independent of whether anything is being served.
+        mdns_start();
+
         return true;
     }
 
@@ -417,6 +494,7 @@ static void picocalc_wifi_disconnect(void)
         return;
     }
     
+    mdns_stop();
     cyw43_wifi_leave(&cyw43_state, CYW43_ITF_STA);
     current_ssid[0] = '\0';
 }
@@ -938,8 +1016,11 @@ static bool picocalc_network_ntp(const char *server, float timezone_offset)
 // TCP Client implementation using lwIP
 // ============================================================================
 
-// TCP connection buffer size
-#define TCP_RECV_BUFFER_SIZE 2048
+// TCP connection receive-ring size. Must exceed the advertised TCP window
+// (TCP_WND) so a full window's worth of coalesced data always fits, letting the
+// receive callback apply backpressure (refuse-when-full) without ever
+// deadlocking on a segment larger than the ring.
+#define TCP_RECV_BUFFER_SIZE 4096
 
 // TCP connection state structure
 typedef struct {
@@ -952,6 +1033,8 @@ typedef struct {
     volatile err_t connect_error;    // Error from connect callback
     volatile bool closed;            // Connection closed by remote
     volatile err_t last_error;       // Last error code
+    bool from_listener;              // Owned by a listener (server conn): close detaches, does not free
+    bool wrote_data;                 // A response was written (graceful close) vs. abandoned (abort)
 } TcpClientState;
 
 // Forward declarations for callbacks
@@ -1022,28 +1105,36 @@ static err_t tcp_client_recv_cb(void *arg, struct altcp_pcb *tpcb, struct pbuf *
         return err;
     }
     
-    // Copy data to circular buffer
+    (void)tpcb;
     cyw43_arch_lwip_check();
-    
+
+    // Flow control: the advertised receive window is only reopened as the
+    // application drains the ring (altcp_recved is deferred to the read path),
+    // so lwIP never delivers more than the ring can hold and a fast sender is
+    // throttled instead of overrunning us. The ring is sized above TCP_WND, so
+    // a delivery always fits; the ERR_MEM guard is a safety net that makes lwIP
+    // keep the data (re-delivered later) rather than us dropping it.
+    int used = (state->recv_head - state->recv_tail + TCP_RECV_BUFFER_SIZE) % TCP_RECV_BUFFER_SIZE;
+    int free_space = (TCP_RECV_BUFFER_SIZE - 1) - used;
+    if ((int)p->tot_len > free_space)
+    {
+        return ERR_MEM;
+    }
+
     for (struct pbuf *q = p; q != NULL; q = q->next)
     {
         uint8_t *data = (uint8_t *)q->payload;
         for (u16_t i = 0; i < q->len; i++)
         {
-            int next_head = (state->recv_head + 1) % TCP_RECV_BUFFER_SIZE;
-            if (next_head != state->recv_tail)
-            {
-                state->recv_buffer[state->recv_head] = data[i];
-                state->recv_head = next_head;
-            }
-            // else: buffer full, discard data
+            state->recv_buffer[state->recv_head] = data[i];
+            state->recv_head = (state->recv_head + 1) % TCP_RECV_BUFFER_SIZE;
         }
     }
-    
-    // Acknowledge received data
-    altcp_recved(tpcb, p->tot_len);
+
+    // NB: do NOT altcp_recved() here -- the read path reopens the window as it
+    // consumes bytes, which is what keeps the window <= ring free space.
     pbuf_free(p);
-    
+
     return ERR_OK;
 }
 
@@ -1324,11 +1415,11 @@ static void picocalc_network_tcp_close(void *connection)
     }
     
     TcpClientState *state = (TcpClientState *)connection;
-    
+
     if (state->pcb)
     {
         cyw43_arch_lwip_begin();
-        
+
         // Clear callbacks first
         altcp_arg(state->pcb, NULL);
         altcp_recv(state->pcb, NULL);
@@ -1336,17 +1427,36 @@ static void picocalc_network_tcp_close(void *connection)
         altcp_poll(state->pcb, NULL, 0);
         altcp_sent(state->pcb, NULL);
 
-        // Attempt graceful close
-        err_t err = altcp_close(state->pcb);
-        if (err != ERR_OK)
+        // A server connection that was abandoned without a response (e.g. an
+        // upload that failed or was torn down mid-transfer) is aborted with a
+        // RST: this frees the PCB and its local port immediately, with no
+        // lingering TIME_WAIT that would make a re-`http.listen` on the same
+        // port fail. A connection that did send its response is closed
+        // gracefully so the response is flushed first.
+        if (state->from_listener && !state->wrote_data)
         {
-            // If close fails, abort the connection
             altcp_abort(state->pcb);
         }
-        
+        else if (altcp_close(state->pcb) != ERR_OK)
+        {
+            altcp_abort(state->pcb);
+        }
+
+        // Clear the PCB inside the lock so the listener's accept callback never
+        // sees a stale pointer for a just-closed slot.
+        state->pcb = NULL;
         cyw43_arch_lwip_end();
     }
-    
+
+    // A listener-owned server connection is a reusable slot: detach the PCB but
+    // keep the struct so the listener's accept callback can reuse it for the
+    // next connection. The listener frees it in unlisten.
+    if (state->from_listener)
+    {
+        state->closed = true;
+        return;
+    }
+
     free(state);
 }
 
@@ -1411,7 +1521,21 @@ static int picocalc_network_tcp_read(void *connection, char *buffer, int count, 
         buffer[bytes_read++] = state->recv_buffer[state->recv_tail];
         state->recv_tail = (state->recv_tail + 1) % TCP_RECV_BUFFER_SIZE;
     }
-    
+
+    // Reopen the receive window by what we just consumed (the receive callback
+    // deferred this), so the sender may send more -- continuous flow control
+    // that tracks how fast the application drains. Re-check the PCB inside the
+    // lock: a background error callback could have freed it.
+    if (bytes_read > 0)
+    {
+        cyw43_arch_lwip_begin();
+        if (state->pcb)
+        {
+            altcp_recved(state->pcb, (u16_t)bytes_read);
+        }
+        cyw43_arch_lwip_end();
+    }
+
     return bytes_read;
 }
 
@@ -1489,7 +1613,10 @@ static int picocalc_network_tcp_write(void *connection, const char *data, int co
         
         total_written += to_write;
     }
-    
+
+    // Mark that a response was written so a server connection is closed
+    // gracefully (flushing the response) rather than aborted.
+    state->wrote_data = true;
     return total_written;
 }
 
@@ -1508,6 +1635,195 @@ static bool picocalc_network_tcp_can_read(void *connection)
     
     // Check if data is available in the buffer
     return state->recv_head != state->recv_tail;
+}
+
+// ----------------------------------------------------------------------------
+// TCP server (listener) support
+// ----------------------------------------------------------------------------
+
+// A listener owns the listening PCB and one pre-allocated connection slot
+// (TCP_LISTEN_BACKLOG is 1, one connection at a time). The slot is a
+// TcpClientState like the client path uses, so read/write/close are unchanged;
+// it is allocated once in listen (never in the lwIP callback) and reused across
+// connections until unlisten frees it.
+typedef struct {
+    struct altcp_pcb *listen_pcb;  // The listening PCB
+    TcpClientState *conn;          // Pre-allocated connection slot (backlog 1)
+    volatile bool ready;           // conn is wired to an accepted PCB, awaiting a claim
+    ip_addr_t remote;              // Remote address of the accepted connection
+} TcpListenerState;
+
+// Accept callback: attach the accepted PCB to the pre-allocated slot and wire
+// its receive callback immediately, so request bytes that arrive before the
+// pump claims the connection are buffered instead of dropped. (lwIP frees
+// inbound data delivered to a PCB whose recv callback is still NULL, which would
+// otherwise lose the whole request and leave the client waiting for a reply.)
+static err_t tcp_listener_accept_cb(void *arg, struct altcp_pcb *newpcb, err_t err)
+{
+    TcpListenerState *ls = (TcpListenerState *)arg;
+
+    if (err != ERR_OK || newpcb == NULL)
+    {
+        return ERR_VAL;
+    }
+    // Backlog is one: refuse a new connection while the slot is occupied.
+    if (ls == NULL || ls->conn == NULL || ls->conn->pcb != NULL)
+    {
+        altcp_abort(newpcb);
+        return ERR_ABRT;
+    }
+
+    TcpClientState *st = ls->conn;
+    st->recv_head = 0;
+    st->recv_tail = 0;
+    st->connected = true;
+    st->connect_complete = true;
+    st->connect_error = ERR_OK;
+    st->closed = false;
+    st->last_error = ERR_OK;
+    st->wrote_data = false;
+    st->pcb = newpcb;
+    altcp_arg(newpcb, st);
+    altcp_recv(newpcb, tcp_client_recv_cb);
+    altcp_err(newpcb, tcp_client_err_cb);
+    altcp_poll(newpcb, tcp_client_poll_cb, 10);
+
+    ip_addr_t *remote = altcp_get_ip(newpcb, 0);  // 0 => remote address
+    if (remote != NULL)
+    {
+        ip_addr_copy(ls->remote, *remote);
+    }
+    else
+    {
+        ip_addr_set_zero(&ls->remote);
+    }
+    ls->ready = true;
+    return ERR_OK;
+}
+
+static void *picocalc_network_tcp_listen(uint16_t port)
+{
+    if (!ensure_wifi_initialized() || !picocalc_wifi_is_connected())
+    {
+        return NULL;
+    }
+    if (port == 0)
+    {
+        return NULL;
+    }
+
+    TcpListenerState *ls = (TcpListenerState *)calloc(1, sizeof(TcpListenerState));
+    if (!ls)
+    {
+        return NULL;
+    }
+    // Allocate the connection slot up front (in the foreground; never in the
+    // lwIP accept callback, where malloc would be unsafe).
+    ls->conn = tcp_state_alloc();
+    if (!ls->conn)
+    {
+        free(ls);
+        return NULL;
+    }
+    ls->conn->from_listener = true;
+
+    cyw43_arch_lwip_begin();
+    struct altcp_pcb *pcb = altcp_tcp_new_ip_type(IPADDR_TYPE_V4);
+    if (!pcb)
+    {
+        cyw43_arch_lwip_end();
+        free(ls->conn);
+        free(ls);
+        return NULL;
+    }
+    if (altcp_bind(pcb, IP_ANY_TYPE, port) != ERR_OK)
+    {
+        altcp_abort(pcb);
+        cyw43_arch_lwip_end();
+        free(ls->conn);
+        free(ls);
+        return NULL;
+    }
+    // altcp_listen returns the (possibly reallocated) listening PCB; the passed
+    // PCB is consumed on success and must not be touched afterwards.
+    struct altcp_pcb *listen_pcb = altcp_listen(pcb);
+    if (!listen_pcb)
+    {
+        altcp_abort(pcb);
+        cyw43_arch_lwip_end();
+        free(ls->conn);
+        free(ls);
+        return NULL;
+    }
+    ls->listen_pcb = listen_pcb;
+    altcp_arg(listen_pcb, ls);
+    altcp_accept(listen_pcb, tcp_listener_accept_cb);
+    cyw43_arch_lwip_end();
+
+    return ls;
+}
+
+static void picocalc_network_tcp_unlisten(void *listener)
+{
+    TcpListenerState *ls = (TcpListenerState *)listener;
+    if (!ls)
+    {
+        return;
+    }
+
+    cyw43_arch_lwip_begin();
+    if (ls->conn && ls->conn->pcb)
+    {
+        altcp_arg(ls->conn->pcb, NULL);
+        altcp_recv(ls->conn->pcb, NULL);
+        altcp_err(ls->conn->pcb, NULL);
+        altcp_poll(ls->conn->pcb, NULL, 0);
+        if (altcp_close(ls->conn->pcb) != ERR_OK)
+        {
+            altcp_abort(ls->conn->pcb);
+        }
+        ls->conn->pcb = NULL;
+    }
+    if (ls->listen_pcb)
+    {
+        altcp_arg(ls->listen_pcb, NULL);
+        altcp_accept(ls->listen_pcb, NULL);
+        altcp_close(ls->listen_pcb);
+    }
+    cyw43_arch_lwip_end();
+
+    free(ls->conn);
+    free(ls);
+}
+
+static void *picocalc_network_tcp_accept(void *listener, char *remote_ip, size_t ip_size)
+{
+    TcpListenerState *ls = (TcpListenerState *)listener;
+    if (!ls)
+    {
+        return NULL;
+    }
+
+    // Drive lwIP so a completed handshake turns into an accept callback.
+    cyw43_arch_poll();
+    sys_check_timeouts();
+
+    // The accept callback has already wired the slot's receive callback; nothing
+    // to do here but hand it over once a connection is ready.
+    if (!ls->ready)
+    {
+        return NULL;
+    }
+    ls->ready = false;
+
+    if (remote_ip && ip_size > 0)
+    {
+        const char *s = ipaddr_ntoa(&ls->remote);
+        strncpy(remote_ip, s ? s : "", ip_size - 1);
+        remote_ip[ip_size - 1] = '\0';
+    }
+
+    return ls->conn;
 }
 
 #endif // LOGO_HAS_WIFI
@@ -1538,6 +1854,7 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .wifi_get_ssid = picocalc_wifi_get_ssid,
     .wifi_get_mac = picocalc_wifi_get_mac,
     .wifi_scan = picocalc_wifi_scan,
+    .network_set_hostname = picocalc_network_set_hostname,
     .network_ping = picocalc_network_ping,
     .network_resolve = picocalc_network_resolve,
     .network_ntp = picocalc_network_ntp,
@@ -1551,6 +1868,9 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .network_tcp_read = picocalc_network_tcp_read,
     .network_tcp_write = picocalc_network_tcp_write,
     .network_tcp_can_read = picocalc_network_tcp_can_read,
+    .network_tcp_listen = picocalc_network_tcp_listen,
+    .network_tcp_unlisten = picocalc_network_tcp_unlisten,
+    .network_tcp_accept = picocalc_network_tcp_accept,
 #else
     .wifi_is_connected = NULL,
     .wifi_connect = NULL,
@@ -1559,6 +1879,7 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .wifi_get_ssid = NULL,
     .wifi_get_mac = NULL,
     .wifi_scan = NULL,
+    .network_set_hostname = NULL,
     .network_ping = NULL,
     .network_resolve = NULL,
     .network_ntp = NULL,
@@ -1568,6 +1889,9 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .network_tcp_read = NULL,
     .network_tcp_write = NULL,
     .network_tcp_can_read = NULL,
+    .network_tcp_listen = NULL,
+    .network_tcp_unlisten = NULL,
+    .network_tcp_accept = NULL,
 #endif
     .get_date = picocalc_get_date,
     .get_time = picocalc_get_time,

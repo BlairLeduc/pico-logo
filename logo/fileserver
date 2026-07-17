@@ -1,0 +1,60 @@
+; File Server -- browse and transfer files over WiFi.
+;
+; On a WiFi board (Pico 2 W or Pico Plus 2 W):
+;   wifi.connect "your-ssid "your-password
+;   load "fileserver.logo
+;   fileserver
+; then, from a computer or phone on the same network:
+;   * open  http://picologo.local/  in a browser to list and download files
+;   * curl  http://picologo.local/notes.txt -o notes.txt   to download a file
+;   * curl -T game http://picologo.local/game              to upload a file
+;
+; See docs/http-server-design.md (P7). A GET serves a file, or the index
+; page listing every file when the path is "/"; a PUT stores the uploaded
+; body. Files stream in small pieces, so they may be any size and binary.
+
+; <li><a href=/NAME>NAME</a></li> -- a download link for one file.
+to fs.entry :name
+  op (http.element "li (http.element "a :name "href word "/ :name))
+end
+
+; An HTML page listing every file in the current directory as a link.
+to fs.index
+  op (word http.element "h1 [Pico Logo files] http.element "ul map [[f] fs.entry :f] files)
+end
+
+; Serve one file, or a 404 page when it is missing.
+to fs.serve :path
+  ifelse file? :path [http.respondfile 200 :path] [http.respond 404 [not found]]
+end
+
+; Answer a GET: the index at "/", otherwise the named file.
+to fs.get
+  ifelse equal? http.path "/ [(http.respond 200 fs.index "Content-Type "text/html)] [fs.serve http.path]
+end
+
+; Store an uploaded body, then confirm. Uploads are unauthenticated -- anyone
+; on the network can write files. To restrict who may upload, guard with a
+; shared secret by adding, as the first line of this procedure:
+;   if not equal? http.reqheader "X-Key "mysecret [http.respond 403 [no] stop]
+; and send  -H "X-Key: mysecret"  with the upload.
+to fs.put
+  http.savebody http.path
+  http.respond 201 [saved]
+end
+
+; Route each request by method.
+to fs.handle
+  if equal? http.method "GET [fs.get stop]
+  if equal? http.method "PUT [fs.put stop]
+  http.respond 405 [method not allowed]
+end
+
+; Start serving. Connect to WiFi first, then run `fileserver`.
+to fileserver
+  if not wifi? [pr [Connect to WiFi first, e.g. wifi.connect "ssid "password] stop]
+  http.listen 80
+  when [http.request?] [fs.handle]
+  pr [File server is running.]
+  pr sentence [Open] (word "http:// wifi.hostname ".local "/)
+end
