@@ -11,7 +11,8 @@ Companion documents (everything in `docs/`):
 - [`launch-design.md`](launch-design.md) — P6 `launch` background processes
   (design complete, implementation not started).
 - [`http-server-design.md`](http-server-design.md) — P7 HTTP server + mDNS
-  (design complete, implementation not started).
+  (implemented, M0–M5, merged to `main` via #108; `curl -T` hardware
+  validation pending).
 - [`sound-design.md`](sound-design.md) — P8 stereo PSG synthesizer (design
   complete, implementation may begin).
 - [`littlefs-filesystem-design.md`](littlefs-filesystem-design.md) — internal
@@ -53,7 +54,7 @@ Companion documents (everything in `docs/`):
 | Item | Status | Notes |
 |---|---|---|
 | Long words via blobs on PSRAM boards | done | Landed 2026-07-12; `word` builds >255-char results via `mem_word` (blob on PSRAM boards), refuses without PSRAM |
-| `play [notes]` background melody | in progress | Absorbed into the P8 sound design — a background sequencer over real voices, not a melody of `toot`s: [P8](#p8--sound-stereo-psg-synthesizer-design-first) |
+| `play [notes]` background melody | todo | Absorbed into the P8 sound design — a background sequencer over real voices, not a melody of `toot`s. No code landed yet ([core/primitives_hardware.c](../core/primitives_hardware.c) has only `toot`): [P8](#p8--sound-stereo-psg-synthesizer-design-first) |
 | Help discoverability | done | [P4](#p4--arc-and-help-discoverability): keyword search fallback in `help`, `(help)` topic listing, "did you mean" on unknown names |
 
 ### Language: big bets
@@ -62,7 +63,7 @@ Companion documents (everything in `docs/`):
 |---|---|---|
 | Multiple turtles/sprites (`tell`/`ask`/`each`), `touching?`, `when` events | done | All milestones landed (M0–M3); validated end-to-end by the Space Invaders game (#101/#102). `launch` processes are the P6 design below |
 | `launch [instrs]` background processes | todo | Design done (gate closed 2026-07-12), implementation not started: [P6](#p6--launch-background-processes-design-first). `broadcast` deferred per Q3 |
-| HTTP server (`http.listen`, `when [http.request?]`, `http.respond`, file transfer) | in progress | M0–M5 implemented on `p7-http-server` (2026-07-16): mDNS + `wifi.hostname`/`wifi.sethostname`, TCP server ops, demon-driven pump/parser, handler surface + `http.element`, `webturtle` example, file transfer. Browser + mDNS hardware-validated; `curl -T` upload validation pending. Design: [P7](#p7--http-server-design-complete-implementation-not-started) |
+| HTTP server (`http.listen`, `when [http.request?]`, `http.respond`, file transfer) | done | M0–M5 implemented, merged to `main` (#108, 2026-07-16): mDNS + `wifi.hostname`/`wifi.sethostname`, TCP server ops, demon-driven pump/parser, handler surface + `http.element`, `webturtle` example, file transfer. Browser + mDNS hardware-validated; `curl -T` upload validation pending. Design: [P7](#p7--http-server-implemented) |
 | Arrays (`array`/`setitem`) | deferred | O(1) indexing; needs a new object kind (likely blob-backed). Wait for demonstrated need |
 | Atom reclamation / `erall` soft reset | deferred | See `memory-reclamation-design.md` |
 
@@ -240,51 +241,37 @@ size is per-turtle state beside the pen colour/state, reached through new
   1 px reverse pen; `pencap` writes `pentest.bmp` via `savepic` for a
   pixel-exact check on a computer.
 
-### P5 — Multi-sprite turtles with collision (design first)
+### P5 — Multi-sprite turtles with collision (implemented)
 
 **Goal:** turn the PicoCalc into a game machine: `tell`/`ask`/`each`,
-`touching?`, and Atari-style `when` demons. **Gate: a design doc PR before any
-implementation.**
+`touching?`, and Atari-style `when` demons. **Design doc:**
+[`multi-sprite-design.md`](multi-sprite-design.md) (v2, gate closed
+2026-07-04).
 
-**Design doc:** [`multi-sprite-design.md`](multi-sprite-design.md) (draft v2
-for review). Scope grew twice:
+- **M0 — display pipeline rework**, a prerequisite the design surfaced:
+  tile dirty tracking (`dirty_tiles.c`), DMA-pipelined blit
+  (`lcd_blit_begin/row/end`), scanline sprite compositor, and
+  `setrefresh`/`refresh`/`refreshmode` (auto restored on `cs`/error).
+- **M1 — sprite model + addressing:** 8 turtles addressed via `select`
+  (sprite id = turtle number, lower on top), `tell`/`ask`/`each`/`who`
+  with command fan-out and lowest-active queries, a colour costume pool
+  (`costumes.c`, 8 KB compact-on-free), `snapsh`/`stamp`,
+  `setrot`/`setmag`. Single-turtle programs are unaffected.
+- **M2 — sensing:** `touching?` (pixel-true mask AND, wrap-fold,
+  both-visible), `over?`/`colourunder` (canvas beneath the mask, sprites
+  excluded), `distance` (Euclidean) — over new device ops
+  (`get_raster`/`canvas_point`/`sense_metrics`); host degrades to
+  `false`/`0` (no graphics device).
+- **M3 — autonomy + events** (`core/demons.c`): edge-triggered `when`
+  demons (`MAX_DEMONS` 8, budgeted poll), actions run in a fresh nested
+  evaluator with re-entrancy suppression; `freeze`/`thaw`;
+  `setspeed`/`speed`/`setanim`. `cs` and toplevel error-unwind clear
+  demons and stop motion/animation. `launch`-as-process was designed for
+  but deferred to the P6 gate.
 
-- The LCD update pipeline: the blocking CPU-paced blit and full-width
-  row-band dirty tracking cannot afford eight moving sprites, so M0 of the
-  design reworks the display path (tile dirty tracking, DMA-pipelined blit,
-  scanline sprite compositor, and a `setrefresh "auto | "manual` + `refresh`
-  policy) before any sprite work.
-- A survey of period/modern multi-turtle Logos (TI Logo, Atari Logo, TRS-80
-  Color Logo, LogoWriter/MicroWorlds, StarLogo/NetLogo, Scratch) from primary
-  sources, which reshaped the sprite model: full-colour variable-size
-  costumes (pool-backed, PSRAM tier), rotation styles + scaling, `setspeed`
-  autonomous motion with `freeze`/`thaw`, costume-list animation,
-  `stamp`/`snapsh`, `over?`/`colourunder`/`distance` sensing, and
-  expression-based `when` demons. Turtle-as-process (`launch`) is
-  explicitly designed-for but deferred to a P6 gate.
-
-The design doc must settle:
-- **Turtle model:** N turtles (SRAM budget suggests 8–16), per-turtle state
-  (pos, heading, pen, shape, visibility, colour) — sized against the ~10%
-  SRAM headroom; `tell [0 1]` / `ask 2 [...]` / `each [...]` / `who`
-  semantics; how existing single-turtle primitives implicitly address the
-  active set.
-- **Rendering:** the existing shape system (`getsh`/`putsh`/`setsh`) as sprite
-  bitmaps; investigate the PicoCalc LCD driver's capability for dirty-rect
-  compositing vs full-line redraw; worst-case frame cost with all sprites
-  moving.
-- **Collision:** `touching? t1 t2` — bounding-box first, optional pixel
-  overlap; cost per check on a 150 MHz M33.
-- **Events:** `when [condition] [action]` demons polled at the top of
-  `eval_instruction` (the interrupt/pause checks already establish this hook
-  point); re-entrancy rules (actions run like mini `run` lists; no nesting of
-  demon firing); how demons interact with TCO and `catch`/`throw`.
-- **Phasing:** likely M1 multiple turtles + tell/ask/each, M2 `touching?`,
-  M3 `when` demons — each independently shippable.
-
-**Risks to answer in the design:** SRAM for sprite backing store, evaluator
-hook complexity (the trampoline's re-entrancy contract), and whether the host
-device (no graphics) degrades cleanly.
+**Validated end-to-end** by the Space Invaders (#101/#102) and Galaxian
+game ports — real games exercising tell/ask/each, collision, and demons
+together, not just unit tests.
 
 ### P6 — `launch` background processes (design first)
 
@@ -312,7 +299,7 @@ Implementation may begin at M0.
   M1 table + scheduler + lifetime → M2 polish/broadcast → M3 hardware
   validation + game retrofit.
 
-### P7 — HTTP server (design complete, implementation not started)
+### P7 — HTTP server (implemented)
 
 **Goal:** serve HTTP from Logo — browser-driven turtle control and cable-free
 file transfer (`curl -T`) on both WiFi boards. **Gate closed:**
@@ -346,8 +333,9 @@ above).
   `http.listen` — the device is findable on the LAN as soon as WiFi is
   up; default hostname `picologo`; no persistence across reboots — a
   custom name goes in the user's startup file.
-- **Not started by user decision (2026-07-10):** another design is being
-  worked first (the P8 sound design).
+- **Implemented and merged to `main` via #108 (2026-07-16).** Browser +
+  mDNS hardware-validated; `curl -T` large-upload validation on real
+  hardware still pending.
 
 ### P8 — Sound: stereo PSG synthesizer (design first)
 

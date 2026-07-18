@@ -1,10 +1,10 @@
-# P5 — Multi-sprite turtles and the display pipeline (design)
+# P5 — Multi-sprite turtles and the display pipeline (implemented)
 
-Status: **draft v2 for review** — this is the design gate for
-[P5 in the improvements roadmap](improvements-roadmap.md#p5--multi-sprite-turtles-with-collision-design-first).
-No implementation until this is agreed. Open questions and behaviour
-changes in §12 were resolved with the user on 2026-07-04; no open
-questions remain.
+Status: **v2, implemented** — the design gate for
+[P5 in the improvements roadmap](improvements-roadmap.md#p5--multi-sprite-turtles-with-collision-implemented)
+closed 2026-07-04 (open questions and behaviour changes in §12 resolved
+with the user) and M0–M3 have since shipped, validated end-to-end by the
+Space Invaders and Galaxian game ports.
 
 v2 adds a survey of period and modern multi-turtle Logos (§3) and redesigns
 the sprite model around it (§4–§8): full-colour variable-size costumes,
