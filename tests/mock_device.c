@@ -135,6 +135,7 @@ static bool mock_turtle_move(float distance)
             line->x2 = new_x;
             line->y2 = new_y;
             line->colour = mock_state.turtle.pen_colour;
+            line->pen_size = mock_state.turtle.pen_size;
         }
     }
     
@@ -156,6 +157,7 @@ static void turtle_slot_sync(void)
     t->pen_colour = mock_state.turtle.pen_colour;
     t->visible = mock_state.turtle.visible;
     t->shape = mock_state.shape.current_shape;
+    t->pen_size = mock_state.turtle.pen_size;
 }
 
 static void mock_turtle_select(uint8_t n)
@@ -175,6 +177,7 @@ static void mock_turtle_select(uint8_t n)
     mock_state.turtle.heading = t->heading;
     mock_state.turtle.pen_state = t->pen_state;
     mock_state.turtle.pen_colour = t->pen_colour;
+    mock_state.turtle.pen_size = t->pen_size;
     mock_state.turtle.visible = t->visible;
     mock_state.shape.current_shape = t->shape;
 }
@@ -192,6 +195,7 @@ static void mock_turtle_home(void)
             line->x2 = 0.0f;
             line->y2 = 0.0f;
             line->colour = mock_state.turtle.pen_colour;
+            line->pen_size = mock_state.turtle.pen_size;
         }
     }
     
@@ -239,6 +243,7 @@ static bool mock_turtle_set_position(float x, float y)
             line->x2 = new_x;
             line->y2 = new_y;
             line->colour = mock_state.turtle.pen_colour;
+            line->pen_size = mock_state.turtle.pen_size;
         }
     }
 
@@ -308,6 +313,16 @@ static void mock_turtle_set_pen_state(LogoPen pen)
 static LogoPen mock_turtle_get_pen_state(void)
 {
     return mock_state.turtle.pen_state;
+}
+
+static void mock_turtle_set_pen_size(uint8_t size)
+{
+    mock_state.turtle.pen_size = size;
+}
+
+static uint8_t mock_turtle_get_pen_size(void)
+{
+    return mock_state.turtle.pen_size;
 }
 
 static void mock_turtle_set_visible(bool visible)
@@ -630,6 +645,8 @@ static const LogoConsoleTurtle mock_turtle_ops = {
     .get_bg_colour = mock_turtle_get_bg_colour,
     .set_pen_state = mock_turtle_set_pen_state,
     .get_pen_state = mock_turtle_get_pen_state,
+    .set_pen_size = mock_turtle_set_pen_size,
+    .get_pen_size = mock_turtle_get_pen_size,
     .set_visible = mock_turtle_set_visible,
     .get_visible = mock_turtle_get_visible,
     .dot = mock_turtle_dot,
@@ -1048,6 +1065,7 @@ void mock_device_reset(void)
     mock_state.turtle.heading = 0.0f;  // North
     mock_state.turtle.pen_state = LOGO_PEN_DOWN;
     mock_state.turtle.pen_colour = 254;  // Default color (white)
+    mock_state.turtle.pen_size = 1;    // Default single-pixel pen
     mock_state.turtle.bg_colour = 0;   // Black background
     mock_state.turtle.visible = true;
     mock_state.turtle.boundary_mode = MOCK_BOUNDARY_WRAP;  // Default is wrap
@@ -1063,6 +1081,7 @@ void mock_device_reset(void)
         mock_state.turtles[i].heading = 0.0f;
         mock_state.turtles[i].pen_state = LOGO_PEN_DOWN;
         mock_state.turtles[i].pen_colour = 254;
+        mock_state.turtles[i].pen_size = 1;
         mock_state.turtles[i].visible = (i == 0);
         mock_state.turtles[i].shape = 0;
         mock_state.turtles[i].rot_style = 0;  // LOGO_ROT_FIXED

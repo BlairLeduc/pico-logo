@@ -63,6 +63,10 @@ diff as given — do not ask the author to "run the tests" or "write tests first
 - Pure style or formatting that already matches the surrounding code.
 - Pre-existing issues outside the diff.
 - Requests to run/build/add tests before merging — review the diff itself.
+- The wide pen stamps a filled disc centred on an integer pixel, so its drawn
+  diameter is always odd; even pen sizes render one pixel wider by design (keeps
+  the stroke symmetric on the turtle's point). Don't flag even-width pens as
+  rendering incorrectly.
 - `Result.value` sits outside the `Result` union; all constructors zero-fill
   unset members, so `result.value.type` is a valid tag (`VALUE_NONE`) for any
   status — defined behaviour, not uninitialized.

@@ -7,6 +7,7 @@
 
 #include "test_scaffold.h"
 #include "mock_device.h"
+#include "core/limits.h"
 #include <math.h>
 #include <string.h>
 #include <stdio.h>
@@ -431,11 +432,73 @@ void test_pc_alias(void)
     TEST_ASSERT_TRUE(strstr(mock_device_get_output(), "5") != NULL);
 }
 
+void test_pensize_defaults_to_one(void)
+{
+    Result r = run_string("print pensize");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(strstr(mock_device_get_output(), "1") != NULL);
+
+    const MockDeviceState *state = mock_device_get_state();
+    TEST_ASSERT_EQUAL(1, state->turtle.pen_size);
+}
+
+void test_setpensize_sets_pen_size(void)
+{
+    Result r = run_string("setpensize 5");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    const MockDeviceState *state = mock_device_get_state();
+    TEST_ASSERT_EQUAL(5, state->turtle.pen_size);
+}
+
+void test_pensize_outputs_current_size(void)
+{
+    run_string("setpensize 7");
+    Result r = run_string("print pensize");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(strstr(mock_device_get_output(), "7") != NULL);
+}
+
+void test_setpensize_rounds_to_nearest_pixel(void)
+{
+    run_string("setpensize 3.6");
+    const MockDeviceState *state = mock_device_get_state();
+    TEST_ASSERT_EQUAL(4, state->turtle.pen_size);
+}
+
+void test_setpensize_clamps_to_maximum(void)
+{
+    run_string("setpensize 1000");
+    const MockDeviceState *state = mock_device_get_state();
+    TEST_ASSERT_EQUAL(MAX_PEN_SIZE, state->turtle.pen_size);
+}
+
+void test_setpensize_rejects_non_positive(void)
+{
+    Result r = run_string("setpensize 0");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+
+    r = run_string("setpensize -2");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_setpensize_records_on_drawn_line(void)
+{
+    run_string("setpensize 4");
+    run_string("pendown");
+    Result r = run_string("forward 20");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    TEST_ASSERT_EQUAL(1, mock_device_line_count());
+    const MockLine *line = mock_device_get_line(0);
+    TEST_ASSERT_EQUAL(4, line->pen_size);
+}
+
 void test_setbg_sets_background_color(void)
 {
     Result r = run_string("setbg 3");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
-    
+
     const MockDeviceState *state = mock_device_get_state();
     TEST_ASSERT_EQUAL(3, state->turtle.bg_colour);
 }
@@ -2270,6 +2333,13 @@ int main(void)
     RUN_TEST(test_setpencolor_alias);
     RUN_TEST(test_pencolor_outputs_pen_color);
     RUN_TEST(test_pc_alias);
+    RUN_TEST(test_pensize_defaults_to_one);
+    RUN_TEST(test_setpensize_sets_pen_size);
+    RUN_TEST(test_pensize_outputs_current_size);
+    RUN_TEST(test_setpensize_rounds_to_nearest_pixel);
+    RUN_TEST(test_setpensize_clamps_to_maximum);
+    RUN_TEST(test_setpensize_rejects_non_positive);
+    RUN_TEST(test_setpensize_records_on_drawn_line);
     RUN_TEST(test_setbg_sets_background_color);
     RUN_TEST(test_setbg_accepts_zero);
     RUN_TEST(test_setbg_accepts_254);

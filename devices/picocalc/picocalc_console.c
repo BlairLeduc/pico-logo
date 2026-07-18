@@ -51,6 +51,7 @@ typedef struct
     float angle;            // Heading in degrees (0 = north)
     uint8_t colour;         // Pen colour
     LogoPen pen_state;
+    uint8_t pen_size;       // Pen width in pixels (setpensize)
     bool visible;
     uint8_t shape;          // Current shape number (0-15)
     uint8_t mag;            // Magnification 1 or 2 (setmag)
@@ -100,6 +101,7 @@ static void turtles_init(void)
         t->angle = TURTLE_DEFAULT_ANGLE;
         t->colour = TURTLE_DEFAULT_COLOUR;
         t->pen_state = LOGO_PEN_DOWN;
+        t->pen_size = 1;
         t->visible = (i == 0) && TURTLE_DEFAULT_VISIBILITY;
         t->shape = 0;
         t->mag = 1;
@@ -746,15 +748,15 @@ static bool turtle_move(float distance)
     // Draw line if pen is down
     if (cur->pen_state == LOGO_PEN_DOWN)
     {
-        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, false);
+        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, false, cur->pen_size);
     }
     else if (cur->pen_state == LOGO_PEN_ERASE)
     {
-        screen_gfx_line(old_x, old_y, cur->x, cur->y, GFX_DEFAULT_BACKGROUND, false);
+        screen_gfx_line(old_x, old_y, cur->x, cur->y, GFX_DEFAULT_BACKGROUND, false, cur->pen_size);
     }
     else if (cur->pen_state == LOGO_PEN_REVERSE)
     {
-        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, true);
+        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, true, 1);
     }
     // else if LOGO_PEN_UP: do not draw anything
 
@@ -788,15 +790,15 @@ static void turtle_home(void)
     // Draw line if pen is down
     if (cur->pen_state == LOGO_PEN_DOWN)
     {
-        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, false);
+        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, false, cur->pen_size);
     }
     else if (cur->pen_state == LOGO_PEN_ERASE)
     {
-        screen_gfx_line(old_x, old_y, cur->x, cur->y, GFX_DEFAULT_BACKGROUND, false);
+        screen_gfx_line(old_x, old_y, cur->x, cur->y, GFX_DEFAULT_BACKGROUND, false, cur->pen_size);
     }
     else if (cur->pen_state == LOGO_PEN_REVERSE)
     {
-        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, true);
+        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, true, 1);
     }
     // else if LOGO_PEN_UP: do not draw anything
 
@@ -856,15 +858,15 @@ static bool turtle_set_position(float x, float y)
     // Draw line if pen is down
     if (cur->pen_state == LOGO_PEN_DOWN)
     {
-        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, false);
+        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, false, cur->pen_size);
     }
     else if (cur->pen_state == LOGO_PEN_ERASE)
     {
-        screen_gfx_line(old_x, old_y, cur->x, cur->y, GFX_DEFAULT_BACKGROUND, false);
+        screen_gfx_line(old_x, old_y, cur->x, cur->y, GFX_DEFAULT_BACKGROUND, false, cur->pen_size);
     }
     else if (cur->pen_state == LOGO_PEN_REVERSE)
     {
-        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, true);
+        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, true, 1);
     }
     // else if LOGO_PEN_UP: do not draw anything
 
@@ -965,6 +967,18 @@ static void turtle_set_pen_state(LogoPen state)
 static LogoPen turtle_get_pen_state(void)
 {
     return cur->pen_state; // Return the current pen state
+}
+
+// Set the pen size (line width in pixels)
+static void turtle_set_pen_size(uint8_t size)
+{
+    cur->pen_size = size;
+}
+
+// Get the current pen size (line width in pixels)
+static uint8_t turtle_get_pen_size(void)
+{
+    return cur->pen_size;
 }
 
 // Set the turtle visibility (visible or hidden)
@@ -1464,6 +1478,8 @@ static const LogoConsoleTurtle picocalc_turtle_ops = {
     .get_bg_colour = turtle_get_bg_colour,
     .set_pen_state = turtle_set_pen_state,
     .get_pen_state = turtle_get_pen_state,
+    .set_pen_size = turtle_set_pen_size,
+    .get_pen_size = turtle_get_pen_size,
     .set_visible = turtle_set_visibility,
     .get_visible = turtle_get_visibility,
     .dot = turtle_dot,

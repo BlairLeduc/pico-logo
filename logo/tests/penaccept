@@ -1,0 +1,122 @@
+; setpensize / pensize hardware acceptance demo (P4)
+; Load with:  load "penaccept
+; Run all:    penaccept       (press a key to advance between steps)
+; Or run any step on its own: penstate pensun penbox penarc penwipe penrev pencap
+;
+; setpensize sets the pen's width in pixels; a wide pen draws by stamping a
+; filled disc at every point along the line, so strokes stay the same width at
+; every angle with round ends. Each visual step below prints what a CORRECT
+; result looks like, then pauses so you can check the screen before moving on.
+
+to penpause
+  pr []
+  pr [--- look at the screen, then press any key ---]
+  ignore rc
+end
+
+to penbanner :text
+  cs ss              ; splitscreen: graphics on top, this text below
+  pr []
+  pr :text
+end
+
+; Step 0: pensize / setpensize state -- rounding, clamping, rejection
+to penstate
+  cs ss
+  pr [Step 0: pensize state]
+  pr se [startup pensize (expect 1):] pensize
+  setpensize 6    pr se [after setpensize 6 (expect 6):] pensize
+  setpensize 3.6  pr se [after setpensize 3.6 (expect 4):] pensize
+  setpensize 1000 pr se [after setpensize 1000 (expect 32):] pensize
+  setpensize 1
+  pr []
+  pr [Now type by hand:  setpensize 0]
+  pr [Expect: an error (turtle does not like 0).]
+end
+
+; Step 1: a wide pen is solid at EVERY angle (the core claim)
+to pensun
+  penbanner [Step 1: solid at every angle (sunburst)]
+  pr [PASS: 24 spokes, all the SAME thickness,]
+  pr [      each solid with no gaps, rounded tips]
+  setpensize 5
+  seth 0
+  repeat 24 [pu setpos [0 0] pd fd 95 rt 15]
+  penpause
+end
+
+; Step 2: round joins -- a thick square has rounded, un-notched corners
+to penbox
+  penbanner [Step 2: thick square -- round joins]
+  pr [PASS: an 8px square with solid, rounded]
+  pr [      corners -- no notches or gaps]
+  setpensize 8
+  pu setpos [-40 -40] seth 0 pd
+  repeat 4 [fd 80 rt 90]
+  penpause
+end
+
+; Step 3: a thick arc is smooth -- the disc hides the segment seams
+to penarc
+  penbanner [Step 3: thick circle via arc]
+  pr [PASS: a solid 6px ring, even thickness all]
+  pr [      the way round, no speckle or seams]
+  setpensize 6
+  pu home pd
+  arc 360 60
+  penpause
+end
+
+; Step 4: penerase honours the pen width
+to penwipe
+  penbanner [Step 4: thick erase]
+  pr [PASS: a thick bar is drawn, then the thick]
+  pr [      eraser removes it completely]
+  setpensize 12
+  pu setpos [-80 0] seth 90 pd
+  fd 160
+  pr [] pr [drawn -- press a key to erase it]
+  ignore rc
+  pe back 160
+  pd
+  penpause
+end
+
+; Step 5: penreverse stays 1px (documented limitation, not a bug)
+to penrev
+  penbanner [Step 5: penreverse stays 1px (by design)]
+  pr [PASS: this line is 1 PIXEL wide even though]
+  pr [      pensize is 12 -- documented limitation]
+  setpensize 12
+  pu setpos [-90 0] seth 90    ; position first, pen up
+  px                           ; NOW put the reversing pen down
+  fd 180
+  pd                           ; restore a normal (down) pen
+  penpause
+end
+
+; Step 6: capture to a BMP for a pixel-exact check on a computer
+to pencap
+  penbanner [Step 6: capture to BMP for pixel check]
+  setpensize 5
+  pu setpos [-40 -40] seth 0 pd
+  repeat 4 [fd 80 rt 90]
+  savepic "pentest.bmp
+  pr [PASS: saved pentest.bmp. Copy it off the SD]
+  pr [      card and zoom in: stroke ~5px wide,]
+  pr [      corners rounded, no gaps.]
+  pr [(If it says the file exists, rename or delete]
+  pr [ pentest.bmp on the card and re-run pencap.)]
+end
+
+to penaccept
+  penstate  penpause
+  pensun
+  penbox
+  penarc
+  penwipe
+  penrev
+  pencap
+  pr []
+  pr [Pen-size acceptance complete.]
+end

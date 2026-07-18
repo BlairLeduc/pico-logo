@@ -40,7 +40,7 @@ Companion documents (everything in `docs/`):
 | `shuffle` | UCB (library) | done | [P2](#p2--list-utilities-pick-reverse-shuffle) |
 | `rerandom` / seedable RNG | UCB, Apple | done | [P3](#p3--rerandom-and-a-core-prng) (hybrid: TRNG default, PCG32 when seeded) |
 | `arc` | UCB | done | [P4](#p4--arc-and-help-discoverability) |
-| `setpensize` / `pensize` | UCB, FMSLogo | on hold | Deferred 2026-07-04; stamped-disc design kept: [On hold](#on-hold--setpensize--pensize) |
+| `setpensize` / `pensize` | UCB, FMSLogo | done | Landed 2026-07-18; stamped-disc, single-integer diameter (1–32), `penreverse` stays 1px |
 | `remove`, `remdup` | UCB | done | Landed 2026-07-11; word + list, `equal?` semantics, `remdup` keeps last |
 | `localmake` | UCB | done | Landed 2026-07-11; `local` + `make` in one step |
 | `tan`, two-input `(arctan x y)` | UCB | done | Landed 2026-07-11; two-input `arctan` is `atan2` |
@@ -215,25 +215,30 @@ the help system useful when you *don't* already know a primitive's name.
 - **Reference:** `arc` section; update the `help` section to document search
   and the no-input form.
 
-### On hold — `setpensize` / `pensize`
+### Done — `setpensize` / `pensize`
 
-Deferred by user decision (2026-07-04). Design notes preserved for when it
-resumes:
+Landed 2026-07-18. `setpensize` takes a single integer diameter (rounded,
+clamped to `MAX_PEN_SIZE` = 32 in `core/limits.h`); `pensize` outputs it. Pen
+size is per-turtle state beside the pen colour/state, reached through new
+`set_pen_size`/`get_pen_size` device ops (host leaves them NULL).
 
-- Pen width for all line drawing; touches the device layer (extend the line
-  op or add a width parameter in `devices/`, record-only in the mock, no-op
-  on host). Width state lives with the other pen state in core.
-- **Algorithm: stamped disc.** At each Bresenham step, plot a filled disc of
-  diameter `pensize` instead of a single pixel. Solid by construction
-  (consecutive stamp centres are 1 px apart, so stamps always overlap — no
-  angle can open a gap), uniform apparent width at every angle, and round
-  caps/joins for free, which hides the seams between segmented curves like
-  `arc`. Rejected: parallel offset strokes (up to ~29 % thinner at 45°,
+- **Algorithm: stamped disc.** `screen_gfx_line` gained a `width` parameter and
+  stamps a filled disc of diameter `pensize` at each Bresenham step instead of
+  a single pixel. Solid by construction (consecutive stamp centres are 1 px
+  apart, so stamps always overlap), uniform apparent width at every angle, and
+  round caps/joins for free — which hides the seams between segmented curves
+  like `arc`. Rejected: parallel offset strokes (up to ~29 % thinner at 45°,
   notched corners at every turtle turn).
-- **Caveat — reverse mode:** `penreverse` toggles pixels, so overlapping
-  stamps would toggle twice and speckle. Thick reverse lines must touch each
-  pixel exactly once (delta-stamp only the pixels not covered by the
-  previous stamp, or fill the thick segment as per-scanline spans).
+- **Reverse mode still draws 1 px wide.** `penreverse` toggles pixels, so
+  overlapping thick stamps would toggle shared pixels twice and speckle. Left
+  as a documented limitation; a future thick-reverse pass would delta-stamp
+  only the pixels the previous stamp did not cover (or fill per-scanline
+  spans).
+- **Hardware validation:** `load "penaccept` (`logo/tests/penaccept`) and run
+  `penaccept`. The steps check pen-size state (round/clamp/reject), solidity at
+  every angle (sunburst), round joins, a thick `arc`, thick erase, and the
+  1 px reverse pen; `pencap` writes `pentest.bmp` via `savepic` for a
+  pixel-exact check on a computer.
 
 ### P5 — Multi-sprite turtles with collision (design first)
 
@@ -416,3 +421,4 @@ prompt while BREAK/error silence, `sound` range 20 Hz–10 kHz).
 | 2026-07-16 | P7 | M3 done: Logo handler surface — request accessors `http.method`/`path` (percent-decoded)/`query` (raw)/`body`/`reqheader` (case-insensitive, empty list if absent)/`remote`, each erroring when no request is pending; `http.respond status body` with the parenthesised `(... name value ...)` extra-header form, `text/plain` default overridable by a `Content-Type` pair, framing headers (`Content-Length`/`Connection: close`) always set by the pump and skipped if the handler passes copies, CR/LF-injection rejected, body streamed straight from the Logo value via `format_value`. End-to-end `when [http.request?] [http.respond ...]` demon test and a client-`http.get`-mid-handler test proving the server/client buffers don't collide; 13 new tests (`test_httpd` now 30), 59/59 ctest green, all three presets link. Reference "HTTP Server" chapter completed (accessors + `http.respond`); HTML-body examples use backslash-escaped angle brackets |
 | 2026-07-16 | P7 | M2 done: request pump + parser (`core/httpd.c`) on the demon poll sites (pumped before demons in `eval.c` and the picocalc prompt idle so a just-completed request is visible to a `when [http.request?]` handler same-tick); `http.listen`/`http.unlisten`/`http.request?` primitives; incremental parse of request line + headers + Content-Length body with percent-decoded path; own lazily-allocated tiered request buffer (PSRAM 64 KB / SRAM 4 KB caps in `core/limits.h`); auto-responses 400/408/411/413/414/431 and the 503 unanswered-deadline; stall/response timers accumulate only across active polls so they pause under `freeze`; listener follows the demon lifetime (`cs`, repl error-unwind, prompt demon-error all `httpd_reset`). Mock gains a stall mode + response getter; new `test_httpd.c` (17 tests), 59/59 ctest green, all three firmware presets link. Reference gains an "HTTP Server" chapter (listen/unlisten/request?) |
 | 2026-07-16 | P7 | M1 done: TCP server device ops — `network_tcp_listen`/`unlisten`/`accept` in `hardware.h`; picocalc altcp listener (bind + listen + accept callback parks one PCB per `TCP_LISTEN_BACKLOG`, claimed PCB wrapped in the existing `TcpClientState` so read/write/close are unchanged); mock scripted connections (`mock_httpd_queue_connection[_ex]`, dribble reads, recorded responses, remote-IP reporting) with read/write/close/can-read dispatching client-vs-server by handle; host ops NULL. New `test_httpd_device.c` (9 tests: listen/accept/read/write/close, accept-when-empty, dribbled reads, unlisten-drops-pending, serial connections), 58/58 ctest green, all three firmware presets link. Hardware raw-TCP smoke test pending on real boards |
+| 2026-07-18 | P4 | Done: `setpensize`/`pensize` off hold — single-integer pen diameter (rounded, clamped to `MAX_PEN_SIZE` 32 in `core/limits.h`), state per-turtle beside pen colour/state; new `set_pen_size`/`get_pen_size` device ops (host NULL). Stamped-disc drawing: `screen_gfx_line` gains a `width` param and stamps a filled disc at each Bresenham step (solid at all angles, round caps/joins). `penreverse` stays 1px for now (avoids the double-toggle speckle). Reference sections + 7 turtle tests, 59/59 ctest green, all three firmware presets link. Hardware acceptance script `logo/tests/penaccept` (sunburst solidity, round joins, thick `arc`, thick erase, 1px reverse, `savepic` pixel check); board validation pending |

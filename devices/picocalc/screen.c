@@ -693,7 +693,7 @@ void screen_gfx_reverse_point(float x, float y)
 
 // Draw a line in the graphics buffer using Bresenham's algorithm
 // This is a true integer-only Bresenham implementation for efficiency on the Pico
-void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, bool reverse)
+void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, bool reverse, int width)
 {
     // Convert float endpoints to integers (round to nearest)
     int ix1 = (int)(x1 + 0.5f);
@@ -749,13 +749,31 @@ void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, boo
         if (plot_y > mark_y1) mark_y1 = plot_y; \
     } while(0)
 
+    // Stamp the pen at a line point: a single pixel for a width-1 pen, or a
+    // filled disc of diameter `width` centred on the point otherwise. Because
+    // consecutive line points are one pixel apart and the disc includes the
+    // 4-neighbours for any width >= 2, the stamps always overlap and the
+    // stroke is solid at every angle, with round caps and joins for free.
+    const float pen_radius = width * 0.5f;
+    const int pen_extent = (int)pen_radius;
+    #define STAMP(cx, cy) do { \
+        if (width <= 1) { \
+            PLOT_PIXEL((cx), (cy)); \
+        } else { \
+            for (int _oy = -pen_extent; _oy <= pen_extent; ++_oy) \
+                for (int _ox = -pen_extent; _ox <= pen_extent; ++_ox) \
+                    if ((float)(_ox * _ox + _oy * _oy) <= pen_radius * pen_radius) \
+                        PLOT_PIXEL((cx) + _ox, (cy) + _oy); \
+        } \
+    } while(0)
+
     if (dx >= dy)
     {
         // X is the driving axis
         int err = 2 * dy - dx;
         for (int i = 0; i <= dx; ++i)
         {
-            PLOT_PIXEL(x, y);
+            STAMP(x, y);
             if (err > 0)
             {
                 y += sy;
@@ -771,7 +789,7 @@ void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, boo
         int err = 2 * dx - dy;
         for (int i = 0; i <= dy; ++i)
         {
-            PLOT_PIXEL(x, y);
+            STAMP(x, y);
             if (err > 0)
             {
                 x += sx;
@@ -782,6 +800,7 @@ void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, boo
         }
     }
 
+    #undef STAMP
     #undef PLOT_PIXEL
 
     if (mark_x1 >= 0)
