@@ -7,5 +7,10 @@ _codeql*
 Testing/
 *.log
 *.o
+
+# Ignore Graphify internal cache
+graphify-out/cache/
+.graphify/cache/
+
 # MacOS specific files
 .DS_Store
