@@ -153,6 +153,12 @@ extern "C"
     void primitives_httpd_init(void);
     void primitives_time_init(void);
 
+    // Stop autonomous motion and animation on every turtle (speed 0, anim
+    // off). Turtle state, not demon state: called by `cs` alongside its
+    // clear/home, and by demons_reset() on a full autonomous reset. No-op
+    // when there is no device yet (boot).
+    void turtle_stop_motion(void);
+
     // Forward declarations for I/O
     struct LogoIO;
 

@@ -75,8 +75,7 @@ Commands and queries, all under the existing `http.` namespace:
   WiFi is not connected. Idempotent (decided 2026-07-16): re-listening on
   the current port is a no-op, so a program that opens with `http.listen`
   reruns cleanly; a different port moves the listener. (Supersedes the
-  original "error if already listening", now that `cs` still closes the
-  listener — see §10.)
+  original "error if already listening" — see §10.)
 - `http.unlisten` — stop listening, drop any pending connection.
   (Naming mirrors `wifi.connect`/`wifi.disconnect`.)
 - `http.request?` — `true` when a complete, parsed request is waiting
@@ -194,13 +193,12 @@ poll point (eval_instruction / idle loop, budget-gated like demons)
 - **`freeze` / `thaw`** suspend the pump along with demons: no accepts,
   and the pending-response deadline pauses. One rule for everything
   autonomous.
-- **Lifetime:** the listener follows the demon lifetime — closed by
-  `cs`/`draw` and on error-unwind to toplevel. Rationale: the P5 rule
-  is *nothing acts on its own after a reset*, and a server whose
-  handler demons were just cleared (as `cs` already does) would only
-  `503` every caller; killing both together keeps the observable state
-  consistent. Decided (2026-07-10) — it does mean a serving program
-  that errors once stops serving; restart it by rerunning.
+- **Lifetime:** the listener follows the demon lifetime — closed on
+  error-unwind to toplevel, and explicitly by `http.unlisten`. `cs`
+  closes neither the listener nor the demons (revisited 2026-07-18,
+  §10): demon lifecycle is separate from turtle graphics, so a program
+  that redraws with `cs` keeps serving. A serving program that errors
+  still stops serving; restart it by rerunning.
 
 ## 5. Device interface changes (`devices/hardware.h`)
 
@@ -434,6 +432,16 @@ program no longer depends on `cs` closing the listener to rerun. (An
 in-handler screen clear uses `clean` / `clean home`, which leaves the
 demons and the pending connection intact — `cs` in a handler would
 disarm the handler and drop the connection.)
+
+Revisited 2026-07-18: reversed. Demons had grown into a general-purpose
+tool (server handlers, timers), so turtle graphics and demon lifecycle
+were separated: `cs` no longer clears demons — and therefore no longer
+closes the listener; the 2026-07-16 "headless listener" argument
+dissolves once `cs` leaves the handler demon armed. Demon teardown is
+now the new `cleardemons` primitive (which *can* leave a listener
+headless — pair it with `http.unlisten`). Error-unwind to toplevel
+still clears demons and closes the listener: *nothing acts on its own
+after an error* stands.
 
 Resolved 2026-07-12 (mDNS, §7):
 

@@ -81,8 +81,9 @@ extern "C"
     // calls httpd_poll() at most once per HTTPD_POLL_MS.
     void httpd_maybe_poll(void);
 
-    // Clear the listener and any connection. Applied by `cs` and on error-unwind
-    // to the toplevel REPL (the demon lifetime): nothing serves after a reset.
+    // Clear the listener and any connection. Applied on error-unwind to the
+    // toplevel REPL (the demon lifetime; `cs` touches neither demons nor the
+    // server): nothing serves after a reset.
     void httpd_reset(void);
 
 #ifdef __cplusplus

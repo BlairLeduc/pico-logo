@@ -1744,7 +1744,7 @@ when _condition_ _action_
 
 `command`
 
-`when` arms a _demon_: a rule that runs _action_ the moment _condition_ becomes true. _condition_ and _action_ are both instruction lists. The condition is checked continually - while your program runs and while you type at the prompt - and its _action_ fires once each time the condition changes from false to true (so a collision fires once on contact, not over and over while the turtles stay touching). Give the same _condition_ an empty _action_ list to disarm that demon; the bare form `(when)` prints the demons currently armed. Up to eight demons can be armed at once. Demons are paused by [`freeze`](#freeze), resumed by [`thaw`](#thaw), and all cleared by [`clearscreen`](#clearscreen-cs) or when a program stops with an error.
+`when` arms a _demon_: a rule that runs _action_ the moment _condition_ becomes true. _condition_ and _action_ are both instruction lists. The condition is checked continually - while your program runs and while you type at the prompt - and its _action_ fires once each time the condition changes from false to true (so a collision fires once on contact, not over and over while the turtles stay touching). Give the same _condition_ an empty _action_ list to disarm that demon; the bare form `(when)` prints the demons currently armed. Up to eight demons can be armed at once. Demons are paused by [`freeze`](#freeze), resumed by [`thaw`](#thaw), and all cleared by [`cleardemons`](#cleardemons) or when a program stops with an error. [`clearscreen`](#clearscreen-cs) does not touch them: clearing the screen is a drawing matter, and your demons keep watching.
 
 **Example**:
 
@@ -1752,6 +1752,21 @@ when _condition_ _action_
 ?when [touching? 0 1] [pr [crash!] setspeed 0]
 ?when [over? 12] [seth heading + 90]
 ?when [key?] []                ; disarm the key demon
+```
+
+
+## cleardemons
+
+cleardemons
+
+`command`
+
+`cleardemons` disarms every [`when`](#when) demon at once: nothing is watching afterwards. It touches nothing else - the screen is not cleared, turtles gliding under [`setspeed`](#setspeed) or animating under [`setanim`](#setanim) carry on, a [`freeze`](#freeze) stays in force until [`thaw`](#thaw), and an HTTP server keeps listening (though with its serving demon gone, close it with [`http.unlisten`](#http.unlisten) unless you arm another handler). To disarm a single demon, give its condition an empty action list with `when`.
+
+**Example**:
+
+```logo
+?cleardemons     ; nothing is watching now
 ```
 
 
@@ -6544,7 +6559,7 @@ pr sentence [serving at] wifi.ip
 
 With mDNS naming (see `wifi.sethostname`), the browser can reach the device at `http://picologo.local` instead of its IP address.
 
-The server closes automatically on a full reset — `clearscreen`, or when a running program stops with an error — so a serving program that errors stops serving; rerun it to restart. Requests that are malformed, that stall halfway, whose body is too large, or that no handler answers within ten seconds are given an automatic error response and closed, so a connection is never left hanging.
+The server closes automatically when a running program stops with an error — so a serving program that errors stops serving; rerun it to restart. `clearscreen` does not close it: a program that redraws the screen keeps serving. Requests that are malformed, that stall halfway, whose body is too large, or that no handler answers within ten seconds are given an automatic error response and closed, so a connection is never left hanging.
 
 
 ## http.listen
@@ -6571,7 +6586,7 @@ http.unlisten
 
 `command`
 
-The `http.unlisten` command stops the HTTP server and drops any connection in progress. It does nothing if the server is not listening. The server is also stopped automatically by `clearscreen` and when a program unwinds to the prompt with an error.
+The `http.unlisten` command stops the HTTP server and drops any connection in progress. It does nothing if the server is not listening. The server is also stopped automatically when a program unwinds to the prompt with an error.
 
 **Example**:
 

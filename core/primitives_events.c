@@ -50,6 +50,15 @@ static Result prim_thaw(Evaluator *eval, int argc, Value *args)
     return result_none();
 }
 
+// cleardemons - disarm every `when` demon. Freeze state and autonomous
+// turtle motion are untouched: this is demon lifecycle only.
+static Result prim_cleardemons(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
+    demons_clear();
+    return result_none();
+}
+
 void primitives_events_init(void)
 {
     // Fresh interpreter: no demons armed, nothing frozen or ticking.
@@ -58,4 +67,5 @@ void primitives_events_init(void)
     primitive_register("when", 2, prim_when);
     primitive_register("freeze", 0, prim_freeze);
     primitive_register("thaw", 0, prim_thaw);
+    primitive_register("cleardemons", 0, prim_cleardemons);
 }

@@ -40,10 +40,15 @@ extern "C"
     // a large upload to storage).
     bool demons_running(void);
 
-    // Clear every demon, reset the freeze/edge/timing state, and stop the
-    // motion clock. Applied by `cs` and when execution unwinds to the
-    // toplevel REPL (error or `throw "toplevel`): nothing acts on its own
-    // after a reset.
+    // Disarm every demon, leaving freeze state and autonomous turtle motion
+    // untouched (backs `cleardemons`). `cs` does not touch demons: turtle
+    // graphics and demon lifecycle are separate.
+    void demons_clear(void);
+
+    // Clear every demon, reset the freeze/edge/timing state, and stop
+    // autonomous turtle motion/animation. Applied when execution unwinds to
+    // the toplevel REPL (error or `throw "toplevel`) and when a demon action
+    // errors at the prompt: nothing acts on its own after a reset.
     void demons_reset(void);
 
     // Evaluate every armed demon's condition and fire the ones that just

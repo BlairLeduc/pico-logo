@@ -179,17 +179,23 @@ on file if they do.
 
 ## 8. Lifetime, errors, and control
 
-One rule, extended: *nothing acts on its own after a reset.*
+One rule, extended: *nothing acts on its own after an error.*
 
-- `cs`/`draw` and error/`throw "toplevel` unwind: **halt all processes**,
-  alongside the existing demon/motion/animation clearing
+- error/`throw "toplevel` unwind: **halt all processes**, alongside the
+  existing demon-clearing and motion/animation stopping
   (`primitives_control_reset.c` toplevel path).
+- `cs`/`draw` stop autonomous motion/animation but leave processes (and
+  demons) running: a screen clear is a drawing matter, not an
+  event-handler teardown, so a redraw must not kill background work
+  (revisited 2026-07-18 alongside `cleardemons`, see
+  [multi-sprite §7](multi-sprite-design.md)).
 - **BREAK** stops foreground *and* all processes (the sound design's
   BREAK-silences-music precedent).
 - `freeze` suspends processes along with demons and motion; `thaw`
   resumes them (no credit for frozen time on `wake_ms`).
 - **`halt`** — new primitive: stop all background processes, touch
-  nothing else (not demons, not motion — `cs` remains the big hammer).
+  nothing else (not demons, not motion — error-unwind remains the big
+  hammer).
   `(launch)` with no inputs prints the live processes (the `(when)`
   precedent). Naming and scope decided as Q5.
 - **`stop` / `output` in a launched list:** `stop` at process top level
@@ -229,7 +235,7 @@ One rule, extended: *nothing acts on its own after a reset.*
   firmware links green).
 - **M1 — process table + scheduler.** `launch`, `halt`, `(launch)`
   print form; round-robin at the poll sites; per-process tell-set and
-  `wait`-sleep; lifetime rules (`cs`/error/BREAK/`freeze`); GC marking;
+  `wait`-sleep; lifetime rules (error/BREAK/`freeze`/`halt`); GC marking;
   Unity tests on mock + host e2e.
 - **M2 — polish.** Blocking-primitive rules (Q4) enforced; reference
   sections (`launch`, `halt`, updates to `wait`/`stop`/`freeze`).
@@ -267,7 +273,9 @@ case.
 - **Q4 — blocking primitives in a process:** **keyboard readers error;
   `play` on a full queue yields** (as §6).
 - **Q5 — `halt`:** stops **background processes only** — demons and
-  motion untouched; `cs` remains the big reset.
+  motion untouched; error-unwind (not `cs`) remains the big reset
+  (revisited 2026-07-18: `cs` clears neither demons nor processes, only
+  motion — see §8).
 - **Q6 — `launch` turtle context:** the process **inherits the
   launcher's active turtle set** at `launch` time.
 

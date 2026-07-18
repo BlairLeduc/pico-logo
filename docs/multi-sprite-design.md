@@ -426,9 +426,10 @@ The TI/Atari feature that made sprites feel alive — and the cheapest
   idiom as one word. (Implementation: per-turtle frame index + divider in
   the same tick.)
 
-Autonomous state is cleared by `cs`/`draw` and on error-unwind to the
-REPL, alongside demons and refresh policy — one lifetime rule for
-everything that acts without being asked (§7).
+Autonomous motion/animation is cleared by `cs`/`draw` and on
+error-unwind to the REPL alongside refresh policy; demons are cleared by
+`cleardemons` and on error-unwind only, not by `cs` (revisited
+2026-07-18, §7).
 
 ## 5. Addressing: `tell`, `ask`, `each`, `who`
 
@@ -509,10 +510,13 @@ when [key?] [steer readchar]
 - **Errors/throws:** an error in an action reports and stops the program
   normally; `throw "toplevel` unwinds to the REPL; a `throw` escaping the
   action is an error (same rule as `pause`).
-- **Lifetime:** demons, autonomous motion, animation, and manual refresh
-  are all cleared by `cs`/`draw` and on error-unwind to toplevel — one
-  rule: *nothing acts on its own after a reset.* `freeze` suspends
-  demons; `thaw` resumes them.
+- **Lifetime:** autonomous motion, animation, and manual refresh are
+  cleared by `cs`/`draw` and on error-unwind to toplevel. Demons are
+  cleared by `cleardemons` and on error-unwind, but **not** by `cs`
+  (revisited 2026-07-18: demons grew into a general-purpose tool — HTTP
+  handlers, timers — and a screen clear must not tear down event
+  handlers; error-unwind keeps *nothing acts on its own after an
+  error*). `freeze` suspends demons; `thaw` resumes them.
 
 ## 8. Concurrency: the position on turtle-as-process
 
@@ -624,7 +628,9 @@ the help text).
   nested evaluator with re-entrancy suppression); poll at the instruction
   point and the picocalc prompt idle loop; new device ops `set_speed`/
   `get_speed`/`set_anim`/`turtle_tick` and a monotonic `ticks_ms` hardware
-  op; `cs`/error-unwind clear demons and stop motion. Decisions made where
+  op; error-unwind clears demons and stops motion, `cs` stops motion
+  only (revisited 2026-07-18: `cleardemons` owns demon teardown, §7).
+  Decisions made where
   the spec was open: speed is **turtle steps per second**, `setanim` is
   `setanim first last interval_ms` (frame range + ms per frame, 0 stops),
   and `freeze`/`thaw` suspend **both** demons and autonomous motion.
@@ -664,7 +670,9 @@ baked into saved images).
   with `ask 2 [over? 12]`. No variadic special case.
 - **Decided (2026-07-04):** demons stay armed at the REPL prompt,
   Atari-style — actions may interleave with typed input echo; `freeze`
-  is the escape hatch and `cs`/error-unwind clears them.
+  is the escape hatch and `cs`/error-unwind clears them. (Revisited
+  2026-07-18: `cs` no longer clears demons — `cleardemons` and
+  error-unwind do; see §7.)
 
 ## 13. Rejected alternatives (summary)
 

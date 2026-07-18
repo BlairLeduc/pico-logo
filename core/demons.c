@@ -136,37 +136,25 @@ bool demons_frozen(void) { return g_frozen; }
 
 bool demons_running(void) { return g_polling; }
 
-void demons_reset(void)
+void demons_clear(void)
 {
     for (int i = 0; i < MAX_DEMONS; i++)
     {
         demons[i].armed = false;
     }
+}
+
+void demons_reset(void)
+{
+    demons_clear();
     g_frozen = false;
     g_polling = false;
     g_have_ticked = false;
     g_have_polled = false;
 
     // Stop autonomous motion and animation on every turtle: nothing acts on
-    // its own after a reset. (No-op at boot, when there is no device yet.)
-    LogoIO *io = primitives_get_io();
-    const LogoConsoleTurtle *turtle =
-        (io && io->console) ? io->console->turtle : NULL;
-    if (turtle && turtle->select)
-    {
-        for (uint8_t n = 0; n < MAX_TURTLES; n++)
-        {
-            turtle->select(n);
-            if (turtle->set_speed) turtle->set_speed(0.0f);
-            if (turtle->set_anim) turtle->set_anim(0, 0, 0);
-        }
-        turtle->select(0);
-    }
-    else if (turtle)
-    {
-        if (turtle->set_speed) turtle->set_speed(0.0f);
-        if (turtle->set_anim) turtle->set_anim(0, 0, 0);
-    }
+    // its own after a reset.
+    turtle_stop_motion();
 }
 
 Result demons_poll(void)
