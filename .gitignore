@@ -8,8 +8,9 @@ Testing/
 *.log
 *.o
 
-# Graphify: track the graph outputs, drop the heavy rebuildable cache
-.graphify/cache/
+# Graphify: track the graph outputs, drop the heavy rebuildable cache and local cost log
+graphify-out/cache/
+graphify-out/cost.json
 
 # MacOS specific files
 .DS_Store
