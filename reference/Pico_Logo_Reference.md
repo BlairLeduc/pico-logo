@@ -369,6 +369,46 @@ Words with internal spaces are created using the "`\`" character, not using the 
 
 Pico Logo does not support the `if predicate list1 list2` form. Use `(if predicate list1 list2)` or `ifelse predicate list1 list2` instead.
 
+Anonymous procedures are written as named lambda expressions - a list whose first element is a list of input names, followed by the body - rather than the `?`-slot template notation (`[? + 1]`) used by UCB/Berkeley Logo. Where Berkeley Logo would write `map [? + 1] [1 2 3]`, Pico Logo writes `map [[x] :x + 1] [1 2 3]`. See [List Processing](#list-processing) for details.
+
+Word and name comparisons are case-insensitive throughout, including [`equal?`](#equal-equalp): `equal? "Hello "hello` outputs `true`, and a list containing `"Hello` is `member?` of a list containing `"hello`. Variable and procedure names are likewise case-insensitive - `make "Total 1` and `:total` refer to the same variable. Use [`before?`](#before-beforep), which compares ASCII values, when exact-case comparison is needed.
+
+All numbers are single-precision (32-bit) IEEE floating point, matching the RP2350's hardware FPU; there is no bignum or double-precision arithmetic, so results very slightly differ in their last digit from Logos that compute in double precision. Numbers printed in exponential form use `n` rather than a signed exponent for negative powers of ten - `1n5` means 1 &times; 10<sup>-5</sup>, while `1e7` means 1 &times; 10<sup>7</sup> - following Apple Logo's convention rather than the `1e-5` form other Logos use (a bare minus sign inside a word is easily confused with the subtraction operator).
+
+Pico Logo has no array data type and no `array`/`setitem` primitives for O(1) indexed access; lists are the only ordered collection. [`.setfirst`](#setfirst), [`.setbf`](#setbf) and [`.setitem`](#setitem) do mutate a list in place, as in UCB Logo, but there is no fixed-size random-access structure to mutate into.
+
+Tail-recursive procedures run in constant space - see [Tail Call Optimization](#tail-call-optimization), below.
+
+## Tail Call Optimization
+
+When the last thing a procedure does is call itself - directly, as the whole
+of the last instruction line, or as the argument to [`output`](#output-op),
+or inside the taken branch of [`if`](#if)/[`ifelse`](#ifelse) in tail
+position - Pico Logo reuses the procedure's current frame instead of pushing
+a new one. This is a genuine loop under the hood, not a stack of pending
+calls, so a tail-recursive procedure runs in *constant* space no matter how
+many times it calls itself:
+
+```logo
+?to countdown :n
+>if :n = 0 [stop]
+>countdown :n - 1
+>end
+?countdown 1000000
+```
+
+`countdown` above never runs out of recursion, because each recursive call
+reuses the same frame rather than adding one. This is a differentiator from
+classic Logo implementations, most of which count every recursive call
+(tail or not) against a fixed recursion depth and would overflow on a
+million-deep call like this one.
+
+The optimization only reuses the frame for a procedure calling **itself**.
+Mutual recursion (`a` tail-calls `b`, which tail-calls `a`) and any
+non-tail call still consume a level of the recursion limits given under
+[Supported Pico Boards](#supported-pico-boards) (128 or 192, depending on
+the board).
+
 
 
 ===
@@ -387,13 +427,13 @@ radio - and storage capacity, which depends on the flash and PSRAM fitted.
 
 **Raspberry Pi Pico 2** - 4 MB flash, no radio.
 
-- 192 levels of recursion
+- 192 levels of recursion (self tail-recursive calls don't count - see [Tail Call Optimization](#tail-call-optimization))
 - 2 MB internal filesystem
 - No networking
 
 **Raspberry Pi Pico 2 W** - 4 MB flash, WiFi, no PSRAM.
 
-- 128 levels of recursion
+- 128 levels of recursion (self tail-recursive calls don't count - see [Tail Call Optimization](#tail-call-optimization))
 - 2 MB internal filesystem
 - WiFi (`wifi.connect`, `wifi.scan`, …) with `network.resolve`, `network.ntp` and `network.ping`
 - `http.get` and `http.post` over `http://` only; `https://` is not available, so `tls?` outputs `false`
@@ -401,7 +441,7 @@ radio - and storage capacity, which depends on the flash and PSRAM fitted.
 
 **Pimoroni Pico Plus 2 W** - 16 MB flash, 8 MB PSRAM, WiFi.
 
-- 128 levels of recursion
+- 128 levels of recursion (self tail-recursive calls don't count - see [Tail Call Optimization](#tail-call-optimization))
 - 8 MB internal filesystem
 - WiFi (`wifi.connect`, `wifi.scan`, …) with `network.resolve`, `network.ntp` and `network.ping`
 - `http.get` and `http.post` over both `http://` and `https://`, so `tls?` outputs `true`
