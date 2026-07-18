@@ -8,8 +8,7 @@ Testing/
 *.log
 *.o
 
-# Ignore Graphify internal cache
-graphify-out/cache/
+# Graphify: track the graph outputs, drop the heavy rebuildable cache
 .graphify/cache/
 
 # MacOS specific files
