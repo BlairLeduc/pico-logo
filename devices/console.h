@@ -105,6 +105,10 @@ extern "C"
         void (*set_pen_state)(LogoPen state);
         LogoPen (*get_pen_state)(void);
 
+        // Pen size (line width, in pixels). 1 is a single-pixel pen.
+        void (*set_pen_size)(uint8_t size);
+        uint8_t (*get_pen_size)(void);
+
         // Turtle visibility
         void (*set_visible)(bool visible);
         bool (*get_visible)(void);

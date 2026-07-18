@@ -667,6 +667,54 @@ static Result prim_pencolor(Evaluator *eval, int argc, Value *args)
     return result_ok(value_number((float)colour));
 }
 
+// setpensize - Set pen size (line width, in pixels)
+static Result prim_setpensize(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
+    REQUIRE_NUMBER(args[0], size);
+
+    // Round to the nearest pixel and clamp to the drawable range.
+    int pixels = (int)(size + 0.5f);
+    if (pixels < 1)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
+    if (pixels > MAX_PEN_SIZE)
+    {
+        pixels = MAX_PEN_SIZE;
+    }
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->set_pen_size)
+    {
+        for (int i = 0; i < active_count; i++)
+        {
+            select_turtle(turtle, active_set[i]);
+            turtle->set_pen_size((uint8_t)pixels);
+        }
+        select_first_active(turtle);
+    }
+
+    return result_none();
+}
+
+// pensize - Output current pen size
+static Result prim_pensize(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+
+    uint8_t size = 1;
+    if (turtle && turtle->get_pen_size)
+    {
+        size = turtle->get_pen_size();
+    }
+
+    return result_ok(value_number((float)size));
+}
+
 // setbg - Set background color
 static Result prim_setbg(Evaluator *eval, int argc, Value *args)
 {
@@ -1963,6 +2011,8 @@ void primitives_turtle_init(void)
     primitive_register("setpencolor", 1, prim_setpc);
     primitive_register("pencolor", 0, prim_pencolor);
     primitive_register("pc", 0, prim_pencolor);
+    primitive_register("setpensize", 1, prim_setpensize);
+    primitive_register("pensize", 0, prim_pensize);
     primitive_register("setbg", 1, prim_setbg);
     primitive_register("background", 0, prim_background);
     primitive_register("bg", 0, prim_background);

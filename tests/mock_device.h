@@ -143,6 +143,7 @@ extern "C"
         float x1, y1;
         float x2, y2;
         uint16_t colour;
+        uint8_t pen_size;   // Pen width in pixels at the time the line was drawn
     } MockLine;
 
     //
@@ -164,6 +165,7 @@ extern "C"
         float heading;
         LogoPen pen_state;
         uint16_t pen_colour;
+        uint8_t pen_size;   // Pen width in pixels
         bool visible;
         uint8_t shape;
         uint8_t rot_style;  // LogoRotationStyle
@@ -233,6 +235,7 @@ extern "C"
             float heading;                   // 0 = north, 90 = east
             LogoPen pen_state;               // Pen state (up/down/erase/reverse)
             uint16_t pen_colour;             // Current pen color
+            uint8_t pen_size;                // Pen width in pixels
             uint16_t bg_colour;              // Background color
             bool visible;                    // Is turtle visible?
             MockTurtleBoundaryMode boundary_mode;  // Fence/window/wrap

@@ -103,7 +103,7 @@ void screen_gfx_set_boundary_mode(ScreenBoundaryMode mode);
 ScreenBoundaryMode screen_gfx_get_boundary_mode(void);
 void screen_gfx_set_point(float x, float y, uint8_t colour);
 uint8_t screen_gfx_get_point(float x, float y);
-void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, bool reverse);
+void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, bool reverse, int width);
 void screen_gfx_text(int x, int y, const char *s, uint8_t colour);
 void screen_gfx_fill(float x, float y, uint8_t colour);
 void screen_gfx_update(void);

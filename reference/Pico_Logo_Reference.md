@@ -1237,6 +1237,25 @@ See [Colours](#appendix-e-colour-palette-for-pico-logo) for the default palette.
 ```
 
 
+## setpensize
+
+setpensize _size_  
+
+`command`
+
+The `setpensize` command sets the width of the pen, in pixels, where _size_ is a whole number of 1 or more. The value is rounded to the nearest whole number and clamped to a maximum of 32. When you start up Logo, the pen size is 1.
+
+A pen wider than one pixel draws by stamping a filled disc at each point along the line, so lines have the same apparent width at every angle and round ends. The reversing pen ([`penreverse`](#penreverse-px)) always draws one pixel wide, regardless of the pen size.
+
+**Example**:
+
+```logo
+; Draw a thick square
+?setpensize 5
+?repeat 4 [fd 60 rt 90]
+```
+
+
 ## settextcolor (settc)
 
 settextcolor [_foreground_ _background_]  
@@ -1424,6 +1443,23 @@ See [Colours](#appendix-e-colour-palette-for-pico-logo) for the default palette.
 ?setpc 4
 ?pr pencolor
 4
+```
+
+
+## pensize
+
+pensize  
+
+`operation`
+
+`pensize` outputs a number representing the current width of the pen, in pixels. When the turtle first starts up, `pensize` outputs 1.
+
+**Example**:
+
+```logo
+?setpensize 5
+?pr pensize
+5
 ```
 
 

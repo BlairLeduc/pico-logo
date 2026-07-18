@@ -64,6 +64,12 @@ extern "C" {
 // ERR_DOESNT_LIKE_INPUT.
 #define MAX_TURTLES 8
 
+// Maximum pen diameter, in pixels, for `setpensize`. The pen draws by
+// stamping a filled disc of this diameter at each line step, so the value is
+// a draw-time cap only (no persistent buffer). `setpensize` rounds its input
+// to an integer and clamps it to [1, MAX_PEN_SIZE].
+#define MAX_PEN_SIZE 32
+
 // Maximum number of armed `when` demons. Each demon holds two node
 // references (a condition expression and an action list) plus a couple of
 // flag bytes, so the table costs ~100 B — see docs/multi-sprite-design.md
