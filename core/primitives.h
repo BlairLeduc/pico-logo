@@ -156,7 +156,8 @@ extern "C"
     // Stop autonomous motion and animation on every turtle (speed 0, anim
     // off). Turtle state, not demon state: called by `cs` alongside its
     // clear/home, and by demons_reset() on a full autonomous reset. No-op
-    // when there is no device yet (boot).
+    // when there is no device yet (boot). On devices that support turtle
+    // selection this visits each turtle in turn and leaves turtle 0 selected.
     void turtle_stop_motion(void);
 
     // Forward declarations for I/O
