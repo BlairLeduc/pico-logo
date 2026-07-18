@@ -229,10 +229,13 @@ when [(alien.bottom.y) < -55] [invasion]   ; block reached the cannon line
 ```
 
 `freeze`/`thaw` pause the whole living world (motion, animation, demons) in
-one word — the natural pause key (`toggle.pause`, bound to `p`). `clearscreen`
-clears demons and stops all autonomous motion, so `setup.level`'s `cs` at the
-top of every level guarantees no demon or bomb survives from the previous
-level — `arm.demons` re-registers all five fresh, every level.
+one word — the natural pause key (`toggle.pause`, bound to `p`). At the top of
+every level `setup.level` calls `cleardemons` then `cs`: `cleardemons` disarms
+every demon so none survives from the previous level, and `cs` clears the
+screen and stops all autonomous motion (bombs, shots) — `arm.demons` then
+re-registers all five fresh, every level. (`cs` no longer clears demons on its
+own — revisited 2026-07-18; demon teardown is `cleardemons`' job, see
+[multi-sprite §7](multi-sprite-design.md).)
 
 ## 6. Input
 

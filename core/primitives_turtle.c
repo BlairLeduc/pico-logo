@@ -9,8 +9,6 @@
 #include "format.h"
 #include "error.h"
 #include "eval.h"
-#include "demons.h"
-#include "httpd.h"
 #include "frame_sync.h"
 #include "limits.h"
 #include "devices/io.h"
@@ -768,6 +766,30 @@ static Result prim_shownp(Evaluator *eval, int argc, Value *args)
 // Screen primitives
 //==========================================================================
 
+void turtle_stop_motion(void)
+{
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (!turtle)
+    {
+        return;
+    }
+    if (turtle->select)
+    {
+        for (uint8_t n = 0; n < MAX_TURTLES; n++)
+        {
+            turtle->select(n);
+            if (turtle->set_speed) turtle->set_speed(0.0f);
+            if (turtle->set_anim) turtle->set_anim(0, 0, 0);
+        }
+        turtle->select(0);
+    }
+    else
+    {
+        if (turtle->set_speed) turtle->set_speed(0.0f);
+        if (turtle->set_anim) turtle->set_anim(0, 0, 0);
+    }
+}
+
 // clearscreen (cs) - Clear screen and reset turtle
 static Result prim_clearscreen(Evaluator *eval, int argc, Value *args)
 {
@@ -777,11 +799,11 @@ static Result prim_clearscreen(Evaluator *eval, int argc, Value *args)
     // afterwards (the device's clear op re-hides turtles 1-7 at home).
     reset_active_set();
 
-    // A full reset also disarms every `when` demon and stops autonomous
-    // turtle motion/animation, and closes the HTTP server: nothing acts on its
-    // own after a reset.
-    demons_reset();
-    httpd_reset();
+    // cs resets turtle state only: moving and animating turtles stop, but
+    // armed `when` demons and the HTTP server are untouched — demon
+    // lifecycle is separate from turtle graphics (see cleardemons and
+    // http.unlisten).
+    turtle_stop_motion();
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (turtle)

@@ -165,18 +165,42 @@ void test_freeze_suspends_demons(void)
 }
 
 //==========================================================================
-// Lifetime: cs and reset clear demons
+// Lifetime: cleardemons clears demons; cs leaves them alone
 //==========================================================================
 
-void test_clearscreen_clears_demons(void)
+void test_clearscreen_leaves_demons_armed(void)
 {
+    // Demon lifecycle is separate from turtle graphics: cs must not disarm.
     run_string("make \"x 5  make \"fired 0");
     run_string("when [:x = 5] [make \"fired :fired + 1]");
     run_string("cs");
     demons_poll();
     mock_device_clear_output();
     run_string("show :fired");
+    TEST_ASSERT_EQUAL_STRING("1\n", mock_device_get_output());
+}
+
+void test_cleardemons_disarms_all(void)
+{
+    run_string("make \"x 5  make \"y 5  make \"fired 0");
+    run_string("when [:x = 5] [make \"fired :fired + 1]");
+    run_string("when [:y = 5] [make \"fired :fired + 1]");
+    run_string("cleardemons");
+    demons_poll();
+    mock_device_clear_output();
+    run_string("show :fired");
     TEST_ASSERT_EQUAL_STRING("0\n", mock_device_get_output());
+}
+
+void test_cleardemons_leaves_motion_and_freeze(void)
+{
+    // cleardemons is demon lifecycle only: a gliding turtle keeps its speed
+    // and a freeze stays in force until thaw.
+    run_string("setspeed 100");
+    run_string("freeze");
+    run_string("cleardemons");
+    TEST_ASSERT_EQUAL_FLOAT(100.0f, mock_device_get_turtle(0)->speed);
+    TEST_ASSERT_TRUE(demons_frozen());
 }
 
 //==========================================================================
@@ -323,7 +347,9 @@ int main(void)
     RUN_TEST(test_when_bad_condition_errors);
     RUN_TEST(test_action_does_not_reenter_poll);
     RUN_TEST(test_freeze_suspends_demons);
-    RUN_TEST(test_clearscreen_clears_demons);
+    RUN_TEST(test_clearscreen_leaves_demons_armed);
+    RUN_TEST(test_cleardemons_disarms_all);
+    RUN_TEST(test_cleardemons_leaves_motion_and_freeze);
     RUN_TEST(test_clearscreen_stops_motion);
     RUN_TEST(test_maybe_poll_respects_budget);
     RUN_TEST(test_setspeed_speed_roundtrip);

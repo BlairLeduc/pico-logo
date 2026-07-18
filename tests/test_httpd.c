@@ -289,14 +289,16 @@ void test_reset_closes_the_listener(void)
     TEST_ASSERT_FALSE(mock_httpd_is_listening());
 }
 
-void test_clearscreen_closes_the_listener(void)
+void test_clearscreen_leaves_the_listener_running(void)
 {
+    // Demon (and server) lifecycle is separate from turtle graphics: a
+    // program that redraws with cs must not lose its HTTP server.
     eval_string("http.listen 80");
     TEST_ASSERT_TRUE(httpd_listening());
 
     eval_string("clearscreen");
-    TEST_ASSERT_FALSE(httpd_listening());
-    TEST_ASSERT_FALSE(mock_httpd_is_listening());
+    TEST_ASSERT_TRUE(httpd_listening());
+    TEST_ASSERT_TRUE(mock_httpd_is_listening());
 }
 
 // ============================================================================
@@ -703,7 +705,7 @@ int main(void)
     RUN_TEST(test_stalled_request_gets_408);
 
     RUN_TEST(test_reset_closes_the_listener);
-    RUN_TEST(test_clearscreen_closes_the_listener);
+    RUN_TEST(test_clearscreen_leaves_the_listener_running);
 
     RUN_TEST(test_accessors_report_request_fields);
     RUN_TEST(test_path_is_percent_decoded);
