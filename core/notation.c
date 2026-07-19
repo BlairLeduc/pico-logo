@@ -162,7 +162,7 @@ NotationKind notation_parse_token(NotationState *s, const char *token, SoundEven
     int dur;
     if (read_uint(&p, &dur))
     {
-        if (dur < 1 || dur > 64)
+        if (dur < 1 || dur > 32)
         {
             return NOTATION_ERROR;
         }

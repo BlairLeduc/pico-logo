@@ -197,6 +197,16 @@ void test_empty_token(void)
     assert_error("");
 }
 
+void test_length_prefix_out_of_range(void)
+{
+    // The inline length prefix uses the same 1..32 range as the `l` control.
+    NotationState s;
+    notation_state_init(&s);
+    TEST_ASSERT_EQUAL_UINT16(63, note(&s, "32g").dur_ms); // 1/32 note accepted
+    assert_error("33g");
+    assert_error("64g");
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -218,5 +228,6 @@ int main(void)
     RUN_TEST(test_tempo_out_of_range);
     RUN_TEST(test_trailing_junk);
     RUN_TEST(test_empty_token);
+    RUN_TEST(test_length_prefix_out_of_range);
     return UNITY_END();
 }

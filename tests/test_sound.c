@@ -281,6 +281,16 @@ void test_play_queue_full_break(void)
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
+void test_play_no_sound_engine_is_noop(void)
+{
+    // A device with no audio engine (e.g. the host) leaves the hardware ops
+    // table NULL, so sound_ops() returns NULL. play must then be a silent
+    // no-op that reports success, not crash on a NULL dereference.
+    logo_hardware_init(&mock_hardware, NULL);
+    Result r = run_string("play [c d e]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+}
+
 void test_playing_false_when_idle(void)
 {
     Result r = eval_string("playing?");
@@ -346,6 +356,7 @@ int main(void)
     RUN_TEST(test_play_bad_notation_errors);
     RUN_TEST(test_play_waits_for_queue_space);
     RUN_TEST(test_play_queue_full_break);
+    RUN_TEST(test_play_no_sound_engine_is_noop);
     RUN_TEST(test_playing_false_when_idle);
     RUN_TEST(test_playing_true_after_play);
     RUN_TEST(test_playing_single_voice);

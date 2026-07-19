@@ -421,7 +421,7 @@ static Result queue_event_waiting(LogoIO *io, LogoHardwareOps *ops, int voice, c
 {
     for (;;)
     {
-        int accepted = ops->sound_queue ? ops->sound_queue(voice, ev, 1) : 1;
+        int accepted = (ops && ops->sound_queue) ? ops->sound_queue(voice, ev, 1) : 1;
         if (accepted >= 1)
         {
             return result_none();
