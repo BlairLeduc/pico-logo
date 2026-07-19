@@ -156,11 +156,21 @@ to sndchord
 end
 
 ; Frere Jacques, built a phrase at a time (tuneblocks).
-to f1  play [c d e c]  end
-to f2  play [e f 2g]  end
-to f3  play [8g. 16a 8g 8f e c]  end
-to f4  play [c g3 2c]  end
-to frere  f1 f1 f2 f2 f3 f3 f4 f4  end
+to f1
+  play [c d e c]
+end
+to f2
+  play [e f 2g]
+end
+to f3
+  play [8g. 16a 8g 8f e c]
+end
+to f4
+  play [c g3 2c]
+end
+to frere
+  f1 f1 f2 f2 f3 f3 f4 f4
+end
 
 ; Step 9: the play sequencer -- a background melody and notation.
 to sndtune
@@ -183,7 +193,7 @@ end
 ; Step 10: a two-voice round (rests offset the second voice).
 to sndround
   sndbanner [Step 10: two-voice round]
-  pr [PASS: voice 0 leads; voice 1 enters two]
+  pr [PASS: voice 0 leads, voice 1 enters two]
   pr [      beats later, both playing together.]
   setwave 0 "triangle  setwave 1 "square
   setenv 0 [8 0 15 60]  setenv 1 [8 0 15 60]
@@ -196,8 +206,8 @@ end
 ; Step 11: playing? and stopsound.
 to sndstop
   sndbanner [Step 11: playing? and stopsound]
-  pr [PASS: a long run starts; playing? reads]
-  pr [      true; after stopsound it goes silent]
+  pr [PASS: a long run starts, playing? reads]
+  pr [      true, after stopsound it goes silent]
   pr [      and playing? reads false.]
   setwave 0 "sawtooth
   play [t90 l8 c d e f g a b c5 d5 e5 f5 g5 a5 b5 c6 c6]
