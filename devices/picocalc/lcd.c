@@ -14,6 +14,13 @@
 //        For instance, you can usually get away with a short chip select high pulse widths, but
 //        writing to the display RAM requires the minimum chip select high pulse width of 40ns.
 //
+//  INVARIANT: the LCD is only ever touched from thread context (never from an
+//  IRQ). The cursor-blink timer merely sets a flag that lcd_cursor_blink()
+//  services from the keyboard wait loop. This is what lets the driver run
+//  with interrupts enabled, so long SPI blits cannot starve the audio DMA
+//  refill IRQ (devices/picocalc/sound.c). Do not call any lcd_* function from
+//  an interrupt handler.
+//
 
 #include <string.h>
 
@@ -44,20 +51,8 @@ static uint8_t line_buffer[WIDTH * GLYPH_HEIGHT] __attribute__((aligned(4)));
 static uint16_t palette[256] = {0};
 
 // Background processing
-static uint32_t irq_state;
 static repeating_timer_t cursor_timer;
-
-static void lcd_disable_interrupts()
-{
-    irq_state = save_and_disable_interrupts();
-    // gpio_put(3, true);
-}
-
-static void lcd_enable_interrupts()
-{
-    // gpio_put(3, false);
-    restore_interrupts(irq_state);
-}
+static volatile bool cursor_blink_due = false;
 
 //
 // Palette functions
@@ -190,7 +185,8 @@ void lcd_write16_buf(const uint16_t *buffer, size_t len)
 //  at wire speed. The CPU therefore pays only for the expansion (~a few us
 //  per row) instead of pacing the SPI one pixel at a time (~68 us per full
 //  row). Between lcd_blit_begin() and lcd_blit_end() the chip select is
-//  held and interrupts are disabled, exactly as the old blocking blit did.
+//  held; interrupts stay enabled (the ST7789P tolerates SPI clock pauses
+//  mid-window), so audio and timer IRQs run normally during blits.
 //
 
 static void lcd_set_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1);
@@ -205,7 +201,6 @@ static uint16_t lcd_blit_width = 0;
 // Rows are then fed with lcd_blit_row(); close with lcd_blit_end().
 void lcd_blit_begin(uint16_t x, uint16_t y, uint16_t width, uint16_t height)
 {
-    lcd_disable_interrupts();
     if (y >= lcd_scroll_top && y < HEIGHT - lcd_scroll_bottom)
     {
         // Adjust y for vertical scroll offset and wrap within memory height
@@ -279,7 +274,6 @@ void lcd_blit_end(void)
 
     gpio_put(LCD_CSX, 1);
     spi_set_format(LCD_SPI, 8, 0, 0, SPI_MSB_FIRST);
-    lcd_enable_interrupts();
 }
 
 //
@@ -364,7 +358,6 @@ void lcd_define_scrolling(uint16_t top_fixed_area, uint16_t bottom_fixed_area)
     lcd_memory_scroll_height = FRAME_HEIGHT - (top_fixed_area + bottom_fixed_area);
     lcd_scroll_bottom = bottom_fixed_area;
 
-    lcd_disable_interrupts();
     lcd_write_cmd(LCD_CMD_VSCRDEF);
     lcd_write_data(6,
                    UPPER8(lcd_scroll_top),
@@ -373,7 +366,6 @@ void lcd_define_scrolling(uint16_t top_fixed_area, uint16_t bottom_fixed_area)
                    LOWER8(scroll_area),
                    UPPER8(lcd_scroll_bottom),
                    LOWER8(lcd_scroll_bottom));
-    lcd_enable_interrupts();
 
     lcd_scroll_reset(); // Reset the scroll area to the top
 }
@@ -384,10 +376,8 @@ void lcd_scroll_reset()
     lcd_y_offset = 0; // Reset the scroll offset
     uint16_t scroll_area_start = lcd_scroll_top + lcd_y_offset;
 
-    lcd_disable_interrupts();
     lcd_write_cmd(LCD_CMD_VSCSAD); // Sets where in display RAM the scroll area starts
     lcd_write_data(2, UPPER8(scroll_area_start), LOWER8(scroll_area_start));
-    lcd_enable_interrupts();
 }
 
 void lcd_scroll_clear(uint8_t bg_colour)
@@ -410,10 +400,8 @@ void lcd_scroll_up(uint8_t bg_colour)
     lcd_y_offset = (lcd_y_offset + GLYPH_HEIGHT) % lcd_memory_scroll_height;
     uint16_t scroll_area_start = lcd_scroll_top + lcd_y_offset;
 
-    lcd_disable_interrupts();
     lcd_write_cmd(LCD_CMD_VSCSAD); // Sets where in display RAM the scroll area starts
     lcd_write_data(2, UPPER8(scroll_area_start), LOWER8(scroll_area_start));
-    lcd_enable_interrupts();
 
     // Clear the new line at the bottom
     lcd_solid_rectangle(bg_colour, 0, HEIGHT - GLYPH_HEIGHT, WIDTH, GLYPH_HEIGHT);
@@ -431,10 +419,8 @@ void lcd_scroll_down(uint8_t bg_colour)
     lcd_y_offset = (lcd_y_offset - GLYPH_HEIGHT + lcd_memory_scroll_height) % lcd_memory_scroll_height;
     uint16_t scroll_area_start = lcd_scroll_top + lcd_y_offset;
 
-    lcd_disable_interrupts();
     lcd_write_cmd(LCD_CMD_VSCSAD); // Sets where in display RAM the scroll area starts
     lcd_write_data(2, UPPER8(scroll_area_start), LOWER8(scroll_area_start));
-    lcd_enable_interrupts();
 
     // Clear the new line at the top
     lcd_solid_rectangle(bg_colour, 0, lcd_scroll_top, WIDTH, GLYPH_HEIGHT);
@@ -682,17 +668,13 @@ void lcd_reset()
 // Turn on the LCD display
 void lcd_display_on()
 {
-    lcd_disable_interrupts();
     lcd_write_cmd(LCD_CMD_DISPON);
-    lcd_enable_interrupts();
 }
 
 // Turn off the LCD display
 void lcd_display_off()
 {
-    lcd_disable_interrupts();
     lcd_write_cmd(LCD_CMD_DISPOFF);
-    lcd_enable_interrupts();
 }
 
 //
@@ -701,14 +683,31 @@ void lcd_display_off()
 //  Handle background tasks such as blinking the cursor
 //
 
-// Blink the cursor at regular intervals
+// Timer callback (IRQ context): only flag that a blink toggle is due. The
+// actual drawing happens in lcd_cursor_blink(), called from thread context
+// (the keyboard wait loop), preserving the invariant that the LCD is never
+// touched from an interrupt handler.
 bool on_cursor_timer(repeating_timer_t *rt)
+{
+    cursor_blink_due = true;
+    return true; // Keep the timer running
+}
+
+// Service a pending blink toggle. Called from thread context while waiting
+// for input; a no-op if the blink interval has not elapsed.
+void lcd_cursor_blink(void)
 {
     static bool cursor_visible = false;
 
+    if (!cursor_blink_due)
+    {
+        return;
+    }
+    cursor_blink_due = false;
+
     if (!lcd_cursor_enabled())
     {
-        return true; // if the SPI bus is not available or cursor is disabled, do not toggle cursor
+        return; // cursor is disabled, do not toggle
     }
 
     if (cursor_visible)
@@ -721,7 +720,6 @@ bool on_cursor_timer(repeating_timer_t *rt)
     }
 
     cursor_visible = !cursor_visible; // Toggle cursor visibility
-    return true;                      // Keep the timer running
 }
 
 // Initialize the LCD display
@@ -769,8 +767,6 @@ void lcd_init()
 
     gpio_put(LCD_CSX, 1);
     gpio_put(LCD_RST, 1);
-
-    lcd_disable_interrupts();
 
     lcd_reset(); // reset the LCD controller
 
@@ -832,7 +828,6 @@ void lcd_init()
     );
 
     lcd_write_cmd(LCD_CMD_SLPOUT); // sleep out
-    lcd_enable_interrupts();
 
     busy_wait_us(10000); // required to wait at least 5ms
 
