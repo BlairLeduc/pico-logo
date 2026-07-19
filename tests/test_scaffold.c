@@ -250,7 +250,14 @@ LogoHardwareOps mock_hardware_ops = {
     .clear_pause_request = mock_clear_pause_request,
     .check_freeze_request = mock_check_freeze_request,
     .clear_freeze_request = mock_clear_freeze_request,
-    .toot = NULL,  // Mock: no audio
+    // Sound synthesizer (P8) - scripted via the mock sound backend
+    // (toot routes through sound_gate; there is no separate toot op)
+    .sound_gate = mock_sound_gate,
+    .sound_queue = mock_sound_queue,
+    .sound_status = mock_sound_status,
+    .sound_stop = mock_sound_stop,
+    .sound_env = mock_sound_env,
+    .sound_wave = mock_sound_wave,
     // WiFi operations (always available in tests)
     .wifi_is_connected = mock_wifi_is_connected,
     .wifi_connect = mock_wifi_connect,

@@ -95,14 +95,31 @@ static Result prim_bootsel(Evaluator *eval, int argc, Value *args)
     return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
 }
 
+// `toot`'s fixed voices: left ear voice 0, right ear voice 4 (the first
+// tone voice of each ear). See docs/sound-design.md §5.1.
+#define TOOT_LEFT_VOICE 0
+#define TOOT_RIGHT_VOICE 4
+
+// A voice is "audible" for toot only within the documented 100-2000 Hz
+// range; anything else is a rest (frequency 0). This is the range
+// enforcement that used to live in the PIO backend.
+static uint32_t toot_gate_freq(uint32_t freq)
+{
+    return (freq >= 100 && freq <= 2000) ? freq : 0;
+}
+
 // toot duration frequency
 // (toot duration leftfrequency rightfrequency)
 // Plays a tone for the specified duration.
 // Duration is in 1/1000ths of a second (milliseconds).
 // Frequency is in Hz. The actual playable range is 100-2000 Hz; per
 // reference §2823, frequencies outside that range are not an error --
-// they behave as a rest (by convention 0 Hz). Range enforcement and the
-// rest fallback are implemented inside the device's tone backend, not here.
+// they behave as a rest (by convention 0 Hz).
+//
+// `toot` is a square wave at volume 15 with an instant envelope on voices
+// 0 and 4 (docs/sound-design.md §5.1) -- it forces that timbre so a beep
+// sounds the same regardless of any setwave/setenv on those voices, and it
+// waits (like a second toot) for the previous toot to finish.
 static Result prim_toot(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
@@ -166,11 +183,33 @@ static Result prim_toot(Evaluator *eval, int argc, Value *args)
         right_freq = (uint32_t)rfreq;
     }
 
-    // Play the tone if hardware supports it
+    // Play the tone if hardware supports it. Route through the sound
+    // engine's per-voice gate (docs/sound-design.md §5.1).
     LogoIO *io = primitives_get_io();
-    if (io && io->hardware && io->hardware->ops && io->hardware->ops->toot)
+    if (io && io->hardware && io->hardware->ops && io->hardware->ops->sound_gate)
     {
-        io->hardware->ops->toot((uint32_t)duration_ms, left_freq, right_freq);
+        LogoHardwareOps *ops = io->hardware->ops;
+
+        // Wait for a previous toot on either channel to finish, like the
+        // reference's second-toot behaviour. Interruptible by BREAK.
+        if (ops->sound_status)
+        {
+            while (ops->sound_status(TOOT_LEFT_VOICE).sounding ||
+                   ops->sound_status(TOOT_RIGHT_VOICE).sounding)
+            {
+                if (logo_io_check_user_interrupt(io))
+                {
+                    return result_none();
+                }
+                logo_io_sleep(io, 1);
+            }
+        }
+
+        // Gate both toot voices at full volume. They keep their default
+        // square, click-free timbre unless the program has changed voice 0/4
+        // with setwave/setenv.
+        ops->sound_gate(TOOT_LEFT_VOICE, toot_gate_freq(left_freq), (uint32_t)duration_ms, 15);
+        ops->sound_gate(TOOT_RIGHT_VOICE, toot_gate_freq(right_freq), (uint32_t)duration_ms, 15);
     }
     // If no audio hardware, silently succeed (command has no output)
 

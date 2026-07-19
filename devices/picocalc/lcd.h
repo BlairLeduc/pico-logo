@@ -155,6 +155,7 @@ void lcd_draw_cursor(void);
 void lcd_erase_cursor(void);
 void lcd_enable_cursor(bool cursor_on);
 bool lcd_cursor_enabled(void);
+void lcd_cursor_blink(void); // service a pending blink toggle (thread context)
 
 // Initialization
 void lcd_clear_screen(uint8_t bg_colour);

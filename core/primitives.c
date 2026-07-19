@@ -79,6 +79,7 @@ void primitives_init(void)
     primitives_turtle_init();
     primitives_events_init();
     primitives_hardware_init();
+    primitives_sound_init();
     primitives_list_processing_init();
     primitives_wifi_init();
     primitives_network_init();

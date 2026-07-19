@@ -171,6 +171,35 @@ extern "C" {
 // ERR_FILE_TOO_BIG rather than truncating.
 #define HTTPD_ELEMENT_MAX 1024
 
+// Sound synthesizer (P8, docs/sound-design.md). The engine renders eight
+// voices: three tone plus one noise per stereo ear (the SN76489 layout,
+// doubled). Voices are numbered by ear: 0-2 tone + 3 noise (left),
+// 4-6 tone + 7 noise (right).
+//
+// OVERFLOW: `sound`/`play`/`setenv`/`setwave` reject a voice number >=
+// MAX_VOICES with ERR_DOESNT_LIKE_INPUT, matching `tell`.
+#define MAX_VOICES 8
+
+// Per-voice sequencer queue depth, in note events (SoundEvent, 6 B). At
+// eight voices that is SOUND_QUEUE_LEN * 8 * 6 B; 64 gives ~16 bars of
+// eighth notes per voice before `play` has to wait. Halving to 32 saves
+// ~1.5 KB if link-time SRAM pressure demands (docs/sound-design.md §8).
+//
+// OVERFLOW: `play` does NOT error when a voice queue is full -- it waits
+// (BREAK-interruptible) for slots to drain, so long songs stream instead
+// of failing.
+#define SOUND_QUEUE_LEN 64
+
+// DMA output ring geometry (docs/sound-design.md §6). Two halves so the
+// wrap IRQ can refill the drained half while DMA streams the other; each
+// slot is a 32-bit L|R PWM compare pair. Power of two so the whole ring
+// (2 * 256 * 4 = 2048 B) is a hardware-ring-wrappable, aligned buffer: the
+// DMA read address wraps in hardware, so if the refill IRQ is starved (the
+// display driver masks interrupts during screen redraws) the DMA cleanly
+// replays the ring instead of reading past it into garbage. 256 slots/half
+// at the 36.6 kHz mix rate is ~3.5 ms of audio per half.
+#define SOUND_RING_HALF 256
+
 #ifdef __cplusplus
 }
 #endif

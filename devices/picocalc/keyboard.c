@@ -21,6 +21,7 @@
 #include "pico/stdlib.h"
 
 #include "keyboard.h"
+#include "lcd.h"
 #include "southbridge.h"
 #include "screensaver.h"
 #include "screen.h"
@@ -207,6 +208,9 @@ char keyboard_get_key()
         }
         // Update screen saver (checks idle time, cycles palette if active)
         screensaver_update();
+        // Blink the cursor here, in thread context; the blink timer only
+        // sets a flag (the LCD must never be drawn from an IRQ).
+        lcd_cursor_blink();
         // Poll `when` demons and advance autonomous turtles while we idle at
         // the prompt, so they stay live as the user types.
         if (keyboard_idle_callback)

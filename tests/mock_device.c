@@ -1166,6 +1166,136 @@ void mock_device_reset(void)
     mock_state.time.get_time_enabled = true;
     mock_state.time.set_date_enabled = true;
     mock_state.time.set_time_enabled = true;
+
+    // Sound: memset zeroed the logs and `sounding` flags; each voice starts
+    // idle with an empty queue (all slots free).
+    for (int i = 0; i < MAX_VOICES; i++)
+    {
+        mock_state.sound.free_slots[i] = SOUND_QUEUE_LEN;
+    }
+}
+
+//
+// Mock sound operations (P8). Every op records its arguments. Voice status
+// is scriptable, and each sound_status poll advances the simulation one step
+// (the current note ends, one queued slot drains) so the interpreter's wait
+// loops -- toot's wait for the previous note and play's wait for queue space
+// -- make progress and terminate without real hardware timing.
+//
+
+void mock_sound_gate(int voice, uint32_t freq_hz, uint32_t dur_ms, int vol)
+{
+    if (voice < 0 || voice >= MAX_VOICES)
+    {
+        return;
+    }
+    if (mock_state.sound.gate_count < MOCK_SOUND_MAX_GATES)
+    {
+        int i = mock_state.sound.gate_count++;
+        mock_state.sound.gates[i].voice = voice;
+        mock_state.sound.gates[i].freq = freq_hz;
+        mock_state.sound.gates[i].dur = dur_ms;
+        mock_state.sound.gates[i].vol = vol;
+    }
+    // A gate wins over queued music: the voice's queue is flushed, and it is
+    // sounding unless the gate is a rest (freq 0).
+    mock_state.sound.free_slots[voice] = SOUND_QUEUE_LEN;
+    mock_state.sound.sounding[voice] = (freq_hz != 0);
+}
+
+int mock_sound_queue(int voice, const SoundEvent *events, int n)
+{
+    if (voice < 0 || voice >= MAX_VOICES || !events || n <= 0)
+    {
+        return 0;
+    }
+    int free = mock_state.sound.free_slots[voice];
+    int accepted = n < free ? n : free;
+    for (int k = 0; k < accepted; k++)
+    {
+        if (mock_state.sound.queued_count < MOCK_SOUND_MAX_QUEUED)
+        {
+            mock_state.sound.queued[mock_state.sound.queued_count++] = events[k];
+        }
+    }
+    mock_state.sound.free_slots[voice] -= accepted;
+    if (accepted > 0)
+    {
+        mock_state.sound.sounding[voice] = true;
+    }
+    return accepted;
+}
+
+SoundStatus mock_sound_status(int voice)
+{
+    SoundStatus s = {false, 0};
+    if (voice < 0 || voice >= MAX_VOICES)
+    {
+        return s;
+    }
+    int free = mock_state.sound.free_slots[voice];
+    s.sounding = mock_state.sound.sounding[voice];
+    s.free_slots = (uint8_t)(free < 0 ? 0 : (free > 255 ? 255 : free));
+
+    // Advance one step so wait loops progress: the note finishes and one
+    // queued slot drains.
+    mock_state.sound.sounding[voice] = false;
+    if (mock_state.sound.free_slots[voice] < SOUND_QUEUE_LEN)
+    {
+        mock_state.sound.free_slots[voice]++;
+    }
+    return s;
+}
+
+void mock_sound_stop(uint32_t voice_mask)
+{
+    mock_state.sound.last_stop_mask = voice_mask;
+    mock_state.sound.stop_count++;
+    for (int i = 0; i < MAX_VOICES; i++)
+    {
+        if (voice_mask & (1u << i))
+        {
+            mock_state.sound.sounding[i] = false;
+            mock_state.sound.free_slots[i] = SOUND_QUEUE_LEN;
+        }
+    }
+}
+
+void mock_sound_env(int voice, uint32_t attack_ms, uint32_t decay_ms, int sustain, uint32_t release_ms)
+{
+    if (voice < 0 || voice >= MAX_VOICES)
+    {
+        return;
+    }
+    mock_state.sound.env[voice].attack = attack_ms;
+    mock_state.sound.env[voice].decay = decay_ms;
+    mock_state.sound.env[voice].sustain = sustain;
+    mock_state.sound.env[voice].release = release_ms;
+}
+
+void mock_sound_wave(int voice, int wave, int duty)
+{
+    if (voice < 0 || voice >= MAX_VOICES)
+    {
+        return;
+    }
+    mock_state.sound.wave[voice].wave = wave;
+    mock_state.sound.wave[voice].duty = duty;
+}
+
+void mock_sound_set_status(int voice, bool sounding, int free_slots)
+{
+    if (voice < 0 || voice >= MAX_VOICES)
+    {
+        return;
+    }
+    mock_state.sound.sounding[voice] = sounding;
+    mock_state.sound.free_slots[voice] = free_slots;
+}
+
+int mock_sound_gate_count(void)
+{
+    return mock_state.sound.gate_count;
 }
 
 const MockDeviceState *mock_device_get_state(void)

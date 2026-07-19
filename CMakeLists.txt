@@ -92,6 +92,8 @@ add_library(logo_core
     core/primitives_files_directory.c
     core/primitives_files_load_save.c
     core/primitives_hardware.c
+    core/primitives_sound.c
+    core/notation.c
     core/primitives_logical.c
     core/primitives_bitwise.c
     core/primitives_outside_world.c
@@ -175,7 +177,7 @@ endif()
 
 add_executable(pico-logo
     devices/picocalc/clib.c
-    devices/picocalc/audio.c
+    devices/picocalc/sound.c
     devices/picocalc/costumes.c
     devices/picocalc/dirty_tiles.c
     devices/picocalc/editor.c
@@ -211,9 +213,6 @@ set_source_files_properties(
 pico_set_program_name(pico-logo "pico-logo")
 pico_set_program_version(pico-logo "0.1")
 
-# Generate PIO header
-pico_generate_pio_header(pico-logo ${CMAKE_CURRENT_LIST_DIR}/devices/picocalc/audio.pio)
-
 # Modify the below lines to enable/disable output over UART/USB
 pico_enable_stdio_uart(pico-logo 0)
 pico_enable_stdio_usb(pico-logo 0)
@@ -234,6 +233,7 @@ target_link_libraries(pico-logo
         hardware_gpio
         hardware_i2c
         hardware_pio
+        hardware_pwm
         hardware_spi
 )
 
@@ -379,6 +379,8 @@ if(BUILD_FOR_HOST)
         core/primitives_files_directory.c
         core/primitives_files_load_save.c
         core/primitives_hardware.c
+        core/primitives_sound.c
+        core/notation.c
         core/primitives_logical.c
         core/primitives_bitwise.c
         core/primitives_outside_world.c
@@ -553,6 +555,8 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_files_directory.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_files_load_save.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_hardware.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_sound.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/notation.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_logical.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_bitwise.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_outside_world.c

@@ -1,0 +1,188 @@
+; Pico Logo sound showcase
+; A tour of the stereo PSG synthesizer, written to be read as much as run.
+;
+; Load and run:
+;   load "sound
+;   sounddemo
+;
+; Every section is its own procedure -- run any of them alone, or `po`
+; one to see how it works:
+;   hello fanfare instruments effects bounce finale
+;
+; The synthesizer is 8 voices: three tone voices and one noise voice per
+; ear.  Voices 0 1 2 (tone) and 3 (noise) play in the LEFT ear; voices
+; 4 5 6 (tone) and 7 (noise) play in the RIGHT.  Anywhere a primitive
+; takes a voice you can give a list instead: [0 4] plays the same thing
+; in both ears (centre).  Best heard on headphones.
+;
+; The whole surface, as used below:
+;   toot dur freq                  beep and wait for it (the classic)
+;   sound voice freq dur           start a note NOW and return at once
+;   (sound voice freq dur vol)     ... at volume 0-15; immediate -- it
+;                                  cuts whatever that voice was doing
+;   setwave voice "square          tone waves: square pulse triangle
+;   (setwave voice "pulse 25)      sawtooth; pulse takes a duty %
+;   setwave voice "white           noise waves: white or periodic
+;   setenv voice [a d s r]         ADSR envelope: attack decay release
+;                                  in ms, sustain level 0-15
+;   play [notes]                   queue music on voice 0; returns at
+;   (play [0 4] [notes])           once and plays in the background
+;   playing?  stopsound            anything sounding? / silence all
+;
+; Note words for play: c d e f g a b, octave digit (c5), leading length
+; (8g = eighth, 2c = half, g. = dotted), r = rest, plus inline controls
+; t tempo, o octave, l default length, v volume (t140 o5 l8 v15).
+; Defaults: t120 o4 l4 v12.
+
+; Block until every voice has finished (safe self-tail-recursion).
+to quietdown
+  if playing? [wait 150 quietdown]
+end
+
+;--------------------------------------------------------------------------
+; Step 1: toot -- one line of Logo, one beep.
+;--------------------------------------------------------------------------
+to hello
+  pr [First, the classic: toot 150 523]
+  toot 150 523  toot 150 659  toot 300 784
+end
+
+;--------------------------------------------------------------------------
+; Step 2: the immediate layer.  `sound` starts a note and returns right
+; away, so gating stereo pairs one after another builds an arpeggio,
+; and gating three pairs together builds a chord.
+;--------------------------------------------------------------------------
+to fanfare
+  pr [A fanfare: three tone voices per ear, so chords are easy.]
+  setwave [0 1 2 4 5 6] "pulse
+  setenv [0 1 2 4 5 6] [4 0 15 250]
+  (sound [0 4] 262 160 13)  wait 180      ; C4, both ears
+  (sound [1 5] 330 160 13)  wait 180      ; E4
+  (sound [2 6] 392 160 13)  wait 180      ; G4
+  (sound [0 4] 523 700 13)                ; now all three at once:
+  (sound [1 5] 659 700 11)                ; a C major chord
+  (sound [2 6] 784 700 11)
+  wait 1000
+end
+
+;--------------------------------------------------------------------------
+; Step 3: four waveforms.  Same lick, different setwave.
+;--------------------------------------------------------------------------
+to lick
+  (play [0 4] [t150 v15 l8 c e g c5 4g])
+  quietdown
+end
+
+to instruments
+  pr [One lick, four waveforms: hollow square, nasal pulse,]
+  pr [soft triangle, bright sawtooth.]
+  setenv [0 4] [5 0 15 80]
+  setwave [0 4] "square      lick
+  (setwave [0 4] "pulse 20)  lick
+  setwave [0 4] "triangle    lick
+  setwave [0 4] "sawtooth    lick
+end
+
+;--------------------------------------------------------------------------
+; Step 4: game sound effects.  Envelopes and noise do the heavy
+; lifting; `sound` cuts the previous note, so a tight loop of short
+; gates sweeps the pitch.
+;--------------------------------------------------------------------------
+to pewpew
+  setwave [0 4] "sawtooth
+  setenv [0 4] [0 0 15 15]
+  make "f 1600
+  repeat 14 [(sound [0 4] :f 30 14) wait 22 make "f :f - 100]
+end
+
+to boom
+  setwave [3 7] "white                    ; 3 and 7 are the noise voices
+  setenv [3 7] [0 350 5 800]              ; slow decay, long release
+  (sound [3 7] 2500 400 15)
+  wait 1300
+end
+
+to coin
+  setwave [0 4] "square
+  setenv [0 4] [0 30 9 80]
+  (sound [0 4] 988 70 14)  wait 70        ; B5...
+  (sound [0 4] 1319 350 14)               ; ...hop up to E6
+  wait 500
+end
+
+to siren
+  setwave [0 4] "square
+  setenv [0 4] [15 0 15 15]
+  repeat 3 [(sound [0 4] 932 350 12) wait 350 (sound [0 4] 622 350 12) wait 350]
+end
+
+to effects
+  pr [Sound effects: a laser...]  pewpew  wait 300
+  pr [an explosion...]  boom
+  pr [a coin...]  coin
+  pr [and a siren.]  siren
+end
+
+;--------------------------------------------------------------------------
+; Step 5: stereo.  Voice 0 is only your left ear, voice 4 only your
+; right -- a rising note bounces between them.
+;--------------------------------------------------------------------------
+to bounce
+  pr [Stereo: a rising note bounces left ear, right ear...]
+  setwave [0 4] "triangle
+  setenv [0 4] [2 0 15 40]
+  make "f 294
+  repeat 5 [(sound 0 :f 130 15) wait 160 (sound 4 :f 130 15) wait 160 make "f :f * 1.25]
+  wait 300
+end
+
+;--------------------------------------------------------------------------
+; Step 6: the finale.  `play` queues note words on any voices and
+; returns at once, so melody, bass line and drums are three layers
+; queued back to back -- six voices sounding while Logo keeps running.
+; (Each play starts fresh at t120 o4 l4 v12, so every list restates
+; its tempo and volume.)
+;--------------------------------------------------------------------------
+to odemelody
+  (play [0 4] [t140 v15 o4 e e f g g f e d c c d e e. 8d 2d])
+  (play [0 4] [t140 v15 o4 e e f g g f e d c c d e d. 8c 2c])
+end
+
+to odebass
+  (play [1 5] [t140 v13 o2 l2 c g c g c g c g])
+  (play [1 5] [t140 v13 o2 l2 c g c g c g g c])
+end
+
+to odedrums
+  ; One bar: thump (low noise) on 1 and 3, tick-tick (high noise) on 2 and 4.
+  repeat 8 [(play [3 7] [t140 v10 o3 4g o8 8c 8c o3 4g o8 8c 8c])]
+end
+
+to finale
+  pr [The finale: melody, bass and drums, all queued with play.]
+  pr [Six voices at once, playing in the background.]
+  (setwave [0 4] "pulse 25)  setenv [0 4] [3 30 12 90]    ; lead
+  setwave [1 5] "triangle    setenv [1 5] [5 0 15 60]     ; bass
+  setwave [3 7] "white       setenv [3 7] [0 60 5 60]     ; drums
+  odemelody odebass odedrums
+  pr [] pr [Ode to Joy is playing... and this printed immediately!]
+  quietdown
+end
+
+;--------------------------------------------------------------------------
+; The whole show.
+;--------------------------------------------------------------------------
+to sounddemo
+  pr [The Pico Logo sound synthesizer:]
+  pr [8 voices, 3 tone and 1 noise per ear.]
+  pr []
+  hello        wait 600
+  fanfare      pr []
+  instruments  pr []
+  effects      pr []
+  bounce       pr []
+  finale
+  pr []
+  pr [That is the tour! Read any part with po, e.g.:  po "finale]
+  pr [Try your own:  play [t140 v15 l8 c e g c5]]
+end

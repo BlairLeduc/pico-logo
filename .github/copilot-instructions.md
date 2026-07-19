@@ -70,3 +70,7 @@ diff as given — do not ask the author to "run the tests" or "write tests first
 - `Result.value` sits outside the `Result` union; all constructors zero-fill
   unset members, so `result.value.type` is a valid tag (`VALUE_NONE`) for any
   status — defined behaviour, not uninitialized.
+- `parse_voice_set` fills a `MAX_VOICES`-sized array from values range-checked to
+  `0..MAX_VOICES-1` and deduplicated on insert, so it holds at most `MAX_VOICES`
+  distinct entries — the sorted insert cannot overflow. Don't flag it as needing
+  a further bounds check.

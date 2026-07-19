@@ -148,7 +148,6 @@ static LogoHardwareOps mock_hardware_ops = {
     .clear_pause_request = mock_clear_pause,
     .check_freeze_request = mock_check_freeze,
     .clear_freeze_request = mock_clear_freeze,
-    .toot = NULL,  // Mock: no audio
     .network_tcp_connect = NULL,
     .network_tcp_close = NULL,
     .network_tcp_read = NULL,

@@ -19,6 +19,42 @@ extern "C"
 #endif
 
     //
+    // Sound synthesizer (P8) shared types.
+    //
+    // A voice is 0..MAX_VOICES-1: 0-2 tone + 3 noise (left ear),
+    // 4-6 tone + 7 noise (right ear). Waveform selectors are shared
+    // between the core surface (setwave/wave) and the device engine.
+    //
+    typedef enum SoundWave
+    {
+        SOUND_WAVE_SQUARE = 0, // tone
+        SOUND_WAVE_PULSE,      // tone, variable duty
+        SOUND_WAVE_TRIANGLE,   // tone
+        SOUND_WAVE_SAWTOOTH,   // tone
+        SOUND_WAVE_WHITE,      // noise
+        SOUND_WAVE_PERIODIC,   // noise
+    } SoundWave;
+
+    // A single resolved note/gate. The note-word parser turns a play list
+    // into an array of these; tempo/octave/length/dots are already applied,
+    // so the device queue holds nothing but gates. freq_hz == 0 is a rest.
+    typedef struct SoundEvent
+    {
+        uint16_t freq_hz; // 0 = rest
+        uint16_t dur_ms;
+        uint8_t vol;   // 0-15
+        uint8_t flags; // reserved; 0 for now
+    } SoundEvent;
+
+    // Snapshot of a voice, returned by sound_status. Backs `playing?` and
+    // the `play` queue-full wait.
+    typedef struct SoundStatus
+    {
+        bool sounding;      // envelope active (producing sound)
+        uint8_t free_slots; // queue slots available for sound_queue
+    } SoundStatus;
+
+    //
     // LogoStorage interface
     // Platform-specific implementation should be provided to logo_io_init()
     //
@@ -67,10 +103,34 @@ extern "C"
         // Clear the freeze request flag
         void (*clear_freeze_request)(void);
 
-        // Play a tone
-        // duration is in milliseconds, frequencies are in Hz
-        // If the device is already playing a tone, block until it finishes
-        void (*toot)(uint32_t duration_ms, uint32_t left_freq, uint32_t right_freq);
+        //
+        // Sound synthesizer (P8). All ops may be NULL on devices without an
+        // audio engine (e.g. host); the sound primitives then silently
+        // succeed, exactly as `toot` did before.
+        //
+
+        // Immediate note/rest on one voice: gate it now, return at once.
+        // freq_hz == 0 gates the voice off (a rest, through its release).
+        // vol is 0..15. Also `toot`'s backend.
+        void (*sound_gate)(int voice, uint32_t freq_hz, uint32_t dur_ms, int vol);
+
+        // Append n events to a voice's sequencer queue. Returns the number
+        // actually accepted (< n when the queue fills); `play` waits and
+        // retries the remainder.
+        int (*sound_queue)(int voice, const SoundEvent *events, int n);
+
+        // Snapshot a voice (sounding? / free queue slots).
+        SoundStatus (*sound_status)(int voice);
+
+        // Release + flush the voices whose bit is set in voice_mask.
+        void (*sound_stop)(uint32_t voice_mask);
+
+        // Set a voice's ADSR envelope: attack/decay/release in ms,
+        // sustain level 0..15.
+        void (*sound_env)(int voice, uint32_t attack_ms, uint32_t decay_ms, int sustain, uint32_t release_ms);
+
+        // Set a voice's waveform. duty (1..99) applies to SOUND_WAVE_PULSE.
+        void (*sound_wave)(int voice, int wave, int duty);
 
         //
         // WiFi operations (only available on Pico W boards with LOGO_HAS_WIFI)

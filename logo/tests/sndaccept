@@ -1,0 +1,253 @@
+; Sound synthesizer hardware acceptance demo (P8)
+; Load with:  load "sndaccept
+; Run all:    sndaccept       (press a key to advance between steps)
+; Or run any step on its own:
+;   sndtoot sndbeep sndstereo sndvol sndwaves sndduty sndenv
+;   sndnoise sndchord sndtune sndround sndstop
+;
+; The engine is a stereo PSG: 8 voices, three tone + one noise per ear.
+; Voices 0 1 2 (tone) and 3 (noise) are the LEFT ear; 4 5 6 (tone) and
+; 7 (noise) are the RIGHT ear. Best judged on headphones so you can hear
+; which ear a voice comes from. Each step prints what a CORRECT result
+; sounds like, plays it, then pauses so you can decide before moving on.
+
+; Wait for a keypress between steps.
+to sndpause
+  pr []
+  (pr "--- "press "any "key "---)
+  ignore rc
+end
+
+; Clean slate for a step: silence anything still playing, clear the screen,
+; and print the heading. (cs does not touch sound, so stopsound is explicit.)
+to sndbanner :text
+  stopsound
+  ct ts
+  pr []
+  pr :text
+  pr []
+end
+
+; Block until every voice has gone quiet (safe: self-tail-recursive).
+to sndwaitdone
+  if playing? [wait 200 sndwaitdone]
+end
+
+; Step 0: toot still works, byte-compatible with the old driver.
+to sndtoot
+  sndbanner se [Step 0: toot] "(unchanged\)
+  pr [PASS: a beep, then a rising "two-note]
+  pr [pair,then one note LEFT + a higher]
+  pr se [RIGHT, then silence] "(out\-of\-range\=rest\).
+  toot 500 440 ; plain beep
+  toot 250 440 toot 250 523 ; rising interval (each waits for the last)
+  (toot 700 392 523) ; left 392, right 523
+  toot 400 50 ; below 100 Hz -> a rest (silence)
+  sndpause
+end
+
+; Step 1: the immediate layer -- sound now, return at once.
+to sndbeep
+  sndbanner se [Step 1: sound] "(immediate\)
+  pr [PASS: a 440 Hz note, then a big low]
+  pr [noise burst, then silence]
+  (pr "(15Hz "= "a "rest\).)
+  sound 0 440 500 wait 700
+  (sound 3 200 400 15) wait 600 ; loud low rumble on the left noise voice
+  sound 0 15 400 wait 500 ; 15 Hz is below 20 Hz -> rest
+  sndpause
+end
+
+; Step 2: stereo routing -- prove left and right are wired correctly.
+to sndstereo
+  sndbanner [Step 2: stereo routing]
+  pr [PASS: first note in the LEFT ear only,]
+  pr [then the same note in the RIGHT ear]
+  pr se [only, then both together] "(centre\).
+  sound 0 440 600 wait 800 ; voice 0 = left
+  sound 4 440 600 wait 800 ; voice 4 = right
+  sound 0 440 600 sound 4 440 600 wait 800
+  sndpause
+end
+
+; Step 3: the 2 dB-per-step volume ladder.
+to sndvol
+  sndbanner [Step 3: volume ladder]
+  pr [PASS: 16 notes on voice 0 climbing]
+  pr [smoothly from silent to full, in even]
+  pr "steps.
+  setwave 0 "square
+  setenv 0 [2 0 15 20]
+  make "v 0
+  repeat 16 [(sound 0 440 180 :v) wait 210 make "v :v + 1]
+  sndpause
+end
+
+; Step 4: the four tone waveforms sound different.
+to sndwaves
+  sndbanner [Step 4: waveforms]
+  pr [PASS: the same pitch four times, each]
+  pr [with a different timbre:]
+  (pr "- "square "(hollow\),)
+  (pr "- "pulse "(nasal\),)
+  (pr "- "triangle "(soft\/flute\),)
+  (pr "- "sawtooth "(bright\/buzzy\).)
+  setenv 0 [5 0 15 120]
+  setwave 0 "square sound 0 330 500 wait 650
+  setwave 0 "pulse sound 0 330 500 wait 650
+  setwave 0 "triangle sound 0 330 500 wait 650
+  setwave 0 "sawtooth sound 0 330 500 wait 650
+  setwave 0 "square
+  sndpause
+end
+
+; Step 5: pulse duty cycle changes the tone.
+to sndduty
+  sndbanner [Step 5: pulse duty]
+  pr [PASS: three pulse notes:]
+  (pr "- "50% "(full\),)
+  (pr "- "25% "(thinner\),)
+  (pr "- "10% "(thin\/nasal\).)
+  setenv 0 [5 0 15 120]
+  (setwave 0 "pulse 50) sound 0 330 500 wait 650
+  (setwave 0 "pulse 25) sound 0 330 500 wait 650
+  (setwave 0 "pulse 10) sound 0 330 500 wait 650
+  setwave 0 "square
+  sndpause
+end
+
+; Step 6: ADSR envelopes shape a note.
+to sndenv
+  sndbanner se [Step 6: envelopes] "(ADSR\)
+  pr se [PASS: first a sharp PLUCK] "(instant
+  pr (se [attack, quick decay to] "silence\), "then "a
+  pr [slow PAD that fades in and out gently.]
+  setwave 1 "sawtooth
+  setenv 1 [0 60 0 40] ; pluck: no sustain
+  sound 1 440 500 wait 800
+  setenv 1 [400 150 9 700] ; pad: slow attack, long release
+  sound 1 440 900 wait 1800
+  sndpause
+end
+
+; Step 7: noise voices -- white vs periodic, and a stereo explosion.
+to sndnoise
+  sndbanner [Step 7: noise]
+  pr [PASS: a low rumble, then a high hiss]
+  (pr "(both "white "noise, "then "a "buzzy)
+  (pr "pitched "rasp "(periodic\), "then "a "big)
+  (pr [explosion in BOTH ears.]
+  setenv 3 [0 0 15 200] setenv 7 [0 0 15 200]
+  setwave 3 "white
+  sound 3 250 600 wait 800 ; low rumble  (explosion/tom)
+  sound 3 9000 250 wait 500 ; high hiss   (snare/steam)
+  setwave 3 "periodic
+  sound 3 1200 500 wait 700 ; buzzy pitched rasp
+  setwave 3 "white setwave 7 "white
+  (sound [3 7] 5000 200) wait 500 ; stereo explosion
+  sndpause
+end
+
+; Step 8: a three-voice chord in one ear.
+to sndchord
+  sndbanner (se [Step 8: chord] "(3 "tone "voices\))
+  pr [PASS: a single C - major chord in the]
+  pr [LEFT ear - three notes sounding]
+  pr [together.]
+  setwave 0 "triangle setwave 1 "triangle setwave 2 "triangle
+  setenv 0 [10 0 15 300] setenv 1 [10 0 15 300] setenv 2 [10 0 15 300]
+  sound 0 262 900 ; C4
+  sound 1 330 900 ; E4
+  sound 2 392 900 ; G4
+  wait 1200
+  sndpause
+end
+
+; Frere Jacques, built a phrase at a time (tuneblocks).
+to f1
+  (play [0 4] [v15 c d e c])
+end
+
+to f2
+  (play [0 4] [v15 e f 2g])
+end
+
+to f3
+  (play [0 4] [v15 8g. 16a 8g 8f e c])
+end
+
+to f4
+  (play [0 4] [v15 c g3 2c])
+end
+
+to frere
+  f1 f1 f2 f2 f3 f3 f4 f4
+end
+
+; Step 9: the play sequencer -- a background melody and notation.
+to sndtune
+  sndbanner [Step 9: play (music sequencer)]
+  pr [PASS: Frere Jacques plays in BOTH ears]
+  pr [- - notice this text prints WHILE it]
+  pr [plays - - then a scale up and a faster]
+  pr [scale back down (tempo / length / octave) .]
+  setwave [0 4] "triangle
+  setenv [0 4] [8 0 15 60]
+  frere
+  pr [] pr [(music is playing in the background...)]
+  sndwaitdone
+  ; scale up at l8, then a quicker scale down via t180
+  (play [0 4] [v15 o4 l8 c d e f g a b c5 t180 c5 b a g f e d c])
+  sndwaitdone
+  sndpause
+end
+
+; Step 10: a two-voice round (rests offset the second voice).
+to sndround
+  sndbanner [Step 10: two - voice round]
+  pr [PASS: voice 0 leads, voice 1 enters two]
+  pr [beats later, both playing together.]
+  setwave 0 "triangle setwave 1 "square
+  setenv 0 [8 0 15 60] setenv 1 [8 0 15 60]
+  (play 0 [c d e f g f e d c])
+  (play 1 [2r c d e f g f e d c])
+  sndwaitdone
+  sndpause
+end
+
+; Step 11: playing? and stopsound.
+to sndstop
+  sndbanner [Step 11: playing? and stopsound]
+  pr [PASS: a long run starts, playing? reads]
+  pr [true, after stopsound it goes silent]
+  pr [and playing? reads false.]
+  setwave 0 "sawtooth
+  play [t90 l8 c d e f g a b c5 d5 e5 f5 g5 a5 b5 c6 c6]
+  pr []
+  pr se [playing? right after play (expect true) :] playing?
+  wait 1200
+  pr [stopping...]
+  stopsound
+  wait 300
+  pr se [playing? after stopsound (expect false) :] playing?
+  sndpause
+end
+
+to sndaccept
+  sndtoot
+  sndbeep
+  sndstereo
+  sndvol
+  sndwaves
+  sndduty
+  sndenv
+  sndnoise
+  sndchord
+  sndtune
+  sndround
+  sndstop
+  stopsound
+  ct ts
+  pr []
+  pr [Sound acceptance complete.]
+end
