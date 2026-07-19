@@ -7,7 +7,7 @@
 #include "pico/stdlib.h"
 #include "pico/stdio/driver.h"
 
-#include "audio.h"
+#include "sound.h"
 #include "fat32.h"
 #include "keyboard.h"
 #include "southbridge.h"
@@ -75,7 +75,7 @@ void picocalc_init()
     keyboard_init();
     keyboard_set_key_available_callback(picocalc_chars_available_notify);
     keyboard_set_background_poll(true);
-    audio_init();
+    sound_init();
     fat32_init();
 
     stdio_set_driver_enabled(&picocalc_stdio_driver, true);

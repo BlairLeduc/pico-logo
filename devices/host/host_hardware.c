@@ -472,7 +472,8 @@ static LogoHardwareOps host_hardware_ops = {
     .clear_pause_request = host_hardware_clear_pause_request,
     .check_freeze_request = host_hardware_check_freeze_request,
     .clear_freeze_request = host_hardware_clear_freeze_request,
-    .toot = NULL,  // Host device has no audio
+    // Sound synthesizer (P8): host has no audio engine; leaving the sound
+    // ops NULL (by omission) makes the sound primitives silently succeed.
     .wifi_is_connected = NULL,
     .wifi_connect = NULL,
     .wifi_disconnect = NULL,

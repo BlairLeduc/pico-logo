@@ -8,7 +8,7 @@
 #include "../hardware.h"
 #include "picocalc_hardware.h"
 #include "southbridge.h"
-#include "audio.h"
+#include "sound.h"
 #include "keyboard.h"
 #include "screen.h"
 
@@ -170,25 +170,6 @@ static bool picocalc_check_freeze_request(void)
 static void picocalc_clear_freeze_request(void)
 {
     freeze_requested = false;
-}
-
-static void picocalc_toot(uint32_t duration_ms, uint32_t left_freq, uint32_t right_freq)
-{
-    // Wait for any existing tone to finish before starting a new one.
-    // Use a cooperative wait: poll less frequently and respect user interrupts.
-    while (audio_is_playing())
-    {
-        if (user_interrupt)
-        {
-            // If the user has requested an interrupt, abort waiting and skip this toot.
-            return;
-        }
-
-        // Sleep for a short period to avoid tight busy-waiting.
-        sleep_ms(1);
-    }
-    // Play the tone (non-blocking with automatic stop after duration)
-    audio_play_sound_timed(left_freq, right_freq, duration_ms);
 }
 
 // ============================================================================
@@ -1845,7 +1826,13 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .clear_pause_request = picocalc_clear_pause_request,
     .check_freeze_request = picocalc_check_freeze_request,
     .clear_freeze_request = picocalc_clear_freeze_request,
-    .toot = picocalc_toot,
+    // Sound synthesizer (P8) -- backed by the software PSG engine (sound.c)
+    .sound_gate = sound_gate,
+    .sound_queue = sound_queue,
+    .sound_status = sound_status,
+    .sound_stop = sound_stop,
+    .sound_env = sound_env,
+    .sound_wave = sound_wave,
 #ifdef LOGO_HAS_WIFI
     .wifi_is_connected = picocalc_wifi_is_connected,
     .wifi_connect = picocalc_wifi_connect,

@@ -49,7 +49,6 @@ static const uint8_t category_to_input_colour[SYNTAX_CATEGORY_COUNT] = {
 
 static void picocalc_beep(void)
 {
-    //audio_play_sound_blocking(HIGH_BEEP, HIGH_BEEP, NOTE_EIGHTH);
 }
 
 // Helper to calculate cursor position from character index

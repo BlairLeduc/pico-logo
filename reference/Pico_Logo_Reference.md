@@ -4863,6 +4863,8 @@ If one frequency is provided the same tone is produced on both left and right ch
 
 `toot` does not block. If a second `toot` is requested, Logo will wait until the previous `toot` completes. 
 
+`toot` is the simplest way to make a sound. For volume, envelopes, waveforms, noise, and background music, see [`sound`](#sound), [`setenv`](#setenv), [`setwave`](#setwave), and [`play`](#play).
+
 > The actual frequency range is 100Hz to 2000Hz. If the input is outside this range, no tone is produced and but `toot` behaves as if a rest is requested. By convention, a rest is produced using a frequency of 0Hz.
 
 **Example**:
@@ -4875,6 +4877,165 @@ If one frequency is provided the same tone is produced on both left and right ch
 ?toot 250 523
 ; Play different tones on left and right channels
 ?(toot 1000 440 523)
+```
+
+
+## sound
+
+sound _voice_ _frequency_ _duration_  
+(sound _voice_ _frequency_ _duration_ _volume_)
+
+`command`
+
+Plays a note immediately on _voice_ and returns at once (it does not wait). _frequency_ is in Hertz and _duration_ in milliseconds. _volume_ is 0 to 15; when omitted, the voice's current volume is used (15 until you set one).
+
+There are eight voices, numbered by ear: 0, 1, and 2 are tone voices and 3 is a noise voice on the left channel; 4, 5, and 6 are tone voices and 7 is noise on the right. _voice_ may be a single number or a list of voice numbers, in which case the note plays on each of them (like `tell`).
+
+The note is shaped by the voice's envelope ([`setenv`](#setenv)) and waveform ([`setwave`](#setwave)). Calling `sound` on a voice that is playing queued music (see [`play`](#play)) flushes that voice's queue - the effect wins.
+
+> The frequency range is 20Hz to 10000Hz. A frequency outside this range (including 0) is a rest: the voice is gated off through its release.
+
+**Example**:
+
+```logo
+; A 440Hz note for half a second on voice 0
+?sound 0 440 500
+; A short, loud noise burst - a stereo explosion on both noise voices
+?(sound [3 7] 6000 80 15)
+```
+
+
+## setenv
+
+setenv _voice_ [_attack_ _decay_ _sustain_ _release_]
+
+`command`
+
+Sets the ADSR envelope of _voice_. _attack_, _decay_, and _release_ are times in milliseconds; _sustain_ is a level from 0 to 15. The envelope shapes every note the voice plays afterwards: the note rises to full volume over _attack_, falls to the _sustain_ level over _decay_, holds there while it sounds, then fades over _release_.
+
+_voice_ may be a single number or a list of voice numbers. The default envelope is `[5 0 15 30]`, which is click-free but otherwise flat, like [`toot`](#toot).
+
+**Example**:
+
+```logo
+; A percussive pluck: instant attack, quick fall to silence
+?setenv 1 [0 60 0 40]
+?sound 1 1800 90
+```
+
+
+## env
+
+env _voice_
+
+`operation`
+
+outputs the ADSR envelope of _voice_ as the list [_attack_ _decay_ _sustain_ _release_], as set by [`setenv`](#setenv). _voice_ must be a single voice number.
+
+**Example**:
+
+```logo
+?show env 0
+[5 0 15 30]
+```
+
+
+## setwave
+
+setwave _voice_ _waveform_  
+(setwave _voice_ "pulse _duty_)
+
+`command`
+
+Sets the waveform of _voice_. For a tone voice (0, 1, 2, 4, 5, 6) _waveform_ is `square`, `pulse`, `triangle`, or `sawtooth`. For a noise voice (3, 7) it is `white` or `periodic`. Using a tone waveform on a noise voice, or a noise waveform on a tone voice, is an error.
+
+With `pulse` you may give a _duty_ cycle from 1 to 99 (percent); it defaults to 50. _voice_ may be a single number or a list of voice numbers.
+
+**Example**:
+
+```logo
+?setwave 0 "triangle
+?(setwave 1 "pulse 25)
+?setwave 3 "periodic
+```
+
+
+## wave
+
+wave _voice_
+
+`operation`
+
+outputs the waveform word of _voice_, as set by [`setwave`](#setwave). _voice_ must be a single voice number.
+
+**Example**:
+
+```logo
+?show wave 0
+square
+```
+
+
+## play
+
+play [_notes_]  
+(play _voice_ [_notes_])
+
+`command`
+
+Plays a sequence of notes on _voice_ (voice 0 when omitted) in the background: the notes are added to the voice's queue and Logo continues at once. Calling `play` again on the same voice appends to what is already queued, so a tune can be built up a phrase at a time. _voice_ may be a single number or a list of voice numbers.
+
+Each note is a word:
+
+- A note is _[length]_ _letter_ _[accidental]_ _[octave]_ _[dot]_. The _letter_ is `a` to `g`. An _accidental_ is `#` or `s` for a sharp or `b` for a flat. The _octave_ is a digit from 1 to 8. A leading _length_ number sets the note length (4 = quarter note, 8 = eighth, and so on); a trailing `.` dots it. So `g` is a plain G, `8g` an eighth-note G, `c#5` a C sharp in octave 5, and `8g#5.` a dotted eighth-note G sharp in octave 5.
+- A rest is _[length]_ `r` _[dot]_, for example `2r` for a half rest.
+- Control words change the defaults from that point on: `t`_n_ sets the tempo in quarter-notes per minute (40 to 300), `o`_n_ the octave (1 to 8), `l`_n_ the default length (1 to 32), and `v`_n_ the volume (0 to 15).
+
+If the voice's queue is full, `play` waits for room (you can interrupt it with the break key), so long tunes stream rather than failing.
+
+**Example**:
+
+```logo
+; Frere Jacques, phrase by phrase, as background music
+to f1  play [c d e c]  end
+to f2  play [e f 2g]  end
+?f1 f1 f2 f2
+; A drum pattern on the left noise voice
+?(play 3 [l8 c c 4c])
+```
+
+
+## playing?
+
+playing?  
+(playing? _voice_)
+
+`operation`
+
+outputs `true` if any voice is currently sounding or still has notes queued, and `false` if all voices are silent. With a _voice_ argument it asks about that one voice. This pairs well with [`when`](#when) to chain music together: `when [not playing?] [next.verse]`.
+
+**Example**:
+
+```logo
+?play [c d e c]
+?show playing?
+true
+```
+
+
+## stopsound
+
+stopsound
+
+`command`
+
+Silences every voice (through its release) and clears all queued notes. It does not change the envelopes or waveforms set with [`setenv`](#setenv) and [`setwave`](#setwave), so the timbre you chose survives.
+
+**Example**:
+
+```logo
+?play [c d e f g a b c6]
+?stopsound
 ```
 
 

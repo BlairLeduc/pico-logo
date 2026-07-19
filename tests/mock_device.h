@@ -9,6 +9,7 @@
 #pragma once
 
 #include "devices/console.h"
+#include "devices/hardware.h"
 #include "core/limits.h"
 #include <stdbool.h>
 #include <stdint.h>
@@ -158,6 +159,11 @@ extern "C"
     // state in tests with mock_device_get_turtle(), which syncs first.
     //
     #define MOCK_MAX_TURTLES 8
+
+    // Sound (P8) recording caps: the flat gate log and the flat accepted-event
+    // log. Generous so a whole song's worth of gates/notes fits for assertions.
+    #define MOCK_SOUND_MAX_GATES 64
+    #define MOCK_SOUND_MAX_QUEUED 512
 
     typedef struct MockTurtleState
     {
@@ -410,6 +416,32 @@ extern "C"
             bool set_date_enabled;           // Whether set_date is supported
             bool set_time_enabled;           // Whether set_time is supported
         } time;
+
+        // Sound synthesizer (P8) tracking. Records every device op with its
+        // arguments; status is scriptable so a test can drive the `play`
+        // queue-full wait and `playing?` without real hardware.
+        struct
+        {
+            // Flat, ordered log of sound_gate calls (toot / sound).
+            struct { int voice; uint32_t freq; uint32_t dur; int vol; } gates[MOCK_SOUND_MAX_GATES];
+            int gate_count;
+
+            // Flat, ordered log of events accepted by sound_queue (play).
+            SoundEvent queued[MOCK_SOUND_MAX_QUEUED];
+            int queued_count;
+
+            // Per-voice recorded timbre (last sound_env / sound_wave args).
+            struct { uint32_t attack, decay, release; int sustain; } env[MAX_VOICES];
+            struct { int wave, duty; } wave[MAX_VOICES];
+
+            // Per-voice scriptable status (backs sound_status → playing? / wait).
+            bool sounding[MAX_VOICES];
+            int free_slots[MAX_VOICES];      // default SOUND_QUEUE_LEN
+
+            // Last sound_stop mask + call count.
+            uint32_t last_stop_mask;
+            int stop_count;
+        } sound;
     } MockDeviceState;
 
     //
@@ -578,6 +610,22 @@ extern "C"
     bool mock_get_time(int *hour, int *minute, int *second);
     bool mock_set_date(int year, int month, int day);
     bool mock_set_time(int hour, int minute, int second);
+
+    //
+    // Sound (P8) mock operations (for use by test_scaffold in mock_hardware_ops)
+    //
+    void mock_sound_gate(int voice, uint32_t freq_hz, uint32_t dur_ms, int vol);
+    int mock_sound_queue(int voice, const SoundEvent *events, int n);
+    SoundStatus mock_sound_status(int voice);
+    void mock_sound_stop(uint32_t voice_mask);
+    void mock_sound_env(int voice, uint32_t attack_ms, uint32_t decay_ms, int sustain, uint32_t release_ms);
+    void mock_sound_wave(int voice, int wave, int duty);
+
+    // Sound test helpers. Script a voice's status so tests can drive
+    // `playing?` and the `play` queue-full wait without hardware; read the
+    // recorded gate log to assert toot/sound sequences.
+    void mock_sound_set_status(int voice, bool sounding, int free_slots);
+    int mock_sound_gate_count(void);
 
 #ifdef __cplusplus
 }

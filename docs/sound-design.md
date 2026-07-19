@@ -1,9 +1,12 @@
 # P8 — Sound: a stereo PSG synthesizer (design)
 
-Status: **v1 — gate closed** — this is the design gate for
+Status: **v1.1 — gate closed, M1–M3 implemented** — this is the design
+gate for
 [P8 in the improvements roadmap](improvements-roadmap.md#p8--sound-stereo-psg-synthesizer-design-first).
-All open questions (§11) were resolved with the user on 2026-07-10; no
-open questions remain. Implementation may begin at M1 (§9).
+All open questions (§11) were resolved with the user on 2026-07-10.
+Hardware bring-up (2026-07-18/19) amended the engine constants and
+surfaced three latency findings — see §12; the body text reflects the
+as-built numbers.
 
 Three decisions were made by the user before this draft (2026-07-10):
 
@@ -54,9 +57,11 @@ almost free:
 
 At the 150 MHz system clock, a wrap of 2048 gives a **73.2 kHz carrier**
 (ultrasonic; the filter and speaker never pass it) with 11-bit sample
-resolution. Every mixed stereo frame is written three times, giving a
-**24.4 kHz mix rate** — a 12.2 kHz Nyquist limit, comfortably above the
-speaker and the o1–o8 note range in §5.
+resolution. Every mixed stereo frame is written twice, giving a
+**36.6 kHz mix rate** — an 18.3 kHz Nyquist limit, comfortably above the
+speaker and the o1–o8 note range in §5. (The draft's ×3 oversample was
+changed to ×2 during bring-up when the ring became a power of two —
+§12.1.)
 
 ## 3. Prior art
 
@@ -348,29 +353,35 @@ stuck chord); `cs` does *not* touch sound (it is a graphics command).
 
 All rendering happens on core 0 inside the DMA IRQ (decision 2).
 
-- **Output**: PWM slice 5, wrap 2048 → 73.2 kHz carrier, 11-bit. One
-  DMA channel, paced by the slice DREQ, streams 32-bit L|R compare
-  pairs from a two-half ring buffer; the wrap IRQ fires when a half
-  drains. Ring: 2 × 192 slots × 4 B = **1.5 KB** (each mixed frame
-  written ×3 → 64 stereo frames per half ≈ 2.6 ms).
+- **Output**: PWM slice 5, wrap 2048 → 73.2 kHz carrier, 11-bit. Two
+  DMA channels, paced by the slice DREQ and chained to each other,
+  ping-pong 32-bit L|R compare pairs through a two-half ring buffer;
+  each channel's completion IRQ refills its half. The ring is a
+  power-of-2, aligned **2 KB** (2 × 256 slots × 4 B; each mixed frame
+  written ×2 → 128 stereo frames per half ≈ 3.5 ms), with a hardware
+  read-address ring-wrap so a starved IRQ replays the ring instead of
+  reading past it (§12.1).
 - **Mixer** (per half-buffer refill): for each of 8 voices — advance
   the 32-bit phase accumulator (or LFSR), look up/fold the waveform,
-  scale by envelope × volume (int multiply), accumulate; saturate; ×3
+  scale by envelope × volume (int multiply), accumulate; saturate; ×2
   duplicate-store. Integer math throughout; per-voice envelopes advance
-  in linear segments once per block (2.6 ms granularity — inaudible for
+  in linear segments once per block (3.5 ms granularity — inaudible for
   ms-scale ADSR stages).
 - **Sequencer**: runs at block boundaries in the same IRQ. Per-voice
   event queues of `{freq_hz u16, dur_ms u16, vol u8, flags u8}` (6 B) —
   tempo, octave, length, and dots are resolved by the parser at `play`
   time, so the queue holds nothing but gates. Timing granularity is
-  2.6 ms, versus the 20 ms demon poll — this is why the sequencer lives
+  3.5 ms, versus the 20 ms demon poll — this is why the sequencer lives
   in the audio callback and not in a demon.
-- **CPU cost**: ~35 cycles/voice/frame × 8 voices × 24.4 kHz ≈ 6.8 M
-  cycles ≈ **4–5 % of core 0**, in interrupt context, regardless of
+- **CPU cost**: ~35 cycles/voice/frame × 8 voices × 36.6 kHz ≈ 10 M
+  cycles ≈ **7 % of core 0**, in interrupt context, regardless of
   what Logo is doing. The old PIO driver's `pio0` state machines are
   freed.
+- **IRQ latency budget**: the refill must run within 3.5 ms of a half
+  draining, so the audio IRQ runs above the default NVIC priority and
+  nothing else may mask interrupts for longer than that (§12.2, §12.3).
 - **Flash-write caveat**: littlefs writes run with IRQs masked, so the
-  refill IRQ is delayed and the DMA ring replays the last 2.6 ms half
+  refill IRQ is delayed and the DMA ring replays the last 3.5 ms half
   until the write completes — a brief stutter during `save` while music
   plays. Accepted (the alternative is core 1, deferred by decision 2;
   moving there trades the stutter for a `multicore_lockout` pause of
@@ -414,11 +425,11 @@ New fixed capacities, all in `core/limits.h`:
 
 | Item | Size | Notes |
 |---|---|---|
-| DMA ring buffer | 1,536 B | 2 × 192 × 4 B (§6) |
+| DMA ring buffer | 2,048 B | 2 × 256 × 4 B, power-of-2 aligned for the ring-wrap (§6, §12.1) |
 | Event queues | 3,072 B | `SOUND_QUEUE_LEN 64` events × 8 voices × 6 B |
 | Voice + envelope state | ~200 B | 8 × ~24 B |
 | Volume/waveform tables | flash | const, no SRAM |
-| **Total SRAM** | **≈ 4.8 KB** | vs ~10 % headroom noted in the sprite design |
+| **Total SRAM** | **≈ 5.3 KB** | vs ~10 % headroom noted in the sprite design |
 
 `SOUND_QUEUE_LEN 64` ≈ 16 bars of eighth notes per voice before `play`
 has to wait; halving it to 32 saves 1.5 KB if link-time SRAM pressure
@@ -489,3 +500,55 @@ All six were resolved in review; the body text above reflects them.
 - **Q6 — `sound` range 20 Hz–10 kHz,** out-of-range acts as a rest;
   `toot` keeps its documented 100–2000 Hz convention. Rejected:
   Atari-exact 14–9000 Hz and status-quo 100–2000 Hz.
+
+## 12. Hardware bring-up findings (2026-07-18/19)
+
+First-board bring-up surfaced three latency problems the draft did not
+anticipate. The common thread: the refill IRQ has a hard deadline of one
+ring half (**3.5 ms**), and anything that delays it past that deadline
+is audible. Each fix below hardened a different layer.
+
+### 12.1 DMA read ring-wrap (engine, 2026-07-18)
+
+**Symptom**: periodic clicks at idle (cursor blink) and a burst of
+static on an F1–F3 screen switch. **Cause**: the first engine reset the
+DMA read address *in the IRQ*; when the IRQ was masked past a half
+draining, the chained DMA marched past the ring into adjacent RAM and
+played garbage. **Fix**: the ring is power-of-2 sized and aligned, with
+a hardware read-address wrap (`channel_config_set_ring`), so a starved
+DMA cleanly *replays* the ring — silence at idle, a brief stutter under
+a note — instead of reading garbage. This forced `SOUND_RING_HALF`
+192 → 256 and OVERSAMPLE 3 → 2 (mix rate 24.4 → 36.6 kHz), the numbers
+now in §2/§6/§8. The wrap is the engine's last-resort safety net; the
+findings below remove the starvation itself.
+
+### 12.2 LCD driver no longer masks interrupts (2026-07-19)
+
+**Symptom**: audible stutter under a note during any large screen
+update (a full redraw holds ~22 ms at 75 MHz SPI). **Cause**: the LCD
+driver wrapped every screen operation in
+`save_and_disable_interrupts()` — a reentrancy lock whose only purpose
+was that the cursor-blink repeating timer drew to the LCD from IRQ
+context. **Fix**: the blink timer now only sets a flag;
+`lcd_cursor_blink()` services it from the keyboard wait loop, and all
+interrupt masking was deleted from `lcd.c`. Invariant, documented at
+the top of `lcd.c`: **the LCD is only ever touched from thread
+context** — the ST7789P tolerates SPI clock pauses mid-window, so the
+audio IRQ preempts blits freely. Never call `lcd_*` from an interrupt
+handler.
+
+### 12.3 Audio IRQ priority above default (2026-07-19)
+
+**Symptom**: with 12.2 fixed, a sustained `toot` still clicked ~10×/s.
+**Cause**: the keyboard poll timer blocks ~4–5 ms on the 10 kHz
+southbridge I2C bus *inside the timer IRQ* every 100 ms, and
+same-priority NVIC interrupts cannot preempt each other — every poll
+made the refill miss its 3.5 ms deadline. **Fix**: `sound_init()` sets
+`DMA_IRQ_0` to priority `0x40`, above the default `0x80`, so the refill
+preempts the poll (the I2C peripheral runs autonomously and is
+unharmed). Sound is the only `DMA_IRQ_0` user; the LCD DMA polls for
+completion and raises no IRQ. **Rule for future device code**: any
+handler that can run longer than 3.5 ms at default priority will click —
+either keep handlers short (12.2's approach) or stay below the audio
+IRQ's priority. Flash program/erase remains the one accepted violator
+(§6 flash-write caveat).
