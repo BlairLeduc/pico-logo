@@ -144,6 +144,7 @@ int main(void)
 
     // Initialize Logo subsystems
     logo_mem_init();
+    printf("Free nodes: %u\n", (unsigned)mem_free_nodes());
 
     // Hand the external PSRAM to the memory system as the aux region (backs the
     // blob heap and relocates large buffers off SRAM). The SDK's hardware_psram
