@@ -194,7 +194,12 @@ A dive moves an alien from the canvas to a turtle and back.
      `towards`, and turn toward it at most 4°/frame. The clamp is the
      whole feel of the game: too high and divers are unavoidable
      homing missiles, too low and they drift. These two constants
-     (turn cap, `setspeed`) are the expected tuning ground.
+     (turn cap, `setspeed`) are the expected tuning ground. Once the
+     diver drops below `break.y` (near the ship's altitude) it stops
+     homing and turns toward straight down instead, so the swoop peels
+     off the bottom of the screen as in the arcade rather than curving
+     into the player — the dive is a threatening pass, not a guaranteed
+     ram.
 4. **Fire**: an attacking diver rolls a small per-frame chance to drop
    an enemy shot from its position, aimed with `towards` at launch
    (then flying straight — `setspeed`, no further steering), using

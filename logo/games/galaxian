@@ -31,6 +31,7 @@ make "peel.frames    20     ; frames spent in the outward peel arc
 make "peel.turn       6     ; deg/frame the peel turns toward straight down
 make "attack.turn     4     ; deg/frame the attack turns toward the player
 make "attack.frames 160     ; safety cap: force a rejoin if a dive runs long
+make "break.y       -40     ; y below which an attacker breaks straight down
 make "fire.chance     3     ; percent/frame an attacking diver drops a shot
 make "sway.slice      6     ; convoy cells re-stamped per frame during a sway
 make "sway.interval   6     ; frames between sway steps
@@ -583,8 +584,16 @@ to steer.diver :t
       .setitem :i :diver.timer :attack.frames
     ]
   ] [
-    ; attack: home on the player, clamped -- the whole feel of the game
-    ask :t [seth turn.toward heading (towards :ppos) :attack.turn]
+    ; attack: home on the player, clamped -- the whole feel of the game --
+    ; until the diver drops near the ship's altitude, then break away
+    ; straight down so the dive peels off the bottom instead of ramming it.
+    local "hd
+    ifelse (ask :t [ycor]) < :break.y [
+      make "hd 180
+    ] [
+      make "hd ask :t [towards :ppos]
+    ]
+    ask :t [seth turn.toward heading :hd :attack.turn]
     local "tm
     make "tm (item :i :diver.timer) - 1
     .setitem :i :diver.timer :tm

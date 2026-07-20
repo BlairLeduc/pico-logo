@@ -323,6 +323,20 @@ void test_flank_dive_launches_a_diver(void)
     assert_num(":alive", 18);                  // a diving alien still counts
 }
 
+void test_diver_breaks_away_near_bottom(void)
+{
+    run_string("make \"level 1 setup.level");
+    // Detach a diver on turtle 2 and force it into the attack phase, low on
+    // the screen (below :break.y) and just to the right of the player.
+    run_string("launch.diver 2 25 240");
+    run_string(".setitem 1 :diver.phase 2 .setitem 1 :diver.timer :attack.frames");
+    run_string("tell 2 setx 40 sety -50 seth 200 tell 0");
+    // Homing on the player (at 0,-70, down-left of the diver) would raise the
+    // heading toward ~243; breaking away straight down lowers it toward 180.
+    run_string("steer.divers");
+    assert_true("(ask 2 [heading]) < 200");
+}
+
 //==========================================================================
 
 int main(void)
@@ -343,5 +357,6 @@ int main(void)
     RUN_TEST(test_flight_kill_scores_doubled);
     RUN_TEST(test_find_flank_walks_inward);
     RUN_TEST(test_flank_dive_launches_a_diver);
+    RUN_TEST(test_diver_breaks_away_near_bottom);
     return UNITY_END();
 }
