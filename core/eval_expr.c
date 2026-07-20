@@ -176,20 +176,26 @@ static bool parse_list(Evaluator *eval, Node *out)
         }
         else if (t.type == TOKEN_WORD || t.type == TOKEN_NUMBER)
         {
-            item = mem_atom(t.start, t.length);
+            // Resolve backslash escapes and strip vertical-bar quoting so a
+            // list literal produces the same words the reader would for
+            // `parse`/`readlist` (e.g. `[|a b|]` holds the word "a b").
+            item = mem_atom_unescape(t.start, t.length);
             advance(eval);
         }
         else if (t.type == TOKEN_QUOTED)
         {
-            // Keep the quote - it's needed when the list is run
-            item = mem_atom(t.start, t.length);
+            // Keep the quote - it's needed when the list is run. Bars and
+            // backslashes inside the word are still resolved; the leading
+            // quote is not a bar/backslash so it survives.
+            item = mem_atom_unescape(t.start, t.length);
             advance(eval);
         }
         else if (t.type == TOKEN_COLON)
         {
-            // Store :var as-is in list (will be evaluated when run)
-            // Create a word with the colon
-            item = mem_atom(t.start, t.length);
+            // Store :var in the list (evaluated when run). As with quoted
+            // words, the leading colon survives while bars/backslashes in the
+            // name are resolved.
+            item = mem_atom_unescape(t.start, t.length);
             advance(eval);
         }
         else if (t.type == TOKEN_PLUS || t.type == TOKEN_MINUS || 

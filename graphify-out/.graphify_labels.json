@@ -193,6 +193,9 @@
   "191": "mbedtls_config.h",
   "192": "picocalc_flash.h",
   "193": "picocalc_lfs.h",
+  "194": "repl_line_starts_with_to",
   "195": "LICENSE.md",
-  "197": "prim_not"
+  "196": "Appendix B: Parsing",
+  "197": "prim_not",
+  "198": "on_sd_card_detect"
 }

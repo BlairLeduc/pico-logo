@@ -10,7 +10,7 @@
     "semantic_hash": ""
   },
   ".vscode/c_cpp_properties.json": {
-    "mtime": 1784514763.7626095,
+    "mtime": 1784561867.4192472,
     "ast_hash": "37143f10a278c9ebfb8cb71774b1f586",
     "semantic_hash": ""
   },
@@ -25,12 +25,12 @@
     "semantic_hash": ""
   },
   ".vscode/launch.json": {
-    "mtime": 1784514763.7636435,
+    "mtime": 1784561867.4197266,
     "ast_hash": "d2fb79a9c37da6996eedda20e7060389",
     "semantic_hash": ""
   },
   ".vscode/settings.json": {
-    "mtime": 1784514768.6524057,
+    "mtime": 1784561867.4206386,
     "ast_hash": "8784d7a4049a8d03e48caf1d78b5ea35",
     "semantic_hash": ""
   },
@@ -635,8 +635,8 @@
     "semantic_hash": ""
   },
   "devices/picocalc/main.c": {
-    "mtime": 1784515736.7778282,
-    "ast_hash": "543a8fe0f5a077553c8046935c6a53df",
+    "mtime": 1784561867.4222243,
+    "ast_hash": "271401a52b56d76b9ecbafe715dbc86b",
     "semantic_hash": ""
   },
   "devices/picocalc/mbedtls_config.h": {
@@ -665,12 +665,12 @@
     "semantic_hash": ""
   },
   "devices/picocalc/picocalc_flash.c": {
-    "mtime": 1784515784.1702478,
+    "mtime": 1784561867.4230468,
     "ast_hash": "8b0588253826fff813587b5ea84f8de0",
     "semantic_hash": ""
   },
   "devices/picocalc/picocalc_flash.h": {
-    "mtime": 1784515793.8572414,
+    "mtime": 1784561867.4235272,
     "ast_hash": "24c1e0a7b2b4d6a79c9add7766ab3200",
     "semantic_hash": ""
   },
@@ -950,8 +950,8 @@
     "semantic_hash": ""
   },
   "tests/test_galaxian.c": {
-    "mtime": 1784513209.488196,
-    "ast_hash": "ff5da8c98c79ed128e7afe4facffd5d0",
+    "mtime": 1784563532.6607149,
+    "ast_hash": "e3498bf31533d72304b595d2325b77be",
     "semantic_hash": ""
   },
   "tests/test_help.c": {
@@ -1255,8 +1255,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1783117333.99442,
-    "ast_hash": "2276d85be32aaa1a7f760c156f91318e",
+    "mtime": 1784561867.4188795,
+    "ast_hash": "92dd51fcd54661a1e2e14b41f5d28c0a",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1265,8 +1265,8 @@
     "semantic_hash": ""
   },
   "CMakeLists.txt": {
-    "mtime": 1784481081.7571955,
-    "ast_hash": "c3003ef284aaf464cfbf92d4017dbd88",
+    "mtime": 1784561867.4216053,
+    "ast_hash": "da4de9c8b4caf2376028ab11dc425b1e",
     "semantic_hash": ""
   },
   "README.md": {
@@ -1280,8 +1280,8 @@
     "semantic_hash": ""
   },
   "docs/galaxian-design.md": {
-    "mtime": 1784513219.7215788,
-    "ast_hash": "7b94c3da30eb0c15f137e05c82c5a46a",
+    "mtime": 1784563555.1965868,
+    "ast_hash": "115dcac416881b01d30874dbbe359769",
     "semantic_hash": ""
   },
   "docs/http-server-design.md": {
@@ -1290,7 +1290,7 @@
     "semantic_hash": ""
   },
   "docs/improvements-roadmap.md": {
-    "mtime": 1784513265.5810928,
+    "mtime": 1784561969.8928006,
     "ast_hash": "7fa7e8ba69ea8fba8d5e38c9d910b604",
     "semantic_hash": ""
   },
@@ -1300,8 +1300,8 @@
     "semantic_hash": ""
   },
   "docs/littlefs-filesystem-design.md": {
-    "mtime": 1784515915.468174,
-    "ast_hash": "3805e42d7b1e96930ccbc4300d5eed37",
+    "mtime": 1784561867.4262302,
+    "ast_hash": "2630ef9ba524e6bcb80fe9cb5efce4d6",
     "semantic_hash": ""
   },
   "docs/memory-reclamation-design.md": {
@@ -1320,7 +1320,7 @@
     "semantic_hash": ""
   },
   "docs/space-invaders-design.md": {
-    "mtime": 1784512925.790821,
+    "mtime": 1784561867.7116857,
     "ast_hash": "1cd0250e82816d181ea4c92e3d7b1c33",
     "semantic_hash": ""
   },

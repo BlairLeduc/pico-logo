@@ -729,50 +729,51 @@ Node mem_atom(const char *str, size_t len)
     return NODE_MAKE_WORD(offset);
 }
 
-// Intern a word while processing backslash escapes.
-// Each \X sequence becomes just X in the resulting atom.
+// Intern a word while processing backslash escapes and vertical-bar quoting.
+// Each `\X` sequence becomes just X, and the bars of a `|...|` run are removed
+// while their contents are kept verbatim (a `\X` inside bars is still
+// unescaped). So both `"\(` and `"|(|` intern to the single-character word
+// `(`. Balanced or not, every unescaped bar is simply dropped.
 Node mem_atom_unescape(const char *str, size_t len)
 {
-    // First, calculate the unescaped length
-    size_t unescaped_len = 0;
+    // Fast path: nothing to strip.
+    bool needs_processing = false;
     for (size_t i = 0; i < len; i++)
     {
-        if (str[i] == '\\' && i + 1 < len)
+        if (str[i] == '\\' || str[i] == '|')
         {
-            // Skip the backslash, count the next character
-            i++;
+            needs_processing = true;
+            break;
         }
-        unescaped_len++;
     }
-
-    // If no escapes found, just use mem_atom directly
-    if (unescaped_len == len)
+    if (!needs_processing)
     {
         return mem_atom(str, len);
     }
 
-    // Atom length is capped at 255 by the 1-byte length prefix. Refuse rather
-    // than silently truncate, so callers can surface an error.
-    if (unescaped_len > 255)
-    {
-        return NODE_NIL;
-    }
-
-    // Build unescaped string on stack (max 255 chars)
+    // Build the resolved string on the stack. Atom length is capped at 255 by
+    // the 1-byte length prefix; refuse rather than silently truncate so
+    // callers can surface an error.
     char buffer[256];
     size_t j = 0;
-    for (size_t i = 0; i < len && j < unescaped_len; i++)
+    for (size_t i = 0; i < len; i++)
     {
-        if (str[i] == '\\' && i + 1 < len)
+        char c = str[i];
+        if (c == '\\' && i + 1 < len)
         {
-            // Skip backslash, take next character
-            i++;
-            buffer[j++] = str[i];
+            // Backslash escape: keep the following character verbatim.
+            c = str[++i];
         }
-        else
+        else if (c == '|')
         {
-            buffer[j++] = str[i];
+            // Bar delimiters are not part of the word's value.
+            continue;
         }
+        if (j >= 255)
+        {
+            return NODE_NIL;
+        }
+        buffer[j++] = c;
     }
 
     return mem_atom(buffer, j);

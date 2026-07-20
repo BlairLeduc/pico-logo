@@ -2461,6 +2461,12 @@ parse _word_
 [a b c d]
 ```
 
+When `parse` tokenizes a word that contains vertical bars (see
+[Vertical Bars](#vertical-bars)), the bars do not appear in the result but the
+characters between them are tokenized as though they were letters. So a word
+read by [`readword`](#readword-rw) that contains `|a b|` parses into the
+single word `a b`.
+
 
 ## sentence (se)
 
@@ -4748,6 +4754,11 @@ rw
 If you use `readword` from a file, `readword` reads characters until it reaches a carriage return, and outputs those characters as a word. The next character to be read is the one after the carriage return. When the end-of-file position is reached, `readword` outputs an empty list.
 
 If you are reading from a network connection and the read times out before a line is available, `readword` outputs the characters read up to that point. If the network connection was closed before `readword` was called, `readword` outputs an empty list.
+
+Because `readword` returns the line verbatim, any vertical bars (see
+[Vertical Bars](#vertical-bars)) are preserved in the resulting word. This
+differs from [`readlist`](#readlist-rl) and [`parse`](#parse), which tokenize
+the line and so consume the bars while keeping the characters between them.
 
 See [`readlist`](#readlist-rl), [`readchar`](#readchar-rc), [`readchars`](#readchars-rcs), and [`setread`](#setread).
 
@@ -7477,6 +7488,43 @@ my/file/name
 ?print "Content-Type
 Content-Type
 ```
+
+## Vertical Bars
+
+Backslashing every delimiter one at a time is tedious when a word contains
+several of them. As an alternative, enclose a run of characters in vertical
+bars (`|`). Every character between the bars — including spaces, brackets,
+parentheses, and the infix operators — is treated as though it were an
+ordinary letter. The bars themselves are not part of the word.
+
+```logo
+?print "|New York|
+New York
+?print "|(a+b)|
+(a+b)
+?make "|my count| 10
+?print :|my count|
+10
+?show count [|San Francisco| |New York|]
+2
+```
+
+The bars are consumed when the word is read, so `[|San Francisco| |New York|]`
+is a two-element list. (Printing does not restore the bars, so such a list
+displays as `[San Francisco New York]`.)
+
+Bars may appear anywhere a word is read: bare words, quoted words (`"`),
+variable references (`:`), and inside lists. Within bars, backslash still
+works, and the only two characters that must be backslashed are the vertical
+bar and the backslash themselves:
+
+```logo
+?print "|a\|b|
+a|b
+```
+
+The two notations may be mixed freely; `"3\[a\]b` and `"|3[a]b|` produce the
+same word.
 
 ## Infix Procedures 
 

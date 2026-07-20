@@ -144,6 +144,54 @@ void test_atom_unescape_too_long_is_error(void)
     TEST_ASSERT_TRUE(mem_is_nil(word));
 }
 
+void test_atom_unescape_strips_backslash(void)
+{
+    // \X becomes just X.
+    Node word = mem_atom_unescape("a\\+b", 4);
+    TEST_ASSERT_TRUE(mem_is_word(word));
+    TEST_ASSERT_EQUAL(3, mem_word_len(word));
+    TEST_ASSERT_EQUAL_STRING_LEN("a+b", mem_word_ptr(word), 3);
+}
+
+void test_atom_unescape_strips_bars(void)
+{
+    // The bars of a |...| run are removed; the contents are kept verbatim.
+    Node word = mem_atom_unescape("|a b|", 5);
+    TEST_ASSERT_TRUE(mem_is_word(word));
+    TEST_ASSERT_EQUAL(3, mem_word_len(word));
+    TEST_ASSERT_EQUAL_STRING_LEN("a b", mem_word_ptr(word), 3);
+}
+
+void test_atom_unescape_bar_with_delimiters(void)
+{
+    // Delimiters inside bars survive as ordinary characters.
+    Node word = mem_atom_unescape("|[a]+(b)|", 9);
+    TEST_ASSERT_TRUE(mem_is_word(word));
+    TEST_ASSERT_EQUAL(7, mem_word_len(word));
+    TEST_ASSERT_EQUAL_STRING_LEN("[a]+(b)", mem_word_ptr(word), 7);
+}
+
+void test_atom_unescape_escaped_bar_inside_bars(void)
+{
+    // Inside bars, \| is a literal bar (the only chars needing a backslash
+    // inside bars are | and \ themselves).
+    Node word = mem_atom_unescape("|a\\|b|", 6);
+    TEST_ASSERT_TRUE(mem_is_word(word));
+    TEST_ASSERT_EQUAL(3, mem_word_len(word));
+    TEST_ASSERT_EQUAL_STRING_LEN("a|b", mem_word_ptr(word), 3);
+}
+
+void test_atom_unescape_bar_and_backslash_agree(void)
+{
+    // "\( and "|(| must intern to the same single-character word "(".
+    Node a = mem_atom_unescape("\\(", 2);
+    Node b = mem_atom_unescape("|(|", 3);
+    TEST_ASSERT_EQUAL(1, mem_word_len(a));
+    TEST_ASSERT_EQUAL(1, mem_word_len(b));
+    TEST_ASSERT_EQUAL_STRING_LEN("(", mem_word_ptr(a), 1);
+    TEST_ASSERT_EQUAL_STRING_LEN("(", mem_word_ptr(b), 1);
+}
+
 //============================================================================
 // Blob Tests (PSRAM-backed large values)
 //============================================================================
@@ -1174,6 +1222,11 @@ int main(void)
     RUN_TEST(test_atom_max_length);
     RUN_TEST(test_atom_too_long_is_error);
     RUN_TEST(test_atom_unescape_too_long_is_error);
+    RUN_TEST(test_atom_unescape_strips_backslash);
+    RUN_TEST(test_atom_unescape_strips_bars);
+    RUN_TEST(test_atom_unescape_bar_with_delimiters);
+    RUN_TEST(test_atom_unescape_escaped_bar_inside_bars);
+    RUN_TEST(test_atom_unescape_bar_and_backslash_agree);
     RUN_TEST(test_blob_no_region_returns_nil);
     RUN_TEST(test_blob_basic_exceeds_atom_limit);
     RUN_TEST(test_blob_not_storable_in_cell);
