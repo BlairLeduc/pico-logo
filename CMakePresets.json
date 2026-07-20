@@ -100,7 +100,6 @@
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/build-host",
             "cacheVariables": {
-                "CMAKE_MAKE_PROGRAM": "$env{HOME}/.pico-sdk/ninja/v1.12.1/ninja",
                 "CMAKE_BUILD_TYPE": "Release",
                 "BUILD_FOR_HOST": "ON",
                 "BUILD_TESTING": "OFF"
@@ -123,7 +122,6 @@
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/build-tests",
             "cacheVariables": {
-                "CMAKE_MAKE_PROGRAM": "$env{HOME}/.pico-sdk/ninja/v1.12.1/ninja",
                 "CMAKE_BUILD_TYPE": "Debug",
                 "BUILD_TESTING": "ON",
                 "LOGO_OP_STACK_DEPTH": "512"
