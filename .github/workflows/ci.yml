@@ -16,9 +16,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Ninja
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build
+
       - name: Configure and build unit tests
         run: |
-          cmake --preset=tests
+          # The host/tests presets pin CMAKE_MAKE_PROGRAM to the VS Code Pico
+          # extension's ninja path; override it with the system ninja on CI.
+          cmake --preset=tests -DCMAKE_MAKE_PROGRAM="$(command -v ninja)"
           cmake --build --preset=tests
 
       - name: Run unit tests
@@ -26,7 +33,7 @@ jobs:
 
       - name: Build host REPL
         run: |
-          cmake --preset=host
+          cmake --preset=host -DCMAKE_MAKE_PROGRAM="$(command -v ninja)"
           cmake --build --preset=host
 
       - name: Run end-to-end golden tests

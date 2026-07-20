@@ -97,9 +97,10 @@
             "name": "host",
             "displayName": "Native Host",
             "description": "Build for native host platform",
-            "generator": "Unix Makefiles",
+            "generator": "Ninja",
             "binaryDir": "${sourceDir}/build-host",
             "cacheVariables": {
+                "CMAKE_MAKE_PROGRAM": "$env{HOME}/.pico-sdk/ninja/v1.12.1/ninja",
                 "CMAKE_BUILD_TYPE": "Release",
                 "BUILD_FOR_HOST": "ON",
                 "BUILD_TESTING": "OFF"
@@ -119,8 +120,10 @@
             "name": "tests",
             "displayName": "Native Tests",
             "description": "Build unit tests for native host platform",
+            "generator": "Ninja",
             "binaryDir": "${sourceDir}/build-tests",
             "cacheVariables": {
+                "CMAKE_MAKE_PROGRAM": "$env{HOME}/.pico-sdk/ninja/v1.12.1/ninja",
                 "CMAKE_BUILD_TYPE": "Debug",
                 "BUILD_TESTING": "ON",
                 "LOGO_OP_STACK_DEPTH": "512"
