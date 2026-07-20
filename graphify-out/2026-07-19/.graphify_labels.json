@@ -163,16 +163,13 @@
   "161": "run_editor_and_process",
   "162": "Bitwise Operations",
   "163": "Variables",
-  "164": "parse_bracket_contents",
   "165": "storage.h",
   "166": "Pico Logo",
   "167": "JSON",
   "168": "drain_tokens",
   "169": "repl_count_bracket_balance",
-  "170": "repl_line_starts_with_to",
   "171": "index-filter.lua",
   "172": "gen_ca_certs.py",
-  "173": "logo_console_init",
   "174": "pandoc_slug",
   "175": "gen_palette.py",
   "176": "iteration_callback",
@@ -198,8 +195,5 @@
   "196": "Managing Various Files",
   "197": "prim_not",
   "198": "on_sd_card_detect",
-  "199": "mem_set_cdr",
-  "200": "test_init_free_nodes",
-  "201": "logo_io_console_write",
-  "202": "logo_io_get_timeout"
+  "199": "mem_set_cdr"
 }
