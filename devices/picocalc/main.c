@@ -142,6 +142,10 @@ int main(void)
     // PSRAM/QMI is configured.
     LogoIO io;
 
+    // Print welcome banner
+    printf("Copyright 2025-2026 Blair Leduc\n");
+    printf("Welcome to Pico Logo.\n");
+
     // Initialize Logo subsystems
     logo_mem_init();
     printf("Free nodes: %u\n", (unsigned)mem_free_nodes());
@@ -154,8 +158,7 @@ int main(void)
     // detected, the interpreter runs SRAM-only.
 #ifdef PICO_PSRAM_CS_PIN
     size_t psram_size = psram_verify() ? psram_get_size() : 0;
-    printf("PSRAM: %s (%u bytes)\n", psram_size > 0 ? "UP" : "ABSENT",
-           (unsigned)psram_size);
+    printf("PSRAM: %u MiB\n", (unsigned)(psram_size / (1024 * 1024)));
 
 #ifdef PICOCALC_FLASH_SPIKE
     // Phase-0 gating spike: validate the flash-write vs PSRAM/QMI interaction
@@ -228,10 +231,6 @@ int main(void)
             logo_io_write_line(&io, error_format(r));
         }
     }
-
-    // Print welcome banner
-    logo_io_write_line(&io, "Copyright 2025-2026 Blair Leduc");
-    logo_io_write_line(&io, "Welcome to Pico Logo.");
 
     // Warn if the internal filesystem could not be mounted/formatted.
     if (!lfs_ok)
