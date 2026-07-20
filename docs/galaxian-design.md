@@ -277,10 +277,23 @@ All `setrot "fixed`. Divers wear slots 1/2 (or 4/5) with
 stamped convoy toggles frames on the sway step — the same
 manual-toggle-vs-`setanim` split Invaders used for aliens vs. the UFO.
 
-Sound stays `toot`-based: a two-note sway pulse on the sway step, a
-short falling pitch sequence stepped once per frame while any diver is
-in the attack phase (the arcade's dive shriek, coarsely), fire and
-explosion blips. No new primitives.
+Sound uses the **P8 stereo PSG** (like the [Invaders retrofit](space-invaders-design.md#8-costumes-and-sound)),
+one centred voice-pair per sound, with the timbres set once in `setup.sound`
+(from `init.game`) because `stopsound` preserves them:
+
+| Sound | Voices | Timbre | Trigger |
+|---|---|---|---|
+| Convoy hum | `[0 4]` | triangle, percussive | two-note pulse on each sway step (`sway.note`) |
+| Laser | `[1 5]` | sawtooth zap | `fire`, when a shot launches |
+| Dive shriek | `[2 6]` | square, **sustained** | the falling pitch stepped while any diver attacks (`dive.shriek`) |
+| Explosions | `[3 7]` | white **noise** | convoy kill (`kill.alien`), flight kill (`diver.shot`), player death (`handle.death`) |
+
+The signature dive shriek is where the retrofit most earns the new engine:
+on a sustained voice-pair each stepped note overlaps the next, so the coarse
+falling pitch glides as one continuous glissando siren *underneath* the
+convoy hum and laser playing on other voices — a held, overlapping sound the
+old blocking `toot` structurally could not produce. The explosions likewise
+move onto real noise voices. No new primitives.
 
 ## 9. Reduced-resource choices (the brief, made concrete)
 

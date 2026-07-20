@@ -950,8 +950,8 @@
     "semantic_hash": ""
   },
   "tests/test_galaxian.c": {
-    "mtime": 1784514468.9009805,
-    "ast_hash": "3806e5ae29747802713b16e26f3c97da",
+    "mtime": 1784513209.488196,
+    "ast_hash": "ff5da8c98c79ed128e7afe4facffd5d0",
     "semantic_hash": ""
   },
   "tests/test_help.c": {
@@ -1280,8 +1280,8 @@
     "semantic_hash": ""
   },
   "docs/galaxian-design.md": {
-    "mtime": 1784514468.8752623,
-    "ast_hash": "dd262ac69c7dde1d34a4ee8c1d8dcfa2",
+    "mtime": 1784513219.7215788,
+    "ast_hash": "7b94c3da30eb0c15f137e05c82c5a46a",
     "semantic_hash": ""
   },
   "docs/http-server-design.md": {
@@ -1290,8 +1290,8 @@
     "semantic_hash": ""
   },
   "docs/improvements-roadmap.md": {
-    "mtime": 1784512631.9970546,
-    "ast_hash": "0f6826fda708084836316675b14fc75a",
+    "mtime": 1784513265.5810928,
+    "ast_hash": "7fa7e8ba69ea8fba8d5e38c9d910b604",
     "semantic_hash": ""
   },
   "docs/launch-design.md": {
@@ -1320,8 +1320,8 @@
     "semantic_hash": ""
   },
   "docs/space-invaders-design.md": {
-    "mtime": 1784512606.8473184,
-    "ast_hash": "9c76031b800e1592ddec12e6bd0d7a76",
+    "mtime": 1784512925.790821,
+    "ast_hash": "1cd0250e82816d181ea4c92e3d7b1c33",
     "semantic_hash": ""
   },
   "grammar/README.md": {

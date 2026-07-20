@@ -86,7 +86,7 @@ static void load_galaxian(void)
 void setUp(void)
 {
     // _and_hardware gives a controllable clock so when-demon registration and
-    // toot (called by kill.alien) have a backend.
+    // sound (called by kill.alien) have a backend.
     test_scaffold_setUp_with_device_and_hardware();
     load_galaxian();
 }

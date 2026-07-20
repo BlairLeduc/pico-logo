@@ -56,6 +56,17 @@ to setup.shapes
   putsh 8 [0 0 0 0 0 0 24 24 60 60 126 255 126 60 24 0]
 end
 
+to setup.sound
+  ; One PSG voice-pair per game sound, centred (left ear + right ear). The
+  ; timbres persist (stopsound never clears them), so this runs once at
+  ; startup, not per level.
+  ;   0/4 convoy hum   1/5 laser   2/6 dive shriek   3/7 explosions
+  setwave [0 4] "triangle setenv [0 4] [0 70 0 60]   ; two-note convoy hum
+  setwave [1 5] "sawtooth setenv [1 5] [0 40 0 40]   ; short laser zap
+  setwave [2 6] "square   setenv [2 6] [4 0 15 40]   ; sustained dive siren
+  setwave [3 7] "white    setenv [3 7] [0 0 15 200]  ; noise explosions
+end
+
 ;==========================================================================
 ; Top-level game / state machine (iterative, bounded stack -- see Invaders)
 ;==========================================================================
@@ -67,6 +78,7 @@ end
 
 to init.game
   setup.shapes
+  setup.sound
 end
 
 to one.game
@@ -104,6 +116,7 @@ to wait.for.space
 end
 
 to show.game.over
+  stopsound
   textscreen
   ct
   setcursor [13 10]
@@ -327,7 +340,7 @@ to kill.alien :idx
   make "alive :alive - 1
   erase.alien.cell :idx
   make "score :score + rank.score (alien.row :idx) 1
-  toot 20 500
+  (sound [3 7] 3000 90 9)   ; short noise splat
 end
 
 ;==========================================================================
@@ -347,9 +360,9 @@ end
 
 to sway.note
   ifelse :sway.note.idx = 0 [
-    toot 40 200 make "sway.note.idx 1
+    (sound [0 4] 200 90 11) make "sway.note.idx 1
   ] [
-    toot 40 160 make "sway.note.idx 0
+    (sound [0 4] 160 90 11) make "sway.note.idx 0
   ]
 end
 
@@ -587,11 +600,15 @@ to any.diver.attacking?
 end
 
 to dive.shriek
-  ; A coarse falling pitch stepped every other frame while any diver attacks.
+  ; The signature Galaxian dive siren: a falling pitch stepped every other
+  ; frame while any diver attacks. On the sustained voice-pair [2 6] each note
+  ; overlaps the next, so the stepped pitch glides as one continuous shriek
+  ; underneath the convoy hum and laser on other voices -- a held, glissando
+  ; siren the old blocking toot could not sustain.
   if 0 = remainder :frame.count 2 [
     make "shriek.p :shriek.p - 30
     if :shriek.p < 300 [make "shriek.p 700]
-    toot 15 :shriek.p
+    (sound [2 6] :shriek.p 200 8)
   ]
 end
 
@@ -666,7 +683,7 @@ to diver.shot :t
   set.alien :idx 0
   make "alive :alive - 1
   make "score :score + rank.score :r 2
-  toot 30 700
+  (sound [3 7] 5000 150 12)   ; bright explosion
 end
 
 ;==========================================================================
@@ -730,6 +747,7 @@ end
 to fire
   if not shot.active? [
     ask 1 [pu setx (ask 0 [xcor]) sety ((ask 0 [ycor]) + 10) seth 0 st setspeed :shot.speed]
+    (sound [1 5] 900 120 9)
   ]
 end
 
@@ -764,7 +782,7 @@ to player.hit
 end
 
 to handle.death
-  toot 200 100
+  (sound [3 7] 600 500 15)   ; big low boom
   wait 500
   reset.after.death
   ask 0 [setx 0]
