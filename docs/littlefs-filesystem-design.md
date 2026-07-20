@@ -94,7 +94,10 @@ image out of it.
 > `flash_range_erase/program` via `flash_set_qmi_cs1_setup_function()` — so
 > `picocalc_flash.c` no longer re-arms manually. The read-back self-test lives
 > on as `psram_verify()` in `devices/picocalc/main.c`. The hazard analysis,
-> spike criteria, and Phase-0 results below are kept as validation history.
+> spike criteria, and Phase-0 results below are kept as validation history —
+their `picocalc_psram.c:<line>` / `PICOCALC_PSRAM_BASE` references describe the
+now-removed driver; the equivalents today are `__psram_start__` and the SDK's
+`hardware_psram`.
 
 This is the highest-risk area and **step 1 of implementation is a spike to
 validate it** before building on top.
