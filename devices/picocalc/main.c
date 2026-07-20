@@ -153,6 +153,8 @@ int main(void)
     // detected, the interpreter runs SRAM-only.
 #ifdef PICO_PSRAM_CS_PIN
     size_t psram_size = psram_verify() ? psram_get_size() : 0;
+    printf("PSRAM: %s (%u bytes)\n", psram_size > 0 ? "UP" : "ABSENT",
+           (unsigned)psram_size);
 
 #ifdef PICOCALC_FLASH_SPIKE
     // Phase-0 gating spike: validate the flash-write vs PSRAM/QMI interaction
