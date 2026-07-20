@@ -15,7 +15,7 @@
                 "interface/cmsis-dap.cfg",
                 "target/rp2350.cfg"
             ],
-            "svdFile": "${userHome}/.pico-sdk/sdk/2.2.0/src/rp2350/hardware_regs/RP2350.svd",
+            "svdFile": "${userHome}/.pico-sdk/sdk/2.3.0/src/rp2350/hardware_regs/RP2350.svd",
             "runToEntryPoint": "main",
             "overrideLaunchCommands": [
                 "monitor reset init",
@@ -40,7 +40,7 @@
                 "interface/cmsis-dap.cfg",
                 "target/rp2350.cfg"
             ],
-            "svdFile": "${userHome}/.pico-sdk/sdk/2.2.0/src/rp2350/hardware_regs/RP2350.svd",
+            "svdFile": "${userHome}/.pico-sdk/sdk/2.3.0/src/rp2350/hardware_regs/RP2350.svd",
             "runToEntryPoint": "main",
             "overrideLaunchCommands": [
                 "monitor reset init",
