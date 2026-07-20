@@ -197,5 +197,9 @@
   "195": "LICENSE.md",
   "196": "Managing Various Files",
   "197": "prim_not",
-  "198": "on_sd_card_detect"
+  "198": "on_sd_card_detect",
+  "199": "mem_set_cdr",
+  "200": "test_init_free_nodes",
+  "201": "logo_io_console_write",
+  "202": "logo_io_get_timeout"
 }

@@ -191,7 +191,6 @@ add_executable(pico-logo
     devices/picocalc/picocalc_flash.c
     devices/picocalc/picocalc_hardware.c
     devices/picocalc/picocalc_lfs.c
-    devices/picocalc/picocalc_psram.c
     devices/picocalc/picocalc_storage.c
     devices/picocalc/picocalc.c
     devices/picocalc/screen.c
@@ -236,6 +235,15 @@ target_link_libraries(pico-logo
         hardware_pwm
         hardware_spi
 )
+
+# PSRAM boards: the SDK's hardware_psram brings up the QMI CS1 window during
+# runtime init (CS pin from the board header) and re-arms it after every flash
+# operation. PICO_AUTO_DETECT_PSRAM_SIZE sizes the region from the chip id,
+# which also verifies a PSRAM chip actually responds before it is used.
+if(PICO_BOARD STREQUAL "pimoroni_pico_plus2_w_rp2350")
+    target_link_libraries(pico-logo hardware_psram)
+    target_compile_definitions(pico-logo PRIVATE PICO_AUTO_DETECT_PSRAM_SIZE=1)
+endif()
 
 # Phase-0 flash/PSRAM-QMI spike: build with -DPICOCALC_FLASH_SPIKE=ON to run the
 # acceptance self-test at boot (prints PASS/FAIL to the LCD). Off by default.

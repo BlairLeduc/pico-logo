@@ -66,10 +66,10 @@ extern "C"
 #ifdef PICOCALC_FLASH_SPIKE
     // Phase-0 spike (docs section 4): exercise the PSRAM/QMI-vs-flash-write
     // interaction and print PASS/FAIL for the four acceptance criteria to stdio
-    // (the LCD console). Must run AFTER picocalc_psram_init() and BEFORE the PSRAM
-    // region is handed to the allocator, because it scribbles a test pattern into
-    // PSRAM and erases/programs the reserved flash region. Returns true iff the
-    // automated criteria (1-3 + data integrity) all passed.
+    // (the LCD console). Must run BEFORE the PSRAM region is handed to the
+    // allocator, because it scribbles a test pattern into PSRAM and
+    // erases/programs the reserved flash region. Returns true iff the automated
+    // criteria (1-3 + data integrity) all passed.
     bool picocalc_flash_selftest(void);
 #endif
 
