@@ -40,8 +40,8 @@
     "semantic_hash": ""
   },
   "CMakePresets.json": {
-    "mtime": 1782931694.3102713,
-    "ast_hash": "79ef915df02fa13d745d392591e88af7",
+    "mtime": 1784581565.2998443,
+    "ast_hash": "ae50609d2fdfdc6780d63ac2dc540bd9",
     "semantic_hash": ""
   },
   "core/demons.c": {
@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "core/eval_expr.c": {
-    "mtime": 1784570874.09,
-    "ast_hash": "3a0d8993b9e7c173c1afc41a3a7142aa",
+    "mtime": 1784591226.225968,
+    "ast_hash": "5459f227c44e00bda8985c60669f637d",
     "semantic_hash": ""
   },
   "core/eval_internal.h": {
@@ -160,7 +160,7 @@
     "semantic_hash": ""
   },
   "core/lexer.c": {
-    "mtime": 1784570149.9490492,
+    "mtime": 1784581565.440237,
     "ast_hash": "85ca1625b24395469134dc848f3f88b7",
     "semantic_hash": ""
   },
@@ -175,7 +175,7 @@
     "semantic_hash": ""
   },
   "core/memory.c": {
-    "mtime": 1784570149.9498954,
+    "mtime": 1784581565.4404895,
     "ast_hash": "b2ade0eeeac5f8c8e0b410a6ac4da527",
     "semantic_hash": ""
   },
@@ -185,7 +185,7 @@
     "semantic_hash": ""
   },
   "core/parse_list.c": {
-    "mtime": 1784570149.950226,
+    "mtime": 1784581565.4406621,
     "ast_hash": "05ed0213420e28aa708d93350aae68d4",
     "semantic_hash": ""
   },
@@ -395,7 +395,7 @@
     "semantic_hash": ""
   },
   "core/syntax_highlight.c": {
-    "mtime": 1784570233.5965886,
+    "mtime": 1784581565.440842,
     "ast_hash": "7721bc875dd3bb1f794b1a38c90dfafa",
     "semantic_hash": ""
   },
@@ -975,7 +975,7 @@
     "semantic_hash": ""
   },
   "tests/test_lexer.c": {
-    "mtime": 1784570149.9508593,
+    "mtime": 1784581565.4555426,
     "ast_hash": "d5f4a7243a82da9d3fd4c0fcd64336f2",
     "semantic_hash": ""
   },
@@ -990,7 +990,7 @@
     "semantic_hash": ""
   },
   "tests/test_memory.c": {
-    "mtime": 1784570149.9511704,
+    "mtime": 1784581565.4557374,
     "ast_hash": "ff77fdb0bdfccbc9b25871a63af9aa92",
     "semantic_hash": ""
   },
@@ -1135,8 +1135,8 @@
     "semantic_hash": ""
   },
   "tests/test_primitives_words_lists.c": {
-    "mtime": 1784571186.837231,
-    "ast_hash": "e9bef38da09021bda85c893a4690692f",
+    "mtime": 1784590991.0280213,
+    "ast_hash": "afb913a44b3fdfc3744d451e9a5b6c63",
     "semantic_hash": ""
   },
   "tests/test_primitives_workspace.c": {
@@ -1255,8 +1255,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1784561867.4188795,
-    "ast_hash": "92dd51fcd54661a1e2e14b41f5d28c0a",
+    "mtime": 1784581565.2993681,
+    "ast_hash": "5aa2cb3e5d2aa3b1da88980ae7a447af",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1330,7 +1330,7 @@
     "semantic_hash": ""
   },
   "reference/Pico_Logo_Reference.md": {
-    "mtime": 1784571269.3343396,
+    "mtime": 1784581565.4534545,
     "ast_hash": "4d0e329c8b48c706e47fddf3a88fc944",
     "semantic_hash": ""
   },

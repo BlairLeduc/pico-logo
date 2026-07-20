@@ -40,8 +40,8 @@
     "semantic_hash": ""
   },
   "CMakePresets.json": {
-    "mtime": 1782931694.3102713,
-    "ast_hash": "79ef915df02fa13d745d392591e88af7",
+    "mtime": 1784581565.2998443,
+    "ast_hash": "ae50609d2fdfdc6780d63ac2dc540bd9",
     "semantic_hash": ""
   },
   "core/demons.c": {
@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "core/eval_expr.c": {
-    "mtime": 1783090124.6197853,
-    "ast_hash": "20bd39bd90cefd7f719adb3386df0c75",
+    "mtime": 1784591013.069674,
+    "ast_hash": "133d9c8efdcc4fcff1aaed634efc2aee",
     "semantic_hash": ""
   },
   "core/eval_internal.h": {
@@ -160,8 +160,8 @@
     "semantic_hash": ""
   },
   "core/lexer.c": {
-    "mtime": 1783009048.3182757,
-    "ast_hash": "eebf759e03f33637f3bdf4a761a072c7",
+    "mtime": 1784581565.440237,
+    "ast_hash": "85ca1625b24395469134dc848f3f88b7",
     "semantic_hash": ""
   },
   "core/lexer.h": {
@@ -175,8 +175,8 @@
     "semantic_hash": ""
   },
   "core/memory.c": {
-    "mtime": 1783090124.62143,
-    "ast_hash": "34da9e08a9c8f0204fd3f19f123a9724",
+    "mtime": 1784581565.4404895,
+    "ast_hash": "b2ade0eeeac5f8c8e0b410a6ac4da527",
     "semantic_hash": ""
   },
   "core/memory.h": {
@@ -185,8 +185,8 @@
     "semantic_hash": ""
   },
   "core/parse_list.c": {
-    "mtime": 1783090124.6221244,
-    "ast_hash": "9dbec792d430fad13690aaf5a1f35d72",
+    "mtime": 1784581565.4406621,
+    "ast_hash": "05ed0213420e28aa708d93350aae68d4",
     "semantic_hash": ""
   },
   "core/parse_list.h": {
@@ -395,8 +395,8 @@
     "semantic_hash": ""
   },
   "core/syntax_highlight.c": {
-    "mtime": 1783009048.4613,
-    "ast_hash": "4a1e7554c994aa1d6b160a8d12d724cc",
+    "mtime": 1784581565.440842,
+    "ast_hash": "7721bc875dd3bb1f794b1a38c90dfafa",
     "semantic_hash": ""
   },
   "core/syntax_highlight.h": {
@@ -950,7 +950,7 @@
     "semantic_hash": ""
   },
   "tests/test_galaxian.c": {
-    "mtime": 1784563532.6607149,
+    "mtime": 1784569041.7389426,
     "ast_hash": "e3498bf31533d72304b595d2325b77be",
     "semantic_hash": ""
   },
@@ -975,8 +975,8 @@
     "semantic_hash": ""
   },
   "tests/test_lexer.c": {
-    "mtime": 1782601169.7186446,
-    "ast_hash": "22fe2191d554b8f238c2bdb47152eebf",
+    "mtime": 1784581565.4555426,
+    "ast_hash": "d5f4a7243a82da9d3fd4c0fcd64336f2",
     "semantic_hash": ""
   },
   "tests/test_lfs_backup.c": {
@@ -990,8 +990,8 @@
     "semantic_hash": ""
   },
   "tests/test_memory.c": {
-    "mtime": 1783090124.630426,
-    "ast_hash": "edb1ed66957dc57722387b6dc236b253",
+    "mtime": 1784581565.4557374,
+    "ast_hash": "ff77fdb0bdfccbc9b25871a63af9aa92",
     "semantic_hash": ""
   },
   "tests/test_mklfsimg.c": {
@@ -1135,8 +1135,8 @@
     "semantic_hash": ""
   },
   "tests/test_primitives_words_lists.c": {
-    "mtime": 1783888084.2015486,
-    "ast_hash": "cb4ff53d062f6eab95b95f9208c54444",
+    "mtime": 1784590991.0280213,
+    "ast_hash": "afb913a44b3fdfc3744d451e9a5b6c63",
     "semantic_hash": ""
   },
   "tests/test_primitives_workspace.c": {
@@ -1250,13 +1250,13 @@
     "semantic_hash": ""
   },
   ".github/copilot-instructions.md": {
-    "mtime": 1784481081.7568226,
-    "ast_hash": "36b69e3c3826e50c017525947a55dcba",
+    "mtime": 1784569041.6986156,
+    "ast_hash": "eb0533a131fc320cc10fc15aa7b0920f",
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1784561867.4188795,
-    "ast_hash": "92dd51fcd54661a1e2e14b41f5d28c0a",
+    "mtime": 1784581565.2993681,
+    "ast_hash": "5aa2cb3e5d2aa3b1da88980ae7a447af",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1280,7 +1280,7 @@
     "semantic_hash": ""
   },
   "docs/galaxian-design.md": {
-    "mtime": 1784563555.1965868,
+    "mtime": 1784569041.699378,
     "ast_hash": "115dcac416881b01d30874dbbe359769",
     "semantic_hash": ""
   },
@@ -1290,7 +1290,7 @@
     "semantic_hash": ""
   },
   "docs/improvements-roadmap.md": {
-    "mtime": 1784561969.8928006,
+    "mtime": 1784569041.7002718,
     "ast_hash": "7fa7e8ba69ea8fba8d5e38c9d910b604",
     "semantic_hash": ""
   },
@@ -1320,7 +1320,7 @@
     "semantic_hash": ""
   },
   "docs/space-invaders-design.md": {
-    "mtime": 1784561867.7116857,
+    "mtime": 1784569041.7007506,
     "ast_hash": "1cd0250e82816d181ea4c92e3d7b1c33",
     "semantic_hash": ""
   },
@@ -1330,8 +1330,8 @@
     "semantic_hash": ""
   },
   "reference/Pico_Logo_Reference.md": {
-    "mtime": 1784481081.794011,
-    "ast_hash": "e90d9f3239bc1f1b9e2644fddb53fb88",
+    "mtime": 1784581565.4534545,
+    "ast_hash": "4d0e329c8b48c706e47fddf3a88fc944",
     "semantic_hash": ""
   },
   "tests/CMakeLists.txt": {

@@ -1408,6 +1408,19 @@ void test_bar_parse_first_is_whole_word(void)
     TEST_ASSERT_EQUAL_STRING("a b", mem_word_ptr(r.value.as.node));
 }
 
+void test_overlong_word_in_list_literal_fails_cleanly(void)
+{
+    // A word longer than the 255-char atom limit inside a list literal must
+    // fail the parse rather than append a NIL sentinel node. Build "[<a*257>]".
+    char src[300];
+    src[0] = '[';
+    memset(src + 1, 'a', 257);
+    src[258] = ']';
+    src[259] = '\0';
+    Result r = eval_string(src);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
 void test_bar_variable_name_with_space(void)
 {
     // make/thing round-trips a variable whose name contains a space.
@@ -1579,6 +1592,7 @@ int main(void)
     RUN_TEST(test_bar_protects_bracket_in_list_literal);
     RUN_TEST(test_bar_parse_of_word_containing_bars);
     RUN_TEST(test_bar_parse_first_is_whole_word);
+    RUN_TEST(test_overlong_word_in_list_literal_fails_cleanly);
     RUN_TEST(test_bar_variable_name_with_space);
 
     return UNITY_END();
