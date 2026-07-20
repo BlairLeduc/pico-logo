@@ -158,13 +158,11 @@
   "159": "Managing Various Files",
   "160": "HTTP Operations",
   "163": "Variables",
-  "164": "parse_bracket_contents",
   "165": "storage.h",
   "166": "Pico Logo",
   "167": "JSON",
   "168": "drain_tokens",
   "169": "repl_count_bracket_balance",
-  "170": "repl_line_starts_with_to",
   "171": "index-filter.lua",
   "172": "gen_ca_certs.py",
   "174": "pandoc_slug",
@@ -189,5 +187,6 @@
   "193": "picocalc_lfs.h",
   "195": "LICENSE.md",
   "197": "prim_not",
+  "198": "on_sd_card_detect",
   "199": "mem_set_cdr"
 }

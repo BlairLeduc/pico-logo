@@ -3,7 +3,7 @@
 ;
 ; Load and play (from the directory containing this file, e.g. after
 ; setprefix to it, or copy it beside "startup" on the SD card):
-;   load "invaders.logo
+;   load "invaders
 ;   invaders
 ;
 ; Note: the Logo lexer treats "-" and "/" as token delimiters, so a
@@ -41,6 +41,22 @@ to setup.shapes
   putsh 8 [0 0 24 24 24 24 24 24 24 24 24 24 24 24 0 0]
 end
 
+to setup.sound
+  ; One PSG voice-pair per game sound, centred (left ear + right ear). The
+  ; timbres persist (stopsound never clears them), so this runs once at
+  ; startup, not per level.
+  ;   0/4 march bass   1/5 laser   2/6 UFO siren   3/7 explosions
+  setwave [0 4] "triangle setenv [0 4] [0 70 0 60]   ; percussive bass thump
+  setwave [1 5] "sawtooth setenv [1 5] [0 40 0 40]   ; short laser zap
+  setwave [2 6] "square   setenv [2 6] [6 0 15 30]   ; sustained UFO siren
+  setwave [3 7] "white    setenv [3 7] [0 0 15 200]  ; noise explosions
+end
+
+to silence.ufo
+  ; Gate the siren voices off (an out-of-range frequency is a rest).
+  (sound [2 6] 0 10)
+end
+
 to invaders
   init.game
   forever [one.game]
@@ -48,6 +64,7 @@ end
 
 to init.game
   setup.shapes
+  setup.sound
 end
 
 to one.game
@@ -86,6 +103,7 @@ to wait.for.space
 end
 
 to show.game.over
+  stopsound
   textscreen
   ct
   setcursor [13 10]
@@ -272,6 +290,7 @@ to kill.alien :idx
   if or (:c = :form.lo) (:c = :form.hi) [shrink.edges]
   if :r = :form.bot [shrink.bottom]
   make "score :score + 10
+  (sound [3 7] 3000 90 9)   ; short noise splat
 end
 
 to column.occupied? :c
@@ -343,7 +362,7 @@ end
 
 to march.note
   make "march.note.idx remainder (:march.note.idx + 1) 4
-  toot 40 item (:march.note.idx + 1) :freqs
+  (sound [0 4] item (:march.note.idx + 1) :freqs 90 12)
 end
 
 to march.interval
@@ -459,6 +478,7 @@ end
 to fire
   if not shot.active? [
     ask 1 [pu setx (ask 0 [xcor]) sety ((ask 0 [ycor]) + 10) seth 0 st setspeed 90]
+    (sound [1 5] 900 120 9)
   ]
 end
 
@@ -575,10 +595,25 @@ end
 
 to launch.ufo
   ask 2 [pu setx -150 sety 140 seth 90 st setanim 5 6 150 setspeed 50]
+  make "ufo.warble.hi true
+  make "ufo.warble.ctr 0
+end
+
+to ufo.warble
+  ; Continuous two-tone siren while the UFO crosses. Retrigger a long note
+  ; only every few frames so it warbles ("ee-oo-ee-oo") rather than machine-
+  ; guns one note per frame. Each note outlives the gap, so the voice sounds
+  ; unbroken -- a sustained background voice toot could never hold.
+  make "ufo.warble.ctr :ufo.warble.ctr + 1
+  if :ufo.warble.ctr > 4 [
+    make "ufo.warble.ctr 0
+    make "ufo.warble.hi not :ufo.warble.hi
+    ifelse :ufo.warble.hi [(sound [2 6] 620 400 7)] [(sound [2 6] 480 400 7)]
+  ]
 end
 
 to recycle.ufo
-  ask 2 [if shown? [if (xcor) > 150 [ht setspeed 0]]]
+  ask 2 [if shown? [if (xcor) > 150 [ht setspeed 0 silence.ufo]]]
 end
 
 to recycle.offscreen
@@ -590,8 +625,9 @@ end
 
 to ufo.hit
   ask 2 [ht setspeed 0]
+  silence.ufo
   make "score :score + 100
-  toot 30 900
+  (sound [3 7] 5000 180 13)   ; bright explosion
 end
 
 to player.hit
@@ -608,7 +644,8 @@ to invasion
 end
 
 to handle.death
-  toot 200 100
+  silence.ufo
+  (sound [3 7] 600 500 15)   ; big low boom
   wait 500
   ask 0 [setx 0]
   make "dying false
@@ -662,6 +699,7 @@ to play.level
       maybe.launch.ufo
       recycle.offscreen
       recycle.ufo
+      if ask 2 [shown?] [ufo.warble]
     ]
     draw.hud
     sync

@@ -1,7 +1,7 @@
 # Space Invaders in Pico Logo (design & implementation)
 
-Status: **implemented.** See [`examples/invaders.logo`](../examples/invaders.logo)
-(`load "invaders.logo` then `invaders`). A worked example that exercises the
+Status: **implemented.** See [`logo/games/invaders`](../logo/games/invaders)
+(`load "invaders` then `invaders`). A worked example that exercises the
 P5 multi-sprite feature set ([design](multi-sprite-design.md)). The goal was a
 playable, recognisably-faithful Space Invaders written entirely in Logo — no
 interpreter changes for the *game itself* — that doubles as an acceptance test
@@ -356,13 +356,29 @@ stack depth regardless of session length.
   bomb, and shot. `setrot "fixed` for all of them (nothing here rotates).
   Colour costumes (`snapsh`) are unnecessary; mono shapes painted in a
   pen colour are truer to the monochrome arcade look and cheaper.
-- **Sound** via `toot duration frequency`: the four-note descending march
-  loop (one note per march step via `march.note`, which the discrete
-  cadence already spaces out), the UFO's warble, and short explosion
-  toots on death/UFO-hit. `toot`'s frequency/duration arguments accept
-  numeric *words* (e.g. `item n list`, which does not hand back a plain
-  `VALUE_NUMBER`) as well as literal numbers — this needed an interpreter
-  fix; see [Implementation notes](#implementation-notes).
+- **Sound** was originally the single primitive `toot duration frequency`;
+  the game was **retrofitted to the P8 stereo PSG** ([`sound-design.md`](sound-design.md))
+  to double as its in-game acceptance test. Each classic sound gets its own
+  **centred voice-pair** (left ear + right ear), so a note is heard in both
+  ears rather than off to one side:
+
+  | Sound | Voices | Timbre (`setwave`/`setenv`) | Trigger |
+  |---|---|---|---|
+  | March bass | `[0 4]` | triangle, percussive pluck `[0 70 0 60]` | one note per march step (`march.note`), the four-note descending loop the discrete cadence already spaces out |
+  | Laser | `[1 5]` | sawtooth, short zap `[0 40 0 40]` | `fire`, when a shot launches |
+  | UFO siren | `[2 6]` | square, **sustained** `[6 0 15 30]` | a two-tone warble held across frames while the UFO crosses (`ufo.warble`) |
+  | Explosions | `[3 7]` | white **noise** `[0 0 15 200]` | alien splat (`kill.alien`), UFO hit (`ufo.hit`), player death (`handle.death`) |
+
+  The timbres are set once at startup (`setup.sound`, called from
+  `init.game`) because `stopsound` preserves them. The sustained UFO siren
+  and the noise-voice explosions are the two things `toot` structurally
+  could not do — a `toot` blocks the next `toot` and offers no envelope,
+  waveform, noise, or overlap — so they're where the retrofit most visibly
+  earns the new engine: the siren holds *underneath* the march and laser
+  playing on other voices at the same time. Note that `sound`'s
+  frequency/duration arguments (like `toot`'s before it) accept numeric
+  *words* such as `item n list`, not just literal numbers — an interpreter
+  fix this game first surfaced; see [Implementation notes](#implementation-notes).
 
 ## 9. What v1 simplifies (and why it's still Invaders)
 
@@ -404,8 +420,8 @@ If Invaders plays correctly, the milestone works end-to-end.
 
 ## 11. Deliverable
 
-Shipped as a single loadable program, [`examples/invaders.logo`](../examples/invaders.logo)
-(`load "invaders.logo` then `invaders`). Named without a hyphen or slash
+Shipped as a single loadable program, [`logo/games/invaders`](../logo/games/invaders)
+(`load "invaders` then `invaders`). Named without a hyphen or slash
 deliberately — see [Implementation notes](#implementation-notes).
 
 ---
@@ -508,7 +524,7 @@ word containing either — a natural filename like `"space-invaders.logo`,
 or any path with a `/` in it — can't be typed without backslash-escaping
 every delimiter character (`"space\-invaders.logo`, `"examples\/foo.logo`).
 `load`'s own default prefix (`/Logo/` on-device) means users are expected
-to `load` a short bareword filename anyway; `invaders.logo` was chosen
+to `load` a short bareword filename anyway; `invaders` was chosen
 specifically to be typeable without any escaping.
 
 ## Known open issue
