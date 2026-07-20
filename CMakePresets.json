@@ -97,7 +97,7 @@
             "name": "host",
             "displayName": "Native Host",
             "description": "Build for native host platform",
-            "generator": "Unix Makefiles",
+            "generator": "Ninja",
             "binaryDir": "${sourceDir}/build-host",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
@@ -119,6 +119,7 @@
             "name": "tests",
             "displayName": "Native Tests",
             "description": "Build unit tests for native host platform",
+            "generator": "Ninja",
             "binaryDir": "${sourceDir}/build-tests",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug",
