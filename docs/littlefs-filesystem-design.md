@@ -86,6 +86,19 @@ image out of it.
 
 ## 4. The PSRAM / QMI-safe flash-write path (do this FIRST)
 
+> **Update (July 2026, SDK 2.3.0):** the custom PSRAM driver this section
+> references (`picocalc_psram.{c,h}` — init, self-test, `psram_rearm_qmi()`)
+> has been replaced by the SDK's `hardware_psram` library. PSRAM is brought up
+> during SDK runtime init (CS pin from the board header, size auto-detected
+> from the chip id), and the SDK re-arms the QMI CS1 window inside every
+> `flash_range_erase/program` via `flash_set_qmi_cs1_setup_function()` — so
+> `picocalc_flash.c` no longer re-arms manually. The read-back self-test lives
+> on as `psram_verify()` in `devices/picocalc/main.c`. The hazard analysis,
+> spike criteria, and Phase-0 results below are kept as validation history —
+their `picocalc_psram.c:<line>` / `PICOCALC_PSRAM_BASE` references describe the
+now-removed driver; the equivalents today are `__psram_start__` and the SDK's
+`hardware_psram`.
+
 This is the highest-risk area and **step 1 of implementation is a spike to
 validate it** before building on top.
 

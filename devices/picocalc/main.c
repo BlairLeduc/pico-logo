@@ -20,7 +20,6 @@
 #include "devices/picocalc/picocalc_storage.h"
 #include "devices/picocalc/picocalc_hardware.h"
 #include "devices/picocalc/picocalc.h"
-#include "devices/picocalc/picocalc_psram.h"
 #include "devices/picocalc/picocalc_flash.h"
 #include "devices/picocalc/picocalc_lfs.h"
 #include "devices/picocalc/sdcard.h"
@@ -33,6 +32,12 @@
 #include "core/repl.h"
 #include "core/variables.h"
 
+#ifdef PICO_PSRAM_CS_PIN
+#include "hardware/psram.h"
+#include "hardware/xip_cache.h"
+// PSRAM window base (QMI chip-select 1), defined by the SDK linker script.
+extern char __psram_start__[];
+#endif
 
 volatile bool user_interrupt;
 volatile bool pause_requested = false;  // F9 key triggers pause during execution
@@ -78,6 +83,39 @@ void __attribute__((naked)) isr_hardfault(void)
     );
 }
 
+#ifdef PICO_PSRAM_CS_PIN
+// The SDK's hardware_psram runtime init verifies the chip id but not that the
+// memory-mapped window works at full QMI speed. Write distinct patterns, force
+// a real PSRAM round-trip (flush + invalidate the XIP cache) and confirm they
+// read back, so a marginal QMI config degrades to SRAM-only rather than handing
+// the allocator a non-functional region (which hardfaults on use).
+static bool psram_verify(void)
+{
+    volatile uint32_t *base = (volatile uint32_t *)__psram_start__;
+    static const size_t off[4] = {0u, 1u, 0x1000u / 4u, 0xFFFCu / 4u};
+    static const uint32_t pat[4] = {0xA5A5A5A5u, 0x5A5A5A5Au, 0xDEADBEEFu, 0x0BADF00Du};
+
+    if (!psram_is_available())
+    {
+        return false;
+    }
+    for (size_t i = 0; i < 4; i++)
+    {
+        base[off[i]] = pat[i];
+    }
+    xip_cache_clean_all();      // push dirty lines out to PSRAM
+    xip_cache_invalidate_all(); // drop the cache so reads come from PSRAM
+    for (size_t i = 0; i < 4; i++)
+    {
+        if (base[off[i]] != pat[i])
+        {
+            return false;
+        }
+    }
+    return true;
+}
+#endif
+
 int main(void)
 {
     picocalc_init();
@@ -104,15 +142,23 @@ int main(void)
     // PSRAM/QMI is configured.
     LogoIO io;
 
+    // Print welcome banner
+    printf("Copyright 2025-2026 Blair Leduc\n");
+    printf("Welcome to Pico Logo.\n");
+
     // Initialize Logo subsystems
     logo_mem_init();
+    printf("Free nodes: %u\n", (unsigned)mem_free_nodes());
 
-    // Bring up external PSRAM and hand it to the memory system as the aux region
-    // (backs the blob heap and relocates large buffers off SRAM). Must run
-    // before primitives_init() so the editor buffers can be placed in it. If no
-    // PSRAM is detected, the interpreter runs SRAM-only.
-#ifdef PIMORONI_PICO_PLUS2_W_PSRAM_CS_PIN
-    size_t psram_size = picocalc_psram_init(PIMORONI_PICO_PLUS2_W_PSRAM_CS_PIN);
+    // Hand the external PSRAM to the memory system as the aux region (backs the
+    // blob heap and relocates large buffers off SRAM). The SDK's hardware_psram
+    // runtime init brought it up before main() (CS pin from the board header,
+    // size auto-detected from the chip id). Must run before primitives_init()
+    // so the editor buffers can be placed in it. If no working PSRAM is
+    // detected, the interpreter runs SRAM-only.
+#ifdef PICO_PSRAM_CS_PIN
+    size_t psram_size = psram_verify() ? psram_get_size() : 0;
+    printf("PSRAM: %u MiB\n", (unsigned)(psram_size / (1024 * 1024)));
 
 #ifdef PICOCALC_FLASH_SPIKE
     // Phase-0 gating spike: validate the flash-write vs PSRAM/QMI interaction
@@ -132,11 +178,10 @@ int main(void)
         if (psram_size >= tls_heap_size + (1024 * 1024))
         {
             aux_size = psram_size - tls_heap_size;
-            picocalc_tls_heap_setup((void *)(PICOCALC_PSRAM_BASE + aux_size),
-                                    tls_heap_size);
+            picocalc_tls_heap_setup(__psram_start__ + aux_size, tls_heap_size);
         }
 #endif
-        logo_mem_set_aux_region((void *)PICOCALC_PSRAM_BASE, aux_size);
+        logo_mem_set_aux_region(__psram_start__, aux_size);
     }
 #endif
 
@@ -186,10 +231,6 @@ int main(void)
             logo_io_write_line(&io, error_format(r));
         }
     }
-
-    // Print welcome banner
-    logo_io_write_line(&io, "Copyright 2025-2026 Blair Leduc");
-    logo_io_write_line(&io, "Welcome to Pico Logo.");
 
     // Warn if the internal filesystem could not be mounted/formatted.
     if (!lfs_ok)

@@ -9,10 +9,11 @@
 //  Each operation therefore runs as a bounded stop-the-world step:
 //    1. disable interrupts (a flash-resident ISR would hardfault while XIP down)
 //    2. xip_cache_clean_all() — push dirty PSRAM lines to the chip first
-//    3. flash_range_erase / flash_range_program (bootrom path, runs from RAM)
-//    4. picocalc_psram_rearm_qmi() — bootrom can clear WRITABLE_M1 / disturb M1
-//    5. xip_cache_invalidate_all() — drop now-stale flash/PSRAM cache lines
-//    6. restore interrupts
+//    3. flash_range_erase / flash_range_program (bootrom path, runs from RAM);
+//       the SDK re-arms the PSRAM window afterwards via the QMI CS1 setup
+//       function that hardware_psram registers during runtime init
+//    4. xip_cache_invalidate_all() — drop now-stale flash/PSRAM cache lines
+//    5. restore interrupts
 //  One sector (erase) / one page (program) per window, so the interrupts-off
 //  stall is bounded to a single flash operation even for large transfers.
 //
@@ -22,7 +23,6 @@
 //
 
 #include "devices/picocalc/picocalc_flash.h"
-#include "devices/picocalc/picocalc_psram.h"
 
 #include "pico/stdlib.h"
 #include "hardware/flash.h"
@@ -61,7 +61,6 @@ static void __not_in_flash_func(flash_erase_one_sector)(uint32_t flash_offs)
     uint32_t save = save_and_disable_interrupts();
     xip_cache_clean_all();
     flash_range_erase(flash_offs, PICOCALC_FLASH_SECTOR_SIZE);
-    picocalc_psram_rearm_qmi();
     xip_cache_invalidate_all();
     restore_interrupts(save);
 }
@@ -74,7 +73,6 @@ static void __not_in_flash_func(flash_program_one_page)(uint32_t flash_offs,
     uint32_t save = save_and_disable_interrupts();
     xip_cache_clean_all();
     flash_range_program(flash_offs, data, PICOCALC_FLASH_PAGE_SIZE);
-    picocalc_psram_rearm_qmi();
     xip_cache_invalidate_all();
     restore_interrupts(save);
 }
@@ -127,6 +125,12 @@ bool picocalc_flash_program(uint32_t offset, const void *src, size_t len)
 #include "hardware/gpio.h"
 #include "hardware/structs/qmi.h"
 #include "hardware/structs/xip_ctrl.h"
+#ifdef PICO_PSRAM_CS_PIN
+#include "hardware/psram.h"
+#endif
+
+// PSRAM window base (QMI chip-select 1), defined by the SDK linker script.
+extern char __psram_start__[];
 
 // Snapshot of the QMI M1 (PSRAM) window registers, used to detect whether the
 // bootrom flash path disturbs them (acceptance criterion 2).
@@ -163,13 +167,18 @@ bool picocalc_flash_selftest(void)
 {
     printf("\n=== Phase 0: flash / PSRAM-QMI spike ===\n");
 
-    bool psram = picocalc_psram_selftest_ok && picocalc_psram_detected_size > 0;
-    printf("PSRAM: %s (id-size %u bytes)\n", psram ? "UP" : "ABSENT",
-           (unsigned)picocalc_psram_detected_size);
+#ifdef PICO_PSRAM_CS_PIN
+    bool psram = psram_is_available();
+    printf("PSRAM: %s (%u bytes)\n", psram ? "UP" : "ABSENT",
+           (unsigned)psram_get_size());
+#else
+    bool psram = false;
+    printf("PSRAM: no board support\n");
+#endif
 
-    // --- snapshot the M1 window + WRITABLE_M1 + CS pin function BEFORE a raw,
-    //     un-rearmed flash erase, so we can observe exactly what the bootrom
-    //     clobbers (criteria 1 observe, 2, 3). ---
+    // --- snapshot the M1 window + WRITABLE_M1 + CS pin function BEFORE a raw
+    //     flash erase, to confirm the SDK's automatic CS1 restore (registered
+    //     by hardware_psram) leaves the PSRAM window intact (criteria 1-3). ---
     m1_snapshot_t before, after;
     m1_capture(&before);
     bool wm1_before = writable_m1();
@@ -177,9 +186,9 @@ bool picocalc_flash_selftest(void)
     uint32_t cs_before = gpio_get_function(PIMORONI_PICO_PLUS2_W_PSRAM_CS_PIN);
 #endif
 
-    // Raw erase of sector 0 of the region: NO rearm, NO cache fix-up, so the
-    // post-state reflects the bootrom alone. We rearm immediately afterward
-    // (still interrupts-off) to restore PSRAM health before doing anything else.
+    // Raw erase of sector 0 of the region with no cache fix-up, so the
+    // post-state reflects flash_range_erase alone (bootrom op + the SDK's
+    // automatic CS1 restore).
     uint32_t save = save_and_disable_interrupts();
     flash_range_erase(PICOCALC_FLASH_LFS_OFFSET, PICOCALC_FLASH_SECTOR_SIZE);
     m1_capture(&after);
@@ -187,11 +196,11 @@ bool picocalc_flash_selftest(void)
 #ifdef PIMORONI_PICO_PLUS2_W_PSRAM_CS_PIN
     uint32_t cs_after = gpio_get_function(PIMORONI_PICO_PLUS2_W_PSRAM_CS_PIN);
 #endif
-    picocalc_psram_rearm_qmi();
     xip_cache_invalidate_all();
     restore_interrupts(save);
 
-    // Criterion 2: M1 window registers unchanged by the bootrom.
+    // Criterion 2: M1 window registers intact after the flash op (the SDK's
+    // CS1 restore must leave the exact same configuration).
     bool crit2 = m1_equal(&before, &after);
     printf("[2] M1 regs unchanged by flash op : %s\n", crit2 ? "PASS" : "CHANGED");
     if (!crit2)
@@ -205,9 +214,9 @@ bool picocalc_flash_selftest(void)
                (unsigned)before.wfmt, (unsigned)after.wfmt);
     }
 
-    // Criterion 1 (observation): did the bootrom clear WRITABLE_M1?
-    printf("[1] WRITABLE_M1 before=%d after(raw)=%d -> %s\n", wm1_before,
-           wm1_after, wm1_after ? "survived" : "CLEARED by bootrom (rearm needed)");
+    // Criterion 1 (observation): did WRITABLE_M1 survive the flash op?
+    printf("[1] WRITABLE_M1 before=%d after=%d -> %s\n", wm1_before,
+           wm1_after, wm1_after ? "survived" : "CLEARED (SDK restore missing)");
 
     // Criterion 3: PSRAM CS pin function survives connect_internal_flash.
 #ifdef PIMORONI_PICO_PLUS2_W_PSRAM_CS_PIN
@@ -240,7 +249,7 @@ bool picocalc_flash_selftest(void)
     bool psram_ok = true;
     if (psram)
     {
-        volatile uint32_t *p = (volatile uint32_t *)PICOCALC_PSRAM_BASE;
+        volatile uint32_t *p = (volatile uint32_t *)__psram_start__;
         p[0] = 0xCAFEBABEu;
         p[1] = 0x0BADF00Du;
         xip_cache_clean_all();
@@ -260,9 +269,8 @@ bool picocalc_flash_selftest(void)
            loop_ok ? "returned" : "BAD ARGS", (long long)us, (long long)(us / 8));
     printf("    -> verify keyboard still responds and no crash followed.\n");
 
-    // Note: a cleared WRITABLE_M1 after the raw op (wm1_after) is NOT a failure
-    // — the recipe's psram_rearm_qmi() restores it, which [1c] confirms. So the
-    // pass criteria are the register/pin checks plus the functional read-backs.
+    // Pass criteria: the register/pin checks plus the functional read-backs
+    // ([1c] confirms the PSRAM window stays writable across flash ops).
     bool all = crit2 && crit3 && data_ok && psram_ok && loop_ok;
     printf("=== Phase 0 automated result: %s ===\n\n", all ? "PASS" : "FAIL");
     return all;
