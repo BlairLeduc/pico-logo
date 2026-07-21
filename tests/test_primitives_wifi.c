@@ -548,6 +548,35 @@ void test_wifi_status_reports_failed_attempt(void)
     TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
 }
 
+// Each driver state gets its own word, so a failure says which stage it
+// failed at rather than collapsing to a bare "failed".
+void test_wifi_status_names_every_state(void)
+{
+    static const struct { int state; const char *word; } cases[] = {
+        { WIFI_STATE_OFF,        "off"         },
+        { WIFI_STATE_CONNECTING, "connecting"  },
+        { WIFI_STATE_NOIP,       "noaddress"   },
+        { WIFI_STATE_CONNECTED,  "connected"   },
+        { WIFI_STATE_NONET,      "notfound"    },
+        { WIFI_STATE_BADAUTH,    "badpassword" },
+        { WIFI_STATE_FAILED,     "failed"      },
+    };
+
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)
+    {
+        mock_device_set_wifi_status(cases[i].state);
+        Result r = eval_string("wifi.status");
+        TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+        TEST_ASSERT_EQUAL_STRING(cases[i].word, mem_word_ptr(r.value.as.node));
+
+        // Only `connected` counts as being on the network.
+        r = eval_string("wifi?");
+        TEST_ASSERT_EQUAL_STRING(
+            cases[i].state == WIFI_STATE_CONNECTED ? "true" : "false",
+            mem_word_ptr(r.value.as.node));
+    }
+}
+
 void test_wifi_start_errors_when_attempt_cannot_be_started(void)
 {
     mock_device_set_wifi_start_result(false);
@@ -655,6 +684,7 @@ int main(void)
     RUN_TEST(test_wifi_start_returns_without_connecting);
     RUN_TEST(test_wifi_status_reports_connecting_then_connected);
     RUN_TEST(test_wifi_status_reports_failed_attempt);
+    RUN_TEST(test_wifi_status_names_every_state);
     RUN_TEST(test_wifi_start_errors_when_attempt_cannot_be_started);
     RUN_TEST(test_wifi_start_errors_when_no_wifi_hardware);
     RUN_TEST(test_wifi_status_is_off_without_status_op);

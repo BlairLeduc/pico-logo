@@ -62,12 +62,17 @@ extern "C"
     // CONNECTED means the interface has an IP address, not merely that the
     // radio associated, so it is safe to make network calls at that point.
     //
+    // These map one-to-one onto the states the cyw43 driver reports, rather
+    // than collapsing them, so a failure says which stage it failed at.
     typedef enum WifiState
     {
         WIFI_STATE_OFF = 0,    // Radio down: nothing started, or disconnected
-        WIFI_STATE_CONNECTING, // Attempt in flight (association/DHCP)
+        WIFI_STATE_CONNECTING, // Scanning for and associating with the network
+        WIFI_STATE_NOIP,       // Associated; waiting for DHCP to assign an address
         WIFI_STATE_CONNECTED,  // Connected, with an IP address
-        WIFI_STATE_FAILED,     // Last attempt failed (bad key, no such network)
+        WIFI_STATE_NONET,      // The network was not found
+        WIFI_STATE_BADAUTH,    // The network rejected the password
+        WIFI_STATE_FAILED,     // Association failed for some other reason
     } WifiState;
 
     //

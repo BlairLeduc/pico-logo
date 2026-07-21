@@ -131,7 +131,10 @@ static Result prim_wifi_status(Evaluator *eval, int argc, Value *args)
     switch (state)
     {
         case WIFI_STATE_CONNECTING: name = "connecting"; break;
+        case WIFI_STATE_NOIP:       name = "noaddress";  break;
         case WIFI_STATE_CONNECTED:  name = "connected";  break;
+        case WIFI_STATE_NONET:      name = "notfound";   break;
+        case WIFI_STATE_BADAUTH:    name = "badpassword";break;
         case WIFI_STATE_FAILED:     name = "failed";     break;
         default:                    name = "off";        break;
     }

@@ -6478,11 +6478,36 @@ wifi.status
 | Output | Meaning |
 |---|---|
 | `off` | Not connected, and nothing is being attempted |
-| `connecting` | A `wifi.start` attempt is under way |
+| `connecting` | Looking for the network and joining it |
+| `noaddress` | Joined the network; waiting for it to assign an address |
 | `connected` | Connected, with an address on the network |
-| `failed` | The last attempt failed — a wrong password, or no such network |
+| `notfound` | The network was not found |
+| `badpassword` | The network refused the password |
+| `failed` | Joining the network failed for some other reason |
 
-A wrong password is reported as `failed` straight away. A network that cannot be found is retried for up to thirty seconds before `wifi.status` gives up, so `connecting` may persist for a while before turning into `failed`.
+The first four are the stages of a connection in progress; the last three say where it went wrong.
+
+`notfound` is worth a word of explanation. It appears while the device is still hunting for the network as well as when the network genuinely is not there, because those look the same until the device gives up. Pico Logo keeps trying for thirty seconds, so a brief `notfound` early on is normal; one that persists means the network really cannot be reached.
+
+**Example**:
+
+```logo
+?wifi.start "TimHortonsWiFi "double-double
+?pr wifi.status
+connecting
+?pr wifi.status
+noaddress
+?pr wifi.status
+connected
+```
+
+To watch the whole sequence — useful when a connection is not coming up, and the fastest way to see which stage it stalls at:
+
+```logo
+make "last "off
+wifi.start "TimHortonsWiFi "double-double
+when [not equal? wifi.status :last] [make "last wifi.status  pr :last]
+```
 
 `wifi.status` outputs `connected` in exactly the cases where `wifi?` outputs `true`. It is most useful after `wifi.start`, where it tells you whether an attempt is still going or has given up — something `wifi?` alone cannot say.
 

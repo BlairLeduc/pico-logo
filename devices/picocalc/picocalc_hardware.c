@@ -387,49 +387,60 @@ static int picocalc_wifi_status(void)
 
     int link_status = cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA);
 
-    if (link_status == CYW43_LINK_UP)
+    switch (link_status)
     {
-        if (wifi_connect_pending)
-        {
-            // An asynchronous attempt just landed. Do the work the blocking
-            // connect path does on success, now that the interface is really
-            // up; polling this op is the only notification we get.
-            wifi_connect_pending = false;
-            wifi_configure_link();
-        }
-        return WIFI_STATE_CONNECTED;
-    }
+        case CYW43_LINK_UP:
+            if (wifi_connect_pending)
+            {
+                // An asynchronous attempt just landed. Do the work the blocking
+                // connect path does on success, now that the interface is
+                // really up; polling this op is the only notification we get.
+                wifi_connect_pending = false;
+                wifi_configure_link();
+            }
+            return WIFI_STATE_CONNECTED;
 
-    // CYW43_LINK_NONET is not a failure: it is the ordinary state while the
-    // scan has yet to find the access point, and the driver only leaves it if
-    // the join is issued again. The SDK's blocking connect re-issues in exactly
-    // this case (cyw43_arch.c, "If there was no network, keep trying") and
-    // keeps doing so until its timeout, so we must too -- otherwise a demon
-    // polling every 20 ms catches the blip and gives up in the first instant of
-    // a join that would have succeeded.
-    if (link_status == CYW43_LINK_NONET && wifi_connect_pending)
-    {
-        if (to_ms_since_boot(get_absolute_time()) < wifi_connect_deadline_ms)
-        {
+        case CYW43_LINK_NOIP:
+            // Associated, but DHCP has not answered yet.
+            return WIFI_STATE_NOIP;
+
+        case CYW43_LINK_JOIN:
+            return WIFI_STATE_CONNECTING;
+
+        case CYW43_LINK_NONET:
+            // Not necessarily a failure: this is also the ordinary state while
+            // the scan has yet to find the access point, and the driver only
+            // leaves it if the join is issued again. The SDK's blocking connect
+            // re-issues in exactly this case (cyw43_arch.c, "If there was no
+            // network, keep trying") until its timeout, so we do too.
             // Re-issuing puts the driver back into WIFI_JOIN_STATE_ACTIVE, so
             // this is self-throttling: we only retry on a fresh NONET.
-            cyw43_arch_wifi_connect_async(current_ssid, current_password,
-                                          CYW43_AUTH_WPA2_AES_PSK);
-            return WIFI_STATE_CONNECTING;
-        }
-        // Out of time: the network really is not there.
-        wifi_connect_pending = false;
-        return WIFI_STATE_FAILED;
-    }
+            if (wifi_connect_pending &&
+                to_ms_since_boot(get_absolute_time()) < wifi_connect_deadline_ms)
+            {
+                cyw43_arch_wifi_connect_async(current_ssid, current_password,
+                                              CYW43_AUTH_WPA2_AES_PSK);
+            }
+            else
+            {
+                wifi_connect_pending = false;
+            }
+            // Reported either way: while retrying it is a true description of
+            // where the attempt has got to, and it is the state we most need to
+            // see when a connection is not coming up.
+            return WIFI_STATE_NONET;
 
-    // CYW43_LINK_FAIL / BADAUTH, and NONET once we have stopped retrying.
-    if (link_status < 0)
-    {
-        wifi_connect_pending = false;
-        return WIFI_STATE_FAILED;
-    }
+        case CYW43_LINK_BADAUTH:
+            wifi_connect_pending = false;
+            return WIFI_STATE_BADAUTH;
 
-    return wifi_connect_pending ? WIFI_STATE_CONNECTING : WIFI_STATE_OFF;
+        case CYW43_LINK_FAIL:
+            wifi_connect_pending = false;
+            return WIFI_STATE_FAILED;
+
+        default: // CYW43_LINK_DOWN
+            return wifi_connect_pending ? WIFI_STATE_CONNECTING : WIFI_STATE_OFF;
+    }
 }
 
 // Apply current_hostname to the netif (for DHCP) and (re)start the mDNS
