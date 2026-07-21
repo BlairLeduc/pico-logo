@@ -1,7 +1,7 @@
 # Graph Report - pico-logo  (2026-07-20)
 
 ## Corpus Check
-- 274 files · ~431,365 words
+- 274 files · ~431,306 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -241,7 +241,7 @@ Nodes (175): format_number(), Evaluator, Result, Value, prim_date(), prim_setdat
 
 ### Community 4 - "mem_is_nil"
 Cohesion: 0.03
-Nodes (185): BlobDesc, blob_desc(), mem_car(), mem_cdr(), mem_is_nil(), mem_word_ptr(), Lexer, parse_list_body() (+177 more)
+Nodes (186): BlobDesc, blob_desc(), mem_car(), mem_cdr(), mem_is_nil(), mem_word_ptr(), Lexer, parse_list_body() (+178 more)
 
 ### Community 5 - "reset_output"
 Cohesion: 0.02
@@ -264,8 +264,8 @@ Cohesion: 0.06
 Nodes (95): mem_atom(), mem_cons(), mem_free_atoms(), mem_free_nodes(), mem_gc(), mem_is_list(), mem_total_atoms(), mem_word_eq() (+87 more)
 
 ### Community 10 - "test_frame.c"
-Cohesion: 0.09
-Nodes (35): frame_pop(), frame_stack_available_bytes(), frame_stack_depth(), frame_stack_is_empty(), frame_stack_used_bytes(), FrameStack, proc_get_frame_stack(), var_get_local_by_index() (+27 more)
+Cohesion: 0.11
+Nodes (30): frame_pop(), frame_stack_available_bytes(), frame_stack_depth(), frame_stack_used_bytes(), FrameStack, proc_get_frame_stack(), var_get_local_by_index(), var_local_count() (+22 more)
 
 ### Community 11 - "proc_define_from_text"
 Cohesion: 0.04
@@ -301,7 +301,7 @@ Nodes (75): bracket_category(), SyntaxCategory, ci_eq(), is_delimiter(), match_k
 
 ### Community 19 - "test_variables.c"
 Cohesion: 0.07
-Nodes (70): Value, find_global(), var_bury(), var_bury_all(), var_declare_local(), var_erase(), var_erase_all(), var_erase_all_globals() (+62 more)
+Nodes (72): Value, find_global(), var_bury(), var_bury_all(), var_declare_local(), var_erase(), var_erase_all(), var_erase_all_globals() (+64 more)
 
 ### Community 20 - "test_token_source.c"
 Cohesion: 0.09
@@ -393,7 +393,7 @@ Nodes (45): test_battery_charging(), test_battery_charging_in_procedure(), test_
 
 ### Community 42 - "mem_atom_cstr"
 Cohesion: 0.07
-Nodes (93): Binding, FrameHeader, FrameStack, UserProcedure, Value, word_offset_t, calc_frame_size(), frame_add_local() (+85 more)
+Nodes (94): Binding, FrameHeader, FrameStack, UserProcedure, Value, word_offset_t, calc_frame_size(), frame_add_local() (+86 more)
 
 ### Community 43 - "test_time.c"
 Cohesion: 0.07
@@ -420,12 +420,12 @@ Cohesion: 0.05
 Nodes (42): name, name, 1, 2, match, name, match, name (+34 more)
 
 ### Community 49 - "test_primitives_outside_world.c"
-Cohesion: 0.26
-Nodes (13): demons_gc_mark_all(), Value, mark_value(), op_stack_gc_mark(), op_stack_get_prim_args(), mem_gc_mark(), prim_recycle(), proc_gc_mark_all() (+5 more)
+Cohesion: 0.33
+Nodes (11): demons_gc_mark_all(), mark_value(), op_stack_gc_mark(), mem_gc_mark(), prim_recycle(), proc_gc_mark_all(), proc_get_tail_call(), prop_gc_mark_all() (+3 more)
 
 ### Community 50 - "primitives.h"
 Cohesion: 0.07
-Nodes (40): Node, Value, demons_print(), demons_running(), demons_set(), value_is_true(), prim_when(), Evaluator (+32 more)
+Nodes (42): Node, Value, demons_print(), demons_running(), demons_set(), value_is_true(), prim_when(), Evaluator (+34 more)
 
 ### Community 51 - "httpd.c"
 Cohesion: 0.10
@@ -445,7 +445,7 @@ Nodes (39): and, Appendix C: Useful Procedures, Appendix D: Error Messages, Appe
 
 ### Community 55 - "primitives_workspace.c"
 Cohesion: 0.10
-Nodes (61): format_property_list(), format_variable(), Evaluator, Result, Value, count_bracket_balance(), prim_edall(), prim_edit() (+53 more)
+Nodes (59): format_property_list(), format_variable(), Evaluator, Result, Value, count_bracket_balance(), prim_edall(), prim_edit() (+51 more)
 
 ### Community 56 - "test_mock_device.c"
 Cohesion: 0.09
@@ -500,8 +500,8 @@ Cohesion: 0.06
 Nodes (34): ascii, before? (beforep), butfirst (bf), butlast (bl), char, count, empty? (emptyp), equal? (equalp) (+26 more)
 
 ### Community 69 - "op_stack_push"
-Cohesion: 0.15
-Nodes (28): EvalOp, op_stack_alloc_prim_args(), op_stack_depth(), op_stack_init(), op_stack_is_empty(), op_stack_peek(), op_stack_push(), op_stack_swap_top() (+20 more)
+Cohesion: 0.14
+Nodes (30): EvalOp, Value, op_stack_alloc_prim_args(), op_stack_depth(), op_stack_get_prim_args(), op_stack_init(), op_stack_is_empty(), op_stack_peek() (+22 more)
 
 ### Community 70 - "value_number"
 Cohesion: 0.31
@@ -544,8 +544,8 @@ Cohesion: 0.07
 Nodes (6): LogoEntryType, LogoStream, collect_cb(), make_stream(), setUp(), spy_reset()
 
 ### Community 80 - "primitives_get_io"
-Cohesion: 0.10
-Nodes (58): mem_atom_cstr(), Evaluator, Result, Value, prim_allopen(), prim_close(), prim_closeall(), prim_dribble() (+50 more)
+Cohesion: 0.11
+Nodes (57): mem_atom_cstr(), Evaluator, Result, Value, prim_allopen(), prim_close(), prim_closeall(), prim_dribble() (+49 more)
 
 ### Community 81 - "host_storage.c"
 Cohesion: 0.11
@@ -620,8 +620,8 @@ Cohesion: 0.08
 Nodes (33): bd_erase(), bd_prog(), bd_read(), blob_get_read_pos(), blob_read_chars(), blob_set_read_pos(), lfs_block_t, lfs_off_t (+25 more)
 
 ### Community 99 - "eval_push_if"
-Cohesion: 0.20
-Nodes (20): Evaluator, Result, Value, prim_false(), prim_if(), prim_ifelse(), prim_iffalse(), prim_iftrue() (+12 more)
+Cohesion: 0.18
+Nodes (22): frame_stack_is_empty(), Evaluator, Result, Value, prim_false(), prim_if(), prim_ifelse(), prim_iffalse() (+14 more)
 
 ### Community 100 - "host_hardware.c"
 Cohesion: 0.09

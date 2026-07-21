@@ -805,13 +805,13 @@
     "semantic_hash": ""
   },
   "grammar/package.json": {
-    "mtime": 1783358338.2662964,
-    "ast_hash": "35dfa4f7aba40bb38cb66d44c8fcd170",
+    "mtime": 1784593454.001848,
+    "ast_hash": "3de103390882d97855ba893172f4ce6b",
     "semantic_hash": ""
   },
   "grammar/syntaxes/logo.tmLanguage.json": {
-    "mtime": 1783358338.26651,
-    "ast_hash": "6cac5b4f9260d08f7e585e34b97ac7e4",
+    "mtime": 1784593218.9491425,
+    "ast_hash": "0a54095432e5e500c6b7c155517a6c83",
     "semantic_hash": ""
   },
   "reference/index-filter.lua": {
@@ -1170,8 +1170,8 @@
     "semantic_hash": ""
   },
   "tests/test_syntax_highlight.c": {
-    "mtime": 1782574635.0571368,
-    "ast_hash": "47a2683f83f5e105c4461f5b7eb9b59b",
+    "mtime": 1784594428.0948224,
+    "ast_hash": "c0926f320a3b4b9bcf4dc4e3ca7863c9",
     "semantic_hash": ""
   },
   "tests/test_time.c": {
