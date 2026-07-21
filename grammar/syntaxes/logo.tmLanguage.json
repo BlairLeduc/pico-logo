@@ -8,6 +8,7 @@
     { "include": "#list" },
     { "include": "#variable" },
     { "include": "#quoted-word" },
+    { "include": "#barred-word" },
     { "include": "#number" },
     { "include": "#operator" },
     { "include": "#command" }
@@ -27,7 +28,7 @@
     },
     "to-end": {
       "name": "meta.procedure.logo",
-      "begin": "(?i)^\\s*(to)\\s+([^\\s\\[\\]\\(\\)]+)",
+      "begin": "(?i)^\\s*(to)\\s+((?:\\|(?:\\\\.|[^|\\\\])*\\||\\\\.|[^\\s\\[\\]()|\\\\])+)",
       "beginCaptures": {
         "1": { "name": "keyword.control.to.logo" },
         "2": { "name": "entity.name.function.logo" }
@@ -39,7 +40,7 @@
       "patterns": [
         {
           "name": "variable.parameter.logo",
-          "match": ":[^\\s\\[\\]\\(\\)\\+\\-\\*/=<>]+"
+          "match": ":(?:\\|(?:\\\\.|[^|\\\\])*\\||\\\\.|[^\\s\\[\\]()+\\-*/=<>|\\\\])+"
         },
         { "include": "$self" }
       ]
@@ -58,11 +59,15 @@
     },
     "variable": {
       "name": "variable.other.logo",
-      "match": ":[^\\s\\[\\]\\(\\)\\+\\-\\*/=<>]+"
+      "match": ":(?:\\|(?:\\\\.|[^|\\\\])*\\||\\\\.|[^\\s\\[\\]()+\\-*/=<>|\\\\])+"
     },
     "quoted-word": {
       "name": "string.quoted.other.logo",
-      "match": "\"[^\\s\\[\\]\\(\\)]*"
+      "match": "\"(?:\\|(?:\\\\.|[^|\\\\])*\\||\\\\.|[^\\s\\[\\]()|\\\\])*"
+    },
+    "barred-word": {
+      "name": "string.quoted.other.logo",
+      "match": "\\|(?:\\\\.|[^|\\\\])*\\|"
     },
     "number": {
       "name": "constant.numeric.logo",

@@ -1346,6 +1346,89 @@ void test_memberp_whitespace_needle_in_word_agrees_with_member(void)
     TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
 }
 
+//============================================================================
+// Vertical-bar quoting (end-to-end)
+//
+// `|...|` lets otherwise-delimiting characters appear in a word. The bars are
+// stripped when the word is interned, so a quoted word, a list literal, and
+// `parse` all agree.
+//============================================================================
+
+void test_bar_quoted_word_strips_bars(void)
+{
+    // "|San Francisco| is the single 13-character word "San Francisco".
+    Result r = eval_string("count \"|San Francisco|");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(13.0f, r.value.as.number);
+}
+
+void test_bar_list_literal_is_one_word(void)
+{
+    // [|a b| c] is a two-element list whose first element is the word "a b".
+    Result r = eval_string("first [|a b| c]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("a b", mem_word_ptr(r.value.as.node));
+}
+
+void test_bar_list_literal_count(void)
+{
+    Result r = eval_string("count [|a b| c]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(2.0f, r.value.as.number);
+}
+
+void test_bar_protects_bracket_in_list_literal(void)
+{
+    // A `]` inside bars is an ordinary character, so `[|a]b| c]` is a
+    // two-element list whose first element is the three-char word "a]b".
+    Result r = eval_string("first [|a]b| c]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("a]b", mem_word_ptr(r.value.as.node));
+}
+
+void test_bar_parse_of_word_containing_bars(void)
+{
+    // Per the reference: when `parse` tokenizes a word that CONTAINS vertical
+    // bars, the bars do not appear in the result but every character between
+    // them (here a space) is tokenized as though it were a letter. The word
+    // "\|a\ b\| is the 5-character word |a b| (literal bars and space); parsing
+    // it yields the one-element list [a b].
+    Result r = eval_string("count parse \"\\|a\\ b\\|");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(1.0f, r.value.as.number);
+}
+
+void test_bar_parse_first_is_whole_word(void)
+{
+    Result r = eval_string("first parse \"\\|a\\ b\\|");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("a b", mem_word_ptr(r.value.as.node));
+}
+
+void test_overlong_word_in_list_literal_fails_cleanly(void)
+{
+    // A word longer than the 255-char atom limit inside a list literal must
+    // fail the parse rather than append a NIL sentinel node. Build "[<a*257>]".
+    char src[300];
+    src[0] = '[';
+    memset(src + 1, 'a', 257);
+    src[258] = ']';
+    src[259] = '\0';
+    Result r = eval_string(src);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_bar_variable_name_with_space(void)
+{
+    // make/thing round-trips a variable whose name contains a space.
+    Result r = run_string("make \"|a b| 42\nthing \"|a b|");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(42.0f, r.value.as.number);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -1501,6 +1584,16 @@ int main(void)
 
     RUN_TEST(test_member_whitespace_needle_in_word);
     RUN_TEST(test_memberp_whitespace_needle_in_word_agrees_with_member);
+
+    // Vertical-bar quoting (end-to-end)
+    RUN_TEST(test_bar_quoted_word_strips_bars);
+    RUN_TEST(test_bar_list_literal_is_one_word);
+    RUN_TEST(test_bar_list_literal_count);
+    RUN_TEST(test_bar_protects_bracket_in_list_literal);
+    RUN_TEST(test_bar_parse_of_word_containing_bars);
+    RUN_TEST(test_bar_parse_first_is_whole_word);
+    RUN_TEST(test_overlong_word_in_list_literal_fails_cleanly);
+    RUN_TEST(test_bar_variable_name_with_space);
 
     return UNITY_END();
 }

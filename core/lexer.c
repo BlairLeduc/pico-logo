@@ -177,6 +177,40 @@ static Token make_error_token(Lexer *lexer, const char *start, size_t length)
     return make_token(lexer, TOKEN_ERROR, start, length);
 }
 
+// Consume a vertical-bar quoted run when positioned on an opening `|`.
+// Every character up to the matching `|` (or end of input) is absorbed into
+// the current token, so otherwise-delimiting characters — spaces, brackets,
+// parentheses, and infix operators — are tokenized as though they were
+// letters. Within the bars a backslash still escapes the following
+// character; the only characters that must be backslashed here are `|` and
+// `\` themselves. Both bars are retained in the token text; they are removed
+// later when the word is interned (see mem_atom_unescape). Does nothing (and
+// returns false) if the current character is not a bar.
+static bool scan_bar_run(Lexer *lexer)
+{
+    if (*lexer->current != '|')
+    {
+        return false;
+    }
+    lexer->current++; // opening bar
+    while (*lexer->current && *lexer->current != '|')
+    {
+        if (*lexer->current == '\\' && lexer->current[1])
+        {
+            lexer->current += 2; // escaped character inside bars
+        }
+        else
+        {
+            lexer->current++;
+        }
+    }
+    if (*lexer->current == '|')
+    {
+        lexer->current++; // closing bar
+    }
+    return true;
+}
+
 // Read a word (alphanumeric sequence, possibly with escaped characters)
 static Token read_word(Lexer *lexer)
 {
@@ -192,6 +226,10 @@ static Token read_word(Lexer *lexer)
             {
                 lexer->current++;
             }
+        }
+        else if (*lexer->current == '|')
+        {
+            scan_bar_run(lexer);
         }
         else if (is_space(*lexer->current) || is_delimiter(*lexer->current) || *lexer->current == ';')
         {
@@ -265,6 +303,13 @@ static Token read_quoted(Lexer *lexer)
             }
             first_char = false;
         }
+        else if (*lexer->current == '|')
+        {
+            // A bar-quoted run absorbs delimiters, spaces, and brackets even
+            // in the middle of a quoted word (e.g. "|San Francisco|).
+            scan_bar_run(lexer);
+            first_char = false;
+        }
         else if (*lexer->current == '[' || *lexer->current == ']')
         {
             // Brackets always end a quoted word (unless escaped)
@@ -320,6 +365,10 @@ static Token read_colon(Lexer *lexer)
             {
                 lexer->current++;
             }
+        }
+        else if (*lexer->current == '|')
+        {
+            scan_bar_run(lexer);
         }
         else if (is_space(*lexer->current) || is_delimiter(*lexer->current) || *lexer->current == ';')
         {

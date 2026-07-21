@@ -91,6 +91,24 @@ static void skip_ws(const char *line, int length,
     }
 }
 
+// Consume a vertical-bar quoted run when line[*pos] == '|'. Absorbs
+// delimiters and spaces up to the matching bar (a backslash still escapes the
+// next character inside), so `|a b|` highlights as a single token. No-op if
+// the current character is not a bar.
+static void skip_bar_run(const char *line, int length, int *pos)
+{
+    if (*pos >= length || line[*pos] != '|')
+        return;
+    (*pos)++;  // opening bar
+    while (*pos < length && line[*pos] != '|') {
+        if (line[*pos] == '\\' && *pos + 1 < length)
+            (*pos)++;  // skip escaped character inside bars
+        (*pos)++;
+    }
+    if (*pos < length)
+        (*pos)++;  // closing bar
+}
+
 // Read a "word" — contiguous non-delimiter, non-bracket characters.
 // Handles backslash escapes: \X skips the backslash and next character.
 // Returns start position; *pos is advanced to one past the end.
@@ -102,6 +120,8 @@ static int read_word_span(const char *line, int length, int *pos)
             (*pos)++;  // skip backslash
             if (*pos < length)
                 (*pos)++;  // skip escaped character
+        } else if (line[*pos] == '|') {
+            skip_bar_run(line, length, pos);
         } else if (is_delimiter(line[*pos])) {
             break;
         } else {
@@ -318,6 +338,8 @@ int syntax_highlight_line(const char *line, int length,
                     pos++;  // skip backslash
                     if (pos < length)
                         pos++;  // skip escaped character
+                } else if (line[pos] == '|') {
+                    skip_bar_run(line, length, &pos);
                 } else if (is_delimiter(line[pos])) {
                     break;
                 } else {
@@ -337,6 +359,8 @@ int syntax_highlight_line(const char *line, int length,
                     pos++;  // skip backslash
                     if (pos < length)
                         pos++;  // skip escaped character
+                } else if (line[pos] == '|') {
+                    skip_bar_run(line, length, &pos);
                 } else if (line[pos] == ' '  || line[pos] == '\t' ||
                            line[pos] == '['  || line[pos] == ']' ||
                            line[pos] == '('  || line[pos] == ')') {
@@ -399,15 +423,20 @@ int syntax_highlight_line(const char *line, int length,
         }
 
         // Bare word: [a-zA-Z][a-zA-Z0-9_.?]*  → SYNTAX_COMMAND
-        // Also handles backslash escapes within words.
-        if (isalpha((unsigned char)c) || c == '\\') {
+        // Also handles backslash escapes and vertical-bar quoting within
+        // words. A leading `|` must enter the scanner here so the run is
+        // consumed as a matched pair of bars (mirroring the lexer); otherwise
+        // the closing bar would be misread as an opening one, swallowing a
+        // following `]` and throwing off REPL bracket-depth tracking.
+        if (isalpha((unsigned char)c) || c == '\\' || c == '|') {
             int start = pos;
-            pos++;
             while (pos < length) {
                 if (line[pos] == '\\') {
                     pos++;  // skip backslash
                     if (pos < length)
                         pos++;  // skip escaped character
+                } else if (line[pos] == '|') {
+                    skip_bar_run(line, length, &pos);
                 } else if (isalnum((unsigned char)line[pos]) ||
                            line[pos] == '_' || line[pos] == '.' || line[pos] == '?' ||
                            line[pos] == ':') {

@@ -10,8 +10,6 @@
 
 #include "parse_list.h"
 
-#include <string.h>
-
 #include "lexer.h"
 #include "memory.h"
 
@@ -42,13 +40,15 @@ static ParseListResult parse_list_body(Lexer *lexer)
         case TOKEN_NUMBER:
         case TOKEN_COLON:
         {
-            char buf[256];
-            size_t len = tok.length;
-            if (len >= sizeof(buf))
-                len = sizeof(buf) - 1;
-            memcpy(buf, tok.start, len);
-            buf[len] = '\0';
-            element = mem_atom(buf, len);
+            // Resolve backslash escapes and strip vertical-bar quoting, so
+            // that `parse`/`readlist` see the same words the main parser
+            // would (e.g. `|San Francisco|` becomes one word "San Francisco").
+            element = mem_atom_unescape(tok.start, tok.length);
+            if (mem_is_nil(element))
+            {
+                // Word exceeds the 255-char atom limit.
+                return (ParseListResult){.node = NODE_NIL, .success = false};
+            }
             break;
         }
 

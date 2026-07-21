@@ -174,22 +174,19 @@ static bool parse_list(Evaluator *eval, Node *out)
             // Wrap in list marker for later
             item = NODE_MAKE_LIST(NODE_GET_INDEX(item));
         }
-        else if (t.type == TOKEN_WORD || t.type == TOKEN_NUMBER)
+        else if (t.type == TOKEN_WORD || t.type == TOKEN_NUMBER ||
+                 t.type == TOKEN_QUOTED || t.type == TOKEN_COLON)
         {
-            item = mem_atom(t.start, t.length);
-            advance(eval);
-        }
-        else if (t.type == TOKEN_QUOTED)
-        {
-            // Keep the quote - it's needed when the list is run
-            item = mem_atom(t.start, t.length);
-            advance(eval);
-        }
-        else if (t.type == TOKEN_COLON)
-        {
-            // Store :var as-is in list (will be evaluated when run)
-            // Create a word with the colon
-            item = mem_atom(t.start, t.length);
+            // Resolve backslash escapes and strip vertical-bar quoting so a
+            // list literal holds the same words the reader would produce for
+            // `parse`/`readlist` (e.g. `[|a b|]` holds the word "a b"). A
+            // leading `"` (quoted word) or `:` (variable) is neither a bar nor
+            // a backslash, so it survives and the word runs correctly later.
+            // A NIL result means the word exceeded the 255-char atom limit;
+            // fail the parse rather than store an invalid node.
+            item = mem_atom_unescape(t.start, t.length);
+            if (mem_is_nil(item))
+                return false;
             advance(eval);
         }
         else if (t.type == TOKEN_PLUS || t.type == TOKEN_MINUS || 

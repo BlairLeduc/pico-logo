@@ -764,6 +764,72 @@ void test_quoted_word_with_colon(void)
     assert_range(cat, 0, len, SYNTAX_STRING, "quoted word with colon");
 }
 
+// ---------------------------------------------------------------------------
+// Vertical-bar quoting
+//
+// A `|...|` run lets spaces, brackets, and other delimiters appear inside a
+// word. The highlighter must colour the whole run as part of its word and,
+// crucially, not count a `]` inside the bars toward bracket depth.
+// ---------------------------------------------------------------------------
+
+void test_bar_quoted_word(void)
+{
+    // "|San Francisco| — the whole quoted word, spaces included, is a string.
+    const char *line = "\"|San Francisco|";
+    int len = (int)strlen(line);
+    uint8_t cat[32];
+    syntax_highlight_line(line, len, cat, 0);
+    assert_range(cat, 0, len, SYNTAX_STRING, "bar-quoted word");
+}
+
+void test_bar_variable(void)
+{
+    // :|a b| — a variable name containing a space.
+    const char *line = ":|a b|";
+    int len = (int)strlen(line);
+    uint8_t cat[16];
+    syntax_highlight_line(line, len, cat, 0);
+    assert_range(cat, 0, len, SYNTAX_VARIABLE, "bar variable");
+}
+
+void test_bar_bare_word(void)
+{
+    // |a b| — a bare word (leading bar) containing a space.
+    const char *line = "|a b|";
+    int len = (int)strlen(line);
+    uint8_t cat[16];
+    syntax_highlight_line(line, len, cat, 0);
+    assert_range(cat, 0, len, SYNTAX_COMMAND, "bare bar word");
+}
+
+void test_bar_escaped_bar_inside_quoted(void)
+{
+    // "|a\|b| — the escaped \| does not close the bar run, so it stays a
+    // single string.
+    const char *line = "\"|a\\|b|";
+    int len = (int)strlen(line);
+    uint8_t cat[16];
+    syntax_highlight_line(line, len, cat, 0);
+    assert_range(cat, 0, len, SYNTAX_STRING, "escaped bar inside quoted run");
+}
+
+void test_bar_protects_bracket_depth(void)
+{
+    // [|a]b| c] — the ] inside the bars is part of the word, so bracket depth
+    // stays balanced: the closing ] returns to depth 0.
+    const char *line = "[|a]b| c]";
+    //                  [  |  a  ]  b  |  _  c  ]
+    //                  0  1  2  3  4  5  6  7  8
+    int len = (int)strlen(line);
+    uint8_t cat[16];
+    int end_depth = syntax_highlight_line(line, len, cat, 0);
+    TEST_ASSERT_EQUAL_UINT8(SYNTAX_BRACKET_1, cat[0]);              // opening [
+    assert_range(cat, 1, 6, SYNTAX_COMMAND, "barred word absorbs ]"); // |a]b|
+    assert_cat(cat, 3, SYNTAX_COMMAND, "] inside bars is not a bracket");
+    TEST_ASSERT_EQUAL_UINT8(SYNTAX_BRACKET_1, cat[8]);             // closing ]
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, end_depth, "bracket depth balanced");
+}
+
 void test_to_body_highlighting(void)
 {
     // After TO name :params, the remaining body should be highlighted
@@ -863,6 +929,13 @@ int main(void)
     RUN_TEST(test_word_with_colon_mid_word);
     RUN_TEST(test_word_with_colon_in_brackets);
     RUN_TEST(test_quoted_word_with_colon);
+
+    // Vertical-bar quoting
+    RUN_TEST(test_bar_quoted_word);
+    RUN_TEST(test_bar_variable);
+    RUN_TEST(test_bar_bare_word);
+    RUN_TEST(test_bar_escaped_bar_inside_quoted);
+    RUN_TEST(test_bar_protects_bracket_depth);
 
     // Complex lines
     RUN_TEST(test_repeat_command);

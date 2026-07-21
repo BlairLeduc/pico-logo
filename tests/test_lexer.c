@@ -820,6 +820,101 @@ void test_escaped_brackets_in_word(void)
 }
 
 //============================================================================
+// Vertical-bar quoting Tests
+//
+// A `|...|` run makes every character between the bars (spaces, brackets,
+// parentheses, infix operators) tokenize as though it were a letter. The
+// bars are retained in the token text; they are stripped later when the word
+// is interned.
+//============================================================================
+
+void test_bar_word_with_spaces(void)
+{
+    // |a b c| is a single bare word.
+    Lexer lexer;
+    lexer_init(&lexer, "|a b c|");
+    assert_token(&lexer, TOKEN_WORD, "|a b c|");
+    assert_token(&lexer, TOKEN_EOF, "");
+}
+
+void test_bar_word_with_delimiters(void)
+{
+    // Brackets, parens, and operators inside bars are not delimiters.
+    Lexer lexer;
+    lexer_init(&lexer, "|[a]+(b)|");
+    assert_token(&lexer, TOKEN_WORD, "|[a]+(b)|");
+    assert_token(&lexer, TOKEN_EOF, "");
+}
+
+void test_bar_quoted_word(void)
+{
+    // "|San Francisco| is a single quoted word.
+    Lexer lexer;
+    lexer_init(&lexer, "\"|San Francisco|");
+    assert_token(&lexer, TOKEN_QUOTED, "\"|San Francisco|");
+    assert_token(&lexer, TOKEN_EOF, "");
+}
+
+void test_bar_run_mid_quoted_word(void)
+{
+    // A bar run may appear partway through a quoted word.
+    Lexer lexer;
+    lexer_init(&lexer, "\"San|  |Francisco");
+    assert_token(&lexer, TOKEN_QUOTED, "\"San|  |Francisco");
+    assert_token(&lexer, TOKEN_EOF, "");
+}
+
+void test_bar_colon_variable(void)
+{
+    // :|a b| references a variable whose name contains a space.
+    Lexer lexer;
+    lexer_init(&lexer, ":|a b|");
+    assert_token(&lexer, TOKEN_COLON, ":|a b|");
+    assert_token(&lexer, TOKEN_EOF, "");
+}
+
+void test_bar_escaped_bar_inside(void)
+{
+    // Inside bars, \| is a literal bar and does not close the run.
+    Lexer lexer;
+    lexer_init(&lexer, "|a\\|b|");
+    assert_token(&lexer, TOKEN_WORD, "|a\\|b|");
+    assert_token(&lexer, TOKEN_EOF, "");
+}
+
+void test_bar_word_then_delimiter(void)
+{
+    // The run ends at the closing bar; a following delimiter is separate.
+    Lexer lexer;
+    lexer_init(&lexer, "|a b|+2");
+    assert_token(&lexer, TOKEN_WORD, "|a b|");
+    assert_token(&lexer, TOKEN_PLUS, "+");
+    assert_token(&lexer, TOKEN_NUMBER, "2");
+    assert_token(&lexer, TOKEN_EOF, "");
+}
+
+void test_bar_in_list_context(void)
+{
+    // [|a b| c] is a two-element list: word "a b" and word "c".
+    Lexer lexer;
+    lexer_init(&lexer, "[|a b| c]");
+    assert_token(&lexer, TOKEN_LEFT_BRACKET, "[");
+    assert_token(&lexer, TOKEN_WORD, "|a b|");
+    assert_token(&lexer, TOKEN_WORD, "c");
+    assert_token(&lexer, TOKEN_RIGHT_BRACKET, "]");
+    assert_token(&lexer, TOKEN_EOF, "");
+}
+
+void test_bar_unterminated_runs_to_end(void)
+{
+    // An unterminated bar run absorbs the rest of the input.
+    Lexer lexer;
+    lexer_init(&lexer, "|a b c");
+    assert_token(&lexer, TOKEN_WORD, "|a b c");
+    assert_token(&lexer, TOKEN_EOF, "");
+}
+
+//============================================================================
 // Complex Expression Tests (from reference)
 //============================================================================
 
@@ -1912,6 +2007,17 @@ int main(void)
     RUN_TEST(test_escaped_space_in_word);
     RUN_TEST(test_escaped_backslash);
     RUN_TEST(test_escaped_brackets_in_word);
+
+    // Vertical-bar quoting
+    RUN_TEST(test_bar_word_with_spaces);
+    RUN_TEST(test_bar_word_with_delimiters);
+    RUN_TEST(test_bar_quoted_word);
+    RUN_TEST(test_bar_run_mid_quoted_word);
+    RUN_TEST(test_bar_colon_variable);
+    RUN_TEST(test_bar_escaped_bar_inside);
+    RUN_TEST(test_bar_word_then_delimiter);
+    RUN_TEST(test_bar_in_list_context);
+    RUN_TEST(test_bar_unterminated_runs_to_end);
 
     // Complex expressions
     RUN_TEST(test_if_expression_no_spaces);
