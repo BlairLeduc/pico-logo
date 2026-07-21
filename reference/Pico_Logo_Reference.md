@@ -6482,6 +6482,8 @@ wifi.status
 | `connected` | Connected, with an address on the network |
 | `failed` | The last attempt failed — a wrong password, or no such network |
 
+A wrong password is reported as `failed` straight away. A network that cannot be found is retried for up to thirty seconds before `wifi.status` gives up, so `connecting` may persist for a while before turning into `failed`.
+
 `wifi.status` outputs `connected` in exactly the cases where `wifi?` outputs `true`. It is most useful after `wifi.start`, where it tells you whether an attempt is still going or has given up — something `wifi?` alone cannot say.
 
 **Example**:

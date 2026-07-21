@@ -358,6 +358,13 @@ static bool ensure_wifi_initialized(void)
 // CONNECTING.
 static bool wifi_connect_pending = false;
 
+// The credentials of the attempt in flight, kept so a CYW43_LINK_NONET blip can
+// re-issue the join (see picocalc_wifi_status), and the point at which we stop
+// retrying. The timeout matches the blocking connect's 30 s.
+#define WIFI_CONNECT_TIMEOUT_MS 30000
+static char current_password[64] = {0};
+static uint32_t wifi_connect_deadline_ms = 0;
+
 static void wifi_configure_link(void);
 static int picocalc_wifi_status(void);
 
@@ -393,7 +400,29 @@ static int picocalc_wifi_status(void)
         return WIFI_STATE_CONNECTED;
     }
 
-    // CYW43_LINK_FAIL / NONET / BADAUTH.
+    // CYW43_LINK_NONET is not a failure: it is the ordinary state while the
+    // scan has yet to find the access point, and the driver only leaves it if
+    // the join is issued again. The SDK's blocking connect re-issues in exactly
+    // this case (cyw43_arch.c, "If there was no network, keep trying") and
+    // keeps doing so until its timeout, so we must too -- otherwise a demon
+    // polling every 20 ms catches the blip and gives up in the first instant of
+    // a join that would have succeeded.
+    if (link_status == CYW43_LINK_NONET && wifi_connect_pending)
+    {
+        if (to_ms_since_boot(get_absolute_time()) < wifi_connect_deadline_ms)
+        {
+            // Re-issuing puts the driver back into WIFI_JOIN_STATE_ACTIVE, so
+            // this is self-throttling: we only retry on a fresh NONET.
+            cyw43_arch_wifi_connect_async(current_ssid, current_password,
+                                          CYW43_AUTH_WPA2_AES_PSK);
+            return WIFI_STATE_CONNECTING;
+        }
+        // Out of time: the network really is not there.
+        wifi_connect_pending = false;
+        return WIFI_STATE_FAILED;
+    }
+
+    // CYW43_LINK_FAIL / BADAUTH, and NONET once we have stopped retrying.
     if (link_status < 0)
     {
         wifi_connect_pending = false;
@@ -526,16 +555,21 @@ static bool picocalc_wifi_start(const char *ssid, const char *password)
         return false;
     }
 
-    // Recorded up front so the link-up edge needs no state beyond the flag;
-    // wifi_get_ssid gates on being connected, so it is not reported early.
+    // Recorded up front so the link-up edge needs no state beyond the flag, and
+    // so a NONET blip can re-issue the join; wifi_get_ssid gates on being
+    // connected, so the SSID is not reported early.
     strncpy(current_ssid, ssid, sizeof(current_ssid) - 1);
     current_ssid[sizeof(current_ssid) - 1] = '\0';
+    strncpy(current_password, password, sizeof(current_password) - 1);
+    current_password[sizeof(current_password) - 1] = '\0';
 
     if (cyw43_arch_wifi_connect_async(ssid, password, CYW43_AUTH_WPA2_AES_PSK) != 0)
     {
         return false;
     }
 
+    wifi_connect_deadline_ms = to_ms_since_boot(get_absolute_time()) +
+                               WIFI_CONNECT_TIMEOUT_MS;
     wifi_connect_pending = true;
     return true;
 }
@@ -550,6 +584,7 @@ static void picocalc_wifi_disconnect(void)
     mdns_stop();
     cyw43_wifi_leave(&cyw43_state, CYW43_ITF_STA);
     current_ssid[0] = '\0';
+    current_password[0] = '\0';
     wifi_connect_pending = false;
 }
 
