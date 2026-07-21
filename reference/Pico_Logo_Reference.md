@@ -6458,13 +6458,7 @@ Use `wifi?` or `wifi.status` to find out how the connection is getting on. A `wh
 
 The demon fires once, as soon as the device has an address on the network. Until then `wifi?` outputs `false`, and the rest of your program runs normally.
 
-If the password is wrong, or the network cannot be found, the connection never comes up and `wifi?` stays `false` forever. Watch `wifi.status` as well if you want to notice that:
-
-```logo
-?when [equal? wifi.status "failed] [pr [Could not join the network]]
-```
-
-An error is displayed only when the attempt cannot be started at all, such as on a board with no radio.
+`wifi.start` keeps trying until it succeeds, so it copes with a network that needs several attempts or is not yet switched on. It stops only for a refused password, or when you call `wifi.disconnect`. `wifi.status` says how it is getting on; an error is displayed only when the attempt cannot be started at all, such as on a board with no radio.
 
 
 ## wifi.status
@@ -6487,7 +6481,18 @@ wifi.status
 
 The first four are the stages of a connection in progress; the last three say where it went wrong.
 
-Joining a network is not always reliable first time: the network may be missed by a scan, or it may join but never get around to assigning an address. If a connection stops making progress for several seconds, Pico Logo quietly starts it again, and keeps doing so for up to thirty seconds before giving up. So `notfound` or `noaddress` appearing briefly along the way is normal — only a state that persists means the attempt has really failed. `badpassword` is reported straight away, since retrying cannot help.
+Joining a network is often unreliable: an attempt may fail outright, be missed by a scan, or join and then never get around to assigning an address. On some networks it simply takes several tries. So `wifi.start` keeps trying — whenever a connection stops making progress for a few seconds, it quietly begins another attempt, and it goes on doing so until it connects. This means a device left switched on will join the network whenever it becomes reachable, even if that is some time later.
+
+Two things stop it: `wifi.disconnect`, and a refused password, since that will not come right however many times it is tried.
+
+So `failed`, `notfound` and `noaddress` are ordinary sights along the way and do not mean Pico Logo has given up — each one is simply the attempt that just ended. Only `badpassword` is final. If you want to report a problem without repeating yourself every few seconds, count the attempts rather than printing on each one:
+
+```logo
+make "tries 0
+when [equal? wifi.status "failed] ~
+     [make "tries :tries + 1
+      if :tries = 5 [pr [Still cannot join the network]]]
+```
 
 **Example**:
 

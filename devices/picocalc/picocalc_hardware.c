@@ -358,25 +358,31 @@ static bool ensure_wifi_initialized(void)
 // CONNECTING.
 static bool wifi_connect_pending = false;
 
-// State for retrying an attempt that has stopped making progress. The overall
-// timeout matches the blocking connect's 30 s.
+// State for retrying an attempt that has stopped making progress.
 //
-// A join is only worth re-issuing when it has *stalled*, and retries must be
-// spaced out in wall-clock time. cyw43_wifi_join resets wifi_join_state,
-// discarding the AUTH/LINK/KEYED flags a join accumulates from async events
-// over a second or two, so issuing one per poll restarts the association faster
-// than it can ever complete: the firmware starts rejecting SET_SSID (->
-// WIFI_JOIN_STATE_FAIL) or the link comes half-up and DHCP never answers. The
-// SDK's blocking loop is safe from this because cyw43_arch_wait_for_work_until
-// paces it; a status getter polled every 20 ms by a demon has no such brake.
+// Joining is unreliable enough on some networks that a single attempt is not
+// much of a signal: individual joins fail with LINK_FAIL and only succeed after
+// several tries. So wifi_start keeps trying until it connects -- the blocking
+// connect gives up on LINK_FAIL after one attempt, which is why it too often
+// failed to connect from a startup file. Only a refused password stops us,
+// since that will not come right on a retry, and wifi_disconnect.
 //
-// The stall threshold is comfortably longer than a healthy join and DHCP, so a
-// connection that is progressing is never disturbed.
-#define WIFI_CONNECT_TIMEOUT_MS 30000
-#define WIFI_STALL_MS 8000
-#define WIFI_RETRY_INTERVAL_MS 2000
+// Retries must be spaced out in wall-clock time. cyw43_wifi_join resets
+// wifi_join_state, discarding the AUTH/LINK/KEYED flags a join accumulates from
+// async events over a second or two, so issuing one per poll restarts the
+// association faster than it can ever complete: the firmware starts rejecting
+// SET_SSID (-> WIFI_JOIN_STATE_FAIL) or the link comes half-up and DHCP never
+// answers. The SDK's blocking loop is safe from this because
+// cyw43_arch_wait_for_work_until paces it; a status getter polled every 20 ms
+// by a demon has no such brake.
+//
+// How long to wait before re-joining depends on where it got stuck: a failed or
+// not-found join is settled and nothing more will happen, while an association
+// waiting on DHCP may yet come good and should not be disturbed so soon.
+#define WIFI_RETRY_SETTLED_MS 3000
+#define WIFI_RETRY_STALLED_MS 8000
+#define WIFI_RETRY_MIN_MS 2000
 static char current_password[64] = {0};
-static uint32_t wifi_connect_deadline_ms = 0;
 static uint32_t wifi_next_retry_ms = 0;
 static uint32_t wifi_last_change_ms = 0;
 static int wifi_last_state = -1;
@@ -448,18 +454,22 @@ static int picocalc_wifi_status(void)
     }
 
     // Being refused is final: the password will not become right on a retry.
-    if (state == WIFI_STATE_BADAUTH || now >= wifi_connect_deadline_ms)
+    if (state == WIFI_STATE_BADAUTH)
     {
         wifi_connect_pending = false;
         return state;
     }
 
-    // Stuck. Both stalls seen in practice recover from re-joining: a scan that
-    // found nothing (notfound), and an association that came up but never got
-    // a DHCP address (noaddress).
-    if (now - wifi_last_change_ms >= WIFI_STALL_MS && now >= wifi_next_retry_ms)
+    // Stuck. Every stall seen in practice recovers from re-joining: a join that
+    // failed outright, a scan that found nothing, and an association that came
+    // up but never got a DHCP address.
+    uint32_t patience = (state == WIFI_STATE_FAILED || state == WIFI_STATE_NONET)
+                            ? WIFI_RETRY_SETTLED_MS
+                            : WIFI_RETRY_STALLED_MS;
+
+    if (now - wifi_last_change_ms >= patience && now >= wifi_next_retry_ms)
     {
-        wifi_next_retry_ms = now + WIFI_RETRY_INTERVAL_MS;
+        wifi_next_retry_ms = now + WIFI_RETRY_MIN_MS;
         wifi_last_change_ms = now;
         cyw43_arch_wifi_connect_async(current_ssid, current_password,
                                       CYW43_AUTH_WPA2_AES_PSK);
@@ -605,8 +615,7 @@ static bool picocalc_wifi_start(const char *ssid, const char *password)
     }
 
     uint32_t now = to_ms_since_boot(get_absolute_time());
-    wifi_connect_deadline_ms = now + WIFI_CONNECT_TIMEOUT_MS;
-    wifi_next_retry_ms = now + WIFI_RETRY_INTERVAL_MS;
+    wifi_next_retry_ms = now + WIFI_RETRY_MIN_MS;
     wifi_last_change_ms = now;
     wifi_last_state = -1;
     wifi_connect_pending = true;

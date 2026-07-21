@@ -675,8 +675,8 @@
     "semantic_hash": ""
   },
   "devices/picocalc/picocalc_hardware.c": {
-    "mtime": 1784662421.0793145,
-    "ast_hash": "9a5745cab1c302fe178e140e00e80a99",
+    "mtime": 1784666717.2642481,
+    "ast_hash": "538516b4d5e466744b7fbbdea4a6c3c6",
     "semantic_hash": ""
   },
   "devices/picocalc/picocalc_hardware.h": {
@@ -1290,8 +1290,8 @@
     "semantic_hash": ""
   },
   "docs/improvements-roadmap.md": {
-    "mtime": 1784662455.6337144,
-    "ast_hash": "14a5109333277b2867e41f4eb5025783",
+    "mtime": 1784666757.514735,
+    "ast_hash": "0805a2c63734294ce7727f09a4ed40f7",
     "semantic_hash": ""
   },
   "docs/launch-design.md": {
@@ -1330,8 +1330,8 @@
     "semantic_hash": ""
   },
   "reference/Pico_Logo_Reference.md": {
-    "mtime": 1784662441.678985,
-    "ast_hash": "7635e8b7c3ac3fa4962e40b34e4823d7",
+    "mtime": 1784666747.8549833,
+    "ast_hash": "682762466e486959ab58c984c35e16fc",
     "semantic_hash": ""
   },
   "tests/CMakeLists.txt": {
