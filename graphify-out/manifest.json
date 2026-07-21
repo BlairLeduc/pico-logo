@@ -675,8 +675,8 @@
     "semantic_hash": ""
   },
   "devices/picocalc/picocalc_hardware.c": {
-    "mtime": 1784666717.2642481,
-    "ast_hash": "538516b4d5e466744b7fbbdea4a6c3c6",
+    "mtime": 1784673231.5131626,
+    "ast_hash": "fcd8f0daf34d0db66994d5a5e56408fb",
     "semantic_hash": ""
   },
   "devices/picocalc/picocalc_hardware.h": {

@@ -379,12 +379,19 @@ static bool wifi_connect_pending = false;
 // How long to wait before re-joining depends on where it got stuck: a failed or
 // not-found join is settled and nothing more will happen, while an association
 // waiting on DHCP may yet come good and should not be disturbed so soon.
+// Retrying is in two steps, because re-joining on its own does not work: once a
+// join has failed the station is left associated-but-broken, and every
+// subsequent join fails too, however long it is left. Disassociating first is
+// what clears it -- which is precisely what `wifi.disconnect` followed by
+// `wifi.connect` does by hand, and why that succeeds first time where an
+// unbroken run of retries never does.
 #define WIFI_RETRY_SETTLED_MS 3000
 #define WIFI_RETRY_STALLED_MS 8000
-#define WIFI_RETRY_MIN_MS 2000
+#define WIFI_REJOIN_DELAY_MS 2000
 static char current_password[64] = {0};
-static uint32_t wifi_next_retry_ms = 0;
 static uint32_t wifi_last_change_ms = 0;
+static uint32_t wifi_rejoin_at_ms = 0;
+static bool wifi_awaiting_rejoin = false;
 static int wifi_last_state = -1;
 
 static void wifi_configure_link(void);
@@ -460,19 +467,33 @@ static int picocalc_wifi_status(void)
         return state;
     }
 
-    // Stuck. Every stall seen in practice recovers from re-joining: a join that
-    // failed outright, a scan that found nothing, and an association that came
-    // up but never got a DHCP address.
+    // Step two: disassociated a moment ago, so now try the join.
+    if (wifi_awaiting_rejoin)
+    {
+        if (now >= wifi_rejoin_at_ms)
+        {
+            wifi_awaiting_rejoin = false;
+            wifi_last_change_ms = now;
+            cyw43_arch_wifi_connect_async(current_ssid, current_password,
+                                          CYW43_AUTH_WPA2_AES_PSK);
+        }
+        return state;
+    }
+
+    // Step one: stuck, so disassociate and let the radio settle before joining
+    // again. How long to wait first depends on where it got stuck -- a failed
+    // or not-found join is settled and nothing further will happen, while an
+    // association waiting on DHCP may yet come good on its own.
     uint32_t patience = (state == WIFI_STATE_FAILED || state == WIFI_STATE_NONET)
                             ? WIFI_RETRY_SETTLED_MS
                             : WIFI_RETRY_STALLED_MS;
 
-    if (now - wifi_last_change_ms >= patience && now >= wifi_next_retry_ms)
+    if (now - wifi_last_change_ms >= patience)
     {
-        wifi_next_retry_ms = now + WIFI_RETRY_MIN_MS;
+        cyw43_wifi_leave(&cyw43_state, CYW43_ITF_STA);
+        wifi_awaiting_rejoin = true;
+        wifi_rejoin_at_ms = now + WIFI_REJOIN_DELAY_MS;
         wifi_last_change_ms = now;
-        cyw43_arch_wifi_connect_async(current_ssid, current_password,
-                                      CYW43_AUTH_WPA2_AES_PSK);
     }
 
     return state;
@@ -615,8 +636,8 @@ static bool picocalc_wifi_start(const char *ssid, const char *password)
     }
 
     uint32_t now = to_ms_since_boot(get_absolute_time());
-    wifi_next_retry_ms = now + WIFI_RETRY_MIN_MS;
     wifi_last_change_ms = now;
+    wifi_awaiting_rejoin = false;
     wifi_last_state = -1;
     wifi_connect_pending = true;
     return true;
@@ -634,6 +655,7 @@ static void picocalc_wifi_disconnect(void)
     current_ssid[0] = '\0';
     current_password[0] = '\0';
     wifi_connect_pending = false;
+    wifi_awaiting_rejoin = false;
 }
 
 static bool picocalc_wifi_get_ip(char *ip_buffer, size_t buffer_size)

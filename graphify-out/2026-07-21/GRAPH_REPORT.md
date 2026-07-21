@@ -1,16 +1,16 @@
 # Graph Report - pico-logo  (2026-07-21)
 
 ## Corpus Check
-- 274 files · ~434,902 words
+- 274 files · ~435,268 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 6619 nodes · 21142 edges · 193 communities (185 shown, 8 thin omitted)
+- 6619 nodes · 21142 edges · 192 communities (184 shown, 8 thin omitted)
 - Extraction: 55% EXTRACTED · 45% INFERRED · 0% AMBIGUOUS · INFERRED: 9577 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `91a0431b`
+- Built from commit: `378e0781`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -173,12 +173,12 @@
 - 3. Survey: multi-turtle and sprite Logos, 1981→now
 - as_httpd_conn
 - Appendix A: Useful Tools
+- Modifying Procedures Under Program Control
 - Managing Various Files
 - repl_extract_proc_name
 - repl_line_starts_with_to
 - mock_text_set_width
 - Variables
-- Managing Various Files
 - mock_fs_reset
 - Pico Logo
 - JSON
@@ -222,7 +222,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (193 total, 8 thin omitted)
+## Communities (192 total, 8 thin omitted)
 
 ### Community 0 - "run_string"
 Cohesion: 0.02
@@ -425,8 +425,8 @@ Cohesion: 0.07
 Nodes (36): mock_device_paint_canvas(), mock_device_set_canvas_point(), test_erprops_clears_all_properties(), test_gprop_requires_word_for_name(), test_gprop_requires_word_for_property(), test_multiple_properties_on_same_name(), test_plist_requires_word(), test_pprop_and_gprop_number_value() (+28 more)
 
 ### Community 50 - "primitives.h"
-Cohesion: 0.09
-Nodes (29): Value, demons_clear(), demons_freeze(), demons_reset(), demons_thaw(), value_is_true(), editor_pick_buffer(), primitives_editor_init() (+21 more)
+Cohesion: 0.08
+Nodes (35): Value, demons_clear(), demons_freeze(), demons_reset(), demons_thaw(), value_is_true(), Evaluator, Result (+27 more)
 
 ### Community 51 - "httpd.c"
 Cohesion: 0.10
@@ -442,7 +442,7 @@ Nodes (40): picocalc_editor_get_ops(), repeating_timer_t, decode_char(), lcd_bli
 
 ### Community 54 - "Pico_Logo_Reference.md"
 Cohesion: 0.05
-Nodes (41): and, Appendix D: Error Messages, Appendix E: Colour Palette for Pico Logo, battery, .bootsel, Break, Contents, copydef (+33 more)
+Nodes (39): and, Appendix C: Useful Procedures, Appendix D: Error Messages, Appendix E: Colour Palette for Pico Logo, battery, .bootsel, Break, Contents (+31 more)
 
 ### Community 55 - "primitives_workspace.c"
 Cohesion: 0.17
@@ -473,8 +473,8 @@ Cohesion: 0.22
 Nodes (25): mem_atom_cstr(), Evaluator, Result, Value, prim_catch(), prim_error(), prim_throw(), prim_toplevel() (+17 more)
 
 ### Community 62 - "primitives_init"
-Cohesion: 0.14
-Nodes (26): primitives_arithmetic_init(), primitives_conditionals_init(), primitives_control_flow_init(), primitives_debug_init(), primitives_exceptions_init(), primitives_files_directory_init(), primitives_files_init(), primitives_http_init() (+18 more)
+Cohesion: 0.11
+Nodes (35): primitives_arithmetic_init(), primitives_bitwise_init(), primitives_conditionals_init(), primitives_control_flow_init(), primitives_debug_control_init(), primitives_debug_init(), editor_pick_buffer(), primitives_editor_init() (+27 more)
 
 ### Community 63 - "primitives_json.c"
 Cohesion: 0.18
@@ -593,8 +593,8 @@ Cohesion: 0.17
 Nodes (17): history_add(), history_get(), history_get_start_index(), history_is_empty(), history_is_end_index(), history_next_index(), history_next_matching(), history_prev_index() (+9 more)
 
 ### Community 92 - "Design: LittleFS internal filesystem + `/sd` FAT32 mount"
-Cohesion: 0.09
-Nodes (23): 10. Testing strategy, 11. Phased plan, 12. Decisions (resolved), 1. Goals, 2. Current architecture (baseline), 3. Flash layout — surviving flash-and-debug, 4. The PSRAM / QMI-safe flash-write path (do this FIRST), 5. LittleFS block device + configuration (+15 more)
+Cohesion: 0.12
+Nodes (16): 10. Testing strategy, 11. Phased plan, 12. Decisions (resolved), 1. Goals, 2. Current architecture (baseline), 3. Flash layout — surviving flash-and-debug, 5. LittleFS block device + configuration, 6. VFS router (LittleFS as root `/`, FAT32 at `/sd`) (+8 more)
 
 ### Community 93 - "P5 — Multi-sprite turtles and the display pipeline (design)"
 Cohesion: 0.09
@@ -725,8 +725,8 @@ Cohesion: 0.25
 Nodes (8): 5.1 Duplicated infix-operator evaluation in `eval_expr.c`, 5.2 Four nearly identical loop steppers, 5.3 Repeated list-builder loop, 5.4 Repeated number→word coercion in element primitives, 5.5 Dead code, 5.6 Documentation drift in `memory.h`, 5.7 Small items, 5. Simplicity and maintainability
 
 ### Community 126 - "procedures.c"
-Cohesion: 0.50
-Nodes (4): Appendix C: Useful Procedures, Displaying Formatted Time, File Navigation, WiFi Connection
+Cohesion: 0.25
+Nodes (8): copydef, define, defined? (definedp), help, Modifying Procedures Under Program Control, primitive? (primitivep), primitives, text
 
 ### Community 127 - "Design: `launch` background processes (P6)"
 Cohesion: 0.13
@@ -785,7 +785,7 @@ Cohesion: 0.28
 Nodes (13): datetime_to_ms(), days_in_month_of_year(), ensure_software_clock_initialized(), get_current_epoch_ms(), is_leap_year(), ms_to_datetime(), ntp_dns_callback(), ntp_send_request() (+5 more)
 
 ### Community 141 - "HTTP server (design)"
-Cohesion: 0.18
+Cohesion: 0.17
 Nodes (11): 10. Decisions (resolved with the user), 1. Goal, 2. What already exists, 3. Primitive surface, 4. Execution model: a poll-driven pump, 5. Device interface changes (`devices/hardware.h`), 6. Core structure, 7. mDNS naming (added 2026-07-12) (+3 more)
 
 ### Community 142 - "Text and Screen Commands"
@@ -801,8 +801,8 @@ Cohesion: 0.29
 Nodes (7): erprops, gprop, plist, pprop, pps, Property Lists, remprop
 
 ### Community 145 - "test_primitives_exceptions.c"
-Cohesion: 0.27
-Nodes (13): Evaluator, Result, Value, pause_check_continue(), pause_request_continue(), pause_reset_state(), prim_co(), prim_go() (+5 more)
+Cohesion: 0.29
+Nodes (7): 4. The PSRAM / QMI-safe flash-write path (do this FIRST), Design response, Phase 0 results — VALIDATED (2026, SDK 2.2.0, Pico Plus 2 W), Safe-write recipe (per single sector erase / per program), Spike acceptance criteria (Phase 0), Three concrete hazards, Why it is risky
 
 ### Community 146 - "What to flag (in priority order)"
 Cohesion: 0.20
@@ -817,7 +817,7 @@ Cohesion: 0.18
 Nodes (12): LogoRotationStyle, heading_to_radians(), mock_turtle_move(), mock_turtle_select(), mock_turtle_set_heading(), mock_turtle_set_rotation_style(), mock_turtle_set_scale(), mock_turtle_set_shape() (+4 more)
 
 ### Community 149 - "Memory Reclamation: Design Notes (deferred)"
-Cohesion: 0.25
+Cohesion: 0.22
 Nodes (8): Background: the "atoms are never freed" simplification, Companion: let the node region shrink back, Design 1: `erall` soft reset (recommended first step, small), Design 2: atom mark-sweep with in-place reuse (larger, helps running programs), Memory Reclamation: Design Notes (deferred), Options considered and rejected, Suggested order, if ever needed, What PR #86 changed that makes reclamation feasible
 
 ### Community 150 - "3. Prior art"
@@ -829,7 +829,7 @@ Cohesion: 0.22
 Nodes (9): apply, crossmap, filter, find, foreach, List Processing, map, map.se (+1 more)
 
 ### Community 152 - "CLAUDE.md"
-Cohesion: 0.25
+Cohesion: 0.19
 Nodes (7): Build & Test, Code Structure, Constraints, graphify, How to work, Project, Unit Testing
 
 ### Community 153 - "logo_io_close_all"
@@ -837,8 +837,8 @@ Cohesion: 0.25
 Nodes (10): LogoConsole, LogoStreamOps, logo_console_has_editor(), logo_console_has_screen_modes(), logo_console_has_text(), logo_console_has_turtle(), logo_console_init(), test_console_has_screen_modes() (+2 more)
 
 ### Community 154 - "improvements-roadmap.md"
-Cohesion: 0.43
-Nodes (7): append_to_list(), Lexer, Node, Token, parse_bracket_contents(), primitives_procedures_init(), token_to_atom()
+Cohesion: 0.53
+Nodes (6): append_to_list(), Lexer, Node, Token, parse_bracket_contents(), token_to_atom()
 
 ### Community 155 - "3. Survey: multi-turtle and sprite Logos, 1981→now"
 Cohesion: 0.33
@@ -851,6 +851,10 @@ Nodes (8): MockHttpdConn, as_httpd_conn(), httpd_conn_read(), httpd_conn_write()
 ### Community 157 - "Appendix A: Useful Tools"
 Cohesion: 0.25
 Nodes (8): Appendix A: Useful Tools, arcr and arcl, circler and circlel, divisor?, Graphics Tools, Math Tools, Program Logic or Debugging Tools, sort
+
+### Community 158 - "Modifying Procedures Under Program Control"
+Cohesion: 0.33
+Nodes (6): date, setdate, settime, ticks, time, Time Management
 
 ### Community 159 - "Managing Various Files"
 Cohesion: 0.47
@@ -871,10 +875,6 @@ Nodes (13): primitive_find(), primitive_get_by_index(), primitive_get_count(), p
 ### Community 163 - "Variables"
 Cohesion: 0.29
 Nodes (7): local, localmake, make, name, name? (namep), thing, Variables
-
-### Community 164 - "Managing Various Files"
-Cohesion: 0.25
-Nodes (8): dribble, load, loadpic, Managing Various Files, nodribble, save, savel, savepic
 
 ### Community 166 - "Pico Logo"
 Cohesion: 0.33
@@ -897,8 +897,8 @@ Cohesion: 0.40
 Nodes (5): LogoStreamOps, logo_stream_init(), LogoStreamType, mock_storage_open(), setUp()
 
 ### Community 177 - "lexer_set_preserve_comments"
-Cohesion: 0.45
-Nodes (10): Evaluator, Result, Value, prim_ashift(), prim_bitand(), prim_bitnot(), prim_bitor(), prim_bitxor() (+2 more)
+Cohesion: 0.53
+Nodes (9): Evaluator, Result, Value, prim_ashift(), prim_bitand(), prim_bitnot(), prim_bitor(), prim_bitxor() (+1 more)
 
 ### Community 178 - "on_sd_card_detect"
 Cohesion: 0.50
@@ -920,7 +920,7 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.137) - this node is a cross-community bridge._
 - **Why does `eval_string()` connect `eval_string` to `run_string`, `mem_is_nil`, `reset_output`, `mem_word_ptr`, `value_to_string`, `primitives_properties.c`, `test_frame.c`, `proc_define_from_text`, `error_format`, `format_buffer_init`, `lexer_init`, `test_variables.c`, `test_httpd.c`, `test_primitives_http.c`, `test_primitives_json.c`, `test_primitives_control_flow.c`, `test_primitives_files_load_save.c`, `memory.c`, `test_primitives_files.c`, `test_primitives_wifi.c`, `test_time.c`, `test_scaffold_setUp`, `test_primitives_outside_world.c`, `test_mock_device.c`, `test_primitives_network.c`, `test_primitives_files_directory.c`, `primitives_files.c`, `test_scaffold.c`, `test_galaxian.c`, `eval_primary`?**
   _High betweenness centrality (0.105) - this node is a cross-community bridge._
-- **Why does `result_none()` connect `result_none` to `run_string`, `test_value.c`, `mem_is_nil`, `value_to_string`, `primitives_properties.c`, `test_primitives_exceptions.c`, `LogoStream`, `test_variables.c`, `io.c`, `test_primitives_conditionals.c`, `memory.c`, `set_mock_input`, `primitives.h`, `httpd.c`, `primitives_workspace.c`, `step_proc_call`, `test_primitives_files_directory.c`, `demons_poll`, `op_stack_push`, `value_number`, `primitives_files.c`, `primitives_get_io`, `eval.c`, `eval_push_if`, `mklfsimg_lib.c`, `primitives_control_flow.c`, `primitives_outside_world.c`, `eval_primary`?**
+- **Why does `result_none()` connect `result_none` to `run_string`, `test_value.c`, `mem_is_nil`, `value_to_string`, `primitives_properties.c`, `LogoStream`, `test_variables.c`, `io.c`, `test_primitives_conditionals.c`, `memory.c`, `set_mock_input`, `primitives.h`, `httpd.c`, `primitives_workspace.c`, `step_proc_call`, `test_primitives_files_directory.c`, `demons_poll`, `op_stack_push`, `value_number`, `primitives_files.c`, `primitives_get_io`, `eval.c`, `eval_push_if`, `mklfsimg_lib.c`, `primitives_control_flow.c`, `primitives_outside_world.c`, `eval_primary`?**
   _High betweenness centrality (0.058) - this node is a cross-community bridge._
 - **Are the 895 inferred relationships involving `run_string()` (e.g. with `test_action_does_not_reenter_poll()` and `test_cleardemons_disarms_all()`) actually correct?**
   _`run_string()` has 895 INFERRED edges - model-reasoned connections that need verification._
