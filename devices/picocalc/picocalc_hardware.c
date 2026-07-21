@@ -358,12 +358,28 @@ static bool ensure_wifi_initialized(void)
 // CONNECTING.
 static bool wifi_connect_pending = false;
 
-// The credentials of the attempt in flight, kept so a CYW43_LINK_NONET blip can
-// re-issue the join (see picocalc_wifi_status), and the point at which we stop
-// retrying. The timeout matches the blocking connect's 30 s.
+// State for retrying an attempt that has stopped making progress. The overall
+// timeout matches the blocking connect's 30 s.
+//
+// A join is only worth re-issuing when it has *stalled*, and retries must be
+// spaced out in wall-clock time. cyw43_wifi_join resets wifi_join_state,
+// discarding the AUTH/LINK/KEYED flags a join accumulates from async events
+// over a second or two, so issuing one per poll restarts the association faster
+// than it can ever complete: the firmware starts rejecting SET_SSID (->
+// WIFI_JOIN_STATE_FAIL) or the link comes half-up and DHCP never answers. The
+// SDK's blocking loop is safe from this because cyw43_arch_wait_for_work_until
+// paces it; a status getter polled every 20 ms by a demon has no such brake.
+//
+// The stall threshold is comfortably longer than a healthy join and DHCP, so a
+// connection that is progressing is never disturbed.
 #define WIFI_CONNECT_TIMEOUT_MS 30000
+#define WIFI_STALL_MS 8000
+#define WIFI_RETRY_INTERVAL_MS 2000
 static char current_password[64] = {0};
 static uint32_t wifi_connect_deadline_ms = 0;
+static uint32_t wifi_next_retry_ms = 0;
+static uint32_t wifi_last_change_ms = 0;
+static int wifi_last_state = -1;
 
 static void wifi_configure_link(void);
 static int picocalc_wifi_status(void);
@@ -387,60 +403,69 @@ static int picocalc_wifi_status(void)
 
     int link_status = cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA);
 
+    int state;
     switch (link_status)
     {
-        case CYW43_LINK_UP:
-            if (wifi_connect_pending)
-            {
-                // An asynchronous attempt just landed. Do the work the blocking
-                // connect path does on success, now that the interface is
-                // really up; polling this op is the only notification we get.
-                wifi_connect_pending = false;
-                wifi_configure_link();
-            }
-            return WIFI_STATE_CONNECTED;
-
-        case CYW43_LINK_NOIP:
-            // Associated, but DHCP has not answered yet.
-            return WIFI_STATE_NOIP;
-
-        case CYW43_LINK_JOIN:
-            return WIFI_STATE_CONNECTING;
-
-        case CYW43_LINK_NONET:
-            // Not necessarily a failure: this is also the ordinary state while
-            // the scan has yet to find the access point, and the driver only
-            // leaves it if the join is issued again. The SDK's blocking connect
-            // re-issues in exactly this case (cyw43_arch.c, "If there was no
-            // network, keep trying") until its timeout, so we do too.
-            // Re-issuing puts the driver back into WIFI_JOIN_STATE_ACTIVE, so
-            // this is self-throttling: we only retry on a fresh NONET.
-            if (wifi_connect_pending &&
-                to_ms_since_boot(get_absolute_time()) < wifi_connect_deadline_ms)
-            {
-                cyw43_arch_wifi_connect_async(current_ssid, current_password,
-                                              CYW43_AUTH_WPA2_AES_PSK);
-            }
-            else
-            {
-                wifi_connect_pending = false;
-            }
-            // Reported either way: while retrying it is a true description of
-            // where the attempt has got to, and it is the state we most need to
-            // see when a connection is not coming up.
-            return WIFI_STATE_NONET;
-
-        case CYW43_LINK_BADAUTH:
-            wifi_connect_pending = false;
-            return WIFI_STATE_BADAUTH;
-
-        case CYW43_LINK_FAIL:
-            wifi_connect_pending = false;
-            return WIFI_STATE_FAILED;
-
-        default: // CYW43_LINK_DOWN
-            return wifi_connect_pending ? WIFI_STATE_CONNECTING : WIFI_STATE_OFF;
+        case CYW43_LINK_UP:      state = WIFI_STATE_CONNECTED;  break;
+        case CYW43_LINK_NOIP:    state = WIFI_STATE_NOIP;       break;
+        case CYW43_LINK_JOIN:    state = WIFI_STATE_CONNECTING; break;
+        case CYW43_LINK_NONET:   state = WIFI_STATE_NONET;      break;
+        case CYW43_LINK_BADAUTH: state = WIFI_STATE_BADAUTH;    break;
+        case CYW43_LINK_FAIL:    state = WIFI_STATE_FAILED;     break;
+        default:                 state = WIFI_STATE_OFF;        break; // LINK_DOWN
     }
+
+    // LINK_DOWN while an attempt is in flight is the gap before the driver has
+    // anything to report, not "nothing is happening".
+    if (state == WIFI_STATE_OFF && wifi_connect_pending)
+    {
+        state = WIFI_STATE_CONNECTING;
+    }
+
+    uint32_t now = to_ms_since_boot(get_absolute_time());
+    if (state != wifi_last_state)
+    {
+        wifi_last_state = state;
+        wifi_last_change_ms = now;
+    }
+
+    if (state == WIFI_STATE_CONNECTED)
+    {
+        if (wifi_connect_pending)
+        {
+            // The attempt just landed. Do the work the blocking connect path
+            // does on success, now that the interface is really up; polling
+            // this op is the only notification we get.
+            wifi_connect_pending = false;
+            wifi_configure_link();
+        }
+        return state;
+    }
+
+    if (!wifi_connect_pending)
+    {
+        return state;
+    }
+
+    // Being refused is final: the password will not become right on a retry.
+    if (state == WIFI_STATE_BADAUTH || now >= wifi_connect_deadline_ms)
+    {
+        wifi_connect_pending = false;
+        return state;
+    }
+
+    // Stuck. Both stalls seen in practice recover from re-joining: a scan that
+    // found nothing (notfound), and an association that came up but never got
+    // a DHCP address (noaddress).
+    if (now - wifi_last_change_ms >= WIFI_STALL_MS && now >= wifi_next_retry_ms)
+    {
+        wifi_next_retry_ms = now + WIFI_RETRY_INTERVAL_MS;
+        wifi_last_change_ms = now;
+        cyw43_arch_wifi_connect_async(current_ssid, current_password,
+                                      CYW43_AUTH_WPA2_AES_PSK);
+    }
+
+    return state;
 }
 
 // Apply current_hostname to the netif (for DHCP) and (re)start the mDNS
@@ -579,8 +604,11 @@ static bool picocalc_wifi_start(const char *ssid, const char *password)
         return false;
     }
 
-    wifi_connect_deadline_ms = to_ms_since_boot(get_absolute_time()) +
-                               WIFI_CONNECT_TIMEOUT_MS;
+    uint32_t now = to_ms_since_boot(get_absolute_time());
+    wifi_connect_deadline_ms = now + WIFI_CONNECT_TIMEOUT_MS;
+    wifi_next_retry_ms = now + WIFI_RETRY_INTERVAL_MS;
+    wifi_last_change_ms = now;
+    wifi_last_state = -1;
     wifi_connect_pending = true;
     return true;
 }

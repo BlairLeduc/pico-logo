@@ -6487,7 +6487,7 @@ wifi.status
 
 The first four are the stages of a connection in progress; the last three say where it went wrong.
 
-`notfound` is worth a word of explanation. It appears while the device is still hunting for the network as well as when the network genuinely is not there, because those look the same until the device gives up. Pico Logo keeps trying for thirty seconds, so a brief `notfound` early on is normal; one that persists means the network really cannot be reached.
+Joining a network is not always reliable first time: the network may be missed by a scan, or it may join but never get around to assigning an address. If a connection stops making progress for several seconds, Pico Logo quietly starts it again, and keeps doing so for up to thirty seconds before giving up. So `notfound` or `noaddress` appearing briefly along the way is normal — only a state that persists means the attempt has really failed. `badpassword` is reported straight away, since retrying cannot help.
 
 **Example**:
 
