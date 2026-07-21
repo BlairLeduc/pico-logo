@@ -55,6 +55,22 @@ extern "C"
     } SoundStatus;
 
     //
+    // WiFi connection state, as reported by wifi_status.
+    //
+    // Backs the `wifi.status` primitive and lets a `when [wifi?] [...]` demon
+    // wait on a non-blocking `wifi.start` without hanging forever on failure.
+    // CONNECTED means the interface has an IP address, not merely that the
+    // radio associated, so it is safe to make network calls at that point.
+    //
+    typedef enum WifiState
+    {
+        WIFI_STATE_OFF = 0,    // Radio down: nothing started, or disconnected
+        WIFI_STATE_CONNECTING, // Attempt in flight (association/DHCP)
+        WIFI_STATE_CONNECTED,  // Connected, with an IP address
+        WIFI_STATE_FAILED,     // Last attempt failed (bad key, no such network)
+    } WifiState;
+
+    //
     // LogoStorage interface
     // Platform-specific implementation should be provided to logo_io_init()
     //
@@ -140,9 +156,20 @@ extern "C"
         // Returns true if connected to a network
         bool (*wifi_is_connected)(void);
 
-        // Connect to a WiFi network
+        // Connect to a WiFi network, blocking until the link is up or the
+        // attempt times out.
         // Returns true on success, false on failure
         bool (*wifi_connect)(const char *ssid, const char *password);
+
+        // Begin connecting to a WiFi network without blocking. The attempt
+        // proceeds in the background; poll wifi_status for the outcome.
+        // Returns false only if the attempt could not be started at all.
+        // May be NULL on devices that only support the blocking connect.
+        bool (*wifi_start)(const char *ssid, const char *password);
+
+        // Current connection state as a WifiState, without blocking.
+        // May be NULL on devices without an asynchronous connect.
+        int (*wifi_status)(void);
 
         // Disconnect from the current WiFi network
         void (*wifi_disconnect)(void);

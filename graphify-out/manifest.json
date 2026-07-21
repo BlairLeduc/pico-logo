@@ -40,7 +40,7 @@
     "semantic_hash": ""
   },
   "CMakePresets.json": {
-    "mtime": 1784581565.2998443,
+    "mtime": 1784594834.512317,
     "ast_hash": "ae50609d2fdfdc6780d63ac2dc540bd9",
     "semantic_hash": ""
   },
@@ -75,7 +75,7 @@
     "semantic_hash": ""
   },
   "core/eval_expr.c": {
-    "mtime": 1784591226.225968,
+    "mtime": 1784594834.5127025,
     "ast_hash": "5459f227c44e00bda8985c60669f637d",
     "semantic_hash": ""
   },
@@ -160,7 +160,7 @@
     "semantic_hash": ""
   },
   "core/lexer.c": {
-    "mtime": 1784581565.440237,
+    "mtime": 1784594834.513099,
     "ast_hash": "85ca1625b24395469134dc848f3f88b7",
     "semantic_hash": ""
   },
@@ -175,7 +175,7 @@
     "semantic_hash": ""
   },
   "core/memory.c": {
-    "mtime": 1784581565.4404895,
+    "mtime": 1784594834.5135076,
     "ast_hash": "b2ade0eeeac5f8c8e0b410a6ac4da527",
     "semantic_hash": ""
   },
@@ -185,7 +185,7 @@
     "semantic_hash": ""
   },
   "core/parse_list.c": {
-    "mtime": 1784581565.4406621,
+    "mtime": 1784594834.5138226,
     "ast_hash": "05ed0213420e28aa708d93350aae68d4",
     "semantic_hash": ""
   },
@@ -340,8 +340,8 @@
     "semantic_hash": ""
   },
   "core/primitives_wifi.c": {
-    "mtime": 1784288949.9893796,
-    "ast_hash": "7a4daa8d28474cc0b5793ad95a435e01",
+    "mtime": 1784658868.0916924,
+    "ast_hash": "d8956deb704c23bb727d106a41cad8f9",
     "semantic_hash": ""
   },
   "core/primitives_words_lists.c": {
@@ -395,7 +395,7 @@
     "semantic_hash": ""
   },
   "core/syntax_highlight.c": {
-    "mtime": 1784581565.440842,
+    "mtime": 1784594834.5141897,
     "ast_hash": "7721bc875dd3bb1f794b1a38c90dfafa",
     "semantic_hash": ""
   },
@@ -455,8 +455,8 @@
     "semantic_hash": ""
   },
   "devices/hardware.h": {
-    "mtime": 1784481081.7589548,
-    "ast_hash": "ddf8ce08be10ab1b3be2237e0b593a3e",
+    "mtime": 1784658868.0919223,
+    "ast_hash": "8900b66f4c788f9b6665c1b014401e76",
     "semantic_hash": ""
   },
   "devices/host/host_console.c": {
@@ -470,8 +470,8 @@
     "semantic_hash": ""
   },
   "devices/host/host_hardware.c": {
-    "mtime": 1784481081.759175,
-    "ast_hash": "6ea05884813ecb314cbe5dd45e996268",
+    "mtime": 1784658868.0922158,
+    "ast_hash": "ce219bade61ca1b705359569a37ed748",
     "semantic_hash": ""
   },
   "devices/host/host_hardware.h": {
@@ -675,8 +675,8 @@
     "semantic_hash": ""
   },
   "devices/picocalc/picocalc_hardware.c": {
-    "mtime": 1784481081.760811,
-    "ast_hash": "98dfcd21a2515932e27bccfa40e6d25f",
+    "mtime": 1784658868.0924907,
+    "ast_hash": "c36bfc070d6f84d1fcb7913ef2533616",
     "semantic_hash": ""
   },
   "devices/picocalc/picocalc_hardware.h": {
@@ -805,12 +805,12 @@
     "semantic_hash": ""
   },
   "grammar/package.json": {
-    "mtime": 1784593454.001848,
+    "mtime": 1784594834.5145597,
     "ast_hash": "3de103390882d97855ba893172f4ce6b",
     "semantic_hash": ""
   },
   "grammar/syntaxes/logo.tmLanguage.json": {
-    "mtime": 1784593218.9491425,
+    "mtime": 1784594834.5147793,
     "ast_hash": "0a54095432e5e500c6b7c155517a6c83",
     "semantic_hash": ""
   },
@@ -855,13 +855,13 @@
     "semantic_hash": ""
   },
   "tests/mock_device.c": {
-    "mtime": 1784481081.7949214,
-    "ast_hash": "3d070fbb53197d4609332ef9cabc83aa",
+    "mtime": 1784658868.0932448,
+    "ast_hash": "d750872cb7d5978c5b99c3985cff1552",
     "semantic_hash": ""
   },
   "tests/mock_device.h": {
-    "mtime": 1784481081.7954783,
-    "ast_hash": "57c171cc0e0f7031af1db0e71951fafe",
+    "mtime": 1784658868.0934303,
+    "ast_hash": "db37d11306604ad81c27ac225251b1d1",
     "semantic_hash": ""
   },
   "tests/mock_sdcard.c": {
@@ -975,7 +975,7 @@
     "semantic_hash": ""
   },
   "tests/test_lexer.c": {
-    "mtime": 1784581565.4555426,
+    "mtime": 1784594834.5345109,
     "ast_hash": "d5f4a7243a82da9d3fd4c0fcd64336f2",
     "semantic_hash": ""
   },
@@ -990,7 +990,7 @@
     "semantic_hash": ""
   },
   "tests/test_memory.c": {
-    "mtime": 1784581565.4557374,
+    "mtime": 1784594834.5351434,
     "ast_hash": "ff77fdb0bdfccbc9b25871a63af9aa92",
     "semantic_hash": ""
   },
@@ -1130,12 +1130,12 @@
     "semantic_hash": ""
   },
   "tests/test_primitives_wifi.c": {
-    "mtime": 1784288949.9943817,
-    "ast_hash": "6c7ad3bc586f6a120288ffe1ab335593",
+    "mtime": 1784658868.0936007,
+    "ast_hash": "80a6d2c213e6d6fd20a7d4948d9cec76",
     "semantic_hash": ""
   },
   "tests/test_primitives_words_lists.c": {
-    "mtime": 1784590991.0280213,
+    "mtime": 1784594834.5355654,
     "ast_hash": "afb913a44b3fdfc3744d451e9a5b6c63",
     "semantic_hash": ""
   },
@@ -1150,8 +1150,8 @@
     "semantic_hash": ""
   },
   "tests/test_scaffold.c": {
-    "mtime": 1784481081.7964578,
-    "ast_hash": "df35d6869a8595994d6b002f25213bba",
+    "mtime": 1784658868.0938234,
+    "ast_hash": "301bc244368d20a3e400669334625805",
     "semantic_hash": ""
   },
   "tests/test_scaffold.h": {
@@ -1170,7 +1170,7 @@
     "semantic_hash": ""
   },
   "tests/test_syntax_highlight.c": {
-    "mtime": 1784594428.0948224,
+    "mtime": 1784594834.5359645,
     "ast_hash": "c0926f320a3b4b9bcf4dc4e3ca7863c9",
     "semantic_hash": ""
   },
@@ -1255,7 +1255,7 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1784581565.2993681,
+    "mtime": 1784594834.5120394,
     "ast_hash": "5aa2cb3e5d2aa3b1da88980ae7a447af",
     "semantic_hash": ""
   },
@@ -1290,8 +1290,8 @@
     "semantic_hash": ""
   },
   "docs/improvements-roadmap.md": {
-    "mtime": 1784569041.7002718,
-    "ast_hash": "7fa7e8ba69ea8fba8d5e38c9d910b604",
+    "mtime": 1784658910.7161005,
+    "ast_hash": "5a87456ca0fe4b93821090c3897fd10c",
     "semantic_hash": ""
   },
   "docs/launch-design.md": {
@@ -1330,8 +1330,8 @@
     "semantic_hash": ""
   },
   "reference/Pico_Logo_Reference.md": {
-    "mtime": 1784581565.4534545,
-    "ast_hash": "4d0e329c8b48c706e47fddf3a88fc944",
+    "mtime": 1784658868.0929544,
+    "ast_hash": "26852e618ca35b98058733f1b495af8a",
     "semantic_hash": ""
   },
   "tests/CMakeLists.txt": {

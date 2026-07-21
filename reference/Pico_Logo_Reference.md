@@ -6428,6 +6428,8 @@ wifi.connect _ssid_ _password_
 
 The `wifi.connect` command connects to the WiFi network with the given _ssid_ and _password_. If the connection is successful, `wifi?` will output `true`. If the connection fails, an error message is displayed.
 
+`wifi.connect` waits for the network to answer, which can take several seconds — and up to thirty if the network is out of range. Use `wifi.start` instead when you would rather carry on working while the connection is made.
+
 **Example**:
 
 ```logo
@@ -6436,6 +6438,60 @@ The `wifi.connect` command connects to the WiFi network with the given _ssid_ an
 true
 ?pr wifi.ssid
 TimHortonsWiFi
+```
+
+
+## wifi.start
+
+wifi.start _ssid_ _password_
+
+`command`
+
+The `wifi.start` command begins connecting to the WiFi network with the given _ssid_ and _password_, but does not wait for the result. Unlike `wifi.connect`, it finishes at once, so the rest of your program — or your startup file — keeps running while the network connects in the background.
+
+Use `wifi?` or `wifi.status` to find out how the connection is getting on. A `when` demon is the tidiest way to wait for it, because it lets you do something the moment the network is ready:
+
+```logo
+?wifi.start "TimHortonsWiFi "double-double
+?when [wifi?] [network.ntp -4  pr [clock set]]
+```
+
+The demon fires once, as soon as the device has an address on the network. Until then `wifi?` outputs `false`, and the rest of your program runs normally.
+
+If the password is wrong, or the network cannot be found, the connection never comes up and `wifi?` stays `false` forever. Watch `wifi.status` as well if you want to notice that:
+
+```logo
+?when [equal? wifi.status "failed] [pr [Could not join the network]]
+```
+
+An error is displayed only when the attempt cannot be started at all, such as on a board with no radio.
+
+
+## wifi.status
+
+wifi.status
+
+`operation`
+
+`wifi.status` outputs a word describing the state of the WiFi connection:
+
+| Output | Meaning |
+|---|---|
+| `off` | Not connected, and nothing is being attempted |
+| `connecting` | A `wifi.start` attempt is under way |
+| `connected` | Connected, with an address on the network |
+| `failed` | The last attempt failed — a wrong password, or no such network |
+
+`wifi.status` outputs `connected` in exactly the cases where `wifi?` outputs `true`. It is most useful after `wifi.start`, where it tells you whether an attempt is still going or has given up — something `wifi?` alone cannot say.
+
+**Example**:
+
+```logo
+?wifi.start "TimHortonsWiFi "double-double
+?pr wifi.status
+connecting
+?pr wifi.status
+connected
 ```
 
 

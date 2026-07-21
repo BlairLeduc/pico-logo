@@ -82,6 +82,62 @@ static Result prim_wifi_connect(Evaluator *eval, int argc, Value *args)
     return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
 }
 
+// wifi.start ssid password
+// Begins connecting to a WiFi network without waiting for the result, so a
+// startup file can reach the prompt immediately. Progress is reported by
+// `wifi?` and `wifi.status`, which a `when` demon can wait on.
+static Result prim_wifi_start(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(2);
+    REQUIRE_WORD(args[0]);
+    REQUIRE_WORD(args[1]);
+
+    const char *ssid = mem_word_ptr(args[0].as.node);
+    const char *password = mem_word_ptr(args[1].as.node);
+
+    LogoIO *io = primitives_get_io();
+    if (io && io->hardware && io->hardware->ops && io->hardware->ops->wifi_start)
+    {
+        if (!io->hardware->ops->wifi_start(ssid, password))
+        {
+            // The attempt could not be started (radio unavailable); a failure
+            // to *associate* shows up later as `wifi.status` = failed.
+            return result_error_arg(ERR_DISK_TROUBLE, NULL, NULL);
+        }
+        return result_none();
+    }
+
+    // WiFi not available on this device
+    return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
+}
+
+// wifi.status
+// Outputs the connection state as a word: off, connecting, connected, failed.
+// Lets a demon distinguish "still trying" from "gave up", which `wifi?` alone
+// cannot express.
+static Result prim_wifi_status(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
+
+    int state = WIFI_STATE_OFF;
+    LogoIO *io = primitives_get_io();
+    if (io && io->hardware && io->hardware->ops && io->hardware->ops->wifi_status)
+    {
+        state = io->hardware->ops->wifi_status();
+    }
+
+    const char *name;
+    switch (state)
+    {
+        case WIFI_STATE_CONNECTING: name = "connecting"; break;
+        case WIFI_STATE_CONNECTED:  name = "connected";  break;
+        case WIFI_STATE_FAILED:     name = "failed";     break;
+        default:                    name = "off";        break;
+    }
+    return result_ok(value_word(mem_atom_cstr(name)));
+}
+
 // wifi.disconnect
 // Disconnects from the current WiFi network
 static Result prim_wifi_disconnect(Evaluator *eval, int argc, Value *args)
@@ -267,6 +323,8 @@ void primitives_wifi_init(void)
     primitive_register("wifi?", 0, prim_wifi_connected);
     primitive_register("wifip", 0, prim_wifi_connected);  // Alias
     primitive_register("wifi.connect", 2, prim_wifi_connect);
+    primitive_register("wifi.start", 2, prim_wifi_start);
+    primitive_register("wifi.status", 0, prim_wifi_status);
     primitive_register("wifi.disconnect", 0, prim_wifi_disconnect);
     primitive_register("wifi.ip", 0, prim_wifi_ip);
     primitive_register("wifi.mac", 0, prim_wifi_mac);

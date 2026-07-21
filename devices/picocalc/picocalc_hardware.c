@@ -352,15 +352,55 @@ static bool ensure_wifi_initialized(void)
     return true;
 }
 
+// Set once wifi_start kicks off an asynchronous attempt, cleared when that
+// attempt resolves. The cyw43 link status reports LINK_DOWN both for "never
+// started" and "still associating", so this is what separates OFF from
+// CONNECTING.
+static bool wifi_connect_pending = false;
+
+static void wifi_configure_link(void);
+static int picocalc_wifi_status(void);
+
 static bool picocalc_wifi_is_connected(void)
+{
+    return picocalc_wifi_status() == WIFI_STATE_CONNECTED;
+}
+
+// Connection state without blocking. Uses cyw43_tcpip_link_status rather than
+// cyw43_wifi_link_status: the latter reports LINK_JOIN as soon as the radio
+// associates, before DHCP has assigned an address, which would let a
+// `when [wifi?] [network.ntp ...]` demon fire while name resolution still has
+// no route.
+static int picocalc_wifi_status(void)
 {
     if (!wifi_initialized)
     {
-        return false;
+        return WIFI_STATE_OFF;
     }
-    
-    int link_status = cyw43_wifi_link_status(&cyw43_state, CYW43_ITF_STA);
-    return link_status == CYW43_LINK_JOIN;
+
+    int link_status = cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA);
+
+    if (link_status == CYW43_LINK_UP)
+    {
+        if (wifi_connect_pending)
+        {
+            // An asynchronous attempt just landed. Do the work the blocking
+            // connect path does on success, now that the interface is really
+            // up; polling this op is the only notification we get.
+            wifi_connect_pending = false;
+            wifi_configure_link();
+        }
+        return WIFI_STATE_CONNECTED;
+    }
+
+    // CYW43_LINK_FAIL / NONET / BADAUTH.
+    if (link_status < 0)
+    {
+        wifi_connect_pending = false;
+        return WIFI_STATE_FAILED;
+    }
+
+    return wifi_connect_pending ? WIFI_STATE_CONNECTING : WIFI_STATE_OFF;
 }
 
 // Apply current_hostname to the netif (for DHCP) and (re)start the mDNS
@@ -428,44 +468,76 @@ static void picocalc_network_set_hostname(const char *name)
     }
 }
 
+// Work that has to happen once the interface is up, shared by the blocking
+// connect and the asynchronous one (where picocalc_wifi_status runs it on the
+// link-up edge).
+static void wifi_configure_link(void)
+{
+    // DHCP normally supplies a DNS server (applied at index 0). Some
+    // networks omit the DNS option, which would leave name resolution with
+    // no server at all. Register a public fallback as the secondary
+    // resolver (index 1) so lookups degrade gracefully; the DHCP-provided
+    // server stays preferred.
+    ip_addr_t dns_fallback;
+    IP_ADDR4(&dns_fallback, 1, 1, 1, 1); // Cloudflare 1.1.1.1
+    dns_setserver(1, &dns_fallback);
+
+    // Findable on the LAN as `<hostname>.local` as soon as WiFi is up,
+    // independent of whether anything is being served.
+    mdns_start();
+}
+
 static bool picocalc_wifi_connect(const char *ssid, const char *password)
 {
     if (!ensure_wifi_initialized())
     {
         return false;
     }
-    
+
     // Connect with timeout (30 seconds)
     int result = cyw43_arch_wifi_connect_timeout_ms(
-        ssid, 
-        password, 
+        ssid,
+        password,
         CYW43_AUTH_WPA2_AES_PSK,
         30000
     );
-    
+
     if (result == 0)
     {
         // Store the SSID for later retrieval
         strncpy(current_ssid, ssid, sizeof(current_ssid) - 1);
         current_ssid[sizeof(current_ssid) - 1] = '\0';
 
-        // DHCP normally supplies a DNS server (applied at index 0). Some
-        // networks omit the DNS option, which would leave name resolution with
-        // no server at all. Register a public fallback as the secondary
-        // resolver (index 1) so lookups degrade gracefully; the DHCP-provided
-        // server stays preferred.
-        ip_addr_t dns_fallback;
-        IP_ADDR4(&dns_fallback, 1, 1, 1, 1); // Cloudflare 1.1.1.1
-        dns_setserver(1, &dns_fallback);
-
-        // Findable on the LAN as `<hostname>.local` as soon as WiFi is up,
-        // independent of whether anything is being served.
-        mdns_start();
+        wifi_connect_pending = false;
+        wifi_configure_link();
 
         return true;
     }
 
     return false;
+}
+
+// Non-blocking counterpart to picocalc_wifi_connect: kicks off the association
+// and returns at once, leaving picocalc_wifi_status to report progress.
+static bool picocalc_wifi_start(const char *ssid, const char *password)
+{
+    if (!ensure_wifi_initialized())
+    {
+        return false;
+    }
+
+    // Recorded up front so the link-up edge needs no state beyond the flag;
+    // wifi_get_ssid gates on being connected, so it is not reported early.
+    strncpy(current_ssid, ssid, sizeof(current_ssid) - 1);
+    current_ssid[sizeof(current_ssid) - 1] = '\0';
+
+    if (cyw43_arch_wifi_connect_async(ssid, password, CYW43_AUTH_WPA2_AES_PSK) != 0)
+    {
+        return false;
+    }
+
+    wifi_connect_pending = true;
+    return true;
 }
 
 static void picocalc_wifi_disconnect(void)
@@ -478,6 +550,7 @@ static void picocalc_wifi_disconnect(void)
     mdns_stop();
     cyw43_wifi_leave(&cyw43_state, CYW43_ITF_STA);
     current_ssid[0] = '\0';
+    wifi_connect_pending = false;
 }
 
 static bool picocalc_wifi_get_ip(char *ip_buffer, size_t buffer_size)
@@ -1836,6 +1909,8 @@ static LogoHardwareOps picocalc_hardware_ops = {
 #ifdef LOGO_HAS_WIFI
     .wifi_is_connected = picocalc_wifi_is_connected,
     .wifi_connect = picocalc_wifi_connect,
+    .wifi_start = picocalc_wifi_start,
+    .wifi_status = picocalc_wifi_status,
     .wifi_disconnect = picocalc_wifi_disconnect,
     .wifi_get_ip = picocalc_wifi_get_ip,
     .wifi_get_ssid = picocalc_wifi_get_ssid,
@@ -1861,6 +1936,8 @@ static LogoHardwareOps picocalc_hardware_ops = {
 #else
     .wifi_is_connected = NULL,
     .wifi_connect = NULL,
+    .wifi_start = NULL,
+    .wifi_status = NULL,
     .wifi_disconnect = NULL,
     .wifi_get_ip = NULL,
     .wifi_get_ssid = NULL,

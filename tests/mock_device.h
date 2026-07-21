@@ -349,6 +349,8 @@ extern "C"
             char ip_address[16];             // IP address as string (e.g., "192.168.1.100")
             int connect_result;              // Result to return from wifi_connect (0 = success)
             int disconnect_result;           // Result to return from wifi_disconnect (0 = success)
+            int status;                      // WifiState reported by wifi_status
+            bool start_result;               // Whether wifi_start accepts the attempt
             // Scan results
             struct {
                 char ssid[33];
@@ -524,6 +526,8 @@ extern "C"
     void mock_device_set_wifi_ssid(const char *ssid);
     void mock_device_set_wifi_ip(const char *ip);
     void mock_device_set_wifi_connect_result(int result);
+    void mock_device_set_wifi_status(int status);
+    void mock_device_set_wifi_start_result(bool ok);
     void mock_device_set_wifi_disconnect_result(int result);
     void mock_device_add_wifi_scan_result(const char *ssid, int8_t rssi);
     void mock_device_clear_wifi_scan_results(void);
@@ -533,6 +537,8 @@ extern "C"
     // Mock WiFi operations (for use by test_scaffold in mock_hardware_ops)
     bool mock_wifi_is_connected(void);
     bool mock_wifi_connect(const char *ssid, const char *password);
+    bool mock_wifi_start(const char *ssid, const char *password);
+    int mock_wifi_status(void);
     void mock_wifi_disconnect(void);
     bool mock_wifi_get_ip(char *ip_buffer, size_t buffer_size);
     bool mock_wifi_get_ssid(char *ssid_buffer, size_t buffer_size);
