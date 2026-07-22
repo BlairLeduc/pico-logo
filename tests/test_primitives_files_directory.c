@@ -117,6 +117,66 @@ void test_catalog_with_invalid_input_error(void)
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
+void test_catalog_long_format_shows_size(void)
+{
+    // catalog is the long (ls -l) form: each file line carries its byte size
+    mock_fs_reset();
+    mock_fs_create_file("/testdir/data.txt", "12345"); // 5 bytes
+
+    output_pos = 0;
+    output_buffer[0] = '\0';
+    Result r = run_string("(catalog \"/testdir)");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "data.txt"));
+    // The size column shows the 5-byte length
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "5  "));
+}
+
+void test_catalog_long_format_marks_directories(void)
+{
+    // Directories have a blank size column and a trailing slash
+    mock_fs_reset();
+    mock_fs_create_dir("/testdir/sub");
+
+    output_pos = 0;
+    output_buffer[0] = '\0';
+    Result r = run_string("(catalog \"/testdir)");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "sub/"));
+    // No size marker shown for directories - the size column is blank
+    TEST_ASSERT_NULL(strstr(output_buffer, "<DIR>"));
+}
+
+void test_cat_runs_without_error(void)
+{
+    // cat (columnar, ls-style) should run without error
+    output_pos = 0;
+    output_buffer[0] = '\0';
+    Result r = run_string("cat");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+}
+
+void test_cat_lists_files(void)
+{
+    mock_fs_reset();
+    mock_fs_create_file("/testdir/alpha.txt", "a");
+    mock_fs_create_file("/testdir/beta.txt", "bb");
+
+    output_pos = 0;
+    output_buffer[0] = '\0';
+    Result r = run_string("(cat \"/testdir)");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "alpha.txt"));
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "beta.txt"));
+}
+
+void test_cat_with_invalid_input_error(void)
+{
+    // (cat [not a word]) should error
+    Result r = run_string("(cat [not a word])");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
 //==========================================================================
 // Directory Management Tests
 //==========================================================================
@@ -228,6 +288,18 @@ void test_setprefix_and_prefix(void)
     Result r2 = eval_string("prefix");
     TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
     // Prefix should have trailing slash
+    TEST_ASSERT_EQUAL_STRING("my/path/", mem_word_ptr(r2.value.as.node));
+}
+
+void test_sp_alias_sets_prefix(void)
+{
+    // sp is an alias for setprefix
+    mock_fs_create_dir("my/path");
+    Result r = run_string("sp \"my\\/path");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    Result r2 = eval_string("prefix");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
     TEST_ASSERT_EQUAL_STRING("my/path/", mem_word_ptr(r2.value.as.node));
 }
 
@@ -403,6 +475,11 @@ int main(void)
     RUN_TEST(test_catalog_with_absolute_pathname);
     RUN_TEST(test_catalog_with_relative_pathname);
     RUN_TEST(test_catalog_with_invalid_input_error);
+    RUN_TEST(test_catalog_long_format_shows_size);
+    RUN_TEST(test_catalog_long_format_marks_directories);
+    RUN_TEST(test_cat_runs_without_error);
+    RUN_TEST(test_cat_lists_files);
+    RUN_TEST(test_cat_with_invalid_input_error);
 
     // Directory Management tests
     RUN_TEST(test_createdir);
@@ -416,6 +493,7 @@ int main(void)
     RUN_TEST(test_free_reports_blocks);
     RUN_TEST(test_free_with_pathname);
     RUN_TEST(test_setprefix_and_prefix);
+    RUN_TEST(test_sp_alias_sets_prefix);
     RUN_TEST(test_setprefix_nonexistent_directory);
     RUN_TEST(test_setprefix_root_directory);
     RUN_TEST(test_setprefix_relative_with_root_prefix);

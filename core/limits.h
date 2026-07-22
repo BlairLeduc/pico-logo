@@ -115,6 +115,14 @@ extern "C" {
 // OVERFLOW: text longer than WRITE_MAX_LEN - 1 is silently truncated.
 #define WRITE_MAX_LEN 256
 
+// Assumed console width, in characters, for `cat`'s multi-column listing. The
+// primary interactive device is the PicoCalc (320 px / 8 px glyph = 40 columns,
+// matching SCREEN_COLUMNS); the core is device-independent and has no live
+// terminal width, so `cat` packs names into columns against this fixed width.
+//
+// OVERFLOW: names wider than the column budget simply list one per line.
+#define CATALOG_DISPLAY_WIDTH 40
+
 // Maximum length, in characters, of the device network hostname set by
 // `sethostname` (the name answered over mDNS as `<hostname>.local` and given to
 // DHCP). Excludes the `.local` suffix, which mDNS appends. 32 is comfortably
