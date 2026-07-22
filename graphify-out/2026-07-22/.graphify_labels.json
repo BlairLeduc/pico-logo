@@ -201,5 +201,9 @@
   "199": "mock_device_get_dot",
   "200": "mock_wifi_status",
   "201": "mock_text_set_width",
-  "202": "mem_region_alloc"
+  "202": "mem_region_alloc",
+  "203": "logo_picocalc_console_create",
+  "204": "Time Management",
+  "205": "repl_count_bracket_balance",
+  "206": "mock_text_set_cursor"
 }

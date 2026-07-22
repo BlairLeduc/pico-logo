@@ -1238,9 +1238,10 @@ The `penup` command lifts the pen up: when the turtle moves, it does not draw li
 ```
 
 
-## setbg
+## setbg (setbackground)
 
 setbg _colournumber_  
+setbackground _colournumber_  
 
 `command`
 
@@ -5016,10 +5017,12 @@ to f2  play [e f 2g]  end
 ```
 
 
-## playing?
+## playing? (playingp)
 
 playing?  
-(playing? _voice_)
+(playing? _voice_)  
+playingp  
+(playingp _voice_)
 
 `operation`
 
@@ -7919,7 +7922,7 @@ Colour numbers 176 through 247 are unallocated and can be used for your own purp
 
 Colour numbers 248 through 253 hold the primary and secondary colours. Changing this range of colour numbers should be avoided.
 
-Colour number 254 is used as the default pen colour. Colour number 255 contains the current background colour used on the graphics screen and is set using [`setbg`](#setbg). 
+Colour number 254 is used as the default pen colour. Colour number 255 contains the current background colour used on the graphics screen and is set using [`setbg`](#setbg-setbackground). 
 
 
 ![Colour Palette for Pico Logo](./Colours.svg)
