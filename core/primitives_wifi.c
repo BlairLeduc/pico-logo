@@ -72,8 +72,10 @@ static Result prim_wifi_connect(Evaluator *eval, int argc, Value *args)
         bool success = io->hardware->ops->wifi_connect(ssid, password);
         if (!success)
         {
-            // Connection failed - return error
-            return result_error_arg(ERR_DISK_TROUBLE, NULL, NULL);
+            // Couldn't join the network (timed out, wrong password, or not
+            // found). Name it, as the rest of the network primitives do,
+            // rather than blaming the disk.
+            return result_error_arg(ERR_CANT_OPEN_NETWORK, NULL, ssid);
         }
         return result_none();
     }

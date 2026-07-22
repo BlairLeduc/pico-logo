@@ -124,6 +124,8 @@ void test_wifi_connect_fails(void)
     Result r = eval_string("wifi.connect \"TestSSID \"password123");
 
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    // A failed join names the network, not the disk.
+    TEST_ASSERT_EQUAL_STRING("Can't open TestSSID", error_format(r));
     // Verify state was not updated
     const MockDeviceState *state = mock_device_get_state();
     TEST_ASSERT_FALSE(state->wifi.connected);
