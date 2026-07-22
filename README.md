@@ -21,23 +21,36 @@ repeat 220 [ fd repcount rt 88 ]
 - **Classic Logo Semantics:** Compatible with Logo books and manuals from the 1980s and 1990s.
 - **Modular Core:** Primitives and interpreter logic are organized for clarity and extensibility.
 - **REPL Interface:** Interactive terminal-based read-eval-print loop with friendly error messages.
+- **Built-in Help:** `help name` explains a primitive's inputs and purpose, falls back to a keyword search over names and descriptions when it isn't one, and `(help)` lists every primitive by manual chapter.
 - **Multi-line Input:** Supports procedure definitions spanning multiple lines.
 - **Basic Constructs:** Variables, procedures, control structures (`if`, `repeat`), lists, arithmetic, and logical operations.
+- **Tail Call Optimization:** A self tail-recursive call reuses the current procedure frame instead of growing the call stack, so recursive loops run in constant space and don't count against the recursion limit.
+- **Functional List Processing:** `apply`, `foreach`, `map`, `map.se`, `filter`, `find`, `reduce`, and `crossmap` for working over words and lists.
+- **Bitwise Operations:** `bitand`, `bitor`, `bitxor`, `bitnot`, `ashift`, and `lshift` for low-level integer manipulation.
+- **Property Lists:** `pprop`/`gprop`/`plist`/`remprop` attach and query key-value data on any name.
+- **Workspace Management:** `bury`/`unbury` protect procedures and variables from `erase`; `nodes`/`recycle` reclaim list space by hand.
 - **Device Abstraction:** Core logic separated from device-specific code for portability.
 - **Host & Pico Support:** Runs on desktop for development; targets three RP2350 boards (Pico 2, Pico 2 W, Pico Plus 2 W).
-- **Single-Precision Math:** Uses 32-bit floats for numerical calculations, with fallback for integer-only hardware.
-- **File I/O:** Manage files (`catalog`, `setprefix`, `erasefile`) and `load` and `save` Logo programs, backed by an internal LittleFS filesystem at `/` and a FAT32 SD card mounted at `/sd`.
-- **Networking (WiFi boards):** WiFi (`wifi.connect`, `wifi.scan`), DNS resolution, NTP time, `ping`, and an HTTP client (`http.get`, `http.post`, `http.put`, `http.patch`, `http.delete`) with JSON read/build primitives. Plain `http://` works on all WiFi boards; `https://` requires a TLS-capable (PSRAM) board.
+- **Single-Precision Math:** Uses 32-bit floats for numerical calculations, hardware-accelerated on the RP2350.
+- **File I/O:** Manage files (`catalog`/`cat`, `setprefix`, `erasefile`) and `load` and `save` Logo programs, backed by an internal LittleFS filesystem at `/` and a FAT32 SD card mounted at `/sd`. Words longer than 255 characters are built on PSRAM-backed blobs on boards with PSRAM. `dribble`/`nodribble` record a session transcript to file.
+- **Networking (WiFi boards):** Non-blocking WiFi join (`wifi.start`/`wifi.status`) alongside `wifi.connect`/`wifi.scan`, DNS resolution, NTP time, `ping`, an HTTP client (`http.get`, `http.post`, `http.put`, `http.patch`, `http.delete`) with JSON read/build primitives, and an HTTP server (`http.listen`) with mDNS so the device answers at `picologo.local`. Plain `http://` works on all WiFi boards; `https://` requires a TLS-capable (PSRAM) board.
+- **Time Management:** `date`/`time` and `setdate`/`settime` for a real-time clock (kept in sync over WiFi via `network.ntp`), plus a monotonic `ticks` millisecond counter for timing intervals.
+- **Event-Driven Programs:** `when` arms a demon that fires an action the moment a condition turns true — up to eight at once, running alongside your program or at the prompt; `cleardemons` clears them.
 - **Unit Testing:** Uses Unity and CMake for isolated, maintainable tests.
 
 
 ## Additional Features for the PicoCalc
 
-- 320×320 resolution turtle graphics with 256 colours (from a palette of 65K colours)
+- 320×320 resolution turtle graphics with 256 colours (from a palette of 65K colours); remap any palette slot with `setpalette`/`palette`/`restorepalette`
+- Turtle drawing tools: `arc`, `dot`, `fill`, `clean`, `stamp`, and custom turtle shapes (`shape`/`getsh`/`putsh`)
+- Screen behaviour control: `window`/`wrap`/`fence` edge modes, and manual `refresh`/`refreshmode`/`sync` control over redraws
+- Eight independent turtles (`tell`, `ask`, `each`, `who`) with costumes, autonomous motion and animation (`setspeed`, `setanim`), and pixel-accurate collision detection (`touching?`, `over?`, `colourunder`, `distance`)
+- Eight-voice stereo PSG sound synthesizer: immediate notes (`sound`) or background music queues (`play`), with per-voice ADSR envelopes and waveforms (`setenv`, `setwave`)
+- Two included example games, Space Invaders and Galaxian, exercising the sprite and sound stack
 - Three simultaneous display modes: full screen text for programs without graphics, full screen graphics for running graphical programs, and split screen for interactive use
 - Full line editing and history
-- Full display text editor (edit procedures, variables and files)
-- Access to PicoCalc hardware (battery status, power control)
+- Full display text editor (edit procedures, variables and files) with Logo syntax highlighting — keywords, procedure names, variables, strings, numbers, comments, and rainbow bracket-depth colouring
+- Access to PicoCalc hardware (battery status, power control, reboot to USB bootloader with `.bootsel`)
 
 
 ## Recommended Requirements
