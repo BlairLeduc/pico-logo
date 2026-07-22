@@ -340,8 +340,8 @@
     "semantic_hash": ""
   },
   "core/primitives_wifi.c": {
-    "mtime": 1784661538.9173474,
-    "ast_hash": "88e73ed111f9111bb420a90a52ed5380",
+    "mtime": 1784683490.7680535,
+    "ast_hash": "c31fb5fb57577b044856d0e09c43e753",
     "semantic_hash": ""
   },
   "core/primitives_words_lists.c": {
@@ -455,8 +455,8 @@
     "semantic_hash": ""
   },
   "devices/hardware.h": {
-    "mtime": 1784661533.0971115,
-    "ast_hash": "adf58fa09bd110b686948e38894130c1",
+    "mtime": 1784683161.908335,
+    "ast_hash": "502eb4c838e16bdd419f219f4e2e8145",
     "semantic_hash": ""
   },
   "devices/host/host_console.c": {
@@ -675,8 +675,8 @@
     "semantic_hash": ""
   },
   "devices/picocalc/picocalc_hardware.c": {
-    "mtime": 1784666717.2642481,
-    "ast_hash": "538516b4d5e466744b7fbbdea4a6c3c6",
+    "mtime": 1784685297.6262498,
+    "ast_hash": "7cfe1b59d41b54432de0d122de8b0121",
     "semantic_hash": ""
   },
   "devices/picocalc/picocalc_hardware.h": {

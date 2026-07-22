@@ -340,7 +340,7 @@
     "semantic_hash": ""
   },
   "core/primitives_wifi.c": {
-    "mtime": 1784661538.9173474,
+    "mtime": 1784685930.29433,
     "ast_hash": "88e73ed111f9111bb420a90a52ed5380",
     "semantic_hash": ""
   },
@@ -455,7 +455,7 @@
     "semantic_hash": ""
   },
   "devices/hardware.h": {
-    "mtime": 1784661533.0971115,
+    "mtime": 1784685915.0036018,
     "ast_hash": "adf58fa09bd110b686948e38894130c1",
     "semantic_hash": ""
   },
@@ -675,8 +675,8 @@
     "semantic_hash": ""
   },
   "devices/picocalc/picocalc_hardware.c": {
-    "mtime": 1784673231.5131626,
-    "ast_hash": "fcd8f0daf34d0db66994d5a5e56408fb",
+    "mtime": 1784685909.4764688,
+    "ast_hash": "e717fc7a1b63b2a84607eb09148e9b13",
     "semantic_hash": ""
   },
   "devices/picocalc/picocalc_hardware.h": {

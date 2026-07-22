@@ -376,23 +376,46 @@ static bool wifi_connect_pending = false;
 // cyw43_arch_wait_for_work_until paces it; a status getter polled every 20 ms
 // by a demon has no such brake.
 //
-// How long to wait before re-joining depends on where it got stuck: a failed or
-// not-found join is settled and nothing more will happen, while an association
-// waiting on DHCP may yet come good and should not be disturbed so soon.
-// Retrying is in two steps, because re-joining on its own does not work: once a
-// join has failed the station is left associated-but-broken, and every
-// subsequent join fails too, however long it is left. Disassociating first is
-// what clears it -- which is precisely what `wifi.disconnect` followed by
-// `wifi.connect` does by hand, and why that succeeds first time where an
-// unbroken run of retries never does.
+// How to retry depends on how the attempt ended, mirroring the SDK's blocking
+// loop wherever it has a proven answer:
+//
+// - Not-found (NONET) is re-joined immediately with no disassociation, which
+//   is exactly what cyw43_arch_wifi_connect_until does -- the firmware lost
+//   the scan race and just needs the join issued again. The re-issue is
+//   self-pacing: the new join reads as "connecting" until the firmware
+//   settles it, so it cannot fire once per poll.
+// - A failed join (FAIL) is retried in two steps, because re-joining on its
+//   own does not work: the station is left associated-but-broken, and every
+//   subsequent join fails too, however long it is left. Disassociating first
+//   is what clears it -- which is precisely what `wifi.disconnect` followed
+//   by `wifi.connect` does by hand.
+// - An association still connecting or waiting on DHCP gets as long as the
+//   blocking connect's 30-second timeout before it is disturbed; tearing it
+//   down sooner kills attempts that were going to succeed.
+//
+// Rejected joins are retried as a short burst, then lone probes separated by
+// growing rests. The AP refuses associations as a penalty that retrying
+// sustains and deepens: traces showed attempts at any steady cadence (2s to
+// 16s gaps) rejected identically ~3.1s after issue for minutes on end, while
+// the joins that succeeded each followed a genuinely attempt-free stretch --
+// and the stretch needed grows with how many attempts preceded it (~19-36s of
+// quiet sufficed after a handful of attempts; after ~19 attempts, 27s was
+// still refused and ~127s was needed). This is also why a by-hand
+// disconnect-pause-connect worked. So: a few quick retries in case the
+// failure was a blip, then one probe per rest, resting 30s, 60s, then 120s
+// repeating.
 #define WIFI_RETRY_SETTLED_MS 3000
-#define WIFI_RETRY_STALLED_MS 8000
+#define WIFI_RETRY_STALLED_MS 30000
 #define WIFI_REJOIN_DELAY_MS 2000
+#define WIFI_FAIL_BURST 3
+#define WIFI_REST_MS 30000
+#define WIFI_REST_MAX_DOUBLINGS 2
 static char current_password[64] = {0};
 static uint32_t wifi_last_change_ms = 0;
 static uint32_t wifi_rejoin_at_ms = 0;
 static bool wifi_awaiting_rejoin = false;
 static int wifi_last_state = -1;
+static int wifi_fail_streak = 0;
 
 static void wifi_configure_link(void);
 static int picocalc_wifi_status(void);
@@ -450,6 +473,7 @@ static int picocalc_wifi_status(void)
             // does on success, now that the interface is really up; polling
             // this op is the only notification we get.
             wifi_connect_pending = false;
+            wifi_fail_streak = 0;
             wifi_configure_link();
         }
         return state;
@@ -467,23 +491,46 @@ static int picocalc_wifi_status(void)
         return state;
     }
 
-    // Step two: disassociated a moment ago, so now try the join.
+    // Step two: disassociated a moment ago, so now try the join. If the join
+    // cannot even be issued, keep waiting and try again next cycle instead of
+    // treating it as in flight -- otherwise nothing is joining at all and the
+    // "failed" state just sits there forever.
     if (wifi_awaiting_rejoin)
     {
         if (now >= wifi_rejoin_at_ms)
         {
-            wifi_awaiting_rejoin = false;
+            int rc = cyw43_arch_wifi_connect_async(current_ssid, current_password,
+                                                   CYW43_AUTH_WPA2_AES_PSK);
+            if (rc == 0)
+            {
+                wifi_awaiting_rejoin = false;
+            }
+            else
+            {
+                wifi_rejoin_at_ms = now + WIFI_REJOIN_DELAY_MS;
+            }
             wifi_last_change_ms = now;
-            cyw43_arch_wifi_connect_async(current_ssid, current_password,
-                                          CYW43_AUTH_WPA2_AES_PSK);
         }
         return state;
     }
 
+    // Not-found settles a join that lost the scan race; re-issue it at once,
+    // no disassociation, as the SDK's blocking loop does.
+    if (state == WIFI_STATE_NONET)
+    {
+        int rc = cyw43_arch_wifi_connect_async(current_ssid, current_password,
+                                               CYW43_AUTH_WPA2_AES_PSK);
+        if (rc == 0)
+        {
+            wifi_last_change_ms = now;
+            return WIFI_STATE_CONNECTING;
+        }
+        // The join could not be issued: fall through to the two-step retry.
+    }
+
     // Step one: stuck, so disassociate and let the radio settle before joining
-    // again. How long to wait first depends on where it got stuck -- a failed
-    // or not-found join is settled and nothing further will happen, while an
-    // association waiting on DHCP may yet come good on its own.
+    // again. A settled failure gets a short pause; an association still in
+    // progress gets the full blocking-connect timeout before being disturbed.
     uint32_t patience = (state == WIFI_STATE_FAILED || state == WIFI_STATE_NONET)
                             ? WIFI_RETRY_SETTLED_MS
                             : WIFI_RETRY_STALLED_MS;
@@ -492,7 +539,17 @@ static int picocalc_wifi_status(void)
     {
         cyw43_wifi_leave(&cyw43_state, CYW43_ITF_STA);
         wifi_awaiting_rejoin = true;
-        wifi_rejoin_at_ms = now + WIFI_REJOIN_DELAY_MS;
+        uint32_t delay = WIFI_REJOIN_DELAY_MS;
+        if (state == WIFI_STATE_FAILED && ++wifi_fail_streak >= WIFI_FAIL_BURST)
+        {
+            int doublings = wifi_fail_streak - WIFI_FAIL_BURST;
+            if (doublings > WIFI_REST_MAX_DOUBLINGS)
+            {
+                doublings = WIFI_REST_MAX_DOUBLINGS;
+            }
+            delay = WIFI_REST_MS << doublings;
+        }
+        wifi_rejoin_at_ms = now + delay;
         wifi_last_change_ms = now;
     }
 
@@ -639,6 +696,7 @@ static bool picocalc_wifi_start(const char *ssid, const char *password)
     wifi_last_change_ms = now;
     wifi_awaiting_rejoin = false;
     wifi_last_state = -1;
+    wifi_fail_streak = 0;
     wifi_connect_pending = true;
     return true;
 }
@@ -652,6 +710,24 @@ static void picocalc_wifi_disconnect(void)
     
     mdns_stop();
     cyw43_wifi_leave(&cyw43_state, CYW43_ITF_STA);
+
+    // cyw43_wifi_leave only queues the disassociation; the EV_DISASSOC event
+    // that settles it arrives asynchronously a moment later, and its handler
+    // zeroes the driver's whole join state. A join issued before it lands
+    // (wifi.disconnect then wifi.start back-to-back in a procedure) has its
+    // active flag wiped mid-flight: the radio associates but the driver never
+    // reports the link up. Wait, bounded, until the driver has left the
+    // joined/joining state so a follow-on join starts from a settled driver,
+    // the same as typing the two commands separately.
+    for (int i = 0; i < 100; i++)
+    {
+        if (cyw43_wifi_link_status(&cyw43_state, CYW43_ITF_STA) != CYW43_LINK_JOIN)
+        {
+            break;
+        }
+        sleep_ms(10);
+    }
+
     current_ssid[0] = '\0';
     current_password[0] = '\0';
     wifi_connect_pending = false;
