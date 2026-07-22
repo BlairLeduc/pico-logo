@@ -1638,7 +1638,7 @@ bool mock_wifi_start(const char *ssid, const char *password)
     return true;
 }
 
-int mock_wifi_status(void)
+WifiState mock_wifi_status(void)
 {
     return mock_state.wifi.status;
 }

@@ -418,7 +418,7 @@ static int wifi_last_state = -1;
 static int wifi_fail_streak = 0;
 
 static void wifi_configure_link(void);
-static int picocalc_wifi_status(void);
+static WifiState picocalc_wifi_status(void);
 
 static bool picocalc_wifi_is_connected(void)
 {
@@ -430,7 +430,7 @@ static bool picocalc_wifi_is_connected(void)
 // associates, before DHCP has assigned an address, which would let a
 // `when [wifi?] [network.ntp ...]` demon fire while name resolution still has
 // no route.
-static int picocalc_wifi_status(void)
+static WifiState picocalc_wifi_status(void)
 {
     if (!wifi_initialized)
     {
@@ -647,6 +647,12 @@ static bool picocalc_wifi_connect(const char *ssid, const char *password)
         return false;
     }
 
+    // A blocking connect supersedes any in-flight async attempt: clear the
+    // pending flag so a failure here leaves wifi.status reporting the real
+    // link state, not a stale CONNECTING left over from an earlier wifi.start.
+    // This also disarms the async retry loop, which is gated on this flag.
+    wifi_connect_pending = false;
+
     // Connect with timeout (30 seconds)
     int result = cyw43_arch_wifi_connect_timeout_ms(
         ssid,
@@ -661,7 +667,6 @@ static bool picocalc_wifi_connect(const char *ssid, const char *password)
         strncpy(current_ssid, ssid, sizeof(current_ssid) - 1);
         current_ssid[sizeof(current_ssid) - 1] = '\0';
 
-        wifi_connect_pending = false;
         wifi_configure_link();
 
         return true;

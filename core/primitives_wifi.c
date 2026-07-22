@@ -103,7 +103,7 @@ static Result prim_wifi_start(Evaluator *eval, int argc, Value *args)
         {
             // The attempt could not be started (radio unavailable); a failure
             // to *associate* shows up later as `wifi.status` = failed.
-            return result_error_arg(ERR_DISK_TROUBLE, NULL, NULL);
+            return result_error_arg(ERR_DEVICE_UNAVAILABLE, NULL, NULL);
         }
         return result_none();
     }

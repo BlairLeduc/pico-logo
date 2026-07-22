@@ -538,7 +538,7 @@ extern "C"
     bool mock_wifi_is_connected(void);
     bool mock_wifi_connect(const char *ssid, const char *password);
     bool mock_wifi_start(const char *ssid, const char *password);
-    int mock_wifi_status(void);
+    WifiState mock_wifi_status(void);
     void mock_wifi_disconnect(void);
     bool mock_wifi_get_ip(char *ip_buffer, size_t buffer_size);
     bool mock_wifi_get_ssid(char *ssid_buffer, size_t buffer_size);

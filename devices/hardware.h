@@ -174,7 +174,7 @@ extern "C"
 
         // Current connection state as a WifiState, without blocking.
         // May be NULL on devices without an asynchronous connect.
-        int (*wifi_status)(void);
+        WifiState (*wifi_status)(void);
 
         // Disconnect from the current WiFi network
         void (*wifi_disconnect)(void);
