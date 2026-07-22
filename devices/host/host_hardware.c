@@ -476,6 +476,8 @@ static LogoHardwareOps host_hardware_ops = {
     // ops NULL (by omission) makes the sound primitives silently succeed.
     .wifi_is_connected = NULL,
     .wifi_connect = NULL,
+    .wifi_start = NULL,
+    .wifi_status = NULL,
     .wifi_disconnect = NULL,
     .wifi_get_ip = NULL,
     .wifi_get_ssid = NULL,

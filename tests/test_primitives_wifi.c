@@ -2,11 +2,12 @@
 //  Pico Logo
 //  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
-//  Tests for WiFi primitives: wifi?, wifi.connect, wifi.disconnect,
-//  wifi.ip, wifi.mac, wifi.ssid, wifi.scan
+//  Tests for WiFi primitives: wifi?, wifi.connect, wifi.start, wifi.status,
+//  wifi.disconnect, wifi.ip, wifi.mac, wifi.ssid, wifi.scan
 //
 
 #include "test_scaffold.h"
+#include "core/demons.h"
 
 void setUp(void)
 {
@@ -123,6 +124,8 @@ void test_wifi_connect_fails(void)
     Result r = eval_string("wifi.connect \"TestSSID \"password123");
 
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    // A failed join names the network, not the disk.
+    TEST_ASSERT_EQUAL_STRING("Can't open TestSSID", error_format(r));
     // Verify state was not updated
     const MockDeviceState *state = mock_device_get_state();
     TEST_ASSERT_FALSE(state->wifi.connected);
@@ -493,6 +496,168 @@ void test_wifi_connect_disconnect_cycle(void)
 }
 
 // ============================================================================
+// wifi.start / wifi.status tests
+// ============================================================================
+
+void test_wifi_status_is_off_before_any_attempt(void)
+{
+    Result r = eval_string("wifi.status");
+
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("off", mem_word_ptr(r.value.as.node));
+}
+
+void test_wifi_start_returns_without_connecting(void)
+{
+    // The whole point: control comes back with the link still down, so a
+    // startup file reaches the prompt instead of stalling for 30 seconds.
+    Result r = eval_string("wifi.start \"TestSSID \"password123");
+
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    MockDeviceState *state = mock_device_get_state();
+    TEST_ASSERT_FALSE(state->wifi.connected);
+    TEST_ASSERT_EQUAL(WIFI_STATE_CONNECTING, state->wifi.status);
+}
+
+void test_wifi_status_reports_connecting_then_connected(void)
+{
+    eval_string("wifi.start \"TestSSID \"password123");
+
+    Result r = eval_string("wifi.status");
+    TEST_ASSERT_EQUAL_STRING("connecting", mem_word_ptr(r.value.as.node));
+
+    mock_device_set_wifi_status(WIFI_STATE_CONNECTED);
+
+    r = eval_string("wifi.status");
+    TEST_ASSERT_EQUAL_STRING("connected", mem_word_ptr(r.value.as.node));
+
+    // wifi? tracks the same link.
+    r = eval_string("wifi?");
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+}
+
+void test_wifi_status_reports_failed_attempt(void)
+{
+    eval_string("wifi.start \"TestSSID \"badpassword");
+    mock_device_set_wifi_status(WIFI_STATE_FAILED);
+
+    Result r = eval_string("wifi.status");
+    TEST_ASSERT_EQUAL_STRING("failed", mem_word_ptr(r.value.as.node));
+
+    // A failed attempt must not read as connected.
+    r = eval_string("wifi?");
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
+}
+
+// Each driver state gets its own word, so a failure says which stage it
+// failed at rather than collapsing to a bare "failed".
+void test_wifi_status_names_every_state(void)
+{
+    static const struct { int state; const char *word; } cases[] = {
+        { WIFI_STATE_OFF,        "off"         },
+        { WIFI_STATE_CONNECTING, "connecting"  },
+        { WIFI_STATE_NOIP,       "noaddress"   },
+        { WIFI_STATE_CONNECTED,  "connected"   },
+        { WIFI_STATE_NONET,      "notfound"    },
+        { WIFI_STATE_BADAUTH,    "badpassword" },
+        { WIFI_STATE_FAILED,     "failed"      },
+    };
+
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)
+    {
+        mock_device_set_wifi_status(cases[i].state);
+        Result r = eval_string("wifi.status");
+        TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+        TEST_ASSERT_EQUAL_STRING(cases[i].word, mem_word_ptr(r.value.as.node));
+
+        // Only `connected` counts as being on the network.
+        r = eval_string("wifi?");
+        TEST_ASSERT_EQUAL_STRING(
+            cases[i].state == WIFI_STATE_CONNECTED ? "true" : "false",
+            mem_word_ptr(r.value.as.node));
+    }
+}
+
+void test_wifi_start_errors_when_attempt_cannot_be_started(void)
+{
+    mock_device_set_wifi_start_result(false);
+
+    Result r = eval_string("wifi.start \"TestSSID \"password123");
+
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_wifi_start_errors_when_no_wifi_hardware(void)
+{
+    // A board with no radio (e.g. Pico 2) has no wifi_start op.
+    mock_hardware_ops.wifi_start = NULL;
+
+    Result r = eval_string("wifi.start \"TestSSID \"password123");
+
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL_STRING("I can't run wifi.start on this device",
+                             error_format(r));
+}
+
+void test_wifi_status_is_off_without_status_op(void)
+{
+    mock_hardware_ops.wifi_status = NULL;
+
+    Result r = eval_string("wifi.status");
+
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("off", mem_word_ptr(r.value.as.node));
+}
+
+void test_wifi_start_requires_two_words(void)
+{
+    Result r = eval_string("wifi.start \"TestSSID");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+
+    r = eval_string("wifi.start [a list] \"password123");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+// The motivating end-to-end case: start the radio without blocking, and let a
+// demon do the follow-up work once the link is actually up.
+void test_demon_fires_when_async_connect_completes(void)
+{
+    eval_string("make \"synced \"no");
+    eval_string("wifi.start \"TestSSID \"password123");
+    eval_string("when [wifi?] [make \"synced \"yes]");
+
+    // Still associating: the demon must not fire yet.
+    demons_poll();
+    Result r = eval_string("thing \"synced");
+    TEST_ASSERT_EQUAL_STRING("no", mem_word_ptr(r.value.as.node));
+
+    // Link comes up in the background.
+    mock_device_set_wifi_status(WIFI_STATE_CONNECTED);
+    demons_poll();
+
+    r = eval_string("thing \"synced");
+    TEST_ASSERT_EQUAL_STRING("yes", mem_word_ptr(r.value.as.node));
+}
+
+void test_demon_can_observe_a_failed_connect(void)
+{
+    eval_string("make \"gaveup \"no");
+    eval_string("wifi.start \"TestSSID \"badpassword");
+    eval_string("when [equal? wifi.status \"failed] [make \"gaveup \"yes]");
+
+    demons_poll();
+    Result r = eval_string("thing \"gaveup");
+    TEST_ASSERT_EQUAL_STRING("no", mem_word_ptr(r.value.as.node));
+
+    mock_device_set_wifi_status(WIFI_STATE_FAILED);
+    demons_poll();
+
+    r = eval_string("thing \"gaveup");
+    TEST_ASSERT_EQUAL_STRING("yes", mem_word_ptr(r.value.as.node));
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -516,6 +681,19 @@ int main(void)
     RUN_TEST(test_wifi_connect_requires_two_args);
     RUN_TEST(test_wifi_connect_requires_words);
     
+    // wifi.start / wifi.status tests
+    RUN_TEST(test_wifi_status_is_off_before_any_attempt);
+    RUN_TEST(test_wifi_start_returns_without_connecting);
+    RUN_TEST(test_wifi_status_reports_connecting_then_connected);
+    RUN_TEST(test_wifi_status_reports_failed_attempt);
+    RUN_TEST(test_wifi_status_names_every_state);
+    RUN_TEST(test_wifi_start_errors_when_attempt_cannot_be_started);
+    RUN_TEST(test_wifi_start_errors_when_no_wifi_hardware);
+    RUN_TEST(test_wifi_status_is_off_without_status_op);
+    RUN_TEST(test_wifi_start_requires_two_words);
+    RUN_TEST(test_demon_fires_when_async_connect_completes);
+    RUN_TEST(test_demon_can_observe_a_failed_connect);
+
     // wifi.disconnect tests
     RUN_TEST(test_wifi_disconnect_when_connected);
     RUN_TEST(test_wifi_disconnect_when_not_connected);

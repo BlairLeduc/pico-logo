@@ -1140,6 +1140,8 @@ void mock_device_reset(void)
     mock_state.wifi.ip_address[0] = '\0';
     mock_state.wifi.connect_result = 0;      // Default to success
     mock_state.wifi.disconnect_result = 0;   // Default to success
+    mock_state.wifi.status = WIFI_STATE_OFF;
+    mock_state.wifi.start_result = true;     // Default to accepting the attempt
     mock_state.wifi.scan_result_count = 0;
     mock_state.wifi.scan_return_value = 0;   // Default to success
     memset(mock_state.wifi.mac, 0, 6);
@@ -1606,6 +1608,7 @@ bool mock_wifi_connect(const char *ssid, const char *password)
     if (mock_state.wifi.connect_result == 0)
     {
         mock_state.wifi.connected = true;
+        mock_state.wifi.status = WIFI_STATE_CONNECTED;
         strncpy(mock_state.wifi.ssid, ssid, sizeof(mock_state.wifi.ssid) - 1);
         mock_state.wifi.ssid[sizeof(mock_state.wifi.ssid) - 1] = '\0';
         // Set a default IP when connected
@@ -1615,7 +1618,29 @@ bool mock_wifi_connect(const char *ssid, const char *password)
         }
         return true;
     }
+    mock_state.wifi.status = WIFI_STATE_FAILED;
     return false;
+}
+
+// Kicks off an attempt and leaves it in flight: the test decides when (and
+// whether) it lands by calling mock_device_set_wifi_status.
+bool mock_wifi_start(const char *ssid, const char *password)
+{
+    (void)password;  // Not stored in mock
+    if (!mock_state.wifi.start_result)
+    {
+        return false;
+    }
+    strncpy(mock_state.wifi.ssid, ssid, sizeof(mock_state.wifi.ssid) - 1);
+    mock_state.wifi.ssid[sizeof(mock_state.wifi.ssid) - 1] = '\0';
+    mock_state.wifi.status = WIFI_STATE_CONNECTING;
+    mock_state.wifi.connected = false;
+    return true;
+}
+
+WifiState mock_wifi_status(void)
+{
+    return mock_state.wifi.status;
 }
 
 void mock_wifi_disconnect(void)
@@ -1623,6 +1648,7 @@ void mock_wifi_disconnect(void)
     if (mock_state.wifi.disconnect_result == 0)
     {
         mock_state.wifi.connected = false;
+        mock_state.wifi.status = WIFI_STATE_OFF;
         mock_state.wifi.ssid[0] = '\0';
         mock_state.wifi.ip_address[0] = '\0';
     }
@@ -2271,9 +2297,23 @@ uint16_t mock_httpd_listen_port(void)
 // WiFi test helpers
 //
 
+// `connected` and `status` are two views of one link on real hardware, so the
+// setters keep them in step whichever way a test drives the mock.
 void mock_device_set_wifi_connected(bool connected)
 {
     mock_state.wifi.connected = connected;
+    mock_state.wifi.status = connected ? WIFI_STATE_CONNECTED : WIFI_STATE_OFF;
+}
+
+void mock_device_set_wifi_status(int status)
+{
+    mock_state.wifi.status = status;
+    mock_state.wifi.connected = (status == WIFI_STATE_CONNECTED);
+}
+
+void mock_device_set_wifi_start_result(bool ok)
+{
+    mock_state.wifi.start_result = ok;
 }
 
 void mock_device_set_wifi_ssid(const char *ssid)

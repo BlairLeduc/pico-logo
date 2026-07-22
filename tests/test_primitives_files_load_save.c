@@ -314,6 +314,23 @@ void test_load_recursive_loading_prevented(void)
     TEST_ASSERT_FALSE(var_exists("outer_ran"));
 }
 
+// `load` evaluates each line through eval_instruction, which polls demons. A
+// demon armed by the file therefore fires while the load is still running,
+// inside load's reentrancy guard -- so its action cannot itself load.
+void test_demon_armed_by_load_fires_during_the_load(void)
+{
+    mock_fs_create_file("outer.logo",
+                        "when [\"true] [make \"demon_ran 1]\n"
+                        "make \"rest_ran 1\n");
+
+    Result r = run_string("load \"outer.logo");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    // If the demon fired only after the load finished, this would be false.
+    TEST_ASSERT_TRUE(var_exists("demon_ran"));
+    TEST_ASSERT_TRUE(var_exists("rest_ran"));
+}
+
 void test_load_startup_can_call_load(void)
 {
     // Create a file that sets startup to load another file
@@ -727,6 +744,7 @@ int main(void)
     RUN_TEST(test_load_does_not_run_preexisting_startup);
     RUN_TEST(test_load_runs_startup_when_file_overwrites);
     RUN_TEST(test_load_recursive_loading_prevented);
+    RUN_TEST(test_demon_armed_by_load_fires_during_the_load);
     RUN_TEST(test_load_startup_can_call_load);
     RUN_TEST(test_save_writes_workspace);
     RUN_TEST(test_save_format_matches_poall);

@@ -6428,6 +6428,8 @@ wifi.connect _ssid_ _password_
 
 The `wifi.connect` command connects to the WiFi network with the given _ssid_ and _password_. If the connection is successful, `wifi?` will output `true`. If the connection fails, an error message is displayed.
 
+`wifi.connect` waits for the network to answer, which can take several seconds — and up to thirty if the network is out of range. Use `wifi.start` instead when you would rather carry on working while the connection is made.
+
 **Example**:
 
 ```logo
@@ -6436,6 +6438,92 @@ The `wifi.connect` command connects to the WiFi network with the given _ssid_ an
 true
 ?pr wifi.ssid
 TimHortonsWiFi
+```
+
+
+## wifi.start
+
+wifi.start _ssid_ _password_
+
+`command`
+
+The `wifi.start` command begins connecting to the WiFi network with the given _ssid_ and _password_, but does not wait for the result. Unlike `wifi.connect`, it finishes at once, so the rest of your program — or your startup file — keeps running while the network connects in the background.
+
+Use `wifi?` or `wifi.status` to find out how the connection is getting on. A `when` demon is the tidiest way to wait for it, because it lets you do something the moment the network is ready:
+
+```logo
+?wifi.start "TimHortonsWiFi "double-double
+?when [wifi?] [network.ntp -4  pr [clock set]]
+```
+
+The demon fires once, as soon as the device has an address on the network. Until then `wifi?` outputs `false`, and the rest of your program runs normally.
+
+`wifi.start` keeps trying until it succeeds, so it copes with a network that needs several attempts or is not yet switched on. It stops only for a refused password, or when you call `wifi.disconnect`. `wifi.status` says how it is getting on; an error is displayed only when the attempt cannot be started at all, such as on a board with no radio.
+
+
+## wifi.status
+
+wifi.status
+
+`operation`
+
+`wifi.status` outputs a word describing the state of the WiFi connection:
+
+| Output | Meaning |
+|---|---|
+| `off` | Not connected, and nothing is being attempted |
+| `connecting` | Looking for the network and joining it |
+| `noaddress` | Joined the network; waiting for it to assign an address |
+| `connected` | Connected, with an address on the network |
+| `notfound` | The network was not found |
+| `badpassword` | The network refused the password |
+| `failed` | Joining the network failed for some other reason |
+
+The first four are the stages of a connection in progress; the last three say where it went wrong.
+
+Joining a network is often unreliable: an attempt may fail outright, be missed by a scan, or join and then never get around to assigning an address. On some networks it simply takes several tries. So `wifi.start` keeps trying — whenever a connection stops making progress for a few seconds, it quietly begins another attempt, and it goes on doing so until it connects. This means a device left switched on will join the network whenever it becomes reachable, even if that is some time later.
+
+Two things stop it: `wifi.disconnect`, and a refused password, since that will not come right however many times it is tried.
+
+So `failed`, `notfound` and `noaddress` are ordinary sights along the way and do not mean Pico Logo has given up — each one is simply the attempt that just ended. Only `badpassword` is final. If you want to report a problem without repeating yourself every few seconds, count the attempts rather than printing on each one:
+
+```logo
+make "tries 0
+when [equal? wifi.status "failed] ~
+     [make "tries :tries + 1
+      if :tries = 5 [pr [Still cannot join the network]]]
+```
+
+**Example**:
+
+```logo
+?wifi.start "TimHortonsWiFi "double-double
+?pr wifi.status
+connecting
+?pr wifi.status
+noaddress
+?pr wifi.status
+connected
+```
+
+To watch the whole sequence — useful when a connection is not coming up, and the fastest way to see which stage it stalls at:
+
+```logo
+make "last "off
+wifi.start "TimHortonsWiFi "double-double
+when [not equal? wifi.status :last] [make "last wifi.status  pr :last]
+```
+
+`wifi.status` outputs `connected` in exactly the cases where `wifi?` outputs `true`. It is most useful after `wifi.start`, where it tells you whether an attempt is still going or has given up — something `wifi?` alone cannot say.
+
+**Example**:
+
+```logo
+?wifi.start "TimHortonsWiFi "double-double
+?pr wifi.status
+connecting
+?pr wifi.status
+connected
 ```
 
 
