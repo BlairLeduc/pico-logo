@@ -5481,9 +5481,9 @@ Outputs a list of file names in the currect directory. If _ext_ is present, the 
 
 ```logo
 ?pr files
-[startup.lgo rink.lgo readme.txt]
-?pr (files "lgo")
-[startup.lgo rink.lgo]
+[startup rink readme.txt]
+?pr (files "txt")
+[readme.txt]
 ```
 
 
@@ -5587,8 +5587,8 @@ When exiting the editor, the contents of the buffer are not run.
 **Example**:
 
 ```logo
-?editfile "storm_notes.lgo
-; Opens the editor with storm_notes.lgo contents
+?editfile "storm_notes
+; Opens the editor with storm_notes contents
 ; After saving and exiting, the file is updated
 ```
 
@@ -5605,10 +5605,10 @@ Stands for erase file. Erases any type of file. The input must be the name of a 
 **Example**:
 
 ```logo
-?pr file? "old_data.lgo
+?pr file? "old_data
 true
-?erasefile "old_data.lgo
-?pr file? "old_data.lgo
+?erasefile "old_data
+?pr file? "old_data
 false
 ```
 
@@ -5646,8 +5646,8 @@ Prints a list of files and directories in the current directory. Directories hav
 
 ```logo
 ?catalog
-startup.lgo
-rink.lgo
+startup
+rink
 sketches/
 ```
 
@@ -5687,9 +5687,9 @@ Outputs `true` if the file exists, otherwise `false`.
 **Example**:
 
 ```logo
-?pr file? "startup.lgo
+?pr file? "startup
 true
-?pr file? "missing.lgo
+?pr file? "missing
 false
 ```
 
@@ -5724,8 +5724,8 @@ Renames the file or directory from _pathname1_ to _pathname2_. A file or directo
 **Example**:
 
 ```logo
-?rename "draft.lgo "pancake_final.lgo
-?pr file? "pancake_final.lgo
+?rename "draft "pancake_final
+?pr file? "pancake_final
 true
 ```
 
@@ -5796,7 +5796,7 @@ pofile _pathname_
 **Example**:
 
 ```logo
-?pofile "winter.lgo
+?pofile "winter
 to greet
 pr [Mitts are in the hall]
 end
@@ -5820,8 +5820,8 @@ After Logo loads the contents of a file, it looks for a variable called `startup
 **Example**:
 
 ```logo
-?load "winter.lgo
-; Loads all procedures and variables from winter.lgo
+?load "winter
+; Loads all procedures and variables from winter
 ```
 
 
@@ -5837,8 +5837,8 @@ The `save` command creates a file and saves in it all unburied procedures and va
 
 ```logo
 ?to greet  pr [Fresh coffee]  end
-?save "winter.lgo
-; Saves all procedures and variables to winter.lgo
+?save "winter
+; Saves all procedures and variables to winter
 ```
 
 
@@ -5856,7 +5856,7 @@ The `savel` command saves the procedures named in _name_ or _namelist_, and all 
 ```logo
 ?to greet  pr [Hello]  end
 ?to farewell  pr [Goodbye]  end
-?savel [greet farewell] "greetings.lgo
+?savel [greet farewell] "greetings
 ; Saves only greet and farewell procedures
 ```
 
@@ -5952,10 +5952,10 @@ allopen
 **Example**:
 
 ```logo
-?open "notes.lgo
+?open "notes
 ?open "log.txt
 ?show allopen
-[notes.lgo log.txt]
+[notes log.txt]
 ```
 
 
@@ -6013,10 +6013,10 @@ This procedure returns an error if the file is a network connection.
 **Example**:
 
 ```logo
-?open "notes.lgo
-?pr filelen "notes.lgo
+?open "notes
+?pr filelen "notes
 1024
-?close "notes.lgo
+?close "notes
 ```
 
 
@@ -6078,8 +6078,8 @@ readpos
 **Example**:
 
 ```logo
-?open "notes.lgo
-?setread "notes.lgo
+?open "notes
+?setread "notes
 ?pr readpos
 0
 ?ignore readword
@@ -6126,8 +6126,8 @@ See [`readpos`](#readpos) for more information about the `setreadpos` command.
 **Example**:
 
 ```logo
-?open "notes.lgo
-?setread "notes.lgo
+?open "notes
+?setread "notes
 ?setreadpos 0
 ?pr readpos
 0
@@ -7413,7 +7413,7 @@ goodbye
 ```logo
 ; Safely shut down the PicoCalc
 ?pr [Saving workspace...]
-?save "session.lgo
+?save "session
 ?goodbye
 ```
 
