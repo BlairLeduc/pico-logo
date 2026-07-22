@@ -160,19 +160,9 @@ static int catalog_compare(const void *a, const void *b)
     return strcasecmp(ea->name, eb->name);
 }
 
-// Writes text to the screen (writer) and, if active, the dribble.
-static void catalog_emit(LogoIO *io, const char *text)
-{
-    logo_stream_write(io->writer, text);
-    if (io->dribble)
-    {
-        logo_stream_write(io->dribble, text);
-    }
-}
-
 // Resolves the directory to list from the optional pathname argument. On
-// success returns true and sets *out_dir to point at resolved_path, the
-// argument word, or ".". On failure returns false with the error in *err.
+// success returns true and sets *out_dir to point at resolved_path or ".".
+// On failure returns false with the error in *err.
 static bool catalog_resolve_dir(LogoIO *io, int argc, Value *args,
                                 char *resolved_path, size_t resolved_size,
                                 const char **out_dir, Result *err)
@@ -186,24 +176,15 @@ static bool catalog_resolve_dir(LogoIO *io, int argc, Value *args,
         }
         const char *pathname = mem_word_ptr(args[0].as.node);
 
-        // Absolute path - use directly; otherwise resolve against the prefix.
-        if (pathname[0] == '/')
+        // Resolve against the prefix via the shared helper, which normalizes
+        // ".." and returns NULL rather than silently truncating an over-long path.
+        char *resolved = logo_io_resolve_path(io, pathname, resolved_path, resolved_size);
+        if (!resolved)
         {
-            *out_dir = pathname;
+            *err = result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+            return false;
         }
-        else
-        {
-            const char *prefix = logo_io_get_prefix(io);
-            if (prefix && prefix[0] != '\0')
-            {
-                snprintf(resolved_path, resolved_size, "%s%s", prefix, pathname);
-                *out_dir = resolved_path;
-            }
-            else
-            {
-                *out_dir = pathname;
-            }
-        }
+        *out_dir = resolved;
     }
     else
     {
@@ -334,8 +315,13 @@ static Result prim_cat(Evaluator *eval, int argc, Value *args)
             }
             CatalogEntry *entry = &ctx.entries[idx];
             bool last = (col == ncols - 1) || (idx + nrows >= ctx.count);
-            pos += snprintf(line + pos, sizeof(line) - pos, "%s%s",
-                            entry->name, entry->is_directory ? "/" : "");
+            int n = snprintf(line + pos, sizeof(line) - pos, "%s%s",
+                             entry->name, entry->is_directory ? "/" : "");
+            if (n < 0 || (size_t)(pos + n) >= sizeof(line))
+            {
+                break; // Line buffer full - emit what we have.
+            }
+            pos += n;
             if (!last)
             {
                 // Pad to the column boundary before the next entry.
@@ -347,8 +333,8 @@ static Result prim_cat(Evaluator *eval, int argc, Value *args)
                 line[pos] = '\0';
             }
         }
-        catalog_emit(io, line);
-        catalog_emit(io, "\n");
+        logo_io_console_write(io, line);
+        logo_io_console_write(io, "\n");
     }
 
     return result_none();
@@ -406,7 +392,7 @@ static Result prim_catalog(Evaluator *eval, int argc, Value *args)
             }
         }
 
-        catalog_emit(io, line);
+        logo_io_console_write(io, line);
     }
 
     return result_none();

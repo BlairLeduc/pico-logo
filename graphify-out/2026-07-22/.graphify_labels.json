@@ -200,5 +200,6 @@
   "198": "Value",
   "199": "mock_device_get_dot",
   "200": "mock_wifi_status",
-  "201": "mock_text_set_width"
+  "201": "mock_text_set_width",
+  "202": "mem_region_alloc"
 }

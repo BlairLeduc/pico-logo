@@ -260,8 +260,8 @@
     "semantic_hash": ""
   },
   "core/primitives_files_directory.c": {
-    "mtime": 1784724178.5832067,
-    "ast_hash": "012592450421bf21b658316dee08a88d",
+    "mtime": 1784724715.6520965,
+    "ast_hash": "402273294143e0adea12452d69ff3e94",
     "semantic_hash": ""
   },
   "core/primitives_files_load_save.c": {
@@ -1060,8 +1060,8 @@
     "semantic_hash": ""
   },
   "tests/test_primitives_files_directory.c": {
-    "mtime": 1784723847.4479017,
-    "ast_hash": "717b0363a2e7cd9fa5330472c53726f5",
+    "mtime": 1784724747.328584,
+    "ast_hash": "5720ff3a05d13747b8565c9cab3a68b1",
     "semantic_hash": ""
   },
   "tests/test_primitives_files_load_save.c": {
@@ -1290,8 +1290,8 @@
     "semantic_hash": ""
   },
   "docs/improvements-roadmap.md": {
-    "mtime": 1784724253.0992918,
-    "ast_hash": "907e4078749464fd25b5122299844bab",
+    "mtime": 1784724777.4744241,
+    "ast_hash": "6039b9fe1407d4b109a6cc4cdb8b4af4",
     "semantic_hash": ""
   },
   "docs/launch-design.md": {
@@ -1330,8 +1330,8 @@
     "semantic_hash": ""
   },
   "reference/Pico_Logo_Reference.md": {
-    "mtime": 1784723983.9896367,
-    "ast_hash": "82442f3b8b783b5e0204e5a71d658691",
+    "mtime": 1784724725.122679,
+    "ast_hash": "4e4430e682d0ed209830af859a9a3fac",
     "semantic_hash": ""
   },
   "tests/CMakeLists.txt": {

@@ -1,11 +1,11 @@
 # Graph Report - pico-logo  (2026-07-22)
 
 ## Corpus Check
-- 274 files · ~437,162 words
+- 274 files · ~437,195 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 6636 nodes · 21191 edges · 202 communities (192 shown, 10 thin omitted)
+- 6636 nodes · 21191 edges · 203 communities (193 shown, 10 thin omitted)
 - Extraction: 55% EXTRACTED · 45% INFERRED · 0% AMBIGUOUS · INFERRED: 9593 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
@@ -204,6 +204,7 @@
 - mock_device_get_dot
 - mock_wifi_status
 - mock_text_set_width
+- mem_region_alloc
 
 ## God Nodes (most connected - your core abstractions)
 1. `run_string()` - 903 edges
@@ -232,7 +233,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (202 total, 10 thin omitted)
+## Communities (203 total, 10 thin omitted)
 
 ### Community 0 - "run_string"
 Cohesion: 0.02
@@ -287,8 +288,8 @@ Cohesion: 0.03
 Nodes (85): CaughtError, append_caller_suffix(), Result, error_clear_caught(), error_format(), error_get_caught(), error_message(), error_set_caught() (+77 more)
 
 ### Community 13 - "picocalc_console.c"
-Cohesion: 0.06
-Nodes (55): lcd_set_palette_rgb(), LogoPen, LogoRotationStyle, LogoStream, LogoTurtleRaster, ScreenSprite, error_output_flush(), error_output_write() (+47 more)
+Cohesion: 0.08
+Nodes (41): LogoPen, LogoRotationStyle, LogoTurtleRaster, ScreenSprite, heading_faces_left(), raster_line(), refresh_shape_wearers(), text_clear() (+33 more)
 
 ### Community 14 - "format_buffer_init"
 Cohesion: 0.07
@@ -376,7 +377,7 @@ Nodes (37): mock_device_get_gfx_load_call_count(), mock_device_get_gfx_save_call
 
 ### Community 35 - "stdlib.h"
 Cohesion: 0.07
-Nodes (24): repeating_timer_t, keyboard_get_key(), keyboard_init(), keyboard_key_available(), keyboard_peek_key(), keyboard_poll(), keyboard_set_background_poll(), keyboard_set_idle_callback() (+16 more)
+Nodes (27): keyboard_get_key(), keyboard_init(), keyboard_key_available(), keyboard_peek_key(), keyboard_set_background_poll(), keyboard_set_idle_callback(), keyboard_set_key_available_callback(), lcd_get_palette_value() (+19 more)
 
 ### Community 36 - "memory.c"
 Cohesion: 0.33
@@ -423,8 +424,8 @@ Cohesion: 0.17
 Nodes (42): LogoEditorResult, editor_backspace(), editor_compute_depth_at_line(), editor_copy_line(), editor_copy_selection(), editor_count_lines(), editor_cut_line(), editor_decrease_indent() (+34 more)
 
 ### Community 47 - "screen.c"
-Cohesion: 0.07
-Nodes (43): lcd_enable_cursor(), lcd_move_cursor(), lcd_set_background(), lcd_set_cursor_char(), screen_fullscreen(), screen_splitscreen(), screen_textscreen(), text_get_background() (+35 more)
+Cohesion: 0.08
+Nodes (38): lcd_move_cursor(), lcd_set_cursor_char(), error_output_write(), output_write(), text_get_background(), text_get_foreground(), text_set_background(), text_set_cursor() (+30 more)
 
 ### Community 48 - "repository"
 Cohesion: 0.04
@@ -483,8 +484,8 @@ Cohesion: 0.21
 Nodes (29): op_stack_pop(), EvalOp, EvalOpKind, Evaluator, Node, Result, UserProcedure, eval_trace_entry() (+21 more)
 
 ### Community 62 - "primitives_init"
-Cohesion: 0.10
-Nodes (34): demons_clear(), demons_reset(), blob_alloc(), mem_region_alloc(), primitives_arithmetic_init(), primitives_bitwise_init(), primitives_conditionals_init(), primitives_control_flow_init() (+26 more)
+Cohesion: 0.12
+Nodes (32): primitives_arithmetic_init(), primitives_bitwise_init(), primitives_conditionals_init(), primitives_control_flow_init(), primitives_debug_control_init(), primitives_debug_init(), primitives_editor_init(), primitives_events_init() (+24 more)
 
 ### Community 63 - "primitives_json.c"
 Cohesion: 0.18
@@ -683,8 +684,8 @@ Cohesion: 0.18
 Nodes (12): primitive_find(), primitive_get_by_index(), primitive_get_count(), primitive_register_alias(), primitives_set_io(), Primitive, test_every_primitive_has_help_entry(), test_primitives_are_registered() (+4 more)
 
 ### Community 112 - "southbridge.c"
-Cohesion: 0.32
-Nodes (14): picocalc_get_battery_level(), picocalc_power_off(), sb_is_power_off_supported(), sb_read(), sb_read_battery(), sb_read_keyboard(), sb_read_keyboard_backlight(), sb_read_keyboard_state() (+6 more)
+Cohesion: 0.23
+Nodes (18): repeating_timer_t, keyboard_poll(), on_keyboard_timer(), picocalc_get_battery_level(), picocalc_power_off(), sb_available(), sb_is_power_off_supported(), sb_read() (+10 more)
 
 ### Community 113 - "primitives_control_flow.c"
 Cohesion: 0.17
@@ -727,8 +728,8 @@ Cohesion: 0.25
 Nodes (8): 3. Survey: multi-turtle and sprite Logos, 1981→now, Atari Logo (LCSI, 1983) — *events as first-class citizens*, BBC Logos (Acornsoft, Logotron; 1983–85), LogoWriter / MicroWorlds (LCSI, 1985 / 1993), StarLogo / NetLogo (MIT/Northwestern, 1994→) and Scratch (MIT, 2007→), Synthesis — what Pico Logo should steal, TI Logo / TI Logo II (TI-99/4A, 1981–82) — *sprites as autonomous objects*, TRS-80 Color Logo (Radio Shack, 1982) — *turtles as processes*
 
 ### Community 123 - "record_command"
-Cohesion: 0.20
-Nodes (14): lcd_get_palette_value(), lcd_restore_palette(), lcd_set_palette_value(), turtle_restore_palette(), turtle_set_bg_colour(), screen_get_mode(), screen_gfx_mark_all_dirty(), advance_cycle() (+6 more)
+Cohesion: 0.11
+Nodes (26): lcd_enable_cursor(), lcd_restore_palette(), lcd_set_background(), lcd_set_palette_rgb(), LogoStream, error_output_flush(), input_read_char(), input_read_chars() (+18 more)
 
 ### Community 124 - "eval_primary"
 Cohesion: 0.31
@@ -779,8 +780,8 @@ Cohesion: 0.25
 Nodes (8): http.delete, http.get, http.header, HTTP Operations, http.patch, http.post, http.put, http.status
 
 ### Community 136 - "logo_io_set_writer"
-Cohesion: 0.24
-Nodes (24): Evaluator, LogoHardwareOps, LogoIO, Result, SoundEvent, Value, is_noise_voice(), parse_voice_set() (+16 more)
+Cohesion: 0.25
+Nodes (23): Evaluator, LogoHardwareOps, LogoIO, Result, SoundEvent, Value, is_noise_voice(), parse_voice_set() (+15 more)
 
 ### Community 137 - "primitives_properties.c"
 Cohesion: 0.12
@@ -851,8 +852,8 @@ Cohesion: 0.25
 Nodes (10): LogoConsole, LogoStreamOps, logo_console_has_editor(), logo_console_has_screen_modes(), logo_console_has_text(), logo_console_has_turtle(), logo_console_init(), test_console_has_screen_modes() (+2 more)
 
 ### Community 154 - "primitives_debug_control.c"
-Cohesion: 0.28
-Nodes (14): Evaluator, Result, Value, pause_check_continue(), pause_request_continue(), pause_reset_state(), prim_co(), prim_go() (+6 more)
+Cohesion: 0.31
+Nodes (13): Evaluator, Result, Value, pause_check_continue(), pause_request_continue(), pause_reset_state(), prim_co(), prim_go() (+5 more)
 
 ### Community 155 - "logo_lfs_backup"
 Cohesion: 0.33
@@ -867,12 +868,12 @@ Cohesion: 0.25
 Nodes (8): Appendix A: Useful Tools, arcr and arcl, circler and circlel, divisor?, Graphics Tools, Math Tools, Program Logic or Debugging Tools, sort
 
 ### Community 158 - "prim_local"
-Cohesion: 0.47
-Nodes (9): Evaluator, Result, Value, prim_localmake(), prim_make(), prim_name(), prim_namep(), prim_thing() (+1 more)
+Cohesion: 0.56
+Nodes (8): Evaluator, Result, Value, prim_localmake(), prim_make(), prim_name(), prim_namep(), prim_thing()
 
 ### Community 159 - "primitives_procedures.c"
-Cohesion: 0.43
-Nodes (7): append_to_list(), Lexer, Node, Token, parse_bracket_contents(), primitives_procedures_init(), token_to_atom()
+Cohesion: 0.53
+Nodes (6): append_to_list(), Lexer, Node, Token, parse_bracket_contents(), token_to_atom()
 
 ### Community 160 - "Appendix B: Parsing"
 Cohesion: 0.25
@@ -943,12 +944,16 @@ Cohesion: 0.22
 Nodes (7): LogoHardware, LogoHardwareOps, logo_hardware_init(), LogoHardware, logo_picocalc_hardware_create(), logo_picocalc_hardware_destroy(), test_play_no_sound_engine_is_noop()
 
 ### Community 197 - "prim_cleardemons"
-Cohesion: 0.39
-Nodes (8): demons_freeze(), demons_thaw(), Evaluator, Result, Value, prim_cleardemons(), prim_freeze(), prim_thaw()
+Cohesion: 0.29
+Nodes (10): demons_clear(), demons_freeze(), demons_reset(), demons_thaw(), Evaluator, Result, Value, prim_cleardemons() (+2 more)
 
 ### Community 198 - "Value"
 Cohesion: 0.29
 Nodes (8): Node, Value, result_get_value(), value_get_node(), value_get_number(), test_result_get_value_ok(), test_result_get_value_output(), test_value_get_number_returns_payload()
+
+### Community 202 - "mem_region_alloc"
+Cohesion: 0.50
+Nodes (4): blob_alloc(), mem_region_alloc(), editor_pick_buffer(), test_region_alloc_no_region_returns_null()
 
 ## Knowledge Gaps
 - **627 isolated node(s):** `dist.sh script`, `flash.sh script`, `name`, `displayName`, `description` (+622 more)
