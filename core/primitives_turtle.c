@@ -2014,6 +2014,7 @@ void primitives_turtle_init(void)
     primitive_register("setpensize", 1, prim_setpensize);
     primitive_register("pensize", 0, prim_pensize);
     primitive_register("setbg", 1, prim_setbg);
+    primitive_register("setbackground", 1, prim_setbg);
     primitive_register("background", 0, prim_background);
     primitive_register("bg", 0, prim_background);
     

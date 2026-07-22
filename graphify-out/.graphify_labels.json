@@ -94,7 +94,6 @@
   "92": "Design: LittleFS internal filesystem + `/sd` FAT32 mount",
   "93": "P5 — Multi-sprite turtles and the display pipeline (design)",
   "94": "Arithmetic Operations",
-  "95": "run_editor_and_process",
   "96": "Space Invaders in Pico Logo (design & implementation)",
   "97": "package.json",
   "98": "test_mklfsimg.c",
@@ -204,6 +203,5 @@
   "202": "mem_region_alloc",
   "203": "logo_picocalc_console_create",
   "204": "Time Management",
-  "205": "repl_count_bracket_balance",
-  "206": "mock_text_set_cursor"
+  "205": "repl_count_bracket_balance"
 }

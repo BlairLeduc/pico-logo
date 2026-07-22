@@ -606,5 +606,6 @@ void primitives_sound_init(void)
     primitive_register("wave", 1, prim_wave);
     primitive_register("play", 1, prim_play);
     primitive_register("playing?", 0, prim_playing);
+    primitive_register("playingp", 0, prim_playing);
     primitive_register("stopsound", 0, prim_stopsound);
 }
