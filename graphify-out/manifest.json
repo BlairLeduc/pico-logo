@@ -170,8 +170,8 @@
     "semantic_hash": ""
   },
   "core/limits.h": {
-    "mtime": 1784481081.7575393,
-    "ast_hash": "0587679c2a0a88ab3a31a0b8afb25c11",
+    "mtime": 1784723617.4160168,
+    "ast_hash": "8753b831456b58f782eab445de6f9559",
     "semantic_hash": ""
   },
   "core/memory.c": {
@@ -260,8 +260,8 @@
     "semantic_hash": ""
   },
   "core/primitives_files_directory.c": {
-    "mtime": 1783090124.6231263,
-    "ast_hash": "1ff0d2d273ff51a71a2049d66ad2076f",
+    "mtime": 1784724715.6520965,
+    "ast_hash": "402273294143e0adea12452d69ff3e94",
     "semantic_hash": ""
   },
   "core/primitives_files_load_save.c": {
@@ -340,8 +340,8 @@
     "semantic_hash": ""
   },
   "core/primitives_wifi.c": {
-    "mtime": 1784685930.29433,
-    "ast_hash": "88e73ed111f9111bb420a90a52ed5380",
+    "mtime": 1784722876.1848478,
+    "ast_hash": "51e43cc05e55a0775a5428604d03ba42",
     "semantic_hash": ""
   },
   "core/primitives_words_lists.c": {
@@ -455,8 +455,8 @@
     "semantic_hash": ""
   },
   "devices/hardware.h": {
-    "mtime": 1784685915.0036018,
-    "ast_hash": "adf58fa09bd110b686948e38894130c1",
+    "mtime": 1784722876.1853154,
+    "ast_hash": "f00fca30b900249894bb86a4462296f7",
     "semantic_hash": ""
   },
   "devices/host/host_console.c": {
@@ -470,7 +470,7 @@
     "semantic_hash": ""
   },
   "devices/host/host_hardware.c": {
-    "mtime": 1784658868.0922158,
+    "mtime": 1784722876.1857338,
     "ast_hash": "ce219bade61ca1b705359569a37ed748",
     "semantic_hash": ""
   },
@@ -675,8 +675,8 @@
     "semantic_hash": ""
   },
   "devices/picocalc/picocalc_hardware.c": {
-    "mtime": 1784685909.4764688,
-    "ast_hash": "e717fc7a1b63b2a84607eb09148e9b13",
+    "mtime": 1784722876.1862512,
+    "ast_hash": "daaeaef8af4d85b61d24ce4ffb24bc70",
     "semantic_hash": ""
   },
   "devices/picocalc/picocalc_hardware.h": {
@@ -855,13 +855,13 @@
     "semantic_hash": ""
   },
   "tests/mock_device.c": {
-    "mtime": 1784658868.0932448,
-    "ast_hash": "d750872cb7d5978c5b99c3985cff1552",
+    "mtime": 1784722876.2065713,
+    "ast_hash": "1012acfb8f7a978b0cb60aaeecabb430",
     "semantic_hash": ""
   },
   "tests/mock_device.h": {
-    "mtime": 1784658868.0934303,
-    "ast_hash": "db37d11306604ad81c27ac225251b1d1",
+    "mtime": 1784722876.2071712,
+    "ast_hash": "ba6b49dcf865dde6585760454f041c16",
     "semantic_hash": ""
   },
   "tests/mock_sdcard.c": {
@@ -1060,12 +1060,12 @@
     "semantic_hash": ""
   },
   "tests/test_primitives_files_directory.c": {
-    "mtime": 1782835449.8831923,
-    "ast_hash": "e14ccaa0a2fded8cc84b2d2918945e55",
+    "mtime": 1784724747.328584,
+    "ast_hash": "5720ff3a05d13747b8565c9cab3a68b1",
     "semantic_hash": ""
   },
   "tests/test_primitives_files_load_save.c": {
-    "mtime": 1784659816.6326768,
+    "mtime": 1784722876.2077565,
     "ast_hash": "f1dfbffe4d18ab9d0c5774c5ef4f5c7f",
     "semantic_hash": ""
   },
@@ -1130,8 +1130,8 @@
     "semantic_hash": ""
   },
   "tests/test_primitives_wifi.c": {
-    "mtime": 1784661584.2095997,
-    "ast_hash": "d3e645d55045a38943c25ac754686fde",
+    "mtime": 1784722876.208143,
+    "ast_hash": "f065f3e74be0f3f563f98dca7d5595ca",
     "semantic_hash": ""
   },
   "tests/test_primitives_words_lists.c": {
@@ -1150,7 +1150,7 @@
     "semantic_hash": ""
   },
   "tests/test_scaffold.c": {
-    "mtime": 1784658868.0938234,
+    "mtime": 1784722876.20845,
     "ast_hash": "301bc244368d20a3e400669334625805",
     "semantic_hash": ""
   },
@@ -1290,8 +1290,8 @@
     "semantic_hash": ""
   },
   "docs/improvements-roadmap.md": {
-    "mtime": 1784666757.514735,
-    "ast_hash": "0805a2c63734294ce7727f09a4ed40f7",
+    "mtime": 1784724777.4744241,
+    "ast_hash": "6039b9fe1407d4b109a6cc4cdb8b4af4",
     "semantic_hash": ""
   },
   "docs/launch-design.md": {
@@ -1330,8 +1330,8 @@
     "semantic_hash": ""
   },
   "reference/Pico_Logo_Reference.md": {
-    "mtime": 1784666747.8549833,
-    "ast_hash": "682762466e486959ab58c984c35e16fc",
+    "mtime": 1784724725.122679,
+    "ast_hash": "4e4430e682d0ed209830af859a9a3fac",
     "semantic_hash": ""
   },
   "tests/CMakeLists.txt": {

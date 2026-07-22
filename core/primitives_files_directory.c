@@ -2,13 +2,15 @@
 //  Pico Logo
 //  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
-//  File directory primitives: files, directories, catalog, setprefix, prefix,
-//                             erasefile, erasedir, createdir, file?, dir?, rename
+//  File directory primitives: files, directories, cat, catalog, setprefix,
+//                             prefix, erasefile, erasedir, createdir, file?,
+//                             dir?, rename
 //
 
 #include "primitives.h"
 #include "error.h"
 #include "format.h"
+#include "limits.h"
 #include "devices/io.h"
 #include <stdio.h>
 #include <string.h>
@@ -16,7 +18,7 @@
 #include <stdlib.h>
 
 //==========================================================================
-// Directory listing primitives: files, directories, catalog
+// Directory listing primitives: files, directories, cat, catalog
 //==========================================================================
 
 // Context for building file list
@@ -117,7 +119,7 @@ static Result prim_directories(Evaluator *eval, int argc, Value *args)
     return result_ok(value_list(ctx.list));
 }
 
-// Context for catalog - collects entries then sorts them
+// Context for cat / catalog - collects entries then sorts them
 #define CATALOG_MAX_ENTRIES 256
 
 typedef struct CatalogEntry
@@ -136,7 +138,7 @@ typedef struct CatalogContext
 static bool catalog_callback(const char *name, LogoEntryType type, void *user_data)
 {
     CatalogContext *ctx = (CatalogContext *)user_data;
-    
+
     if (ctx->count >= CATALOG_MAX_ENTRIES)
     {
         return false; // Stop - too many entries
@@ -146,7 +148,7 @@ static bool catalog_callback(const char *name, LogoEntryType type, void *user_da
     strncpy(entry->name, name, LOGO_STREAM_NAME_MAX - 1);
     entry->name[LOGO_STREAM_NAME_MAX - 1] = '\0';
     entry->is_directory = (type == LOGO_ENTRY_DIRECTORY);
-    
+
     return true;
 }
 
@@ -158,8 +160,204 @@ static int catalog_compare(const void *a, const void *b)
     return strcasecmp(ea->name, eb->name);
 }
 
-// catalog - prints a list of files and directories, sorted alphabetically
-// (catalog pathname) - prints listing for the specified directory
+// Writes text to the screen (writer) and, if active, the dribble.
+static void catalog_emit(LogoIO *io, const char *text)
+{
+    logo_stream_write(io->writer, text);
+    if (io->dribble)
+    {
+        logo_stream_write(io->dribble, text);
+    }
+}
+
+// Resolves the directory to list from the optional pathname argument. On
+// success returns true and sets *out_dir to point at resolved_path, the
+// argument word, or ".". On failure returns false with the error in *err.
+static bool catalog_resolve_dir(LogoIO *io, int argc, Value *args,
+                                char *resolved_path, size_t resolved_size,
+                                const char **out_dir, Result *err)
+{
+    if (argc >= 1)
+    {
+        if (!value_is_word(args[0]))
+        {
+            *err = result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+            return false;
+        }
+        const char *pathname = mem_word_ptr(args[0].as.node);
+
+        // Absolute path - use directly; otherwise resolve against the prefix.
+        if (pathname[0] == '/')
+        {
+            *out_dir = pathname;
+        }
+        else
+        {
+            const char *prefix = logo_io_get_prefix(io);
+            if (prefix && prefix[0] != '\0')
+            {
+                snprintf(resolved_path, resolved_size, "%s%s", prefix, pathname);
+                *out_dir = resolved_path;
+            }
+            else
+            {
+                *out_dir = pathname;
+            }
+        }
+    }
+    else
+    {
+        // No argument - use the current directory (prefix if set, otherwise ".")
+        const char *dir = logo_io_get_prefix(io);
+        if (!dir || dir[0] == '\0')
+        {
+            dir = ".";
+        }
+        *out_dir = dir;
+    }
+    return true;
+}
+
+// Collects the entries of dir into ctx, sorted alphabetically. Returns false if
+// the directory could not be listed.
+static bool catalog_collect(LogoIO *io, const char *dir, CatalogContext *ctx)
+{
+    ctx->count = 0;
+    if (!logo_io_list_directory(io, dir, catalog_callback, ctx, "*"))
+    {
+        return false;
+    }
+    if (ctx->count > 0)
+    {
+        qsort(ctx->entries, ctx->count, sizeof(CatalogEntry), catalog_compare);
+    }
+    return true;
+}
+
+// Looks up the byte size of an entry within dir. Returns -1 when unknown.
+static long catalog_entry_size(LogoIO *io, const char *dir, const CatalogEntry *entry)
+{
+    if (!io->storage || !io->storage->ops->file_size)
+    {
+        return -1;
+    }
+
+    // Big enough for a resolved directory (the caller's 256-byte buffer) plus a
+    // "/" and an entry name. A truncated path could stat an unrelated ancestor
+    // directory, so bail if the join would not fit.
+    char path[256 + LOGO_STREAM_NAME_MAX];
+    int n;
+    if (entry->name[0] == '/')
+    {
+        // Already an absolute path (some backends list full paths).
+        n = snprintf(path, sizeof(path), "%s", entry->name);
+    }
+    else if (dir[0] == '.' && dir[1] == '\0')
+    {
+        // "." means the filesystem root; storage paths are absolute.
+        n = snprintf(path, sizeof(path), "/%s", entry->name);
+    }
+    else
+    {
+        size_t dl = strlen(dir);
+        const char *sep = (dl > 0 && dir[dl - 1] == '/') ? "" : "/";
+        n = snprintf(path, sizeof(path), "%s%s%s", dir, sep, entry->name);
+    }
+
+    if (n < 0 || (size_t)n >= sizeof(path))
+    {
+        return -1;
+    }
+
+    return io->storage->ops->file_size(path);
+}
+
+// cat - prints files and directories in a tight multi-column layout (like `ls`),
+// sorted alphabetically. Directories have a trailing "/".
+// (cat pathname) - lists the specified directory.
+static Result prim_cat(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_none();
+    }
+
+    char resolved_path[256];
+    const char *dir = NULL;
+    Result err;
+    if (!catalog_resolve_dir(io, argc, args, resolved_path, sizeof(resolved_path), &dir, &err))
+    {
+        return err;
+    }
+
+    CatalogContext ctx;
+    if (!catalog_collect(io, dir, &ctx) || ctx.count == 0)
+    {
+        return result_none();
+    }
+
+    // Widest display name (directories carry a trailing "/").
+    size_t widest = 0;
+    for (int i = 0; i < ctx.count; i++)
+    {
+        size_t len = strlen(ctx.entries[i].name) + (ctx.entries[i].is_directory ? 1 : 0);
+        if (len > widest)
+        {
+            widest = len;
+        }
+    }
+
+    // Fit as many columns as the display width allows (2-space gutter).
+    size_t col_width = widest + 2;
+    int ncols = (int)(CATALOG_DISPLAY_WIDTH / col_width);
+    if (ncols < 1)
+    {
+        ncols = 1;
+    }
+    int nrows = (ctx.count + ncols - 1) / ncols;
+
+    // Column-major layout: fill down each column, then across (like `ls`).
+    // A row is at most the padded columns plus one (possibly wide) trailing name.
+    for (int row = 0; row < nrows; row++)
+    {
+        char line[CATALOG_DISPLAY_WIDTH + LOGO_STREAM_NAME_MAX + 4];
+        int pos = 0;
+        for (int col = 0; col < ncols; col++)
+        {
+            int idx = col * nrows + row;
+            if (idx >= ctx.count)
+            {
+                break;
+            }
+            CatalogEntry *entry = &ctx.entries[idx];
+            bool last = (col == ncols - 1) || (idx + nrows >= ctx.count);
+            pos += snprintf(line + pos, sizeof(line) - pos, "%s%s",
+                            entry->name, entry->is_directory ? "/" : "");
+            if (!last)
+            {
+                // Pad to the column boundary before the next entry.
+                size_t cell = strlen(entry->name) + (entry->is_directory ? 1 : 0);
+                for (size_t p = cell; p < col_width && pos < (int)sizeof(line) - 1; p++)
+                {
+                    line[pos++] = ' ';
+                }
+                line[pos] = '\0';
+            }
+        }
+        catalog_emit(io, line);
+        catalog_emit(io, "\n");
+    }
+
+    return result_none();
+}
+
+// catalog - prints a detailed listing (like `ls -l`): one entry per line with a
+// right-aligned size column, sorted alphabetically. Directories have a blank
+// size column and carry a trailing "/".
+// (catalog pathname) - lists the specified directory.
 static Result prim_catalog(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
@@ -170,87 +368,45 @@ static Result prim_catalog(Evaluator *eval, int argc, Value *args)
         return result_none();
     }
 
-    const char *dir = NULL;
     char resolved_path[256];
-
-    // Check for optional pathname argument
-    if (argc >= 1)
+    const char *dir = NULL;
+    Result err;
+    if (!catalog_resolve_dir(io, argc, args, resolved_path, sizeof(resolved_path), &dir, &err))
     {
-        REQUIRE_WORD(args[0]);
-        const char *pathname = mem_word_ptr(args[0].as.node);
-        
-        // Resolve pathname - if absolute, use directly; otherwise resolve against prefix
-        if (pathname[0] == '/')
-        {
-            dir = pathname;
-        }
-        else
-        {
-            // Resolve relative pathname against current prefix
-            const char *prefix = logo_io_get_prefix(io);
-            if (prefix && prefix[0] != '\0')
-            {
-                snprintf(resolved_path, sizeof(resolved_path), "%s%s", prefix, pathname);
-                dir = resolved_path;
-            }
-            else
-            {
-                dir = pathname;
-            }
-        }
-    }
-    else
-    {
-        // No argument - use current directory (prefix if set, otherwise ".")
-        dir = logo_io_get_prefix(io);
-        if (!dir || dir[0] == '\0')
-        {
-            dir = ".";
-        }
+        return err;
     }
 
-    CatalogContext ctx = {{{{0}}}, 0};
-    
-    if (!logo_io_list_directory(io, dir, catalog_callback, &ctx, "*"))
+    CatalogContext ctx;
+    if (!catalog_collect(io, dir, &ctx))
     {
         return result_none();
     }
 
-    // Sort entries alphabetically
-    if (ctx.count > 0)
-    {
-        qsort(ctx.entries, ctx.count, sizeof(CatalogEntry), catalog_compare);
-    }
-
-    // Print each entry
     for (int i = 0; i < ctx.count; i++)
     {
         CatalogEntry *entry = &ctx.entries[i];
+        char line[LOGO_STREAM_NAME_MAX + 16];
+
         if (entry->is_directory)
         {
-            logo_stream_write(io->writer, entry->name);
-            logo_stream_write(io->writer, "/\n");
+            // Directories have no size - leave the column blank.
+            snprintf(line, sizeof(line), "%7s  %s/\n", "", entry->name);
         }
         else
         {
-            logo_stream_write(io->writer, entry->name);
-            logo_stream_write(io->writer, "\n");
-        }
-        
-        // Also write to dribble if active
-        if (io->dribble)
-        {
-            if (entry->is_directory)
+            long size = catalog_entry_size(io, dir, entry);
+            if (size >= 0)
             {
-                logo_stream_write(io->dribble, entry->name);
-                logo_stream_write(io->dribble, "/\n");
+                snprintf(line, sizeof(line), "%7ld  %s\n", size, entry->name);
             }
             else
             {
-                logo_stream_write(io->dribble, entry->name);
-                logo_stream_write(io->dribble, "\n");
+                // Size unavailable - leave the column blank.
+                snprintf(line, sizeof(line), "%7s  %s\n", "", entry->name);
             }
         }
+
+        catalog_emit(io, line);
     }
 
     return result_none();
@@ -649,8 +805,10 @@ void primitives_files_directory_init(void)
     primitive_register("files", 0, prim_files);
     primitive_register("free", 0, prim_free);
     primitive_register("directories", 0, prim_directories);
+    primitive_register("cat", 0, prim_cat);
     primitive_register("catalog", 0, prim_catalog);
     primitive_register("setprefix", 1, prim_setprefix);
+    primitive_register("sp", 1, prim_setprefix);
     primitive_register("prefix", 0, prim_getprefix);
     primitive_register("erasefile", 1, prim_erase_file);
     primitive_register("erf", 1, prim_erase_file);

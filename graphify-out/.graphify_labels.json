@@ -179,9 +179,11 @@
   "177": "lexer_set_preserve_comments",
   "178": "mock_sound_status",
   "179": "dist.sh",
+  "180": "procedures.c",
   "181": "gen_palette_svg.py",
   "182": "generate_help.sh",
   "183": "run_e2e.sh",
+  "184": "test_scaffold_setUp_with_device_and_hardware",
   "185": "VENDOR.md",
   "186": "syntax_highlight.h",
   "187": "host_console.h",
@@ -191,5 +193,13 @@
   "191": "mbedtls_config.h",
   "192": "picocalc_flash.h",
   "193": "picocalc_lfs.h",
-  "195": "LICENSE.md"
+  "194": "LogoStream",
+  "195": "LICENSE.md",
+  "196": "logo_hardware_init",
+  "197": "prim_cleardemons",
+  "198": "Value",
+  "199": "mock_device_get_dot",
+  "200": "mock_wifi_status",
+  "201": "mock_text_set_width",
+  "202": "mem_region_alloc"
 }

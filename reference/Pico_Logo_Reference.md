@@ -5464,7 +5464,7 @@ Pico Logo presents a single directory tree with two filesystems mounted in it:
 - **`/`** - the root is the device's internal flash storage. It is always present and is where files are saved by default (the default prefix is `/`). Your `startup` file lives here as `/startup`.
 - **`/sd`** - the FAT32 SD card, mounted under `/sd`. It appears in a listing of `/` only while a card is inserted, and is re-read automatically when a card is removed and another inserted. Asking about `/sd` with no card present reports `There is no SD card`.
 
-Paths may be absolute (beginning with `/`) or relative to the current prefix (see [`setprefix`](#setprefix)). [`rename`](#rename) moves a **file** between the two filesystems by copying it and deleting the original, while [`copyfile`](#copyfile) leaves the original in place. Both work on **files** only; moving or copying a **directory** across filesystems is not supported and reports `File is the wrong type`. Both are binary-safe, so images and other binary files are copied without corruption.
+Paths may be absolute (beginning with `/`) or relative to the current prefix (see [`setprefix`](#setprefix-sp)). [`rename`](#rename) moves a **file** between the two filesystems by copying it and deleting the original, while [`copyfile`](#copyfile) leaves the original in place. Both work on **files** only; moving or copying a **directory** across filesystems is not supported and reports `File is the wrong type`. Both are binary-safe, so images and other binary files are copied without corruption.
 
 Use [`free`](#free) to see how much space remains on a filesystem. The whole internal filesystem can be saved to and reloaded from an SD-card file with [`backup`](#backup) and [`.restore`](#restore).
 
@@ -5520,13 +5520,14 @@ createdir _pathname_
 ```
 
 
-## setprefix
+## setprefix (sp)
 
 setprefix _pathname_  
+sp _pathname_  
 
 `command`
 
-Sets a prefix that will be used as the implicit beginning of filenames in [`open`](#open), [`load`](#load), and [`save`](#save) commands. The input to `setprefix` must be a word, unless it is the empty list, to indicate that there should be no prefix.
+Sets a prefix that will be used as the implicit beginning of filenames in [`open`](#open), [`load`](#load), and [`save`](#save) commands. The input to `setprefix` must be a word, unless it is the empty list, to indicate that there should be no prefix. `sp` is an abbreviation for `setprefix`.
 
 The _pathname_ can include parent directory references ("`..`") to navigate up the directory tree. For example, if the current prefix is `/sketches/apple/`, then `setprefix ".."` will change the prefix to `/sketches/`, and `setprefix "..\/banana"` will change it to `/sketches/banana/`.
 
@@ -5631,6 +5632,28 @@ false
 ```
 
 
+## cat
+
+cat  
+(cat _pathname_)  
+
+`command`
+
+Prints the names of the files and directories in the current directory, sorted alphabetically and packed into as many columns as fit across the screen (like a terse `ls`). Directories have the slash "`/`" character appended to their name. If _pathname_ is present, it specifies the directory to be listed.
+
+For a detailed one-per-line listing that includes file sizes, use [`catalog`](#catalog).
+
+`cat` prints to the screen but not to the current writer.
+
+**Example**:
+
+```logo
+?cat
+kite       rink       startup
+maze       sketches/
+```
+
+
 ## catalog
 
 catalog  
@@ -5638,7 +5661,9 @@ catalog
 
 `command`
 
-Prints a list of files and directories in the current directory. Directories have the slash "`/`" character appended to their pathname. If _pathname_ is present, it specifies the directory to be listed.
+Prints a detailed list of the files and directories in the current directory, one per line, sorted alphabetically (like `ls -l`). Each line begins with the file's size in bytes, right-aligned; directories have a blank size column and the slash "`/`" character appended to their name. If _pathname_ is present, it specifies the directory to be listed.
+
+For a compact multi-column listing, use [`cat`](#cat).
 
 `catalog` prints to the screen but not to the current writer.
 
@@ -5646,9 +5671,9 @@ Prints a list of files and directories in the current directory. Directories hav
 
 ```logo
 ?catalog
-startup.lgo
-rink.lgo
-sketches/
+    418  rink
+    212  startup
+         sketches/
 ```
 
 
@@ -7748,19 +7773,6 @@ This Appendix contains procedures that are not primitives but are useful for var
 
 You can add these procedures to your `startup` file so they are always available when you start Logo. To do this, copy and paste the code into a file named `startup` and save it (`save "startup`) in the root directory of the device's internal storage.
 
-## File Navigation
-
-These procedures are for navigating the file system. The `ls` procedure lists the files and directories in the current directory, and the `cd` procedure changes the current directory to the one specified by _path_.
-
-```logo
-to ls
-  catalog
-end
-
-to cd :path
-  setprefix :path
-end
-```
 
 ## Displaying Formatted Time
 
