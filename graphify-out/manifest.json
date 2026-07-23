@@ -5,8 +5,8 @@
     "semantic_hash": ""
   },
   ".claude/settings.local.json": {
-    "mtime": 1784744521.3690426,
-    "ast_hash": "63199f7ca693e08e4fa581296ee4d7b0",
+    "mtime": 1784839070.3086584,
+    "ast_hash": "4ca4ac0582532601c7f7d1d019a90da4",
     "semantic_hash": ""
   },
   ".vscode/c_cpp_properties.json": {
@@ -65,18 +65,18 @@
     "semantic_hash": ""
   },
   "core/eval.c": {
-    "mtime": 1784288949.9878993,
-    "ast_hash": "ae79355d80289e19d4905e7aa9328747",
+    "mtime": 1784820499.0540557,
+    "ast_hash": "cbc92cd69c4dd22ffc12ccc838505d1e",
     "semantic_hash": ""
   },
   "core/eval.h": {
-    "mtime": 1783826231.4169436,
-    "ast_hash": "1c9a1a1a979a8ef61f81253ee02de89e",
+    "mtime": 1784820507.3095696,
+    "ast_hash": "721ed232d3334dca5164f9c89c2cc769",
     "semantic_hash": ""
   },
   "core/eval_expr.c": {
-    "mtime": 1784594834.5127025,
-    "ast_hash": "5459f227c44e00bda8985c60669f637d",
+    "mtime": 1784843231.4408498,
+    "ast_hash": "b0f3e04d0f3ee08c9dd2806d3027253b",
     "semantic_hash": ""
   },
   "core/eval_internal.h": {
@@ -85,8 +85,8 @@
     "semantic_hash": ""
   },
   "core/eval_ops.c": {
-    "mtime": 1783826231.417474,
-    "ast_hash": "f10c9b67f1df471c358be251e0b269b2",
+    "mtime": 1784820462.7389023,
+    "ast_hash": "a862f68a08885712d65b3837a5f90789",
     "semantic_hash": ""
   },
   "core/eval_ops.h": {
@@ -95,8 +95,8 @@
     "semantic_hash": ""
   },
   "core/eval_steps.c": {
-    "mtime": 1783826231.418349,
-    "ast_hash": "c3df06237eb912f45858f07c807089bf",
+    "mtime": 1784820499.202572,
+    "ast_hash": "d22333b1bd703621130d8328db551e9e",
     "semantic_hash": ""
   },
   "core/format.c": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "core/frame.c": {
-    "mtime": 1783009048.3069904,
-    "ast_hash": "a1562d4c7e6dd142dd195a556c6f57b9",
+    "mtime": 1784820462.5707562,
+    "ast_hash": "10a696bab9529ad84ab34457f4861cd5",
     "semantic_hash": ""
   },
   "core/frame.h": {
@@ -170,18 +170,18 @@
     "semantic_hash": ""
   },
   "core/limits.h": {
-    "mtime": 1784729889.498083,
-    "ast_hash": "8753b831456b58f782eab445de6f9559",
+    "mtime": 1784820325.7041042,
+    "ast_hash": "6865fce35d4b77254f7641cd7298f11b",
     "semantic_hash": ""
   },
   "core/memory.c": {
-    "mtime": 1784594834.5135076,
-    "ast_hash": "b2ade0eeeac5f8c8e0b410a6ac4da527",
+    "mtime": 1784843359.477577,
+    "ast_hash": "dfd89b56b02026e2b6079f1071862edc",
     "semantic_hash": ""
   },
   "core/memory.h": {
-    "mtime": 1783090124.6217978,
-    "ast_hash": "5cc270d71a1522190d850e4f99d1fecc",
+    "mtime": 1784843231.8908594,
+    "ast_hash": "57c69a119a70b82aa7d8d3ad6bec47b6",
     "semantic_hash": ""
   },
   "core/parse_list.c": {
@@ -290,8 +290,8 @@
     "semantic_hash": ""
   },
   "core/primitives_list_processing.c": {
-    "mtime": 1783090124.6237948,
-    "ast_hash": "51cf6df824a7ea5a6daea41462580086",
+    "mtime": 1784820907.4837937,
+    "ast_hash": "ebecd8f89d129f0a3910e61f8d0378b3",
     "semantic_hash": ""
   },
   "core/primitives_logical.c": {
@@ -350,13 +350,13 @@
     "semantic_hash": ""
   },
   "core/primitives_workspace.c": {
-    "mtime": 1783273596.0180347,
-    "ast_hash": "80e28ed48ebdae747b0de613089011b5",
+    "mtime": 1784843231.7422388,
+    "ast_hash": "17cae00b5132905f61a4040696d8b571",
     "semantic_hash": ""
   },
   "core/procedures.c": {
-    "mtime": 1783090124.626938,
-    "ast_hash": "e6f5aaf1776f128c129c03081220fcf1",
+    "mtime": 1784820462.414681,
+    "ast_hash": "89badf234859ff30f448519fad46bdee",
     "semantic_hash": ""
   },
   "core/procedures.h": {
@@ -425,8 +425,8 @@
     "semantic_hash": ""
   },
   "core/variables.c": {
-    "mtime": 1783090124.6289961,
-    "ast_hash": "d1a4e82a8151776dd58c23f6238e9260",
+    "mtime": 1784843231.591718,
+    "ast_hash": "c0bcc2e425603f1cd898e85ef5f5ce63",
     "semantic_hash": ""
   },
   "core/variables.h": {
@@ -915,8 +915,8 @@
     "semantic_hash": ""
   },
   "tests/test_eval.c": {
-    "mtime": 1782574635.037832,
-    "ast_hash": "6b136b390d56aa3b40c8f868cc1b948c",
+    "mtime": 1784843297.056951,
+    "ast_hash": "c8eadfd94ac2e1fa2fda829a87e01b99",
     "semantic_hash": ""
   },
   "tests/test_eval_ops.c": {
@@ -990,8 +990,8 @@
     "semantic_hash": ""
   },
   "tests/test_memory.c": {
-    "mtime": 1784594834.5351434,
-    "ast_hash": "ff77fdb0bdfccbc9b25871a63af9aa92",
+    "mtime": 1784843331.041067,
+    "ast_hash": "ad582fe677d7a66f70ea3976ae58523c",
     "semantic_hash": ""
   },
   "tests/test_mklfsimg.c": {
@@ -1140,8 +1140,8 @@
     "semantic_hash": ""
   },
   "tests/test_primitives_workspace.c": {
-    "mtime": 1783164306.9612923,
-    "ast_hash": "e2cb09b8b99b52512b635b47aae200bc",
+    "mtime": 1784820749.3761654,
+    "ast_hash": "0226bf2589ce9616d43d8c9cfca515b4",
     "semantic_hash": ""
   },
   "tests/test_repl.c": {
@@ -1195,8 +1195,8 @@
     "semantic_hash": ""
   },
   "tests/test_variables.c": {
-    "mtime": 1782574635.0583148,
-    "ast_hash": "6fb9c3241aeecba393e694d42f00ad0c",
+    "mtime": 1784843297.3582768,
+    "ast_hash": "bef60b1135ce76ff97618fa1bcfb8a81",
     "semantic_hash": ""
   },
   "tests/unity.c": {
@@ -1270,8 +1270,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1784740599.9117725,
-    "ast_hash": "5ae4649633df329e633055f1749d4f23",
+    "mtime": 1784820907.6232896,
+    "ast_hash": "a1b3b261cc49a4a226f590e335bb6ce4",
     "semantic_hash": ""
   },
   "docs/code-review-2026-07-02.md": {
@@ -1290,8 +1290,8 @@
     "semantic_hash": ""
   },
   "docs/improvements-roadmap.md": {
-    "mtime": 1784755837.3714721,
-    "ast_hash": "0b0e47fb2e16e7089611e878a4d57147",
+    "mtime": 1784820973.7274466,
+    "ast_hash": "fcab1f48a99b384c569b85b2887db6ee",
     "semantic_hash": ""
   },
   "docs/launch-design.md": {
@@ -1305,8 +1305,8 @@
     "semantic_hash": ""
   },
   "docs/memory-reclamation-design.md": {
-    "mtime": 1783097546.2822125,
-    "ast_hash": "f83b3d63da8d8307f27c8a69dd44e57e",
+    "mtime": 1784820941.902773,
+    "ast_hash": "e23d2f15e2d33d7d3040b8c26a3cd148",
     "semantic_hash": ""
   },
   "docs/multi-sprite-design.md": {
@@ -1330,12 +1330,12 @@
     "semantic_hash": ""
   },
   "reference/Pico_Logo_Reference.md": {
-    "mtime": 1784732476.8428035,
-    "ast_hash": "ffaf607209965bf0393b0ae8ab8aed2e",
+    "mtime": 1784820941.721184,
+    "ast_hash": "bce13fc904b1c3ccd57a0846f744bea2",
     "semantic_hash": ""
   },
   "tests/CMakeLists.txt": {
-    "mtime": 1784746290.0814018,
+    "mtime": 1784818403.2666094,
     "ast_hash": "e81b563aa3985ba722fe69b1f170888e",
     "semantic_hash": ""
   },
@@ -1395,23 +1395,18 @@
     "semantic_hash": ""
   },
   "tests/test_fileserver.c": {
-    "mtime": 1784815112.347891,
+    "mtime": 1784818403.2668896,
     "ast_hash": "71c97b3316213948bd11fdf2506d7e6e",
     "semantic_hash": ""
   },
   ".codex/hooks.json": {
-    "mtime": 1784812719.821926,
+    "mtime": 1784818414.1408331,
     "ast_hash": "d793ab73da28df612e83adc082204d6a",
     "semantic_hash": ""
   },
   "AGENTS.md": {
-    "mtime": 1784812811.1384075,
+    "mtime": 1784818414.1411116,
     "ast_hash": "4e0b3f07c54eec774dd379b10c7ebba2",
-    "semantic_hash": ""
-  },
-  "logo/Pico Logo Files.html": {
-    "mtime": 1784814282.2700338,
-    "ast_hash": "e68c06e3646ae07c31229a47161c52ce",
     "semantic_hash": ""
   }
 }

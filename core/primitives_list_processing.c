@@ -190,7 +190,7 @@ static Result invoke_proc_spec(Evaluator *eval, ProcSpec *spec, int argc, Value 
         if (spec->as.named.primitive)
         {
             // Call primitive directly
-            return spec->as.named.primitive->func(eval, argc, args);
+            return eval_call_primitive(eval, spec->as.named.primitive, argc, args);
         }
         else if (spec->as.named.user_proc)
         {
@@ -543,8 +543,20 @@ static Result prim_foreach(Evaluator *eval, int argc, Value *args)
             }
         }
         
-        // Invoke the procedure
+        // A callback may run `recycle`; number conversions and current values
+        // live only in these C locals.
+        Node gc_roots[2 * MAX_PROC_PARAMS];
+        size_t gc_root_count = 0;
+        for (int i = 0; i < data_count; i++)
+        {
+            gc_roots[gc_root_count++] = word_nodes[i];
+            if (proc_args[i].type == VALUE_WORD || proc_args[i].type == VALUE_LIST)
+                gc_roots[gc_root_count++] = proc_args[i].as.node;
+        }
+        MemGcRootScope gc_scope;
+        mem_gc_roots_push(&gc_scope, gc_roots, gc_root_count);
         r = invoke_proc_spec(eval, &spec, data_count, proc_args);
+        mem_gc_roots_pop(&gc_scope);
         
         // Propagate errors, stop, throw
         if (r.status == RESULT_ERROR || r.status == RESULT_THROW ||
@@ -745,8 +757,20 @@ static Result prim_map(Evaluator *eval, int argc, Value *args)
             }
         }
         
-        // Invoke the procedure
+        Node gc_roots[2 + 2 * MAX_PROC_PARAMS];
+        size_t gc_root_count = 0;
+        gc_roots[gc_root_count++] = result_head;
+        gc_roots[gc_root_count++] = result_tail;
+        for (int i = 0; i < data_count; i++)
+        {
+            gc_roots[gc_root_count++] = word_nodes[i];
+            if (proc_args[i].type == VALUE_WORD || proc_args[i].type == VALUE_LIST)
+                gc_roots[gc_root_count++] = proc_args[i].as.node;
+        }
+        MemGcRootScope gc_scope;
+        mem_gc_roots_push(&gc_scope, gc_roots, gc_root_count);
         r = invoke_proc_spec(eval, &spec, data_count, proc_args);
+        mem_gc_roots_pop(&gc_scope);
         
         // Propagate errors, stop, throw
         if (r.status == RESULT_ERROR || r.status == RESULT_THROW ||
@@ -1035,8 +1059,20 @@ static Result prim_map_se(Evaluator *eval, int argc, Value *args)
             }
         }
         
-        // Invoke the procedure
+        Node gc_roots[2 + 2 * MAX_PROC_PARAMS];
+        size_t gc_root_count = 0;
+        gc_roots[gc_root_count++] = result_head;
+        gc_roots[gc_root_count++] = result_tail;
+        for (int i = 0; i < data_count; i++)
+        {
+            gc_roots[gc_root_count++] = word_nodes[i];
+            if (proc_args[i].type == VALUE_WORD || proc_args[i].type == VALUE_LIST)
+                gc_roots[gc_root_count++] = proc_args[i].as.node;
+        }
+        MemGcRootScope gc_scope;
+        mem_gc_roots_push(&gc_scope, gc_roots, gc_root_count);
         r = invoke_proc_spec(eval, &spec, data_count, proc_args);
+        mem_gc_roots_pop(&gc_scope);
         
         // Propagate errors, stop, throw
         if (r.status == RESULT_ERROR || r.status == RESULT_THROW ||

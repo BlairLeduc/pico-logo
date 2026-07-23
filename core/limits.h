@@ -54,6 +54,11 @@ extern "C" {
 // affected).
 #define MAX_CURRENT_PROC_DEPTH 32
 
+// Segregated free-list heads for reclaimed atom storage.  Atom entries are
+// four-byte aligned and max out at 260 bytes; the last bin also accepts larger
+// blocks produced by coalescing.
+#define LOGO_ATOM_FREE_LIST_COUNT 65
+
 // Number of turtles (sprites). All eight are full turtles with pens;
 // turtle 0 boots visible as the classic single turtle, 1-7 boot hidden
 // at home. Z-order in the compositor: lower number on top. Kept modest

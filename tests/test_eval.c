@@ -94,6 +94,30 @@ void test_print_variadic_parens(void)
     TEST_ASSERT_EQUAL_STRING("1 2 3\n", output_buffer);
 }
 
+void test_primitive_argument_survives_recycle_in_later_argument(void)
+{
+    const char *gc_params[] = {"value"};
+    define_proc("gc", gc_params, 1, "recycle output :value");
+
+    Result r = eval_string("word \"hello gc \"world");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("helloworld", mem_word_ptr(r.value.as.node));
+}
+
+void test_user_proc_argument_survives_recycle_in_later_argument(void)
+{
+    const char *gc_params[] = {"value"};
+    const char *join_params[] = {"first", "second"};
+    define_proc("gc", gc_params, 1, "recycle output :value");
+    define_proc("join", join_params, 2, "output word :first :second");
+
+    Result r = eval_string("join \"hello gc \"world");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("helloworld", mem_word_ptr(r.value.as.node));
+}
+
 //==========================================================================
 // Error Message Tests
 //==========================================================================
@@ -570,6 +594,8 @@ int main(void)
     RUN_TEST(test_print);
     RUN_TEST(test_print_word);
     RUN_TEST(test_print_variadic_parens);
+    RUN_TEST(test_primitive_argument_survives_recycle_in_later_argument);
+    RUN_TEST(test_user_proc_argument_survives_recycle_in_later_argument);
 
     // Error message tests
     RUN_TEST(test_error_dont_know_how);
@@ -624,4 +650,3 @@ int main(void)
 
     return UNITY_END();
 }
-

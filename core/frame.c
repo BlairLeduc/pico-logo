@@ -676,6 +676,7 @@ void frame_gc_mark_all(FrameStack *stack)
         int binding_count = frame->param_count + frame->local_count;
         for (int i = 0; i < binding_count; i++)
         {
+            mem_gc_mark_atom_ptr(bindings[i].name);
             Value *val = &bindings[i].value;
             if (val->type == VALUE_WORD || val->type == VALUE_LIST)
             {

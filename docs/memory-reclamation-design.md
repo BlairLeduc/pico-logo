@@ -1,6 +1,6 @@
 # Atom Garbage Collection: Implementation Plan
 
-**Status: planned, 2026-07-23.** Extend explicit `recycle` to reclaim
+**Status: implemented, 2026-07-23.** Explicit `recycle` reclaims
 unreachable atoms without moving live entries. Harden transient GC roots first
 so nested evaluation is safe for both the existing node collector and the new
 atom collector. Automatic collection and instruction retry are out of scope for

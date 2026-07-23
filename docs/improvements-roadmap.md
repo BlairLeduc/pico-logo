@@ -18,8 +18,8 @@ Companion documents (everything in `docs/`):
 - [`littlefs-filesystem-design.md`](littlefs-filesystem-design.md) — internal
   LittleFS root + `/sd` FAT32 mount (implemented, PR #83, 2026-06-29 —
   predates this roadmap).
-- [`memory-reclamation-design.md`](memory-reclamation-design.md) — atom GC /
-  `erall` soft reset designs (deferred).
+- [`memory-reclamation-design.md`](memory-reclamation-design.md) — atom GC
+  (implemented); `erall` soft reset remains deferred.
 - [`space-invaders-design.md`](space-invaders-design.md) /
   [`galaxian-design.md`](galaxian-design.md) — shipped games (#101, #106) that
   validate the sprite stack.
@@ -66,7 +66,7 @@ Companion documents (everything in `docs/`):
 | Non-blocking `wifi.start` + `wifi.status` | done | Landed 2026-07-21; a startup file reaches the prompt immediately and a `when [wifi?] [network.ntp ...]` demon does the follow-up. Independent of P6 — `launch-design.md` never cited WiFi as a motivating case |
 | HTTP server (`http.listen`, `when [http.request?]`, `http.respond`, file transfer) | done | M0–M5 implemented, merged to `main` (#108, 2026-07-16): mDNS + `wifi.hostname`/`wifi.sethostname`, TCP server ops, demon-driven pump/parser, handler surface + `http.element`, `webturtle` example, file transfer. Browser + mDNS hardware-validated; `curl -T` upload validation pending. Design: [P7](#p7--http-server-implemented) |
 | Arrays (`array`/`setitem`) | deferred | O(1) indexing; needs a new object kind (likely blob-backed). Wait for demonstrated need |
-| Atom reclamation / `erall` soft reset | deferred | See `memory-reclamation-design.md` |
+| Atom reclamation / `erall` soft reset | done / deferred | Atom reclamation landed 2026-07-23; `erall` soft reset remains deferred. See `memory-reclamation-design.md` |
 
 ### Platform
 

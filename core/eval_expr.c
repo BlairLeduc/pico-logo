@@ -325,7 +325,7 @@ Result eval_primary(Evaluator *eval)
                     if (bp != BP_NONE)
                     {
                         // Call the primitive with no args first
-                        Result r = prim->func(eval, 0, NULL);
+                        Result r = eval_call_primitive(eval, prim, 0, NULL);
                         if (r.status != RESULT_OK)
                         {
                             eval->paren_depth--;
@@ -471,7 +471,7 @@ Result eval_primary(Evaluator *eval)
                 eval->paren_depth--;
                 
                 // Call primitive and set error_proc if needed
-                Result r = prim->func(eval, argc, args);
+                Result r = eval_call_primitive(eval, prim, argc, args);
                 return result_set_error_proc(r, user_name);
             }
         }
@@ -544,6 +544,11 @@ Result eval_primary(Evaluator *eval)
             // Collect default number of arguments
             Value args[MAX_PRIM_ARGS];
             int argc = 0;
+            Node gc_roots[MAX_PRIM_ARGS + 1];
+            size_t gc_root_count = 1;
+            gc_roots[0] = user_name_atom;
+            MemGcRootScope gc_scope;
+            mem_gc_roots_push(&gc_scope, gc_roots, gc_root_count);
 
             // When inside a procedure, speculatively push OP_PRIM_CALL.
             // If an arg expression defers (user proc call pushed OP_PROC_CALL),
@@ -556,7 +561,10 @@ Result eval_primary(Evaluator *eval)
             {
                 prim_staging = op_stack_push(eval->op_stack);
                 if (!prim_staging)
+                {
+                    mem_gc_roots_pop(&gc_scope);
                     return result_error(ERR_STACK_OVERFLOW);
+                }
                 prim_staging->kind = OP_PRIM_CALL;
                 prim_staging->flags = OP_FLAG_NONE;
                 prim_staging->result = result_none();
@@ -618,6 +626,7 @@ Result eval_primary(Evaluator *eval)
                     prim_staging->prim_call.saved_in_tail_position =
                         (is_output_prim && eval->proc_depth > 0);
                     eval->primitive_arg_depth--;
+                    mem_gc_roots_pop(&gc_scope);
                     return result_none();
                 }
                 
@@ -627,15 +636,22 @@ Result eval_primary(Evaluator *eval)
                 {
                     if (prim_staging) op_stack_pop(eval->op_stack);
                     eval->primitive_arg_depth--;
+                    mem_gc_roots_pop(&gc_scope);
                     return result_set_error_proc(arg, user_name);
                 }
                 if (arg.status != RESULT_OK)
                 {
                     if (prim_staging) op_stack_pop(eval->op_stack);
                     eval->primitive_arg_depth--;
+                    mem_gc_roots_pop(&gc_scope);
                     return result_error_arg(ERR_NOT_ENOUGH_INPUTS, user_name, NULL);
                 }
                 args[argc++] = arg.value;
+                if (arg.value.type == VALUE_WORD || arg.value.type == VALUE_LIST)
+                {
+                    gc_roots[gc_root_count++] = arg.value.as.node;
+                    gc_scope.count = gc_root_count;
+                }
             }
 
             eval->primitive_arg_depth--;
@@ -646,11 +662,13 @@ Result eval_primary(Evaluator *eval)
 
             if (argc < prim->default_args)
             {
+                mem_gc_roots_pop(&gc_scope);
                 return result_error_arg(ERR_NOT_ENOUGH_INPUTS, user_name, NULL);
             }
 
             // Call primitive and set error_proc if needed
-            Result r = prim->func(eval, argc, args);
+            Result r = eval_call_primitive(eval, prim, argc, args);
+            mem_gc_roots_pop(&gc_scope);
             return result_set_error_proc(r, user_name);
         }
 
@@ -662,6 +680,10 @@ Result eval_primary(Evaluator *eval)
             // Collect arguments for user procedure
             Value args[MAX_PROC_PARAMS];
             int argc = 0;
+            Node gc_roots[MAX_PROC_PARAMS];
+            size_t gc_root_count = 0;
+            MemGcRootScope gc_scope;
+            mem_gc_roots_push(&gc_scope, gc_roots, gc_root_count);
 
             // Track that we're collecting user proc args (blocks deferral
             // for nested proc calls — only OP_PRIM_CALL can handle deferrals)
@@ -687,20 +709,28 @@ Result eval_primary(Evaluator *eval)
                     arg.status == RESULT_STOP || arg.status == RESULT_OUTPUT)
                 {
                     eval->user_arg_depth--;
+                    mem_gc_roots_pop(&gc_scope);
                     return arg;
                 }
                 if (arg.status != RESULT_OK)
                 {
                     eval->user_arg_depth--;
+                    mem_gc_roots_pop(&gc_scope);
                     return result_error_arg(ERR_NOT_ENOUGH_INPUTS, user_proc->name, NULL);
                 }
                 args[argc++] = arg.value;
+                if (arg.value.type == VALUE_WORD || arg.value.type == VALUE_LIST)
+                {
+                    gc_roots[gc_root_count++] = arg.value.as.node;
+                    gc_scope.count = gc_root_count;
+                }
             }
 
             eval->user_arg_depth--;
 
             if (argc < user_proc->param_count)
             {
+                mem_gc_roots_pop(&gc_scope);
                 return result_error_arg(ERR_NOT_ENOUGH_INPUTS, user_proc->name, NULL);
             }
 
@@ -734,6 +764,7 @@ Result eval_primary(Evaluator *eval)
                                 tc->args[i] = args[i];
                             }
                             // Return RESULT_STOP — step_proc_call handles TCO
+                            mem_gc_roots_pop(&gc_scope);
                             return result_stop();
                         }
                         // Invariant violated: fall through to non-TCO path.
@@ -766,7 +797,10 @@ Result eval_primary(Evaluator *eval)
                 // Push frame
                 word_offset_t frame_offset = frame_push(eval->frames, user_proc, args, argc);
                 if (frame_offset == OFFSET_NONE)
+                {
+                    mem_gc_roots_pop(&gc_scope);
                     return result_error(ERR_OUT_OF_SPACE);
+                }
                 eval->proc_depth++;
                 proc_push_current(user_proc->name);
                 proc_clear_tail_call();
@@ -778,6 +812,7 @@ Result eval_primary(Evaluator *eval)
                     eval->proc_depth--;
                     proc_pop_current();
                     frame_pop(eval->frames);
+                    mem_gc_roots_pop(&gc_scope);
                     return result_error(ERR_STACK_OVERFLOW);
                 }
                 call_op->kind = OP_PROC_CALL;
@@ -786,11 +821,14 @@ Result eval_primary(Evaluator *eval)
                 call_op->proc_call.current_line = user_proc->body;
                 call_op->proc_call.phase = 0;
                 call_op->proc_call.tco_mode = TCO_MODE_NONE;
+                mem_gc_roots_pop(&gc_scope);
                 return result_none();
             }
 
             // At top-level or inside primitive args: synchronous call via sub-trampoline
-            return eval_push_proc_call(eval, user_proc, argc, args);
+            Result r = eval_push_proc_call(eval, user_proc, argc, args);
+            mem_gc_roots_pop(&gc_scope);
+            return r;
         }
 
         // Unknown procedure - intern the name so pointer persists

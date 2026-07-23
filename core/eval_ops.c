@@ -124,10 +124,12 @@ void op_stack_gc_mark(OpStack *stack)
             break;
         case OP_FOR:
             mem_gc_mark(op->for_state.body);
+            mem_gc_mark_atom_ptr(op->for_state.varname);
             mark_value(op->for_state.saved_value);
             break;
         case OP_CATCH:
             mem_gc_mark(op->catch_state.body);
+            mem_gc_mark_atom_ptr(op->catch_state.tag);
             break;
         case OP_RUNRESULT:
             mem_gc_mark(op->runresult.body);
@@ -148,6 +150,7 @@ void op_stack_gc_mark(OpStack *stack)
                 : op->prim_call.args;
             for (int j = 0; j < op->prim_call.argc; j++)
                 mark_value(args[j]);
+            mem_gc_mark_atom_ptr(op->prim_call.user_name);
             break;
         }
         default:

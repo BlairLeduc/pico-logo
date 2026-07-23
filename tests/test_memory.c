@@ -41,9 +41,7 @@ void test_init_free_nodes(void)
     // After init the only consumed space is the bootstrap atoms (newline
     // marker, "true", "false"); every remaining word of the shared block
     // is a potential node.
-    size_t init_atom_bytes = mem_total_atoms() - mem_free_atoms();
-    TEST_ASSERT_EQUAL(mem_total_nodes() + 1 - init_atom_bytes / 4,
-                      mem_free_nodes());
+    TEST_ASSERT_EQUAL((LOGO_MEMORY_SIZE - 28) / 4, mem_free_nodes());
 }
 
 void test_init_free_atoms(void)
@@ -62,8 +60,7 @@ void test_total_nodes(void)
 
 void test_total_atoms(void)
 {
-    // Total atom space is now the entire memory block
-    TEST_ASSERT_EQUAL(LOGO_MEMORY_SIZE, mem_total_atoms());
+    TEST_ASSERT_EQUAL(LOGO_MEMORY_SIZE / 4, mem_total_atoms());
 }
 
 //============================================================================
@@ -711,16 +708,108 @@ void test_gc_frees_unreachable(void)
     TEST_ASSERT_EQUAL(2, free_after - free_before);
 }
 
-void test_atoms_not_freed_by_gc(void)
+void test_gc_reclaims_unreachable_atoms(void)
 {
-    // Atoms are never garbage collected
-    Node word = mem_atom("permanent", 9);
-    
+    Node word = mem_atom("temporary", 9);
     mem_gc(NULL, 0);
-    
-    // Word should still be valid
-    TEST_ASSERT_TRUE(mem_is_word(word));
-    TEST_ASSERT_TRUE(mem_word_eq(word, "permanent", 9));
+
+    TEST_ASSERT_NULL(mem_word_ptr(word));
+    Node replacement = mem_atom("replaced!", 9);
+    TEST_ASSERT_EQUAL(word, replacement);
+    TEST_ASSERT_TRUE(mem_word_eq(replacement, "replaced!", 9));
+}
+
+void test_gc_preserves_rooted_atoms_in_cells(void)
+{
+    Node car = mem_atom("carword", 7);
+    Node cdr = mem_atom("cdrword", 7);
+    Node list = mem_cons(car, cdr);
+
+    mem_gc(&list, 1);
+
+    TEST_ASSERT_TRUE(mem_word_eq(mem_car(list), "carword", 7));
+    TEST_ASSERT_TRUE(mem_word_eq(mem_cdr(list), "cdrword", 7));
+}
+
+void test_gc_preserves_atom_pointer_root(void)
+{
+    Node word = mem_atom("name", 4);
+    const char *name = mem_word_ptr(word);
+
+    mem_gc_mark_atom_ptr(name);
+    mem_gc_sweep();
+
+    TEST_ASSERT_TRUE(mem_word_eq(word, "name", 4));
+}
+
+void test_interning_ignores_atom_mark_bits(void)
+{
+    Node atoms[257];
+    char name[16];
+
+    // More names than hash buckets guarantees at least one chain. Mark every
+    // entry, then prove a lookup can still traverse each marked link.
+    for (int i = 0; i < 257; i++)
+    {
+        snprintf(name, sizeof(name), "atom%d", i);
+        atoms[i] = mem_atom(name, strlen(name));
+        TEST_ASSERT_TRUE(mem_is_word(atoms[i]));
+    }
+    for (int i = 0; i < 257; i++)
+        mem_gc_mark_atom_ptr(mem_word_ptr(atoms[i]));
+    for (int i = 0; i < 257; i++)
+    {
+        snprintf(name, sizeof(name), "atom%d", i);
+        TEST_ASSERT_EQUAL(atoms[i], mem_atom(name, strlen(name)));
+    }
+}
+
+void test_gc_recovers_exhausted_atom_space(void)
+{
+    char word[256];
+    int created = 0;
+    for (int i = 0; ; i++)
+    {
+        memset(word, 'x', 255);
+        snprintf(word, sizeof(word), "%d", i);
+        Node atom = mem_atom(word, 255);
+        if (mem_is_nil(atom))
+            break;
+        created++;
+    }
+    TEST_ASSERT_TRUE(created > 100);
+
+    mem_gc(NULL, 0);
+    TEST_ASSERT_TRUE(mem_is_word(mem_atom("after-recycle", 13)));
+}
+
+void test_atom_chain_end_is_not_an_allocatable_offset(void)
+{
+    // Two-byte words occupy eight bytes. Leave exactly one four-byte entry
+    // after filling the atom region, then allocate the empty word there.
+    size_t fill_count = (mem_free_atoms() - 4) / 8;
+    for (size_t i = 0; i < fill_count; i++)
+    {
+        char word[2] = {(char)(i & 0xff), (char)(i >> 8)};
+        TEST_ASSERT_TRUE(mem_is_word(mem_atom(word, sizeof(word))));
+    }
+
+    Node empty = mem_atom("", 0);
+    TEST_ASSERT_TRUE(mem_is_word(empty));
+    TEST_ASSERT_EQUAL(empty, mem_atom("", 0));
+}
+
+void test_gc_reuses_interior_atom_hole_without_losing_live_atom(void)
+{
+    Node dead = mem_atom("discarded", 9);
+    Node live = mem_atom("preserved", 9);
+
+    mem_gc(&live, 1);
+
+    Node replacement = mem_atom("replaced!", 9);
+    TEST_ASSERT_EQUAL(dead, replacement);
+    TEST_ASSERT_TRUE(mem_word_eq(live, "preserved", 9));
+    TEST_ASSERT_TRUE(mem_word_eq(replacement, "replaced!", 9));
 }
 
 void test_gc_preserves_long_list(void)
@@ -804,11 +893,10 @@ void test_free_nodes_accurate(void)
     // - 2 fewer potential nodes (from the atom entry)
     TEST_ASSERT_EQUAL(initial - 4, mem_free_nodes());
 
-    // After GC with no roots, both cons cells should be freed
-    // But the atom still takes space, so we get back 2 nodes, not 4
+    // Atom collection returns its storage as well as the two cells.
     mem_gc(NULL, 0);
 
-    TEST_ASSERT_EQUAL(initial - 2, mem_free_nodes());
+    TEST_ASSERT_EQUAL(initial, mem_free_nodes());
 }
 
 //============================================================================
@@ -1272,7 +1360,13 @@ int main(void)
     RUN_TEST(test_gc_preserves_roots);
     RUN_TEST(test_gc_preserves_linked_lists);
     RUN_TEST(test_gc_frees_unreachable);
-    RUN_TEST(test_atoms_not_freed_by_gc);
+    RUN_TEST(test_gc_reclaims_unreachable_atoms);
+    RUN_TEST(test_gc_preserves_rooted_atoms_in_cells);
+    RUN_TEST(test_gc_preserves_atom_pointer_root);
+    RUN_TEST(test_interning_ignores_atom_mark_bits);
+    RUN_TEST(test_gc_recovers_exhausted_atom_space);
+    RUN_TEST(test_atom_chain_end_is_not_an_allocatable_offset);
+    RUN_TEST(test_gc_reuses_interior_atom_hole_without_losing_live_atom);
     RUN_TEST(test_gc_preserves_long_list);
     RUN_TEST(test_gc_preserves_nested_lists);
     RUN_TEST(test_free_nodes_accurate);

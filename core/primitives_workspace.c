@@ -752,26 +752,14 @@ static Result prim_recycle(Evaluator *eval, int argc, Value *args)
     // Mark everything the live evaluation still references: procedure
     // frames (parameters and locals), in-flight operations on the op stack
     // (loop bodies, saved token positions, staged arguments), the token
-    // source we are currently reading from, and any pending tail call.
+    // source we are currently reading from. Pending tail calls are covered by
+    // proc_gc_mark_all().
     // Suspended parent evaluators (e.g. across a pause) are covered too:
     // their state lives on the shared op stack.
     frame_gc_mark_all(proc_get_frame_stack());
     op_stack_gc_mark(eval->op_stack);
     token_source_gc_mark(&eval->token_source);
     demons_gc_mark_all();
-
-    TailCall *tc = proc_get_tail_call();
-    if (tc->is_tail_call)
-    {
-        for (int i = 0; i < tc->arg_count; i++)
-        {
-            Value v = tc->args[i];
-            if (v.type == VALUE_WORD || v.type == VALUE_LIST)
-            {
-                mem_gc_mark(v.as.node);
-            }
-        }
-    }
 
     // Sweep unmarked nodes
     mem_gc_sweep();

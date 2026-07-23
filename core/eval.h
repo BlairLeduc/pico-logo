@@ -17,6 +17,8 @@ extern "C"
 {
 #endif
 
+    struct Primitive;
+
     // Evaluator state
     typedef struct Evaluator
     {
@@ -106,6 +108,11 @@ extern "C"
 
     // Push an OP_PROC_CALL operation. Always uses sub-trampoline (synchronous).
     Result eval_push_proc_call(Evaluator *eval, struct UserProcedure *proc, int argc, Value *args);
+
+    // Invoke a primitive while its word/list arguments are registered as
+    // transient GC roots.  Use this for every direct primitive call.
+    Result eval_call_primitive(Evaluator *eval, const struct Primitive *prim,
+                               int argc, Value *args);
 
 #ifdef __cplusplus
 }

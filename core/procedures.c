@@ -394,9 +394,24 @@ void proc_gc_mark_all(void)
 {
     for (int i = 0; i < procedure_count; i++)
     {
-        if (procedures[i].name != NULL && !mem_is_nil(procedures[i].body))
+        if (procedures[i].name != NULL)
         {
+            mem_gc_mark_atom_ptr(procedures[i].name);
+            for (int j = 0; j < procedures[i].param_count; j++)
+                mem_gc_mark_atom_ptr(procedures[i].params[j]);
             mem_gc_mark(procedures[i].body);
+        }
+    }
+    for (int i = 0; i < current_proc_depth; i++)
+        mem_gc_mark_atom_ptr(current_proc_stack[i]);
+    if (tail_call_state.is_tail_call)
+    {
+        mem_gc_mark_atom_ptr(tail_call_state.proc_name);
+        for (int i = 0; i < tail_call_state.arg_count; i++)
+        {
+            Value value = tail_call_state.args[i];
+            if (value.type == VALUE_WORD || value.type == VALUE_LIST)
+                mem_gc_mark(value.as.node);
         }
     }
 }

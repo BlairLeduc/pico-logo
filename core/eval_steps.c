@@ -1301,6 +1301,6 @@ Result step_prim_call(Evaluator *eval, EvalOp *op)
     const char *user_name = st->user_name;
 
     op_stack_pop(eval->op_stack);
-    Result r = prim->func(eval, argc, call_args);
+    Result r = eval_call_primitive(eval, prim, argc, call_args);
     return result_set_error_proc(r, user_name);
 }
