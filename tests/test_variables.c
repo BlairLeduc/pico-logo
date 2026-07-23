@@ -10,6 +10,7 @@
 #include "core/variables.h"
 #include "core/memory.h"
 
+#include <stdio.h>
 #include <string.h>
 
 void setUp(void)
@@ -249,6 +250,24 @@ void test_bury_all_and_unbury_all(void)
     
     var_unbury_all();
     TEST_ASSERT_EQUAL(2, var_global_count(false));
+}
+
+void test_bury_all_does_not_mark_atom_hash_links(void)
+{
+    char name[16];
+    for (int i = 0; i < 128; i++)
+    {
+        snprintf(name, sizeof(name), "variable%d", i);
+        TEST_ASSERT_TRUE(var_set(name, value_number((float)i)));
+    }
+
+    var_bury_all();
+
+    for (int i = 0; i < 128; i++)
+    {
+        snprintf(name, sizeof(name), "variable%d", i);
+        TEST_ASSERT_TRUE(mem_is_word(mem_atom(name, strlen(name))));
+    }
 }
 
 void test_bury_nonexistent(void)
@@ -554,6 +573,7 @@ int main(void)
     // Bury/unbury
     RUN_TEST(test_bury_and_unbury);
     RUN_TEST(test_bury_all_and_unbury_all);
+    RUN_TEST(test_bury_all_does_not_mark_atom_hash_links);
     RUN_TEST(test_bury_nonexistent);
 
     // Global count and iteration

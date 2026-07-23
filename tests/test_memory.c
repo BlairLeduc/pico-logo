@@ -49,7 +49,7 @@ void test_init_free_atoms(void)
     // After init the atom table holds the bootstrap atoms — the newline
     // marker (8 bytes), "true" (8), and "false" (12) — each laid out as
     // [next:2][len:1][chars][nul][pad-to-4].
-    TEST_ASSERT_EQUAL((1u << 15) - 28, mem_free_atoms());
+    TEST_ASSERT_EQUAL(mem_total_atoms() - 28, mem_free_atoms());
 }
 
 void test_total_nodes(void)
@@ -60,7 +60,7 @@ void test_total_nodes(void)
 
 void test_total_atoms(void)
 {
-    TEST_ASSERT_EQUAL(1u << 15, mem_total_atoms());
+    TEST_ASSERT_EQUAL(LOGO_MEMORY_SIZE / 4, mem_total_atoms());
 }
 
 //============================================================================
@@ -742,6 +742,28 @@ void test_gc_preserves_atom_pointer_root(void)
     TEST_ASSERT_TRUE(mem_word_eq(word, "name", 4));
 }
 
+void test_interning_ignores_atom_mark_bits(void)
+{
+    Node atoms[257];
+    char name[16];
+
+    // More names than hash buckets guarantees at least one chain. Mark every
+    // entry, then prove a lookup can still traverse each marked link.
+    for (int i = 0; i < 257; i++)
+    {
+        snprintf(name, sizeof(name), "atom%d", i);
+        atoms[i] = mem_atom(name, strlen(name));
+        TEST_ASSERT_TRUE(mem_is_word(atoms[i]));
+    }
+    for (int i = 0; i < 257; i++)
+        mem_gc_mark_atom_ptr(mem_word_ptr(atoms[i]));
+    for (int i = 0; i < 257; i++)
+    {
+        snprintf(name, sizeof(name), "atom%d", i);
+        TEST_ASSERT_EQUAL(atoms[i], mem_atom(name, strlen(name)));
+    }
+}
+
 void test_gc_recovers_exhausted_atom_space(void)
 {
     char word[256];
@@ -759,6 +781,22 @@ void test_gc_recovers_exhausted_atom_space(void)
 
     mem_gc(NULL, 0);
     TEST_ASSERT_TRUE(mem_is_word(mem_atom("after-recycle", 13)));
+}
+
+void test_atom_chain_end_is_not_an_allocatable_offset(void)
+{
+    // Two-byte words occupy eight bytes. Leave exactly one four-byte entry
+    // after filling the atom region, then allocate the empty word there.
+    size_t fill_count = (mem_free_atoms() - 4) / 8;
+    for (size_t i = 0; i < fill_count; i++)
+    {
+        char word[2] = {(char)(i & 0xff), (char)(i >> 8)};
+        TEST_ASSERT_TRUE(mem_is_word(mem_atom(word, sizeof(word))));
+    }
+
+    Node empty = mem_atom("", 0);
+    TEST_ASSERT_TRUE(mem_is_word(empty));
+    TEST_ASSERT_EQUAL(empty, mem_atom("", 0));
 }
 
 void test_gc_reuses_interior_atom_hole_without_losing_live_atom(void)
@@ -1325,7 +1363,9 @@ int main(void)
     RUN_TEST(test_gc_reclaims_unreachable_atoms);
     RUN_TEST(test_gc_preserves_rooted_atoms_in_cells);
     RUN_TEST(test_gc_preserves_atom_pointer_root);
+    RUN_TEST(test_interning_ignores_atom_mark_bits);
     RUN_TEST(test_gc_recovers_exhausted_atom_space);
+    RUN_TEST(test_atom_chain_end_is_not_an_allocatable_offset);
     RUN_TEST(test_gc_reuses_interior_atom_hole_without_losing_live_atom);
     RUN_TEST(test_gc_preserves_long_list);
     RUN_TEST(test_gc_preserves_nested_lists);

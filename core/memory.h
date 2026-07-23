@@ -283,8 +283,8 @@ extern "C"
     void mem_gc_roots_pop(MemGcRootScope *scope);
     void mem_gc_mark_transient_roots(void);
 
-    // Run garbage collection.
-    // Caller must mark all roots first with mem_gc_mark().
+    // Complete a collection after marking all non-implicit roots. The sweep
+    // preserves bootstrap atoms and Nodes held by active transient scopes.
     void mem_gc_sweep(void);
 
     // Convenience: run full GC with automatic root marking.

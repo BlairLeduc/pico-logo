@@ -5,8 +5,8 @@
     "semantic_hash": ""
   },
   ".claude/settings.local.json": {
-    "mtime": 1784744521.3690426,
-    "ast_hash": "63199f7ca693e08e4fa581296ee4d7b0",
+    "mtime": 1784839070.3086584,
+    "ast_hash": "4ca4ac0582532601c7f7d1d019a90da4",
     "semantic_hash": ""
   },
   ".vscode/c_cpp_properties.json": {
@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "core/eval_expr.c": {
-    "mtime": 1784820499.35371,
-    "ast_hash": "ab1ea7dae91327adbf2c61a96a1840e0",
+    "mtime": 1784843231.4408498,
+    "ast_hash": "b0f3e04d0f3ee08c9dd2806d3027253b",
     "semantic_hash": ""
   },
   "core/eval_internal.h": {
@@ -175,13 +175,13 @@
     "semantic_hash": ""
   },
   "core/memory.c": {
-    "mtime": 1784820974.0290606,
-    "ast_hash": "bd0313fbc095f234bc312b4abc55d986",
+    "mtime": 1784843232.046769,
+    "ast_hash": "c55ef1fd124008677c444c62dc1e0f2c",
     "semantic_hash": ""
   },
   "core/memory.h": {
-    "mtime": 1784820325.8558245,
-    "ast_hash": "5bf146810f94b98547c5d8c7b2fed3bd",
+    "mtime": 1784843231.8908594,
+    "ast_hash": "57c69a119a70b82aa7d8d3ad6bec47b6",
     "semantic_hash": ""
   },
   "core/parse_list.c": {
@@ -350,8 +350,8 @@
     "semantic_hash": ""
   },
   "core/primitives_workspace.c": {
-    "mtime": 1783273596.0180347,
-    "ast_hash": "80e28ed48ebdae747b0de613089011b5",
+    "mtime": 1784843231.7422388,
+    "ast_hash": "17cae00b5132905f61a4040696d8b571",
     "semantic_hash": ""
   },
   "core/procedures.c": {
@@ -425,8 +425,8 @@
     "semantic_hash": ""
   },
   "core/variables.c": {
-    "mtime": 1784820683.9744756,
-    "ast_hash": "e389781af9f03e9472c9183d8a83f9a0",
+    "mtime": 1784843231.591718,
+    "ast_hash": "c0bcc2e425603f1cd898e85ef5f5ce63",
     "semantic_hash": ""
   },
   "core/variables.h": {
@@ -915,8 +915,8 @@
     "semantic_hash": ""
   },
   "tests/test_eval.c": {
-    "mtime": 1782574635.037832,
-    "ast_hash": "6b136b390d56aa3b40c8f868cc1b948c",
+    "mtime": 1784843297.056951,
+    "ast_hash": "c8eadfd94ac2e1fa2fda829a87e01b99",
     "semantic_hash": ""
   },
   "tests/test_eval_ops.c": {
@@ -990,8 +990,8 @@
     "semantic_hash": ""
   },
   "tests/test_memory.c": {
-    "mtime": 1784821176.7419586,
-    "ast_hash": "178e33934622e53ea1d07e5b8f1a4511",
+    "mtime": 1784843331.041067,
+    "ast_hash": "ad582fe677d7a66f70ea3976ae58523c",
     "semantic_hash": ""
   },
   "tests/test_mklfsimg.c": {
@@ -1195,8 +1195,8 @@
     "semantic_hash": ""
   },
   "tests/test_variables.c": {
-    "mtime": 1782574635.0583148,
-    "ast_hash": "6fb9c3241aeecba393e694d42f00ad0c",
+    "mtime": 1784843297.3582768,
+    "ast_hash": "bef60b1135ce76ff97618fa1bcfb8a81",
     "semantic_hash": ""
   },
   "tests/unity.c": {
