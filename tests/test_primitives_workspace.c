@@ -604,6 +604,11 @@ void test_recycle_preserves_live_data(void)
     
     // Run garbage collection
     run_string("recycle");
+
+    Value kept;
+    TEST_ASSERT_TRUE(var_get("keepme", &kept));
+    TEST_ASSERT_TRUE(value_is_list(kept));
+    TEST_ASSERT_TRUE(mem_word_eq(mem_car(kept.as.node), "important", 9));
     
     reset_output();
     
@@ -643,6 +648,17 @@ void test_recycle_preserves_procedure_locals(void)
     r = eval_string("print f");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     TEST_ASSERT_EQUAL_STRING("1 2\n", output_buffer);
+}
+
+void test_recycle_inside_map_preserves_partial_result(void)
+{
+    const char *params[] = {"x"};
+    define_proc("gcident", params, 1, "recycle\noutput :x");
+
+    reset_output();
+    Result r = eval_string("print map \"gcident [one two three]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("one two three\n", output_buffer);
 }
 
 //==========================================================================
@@ -1319,6 +1335,7 @@ int main(void)
     RUN_TEST(test_recycle_preserves_live_data);
     RUN_TEST(test_recycle_inside_repeat_body);
     RUN_TEST(test_recycle_preserves_procedure_locals);
+    RUN_TEST(test_recycle_inside_map_preserves_partial_result);
 
     // primitives operation tests
     RUN_TEST(test_primitives_returns_list);

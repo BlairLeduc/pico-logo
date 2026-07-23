@@ -273,6 +273,10 @@ void var_bury_all(void)
 {
     for (int i = 0; i < global_count; i++)
     {
+        if (global_variables[i].active)
+        {
+            mem_gc_mark_atom_ptr(global_variables[i].name);
+        }
         if (global_variables[i].active && global_variables[i].has_value)
         {
             global_variables[i].buried = true;
@@ -429,6 +433,10 @@ void var_gc_mark_all(void)
     // Mark global variables
     for (int i = 0; i < global_count; i++)
     {
+        if (global_variables[i].active)
+        {
+            mem_gc_mark_atom_ptr(global_variables[i].name);
+        }
         if (global_variables[i].active && global_variables[i].has_value)
         {
             Value v = global_variables[i].value;

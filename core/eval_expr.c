@@ -325,7 +325,7 @@ Result eval_primary(Evaluator *eval)
                     if (bp != BP_NONE)
                     {
                         // Call the primitive with no args first
-                        Result r = prim->func(eval, 0, NULL);
+                        Result r = eval_call_primitive(eval, prim, 0, NULL);
                         if (r.status != RESULT_OK)
                         {
                             eval->paren_depth--;
@@ -471,7 +471,7 @@ Result eval_primary(Evaluator *eval)
                 eval->paren_depth--;
                 
                 // Call primitive and set error_proc if needed
-                Result r = prim->func(eval, argc, args);
+                Result r = eval_call_primitive(eval, prim, argc, args);
                 return result_set_error_proc(r, user_name);
             }
         }
@@ -650,7 +650,7 @@ Result eval_primary(Evaluator *eval)
             }
 
             // Call primitive and set error_proc if needed
-            Result r = prim->func(eval, argc, args);
+            Result r = eval_call_primitive(eval, prim, argc, args);
             return result_set_error_proc(r, user_name);
         }
 

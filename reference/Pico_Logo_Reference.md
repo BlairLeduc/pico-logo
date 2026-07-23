@@ -5064,7 +5064,7 @@ nodes
 
 `nodes` outputs the number of free nodes. This gives you an idea of how much space you have in your workspace for procedures, variables, properties, and the running of procedures. `nodes` is most useful if run immediately after [`recycle`](#recycle).
 
-Note that the space used to store words is permanent: every distinct word Logo encounters - including each character extracted with `first` or `item`, each number turned into a word, and each intermediate result of building words with `word` - is remembered for the rest of the session and is not returned by `recycle`. A program that builds many different words will see `nodes` gradually decline and eventually run out of word space. Lists, on the other hand, are fully reclaimed by `recycle` once nothing refers to them.
+Words and lists share the interpreter's memory. `recycle` reclaims storage for words and lists that are no longer reachable, so a program that creates temporary words can recover that space explicitly. Live words still use a 32 KB atom table, so a workspace that keeps too many distinct words can still run out of space.
 
 **Example**:
 
@@ -5081,7 +5081,7 @@ recycle
 
 `command`
 
-The `recycle` command frees up as many nodes as possible, performing what is called a garbage collection. Logo does not collect garbage on its own: if you run out of nodes, the current instruction stops with an `out of space` error, and you must run `recycle` (typically at a convenient point in your program, such as the top of a main loop) to reclaim the space held by lists that are no longer in use. Space used by words is permanent and is not reclaimed (see [`nodes`](#nodes)).
+The `recycle` command frees up as much unreachable list, word, and blob storage as possible, performing what is called a garbage collection. Logo does not collect garbage on its own: if you run out of space, the current instruction stops with an `out of space` error, and you must run `recycle` (typically at a convenient point in your program, such as the top of a main loop) to reclaim unused storage.
 
 **Example**:
 

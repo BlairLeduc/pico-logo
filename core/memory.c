@@ -20,6 +20,7 @@
 //
 
 #include "core/memory.h"
+#include "core/limits.h"
 
 #include <assert.h>
 #include <ctype.h>
@@ -108,8 +109,12 @@ static size_t node_count;
 // Heads of the per-bucket atom hash chains (atom offsets; ATOM_CHAIN_END =
 // empty). See the Atom Table section for the entry layout and rationale.
 #define ATOM_BUCKET_COUNT 256
-#define ATOM_CHAIN_END 0xFFFFu
+#define ATOM_CHAIN_END 0x7FFCu
+#define ATOM_LINK_MARK 0x8000u
+#define ATOM_LINK_FREE 0x0001u
 static uint16_t atom_buckets[ATOM_BUCKET_COUNT];
+static uint16_t atom_free_lists[LOGO_ATOM_FREE_LIST_COUNT];
+static MemGcRootScope *gc_root_scopes;
 
 //==========================================================================
 // Blob Heap (auxiliary region, e.g. PSRAM)
@@ -352,18 +357,16 @@ static inline bool mem_would_collide(size_t extra)
 //
 // This is an interned atom (initialised once in `logo_mem_init`) used as a
 // sentinel inside list bodies returned by `text` and friends to preserve
-// source-line boundaries. Because it lives in the atom region and not the
-// cell region, the sweep phase cannot reclaim it; it is effectively a
-// permanent GC root. `mem_gc()` marks it unconditionally so callers do not
-// need to remember to add it to their root set.
+// source-line boundaries. `mem_gc_sweep()` marks it unconditionally so callers
+// do not need to remember to add it to their root set.
 Node mem_newline_marker = NODE_NIL;
 
 // Cached boolean atoms.
 //
 // Every predicate and comparison produces the word `true` or `false`;
 // interning them once at init lets those hot paths reuse the Node instead
-// of re-hashing the string per call. Like all atoms they are never swept,
-// so no GC rooting is needed.
+// of re-hashing the string per call. They are marked unconditionally with the
+// newline marker.
 Node mem_true_node = NODE_NIL;
 Node mem_false_node = NODE_NIL;
 
@@ -374,7 +377,11 @@ void logo_mem_init(void)
     // Initialize atom table (grows upward from 0)
     atom_next = 0;
     memset(memory_block, 0, LOGO_MEMORY_SIZE);
-    memset(atom_buckets, 0xFF, sizeof(atom_buckets)); // all chains empty
+    for (size_t i = 0; i < ATOM_BUCKET_COUNT; i++)
+        atom_buckets[i] = ATOM_CHAIN_END;
+    for (size_t i = 0; i < LOGO_ATOM_FREE_LIST_COUNT; i++)
+        atom_free_lists[i] = ATOM_CHAIN_END;
+    gc_root_scopes = NULL;
 
     // Initialize node region (grows downward from top)
     // Start with no nodes allocated
@@ -626,6 +633,82 @@ static uint16_t atom_entry_next(size_t offset)
     return next;
 }
 
+static void atom_entry_set_next(size_t offset, uint16_t next);
+
+static bool atom_entry_is_free(size_t offset)
+{
+    return (atom_entry_next(offset) & ATOM_LINK_FREE) != 0;
+}
+
+static size_t atom_live_size(size_t offset)
+{
+    return ALIGN4(2 + 1 + memory_block[offset + 2] + 1);
+}
+
+static size_t atom_entry_size(size_t offset)
+{
+    if (!atom_entry_is_free(offset))
+        return atom_live_size(offset);
+
+    uint16_t size;
+    memcpy(&size, &memory_block[offset + 2], sizeof(size));
+    return size;
+}
+
+static uint16_t atom_free_next(size_t offset)
+{
+    return atom_entry_next(offset) & ~(ATOM_LINK_MARK | ATOM_LINK_FREE);
+}
+
+static size_t atom_free_bin(size_t size)
+{
+    size_t units = size / 4;
+    return units >= LOGO_ATOM_FREE_LIST_COUNT
+        ? LOGO_ATOM_FREE_LIST_COUNT - 1 : units - 1;
+}
+
+static void atom_free_add(size_t offset, size_t size)
+{
+    size_t bin = atom_free_bin(size);
+    uint16_t next = atom_free_lists[bin];
+    atom_entry_set_next(offset, (uint16_t)(next | ATOM_LINK_FREE));
+    uint16_t stored_size = (uint16_t)size;
+    memcpy(&memory_block[offset + 2], &stored_size, sizeof(stored_size));
+    atom_free_lists[bin] = (uint16_t)offset;
+}
+
+static bool atom_free_take(size_t size, size_t *offset_out)
+{
+    size_t first_bin = atom_free_bin(size);
+    for (size_t bin = first_bin; bin < LOGO_ATOM_FREE_LIST_COUNT; bin++)
+    {
+        uint16_t previous = ATOM_CHAIN_END;
+        uint16_t offset = atom_free_lists[bin];
+        while (offset != ATOM_CHAIN_END)
+        {
+            size_t block_size = atom_entry_size(offset);
+            uint16_t next = atom_free_next(offset);
+            if (block_size >= size)
+            {
+                if (previous == ATOM_CHAIN_END)
+                    atom_free_lists[bin] = next;
+                else
+                    atom_entry_set_next(previous,
+                        (uint16_t)(next | ATOM_LINK_FREE));
+
+                size_t remainder = block_size - size;
+                if (remainder >= 4)
+                    atom_free_add(offset + size, remainder);
+                *offset_out = offset;
+                return true;
+            }
+            previous = offset;
+            offset = next;
+        }
+    }
+    return false;
+}
+
 static void atom_entry_set_next(size_t offset, uint16_t next)
 {
     memcpy(&memory_block[offset], &next, sizeof(next));
@@ -672,6 +755,9 @@ static size_t find_atom(const char *str, size_t len)
     uint16_t offset = atom_buckets[atom_hash(str, len)];
     while (offset != ATOM_CHAIN_END)
     {
+        // Free blocks are never linked into hash buckets.
+        if (atom_entry_is_free(offset))
+            return SIZE_MAX;
         uint8_t atom_len = memory_block[offset + 2];
         // Use case-sensitive comparison to preserve original case
         if (str_eq(str, len, (const char *)&memory_block[offset + 3], atom_len))
@@ -705,27 +791,23 @@ Node mem_atom(const char *str, size_t len)
     // [next:2][len:1][chars:len][nul:1][padding]
     size_t entry_size = ALIGN4(2 + 1 + len + 1);
 
-    // Need to add new atom - check for collision with node region
-    if (mem_would_collide(entry_size))
+    // Reuse a collected block before extending the atom region.  Atom offsets
+    // stay stable for live entries; only unreachable storage is repurposed.
+    if (!atom_free_take(entry_size, &offset))
     {
-        return NODE_NIL; // Out of atom space - would collide with nodes
+        size_t atom_limit = node_bottom < LOGO_ATOM_LIMIT ? node_bottom : LOGO_ATOM_LIMIT;
+        if (atom_next + entry_size > atom_limit)
+            return NODE_NIL;
+        offset = atom_next;
+        atom_next += entry_size;
     }
 
-    // Check offset fits in our encoding (15 bits = 32KB max)
-    if (atom_next >= LOGO_ATOM_LIMIT)
-    {
-        return NODE_NIL; // Atom table too large
-    }
-
-    offset = atom_next;
     uint8_t bucket = atom_hash(str, len);
     atom_entry_set_next(offset, atom_buckets[bucket]);
     memory_block[offset + 2] = (uint8_t)len;
     memcpy(&memory_block[offset + 3], str, len);
     memory_block[offset + 3 + len] = '\0';  // Null terminator
     atom_buckets[bucket] = (uint16_t)offset;
-    atom_next += entry_size;
-
     return NODE_MAKE_WORD(offset);
 }
 
@@ -1051,7 +1133,7 @@ const char *mem_word_ptr(Node n)
     }
 
     uint32_t offset = NODE_GET_INDEX(n);
-    if (offset >= atom_next)
+    if (offset >= atom_next || atom_entry_is_free(offset))
     {
         return NULL;
     }
@@ -1076,7 +1158,7 @@ size_t mem_word_len(Node n)
     }
 
     uint32_t offset = NODE_GET_INDEX(n);
-    if (offset >= atom_next)
+    if (offset >= atom_next || atom_entry_is_free(offset))
     {
         return 0;
     }
@@ -1153,8 +1235,6 @@ static void gc_mark_node(Node n)
 
     if (type == NODE_TYPE_WORD)
     {
-        // Atoms are never freed, so they need no marking. Blobs ARE collected:
-        // mark the reachable descriptor so the sweep keeps it.
         if (NODE_WORD_IS_BLOB(n))
         {
             uint32_t handle = NODE_GET_BLOB_HANDLE(n);
@@ -1162,6 +1242,12 @@ static void gc_mark_node(Node n)
             {
                 blob_mark[handle / 8] |= (uint8_t)(1u << (handle % 8));
             }
+        }
+        else
+        {
+            uint32_t offset = NODE_GET_INDEX(n);
+            if (offset < atom_next && !atom_entry_is_free(offset))
+                atom_entry_set_next(offset, atom_entry_next(offset) | ATOM_LINK_MARK);
         }
         return;
     }
@@ -1218,14 +1304,18 @@ static void gc_mark_index(uint16_t index)
         uint16_t car_idx = CELL_GET_CAR(cell);
         uint16_t cdr_idx = CELL_GET_CDR(cell);
 
-        // Mark car recursively (only for nested lists, not words)
-        if (car_idx != 0 && !(car_idx & CELL_WORD_MARKER))
-        {
+        if (car_idx & CELL_WORD_MARKER)
+            gc_mark_node(index_to_node(car_idx));
+        else if (car_idx != 0)
             gc_mark_index(car_idx);
-        }
 
         // Follow cdr iteratively (tail-call elimination)
-        if (cdr_idx == 0 || (cdr_idx & CELL_WORD_MARKER))
+        if (cdr_idx & CELL_WORD_MARKER)
+        {
+            gc_mark_node(index_to_node(cdr_idx));
+            return;
+        }
+        if (cdr_idx == 0)
         {
             return;
         }
@@ -1239,24 +1329,88 @@ void mem_gc_mark(Node n)
     gc_mark_node(n);
 }
 
+void mem_gc_mark_atom_ptr(const char *ptr)
+{
+    if (ptr == NULL)
+        return;
+    for (size_t offset = 0; offset < atom_next; )
+    {
+        size_t size = atom_entry_size(offset);
+        if (!atom_entry_is_free(offset) &&
+            (const char *)&memory_block[offset + 3] == ptr)
+        {
+            atom_entry_set_next(offset, atom_entry_next(offset) | ATOM_LINK_MARK);
+            return;
+        }
+        offset += size;
+    }
+}
+
+void mem_gc_roots_push(MemGcRootScope *scope, const Node *roots, size_t count)
+{
+    assert(scope != NULL);
+    scope->roots = roots;
+    scope->count = count;
+    scope->previous = gc_root_scopes;
+    gc_root_scopes = scope;
+}
+
+void mem_gc_roots_pop(MemGcRootScope *scope)
+{
+    assert(scope != NULL && gc_root_scopes == scope);
+    gc_root_scopes = scope->previous;
+}
+
+void mem_gc_mark_transient_roots(void)
+{
+    for (MemGcRootScope *scope = gc_root_scopes; scope != NULL;
+         scope = scope->previous)
+        for (size_t i = 0; i < scope->count; i++)
+            mem_gc_mark(scope->roots[i]);
+}
+
+static void atom_clear_marks(void)
+{
+    for (size_t offset = 0; offset < atom_next; )
+    {
+        size_t size = atom_entry_size(offset);
+        if (!atom_entry_is_free(offset))
+            atom_entry_set_next(offset, atom_entry_next(offset) & ~ATOM_LINK_MARK);
+        offset += size;
+    }
+}
+
 // Sweep unmarked nodes back to free list
 void mem_gc_sweep(void)
 {
+    mem_gc_mark(mem_newline_marker);
+    mem_gc_mark(mem_true_node);
+    mem_gc_mark(mem_false_node);
+    mem_gc_mark_transient_roots();
+
     free_list = 0;
     free_count = 0;
 
     // Calculate the maximum node index based on allocated region
     uint16_t max_index = (uint16_t)((LOGO_MEMORY_SIZE - node_bottom) / 4);
-    
-    // Sweep through all allocated nodes (skip index 0 which is reserved)
+
+    uint16_t highest_live = 0;
     for (uint16_t i = 1; i <= max_index; i++)
     {
         uint32_t word_idx = i / 32;
         uint32_t bit_idx = i % 32;
+        if (gc_marks[word_idx] & (1u << bit_idx))
+            highest_live = i;
+    }
 
+    // Rebuild free cells only through the last live cell.  Dead trailing cells
+    // cease to be part of the pool, returning the shared arena to atoms.
+    for (uint16_t i = 1; i <= highest_live; i++)
+    {
+        uint32_t word_idx = i / 32;
+        uint32_t bit_idx = i % 32;
         if (gc_marks[word_idx] & (1u << bit_idx))
         {
-            // Marked - keep it, clear the mark
             gc_marks[word_idx] &= ~(1u << bit_idx);
         }
         else
@@ -1270,6 +1424,77 @@ void mem_gc_sweep(void)
                 free_count++;
             }
         }
+    }
+    node_count = highest_live;
+    node_bottom = LOGO_MEMORY_SIZE - (size_t)highest_live * 4;
+
+    // Sweep atom entries in place.  A second pass coalesces free neighbours,
+    // trims a free tail, then rebuilds both the hash index and size bins.
+    size_t offset = 0;
+    while (offset < atom_next)
+    {
+        size_t size = atom_entry_size(offset);
+        if (!atom_entry_is_free(offset))
+        {
+            if (atom_entry_next(offset) & ATOM_LINK_MARK)
+                atom_entry_set_next(offset, atom_entry_next(offset) & ~ATOM_LINK_MARK);
+            else
+                atom_free_add(offset, size);
+        }
+        offset += size;
+    }
+
+    offset = 0;
+    while (offset < atom_next)
+    {
+        if (!atom_entry_is_free(offset))
+        {
+            offset += atom_entry_size(offset);
+            continue;
+        }
+        size_t size = atom_entry_size(offset);
+        size_t next = offset + size;
+        while (next < atom_next && atom_entry_is_free(next))
+        {
+            size += atom_entry_size(next);
+            next = offset + size;
+        }
+        uint16_t stored_size = (uint16_t)size;
+        memcpy(&memory_block[offset + 2], &stored_size, sizeof(stored_size));
+        offset = next;
+    }
+
+    // A trailing free run needs no free-list entry; reducing the high-water
+    // mark lets both allocators reuse that part of the unified arena.
+    size_t scan = 0;
+    size_t last = SIZE_MAX;
+    while (scan < atom_next)
+    {
+        last = scan;
+        scan += atom_entry_size(scan);
+    }
+    if (last != SIZE_MAX && atom_entry_is_free(last))
+        atom_next = last;
+
+    for (size_t i = 0; i < ATOM_BUCKET_COUNT; i++)
+        atom_buckets[i] = ATOM_CHAIN_END;
+    for (size_t i = 0; i < LOGO_ATOM_FREE_LIST_COUNT; i++)
+        atom_free_lists[i] = ATOM_CHAIN_END;
+    for (offset = 0; offset < atom_next; )
+    {
+        size_t size = atom_entry_size(offset);
+        if (atom_entry_is_free(offset))
+        {
+            atom_free_add(offset, size);
+        }
+        else
+        {
+            uint8_t bucket = atom_hash((const char *)&memory_block[offset + 3],
+                                       memory_block[offset + 2]);
+            atom_entry_set_next(offset, atom_buckets[bucket]);
+            atom_buckets[bucket] = (uint16_t)offset;
+        }
+        offset += size;
     }
 
     // Sweep the blob heap: free any descriptor not reached during marking.
@@ -1299,10 +1524,14 @@ void mem_gc(Node *roots, size_t num_roots)
 {
     // Clear mark bits
     memset(gc_marks, 0, sizeof(gc_marks));
+    memset(blob_mark, 0, sizeof(blob_mark));
+    atom_clear_marks();
 
     // Always mark the newline sentinel — callers must never have to
     // remember it, and forgetting would corrupt list outputs from `text`.
     mem_gc_mark(mem_newline_marker);
+    mem_gc_mark(mem_true_node);
+    mem_gc_mark(mem_false_node);
 
     // Mark phase
     for (size_t i = 0; i < num_roots; i++)
@@ -1360,17 +1589,20 @@ size_t mem_total_nodes(void)
 // This represents the free space between atoms and nodes.
 size_t mem_free_atoms(void)
 {
-    if (node_bottom > atom_next)
-    {
-        return node_bottom - atom_next;
-    }
-    return 0;
+    size_t free_bytes = 0;
+    for (size_t offset = 0; offset < atom_next; offset += atom_entry_size(offset))
+        if (atom_entry_is_free(offset))
+            free_bytes += atom_entry_size(offset);
+    size_t limit = node_bottom < LOGO_ATOM_LIMIT ? node_bottom : LOGO_ATOM_LIMIT;
+    if (limit > atom_next)
+        free_bytes += limit - atom_next;
+    return free_bytes;
 }
 
 // Get the total size of the atom table (shared with nodes).
 size_t mem_total_atoms(void)
 {
-    return LOGO_MEMORY_SIZE;
+    return LOGO_ATOM_LIMIT;
 }
 
 // Get the number of blob descriptors currently in use.

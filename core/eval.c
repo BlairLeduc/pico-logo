@@ -54,6 +54,23 @@ bool eval_in_procedure(Evaluator *eval)
     return eval->frames != NULL && !frame_stack_is_empty(eval->frames);
 }
 
+Result eval_call_primitive(Evaluator *eval, const struct Primitive *prim,
+                           int argc, Value *args)
+{
+    Node roots[MAX_PRIM_ARGS];
+    size_t count = 0;
+    for (int i = 0; i < argc && count < MAX_PRIM_ARGS; i++)
+    {
+        if (args[i].type == VALUE_WORD || args[i].type == VALUE_LIST)
+            roots[count++] = args[i].as.node;
+    }
+    MemGcRootScope scope;
+    mem_gc_roots_push(&scope, roots, count);
+    Result result = prim->func(eval, argc, args);
+    mem_gc_roots_pop(&scope);
+    return result;
+}
+
 // Check if at end of input
 bool eval_at_end(Evaluator *eval)
 {

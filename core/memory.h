@@ -234,8 +234,7 @@ extern "C"
 
     // The words "true" and "false", interned once at init. Predicates and
     // comparisons run constantly; use these (or value_bool) instead of
-    // re-interning the strings. Atoms are never swept, so no GC rooting is
-    // needed.
+    // re-interning the strings.
     extern Node mem_true_node;
     extern Node mem_false_node;
 
@@ -265,6 +264,24 @@ extern "C"
     // Mark a node as reachable (for GC roots).
     // Call this for all root nodes before calling mem_gc_sweep().
     void mem_gc_mark(Node n);
+
+    // Mark an exact pointer previously returned by mem_word_ptr(). Pointers to
+    // literals, stack storage, blobs, or the middle of a word are ignored.
+    void mem_gc_mark_atom_ptr(const char *ptr);
+
+    // C-stack code that can re-enter the evaluator may keep Nodes outside the
+    // persistent root tables. Scopes are nested LIFO and have no fixed global
+    // capacity; the root array itself remains owned by the caller's stack.
+    typedef struct MemGcRootScope
+    {
+        const Node *roots;
+        size_t count;
+        struct MemGcRootScope *previous;
+    } MemGcRootScope;
+
+    void mem_gc_roots_push(MemGcRootScope *scope, const Node *roots, size_t count);
+    void mem_gc_roots_pop(MemGcRootScope *scope);
+    void mem_gc_mark_transient_roots(void);
 
     // Run garbage collection.
     // Caller must mark all roots first with mem_gc_mark().
