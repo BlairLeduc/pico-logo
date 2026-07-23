@@ -1,36 +1,179 @@
-; File Server -- browse and transfer files over WiFi.
+; File Server -- browse, download, upload and delete files over WiFi.
 ;
 ; On a WiFi board (Pico 2 W or Pico Plus 2 W):
 ;   wifi.connect "your-ssid "your-password
 ;   load "fileserver.logo
 ;   fileserver
 ; then, from a computer or phone on the same network:
-;   * open  http://picologo.local/  in a browser to list and download files
+;   * open  http://picologo.local/  in a browser to browse the file system:
+;       click a folder to descend, "Parent directory" to go back up,
+;       a file to download it (served with its content type so pages and
+;       images open in the browser), the Upload button to send a file into
+;       the current folder, and the x next to a file to delete it.
 ;   * curl  http://picologo.local/notes.txt -o notes.txt   to download a file
 ;   * curl -T game http://picologo.local/game              to upload a file
+;   * curl -X DELETE http://picologo.local/game            to delete a file
 ;
-; See docs/http-server-design.md (P7). A GET serves a file, or the index
-; page listing every file when the path is "/"; a PUT stores the uploaded
-; body. Files stream in small pieces, so they may be any size and binary.
+; See docs/http-server-design.md (P7). GET lists a directory (a page of
+; links) or streams a file; PUT stores the raw request body; DELETE removes
+; a file. The page is streamed as a list of small HTML pieces, so a folder
+; with many files fits even on the board without PSRAM, and files stream in
+; small chunks, so they may be any size and binary. Browser uploads use a
+; raw PUT via fetch() (see fs.script), which sidesteps multipart/form-data.
 
-; <li><a href=/NAME>NAME</a></li> -- a download link for one file.
-to fs.entry :name
-  op (http.element "li (http.element "a :name "href word "/ :name))
+; --- paths ---------------------------------------------------------------
+
+; Drop one trailing "/" (so "/sub/" and "/sub" name the same directory),
+; but never strip the root "/" itself.
+to fs.trim :path
+  if emptyp :path [op "/]
+  if not equalp last :path "/ [op :path]
+  if emptyp butfirst :path [op :path]
+  op butlast :path
 end
 
-; An HTML page listing every file in the current directory as a link.
-to fs.index
-  op (word http.element "h1 [Pico Logo files] http.element "ul map [[f] fs.entry :f] files)
+; Join a directory and a bare entry name into an absolute path, avoiding a
+; doubled slash at the root.
+to fs.join :dir :name
+  ifelse equalp :dir "/ [op word "/ :name] [op (word :dir "/ :name)]
 end
 
-; Serve one file, or a 404 page when it is missing.
-to fs.serve :path
-  ifelse file? :path [http.respondfile 200 :path] [http.respond 404 [not found]]
+; The parent of an absolute directory path ("/a/b" -> "/a", "/a" -> "/").
+to fs.parent :dir
+  op fs.trim reverse member "/ reverse :dir
 end
 
-; Answer a GET: the index at "/", otherwise the named file.
+; --- content types -------------------------------------------------------
+
+; The lowercased extension after the last dot, or the empty word if none.
+to fs.ext :name
+  if emptyp member ". :name [op "]
+  localmake "rest butfirst member ". :name
+  if emptyp member ". :rest [op lowercase :rest]
+  op fs.ext :rest
+end
+
+; A Content-Type for a file name, defaulting to a binary download.
+to fs.mime :name
+  localmake "e fs.ext :name
+  if emptyp :e [op "application/octet-stream]
+  if equalp :e "html [op "text/html]
+  if equalp :e "htm [op "text/html]
+  if equalp :e "css [op "text/css]
+  if equalp :e "js [op "application/javascript]
+  if equalp :e "json [op "application/json]
+  if equalp :e "txt [op "text/plain]
+  if equalp :e "svg [op "|image/svg+xml|]
+  if equalp :e "png [op "image/png]
+  if equalp :e "jpg [op "image/jpeg]
+  if equalp :e "jpeg [op "image/jpeg]
+  if equalp :e "gif [op "image/gif]
+  if equalp :e "bmp [op "image/bmp]
+  if equalp :e "ico [op "image/x-icon]
+  op "application/octet-stream
+end
+
+; --- page pieces ---------------------------------------------------------
+
+; The document shell and compact embedded CSS. It is split into small pieces so
+; the listing still streams on boards with the normal Logo word-size limit.
+to fs.head
+  localmake "s (list "|<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Pico Logo Files</title><style>|)
+  make "s lput "|:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#101827;color:#e7edf7}*{box-sizing:border-box}body{margin:0;min-width:20rem}.app{max-width:58rem;margin:auto;padding:1rem}| :s
+  make "s lput "|.masthead{display:flex;gap:.8rem;align-items:center;padding:1rem;background:#1b3455;border:1px solid #41658d;border-radius:.8rem}.mark{padding:.65rem;border-radius:.55rem;background:#50d2a6;color:#06271f;font-weight:bold}| :s
+  make "s lput "|.eyebrow{margin:0;color:#9ce7d0;font-size:.75rem;font-weight:bold;letter-spacing:.1em}.masthead h1{margin:.1rem 0 0;font-size:1.3rem;overflow-wrap:anywhere}| :s
+  make "s lput "|.toolbar,.upload{margin-top:1rem;padding:1rem;background:#172235;border:1px solid #293b56;border-radius:.7rem}.toolbar a,.entry a{color:#edf5ff;text-decoration:none}.toolbar a{color:#9ce7d0;font-weight:bold}| :s
+  make "s lput "|.entries{margin:1rem 0;padding:0;list-style:none;border:1px solid #293b56;border-radius:.7rem;overflow:hidden}.entry{display:flex;gap:.65rem;align-items:center;padding:.65rem .8rem;background:#172235;border-bottom:1px solid #293b56}| :s
+  make "s lput "|.entry:last-child{border:0}.entry:hover{background:#1c2b43}.entry a{flex:1;min-width:0;overflow-wrap:anywhere}.badge{padding:.2rem .4rem;border-radius:.3rem;background:#263b59;color:#a9c9ec;font-size:.65rem;font-weight:bold}| :s
+  make "s lput "|.dir .badge{background:#164b4a;color:#9ce7d0}button{border:0;border-radius:.4rem;padding:.5rem .65rem;font:inherit;font-weight:bold;cursor:pointer}.delete{background:#422838;color:#ffb7c3}.primary{background:#50d2a6;color:#06271f}| :s
+  make "s lput "|button:disabled{opacity:.55;cursor:wait}.upload{display:grid;gap:.65rem}.upload-row{display:flex;flex-wrap:wrap;gap:.65rem}| :s
+  make "s lput "|.hint,#status{margin:0;color:#a9b9ce;font-size:.9rem}#status{min-height:1.25rem}@media(max-width:30rem){.app{padding:.7rem}.badge{display:none}}</style><body><main class=app>| :s
+  op :s
+end
+
+; A "Parent directory" list item, or nothing at the root.
+to fs.parentlink :dir
+  if equalp :dir "/ [op []]
+  localmake "link (http.element "a [Parent directory] "href fs.parent :dir)
+  op (list (word "|<nav class=toolbar>| (word :link "|</nav>|)))
+end
+
+; A folder row with a link that descends into it.
+to fs.direntry :dir :name
+  localmake "target word (fs.join :dir :name) "/
+  localmake "label word :name "/
+  localmake "link (http.element "a :label "href :target)
+  op (word "|<li class="entry dir"><span class=badge>DIR</span>| :link "|</li>|)
+end
+
+; A file row with a download link and delete action (fs.script handles it).
+to fs.fileentry :dir :name
+  localmake "target fs.join :dir :name
+  localmake "link (http.element "a :name "href :target)
+  localmake "del (http.element "button "Delete "class "delete "data-f :name "type "button)
+  op (word "|<li class=entry><span class=badge>FILE</span>| :link :del "|</li>|)
+end
+
+; The upload control followed by the client script (a list of pieces).
+to fs.uploadui
+  localmake "ui (list "|<section class=upload><div class=upload-row><input type=file id=f><button class=primary type=button onclick="up()">Upload file</button></div>|)
+  make "ui lput "|<p class=hint>One transfer at a time. Keep this page open until it finishes.</p><p id=status aria-live=polite></p></section>| :ui
+  op sentence :ui fs.script
+end
+
+; The browser-side script: Upload PUTs the chosen file's raw bytes to the
+; current path, and clicking a file's delete button DELETEs it -- both via
+; fetch(), so no multipart form encoding is involved. Kept as short pieces so
+; each stays within a word, and joined only when streamed.
+to fs.script
+  localmake "s (list "|<script>var busy=false;function base(){var b=location.pathname;if(b.charAt(b.length-1)!='/')b+='/';return b}</script>|)
+  make "s lput "|<script>function status(t,wait){document.getElementById('status').textContent=t;var x=document.querySelectorAll('button,input');for(var i=0;i<x.length;i++)x[i].disabled=wait}</script>| :s
+  make "s lput "|<script>function fail(){busy=false;status('That did not finish. Please try again.',false)}function done(t){status(t+' Refreshing…',true);location.reload()}</script>| :s
+  make "s lput "|<script>function uploaded(r){if(!r.ok)throw 0;done('Upload complete.')}</script>| :s
+  make "s lput "|<script>function up(){if(busy)return;var f=document.querySelector('#f').files[0];if(!f)return;busy=true;status('Uploading…',true);fetch(base()+encodeURIComponent(f.name),{method:'PUT',body:f}).then(uploaded).catch(fail)}</script>| :s
+  make "s lput "|<script>function remove(n){busy=true;status('Deleting '+n+'…',true);fetch(base()+encodeURIComponent(n),{method:'DELETE'}).then(function(r){if(!r.ok)throw 0;done('Deleted.')}).catch(fail)}</script>| :s
+  make "s lput "|<script>document.addEventListener('click',function(e){var n=e.target.getAttribute('data-f');if(!n)return;if(busy)return;if(confirm('Delete '+n+'?'))remove(n)});</script>| :s
+  op :s
+end
+
+; The full HTML page for one directory, as a list of pieces streamed by
+; http.respond. Listing needs the prefix, so set it around the scan and put
+; it back (the server may be serving while you work at the prompt).
+to fs.page :dir
+  localmake "save prefix
+  setprefix :dir
+  localmake "subs directories
+  localmake "fils files
+  fs.restore :save
+  localmake "title (word "|<header class=masthead><span class=mark>PL</span><div><p class=eyebrow>Pico Logo</p>| (http.element "h1 :dir) "|</div></header><section aria-label="Files"><ul class=entries>|)
+  localmake "head sentence fs.head :title
+  localmake "up (fs.parentlink :dir)
+  localmake "dl (map [[d] fs.direntry :dir :d] :subs)
+  localmake "fl (map [[f] fs.fileentry :dir :f] :fils)
+  localmake "ui fput "|</ul></section>| fs.uploadui
+  op (sentence :head :up :dl :fl :ui)
+end
+
+; Restore a saved prefix, treating an empty one as the root.
+to fs.restore :save
+  ifelse emptyp :save [setprefix "/] [setprefix :save]
+end
+
+; --- request handling ----------------------------------------------------
+
+; Serve one file with its content type (so pages and images open in-browser).
+to fs.sendfile :path
+  localmake "type fs.mime :path
+  (http.respondfile 200 :path "Content-Type :type)
+end
+
+; Answer a GET: a directory page (root or a real folder), else the file, else 404.
 to fs.get
-  ifelse equal? http.path "/ [(http.respond 200 fs.index "Content-Type "text/html)] [fs.serve http.path]
+  localmake "p fs.trim http.path
+  if equalp :p "/ [(http.respond 200 fs.page "/ "Content-Type "text/html) stop]
+  if dir? :p [(http.respond 200 fs.page :p "Content-Type "text/html) stop]
+  if file? :p [fs.sendfile :p stop]
+  http.respond 404 [not found]
 end
 
 ; Store an uploaded body, then confirm. Uploads are unauthenticated -- anyone
@@ -43,16 +186,28 @@ to fs.put
   http.respond 201 [saved]
 end
 
+; Delete a file, or 404 when it is missing (guard as in fs.put to restrict).
+to fs.delete
+  ifelse file? http.path [erasefile http.path http.respond 200 [deleted]] [http.respond 404 [not found]]
+end
+
 ; Route each request by method.
 to fs.handle
-  if equal? http.method "GET [fs.get stop]
-  if equal? http.method "PUT [fs.put stop]
+  ; Directory pages create temporary lists. Pico Logo collects explicitly, so
+  ; reclaim the previous response before building the next one.
+  recycle
+  if equalp http.method "GET [fs.get stop]
+  if equalp http.method "PUT [fs.put stop]
+  if equalp http.method "DELETE [fs.delete stop]
   http.respond 405 [method not allowed]
 end
 
 ; Start serving. Connect to WiFi first, then run `fileserver`.
 to fileserver
   if not wifi? [pr [Connect to WiFi first, e.g. wifi.connect "ssid "password] stop]
+  ; A previous handler error closes the listener, but explicitly closing here
+  ; also makes a manual restart release any stale device listener first.
+  http.unlisten
   http.listen 80
   when [http.request?] [fs.handle]
   pr [File server is running.]
