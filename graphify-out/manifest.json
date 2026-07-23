@@ -5,8 +5,8 @@
     "semantic_hash": ""
   },
   ".claude/settings.local.json": {
-    "mtime": 1783954921.1135287,
-    "ast_hash": "ab0beea1f8eba5aa28ba471486ac49f2",
+    "mtime": 1784744521.3690426,
+    "ast_hash": "63199f7ca693e08e4fa581296ee4d7b0",
     "semantic_hash": ""
   },
   ".vscode/c_cpp_properties.json": {
@@ -150,7 +150,7 @@
     "semantic_hash": ""
   },
   "core/httpd.c": {
-    "mtime": 1784288949.9880536,
+    "mtime": 1784748035.622339,
     "ast_hash": "4fef4b5e612b4f57e1499c6cd397eb8c",
     "semantic_hash": ""
   },
@@ -330,7 +330,7 @@
     "semantic_hash": ""
   },
   "core/primitives_turtle.c": {
-    "mtime": 1784730759.3307269,
+    "mtime": 1784732476.8237376,
     "ast_hash": "cc0daa801c5bda0b4eaadbf9bc4ce29d",
     "semantic_hash": ""
   },
@@ -855,7 +855,7 @@
     "semantic_hash": ""
   },
   "tests/mock_device.c": {
-    "mtime": 1784722876.2065713,
+    "mtime": 1784748043.591809,
     "ast_hash": "1012acfb8f7a978b0cb60aaeecabb430",
     "semantic_hash": ""
   },
@@ -1270,8 +1270,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1783094349.6466775,
-    "ast_hash": "c2c7a302d581bd4a894950c911bdcd7a",
+    "mtime": 1784740599.9117725,
+    "ast_hash": "5ae4649633df329e633055f1749d4f23",
     "semantic_hash": ""
   },
   "docs/code-review-2026-07-02.md": {
@@ -1290,8 +1290,8 @@
     "semantic_hash": ""
   },
   "docs/improvements-roadmap.md": {
-    "mtime": 1784729889.4986787,
-    "ast_hash": "6039b9fe1407d4b109a6cc4cdb8b4af4",
+    "mtime": 1784755837.3714721,
+    "ast_hash": "0b0e47fb2e16e7089611e878a4d57147",
     "semantic_hash": ""
   },
   "docs/launch-design.md": {
@@ -1330,13 +1330,13 @@
     "semantic_hash": ""
   },
   "reference/Pico_Logo_Reference.md": {
-    "mtime": 1784730865.4860485,
+    "mtime": 1784732476.8428035,
     "ast_hash": "ffaf607209965bf0393b0ae8ab8aed2e",
     "semantic_hash": ""
   },
   "tests/CMakeLists.txt": {
-    "mtime": 1784481081.7946782,
-    "ast_hash": "a7dc62bf4f7190686036ffe2fa33532f",
+    "mtime": 1784746290.0814018,
+    "ast_hash": "e81b563aa3985ba722fe69b1f170888e",
     "semantic_hash": ""
   },
   "third_party/littlefs/LICENSE.md": {
@@ -1370,7 +1370,7 @@
     "semantic_hash": ""
   },
   "core/primitives_sound.c": {
-    "mtime": 1784730752.3073237,
+    "mtime": 1784732476.8232713,
     "ast_hash": "24ec13a369405e1fcbd9686fa8ff4c58",
     "semantic_hash": ""
   },
@@ -1392,6 +1392,26 @@
   "tests/test_sound.c": {
     "mtime": 1784481081.796627,
     "ast_hash": "4f51a1a6952ccafdbec3a96efa9923ef",
+    "semantic_hash": ""
+  },
+  "tests/test_fileserver.c": {
+    "mtime": 1784815112.347891,
+    "ast_hash": "71c97b3316213948bd11fdf2506d7e6e",
+    "semantic_hash": ""
+  },
+  ".codex/hooks.json": {
+    "mtime": 1784812719.821926,
+    "ast_hash": "d793ab73da28df612e83adc082204d6a",
+    "semantic_hash": ""
+  },
+  "AGENTS.md": {
+    "mtime": 1784812811.1384075,
+    "ast_hash": "4e0b3f07c54eec774dd379b10c7ebba2",
+    "semantic_hash": ""
+  },
+  "logo/Pico Logo Files.html": {
+    "mtime": 1784814282.2700338,
+    "ast_hash": "e68c06e3646ae07c31229a47161c52ce",
     "semantic_hash": ""
   }
 }
