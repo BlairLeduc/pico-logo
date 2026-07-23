@@ -1,11 +1,14 @@
-# Memory Reclamation: Design Notes (deferred)
+# Atom Garbage Collection: Implementation Plan
 
-**Status: deferred, 2026-07-03.** Pico Logo runs on handheld, battery-powered
-devices. The expected usage pattern is short sessions: pick up the device, work,
-save, power off. Long-running programs that would exhaust the atom table within
-a session are not a realistic workload, so none of the designs below are
-scheduled. This note preserves the analysis so it can be picked up if the need
-arises.
+**Status: planned, 2026-07-23.** Extend explicit `recycle` to reclaim
+unreachable atoms without moving live entries. Harden transient GC roots first
+so nested evaluation is safe for both the existing node collector and the new
+atom collector. Automatic collection and instruction retry are out of scope for
+the first implementation.
+
+Success means an exhausted atom table can run `recycle`, reclaim dead words,
+and continue without damaging variables, procedures, active evaluation, or
+partially constructed results.
 
 ## Background: the "atoms are never freed" simplification
 
@@ -30,175 +33,189 @@ On atom exhaustion the interpreter now fails cleanly with `ERR_OUT_OF_SPACE`
 (see PR #86, which removed the silent-truncation and `strlen(NULL)` failure
 modes), so the cost of the simplification is a hard stop, not corruption.
 
-## What PR #86 changed that makes reclamation feasible
+## Existing groundwork and prerequisite
 
-Two pieces of groundwork now exist that earlier designs lacked:
+Atom entries are self-describing and chained. Their
+`[next:2][len:1][chars][nul][pad-to-4]` layout and 256-bucket hash index make
+the table walkable during a sweep. The `mem_word_ptr` contract also already
+says that returned pointers are valid only until the next GC.
 
-1. **A complete, enumerable GC root set.** `prim_recycle` marks globals,
-   procedure bodies, property lists, the frame stack (`frame_gc_mark_all`),
-   all in-flight evaluator state (`op_stack_gc_mark`: loop bodies, saved
-   token-source positions, staged arguments, pending operands, result values),
-   the active token source, and pending tail-call arguments. Any atom-GC design
-   reuses this infrastructure directly.
-2. **Atom entries are self-describing and chained.** The layout is
-   `[next:2][len:1][chars][nul][pad-to-4]` with a 256-bucket hash index.
-   The `next` field and the walkable, self-sizing entries are exactly what a
-   sweep needs.
+The existing root walk covers workspace values, procedure bodies, property
+lists, frames, evaluator operations, token-source positions, demons, and
+pending tail-call arguments. It is not yet complete for re-entrant evaluation:
+primitives such as `map`, `filter`, `reduce`, and `crossmap` retain cursors,
+partially built results, callback specifications, and accumulators in C locals
+or heap scratch arrays while invoking Logo code. If that callback runs
+`recycle`, those values are invisible to the current collector.
 
-Also note: the `mem_word_ptr` contract in `memory.h` already says the returned
-pointer is "valid until the next GC" — the API anticipated atom collection.
+A scoped transient-root mechanism is therefore a prerequisite, not optional
+hardening. It fixes the existing node-GC hazard and makes atom collection safe.
 
----
+## Implementation
 
-## Design 1: `erall` soft reset (recommended first step, small)
+### Atom allocator and collector
 
-**Idea.** `erall` is the one moment when a *total* memory reset is legitimate:
-if the workspace is truly empty, nothing can be holding an atom, cell, or blob.
-This sidesteps the entire hard part of atom GC — no root tracing at all —
-because the invariant is "there are no roots" rather than "find all the roots".
+- Preserve the live atom layout and existing offsets; live atoms never move.
+- Reserve aligned link value `0x7FFC` as the chain terminator and limit new
+  entry starts to `0x7FF8`.
+- Use bit 15 of the link as the GC mark and bit 0 as the free-entry flag.
+  Four-byte alignment leaves those bits available.
+- Represent free entries as `[free-link|flag:2][block-size:2]`.
+- Define 65 segregated free-list heads in `core/limits.h`, covering four-byte
+  units through the maximum 260-byte live atom entry. The final bin accepts
+  larger coalesced blocks.
+- On an interning miss, take the first suitable free block, split any remainder
+  of at least four bytes, and grow `atom_next` only when no reusable block fits.
+- During sweep:
+  1. Convert unmarked atoms to free blocks.
+  2. Coalesce adjacent free blocks.
+  3. Lower `atom_next` past a trailing free run.
+  4. Rebuild hash buckets and free-list bins in a second table walk.
+- Make `mem_word_ptr` and `mem_word_len` reject offsets currently marked free.
+- Change `mem_free_atoms` to include reusable holes plus the allocatable
+  contiguous region up to `min(node_bottom, LOGO_ATOM_LIMIT)`.
 
-**Behaviour.** Inside `prim_erall`, after the erasures, if all safety
-conditions hold, perform a soft reset of the memory system. Fully transparent:
-no new user-facing surface. Restores full atom space, releases the
-`node_bottom` ratchet, and empties the blob heap — a genuinely fresh machine
-without a reboot.
+### Marking persistent roots
 
-**Safety conditions (all must hold):**
+- Make `mem_gc_mark(Node)` mark ordinary atom Nodes as well as blobs.
+- While traversing cons cells, mark word-tagged `car` and `cdr` references.
+- Add `mem_gc_mark_atom_ptr(const char *)`. It accepts exact pointers returned
+  by `mem_word_ptr` and ignores literals, static buffers, and pointers outside
+  the atom arena.
+- Extend the existing root walkers to cover:
+  - global variable names and values;
+  - procedure names, parameters, bodies, the current-procedure stack, and
+    pending tail-call state;
+  - frame binding names and values;
+  - loop variable names, catch tags, primitive display names, cached `Result`
+    metadata, and token-cache pointers;
+  - caught-error procedure and caller pointers.
+- Always mark the newline, `true`, and `false` bootstrap atoms.
 
-1. **Workspace fully empty, including buried items.** `erall` spares buried
-   procedures/variables, and buried bodies/values reference atoms and cells.
-   If anything survives the erasure, skip the reset. (Most users bury nothing,
-   so the common case qualifies.)
-2. **Nothing in flight.** `erall` inside a `repeat` body or procedure would
-   destroy the very list being executed — the same corruption class as the
-   recycle GC bug fixed in PR #86. Guard: `eval->proc_depth == 0`, frame stack
-   empty, op stack empty, no pending tail call. At the top-level REPL these all
-   hold; the current line is lexer text, not nodes.
+### Scoped transient roots
 
-**Soft reset ≠ `logo_mem_init`.** This is the one real subtlety:
-`logo_mem_init` calls `blob_reset`, which rebuilds the free list over the
-*whole* aux region — clobbering permanent `mem_region_alloc` blocks (the PSRAM
-HTTP transfer buffer and editor buffer that devices hold raw pointers to).
-The soft reset must instead:
+Add a LIFO root-scope API to `memory.h`:
 
-- reset `atom_next`, the hash buckets, `node_bottom`, `node_count`, the cell
-  free list, and `gc_marks`;
-- free descriptor-tracked blobs individually (`blob_free` each), leaving the
-  region's free list and permanent allocations intact;
-- re-intern the bootstrap atoms (newline marker, `true`, `false`) and refresh
-  `mem_newline_marker` / `mem_true_node` / `mem_false_node`. (They land at
-  identical offsets anyway — first atoms, deterministic order — but reassign
-  explicitly.)
+```c
+typedef struct MemGcRootScope
+{
+    const Node *roots;
+    size_t count;
+    struct MemGcRootScope *previous;
+} MemGcRootScope;
 
-**Effort:** roughly 60–80 lines plus tests. **Risk:** low; the guard conditions
-are cheap and already queryable.
+void mem_gc_roots_push(MemGcRootScope *scope, const Node *roots, size_t count);
+void mem_gc_roots_pop(MemGcRootScope *scope);
+void mem_gc_mark_transient_roots(void);
+```
 
-**Tests to write:** reset happens at top level with empty workspace (verify
-`nodes` returns to the boot value); no reset when a buried procedure survives;
-no reset inside a procedure or `repeat` body (and no corruption — reuse the
-PR #86 repro shapes); permanent aux allocations still valid after reset
-(HTTP/editor buffer contents survive); bootstrap atoms and cached boolean
-nodes work after reset.
+The scope and Node array live on the C stack; the memory subsystem retains only
+the current-scope pointer, so there is no new fixed-capacity root table.
+`mem_gc_roots_pop` asserts LIFO ordering in debug builds.
 
-**Reference update:** the `nodes` section's "word space is permanent" paragraph
-gains "…until `erall` empties the workspace".
+- Centralize primitive invocation through a wrapper that registers every word
+  and list argument for the duration of the call. Route direct primitive
+  calls, including list-processing callbacks, through the wrapper.
+- Register additional roots around every re-entrant evaluator call for state
+  not reachable from the original arguments: partially built result lists,
+  cursors, converted-number atoms, lambda saved values, reducer accumulators,
+  load/startup state, and comparable local state.
+- Pop each scope immediately after the nested evaluator or callback returns so
+  early-result handling cannot leak registrations.
 
-## Design 2: atom mark-sweep with in-place reuse (larger, helps running programs)
+### Shared arena recovery
 
-**Idea.** Extend the existing mark-sweep to atoms, freeing dead entries onto
-size-class free lists for reuse **in place**. No compaction, so offsets never
-move and no pointer ever needs rewriting — which neutralizes the two hard
-blockers (interior `char*` name pointers everywhere, and atom offsets baked
-into cons-cell halves).
+- During node sweep, find the highest live node index.
+- Rebuild the free list only through that index, raise `node_bottom` over the
+  trailing free run, and update `node_count`.
+- Continue to reuse interior free cells normally.
 
-**Mark phase additions:**
+This returns shared arena space in both directions: trailing dead atoms lower
+`atom_next`, while trailing dead cells raise `node_bottom`.
 
-- `gc_mark_node` marks the atom for word Nodes (it currently skips words).
-- `gc_mark_index` marks the atom offset in word-tagged cell halves
-  (`car_idx & CELL_WORD_MASK` when `CELL_WORD_MARKER` is set) — currently
-  skipped.
-- New `mem_atom_mark_cstr(const char *p)`: range-check `p` against the atom
-  region; if it points into it, mark the owning entry (`p` is always a
-  `mem_word_ptr` result, i.e. entry offset + 3). This one helper covers every
-  raw-string holder:
-  - `Variable.name`, `UserProcedure.name` + `params[]`, `Binding.name`
-  - `ForState.varname`, `CatchState.tag`, `PrimCallState.user_name`
-  - `TailCall.proc_name`, the pause-prompt stack (`current_proc_stack`)
-  - `Result` error strings (`error_proc`/`error_arg`/`error_caller`) held in
-    op-stack results — these may also be string literals or static buffers,
-    which the range check safely ignores.
-- Bootstrap atoms marked unconditionally (as `mem_gc` already does for the
-  newline marker).
-- Mark-bit storage: bit 15 of each entry's `next` field is free (offsets are
-  ≤ 0x7FF8; change the chain-end sentinel from 0xFFFF to 0x7FFF). Alternative:
-  a separate 1 KB bitmap (offset/4 → 8192 bits) if touching the encoding is
-  unwanted.
+## Collection behaviour
 
-**Sweep phase:** walk the table (entries are contiguous and self-sizing via
-`len`), unlink dead entries from their hash buckets, push them onto
-**segregated free lists by entry size**. Entry sizes are `ALIGN4(len + 4)` =
-8, 12, …, 260 bytes → 64 exact-fit size classes → a 64 × 2-byte head array
-(128 B SRAM), no search, no fragmentation *within* a class. Rebuild the 256
-hash buckets during the same walk. The `next` field doubles as the free-list
-link (hash-chain when live, free-chain when dead — disjoint states). Keep the
-`len` byte valid in free entries so the table stays walkable; rewrite it on
-reuse (lengths within a class share the aligned size; padding absorbs the
-difference).
+- `recycle` remains the only collection trigger.
+- A failed instruction is not retried automatically.
+- Allocation routines do not invoke GC because arbitrary allocation points do
+  not guarantee that all C-local state and source bytes have registered roots.
+- Preserve raw-token primitive dispatch so top-level `recycle` remains
+  callable even when its display-name atom cannot be allocated.
+- The 32 KB atom-offset limit remains unchanged.
+- Reusing an unreachable atom's offset is valid because atom identity is not
+  exposed by Logo. The same-offset equality fast path remains valid for live
+  values.
 
-**Allocation:** `mem_atom` on a miss pops the matching size class before
-growing `atom_next`.
+## Test plan
 
-**Properties preserved:** interning/dedup survives (dead atoms leave the hash
-chains, so a lookup never finds one); the `mem_words_equal` same-offset fast
-path stays valid; blobs are unaffected (already collected).
+### Memory unit tests
 
-**Known limitations:**
+- A directly rooted atom survives; an unrooted atom is collected and its block
+  can be reused.
+- Atoms reachable through word-tagged `car` and `cdr` fields survive.
+- Newline, `true`, and `false` survive an otherwise rootless collection.
+- Empty-word four-byte entries, all size classes, splitting, coalescing,
+  hash-chain rebuilding, and trailing-run trimming work.
+- Repeated collect/reuse cycles do not corrupt hash lookup or word equality.
+- Node sweep raises `node_bottom` without losing live interior nodes.
 
-- No coalescing of adjacent free entries in v1 (the `len` byte caps a merged
-  entry's representable size at 260 B). Acceptable: allocation falls back to
-  growing `atom_next` when a class is empty.
-- The 32 KB cap still bounds *live* atoms. Raising it means referencing atoms
-  by handle (index into a side table) instead of byte offset — a much larger
-  redesign, and far less urgent once space recycles.
-- Trigger remains explicit `recycle` (plus, potentially, automatic
-  collect-and-retry when `mem_atom`/`mem_cons` fail — deliberately not
-  designed here; it requires the full root set to be marked at any allocation
-  point, which the current recycle-time-only walk does not guarantee).
+### Root and integration tests
 
-**Risk profile:** same class as the PR #86 recycle fix — one missed root frees
-a live atom, and its bytes get rewritten on reuse. Mitigations are the same:
-the root walk is centralized in `prim_recycle`, and the established test
-recipes transfer (exhaust-then-verify; allocate junk after `recycle` and check
-survivors; the `repeat … [recycle …]` and procedure-local shapes from
-`test_primitives_workspace.c`).
+- Preserve global names and values, procedure names/parameters/bodies,
+  properties, frame bindings, loop/catch state, tail calls, token caches,
+  caught errors, demons, and blobs.
+- Add nested-collection regressions for `map`, `map.se`, `filter`, `find`,
+  `reduce`, `crossmap`, lambda saved variables, `load`, `ask`, `each`, pause,
+  and nested evaluator paths.
+- Allocate new atoms and cells immediately after each collection so a missed
+  root is overwritten and exposed rather than passing accidentally.
+- Exhaust atom space with unreachable words, execute top-level `recycle`, and
+  verify that a previously failing allocation succeeds.
+- Verify that live atoms filling the 32 KB offset space still produce
+  `ERR_OUT_OF_SPACE` after `recycle`.
 
-**Effort:** ~200 lines in `memory.c`, ~80 for the holder walks, plus a
-substantial test batch. Noticeably bigger than the PR #86 recycle fix.
+### Verification
 
-## Companion: let the node region shrink back
+Run:
 
-Independent, small: during sweep, find the contiguous run of free cells at the
-region floor (highest indices), remove them from the free list, and raise
-`node_bottom`, returning the space to the atom side. Fixes the one-way ratchet
-where a transient list spike permanently eats atom headroom. Needs a way to
-distinguish free cells during the scan (the sweep already knows — do it in the
-same pass, before rebuilding the free list).
+```bash
+cmake --preset=tests
+cmake --build --preset=tests
+ctest --preset=tests
 
-## Options considered and rejected
+cmake --preset=tests-coverage
+cmake --build --preset=tests-coverage
+ctest --preset=tests-coverage
 
-- **Mark-compact atoms:** moving atoms requires rewriting 15-bit offsets in
-  every referencing cons cell *and* every raw `char*` name pointer across the
-  interpreter (variables, procedures, bindings, error strings, …). Invasive
-  and risky; in-place reuse gets the benefit without any of it.
-- **Reference counting:** `Value`/`Node` copies are pervasive and unhooked;
-  no way to maintain counts in C without touching every copy site.
-- **Handle-table indirection (to exceed 32 KB):** valid future direction, big
-  redesign; unnecessary while live-atom footprints stay small.
+cmake --build --preset=pico2
+cmake --build --preset=pico2w
+cmake --build --preset=pico+2w
 
-## Suggested order, if ever needed
+graphify update .
+```
 
-1. Design 1 (`erall` soft reset) — small, low-risk, delivers most practical
-   value for the session-based usage pattern.
-2. Companion node-region shrink-back — small, pairs with either design.
-3. Design 2 (atom mark-sweep) — only if a real workload demonstrates atom
-   exhaustion *within* a session that `erall` can't address.
+Compare linker SRAM usage for all three firmware targets. The collector adds
+65 two-byte free-list heads and one transient-root pointer; any larger static
+increase requires explicit review.
+
+## Documentation updates during implementation
+
+- Update the `nodes` and `recycle` reference sections: unreachable word storage
+  is reclaimed by explicit `recycle`, while live atoms remain subject to the
+  32 KB offset limit.
+- Mark atom reclamation complete in `docs/improvements-roadmap.md`.
+- Update comments in `memory.h`, `memory.c`, and root-walker headers that still
+  state atoms are permanent.
+
+## Alternatives not selected
+
+- **`erall` soft reset:** useful as an independent recovery feature, but it
+  discards the workspace and does not help a long-running program.
+- **Mark-compact atoms:** requires rewriting every 15-bit cell offset and every
+  cached `char *`; in-place reuse provides reclamation without that risk.
+- **Reference counting:** pervasive unhooked `Value` and `Node` copies make
+  correct counts impractical.
+- **Handle-table indirection:** could exceed the 32 KB offset limit, but is a
+  substantially larger redesign and is unnecessary for reclamation.
+- **Automatic collect-and-retry:** requires safe roots and rollback semantics at
+  every allocation site; defer until explicit collection has proven reliable.
