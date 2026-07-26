@@ -82,6 +82,12 @@ add_logo_test(test_cross_fs_move)
 add_logo_test(test_lfs_backup)
 add_logo_test(test_repl)
 add_logo_test(test_syntax_highlight)
+# Graphics showcase test — loads logo/demos/graphics into the interpreter,
+# then renders its static sprite and tilemap scenes on the mock device.
+add_logo_test(test_graphics_demo)
+target_compile_definitions(test_graphics_demo PRIVATE
+    GRAPHICS_DEMO_SOURCE="${CMAKE_SOURCE_DIR}/logo/demos/graphics")
+
 # Galaxian game test — loads logo/games/galaxian into the interpreter (proving
 # it parses and its init path runs on the mock device) and checks the game's
 # pure logic helpers. The source path is passed in as a compile definition.
