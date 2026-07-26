@@ -65,17 +65,17 @@
     "semantic_hash": ""
   },
   "core/eval.c": {
-    "mtime": 1784820499.0540557,
+    "mtime": 1784847036.089696,
     "ast_hash": "cbc92cd69c4dd22ffc12ccc838505d1e",
     "semantic_hash": ""
   },
   "core/eval.h": {
-    "mtime": 1784820507.3095696,
+    "mtime": 1784847036.0901885,
     "ast_hash": "721ed232d3334dca5164f9c89c2cc769",
     "semantic_hash": ""
   },
   "core/eval_expr.c": {
-    "mtime": 1784843231.4408498,
+    "mtime": 1784847036.0906296,
     "ast_hash": "b0f3e04d0f3ee08c9dd2806d3027253b",
     "semantic_hash": ""
   },
@@ -85,7 +85,7 @@
     "semantic_hash": ""
   },
   "core/eval_ops.c": {
-    "mtime": 1784820462.7389023,
+    "mtime": 1784847036.0909705,
     "ast_hash": "a862f68a08885712d65b3837a5f90789",
     "semantic_hash": ""
   },
@@ -95,7 +95,7 @@
     "semantic_hash": ""
   },
   "core/eval_steps.c": {
-    "mtime": 1784820499.202572,
+    "mtime": 1784847036.091324,
     "ast_hash": "d22333b1bd703621130d8328db551e9e",
     "semantic_hash": ""
   },
@@ -110,7 +110,7 @@
     "semantic_hash": ""
   },
   "core/frame.c": {
-    "mtime": 1784820462.5707562,
+    "mtime": 1784847036.0917065,
     "ast_hash": "10a696bab9529ad84ab34457f4861cd5",
     "semantic_hash": ""
   },
@@ -170,17 +170,17 @@
     "semantic_hash": ""
   },
   "core/limits.h": {
-    "mtime": 1784820325.7041042,
+    "mtime": 1784847036.0921817,
     "ast_hash": "6865fce35d4b77254f7641cd7298f11b",
     "semantic_hash": ""
   },
   "core/memory.c": {
-    "mtime": 1784843359.477577,
+    "mtime": 1784847036.0925405,
     "ast_hash": "dfd89b56b02026e2b6079f1071862edc",
     "semantic_hash": ""
   },
   "core/memory.h": {
-    "mtime": 1784843231.8908594,
+    "mtime": 1784847036.0928776,
     "ast_hash": "57c69a119a70b82aa7d8d3ad6bec47b6",
     "semantic_hash": ""
   },
@@ -290,7 +290,7 @@
     "semantic_hash": ""
   },
   "core/primitives_list_processing.c": {
-    "mtime": 1784820907.4837937,
+    "mtime": 1784847036.093236,
     "ast_hash": "ebecd8f89d129f0a3910e61f8d0378b3",
     "semantic_hash": ""
   },
@@ -350,12 +350,12 @@
     "semantic_hash": ""
   },
   "core/primitives_workspace.c": {
-    "mtime": 1784843231.7422388,
+    "mtime": 1784847036.0935884,
     "ast_hash": "17cae00b5132905f61a4040696d8b571",
     "semantic_hash": ""
   },
   "core/procedures.c": {
-    "mtime": 1784820462.414681,
+    "mtime": 1784847036.0939152,
     "ast_hash": "89badf234859ff30f448519fad46bdee",
     "semantic_hash": ""
   },
@@ -425,7 +425,7 @@
     "semantic_hash": ""
   },
   "core/variables.c": {
-    "mtime": 1784843231.591718,
+    "mtime": 1784847036.0942116,
     "ast_hash": "c0bcc2e425603f1cd898e85ef5f5ce63",
     "semantic_hash": ""
   },
@@ -915,7 +915,7 @@
     "semantic_hash": ""
   },
   "tests/test_eval.c": {
-    "mtime": 1784843297.056951,
+    "mtime": 1784847036.1139145,
     "ast_hash": "c8eadfd94ac2e1fa2fda829a87e01b99",
     "semantic_hash": ""
   },
@@ -990,7 +990,7 @@
     "semantic_hash": ""
   },
   "tests/test_memory.c": {
-    "mtime": 1784843331.041067,
+    "mtime": 1784847036.1144037,
     "ast_hash": "ad582fe677d7a66f70ea3976ae58523c",
     "semantic_hash": ""
   },
@@ -1140,7 +1140,7 @@
     "semantic_hash": ""
   },
   "tests/test_primitives_workspace.c": {
-    "mtime": 1784820749.3761654,
+    "mtime": 1784847036.115189,
     "ast_hash": "0226bf2589ce9616d43d8c9cfca515b4",
     "semantic_hash": ""
   },
@@ -1195,7 +1195,7 @@
     "semantic_hash": ""
   },
   "tests/test_variables.c": {
-    "mtime": 1784843297.3582768,
+    "mtime": 1784847036.1157858,
     "ast_hash": "bef60b1135ce76ff97618fa1bcfb8a81",
     "semantic_hash": ""
   },
@@ -1270,7 +1270,7 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1784820907.6232896,
+    "mtime": 1784847036.1263883,
     "ast_hash": "a1b3b261cc49a4a226f590e335bb6ce4",
     "semantic_hash": ""
   },
@@ -1290,7 +1290,7 @@
     "semantic_hash": ""
   },
   "docs/improvements-roadmap.md": {
-    "mtime": 1784820973.7274466,
+    "mtime": 1784847036.094787,
     "ast_hash": "fcab1f48a99b384c569b85b2887db6ee",
     "semantic_hash": ""
   },
@@ -1305,7 +1305,7 @@
     "semantic_hash": ""
   },
   "docs/memory-reclamation-design.md": {
-    "mtime": 1784820941.902773,
+    "mtime": 1784847036.0951335,
     "ast_hash": "e23d2f15e2d33d7d3040b8c26a3cd148",
     "semantic_hash": ""
   },
@@ -1330,13 +1330,13 @@
     "semantic_hash": ""
   },
   "reference/Pico_Logo_Reference.md": {
-    "mtime": 1784820941.721184,
+    "mtime": 1784847036.1126919,
     "ast_hash": "bce13fc904b1c3ccd57a0846f744bea2",
     "semantic_hash": ""
   },
   "tests/CMakeLists.txt": {
-    "mtime": 1784818403.2666094,
-    "ast_hash": "e81b563aa3985ba722fe69b1f170888e",
+    "mtime": 1785067844.5425878,
+    "ast_hash": "2d7dd7b7a0c7b06e3f1d8341f6a042fb",
     "semantic_hash": ""
   },
   "third_party/littlefs/LICENSE.md": {
@@ -1407,6 +1407,11 @@
   "AGENTS.md": {
     "mtime": 1784818414.1411116,
     "ast_hash": "4e0b3f07c54eec774dd379b10c7ebba2",
+    "semantic_hash": ""
+  },
+  "tests/test_graphics_demo.c": {
+    "mtime": 1785067985.2825713,
+    "ast_hash": "63e3049695abef24369b3df3fc6eb636",
     "semantic_hash": ""
   }
 }

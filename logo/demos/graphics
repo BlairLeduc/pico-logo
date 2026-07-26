@@ -1,0 +1,331 @@
+; Pico Logo graphics showcase
+; A game-developer tour of sprites, tilemaps, collision and smooth animation.
+;
+; Load and run:
+;   load "graphics
+;   graphicsdemo
+;
+; Every scene is also useful on its own:
+;   gfxsprites   gfxmotion   gfxtiles   gfxcollision
+;
+; Pico Logo has eight live turtles. Each can wear a bitmap or full-colour
+; costume, move and animate autonomously, rotate, scale, stamp into the
+; canvas, and take part in pixel-accurate collision tests. The canvas is a
+; separate permanent layer for scenery, tilemaps, trails and graphics text.
+;
+; This demo uses palette slots 240-247, leaving the standard palette alone.
+
+make "gfx.bg       240
+make "gfx.ink      241
+make "gfx.sun      242
+make "gfx.player   243
+make "gfx.enemy    244
+make "gfx.gem      245
+make "gfx.hazard   246
+make "gfx.tile     247
+
+;--------------------------------------------------------------------------
+; Shared setup
+;--------------------------------------------------------------------------
+
+to gfx.palette
+  setpalette :gfx.bg     [5 8 24]       ; midnight blue
+  setpalette :gfx.ink    [214 234 248]  ; ice white
+  setpalette :gfx.sun    [255 207 64]   ; gold
+  setpalette :gfx.player [80 220 160]   ; mint
+  setpalette :gfx.enemy  [255 92 120]   ; coral
+  setpalette :gfx.gem    [96 180 255]   ; electric blue
+  setpalette :gfx.hazard [210 64 255]   ; neon purple
+  setpalette :gfx.tile   [48 72 112]    ; steel blue
+  setbg :gfx.bg
+end
+
+to gfx.shapes
+  ; 1-2: a two-frame running character
+  putsh 1 [24 24 60 126 90 24 60 90 24 36 66 66 66 36 0 0]
+  putsh 2 [24 24 60 126 90 24 60 90 24 36 24 24 36 66 0 0]
+
+  ; 3: ship, 4: asteroid, 5-6: spinning pickup
+  putsh 3 [24 60 126 255 90 90 24 24 60 126 219 24 24 0 0 0]
+  putsh 4 [0 24 126 255 231 219 255 126 60 126 219 126 60 0 0 0]
+  putsh 5 [0 24 60 102 195 195 195 195 195 195 102 60 24 0 0 0]
+  putsh 6 [0 0 24 24 60 60 60 60 60 60 24 24 0 0 0 0]
+
+  ; 7: projectile, 8: solid tile
+  putsh 7 [0 0 0 24 24 60 126 255 126 60 24 24 0 0 0 0]
+  putsh 8 [255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255]
+
+  ; 9-11: three-frame impact animation
+  putsh 9  [0 0 0 0 24 0 60 24 126 60 24 0 0 0 0 0]
+  putsh 10 [0 0 66 24 165 90 60 255 60 90 165 24 66 0 0 0]
+  putsh 11 [129 36 66 24 0 129 36 0 66 0 36 129 0 66 36 129]
+end
+
+to gfx.setup
+  gfx.palette
+  gfx.shapes
+end
+
+to gfx.stop
+  cleardemons
+  thaw
+  tell [0 1 2 3 4 5 6 7]
+  each [setspeed 0 setanim 0 0 0]
+  tell 0
+  setrefresh "auto
+end
+
+to gfx.reset
+  gfx.stop
+  cs
+  fs
+  tell [0 1 2 3 4 5 6 7]
+  each [pu ht wrap setmag 1 setrot "fixed setpensize 1]
+  tell 0
+  setbg :gfx.bg
+end
+
+to gfx.label :x :y :colour :text
+  ask 7 [ht pu setpc :colour setx :x sety :y write :text]
+end
+
+to gfx.title :text
+  gfx.label -146 145 :gfx.ink :text
+end
+
+;--------------------------------------------------------------------------
+; Scene 1: bitmap costumes are cheap, tintable actors.
+;--------------------------------------------------------------------------
+
+to gfxsprites
+  gfx.setup
+  gfx.reset
+  gfx.title [BITMAP SPRITES  ROTATION  SCALE]
+  gfx.label -142 112 :gfx.tile [FIXED]
+  gfx.label -48 112 :gfx.tile [FLIP]
+  gfx.label 48 112 :gfx.tile [FULL]
+
+  ; Stamp some scenery first. Stamps become canvas pixels, behind live actors.
+  ask 6 [
+    ht pu setsh 4 setpc :gfx.tile
+    setpos [-118 -48] stamp
+    setpos [-70 -72] stamp
+    setpos [76 -56] stamp
+    setpos [126 -76] stamp
+  ]
+
+  ; The same monochrome costume can be tinted per actor.
+  ask 0 [pu setsh 1 setpc :gfx.player setrot "fixed setpos [-108 65] st]
+  ask 1 [pu setsh 1 setpc :gfx.sun setrot "flip seth 270 setpos [-12 65] st]
+  ask 2 [pu setsh 3 setpc :gfx.enemy setrot "full seth 45 setpos [84 65] st]
+
+  ; Magnification changes appearance and collision, not movement distance.
+  gfx.label -142 6 :gfx.tile [1X]
+  gfx.label -48 6 :gfx.tile [2X]
+  ask 3 [pu setsh 5 setpc :gfx.gem setmag 1 setpos [-95 -14] st]
+  ask 4 [pu setsh 5 setpc :gfx.gem setmag 2 setpos [0 -25] st]
+
+  ; Lower-numbered turtles render on top when live actors overlap.
+  ask 5 [pu setsh 4 setpc :gfx.enemy setpos [94 -22] st]
+  ask 6 [pu setsh 1 setpc :gfx.player setpos [88 -18] st]
+  gfx.label 46 6 :gfx.tile [LIVE LAYERS]
+end
+
+;--------------------------------------------------------------------------
+; Scene 2: animation and motion keep running while Logo does other work.
+;--------------------------------------------------------------------------
+
+to gfxmotion
+  gfx.setup
+  gfx.reset
+  gfx.title [ANIMATION  AUTONOMY  FRAME SYNC]
+  gfx.label -142 112 :gfx.tile [SETANIM CYCLES COSTUMES]
+  gfx.label -142 92 :gfx.tile [SETSPEED MOVES IN BACKGROUND]
+  gfx.label -142 72 :gfx.tile [FULL ROTATION FOLLOWS HEADING]
+  gfx.label -142 52 :gfx.tile [FREEZE AND THAW PAUSE THE WORLD]
+
+  ask 0 [
+    pu setsh 1 setpc :gfx.player setrot "flip
+    setpos [-125 0] seth 90 st setanim 1 2 110 setspeed 42
+  ]
+  ask 1 [
+    pu setsh 5 setpc :gfx.sun setpos [0 -58] st setanim 5 6 90
+  ]
+  ask 2 [
+    pu setsh 3 setpc :gfx.enemy setrot "full
+    setpos [84 -38] seth 0 st
+  ]
+
+  ; sync gives a stable 30 fps game clock; one sync ends each frame.
+  (setrefresh "sync 30)
+  repeat 90 [
+    ask 2 [rt 4]
+    if repcount = 45 [freeze sync wait 550 thaw]
+    sync
+  ]
+  gfx.stop
+end
+
+;--------------------------------------------------------------------------
+; Scene 3: draw once, capture a colour sprite, then build a stamped world.
+;--------------------------------------------------------------------------
+
+to gfx.capture.gem
+  ; Draw a small two-colour diamond around turtle 7 and capture its pixels.
+  ask 7 [
+    ht pu setpensize 1 setpc :gfx.gem
+    setpos [-9 0] pd setpos [0 11] setpos [9 0]
+    setpos [0 -11] setpos [-9 0]
+    pu home pd fill
+    setpc :gfx.ink setpensize 3
+    pu setpos [-4 0] pd setpos [4 0]
+    pu home snapsh 15 24 24
+    setpensize 1 pu
+  ]
+end
+
+to gfxtiles
+  gfx.setup
+  gfx.reset
+  setrefresh "manual
+
+  ; snapsh turns ordinary turtle drawing into a full-colour costume.
+  gfx.capture.gem
+  clean
+
+  gfx.title [COLOUR COSTUMES  STAMPED TILEMAPS]
+  gfx.label -142 112 :gfx.tile [SNAPSH CAPTURES A COLOUR COSTUME]
+  gfx.label -142 92 :gfx.tile [STAMP BAKES SPRITES INTO THE CANVAS]
+
+  ; A hidden turtle acts as a tilemap renderer.
+  ask 6 [ht pu setsh 8 setpc :gfx.tile setmag 1]
+  local "x
+  make "x -144
+  repeat 13 [
+    ask 6 [setx :x sety -112 stamp]
+    make "x :x + 24
+  ]
+  make "x -120
+  repeat 5 [
+    ask 6 [setx :x sety -40 stamp]
+    make "x :x + 24
+  ]
+  make "x 54
+  repeat 4 [
+    ask 6 [setx :x sety 4 stamp]
+    make "x :x + 24
+  ]
+
+  ; The colour gem ignores setpc because its captured RGB pixels are retained.
+  ask 6 [
+    setsh 15 setmag 1
+    setpos [-72 -14] stamp
+    setpos [90 30] stamp
+    setpos [138 -86] stamp
+  ]
+
+  ; A live animated player appears over the permanent tilemap layer.
+  ask 0 [
+    pu setsh 1 setpc :gfx.player setrot "flip setmag 1
+    setpos [-122 -85] seth 90 st setanim 1 2 130
+  ]
+  refresh
+  setrefresh "auto
+end
+
+;--------------------------------------------------------------------------
+; Scene 4: exact sprite collision, canvas sensing and a fixed-rate loop.
+;--------------------------------------------------------------------------
+
+to gfx.terrain?
+  output ask 2 [over? :gfx.hazard]
+end
+
+to gfx.crash
+  make "gfx.crashed true
+  ask [0 1] [setspeed 0 setpc :gfx.enemy setanim 9 11 90]
+end
+
+to gfx.terrain.hit
+  make "gfx.terrainhit true
+  ask 2 [setspeed 0 setpc :gfx.sun setanim 9 11 90]
+end
+
+to gfxcollision
+  gfx.setup
+  gfx.reset
+  gfx.title [COLLISION  CANVAS SENSING  GAME LOOP]
+  gfx.label -142 112 :gfx.tile [TOUCHING TESTS RENDERED SPRITE PIXELS]
+  gfx.label -142 92 :gfx.tile [OVER TESTS DRAWING UNDER AN ACTOR]
+
+  ; A permanent hazard stripe lives in the canvas.
+  ask 7 [
+    ht pu setpc :gfx.hazard setpensize 12
+    setpos [20 -130] pd setpos [20 -34] pu setpensize 1
+  ]
+
+  ; Two dense sprites converge for a reliable pixel-perfect collision.
+  ask 0 [
+    pu setsh 4 setpc :gfx.player setrot "full
+    setpos [-108 18] seth 90 st setspeed 45
+  ]
+  ask 1 [
+    pu setsh 4 setpc :gfx.enemy setrot "full
+    setpos [108 18] seth 270 st setspeed 45
+  ]
+
+  ; A third actor crosses canvas pixels independently.
+  ask 2 [
+    pu setsh 1 setpc :gfx.gem setrot "flip
+    setpos [-100 -78] seth 90 st setanim 1 2 100 setspeed 38
+  ]
+
+  make "gfx.crashed false
+  make "gfx.terrainhit false
+  when [touching? 0 1] [gfx.crash]
+  when [gfx.terrain?] [gfx.terrain.hit]
+
+  ; This is the classic game loop: update work, then one paced presentation.
+  (setrefresh "sync 30)
+  repeat 120 [sync]
+
+  if :gfx.crashed [
+    gfx.label -142 -130 :gfx.enemy [SPRITE COLLISION DETECTED]
+  ]
+  if :gfx.terrainhit [
+    gfx.label 28 -130 :gfx.sun [TERRAIN DETECTED]
+  ]
+  sync
+  gfx.stop
+end
+
+;--------------------------------------------------------------------------
+; The whole show.
+;--------------------------------------------------------------------------
+
+to graphicsdemo
+  gfxsprites
+  wait 2600
+  gfxmotion
+  wait 700
+  gfxtiles
+  wait 2800
+  gfxcollision
+  wait 2200
+
+  gfx.reset
+  gfx.title [PICO LOGO IS A TINY 2D GAME ENGINE]
+  gfx.label -142 92 :gfx.player [8 LIVE ACTORS]
+  gfx.label -142 62 :gfx.gem [15 CUSTOM COSTUMES]
+  gfx.label -142 32 :gfx.sun [PALETTE GRAPHICS AND TILEMAPS]
+  gfx.label -142 2 :gfx.enemy [ANIMATION COLLISION AND EVENTS]
+  gfx.label -142 -28 :gfx.ink [FRAME PACING BUILT IN]
+  wait 2800
+
+  gfx.stop
+  ts
+  ct
+  pr [That is the graphics tour!]
+  pr [Read any scene with po, for example: po "gfxcollision]
+  pr [Run a scene again: gfxsprites gfxmotion gfxtiles gfxcollision]
+end
