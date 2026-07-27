@@ -44,13 +44,13 @@ cost freed up is spent on the one new mechanic: steering divers.
 ## 2. The board
 
 - Same screen model as Invaders: 320×320 steps, origin centre,
-  `splitscreen`, HUD on the text rows via change-tracked
-  `setcursor` + `print`.
-- Player ship at y = −70, clamped to x ∈ [−150, 150].
-- Convoy occupies y ∈ [80, 140] (4 rows) and sways within
+  `fullscreen`, with a change-tracked HUD: score left, level centred,
+  lives right.
+- Player ship at y = −145, clamped to x ∈ [−150, 150].
+- Convoy occupies y ∈ [54, 120] (4 rows) and sways within
   x ∈ [−110, 110]. It never descends, so there is **no invasion demon**
   and no `alien.bottom.y` machinery.
-- Divers fly the space between; a diver crossing y < −85 has exited and
+- Divers fly the space between; a diver crossing y < −155 has exited and
   rejoins the convoy (§5).
 - No scrolling starfield in v1 (§9) — repainting canvas pixels every
   frame is the one arcade feature whose cost profile is wrong for this
@@ -111,7 +111,7 @@ blue). The reduced convoy keeps one row per rank and shrinks each:
 make "conv.rows 4
 make "conv.cols 8          ; widest rank
 make "colgap 20            ; 16x16 rendered costume + 4px gap, as Invaders
-make "rowgap 20
+make "rowgap 22
 ; Row occupancy masks, row 1 = top. 0 cells are permanent holes:
 ; row 1: 2 flagships (cols 4,5)   row 2: 4 red (cols 3-6)
 ; row 3: 6 purple (cols 2-7)      row 4: 8 blue (cols 1-8)
@@ -329,7 +329,7 @@ until [:over] [
     maybe.launch.dive    ; NEW: flank / flagship dive selection
     maybe.diver.fire     ; NEW: attack-phase shot drops
     check.shot           ; colourunder -> locate.alien on the convoy
-    recycle.offscreen    ; shot past top; enemy shots past bottom
+    recycle.offscreen    ; shots leave the active play field
     recycle.divers       ; exit at bottom -> rejoin convoy
   ]
   draw.hud

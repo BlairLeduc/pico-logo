@@ -95,6 +95,13 @@ add_logo_test(test_galaxian)
 target_compile_definitions(test_galaxian PRIVATE
     GALAXIAN_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/galaxian")
 
+# Game HUD test — both games use the fullscreen graphics canvas and draw their
+# score/lives/level text into the lower part of it.
+add_logo_test(test_game_huds)
+target_compile_definitions(test_game_huds PRIVATE
+    INVADERS_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/invaders"
+    GALAXIAN_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/galaxian")
+
 # File-server example test — loads logo/fileserver into the interpreter and
 # drives real HTTP requests through the mock connection. The source path is
 # passed in as a compile definition.

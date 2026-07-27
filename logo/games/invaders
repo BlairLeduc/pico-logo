@@ -115,7 +115,7 @@ end
 
 to setup.level
   cs
-  splitscreen
+  fullscreen
   make "dying false
   make "paused false
   make "march.counter 0
@@ -140,7 +140,7 @@ end
 to setup.turtles
   tell [0 1 2 3 4 5 6 7]
   each [window]
-  tell 0 pu setsh 4 setpc :cannon.colour setrot "fixed setx 0 sety -70 seth 0 st
+  tell 0 pu setsh 4 setpc :cannon.colour setrot "fixed setx 0 sety -145 seth 0 st
   tell 1 pu setsh 8 setpc :shot.colour setrot "fixed ht
   tell 2 pu setsh 5 setpc :ufo.colour setrot "fixed ht
   tell 3 pu setsh 7 setpc :bomb.colour setrot "fixed ht
@@ -155,7 +155,7 @@ to arm.demons
   when [touching? 0 3] [player.hit]
   when [touching? 0 4] [player.hit]
   when [touching? 0 5] [player.hit]
-  when [(alien.bottom.y) < -55] [invasion]
+  when [(alien.bottom.y) < -130] [invasion]
 end
 
 to make.ones :n
@@ -189,9 +189,9 @@ to setup.aliens
   ; than 16 leaves adjacent aliens
   ; touching or overlapping.
   make "colgap 20
-  make "rowgap 20
+  make "rowgap 22
   make "formx -100
-  make "formy 140
+  make "formy 120
   make "formdir 1
   make "alive :alien.rows * :alien.cols
   make "aliens make.ones :alive
@@ -453,10 +453,10 @@ to draw.shield :cx :cy
 end
 
 to setup.shields
-  draw.shield -90 -20
-  draw.shield -30 -20
-  draw.shield 30 -20
-  draw.shield 90 -20
+  draw.shield -90 -65
+  draw.shield -30 -65
+  draw.shield 30 -65
+  draw.shield 90 -65
 end
 
 to erode :x :y
@@ -594,7 +594,7 @@ to maybe.launch.ufo
 end
 
 to launch.ufo
-  ask 2 [pu setx -150 sety 140 seth 90 st setanim 5 6 150 setspeed 50]
+  ask 2 [pu setx -150 sety 130 seth 90 st setanim 5 6 150 setspeed 50]
   make "ufo.warble.hi true
   make "ufo.warble.ctr 0
 end
@@ -666,19 +666,33 @@ to poll.input
   ]
 end
 
+to level.hud.x :n
+  if :n < 10 [output -28]
+  if :n < 100 [output -32]
+  output -36
+end
+
+to write.hud :s :l :n
+  setx -155 sety 155 write sentence [SCORE:] :s
+  setx level.hud.x :n sety 155 write sentence [LEVEL:] :n
+  setx 91 sety 155 write sentence [LIVES:] :l
+end
+
 to draw.hud
-  ; Repaint a line only when its value changes. Rewriting all of them every
-  ; frame re-blits ~160 glyphs over SPI (each row is drawn character by
-  ; character) and was the single biggest cost in an ordinary frame.
-  if not (:score = :hud.score) [
-    setcursor [0 0] (print [SCORE:] :score) make "hud.score :score
+  ; Repaint the top line only when a value changes. Canvas text paints only
+  ; set glyph pixels, so erase the old line before drawing its replacement.
+  if :score = :hud.score [
+    if :lives = :hud.lives [
+      if :level = :hud.level [stop]
+    ]
   ]
-  if not (:lives = :hud.lives) [
-    setcursor [0 1] (print [LIVES:] :lives) make "hud.lives :lives
+  ask 6 [
+    setpc :bg.colour write.hud :hud.score :hud.lives :hud.level
+    setpc :cannon.colour write.hud :score :lives :level
   ]
-  if not (:level = :hud.level) [
-    setcursor [0 2] (print [LEVEL:] :level) make "hud.level :level
-  ]
+  make "hud.score :score
+  make "hud.lives :lives
+  make "hud.level :level
 end
 
 to play.level
