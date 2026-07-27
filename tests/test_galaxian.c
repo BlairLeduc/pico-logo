@@ -7,7 +7,7 @@
 //  The game itself is pure Logo; this exercises it two ways:
 //   - loading the whole file proves it parses and every procedure the init
 //     path touches is defined and runs on the mock device (setup.level does
-//     cs/splitscreen/stamping/when-demon registration);
+//     cs/fullscreen/stamping/when-demon registration);
 //   - the pure logic helpers (the rank pyramid, the cell<->position formulas,
 //     the scoring table, the clamped-turn steering, the hit-test inverse) are
 //     checked directly, since those are where the bugs would hide.
@@ -221,28 +221,28 @@ static void seed_convoy(void)
 {
     run_string("make \"conv.rows 4 make \"conv.cols 8 "
                "make \"colgap 20 make \"rowgap 20 "
-               "make \"formx -70 make \"formy 140 "
+               "make \"formx -70 make \"formy 130 "
                "make \"aliens make.convoy");
 }
 
 void test_locate_alien_exact_and_tolerant(void)
 {
     seed_convoy();
-    // Row 4 col 1 sits at (-70, 80).
-    assert_num("locate.alien -70 80", 25);
-    assert_num("locate.alien -64 80", 25);   // 6px off in x, within tolerance
-    assert_num("locate.alien -70 88", 25);   // 8px off in y, within tolerance
-    // A flagship at (10, 140) -> row1 col5 -> idx 5.
-    assert_num("locate.alien 10 140", 5);
+    // Row 4 col 1 sits at (-70, 70).
+    assert_num("locate.alien -70 70", 25);
+    assert_num("locate.alien -64 70", 25);   // 6px off in x, within tolerance
+    assert_num("locate.alien -70 78", 25);   // 8px off in y, within tolerance
+    // A flagship at (10, 130) -> row1 col5 -> idx 5.
+    assert_num("locate.alien 10 130", 5);
 }
 
 void test_locate_alien_misses(void)
 {
     seed_convoy();
-    // Row 1 col 1 position (-70,140) is a permanent hole.
-    assert_num("locate.alien -70 140", 0);
+    // Row 1 col 1 position (-70,130) is a permanent hole.
+    assert_num("locate.alien -70 130", 0);
     // Well outside the grid.
-    assert_num("locate.alien 200 80", 0);
+    assert_num("locate.alien 200 70", 0);
 }
 
 //==========================================================================
@@ -330,8 +330,8 @@ void test_diver_breaks_away_near_bottom(void)
     // the screen (below :break.y) and just to the right of the player.
     run_string("launch.diver 2 25 240");
     run_string(".setitem 1 :diver.phase 2 .setitem 1 :diver.timer :attack.frames");
-    run_string("tell 2 setx 40 sety -50 seth 200 tell 0");
-    // Homing on the player (at 0,-70, down-left of the diver) would raise the
+    run_string("tell 2 setx 40 sety -125 seth 200 tell 0");
+    // Homing on the player (at 0,-145, down-left of the diver) would raise the
     // heading toward ~243; breaking away straight down lowers it toward 180.
     run_string("steer.divers");
     assert_true("(ask 2 [heading]) < 200");

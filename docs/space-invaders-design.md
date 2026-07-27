@@ -28,13 +28,12 @@ layout has to account for both constraints, not just `MAX_TURTLES`.
 
 - Screen is 320×320 turtle steps, origin at centre: x ∈ [−159, 160],
   y ∈ [−159, 160] (reference §*setpos*).
-- We run in **`splitscreen`**: the top 24 text-lines of graphics stay
-  visible (240 units tall) and the bottom text lines carry the HUD
-  (score, lives, level). There is no draw-text-on-canvas primitive, so
-  the HUD is ordinary `setcursor` + `type`/`pr` on the text screen.
-- Visible play field is therefore roughly y ∈ [−80, 160]. Cannon sits at
-  y = −70, the alien formation starts at y ∈ [60, 140], bombs fall
-  down-screen.
+- We run in **`fullscreen`**. The change-tracked HUD paints score left,
+  level centred, and lives right at y = 155.
+- The cannon sits at y = −145 and the alien formation starts at
+  y ∈ [32, 120], leaving an extra 10px below the HUD and using more of the
+  screen's height. Missed bombs can use
+  the full lower canvas before they recycle.
 
 ## 2. Object representation — the central decision
 
@@ -70,9 +69,9 @@ ever appearing as a sprite of its own.
 make "alien.rows 5
 make "alien.cols 11
 make "colgap 20      ; column spacing
-make "rowgap 20      ; row spacing
+make "rowgap 22      ; row spacing
 make "formx -100     ; x of column 1's centre
-make "formy 140      ; y of row 1's centre
+make "formy 120      ; y of row 1's centre
 make "formdir 1      ; +1 marching right, -1 left
 ```
 
@@ -389,7 +388,7 @@ stack depth regardless of session length.
 | Destructible shields | coarser erosion chunks | pixel-exact erosion is a later polish |
 | ≤3 alien bombs | one bomb type, random column drops | targeted "aimed" bombs later |
 | Mystery UFO with bonus | fixed bonus, timed appearance | score-position bonus later |
-| Lives, levels, score | text-screen HUD | no on-canvas digits primitive |
+| Lives, levels, score | fullscreen canvas HUD | one change-tracked `write` line |
 | Continuous cannon movement | key-repeat only | `readchar` gives presses, not held-key state; a held-key device query would smooth this but is out of scope |
 
 None of these touch the interpreter; they're all Logo-level polish.
@@ -466,8 +465,8 @@ this program:
   in this interpreter, so a bracketed list *literal* (e.g. `march.note`'s
   four-entry frequency table, or a HUD label like `[SCORE:]`) allocates
   fresh cons cells every time that line executes, even though it looks
-  like a constant. That's a few cells per march step and a few per frame
-  — orders of magnitude less than the eliminated `setpos` traffic, but
+  like a constant. That's a few cells per march step and a few per HUD
+  change — orders of magnitude less than the eliminated `setpos` traffic, but
   still non-zero over a long session, so `march.step` still calls
   `recycle` once per march.
 
