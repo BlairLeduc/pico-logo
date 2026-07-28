@@ -1,0 +1,1434 @@
+; Turtle Trails -- an original maze-chase game themed on the Logo turtle.
+; Load and play:  load "trails   trails
+;
+; See docs/turtle-trails-design.md.  The encoded map is the only source of
+; truth: movement, bug decisions, painting and the drawn maze all read it, and
+; nothing reads canvas colour.  There are no picture assets -- setup.palette
+; defines every colour and the hedges are carved from the same map the rules
+; use, so the picture and the logic cannot drift apart.
+;
+; Four interpreter rules govern this file:
+;   * there is no >= or <=; write  not (a < b)
+;   * a call's last argument absorbs trailing infix, so parenthesise:
+;     (item :i :a.dir) * (item :i :a.off)
+;   * a bracketed list literal cannot span lines in a loadable file, so the
+;     map gets one complete statement per row
+;   * a call to a procedure defined here may not sit inside a parenthesised
+;     arithmetic expression: `setx ((tile.x :c) - 4)` raises ") without (",
+;     because the deferred call eats the grouping paren's closing bracket.
+;     Put the call's result in a local first, then do the arithmetic.
+;   * every drawing sequence lives inside one  ask 7 [...]
+
+; -------------------------------------------------------------------------
+; Palette slots.  Slot 255 is the reserved transparent index and cannot be a
+; background, so black gets slot 245 rather than the 255 the design named.
+; Game logic compares slots, never RGB.
+; -------------------------------------------------------------------------
+
+make "c.bg 245
+make "c.speck 246
+make "c.trail 247
+make "c.dart 248
+make "c.swoop 249
+make "c.echo 250
+make "c.moss 251
+make "c.hedge 252
+make "c.dizzy 253
+make "c.text 254
+
+; Shape slots.  All sprites are mono 8x16 bitmaps drawn 16x16, painted in
+; each turtle's pen colour.
+make "sh.walk 1        ; 1..3 turtle walk cycle
+make "sh.bug 4         ; 4..5 bug body animation
+make "sh.wings 6       ; returning wings, rotated by heading
+make "sh.bonus 7       ; current bonus shape, redefined at level setup
+make "sh.shell 10      ; 10..15 shell-withdraw death sequence
+
+; -------------------------------------------------------------------------
+; The map.  Thirty-six encoded 28-character words, one `make` per line: the
+; parser drops multi-line parenthesised expressions inside procedure bodies,
+; and a bracketed literal cannot span lines in a loadable file.
+;
+; Letters, not digits, because a row of digits would be read as a number and
+; lose its leading zeros.  A=dead space or hedge, B=painted or intrinsically
+; empty path, C=unpainted path, D=power blossom, E=tunnel, F=nest floor,
+; G=nest door.
+;
+; Rows 1..3 carry the score line, rows 4..34 the hedge maze, rows 35..36 the
+; spare lives and the bonus history.
+; -------------------------------------------------------------------------
+
+make "tt.map []
+make "tt.map lput "AAAAAAAAAAAAAAAAAAAAAAAAAAAA :tt.map
+make "tt.map lput "AAAAAAAAAAAAAAAAAAAAAAAAAAAA :tt.map
+make "tt.map lput "AAAAAAAAAAAAAAAAAAAAAAAAAAAA :tt.map
+make "tt.map lput "AAAAAAAAAAAAAAAAAAAAAAAAAAAA :tt.map
+make "tt.map lput "ACCCCCCCCCCCCCCCCCCCCCCCCCCA :tt.map
+make "tt.map lput "ACAAAACAAAAACAACAAAAACAAAACA :tt.map
+make "tt.map lput "ADAAAACAAAAACAACAAAAACAAAADA :tt.map
+make "tt.map lput "ACAAAACAAAAACAACAAAAACAAAACA :tt.map
+make "tt.map lput "ACCCCCCAACCCCCCCCCCAACCCCCCA :tt.map
+make "tt.map lput "ACACAAAAACAAAAAAAACAAAAACACA :tt.map
+make "tt.map lput "ACACAAAAACAAAAAAAACAAAAACACA :tt.map
+make "tt.map lput "ACCCCCCAACCCCAACCCCAACCCCCCA :tt.map
+make "tt.map lput "AAAAAACAAAAACAACAAAAACAAAAAA :tt.map
+make "tt.map lput "AAAAAACAAAAACAACAAAAACAAAAAA :tt.map
+make "tt.map lput "AAAAAACBBBBBBBBBBBBBBCAAAAAA :tt.map
+make "tt.map lput "AAAAAACAABAAAGGAAABAACAAAAAA :tt.map
+make "tt.map lput "AAAAAACAABAFFFFFFABAACAAAAAA :tt.map
+make "tt.map lput "EEEEEECAABAFFFFFFABAACEEEEEE :tt.map
+make "tt.map lput "AAAAAACAABAFFFFFFABAACAAAAAA :tt.map
+make "tt.map lput "AAAAAACAABAAAAAAAABAACAAAAAA :tt.map
+make "tt.map lput "AAAAAACBBBBBBBBBBBBBBCAAAAAA :tt.map
+make "tt.map lput "AAAAAAAAABAABAABAABAAAAAAAAA :tt.map
+make "tt.map lput "AAAAAAAAABAABAABAABAAAAAAAAA :tt.map
+make "tt.map lput "ACCCCCCCCCAACBBCAACCCCCCCCCA :tt.map
+make "tt.map lput "ACAAAACAAAAACAACAAAAACAAAACA :tt.map
+make "tt.map lput "ACAAAACAAAAACAACAAAAACAAAACA :tt.map
+make "tt.map lput "EEECCCCAAAAACCCCAAAAACCCCEEE :tt.map
+make "tt.map lput "AAACAACAAAAAACCAAAAAACAACAAA :tt.map
+make "tt.map lput "AAACAACAAAAAACCAAAAAACAACAAA :tt.map
+make "tt.map lput "ACCCCCCAACCCCCCCCCCAACCCCCCA :tt.map
+make "tt.map lput "ACAAAACAACAAAAAAAACAACAAAACA :tt.map
+make "tt.map lput "ADAAAACAACAAAAAAAACAACAAAADA :tt.map
+make "tt.map lput "ACCCCCCCCCCCCCCCCCCCCCCCCCCA :tt.map
+make "tt.map lput "AAAAAAAAAAAAAAAAAAAAAAAAAAAA :tt.map
+make "tt.map lput "AAAAAAAAAAAAAAAAAAAAAAAAAAAA :tt.map
+make "tt.map lput "AAAAAAAAAAAAAAAAAAAAAAAAAAAA :tt.map
+
+; -------------------------------------------------------------------------
+; Fixed map landmarks.  All in map coordinates: column 1..28, row 1..36.
+; -------------------------------------------------------------------------
+
+make "tt.tunnels [18 27]        ; the two wrap-around rows
+make "tt.calm.rows [15 24]      ; a hunting bug may not turn upward here...
+make "tt.calm.cols [13 16]      ; ...in these columns, so it cannot camp
+make "tt.door.col 14            ; the nest door and the column bugs leave by
+make "tt.door.row 16
+make "tt.gate.col 14            ; the garden gate: where a bonus shape appears
+make "tt.gate.row 21
+make "tt.start.col 14           ; the turtle's tile at a level or life start
+make "tt.start.row 24
+
+; Indexed by turtle number + 1, so entry 1 is the turtle and 2..5 the bugs.
+make "tt.home.col [14 14 14 12 17]
+make "tt.home.row [24 15 18 18 18]
+make "tt.corner.col [14 26 3 27 2]
+make "tt.corner.row [24 2 2 36 36]
+make "tt.bug.pc [0 0 0 0 0]     ; filled by setup.palette
+
+; Bonus shape bitmaps, chosen by level.  One statement per row: a bracketed
+; literal cannot span lines in a loadable file.
+make "tt.shapes []
+make "tt.shapes lput [0 0 0 24 24 60 60 126 126 255 255 0 0 0 0 0] :tt.shapes
+make "tt.shapes lput [0 0 0 255 255 255 255 255 255 255 255 255 0 0 0 0] :tt.shapes
+make "tt.shapes lput [0 0 24 60 126 255 255 255 255 255 255 231 0 0 0 0] :tt.shapes
+make "tt.shapes lput [0 0 24 60 126 255 255 255 255 126 60 24 0 0 0 0] :tt.shapes
+make "tt.shapes lput [0 60 126 255 255 255 255 255 255 255 255 126 60 0 0 0] :tt.shapes
+make "tt.shapes lput [0 24 24 60 255 255 126 60 60 102 102 195 0 0 0 0] :tt.shapes
+make "tt.shapes lput [0 126 255 195 207 219 219 216 220 199 255 126 0 0 0 0] :tt.shapes
+make "tt.shapes lput [0 0 126 255 255 255 126 126 60 60 24 24 0 0 0 0] :tt.shapes
+
+; Session high score and the bonus history: both outlive a game, so they are
+; set up once at load.
+make "tt.high 0
+make "tt.history []
+
+; -------------------------------------------------------------------------
+; Map access.  The decoded map is 36 mutable row lists of 28 tile codes; a
+; junction lookup then walks at most 36 + 28 cons cells instead of the
+; hundreds a flat 1,008-member list would cost.
+; -------------------------------------------------------------------------
+
+to tile.code :ch
+  output ((ascii :ch) - 65)
+end
+
+; Build the rows back to front so every step is a constant-time fput: lput
+; would copy the list it appends to and leave 14,000 cells of garbage.
+to decode.map
+  local "w local "row
+  make "tt.tiles []
+  repeat 36 [
+    make "w (item (37 - repcount) :tt.map)
+    make "row []
+    repeat 28 [make "row (fput (tile.code (item (29 - repcount) :w)) :row)]
+    make "tt.tiles (fput :row :tt.tiles)
+  ]
+end
+
+to tile.at :col :row
+  if :col < 1 [output 0]
+  if :col > 28 [output 0]
+  if :row < 1 [output 0]
+  if :row > 36 [output 0]
+  output (item :col (item :row :tt.tiles))
+end
+
+; Painting mutates a tile in place and allocates nothing.
+to set.tile :col :row :value
+  .setitem :col (item :row :tt.tiles) :value
+end
+
+to walk? :code
+  if :code < 1 [output "false]
+  output (:code < 5)
+end
+
+to tunnel.row? :row
+  output (member? :row :tt.tunnels)
+end
+
+; -------------------------------------------------------------------------
+; Geometry.  Tile centres sit at x = -108 + 8(col-1) and y = 140 - 8(row-1),
+; so the 28x36 board fills 224x288 pixels centred on the 320x320 screen.
+; Directions are 1 up, 2 left, 3 down, 4 right -- also the tie-break order.
+; -------------------------------------------------------------------------
+
+to tile.x :col
+  output (-108 + (8 * (:col - 1)))
+end
+
+to tile.y :row
+  output (140 - (8 * (:row - 1)))
+end
+
+to dir.dc :d
+  if :d = 2 [output -1]
+  if :d = 4 [output 1]
+  output 0
+end
+
+to dir.dr :d
+  if :d = 1 [output -1]
+  if :d = 3 [output 1]
+  output 0
+end
+
+to dir.heading :d
+  if :d = 1 [output 0]
+  if :d = 2 [output 270]
+  if :d = 3 [output 180]
+  output 90
+end
+
+to opposite :d
+  output (1 + (remainder (:d + 1) 4))
+end
+
+; The tunnel rows are the only place where column 1 and column 28 are
+; neighbours; everywhere else stepping off the board lands on code 0.
+to next.col :col :row :d
+  local "c local "dc
+  make "dc (dir.dc :d)
+  make "c (:col + :dc)
+  if :c < 1 [ifelse (tunnel.row? :row) [output 28] [output 0]]
+  if :c > 28 [ifelse (tunnel.row? :row) [output 1] [output 0]]
+  output :c
+end
+
+to next.row :row :d
+  output (:row + (dir.dr :d))
+end
+
+to open? :col :row :d
+  output (walk? (tile.at (next.col :col :row :d) (next.row :row :d)))
+end
+
+; Nest floor and door are not ordinary paths: only bugs in a nest state may
+; cross them, which is what makes the door one-way for everyone else.
+to nest.open? :col :row :d
+  local "k
+  make "k (tile.at (next.col :col :row :d) (next.row :row :d))
+  output (:k > 0)
+end
+
+; -------------------------------------------------------------------------
+; Colours, shapes and turtles.
+; -------------------------------------------------------------------------
+
+to setup.palette
+  setpalette :c.bg [0 0 0]
+  setpalette :c.speck [104 108 120]
+  setpalette :c.trail [248 214 84]
+  setpalette :c.dart [232 74 62]
+  setpalette :c.swoop [236 130 220]
+  setpalette :c.echo [86 214 226]
+  setpalette :c.moss [240 152 62]
+  setpalette :c.hedge [42 106 66]
+  setpalette :c.dizzy [70 96 232]
+  setpalette :c.text [236 240 246]
+  make "tt.bug.pc (list 0 :c.dart :c.swoop :c.echo :c.moss)
+end
+
+to setup.shapes
+  putsh :sh.walk [24 24 60 126 255 126 126 126 126 126 255 126 60 24 0 0]
+  putsh (:sh.walk + 1) [24 24 60 126 126 126 126 126 126 126 126 126 60 24 0 0]
+  putsh (:sh.walk + 2) [24 24 60 255 126 126 126 126 126 126 126 255 60 24 0 0]
+  putsh :sh.bug [24 36 60 126 255 255 255 255 255 255 255 126 189 60 0 0]
+  putsh (:sh.bug + 1) [24 36 60 126 255 255 255 255 255 255 255 126 90 102 0 0]
+  putsh :sh.wings [0 0 102 255 255 255 102 24 24 0 0 0 0 0 0 0]
+  putsh :sh.shell [0 24 60 126 126 126 126 126 126 126 126 126 60 24 0 0]
+  putsh (:sh.shell + 1) [0 0 60 126 126 126 126 126 126 126 126 126 60 0 0 0]
+  putsh (:sh.shell + 2) [0 0 0 60 126 126 126 126 126 126 126 60 0 0 0 0]
+  putsh (:sh.shell + 3) [0 0 0 0 60 126 126 126 126 126 60 0 0 0 0 0]
+  putsh (:sh.shell + 4) [0 0 0 0 0 0 60 126 126 60 0 0 0 0 0 0]
+  putsh (:sh.shell + 5) [0 0 0 0 0 0 0 24 24 0 0 0 0 0 0 0]
+end
+
+; Lower-numbered turtles composite on top, so the turtle is 0 and the bonus
+; shape sits under every actor.  Turtle 7 never shows: it draws the canvas.
+to setup.turtles
+  tell [0 1 2 3 4 5 6 7]
+  each [pu ht setmag 1 setspeed 0 seth 0]
+  ask 0 [setrot "full setpc :c.trail setpensize 2]
+  ask [1 2 3 4] [setrot "fixed]
+  ask 5 [setrot "fixed]
+  ask 7 [setrot "fixed]
+  tell 0
+end
+
+; -------------------------------------------------------------------------
+; Drawing.  Everything below draws with turtle 7 inside one ask block.
+;
+; The board is filled with hedge and the corridors are then carved out of it
+; in the background colour, one pen-8 sweep per maximal run of walkable
+; tiles.  A pen wider than one pixel stamps a filled disc at each point, so
+; every corridor end and junction comes out rounded -- which is exactly the
+; curved hedge the design asks for, at no drawing cost.
+;
+; Sweeping by row and again by column matters: the discs at a run's ends
+; leave shallow notches along a block edge, and the perpendicular pass fills
+; them.  A run of one tile is skipped, because the maze has no dead ends and
+; so every walkable tile also belongs to a run of two or more on the other
+; axis.
+; -------------------------------------------------------------------------
+
+to sweep.row :r :c1 :c2
+  if :c1 = :c2 [stop]
+  pu sety (tile.y :r) setx (tile.x :c1) pd setx (tile.x :c2) pu
+end
+
+to sweep.col :c :r1 :r2
+  if :r1 = :r2 [stop]
+  pu setx (tile.x :c) sety (tile.y :r1) pd sety (tile.y :r2) pu
+end
+
+to fill.board
+  ask 7 [
+    pu setpensize 8 setpc :c.hedge
+    repeat 36 [pu sety (tile.y repcount) setx -108 pd setx 108 pu]
+    repeat 28 [pu setx (tile.x repcount) sety 140 pd sety -140 pu]
+  ]
+end
+
+to carve.paths
+  local "r local "c local "run
+  ask 7 [
+    pu setpensize 8 setpc :c.bg
+    repeat 36 [
+      make "r repcount
+      make "run 0
+      repeat 28 [
+        make "c repcount
+        ifelse (walk? (tile.at :c :r)) [
+          if :run = 0 [make "run :c]
+        ] [
+          if :run > 0 [sweep.row :r :run (:c - 1)]
+          make "run 0
+        ]
+      ]
+      if :run > 0 [sweep.row :r :run 28]
+    ]
+    repeat 28 [
+      make "c repcount
+      make "run 0
+      repeat 36 [
+        make "r repcount
+        ifelse (walk? (tile.at :c :r)) [
+          if :run = 0 [make "run :r]
+        ] [
+          if :run > 0 [sweep.col :c :run (:r - 1)]
+          make "run 0
+        ]
+      ]
+      if :run > 0 [sweep.col :c :run 36]
+    ]
+  ]
+end
+
+to mark.tile :c :r
+  dot (list (tile.x :c) (tile.y :r))
+end
+
+; Unpainted tiles carry a faint speck and blossoms a fat disc.  The turtle's
+; 2-pixel trail runs straight through a tile centre, so painting covers a
+; speck with no extra drawing.
+to draw.specks
+  local "r local "c local "k
+  ask 7 [
+    pu
+    repeat 36 [
+      make "r repcount
+      repeat 28 [
+        make "c repcount
+        make "k (tile.at :c :r)
+        if :k = 2 [setpensize 2 setpc :c.speck mark.tile :c :r]
+        if :k = 3 [setpensize 6 setpc :c.trail mark.tile :c :r]
+      ]
+    ]
+    setpensize 8
+  ]
+end
+
+; A blossom is wider than the trail, so covering it needs more than the
+; trail: black it out, then relay the half-trail the turtle drew coming in
+; so the painted path stays unbroken.
+to erase.blossom :c :r :d
+  local "cx local "cy local "bx local "by local "h
+  make "cx (tile.x :c)
+  make "cy (tile.y :r)
+  make "h (dir.dc :d)
+  make "bx (:cx - (:h * 4))
+  make "h (dir.dr :d)
+  make "by (:cy + (:h * 4))
+  ask 7 [
+    pu setpensize 8 setpc :c.bg mark.tile :c :r
+    setpensize 2 setpc :c.trail
+    setx :bx sety :by
+    pd setx :cx sety :cy pu
+    setpensize 8
+  ]
+end
+
+to draw.board
+  setbg :c.bg
+  clean
+  fill.board
+  carve.paths
+  draw.specks
+  draw.lives
+  draw.history
+  draw.labels
+  make "tt.hud.score -1
+  make "tt.hud.high -1
+  draw.hud
+end
+
+; -------------------------------------------------------------------------
+; Heads-up display.  The static rows are redrawn only when a value changes:
+; the old text is written again in the background colour, then the new text
+; in white.
+; -------------------------------------------------------------------------
+
+to write.at :x :y :text
+  ask 7 [pu setx :x sety :y write :text]
+end
+
+; The labels never change, so they are drawn once with the board.  Only the
+; two numbers are rewritten, and `sentence` is deliberately not used to join
+; label and value: building a list every score change is the one thing that
+; would make an ordinary frame consume storage, and Logo never collects on
+; its own.
+to draw.labels
+  ask 7 [setpc :c.text]
+  write.at -108 132 [SCORE]
+  write.at 20 132 [TOP]
+end
+
+to score.line :s :h
+  write.at -60 132 :s
+  write.at 52 132 :h
+end
+
+to draw.hud
+  if :tt.score = :tt.hud.score [if :tt.high = :tt.hud.high [stop]]
+  ask 7 [setpc :c.bg]
+  if not (:tt.hud.score < 0) [score.line :tt.hud.score :tt.hud.high]
+  ask 7 [setpc :c.text]
+  score.line :tt.score :tt.high
+  make "tt.hud.score :tt.score
+  make "tt.hud.high :tt.high
+end
+
+; Spare lives are small turtle stamps; the bonus history shows the last seven
+; levels' shapes.  Both are canvas stamps, redrawn only when they change.
+to draw.lives
+  local "n
+  ask 7 [
+    pu setpensize 8 setpc :c.bg
+    sety -136 setx -100 pd setx -20 pu
+    setsh :sh.walk setpc :c.trail seth 0
+    make "n :tt.lives
+    if :n > 5 [make "n 5]
+    repeat :n [setx (-100 + (16 * (repcount - 1))) stamp]
+  ]
+end
+
+to draw.history
+  local "n
+  ask 7 [
+    pu setpensize 8 setpc :c.bg
+    sety -136 setx 20 pd setx 100 pu
+    make "n (count :tt.history)
+    if :n > 7 [make "n 7]
+    repeat :n [
+      putsh :sh.bonus (item repcount :tt.history)
+      setsh :sh.bonus setpc :c.trail seth 0
+      setx (100 - (16 * (repcount - 1))) stamp
+    ]
+    putsh :sh.bonus (item :tt.bonus.shape :tt.shapes)
+    setsh :sh.walk
+  ]
+end
+
+; -------------------------------------------------------------------------
+; Actor state.  Screen position is the rendered result, not the simulation:
+; the truth is a logical tile plus a signed pixel offset from its centre.
+; Each list is indexed by turtle number + 1.
+;
+; a.off runs 0..128 along a.dir from the centre of a.col/a.row, so reaching
+; 128 is exactly the moment the actor enters the next tile -- one event per
+; tile, which is what makes painting, bug decisions and collisions
+; repeatable.
+;
+; The unit is a sixteenth of a pixel, so a tile is 128 units and half a tile
+; is 64.  Sub-pixel *integers* rather than fractional pixels: a float result
+; stored into an actor list is retained rather than recycled, which drains
+; the node pool in about a minute of play, and integers also make the
+; simulation bit-identical on every board.
+; -------------------------------------------------------------------------
+
+to place.actor :i
+  local "d local "o local "t local "px local "py local "h
+  make "d (item :i :a.dir)
+  make "o (item :i :a.off)
+  make "t (:i - 1)
+  make "o (intquotient :o 16)
+  make "px (tile.x (item :i :a.col))
+  make "py (tile.y (item :i :a.row))
+  make "h (dir.dc :d)
+  make "px (:px + (:h * :o))
+  make "h (dir.dr :d)
+  make "py (:py - (:h * :o))
+  make "h (dir.heading :d)
+  ask :t [seth :h setx :px sety :py]
+end
+
+; The pen lifts across a teleport, or the turtle would draw its trail
+; straight back across the screen.  It also lifts for death and respawn.
+to place.all
+  if :tt.warp [ask 0 [pu]]
+  repeat 5 [place.actor repcount]
+  if :tt.warp [ask 0 [pd] make "tt.warp "false]
+end
+
+to advance.tile :i
+  local "c local "r local "d
+  make "d (item :i :a.dir)
+  make "c (item :i :a.col)
+  make "r (item :i :a.row)
+  .setitem :i :a.col (next.col :c :r :d)
+  .setitem :i :a.row (next.row :r :d)
+end
+
+; True when the actor may leave its tile centre in its current direction.
+to can.go? :i
+  local "st
+  make "st (item :i :a.state)
+  if :st > 1 [
+    if not (:st = 4) [
+      output (nest.open? (item :i :a.col) (item :i :a.row) (item :i :a.dir))
+    ]
+  ]
+  output (open? (item :i :a.col) (item :i :a.row) (item :i :a.dir))
+end
+
+; Advance one actor by :dist pixels.  Crossing a tile centre enters the next
+; tile and carries the remainder forward; an actor facing a hedge waits at
+; the centre instead, with its walk animation still running.
+to move.actor :i :dist
+  local "o local "was
+  make "o ((item :i :a.off) + :dist)
+  while [not (:o < 128)] [
+    make "o (:o - 128)
+    make "was (item :i :a.col)
+    advance.tile :i
+    if :i = 1 [warp.check :was]
+    if :i > 1 [bug.arrive :i]
+  ]
+  if :o > 0 [if not (can.go? :i) [make "o 0]]
+  .setitem :i :a.off :o
+end
+
+; next.col already carried the column across a tunnel, so a jump of more than
+; one column is the only evidence a teleport happened.
+to warp.check :was
+  local "d
+  make "d ((item 1 :a.col) - :was)
+  if :d < -1 [make "tt.warp "true]
+  if :d > 1 [make "tt.warp "true]
+end
+
+; -------------------------------------------------------------------------
+; Input and player movement.
+; -------------------------------------------------------------------------
+
+; Drain every queued arrow byte and keep the most recent legal desire; a turn
+; the corridor will not take yet stays buffered until it opens.
+to poll.input
+  local "k
+  while [key?] [
+    make "k (ascii readchar)
+    if :k = 181 [.setitem 1 :a.next 1]
+    if :k = 180 [.setitem 1 :a.next 2]
+    if :k = 182 [.setitem 1 :a.next 3]
+    if :k = 183 [.setitem 1 :a.next 4]
+    if :k = 112 [make "tt.paused (not :tt.paused)]
+    if :k = 113 [make "tt.quit "true]
+  ]
+end
+
+; A reverse is free: the actor is between two centres, so it keeps its
+; position and adopts the tile it was heading for.
+to reverse.player :o :n
+  local "c local "r local "d
+  make "d (item 1 :a.dir)
+  if :o > 0 [
+    make "c (item 1 :a.col)
+    make "r (item 1 :a.row)
+    .setitem 1 :a.col (next.col :c :r :d)
+    .setitem 1 :a.row (next.row :r :d)
+    .setitem 1 :a.off (128 - :o)
+  ]
+  .setitem 1 :a.dir :n
+  .setitem 1 :a.next 0
+end
+
+; Cornering.  A turn may start up to four pixels before a tile centre and
+; finish up to four after it, so the corridor tested is the nearest centre,
+; not the one last passed.  On acceptance the perpendicular axis snaps to
+; that centre and the unspent movement continues in the new direction --
+; forcing turns at the exact centre feels sluggish.
+to try.turn
+  local "n local "d local "o local "c local "r
+  make "n (item 1 :a.next)
+  if :n = 0 [stop]
+  make "d (item 1 :a.dir)
+  make "o (item 1 :a.off)
+  if :n = :d [.setitem 1 :a.next 0 stop]
+  if :n = (opposite :d) [reverse.player :o :n stop]
+  make "c (item 1 :a.col)
+  make "r (item 1 :a.row)
+  if not (:o < 64) [
+    make "c (next.col (item 1 :a.col) (item 1 :a.row) :d)
+    make "r (next.row (item 1 :a.row) :d)
+  ]
+  if not (open? :c :r :n) [stop]
+  .setitem 1 :a.col :c
+  .setitem 1 :a.row :r
+  .setitem 1 :a.dir :n
+  .setitem 1 :a.off 0
+  .setitem 1 :a.next 0
+end
+
+to step.player
+  if :tt.pause > 0 [make "tt.pause (:tt.pause - 1) stop]
+  try.turn
+  move.actor 1 :tt.pstep
+end
+
+; -------------------------------------------------------------------------
+; Painting.  A fresh tile withholds one movement quantum from the turtle and
+; a blossom three: those short pauses let a pursuing bug gain ground, which
+; is what keeps clearing the last corridors tense.
+; -------------------------------------------------------------------------
+
+to paint.tile
+  local "c local "r local "k
+  make "c (item 1 :a.col)
+  make "r (item 1 :a.row)
+  make "k (tile.at :c :r)
+  if :k < 2 [stop]
+  if :k > 3 [stop]
+  set.tile :c :r 1
+  make "tt.left (:tt.left - 1)
+  make "tt.painted (:tt.painted + 1)
+  make "tt.idle 0
+  ifelse :k = 3 [
+    add.score 50
+    make "tt.pause 3
+    erase.blossom :c :r (item 1 :a.dir)
+    eat.blossom
+  ] [
+    add.score 10
+    make "tt.pause 1
+    paint.sound
+  ]
+  release.check
+  bonus.check
+end
+
+to add.score :n
+  make "tt.score (:tt.score + :n)
+  if :tt.score > :tt.high [make "tt.high :tt.score]
+  if not :tt.extra [
+    if not (:tt.score < 10000) [
+      make "tt.extra "true
+      make "tt.lives (:tt.lives + 1)
+      draw.lives
+      (sound [2 6] 1200 220 11)
+    ]
+  ]
+end
+
+; -------------------------------------------------------------------------
+; Global patrol / hunt schedule.  Bugs alternate between orbiting their home
+; corners and hunting; every change sets a pending reversal on each hunting
+; bug.  Dizzy time pauses the schedule.
+; -------------------------------------------------------------------------
+
+to step.mode.clock
+  if :tt.dizzy > 0 [step.dizzy.clock stop]
+  if :tt.phase > (count :tt.sched) [stop]
+  make "tt.mtimer (:tt.mtimer - 1)
+  if :tt.mtimer > 0 [stop]
+  make "tt.phase (:tt.phase + 1)
+  make "tt.mode (1 - :tt.mode)
+  reverse.bugs
+  if :tt.phase > (count :tt.sched) [stop]
+  make "tt.mtimer (25 * (item :tt.phase :tt.sched))
+end
+
+to reverse.bugs
+  local "i
+  repeat 4 [
+    make "i (repcount + 1)
+    if (item :i :a.state) = 1 [.setitem :i :a.rev 1]
+  ]
+end
+
+to step.dizzy.clock
+  local "i
+  make "tt.dizzy (:tt.dizzy - 1)
+  if :tt.dizzy > 0 [stop]
+  repeat 4 [
+    make "i (repcount + 1)
+    if (item :i :a.state) = 4 [.setitem :i :a.state 1 .setitem :i :a.rev 1]
+  ]
+end
+
+; Eating a blossom turns the tables: eligible bugs reverse and go dizzy, the
+; schedule pauses, and the chain score restarts at 200.  Bugs in the nest,
+; leaving it, or flying back as wings are immune.
+to eat.blossom
+  local "i
+  make "tt.chain 0
+  make "tt.dizzy :tt.p.dizzy
+  repeat 4 [
+    make "i (repcount + 1)
+    if (item :i :a.state) = 1 [
+      .setitem :i :a.state 4
+      .setitem :i :a.rev 1
+      .setitem :i :a.next 0
+    ]
+  ]
+  (sound [2 6] 220 260 12)
+end
+
+; -------------------------------------------------------------------------
+; Bug targeting.  One tile before a junction a hunting bug scores each exit
+; of the tile it is about to enter by squared distance to its target and
+; takes the smallest.  Bugs cannot reverse voluntarily; ties break up, left,
+; down, right.  The classic's facing-up overflow is deliberately not
+; reproduced -- there are no memorised patterns here to stay faithful to.
+; -------------------------------------------------------------------------
+
+to hunt.col :i
+  local "pc local "dc local "ahead
+  make "pc (item 1 :a.col)
+  make "dc (dir.dc (item 1 :a.dir))
+  if :i = 2 [output :pc]
+  if :i = 3 [output (:pc + (4 * :dc))]
+  if :i = 4 [
+    make "ahead (:pc + (2 * :dc))
+    output ((2 * :ahead) - (item 2 :a.col))
+  ]
+  if (moss.far?) [output :pc]
+  output (item 5 :tt.corner.col)
+end
+
+to hunt.row :i
+  local "pr local "dr local "ahead
+  make "pr (item 1 :a.row)
+  make "dr (dir.dr (item 1 :a.dir))
+  if :i = 2 [output :pr]
+  if :i = 3 [output (:pr + (4 * :dr))]
+  if :i = 4 [
+    make "ahead (:pr + (2 * :dr))
+    output ((2 * :ahead) - (item 2 :a.row))
+  ]
+  if (moss.far?) [output :pr]
+  output (item 5 :tt.corner.row)
+end
+
+; Moss hunts only from a distance and turns for home once inside eight tiles.
+to moss.far?
+  local "dc local "dr
+  make "dc ((item 5 :a.col) - (item 1 :a.col))
+  make "dr ((item 5 :a.row) - (item 1 :a.row))
+  output (not (((:dc * :dc) + (:dr * :dr)) < 64))
+end
+
+; Dart turns relentless as the garden empties: it targets the turtle even
+; during patrol once few tiles remain.
+to frenzy? :i
+  if not (:i = 2) [output "false]
+  output (:tt.left < :tt.frenzy1)
+end
+
+to target.col :i
+  if (item :i :a.state) = 5 [output :tt.door.col]
+  if :tt.mode = 0 [if not (frenzy? :i) [output (item :i :tt.corner.col)]]
+  output (hunt.col :i)
+end
+
+to target.row :i
+  if (item :i :a.state) = 5 [output (:tt.door.row - 1)]
+  if :tt.mode = 0 [if not (frenzy? :i) [output (item :i :tt.corner.row)]]
+  output (hunt.row :i)
+end
+
+; Wings may use the door; a hunting bug may not turn upward on a calm tile,
+; which stops it camping the corridor above the nest.  Dizzy bugs ignore the
+; restriction.
+to exit.open? :i :c :r :k
+  if (item :i :a.state) = 5 [output (nest.open? :c :r :k)]
+  if :k = 1 [
+    if (item :i :a.state) = 1 [
+      if (member? :r :tt.calm.rows) [if (member? :c :tt.calm.cols) [output "false]]
+    ]
+  ]
+  output (open? :c :r :k)
+end
+
+to best.dir :i :c :r :d :tc :tr
+  local "k local "back local "bd local "bs local "s local "nc local "nr
+  make "back (opposite :d)
+  make "bd 0
+  make "bs 999999
+  repeat 4 [
+    make "k repcount
+    if not (:k = :back) [
+      if (exit.open? :i :c :r :k) [
+        make "nc (next.col :c :r :k)
+        make "nr (next.row :r :k)
+        make "s (((:nc - :tc) * (:nc - :tc)) + ((:nr - :tr) * (:nr - :tr)))
+        if :s < :bs [make "bs :s make "bd :k]
+      ]
+    ]
+  ]
+  if :bd = 0 [output :back]
+  output :bd
+end
+
+; A dizzy bug staggers: it starts from a pseudo-random direction and takes
+; the first legal non-reversing exit.  rerandom at level start keeps those
+; paths repeatable for the tests.
+to dizzy.dir :i :c :r :d
+  local "k local "back local "start
+  make "back (opposite :d)
+  make "start (random 4)
+  repeat 4 [
+    make "k (1 + (remainder (:start + repcount) 4))
+    if not (:k = :back) [if (exit.open? :i :c :r :k) [output :k]]
+  ]
+  output :back
+end
+
+to choose.dir :i
+  local "c local "r local "d
+  make "d (item :i :a.dir)
+  make "c (next.col (item :i :a.col) (item :i :a.row) :d)
+  make "r (next.row (item :i :a.row) :d)
+  if (item :i :a.state) = 4 [output (dizzy.dir :i :c :r :d)]
+  output (best.dir :i :c :r :d (target.col :i) (target.row :i))
+end
+
+; A bug reaching a tile centre commits the exit it chose a tile ago, then
+; looks one tile further ahead and chooses again.  Scripted nest states move
+; on rails instead and never come through here.
+to bug.arrive :i
+  local "d local "st
+  make "st (item :i :a.state)
+  if :st > 1 [if not (:st = 4) [if not (:st = 5) [stop]]]
+  if (item :i :a.rev) = 1 [
+    .setitem :i :a.rev 0
+    .setitem :i :a.dir (opposite (item :i :a.dir))
+    .setitem :i :a.next 0
+  ]
+  make "d (item :i :a.next)
+  if :d > 0 [.setitem :i :a.dir :d]
+  if :st = 5 [if (wings.home? :i) [stop]]
+  .setitem :i :a.next (choose.dir :i)
+end
+
+; Wings arriving above the door stop navigating and drop onto the rails.
+to wings.home? :i
+  if not ((item :i :a.row) = (:tt.door.row - 1)) [output "false]
+  if (item :i :a.col) < :tt.door.col [output "false]
+  if (item :i :a.col) > (:tt.door.col + 1) [output "false]
+  .setitem :i :a.state 6
+  .setitem :i :a.col :tt.door.col
+  .setitem :i :a.dir 3
+  .setitem :i :a.off 0
+  .setitem :i :a.next 0
+  output "true
+end
+
+; -------------------------------------------------------------------------
+; The nest.  Movement in and out is a short scripted state machine, not
+; pathfinding: 2 waiting, 3 leaving upward, 6 dropping back in.
+; -------------------------------------------------------------------------
+
+; Wait on the spot with a slow bob, so a bug in the nest never looks dead.
+to nest.bob :i
+  local "p
+  make "p (remainder (intquotient :tt.frame 4) 8)
+  if :p > 4 [make "p (8 - :p)]
+  .setitem :i :a.dir 1
+  .setitem :i :a.off (:p * 16)
+end
+
+to nest.leave :i
+  local "c
+  make "c (item :i :a.col)
+  ifelse :c = :tt.door.col [
+    .setitem :i :a.dir 1
+  ] [
+    ifelse :c < :tt.door.col [.setitem :i :a.dir 4] [.setitem :i :a.dir 2]
+  ]
+  move.actor :i :tt.lstep
+  if (item :i :a.row) < :tt.door.row [
+    .setitem :i :a.state 1
+    .setitem :i :a.dir 2
+    .setitem :i :a.off 0
+    .setitem :i :a.next 0
+    dress.bug :i
+  ]
+end
+
+to nest.enter :i
+  .setitem :i :a.dir 3
+  move.actor :i :tt.wstep
+  if not ((item :i :a.row) < (item :i :tt.home.row)) [
+    .setitem :i :a.row (item :i :tt.home.row)
+    .setitem :i :a.off 0
+    .setitem :i :a.state 3
+    dress.bug :i
+  ]
+end
+
+; Release rules.  Personal painted-tile counters govern a fresh level; after
+; a lost life a global counter replaces them, and a no-painting timer forces
+; the preferred waiting bug out regardless.  Together they stop a level
+; stalling with bugs trapped inside.
+to release.check
+  local "i local "n
+  repeat 4 [
+    make "i (repcount + 1)
+    if (item :i :a.state) = 2 [
+      make "n (item :i :tt.release)
+      if not (:tt.painted < :n) [.setitem :i :a.state 3]
+    ]
+  ]
+end
+
+to step.nest.clock
+  local "i
+  make "tt.idle (:tt.idle + 1)
+  if :tt.idle < :tt.p.idle [stop]
+  make "tt.idle 0
+  repeat 4 [
+    make "i (repcount + 1)
+    if (item :i :a.state) = 2 [.setitem :i :a.state 3 stop]
+  ]
+end
+
+; -------------------------------------------------------------------------
+; Bug movement.
+; -------------------------------------------------------------------------
+
+to bug.step :i
+  local "st
+  make "st (item :i :a.state)
+  if :st = 4 [output :tt.dstep]
+  if :st = 5 [output :tt.wstep]
+  if (tunnel.row? (item :i :a.row)) [output :tt.tstep]
+  if (frenzy? :i) [output :tt.fstep]
+  output :tt.bstep
+end
+
+to step.one.bug :i
+  local "st
+  make "st (item :i :a.state)
+  if :st = 2 [nest.bob :i stop]
+  if :st = 3 [nest.leave :i stop]
+  if :st = 6 [nest.enter :i stop]
+  move.actor :i (bug.step :i)
+end
+
+to step.bugs
+  repeat 4 [step.one.bug (repcount + 1)]
+end
+
+; Bugs wear the common body frames in their own pen colour; dizzy bugs turn
+; blue and flash white as their time runs out.
+to dress.bug :i
+  local "st local "pc
+  make "st (item :i :a.state)
+  make "pc (item :i :tt.bug.pc)
+  if :st = 4 [
+    make "pc :c.dizzy
+    if :tt.dizzy < 50 [if (remainder (intquotient :tt.dizzy 4) 2) = 1 [make "pc :c.text]]
+  ]
+  ifelse :st = 5 [
+    ask (:i - 1) [setrot "full setanim 0 0 0 setsh :sh.wings setpc :c.text]
+  ] [
+    ask (:i - 1) [setrot "fixed setanim :sh.bug (:sh.bug + 1) 140 setpc :pc]
+  ]
+end
+
+to dress.bugs
+  repeat 4 [dress.bug (repcount + 1)]
+end
+
+; -------------------------------------------------------------------------
+; Bonus shapes.  Two appear per level at the garden gate, each for a bounded
+; interval near nine seconds.
+; -------------------------------------------------------------------------
+
+to bonus.check
+  if :tt.bonus > 0 [stop]
+  if :tt.bonus.done > 1 [stop]
+  if :tt.painted < (item (:tt.bonus.done + 1) :tt.bonus.at) [stop]
+  make "tt.bonus.done (:tt.bonus.done + 1)
+  make "tt.bonus (200 + (random 50))
+  ask 5 [setsh :sh.bonus setpc :c.trail setx (tile.x :tt.gate.col) sety (tile.y :tt.gate.row) st]
+end
+
+to step.bonus
+  if :tt.bonus = 0 [stop]
+  make "tt.bonus (:tt.bonus - 1)
+  if :tt.bonus > 0 [stop]
+  ask 5 [ht]
+end
+
+to take.bonus
+  if :tt.bonus = 0 [stop]
+  if not ((item 1 :a.col) = :tt.gate.col) [stop]
+  if not ((item 1 :a.row) = :tt.gate.row) [stop]
+  make "tt.bonus 0
+  ask 5 [ht]
+  add.score :tt.bonus.score
+  (sound [2 6] 900 200 12)
+end
+
+; -------------------------------------------------------------------------
+; Collisions.  Checked after all five actors have moved, so eating a blossom
+; changes bug state before the test.  Two actors collide when their centres
+; occupy the same logical tile: there is deliberately no swept test, so the
+; rare opposite-direction tile swap passes through, as a rule that is
+; deterministic and testable rather than an accident.
+; -------------------------------------------------------------------------
+
+to same.tile? :i
+  if not ((item :i :a.col) = (item 1 :a.col)) [output "false]
+  output ((item :i :a.row) = (item 1 :a.row))
+end
+
+to eat.bug :i
+  make "tt.chain (:tt.chain + 1)
+  add.score (100 * (pwr 2 :tt.chain))
+  .setitem :i :a.state 5
+  .setitem :i :a.next 0
+  .setitem :i :a.rev 0
+  dress.bug :i
+  (sound [2 6] (400 + (200 * :tt.chain)) 180 12)
+end
+
+to check.collisions
+  local "i local "st
+  repeat 4 [
+    make "i (repcount + 1)
+    make "st (item :i :a.state)
+    if (same.tile? :i) [
+      if :st = 4 [eat.bug :i]
+      if :st = 1 [make "tt.dying "true]
+    ]
+  ]
+  take.bonus
+end
+
+; -------------------------------------------------------------------------
+; Sound.  Every effect is centred with a left/right voice pair.  Per-frame
+; code only changes the drone pitch when the game state changes; it never
+; enqueues a note every frame.
+; -------------------------------------------------------------------------
+
+to setup.sound
+  setwave [0 4] "pulse setenv [0 4] [0 18 0 40]
+  setwave [1 5] "square setenv [1 5] [0 30 12 60]
+  setwave [2 6] "sawtooth setenv [2 6] [0 40 0 90]
+  setwave [3 7] "white setenv [3 7] [0 0 15 200]
+  make "tt.drone -1
+  make "tt.dab 0
+end
+
+; Alternating dabs, so a painted run reads as a rhythm rather than one tone.
+to paint.sound
+  make "tt.dab (1 - :tt.dab)
+  (sound [0 4] (330 + (70 * :tt.dab)) 40 5)
+end
+
+to drone.state
+  if :tt.dizzy > 0 [output 3]
+  if :tt.left < :tt.frenzy2 [output 2]
+  if :tt.left < :tt.frenzy1 [output 1]
+  output 0
+end
+
+to update.drone
+  local "s
+  make "s (drone.state)
+  if :s = :tt.drone [stop]
+  make "tt.drone :s
+  (sound [1 5] (90 + (26 * :s)) 400 7)
+end
+
+; -------------------------------------------------------------------------
+; Level profiles.  One table owns every speed and timing, grouped by
+; behavioural range rather than one near-identical row per level.
+; -------------------------------------------------------------------------
+
+to set.profile :n
+  make "tt.pstep 41
+  make "tt.bstep 37
+  make "tt.dstep 24
+  make "tt.tstep 22
+  make "tt.wstep 80
+  make "tt.fstep 42
+  make "tt.lstep 18
+  make "tt.p.dizzy 150
+  make "tt.p.idle 100
+  make "tt.frenzy1 50
+  make "tt.frenzy2 20
+  make "tt.sched [7 20 7 20 5 20 5]
+  if :n > 1 [
+    make "tt.pstep 45
+    make "tt.bstep 40
+    make "tt.dstep 27
+    make "tt.fstep 46
+    make "tt.p.dizzy 125
+  ]
+  if :n > 4 [
+    make "tt.pstep 46
+    make "tt.bstep 42
+    make "tt.fstep 48
+    make "tt.p.dizzy 75
+    make "tt.p.idle 75
+    make "tt.frenzy1 60
+    make "tt.frenzy2 30
+    make "tt.sched [5 20 5 20 5 17 5]
+  ]
+  if :n > 8 [
+    make "tt.pstep 47
+    make "tt.bstep 45
+    make "tt.fstep 49
+    make "tt.p.dizzy 50
+    make "tt.sched [5 20 5 20 5 17 3]
+  ]
+  if :n > 12 [
+    make "tt.p.dizzy 25
+    make "tt.frenzy1 80
+    make "tt.frenzy2 40
+  ]
+  set.bonus :n
+end
+
+to set.bonus :n
+  make "tt.bonus.shape 1
+  make "tt.bonus.score 100
+  if :n > 1 [make "tt.bonus.shape 2 make "tt.bonus.score 300]
+  if :n > 2 [make "tt.bonus.shape 3 make "tt.bonus.score 500]
+  if :n > 4 [make "tt.bonus.shape 4 make "tt.bonus.score 700]
+  if :n > 6 [make "tt.bonus.shape 5 make "tt.bonus.score 1000]
+  if :n > 8 [make "tt.bonus.shape 6 make "tt.bonus.score 2000]
+  if :n > 10 [make "tt.bonus.shape 7 make "tt.bonus.score 3000]
+  if :n > 12 [make "tt.bonus.shape 8 make "tt.bonus.score 5000]
+  putsh :sh.bonus (item :tt.bonus.shape :tt.shapes)
+end
+
+; -------------------------------------------------------------------------
+; Placing actors.  A level rebuilds the map; a lost life must not, because
+; painted paths have to stay painted.
+; -------------------------------------------------------------------------
+
+to place.actors
+  make "a.col (list :tt.start.col 14 14 12 17)
+  make "a.row (list :tt.start.row 15 18 18 18)
+  make "a.dir [2 2 1 1 1]
+  make "a.off [0 0 0 0 0]
+  make "a.next [0 0 0 0 0]
+  make "a.state [0 1 3 2 2]
+  make "a.rev [0 0 0 0 0]
+  make "tt.pause 0
+  make "tt.idle 0
+  make "tt.mode 0
+  make "tt.phase 1
+  make "tt.mtimer (25 * (item 1 :tt.sched))
+  make "tt.dizzy 0
+  make "tt.chain 0
+  make "tt.drone -1
+  make "tt.warp "false
+  .setitem 2 :a.next (choose.dir 2)
+  ask 0 [pu setanim :sh.walk (:sh.walk + 2) 110 setpc :c.trail]
+  dress.bugs
+  place.all
+  ask [0 1 2 3 4] [st]
+  ask 5 [ht]
+  ask 0 [pd]
+end
+
+to setup.level
+  make "tt.frame 0
+  make "tt.painted 0
+  make "tt.bonus 0
+  make "tt.bonus.done 0
+  make "tt.paused "false
+  make "tt.dying "false
+  make "tt.cleared "false
+  make "tt.release [0 0 0 30 60]
+  set.profile :tt.level
+  make "tt.tiles []
+  recycle
+  decode.map
+  make "tt.left (count.paint)
+  (rerandom 7)
+  draw.board
+  place.actors
+  recycle
+end
+
+to count.paint
+  local "r local "n local "k
+  make "n 0
+  repeat 36 [
+    make "r repcount
+    repeat 28 [
+      make "k (tile.at repcount :r)
+      if :k = 2 [make "n (:n + 1)]
+      if :k = 3 [make "n (:n + 1)]
+    ]
+  ]
+  output :n
+end
+
+; After a lost life a global release counter replaces the personal ones, so
+; the bugs cannot all sit in the nest while the turtle clears the last tiles.
+to respawn
+  make "tt.release [0 0 7 17 32]
+  make "tt.painted 0
+  make "tt.dying "false
+  make "tt.pause 0
+  (rerandom 7)
+  place.actors
+end
+
+; -------------------------------------------------------------------------
+; Screens and transitions.  Every state is entered from the loops below, so
+; a long session never grows the interpreter frame stack.
+; -------------------------------------------------------------------------
+
+to wait.for.space
+  local "k
+  make "k 0
+  until [:k = 32] [if key? [make "k (ascii readchar)]]
+end
+
+to attract.screen
+  stopsound
+  textscreen ct
+  setcursor [13 4] print [TURTLE TRAILS]
+  setcursor [7 7] print [PAINT EVERY PATH WITH YOUR PEN]
+  setcursor [9 9] print [DART    RELENTLESS]
+  setcursor [9 10] print [SWOOP   AMBUSHER]
+  setcursor [9 11] print [ECHO    FLANKER]
+  setcursor [9 12] print [MOSS    TIMID]
+  setcursor [7 14] print [A BLOSSOM MAKES THEM DIZZY]
+  setcursor [7 16] print [PATH 10   BLOSSOM 50   BUG 200+]
+  setcursor [8 18] print [ARROWS MOVE  P PAUSE  Q QUIT]
+  if :tt.high > 0 [setcursor [13 20] (print [TOP] :tt.high)]
+  setcursor [12 22] print [PRESS SPACE]
+  wait.for.space
+  fullscreen
+end
+
+to ready.screen
+  write.at -32 -20 [READY]
+  refresh
+  wait 1200
+  ask 7 [setpc :c.bg]
+  write.at -32 -20 [READY]
+  ask 7 [setpc :c.text]
+end
+
+; The shell-withdraw sequence: the turtle draws its head and legs in and the
+; bugs stand still, because movement and collisions are suspended until it
+; finishes.
+to death.animation
+  stopsound
+  ask [1 2 3 4] [ht]
+  ask 0 [setanim 0 0 0 setrot "fixed]
+  (sound [3 7] 900 500 13)
+  repeat 6 [
+    ask 0 [setsh (:sh.shell + (repcount - 1))]
+    refresh
+    wait 130
+  ]
+  ask 0 [ht setrot "full]
+  refresh
+  wait 400
+end
+
+to handle.death
+  death.animation
+  make "tt.lives (:tt.lives - 1)
+  draw.lives
+  if :tt.lives < 1 [stop]
+  respawn
+  ready.screen
+end
+
+; The level-clear flash costs nothing but a palette write, and leaves every
+; painted path on the canvas.
+to level.flash
+  stopsound
+  ask [0 1 2 3 4 5] [ht]
+  repeat 6 [
+    setpalette :c.hedge [236 240 246]
+    refresh
+    wait 150
+    setpalette :c.hedge [42 106 66]
+    refresh
+    wait 150
+  ]
+end
+
+to handle.level.clear
+  make "tt.cleared "true
+  level.flash
+  make "tt.history (fput (item :tt.bonus.shape :tt.shapes) :tt.history)
+  if (count :tt.history) > 7 [make "tt.history (bl :tt.history)]
+  make "tt.level (:tt.level + 1)
+end
+
+to gameover.screen
+  stopsound
+  write.at -44 -20 [GAME OVER]
+  refresh
+  wait 2400
+end
+
+; -------------------------------------------------------------------------
+; The frame and the loops.  One frame has a fixed order: a blossom changes
+; bug state before that frame's collision test, every bug moves before any
+; collision is resolved, and a death or level clear is handled after sync,
+; outside the hot update body.
+; -------------------------------------------------------------------------
+
+to play.frame
+  poll.input
+  if not :tt.paused [
+    make "tt.frame (:tt.frame + 1)
+    step.mode.clock
+    step.nest.clock
+    step.player
+    paint.tile
+    step.bugs
+    step.bonus
+    check.collisions
+    update.drone
+    dress.bugs
+  ]
+  place.all
+  draw.hud
+  reclaim
+  sync
+end
+
+; Actors move by fractional pixels, so the frame arithmetic is floating point
+; and costs a few cells a frame however carefully it is written.  Logo never
+; collects on its own, so a level lasting several minutes has to reclaim as
+; it goes.  Once every ten seconds is far from every frame -- the design
+; forbids that -- and it keeps free storage flat instead of sliding towards
+; the `out of space` that ends the program.
+to reclaim
+  if not ((remainder :tt.frame 250) = 0) [stop]
+  recycle
+end
+
+to level.over?
+  if :tt.quit [output "true]
+  if :tt.lives < 1 [output "true]
+  output :tt.cleared
+end
+
+to play.level
+  setup.level
+  (setrefresh "sync 25)
+  ready.screen
+  until [level.over?] [
+    play.frame
+    ifelse :tt.dying [handle.death] [if :tt.left = 0 [handle.level.clear]]
+  ]
+  setrefresh "auto
+  stopsound
+end
+
+to game.over?
+  if :tt.quit [output "true]
+  output (:tt.lives < 1)
+end
+
+to init.game
+  make "tt.score 0
+  make "tt.lives 3
+  make "tt.level 1
+  make "tt.extra "false
+  make "tt.quit "false
+  make "tt.history []
+  make "tt.release [0 0 0 30 60]
+  make "tt.bonus.at [70 170]
+  make "tt.hud.score -1
+  make "tt.hud.high -1
+end
+
+to one.game
+  attract.screen
+  init.game
+  until [game.over?] [play.level]
+  if :tt.lives < 1 [gameover.screen]
+  setrefresh "auto
+  textscreen
+end
+
+to trails
+  setup.palette
+  setup.shapes
+  setup.turtles
+  setup.sound
+  forever [one.game]
+end
+
+make "startup [trails]

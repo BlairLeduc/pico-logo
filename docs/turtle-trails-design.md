@@ -1,6 +1,8 @@
 # Turtle Trails (design)
 
-Status: **design only; implementation not started.**
+Status: **implemented.** The game is `logo/games/trails` and its tests are
+`tests/test_trails.c`. Section 15 records where the built game diverges from
+the design below; everything else was built as written.
 
 Turtle Trails is an original maze-chase game for Pico Logo, *inspired by* the
 1980s arcade genre but themed entirely around Logo itself: the player is the
@@ -698,12 +700,80 @@ board; the Pico 2 is the tightest common target.
 No milestone should require a new C primitive. If implementation discovers
 otherwise, stop and revise this design before changing the interpreter.
 
-## Open verification items
+## 15. As built: divergences from this design
 
-- Arrow-key byte codes for up (181?) and down (182?) — confirm on hardware
-  or in the keyboard driver before wiring `poll.input`.
-- Whether `stamp` composites while the turtle is hidden (fallback in §5.1).
-- Free flash-filesystem space for the ~103 KB BMP on the 4 MB boards.
+Everything not listed here was built as specified above.
+
+**No BMP; the maze is drawn from the map.** §4 called for a 320×320 indexed
+`garden.bmp` loaded with `loadpic`. The built game has no picture asset. The
+repository has no BMP-generation tooling, the mock device implements no
+`loadpic`, so every drawing test in §13 would have been unrunnable natively,
+and Checkpoint Run — the newest shipped game — had already gone the other way
+("the encoded map is the only source of truth… there are no picture assets").
+
+`setup.palette` now defines every colour, and `draw.board` fills the board
+with hedge and then carves the corridors out of it in the background colour,
+one pen-8 sweep per maximal run of walkable tiles, by row and again by
+column. A pen wider than one pixel stamps a filled disc at each point, so
+every corridor end and junction comes out rounded — the curved hedge §3 asks
+for, at no drawing cost. The perpendicular pass matters: the discs at a run's
+ends leave shallow notches along a block edge, and the second pass fills
+them. Runs of a single tile are skipped, which is safe because the maze has
+no dead ends, so every walkable tile also lies on a run of two or more along
+the other axis; `test_no_dead_ends` pins that. The blossom erase mask (shape
+slot 8) is gone with it: eating a blossom blacks out a disc and relays the
+half-trail the turtle drew coming in.
+
+**Palette slot 245, not 255, is the background.** Slot 255 is the reserved
+transparent index and cannot be a background. Slots 246–254 are exactly as
+§4 specifies.
+
+**Calm rows are calm *tiles*.** §3 and §7.4 describe rows where a hunting bug
+may not turn upward. Applied to whole rows this cuts the maze in half for
+bugs: every upward exit from row 15 is one of the four verticals leaving the
+nest ring, so bugs could never reach the top of the garden. The rule is
+therefore a row table *and* a column table — rows 15 and 24, columns 13 and
+16 — which is the classic's four-tile restriction and leaves columns 7 and 22
+open. `test_calm_tiles_do_not_strand_bugs` flood-fills the maze under the
+restriction and asserts every path tile stays reachable.
+
+**The simulation counts sixteenths of a pixel, not fractional pixels.** §6.1
+specified fractional pixel offsets. A float result stored into an actor list
+is *retained* rather than recycled — measured at ~5 cells a frame, which
+drains the node pool in about a minute of play and ends the program with
+`out of space`. `a.off` therefore runs 0..128 in sixteenths of a pixel and
+every speed is a whole number of those units, which makes the hot path
+integer, costs about one cell a frame, and makes the simulation
+bit-identical on every board. The design's px/s figures survive as the unit
+conversion: 64 px/s is 41 units a frame.
+
+**The frame loop reclaims on a timer.** §11 said to recycle at level setup
+and between lives. Even at one cell a frame that is 25 cells a second, so
+`play.frame` calls `reclaim`, which recycles once every 250 frames — ten
+seconds, far from the every-frame the design rules out.
+`test_the_frame_loop_reclaims_what_it_spends` pins both the cost and the
+recovery.
+
+**A frenzied Dart is allowed to outrun the turtle**, which is the point of
+frenzy; ordinary bugs never are. `test_speeds_are_sane_at_25_fps` enforces
+both, at every level.
+
+**One interpreter constraint shapes the source.** A call to a procedure
+defined in the file may not sit inside a parenthesised arithmetic
+expression: `setx ((tile.x :c) - 4)` raises `) without (`, because the
+deferred call consumes the grouping paren's closing bracket
+(`core/eval_expr.c`, the deferral at the end of the user-procedure case).
+Such calls put their result in a local first. This is an interpreter bug
+rather than a language rule, and is worth fixing separately.
+
+The three open verification items are resolved: the arrow-key codes are
+`KEY_UP 0xB5` (181) and `KEY_DOWN 0xB6` (182), per
+`devices/picocalc/keyboard.h`; `stamp` composites while the turtle is hidden,
+as Checkpoint Run already relied on; and the flash-space question is moot
+with the BMP gone.
+
+Still to do on hardware: play a level through on a Pico 2 and tune the speed
+table, which is the one thing the native tests cannot judge.
 
 ## References
 
