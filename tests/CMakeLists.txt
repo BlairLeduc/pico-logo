@@ -101,6 +101,13 @@ add_logo_test(test_checkrun)
 target_compile_definitions(test_checkrun PRIVATE
     CHECKRUN_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/checkrun")
 
+# Turtle Trails is a pure-Logo maze chase.  Its test loads the program and
+# checks the encoded map, the deterministic 25 fps simulation, and the maze it
+# carves from that same map.
+add_logo_test(test_trails)
+target_compile_definitions(test_trails PRIVATE
+    TRAILS_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/trails")
+
 # Game HUD test — both games use the fullscreen graphics canvas and draw their
 # score/lives/level text into the lower part of it.
 add_logo_test(test_game_huds)

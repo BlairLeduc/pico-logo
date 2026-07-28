@@ -27,6 +27,11 @@ Companion documents (everything in `docs/`):
 - [`space-invaders-design.md`](space-invaders-design.md) /
   [`galaxian-design.md`](galaxian-design.md) — shipped games (#101, #106) that
   validate the sprite stack.
+- [`checkpoint-run-design.md`](checkpoint-run-design.md) /
+  [`turtle-trails-design.md`](turtle-trails-design.md) — shipped games (#124)
+  that validate the tile-map, deterministic `sync`-mode simulation and
+  mutate-in-place memory patterns. Turtle Trails also draws its whole maze
+  from its own map, so it ships without a picture asset.
 - [`code-review-2026-07-02.md`](code-review-2026-07-02.md) — the review that
   produced PR #86; a few small refinements from it are tracked below, its
   defects in [`bugs.md`](bugs.md).

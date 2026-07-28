@@ -46,7 +46,7 @@ repeat 220 [ fd repcount rt 88 ]
 - Screen behaviour control: `window`/`wrap`/`fence` edge modes, and manual `refresh`/`refreshmode`/`sync` control over redraws
 - Eight independent turtles (`tell`, `ask`, `each`, `who`) with costumes, autonomous motion and animation (`setspeed`, `setanim`), and pixel-accurate collision detection (`touching?`, `over?`, `colourunder`, `distance`)
 - Eight-voice stereo PSG sound synthesizer: immediate notes (`sound`) or background music queues (`play`), with per-voice ADSR envelopes and waveforms (`setenv`, `setwave`)
-- Two included example games, Space Invaders and Galaxian, exercising the sprite and sound stack
+- Four included example games — Space Invaders, Galaxian, Checkpoint Run and Turtle Trails — exercising the sprite and sound stack
 - Three simultaneous display modes: full screen text for programs without graphics, full screen graphics for running graphical programs, and split screen for interactive use
 - Full line editing and history
 - Full display text editor (edit procedures, variables and files) with Logo syntax highlighting — keywords, procedure names, variables, strings, numbers, comments, and rainbow bracket-depth colouring
