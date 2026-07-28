@@ -471,6 +471,19 @@ static bool mock_turtle_put_shape_data(uint8_t shape_num, const uint8_t *data)
 static void mock_turtle_stamp(void)
 {
     record_command(MOCK_CMD_STAMP);
+
+    // Record where the stamp landed, so tests can check a composed drawing
+    // against the data it was drawn from.
+    if (mock_state.graphics.stamp_count < MOCK_MAX_STAMPS)
+    {
+        MockStamp *s = &mock_state.graphics.stamps[mock_state.graphics.stamp_count++];
+        s->x = mock_state.turtle.x;
+        s->y = mock_state.turtle.y;
+        s->colour = mock_state.turtle.pen_colour;
+        s->shape = mock_state.shape.current_shape;
+        s->mag = mock_state.turtles[mock_state.current_turtle].mag;
+        s->turtle = mock_state.current_turtle;
+    }
 }
 
 static void mock_turtle_draw_text(const char *text)
@@ -1425,11 +1438,26 @@ const MockLine *mock_device_get_line(int index)
     return &mock_state.graphics.lines[index];
 }
 
+int mock_device_stamp_count(void)
+{
+    return mock_state.graphics.stamp_count;
+}
+
+const MockStamp *mock_device_get_stamp(int index)
+{
+    if (index < 0 || index >= mock_state.graphics.stamp_count)
+    {
+        return NULL;
+    }
+    return &mock_state.graphics.stamps[index];
+}
+
 void mock_device_clear_graphics(void)
 {
     mock_state.graphics.cleared = false;
     mock_state.graphics.dot_count = 0;
     mock_state.graphics.line_count = 0;
+    mock_state.graphics.stamp_count = 0;
 }
 
 bool mock_device_verify_position(float x, float y, float tolerance)

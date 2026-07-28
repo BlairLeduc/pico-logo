@@ -265,8 +265,8 @@
     "semantic_hash": ""
   },
   "core/primitives_files_load_save.c": {
-    "mtime": 1783201869.21384,
-    "ast_hash": "4f12ba7f75af7cc059b5d31ba0de4be2",
+    "mtime": 1785247407.5416396,
+    "ast_hash": "626aada11f6e526bc8a8101e5bea95ec",
     "semantic_hash": ""
   },
   "core/primitives_hardware.c": {
@@ -855,13 +855,13 @@
     "semantic_hash": ""
   },
   "tests/mock_device.c": {
-    "mtime": 1784748043.591809,
-    "ast_hash": "1012acfb8f7a978b0cb60aaeecabb430",
+    "mtime": 1785184605.253585,
+    "ast_hash": "77b17c8e4af9bf4b18af1f2579909dcf",
     "semantic_hash": ""
   },
   "tests/mock_device.h": {
-    "mtime": 1784722876.2071712,
-    "ast_hash": "ba6b49dcf865dde6585760454f041c16",
+    "mtime": 1785184357.6132858,
+    "ast_hash": "0e36529b4e30385ecb910d67c6eb04ca",
     "semantic_hash": ""
   },
   "tests/mock_sdcard.c": {
@@ -950,7 +950,7 @@
     "semantic_hash": ""
   },
   "tests/test_galaxian.c": {
-    "mtime": 1785162178.7878993,
+    "mtime": 1785172622.7675002,
     "ast_hash": "81956ec45cbd0a7dfc054f6eef2c90b5",
     "semantic_hash": ""
   },
@@ -1065,8 +1065,8 @@
     "semantic_hash": ""
   },
   "tests/test_primitives_files_load_save.c": {
-    "mtime": 1784722876.2077565,
-    "ast_hash": "f1dfbffe4d18ab9d0c5774c5ef4f5c7f",
+    "mtime": 1785247373.7789674,
+    "ast_hash": "020a3d3882fa68e33d46cf88431332f4",
     "semantic_hash": ""
   },
   "tests/test_primitives_hardware.c": {
@@ -1280,7 +1280,7 @@
     "semantic_hash": ""
   },
   "docs/galaxian-design.md": {
-    "mtime": 1785162179.2471752,
+    "mtime": 1785172622.749139,
     "ast_hash": "620801fb57bae8ede8a18cdd35381249",
     "semantic_hash": ""
   },
@@ -1320,7 +1320,7 @@
     "semantic_hash": ""
   },
   "docs/space-invaders-design.md": {
-    "mtime": 1785162178.949803,
+    "mtime": 1785172622.7498398,
     "ast_hash": "2c3335ce88ebff004b59b283c38a8a42",
     "semantic_hash": ""
   },
@@ -1335,8 +1335,8 @@
     "semantic_hash": ""
   },
   "tests/CMakeLists.txt": {
-    "mtime": 1785100103.5406811,
-    "ast_hash": "264779dd07d745a687b5af139e7eb96b",
+    "mtime": 1785184566.0287387,
+    "ast_hash": "96a3bfc62cb0f8631bfef43280c52cc6",
     "semantic_hash": ""
   },
   "third_party/littlefs/LICENSE.md": {
@@ -1415,8 +1415,23 @@
     "semantic_hash": ""
   },
   "tests/test_game_huds.c": {
-    "mtime": 1785162108.2795637,
+    "mtime": 1785172622.7676842,
     "ast_hash": "a6d7cabc5f92342c0616189af89e8556",
+    "semantic_hash": ""
+  },
+  "docs/turtle-trails-design.md": {
+    "mtime": 1785175831.3980124,
+    "ast_hash": "31c80e5d6beb36a70aaab340e068d1b9",
+    "semantic_hash": ""
+  },
+  "tests/test_checkrun.c": {
+    "mtime": 1785246910.1069908,
+    "ast_hash": "1565275cb45893e80455541c64913521",
+    "semantic_hash": ""
+  },
+  "docs/checkpoint-run-design.md": {
+    "mtime": 1785247518.5569668,
+    "ast_hash": "a15801eb21d0031ea4198341b34b6f1e",
     "semantic_hash": ""
   }
 }

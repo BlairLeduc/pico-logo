@@ -213,3 +213,5 @@ to fileserver
   pr [File server is running.]
   pr sentence [Open] (word "http:// wifi.hostname ".local "/)
 end
+
+make "startup [fileserver]

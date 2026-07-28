@@ -238,6 +238,38 @@ void test_load_defines_procedure(void)
     TEST_ASSERT_EQUAL_FLOAT(100.0, val.as.number);
 }
 
+// A file may call a procedure it has just defined. prim_load builds its own
+// Evaluator, and eval_init leaves the frame stack NULL for the caller to set;
+// omitting eval_set_frames made every such call dereference NULL and crash.
+void test_load_calls_procedure_defined_in_same_file(void)
+{
+    mock_fs_create_file("selfcall.logo", "to setit :n\nmake \"x :n * 2\nend\nsetit 21\n");
+
+    Result r = run_string("load \"selfcall.logo");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    Value val;
+    TEST_ASSERT_TRUE(var_get("x", &val));
+    TEST_ASSERT_EQUAL_FLOAT(42.0, val.as.number);
+}
+
+// The same path, but where the called procedure itself calls another one, so
+// a frame is pushed on top of a frame during load.
+void test_load_calls_nested_procedures(void)
+{
+    mock_fs_create_file("nested.logo",
+                        "to inner :n\noutput :n + 1\nend\n"
+                        "to outer :n\noutput (inner :n) * 10\nend\n"
+                        "make \"y outer 4\n");
+
+    Result r = run_string("load \"nested.logo");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    Value val;
+    TEST_ASSERT_TRUE(var_get("y", &val));
+    TEST_ASSERT_EQUAL_FLOAT(50.0, val.as.number);
+}
+
 void test_load_runs_startup_from_file(void)
 {
     // Create a file that sets startup variable
@@ -740,6 +772,8 @@ int main(void)
     // Load/Save tests
     RUN_TEST(test_load_executes_file);
     RUN_TEST(test_load_defines_procedure);
+    RUN_TEST(test_load_calls_procedure_defined_in_same_file);
+    RUN_TEST(test_load_calls_nested_procedures);
     RUN_TEST(test_load_runs_startup_from_file);
     RUN_TEST(test_load_does_not_run_preexisting_startup);
     RUN_TEST(test_load_runs_startup_when_file_overwrites);

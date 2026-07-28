@@ -863,3 +863,5 @@ to play.level
   ]
   setrefresh "auto
 end
+
+make "startup [galaxian]

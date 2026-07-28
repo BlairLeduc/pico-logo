@@ -95,6 +95,12 @@ add_logo_test(test_galaxian)
 target_compile_definitions(test_galaxian PRIVATE
     GALAXIAN_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/galaxian")
 
+# Checkpoint Run is another pure-Logo game.  Its test loads the program and
+# checks the map and deterministic simulation helpers directly.
+add_logo_test(test_checkrun)
+target_compile_definitions(test_checkrun PRIVATE
+    CHECKRUN_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/checkrun")
+
 # Game HUD test — both games use the fullscreen graphics canvas and draw their
 # score/lives/level text into the lower part of it.
 add_logo_test(test_game_huds)
