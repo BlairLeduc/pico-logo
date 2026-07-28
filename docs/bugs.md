@@ -29,6 +29,7 @@ edge case)
 | [B5](#b5--name_buf64-identifier-truncation-aliasing) | `name_buf[64]` identifier truncation aliasing | lexer | low | 2026-07-02 | open |
 | [B6](#b6--penreverse-ignores-pen-size-always-1-px) | `penreverse` ignores pen size (always 1 px) | graphics | low | 2026-07-18 | won't fix (documented) |
 | [B7](#b7--a-user-procedure-call-as-the-left-operand-of-a-parenthesised-expression-corrupts-the-parse) | A user-procedure call as the left operand of a parenthesised expression corrupts the parse | parser/eval | high | 2026-07-28 | open |
+| [B8](#b8--a-turtle-command-automatically-switches-to-splitscreen) | A turtle command automatically switches to splitscreen | graphics | low | 2026-07-28 | open |
 
 ### B1 — Multi-line `(…)` expressions inside a procedure body evaluate to empty
 
@@ -174,6 +175,54 @@ Scope, all verified against `./build-host/logo` on 2026-07-28:
   shapes above, and the `output` path.
 - **Found:** 2026-07-28, building `logo/games/trails`, where it stopped the
   game running a single frame.
+
+### B8 — A turtle command automatically switches to splitscreen
+
+In `textscreen` mode, most turtle commands silently change the screen mode to
+`splitscreen`. The screen mode should only change when the program asks for it
+— with `textscreen` / `splitscreen` / `fullscreen`, or the `F1`–`F3` keys.
+
+```logo
+?ts
+?fd 50        ; screen flips to splitscreen
+```
+
+This takes the mode decision away from the program. A procedure that wants to
+draw off-screen and present later (or that is deliberately running with the
+text screen up) cannot do so, and the flip costs a full redraw of both buffers
+at an arbitrary moment.
+
+The behaviour is also inconsistent: it fires from `clearscreen`, `forward`,
+`home`, `setpos`, `setheading`, `setcolour`, `pen` state, `showturtle` /
+`hideturtle`, `dot`, `fill`, turtle text, `setshape`, rotation style, scale and
+`stamp`, but not from `setpensize`, `setbg`, `fence` / `window` / `wrap`, so
+which commands steal the screen is arbitrary from the user's point of view.
+
+- **Cause:** `screen_show_field()` (`devices/picocalc/screen.c:333`) sets
+  `SCREEN_MODE_SPLIT` whenever the current mode is not already `GFX` or
+  `SPLIT`; the turtle ops in `devices/picocalc/picocalc_console.c` call it at
+  ~16 sites (687, 703, 780, 817, 904, 926, 962, 992, 1010, 1052, 1067, 1164,
+  1195, 1214, 1231, 1241). Note it only hijacks `textscreen`; `fullscreen` is
+  left alone.
+- **Documentation:** this is currently *documented* behaviour —
+  `reference/Pico_Logo_Reference.md:696` says "When you use any primitive or
+  procedure that renders to the turtle, Logo shows you the graphics screen"
+  (inherited from LCSI Logo). Fixing the code therefore means editing that
+  paragraph too, otherwise the fix creates a new reference mismatch.
+- **Workaround:** issue `splitscreen` (or `fullscreen`) explicitly before
+  drawing, and accept the flip otherwise; there is no way to draw while staying
+  in `textscreen`.
+- **Fix:** drop the `screen_show_field()` calls from the turtle ops and delete
+  the helper, leaving mode changes to `prim_textscreen` / `prim_splitscreen` /
+  `prim_fullscreen` and `screen_handle_mode_key`. Update the reference
+  paragraph above and the `## Turtle Graphics` intro to say the mode is only
+  changed by those commands.
+- **Testing:** not reproducible on the host — this lives in the PicoCalc
+  device layer, and the mock device's turtle ops (`tests/mock_device.c`) never
+  touch `screen_mode`. A test can assert the mock stays in
+  `MOCK_SCREEN_TEXT` across turtle commands to pin the intended contract, but
+  the actual change must be validated on hardware.
+- **Found:** 2026-07-28.
 
 ---
 
