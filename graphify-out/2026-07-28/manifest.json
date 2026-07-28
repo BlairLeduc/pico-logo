@@ -265,7 +265,7 @@
     "semantic_hash": ""
   },
   "core/primitives_files_load_save.c": {
-    "mtime": 1785247407.5416396,
+    "mtime": 1785250202.032859,
     "ast_hash": "626aada11f6e526bc8a8101e5bea95ec",
     "semantic_hash": ""
   },
@@ -855,12 +855,12 @@
     "semantic_hash": ""
   },
   "tests/mock_device.c": {
-    "mtime": 1785184605.253585,
+    "mtime": 1785250202.0872054,
     "ast_hash": "77b17c8e4af9bf4b18af1f2579909dcf",
     "semantic_hash": ""
   },
   "tests/mock_device.h": {
-    "mtime": 1785184357.6132858,
+    "mtime": 1785250202.0873923,
     "ast_hash": "0e36529b4e30385ecb910d67c6eb04ca",
     "semantic_hash": ""
   },
@@ -1065,7 +1065,7 @@
     "semantic_hash": ""
   },
   "tests/test_primitives_files_load_save.c": {
-    "mtime": 1785247373.7789674,
+    "mtime": 1785250202.087694,
     "ast_hash": "020a3d3882fa68e33d46cf88431332f4",
     "semantic_hash": ""
   },
@@ -1270,8 +1270,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1784847036.1263883,
-    "ast_hash": "a1b3b261cc49a4a226f590e335bb6ce4",
+    "mtime": 1785253663.3634574,
+    "ast_hash": "b13bd99b7374b47fbd32b89d5f85af6c",
     "semantic_hash": ""
   },
   "docs/code-review-2026-07-02.md": {
@@ -1290,8 +1290,8 @@
     "semantic_hash": ""
   },
   "docs/improvements-roadmap.md": {
-    "mtime": 1784847036.094787,
-    "ast_hash": "fcab1f48a99b384c569b85b2887db6ee",
+    "mtime": 1785253662.1500223,
+    "ast_hash": "5cc462d4234530b9514712b7194a47e2",
     "semantic_hash": ""
   },
   "docs/launch-design.md": {
@@ -1335,8 +1335,8 @@
     "semantic_hash": ""
   },
   "tests/CMakeLists.txt": {
-    "mtime": 1785184566.0287387,
-    "ast_hash": "96a3bfc62cb0f8631bfef43280c52cc6",
+    "mtime": 1785252063.947703,
+    "ast_hash": "0483019a23717ee4c27e06a6253aff95",
     "semantic_hash": ""
   },
   "third_party/littlefs/LICENSE.md": {
@@ -1420,18 +1420,23 @@
     "semantic_hash": ""
   },
   "docs/turtle-trails-design.md": {
-    "mtime": 1785175831.3980124,
-    "ast_hash": "31c80e5d6beb36a70aaab340e068d1b9",
+    "mtime": 1785253631.898127,
+    "ast_hash": "252a96ad9074fe712c2216f5903ef321",
     "semantic_hash": ""
   },
   "tests/test_checkrun.c": {
-    "mtime": 1785246910.1069908,
+    "mtime": 1785250202.0875368,
     "ast_hash": "1565275cb45893e80455541c64913521",
     "semantic_hash": ""
   },
   "docs/checkpoint-run-design.md": {
-    "mtime": 1785247518.5569668,
+    "mtime": 1785250202.0330603,
     "ast_hash": "a15801eb21d0031ea4198341b34b6f1e",
+    "semantic_hash": ""
+  },
+  "tests/test_trails.c": {
+    "mtime": 1785253541.9334333,
+    "ast_hash": "0f8f1b9a837d7094351554df85d2081c",
     "semantic_hash": ""
   }
 }
