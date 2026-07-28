@@ -184,6 +184,11 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
         Evaluator load_eval;
         lexer_init(&lexer, line);
         eval_init(&load_eval, &lexer);
+        // eval_init leaves the frame stack NULL for the caller to supply.
+        // Without it, a line that calls a user-defined procedure - including
+        // one this same file has just defined - pushes a frame through a NULL
+        // stack and crashes. The REPL and demons set it the same way.
+        eval_set_frames(&load_eval, proc_get_frame_stack());
 
         // Evaluate all instructions on the line
         while (!eval_at_end(&load_eval))

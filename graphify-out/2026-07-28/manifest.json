@@ -855,13 +855,13 @@
     "semantic_hash": ""
   },
   "tests/mock_device.c": {
-    "mtime": 1784748043.591809,
-    "ast_hash": "1012acfb8f7a978b0cb60aaeecabb430",
+    "mtime": 1785184605.253585,
+    "ast_hash": "77b17c8e4af9bf4b18af1f2579909dcf",
     "semantic_hash": ""
   },
   "tests/mock_device.h": {
-    "mtime": 1784722876.2071712,
-    "ast_hash": "ba6b49dcf865dde6585760454f041c16",
+    "mtime": 1785184357.6132858,
+    "ast_hash": "0e36529b4e30385ecb910d67c6eb04ca",
     "semantic_hash": ""
   },
   "tests/mock_sdcard.c": {
@@ -1335,8 +1335,8 @@
     "semantic_hash": ""
   },
   "tests/CMakeLists.txt": {
-    "mtime": 1785178800.0239837,
-    "ast_hash": "c3ae18dd145ae35741b0947f0663486e",
+    "mtime": 1785184566.0287387,
+    "ast_hash": "96a3bfc62cb0f8631bfef43280c52cc6",
     "semantic_hash": ""
   },
   "third_party/littlefs/LICENSE.md": {
@@ -1419,19 +1419,19 @@
     "ast_hash": "a6d7cabc5f92342c0616189af89e8556",
     "semantic_hash": ""
   },
-  "docs/rally-x-design.md": {
-    "mtime": 1785176232.2365944,
-    "ast_hash": "ad5ee2eba6d88d254c63d0e65e45fe33",
-    "semantic_hash": ""
-  },
   "docs/turtle-trails-design.md": {
     "mtime": 1785175831.3980124,
     "ast_hash": "31c80e5d6beb36a70aaab340e068d1b9",
     "semantic_hash": ""
   },
   "tests/test_checkrun.c": {
-    "mtime": 1785178800.1906686,
-    "ast_hash": "446b9b803eec45cbc8cf7f78a615d012",
+    "mtime": 1785184965.250971,
+    "ast_hash": "6f27a90fe7d374ee569f238208cded18",
+    "semantic_hash": ""
+  },
+  "docs/checkpoint-run-design.md": {
+    "mtime": 1785185005.7158592,
+    "ast_hash": "b5485880f688a793b6539ededdb887cf",
     "semantic_hash": ""
   }
 }

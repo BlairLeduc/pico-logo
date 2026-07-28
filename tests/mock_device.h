@@ -137,6 +137,27 @@ extern "C"
     #define MOCK_MAX_DOTS 1024
 
     //
+    // Mock stamp record. MOCK_CMD_STAMP alone says only that a stamp
+    // happened; tests that check a drawing was composed correctly (for
+    // example, that a game's tile map matches the picture it draws) need to
+    // know where each stamp landed and with which shape.
+    //
+    typedef struct MockStamp
+    {
+        float x, y;
+        uint16_t colour;
+        uint8_t shape;
+        uint8_t mag;
+        uint8_t turtle;
+    } MockStamp;
+
+    //
+    // Maximum stamps to track. A full-screen tile composition is several
+    // hundred stamps, so this is sized well above one screen.
+    //
+    #define MOCK_MAX_STAMPS 2048
+
+    //
     // Mock line segment for tracking drawn lines
     //
     typedef struct MockLine
@@ -305,6 +326,8 @@ extern "C"
             int dot_count;
             MockLine lines[MOCK_MAX_LINES];  // Recorded lines
             int line_count;
+            MockStamp stamps[MOCK_MAX_STAMPS];  // Recorded stamps
+            int stamp_count;
         } graphics;
 
         // Command history
@@ -484,6 +507,8 @@ extern "C"
     const MockDot *mock_device_get_dot(int index);
     int mock_device_line_count(void);
     const MockLine *mock_device_get_line(int index);
+    int mock_device_stamp_count(void);
+    const MockStamp *mock_device_get_stamp(int index);
     void mock_device_clear_graphics(void);
 
     // Verify helpers for tests
