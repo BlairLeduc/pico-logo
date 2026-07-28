@@ -28,6 +28,7 @@ edge case)
 | [B4](#b4--parse_list-silently-drops-unknown-tokens) | `parse_list` silently drops unknown tokens | parser | medium | 2026-07-02 | open |
 | [B5](#b5--name_buf64-identifier-truncation-aliasing) | `name_buf[64]` identifier truncation aliasing | lexer | low | 2026-07-02 | open |
 | [B6](#b6--penreverse-ignores-pen-size-always-1-px) | `penreverse` ignores pen size (always 1 px) | graphics | low | 2026-07-18 | won't fix (documented) |
+| [B7](#b7--a-user-procedure-call-as-the-left-operand-of-a-parenthesised-expression-corrupts-the-parse) | A user-procedure call as the left operand of a parenthesised expression corrupts the parse | parser/eval | high | 2026-07-28 | open |
 
 ### B1 — Multi-line `(…)` expressions inside a procedure body evaluate to empty
 
@@ -111,6 +112,68 @@ pixels twice and speckle the line. Thick reverse drawing is therefore left at
 - **Status:** won't fix for now. A future thick-reverse pass would delta-stamp
   only the pixels the previous stamp did not cover, or fill per-scanline spans.
 - **Found:** 2026-07-18, with `setpensize` / `pensize`.
+
+### B7 — A user-procedure call as the left operand of a parenthesised expression corrupts the parse
+
+**Inside a procedure body**, a call to a *user-defined* procedure that appears
+as the left operand within a parenthesised expression makes the evaluator
+consume a closing paren that is not its own. It has two failure modes, and the
+first is silent.
+
+**Silent wrong answer.** Operands re-associate across the parentheses:
+
+```
+to f :x
+output :x
+end
+to t6
+output (item 1 [5 6]) + (3 * (f 2))
+end
+show t6
+```
+
+prints **21**, not `11`: it evaluates as `3 * (5 + 2)`. The same shape with a
+multi-branch procedure returns 18 instead of 8. No error is raised, so a
+program simply computes the wrong number.
+
+**Spurious `) without (`.** A primitive whose argument is a parenthesised
+expression *starting* with the call computes the right value and then trips
+over the orphaned bracket:
+
+```
+to t2
+pr ((f 2) * 3)
+end
+t2
+```
+
+prints `6`, then raises `) without ( in t2`.
+
+Scope, all verified against `./build-host/logo` on 2026-07-28:
+
+- Only inside a procedure body. Every form above is correct at the top level,
+  because the deferral path that causes it needs `proc_depth > 0`.
+- `output` is unaffected: `output ((f 2) * 3)` is correct.
+- Primitives are unaffected: `((item 1 [5 6]) * 3)` is correct.
+- The call is fine on the *right* of the operator: `(3 * (f 2))` is correct,
+  as is `((f 2) + (f 3))`.
+
+- **Cause:** `core/eval_expr.c`, the deferral branch in the user-procedure
+  (`TOKEN_WORD`) case guarded by
+  `eval->proc_depth > 0 && eval->user_arg_depth == 0`. Before deferring to the
+  trampoline it consumes the following `)` so that infix parsing can continue
+  past the call — which is right for `(f :x) + (g :y)`, where that bracket
+  closes the call itself. When the `(` was a *grouping* paren instead, the
+  grouping handler further out then consumes an outer `)` that is not its own,
+  leaving the operands re-associated or a stray `)` in the stream.
+- **Workaround:** bind the call to a `local` first and do the arithmetic on
+  the variable. `logo/games/trails` is written this way throughout.
+- **Fix:** only consume the closing paren when it belongs to the call, which
+  means distinguishing the paren-call form from a grouping paren that merely
+  happens to start with a call. Needs tests for `(f :x) + (g :y)`, the two
+  shapes above, and the `output` path.
+- **Found:** 2026-07-28, building `logo/games/trails`, where it stopped the
+  game running a single frame.
 
 ---
 
