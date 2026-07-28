@@ -2,7 +2,7 @@
 
 Status: **v1.1 — gate closed, M1–M3 implemented** — this is the design
 gate for
-[P8 in the improvements roadmap](improvements-roadmap.md#p8--sound-stereo-psg-synthesizer-design-first).
+[P8 in the roadmap](roadmap.md#p8--sound-stereo-psg-synthesizer-design-first).
 All open questions (§11) were resolved with the user on 2026-07-10.
 Hardware bring-up (2026-07-18/19) amended the engine constants and
 surfaced three latency findings — see §12; the body text reflects the

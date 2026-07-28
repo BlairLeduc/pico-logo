@@ -1,6 +1,10 @@
-# Improvements Roadmap
+# Roadmap
 
-Tracks candidate improvements to Pico Logo, comparing the current implementation
+Tracks **features** — past, present and future. Defects live in
+[`bugs.md`](bugs.md); if an item adds capability it belongs here, if it means
+"this doesn't work as documented" it belongs there.
+
+Compares the current implementation
 (everything in `reference/Pico_Logo_Reference.md`, 296 primitive/section
 headings as of 2026-07-03) against the wider Logo family (Apple Logo II — the
 model dialect — plus UCB/Berkeley Logo, Atari Logo, Terrapin, FMSLogo).
@@ -24,7 +28,9 @@ Companion documents (everything in `docs/`):
   [`galaxian-design.md`](galaxian-design.md) — shipped games (#101, #106) that
   validate the sprite stack.
 - [`code-review-2026-07-02.md`](code-review-2026-07-02.md) — the review that
-  produced PR #86; a few small refinements from it are tracked below.
+  produced PR #86; a few small refinements from it are tracked below, its
+  defects in [`bugs.md`](bugs.md).
+- [`bugs.md`](bugs.md) — the bug tracker (open and fixed defects).
 
 **Status legend:** `todo` · `in progress` · `done` · `deferred`
 
@@ -83,15 +89,12 @@ Companion documents (everything in `docs/`):
 
 ### Implementation refinements (code-review leftovers)
 
+Performance and cleanup only — defects moved to [`bugs.md`](bugs.md).
+
 | Item | Status | Notes |
 |---|---|---|
 | TCO lookahead double-parse on last lines | todo | Measure after PR #86's lookup speedups; may no longer matter |
-| `name_buf[64]` identifier truncation aliasing | todo | Two >63-char names can alias at lookup |
-| `parse_list` silently drops unknown tokens | todo | Consider erroring inside `[...]` literals |
 | Procedure-body token re-classification per run | todo | Profile before optimizing (per-atom numeric cache is the candidate) |
-| Demons fire during `load` | todo | `load` evaluates each line through `eval_instruction`, which polls demons, so a `when` armed by a file runs its action while the rest of the file is still being read — inside `load`'s reentrancy guard. The action therefore cannot call `load` ("No more file buffers", `primitives_files_load_save.c:52`) and cannot call a procedure defined *later* in the same file. Newly reachable now that `wifi.start` + `when` is the documented startup-file idiom. Characterised by `test_demon_armed_by_load_fires_during_the_load`. Likely fix: suspend demon polling for the duration of a `load` and poll once it completes — but check first whether any file arms demons and then does top-level work in the same file, which that would change. Found 2026-07-21 |
-| Single-line `to … end` definitions not supported | todo | Loader/REPL only close a definition on a standalone `end` line (`repl_line_is_end`, `core/repl.c`); a one-line `to f  play [c d e]  end` silently swallows following procedures until the next lone `end`. Recognise an inline `end` on the `to` line (in `core/repl.c` + `core/primitives_files_load_save.c`), with tests. Found 2026-07-19 via `logo/tests/sndaccept` (worked around by expanding its tuneblocks to multi-line) |
-| Multi-line `(…)` expressions inside a procedure body evaluate to empty | todo | The parser is line-oriented: a parenthesised expression split across source lines inside a `to … end` body silently yields an empty/wrong result (an unclosed `(` drops the rest). Minimal repro: `op (list` / `"\|a\|` / `"\|b\|` / `)` returns `count 0`, while the single-line `op (list "\|a\| "\|b\|)` returns `2`. Affects both the REPL and `load`/`proc_define_from_text`. Proper fix: treat newlines inside an open paren as whitespace during proc-body assembly (`core/repl.c` line buffering + `core/parse_list.c`/`core/lexer.c`), with tests. Found 2026-07-22 building `logo/fileserver` (worked around by keeping each `(…)` on one line and accumulating with `localmake`/`lput`) |
 
 ### Tooling and process
 
@@ -426,4 +429,5 @@ prompt while BREAK/error silence, `sound` range 20 Hz–10 kHz).
 | 2026-07-21 | Platform | Diagnostics: `wifi.status` now maps one-to-one onto the cyw43 driver states (`off`/`connecting`/`noaddress`/`connected`/`notfound`/`badpassword`/`failed`) instead of collapsing every failure to `failed`, at the user's suggestion, so a stalled connection says which stage it stalled at. Reference documents a state-trace recipe (`when [not equal? wifi.status :last] [...]`) — that trace is what identified the bug above |
 | 2026-07-21 | Platform | First bug fix (incomplete — see above), found by the user: connecting from a startup file failed most of the time while the identical commands worked from the REPL. `CYW43_LINK_NONET` (-2) is not a failure — it is the ordinary state while the scan has yet to find the AP, and the driver only leaves it if the join is *issued again* (the SDK's blocking connect does exactly this: `cyw43_arch.c`, "If there was no network, keep trying"). `wifi_status` treated any negative link status as terminal, latching `failed` and clearing `wifi_connect_pending` so it could never recover. Only the startup file was fast enough to see it: `when [wifi?]` armed there polls every 20 ms *during the load*, landing inside the blip, whereas at the REPL the seconds spent typing the `when` line let the join reach `LINK_UP` first. Fix mirrors the SDK — re-issue the join on NONET (self-throttling, since re-issuing returns the driver to `WIFI_JOIN_STATE_ACTIVE`) until a 30 s deadline matching the blocking path; `FAIL`/`BADAUTH` stay terminal. Needs the password kept alongside the SSID (+64 B, WiFi boards only). Not reproducible on the mock (no cyw43 join state machine), so this one rests on hardware validation |
 | 2026-07-19 | P8 | `logo/games/galaxian` given the same PSG retrofit for consistency: same four centred voice-pairs (`[0 4]` two-note convoy hum, `[1 5]` sawtooth laser, `[2 6]` **sustained** square dive shriek, `[3 7]` white-noise explosions), timbres in `setup.sound` from `init.game`. The signature `dive.shriek` glissando now overlaps notes on a held voice under the hum/laser (the old `toot 15` couldn't sustain); added a laser on `fire`, noise splats on `kill.alien`/`diver.shot`, a low boom on `handle.death`, `stopsound` on game over. `test_galaxian` (loads the file, exercises `kill.alien`/`diver.shot` on the mock which records sound ops) still green — 61/61 ctest; host smoke-test clean; `galaxian-design.md` §8 rewritten, one stale `toot` test comment fixed. Same hardware A/B listen pending |
+| 2026-07-28 | Roadmap | Split defect tracking out into [`bugs.md`](bugs.md): this roadmap is now features-only (past, present, future). The five open defects in the refinements table moved to `bugs.md` as B1–B5 (multi-line `(…)` in proc bodies, single-line `to … end`, demons firing during `load`, `parse_list` dropping unknown tokens, `name_buf[64]` aliasing), plus the 1 px `penreverse` limitation as B6; the refinements table keeps only the two performance items. Past fixes recorded from this log and git history. Renamed `improvements-roadmap.md` → `roadmap.md` (all references updated) |
 | 2026-07-22 | Navigation | Done: easier directory navigation. Split the old one-per-line `catalog` into two commands: `cat` is a terse `ls`-style multi-column listing (alphabetical, dirs get a trailing `/`, column-major packing against a new `CATALOG_DISPLAY_WIDTH` 40 in `core/limits.h` = the PicoCalc's `SCREEN_COLUMNS`; over-wide names fall back to one per line), and `catalog` becomes the `ls -l` long form — one per line with a right-aligned 7-char size column (blank for directories, and when a file size can't be read). Added `sp` as an alias for `setprefix`. Shared collect/sort/resolve helpers; per-entry size via `io->storage->ops->file_size` on the joined `dir`/name path (buffer sized to avoid a truncated ancestor stat). Reference gains a `## cat` section, rewrites `## catalog`, aliases `setprefix (sp)`, and the startup `ls` example now calls `cat`; 6 new tests (`test_primitives_files_directory` covers cat columns, catalog size + `<DIR>`, and the `sp` alias). 61/61 ctest green, anchors resolve, pico2 links (RAM 95.6%). Verified on the host REPL: `cat`/`catalog` render correct columns and byte sizes |

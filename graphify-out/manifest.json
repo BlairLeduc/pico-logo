@@ -265,7 +265,7 @@
     "semantic_hash": ""
   },
   "core/primitives_files_load_save.c": {
-    "mtime": 1785247407.5416396,
+    "mtime": 1785250202.032859,
     "ast_hash": "626aada11f6e526bc8a8101e5bea95ec",
     "semantic_hash": ""
   },
@@ -855,12 +855,12 @@
     "semantic_hash": ""
   },
   "tests/mock_device.c": {
-    "mtime": 1785184605.253585,
+    "mtime": 1785250202.0872054,
     "ast_hash": "77b17c8e4af9bf4b18af1f2579909dcf",
     "semantic_hash": ""
   },
   "tests/mock_device.h": {
-    "mtime": 1785184357.6132858,
+    "mtime": 1785250202.0873923,
     "ast_hash": "0e36529b4e30385ecb910d67c6eb04ca",
     "semantic_hash": ""
   },
@@ -1065,7 +1065,7 @@
     "semantic_hash": ""
   },
   "tests/test_primitives_files_load_save.c": {
-    "mtime": 1785247373.7789674,
+    "mtime": 1785250202.087694,
     "ast_hash": "020a3d3882fa68e33d46cf88431332f4",
     "semantic_hash": ""
   },
@@ -1260,8 +1260,8 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1784400310.6131134,
-    "ast_hash": "a38de04593bdadf3745abf8e0c3b5185",
+    "mtime": 1785259793.2404222,
+    "ast_hash": "7919ca77edcbe397735d65d849b5eaaf",
     "semantic_hash": ""
   },
   "CMakeLists.txt": {
@@ -1270,7 +1270,7 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1784847036.1263883,
+    "mtime": 1785259640.2100985,
     "ast_hash": "a1b3b261cc49a4a226f590e335bb6ce4",
     "semantic_hash": ""
   },
@@ -1289,11 +1289,6 @@
     "ast_hash": "79f6672fadc682b9b53a28530c32c0fa",
     "semantic_hash": ""
   },
-  "docs/improvements-roadmap.md": {
-    "mtime": 1784847036.094787,
-    "ast_hash": "fcab1f48a99b384c569b85b2887db6ee",
-    "semantic_hash": ""
-  },
   "docs/launch-design.md": {
     "mtime": 1784393955.6390705,
     "ast_hash": "afd21ceabcdb726e11f635529f7e3bae",
@@ -1305,18 +1300,18 @@
     "semantic_hash": ""
   },
   "docs/memory-reclamation-design.md": {
-    "mtime": 1784847036.0951335,
-    "ast_hash": "e23d2f15e2d33d7d3040b8c26a3cd148",
+    "mtime": 1785259788.2877223,
+    "ast_hash": "220d8612e80f7d5ab44fc77548812fe0",
     "semantic_hash": ""
   },
   "docs/multi-sprite-design.md": {
-    "mtime": 1784401678.5994337,
-    "ast_hash": "86e7a476173b3d28b9c97f07ce12435d",
+    "mtime": 1785259806.3468146,
+    "ast_hash": "aea7799795b18a8af3b8e1cf47689ea2",
     "semantic_hash": ""
   },
   "docs/sound-design.md": {
-    "mtime": 1784481081.7619762,
-    "ast_hash": "3b1a93ebfee65a6d974e61a1fc2899cf",
+    "mtime": 1785259806.3478816,
+    "ast_hash": "a92488b51ad65b26e2410c04dc79efbc",
     "semantic_hash": ""
   },
   "docs/space-invaders-design.md": {
@@ -1335,7 +1330,7 @@
     "semantic_hash": ""
   },
   "tests/CMakeLists.txt": {
-    "mtime": 1785184566.0287387,
+    "mtime": 1785259640.275465,
     "ast_hash": "96a3bfc62cb0f8631bfef43280c52cc6",
     "semantic_hash": ""
   },
@@ -1405,8 +1400,8 @@
     "semantic_hash": ""
   },
   "AGENTS.md": {
-    "mtime": 1784818414.1411116,
-    "ast_hash": "4e0b3f07c54eec774dd379b10c7ebba2",
+    "mtime": 1785259803.362749,
+    "ast_hash": "f2f2357de684d5180c5135a36db1d253",
     "semantic_hash": ""
   },
   "tests/test_graphics_demo.c": {
@@ -1420,18 +1415,28 @@
     "semantic_hash": ""
   },
   "docs/turtle-trails-design.md": {
-    "mtime": 1785175831.3980124,
+    "mtime": 1785259640.2114737,
     "ast_hash": "31c80e5d6beb36a70aaab340e068d1b9",
     "semantic_hash": ""
   },
   "tests/test_checkrun.c": {
-    "mtime": 1785246910.1069908,
+    "mtime": 1785250202.0875368,
     "ast_hash": "1565275cb45893e80455541c64913521",
     "semantic_hash": ""
   },
   "docs/checkpoint-run-design.md": {
-    "mtime": 1785247518.5569668,
+    "mtime": 1785250202.0330603,
     "ast_hash": "a15801eb21d0031ea4198341b34b6f1e",
+    "semantic_hash": ""
+  },
+  "docs/bugs.md": {
+    "mtime": 1785259788.2871997,
+    "ast_hash": "2dcb4d6250395383ffb510a3f227338a",
+    "semantic_hash": ""
+  },
+  "docs/roadmap.md": {
+    "mtime": 1785259814.8018734,
+    "ast_hash": "b510de9fb51e32a2462aaab4492a2a31",
     "semantic_hash": ""
   }
 }

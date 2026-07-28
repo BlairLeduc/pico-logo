@@ -1,7 +1,7 @@
 # P5 — Multi-sprite turtles and the display pipeline (implemented)
 
 Status: **v2, implemented** — the design gate for
-[P5 in the improvements roadmap](improvements-roadmap.md#p5--multi-sprite-turtles-with-collision-implemented)
+[P5 in the roadmap](roadmap.md#p5--multi-sprite-turtles-with-collision-implemented)
 closed 2026-07-04 (open questions and behaviour changes in §12 resolved
 with the user) and M0–M3 have since shipped, validated end-to-end by the
 Space Invaders and Galaxian game ports.

@@ -3,7 +3,8 @@
 - This project is a **Logo interpreter written in C**, targeting three RP2350 boards using the **Pico C/C++ SDK**: the Raspberry Pi **Pico 2** (4MB Flash, no radio), the Raspberry Pi **Pico 2 W** (4MB Flash, WiFi, no PSRAM), and the Pimoroni **Pico Plus 2 W** (16MB Flash, 8MB PSRAM, WiFi).
 - Networking is tiered by hardware via two build flags: `LOGO_HAS_WIFI` (radio → WiFi, DNS/NTP/ping, plain `http://`) and `LOGO_HAS_TLS` (PSRAM → `https://`, since mbedTLS's handshake heap lives in PSRAM). So Pico 2 is offline, Pico 2 W does plain HTTP only, Pico Plus 2 W does HTTPS. Set per board in `CMakePresets.json`.
 - The interpreter aims to be strictly compatible with the semantics described in [Pico_Logo_Reference](reference/Pico_Logo_Reference.md).
-- Our roadmap is in [Improvements Roadmap](docs/improvements-roadmap.md).
+- Our feature roadmap (past, present, future) is in [Roadmap](docs/roadmap.md).
+- Our bug tracker (past, present, future) is in [Bugs](docs/bugs.md). Features go in the roadmap, defects go here — check it before starting work, and keep it current: log a new bug when you find one, move it to the Fixed table when you fix it.
 
 # Build & Test
 
@@ -39,7 +40,7 @@ Use the `tests-coverage` preset for coverage. Host REPL: `--preset=host` → `./
 
 - Tests use **Unity** + **ctest**. A test file `test_foo.c` mirrors the source `core/foo.c`; cover typical and edge cases with clear, descriptive assertions.
 - Tests use the **mock device** (`tests/mock_device.*`); extend the mock as needed rather than touching real hardware.
-- Found a bug while working? Write a test that reproduces it **first**, then fix it.
+- Found a bug while working? Write a test that reproduces it **first**, then fix it — and record it in [Bugs](docs/bugs.md) (open it if you're not fixing it now, Fixed table if you are).
 - Never change a test just to make it pass without understanding the failure — investigate and fix the underlying cause.
 
 ## graphify

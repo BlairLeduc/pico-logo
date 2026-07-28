@@ -265,8 +265,8 @@
     "semantic_hash": ""
   },
   "core/primitives_files_load_save.c": {
-    "mtime": 1783201869.21384,
-    "ast_hash": "4f12ba7f75af7cc059b5d31ba0de4be2",
+    "mtime": 1785247407.5416396,
+    "ast_hash": "626aada11f6e526bc8a8101e5bea95ec",
     "semantic_hash": ""
   },
   "core/primitives_hardware.c": {
@@ -1065,8 +1065,8 @@
     "semantic_hash": ""
   },
   "tests/test_primitives_files_load_save.c": {
-    "mtime": 1784722876.2077565,
-    "ast_hash": "f1dfbffe4d18ab9d0c5774c5ef4f5c7f",
+    "mtime": 1785247373.7789674,
+    "ast_hash": "020a3d3882fa68e33d46cf88431332f4",
     "semantic_hash": ""
   },
   "tests/test_primitives_hardware.c": {
@@ -1425,13 +1425,13 @@
     "semantic_hash": ""
   },
   "tests/test_checkrun.c": {
-    "mtime": 1785184965.250971,
-    "ast_hash": "6f27a90fe7d374ee569f238208cded18",
+    "mtime": 1785246910.1069908,
+    "ast_hash": "1565275cb45893e80455541c64913521",
     "semantic_hash": ""
   },
   "docs/checkpoint-run-design.md": {
-    "mtime": 1785185005.7158592,
-    "ast_hash": "b5485880f688a793b6539ededdb887cf",
+    "mtime": 1785247518.5569668,
+    "ast_hash": "a15801eb21d0031ea4198341b34b6f1e",
     "semantic_hash": ""
   }
 }

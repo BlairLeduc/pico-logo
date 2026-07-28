@@ -203,7 +203,7 @@ increase requires explicit review.
 - Update the `nodes` and `recycle` reference sections: unreachable word storage
   is reclaimed by explicit `recycle`, while live atoms remain subject to the
   32 KB offset limit.
-- Mark atom reclamation complete in `docs/improvements-roadmap.md`.
+- Mark atom reclamation complete in `docs/roadmap.md`.
 - Update comments in `memory.h`, `memory.c`, and root-walker headers that still
   state atoms are permanent.
 
