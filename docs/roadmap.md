@@ -67,6 +67,7 @@ Companion documents (everything in `docs/`):
 | Long words via blobs on PSRAM boards | done | Landed 2026-07-12; `word` builds >255-char results via `mem_word` (blob on PSRAM boards), refuses without PSRAM |
 | `play [notes]` background melody | done | Landed 2026-07-18 as the P8 music sequencer: a real background sequencer over the 8-voice PSG (note-word notation, append semantics), not a melody of `toot`s. See [P8](#p8--sound-stereo-psg-synthesizer-design-first) |
 | Help discoverability | done | [P4](#p4--arc-and-help-discoverability): keyword search fallback in `help`, `(help)` topic listing, "did you mean" on unknown names |
+| `.reset` — clear the workspace for the next program | todo | One command instead of the `erall` + `cleardemons` + `cs` + `stopsound` + `recycle` incantation; buried procedures survive. See [`.reset`](#reset--clear-the-workspace-for-the-next-program) |
 
 ### Language: big bets
 
@@ -380,6 +381,44 @@ prompt while BREAK/error silence, `sound` range 20 Hz–10 kHz).
 - **M1–M3 implemented 2026-07-18** (core + device engine + tests, all three
   firmware presets link). M4 game retrofit and hardware A/B listen pending.
 
+### `.reset` — clear the workspace for the next program
+
+**Goal:** one command that clears out the program you just ran so the next one
+can be loaded onto a clean slate. Today that means remembering an incantation —
+`cleardemons`, `erall`, `cs`, `stopsound`, `recycle` — and even then a previous
+program's leftovers (open files, an HTTP listener, pen and sound settings) are
+still there to surprise the next one.
+
+- **Name:** `.reset`, following the dot-prefix convention already used for the
+  primitives you have to mean (`.setfirst`, `.setbf`, `.setitem`) — it throws
+  the workspace away without asking, so the dot is the warning.
+- **What it clears** — each of these is existing teardown code, so the
+  primitive is mostly a call list, not new machinery: procedures and global
+  names via `erall` (which already skips buried ones, so a buried library
+  survives — that's the point of burying it); demons (`cleardemons`) and, once
+  P6 lands, processes (`halt`); graphics via `cs` plus the settings `cs`
+  doesn't touch (`refreshmode` auto, pen size/colour/mode, turtles 1–7 hidden,
+  costumes freed, `setspeed`/`setanim` defaults); sound via `stopsound` plus
+  envelope/waveform defaults; an open HTTP listener (`http.unlisten`) and any
+  open file handles; finally `recycle`.
+- **What it leaves alone:** buried procedures and names; the filesystem (no
+  file is erased) and the current prefix; the WiFi link and hostname — staying
+  online across a reset is the useful behaviour, and rejoining is slow and
+  unreliable on some networks; the RNG seed set by `rerandom`; and the startup
+  file, which is *not* re-run — the workspace is left empty, so `.reset` is
+  also the way out of a startup file that misbehaves.
+- **Where:** `core/primitives_workspace.c` beside `erall`/`recycle`, delegating
+  to the per-subsystem reset helpers the toplevel error-unwind path already
+  calls (`demons_reset`, `httpd_reset`, …). If a subsystem lacks one, add it
+  there rather than reaching into its internals from the primitive.
+- **Tests:** define procedures + globals, bury one of each, arm a demon, listen
+  on a port, open a file, set pen/sound state, then `.reset` and assert the
+  unburied things are gone, the buried ones remain, and the device state is
+  back to defaults; plus `.reset` inside a procedure body unwinding to toplevel
+  rather than returning into a body that no longer exists.
+- **Reference:** a `## .reset` section under Workspace Management, cross-linked
+  from `erall` and `recycle`, spelling out exactly what survives.
+
 ---
 
 ## Progress log
@@ -435,4 +474,5 @@ prompt while BREAK/error silence, `sound` range 20 Hz–10 kHz).
 | 2026-07-21 | Platform | First bug fix (incomplete — see above), found by the user: connecting from a startup file failed most of the time while the identical commands worked from the REPL. `CYW43_LINK_NONET` (-2) is not a failure — it is the ordinary state while the scan has yet to find the AP, and the driver only leaves it if the join is *issued again* (the SDK's blocking connect does exactly this: `cyw43_arch.c`, "If there was no network, keep trying"). `wifi_status` treated any negative link status as terminal, latching `failed` and clearing `wifi_connect_pending` so it could never recover. Only the startup file was fast enough to see it: `when [wifi?]` armed there polls every 20 ms *during the load*, landing inside the blip, whereas at the REPL the seconds spent typing the `when` line let the join reach `LINK_UP` first. Fix mirrors the SDK — re-issue the join on NONET (self-throttling, since re-issuing returns the driver to `WIFI_JOIN_STATE_ACTIVE`) until a 30 s deadline matching the blocking path; `FAIL`/`BADAUTH` stay terminal. Needs the password kept alongside the SSID (+64 B, WiFi boards only). Not reproducible on the mock (no cyw43 join state machine), so this one rests on hardware validation |
 | 2026-07-19 | P8 | `logo/games/galaxian` given the same PSG retrofit for consistency: same four centred voice-pairs (`[0 4]` two-note convoy hum, `[1 5]` sawtooth laser, `[2 6]` **sustained** square dive shriek, `[3 7]` white-noise explosions), timbres in `setup.sound` from `init.game`. The signature `dive.shriek` glissando now overlaps notes on a held voice under the hum/laser (the old `toot 15` couldn't sustain); added a laser on `fire`, noise splats on `kill.alien`/`diver.shot`, a low boom on `handle.death`, `stopsound` on game over. `test_galaxian` (loads the file, exercises `kill.alien`/`diver.shot` on the mock which records sound ops) still green — 61/61 ctest; host smoke-test clean; `galaxian-design.md` §8 rewritten, one stale `toot` test comment fixed. Same hardware A/B listen pending |
 | 2026-07-28 | Roadmap | Split defect tracking out into [`bugs.md`](bugs.md): this roadmap is now features-only (past, present, future). The five open defects in the refinements table moved to `bugs.md` as B1–B5 (multi-line `(…)` in proc bodies, single-line `to … end`, demons firing during `load`, `parse_list` dropping unknown tokens, `name_buf[64]` aliasing), plus the 1 px `penreverse` limitation as B6; the refinements table keeps only the two performance items. Past fixes recorded from this log and git history. Renamed `improvements-roadmap.md` → `roadmap.md` (all references updated) |
+| 2026-07-29 | Language: medium | Added `.reset` (todo, user request): a single command that clears the program you just ran so the next one loads onto a clean slate — unburied procedures and names, demons (later processes), graphics, sound, HTTP listener, open files, then `recycle` — where today it takes a remembered `cleardemons`/`erall`/`cs`/`stopsound`/`recycle` sequence that still leaves state behind. Deliberately survives: buried procedures (`erall` already skips them), the filesystem and prefix, the WiFi link and hostname, the `rerandom` seed; the startup file is not re-run |
 | 2026-07-22 | Navigation | Done: easier directory navigation. Split the old one-per-line `catalog` into two commands: `cat` is a terse `ls`-style multi-column listing (alphabetical, dirs get a trailing `/`, column-major packing against a new `CATALOG_DISPLAY_WIDTH` 40 in `core/limits.h` = the PicoCalc's `SCREEN_COLUMNS`; over-wide names fall back to one per line), and `catalog` becomes the `ls -l` long form — one per line with a right-aligned 7-char size column (blank for directories, and when a file size can't be read). Added `sp` as an alias for `setprefix`. Shared collect/sort/resolve helpers; per-entry size via `io->storage->ops->file_size` on the joined `dir`/name path (buffer sized to avoid a truncated ancestor stat). Reference gains a `## cat` section, rewrites `## catalog`, aliases `setprefix (sp)`, and the startup `ls` example now calls `cat`; 6 new tests (`test_primitives_files_directory` covers cat columns, catalog size + `<DIR>`, and the `sp` alias). 61/61 ctest green, anchors resolve, pico2 links (RAM 95.6%). Verified on the host REPL: `cat`/`catalog` render correct columns and byte sizes |
