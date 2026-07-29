@@ -79,6 +79,7 @@ Companion documents (everything in `docs/`):
 | HTTP server (`http.listen`, `when [http.request?]`, `http.respond`, file transfer) | done | M0–M5 implemented, merged to `main` (#108, 2026-07-16): mDNS + `wifi.hostname`/`wifi.sethostname`, TCP server ops, demon-driven pump/parser, handler surface + `http.element`, `webturtle` example, file transfer. Browser + mDNS hardware-validated; `curl -T` upload validation pending. Design: [P7](#p7--http-server-implemented) |
 | Arrays (`array`/`setitem`) | deferred | O(1) indexing; needs a new object kind (likely blob-backed). Wait for demonstrated need |
 | Atom reclamation / `erall` soft reset | done / deferred | Atom reclamation landed 2026-07-23; `erall` soft reset remains deferred. See `memory-reclamation-design.md` |
+| Tile maps + smooth scrolling (accelerated tile games) | todo | Design first: a tile bank snapped off the canvas, a map larger than the screen, and a pixel-offset view the compositor sources rows from. See [P9](#p9--tile-maps-and-smooth-scrolling-design-first) |
 
 ### Platform
 
@@ -381,6 +382,79 @@ prompt while BREAK/error silence, `sound` range 20 Hz–10 kHz).
 - **M1–M3 implemented 2026-07-18** (core + device engine + tests, all three
   firmware presets link). M4 game retrofit and hardware A/B listen pending.
 
+### P9 — Tile maps and smooth scrolling (design first)
+
+**Goal:** make scrolling tile games — the Rally-X / Super Mario Bros. shape —
+practical on the PicoCalc: a map of tiles much larger than the screen, a view
+into it at an arbitrary **pixel** offset so scrolling is smooth rather than
+tile-stepped, and tiles that are *drawn* with the turtle and then snapped out
+of the canvas into a reusable bank. Nothing here is a new kind of graphics; it
+is the existing `snapsh`-draw-then-pick-it-up idiom applied to a background
+layer instead of a sprite.
+
+**Why now.** Both shipped tile games hit the same wall from opposite sides.
+Checkpoint Run rebuilds a sector by *redrawing* it — ~400 stamps per crossing —
+and its design (§4.2) closes with "do not add a framebuffer-scroll or tilemap
+primitive for this game without revising this design… the case should be made
+with numbers from **both** this game and Turtle Trails." Turtle Trails avoids
+the problem by fitting its whole 28×36 board on screen at once, which is
+exactly the constraint that rules the genre out. This item *is* that revision,
+and its gate is those numbers.
+
+- **The insight that makes it cheap:** the display already composites. Since
+  P5/M0, `gfx_buffer` holds only the canvas and each outgoing row is expanded
+  into a line buffer at blit time, with sprites overlaid per scanline
+  (`multi-sprite-design.md` §2.4). A scrolling background is the *same*
+  operation one layer lower: when a map view is active, the row's source
+  becomes the tile bank sampled at `(scroll_x + x, scroll_y + y)` instead of a
+  `memcpy` from `gfx_buffer`. Scrolling then costs **nothing per pixel of
+  offset** — no canvas move, no redraw, no re-stamping — because the picture is
+  never stored, only generated. Changing `scroll_x` by one pixel is one integer
+  write.
+- **The number to measure first (M0):** a scroll dirties every tile, so each
+  frame is a full-screen blit — 320×320 8-bit expanded to RGB565 over the
+  existing DMA pipeline. Whether the sample-from-map row builder holds 30 fps
+  on a Pico 2 is the whole feasibility question, and it decides the shape of
+  everything below. Measure with `ticks` before writing the surface, and
+  measure the two shipped games' redraw costs beside it so the comparison the
+  Checkpoint Run design asked for is on the record.
+- **Tile bank:** fixed-size square tiles (8×8 or 16×16 — one size, chosen at
+  M0, not per-map), 8-bit indexed like the canvas, in a pool separate from the
+  15 shape slots so a game can have a full tile set *and* its sprites. Filled
+  by capture: draw the tile with the pen anywhere on the canvas, snap it into
+  the bank, clear, repeat — so a game ships without a picture asset, the way
+  Turtle Trails already draws its own maze.
+- **Map storage:** one byte per cell, so a 64×64 map is 4 KB and a 128×128 map
+  is 16 KB. Too big for Logo lists (a cons per cell is out of the question) and
+  awkward as a blob, so this most likely wants its own fixed region with a
+  tiered cap — small in SRAM, large in PSRAM — following the HTTP body and
+  costume-pool precedent, sizes in `core/limits.h`. **The memory plan is the
+  open question**, not the rendering: SRAM is at ~95.6 % on pico2.
+- **Surface sketch** (names are provisional — `window` and `map` are both taken
+  by existing primitives, so the view is `setscroll`/`scroll`): `snaptile n`
+  captures the tile under the turtle into bank slot _n_; `newmap cols rows`
+  allocates and clears; `settile col row n` / `tile col row` write and read
+  cells; `setscroll x y` / `scroll` move the view in pixels;
+  `showmap`/`hidemap` switch the background source between the map and the
+  ordinary canvas. Pen drawing, `dot?`, `fill` and `savepic` keep seeing the
+  canvas alone, exactly as they keep seeing it free of sprites today.
+- **Levers if M0 misses budget:** the LCD's hardware vertical scroll
+  (`lcd_define_scrolling`/`lcd_scroll_up`, already driving text scrolling)
+  makes vertical-only scrolling nearly free by shifting the panel's start line,
+  at the cost of horizontal motion; or restrict smooth offset to one axis; or
+  blit only the moving band. Each of these narrows the genre, so take them only
+  with numbers in hand.
+- **Open questions for the gate:** tile size; where the map lives and how big
+  it may be on each board tier; whether a map is bigger than one screen only,
+  or wraps (Rally-X's radar-mapped world wraps, Mario's does not); whether tile
+  cells carry a "solid" bit for collision or games keep that in their own list;
+  how `touching?`/`over?`/`colourunder` read a map-sourced background; what
+  `cs` and the error unwind do to a bank and a map.
+- **Milestones:** M0 measurement + design gate → M1 tile bank and capture →
+  M2 map storage and the compositor's map row source → M3 pixel scrolling and
+  the Logo surface → M4 validation by a real scrolling game, with a Checkpoint
+  Run retrofit as the before/after.
+
 ### `.reset` — clear the workspace for the next program
 
 **Goal:** one command that clears out the program you just ran so the next one
@@ -475,4 +549,5 @@ still there to surprise the next one.
 | 2026-07-19 | P8 | `logo/games/galaxian` given the same PSG retrofit for consistency: same four centred voice-pairs (`[0 4]` two-note convoy hum, `[1 5]` sawtooth laser, `[2 6]` **sustained** square dive shriek, `[3 7]` white-noise explosions), timbres in `setup.sound` from `init.game`. The signature `dive.shriek` glissando now overlaps notes on a held voice under the hum/laser (the old `toot 15` couldn't sustain); added a laser on `fire`, noise splats on `kill.alien`/`diver.shot`, a low boom on `handle.death`, `stopsound` on game over. `test_galaxian` (loads the file, exercises `kill.alien`/`diver.shot` on the mock which records sound ops) still green — 61/61 ctest; host smoke-test clean; `galaxian-design.md` §8 rewritten, one stale `toot` test comment fixed. Same hardware A/B listen pending |
 | 2026-07-28 | Roadmap | Split defect tracking out into [`bugs.md`](bugs.md): this roadmap is now features-only (past, present, future). The five open defects in the refinements table moved to `bugs.md` as B1–B5 (multi-line `(…)` in proc bodies, single-line `to … end`, demons firing during `load`, `parse_list` dropping unknown tokens, `name_buf[64]` aliasing), plus the 1 px `penreverse` limitation as B6; the refinements table keeps only the two performance items. Past fixes recorded from this log and git history. Renamed `improvements-roadmap.md` → `roadmap.md` (all references updated) |
 | 2026-07-29 | Language: medium | Added `.reset` (todo, user request): a single command that clears the program you just ran so the next one loads onto a clean slate — unburied procedures and names, demons (later processes), graphics, sound, HTTP listener, open files, then `recycle` — where today it takes a remembered `cleardemons`/`erall`/`cs`/`stopsound`/`recycle` sequence that still leaves state behind. Deliberately survives: buried procedures (`erall` already skips them), the filesystem and prefix, the WiFi link and hostname, the `rerandom` seed; the startup file is not re-run |
+| 2026-07-29 | P9 | Added tile maps + smooth scrolling (todo, design first, user request): acceleration for scrolling tile games — a bank of tiles drawn with the pen and snapped off the canvas, a map larger than the screen at one byte per cell, and a view into it at a pixel offset. Rendering falls out of the existing scanline compositor (the row source becomes the map instead of `gfx_buffer`, so an offset change costs one integer write and the picture is never stored); the real questions are the per-frame full-screen blit cost and where the map lives on a pico2 at 95.6 % SRAM. This is the revision `checkpoint-run-design.md` §4.2 demanded before any tilemap primitive, so M0 is measurement — the scroll builder's frame time beside both shipped games' redraw costs |
 | 2026-07-22 | Navigation | Done: easier directory navigation. Split the old one-per-line `catalog` into two commands: `cat` is a terse `ls`-style multi-column listing (alphabetical, dirs get a trailing `/`, column-major packing against a new `CATALOG_DISPLAY_WIDTH` 40 in `core/limits.h` = the PicoCalc's `SCREEN_COLUMNS`; over-wide names fall back to one per line), and `catalog` becomes the `ls -l` long form — one per line with a right-aligned 7-char size column (blank for directories, and when a file size can't be read). Added `sp` as an alias for `setprefix`. Shared collect/sort/resolve helpers; per-entry size via `io->storage->ops->file_size` on the joined `dir`/name path (buffer sized to avoid a truncated ancestor stat). Reference gains a `## cat` section, rewrites `## catalog`, aliases `setprefix (sp)`, and the startup `ls` example now calls `cat`; 6 new tests (`test_primitives_files_directory` covers cat columns, catalog size + `<DIR>`, and the `sp` alias). 61/61 ctest green, anchors resolve, pico2 links (RAM 95.6%). Verified on the host REPL: `cat`/`catalog` render correct columns and byte sizes |
