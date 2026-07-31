@@ -684,8 +684,6 @@ static void turtle_draw(void)
 // Clear the graphics buffer and reset the turtle to the home position
 static void turtle_clearscreen(void)
 {
-    screen_show_field();
-
     // Clear the graphics buffer
     screen_gfx_clear();
 
@@ -700,8 +698,6 @@ static void turtle_clearscreen(void)
 // Returns true on success, false if boundary error in fence mode
 static bool turtle_move(float distance)
 {
-    screen_show_field();
-
     float old_x = cur->x;
     float old_y = cur->y;
 
@@ -777,8 +773,6 @@ static bool turtle_move(float distance)
 // Reset the turtle to the home position
 static void turtle_home(void)
 {
-    screen_show_field();
-
     float old_x = cur->x;
     float old_y = cur->y;
 
@@ -814,8 +808,6 @@ static void turtle_home(void)
 // Returns true on success, false if boundary error (fence mode)
 static bool turtle_set_position(float x, float y)
 {
-    screen_show_field();
-
     float old_x = cur->x;
     float old_y = cur->y;
 
@@ -901,8 +893,6 @@ static void turtle_get_position(float *x, float *y)
 // Set the turtle angle to the specified value
 static void turtle_set_angle(float angle)
 {
-    screen_show_field();
-
     // Normalize the angle to [0, 360)
     cur->angle = fmodf(angle, 360.0f);
     if (cur->angle < 0.0f)
@@ -923,8 +913,6 @@ static float turtle_get_angle(void)
 // Set the turtle color to the specified value
 static void turtle_set_colour(uint8_t colour)
 {
-    screen_show_field();
-
     // Set the new turtle color
     cur->colour = colour;
 
@@ -959,7 +947,6 @@ static uint8_t turtle_get_bg_colour(void)
 // Set the pen state (down or up)
 static void turtle_set_pen_state(LogoPen state)
 {
-    screen_show_field();
     cur->pen_state = state; // Set the pen state
 }
 
@@ -989,8 +976,6 @@ static void turtle_set_visibility(bool visible)
         return; // No change in visibility
     }
 
-    screen_show_field();
-
     cur->visible = visible;
 
     // turtle_draw shows or hides the sprite to match the new visibility
@@ -1007,7 +992,6 @@ static bool turtle_get_visibility(void)
 
 static void turtle_dot(float x, float y)
 {
-    screen_show_field();
     // Convert Logo coordinates to screen coordinates:
     // - X: Logo 0 -> Screen center (SCREEN_WIDTH/2)
     // - Y: Logo 0 -> Screen center, but Y axis is flipped (Logo Y up, Screen Y down)
@@ -1049,8 +1033,6 @@ static void turtle_fill(void)
             return;
     }
 
-    screen_show_field();
-
     // The turtle is composited over the canvas, never written into it,
     // so the fill sees a clean canvas and needs no hide/restore dance.
     screen_gfx_fill(cur->x, cur->y, fill_colour);
@@ -1064,7 +1046,6 @@ static void turtle_fill(void)
 // (backs the `write` primitive).
 static void turtle_draw_text(const char *text)
 {
-    screen_show_field();
     screen_gfx_text((int)(cur->x + 0.5f), (int)(cur->y + 0.5f) - GLYPH_HEIGHT / 2, text, cur->colour);
     screen_gfx_update();
 }
@@ -1161,8 +1142,6 @@ static void turtle_set_shape_num(uint8_t shape_num)
     if (shape_num == cur->shape)
         return;
     
-    screen_show_field();
-
     // Change shape; the raster cache notices the shape mismatch
     cur->shape = shape_num;
 
@@ -1192,7 +1171,6 @@ static void refresh_shape_wearers(uint8_t shape_num)
         if (picoturtles[i].visible)
         {
             turtle_op_select(i);
-            screen_show_field();
             turtle_draw();
         }
     }
@@ -1211,7 +1189,6 @@ static void turtle_set_rotation_style(LogoRotationStyle style)
     cur->raster_valid = false;
     if (cur->visible)
     {
-        screen_show_field();
         turtle_draw();
         screen_gfx_update();
     }
@@ -1228,7 +1205,6 @@ static void turtle_set_scale(uint8_t mag)
     cur->raster_valid = false;
     if (cur->visible)
     {
-        screen_show_field();
         turtle_draw();
         screen_gfx_update();
     }
@@ -1238,7 +1214,6 @@ static void turtle_set_scale(uint8_t mag)
 // position (the stamp primitive)
 static void turtle_stamp(void)
 {
-    screen_show_field();
     turtle_update_raster();
 
     ScreenSprite sprite;

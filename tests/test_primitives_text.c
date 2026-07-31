@@ -261,6 +261,30 @@ void test_screen_mode_cycle(void)
     TEST_ASSERT_EQUAL(MOCK_SCREEN_TEXT, state->screen_mode);
 }
 
+// Only textscreen/splitscreen/fullscreen (and F1-F3) choose the screen mode.
+// Drawing while the text screen is up must not steal the screen: the picture
+// accumulates in the graphics buffer and appears on the next mode switch.
+void test_turtle_commands_do_not_change_screen_mode(void)
+{
+    static const char *const turtle_commands[] = {
+        "cs", "fd 50", "bk 10", "home", "setpos [10 10]", "seth 90",
+        "setpc 3", "pu", "pd", "ht", "st", "dot [5 5]", "fill",
+        "write [hello]", "setsh 2", "setrot \"full", "setmag 2", "stamp",
+    };
+
+    const MockDeviceState *state = mock_device_get_state();
+
+    run_string("textscreen");
+    TEST_ASSERT_EQUAL(MOCK_SCREEN_TEXT, state->screen_mode);
+
+    for (size_t i = 0; i < sizeof(turtle_commands) / sizeof(turtle_commands[0]); i++)
+    {
+        Result r = run_string(turtle_commands[i]);
+        TEST_ASSERT_NOT_EQUAL_MESSAGE(RESULT_ERROR, r.status, turtle_commands[i]);
+        TEST_ASSERT_EQUAL_MESSAGE(MOCK_SCREEN_TEXT, state->screen_mode, turtle_commands[i]);
+    }
+}
+
 // ============================================================================
 // Command recording tests
 // ============================================================================
@@ -619,6 +643,7 @@ int main(void)
     
     // Screen mode cycling
     RUN_TEST(test_screen_mode_cycle);
+    RUN_TEST(test_turtle_commands_do_not_change_screen_mode);
     
     // Command recording
     RUN_TEST(test_cleartext_records_command);

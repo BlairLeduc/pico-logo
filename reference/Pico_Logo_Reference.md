@@ -693,7 +693,7 @@ Freshly zambonied ice
 ===
 # Turtle Graphics
 
-Pico Logo has two kinds of screens: the graphics screen and the text screen. When you use any primitive or procedure that renders to the turtle, Logo shows you the graphics screen. The commands [`fullscreen`](#fullscreen-fs), [`splitscreen`](#splitscreen-ss), and [`textscreen`](#textscreen-ts) allow you to switch between the two kinds of screens.
+Pico Logo has two kinds of screens: the graphics screen and the text screen. The commands [`fullscreen`](#fullscreen-fs), [`splitscreen`](#splitscreen-ss), and [`textscreen`](#textscreen-ts) allow you to switch between the two kinds of screens, and the `F1`, `F2`, and `F3` keys do the same from the keyboard. Only those commands and keys change which screen you see: drawing while the text screen is up is not an error, and it does not switch screens. The turtle goes on drawing on the graphics screen, and your picture is waiting for you the next time you look at it.
 
 The screen limits are 320 turtle steps high and 320 steps wide. Hence, when using Cartesian coordinates (as in [`setpos`](#setpos)), you reach the edge of the screen when the y-coordinate is 160 (top) or -159 (bottom) and the x-coordinate is -159 (left edge) or 160 (right edge). 
 
@@ -2081,7 +2081,7 @@ ts
 
 `command`
 
-`textscreen` devotes the entire screen to text; the graphics screen is invisible to you until a graphics procedure is run.
+`textscreen` devotes the entire screen to text; the graphics screen is invisible to you until you use [`splitscreen`](#splitscreen-ss) or [`fullscreen`](#fullscreen-fs). A turtle command given while the text screen is up still draws, but it does not bring the graphics screen back.
 
 **Example**:
 
