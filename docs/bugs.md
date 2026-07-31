@@ -22,40 +22,12 @@ edge case)
 
 | ID | Bug | Area | Severity | Found | Status |
 |---|---|---|---|---|---|
-| [B1](#b1--multi-line--expressions-inside-a-procedure-body-evaluate-to-empty) | Multi-line `(…)` expressions inside a procedure body evaluate to empty | parser | high | 2026-07-22 | open |
 | [B2](#b2--single-line-to--end-definitions-are-not-supported) | Single-line `to … end` definitions are not supported | loader/REPL | high | 2026-07-19 | open |
 | [B3](#b3--demons-fire-during-load) | Demons fire during `load` | demons | medium | 2026-07-21 | open |
 | [B4](#b4--parse_list-silently-drops-unknown-tokens) | `parse_list` silently drops unknown tokens | parser | medium | 2026-07-02 | open |
 | [B5](#b5--name_buf64-identifier-truncation-aliasing) | `name_buf[64]` identifier truncation aliasing | lexer | low | 2026-07-02 | open |
 | [B6](#b6--penreverse-ignores-pen-size-always-1-px) | `penreverse` ignores pen size (always 1 px) | graphics | low | 2026-07-18 | won't fix (documented) |
 | [B7](#b7--a-user-procedure-call-as-the-left-operand-of-a-parenthesised-expression-corrupts-the-parse) | A user-procedure call as the left operand of a parenthesised expression corrupts the parse | parser/eval | high | 2026-07-28 | open |
-
-### B1 — Multi-line `(…)` expressions inside a procedure body evaluate to empty
-
-The parser is line-oriented: a parenthesised expression split across source
-lines inside a `to … end` body silently yields an empty or wrong result — an
-unclosed `(` drops the rest of the line.
-
-Minimal repro (inside a procedure body):
-
-```
-op (list
-"|a|
-"|b|
-)
-```
-
-returns `count 0`, while the single-line `op (list "|a| "|b|)` returns `2`.
-
-Affects both the REPL and `load` / `proc_define_from_text`. Silent — no error
-is raised, so a program simply computes the wrong answer.
-
-- **Workaround:** keep every `(…)` expression on one line; accumulate long
-  lists with `localmake` / `lput`.
-- **Fix:** treat newlines inside an open paren as whitespace during proc-body
-  assembly (`core/repl.c` line buffering plus `core/parse_list.c` /
-  `core/lexer.c`), with tests.
-- **Found:** 2026-07-22, building `logo/fileserver`.
 
 ### B2 — Single-line `to … end` definitions are not supported
 
@@ -181,6 +153,7 @@ Scope, all verified against `./build-host/logo` on 2026-07-28:
 
 | Date | Bug | Area | Fix | Ref |
 |---|---|---|---|---|
+| 2026-07-31 | Multi-line `(…)` expressions inside a procedure body evaluate to empty (B1) | parser | `proc_define_from_text` split the body on every newline, so `op (list` on its own line evaluated as `(list)`. It now tracks `(` nesting and, while a paren is open, keeps the tokens on the same body line. The break is recorded as a newline marker rather than dropped, so a `;` comment inside the expression still ends at its own source line and `po` reproduces the layout (`core/format.c` renders a top-level marker as a line break, `core/eval_steps.c` skips it when printing a stepped line). `end` is still recognised at line start inside an open paren, so an unbalanced `(` cannot swallow the procedures that follow it | — |
 | 2026-07-31 | A turtle command automatically switches to splitscreen (B8) | graphics | Deleted `screen_show_field()` and its 16 call sites in the PicoCalc turtle ops, so only `textscreen`/`splitscreen`/`fullscreen` and `F1`–`F3` choose the mode. Drawing under `textscreen` already worked — `screen_gfx_blit_dirty` skips the blit in text mode and keeps the dirty state, and a later mode switch marks all dirty and presents — so the picture now waits instead of stealing the screen. Reference updated to match (it had documented the old behaviour, inherited from LCSI Logo). Validated on hardware — the host tests cannot reach the PicoCalc device layer | #126 |
 | 2026-07-22 | Atom GC freed storage still reachable from roots | memory | Corrected root handling in the atom collector | `1eaa4ae`, #120 |
 | 2026-07-21 | WiFi: joining unreliable — steady retrying *sustains* the AP's rejection penalty | wifi | Retry policy changed to burst-then-escalating-rests (3 attempts at 2 s, then one probe per 30/60/120 s rest); plain exponential backoff was tried first and did not help. Diagnosed from on-device `wifi.log` traces | #116 |

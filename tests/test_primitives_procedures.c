@@ -1021,6 +1021,172 @@ void test_proc_define_from_text_blank_line_inside_bracket_body(void)
     TEST_ASSERT_EQUAL_STRING("hi\nbye\nhi\nbye\n", output_buffer);
 }
 
+void test_proc_define_from_text_multiline_paren_body(void)
+{
+    // B1: a parenthesised expression split across source lines inside a
+    // procedure body must behave exactly as if it were on one line. It
+    // used to yield an empty list, because every newline broke the body
+    // line regardless of the open paren.
+    Result r = proc_define_from_text(
+        "to mlp\n"
+        "op (list\n"
+        "\"|a|\n"
+        "\"|b|\n"
+        ")\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    Result rc = eval_string("count mlp");
+    TEST_ASSERT_EQUAL(RESULT_OK, rc.status);
+    TEST_ASSERT_EQUAL_FLOAT(2.0f, rc.value.as.number);
+
+    reset_output();
+    Result r2 = run_string("show mlp");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+    TEST_ASSERT_EQUAL_STRING("[a b]\n", output_buffer);
+}
+
+void test_proc_define_from_text_multiline_grouping_paren(void)
+{
+    // B1: a grouping paren (not a paren-call) spanning lines.
+    Result r = proc_define_from_text(
+        "to mlg :x\n"
+        "op (:x\n"
+        "   + 1) * 2\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    Result r2 = eval_string("mlg 4");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+    TEST_ASSERT_EQUAL_FLOAT(10.0f, r2.value.as.number);
+}
+
+void test_proc_define_from_text_nested_parens_across_lines(void)
+{
+    // B1: nested parens must all close before the body line ends.
+    Result r = proc_define_from_text(
+        "to mlnp\n"
+        "op (list\n"
+        "  (sum 1\n"
+        "        2)\n"
+        "  3\n"
+        ")\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    reset_output();
+    Result r2 = run_string("show mlnp");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+    TEST_ASSERT_EQUAL_STRING("[3 3]\n", output_buffer);
+}
+
+void test_proc_define_from_text_bracket_inside_multiline_paren(void)
+{
+    // B1: a bracket literal inside a multi-line paren takes the bracket
+    // parsing path, which must not end the body line either.
+    Result r = proc_define_from_text(
+        "to mlbp\n"
+        "op (list [1 2]\n"
+        "\"|c|\n"
+        ")\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    reset_output();
+    Result r2 = run_string("show mlbp");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+    TEST_ASSERT_EQUAL_STRING("[[1 2] c]\n", output_buffer);
+}
+
+void test_proc_define_from_text_multiline_paren_then_next_line(void)
+{
+    // B1: once the paren closes, the following newline must end the body
+    // line as usual so later lines still run.
+    Result r = proc_define_from_text(
+        "to mlpn\n"
+        "print (word \"|a|\n"
+        "  \"|b|)\n"
+        "print \"|done|\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    reset_output();
+    Result r2 = run_string("mlpn");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+    TEST_ASSERT_EQUAL_STRING("ab\ndone\n", output_buffer);
+}
+
+void test_proc_define_from_text_comment_inside_multiline_paren(void)
+{
+    // B1: the source line breaks are kept as newline markers, so a `;`
+    // comment inside a multi-line paren ends at its own line instead of
+    // swallowing the rest of the expression.
+    Result r = proc_define_from_text(
+        "to mlpc\n"
+        "op (list  ; the items\n"
+        "\"|a|\n"
+        "\"|b|\n"
+        ")\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    reset_output();
+    Result r2 = run_string("show mlpc");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r2.status);
+    TEST_ASSERT_EQUAL_STRING("[a b]\n", output_buffer);
+}
+
+void test_proc_define_from_text_multiline_paren_round_trips(void)
+{
+    // B1: `po` reproduces the source layout of a multi-line paren, so the
+    // definition survives a save/load (or edit) round trip unchanged.
+    Result r = proc_define_from_text(
+        "to mlpr\n"
+        "op (list\n"
+        "\"a\n"
+        "\"b\n"
+        ")\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    char buffer[512];
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    UserProcedure *proc = proc_find("mlpr");
+    TEST_ASSERT_NOT_NULL(proc);
+    TEST_ASSERT_TRUE(format_procedure_definition(format_buffer_output, &ctx, proc));
+
+    const char *expected =
+        "to mlpr\n"
+        "  op (list\n"
+        "  \"a\n"
+        "  \"b\n"
+        "  )\n"
+        "end\n";
+    TEST_ASSERT_EQUAL_STRING(expected, buffer);
+}
+
+void test_proc_define_from_text_unclosed_paren_stops_at_end(void)
+{
+    // B1 guard: an unbalanced `(` must not swallow `end` and absorb the
+    // procedures that follow it in the same text.
+    Result r = proc_define_from_text(
+        "to unclosed\n"
+        "op (list\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    Result r2 = proc_define_from_text(
+        "to afterunclosed\n"
+        "op 7\n"
+        "end");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+
+    Result r3 = eval_string("afterunclosed");
+    TEST_ASSERT_EQUAL(RESULT_OK, r3.status);
+    TEST_ASSERT_EQUAL_FLOAT(7.0f, r3.value.as.number);
+}
+
 void test_proc_define_from_text_equals_operator(void)
 {
     // Test equals operator with real newlines
@@ -2004,6 +2170,14 @@ int main(void)
     RUN_TEST(test_proc_define_from_text_multiline_bracket_body);
     RUN_TEST(test_proc_define_from_text_preserves_comments_inside_bracket_body);
     RUN_TEST(test_proc_define_from_text_nested_brackets_across_lines);
+    RUN_TEST(test_proc_define_from_text_multiline_paren_body);
+    RUN_TEST(test_proc_define_from_text_multiline_grouping_paren);
+    RUN_TEST(test_proc_define_from_text_nested_parens_across_lines);
+    RUN_TEST(test_proc_define_from_text_bracket_inside_multiline_paren);
+    RUN_TEST(test_proc_define_from_text_multiline_paren_then_next_line);
+    RUN_TEST(test_proc_define_from_text_comment_inside_multiline_paren);
+    RUN_TEST(test_proc_define_from_text_multiline_paren_round_trips);
+    RUN_TEST(test_proc_define_from_text_unclosed_paren_stops_at_end);
     RUN_TEST(test_proc_define_from_text_blank_line_inside_bracket_body);
     RUN_TEST(test_proc_define_from_text_equals_operator);
     RUN_TEST(test_proc_define_from_text_less_than_operator);

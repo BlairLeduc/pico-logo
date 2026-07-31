@@ -305,6 +305,22 @@ void test_repl_run_multiple_lines(void)
     TEST_ASSERT_TRUE(strstr(output_buffer, "3") != NULL);
 }
 
+void test_repl_defines_proc_with_multiline_paren(void)
+{
+    ReplState state;
+
+    // B1: a parenthesised expression typed across several lines of a
+    // procedure definition must survive the REPL's line buffering.
+    set_mock_input("to f\nop (list\n\"a\n\"b\n)\nend\nshow count f\n");
+
+    repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
+    Result r = repl_run(&state);
+    repl_cleanup(&state);
+
+    TEST_ASSERT_EQUAL(RESULT_EOF, r.status);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "2") != NULL);
+}
+
 void test_repl_error_restores_auto_refresh(void)
 {
     ReplState state;
@@ -710,6 +726,7 @@ int main(void)
     
     // REPL run tests
     RUN_TEST(test_repl_run_simple_print);
+    RUN_TEST(test_repl_defines_proc_with_multiline_paren);
     RUN_TEST(test_repl_error_restores_auto_refresh);
     RUN_TEST(test_repl_throw_toplevel_restores_auto_refresh);
     RUN_TEST(test_repl_error_clears_sync_refresh);

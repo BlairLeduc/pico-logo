@@ -281,18 +281,28 @@ Result proc_define_from_text(const char *text)
     Node current_line_tail = NODE_NIL;
     bool at_line_start = lexer.had_newline;  // Check if we crossed a newline to get here
     bool body_started = false;      // Have we added any content to body?
-    
+    int paren_depth = 0;            // Open `(` on the line being built
+
     while (t.type != TOKEN_EOF)
     {
-        // Check for 'end' only at line start
+        // Check for 'end' only at line start. This is checked inside an open
+        // paren too, so an unbalanced `(` cannot swallow `end` and absorb the
+        // procedures that follow it.
         if (at_line_start && t.type == TOKEN_WORD && t.length == 3 &&
             strncasecmp(t.start, "end", 3) == 0)
         {
             break;
         }
-        
+
         at_line_start = false;
-        
+
+        // Track `(` nesting so a newline inside a parenthesised expression
+        // is treated as whitespace rather than a body-line break.
+        if (t.type == TOKEN_LEFT_PAREN)
+            paren_depth++;
+        else if (t.type == TOKEN_RIGHT_PAREN && paren_depth > 0)
+            paren_depth--;
+
         // Build token node
         Node item = NODE_NIL;
         
@@ -326,7 +336,19 @@ Result proc_define_from_text(const char *text)
                 int newline_count = lexer.newline_count;
                 lexer.had_newline = false;
                 lexer.newline_count = 0;
-                
+
+                // Inside an open `(` the newline is whitespace: keep
+                // accumulating into the same body line.
+                if (paren_depth > 0)
+                {
+                    while (newline_count-- > 0)
+                        current_line_tail = append_to_list(&current_line,
+                                                           &current_line_tail,
+                                                           mem_newline_marker);
+                    at_line_start = true;
+                    continue;
+                }
+
                 // Finish current line
                 Node line_to_add = mem_is_nil(current_line) ? NODE_NIL : 
                                    NODE_MAKE_LIST(NODE_GET_INDEX(current_line));
@@ -395,13 +417,27 @@ Result proc_define_from_text(const char *text)
             lexer.had_newline = false;
             lexer.newline_count = 0;
             
-            // Skip leading newlines before body starts
+            // Skip leading newlines before the body starts.
             if (!body_started && mem_is_nil(current_line))
             {
                 at_line_start = true;
                 continue;
             }
-            
+
+            // Inside an open `(` the newline is whitespace: keep accumulating
+            // into the same body line so a parenthesised expression can span
+            // source lines. The marker is kept so a `;` comment still ends at
+            // its own source line, and so `po` reproduces the layout.
+            if (paren_depth > 0)
+            {
+                while (newline_count-- > 0)
+                    current_line_tail = append_to_list(&current_line,
+                                                       &current_line_tail,
+                                                       mem_newline_marker);
+                at_line_start = true;
+                continue;
+            }
+
             // First newline finishes the current line
             Node line_to_add = mem_is_nil(current_line) ? NODE_NIL : 
                                NODE_MAKE_LIST(NODE_GET_INDEX(current_line));
