@@ -330,15 +330,6 @@ void screen_set_mode_no_update(uint8_t mode)
     }
 }
 
-void screen_show_field()
-{
-    if (screen_mode == SCREEN_MODE_GFX || screen_mode == SCREEN_MODE_SPLIT)
-    {
-        return;
-    }
-    screen_set_mode(SCREEN_MODE_SPLIT);
-}
-
 //
 //  Graphics functions
 //

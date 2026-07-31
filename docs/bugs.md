@@ -29,7 +29,6 @@ edge case)
 | [B5](#b5--name_buf64-identifier-truncation-aliasing) | `name_buf[64]` identifier truncation aliasing | lexer | low | 2026-07-02 | open |
 | [B6](#b6--penreverse-ignores-pen-size-always-1-px) | `penreverse` ignores pen size (always 1 px) | graphics | low | 2026-07-18 | won't fix (documented) |
 | [B7](#b7--a-user-procedure-call-as-the-left-operand-of-a-parenthesised-expression-corrupts-the-parse) | A user-procedure call as the left operand of a parenthesised expression corrupts the parse | parser/eval | high | 2026-07-28 | open |
-| [B8](#b8--a-turtle-command-automatically-switches-to-splitscreen) | A turtle command automatically switches to splitscreen | graphics | low | 2026-07-28 | open |
 
 ### B1 — Multi-line `(…)` expressions inside a procedure body evaluate to empty
 
@@ -176,60 +175,13 @@ Scope, all verified against `./build-host/logo` on 2026-07-28:
 - **Found:** 2026-07-28, building `logo/games/trails`, where it stopped the
   game running a single frame.
 
-### B8 — A turtle command automatically switches to splitscreen
-
-In `textscreen` mode, most turtle commands silently change the screen mode to
-`splitscreen`. The screen mode should only change when the program asks for it
-— with `textscreen` / `splitscreen` / `fullscreen`, or the `F1`–`F3` keys.
-
-```logo
-?ts
-?fd 50        ; screen flips to splitscreen
-```
-
-This takes the mode decision away from the program. A procedure that wants to
-draw off-screen and present later (or that is deliberately running with the
-text screen up) cannot do so, and the flip costs a full redraw of both buffers
-at an arbitrary moment.
-
-The behaviour is also inconsistent: it fires from `clearscreen`, `forward`,
-`home`, `setpos`, `setheading`, `setcolour`, `pen` state, `showturtle` /
-`hideturtle`, `dot`, `fill`, turtle text, `setshape`, rotation style, scale and
-`stamp`, but not from `setpensize`, `setbg`, `fence` / `window` / `wrap`, so
-which commands steal the screen is arbitrary from the user's point of view.
-
-- **Cause:** `screen_show_field()` (`devices/picocalc/screen.c:333`) sets
-  `SCREEN_MODE_SPLIT` whenever the current mode is not already `GFX` or
-  `SPLIT`; the turtle ops in `devices/picocalc/picocalc_console.c` call it at
-  ~16 sites (687, 703, 780, 817, 904, 926, 962, 992, 1010, 1052, 1067, 1164,
-  1195, 1214, 1231, 1241). Note it only hijacks `textscreen`; `fullscreen` is
-  left alone.
-- **Documentation:** this is currently *documented* behaviour —
-  `reference/Pico_Logo_Reference.md:696` says "When you use any primitive or
-  procedure that renders to the turtle, Logo shows you the graphics screen"
-  (inherited from LCSI Logo). Fixing the code therefore means editing that
-  paragraph too, otherwise the fix creates a new reference mismatch.
-- **Workaround:** issue `splitscreen` (or `fullscreen`) explicitly before
-  drawing, and accept the flip otherwise; there is no way to draw while staying
-  in `textscreen`.
-- **Fix:** drop the `screen_show_field()` calls from the turtle ops and delete
-  the helper, leaving mode changes to `prim_textscreen` / `prim_splitscreen` /
-  `prim_fullscreen` and `screen_handle_mode_key`. Update the reference
-  paragraph above and the `## Turtle Graphics` intro to say the mode is only
-  changed by those commands.
-- **Testing:** not reproducible on the host — this lives in the PicoCalc
-  device layer, and the mock device's turtle ops (`tests/mock_device.c`) never
-  touch `screen_mode`. A test can assert the mock stays in
-  `MOCK_SCREEN_TEXT` across turtle commands to pin the intended contract, but
-  the actual change must be validated on hardware.
-- **Found:** 2026-07-28.
-
 ---
 
 ## Fixed
 
 | Date | Bug | Area | Fix | Ref |
 |---|---|---|---|---|
+| 2026-07-31 | A turtle command automatically switches to splitscreen (B8) | graphics | Deleted `screen_show_field()` and its 16 call sites in the PicoCalc turtle ops, so only `textscreen`/`splitscreen`/`fullscreen` and `F1`–`F3` choose the mode. Drawing under `textscreen` already worked — `screen_gfx_blit_dirty` skips the blit in text mode and keeps the dirty state, and a later mode switch marks all dirty and presents — so the picture now waits instead of stealing the screen. Reference updated to match (it had documented the old behaviour, inherited from LCSI Logo). Validated on hardware — the host tests cannot reach the PicoCalc device layer | #126 |
 | 2026-07-22 | Atom GC freed storage still reachable from roots | memory | Corrected root handling in the atom collector | `1eaa4ae`, #120 |
 | 2026-07-21 | WiFi: joining unreliable — steady retrying *sustains* the AP's rejection penalty | wifi | Retry policy changed to burst-then-escalating-rests (3 attempts at 2 s, then one probe per 30/60/120 s rest); plain exponential backoff was tried first and did not help. Diagnosed from on-device `wifi.log` traces | #116 |
 | 2026-07-21 | WiFi: healthy-but-slow joins torn down mid-DHCP | wifi | Stall patience raised from 8 s to 30 s (DHCP measured at ~8.4 s on the user's network) | #116 |

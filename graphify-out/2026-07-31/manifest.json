@@ -655,8 +655,8 @@
     "semantic_hash": ""
   },
   "devices/picocalc/picocalc_console.c": {
-    "mtime": 1785530600.2767718,
-    "ast_hash": "456bcec5473266709912248424ca1bc6",
+    "mtime": 1784401152.0676672,
+    "ast_hash": "50501990e07d98a51c66597ea771c228",
     "semantic_hash": ""
   },
   "devices/picocalc/picocalc_console.h": {
@@ -705,13 +705,13 @@
     "semantic_hash": ""
   },
   "devices/picocalc/screen.c": {
-    "mtime": 1785530607.6536112,
-    "ast_hash": "899470a3cf09e674d4ce53dce28ff7c7",
+    "mtime": 1784401152.067975,
+    "ast_hash": "19955da7cbe60da23baab108a8a8e537",
     "semantic_hash": ""
   },
   "devices/picocalc/screen.h": {
-    "mtime": 1785530612.17304,
-    "ast_hash": "9a469f704d5bb44879ee2eb798c4df4d",
+    "mtime": 1784401152.068223,
+    "ast_hash": "82ba6b047ca110a268ffff60e134c9ec",
     "semantic_hash": ""
   },
   "devices/picocalc/screensaver.c": {
@@ -1115,8 +1115,8 @@
     "semantic_hash": ""
   },
   "tests/test_primitives_text.c": {
-    "mtime": 1785530797.501472,
-    "ast_hash": "77184e13e752fe0071b6b77780e36767",
+    "mtime": 1783358338.268492,
+    "ast_hash": "1c659c1f38f945f2cf476558536735c2",
     "semantic_hash": ""
   },
   "tests/test_primitives_turtle.c": {
@@ -1325,8 +1325,8 @@
     "semantic_hash": ""
   },
   "reference/Pico_Logo_Reference.md": {
-    "mtime": 1785530638.847959,
-    "ast_hash": "3334600777910e4da2b6ca89383c2cc4",
+    "mtime": 1784847036.1126919,
+    "ast_hash": "bce13fc904b1c3ccd57a0846f744bea2",
     "semantic_hash": ""
   },
   "tests/CMakeLists.txt": {
@@ -1435,8 +1435,8 @@
     "semantic_hash": ""
   },
   "docs/bugs.md": {
-    "mtime": 1785530865.9284313,
-    "ast_hash": "0d18eb99f1da6641913871b914da6881",
+    "mtime": 1785269663.2418215,
+    "ast_hash": "289cfac07c01bb1c308af9c217cdd2dd",
     "semantic_hash": ""
   },
   "docs/roadmap.md": {
@@ -1445,8 +1445,8 @@
     "semantic_hash": ""
   },
   "docs/tilemap-scrolling-design.md": {
-    "mtime": 1785351715.3084652,
-    "ast_hash": "4f2b81f07a16a3ce71b462e019744ae6",
+    "mtime": 1785340436.271683,
+    "ast_hash": "8f48d085cf5b8e5a5f31164abbcf3a58",
     "semantic_hash": ""
   }
 }
