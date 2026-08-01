@@ -55,12 +55,12 @@
     "semantic_hash": ""
   },
   "core/error.c": {
-    "mtime": 1785546337.955155,
+    "mtime": 1785547415.3188777,
     "ast_hash": "ad0eeec4aa8d411a09901909d304f9e3",
     "semantic_hash": ""
   },
   "core/error.h": {
-    "mtime": 1785546334.1094537,
+    "mtime": 1785547415.3192487,
     "ast_hash": "7ff336092d366732f252bca382219564",
     "semantic_hash": ""
   },
@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "core/eval_expr.c": {
-    "mtime": 1785546364.1423793,
-    "ast_hash": "b689ef23479a07c96763ab20505e9efb",
+    "mtime": 1785587919.8192294,
+    "ast_hash": "895b5b3c63dc7e059a7a1347b1c4a0f4",
     "semantic_hash": ""
   },
   "core/eval_internal.h": {
@@ -95,8 +95,8 @@
     "semantic_hash": ""
   },
   "core/eval_steps.c": {
-    "mtime": 1785542999.1986032,
-    "ast_hash": "60c123d46ce7ab2568693db991915376",
+    "mtime": 1785587931.9172919,
+    "ast_hash": "41491f3756efeedd19076136441c49dc",
     "semantic_hash": ""
   },
   "core/format.c": {
@@ -195,13 +195,13 @@
     "semantic_hash": ""
   },
   "core/primitives.c": {
-    "mtime": 1784481081.758168,
-    "ast_hash": "90da232843a9b4596b58d05fa40da18b",
+    "mtime": 1785587877.7043946,
+    "ast_hash": "9bc100f2737fb95c0eac6849175de638",
     "semantic_hash": ""
   },
   "core/primitives.h": {
-    "mtime": 1784481081.758393,
-    "ast_hash": "72b538ca18d387629204b88d12703cd8",
+    "mtime": 1785587859.4101584,
+    "ast_hash": "7fc8a8b82664fb079f297c74a1f11203",
     "semantic_hash": ""
   },
   "core/primitives_arithmetic.c": {
@@ -355,13 +355,13 @@
     "semantic_hash": ""
   },
   "core/procedures.c": {
-    "mtime": 1784847036.0939152,
-    "ast_hash": "89badf234859ff30f448519fad46bdee",
+    "mtime": 1785587899.4172256,
+    "ast_hash": "5ea122e9b732f30f7d1cf024173af49c",
     "semantic_hash": ""
   },
   "core/procedures.h": {
-    "mtime": 1782574634.9855218,
-    "ast_hash": "75dc544467ce3d9f29bdc669d9520912",
+    "mtime": 1785587887.349536,
+    "ast_hash": "77c6863b3552b156520c099c610e4f9d",
     "semantic_hash": ""
   },
   "core/properties.c": {
@@ -915,8 +915,8 @@
     "semantic_hash": ""
   },
   "tests/test_eval.c": {
-    "mtime": 1785546329.0395975,
-    "ast_hash": "1f9427adbd82e108fffcd3ca6c85dbdb",
+    "mtime": 1785587844.029485,
+    "ast_hash": "ef172e8e6b6f51b3f5fcb4c571edae43",
     "semantic_hash": ""
   },
   "tests/test_eval_ops.c": {
@@ -1030,7 +1030,7 @@
     "semantic_hash": ""
   },
   "tests/test_primitives_control_flow.c": {
-    "mtime": 1785546446.4556344,
+    "mtime": 1785547415.3825345,
     "ast_hash": "d8d4441ff52664bb31ba1a786e409c98",
     "semantic_hash": ""
   },
@@ -1050,7 +1050,7 @@
     "semantic_hash": ""
   },
   "tests/test_primitives_exceptions.c": {
-    "mtime": 1785546448.174633,
+    "mtime": 1785547415.3830523,
     "ast_hash": "940ce7133234e6855bdbcf22d0c33bd6",
     "semantic_hash": ""
   },
@@ -1250,8 +1250,8 @@
     "semantic_hash": ""
   },
   ".github/copilot-instructions.md": {
-    "mtime": 1785544969.1493232,
-    "ast_hash": "2a34b2ae472faa715cd99dfb4fb4b1d8",
+    "mtime": 1785547415.3185008,
+    "ast_hash": "ef5b42ad1b5df617f36654d2c121f336",
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
@@ -1325,7 +1325,7 @@
     "semantic_hash": ""
   },
   "reference/Pico_Logo_Reference.md": {
-    "mtime": 1785546516.43375,
+    "mtime": 1785547415.3816483,
     "ast_hash": "c507633bd3a4ac0cac584e3b54781a25",
     "semantic_hash": ""
   },
@@ -1435,8 +1435,8 @@
     "semantic_hash": ""
   },
   "docs/bugs.md": {
-    "mtime": 1785546539.0071099,
-    "ast_hash": "0383acdeb66233c75471a484f2ca6784",
+    "mtime": 1785588024.2235057,
+    "ast_hash": "ea1e8b82faebb7dce4424ace6acad2fd",
     "semantic_hash": ""
   },
   "docs/roadmap.md": {

@@ -577,6 +577,77 @@ void test_paren_user_proc_recursive_count_words(void)
     TEST_ASSERT_EQUAL_FLOAT(4.0f, r.value.as.number);
 }
 
+//==========================================================================
+// Grouping parens around a deferred user-proc call (B7)
+//==========================================================================
+
+// Inside a procedure, a user-proc call defers to the trampoline. The
+// deferral used to consume the following `)` unconditionally, which is
+// right for the call form `(f :x)` but wrong when the `(` was a grouping
+// paren that merely happens to start with a call: the grouping handler
+// then ate a `)` that was not its own.
+
+void test_b7_grouped_call_inside_operand(void)
+{
+    // (3 * (f 2)) must group as 3 * 2, not re-associate across the parens.
+    const char *params[] = {"x"};
+    define_proc("f", params, 1, "output :x");
+    define_proc("t6", NULL, 0, "output (item 1 [5 6]) + (3 * (f 2))");
+
+    Result r = eval_string("t6");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(11.0f, r.value.as.number);
+}
+
+void test_b7_grouped_multi_branch_call_inside_operand(void)
+{
+    // Same shape, but the called procedure has more than one body line.
+    const char *params[] = {"x"};
+    define_proc("g", params, 1, "if :x > 10 [output 0]\noutput :x");
+    define_proc("t7", NULL, 0, "output (item 1 [5 6]) + (3 * (g 1))");
+
+    Result r = eval_string("t7");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(8.0f, r.value.as.number);
+}
+
+void test_b7_grouping_paren_starting_with_call(void)
+{
+    // ((f 2) * 3) as a primitive's argument: the inner `(` is the call's,
+    // the outer one is grouping. Consuming both used to leave a stray `)`.
+    const char *params[] = {"x"};
+    define_proc("f", params, 1, "output :x");
+    define_proc("t2", NULL, 0, "pr ((f 2) * 3)");
+
+    Result r = run_string("t2");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("6\n", output_buffer);
+}
+
+void test_b7_grouping_paren_starting_with_call_output(void)
+{
+    // The same expression on the `output` path.
+    const char *params[] = {"x"};
+    define_proc("f", params, 1, "output :x");
+    define_proc("t3", NULL, 0, "output ((f 2) * 3)");
+
+    Result r = eval_string("t3");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(6.0f, r.value.as.number);
+}
+
+void test_b7_nested_grouping_parens_around_call(void)
+{
+    // Redundant grouping must not shift the operands either.
+    const char *params[] = {"x"};
+    define_proc("f", params, 1, "output :x");
+    define_proc("t4", NULL, 0, "output 1 + ((f 2) * 3)");
+
+    Result r = eval_string("t4");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(7.0f, r.value.as.number);
+}
+
 // B4: a `[` that is never closed used to end the list quietly at end of
 // input, so a typo silently changed the list's contents.
 void test_error_unclosed_bracket(void)
@@ -769,6 +840,11 @@ int main(void)
     RUN_TEST(test_paren_user_proc_infix_in_proc);
     RUN_TEST(test_paren_user_proc_infix_in_variadic_primitive_arg);
     RUN_TEST(test_paren_user_proc_recursive_count_words);
+    RUN_TEST(test_b7_grouped_call_inside_operand);
+    RUN_TEST(test_b7_grouped_multi_branch_call_inside_operand);
+    RUN_TEST(test_b7_grouping_paren_starting_with_call);
+    RUN_TEST(test_b7_grouping_paren_starting_with_call_output);
+    RUN_TEST(test_b7_nested_grouping_parens_around_call);
 
     // Long identifier names (B5)
     RUN_TEST(test_long_proc_name_is_callable);

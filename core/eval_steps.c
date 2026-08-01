@@ -1178,6 +1178,28 @@ Result step_expr_eval(Evaluator *eval, EvalOp *op)
     return lhs;
 }
 
+// Finish a grouping paren whose body deferred a user procedure call.
+// The body's value has just arrived; all that is left is the closing ')'
+// that eval_primary could not consume when it yielded to the trampoline.
+Result step_paren_group(Evaluator *eval, EvalOp *op)
+{
+    Result r = op->result;
+    op->result = result_none();
+
+    op_stack_pop(eval->op_stack);
+    eval->paren_depth--;
+
+    // Mirror the synchronous grouping handler: an error leaves the stream
+    // alone, anything else consumes the closing paren if it is there.
+    if (r.status == RESULT_ERROR)
+        return r;
+
+    Token closing = peek(eval);
+    if (closing.type == TOKEN_RIGHT_PAREN)
+        advance(eval);
+    return r;
+}
+
 Result step_prim_call(Evaluator *eval, EvalOp *op)
 {
     PrimCallState *st = &op->prim_call;

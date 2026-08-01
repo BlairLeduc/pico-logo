@@ -48,6 +48,7 @@ extern "C"
         OP_PROC_CALL,     // User procedure call (frame + body execution)
         OP_EXPR_EVAL,     // Expression evaluation resume after deferred proc call
         OP_PRIM_CALL,     // Deferred primitive call (args collected via expression)
+        OP_PAREN_GROUP,   // Closing ) of a grouping paren whose body deferred
     } EvalOpKind;
 
     //==========================================================================
@@ -250,9 +251,11 @@ extern "C"
     // Get current depth
     int op_stack_depth(OpStack *stack);
 
-    // Swap the top two operations on the stack.
-    // Used to ensure correct execution order when pushing continuation + operation.
-    void op_stack_swap_top(OpStack *stack);
+    // Insert a new operation at `index`, shifting the ops above it up.
+    // Returns a pointer to it, or NULL if the stack is full or the index is
+    // out of range. Used to place a continuation *below* every op a deferred
+    // sub-expression pushed, so results flow back in the right order.
+    EvalOp *op_stack_insert(OpStack *stack, int index);
 
     // Transient storage for variadic deferred primitive arguments.
     int op_stack_alloc_prim_args(OpStack *stack, int capacity);

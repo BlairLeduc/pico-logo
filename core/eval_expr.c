@@ -482,8 +482,26 @@ Result eval_primary(Evaluator *eval)
         // result may feed into an outer infix expression.
         bool old_tail = eval->in_tail_position;
         eval->in_tail_position = false;
+        int depth_before_group = op_stack_depth(eval->op_stack);
         Result r = eval_expr_bp(eval, BP_NONE);
         eval->in_tail_position = old_tail;
+
+        // The group deferred a user procedure call to the trampoline, so its
+        // value is not known yet and the tokens up to the closing ) have not
+        // been consumed. Park the closing ) on the op stack, below everything
+        // the deferral pushed, and let it run once the group has its value.
+        if (r.status == RESULT_NONE &&
+            op_stack_depth(eval->op_stack) > depth_before_group)
+        {
+            EvalOp *group_op = op_stack_insert(eval->op_stack, depth_before_group);
+            if (!group_op)
+                return result_error(ERR_STACK_OVERFLOW);
+            group_op->kind = OP_PAREN_GROUP;
+            group_op->flags = OP_FLAG_NONE;
+            group_op->saved_source = eval->token_source;
+            return result_none();
+        }
+
         if (r.status == RESULT_ERROR)
         {
             eval->paren_depth--;
@@ -775,18 +793,10 @@ Result eval_primary(Evaluator *eval)
             // proc arg collection doesn't have OP_PRIM_CALL support.
             if (eval->proc_depth > 0 && eval->user_arg_depth == 0)
             {
-                // Consume closing paren of (proc args) call before deferring
-                // so that the saved token source is past the ')' and the
-                // infix expression parser can see operators that follow,
-                // e.g. (f :x) + (g :y).  Don't decrement paren_depth here;
-                // the TOKEN_LEFT_PAREN "grouping" handler does that.
-                {
-                    Token closing = peek(eval);
-                    if (closing.type == TOKEN_RIGHT_PAREN)
-                    {
-                        advance(eval);
-                    }
-                }
+                // Any following ')' stays in the stream: it belongs to the
+                // paren that opened this group, and OP_PAREN_GROUP consumes
+                // it once the deferred call has produced its value.
+
                 // Push frame
                 word_offset_t frame_offset = frame_push(eval->frames, user_proc, args, argc);
                 if (frame_offset == OFFSET_NONE)
@@ -867,20 +877,18 @@ Result eval_expr_bp(Evaluator *eval, int min_bp)
     // the primary expression (e.g. (f :x) + (g :y)).
     if (lhs.status == RESULT_NONE && op_stack_depth(eval->op_stack) > depth_before_primary)
     {
-        // Push OP_EXPR_EVAL above the OP_PROC_CALL, then swap so it's below.
-        // Stack order: ... → OP_EXPR_EVAL → OP_PROC_CALL (top)
-        // Trampoline runs OP_PROC_CALL first, result flows to OP_EXPR_EVAL.
-        EvalOp *expr_op = op_stack_push(eval->op_stack);
+        // Insert OP_EXPR_EVAL below every op the primary pushed, so the
+        // value of the primary flows back into this expression.
+        // Stack order: ... → OP_EXPR_EVAL → ... → OP_PROC_CALL (top)
+        EvalOp *expr_op = op_stack_insert(eval->op_stack, depth_before_primary);
         if (!expr_op)
             return result_error(ERR_STACK_OVERFLOW);
         expr_op->kind = OP_EXPR_EVAL;
         expr_op->flags = OP_FLAG_NONE;
         expr_op->saved_source = eval->token_source;
-        expr_op->result = result_none();
         expr_op->expr_eval.depth = depth;
         expr_op->expr_eval.min_bp = min_bp;
         expr_op->expr_eval.phase = 0;
-        op_stack_swap_top(eval->op_stack);
         return result_none();
     }
 
@@ -932,20 +940,18 @@ Result eval_expr_bp(Evaluator *eval, int min_bp)
         // If eval_primary pushed a deferred proc call, save expression state
         if (lhs.status == RESULT_NONE && op_stack_depth(eval->op_stack) > depth_before_primary)
         {
-            // Push OP_EXPR_EVAL above the OP_PROC_CALL, then swap so it's below.
-            EvalOp *expr_op = op_stack_push(eval->op_stack);
+            // Insert OP_EXPR_EVAL below every op the primary pushed.
+            EvalOp *expr_op = op_stack_insert(eval->op_stack, depth_before_primary);
             if (!expr_op)
                 return result_error(ERR_STACK_OVERFLOW);
             expr_op->kind = OP_EXPR_EVAL;
             expr_op->flags = OP_FLAG_NONE;
             expr_op->saved_source = eval->token_source;
-            expr_op->result = result_none();
             expr_op->expr_eval.depth = depth;
             expr_op->expr_eval.min_bp = min_bp;
             expr_op->expr_eval.phase = 0;
             for (int i = 0; i < depth; i++)
                 expr_op->expr_eval.ops[i] = op_stack[i];
-            op_stack_swap_top(eval->op_stack);
             return result_none();
         }
 
