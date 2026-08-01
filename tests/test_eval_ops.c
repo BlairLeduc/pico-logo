@@ -284,7 +284,7 @@ int main(void)
     RUN_TEST(test_pop_empty_is_safe);
     RUN_TEST(test_push_pop_returns_to_empty);
 
-    // Swap tests
+    // Insert tests
     RUN_TEST(test_insert_below_pushed_ops);
     RUN_TEST(test_insert_at_top_is_a_push);
     RUN_TEST(test_insert_out_of_range_returns_null);
