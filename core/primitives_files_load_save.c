@@ -6,6 +6,7 @@
 //
 
 #include "primitives.h"
+#include "demons.h"
 #include "procedures.h"
 #include "variables.h"
 #include "properties.h"
@@ -80,6 +81,11 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
 
     // Set the loading flag to prevent recursive loads
     loading_in_progress = true;
+
+    // Hold demons off until the whole file has run: a demon armed on one line
+    // would otherwise fire while the rest of the file is still being read,
+    // inside the guard above (B3). Resumed below, before `startup` runs.
+    demons_suspend();
 
     // Read and execute the file line by line
     char line[LOAD_MAX_LINE];
@@ -187,6 +193,7 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
 
     // Clear the loading flag
     loading_in_progress = false;
+    demons_resume();
 
     // If load was successful, check if the file set the startup variable
     // Run startup only if the loaded file sets it (value changed or newly created)
@@ -221,6 +228,14 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
                 result = eval_run_list(eval, startup_after.as.node);
             }
         }
+    }
+
+    // Give the demons the file armed their first poll now that everything the
+    // file does is in place. A demon action is free to `load` from here: the
+    // guard is down. Suppressed if this load is itself inside a demon action.
+    if (result.status == RESULT_NONE)
+    {
+        result = demons_poll();
     }
 
     return result;

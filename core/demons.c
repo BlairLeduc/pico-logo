@@ -37,6 +37,7 @@ typedef struct Demon
 static Demon demons[MAX_DEMONS];
 static bool g_frozen = false;
 static bool g_polling = false;       // Re-entrancy guard: an action is running
+static bool g_suspended = false;     // Polling held off for the duration of a load
 static bool g_have_ticked = false;   // Motion clock has a baseline
 static uint32_t g_last_tick_ms = 0;  // Motion clock baseline
 static uint32_t g_last_poll_ms = 0;  // Budget baseline
@@ -134,6 +135,16 @@ void demons_thaw(void)
 
 bool demons_frozen(void) { return g_frozen; }
 
+void demons_suspend(void) { g_suspended = true; }
+
+void demons_resume(void)
+{
+    g_suspended = false;
+    // Resume the motion clock without crediting the suspended interval, so a
+    // moving turtle does not jump by the whole duration of the load.
+    g_have_ticked = false;
+}
+
 bool demons_running(void) { return g_polling; }
 
 void demons_clear(void)
@@ -149,6 +160,7 @@ void demons_reset(void)
     demons_clear();
     g_frozen = false;
     g_polling = false;
+    g_suspended = false;
     g_have_ticked = false;
     g_have_polled = false;
 
@@ -159,7 +171,7 @@ void demons_reset(void)
 
 Result demons_poll(void)
 {
-    if (g_frozen || g_polling)
+    if (g_frozen || g_polling || g_suspended)
     {
         return result_none();
     }
@@ -233,7 +245,7 @@ Result demons_poll(void)
 
 Result demons_maybe_poll(void)
 {
-    if (g_frozen || g_polling)
+    if (g_frozen || g_polling || g_suspended)
     {
         return result_none();
     }

@@ -5846,6 +5846,8 @@ The `load` command loads the contents of the file indicated by _pathname_ into t
 
 After Logo loads the contents of a file, it looks for a variable called `startup`. If one exists, Logo executes its contents.
 
+Demons armed with [`when`](#when) while a file loads do not run until the whole file has been read. A demon's action can therefore call a procedure the file defines further down, or `load` another file. A `startup` runs after that, with demons live as they are at top level.
+
 **Example**:
 
 ```logo

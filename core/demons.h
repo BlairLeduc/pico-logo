@@ -33,6 +33,14 @@ extern "C"
     void demons_thaw(void);
     bool demons_frozen(void);
 
+    // Suspend / resume polling for the duration of a `load`. A demon armed by
+    // the file must not fire while the rest of the file is still being read:
+    // inside load's reentrancy guard its action could not itself `load`, nor
+    // call a procedure the file defines further down. `load` polls once on
+    // its way out, so the demon still gets its first chance promptly.
+    void demons_suspend(void);
+    void demons_resume(void);
+
     // True while a demon action is executing. The HTTP pump uses this to stand
     // down: a `when [http.request?]` handler owns the connection while it runs,
     // so the pump must not read the socket or age the response deadline (and

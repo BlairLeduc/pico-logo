@@ -22,28 +22,11 @@ edge case)
 
 | ID | Bug | Area | Severity | Found | Status |
 |---|---|---|---|---|---|
-| [B3](#b3--demons-fire-during-load) | Demons fire during `load` | demons | medium | 2026-07-21 | open |
 | [B4](#b4--parse_list-silently-drops-unknown-tokens) | `parse_list` silently drops unknown tokens | parser | medium | 2026-07-02 | open |
 | [B5](#b5--name_buf64-identifier-truncation-aliasing) | `name_buf[64]` identifier truncation aliasing | lexer | low | 2026-07-02 | open |
 | [B6](#b6--penreverse-ignores-pen-size-always-1-px) | `penreverse` ignores pen size (always 1 px) | graphics | low | 2026-07-18 | won't fix (documented) |
 | [B7](#b7--a-user-procedure-call-as-the-left-operand-of-a-parenthesised-expression-corrupts-the-parse) | A user-procedure call as the left operand of a parenthesised expression corrupts the parse | parser/eval | high | 2026-07-28 | open |
 | [B9](#b9--text-returns-newline-markers-as-ordinary-list-elements) | `text` returns newline markers as ordinary list elements | workspace/format | medium | 2026-07-31 | open |
-
-### B3 — Demons fire during `load`
-
-`load` evaluates each line through `eval_instruction`, which polls demons, so a
-`when` armed by a file runs its action while the rest of the file is still
-being read — inside `load`'s reentrancy guard. The action therefore cannot call
-`load` ("No more file buffers", `core/primitives_files_load_save.c:52`) and
-cannot call a procedure defined *later* in the same file.
-
-Newly reachable now that `wifi.start` + `when` is the documented startup-file
-idiom. Characterised by `test_demon_armed_by_load_fires_during_the_load`.
-
-- **Likely fix:** suspend demon polling for the duration of a `load` and poll
-  once it completes — but check first whether any file arms demons and then
-  does top-level work in the same file, which that would change.
-- **Found:** 2026-07-21.
 
 ### B4 — `parse_list` silently drops unknown tokens
 
@@ -178,6 +161,7 @@ Scope, verified against `./build-host/logo` on 2026-07-31:
 
 | Date | Bug | Area | Fix | Ref |
 |---|---|---|---|---|
+| 2026-07-31 | Demons fire during `load` (B3) | demons | `load` evaluates each line through `eval_instruction`, which polls demons, so a `when` armed by a file ran its action while the rest of the file was still being read — inside `load`'s reentrancy guard, where the action could neither `load` nor call a procedure defined further down the same file. New `demons_suspend` / `demons_resume` hold polling off for the duration of the load (checked in `demons_poll` itself, so the device idle loop is covered too); `load` resumes before `startup` runs and polls once on its way out, so an armed demon still gets its first chance promptly. Resume clears the motion-clock baseline like `thaw`, so a moving turtle does not jump by the load's duration. No `.logo` file arms a demon at file level — every `when` is inside a procedure — so nothing depended on the old mid-load firing | |
 | 2026-07-31 | Single-line `to … end` definitions are not supported (B2) | loader/REPL | Only a standalone `end` line closed a definition, so `to f  play [c d e]  end` swallowed every procedure that followed until the next lone `end`. New `repl_find_end_token` lexes the line and accepts `end` as the *last* token outside brackets and parens — so `pr [the end]` and `pr "end` stay ordinary words, and closing a definition can never discard anything else on the line. The three copies of the accumulate/close loop (REPL, `load`, editor) were replaced by one shared `repl_proc_def_append`. Reference updated: it required `end` alone on a line while its own examples used one-liners | |
 | 2026-07-31 | Multi-line `(…)` expressions inside a procedure body evaluate to empty (B1) | parser | `proc_define_from_text` split the body on every newline, so `op (list` on its own line evaluated as `(list)`. It now tracks `(` nesting and, while a paren is open, keeps the tokens on the same body line. The break is recorded as a newline marker rather than dropped, so a `;` comment inside the expression still ends at its own source line and `po` reproduces the layout (`core/format.c` renders a top-level marker as a line break, `core/eval_steps.c` skips it when printing a stepped line). `end` is still recognised at line start inside an open paren, so an unbalanced `(` cannot swallow the procedures that follow it | #127 |
 | 2026-07-31 | A turtle command automatically switches to splitscreen (B8) | graphics | Deleted `screen_show_field()` and its 16 call sites in the PicoCalc turtle ops, so only `textscreen`/`splitscreen`/`fullscreen` and `F1`–`F3` choose the mode. Drawing under `textscreen` already worked — `screen_gfx_blit_dirty` skips the blit in text mode and keeps the dirty state, and a later mode switch marks all dirty and presents — so the picture now waits instead of stealing the screen. Reference updated to match (it had documented the old behaviour, inherited from LCSI Logo). Validated on hardware — the host tests cannot reach the PicoCalc device layer | #126 |
