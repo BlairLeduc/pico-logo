@@ -95,13 +95,13 @@
     "semantic_hash": ""
   },
   "core/eval_steps.c": {
-    "mtime": 1785541132.9312778,
+    "mtime": 1785542999.1986032,
     "ast_hash": "60c123d46ce7ab2568693db991915376",
     "semantic_hash": ""
   },
   "core/format.c": {
-    "mtime": 1785541189.9024704,
-    "ast_hash": "541a5f27ae1201336ee5ff89410b5fee",
+    "mtime": 1785542999.198797,
+    "ast_hash": "08ee03f1bb39d5e359d90b61c9001a3a",
     "semantic_hash": ""
   },
   "core/format.h": {
@@ -240,8 +240,8 @@
     "semantic_hash": ""
   },
   "core/primitives_editor.c": {
-    "mtime": 1783009048.3532696,
-    "ast_hash": "b322a6f580bb77d22526da4c868bb689",
+    "mtime": 1785543404.1385741,
+    "ast_hash": "6337723c38c4e29beb578139087a0abb",
     "semantic_hash": ""
   },
   "core/primitives_events.c": {
@@ -265,8 +265,8 @@
     "semantic_hash": ""
   },
   "core/primitives_files_load_save.c": {
-    "mtime": 1785250202.032859,
-    "ast_hash": "626aada11f6e526bc8a8101e5bea95ec",
+    "mtime": 1785543383.4950056,
+    "ast_hash": "2f0a843076ccf09b2ab18623031e6679",
     "semantic_hash": ""
   },
   "core/primitives_hardware.c": {
@@ -310,7 +310,7 @@
     "semantic_hash": ""
   },
   "core/primitives_procedures.c": {
-    "mtime": 1785541112.570223,
+    "mtime": 1785542999.198972,
     "ast_hash": "1a150c7966aaa0e612335e2929ca346d",
     "semantic_hash": ""
   },
@@ -385,13 +385,13 @@
     "semantic_hash": ""
   },
   "core/repl.c": {
-    "mtime": 1784288949.989588,
-    "ast_hash": "0e045cdf94324cf4c8eb40d71109b8a9",
+    "mtime": 1785543580.478786,
+    "ast_hash": "6e0235f028712da9976baff5c319bb16",
     "semantic_hash": ""
   },
   "core/repl.h": {
-    "mtime": 1783117333.9962308,
-    "ast_hash": "75f7526d24a120adb36722842d79a334",
+    "mtime": 1785543337.2448914,
+    "ast_hash": "5b1cf002511e50bba9c181ef4259e6de",
     "semantic_hash": ""
   },
   "core/syntax_highlight.c": {
@@ -1065,8 +1065,8 @@
     "semantic_hash": ""
   },
   "tests/test_primitives_files_load_save.c": {
-    "mtime": 1785250202.087694,
-    "ast_hash": "020a3d3882fa68e33d46cf88431332f4",
+    "mtime": 1785543428.6776512,
+    "ast_hash": "8f79135d7417c827c887b031d967910b",
     "semantic_hash": ""
   },
   "tests/test_primitives_hardware.c": {
@@ -1105,7 +1105,7 @@
     "semantic_hash": ""
   },
   "tests/test_primitives_procedures.c": {
-    "mtime": 1785541148.3883493,
+    "mtime": 1785542999.216091,
     "ast_hash": "c71c1306b85f20d4eb2917ef01ff736c",
     "semantic_hash": ""
   },
@@ -1145,8 +1145,8 @@
     "semantic_hash": ""
   },
   "tests/test_repl.c": {
-    "mtime": 1785540956.295244,
-    "ast_hash": "941fbe7b22a9a847858c54b8d81a5b6b",
+    "mtime": 1785543624.6930358,
+    "ast_hash": "e20231a4813b75d34d80065ff7eb4730",
     "semantic_hash": ""
   },
   "tests/test_scaffold.c": {
@@ -1325,8 +1325,8 @@
     "semantic_hash": ""
   },
   "reference/Pico_Logo_Reference.md": {
-    "mtime": 1785540547.3768485,
-    "ast_hash": "3334600777910e4da2b6ca89383c2cc4",
+    "mtime": 1785543540.1536922,
+    "ast_hash": "995b2459c429c8e95b45b82879d16ee1",
     "semantic_hash": ""
   },
   "tests/CMakeLists.txt": {
@@ -1435,8 +1435,8 @@
     "semantic_hash": ""
   },
   "docs/bugs.md": {
-    "mtime": 1785541256.7329342,
-    "ast_hash": "c5f00e8579a8efad0d0e04ea2568b997",
+    "mtime": 1785543554.6991565,
+    "ast_hash": "45cb1b971f58ae5a326707177b2d0571",
     "semantic_hash": ""
   },
   "docs/roadmap.md": {

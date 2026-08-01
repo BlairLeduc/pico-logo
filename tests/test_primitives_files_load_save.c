@@ -382,21 +382,55 @@ void test_load_recursive_loading_prevented(void)
     TEST_ASSERT_FALSE(var_exists("outer_ran"));
 }
 
-// `load` evaluates each line through eval_instruction, which polls demons. A
-// demon armed by the file therefore fires while the load is still running,
-// inside load's reentrancy guard -- so its action cannot itself load.
-void test_demon_armed_by_load_fires_during_the_load(void)
+// B3: demon polling is suspended for the duration of a `load`, so a demon the
+// file arms fires once the whole file has run -- not part-way through it. The
+// action reads a variable the file sets on a later line: firing mid-load would
+// fail with "rest_ran has no value".
+void test_demon_armed_by_load_fires_after_the_load(void)
 {
     mock_fs_create_file("outer.logo",
-                        "when [\"true] [make \"demon_ran 1]\n"
+                        "when [\"true] [make \"demon_ran :rest_ran]\n"
                         "make \"rest_ran 1\n");
 
     Result r = run_string("load \"outer.logo");
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
 
-    // If the demon fired only after the load finished, this would be false.
-    TEST_ASSERT_TRUE(var_exists("demon_ran"));
     TEST_ASSERT_TRUE(var_exists("rest_ran"));
+    Value val;
+    TEST_ASSERT_TRUE(var_get("demon_ran", &val));
+    TEST_ASSERT_EQUAL_FLOAT(1.0, val.as.number);
+
+    run_string("cleardemons");
+}
+
+// B3: firing after the load means the reentrancy guard is down, so the action
+// can `load` another file -- the wifi.start + when startup-file idiom.
+void test_demon_armed_by_load_can_load(void)
+{
+    mock_fs_create_file("outer.logo", "when [\"true] [load \"inner.logo]\n");
+    mock_fs_create_file("inner.logo", "make \"inner_ran 1\n");
+
+    Result r = run_string("load \"outer.logo");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(var_exists("inner_ran"));
+
+    run_string("cleardemons");
+}
+
+// B3: and the action can call a procedure the same file defines below it.
+void test_demon_armed_by_load_can_call_later_procedure(void)
+{
+    mock_fs_create_file("outer.logo",
+                        "when [\"true] [greet]\n"
+                        "to greet\n"
+                        "make \"greeted 1\n"
+                        "end\n");
+
+    Result r = run_string("load \"outer.logo");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(var_exists("greeted"));
+
+    run_string("cleardemons");
 }
 
 void test_load_startup_can_call_load(void)
@@ -816,7 +850,9 @@ int main(void)
     RUN_TEST(test_load_does_not_run_preexisting_startup);
     RUN_TEST(test_load_runs_startup_when_file_overwrites);
     RUN_TEST(test_load_recursive_loading_prevented);
-    RUN_TEST(test_demon_armed_by_load_fires_during_the_load);
+    RUN_TEST(test_demon_armed_by_load_fires_after_the_load);
+    RUN_TEST(test_demon_armed_by_load_can_load);
+    RUN_TEST(test_demon_armed_by_load_can_call_later_procedure);
     RUN_TEST(test_load_startup_can_call_load);
     RUN_TEST(test_save_writes_workspace);
     RUN_TEST(test_save_format_matches_poall);
