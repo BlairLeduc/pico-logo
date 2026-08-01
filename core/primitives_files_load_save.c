@@ -27,8 +27,8 @@ static bool loading_in_progress = false;
 // Load helpers
 //==========================================================================
 
-// `to`-line and `end`-line detection are shared with the REPL; see
-// repl_line_starts_with_to / repl_line_is_end in core/repl.h.
+// Procedure-definition accumulation is shared with the REPL; see
+// repl_line_starts_with_to / repl_proc_def_append in core/repl.h.
 
 // Maximum line length for load
 #define LOAD_MAX_LINE 256
@@ -103,46 +103,29 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
             continue;
         }
 
-        // Handle multi-line procedure definitions
+        // Handle procedure definitions
         if (!in_procedure_def && repl_line_starts_with_to(line))
         {
-            // Start collecting procedure definition
             in_procedure_def = true;
             proc_len = 0;
-
-            // Copy the "to" line to buffer with newline
-            if (len + 2 <= LOAD_MAX_PROC - 10)
-            {
-                memcpy(proc_buffer, line, len);
-                proc_buffer[len] = '\n';
-                proc_len = len + 1;
-            }
-            else
-            {
-                // Procedure header is larger than the in-memory buffer.
-                // Returning ERR_OUT_OF_SPACE is preferable to silently
-                // dropping the entire procedure: the user needs to know
-                // their code did not load.
-                in_procedure_def = false;
-                proc_len = 0;
-                result = result_error_arg(ERR_OUT_OF_SPACE, NULL, pathname);
-                break;
-            }
-            continue;
         }
 
         if (in_procedure_def)
         {
-            if (repl_line_is_end(line))
+            ProcDefStatus status = repl_proc_def_append(proc_buffer, LOAD_MAX_PROC, &proc_len, line);
+            if (status == PROC_DEF_OVERFLOW)
             {
-                // Complete the procedure definition
-                if (proc_len + 4 < LOAD_MAX_PROC)
-                {
-                    memcpy(proc_buffer + proc_len, "end", 3);
-                    proc_len += 3;
-                    proc_buffer[proc_len] = '\0';
-                }
+                // The definition is larger than the in-memory buffer.
+                // Returning ERR_OUT_OF_SPACE is preferable to silently
+                // dropping or truncating it: the user needs to know their
+                // code did not load.
+                in_procedure_def = false;
+                result = result_error_arg(ERR_OUT_OF_SPACE, NULL, pathname);
+                break;
+            }
 
+            if (status == PROC_DEF_COMPLETE)
+            {
                 in_procedure_def = false;
 
                 // Parse and define the procedure
@@ -154,27 +137,6 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
                 }
 
                 proc_len = 0;
-            }
-            else
-            {
-                // Append line to procedure buffer with newline
-                if (proc_len + len + 2 <= LOAD_MAX_PROC - 10)
-                {
-                    memcpy(proc_buffer + proc_len, line, len);
-                    proc_buffer[proc_len + len] = '\n';
-                    proc_len += len + 1;
-                }
-                else
-                {
-                    // Body line would overflow the procedure buffer. Report
-                    // ERR_OUT_OF_SPACE rather than silently truncating the
-                    // definition (which would leave a half-defined procedure
-                    // that may not even parse).
-                    in_procedure_def = false;
-                    proc_len = 0;
-                    result = result_error_arg(ERR_OUT_OF_SPACE, NULL, pathname);
-                    break;
-                }
             }
             continue;
         }

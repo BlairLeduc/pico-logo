@@ -204,7 +204,7 @@ In relaxed Logo, you can define a procedure with `edit` and `to`. The command `t
 >end
 ``` 
 
-As shown, when interactively defining a procedure using the command `to`, the prompt changes to `>` until a line starting with `end` is encountered ending the definition of the procedure. This provides feedback that you are in the middle of defining a procedure and is the only time when this prompt is used.
+As shown, when interactively defining a procedure using the command `to`, the prompt changes to `>` until a line ending with `end` is encountered ending the definition of the procedure. This provides feedback that you are in the middle of defining a procedure and is the only time when this prompt is used.
 
 ## A Further Note on Operations 
 
@@ -656,8 +656,9 @@ to _name_ _input1_ _input2_ ...
 
 > You need not put a quotation mark before name because TO puts one there automatically.
 
-To complete the procedure and return Logo to top level, type the word [`end`](#end) as the last line of the procedure. The special
-word [`end`](#end) must be used alone on the last line.
+To complete the procedure and return Logo to top level, type the word [`end`](#end) as the last word of the procedure. The special
+word [`end`](#end) must be the last word on its line; it is usually on a line of its own, but a short procedure may be written
+entirely on one line, as in `to rink  pr [Zamboni break]  end`.
 
 If you change your mind while defining a procedure with `to`,
 press `Brk` to stop the definition. 
@@ -676,7 +677,7 @@ end
 
 `command`
 
-`end` is necessary, when you are using [`to`](#to), to tell Logo that you are done defining a procedure. It must be on a line by itself. `end` also must be used to separate procedures when defining multiple procedures in the Logo Editor.
+`end` is necessary, when you are using [`to`](#to), to tell Logo that you are done defining a procedure. It must be the last word on its line, so that `end` inside a list (`pr [the end]`) or after a quotation mark (`pr "end`) is an ordinary word. `end` also must be used to separate procedures when defining multiple procedures in the Logo Editor.
 
 **Example**:
 

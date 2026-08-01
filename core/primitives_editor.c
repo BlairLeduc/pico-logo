@@ -54,8 +54,8 @@ static char *editor_pick_buffer(char **heap_cache)
     return *heap_cache;
 }
 
-// `to`-line and `end`-line detection are shared with the REPL; see
-// repl_line_starts_with_to / repl_line_is_end in core/repl.h.
+// Procedure-definition accumulation is shared with the REPL; see
+// repl_line_starts_with_to / repl_proc_def_append in core/repl.h.
 
 // Count bracket balance in a line (positive = more '[', negative = more ']')
 static int count_bracket_balance(const char *line)
@@ -156,37 +156,25 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
             
             if (!in_procedure_def && repl_line_starts_with_to(line_start))
             {
-                // Start collecting procedure definition
+                // Start collecting the definition. The "to" line goes through
+                // the same append as the rest, since it may close it too.
                 in_procedure_def = true;
                 proc_len = 0;
-                
-                // Copy the "to" line to buffer with real newline
-                if (line_len + 2 < LOGO_EDITOR_BUFFER_SIZE - 10)
-                {
-                    memcpy(proc_buffer, line_start, line_len);
-                    proc_buffer[line_len] = '\n';
-                    proc_len = line_len + 1;
-                }
-                else
+            }
+
+            if (in_procedure_def)
+            {
+                ProcDefStatus status = repl_proc_def_append(proc_buffer, LOGO_EDITOR_BUFFER_SIZE,
+                                                            &proc_len, line_start);
+                if (status == PROC_DEF_OVERFLOW)
                 {
                     logo_io_write(io, "Procedure too long\n");
                     in_procedure_def = false;
                 }
-            }
-            else if (in_procedure_def)
-            {
-                if (repl_line_is_end(line_start))
+                else if (status == PROC_DEF_COMPLETE)
                 {
-                    // Complete the procedure definition
-                    if (proc_len + 4 < LOGO_EDITOR_BUFFER_SIZE)
-                    {
-                        memcpy(proc_buffer + proc_len, "end", 3);
-                        proc_len += 3;
-                        proc_buffer[proc_len] = '\0';
-                    }
-                    
                     in_procedure_def = false;
-                    
+
                     // Parse and define the procedure
                     Result r = proc_define_from_text(proc_buffer);
                     if (r.status == RESULT_ERROR)
@@ -198,28 +186,12 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
                     {
                         // Procedure defined successfully
                         char buf[256];
-                        snprintf(buf, sizeof(buf), "%s defined\n", 
+                        snprintf(buf, sizeof(buf), "%s defined\n",
                                 r.value.as.node ? mem_word_ptr(r.value.as.node) : "procedure");
                         logo_io_write(io, buf);
                     }
-                    
+
                     proc_len = 0;
-                }
-                else
-                {
-                    // Append line to procedure buffer with real newline
-                    if (proc_len + line_len + 2 < LOGO_EDITOR_BUFFER_SIZE - 10)
-                    {
-                        memcpy(proc_buffer + proc_len, line_start, line_len);
-                        proc_buffer[proc_len + line_len] = '\n';
-                        proc_len += line_len + 1;
-                    }
-                    else
-                    {
-                        logo_io_write(io, "Procedure too long\n");
-                        in_procedure_def = false;
-                        proc_len = 0;
-                    }
                 }
             }
             else
