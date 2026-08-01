@@ -306,14 +306,7 @@ Result eval_primary(Evaluator *eval)
         if (next.type == TOKEN_WORD && !is_number_string(next.start, next.length))
         {
             // Check if it's a primitive
-            char name_buf[64];
-            size_t name_len = next.length;
-            if (name_len >= sizeof(name_buf))
-                name_len = sizeof(name_buf) - 1;
-            memcpy(name_buf, next.start, name_len);
-            name_buf[name_len] = '\0';
-            
-            const Primitive *prim = primitive_find(name_buf);
+            const Primitive *prim = primitive_find_n(next.start, next.length);
             if (prim)
             {
                 // Intern the user's name for error messages
@@ -533,15 +526,7 @@ Result eval_primary(Evaluator *eval)
         }
 
         // Look up primitive
-        // Need null-terminated name for lookup
-        char name_buf[64];
-        size_t name_len = t.length;
-        if (name_len >= sizeof(name_buf))
-            name_len = sizeof(name_buf) - 1;
-        memcpy(name_buf, t.start, name_len);
-        name_buf[name_len] = '\0';
-
-        const Primitive *prim = primitive_find(name_buf);
+        const Primitive *prim = primitive_find_n(t.start, t.length);
         if (prim)
         {
             // Intern the user's name for error messages
@@ -607,8 +592,8 @@ Result eval_primary(Evaluator *eval)
                 // position when inside a procedure, because output terminates
                 // the procedure regardless of where it appears (e.g. inside
                 // an if branch that isn't on the last body line).
-                bool is_output_prim = (strcasecmp(name_buf, "output") == 0 ||
-                                       strcasecmp(name_buf, "op") == 0);
+                bool is_output_prim = (t.length == 6 && strncasecmp(t.start, "output", 6) == 0) ||
+                                      (t.length == 2 && strncasecmp(t.start, "op", 2) == 0);
                 bool old_tail = eval->in_tail_position;
                 if (is_output_prim && eval->proc_depth > 0)
                     eval->in_tail_position = true;
@@ -681,7 +666,7 @@ Result eval_primary(Evaluator *eval)
         }
 
         // Check for user-defined procedure
-        UserProcedure *user_proc = proc_find(name_buf);
+        UserProcedure *user_proc = proc_find_n(t.start, t.length);
         if (user_proc)
         {
             advance(eval);

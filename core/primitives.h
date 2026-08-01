@@ -108,6 +108,11 @@ extern "C"
     // Find a primitive by name (case-insensitive), returns NULL if not found
     const Primitive *primitive_find(const char *name);
 
+    // Same, for a name that is not NUL-terminated (a word token straight out
+    // of the lexer). Lets the evaluator look a name up without first copying
+    // it into a fixed-size buffer, which truncated long names (B5).
+    const Primitive *primitive_find_n(const char *name, size_t len);
+
     // Registration helper for primitive modules
     void primitive_register(const char *name, int default_args, PrimitiveFunc func);
 

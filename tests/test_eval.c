@@ -609,6 +609,74 @@ void test_closed_bracket_still_parses(void)
     TEST_ASSERT_EQUAL_STRING("[a b]\n[c [d e]]\n", output_buffer);
 }
 
+//==========================================================================
+// Long identifier names (B5)
+//==========================================================================
+
+// The evaluator used to copy a word token into a 64-byte buffer before
+// looking it up, so everything past the 63rd character was discarded.
+// PREFIX63 is exactly that cut-off length: names built from it differ only
+// in the characters the old buffer threw away.
+#define PREFIX63 "abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabc"
+
+void test_long_proc_name_is_callable(void)
+{
+    // A name longer than the old buffer was defined under its full name but
+    // looked up truncated, so the call raised "I don't know how to ...".
+    define_proc(PREFIX63 ".one", NULL, 0, "print 1");
+
+    Result r = run_string(PREFIX63 ".one");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("1\n", output_buffer);
+}
+
+void test_long_proc_names_sharing_prefix_do_not_alias(void)
+{
+    define_proc(PREFIX63 ".one", NULL, 0, "print 1");
+    define_proc(PREFIX63 ".two", NULL, 0, "print 2");
+
+    run_string(PREFIX63 ".two");
+    TEST_ASSERT_EQUAL_STRING("2\n", output_buffer);
+}
+
+void test_long_name_does_not_alias_shorter_proc(void)
+{
+    // Truncating the call's name to 63 characters used to make it match a
+    // procedure whose whole name is that prefix.
+    define_proc(PREFIX63, NULL, 0, "print 1");
+
+    Result r = run_string(PREFIX63 ".other");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
+    TEST_ASSERT_EQUAL_STRING("", output_buffer);
+}
+
+void test_long_proc_name_in_paren_call(void)
+{
+    // The `(proc arg ...)` form has its own lookup site.
+    const char *params[] = {"n"};
+    define_proc(PREFIX63 ".double", params, 1, "op :n * 2");
+
+    Result r = eval_string("(" PREFIX63 ".double 21)");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(42.0f, r.value.as.number);
+}
+
+void test_long_proc_name_tail_recursion(void)
+{
+    // The tail-call lookahead in eval_steps.c has a third lookup site; a
+    // name it cannot resolve loses tail-call elimination and the recursion
+    // grows the op stack instead of reusing the frame.
+    const char *params[] = {"n"};
+    define_proc(PREFIX63 ".countdown", params, 1,
+        "if :n = 0 [print \"done stop]\n"
+        PREFIX63 ".countdown :n - 1");
+
+    Result r = run_string(PREFIX63 ".countdown 2000");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("done\n", output_buffer);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -683,6 +751,13 @@ int main(void)
     RUN_TEST(test_paren_user_proc_infix_in_proc);
     RUN_TEST(test_paren_user_proc_infix_in_variadic_primitive_arg);
     RUN_TEST(test_paren_user_proc_recursive_count_words);
+
+    // Long identifier names (B5)
+    RUN_TEST(test_long_proc_name_is_callable);
+    RUN_TEST(test_long_proc_names_sharing_prefix_do_not_alias);
+    RUN_TEST(test_long_name_does_not_alias_shorter_proc);
+    RUN_TEST(test_long_proc_name_in_paren_call);
+    RUN_TEST(test_long_proc_name_tail_recursion);
 
     return UNITY_END();
 }

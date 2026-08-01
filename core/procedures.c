@@ -65,19 +65,28 @@ void procedures_init(void)
 // The table is small (MAX_PROCEDURES) but this runs for every unmatched
 // word token, so a cheap case-folded first-character check screens out
 // most slots before the full strcasecmp.
-static int find_procedure_index(const char *name)
+// `name` holds exactly `len` bytes and need not be NUL-terminated, so a
+// stored name matches only when it is `len` bytes long as well.
+static int find_procedure_index_n(const char *name, size_t len)
 {
+    if (len == 0)
+        return -1;
     int first = tolower((unsigned char)name[0]);
     for (int i = 0; i < procedure_count; i++)
     {
         const char *pname = procedures[i].name;
         if (pname && tolower((unsigned char)pname[0]) == first &&
-            strcasecmp(pname, name) == 0)
+            strncasecmp(pname, name, len) == 0 && pname[len] == '\0')
         {
             return i;
         }
     }
     return -1;
+}
+
+static int find_procedure_index(const char *name)
+{
+    return find_procedure_index_n(name, strlen(name));
 }
 
 bool proc_define(const char *name, const char **params, int param_count, Node body)
@@ -121,7 +130,12 @@ bool proc_define(const char *name, const char **params, int param_count, Node bo
 
 UserProcedure *proc_find(const char *name)
 {
-    int idx = find_procedure_index(name);
+    return proc_find_n(name, strlen(name));
+}
+
+UserProcedure *proc_find_n(const char *name, size_t len)
+{
+    int idx = find_procedure_index_n(name, len);
     if (idx >= 0)
     {
         return &procedures[idx];
