@@ -95,13 +95,13 @@
     "semantic_hash": ""
   },
   "core/eval_steps.c": {
-    "mtime": 1784847036.091324,
-    "ast_hash": "d22333b1bd703621130d8328db551e9e",
+    "mtime": 1785541132.9312778,
+    "ast_hash": "60c123d46ce7ab2568693db991915376",
     "semantic_hash": ""
   },
   "core/format.c": {
-    "mtime": 1783009048.3021257,
-    "ast_hash": "f0830a9670b8a8a869900c1743f48612",
+    "mtime": 1785541189.9024704,
+    "ast_hash": "541a5f27ae1201336ee5ff89410b5fee",
     "semantic_hash": ""
   },
   "core/format.h": {
@@ -310,8 +310,8 @@
     "semantic_hash": ""
   },
   "core/primitives_procedures.c": {
-    "mtime": 1783090124.6249783,
-    "ast_hash": "3a9c8182291ad497dc860db9df896d36",
+    "mtime": 1785541112.570223,
+    "ast_hash": "1a150c7966aaa0e612335e2929ca346d",
     "semantic_hash": ""
   },
   "core/primitives_properties.c": {
@@ -1105,8 +1105,8 @@
     "semantic_hash": ""
   },
   "tests/test_primitives_procedures.c": {
-    "mtime": 1782574635.053344,
-    "ast_hash": "62d13681b7065a5ebfe69ca43588afe1",
+    "mtime": 1785541148.3883493,
+    "ast_hash": "c71c1306b85f20d4eb2917ef01ff736c",
     "semantic_hash": ""
   },
   "tests/test_primitives_properties.c": {
@@ -1145,8 +1145,8 @@
     "semantic_hash": ""
   },
   "tests/test_repl.c": {
-    "mtime": 1783358338.2694092,
-    "ast_hash": "ee3660ca96cf8d5264e02196c9f1d50e",
+    "mtime": 1785540956.295244,
+    "ast_hash": "941fbe7b22a9a847858c54b8d81a5b6b",
     "semantic_hash": ""
   },
   "tests/test_scaffold.c": {
@@ -1435,8 +1435,8 @@
     "semantic_hash": ""
   },
   "docs/bugs.md": {
-    "mtime": 1785540547.34687,
-    "ast_hash": "8b925802d8a3f6185467920291109c85",
+    "mtime": 1785541256.7329342,
+    "ast_hash": "c5f00e8579a8efad0d0e04ea2568b997",
     "semantic_hash": ""
   },
   "docs/roadmap.md": {

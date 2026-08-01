@@ -1024,6 +1024,13 @@ Result step_proc_call(Evaluator *eval, EvalOp *op)
                 while (!mem_is_nil(n) && pos < (int)sizeof(line_buf) - 1)
                 {
                     Node elem = mem_car(n);
+                    // Newline markers record where a parenthesised expression
+                    // was split across source lines; they are not tokens.
+                    if (mem_is_newline(elem))
+                    {
+                        n = mem_cdr(n);
+                        continue;
+                    }
                     if (!first && pos < (int)sizeof(line_buf) - 1)
                         line_buf[pos++] = ' ';
                     first = false;

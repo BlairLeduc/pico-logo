@@ -540,6 +540,19 @@ bool format_procedure_title(FormatOutputFunc out, void *ctx, UserProcedure *proc
     return out(ctx, "\n");
 }
 
+// Procedure-body indent: 2 spaces, plus 2 more per open bracket
+static bool format_body_indent(FormatOutputFunc out, void *ctx, int bracket_depth)
+{
+    if (!out(ctx, "  "))
+        return false;
+    for (int i = 0; i < bracket_depth; i++)
+    {
+        if (!out(ctx, "  "))
+            return false;
+    }
+    return true;
+}
+
 // Format a complete procedure definition (to...end)
 bool format_procedure_definition(FormatOutputFunc out, void *ctx, UserProcedure *proc)
 {
@@ -579,24 +592,26 @@ bool format_procedure_definition(FormatOutputFunc out, void *ctx, UserProcedure 
             peek = mem_cdr(peek);
         }
         
-        // Print base indent (2 spaces for procedure body)
-        if (!out(ctx, "  "))
+        if (!format_body_indent(out, ctx, bracket_depth))
             return false;
-        
-        // Add extra indentation based on cumulative bracket depth
-        for (int i = 0; i < bracket_depth; i++)
-        {
-            if (!out(ctx, "  "))
-                return false;
-        }
-        
+
         while (!mem_is_nil(tokens))
         {
             Node elem = mem_car(tokens);
-            
+
+            // A newline marker in a body line records where a parenthesised
+            // expression was split across source lines; reproduce the break.
+            if (mem_is_newline(elem))
+            {
+                if (!out(ctx, "\n") || !format_body_indent(out, ctx, bracket_depth))
+                    return false;
+                tokens = mem_cdr(tokens);
+                continue;
+            }
+
             if (!format_body_element(out, ctx, elem))
                 return false;
-            
+
             // Track brackets
             if (mem_is_word(elem))
             {
@@ -618,7 +633,8 @@ bool format_procedure_definition(FormatOutputFunc out, void *ctx, UserProcedure 
                 bool curr_is_open = mem_is_word(elem) && strcmp(mem_word_ptr(elem), "(") == 0;
                 Node next_elem = mem_car(next);
                 bool next_is_close = mem_is_word(next_elem) && strcmp(mem_word_ptr(next_elem), ")") == 0;
-                if (!curr_is_open && !next_is_close)
+                // A newline marker emits its own break, so no separator here
+                if (!curr_is_open && !next_is_close && !mem_is_newline(next_elem))
                 {
                     if (!out(ctx, " "))
                         return false;
