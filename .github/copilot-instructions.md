@@ -7,7 +7,7 @@ Review the diff as given: concrete problems only, a few high-confidence findings
 many speculative ones. Never ask the author to run or add tests first.
 
 ## PR Review Checklist (CRITICAL)
-<!-- KEEP UNDER 4000 CHARS - Copilot only reads the first ~4000 -->
+<!-- Copilot not longer has a ~4000 char limit -->
 
 ### 1. Floating point — single precision only
 - The RP2350 is hardware **single-precision** only. Flag `double`, `long double`, `%lf`.
