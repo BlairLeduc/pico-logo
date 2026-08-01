@@ -28,6 +28,7 @@ edge case)
 | [B5](#b5--name_buf64-identifier-truncation-aliasing) | `name_buf[64]` identifier truncation aliasing | lexer | low | 2026-07-02 | open |
 | [B6](#b6--penreverse-ignores-pen-size-always-1-px) | `penreverse` ignores pen size (always 1 px) | graphics | low | 2026-07-18 | won't fix (documented) |
 | [B7](#b7--a-user-procedure-call-as-the-left-operand-of-a-parenthesised-expression-corrupts-the-parse) | A user-procedure call as the left operand of a parenthesised expression corrupts the parse | parser/eval | high | 2026-07-28 | open |
+| [B9](#b9--text-returns-newline-markers-as-ordinary-list-elements) | `text` returns newline markers as ordinary list elements | workspace/format | medium | 2026-07-31 | open |
 
 ### B2 — Single-line `to … end` definitions are not supported
 
@@ -146,6 +147,45 @@ Scope, all verified against `./build-host/logo` on 2026-07-28:
   shapes above, and the `output` path.
 - **Found:** 2026-07-28, building `logo/games/trails`, where it stopped the
   game running a single frame.
+
+### B9 — `text` returns newline markers as ordinary list elements
+
+Line breaks inside a procedure body are stored as an invisible newline-marker
+atom (`mem_newline_marker`, `\x01`). `prim_text` returns the body unchanged, so
+those markers count as list elements even though nothing prints them. A program
+that inspects or edits procedure text therefore gets a length that depends on
+the source layout:
+
+```
+to mlb :n
+if :n > 0 [
+print :n
+print 1
+]
+end
+show count item 5 item 2 text "mlb    ; 7
+```
+
+against `4` for the same body written on one line. `show` and `po` render the
+two identically, so the discrepancy is invisible until something counts.
+
+Scope, verified against `./build-host/logo` on 2026-07-31:
+
+- Multi-line `[...]` bodies have always done this — the markers sit inside the
+  nested list (`parse_bracket_contents`).
+- Multi-line `(...)` expressions do it too since B1 was fixed, where the
+  markers sit at the body-line level.
+- `text` → `define` round-trips correctly and keeps the layout; only element
+  counting and indexing are affected.
+
+- **Workaround:** none needed for round-tripping; a program that walks a body
+  line must skip elements for which the marker is `\x01`.
+- **Fix:** decide first whether markers should be invisible to `count` / `item`
+  generally, or excluded from `text` with the layout carried elsewhere. The
+  second must not regress `po` / `save` layout or the `text` → `define` round
+  trip. Whatever is chosen has to cover the bracket and paren cases together.
+- **Found:** 2026-07-31, raised by the Codex review on PR #127 (the B1 fix) and
+  confirmed to predate it.
 
 ---
 
