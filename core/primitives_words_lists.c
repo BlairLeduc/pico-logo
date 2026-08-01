@@ -71,7 +71,7 @@ static Result prim_first(Evaluator *eval, int argc, Value *args)
     }
     else if (value_is_list(obj))
     {
-        Node list = obj.as.node;
+        Node list = mem_first_cell(obj.as.node);
         if (mem_is_nil(list))
         {
             return result_error_arg(ERR_TOO_FEW_ITEMS, NULL, "[]");
@@ -116,17 +116,16 @@ static Result prim_last(Evaluator *eval, int argc, Value *args)
     }
     else if (value_is_list(obj))
     {
-        Node list = obj.as.node;
+        Node list = mem_first_cell(obj.as.node);
         if (mem_is_nil(list))
         {
             return result_error_arg(ERR_TOO_FEW_ITEMS, NULL, "[]");
         }
         // Find last element
         Node last = mem_car(list);
-        while (!mem_is_nil(mem_cdr(list)))
+        for (Node n = mem_next_cell(list); !mem_is_nil(n); n = mem_next_cell(n))
         {
-            list = mem_cdr(list);
-            last = mem_car(list);
+            last = mem_car(n);
         }
         if (mem_is_word(last))
         {
@@ -171,12 +170,12 @@ static Result prim_butfirst(Evaluator *eval, int argc, Value *args)
     }
     else if (value_is_list(obj))
     {
-        Node list = obj.as.node;
+        Node list = mem_first_cell(obj.as.node);
         if (mem_is_nil(list))
         {
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, "[]");
         }
-        return result_ok(value_list(mem_cdr(list)));
+        return result_ok(value_list(mem_next_cell(list)));
     }
     
     return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
@@ -212,13 +211,13 @@ static Result prim_butlast(Evaluator *eval, int argc, Value *args)
     }
     else if (value_is_list(obj))
     {
-        Node list = obj.as.node;
+        Node list = mem_first_cell(obj.as.node);
         if (mem_is_nil(list))
         {
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, "[]");
         }
         // Build new list without last element
-        if (mem_is_nil(mem_cdr(list)))
+        if (mem_is_nil(mem_next_cell(list)))
         {
             // Only one element, return empty list
             return result_ok(value_list(NODE_NIL));
@@ -226,13 +225,13 @@ static Result prim_butlast(Evaluator *eval, int argc, Value *args)
         // Copy all but last
         Node result = NODE_NIL;
         Node tail = NODE_NIL;
-        while (!mem_is_nil(mem_cdr(list)))
+        while (!mem_is_nil(mem_next_cell(list)))
         {
             if (!mem_list_append(&result, &tail, mem_car(list)))
             {
                 return result_error(ERR_OUT_OF_SPACE);
             }
-            list = mem_cdr(list);
+            list = mem_next_cell(list);
         }
         return result_ok(value_list(result));
     }
@@ -259,11 +258,9 @@ static Result prim_count(Evaluator *eval, int argc, Value *args)
     else if (value_is_list(obj))
     {
         int count = 0;
-        Node list = obj.as.node;
-        while (!mem_is_nil(list))
+        for (Node n = mem_first_cell(obj.as.node); !mem_is_nil(n); n = mem_next_cell(n))
         {
             count++;
-            list = mem_cdr(list);
         }
         return result_ok(value_number((float)count));
     }
@@ -289,7 +286,7 @@ static Result prim_emptyp(Evaluator *eval, int argc, Value *args)
     }
     else if (value_is_list(obj))
     {
-        if (mem_is_nil(obj.as.node))
+        if (mem_is_nil(mem_first_cell(obj.as.node)))
             return result_ok(value_word(true_word));
         return result_ok(value_word(false_word));
     }
@@ -338,10 +335,10 @@ static Result prim_item(Evaluator *eval, int argc, Value *args)
     }
     else if (value_is_list(obj))
     {
-        Node list = obj.as.node;
+        Node list = mem_first_cell(obj.as.node);
         for (int i = 1; i < index && !mem_is_nil(list); i++)
         {
-            list = mem_cdr(list);
+            list = mem_next_cell(list);
         }
         if (mem_is_nil(list))
         {
@@ -465,19 +462,17 @@ static Result prim_replace(Evaluator *eval, int argc, Value *args)
     }
     else if (value_is_list(obj))
     {
-        Node list = obj.as.node;
+        Node list = mem_first_cell(obj.as.node);
         if (mem_is_nil(list))
         {
             return result_error_arg(ERR_TOO_FEW_ITEMS, NULL, "[]");
         }
-        
+
         // Count elements to verify index is valid
         int count = 0;
-        Node temp = list;
-        while (!mem_is_nil(temp))
+        for (Node temp = list; !mem_is_nil(temp); temp = mem_next_cell(temp))
         {
             count++;
-            temp = mem_cdr(temp);
         }
         if (index > count)
         {
@@ -505,7 +500,7 @@ static Result prim_replace(Evaluator *eval, int argc, Value *args)
             {
                 return result_error(ERR_OUT_OF_SPACE);
             }
-            list = mem_cdr(list);
+            list = mem_next_cell(list);
             pos++;
         }
         return result_ok(value_list(result));
@@ -557,13 +552,12 @@ static size_t find_word_in_word(const char *haystack, size_t haystack_len,
 // or NODE_NIL if not found.
 static Node find_element_in_list(Value obj, Node list)
 {
-    while (!mem_is_nil(list))
+    for (Node n = mem_first_cell(list); !mem_is_nil(n); n = mem_next_cell(n))
     {
-        Node car = mem_car(list);
+        Node car = mem_car(n);
         Value car_val = mem_is_word(car) ? value_word(car) : value_list(car);
         if (values_equal(obj, car_val))
-            return list;
-        list = mem_cdr(list);
+            return n;
     }
     return NODE_NIL;
 }
@@ -606,7 +600,8 @@ static Result prim_dsetfirst(Evaluator *eval, int argc, Value *args)
     UNUSED(eval); UNUSED(argc);
 
     Value list_val = args[0];
-    if (!value_is_list(list_val) || mem_is_nil(list_val.as.node))
+    Node cell = value_is_list(list_val) ? mem_first_cell(list_val.as.node) : NODE_NIL;
+    if (mem_is_nil(cell))
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(list_val));
     }
@@ -618,7 +613,7 @@ static Result prim_dsetfirst(Evaluator *eval, int argc, Value *args)
         return err;
     }
 
-    mem_set_car(list_val.as.node, value_node);
+    mem_set_car(cell, value_node);
     return result_none();
 }
 
@@ -632,7 +627,8 @@ static Result prim_dsetbf(Evaluator *eval, int argc, Value *args)
     UNUSED(eval); UNUSED(argc);
 
     Value list_val = args[0];
-    if (!value_is_list(list_val) || mem_is_nil(list_val.as.node))
+    Node cell = value_is_list(list_val) ? mem_first_cell(list_val.as.node) : NODE_NIL;
+    if (mem_is_nil(cell))
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(list_val));
     }
@@ -641,7 +637,7 @@ static Result prim_dsetbf(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
     }
 
-    mem_set_cdr(list_val.as.node, args[1].as.node);
+    mem_set_cdr(cell, args[1].as.node);
     return result_none();
 }
 
@@ -670,10 +666,10 @@ static Result prim_dsetitem(Evaluator *eval, int argc, Value *args)
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
     }
-    Node cell = args[1].as.node;
+    Node cell = mem_first_cell(args[1].as.node);
     for (int i = 1; i < index && !mem_is_nil(cell); i++)
     {
-        cell = mem_cdr(cell);
+        cell = mem_next_cell(cell);
     }
     if (mem_is_nil(cell))
     {
@@ -768,7 +764,7 @@ static Result prim_pick(Evaluator *eval, int argc, Value *args)
     else if (value_is_list(obj))
     {
         size_t count = 0;
-        for (Node n = obj.as.node; !mem_is_nil(n); n = mem_cdr(n))
+        for (Node n = mem_first_cell(obj.as.node); !mem_is_nil(n); n = mem_next_cell(n))
         {
             count++;
         }
@@ -777,10 +773,10 @@ static Result prim_pick(Evaluator *eval, int argc, Value *args)
             return result_error_arg(ERR_TOO_FEW_ITEMS, NULL, "[]");
         }
 
-        Node list = obj.as.node;
+        Node list = mem_first_cell(obj.as.node);
         for (size_t i = logo_random_next(io) % count; i > 0; i--)
         {
-            list = mem_cdr(list);
+            list = mem_next_cell(list);
         }
         Node item = mem_car(list);
         if (mem_is_word(item))
@@ -842,7 +838,7 @@ static Result prim_reverse(Evaluator *eval, int argc, Value *args)
     {
         // Prepending naturally reverses; no tail pointer needed.
         Node result = NODE_NIL;
-        for (Node n = obj.as.node; !mem_is_nil(n); n = mem_cdr(n))
+        for (Node n = mem_first_cell(obj.as.node); !mem_is_nil(n); n = mem_next_cell(n))
         {
             result = mem_cons(mem_car(n), result);
             if (mem_is_nil(result))
@@ -915,7 +911,7 @@ static Result prim_shuffle(Evaluator *eval, int argc, Value *args)
     else if (value_is_list(obj))
     {
         size_t count = 0;
-        for (Node n = obj.as.node; !mem_is_nil(n); n = mem_cdr(n))
+        for (Node n = mem_first_cell(obj.as.node); !mem_is_nil(n); n = mem_next_cell(n))
         {
             count++;
         }
@@ -932,7 +928,7 @@ static Result prim_shuffle(Evaluator *eval, int argc, Value *args)
             return result_error(ERR_OUT_OF_SPACE);
         }
         size_t idx = 0;
-        for (Node n = obj.as.node; !mem_is_nil(n); n = mem_cdr(n))
+        for (Node n = mem_first_cell(obj.as.node); !mem_is_nil(n); n = mem_next_cell(n))
         {
             elements[idx++] = mem_car(n);
         }
@@ -1022,7 +1018,7 @@ static Result prim_remove(Evaluator *eval, int argc, Value *args)
     {
         Node result = NODE_NIL;
         Node tail = NODE_NIL;
-        for (Node n = obj.as.node; !mem_is_nil(n); n = mem_cdr(n))
+        for (Node n = mem_first_cell(obj.as.node); !mem_is_nil(n); n = mem_next_cell(n))
         {
             Node car = mem_car(n);
             Value car_val = mem_is_word(car) ? value_word(car) : value_list(car);
@@ -1098,12 +1094,12 @@ static Result prim_remdup(Evaluator *eval, int argc, Value *args)
     {
         Node result = NODE_NIL;
         Node tail = NODE_NIL;
-        for (Node n = obj.as.node; !mem_is_nil(n); n = mem_cdr(n))
+        for (Node n = mem_first_cell(obj.as.node); !mem_is_nil(n); n = mem_next_cell(n))
         {
             Node car = mem_car(n);
             Value car_val = mem_is_word(car) ? value_word(car) : value_list(car);
             bool dup_later = false;
-            for (Node m = mem_cdr(n); !mem_is_nil(m); m = mem_cdr(m))
+            for (Node m = mem_next_cell(n); !mem_is_nil(m); m = mem_next_cell(m))
             {
                 Node c2 = mem_car(m);
                 Value v2 = mem_is_word(c2) ? value_word(c2) : value_list(c2);
@@ -1238,14 +1234,14 @@ static Result prim_lput(Evaluator *eval, int argc, Value *args)
     // Copy list and add object at end
     Node result = NODE_NIL;
     Node tail = NODE_NIL;
-    Node list = list_val.as.node;
+    Node list = mem_first_cell(list_val.as.node);
     while (!mem_is_nil(list))
     {
         if (!mem_list_append(&result, &tail, mem_car(list)))
         {
             return result_error(ERR_OUT_OF_SPACE);
         }
-        list = mem_cdr(list);
+        list = mem_next_cell(list);
     }
 
     // Add object at end
@@ -1309,14 +1305,14 @@ static Result prim_sentence(Evaluator *eval, int argc, Value *args)
         if (value_is_list(args[i]))
         {
             // Append all elements of the list
-            Node list = args[i].as.node;
+            Node list = mem_first_cell(args[i].as.node);
             while (!mem_is_nil(list))
             {
                 if (!mem_list_append(&result, &tail, mem_car(list)))
                 {
                     return result_error(ERR_OUT_OF_SPACE);
                 }
-                list = mem_cdr(list);
+                list = mem_next_cell(list);
             }
         }
         else

@@ -2101,6 +2101,167 @@ void test_proc_param_case_insensitive_lookup(void)
     proc_erase("mixedcase");
 }
 
+//==========================================================================
+// B9 — newline markers must be invisible to list readers
+//
+// Line breaks inside a body are stored as newline-marker atoms so `po` and
+// `save` can reproduce the layout. They are layout, not elements: a list
+// carrying them must count, index and compare exactly like the same list
+// written on one line.
+//==========================================================================
+
+// The reported case: counting inside `text` of a multi-line body.
+void test_b9_text_count_ignores_layout(void)
+{
+    Result r = proc_define_from_text(
+        "to mlb :n\n"
+        "if :n > 0 [\n"
+        "print :n\n"
+        "print 1\n"
+        "]\n"
+        "end\n");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    // Same body, one line: the two must agree on every count.
+    Result r2 = proc_define_from_text("to slb :n\nif :n > 0 [print :n print 1]\nend\n");
+    TEST_ASSERT_EQUAL(RESULT_OK, r2.status);
+
+    Result multi = eval_string("count item 5 item 2 text \"mlb");
+    TEST_ASSERT_EQUAL(RESULT_OK, multi.status);
+    Result single = eval_string("count item 5 item 2 text \"slb");
+    TEST_ASSERT_EQUAL(RESULT_OK, single.status);
+    TEST_ASSERT_EQUAL_FLOAT(4.0f, single.value.as.number);
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(single.value.as.number, multi.value.as.number,
+        "count must not depend on the source layout of the body");
+}
+
+// Indexing must land on tokens, never on a marker.
+void test_b9_text_item_ignores_layout(void)
+{
+    Result r = proc_define_from_text(
+        "to mlb2 :n\n"
+        "if :n > 0 [\n"
+        "print :n\n"
+        "print 1\n"
+        "]\n"
+        "end\n");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    Result first = eval_string("first item 5 item 2 text \"mlb2");
+    TEST_ASSERT_EQUAL(RESULT_OK, first.status);
+    TEST_ASSERT_TRUE(value_is_word(first.value));
+    TEST_ASSERT_EQUAL_STRING("print", mem_word_ptr(first.value.as.node));
+
+    Result third = eval_string("item 3 item 5 item 2 text \"mlb2");
+    TEST_ASSERT_EQUAL(RESULT_OK, third.status);
+    TEST_ASSERT_TRUE(value_is_word(third.value));
+    TEST_ASSERT_EQUAL_STRING("print", mem_word_ptr(third.value.as.node));
+
+    Result last = eval_string("last item 5 item 2 text \"mlb2");
+    TEST_ASSERT_EQUAL(RESULT_OK, last.status);
+    TEST_ASSERT_TRUE(value_is_word(last.value));
+    TEST_ASSERT_EQUAL_STRING("1", mem_word_ptr(last.value.as.node));
+}
+
+// The same defect reached without `text`: a multi-line list literal used as
+// ordinary data.
+void test_b9_multiline_literal_counts_as_data(void)
+{
+    Result r = proc_define_from_text(
+        "to lit\n"
+        "output [\n"
+        "a\n"
+        "b\n"
+        "]\n"
+        "end\n");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    Result count = eval_string("count lit");
+    TEST_ASSERT_EQUAL(RESULT_OK, count.status);
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2.0f, count.value.as.number,
+        "a multi-line list literal has two elements");
+
+    Result first = eval_string("first lit");
+    TEST_ASSERT_EQUAL(RESULT_OK, first.status);
+    TEST_ASSERT_EQUAL_STRING("a", mem_word_ptr(first.value.as.node));
+
+    Result last = eval_string("last lit");
+    TEST_ASSERT_EQUAL(RESULT_OK, last.status);
+    TEST_ASSERT_EQUAL_STRING("b", mem_word_ptr(last.value.as.node));
+
+    Result bf = eval_string("count butfirst lit");
+    TEST_ASSERT_EQUAL(RESULT_OK, bf.status);
+    TEST_ASSERT_EQUAL_FLOAT(1.0f, bf.value.as.number);
+
+    Result bl = eval_string("count butlast lit");
+    TEST_ASSERT_EQUAL(RESULT_OK, bl.status);
+    TEST_ASSERT_EQUAL_FLOAT(1.0f, bl.value.as.number);
+
+    // Layout must not make two equal lists compare unequal.
+    Result eq = eval_string("equal? lit [a b]");
+    TEST_ASSERT_EQUAL(RESULT_OK, eq.status);
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(eq.value.as.node));
+}
+
+// Iteration primitives see elements only.
+void test_b9_multiline_literal_iterates_as_data(void)
+{
+    Result r = proc_define_from_text(
+        "to lit2\n"
+        "output [\n"
+        "1\n"
+        "2\n"
+        "3\n"
+        "]\n"
+        "end\n");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    reset_output();
+    Result fe = run_string("foreach lit2 [[x] print :x]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, fe.status);
+    TEST_ASSERT_EQUAL_STRING("1\n2\n3\n", output_buffer);
+
+    Result mapped = eval_string("count map [[x] :x * 2] lit2");
+    TEST_ASSERT_EQUAL(RESULT_OK, mapped.status);
+    TEST_ASSERT_EQUAL_FLOAT(3.0f, mapped.value.as.number);
+
+    Result member = eval_string("member? 2 lit2");
+    TEST_ASSERT_EQUAL(RESULT_OK, member.status);
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(member.value.as.node));
+}
+
+// Markers may propagate into freshly built lists; readers must still skip
+// them, and the layout of the stored body must survive untouched.
+void test_b9_layout_survives_and_propagates_harmlessly(void)
+{
+    Result r = proc_define_from_text(
+        "to lit3\n"
+        "output [\n"
+        "a\n"
+        "b\n"
+        "]\n"
+        "end\n");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    Result se = eval_string("count sentence lit3 [c]");
+    TEST_ASSERT_EQUAL(RESULT_OK, se.status);
+    TEST_ASSERT_EQUAL_FLOAT(3.0f, se.value.as.number);
+
+    Result fp = eval_string("count fput \"c lit3");
+    TEST_ASSERT_EQUAL(RESULT_OK, fp.status);
+    TEST_ASSERT_EQUAL_FLOAT(3.0f, fp.value.as.number);
+
+    // `po` still reproduces the source layout.
+    UserProcedure *proc = proc_find("lit3");
+    TEST_ASSERT_NOT_NULL(proc);
+    char buffer[256];
+    FormatBufferContext ctx;
+    format_buffer_init(&ctx, buffer, sizeof(buffer));
+    format_procedure_definition(format_buffer_output, &ctx, proc);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(buffer, "output [\n"),
+        "multi-line layout must still be reproduced");
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -2218,6 +2379,13 @@ int main(void)
     RUN_TEST(test_empty_list_roundtrip);
     RUN_TEST(test_empty_list_inside_brackets_roundtrip);
     RUN_TEST(test_proc_param_case_insensitive_lookup);
+
+    // B9: newline markers are layout, not list elements
+    RUN_TEST(test_b9_text_count_ignores_layout);
+    RUN_TEST(test_b9_text_item_ignores_layout);
+    RUN_TEST(test_b9_multiline_literal_counts_as_data);
+    RUN_TEST(test_b9_multiline_literal_iterates_as_data);
+    RUN_TEST(test_b9_layout_survives_and_propagates_harmlessly);
 
     return UNITY_END();
 }

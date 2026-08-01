@@ -1117,6 +1117,22 @@ bool mem_is_newline(Node n)
     return n == mem_newline_marker;
 }
 
+// Position a list at its first element, skipping any layout markers.
+Node mem_first_cell(Node list)
+{
+    while (!mem_is_nil(list) && mem_is_newline(mem_car(list)))
+    {
+        list = mem_cdr(list);
+    }
+    return list;
+}
+
+// Advance past the element at cell to the next one.
+Node mem_next_cell(Node cell)
+{
+    return mem_first_cell(mem_cdr(cell));
+}
+
 //==========================================================================
 // Word Access
 //==========================================================================

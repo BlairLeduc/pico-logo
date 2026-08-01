@@ -174,9 +174,9 @@ static Result prim_for(Evaluator *eval, int argc, Value *args)
     REQUIRE_LIST(args[0]);
     REQUIRE_LIST(args[1]);
 
-    Node forcontrol = args[0].as.node;
+    Node forcontrol = mem_first_cell(args[0].as.node);
     Node body = args[1].as.node;
-    
+
     // Parse forcontrol: [varname start limit] or [varname start limit step]
     // Count elements
     int count = 0;
@@ -184,7 +184,7 @@ static Result prim_for(Evaluator *eval, int argc, Value *args)
     while (!mem_is_nil(temp))
     {
         count++;
-        temp = mem_cdr(temp);
+        temp = mem_next_cell(temp);
     }
     
     if (count < 3 || count > 4)
@@ -194,11 +194,11 @@ static Result prim_for(Evaluator *eval, int argc, Value *args)
     
     // Extract elements
     Node elem1 = mem_car(forcontrol);
-    Node rest1 = mem_cdr(forcontrol);
+    Node rest1 = mem_next_cell(forcontrol);
     Node elem2 = mem_car(rest1);
-    Node rest2 = mem_cdr(rest1);
+    Node rest2 = mem_next_cell(rest1);
     Node elem3 = mem_car(rest2);
-    Node rest3 = mem_cdr(rest2);
+    Node rest3 = mem_next_cell(rest2);
     
     // First element must be a word (variable name)
     if (!mem_is_word(elem1))

@@ -157,8 +157,15 @@ static Result prim_define(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_IS_PRIMITIVE, name, NULL);
     }
     
-    Node params_elem = mem_car(def_list);
-    Node body_start = mem_cdr(def_list);
+    // The definition list may itself have been written across source lines, so
+    // walk it past any layout markers (B9).
+    Node def_head = mem_first_cell(def_list);
+    if (mem_is_nil(def_head))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, "[]");
+    }
+    Node params_elem = mem_car(def_head);
+    Node body_start = mem_next_cell(def_head);
     
     // Parse parameters
     const char *params[MAX_PROC_PARAMS];
@@ -175,7 +182,7 @@ static Result prim_define(Evaluator *eval, int argc, Value *args)
     
     if (mem_is_list(param_list) || mem_is_nil(param_list))
     {
-        Node curr = param_list;
+        Node curr = mem_first_cell(param_list);
         while (!mem_is_nil(curr) && param_count < MAX_PROC_PARAMS)
         {
             Node param = mem_car(curr);
@@ -199,7 +206,7 @@ static Result prim_define(Evaluator *eval, int argc, Value *args)
                 }
                 params[param_count++] = pname;
             }
-            curr = mem_cdr(curr);
+            curr = mem_next_cell(curr);
         }
     }
     

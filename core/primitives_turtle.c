@@ -110,7 +110,7 @@ static bool parse_turtle_set(Value v, uint8_t *set, int *count, Result *error)
     bool single = (v.type != VALUE_LIST);
     if (!single)
     {
-        list = v.as.node;
+        list = mem_first_cell(v.as.node);
     }
 
     while (true)
@@ -128,7 +128,7 @@ static bool parse_turtle_set(Value v, uint8_t *set, int *count, Result *error)
             }
             Node node = mem_car(list);
             item = mem_is_word(node) ? value_word(node) : value_list(node);
-            list = mem_cdr(list);
+            list = mem_next_cell(list);
         }
 
         float num;
@@ -1292,7 +1292,7 @@ static Result prim_putsh(Evaluator *eval, int argc, Value *args)
 
     // Extract 16 numbers from the list
     uint8_t shape_data[16];
-    Node list = args[1].as.node;
+    Node list = mem_first_cell(args[1].as.node);
     int count = 0;
 
     while (!mem_is_nil(list) && count < 16)
@@ -1313,7 +1313,7 @@ static Result prim_putsh(Evaluator *eval, int argc, Value *args)
 
         shape_data[count] = (uint8_t)num;
         count++;
-        list = mem_cdr(list);
+        list = mem_next_cell(list);
     }
 
     if (count != 16 || !mem_is_nil(list))
