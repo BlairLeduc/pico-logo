@@ -91,7 +91,7 @@ static bool parse_voice_set(Value v, uint8_t *set, int *count, Result *error)
     bool single = (v.type != VALUE_LIST);
     if (!single)
     {
-        list = v.as.node;
+        list = mem_first_cell(v.as.node);
     }
 
     while (true)
@@ -109,7 +109,7 @@ static bool parse_voice_set(Value v, uint8_t *set, int *count, Result *error)
             }
             Node node = mem_car(list);
             item = mem_is_word(node) ? value_word(node) : value_list(node);
-            list = mem_cdr(list);
+            list = mem_next_cell(list);
         }
 
         float num;
@@ -272,7 +272,7 @@ static Result prim_setenv(Evaluator *eval, int argc, Value *args)
     REQUIRE_LIST(args[1]);
     // Exactly four numbers: attack decay sustain release.
     int vals[4];
-    Node l = args[1].as.node;
+    Node l = mem_first_cell(args[1].as.node);
     for (int i = 0; i < 4; i++)
     {
         if (mem_is_nil(l) || !mem_is_word(mem_car(l)))
@@ -285,7 +285,7 @@ static Result prim_setenv(Evaluator *eval, int argc, Value *args)
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
         }
         vals[i] = (int)num;
-        l = mem_cdr(l);
+        l = mem_next_cell(l);
     }
     if (!mem_is_nil(l) || vals[2] > 15) // extra items, or sustain out of 0..15
     {
@@ -455,7 +455,7 @@ static Result play_one_voice(LogoIO *io, LogoHardwareOps *ops, int voice, Node n
     NotationState state;
     notation_state_init(&state);
 
-    for (Node l = notes; !mem_is_nil(l); l = mem_cdr(l))
+    for (Node l = mem_first_cell(notes); !mem_is_nil(l); l = mem_next_cell(l))
     {
         Node elem = mem_car(l);
         if (!mem_is_word(elem))

@@ -49,7 +49,7 @@ static Result prim_step(Evaluator *eval, int argc, Value *args)
     else if (value_is_list(args[0]))
     {
         // List of procedure names
-        Node curr = args[0].as.node;
+        Node curr = mem_first_cell(args[0].as.node);
         while (!mem_is_nil(curr))
         {
             Node elem = mem_car(curr);
@@ -62,7 +62,7 @@ static Result prim_step(Evaluator *eval, int argc, Value *args)
                 }
                 proc_step(name);
             }
-            curr = mem_cdr(curr);
+            curr = mem_next_cell(curr);
         }
     }
     else
@@ -93,7 +93,7 @@ static Result prim_unstep(Evaluator *eval, int argc, Value *args)
     else if (value_is_list(args[0]))
     {
         // List of procedure names
-        Node curr = args[0].as.node;
+        Node curr = mem_first_cell(args[0].as.node);
         while (!mem_is_nil(curr))
         {
             Node elem = mem_car(curr);
@@ -106,7 +106,7 @@ static Result prim_unstep(Evaluator *eval, int argc, Value *args)
                 }
                 proc_unstep(name);
             }
-            curr = mem_cdr(curr);
+            curr = mem_next_cell(curr);
         }
     }
     else
@@ -137,7 +137,7 @@ static Result prim_trace(Evaluator *eval, int argc, Value *args)
     else if (value_is_list(args[0]))
     {
         // List of procedure names
-        Node curr = args[0].as.node;
+        Node curr = mem_first_cell(args[0].as.node);
         while (!mem_is_nil(curr))
         {
             Node elem = mem_car(curr);
@@ -150,7 +150,7 @@ static Result prim_trace(Evaluator *eval, int argc, Value *args)
                 }
                 proc_trace(name);
             }
-            curr = mem_cdr(curr);
+            curr = mem_next_cell(curr);
         }
     }
     else
@@ -181,7 +181,7 @@ static Result prim_untrace(Evaluator *eval, int argc, Value *args)
     else if (value_is_list(args[0]))
     {
         // List of procedure names
-        Node curr = args[0].as.node;
+        Node curr = mem_first_cell(args[0].as.node);
         while (!mem_is_nil(curr))
         {
             Node elem = mem_car(curr);
@@ -194,7 +194,7 @@ static Result prim_untrace(Evaluator *eval, int argc, Value *args)
                 }
                 proc_untrace(name);
             }
-            curr = mem_cdr(curr);
+            curr = mem_next_cell(curr);
         }
     }
     else

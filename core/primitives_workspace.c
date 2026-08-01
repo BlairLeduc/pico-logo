@@ -142,7 +142,7 @@ static Result prim_po(Evaluator *eval, int argc, Value *args)
     else if (value_is_list(args[0]))
     {
         // List of procedure names
-        Node curr = args[0].as.node;
+        Node curr = mem_first_cell(args[0].as.node);
         while (!mem_is_nil(curr))
         {
             Node elem = mem_car(curr);
@@ -156,7 +156,7 @@ static Result prim_po(Evaluator *eval, int argc, Value *args)
                 }
                 ws_write_procedure_definition(io, proc);
             }
-            curr = mem_cdr(curr);
+            curr = mem_next_cell(curr);
         }
     }
     else
@@ -234,7 +234,7 @@ static Result prim_pon(Evaluator *eval, int argc, Value *args)
     else if (value_is_list(args[0]))
     {
         // List of variable names
-        Node curr = args[0].as.node;
+        Node curr = mem_first_cell(args[0].as.node);
         while (!mem_is_nil(curr))
         {
             Node elem = mem_car(curr);
@@ -248,7 +248,7 @@ static Result prim_pon(Evaluator *eval, int argc, Value *args)
                 }
                 ws_write_variable(io, name, value);
             }
-            curr = mem_cdr(curr);
+            curr = mem_next_cell(curr);
         }
     }
     else
@@ -342,7 +342,7 @@ static Result prim_pot(Evaluator *eval, int argc, Value *args)
     else if (value_is_list(args[0]))
     {
         // List of procedure names
-        Node curr = args[0].as.node;
+        Node curr = mem_first_cell(args[0].as.node);
         while (!mem_is_nil(curr))
         {
             Node elem = mem_car(curr);
@@ -356,7 +356,7 @@ static Result prim_pot(Evaluator *eval, int argc, Value *args)
                 }
                 ws_write_procedure_title(io, proc);
             }
-            curr = mem_cdr(curr);
+            curr = mem_next_cell(curr);
         }
     }
     else
@@ -404,7 +404,7 @@ static Result prim_bury(Evaluator *eval, int argc, Value *args)
     }
     else if (value_is_list(args[0]))
     {
-        Node curr = args[0].as.node;
+        Node curr = mem_first_cell(args[0].as.node);
         while (!mem_is_nil(curr))
         {
             Node elem = mem_car(curr);
@@ -417,7 +417,7 @@ static Result prim_bury(Evaluator *eval, int argc, Value *args)
                 }
                 proc_bury(name);
             }
-            curr = mem_cdr(curr);
+            curr = mem_next_cell(curr);
         }
     }
     else
@@ -457,7 +457,7 @@ static Result prim_buryname(Evaluator *eval, int argc, Value *args)
     }
     else if (value_is_list(args[0]))
     {
-        Node curr = args[0].as.node;
+        Node curr = mem_first_cell(args[0].as.node);
         while (!mem_is_nil(curr))
         {
             Node elem = mem_car(curr);
@@ -470,7 +470,7 @@ static Result prim_buryname(Evaluator *eval, int argc, Value *args)
                 }
                 var_bury(name);
             }
-            curr = mem_cdr(curr);
+            curr = mem_next_cell(curr);
         }
     }
     else
@@ -499,7 +499,7 @@ static Result prim_unbury(Evaluator *eval, int argc, Value *args)
     }
     else if (value_is_list(args[0]))
     {
-        Node curr = args[0].as.node;
+        Node curr = mem_first_cell(args[0].as.node);
         while (!mem_is_nil(curr))
         {
             Node elem = mem_car(curr);
@@ -512,7 +512,7 @@ static Result prim_unbury(Evaluator *eval, int argc, Value *args)
                 }
                 proc_unbury(name);
             }
-            curr = mem_cdr(curr);
+            curr = mem_next_cell(curr);
         }
     }
     else
@@ -552,7 +552,7 @@ static Result prim_unburyname(Evaluator *eval, int argc, Value *args)
     }
     else if (value_is_list(args[0]))
     {
-        Node curr = args[0].as.node;
+        Node curr = mem_first_cell(args[0].as.node);
         while (!mem_is_nil(curr))
         {
             Node elem = mem_car(curr);
@@ -565,7 +565,7 @@ static Result prim_unburyname(Evaluator *eval, int argc, Value *args)
                 }
                 var_unbury(name);
             }
-            curr = mem_cdr(curr);
+            curr = mem_next_cell(curr);
         }
     }
     else
@@ -606,7 +606,7 @@ static Result prim_erase(Evaluator *eval, int argc, Value *args)
     }
     else if (value_is_list(args[0]))
     {
-        Node curr = args[0].as.node;
+        Node curr = mem_first_cell(args[0].as.node);
         while (!mem_is_nil(curr))
         {
             Node elem = mem_car(curr);
@@ -619,7 +619,7 @@ static Result prim_erase(Evaluator *eval, int argc, Value *args)
                 }
                 proc_erase(name);
             }
-            curr = mem_cdr(curr);
+            curr = mem_next_cell(curr);
         }
     }
     else
@@ -648,7 +648,7 @@ static Result prim_ern(Evaluator *eval, int argc, Value *args)
     }
     else if (value_is_list(args[0]))
     {
-        Node curr = args[0].as.node;
+        Node curr = mem_first_cell(args[0].as.node);
         while (!mem_is_nil(curr))
         {
             Node elem = mem_car(curr);
@@ -661,7 +661,7 @@ static Result prim_ern(Evaluator *eval, int argc, Value *args)
                 }
                 var_erase(name);
             }
-            curr = mem_cdr(curr);
+            curr = mem_next_cell(curr);
         }
     }
     else

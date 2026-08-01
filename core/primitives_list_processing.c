@@ -104,12 +104,12 @@ static Result parse_proc_spec(Value proc_arg, ProcSpec *spec)
         // Lambda: [[x] :x + 1] - single expression after params
         // Text: [[x y] [output :x + :y]] - list of lines after params
         
-        Node list = proc_arg.as.node;
+        Node list = mem_first_cell(proc_arg.as.node);
         if (mem_is_nil(list))
         {
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, "[]");
         }
-        
+
         // First element must be the parameter list
         Node first = mem_car(list);
         if (!mem_is_nil(first) && !mem_is_list(first))
@@ -120,10 +120,10 @@ static Result parse_proc_spec(Value proc_arg, ProcSpec *spec)
         }
         
         // Parse parameter names from the first element (parameter list)
-        Node param_list = first;
+        Node param_list = mem_first_cell(first);
         int param_count = 0;
         const char *params[MAX_PROC_PARAMS];
-        
+
         while (!mem_is_nil(param_list) && param_count < MAX_PROC_PARAMS)
         {
             Node param_node = mem_car(param_list);
@@ -132,11 +132,11 @@ static Result parse_proc_spec(Value proc_arg, ProcSpec *spec)
                 return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(proc_arg));
             }
             params[param_count++] = mem_word_ptr(param_node);
-            param_list = mem_cdr(param_list);
+            param_list = mem_next_cell(param_list);
         }
-        
+
         // Rest of the list is the body
-        Node rest = mem_cdr(list);
+        Node rest = mem_next_cell(list);
         if (mem_is_nil(rest))
         {
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(proc_arg));
@@ -267,9 +267,9 @@ static Result invoke_proc_spec(Evaluator *eval, ProcSpec *spec, int argc, Value 
         else
         {
             // Procedure text: run as list of lines, looking for output
-            Node body = spec->as.lambda.body;
+            Node body = mem_first_cell(spec->as.lambda.body);
             r = result_none();
-            
+
             while (!mem_is_nil(body))
             {
                 Node line = mem_car(body);
@@ -301,7 +301,7 @@ static Result invoke_proc_spec(Evaluator *eval, ProcSpec *spec, int argc, Value 
                     }
                 }
                 
-                body = mem_cdr(body);
+                body = mem_next_cell(body);
             }
         }
         
@@ -344,7 +344,7 @@ static Result prim_apply(Evaluator *eval, int argc, Value *args)
     
     // Second argument must be a list of inputs
     REQUIRE_LIST(args[1]);
-    Node input_list = args[1].as.node;
+    Node input_list = mem_first_cell(args[1].as.node);
     
     // Collect inputs from the list
     Value proc_args[MAX_PROC_PARAMS];
@@ -367,7 +367,7 @@ static Result prim_apply(Evaluator *eval, int argc, Value *args)
             proc_args[proc_argc++] = value_list(elem);
         }
         
-        input_list = mem_cdr(input_list);
+        input_list = mem_next_cell(input_list);
     }
     
     // Invoke the procedure with collected arguments
@@ -448,11 +448,11 @@ static Result prim_foreach(Evaluator *eval, int argc, Value *args)
     int length = 0;
     if (value_is_list(args[0]))
     {
-        Node list = args[0].as.node;
+        Node list = mem_first_cell(args[0].as.node);
         while (!mem_is_nil(list))
         {
             length++;
-            list = mem_cdr(list);
+            list = mem_next_cell(list);
         }
     }
     else
@@ -469,11 +469,11 @@ static Result prim_foreach(Evaluator *eval, int argc, Value *args)
             int other_length = 0;
             if (value_is_list(args[i]))
             {
-                Node list = args[i].as.node;
+                Node list = mem_first_cell(args[i].as.node);
                 while (!mem_is_nil(list))
                 {
                     other_length++;
-                    list = mem_cdr(list);
+                    list = mem_next_cell(list);
                 }
             }
             else
@@ -498,7 +498,7 @@ static Result prim_foreach(Evaluator *eval, int argc, Value *args)
     {
         if (value_is_list(args[i]))
         {
-            cursors[i] = args[i].as.node;
+            cursors[i] = mem_first_cell(args[i].as.node);
             is_word[i] = false;
         }
         else
@@ -539,7 +539,7 @@ static Result prim_foreach(Evaluator *eval, int argc, Value *args)
                 {
                     proc_args[i] = value_list(elem);
                 }
-                cursors[i] = mem_cdr(cursors[i]);
+                cursors[i] = mem_next_cell(cursors[i]);
             }
         }
         
@@ -643,11 +643,11 @@ static Result prim_map(Evaluator *eval, int argc, Value *args)
     int length = 0;
     if (value_is_list(args[1]))
     {
-        Node list = args[1].as.node;
+        Node list = mem_first_cell(args[1].as.node);
         while (!mem_is_nil(list))
         {
             length++;
-            list = mem_cdr(list);
+            list = mem_next_cell(list);
         }
     }
     else
@@ -664,11 +664,11 @@ static Result prim_map(Evaluator *eval, int argc, Value *args)
             int other_length = 0;
             if (value_is_list(args[i]))
             {
-                Node list = args[i].as.node;
+                Node list = mem_first_cell(args[i].as.node);
                 while (!mem_is_nil(list))
                 {
                     other_length++;
-                    list = mem_cdr(list);
+                    list = mem_next_cell(list);
                 }
             }
             else
@@ -693,7 +693,7 @@ static Result prim_map(Evaluator *eval, int argc, Value *args)
     {
         if (value_is_list(args[i + 1]))
         {
-            cursors[i] = args[i + 1].as.node;
+            cursors[i] = mem_first_cell(args[i + 1].as.node);
             is_word[i] = false;
         }
         else
@@ -753,7 +753,7 @@ static Result prim_map(Evaluator *eval, int argc, Value *args)
                 {
                     proc_args[i] = value_list(elem);
                 }
-                cursors[i] = mem_cdr(cursors[i]);
+                cursors[i] = mem_next_cell(cursors[i]);
             }
         }
         
@@ -963,11 +963,11 @@ static Result prim_map_se(Evaluator *eval, int argc, Value *args)
     int length = 0;
     if (value_is_list(args[1]))
     {
-        Node list = args[1].as.node;
+        Node list = mem_first_cell(args[1].as.node);
         while (!mem_is_nil(list))
         {
             length++;
-            list = mem_cdr(list);
+            list = mem_next_cell(list);
         }
     }
     else
@@ -984,11 +984,11 @@ static Result prim_map_se(Evaluator *eval, int argc, Value *args)
             int other_length = 0;
             if (value_is_list(args[i]))
             {
-                Node list = args[i].as.node;
+                Node list = mem_first_cell(args[i].as.node);
                 while (!mem_is_nil(list))
                 {
                     other_length++;
-                    list = mem_cdr(list);
+                    list = mem_next_cell(list);
                 }
             }
             else
@@ -1013,7 +1013,7 @@ static Result prim_map_se(Evaluator *eval, int argc, Value *args)
     {
         if (value_is_list(args[i + 1]))
         {
-            cursors[i] = args[i + 1].as.node;
+            cursors[i] = mem_first_cell(args[i + 1].as.node);
             is_word[i] = false;
         }
         else
@@ -1055,7 +1055,7 @@ static Result prim_map_se(Evaluator *eval, int argc, Value *args)
                 {
                     proc_args[i] = value_list(elem);
                 }
-                cursors[i] = mem_cdr(cursors[i]);
+                cursors[i] = mem_next_cell(cursors[i]);
             }
         }
         
@@ -1093,14 +1093,14 @@ static Result prim_map_se(Evaluator *eval, int argc, Value *args)
             if (value_is_list(r.value))
             {
                 // Append all elements of the list (sentence semantics)
-                Node list = r.value.as.node;
+                Node list = mem_first_cell(r.value.as.node);
                 while (!mem_is_nil(list))
                 {
                     if (!mem_list_append(&result_head, &result_tail, mem_car(list)))
                     {
                         return result_error(ERR_OUT_OF_SPACE);
                     }
-                    list = mem_cdr(list);
+                    list = mem_next_cell(list);
                 }
             }
             else if (value_is_word(r.value) || value_is_number(r.value))
@@ -1163,7 +1163,7 @@ static Result prim_filter(Evaluator *eval, int argc, Value *args)
     }
     
     bool input_is_word = !value_is_list(args[1]);
-    Node data = input_is_word ? NODE_NIL : args[1].as.node;
+    Node data = input_is_word ? NODE_NIL : mem_first_cell(args[1].as.node);
     const char *word_ptr = input_is_word ? mem_word_ptr(word_node) : NULL;
     int word_len = input_is_word ? (int)mem_word_len(word_node) : 0;
     int word_idx = 0;
@@ -1287,7 +1287,7 @@ static Result prim_filter(Evaluator *eval, int argc, Value *args)
         }
         else
         {
-            data = mem_cdr(data);
+            data = mem_next_cell(data);
         }
     }
     
@@ -1338,7 +1338,7 @@ static Result prim_find(Evaluator *eval, int argc, Value *args)
     }
     
     bool input_is_word = !value_is_list(args[1]);
-    Node data = input_is_word ? NODE_NIL : args[1].as.node;
+    Node data = input_is_word ? NODE_NIL : mem_first_cell(args[1].as.node);
     const char *word_ptr = input_is_word ? mem_word_ptr(word_node) : NULL;
     int word_len = input_is_word ? (int)mem_word_len(word_node) : 0;
     int word_idx = 0;
@@ -1414,7 +1414,7 @@ static Result prim_find(Evaluator *eval, int argc, Value *args)
         }
         else
         {
-            data = mem_cdr(data);
+            data = mem_next_cell(data);
         }
     }
     
@@ -1474,12 +1474,12 @@ static Result prim_reduce(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        Node data = args[1].as.node;
+        Node data = mem_first_cell(args[1].as.node);
         Node temp = data;
         while (!mem_is_nil(temp))
         {
             count++;
-            temp = mem_cdr(temp);
+            temp = mem_next_cell(temp);
         }
     }
     
@@ -1499,7 +1499,7 @@ static Result prim_reduce(Evaluator *eval, int argc, Value *args)
         }
         else
         {
-            Node data = args[1].as.node;
+            Node data = mem_first_cell(args[1].as.node);
             Node elem = mem_car(data);
             if (mem_is_word(elem))
             {
@@ -1531,7 +1531,7 @@ static Result prim_reduce(Evaluator *eval, int argc, Value *args)
     }
     else
     {
-        Node data = args[1].as.node;
+        Node data = mem_first_cell(args[1].as.node);
         Node temp = data;
         for (int i = 0; i < count; i++)
         {
@@ -1548,7 +1548,7 @@ static Result prim_reduce(Evaluator *eval, int argc, Value *args)
             {
                 elements[i] = value_list(elem);
             }
-            temp = mem_cdr(temp);
+            temp = mem_next_cell(temp);
         }
     }
     
@@ -1650,7 +1650,7 @@ static Result prim_crossmap(Evaluator *eval, int argc, Value *args)
         // Single listlist argument - must be a list
         // Elements can be lists or words
         REQUIRE_LIST(args[1]);
-        Node listlist = args[1].as.node;
+        Node listlist = mem_first_cell(args[1].as.node);
         
         while (!mem_is_nil(listlist) && data_count < MAX_PROC_PARAMS)
         {
@@ -1667,15 +1667,15 @@ static Result prim_crossmap(Evaluator *eval, int argc, Value *args)
             {
                 is_word[data_count] = false;
                 word_ptrs[data_count] = NULL;
-                data_lists[data_count] = elem;
+                data_lists[data_count] = mem_first_cell(elem);
                 
                 // Count length
                 int len = 0;
-                Node temp = elem;
+                Node temp = mem_first_cell(elem);
                 while (!mem_is_nil(temp))
                 {
                     len++;
-                    temp = mem_cdr(temp);
+                    temp = mem_next_cell(temp);
                 }
                 lengths[data_count] = len;
             }
@@ -1685,7 +1685,7 @@ static Result prim_crossmap(Evaluator *eval, int argc, Value *args)
             }
             data_count++;
             
-            listlist = mem_cdr(listlist);
+            listlist = mem_next_cell(listlist);
         }
     }
     else
@@ -1704,15 +1704,15 @@ static Result prim_crossmap(Evaluator *eval, int argc, Value *args)
             {
                 is_word[data_count] = false;
                 word_ptrs[data_count] = NULL;
-                data_lists[data_count] = args[i].as.node;
+                data_lists[data_count] = mem_first_cell(args[i].as.node);
                 
                 // Count length
                 int len = 0;
-                Node temp = args[i].as.node;
+                Node temp = mem_first_cell(args[i].as.node);
                 while (!mem_is_nil(temp))
                 {
                     len++;
-                    temp = mem_cdr(temp);
+                    temp = mem_next_cell(temp);
                 }
                 lengths[data_count] = len;
             }
@@ -1794,7 +1794,7 @@ static Result prim_crossmap(Evaluator *eval, int argc, Value *args)
         else
         {
             // List
-            Node temp = data_lists[i];
+            Node temp = mem_first_cell(data_lists[i]);
             for (int j = 0; j < lengths[i]; j++)
             {
                 Node elem = mem_car(temp);
@@ -1810,7 +1810,7 @@ static Result prim_crossmap(Evaluator *eval, int argc, Value *args)
                 {
                     all_elements[i][j] = value_list(elem);
                 }
-                temp = mem_cdr(temp);
+                temp = mem_next_cell(temp);
             }
         }
     }

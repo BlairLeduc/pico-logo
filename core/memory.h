@@ -241,6 +241,19 @@ extern "C"
     // Check if a node is the newline marker.
     bool mem_is_newline(Node n);
 
+    // A newline marker is layout, never an element: it records where the
+    // source broke a line so `po` and `save` can reproduce it. Every reader
+    // of a list's elements walks the spine with these two helpers, so a list
+    // carrying layout counts, indexes and compares like the same list written
+    // on one line (see B9 in docs/bugs.md).
+    //
+    //     for (Node n = mem_first_cell(list); !mem_is_nil(n); n = mem_next_cell(n))
+    //
+    // mem_first_cell skips leading markers; mem_next_cell advances one element
+    // and skips the markers that follow it.
+    Node mem_first_cell(Node list);
+    Node mem_next_cell(Node cell);
+
     // Get the string content of a word node.
     // Returns NULL if node is not a word.
     // The returned pointer is valid until the next GC.

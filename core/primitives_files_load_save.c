@@ -363,7 +363,7 @@ static Result prim_savel(Evaluator *eval, int argc, Value *args)
     }
     else if (value_is_list(args[0]))
     {
-        Node curr = args[0].as.node;
+        Node curr = mem_first_cell(args[0].as.node);
         while (!mem_is_nil(curr))
         {
             Node elem = mem_car(curr);
@@ -375,7 +375,7 @@ static Result prim_savel(Evaluator *eval, int argc, Value *args)
                     return result_error_arg(ERR_DONT_KNOW_HOW, name, NULL);
                 }
             }
-            curr = mem_cdr(curr);
+            curr = mem_next_cell(curr);
         }
     }
     else
@@ -407,7 +407,7 @@ static Result prim_savel(Evaluator *eval, int argc, Value *args)
     }
     else if (value_is_list(args[0]))
     {
-        Node curr = args[0].as.node;
+        Node curr = mem_first_cell(args[0].as.node);
         while (!mem_is_nil(curr))
         {
             Node elem = mem_car(curr);
@@ -421,7 +421,7 @@ static Result prim_savel(Evaluator *eval, int argc, Value *args)
                     save_output(NULL, "\n");
                 }
             }
-            curr = mem_cdr(curr);
+            curr = mem_next_cell(curr);
         }
     }
 

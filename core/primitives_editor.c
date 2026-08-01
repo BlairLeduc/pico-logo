@@ -413,7 +413,7 @@ static Result prim_edit(Evaluator *eval, int argc, Value *args)
     else if (value_is_list(args[0]))
     {
         // List of procedure names
-        Node curr = args[0].as.node;
+        Node curr = mem_first_cell(args[0].as.node);
         while (!mem_is_nil(curr))
         {
             Node elem = mem_car(curr);
@@ -465,7 +465,7 @@ static Result prim_edit(Evaluator *eval, int argc, Value *args)
                     }
                 }
             }
-            curr = mem_cdr(curr);
+            curr = mem_next_cell(curr);
         }
     }
     else
@@ -505,7 +505,7 @@ static Result prim_edn(Evaluator *eval, int argc, Value *args)
     else if (value_is_list(args[0]))
     {
         // List of variable names
-        Node curr = args[0].as.node;
+        Node curr = mem_first_cell(args[0].as.node);
         while (!mem_is_nil(curr))
         {
             Node elem = mem_car(curr);
@@ -523,7 +523,7 @@ static Result prim_edn(Evaluator *eval, int argc, Value *args)
                     return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
                 }
             }
-            curr = mem_cdr(curr);
+            curr = mem_next_cell(curr);
         }
     }
     else

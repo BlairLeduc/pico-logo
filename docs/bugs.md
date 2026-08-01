@@ -23,7 +23,6 @@ edge case)
 | ID | Bug | Area | Severity | Found | Status |
 |---|---|---|---|---|---|
 | [B6](#b6--penreverse-ignores-pen-size-always-1-px) | `penreverse` ignores pen size (always 1 px) | graphics | low | 2026-07-18 | won't fix (documented) |
-| [B9](#b9--text-returns-newline-markers-as-ordinary-list-elements) | `text` returns newline markers as ordinary list elements | workspace/format | medium | 2026-07-31 | open |
 
 ### B6 — `penreverse` ignores pen size (always 1 px)
 
@@ -35,51 +34,13 @@ pixels twice and speckle the line. Thick reverse drawing is therefore left at
   only the pixels the previous stamp did not cover, or fill per-scanline spans.
 - **Found:** 2026-07-18, with `setpensize` / `pensize`.
 
-### B9 — `text` returns newline markers as ordinary list elements
-
-Line breaks inside a procedure body are stored as an invisible newline-marker
-atom (`mem_newline_marker`, `\x01`). `prim_text` returns the body unchanged, so
-those markers count as list elements even though nothing prints them. A program
-that inspects or edits procedure text therefore gets a length that depends on
-the source layout:
-
-```
-to mlb :n
-if :n > 0 [
-print :n
-print 1
-]
-end
-show count item 5 item 2 text "mlb    ; 7
-```
-
-against `4` for the same body written on one line. `show` and `po` render the
-two identically, so the discrepancy is invisible until something counts.
-
-Scope, verified against `./build-host/logo` on 2026-07-31:
-
-- Multi-line `[...]` bodies have always done this — the markers sit inside the
-  nested list (`parse_bracket_contents`).
-- Multi-line `(...)` expressions do it too since B1 was fixed, where the
-  markers sit at the body-line level.
-- `text` → `define` round-trips correctly and keeps the layout; only element
-  counting and indexing are affected.
-
-- **Workaround:** none needed for round-tripping; a program that walks a body
-  line must skip elements for which the marker is `\x01`.
-- **Fix:** decide first whether markers should be invisible to `count` / `item`
-  generally, or excluded from `text` with the layout carried elsewhere. The
-  second must not regress `po` / `save` layout or the `text` → `define` round
-  trip. Whatever is chosen has to cover the bracket and paren cases together.
-- **Found:** 2026-07-31, raised by the Codex review on PR #127 (the B1 fix) and
-  confirmed to predate it.
-
 ---
 
 ## Fixed
 
 | Date | Bug | Area | Fix | Ref |
 |---|---|---|---|---|
+| 2026-08-01 | Newline markers count as list elements (B9) | workspace/format | The reported symptom — `count item 5 item 2 text "mlb` giving 7 against 4 for the same body on one line — was one route into a wider defect: a multi-line `[...]` literal used as *data* carries the markers too, so `to lit output [` / `a` / `b` / `]` / `end` made `count lit` output 5. Fixing `text` alone would have left that reachable. The markers stay where they are (so `po`, `save` and `edit` still reproduce the layout exactly, and `text` → `define` still round-trips it), and the invariant is now that a marker is layout, never an element: every reader of a list's elements walks the spine with the new `mem_first_cell` / `mem_next_cell` helpers, which skip markers. That covers `first`/`last`/`butfirst`/`butlast`/`item`/`count`/`empty?`/`replace`/`member`/`pick`/`reverse`/`shuffle`/`remove`/`remdup`/`lput`/`sentence`/`.setfirst`/`.setbf`/`.setitem`, `equal?` and `value_to_string` in `value.c`, the `apply`/`foreach`/`map`/`map.se`/`filter`/`find`/`reduce`/`crossmap` cursors and their lambda-spec parser, `define`'s parameter and body walk, `for`'s control list, `local`'s name list, the `po`/`pot`/`erase`/`trace`/`step`/`save`/`edit` name lists, `json.get`/`json.stringify`, `standout`, and the `setdate`/`settime`/`putsh`/turtle-set/voice-set/`play` readers. Constructors that copy element-wise (`sentence`, `lput`, `map.se`) now drop the markers from what they build. The bracket and paren cases are covered together, since both go through the same readers | |
 | 2026-08-01 | A user-procedure call as the left operand of a parenthesised expression corrupts the parse (B7) | parser/eval | The grouping-paren handler in `eval_primary` never handled deferral: when the expression inside `(...)` deferred a user proc call to the trampoline, the handler carried on synchronously and consumed a `)` that had not been reached yet. The old workaround — the deferral branch eating the following `)` itself — made `(f :x) + (g :y)` work by cancelling that mistake out, but left the operands re-associated (`(item 1 [5 6]) + (3 * (f 2))` gave 21, not 11) or a stray `)` in the stream (`pr ((f 2) * 3)` printed 6 then raised `) without (`) whenever the paren was a grouping one. Deferral is now honoured: a new `OP_PAREN_GROUP` op parks the closing `)` on the op stack and consumes it once the group has its value, and the deferral branch leaves the `)` alone. Getting the continuation into the right stack slot needed `op_stack_insert` in place of `op_stack_swap_top`: swapping only reaches one op down, so a continuation landed *inside* the ops a nested deferral had pushed and results flowed back out of order. `eval_expr_bp` inserts its `OP_EXPR_EVAL` the same way. `eval->paren_depth` is still maintained but remains write-only — nothing in the interpreter reads it | |
 | 2026-08-01 | `name_buf[64]` identifier truncation aliasing (B5) | eval | The evaluator copied a word token into a 64-byte stack buffer before looking it up, so everything past the 63rd character was thrown away. The reported aliasing is real — a call to `<63 chars>.other` ran a procedure actually named `<63 chars>` — but the commoner symptom was worse: a procedure whose name is 64 characters or longer was stored under its full name (`proc_define_from_text` interns the whole word) and looked up truncated, so it could be defined but never called, and its recursive calls also fell out of tail-call detection. Fixed by removing the buffer: new `primitive_find_n` / `proc_find_n` take a pointer and a length and match only a stored name of exactly that length, and the three lookup sites (`eval_expr.c` word case, `eval_expr.c` `(proc …)` paren-call case, `eval_steps.c` tail-call lookahead) pass the token directly. `primitive_find` / `proc_find` are now one-line wrappers, so the C-string callers are unchanged. `repl.c` keeps its own `name_buf[64]`, but only to check a `to` line's name against the primitive table — no primitive name is 63 characters, so a truncated name cannot false-match there | |
 | 2026-07-31 | `parse_list` silently drops tokens (B4) | parser | `parse_list` (`core/eval_expr.c`) had two silent-drop paths. The one the review named — the `else` that advanced past an unrecognised token — turned out to be unreachable: the token kinds it can receive are exhaustively handled above it, `TOKEN_COMMENT` never reaches an evaluator (no eval lexer sets `preserve_comments`, and `classify_word` never produces it), and `TOKEN_ERROR` is never produced at all (`make_error_token` is dead code). The *reachable* drop was the sibling `TOKEN_EOF` case, which ended the list quietly, so an unterminated `[` silently truncated it: `show [a b` printed `[a b]` and `show [a ; b]` printed `[a]` — the comment runs to end of line and takes the `]` with it, exactly the "a typo silently changes the list's contents" symptom. `parse_list` now returns an error code instead of a bool: new error 72 `[ without ]` at end of input, `ERR_DONT_KNOW_WHAT` for an unrecognised token, `ERR_OUT_OF_SPACE` unchanged. Two test inputs relied on the old tolerance (`define "inner [[] [run [throw "toplevel]]` is short one `]`; `define "test.comment [[] [print 42 ; trailing comment]]` has both closers inside the comment) and were corrected. No shipped `.logo` program has an unbalanced top-level line; procedure bodies go through `parse_bracket_contents`, which is untouched | |

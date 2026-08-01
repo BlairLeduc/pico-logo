@@ -398,7 +398,7 @@ static Result prim_json_get(Evaluator *eval, int argc, Value *args)
     size_t text_len = mem_word_len(args[0].as.node);
     Scan s = { text, text + text_len };
 
-    for (Node step = args[1].as.node; !mem_is_nil(step); step = mem_cdr(step))
+    for (Node step = mem_first_cell(args[1].as.node); !mem_is_nil(step); step = mem_next_cell(step))
     {
         Node step_node = mem_car(step);
         if (!mem_is_word(step_node))
@@ -725,7 +725,7 @@ static void render_value(StrBuf *b, Value v)
     }
 
     // List: tagged object, tagged array, empty (null), or plain array.
-    Node list = v.as.node;
+    Node list = mem_first_cell(v.as.node);
     if (mem_is_nil(list))
     {
         sb_put(b, "null", 4);
@@ -737,10 +737,10 @@ static void render_value(StrBuf *b, Value v)
     {
         sb_putc(b, '{');
         bool first = true;
-        for (Node p = mem_cdr(list); !mem_is_nil(p);)
+        for (Node p = mem_next_cell(list); !mem_is_nil(p);)
         {
             Node key = mem_car(p);
-            Node rest = mem_cdr(p);
+            Node rest = mem_next_cell(p);
             Node val = mem_is_nil(rest) ? NODE_NIL : mem_car(rest);
             if (!first)
                 sb_putc(b, ',');
@@ -753,7 +753,7 @@ static void render_value(StrBuf *b, Value v)
                 render_node(b, key);
             sb_putc(b, ':');
             render_node(b, val);
-            p = mem_is_nil(rest) ? rest : mem_cdr(rest);
+            p = mem_is_nil(rest) ? rest : mem_next_cell(rest);
         }
         sb_putc(b, '}');
         return;
@@ -762,7 +762,7 @@ static void render_value(StrBuf *b, Value v)
     bool tagged_array = node_has_tag(head, JSON_ARR_TAG);
     sb_putc(b, '[');
     bool first = true;
-    for (Node p = tagged_array ? mem_cdr(list) : list; !mem_is_nil(p); p = mem_cdr(p))
+    for (Node p = tagged_array ? mem_next_cell(list) : list; !mem_is_nil(p); p = mem_next_cell(p))
     {
         if (!first)
             sb_putc(b, ',');

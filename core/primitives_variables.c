@@ -58,7 +58,7 @@ static Result prim_local(Evaluator *eval, int argc, Value *args)
     else if (value_is_list(args[0]))
     {
         // List of names
-        Node node = args[0].as.node;
+        Node node = mem_first_cell(args[0].as.node);
         while (!mem_is_nil(node))
         {
             Node element = mem_car(node);
@@ -70,7 +70,7 @@ static Result prim_local(Evaluator *eval, int argc, Value *args)
                     return result_error(ERR_OUT_OF_SPACE);
                 }
             }
-            node = mem_cdr(node);
+            node = mem_next_cell(node);
         }
     }
     else

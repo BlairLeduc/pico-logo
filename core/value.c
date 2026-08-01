@@ -117,8 +117,8 @@ bool values_equal(Value a, Value b)
     else if (value_is_list(a))
     {
         // Compare lists element by element
-        Node la = a.as.node;
-        Node lb = b.as.node;
+        Node la = mem_first_cell(a.as.node);
+        Node lb = mem_first_cell(b.as.node);
         while (!mem_is_nil(la) && !mem_is_nil(lb))
         {
             Node car_a = mem_car(la);
@@ -129,8 +129,8 @@ bool values_equal(Value a, Value b)
             {
                 return false;
             }
-            la = mem_cdr(la);
-            lb = mem_cdr(lb);
+            la = mem_next_cell(la);
+            lb = mem_next_cell(lb);
         }
         return mem_is_nil(la) && mem_is_nil(lb);
     }
@@ -234,7 +234,7 @@ static bool extract_number_list(Value list, float *out, size_t count, Result *er
         return false;
     }
 
-    Node node = list.as.node;
+    Node node = mem_first_cell(list.as.node);
     for (size_t i = 0; i < count; i++)
     {
         if (mem_is_nil(node))
@@ -251,7 +251,7 @@ static bool extract_number_list(Value list, float *out, size_t count, Result *er
             return false;
         }
 
-        node = mem_cdr(node);
+        node = mem_next_cell(node);
     }
     return true;
 }
@@ -296,7 +296,8 @@ static void list_to_buf(Node node, char *buf, int *pos, int max)
     
     buf[(*pos)++] = '[';
     bool first = true;
-    
+
+    node = mem_first_cell(node);
     while (!mem_is_nil(node) && *pos < max - 2)
     {
         if (!first && *pos < max - 1) buf[(*pos)++] = ' ';
@@ -315,7 +316,7 @@ static void list_to_buf(Node node, char *buf, int *pos, int max)
         {
             list_to_buf(car, buf, pos, max);
         }
-        node = mem_cdr(node);
+        node = mem_next_cell(node);
     }
     
     if (*pos < max - 1) buf[(*pos)++] = ']';

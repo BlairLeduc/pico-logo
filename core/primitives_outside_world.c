@@ -343,6 +343,7 @@ static size_t standout_value(char *buffer, size_t bufsize, size_t pos, Value val
 static size_t standout_list_contents(char *buffer, size_t bufsize, size_t pos, Node node)
 {
     bool first = true;
+    node = mem_first_cell(node);
     while (!mem_is_nil(node) && pos < bufsize - 1)
     {
         if (!first)
@@ -374,7 +375,7 @@ static size_t standout_list_contents(char *buffer, size_t bufsize, size_t pos, N
                 buffer[pos++] = (char)(']' | 0x80);
             }
         }
-        node = mem_cdr(node);
+        node = mem_next_cell(node);
     }
     return pos;
 }
