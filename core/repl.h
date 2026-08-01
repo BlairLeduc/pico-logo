@@ -79,6 +79,23 @@ bool repl_line_starts_with_to(const char *line);
 // Check if a line is just "end" (case-insensitive)
 bool repl_line_is_end(const char *line);
 
+// Find the bare `end` token that closes a procedure definition on this line.
+// Returns its offset in the line, or -1 if the line does not close one.
+int repl_find_end_token(const char *line);
+
+// Outcome of feeding one line to a procedure definition being accumulated
+typedef enum {
+    PROC_DEF_CONTINUE,  // Line appended; the definition is still open
+    PROC_DEF_COMPLETE,  // Definition closed; the buffer holds its full text
+    PROC_DEF_OVERFLOW,  // Line does not fit; the buffer has been discarded
+} ProcDefStatus;
+
+// Append one line to the "to...end" definition accumulating in buffer.
+// len is the length used so far, updated in place; capacity is the whole
+// buffer, of which room for the closing "end" is always kept in reserve.
+ProcDefStatus repl_proc_def_append(char *buffer, size_t capacity, size_t *len,
+                                   const char *line);
+
 // Extract procedure name from a "to" line into buffer
 // Returns pointer to the name in buffer, or NULL if no valid name found
 const char *repl_extract_proc_name(const char *line, char *buffer, size_t buffer_size);

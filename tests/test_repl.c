@@ -87,6 +87,65 @@ void test_repl_line_is_end_false_cases(void)
     TEST_ASSERT_FALSE(repl_line_is_end("end; comment"));
 }
 
+void test_repl_find_end_token_closes_definition(void)
+{
+    TEST_ASSERT_EQUAL_INT(0, repl_find_end_token("end"));
+    TEST_ASSERT_EQUAL_INT(2, repl_find_end_token("  END  "));
+    TEST_ASSERT_EQUAL_INT(0, repl_find_end_token("end ; trailing comment"));
+    TEST_ASSERT_EQUAL_INT(12, repl_find_end_token("to f  pr 1  end"));
+    TEST_ASSERT_EQUAL_INT(16, repl_find_end_token("to f  pr [a b]  end"));
+    TEST_ASSERT_EQUAL_INT(20, repl_find_end_token("to f  pr (sum 1 2)  end"));
+    // A bracket opened on an earlier line closes at depth 0 on this one
+    TEST_ASSERT_EQUAL_INT(9, repl_find_end_token("  \"a \"b) end"));
+}
+
+void test_repl_find_end_token_leaves_ordinary_words_alone(void)
+{
+    TEST_ASSERT_EQUAL_INT(-1, repl_find_end_token(""));
+    TEST_ASSERT_EQUAL_INT(-1, repl_find_end_token("ending"));
+    TEST_ASSERT_EQUAL_INT(-1, repl_find_end_token("friend"));
+    // `end` only closes a definition as the last token, outside brackets
+    TEST_ASSERT_EQUAL_INT(-1, repl_find_end_token("pr [the end]"));
+    TEST_ASSERT_EQUAL_INT(-1, repl_find_end_token("pr \"end"));
+    TEST_ASSERT_EQUAL_INT(-1, repl_find_end_token("pr :end"));
+    TEST_ASSERT_EQUAL_INT(-1, repl_find_end_token("end something"));
+}
+
+void test_repl_proc_def_append_one_line_definition(void)
+{
+    char buffer[64];
+    size_t len = 0;
+
+    TEST_ASSERT_EQUAL(PROC_DEF_COMPLETE,
+                      repl_proc_def_append(buffer, sizeof(buffer), &len, "to f  pr 1  end"));
+    TEST_ASSERT_EQUAL_STRING("to f  pr 1\nend", buffer);
+}
+
+void test_repl_proc_def_append_multi_line_definition(void)
+{
+    char buffer[64];
+    size_t len = 0;
+
+    TEST_ASSERT_EQUAL(PROC_DEF_CONTINUE,
+                      repl_proc_def_append(buffer, sizeof(buffer), &len, "to f"));
+    TEST_ASSERT_EQUAL(PROC_DEF_CONTINUE,
+                      repl_proc_def_append(buffer, sizeof(buffer), &len, "pr 1"));
+    TEST_ASSERT_EQUAL(PROC_DEF_COMPLETE,
+                      repl_proc_def_append(buffer, sizeof(buffer), &len, "  end  "));
+    // The `end` line contributes no body line of its own
+    TEST_ASSERT_EQUAL_STRING("to f\npr 1\nend", buffer);
+}
+
+void test_repl_proc_def_append_overflow_discards_buffer(void)
+{
+    char buffer[16];
+    size_t len = 0;
+
+    TEST_ASSERT_EQUAL(PROC_DEF_OVERFLOW,
+                      repl_proc_def_append(buffer, sizeof(buffer), &len, "to averylongname :x"));
+    TEST_ASSERT_EQUAL_size_t(0, len);
+}
+
 void test_repl_extract_proc_name_basic(void)
 {
     char buffer[64];
@@ -598,6 +657,63 @@ void test_repl_run_proc_def_in_pause(void)
     TEST_ASSERT_EQUAL_STRING("99\n", output_buffer);
 }
 
+// A whole definition may be written on one line (B2). The `end` closes it
+// there, so a following definition is not swallowed into the first one.
+void test_repl_run_define_procedure_one_line(void)
+{
+    ReplState state;
+
+    set_mock_input("to square  print 42  end\nto cube  print 8  end\n");
+
+    repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
+    Result r = repl_run(&state);
+    repl_cleanup(&state);
+
+    TEST_ASSERT_EQUAL(RESULT_EOF, r.status);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "square defined") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "cube defined") != NULL);
+
+    reset_output();
+    run_string("square cube");
+    TEST_ASSERT_EQUAL_STRING("42\n8\n", output_buffer);
+}
+
+// `end` only closes a definition when it is the last token on the line, so it
+// stays an ordinary word inside a list or after a quote.
+void test_repl_run_end_inside_line_is_not_a_terminator(void)
+{
+    ReplState state;
+
+    set_mock_input("to f  print [the end]  print \"end  end\n");
+
+    repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
+    Result r = repl_run(&state);
+    repl_cleanup(&state);
+
+    TEST_ASSERT_EQUAL(RESULT_EOF, r.status);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "f defined") != NULL);
+
+    reset_output();
+    run_string("f");
+    TEST_ASSERT_EQUAL_STRING("the end\nend\n", output_buffer);
+}
+
+// The inline `end` also closes a definition opened on an earlier line.
+void test_repl_run_multi_line_def_with_inline_end(void)
+{
+    ReplState state;
+
+    set_mock_input("to greet\nprint \"hi  end\nprint 1\n");
+
+    repl_init(&state, &mock_io, REPL_FLAGS_FULL, "");
+    Result r = repl_run(&state);
+    repl_cleanup(&state);
+
+    TEST_ASSERT_EQUAL(RESULT_EOF, r.status);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "greet defined") != NULL);
+    TEST_ASSERT_TRUE(strstr(output_buffer, "1\n") != NULL);
+}
+
 //==========================================================================
 // Bracket continuation tests
 //==========================================================================
@@ -706,6 +822,11 @@ int main(void)
     RUN_TEST(test_repl_line_is_end_basic);
     RUN_TEST(test_repl_line_is_end_with_whitespace);
     RUN_TEST(test_repl_line_is_end_false_cases);
+    RUN_TEST(test_repl_find_end_token_closes_definition);
+    RUN_TEST(test_repl_find_end_token_leaves_ordinary_words_alone);
+    RUN_TEST(test_repl_proc_def_append_one_line_definition);
+    RUN_TEST(test_repl_proc_def_append_multi_line_definition);
+    RUN_TEST(test_repl_proc_def_append_overflow_discards_buffer);
     RUN_TEST(test_repl_extract_proc_name_basic);
     RUN_TEST(test_repl_extract_proc_name_with_inputs);
     RUN_TEST(test_repl_extract_proc_name_with_whitespace);
@@ -748,6 +869,9 @@ int main(void)
     RUN_TEST(test_repl_run_define_procedure_prompt_changes);
     RUN_TEST(test_repl_run_define_primitive_error);
     RUN_TEST(test_repl_run_proc_def_in_pause);
+    RUN_TEST(test_repl_run_define_procedure_one_line);
+    RUN_TEST(test_repl_run_end_inside_line_is_not_a_terminator);
+    RUN_TEST(test_repl_run_multi_line_def_with_inline_end);
     
     // Bracket continuation tests
     RUN_TEST(test_repl_run_bracket_continuation);

@@ -492,6 +492,27 @@ void test_edit_undefined_procedure_accept_creates_procedure(void)
     TEST_ASSERT_TRUE(proc_exists("newproc"));
 }
 
+// A blank line inside a definition is part of the procedure's layout and must
+// survive the edit, so the editor keeps handling it separately from the shared
+// repl_proc_def_append (which never sees an empty line).
+void test_edit_preserves_blank_line_inside_definition(void)
+{
+    mock_device_clear_editor();
+    mock_device_set_editor_result(LOGO_EDITOR_ACCEPT);
+    mock_device_set_editor_content("to spaced\nprint 1\n\nprint 2\nend\n");
+
+    Result r = run_string("(edit)");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_TRUE(proc_exists("spaced"));
+
+    // Re-opening the procedure shows the blank line still in the body
+    mock_device_clear_editor();
+    mock_device_set_editor_result(LOGO_EDITOR_CANCEL);
+    run_string("edit \"spaced");
+    TEST_ASSERT_EQUAL_STRING("to spaced\n  print 1\n  \n  print 2\nend\n",
+                             mock_device_get_editor_input());
+}
+
 void test_edit_cancel_does_nothing(void)
 {
     const char *params[] = {};
@@ -1176,6 +1197,7 @@ int main(void)
     RUN_TEST(test_edit_undefined_procedure_opens_with_template);
     RUN_TEST(test_edit_list_with_undefined_procedure_opens_with_template);
     RUN_TEST(test_edit_undefined_procedure_accept_creates_procedure);
+    RUN_TEST(test_edit_preserves_blank_line_inside_definition);
     RUN_TEST(test_edit_cancel_does_nothing);
     RUN_TEST(test_edit_accept_redefines_procedure);
     RUN_TEST(test_ed_abbreviation);

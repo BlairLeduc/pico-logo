@@ -238,6 +238,42 @@ void test_load_defines_procedure(void)
     TEST_ASSERT_EQUAL_FLOAT(100.0, val.as.number);
 }
 
+// B2: a file may write a whole definition on one line. The inline `end` closes
+// it, so the procedures that follow are not absorbed into the first one.
+void test_load_defines_one_line_procedures(void)
+{
+    mock_fs_create_file("oneline.logo",
+                        "to setone  make \"a 1  end\n"
+                        "to settwo  make \"b 2  end\n"
+                        "setone settwo\n");
+
+    Result r = run_string("load \"oneline.logo");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    TEST_ASSERT_TRUE(proc_exists("setone"));
+    TEST_ASSERT_TRUE(proc_exists("settwo"));
+
+    Value val;
+    TEST_ASSERT_TRUE(var_get("a", &val));
+    TEST_ASSERT_EQUAL_FLOAT(1.0, val.as.number);
+    TEST_ASSERT_TRUE(var_get("b", &val));
+    TEST_ASSERT_EQUAL_FLOAT(2.0, val.as.number);
+}
+
+// `end` inside a list is an ordinary word, not a terminator.
+void test_load_end_inside_list_does_not_close_definition(void)
+{
+    mock_fs_create_file("endword.logo", "to f  make \"w [the end]  end\nf\n");
+
+    Result r = run_string("load \"endword.logo");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    TEST_ASSERT_TRUE(proc_exists("f"));
+    reset_output();
+    run_string("show :w");
+    TEST_ASSERT_EQUAL_STRING("[the end]\n", output_buffer);
+}
+
 // A file may call a procedure it has just defined. prim_load builds its own
 // Evaluator, and eval_init leaves the frame stack NULL for the caller to set;
 // omitting eval_set_frames made every such call dereference NULL and crash.
@@ -772,6 +808,8 @@ int main(void)
     // Load/Save tests
     RUN_TEST(test_load_executes_file);
     RUN_TEST(test_load_defines_procedure);
+    RUN_TEST(test_load_defines_one_line_procedures);
+    RUN_TEST(test_load_end_inside_list_does_not_close_definition);
     RUN_TEST(test_load_calls_procedure_defined_in_same_file);
     RUN_TEST(test_load_calls_nested_procedures);
     RUN_TEST(test_load_runs_startup_from_file);

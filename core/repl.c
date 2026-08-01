@@ -159,6 +159,69 @@ bool repl_line_is_end(const char *line)
     return *line == '\0';
 }
 
+// A definition may be written entirely on one line (`to f  pr [hi]  end`), so
+// `end` is recognised wherever it is the *last* token of the line, outside any
+// brackets or parentheses. Requiring it to be last is what keeps `pr [the end]`
+// and `pr "end` from closing the definition, and it guarantees that closing one
+// never discards anything else on the line.
+int repl_find_end_token(const char *line)
+{
+    Lexer lexer;
+    lexer_init(&lexer, line);
+
+    int depth = 0;
+    const char *found = NULL;
+
+    for (Token t = lexer_next_token(&lexer); t.type != TOKEN_EOF; t = lexer_next_token(&lexer))
+    {
+        if (t.type == TOKEN_LEFT_BRACKET || t.type == TOKEN_LEFT_PAREN)
+            depth++;
+        else if ((t.type == TOKEN_RIGHT_BRACKET || t.type == TOKEN_RIGHT_PAREN) && depth > 0)
+            depth--;  // A bracket opened on an earlier line closes at depth 0
+
+        bool is_end = (depth == 0 && t.type == TOKEN_WORD && t.length == 3 &&
+                       strncasecmp(t.start, "end", 3) == 0);
+        found = is_end ? t.start : NULL;
+    }
+
+    return found ? (int)(found - line) : -1;
+}
+
+ProcDefStatus repl_proc_def_append(char *buffer, size_t capacity, size_t *len,
+                                   const char *line)
+{
+    int end_offset = repl_find_end_token(line);
+    size_t body_len = (end_offset >= 0) ? (size_t)end_offset : strlen(line);
+
+    // Whitespace sitting in front of an inline `end` is not a body line
+    while (end_offset >= 0 && body_len > 0 && isspace((unsigned char)line[body_len - 1]))
+        body_len--;
+
+    // Room for the body line, its newline, and the closing "end" plus its NUL
+    if (*len + body_len + 1 + 4 > capacity)
+    {
+        *len = 0;
+        return PROC_DEF_OVERFLOW;
+    }
+
+    if (body_len > 0)
+    {
+        memcpy(buffer + *len, line, body_len);
+        buffer[*len + body_len] = '\n';
+        *len += body_len + 1;
+    }
+
+    if (end_offset < 0)
+    {
+        return PROC_DEF_CONTINUE;
+    }
+
+    memcpy(buffer + *len, "end", 3);
+    *len += 3;
+    buffer[*len] = '\0';
+    return PROC_DEF_COMPLETE;
+}
+
 const char *repl_extract_proc_name(const char *line, char *buffer, size_t buffer_size)
 {
     // Skip leading whitespace
@@ -439,39 +502,23 @@ Result repl_run(ReplState *state)
                 continue;
             }
             
-            // Start collecting procedure definition
+            // Start collecting the definition. The "to" line goes through the
+            // same append as the rest, since it may close the definition too.
             state->in_procedure_def = true;
             state->proc_len = 0;
-            
-            // Copy the "to" line to buffer with newline
-            size_t line_len = strlen(state->line);
-            if (line_len + 2 <= REPL_MAX_PROC_BUFFER - 10)
-            {
-                memcpy(state->proc_buffer, state->line, line_len);
-                state->proc_buffer[line_len] = '\n';
-                state->proc_len = line_len + 1;
-            }
-            else
-            {
-                logo_io_write_error_line(state->io, "Procedure too long");
-                state->in_procedure_def = false;
-                state->proc_len = 0;
-            }
-            continue;
         }
 
         if (state->in_procedure_def)
         {
-            if (repl_line_is_end(state->line))
+            ProcDefStatus status = repl_proc_def_append(state->proc_buffer, REPL_MAX_PROC_BUFFER,
+                                                        &state->proc_len, state->line);
+            if (status == PROC_DEF_OVERFLOW)
             {
-                // Complete the procedure definition
-                if (state->proc_len + 4 < REPL_MAX_PROC_BUFFER)
-                {
-                    memcpy(state->proc_buffer + state->proc_len, "end", 3);
-                    state->proc_len += 3;
-                    state->proc_buffer[state->proc_len] = '\0';
-                }
-                
+                logo_io_write_error_line(state->io, "Procedure too long");
+                state->in_procedure_def = false;
+            }
+            else if (status == PROC_DEF_COMPLETE)
+            {
                 state->in_procedure_def = false;
 
                 // Parse and define the procedure
@@ -483,29 +530,12 @@ Result repl_run(ReplState *state)
                 else if (r.status == RESULT_OK)
                 {
                     char buf[256];
-                    snprintf(buf, sizeof(buf), "%s defined", 
+                    snprintf(buf, sizeof(buf), "%s defined",
                              r.value.as.node ? mem_word_ptr(r.value.as.node) : "procedure");
                     logo_io_write_line(state->io, buf);
                 }
-                
+
                 state->proc_len = 0;
-            }
-            else
-            {
-                // Append line to procedure buffer with newline
-                size_t line_len = strlen(state->line);
-                if (state->proc_len + line_len + 2 <= REPL_MAX_PROC_BUFFER - 10)
-                {
-                    memcpy(state->proc_buffer + state->proc_len, state->line, line_len);
-                    state->proc_buffer[state->proc_len + line_len] = '\n';
-                    state->proc_len += line_len + 1;
-                }
-                else
-                {
-                    logo_io_write_error_line(state->io, "Procedure too long");
-                    state->in_procedure_def = false;
-                    state->proc_len = 0;
-                }
             }
             continue;
         }
