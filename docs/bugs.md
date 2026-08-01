@@ -22,20 +22,10 @@ edge case)
 
 | ID | Bug | Area | Severity | Found | Status |
 |---|---|---|---|---|---|
-| [B4](#b4--parse_list-silently-drops-unknown-tokens) | `parse_list` silently drops unknown tokens | parser | medium | 2026-07-02 | open |
 | [B5](#b5--name_buf64-identifier-truncation-aliasing) | `name_buf[64]` identifier truncation aliasing | lexer | low | 2026-07-02 | open |
 | [B6](#b6--penreverse-ignores-pen-size-always-1-px) | `penreverse` ignores pen size (always 1 px) | graphics | low | 2026-07-18 | won't fix (documented) |
 | [B7](#b7--a-user-procedure-call-as-the-left-operand-of-a-parenthesised-expression-corrupts-the-parse) | A user-procedure call as the left operand of a parenthesised expression corrupts the parse | parser/eval | high | 2026-07-28 | open |
 | [B9](#b9--text-returns-newline-markers-as-ordinary-list-elements) | `text` returns newline markers as ordinary list elements | workspace/format | medium | 2026-07-31 | open |
-
-### B4 — `parse_list` silently drops unknown tokens
-
-Tokens the parser does not recognise inside a `[...]` literal are discarded
-without an error, so a typo silently changes the list's contents.
-
-- **Fix:** consider erroring inside `[...]` literals rather than dropping.
-- **Found:** 2026-07-02, in the code review that produced PR #86
-  ([`code-review-2026-07-02.md`](code-review-2026-07-02.md)).
 
 ### B5 — `name_buf[64]` identifier truncation aliasing
 
@@ -161,6 +151,7 @@ Scope, verified against `./build-host/logo` on 2026-07-31:
 
 | Date | Bug | Area | Fix | Ref |
 |---|---|---|---|---|
+| 2026-07-31 | `parse_list` silently drops tokens (B4) | parser | `parse_list` (`core/eval_expr.c`) had two silent-drop paths. The one the review named — the `else` that advanced past an unrecognised token — turned out to be unreachable: the token kinds it can receive are exhaustively handled above it, `TOKEN_COMMENT` never reaches an evaluator (no eval lexer sets `preserve_comments`, and `classify_word` never produces it), and `TOKEN_ERROR` is never produced at all (`make_error_token` is dead code). The *reachable* drop was the sibling `TOKEN_EOF` case, which ended the list quietly, so an unterminated `[` silently truncated it: `show [a b` printed `[a b]` and `show [a ; b]` printed `[a]` — the comment runs to end of line and takes the `]` with it, exactly the "a typo silently changes the list's contents" symptom. `parse_list` now returns an error code instead of a bool: new error 72 `[ without ]` at end of input, `ERR_DONT_KNOW_WHAT` for an unrecognised token, `ERR_OUT_OF_SPACE` unchanged. Two test inputs relied on the old tolerance (`define "inner [[] [run [throw "toplevel]]` is short one `]`; `define "test.comment [[] [print 42 ; trailing comment]]` has both closers inside the comment) and were corrected. No shipped `.logo` program has an unbalanced top-level line; procedure bodies go through `parse_bracket_contents`, which is untouched | |
 | 2026-07-31 | Demons fire during `load` (B3) | demons | `load` evaluates each line through `eval_instruction`, which polls demons, so a `when` armed by a file ran its action while the rest of the file was still being read — inside `load`'s reentrancy guard, where the action could neither `load` nor call a procedure defined further down the same file. New `demons_suspend` / `demons_resume` hold polling off for the duration of the load (checked in `demons_poll` itself, so the device idle loop is covered too); `load` resumes before `startup` runs and polls once on its way out, so an armed demon still gets its first chance promptly. Resume clears the motion-clock baseline like `thaw`, so a moving turtle does not jump by the load's duration. No `.logo` file arms a demon at file level — every `when` is inside a procedure — so nothing depended on the old mid-load firing | |
 | 2026-07-31 | Single-line `to … end` definitions are not supported (B2) | loader/REPL | Only a standalone `end` line closed a definition, so `to f  play [c d e]  end` swallowed every procedure that followed until the next lone `end`. New `repl_find_end_token` lexes the line and accepts `end` as the *last* token outside brackets and parens — so `pr [the end]` and `pr "end` stay ordinary words, and closing a definition can never discard anything else on the line. The three copies of the accumulate/close loop (REPL, `load`, editor) were replaced by one shared `repl_proc_def_append`. Reference updated: it required `end` alone on a line while its own examples used one-liners | |
 | 2026-07-31 | Multi-line `(…)` expressions inside a procedure body evaluate to empty (B1) | parser | `proc_define_from_text` split the body on every newline, so `op (list` on its own line evaluated as `(list)`. It now tracks `(` nesting and, while a paren is open, keeps the tokens on the same body line. The break is recorded as a newline marker rather than dropped, so a `;` comment inside the expression still ends at its own source line and `po` reproduces the layout (`core/format.c` renders a top-level marker as a line break, `core/eval_steps.c` skips it when printing a stepped line). `end` is still recognised at line start inside an open paren, so an unbalanced `(` cannot swallow the procedures that follow it | #127 |

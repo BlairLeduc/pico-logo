@@ -82,6 +82,7 @@ extern "C"
     #define ERR_NO_SD_CARD             69
     #define ERR_BACKUP_LOCATION        70
     #define ERR_BACKUP_INVALID         71
+    #define ERR_UNCLOSED_BRACKET       72
 
     // Format an error message from a Result
     // Returns pointer to static buffer - do not free

@@ -7703,6 +7703,17 @@ Unexpected ']'
 Unexpected ')'
 ```
 
+A left bracket that is never closed is an error too. Because a semicolon
+comments out the rest of the line, a closing bracket written after one is not
+seen and the list is left open:
+
+```logo
+?show [a b
+[ without ]
+?show [a ; b]
+[ without ]
+```
+
 ## Quotation Marks and Delimiters 
 
 Normally, you have to put a backslash (\) before the characters `[`,`]`,`(`,`)`, and `\` itself. But the first character after a quotation mark (") does not need to have a backslash preceding it. For example: 
@@ -7888,6 +7899,7 @@ When error 35 ("I don't know how to ...") is reported at the prompt, Logo also s
 |69|There is no SD card
 |70|Backup file must be on the SD card
 |71|Backup file is not valid for this device
+|72|[ without ]
 ||!!! LOGO SYSTEM BUG !!! _Should not occur. Please let me know._
 
 

@@ -392,8 +392,9 @@ void test_comment_with_word(void)
 
 void test_comment_in_procedure(void)
 {
-    // ; should work inside procedures.
-    run_string("define \"test.comment [[] [print 42 ; trailing comment]]");
+    // ; should work inside procedures. The comment runs to end of line, so
+    // the closing brackets have to be on the next line to be seen at all.
+    run_string("define \"test.comment [[] [print 42 ; trailing comment\n]]");
     reset_output();
     run_string("test.comment");
     TEST_ASSERT_EQUAL_STRING("42\n", output_buffer);
