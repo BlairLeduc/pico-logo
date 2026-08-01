@@ -1,7 +1,7 @@
 # GitHub Copilot Instructions
 
-A **Logo interpreter in C (C11)** for three RP2350 boards (Pico 2, Pico 2 W, Pimoroni
-Pico Plus 2 W) on the Pico SDK. Behaviour must match
+A **Logo interpreter in C (C11)** for three RP2350 boards (Pico 2, Pico 2 W, Pico Plus
+2 W) on the Pico SDK. Behaviour must match
 [Pico_Logo_Reference](../reference/Pico_Logo_Reference.md).
 
 Review the diff as given: only concrete problems visible in it, a few high-confidence
@@ -48,23 +48,24 @@ findings over many speculative ones. Never ask the author to run or add tests fi
   under the Pico SDK.
 
 ## What NOT to comment on
-- `repl_proc_def_append` never receives an empty line: the REPL and `load` skip them
-  before definition handling, and the editor appends the newline in its own
-  `is_empty && in_procedure_def` branch. Don't flag it as dropping blank lines.
-- A lone `end` line closes a `to` definition even inside an unclosed `[` or `(` —
-  deliberate (#127), so an unbalanced bracket cannot swallow the procedures after it.
-  The per-line bracket depth in `repl_find_end_token` is intentional.
-- `graphify-out/` is machine-generated and committed as-is; never flag its contents.
-  Its dated snapshots archive the *prior* graph state, so a snapshot's report header
-  trails its directory date by design — not a stale date.
+- `error_format` never passes NULL to `snprintf`: a `%s` template with no `error_proc`
+  or `error_arg` falls back to stripping the placeholder, so `result_error(CODE)` is
+  safe for any code — not UB (ASan/UBSan verified).
+- `repl_proc_def_append` never sees an empty line — the REPL and `load` skip them, the
+  editor appends the newline itself. Not a blank-line bug.
+- A lone `end` closes a `to` definition even inside an unclosed `[` or `(` (#127), so an
+  unbalanced bracket can't swallow later procedures. `repl_find_end_token`'s per-line
+  depth is intentional.
+- `graphify-out/` is machine-generated, committed as-is; never flag its contents. Dated
+  snapshots archive the *prior* state, so a header trailing its directory date is by
+  design.
 - Pure style or formatting that already matches the surrounding code.
 - Pre-existing issues outside the diff.
-- Requests to run/build/add tests before merging — review the diff itself.
 - The wide pen stamps a disc centred on an integer pixel, so its drawn diameter is
   always odd; even pen sizes render one pixel wider by design.
-- `Result.value` sits outside the union; constructors zero-fill unset members, so
+- `Result.value` sits outside the union and constructors zero-fill, so
   `result.value.type` is a valid tag (`VALUE_NONE`) for any status.
-- `parse_voice_set` fills a `MAX_VOICES` array from range-checked, deduplicated values,
-  so its sorted insert cannot overflow.
-- LittleFS restore (`logo_lfs_restore`) is intentionally **sparse**: littlefs replaces
-  the filesystem from the restored superblock and erases free blocks on demand.
+- `parse_voice_set` fills `MAX_VOICES` from range-checked, deduped values; its sorted
+  insert cannot overflow.
+- LittleFS restore (`logo_lfs_restore`) is intentionally **sparse**: littlefs rebuilds
+  from the superblock and erases free blocks on demand.

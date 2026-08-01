@@ -83,8 +83,8 @@ void test_throw_toplevel_in_run_inside_catch(void)
 {
     // throw "toplevel inside a catch should propagate to top level
     // even if there's a catch with a different tag
-    run_string("define \"inner [[] [run [throw \"toplevel]]");
-    run_string("define \"outer [[] [catch \"error [inner]]");
+    run_string("define \"inner [[] [run [throw \"toplevel]]]");
+    run_string("define \"outer [[] [catch \"error [inner]]]");
 
     Result r = run_string("outer");
     TEST_ASSERT_EQUAL(RESULT_THROW, r.status);

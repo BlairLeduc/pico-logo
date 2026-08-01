@@ -577,6 +577,38 @@ void test_paren_user_proc_recursive_count_words(void)
     TEST_ASSERT_EQUAL_FLOAT(4.0f, r.value.as.number);
 }
 
+// B4: a `[` that is never closed used to end the list quietly at end of
+// input, so a typo silently changed the list's contents.
+void test_error_unclosed_bracket(void)
+{
+    Result r = run_string("show [a b");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_UNCLOSED_BRACKET, r.error_code);
+    TEST_ASSERT_EQUAL_STRING("[ without ]", error_format(r));
+}
+
+void test_error_unclosed_nested_bracket(void)
+{
+    Result r = run_string("show [a [b c]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_UNCLOSED_BRACKET, r.error_code);
+}
+
+void test_error_comment_swallows_closing_bracket(void)
+{
+    // The `;` comment runs to end of line, taking the `]` with it, so the
+    // list is unterminated. It used to print `[a]` and drop `b` silently.
+    Result r = run_string("show [a ; b]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_UNCLOSED_BRACKET, r.error_code);
+}
+
+void test_closed_bracket_still_parses(void)
+{
+    run_string("show [a b] show [c [d e]]");
+    TEST_ASSERT_EQUAL_STRING("[a b]\n[c [d e]]\n", output_buffer);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -606,6 +638,10 @@ int main(void)
     RUN_TEST(test_error_infix_doesnt_like);
     RUN_TEST(test_error_bracket_mismatch);
     RUN_TEST(test_error_paren_mismatch);
+    RUN_TEST(test_error_unclosed_bracket);
+    RUN_TEST(test_error_unclosed_nested_bracket);
+    RUN_TEST(test_error_comment_swallows_closing_bracket);
+    RUN_TEST(test_closed_bracket_still_parses);
     
     // Error messages in procedures tests
     RUN_TEST(test_error_in_procedure_includes_proc_name);

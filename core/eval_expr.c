@@ -147,9 +147,12 @@ static float parse_number(const char *str, size_t len)
 }
 
 // Parse a list from tokens until ].
-// Returns false on out-of-memory (node pool exhausted); *out receives the
-// parsed list on success.
-static bool parse_list(Evaluator *eval, Node *out)
+// Returns 0 on success (with *out receiving the parsed list), otherwise an
+// error code: ERR_OUT_OF_SPACE (node pool exhausted), ERR_UNCLOSED_BRACKET
+// (input ran out before the `]`), or ERR_DONT_KNOW_WHAT (a token kind that
+// cannot appear in a list literal). Nothing is dropped silently — a `[...]`
+// that does not parse must be reported, not quietly truncated.
+static int parse_list(Evaluator *eval, Node *out)
 {
     Node list = NODE_NIL;
     Node tail = NODE_NIL;
@@ -157,10 +160,11 @@ static bool parse_list(Evaluator *eval, Node *out)
     while (true)
     {
         Token t = peek(eval);
-        if (t.type == TOKEN_EOF || t.type == TOKEN_RIGHT_BRACKET)
+        if (t.type == TOKEN_EOF)
+            return ERR_UNCLOSED_BRACKET;
+        if (t.type == TOKEN_RIGHT_BRACKET)
         {
-            if (t.type == TOKEN_RIGHT_BRACKET)
-                advance(eval);
+            advance(eval);
             break;
         }
 
@@ -169,8 +173,9 @@ static bool parse_list(Evaluator *eval, Node *out)
         if (t.type == TOKEN_LEFT_BRACKET)
         {
             advance(eval);
-            if (!parse_list(eval, &item))
-                return false;
+            int err = parse_list(eval, &item);
+            if (err != 0)
+                return err;
             // Wrap in list marker for later
             item = NODE_MAKE_LIST(NODE_GET_INDEX(item));
         }
@@ -186,7 +191,7 @@ static bool parse_list(Evaluator *eval, Node *out)
             // fail the parse rather than store an invalid node.
             item = mem_atom_unescape(t.start, t.length);
             if (mem_is_nil(item))
-                return false;
+                return ERR_OUT_OF_SPACE;
             advance(eval);
         }
         else if (t.type == TOKEN_PLUS || t.type == TOKEN_MINUS || 
@@ -207,17 +212,19 @@ static bool parse_list(Evaluator *eval, Node *out)
         }
         else
         {
-            advance(eval);
-            continue;
+            // Every token kind a list literal can hold is handled above, so
+            // anything left is something we cannot represent. Report it
+            // rather than dropping it, which would silently change the list.
+            return ERR_DONT_KNOW_WHAT;
         }
 
         if (!mem_list_append(&list, &tail, item))
         {
-            return false;
+            return ERR_OUT_OF_SPACE;
         }
     }
     *out = list;
-    return true;
+    return 0;
 }
 
 // Evaluate a primary expression
@@ -281,9 +288,10 @@ Result eval_primary(Evaluator *eval)
         
         // For Lexer OR NodeIterator with flat [ ] tokens: parse tokens until ]
         Node list;
-        if (!parse_list(eval, &list))
+        int err = parse_list(eval, &list);
+        if (err != 0)
         {
-            return result_error(ERR_OUT_OF_SPACE);
+            return result_error(err);
         }
         return result_ok(value_list(list));
     }
