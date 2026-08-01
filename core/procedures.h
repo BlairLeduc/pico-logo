@@ -66,6 +66,11 @@ extern "C"
     // Find a procedure by name (case-insensitive), returns NULL if not found
     UserProcedure *proc_find(const char *name);
 
+    // Same, for a name that is not NUL-terminated (a word token straight out
+    // of the lexer). Lets the evaluator look a name up without first copying
+    // it into a fixed-size buffer, which truncated long names (B5).
+    UserProcedure *proc_find_n(const char *name, size_t len);
+
     // Check if a procedure exists
     bool proc_exists(const char *name);
 

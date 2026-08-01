@@ -100,7 +100,26 @@ void primitive_register(const char *name, int default_args, PrimitiveFunc func)
     primitives_sorted = false;
 }
 
-const Primitive *primitive_find(const char *name)
+// Order `name` (exactly `len` bytes, not NUL-terminated) against a registered
+// primitive name the same way strcasecmp would, so the binary search below
+// stays valid for both entry points.
+//
+// Reading `pname[len]` is in bounds: `name` holds no NUL in its `len` bytes
+// (it is a word token, or a C string measured by strlen), so if `pname` were
+// shorter, strncasecmp would have compared a real character against `pname`'s
+// terminator and returned non-zero above. Reaching the last line therefore
+// means strlen(pname) >= len, and index `len` is at worst the terminator.
+static int primitive_name_compare(const char *name, size_t len, const char *pname)
+{
+    int cmp = strncasecmp(name, pname, len);
+    if (cmp != 0)
+        return cmp;
+    // Equal over the first `len` bytes: `name` is shorter unless `pname` ends
+    // there too.
+    return pname[len] == '\0' ? 0 : -1;
+}
+
+const Primitive *primitive_find_n(const char *name, size_t len)
 {
     if (!primitives_sorted)
     {
@@ -119,7 +138,7 @@ const Primitive *primitive_find(const char *name)
     {
         int mid = lo + (hi - lo) / 2;
         const Primitive *p = &primitives[primitive_order[mid]];
-        int cmp = strcasecmp(name, p->name);
+        int cmp = primitive_name_compare(name, len, p->name);
         if (cmp == 0)
         {
             return p;
@@ -134,6 +153,11 @@ const Primitive *primitive_find(const char *name)
         }
     }
     return NULL;
+}
+
+const Primitive *primitive_find(const char *name)
+{
+    return primitive_find_n(name, strlen(name));
 }
 
 bool primitive_register_alias(const char *alias_name, const Primitive *source)

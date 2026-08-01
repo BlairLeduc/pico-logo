@@ -49,14 +49,7 @@ static bool skip_primary(Evaluator *eval)
         }
         
         // Look up as primitive or user proc
-        char name_buf[64];
-        size_t name_len = t.length;
-        if (name_len >= sizeof(name_buf))
-            name_len = sizeof(name_buf) - 1;
-        memcpy(name_buf, t.start, name_len);
-        name_buf[name_len] = '\0';
-        
-        const Primitive *prim = primitive_find(name_buf);
+        const Primitive *prim = primitive_find_n(t.start, t.length);
         if (prim)
         {
             advance(eval);
@@ -72,7 +65,7 @@ static bool skip_primary(Evaluator *eval)
             return true;
         }
         
-        UserProcedure *user_proc = proc_find(name_buf);
+        UserProcedure *user_proc = proc_find_n(t.start, t.length);
         if (user_proc)
         {
             advance(eval);
