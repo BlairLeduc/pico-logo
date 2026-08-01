@@ -77,37 +77,48 @@ void test_push_pop_returns_to_empty(void)
 }
 
 //============================================================================
-// Swap Tests
+// Insert Tests
 //============================================================================
 
-void test_swap_top_two(void)
+void test_insert_below_pushed_ops(void)
 {
     EvalOp *a = op_stack_push(&stack);
     a->kind = OP_REPEAT;
     EvalOp *b = op_stack_push(&stack);
     b->kind = OP_IF;
 
-    op_stack_swap_top(&stack);
+    // Insert between them: the ops above shift up and keep their order.
+    EvalOp *c = op_stack_insert(&stack, 1);
+    TEST_ASSERT_NOT_NULL(c);
+    c->kind = OP_CATCH;
 
-    EvalOp *top = op_stack_peek(&stack);
-    TEST_ASSERT_EQUAL(OP_REPEAT, top->kind);
-
+    TEST_ASSERT_EQUAL(3, op_stack_depth(&stack));
+    TEST_ASSERT_EQUAL(OP_IF, op_stack_peek(&stack)->kind);
     op_stack_pop(&stack);
-    EvalOp *second = op_stack_peek(&stack);
-    TEST_ASSERT_EQUAL(OP_IF, second->kind);
+    TEST_ASSERT_EQUAL(OP_CATCH, op_stack_peek(&stack)->kind);
+    op_stack_pop(&stack);
+    TEST_ASSERT_EQUAL(OP_REPEAT, op_stack_peek(&stack)->kind);
 }
 
-void test_swap_single_element_no_crash(void)
+void test_insert_at_top_is_a_push(void)
+{
+    EvalOp *a = op_stack_push(&stack);
+    a->kind = OP_REPEAT;
+
+    EvalOp *b = op_stack_insert(&stack, op_stack_depth(&stack));
+    TEST_ASSERT_NOT_NULL(b);
+    b->kind = OP_IF;
+
+    TEST_ASSERT_EQUAL(2, op_stack_depth(&stack));
+    TEST_ASSERT_EQUAL(OP_IF, op_stack_peek(&stack)->kind);
+}
+
+void test_insert_out_of_range_returns_null(void)
 {
     op_stack_push(&stack);
-    op_stack_swap_top(&stack); // Should be safe with < 2 elements
+    TEST_ASSERT_NULL(op_stack_insert(&stack, -1));
+    TEST_ASSERT_NULL(op_stack_insert(&stack, 2));
     TEST_ASSERT_EQUAL(1, op_stack_depth(&stack));
-}
-
-void test_swap_empty_no_crash(void)
-{
-    op_stack_swap_top(&stack); // Should be safe when empty
-    TEST_ASSERT_TRUE(op_stack_is_empty(&stack));
 }
 
 //============================================================================
@@ -274,9 +285,9 @@ int main(void)
     RUN_TEST(test_push_pop_returns_to_empty);
 
     // Swap tests
-    RUN_TEST(test_swap_top_two);
-    RUN_TEST(test_swap_single_element_no_crash);
-    RUN_TEST(test_swap_empty_no_crash);
+    RUN_TEST(test_insert_below_pushed_ops);
+    RUN_TEST(test_insert_at_top_is_a_push);
+    RUN_TEST(test_insert_out_of_range_returns_null);
 
     // Stack overflow tests
     RUN_TEST(test_push_until_full_returns_null);

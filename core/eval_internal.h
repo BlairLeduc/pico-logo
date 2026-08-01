@@ -97,6 +97,7 @@ extern "C"
     Result step_proc_call(Evaluator *eval, EvalOp *op);
     Result step_expr_eval(Evaluator *eval, EvalOp *op);
     Result step_prim_call(Evaluator *eval, EvalOp *op);
+    Result step_paren_group(Evaluator *eval, EvalOp *op);
 
 #ifdef __cplusplus
 }

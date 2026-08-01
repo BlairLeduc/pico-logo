@@ -23,7 +23,6 @@ edge case)
 | ID | Bug | Area | Severity | Found | Status |
 |---|---|---|---|---|---|
 | [B6](#b6--penreverse-ignores-pen-size-always-1-px) | `penreverse` ignores pen size (always 1 px) | graphics | low | 2026-07-18 | won't fix (documented) |
-| [B7](#b7--a-user-procedure-call-as-the-left-operand-of-a-parenthesised-expression-corrupts-the-parse) | A user-procedure call as the left operand of a parenthesised expression corrupts the parse | parser/eval | high | 2026-07-28 | open |
 | [B9](#b9--text-returns-newline-markers-as-ordinary-list-elements) | `text` returns newline markers as ordinary list elements | workspace/format | medium | 2026-07-31 | open |
 
 ### B6 — `penreverse` ignores pen size (always 1 px)
@@ -35,68 +34,6 @@ pixels twice and speckle the line. Thick reverse drawing is therefore left at
 - **Status:** won't fix for now. A future thick-reverse pass would delta-stamp
   only the pixels the previous stamp did not cover, or fill per-scanline spans.
 - **Found:** 2026-07-18, with `setpensize` / `pensize`.
-
-### B7 — A user-procedure call as the left operand of a parenthesised expression corrupts the parse
-
-**Inside a procedure body**, a call to a *user-defined* procedure that appears
-as the left operand within a parenthesised expression makes the evaluator
-consume a closing paren that is not its own. It has two failure modes, and the
-first is silent.
-
-**Silent wrong answer.** Operands re-associate across the parentheses:
-
-```
-to f :x
-output :x
-end
-to t6
-output (item 1 [5 6]) + (3 * (f 2))
-end
-show t6
-```
-
-prints **21**, not `11`: it evaluates as `3 * (5 + 2)`. The same shape with a
-multi-branch procedure returns 18 instead of 8. No error is raised, so a
-program simply computes the wrong number.
-
-**Spurious `) without (`.** A primitive whose argument is a parenthesised
-expression *starting* with the call computes the right value and then trips
-over the orphaned bracket:
-
-```
-to t2
-pr ((f 2) * 3)
-end
-t2
-```
-
-prints `6`, then raises `) without ( in t2`.
-
-Scope, all verified against `./build-host/logo` on 2026-07-28:
-
-- Only inside a procedure body. Every form above is correct at the top level,
-  because the deferral path that causes it needs `proc_depth > 0`.
-- `output` is unaffected: `output ((f 2) * 3)` is correct.
-- Primitives are unaffected: `((item 1 [5 6]) * 3)` is correct.
-- The call is fine on the *right* of the operator: `(3 * (f 2))` is correct,
-  as is `((f 2) + (f 3))`.
-
-- **Cause:** `core/eval_expr.c`, the deferral branch in the user-procedure
-  (`TOKEN_WORD`) case guarded by
-  `eval->proc_depth > 0 && eval->user_arg_depth == 0`. Before deferring to the
-  trampoline it consumes the following `)` so that infix parsing can continue
-  past the call — which is right for `(f :x) + (g :y)`, where that bracket
-  closes the call itself. When the `(` was a *grouping* paren instead, the
-  grouping handler further out then consumes an outer `)` that is not its own,
-  leaving the operands re-associated or a stray `)` in the stream.
-- **Workaround:** bind the call to a `local` first and do the arithmetic on
-  the variable. `logo/games/trails` is written this way throughout.
-- **Fix:** only consume the closing paren when it belongs to the call, which
-  means distinguishing the paren-call form from a grouping paren that merely
-  happens to start with a call. Needs tests for `(f :x) + (g :y)`, the two
-  shapes above, and the `output` path.
-- **Found:** 2026-07-28, building `logo/games/trails`, where it stopped the
-  game running a single frame.
 
 ### B9 — `text` returns newline markers as ordinary list elements
 
@@ -143,6 +80,7 @@ Scope, verified against `./build-host/logo` on 2026-07-31:
 
 | Date | Bug | Area | Fix | Ref |
 |---|---|---|---|---|
+| 2026-08-01 | A user-procedure call as the left operand of a parenthesised expression corrupts the parse (B7) | parser/eval | The grouping-paren handler in `eval_primary` never handled deferral: when the expression inside `(...)` deferred a user proc call to the trampoline, the handler carried on synchronously and consumed a `)` that had not been reached yet. The old workaround — the deferral branch eating the following `)` itself — made `(f :x) + (g :y)` work by cancelling that mistake out, but left the operands re-associated (`(item 1 [5 6]) + (3 * (f 2))` gave 21, not 11) or a stray `)` in the stream (`pr ((f 2) * 3)` printed 6 then raised `) without (`) whenever the paren was a grouping one. Deferral is now honoured: a new `OP_PAREN_GROUP` op parks the closing `)` on the op stack and consumes it once the group has its value, and the deferral branch leaves the `)` alone. Getting the continuation into the right stack slot needed `op_stack_insert` in place of `op_stack_swap_top`: swapping only reaches one op down, so a continuation landed *inside* the ops a nested deferral had pushed and results flowed back out of order. `eval_expr_bp` inserts its `OP_EXPR_EVAL` the same way. `eval->paren_depth` is still maintained but remains write-only — nothing in the interpreter reads it | |
 | 2026-08-01 | `name_buf[64]` identifier truncation aliasing (B5) | eval | The evaluator copied a word token into a 64-byte stack buffer before looking it up, so everything past the 63rd character was thrown away. The reported aliasing is real — a call to `<63 chars>.other` ran a procedure actually named `<63 chars>` — but the commoner symptom was worse: a procedure whose name is 64 characters or longer was stored under its full name (`proc_define_from_text` interns the whole word) and looked up truncated, so it could be defined but never called, and its recursive calls also fell out of tail-call detection. Fixed by removing the buffer: new `primitive_find_n` / `proc_find_n` take a pointer and a length and match only a stored name of exactly that length, and the three lookup sites (`eval_expr.c` word case, `eval_expr.c` `(proc …)` paren-call case, `eval_steps.c` tail-call lookahead) pass the token directly. `primitive_find` / `proc_find` are now one-line wrappers, so the C-string callers are unchanged. `repl.c` keeps its own `name_buf[64]`, but only to check a `to` line's name against the primitive table — no primitive name is 63 characters, so a truncated name cannot false-match there | |
 | 2026-07-31 | `parse_list` silently drops tokens (B4) | parser | `parse_list` (`core/eval_expr.c`) had two silent-drop paths. The one the review named — the `else` that advanced past an unrecognised token — turned out to be unreachable: the token kinds it can receive are exhaustively handled above it, `TOKEN_COMMENT` never reaches an evaluator (no eval lexer sets `preserve_comments`, and `classify_word` never produces it), and `TOKEN_ERROR` is never produced at all (`make_error_token` is dead code). The *reachable* drop was the sibling `TOKEN_EOF` case, which ended the list quietly, so an unterminated `[` silently truncated it: `show [a b` printed `[a b]` and `show [a ; b]` printed `[a]` — the comment runs to end of line and takes the `]` with it, exactly the "a typo silently changes the list's contents" symptom. `parse_list` now returns an error code instead of a bool: new error 72 `[ without ]` at end of input, `ERR_DONT_KNOW_WHAT` for an unrecognised token, `ERR_OUT_OF_SPACE` unchanged. Two test inputs relied on the old tolerance (`define "inner [[] [run [throw "toplevel]]` is short one `]`; `define "test.comment [[] [print 42 ; trailing comment]]` has both closers inside the comment) and were corrected. No shipped `.logo` program has an unbalanced top-level line; procedure bodies go through `parse_bracket_contents`, which is untouched | |
 | 2026-07-31 | Demons fire during `load` (B3) | demons | `load` evaluates each line through `eval_instruction`, which polls demons, so a `when` armed by a file ran its action while the rest of the file was still being read — inside `load`'s reentrancy guard, where the action could neither `load` nor call a procedure defined further down the same file. New `demons_suspend` / `demons_resume` hold polling off for the duration of the load (checked in `demons_poll` itself, so the device idle loop is covered too); `load` resumes before `startup` runs and polls once on its way out, so an armed demon still gets its first chance promptly. Resume clears the motion-clock baseline like `thaw`, so a moving turtle does not jump by the load's duration. No `.logo` file arms a demon at file level — every `when` is inside a procedure — so nothing depended on the old mid-load firing | |

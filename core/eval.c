@@ -267,6 +267,10 @@ Result eval_trampoline(Evaluator *eval, int base_depth)
             r = step_prim_call(eval, op);
             break;
 
+        case OP_PAREN_GROUP:
+            r = step_paren_group(eval, op);
+            break;
+
         default:
             r = result_error(ERR_STACK_OVERFLOW);
             eval->token_source = op->saved_source;

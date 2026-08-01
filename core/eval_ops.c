@@ -54,13 +54,19 @@ int op_stack_depth(OpStack *stack)
     return stack->top;
 }
 
-void op_stack_swap_top(OpStack *stack)
+EvalOp *op_stack_insert(OpStack *stack, int index)
 {
-    if (stack->top < 2)
-        return;
-    EvalOp tmp = stack->ops[stack->top - 1];
-    stack->ops[stack->top - 1] = stack->ops[stack->top - 2];
-    stack->ops[stack->top - 2] = tmp;
+    if (index < 0 || index > stack->top)
+        return NULL;
+    if (stack->top >= MAX_OP_STACK_DEPTH)
+        return NULL;
+    memmove(&stack->ops[index + 1], &stack->ops[index],
+            (size_t)(stack->top - index) * sizeof(EvalOp));
+    stack->top++;
+    EvalOp *op = &stack->ops[index];
+    memset(op, 0, sizeof(EvalOp));
+    op->result = result_none();
+    return op;
 }
 
 int op_stack_alloc_prim_args(OpStack *stack, int capacity)
@@ -154,7 +160,7 @@ void op_stack_gc_mark(OpStack *stack)
             break;
         }
         default:
-            // OP_RUN_LIST / OP_RUN_LIST_EXPR: saved_source only
+            // OP_RUN_LIST / OP_RUN_LIST_EXPR / OP_PAREN_GROUP: saved_source only
             break;
         }
     }
