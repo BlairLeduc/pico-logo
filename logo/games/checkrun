@@ -1333,4 +1333,84 @@ to time.frame
   output (ticks - :t0)
 end
 
+; P9 M0 items 2 and 3 (docs/tilemap-scrolling-design.md section 3.1): the
+; sector rebuild this design deletes, and a frame body to set beside the
+; present cost `p9m0` measures.  Manual refresh, so the `sync` ending a frame
+; presents and returns instead of waiting for the 25 fps boundary -- the
+; number wanted is the work, not the cadence.
+;
+; A mean is not enough here.  `step.player` calls `enter.sector` when the car
+; crosses a sector edge, and that rebuilds the whole screen inside the frame,
+; so one crossing in a short run buries every other number.  Hence min and max
+; beside the mean, a count of the crossings, and the frame split three ways:
+; the simulation P9 cannot help, the per-frame drawing it replaces, and the
+; present.  `p9.frame` mirrors the unpaused body of `play.frame`; keep the two
+; in step while this instrumentation lives here.
+to p9.frame
+  local "t0 local "was
+  make "t0 ticks
+  poll.input
+  step.fuel
+  maybe.smoke
+  make "was :cr.sector
+  step.player
+  if not (:was = :cr.sector) [make "p9.crossings (:p9.crossings + 1)]
+  step.enemies
+  step.smoke
+  collect.checkpoint
+  check.rocks
+  check.smoke.hits
+  check.enemy.rocks
+  check.car.hits
+  update.engine.sound
+  make "cr.frame (:cr.frame + 1)
+  make "p9.sim (:p9.sim + (ticks - :t0))
+  make "t0 ticks
+  update.visible.turtles
+  draw.changed.radar
+  draw.hud
+  make "p9.draw (:p9.draw + (ticks - :t0))
+  make "t0 ticks
+  sync
+  make "p9.show (:p9.show + (ticks - :t0))
+  output (:p9.sim + :p9.draw + :p9.show)
+end
+
+to p9m0.checkrun
+  local "s local "f local "one local "lo local "hi local "run
+  setup.sound
+  init.game
+  start.round
+  setrefresh "manual
+  make "s (time.sector)
+  make "p9.sim 0
+  make "p9.draw 0
+  make "p9.show 0
+  make "p9.crossings 0
+  make "f 0
+  make "lo 99999
+  make "hi 0
+  repeat 20 [
+    make "run (p9.frame)
+    make "one (:run - :f)
+    make "f :run
+    if :one < :lo [make "lo :one]
+    if :one > :hi [make "hi :one]
+  ]
+  setrefresh "auto
+  textscreen
+  pr [P9 M0 -- Checkpoint Run]
+  pr []
+  pr (se [draw.sector, ~400 stamps :] :s [ms])
+  pr []
+  pr (se [frame mean :] (:f / 20) [ms])
+  pr (se [frame min  :] :lo [ms])
+  pr (se [frame max  :] :hi [ms])
+  pr (se [sector crossings in 20 frames :] :p9.crossings)
+  pr []
+  pr (se [simulation total :] :p9.sim [ms])
+  pr (se [drawing    total :] :p9.draw [ms])
+  pr (se [present    total :] :p9.show [ms])
+end
+
 make "startup [checkrun]

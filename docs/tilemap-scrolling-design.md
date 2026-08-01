@@ -73,6 +73,9 @@ inside the loop, so the wall time is interpreter time:
 | Checkpoint Run view 256×320 | 81,920 | ~17.5 ms | ~22 ms |
 | One 16×16 tile (today's granule) | 256 | ~55 µs | — |
 
+*(Measured on a Pico 2 at §3.3: 25.6 ms and 21.1 ms — this table's rate is
+17–21 % optimistic. The reasoning below stands; the margins do not.)*
+
 Map row sampling adds ~1–1.5 ms of CPU per full frame on top; palette
 expansion (~10 µs/row) is already paid today and overlaps the DMA. 30 fps
 full-screen (33.3 ms budget) leaves ~11 ms of Logo — not enough for a real
@@ -88,9 +91,8 @@ serviced normally through sustained full-screen presents.
 All on a Pico 2, with `ticks`; record the results in this section.
 
 1. **Full-screen present wall time — measurable today, zero new code:**
-   `setrefresh "manual`, change every pixel (e.g. `fill` after `cs`), then
-   time `refresh`. Expected ~22 ms; this is the dominant term and validates
-   the wire math above.
+   `setrefresh "manual`, change every pixel, then time `refresh`. Expected
+   ~22 ms; this is the dominant term and validates the wire math above.
 2. **A representative game frame body:** time one frame of the shipped
    Turtle Trails loop (5 actors) and, if available, a Checkpoint Run
    milestone-1 frame (7 cars) — the Logo side must fit in the remainder
@@ -105,6 +107,164 @@ All on a Pico 2, with `ticks`; record the results in this section.
 **Gate:** proceed to M1 if (present wall time) + (game frame body) ≤ 40 ms
 with ≥20 % headroom for both target games. Otherwise apply §15 levers and
 re-measure before building any surface.
+
+### 3.2 The harness
+
+Three throwaway scripts, all running on today's firmware:
+
+| Script | Gives |
+|---|---|
+| `logo/tests/p9m0` → `p9m0` | items 1 and 4 |
+| `logo/games/checkrun` → `p9m0.checkrun` | items 2 and 3, Checkpoint Run |
+| `logo/games/trails` → `p9m0.trails` | items 2 and 3, Turtle Trails |
+
+`p9m0` works the present cost out by difference. A present only sends tiles
+that are dirty, so each pass must repaint first; the repainting is timed a
+second time on its own and subtracted, leaving the presents alone, and twenty
+passes are averaged because `ticks` is whole milliseconds against a ~22 ms
+quantity. It dirties an exact band — the leftmost *n* of the 20 tile columns,
+full height — so the road-view viewport (16 columns, 256 px) is measured, not
+extrapolated, and the per-column slope and the fixed per-present cost fall out
+of the difference between bands. It runs in `window` boundary mode: under the
+default `wrap` a stroke's round cap spills past the left edge to the right one
+and dirties the whole tile row, which would make every band measure as a full
+screen.
+
+The two game entries set a round up from cold and time `draw.sector` /
+`draw.board` and ten `play.frame`s in `manual` refresh, so the `sync` ending a
+frame presents and returns instead of waiting for the 25 fps boundary — the
+number wanted is the work, not the cadence. The frame figures include today's
+small dirty-rect present, so they are an **upper bound** on the body that a
+full-viewport present would be added to.
+
+### 3.3 Results
+
+Pico 2, 2026-08-01. Items 1 and 4 taken; items 2 and 3 still to come.
+
+| Measurement | Expected | Measured |
+|---|---:|---:|
+| Present, full screen 320×320 | ~21.9 ms | **25.6 ms** |
+| Present, road view 256×320 | ~17.5 ms | **21.1 ms** |
+| Present, strip 64×320 | ~4.4 ms | 5.45 ms |
+| Per tile column (16×320) | ~1.1 ms | 1.259 ms |
+| Fixed cost per present | — | 0.41 ms |
+| Checkpoint Run `play.frame`, 7 cars | ~22 ms | **258.6 ms** |
+| Checkpoint Run `draw.sector`, ~400 stamps | <120 ms budget | **1,346 ms** |
+| Turtle Trails `play.frame`, 5 actors | <40 ms | **87.3 ms** |
+| Turtle Trails `draw.board` | — | **5,916 ms** |
+| Audio under sustained presenting | clean | **clean** |
+
+**A present costs 17–21 % more than §3's wire math.** The band figures are
+internally consistent (slope 1.259 ms per tile column, intercept 0.41 ms), so
+this is not measurement noise: the effective rate is **4.0 Mpx/s**, not the
+4.69 Mpx/s the raw 75 MHz / 16 bpp figure gives. The difference is the work §3
+treated as free or overlapped — `compose_row`'s canvas `memcpy` and palette
+expansion per row, and the twenty *separate* `lcd_blit_begin`/`end` windows a
+full-height present costs, since `dirty_tiles` tracks one span per 16-px tile
+row and each becomes its own window. The near-zero intercept says the cost is
+per pixel, not per present, so narrowing a viewport still buys back its area
+share exactly as §15's first lever assumes.
+
+Audio was clean through twelve seconds of flat-out full-screen presenting, as
+§3 predicted: interrupts stay enabled during a blit.
+
+**Consequence for the budget.** At 25 fps the gate allows 32 ms of the 40 ms
+frame, so the Logo body must fit in **6.4 ms** full-screen or **10.9 ms** in
+Checkpoint Run's road view — against §3's advertised ~18 ms and ~22 ms. The
+road-view layout is now doing much more than banking a 20 % nicety; it is most
+of the remaining headroom.
+
+**The premise of §3 is wrong: the cost is the CPU, not the wire.** A present
+is 21–26 ms. A frame body is 87 ms in Turtle Trails and 259 ms in Checkpoint
+Run — three to ten times the present it was supposed to fit beside.
+
+| Game | Present | Body | Total | Against the 32 ms gate |
+|---|---:|---:|---:|---:|
+| Turtle Trails | 25.6 ms | 87.3 ms | 112.9 ms | 3.5× over |
+| Checkpoint Run | 21.1 ms | 258.6 ms | 279.7 ms | 8.7× over |
+
+Neither game has ever met its frame budget, and **neither had ever been timed
+on hardware** — `checkpoint-run-design.md` §4.2 says the rebuild "is the one
+number in the design that is not yet measured", §13 lists profiling as
+outstanding, and `turtle-trails-design.md` §11 likewise says only "profile
+with `ticks`". These are the first hardware numbers for either game. They ship
+at `(setrefresh "sync 25)` and actually run at about 9 fps and 4 fps; `sync`
+does not wait when a frame overruns, so the games degrade quietly rather than
+failing, which is why this went unnoticed.
+
+The before-numbers are correspondingly worse than their designs assumed: the
+sector rebuild is **1,346 ms against a 120 ms budget** — 11× over, and the
+three §4.2 tuning levers were sized for a 120 ms problem — and Turtle Trails'
+`draw.board` is **5,916 ms**, a six-second pause at every level start.
+
+**Gate verdict: FAIL, and no §15 lever can rescue it.** Every lever narrows
+the *present*, and the present is not the problem: set it to zero and both
+games still miss the 32 ms gate by 2.7× and 8.1×.
+
+### 3.4 What this changes
+
+The finding splits the design cleanly in two, and the halves now point
+opposite ways.
+
+- **The scrolling premise fails.** §2's "scrolling costs nothing per pixel of
+  offset" is still true, and irrelevant: a game that cannot reach 25 fps
+  cannot scroll smoothly at 25 fps. Live map viewing (§5.3), `setscroll`, and
+  the Checkpoint Run camera (§10) rest on a per-frame budget that does not
+  exist.
+- **The bake premise gets stronger.** `stampmap`/`stamptile` (§5.4) replace a
+  1,346 ms rebuild and a 5,916 ms board build with a C loop. Those are the
+  largest single stalls measured anywhere in the project, they are not
+  per-frame costs, and they need no frame budget at all. This half of the
+  design is *more* justified by the measurement, not less.
+
+What the numbers actually argue for is interpreter throughput as the
+prerequisite item, with the tile **bake** path as an independently worthwhile
+piece of P9 that can proceed on its own. Deciding that is the user's call, not
+this document's; §3.5 records the evidence still wanted.
+
+### 3.5 Where the time actually goes
+
+Answered on the host rather than by another hardware run. The host build runs
+the same interpreter against the mock device, where drawing is a recorded
+command instead of a rasterised one, so host timings isolate interpreter cost
+from rasterisation.
+
+| | Host | Pico 2 | Ratio |
+|---|---:|---:|---:|
+| Turtle Trails `play.frame` | 0.96 ms | 87.3 ms | 91× |
+| Turtle Trails `draw.board` | 55.1 ms | 5,916 ms | 107× |
+| Checkpoint Run `play.frame` | 3.42 ms | 258.6 ms | 76× |
+| Checkpoint Run `draw.sector` | 18.0 ms | 1,346 ms | 75× |
+
+Two things follow. **Rasterisation is a minor term** — the ratio barely moves
+between a frame that draws almost nothing and a board build that draws
+everything, so what the Pico is slow at is *interpreting*, not plotting
+pixels. And **Checkpoint Run's 258.6 ms is an ordinary frame**: 400 host
+frames produced *zero* sector crossings, because an unattended car stops at
+the first wall. No rebuild is hiding in that mean.
+
+Within a frame, the cost is simulation the tile system does not touch —
+Turtle Trails: `step.bugs` 0.56 ms (59 %), `place.all` 0.26 ms (28 %),
+everything else under 0.1 ms.
+
+**The interpreter profile.** Sampling a pure `repeat [make "x (:x + 1)]` loop
+(no device work at all) gives:
+
+| Cost | Share |
+|---|---:|
+| Re-lexing and classifying words on every evaluation | 34 % |
+| Primitive lookup by case-insensitive string compare | 14 % |
+| Cons-cell walk and index→pointer indirection | 20 % |
+| `memmove`/`memset` | 8 % |
+| Actual evaluation and everything else | 24 % |
+
+`classify_word` is the single largest leaf. The interpreter re-derives, on
+*every* pass through a loop body, what each word already is — number or not,
+delimiter, comment, infix — and then finds each primitive by `strncasecmp`
+against the registry. Words are interned atoms, so all of this is a pure
+function of the atom and could be computed once. That is roughly **48 % of
+runtime spent rediscovering facts that do not change**, and it is a
+memoisation problem, not an interpreter rewrite.
 
 ## 4. Availability and the memory plan
 

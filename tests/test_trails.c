@@ -1365,6 +1365,17 @@ static void test_speeds_are_sane_at_25_fps(void)
     }
 }
 
+// The P9 M0 instrumentation (docs/tilemap-scrolling-design.md 3.1) is taken on
+// hardware, where a script that fails half way through wastes the session, so
+// it has to run end to end here first.
+static void test_p9m0_instrumentation_runs(void)
+{
+    run("setup.level");
+    TEST_ASSERT_TRUE(num("time.board") >= 0);
+    TEST_ASSERT_TRUE(num("time.frame") >= 0);
+    run("p9m0.trails");
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -1427,6 +1438,7 @@ int main(void)
     RUN_TEST(test_state_machine_soak);
     RUN_TEST(test_level_profiles_escalate);
     RUN_TEST(test_speeds_are_sane_at_25_fps);
+    RUN_TEST(test_p9m0_instrumentation_runs);
 
     return UNITY_END();
 }

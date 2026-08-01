@@ -1431,4 +1431,96 @@ to trails
   forever [one.game]
 end
 
+; -------------------------------------------------------------------------
+; P9 M0 instrumentation (docs/tilemap-scrolling-design.md section 3.1, items
+; 2 and 3), mirroring Checkpoint Run's.  `draw.board` is the pen-carved board
+; the tile bake would replace; `play.frame` is the five-actor body that has to
+; fit beside a present.  Manual refresh, so the `sync` ending a frame presents
+; and returns rather than waiting for the 25 fps boundary.
+; -------------------------------------------------------------------------
+
+to time.board
+  local "t0
+  make "t0 ticks
+  draw.board
+  output (ticks - :t0)
+end
+
+to time.frame
+  local "t0
+  make "t0 ticks
+  play.frame
+  output (ticks - :t0)
+end
+
+; A mean alone does not say whether P9 can help, because P9 replaces drawing
+; and leaves the simulation exactly where it is.  So the frame is split three
+; ways -- simulation, the per-frame drawing, the present -- with min and max
+; beside the mean.  `p9.frame` mirrors the unpaused body of `play.frame`; keep
+; the two in step while this instrumentation lives here.
+to p9.frame
+  local "t0
+  make "t0 ticks
+  poll.input
+  make "tt.frame (:tt.frame + 1)
+  step.mode.clock
+  step.nest.clock
+  step.player
+  paint.tile
+  step.bugs
+  step.bonus
+  check.collisions
+  update.drone
+  dress.bugs
+  reclaim
+  make "p9.sim (:p9.sim + (ticks - :t0))
+  make "t0 ticks
+  place.all
+  draw.hud
+  make "p9.draw (:p9.draw + (ticks - :t0))
+  make "t0 ticks
+  sync
+  make "p9.show (:p9.show + (ticks - :t0))
+  output (:p9.sim + :p9.draw + :p9.show)
+end
+
+to p9m0.trails
+  local "b local "f local "one local "lo local "hi local "run
+  setup.palette
+  setup.shapes
+  setup.turtles
+  setup.sound
+  init.game
+  setup.level
+  setrefresh "manual
+  make "b (time.board)
+  make "p9.sim 0
+  make "p9.draw 0
+  make "p9.show 0
+  make "f 0
+  make "lo 99999
+  make "hi 0
+  repeat 20 [
+    make "run (p9.frame)
+    make "one (:run - :f)
+    make "f :run
+    if :one < :lo [make "lo :one]
+    if :one > :hi [make "hi :one]
+  ]
+  setrefresh "auto
+  stopsound
+  textscreen
+  pr [P9 M0 -- Turtle Trails]
+  pr []
+  pr (se [draw.board :] :b [ms])
+  pr []
+  pr (se [frame mean :] (:f / 20) [ms])
+  pr (se [frame min  :] :lo [ms])
+  pr (se [frame max  :] :hi [ms])
+  pr []
+  pr (se [simulation total :] :p9.sim [ms])
+  pr (se [drawing    total :] :p9.draw [ms])
+  pr (se [present    total :] :p9.show [ms])
+end
+
 make "startup [trails]

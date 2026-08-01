@@ -875,6 +875,7 @@ void test_remaining_procedures_execute(void)
     truth("round.over?", "true");
     truth("game.over?", "true");
     TEST_ASSERT_TRUE(num("time.sector") >= 0);
+    TEST_ASSERT_TRUE(num("time.frame") >= 0);
     TEST_ASSERT_TRUE(num("dist2 1 2") >= 0);
     TEST_ASSERT_TRUE(num("tile.dist2 1 car.tile 1") >= 0);
     TEST_ASSERT_TRUE(num("flag.value") >= 0);
@@ -895,6 +896,14 @@ void test_radar_fits_the_instrument_column(void)
     TEST_ASSERT_TRUE_MESSAGE(num("radar.x 31") + 1 <= 159, "radar runs off the screen");
     TEST_ASSERT_EQUAL_FLOAT(92, num("radar.y 0"));
     TEST_ASSERT_EQUAL_FLOAT(14, num("radar.y 39"));
+}
+
+// The P9 M0 instrumentation (docs/tilemap-scrolling-design.md 3.1) is taken on
+// hardware, where a script that fails half way through wastes the session, so
+// it has to run end to end here first.
+void test_p9m0_instrumentation_runs(void)
+{
+    run("p9m0.checkrun");
 }
 
 int main(void)
@@ -942,6 +951,7 @@ int main(void)
     RUN_TEST(test_a_frame_runs_in_every_sector);
     RUN_TEST(test_paused_frame_does_not_advance_the_simulation);
     RUN_TEST(test_remaining_procedures_execute);
+    RUN_TEST(test_p9m0_instrumentation_runs);
     RUN_TEST(test_radar_fits_the_instrument_column);
     return UNITY_END();
 }
