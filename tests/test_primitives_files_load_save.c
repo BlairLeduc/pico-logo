@@ -398,7 +398,7 @@ void test_demon_armed_by_load_fires_after_the_load(void)
     TEST_ASSERT_TRUE(var_exists("rest_ran"));
     Value val;
     TEST_ASSERT_TRUE(var_get("demon_ran", &val));
-    TEST_ASSERT_EQUAL_FLOAT(1.0, val.as.number);
+    TEST_ASSERT_EQUAL_FLOAT(1.0f, val.as.number);
 
     run_string("cleardemons");
 }
