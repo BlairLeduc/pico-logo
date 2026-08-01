@@ -103,6 +103,12 @@ void primitive_register(const char *name, int default_args, PrimitiveFunc func)
 // Order `name` (exactly `len` bytes, not NUL-terminated) against a registered
 // primitive name the same way strcasecmp would, so the binary search below
 // stays valid for both entry points.
+//
+// Reading `pname[len]` is in bounds: `name` holds no NUL in its `len` bytes
+// (it is a word token, or a C string measured by strlen), so if `pname` were
+// shorter, strncasecmp would have compared a real character against `pname`'s
+// terminator and returned non-zero above. Reaching the last line therefore
+// means strlen(pname) >= len, and index `len` is at worst the terminator.
 static int primitive_name_compare(const char *name, size_t len, const char *pname)
 {
     int cmp = strncasecmp(name, pname, len);

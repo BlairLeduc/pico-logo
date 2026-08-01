@@ -662,6 +662,24 @@ void test_long_proc_name_in_paren_call(void)
     TEST_ASSERT_EQUAL_FLOAT(42.0f, r.value.as.number);
 }
 
+void test_word_that_is_a_prefix_of_a_primitive_is_not_a_primitive(void)
+{
+    // `prin` matches `print` over the token's whole length, which is the one
+    // case where the lookup has to look past it at the stored name's next
+    // character. It must not resolve as an abbreviation.
+    Result r = run_string("prin 1");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
+}
+
+void test_word_that_extends_a_primitive_is_not_a_primitive(void)
+{
+    // The mirror case: the token runs past the end of the stored name.
+    Result r = run_string("prints 1");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
+}
+
 void test_long_proc_name_tail_recursion(void)
 {
     // The tail-call lookahead in eval_steps.c has a third lookup site; a
@@ -757,6 +775,8 @@ int main(void)
     RUN_TEST(test_long_proc_names_sharing_prefix_do_not_alias);
     RUN_TEST(test_long_name_does_not_alias_shorter_proc);
     RUN_TEST(test_long_proc_name_in_paren_call);
+    RUN_TEST(test_word_that_is_a_prefix_of_a_primitive_is_not_a_primitive);
+    RUN_TEST(test_word_that_extends_a_primitive_is_not_a_primitive);
     RUN_TEST(test_long_proc_name_tail_recursion);
 
     return UNITY_END();

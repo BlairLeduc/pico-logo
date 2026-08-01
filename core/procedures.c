@@ -66,7 +66,10 @@ void procedures_init(void)
 // word token, so a cheap case-folded first-character check screens out
 // most slots before the full strcasecmp.
 // `name` holds exactly `len` bytes and need not be NUL-terminated, so a
-// stored name matches only when it is `len` bytes long as well.
+// stored name matches only when it is `len` bytes long as well. Reading
+// `pname[len]` is in bounds for the same reason as in primitive_name_compare:
+// `name` holds no NUL in its `len` bytes, so a shorter `pname` makes the
+// strncasecmp non-zero and short-circuits before the index.
 static int find_procedure_index_n(const char *name, size_t len)
 {
     if (len == 0)
