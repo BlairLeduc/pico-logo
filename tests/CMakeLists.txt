@@ -101,6 +101,14 @@ add_logo_test(test_checkrun)
 target_compile_definitions(test_checkrun PRIVATE
     CHECKRUN_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/checkrun")
 
+# P10 M0 interpreter throughput benchmark -- repeatable baseline plus a
+# regression guard on relative numbers (interpreter-throughput-design.md §6).
+add_logo_test(test_bench_throughput)
+target_compile_definitions(test_bench_throughput PRIVATE
+    CHECKRUN_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/checkrun"
+    TRAILS_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/trails"
+    P10M0_SOURCE="${CMAKE_SOURCE_DIR}/logo/tests/p10m0")
+
 # Turtle Trails is a pure-Logo maze chase.  Its test loads the program and
 # checks the encoded map, the deterministic 25 fps simulation, and the maze it
 # carves from that same map.

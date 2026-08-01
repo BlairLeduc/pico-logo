@@ -104,6 +104,11 @@ bool is_number_string(const char *str, size_t len)
         // Only allow signs after e/E, not after n/N
         if (!is_n_notation && i < len && (str[i] == '-' || str[i] == '+'))
             i++;
+        // Require at least one digit after the exponent marker, matching
+        // the lexer's is_valid_number and token_source's is_number_word —
+        // otherwise a bare `1e` silently evaluates as 1 (B10).
+        if (i >= len || !isdigit((unsigned char)str[i]))
+            return false;
         while (i < len && isdigit((unsigned char)str[i]))
             i++;
     }

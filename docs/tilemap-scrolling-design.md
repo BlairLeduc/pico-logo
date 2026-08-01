@@ -1,9 +1,12 @@
 # P9 — Tile maps and smooth scrolling (design)
 
-Status: **v1 design, drafted 2026-07-29.** The M0 measurement gate is open:
-nothing below M1 may be built until the numbers in §3 are taken on a Pico 2
-and recorded here. Three scoping decisions were taken with the user on
-2026-07-29:
+Status: **v1 design, drafted 2026-07-29. M0 measured 2026-08-01 — gate
+FAILED (§3.3), design split (§3.4).** The bake half (`stampmap`/`stamptile`,
+the C map, the render-only Turtle Trails revamp) proceeds on its own
+schedule; the scrolling half (§5.3, §10) is blocked on
+[P10](interpreter-throughput-design.md), whose M3 re-measure is the reopen
+gate. §13's milestones are resequenced accordingly. Three scoping decisions
+were taken with the user on 2026-07-29:
 
 - **Available on all three boards**, with tiered capacity (small SRAM tier
   everywhere, large PSRAM tier on the Pico Plus 2 W) — not PSRAM-gated.
@@ -219,8 +222,30 @@ opposite ways.
 
 What the numbers actually argue for is interpreter throughput as the
 prerequisite item, with the tile **bake** path as an independently worthwhile
-piece of P9 that can proceed on its own. Deciding that is the user's call, not
-this document's; §3.5 records the evidence still wanted.
+piece of P9 that can proceed on its own. That became
+**[P10](interpreter-throughput-design.md)** on 2026-08-01; §3.5 below is the
+evidence it was opened on. The split it leaves P9 with:
+
+- **Scrolling (§5.3, §10) is blocked on P10.** It needs a per-frame budget
+  that does not exist yet.
+- **The bake path (§5.4) is not blocked** and should proceed on its own
+  schedule — it needs no frame budget, and it deletes the two largest stalls
+  measured anywhere in this project.
+- **The C map (§5.2) is complementary to P10, not redundant** — `tile.at`'s
+  36+28 cons-cell walk sits inside `step.bugs`, which is 59 % of a Turtle
+  Trails frame.
+
+How much P10 buys P9, sized from its design (§7 there): its M1+M2 target
+48 % of runtime, an upper bound of ~1.9× — a Turtle Trails frame goes from
+87.3 ms to ~46 ms against the 40 ms budget. Close, but not clear on its own;
+the C map attacks the remainder from the data side (the `tile.at` walk above),
+and P10's §7 names it as one of the levers expected to finish the job. So the
+two items converge on Trails from opposite ends. Checkpoint Run (258.6 ms) is
+harder: it needs P10, the camera retrofit deleting its sector machinery (§10),
+*and* game-side simplification — no single item covers a 6.5× shortfall.
+**P10's M3 re-measure is the checkpoint where P9's scrolling half reopens:**
+if a frame body fits under 40 ms there, a per-frame budget exists and §5.3/§10
+proceed against real numbers.
 
 ### 3.5 Where the time actually goes
 
@@ -253,7 +278,7 @@ everything else under 0.1 ms.
 | Cost | Share |
 |---|---:|
 | Re-lexing and classifying words on every evaluation | 34 % |
-| Primitive lookup by case-insensitive string compare | 14 % |
+| Name resolution by case-insensitive string compare | 14 % |
 | Cons-cell walk and index→pointer indirection | 20 % |
 | `memmove`/`memset` | 8 % |
 | Actual evaluation and everything else | 24 % |
@@ -264,7 +289,9 @@ delimiter, comment, infix — and then finds each primitive by `strncasecmp`
 against the registry. Words are interned atoms, so all of this is a pure
 function of the atom and could be computed once. That is roughly **48 % of
 runtime spent rediscovering facts that do not change**, and it is a
-memoisation problem, not an interpreter rewrite.
+memoisation problem, not an interpreter rewrite. (P10's design review later
+split the 14 % bucket: part of it is *variable* resolution — `make "x`, `:x`
+— which is dynamically scoped and cannot be cached on the atom; its §7.)
 
 ## 4. Availability and the memory plan
 
@@ -501,7 +528,9 @@ design, unchanged.
   (crossing the panel seam hides one car-width early, §7).
 - **Frame budget:** ~17.5 ms present + player, six enemies, radar and HUD
   deltas in the remaining ~22 ms at 25 fps. M0's measured frame body
-  decides whether this holds before any game code changes.
+  decides whether this holds before any game code changes. *M0 decided: the
+  body is 258.6 ms (§3.3), so this retrofit waits on P10 plus game-side work
+  (§3.4) and is P9's last milestone (§13).*
 - The design doc gains an as-revamped section recording this, and its §4.2
   closes with the measured comparison.
 
@@ -556,26 +585,36 @@ class of hitch and the entire rebuild machinery disappear.
 
 ## 13. Milestones
 
-- **M0 — measure and gate:** the four numbers in §3.1 on a Pico 2, recorded
-  in this document; go/no-go against the gate criterion; pick §15 levers if
-  needed. No new code beyond throwaway measurement scripts.
+Resequenced 2026-08-01 after the M0 verdict: the unblocked bake half runs
+first, the live view waits for P10 to create the frame budget it needs.
+
+- **M0 — measure and gate: done, FAILED (§3.3).** The split in §3.4
+  reordered everything below.
 - **M1 — bank and capture:** `core/tilemap.c` storage + tiering,
   `newtiles`/`snaptile`, limits, mock recording, native tests, all three
-  presets link and boot.
-- **M2 — map and row source:** `newmap`/`settile`/`tile`, the sampler,
-  `compose_row` integration, `showmap`/`hidemap`, viewport clipping,
-  `map_changed`, dirty marking. Native sampler tests cover offsets, wrap
-  seams (x, y, corner), partial tiles, viewport edges, cell 0, empty slots,
-  both tile sizes.
-- **M3 — scrolling and bake:** `setscroll`/`scroll`, wrap rules,
-  `stampmap`/`stamptile`, lifecycle (§9), reference sections for all eleven
-  primitives.
-- **M4 — the games:** Checkpoint Run retrofit (§10) with before/after
-  numbers beside M0's, then Turtle Trails render revamp (§11); both full
-  test suites reworked; hardware soak on a Pico 2. Also an A/B check on the
-  Pico Plus 2 W: time the same scrolled frame from the PSRAM tier and
-  confirm the present stays wire-bound (§4) — M0's gate ran on the SRAM
-  tier and does not cover this by itself.
+  presets link and boot. Not blocked.
+- **M2 — map storage and the bake path:** `newmap`/`settile`/`tile`, the
+  sampler (writing into `gfx_buffer` via `stampmap`/`stamptile`), lifecycle
+  (§9), reference sections for the storage and bake primitives. Native
+  sampler tests cover offsets, wrap seams (x, y, corner), partial tiles,
+  cell 0, empty slots, both tile sizes — the full corpus, exercised through
+  the bake path. Not blocked.
+- **M3 — Turtle Trails revamp (§11):** render-only, needs nothing beyond
+  M2. Deletes the 5,916 ms `draw.board` and the ~1,050-cell Logo map;
+  before/after numbers beside M0's. Not blocked — and it lands the C map
+  inside `step.bugs`, the data-side half of the Trails frame problem
+  (§3.4).
+- **M4 — live view and scrolling — GATED on P10 M3:** `showmap`/`hidemap`,
+  viewport clipping, `compose_row` integration, `map_changed` and dirty
+  marking, `setscroll`/`scroll` wrap rules, remaining reference sections.
+  Proceeds only when P10's re-measure shows a frame body under 40 ms. Also
+  the A/B check on the Pico Plus 2 W: time the same scrolled frame from the
+  PSRAM tier and confirm the present stays wire-bound (§4) — M0 ran on the
+  SRAM tier and does not cover this by itself.
+- **M5 — Checkpoint Run revamp (§10):** the camera replaces sector paging,
+  with before/after numbers; full test suite rework; hardware soak on a
+  Pico 2. Needs M4 *and* the game-side work §3.4 records — P10 alone does
+  not rescue a 6.5× shortfall.
 
 ## 14. Tests
 

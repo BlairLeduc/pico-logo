@@ -79,7 +79,7 @@ Companion documents (everything in `docs/`):
 | HTTP server (`http.listen`, `when [http.request?]`, `http.respond`, file transfer) | done | M0–M5 implemented, merged to `main` (#108, 2026-07-16): mDNS + `wifi.hostname`/`wifi.sethostname`, TCP server ops, demon-driven pump/parser, handler surface + `http.element`, `webturtle` example, file transfer. Browser + mDNS hardware-validated; `curl -T` upload validation pending. Design: [P7](#p7--http-server-implemented) |
 | Arrays (`array`/`setitem`) | deferred | O(1) indexing; needs a new object kind (likely blob-backed). Wait for demonstrated need |
 | Atom reclamation / `erall` soft reset | done / deferred | Atom reclamation landed 2026-07-23; `erall` soft reset remains deferred. See `memory-reclamation-design.md` |
-| Tile maps + smooth scrolling (accelerated tile games) | todo | Design drafted 2026-07-29 ([`tilemap-scrolling-design.md`](tilemap-scrolling-design.md)), M0 measurement gate open with its harness built (§3.2) and awaiting a Pico 2 run: a tile bank snapped off the canvas, a map larger than the screen, and a pixel-offset viewport the compositor sources rows from. All boards, tiered capacity. See [P9](#p9--tile-maps-and-smooth-scrolling-design-first) |
+| Tile maps + smooth scrolling (accelerated tile games) | todo | Design drafted 2026-07-29 ([`tilemap-scrolling-design.md`](tilemap-scrolling-design.md)); M0 measured 2026-08-01 and the gate **failed** — the interpreter, not the wire, is the bottleneck, which opened [P10](#p10--interpreter-throughput). Split (design §3.4): the bake half (`stampmap`/`stamptile` + C map, deleting the 5,916 ms `draw.board` and 1,346 ms `draw.sector`) proceeds now; the scrolling half waits on P10's M3 re-measure. All boards, tiered capacity. See [P9](#p9--tile-maps-and-smooth-scrolling-design-first) |
 | Interpreter throughput (games hit their frame budgets) | todo | Opened 2026-08-01 by P9's failed M0 gate, design drafted ([`interpreter-throughput-design.md`](interpreter-throughput-design.md)): the display was never the bottleneck — both shipped games run at ~9 fps and ~4 fps against a designed 25, and ~48 % of interpreter runtime is spent re-deriving facts that cannot change (word class re-lexed every evaluation, names resolved by `strncasecmp` every call). Memoise them on the interned atom. Target: Turtle Trails' `play.frame` under 40 ms, from 87.3 ms. See [P10](#p10--interpreter-throughput) |
 
 ### Platform
@@ -385,10 +385,16 @@ prompt while BREAK/error silence, `sound` range 20 Hz–10 kHz).
 
 ### P9 — Tile maps and smooth scrolling (design first)
 
-Status: **design drafted 2026-07-29** — [`tilemap-scrolling-design.md`](tilemap-scrolling-design.md);
-the M0 measurement gate is open, its harness built 2026-08-01 (design §3.2:
-`logo/tests/p9m0`, plus `p9m0.checkrun` and `p9m0.trails` in the games) and
-awaiting a Pico 2 run to fill design §3.3. Scoping decided with the user: available on
+Status: **design drafted 2026-07-29; M0 measured 2026-08-01 — gate FAILED**
+([`tilemap-scrolling-design.md`](tilemap-scrolling-design.md) §3.3–§3.5): a
+present is 21–26 ms but the game frame bodies are 87.3 ms and 258.6 ms, so
+the interpreter, not the display, is the bottleneck — which opened
+[P10](#p10--interpreter-throughput). The item is split (design §3.4): the
+**bake half** — `stampmap`/`stamptile`, the C map, and the render-only
+Turtle Trails revamp — proceeds on its own schedule and needs no frame
+budget; the **scrolling half** (live view, `setscroll`, the Checkpoint Run
+camera) is blocked until P10's M3 re-measure shows a frame body under
+40 ms. Scoping decided with the user: available on
 **all three boards** with tiered capacity (SRAM tier everywhere, PSRAM tier on
 the Plus 2 W); the Turtle Trails revamp is render-only (board and gameplay
 unchanged); both game revamps replace the shipped games in place. The prose
@@ -463,10 +469,11 @@ and its gate is those numbers.
   cells carry a "solid" bit for collision or games keep that in their own list;
   how `touching?`/`over?`/`colourunder` read a map-sourced background; what
   `cs` and the error unwind do to a bank and a map.
-- **Milestones:** M0 measurement + design gate → M1 tile bank and capture →
-  M2 map storage and the compositor's map row source → M3 pixel scrolling and
-  the Logo surface → M4 validation by a real scrolling game, with a Checkpoint
-  Run retrofit as the before/after.
+- **Milestones** (resequenced 2026-08-01 after the M0 verdict; design §13):
+  M0 measure + gate (done, failed) → M1 tile bank and capture → M2 map
+  storage and the bake path → M3 Turtle Trails render revamp → M4 live view
+  and pixel scrolling (**gated on P10 M3**) → M5 Checkpoint Run camera
+  retrofit as the before/after.
 
 ### `.reset` — clear the workspace for the next program
 
@@ -505,6 +512,59 @@ still there to surprise the next one.
   rather than returning into a body that no longer exists.
 - **Reference:** a `## .reset` section under Workspace Management, cross-linked
   from `erall` and `recycle`, spelling out exactly what survives.
+
+### P10 — Interpreter throughput
+
+Status: **design drafted 2026-08-01; M0 done 2026-08-01** —
+[`interpreter-throughput-design.md`](interpreter-throughput-design.md).
+Opened by P9's M0 measurement, which failed its gate and found the display was
+never the bottleneck. The benchmark harness and host baseline are in
+(`tests/test_bench_throughput.c` in ctest as a relative-ratio regression
+guard, `logo/tests/p10m0` for the hardware side; design §6.1); the Pico 2
+baseline column awaits a hardware run of `p10m0`.
+
+**The finding.** Both shipped games miss their frame budgets badly and always
+have: Turtle Trails' `play.frame` is 87.3 ms and Checkpoint Run's 258.6 ms
+against the 40 ms their `(setrefresh "sync 25)` asks for — about 9 fps and
+4 fps. Neither had ever been timed on hardware. `sync` does not wait when a
+frame overruns, so they degraded quietly rather than failing.
+
+**It is not the screen.** A present is 21–26 ms. The host build runs the same
+interpreter against the mock device, where drawing is a recorded command
+rather than a rasterised one, and the host:Pico ratio barely moves between a
+frame that draws almost nothing (91×) and a board build that draws everything
+(107×). Rasterisation is a minor term.
+
+**The cause.** Sampling a pure `repeat [make "x (:x + 1)]` loop: 34 % re-lexing
+and classifying words on every evaluation (`classify_word` is the largest
+single leaf in the interpreter), 14 % resolving names by case-insensitive
+string compare on every call, 20 % cons-cell walk and index→pointer
+indirection, 8 % `memmove`/`memset`, 24 % actual evaluation.
+
+**The design.** Words are interned, immutable atoms, so word class, parsed
+numeric value and resolved binding are all pure functions of the atom —
+derive them once and store them with it. Roughly half of runtime is spent
+rediscovering facts that cannot change, which makes this a memoisation
+problem rather than the bytecode rewrite it might look like. The one
+context-dependent case (a leading `-`, which is unary or binary depending on
+the previous token) keeps today's logic behind a distinguished cached class.
+
+**Target:** Turtle Trails' `play.frame` under 40 ms — the smallest goal that
+turns a shipped game back into the 25 fps it was written for. M1+M2 target
+48 % of runtime, an upper bound of ~1.9×, which likely gets Turtle Trails
+close but does **not** on its own rescue Checkpoint Run's 6.5× shortfall;
+that one needs P9's tile map and game-side work as well. M0 is a benchmark
+harness and baseline, and nothing lands without a before-and-after from it.
+
+**Relationship to P9:** P9's scrolling half is blocked on this item — its
+M3 re-measure is the checkpoint that reopens it. P9's bake half
+(`stampmap`/`stamptile`) is not blocked and should proceed independently —
+it replaces the 5,916 ms `draw.board` and 1,346 ms `draw.sector` with a C
+loop, the two largest stalls measured anywhere in the project. And P9's C
+map (`tile`/`settile`) is complementary rather than redundant: it removes
+the 36+28 cons-cell walk per `tile.at` inside `step.bugs` — 59 % of a
+Turtle Trails frame — attacking the same milliseconds from the data side
+that this item attacks from the interpreter side.
 
 ---
 
@@ -569,3 +629,6 @@ still there to surprise the next one.
 | 2026-08-01 | P9 | M0 items 1 and 4 measured on a Pico 2 (design §3.3): full-screen present **25.6 ms**, road view 256×320 **21.1 ms**, per tile column 1.259 ms, fixed cost per present 0.41 ms; audio clean through twelve seconds of flat-out presenting, as predicted. **A present costs 17–21 % more than §3's wire math** — the band figures are internally consistent, so the effective rate is 4.0 Mpx/s, not the 4.69 Mpx/s the raw 75 MHz / 16 bpp figure gives. The gap is what §3 treated as free or overlapped: `compose_row`'s canvas `memcpy` and palette expansion per row, and the twenty *separate* `lcd_blit_begin`/`end` windows a full-height present costs, since `dirty_tiles` keeps one span per 16-px tile row. The near-zero intercept confirms the cost is per pixel, so §15's narrow-the-viewport lever still buys back its area share exactly. Consequence: at the gate's 32 ms the Logo body must fit in **6.4 ms** full-screen or **10.9 ms** in the road view, against the ~18/~22 ms §3 advertised — the road-view layout is now most of the remaining headroom rather than a 20 % nicety. Verdict still pending on the two game frame bodies (items 2 and 3) |
 | 2026-08-01 | P9 | M0 items 2 and 3 measured, and **the gate fails** (design §3.3): Turtle Trails frame body **87.3 ms**, Checkpoint Run **258.6 ms**, against a gate allowing 32 ms for present *and* body. The design's premise is inverted — the cost is the CPU, not the wire. A present is 21–26 ms; the Logo frame body is three to ten times that, so setting the present to zero still misses the gate by 2.7× and 8.1×, and every §15 lever narrows only the present. **Neither game had ever been timed on hardware**: `checkpoint-run-design.md` §4.2 calls the rebuild "the one number in the design that is not yet measured" and §13 lists profiling as outstanding; `turtle-trails-design.md` §11 likewise. Both ship at `(setrefresh "sync 25)` and actually run at ~9 fps and ~4 fps — `sync` does not wait when a frame overruns, so they degrade quietly instead of failing, which is why it went unnoticed. Before-numbers: `draw.sector` **1,346 ms** against its 120 ms budget (11× over; §4.2's three levers were sized for a 120 ms problem), `draw.board` **5,916 ms** — a six-second pause at every level start. The finding splits P9 in two: the **scrolling** half rests on a per-frame budget that does not exist, while the **bake** half (`stampmap`/`stamptile`) replaces the two largest stalls measured anywhere in the project with a C loop, needs no frame budget, and is *more* justified by the measurement. Interpreter throughput now looks like the prerequisite item. One decomposition run still wanted (design §3.5): `p9.frame` in both games splits a frame into simulation / drawing / present with min-max and a sector-crossing count, since one crossing carries a 1,346 ms rebuild into a single frame and the 258.6 ms mean may hide it |
 | 2026-08-01 | P9 | Root cause of the M0 failure, found on the host rather than by another hardware run (design §3.5): **the interpreter is the bottleneck, not the display**. The host build runs the same core against the mock device, where drawing is a recorded command instead of a rasterised one, so host timings isolate interpretation from plotting — and the host:Pico ratio barely moves between a frame that draws almost nothing (91×) and a board build that draws everything (107×). Rasterisation is a minor term. Also settled: Checkpoint Run's 258.6 ms is an **ordinary** frame, not a hidden sector rebuild — 400 host frames produced zero crossings, since an unattended car stops at the first wall. Within a Trails frame the cost is simulation the tile system never touches (`step.bugs` 59 %, `place.all` 28 %). Sampling a pure `repeat [make "x (:x + 1)]` loop: **34 % re-lexing/classifying words on every evaluation** (`classify_word` is the largest single leaf), **14 % primitive lookup by `strncasecmp`** against the registry, 20 % cons-cell walk and index→pointer indirection, 8 % `memmove`/`memset`, 24 % actual evaluation. Words are interned atoms, so word class, parsed numeric value and primitive index are all pure functions of the atom and could be computed once at intern time — roughly **half of runtime is spent rediscovering facts that do not change**, which is a memoisation problem rather than an interpreter rewrite. Proposed as a new roadmap item ahead of P9's scrolling half; not opened unilaterally — scoping is the user's call |
+| 2026-08-01 | P10 | M0 done: benchmark harness and host baseline. `tests/test_bench_throughput.c` runs in ctest with five scenarios — the profile's pure `repeat` loop, a user-procedure call at workspace sizes 1/64/128, both games' `play.frame` on the mock, and the hardware script executed end to end so it cannot waste a Pico session — printing `BENCH` lines for the record and asserting only **relative** ratios (each scenario against an in-process calibration loop, plus the 128:1 workspace-scan ratio), so the guard does not flap on a loaded machine. `logo/tests/p10m0` takes the same scenarios on a Pico 2; frame bodies stay with p9m0's scripts. Host baseline (design §6.1): repeat loop 1.07 µs/iter; proc call 0.43 µs with 1 defined → 2.09 µs with the table full — a **4.8× spread**, steeper than the ad-hoc 0.57 → 0.96 µs the design first recorded, whose 200-procedure workspace no stock build can hold (`MAX_PROCEDURES` is 128); Trails `play.frame` 0.84 ms, Checkpoint Run 2.73 ms. The corrected scan number strengthens M2's case: both games sit near a hundred procedures, so real calls pay most of the worst case |
+| 2026-08-01 | P9 | Post-M0 split ratified across the docs and sized against P10's design. Milestones resequenced (design §13) so the unblocked bake half runs first: M1 bank → M2 map storage + `stampmap`/`stamptile` → M3 Turtle Trails render revamp (deletes the 5,916 ms `draw.board` and the ~1,050-cell Logo map; needs no frame budget) — then M4 live view/scrolling **gated on P10's M3 re-measure**, and M5 the Checkpoint Run camera. How P10 helps, honestly (its §7, recorded in design §3.4): M1+M2's ~1.9× upper bound takes a Trails frame 87.3 → ~46 ms against 40 — close, with the C map's `tile.at` removal (inside `step.bugs`, 59 % of the frame) converging on the rest from the data side; Checkpoint Run needs P10 *and* the camera retrofit *and* game-side work. Design §3.5's 14 % row relabelled name resolution, noting P10's review found part of it is variable lookup, which cannot be atom-cached |
+| 2026-08-01 | P10 | Added interpreter throughput (todo, design first), opened by P9's failed M0 gate: [`interpreter-throughput-design.md`](interpreter-throughput-design.md). The display was never the bottleneck — both shipped games miss their frame budgets and always have (Turtle Trails 87.3 ms, Checkpoint Run 258.6 ms against 40 ms; ~9 fps and ~4 fps), and neither had ever been timed on hardware. Diagnosis from a sampled profile of a pure `repeat [make "x (:x + 1)]` loop: **34 %** re-lexing and classifying words on every evaluation (`classify_word` is the interpreter's largest single leaf), **14 %** resolving names by `strncasecmp` on every call (`primitive_find_n` binary-searches ~390 primitives, then `find_procedure_index_n` *linearly scans* the ~100-procedure table; measured, a user-procedure call goes 0.57 µs → 0.96 µs as the workspace grows from 1 to 200 procedures), 20 % cons-cell walk and index→pointer indirection, 8 % `memmove`/`memset`. Design: words are interned immutable atoms, so class, parsed numeric value and resolved binding are pure functions of the atom — derive once, store in the atom header (which already carries `ATOM_LINK_FREE`/`ATOM_LINK_MARK` flag bits), invalidate bindings via a generation counter bumped on procedure-table mutation. Costs **no new `bss`**: atoms live inside the existing 128 KB block, so a wider header trades atoms against nodes rather than enlarging a static array (~+1 byte/atom for M1). The single context-dependent case — a leading `-`, unary or binary by preceding token — keeps today's logic behind a distinguished cached class. Milestones: M0 benchmark + baseline (nothing lands without a before/after, and it becomes the CI regression guard), M1 word class, M2 name binding, M3 re-measure and decide, M4 representation only if needed. Honest expectation recorded: M1+M2 target 48 % → upper bound ~1.9×, which likely gets Trails close to 40 ms but does **not** rescue Checkpoint Run's 6.5× shortfall alone. Rejected: bytecode/AST compilation (the real fix, far too large for the evidence — touches GC, `format.c` procedure printing, the editor, and "a program is a list"; revisit only if M3 falls short), case-insensitive interning (changes what `print "Hello` prints), sorting the procedure table (still string compares, and does nothing for the bigger half), overclocking, and lowering the games to 15 fps |

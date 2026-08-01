@@ -133,6 +133,50 @@ void test_error_dont_know_how(void)
     TEST_ASSERT_EQUAL_STRING("I don't know how to foobar", msg);
 }
 
+// B10: a bare exponent marker (`1e`, `1n`, `1e+`) fails the number grammar
+// in both tokenizers (a digit is required after the marker), so the word
+// must error like any other unknown name — not silently evaluate as 1 via
+// the evaluator's lenient `is_number_string`. Compare `1x`, which errors.
+void test_b10_bare_exponent_word_is_not_a_number(void)
+{
+    Result r = eval_string("1e");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
+
+    const char *msg = error_format(r);
+    TEST_ASSERT_EQUAL_STRING("I don't know how to 1e", msg);
+}
+
+void test_b10_bare_n_exponent_word_is_not_a_number(void)
+{
+    Result r = eval_string("1n");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
+}
+
+void test_b10_bare_exponent_in_list_path_is_not_a_number(void)
+{
+    // Same word arriving through the node-iterator path.
+    Result r = eval_string("run [1e]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
+}
+
+void test_b10_valid_exponent_forms_still_numbers(void)
+{
+    Result r = eval_string("1e5");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(100000.0f, r.value.as.number);
+
+    r = eval_string("1e+2");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(100.0f, r.value.as.number);
+
+    r = eval_string("1n2");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(0.01f, r.value.as.number);
+}
+
 void test_error_not_enough_inputs(void)
 {
     // Not enough inputs to sum
@@ -854,6 +898,12 @@ int main(void)
     RUN_TEST(test_word_that_is_a_prefix_of_a_primitive_is_not_a_primitive);
     RUN_TEST(test_word_that_extends_a_primitive_is_not_a_primitive);
     RUN_TEST(test_long_proc_name_tail_recursion);
+
+    // Bare exponent markers (B10)
+    RUN_TEST(test_b10_bare_exponent_word_is_not_a_number);
+    RUN_TEST(test_b10_bare_n_exponent_word_is_not_a_number);
+    RUN_TEST(test_b10_bare_exponent_in_list_path_is_not_a_number);
+    RUN_TEST(test_b10_valid_exponent_forms_still_numbers);
 
     return UNITY_END();
 }

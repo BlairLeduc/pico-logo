@@ -1,0 +1,75 @@
+; P10 M0 -- interpreter throughput baseline on hardware.
+; See docs/interpreter-throughput-design.md section 6 (M0).
+;
+;   load "p10m0
+;   p10m0
+;
+; The native benchmark (tests/test_bench_throughput.c) is the repeatable
+; regression guard; this script takes the same scenarios on a Pico 2 with
+; `ticks`, so the host-to-Pico ratio the design leans on stays on the
+; record.  The game frame bodies are already covered by `p9m0.trails` and
+; `p9m0.checkrun`, so this file measures only the two synthetic scenarios:
+; the pure repeat loop of the design's profile, and a user-procedure call
+; in a small workspace against a full one.
+;
+; The full-workspace case fills the procedure table to ~110 of its 128
+; entries and defines the call target last, so the linear scan in
+; `find_procedure_index_n` pays close to its worst case -- the number
+; P10 M2's binding cache should flatten.
+
+make "p10.n 10000
+
+to p10.target
+end
+
+; Microseconds per iteration of the profile's loop.
+to p10.loop
+  local "t0 local "x
+  make "x 0
+  make "t0 ticks
+  repeat :p10.n [make "x (:x + 1)]
+  output (((ticks - :t0) * 1000) / :p10.n)
+end
+
+; Microseconds per call of a procedure defined before any filler.
+to p10.calls.early
+  local "t0
+  make "t0 ticks
+  repeat :p10.n [p10.target]
+  output (((ticks - :t0) * 1000) / :p10.n)
+end
+
+; Microseconds per call of the procedure defined last, table nearly full.
+to p10.calls.late
+  local "t0
+  make "t0 ticks
+  repeat :p10.n [p10.target.late]
+  output (((ticks - :t0) * 1000) / :p10.n)
+end
+
+to p10.fill :count
+  repeat :count [define (word "p10.f. repcount) [[]]]
+end
+
+to p10.unfill :count
+  repeat :count [erase (word "p10.f. repcount)]
+  erase "p10.target.late
+end
+
+to p10m0
+  local "l local "e local "lt
+  pr [P10 M0 interpreter throughput baseline]
+  pr []
+  make "l (p10.loop)
+  make "e (p10.calls.early)
+  p10.fill 100
+  define "p10.target.late [[]]
+  make "lt (p10.calls.late)
+  p10.unfill 100
+  pr (se [repeat loop         :] :l [usec each])
+  pr (se [proc call, small ws :] :e [usec each])
+  pr (se [proc call, full ws  :] :lt [usec each])
+  pr []
+  pr [Frame bodies: load "trails then p9m0.trails,]
+  pr [and load "checkrun then p9m0.checkrun.]
+end
