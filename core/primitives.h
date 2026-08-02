@@ -168,6 +168,7 @@ extern "C"
     void primitives_http_init(void);
     void primitives_httpd_init(void);
     void primitives_time_init(void);
+    void primitives_tilemap_init(void);
 
     // Stop autonomous motion and animation on every turtle (speed 0, anim
     // off). Turtle state, not demon state: called by `cs` alongside its
@@ -175,6 +176,11 @@ extern "C"
     // when there is no device yet (boot). On devices that support turtle
     // selection this visits each turtle in turn and leaves turtle 0 selected.
     void turtle_stop_motion(void);
+
+    // Route the device to the lowest turtle in the `tell` set, the one a
+    // query answers for. Shared with the tile primitives, whose capture
+    // happens at the turtle exactly as snapsh's does. No-op without a device.
+    void turtle_select_first_active(void);
 
     // Forward declarations for I/O
     struct LogoIO;

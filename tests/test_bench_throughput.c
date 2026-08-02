@@ -37,6 +37,7 @@
 #define BOUND_PROC1_ITER_X_CAL    300.0    // M2 baseline x~91
 #define BOUND_PROC_SCAN_RATIO     2.0      // 128- vs 1-proc; M2 flattened this to 1.00
 #define BOUND_TRAILS_FRAME_X_CAL  5.5e5    // M2 baseline x181k
+#define BOUND_TRAILS_BOARD_X_CAL  3.0e6    // P9 M3 baseline x~0.9M (was x~16M)
 #define BOUND_CHECKRUN_FRAME_X_CAL 1.8e6   // M2 baseline x587k
 
 void setUp(void)
@@ -223,13 +224,23 @@ void test_bench_trails_play_frame(void)
     double cal = calibrate_ns();
     load_game(TRAILS_SOURCE);
     double ms = time_game_frames_ms(
-        "setup.palette setup.shapes setup.turtles setup.sound "
+        "setup.palette setup.shapes setup.turtles setup.tiles setup.sound "
         "init.game setup.level setrefresh \"manual", 30);
 
     printf("BENCH trails.frame     %8.3f ms/frame  x%.1fk cal\n",
            ms, ms * 1e6 / cal / 1e3);
     TEST_ASSERT_TRUE_MESSAGE(ms * 1e6 / cal < BOUND_TRAILS_FRAME_X_CAL,
                              "Turtle Trails play.frame regressed vs calibration");
+
+    // The level build -- P9 M3 turned this from decoding a map into 1,050
+    // cons cells and carving it with the pen into two map passes and one
+    // stampmap.  It is not a frame cost, but it is the largest single stall
+    // the game has, so it belongs in the record beside the frame.
+    double board = time_code_ms("setup.level");
+    printf("BENCH trails.board     %8.3f ms/build x%.1fM cal\n",
+           board, board * 1e6 / cal / 1e6);
+    TEST_ASSERT_TRUE_MESSAGE(board * 1e6 / cal < BOUND_TRAILS_BOARD_X_CAL,
+                             "Turtle Trails level build regressed vs calibration");
 }
 
 void test_bench_checkrun_play_frame(void)

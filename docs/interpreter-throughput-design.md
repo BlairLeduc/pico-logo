@@ -578,6 +578,21 @@ frame to `tile.at` inside `step.bugs` — 43.2 ms of the 73.2 — and P9's C map
 is worth having and will not be decisive, while P9's map is decisive; the two
 are complementary as §10 says, but the weight sits with P9.
 
+> **Disproved 2026-08-02.** P9 M3 built the C map and Turtle Trails' frame
+> did not move: 73.4 → **73.6 ms** on a Pico 2
+> ([`tilemap-scrolling-design.md`](tilemap-scrolling-design.md) §13.4). The
+> paragraph above misread its own source. P9's M0 measured **`step.bugs`** at
+> 59 % of a frame, not `tile.at`; `step.bugs` is dozens of statements and
+> procedure calls of targeting arithmetic around a handful of lookups, and
+> replacing a 36+28 cons walk with a `tile` primitive is close to a wash
+> anyway — the primitive pays argument validation and a fresh number value
+> where the walk paid pointer chasing. **Nothing outside P10 closes Trails.**
+> What is left in the frame is ordinary interpreter overhead spread thin, the
+> target of M4 (§7 below rejects it partly *because* of the claim now
+> disproved) and of the bytecode body §8 rejects. §1's 40 ms is unmet with no
+> named lever; reopening either rejection needs a fresh decision, not this
+> paragraph.
+
 This should inform M3's decision, and it argues against M4: representation
 work (the cons-cell walk, §3.3) attacks the same milliseconds P9's C map
 removes outright, and the C map is both cheaper and already designed.

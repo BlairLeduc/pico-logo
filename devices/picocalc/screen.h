@@ -156,7 +156,15 @@ typedef struct {
 void screen_sprite_set(uint8_t id, const ScreenSprite *sprite);
 void screen_sprite_hide(uint8_t id);
 void screen_gfx_stamp(const ScreenSprite *sprite);
-void screen_gfx_snap(int x0, int y0, int w, int h, uint8_t *out);
+// Read a canvas region into `out` (w*h bytes, row-major), honouring the
+// boundary mode. `opaque` false substitutes SCREEN_SPRITE_TRANSPARENT for
+// background pixels (the costume capture, snapsh); true copies every byte
+// verbatim (the tile capture, snaptile).
+void screen_gfx_snap(int x0, int y0, int w, int h, uint8_t *out, bool opaque);
+
+// Write `count` palette indices into the canvas from screen pixel (x, y),
+// left to right, clipped to the screen (the tile baker: stampmap/stamptile).
+void screen_gfx_write_row(int x, int y, const uint8_t *pixels, int count);
 int screen_gfx_save(LogoStream *out);
 int screen_gfx_load(LogoStream *in);
 

@@ -1,8 +1,12 @@
 # P9 — Tile maps and smooth scrolling (design)
 
 Status: **v1 design, drafted 2026-07-29. M0 measured 2026-08-01 — gate
-FAILED (§3.3), design split (§3.4).** The bake half (`stampmap`/`stamptile`,
-the C map, the render-only Turtle Trails revamp) proceeds on its own
+FAILED (§3.3), design split (§3.4). The bake half is built: M1+M2 landed and
+were hardware-accepted 2026-08-02 (§13.1, §13.2), and M3 — the Turtle Trails
+revamp — landed and was hardware-accepted the same day (§13.3, §13.4). M3
+also disproved §3.4's expectation that the C map would close Trails' frame:
+it is frame-neutral.** The bake half (`stampmap`/`stamptile`, the C map, the
+render-only Turtle Trails revamp) proceeds on its own
 schedule; the scrolling half (§5.3, §10) is blocked on
 [P10](interpreter-throughput-design.md), whose M3 re-measure is the reopen
 gate. §13's milestones are resequenced accordingly. Three scoping decisions
@@ -233,14 +237,18 @@ evidence it was opened on. The split it leaves P9 with:
   measured anywhere in this project.
 - **The C map (§5.2) is complementary to P10, not redundant** — `tile.at`'s
   36+28 cons-cell walk sits inside `step.bugs`, which is 59 % of a Turtle
-  Trails frame.
+  Trails frame. **[Disproved by M3, §13.4: the C map is frame-neutral. The
+  59 % is `step.bugs` as a whole, not the walk inside it.]**
 
 How much P10 buys P9, sized from its design (§7 there): its M1+M2 target
 48 % of runtime, an upper bound of ~1.9× — a Turtle Trails frame goes from
 87.3 ms to ~46 ms against the 40 ms budget. Close, but not clear on its own;
 the C map attacks the remainder from the data side (the `tile.at` walk above),
 and P10's §7 names it as one of the levers expected to finish the job. So the
-two items converge on Trails from opposite ends. Checkpoint Run (258.6 ms) is
+two items converge on Trails from opposite ends. **[Disproved: M3 built the
+C map and the frame did not move — 73.4 → 73.6 ms, §13.4. Only P10 M1's
+1.19× was ever real, and Trails stays at ~73 ms against 40.]** Checkpoint Run
+(258.6 ms) is
 harder: it needs P10, the camera retrofit deleting its sector machinery (§10),
 *and* game-side simplification — no single item covers a 6.5× shortfall.
 **P10's M3 re-measure is the checkpoint where P9's scrolling half reopens:**
@@ -536,6 +544,8 @@ design, unchanged.
 
 ## 11. Turtle Trails revamp (render-only, gameplay identical)
 
+> Built 2026-08-02; §13.3 records what changed against this section.
+
 Per the scoping decision: same 28×36 board, no scrolling, byte-identical
 rules, speeds, AI, and sound. The tile system replaces how the board is
 *stored and drawn*:
@@ -590,20 +600,19 @@ first, the live view waits for P10 to create the frame budget it needs.
 
 - **M0 — measure and gate: done, FAILED (§3.3).** The split in §3.4
   reordered everything below.
-- **M1 — bank and capture:** `core/tilemap.c` storage + tiering,
-  `newtiles`/`snaptile`, limits, mock recording, native tests, all three
-  presets link and boot. Not blocked.
-- **M2 — map storage and the bake path:** `newmap`/`settile`/`tile`, the
-  sampler (writing into `gfx_buffer` via `stampmap`/`stamptile`), lifecycle
-  (§9), reference sections for the storage and bake primitives. Native
-  sampler tests cover offsets, wrap seams (x, y, corner), partial tiles,
-  cell 0, empty slots, both tile sizes — the full corpus, exercised through
-  the bake path. Not blocked.
-- **M3 — Turtle Trails revamp (§11):** render-only, needs nothing beyond
-  M2. Deletes the 5,916 ms `draw.board` and the ~1,050-cell Logo map;
-  before/after numbers beside M0's. Not blocked — and it lands the C map
-  inside `step.bugs`, the data-side half of the Trails frame problem
-  (§3.4).
+- **M1 — bank and capture: done 2026-08-02.** `core/tilemap.c` storage +
+  tiering, `newtiles`/`snaptile`, limits, native tests. Delivered together
+  with M2 (see §13.1), since a bank nothing can draw is not reviewable on
+  its own.
+- **M2 — map storage and the bake path: done 2026-08-02.**
+  `newmap`/`settile`/`tile`, the sampler, `stampmap`/`stamptile`, lifecycle
+  (§9), reference sections for all seven primitives. Native sampler tests
+  cover offsets, wrap seams (x, y, corner), partial tiles, cell 0, empty
+  slots, both tile sizes, and the viewport origin; the bake path is
+  exercised through the mock canvas end to end.
+- **M3 — Turtle Trails revamp (§11): done 2026-08-02** (§13.3). The
+  5,916 ms `draw.board` and the ~1,050-cell Logo map are both gone; the
+  level build is 56.7 → **3.3 ms** on the host. Hardware numbers pending.
 - **M4 — live view and scrolling — GATED on P10 M3:** `showmap`/`hidemap`,
   viewport clipping, `compose_row` integration, `map_changed` and dirty
   marking, `setscroll`/`scroll` wrap rules, remaining reference sections.
@@ -615,6 +624,189 @@ first, the live view waits for P10 to create the frame budget it needs.
   with before/after numbers; full test suite rework; hardware soak on a
   Pico 2. Needs M4 *and* the game-side work §3.4 records — P10 alone does
   not rescue a 6.5× shortfall.
+
+### 13.1 M1+M2 as built (2026-08-02)
+
+Seven primitives shipped — `newtiles`, `snaptile`, `newmap`, `settile`,
+`tile`, `stampmap`, `stamptile` — in `core/primitives_tilemap.c` over
+`core/tilemap.c`, with a `# Tile Maps` chapter in the reference. 69/69 ctest
+green (two new files, 39 tests); all three firmware presets link and the host
+REPL runs the storage half. Six departures from §5–§7 are worth recording:
+
+- **Two console ops, not one.** M2 needs no `map_changed` (that belongs to
+  the live view), but it does need to move pixels both ways: `canvas_snap`
+  copies the tile-sized region centred on the turtle *verbatim* — the
+  distinction from `snap_costume`, which turns background pixels
+  transparent — and `canvas_write_row` writes a run of palette bytes into the
+  canvas at a screen position. On the PicoCalc these are `screen_gfx_snap`
+  (which gained an `opaque` flag rather than a near-duplicate) and a new
+  `screen_gfx_write_row` that memcpys into `gfx_buffer` and marks one dirty
+  rect per row. Both land on the mock's staged canvas, which is what lets a
+  test paint a tile, capture it, bake it back, and assert the pixels.
+- **The sampler takes the background colour and does not clip.**
+  `tilemap_fill_row(dst, y, x0, x1, bg)`: cell 0 and cells naming an empty
+  slot are a `memset` of `bg`, which core cannot know on its own, and the
+  *caller* clips its span to the viewport (via `tilemap_get_viewport`) rather
+  than the sampler returning a covered sub-range. M4's `compose_row` clips
+  the same way, and the pure-function shape is what makes the seam tests
+  readable.
+- **No `setscroll`/`showmap` yet.** Scroll and viewport are core state
+  because the sampler is defined in terms of them, and they are tested
+  natively; the primitives that set them stay in M4 with the live view. A
+  bake therefore runs at scroll (0, 0) through the whole graphics area, which
+  is exactly what a non-scrolling tile board (Trails) wants.
+- **"Before `newtiles`/`newmap`" is an input error, not a new message.** A
+  bank with no size has no slots and a map with no dimensions has no cells,
+  so every index is out of range and `ERR_DOESNT_LIKE_INPUT` names the
+  offending input — the §6 rule falls out for free. `stampmap` takes no
+  input, and every existing single-`%s` error template renders the
+  *primitive's* name (the evaluator fills `error_proc`), so "map not found"
+  would have printed as "stampmap not found"; it is a no-op instead, which
+  also matches `stamp` with an empty shape slot.
+- **`stamptile` re-bakes every on-screen copy of the cell.** Sampling wraps,
+  so a world smaller than the viewport shows a cell more than once; the
+  repair walks the occurrences instead of assuming one.
+- **Cost:** `pico2` RAM 93.86 % → **93.94 %**, +~380 B of `bss` — the 32-byte
+  slot-filled bitmap and the 320-byte row buffer `stampmap` bakes through
+  (`TILEMAP_ROW_MAX`). The pools themselves are still **0 B static**, as
+  designed: `mem_region_alloc` else one process-lifetime `malloc`, allocated
+  on the first `newtiles`/`newmap`. A consequence worth knowing for tests:
+  the tier is fixed by the *first* allocation, so a single process cannot
+  exercise both tiers.
+
+### 13.2 M1+M2 on hardware (2026-08-02, Pico Plus 2 W)
+
+`logo/tests/p9m2`, all four checks **pass**.
+
+- **Tier and capacity (1): PASS.** The large tier is real — slot 255 accepted
+  and 256 refused, a 512×512 map accepted and 513×512 refused — so §4's
+  table holds on the board, and the PSRAM path has now run at least once.
+- **Bake (2): Turtle Trails' 28×36 board bakes in 7.45 ms**, against the
+  **5,916 ms** `draw.board` it replaces: **794×**. M2's reason for existing
+  is settled, and M3 can bake a board at level start for free in human terms.
+- **Capture orientation (3): PASS.** The asymmetric "L" comes back upright
+  and in the right cells through the device's own `turtle_canvas_snap`, which
+  no unit test can reach — the mock reimplements the coordinate conversion
+  rather than sharing it.
+- **`snapsh` (4): PASS.** The band runs unbroken behind the worn costume, so
+  the `opaque` flag did not leak into the costume capture.
+
+**The 7.45 ms is worth reading closely, because it is slower than it looks.**
+224×288 is 64,512 pixels, so the bake runs at ~8.7 Mpx/s — about 115 ns a
+pixel, and only ~2× faster than the SPI wire M0 measured at 4.0 Mpx/s. A
+memcpy-bound loop on a 150 MHz core should be an order of magnitude quicker.
+Three suspects, in the order worth attacking:
+
+1. **The sampler copies a tile run at a time.** At 8 px tiles that is 28 runs
+   of 8 bytes per row, 8,064 `memcpy` calls for this board — a copy small
+   enough that the call is the cost.
+2. **One dirty mark per row.** `screen_gfx_write_row` marks a rect per row;
+   288 rows against a rect that spans 14 tile columns each time. A bake could
+   mark its whole rectangle once.
+3. **None of this is RAM-resident.** §7 asks for the sampler to be
+   `__not_in_flash_func` like `lcd_blit_row`, and M1+M2 did **not** do it:
+   the macro is Pico-SDK-only and `core/tilemap.c` compiles for the host too,
+   so it needs a shim (a no-op macro on host, or the hot loop moved into the
+   device). This is the same instruction-fetch story as P10's open XIP_RAM
+   lead, on the same board.
+
+**None of it blocks M3**, where `stampmap` runs once at level start. It
+matters to **M4**: extrapolating this rate to a full screen (102,400 px)
+gives ~11.8 ms of CPU on top of M0's 25.6 ms present, which does not leave a
+40 ms frame anywhere to stand — so if P10's re-measure ever reopens the live
+view, the three items above are the first work, not the last.
+
+### 13.3 M3 as built (2026-08-02)
+
+Turtle Trails now stores its board in the C map and bakes it, with the
+gameplay byte-identical. 69/69 ctest green (`test_trails` 55 tests, five of
+them new or rewritten); the firmware presets are untouched, since the change
+is entirely in `logo/games/trails`. Five things are worth recording.
+
+- **A cell holds a bank slot, not a tile code.** §11 said the C map replaces
+  the Logo map; what it did not say is that one byte then has to answer both
+  "what does this look like" and "what is this". The slots are ordered so
+  every rule is one comparison — 0 off the board, 1 hedge, 2 nest, 3..18
+  open path (one per neighbour mask), 19..34 speck, 35..50 blossom — so
+  `walk?` is `> 2`, `nest.open?` is `> 1`, paintable is `>= 19`, and
+  painting subtracts 16 or 32 to reach the plain variant of the same shape.
+  A consequence: a tunnel cell and an empty corridor share a picture, and so
+  do the nest floor and its door. Nothing in the game ever told them apart.
+- **The mask is the rounded corner, so the tiles are drawn with the pen.**
+  A tile is a fat hedge dot with a pen-8 stroke run into each walkable
+  neighbour: a stroke that stops at the cell centre leaves a round cap, one
+  that runs on leaves a square edge. That is the same pen `carve.paths`
+  used, which is why the hedge still looks carved. All 50 slots are drawn
+  once at startup (only 26 are reachable from this map, but drawing the rest
+  costs about a millisecond and keeps every slot number arithmetic).
+- **One pixel changes.** A pen-8 disc is nine pixels across, not eight, so
+  the carved board had nine-pixel corridors that ate a pixel off the hedge
+  either side. Tiles make corridors eight pixels and one-cell hedge walls
+  eight rather than six. The board is visibly the same board; it is not
+  pixel-identical, and no reasonable tile scheme could be — the bleed makes
+  a cell's pixels depend on its neighbours' *neighbours*.
+- **The map is 40 × 77, and the board is derived once.** A bake starts at
+  the top left of the graphics area, so the map must be the whole screen and
+  the 28×36 board sits at cell offset (6, 2) inside it — which also lets
+  `tile.at` drop its four bounds tests, because a step off the board lands
+  on margin and reads 0. Rows 41–76 hold the finished board, off the bottom
+  of the 608-pixel world where the sampler never reaches; `reset.board`
+  copies them down at a level start. Deriving a cell costs about twenty Logo
+  statements and copying one costs two, which is the difference between an
+  18 ms and a 3 ms level build on the host.
+- **Numbers.** New `trails.board` line in `test_bench_throughput`, host,
+  same machine, before and after: level build **56.7 → 3.1 ms** (18×), of
+  which the bake itself is 0.07 ms. `play.frame` is unmoved at ~0.60 ms —
+  as §3.4 said it would be, the tile system does not touch the simulation,
+  and `tile.at`'s cons walk was never the frame's problem on the host.
+
+### 13.4 M3 on hardware (2026-08-02) — accepted
+
+Two `p9m0.trails` runs. The first showed a blank maze and a frame 8 % the
+wrong way; the second, after the two fixes below, shows the board and puts
+the frame back where it was.
+
+- **The blank maze was not the tile system.** `dot` ignored the pen size on
+  the PicoCalc (**B11**, `docs/bugs.md`), so `make.tile`'s pensize-16 hedge
+  patch was a single pixel and every captured tile came back as background
+  with one hedge pixel in it. The bake was doing exactly what it was told.
+  Fixed by drawing a dot as a zero-length line at the current pen size,
+  which is how every other drawing path already stamps the pen. The defect
+  was *already* shipping and unnoticed: Trails' specks and blossoms were
+  1-px dots rather than the 2-px speck and 6-px disc `draw.specks` asked
+  for, and the blossom erase blacked out one pixel. No native test could
+  see it, because the mock recorded a dot without a pen size. It does now.
+- **The 8 % frame regression was two variable reads.** `:sl.dc` and
+  `:sl.dr` inside `tile.at` — the most-called procedure in the game, and a
+  dynamically scoped name cannot be cached. Written out as literals (the
+  tests pin the two spellings against each other), the frame comes back.
+- **The board build: 5,916 → 303 ms, 19.5×**, the same factor the host
+  measured, which is what a purely interpreter-bound build should give.
+  `draw.board` alone — the bake plus the HUD — is **20 ms**.
+- **The C map is frame-neutral: 73.6 ms mean** (min 68, max 79; simulation
+  48.6, drawing 24.8, present **0.25** a frame) against P10 M1's
+  **73.4 ms**. The present is worth a second look on its own: a quarter of
+  a millisecond in a 73.6 ms frame, which is §3.3's finding taken to its
+  limit — a game that moves five sprites dirties almost nothing, so the
+  wire this whole design was sized against is not in the picture at all
+  until something scrolls.
+  Not a regression, and not the win either half of this project predicted.
+  **§3.4's "the C map attacks the remainder from the data side", and P10's
+  §7 "what closes the gap is P9, not P10", are both disproved.** The error
+  in both was one of scope: P9 M0 measured `step.bugs` at 59 % of a frame,
+  and that was read as `tile.at`'s cons walk being 59 % of a frame, when
+  `step.bugs` is dozens of statements and procedure calls of targeting
+  arithmetic around a handful of lookups. Swapping the 36+28 walk for a
+  `tile` primitive is close to a wash on this interpreter in any case — the
+  primitive pays argument validation and a fresh number value where the
+  walk paid pointer chasing.
+- **So Turtle Trails' 40 ms target has no named lever left.** What remains
+  is ordinary interpreter overhead spread thin across `step.bugs` — what
+  P10 M4 (declined) and a bytecode body would attack — plus game-side
+  simplification. Recorded as a measurement result, not as new scope.
+- One observation not worth much at n = 20: the first run's spread was
+  64–115 ms and the second's 68–79. Nothing in the frame path recycles at
+  that cadence, and it stays unexplained.
 
 ## 14. Tests
 

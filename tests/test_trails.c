@@ -1,10 +1,11 @@
 // Tests for the pure-Logo Turtle Trails game.
 //
 // The encoded map is the game's only source of truth: movement, bug
-// decisions, painting and the drawn maze all read it. These tests therefore
-// check the map against itself (symmetry, connectivity, a sealed nest, no
-// dead ends) and check the drawing against the map, so the picture and the
-// logic cannot drift apart.
+// decisions, painting and the board on screen all read it. These tests
+// therefore check the encoded map against itself (symmetry, connectivity, a
+// sealed nest, no dead ends), check that the C tile map the game builds from
+// it agrees cell for cell, and check the baked board against that map, so the
+// picture and the logic cannot drift apart.
 //
 // They also execute every rule procedure at least once. The parse hazards
 // listed at the top of logo/games/trails are runtime errors that reading does
@@ -33,6 +34,22 @@
 #define T_TUNNEL  4
 #define T_NEST    5
 #define T_DOOR    6
+
+// Bank slots, as laid out at the top of logo/games/trails. A map cell holds
+// one of these: the picture and the rule at once.
+#define S_HEDGE   1
+#define S_NEST    2
+#define S_PATH    3
+#define S_SPECK  19
+#define S_BLOSS  35
+
+// The board's offset inside the whole-screen map, and the screen rectangle it
+// therefore occupies: 28x36 cells of 8 pixels centred on 320x320.
+#define MAP_DC 6
+#define MAP_DR 2
+#define MAP_KEEP 40   // row offset of the derived board, below the screen
+#define BOARD_X0 (MAP_DC * 8)
+#define BOARD_Y0 (MAP_DR * 8)
 
 // Directions, which are also the tie-break order.
 #define D_UP 1
@@ -162,13 +179,32 @@ static int actor(const char *field, int i)
     return (int)numf("item %d :a.%s", i, field);
 }
 
-// Read the whole decoded map into C so graph properties can be checked with a
-// real traversal rather than by trusting the game's own helpers.
+// Read the encoded map into C so graph properties can be checked with a real
+// traversal rather than by trusting the game's own helpers. The encoded rows
+// are the source data; what the runtime map holds is a bank slot, and
+// test_the_built_map_agrees_with_the_encoding ties the two together.
 static void read_map(int m[ROWS][COLS])
+{
+    for (int r = 0; r < ROWS; r++) {
+        char code[64];
+        snprintf(code, sizeof(code), "item %d :tt.map", r + 1);
+        Result res = eval_string(code);
+        TEST_ASSERT_EQUAL_MESSAGE(RESULT_OK, res.status, error_format(res));
+        const char *w = value_to_string(res.value);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(COLS, (int)strlen(w), "an encoded row is not 28 characters");
+        for (int c = 0; c < COLS; c++) {
+            TEST_ASSERT_TRUE_MESSAGE(w[c] >= 'A' && w[c] <= 'G', "unknown tile letter");
+            m[r][c] = w[c] - 'A';
+        }
+    }
+}
+
+// Read the C tile map the game actually plays from, in board coordinates.
+static void read_slots(int s[ROWS][COLS])
 {
     for (int r = 0; r < ROWS; r++)
         for (int c = 0; c < COLS; c++)
-            m[r][c] = (int)numf("tile.at %d %d", c + 1, r + 1);
+            s[r][c] = (int)numf("tile.at %d %d", c + 1, r + 1);
 }
 
 static bool walkable(int code)
@@ -201,7 +237,7 @@ void setUp(void)
 {
     test_scaffold_setUp_with_device_and_hardware();
     load_trails();
-    run("setup.palette setup.shapes setup.turtles setup.sound");
+    run("setup.palette setup.shapes setup.turtles setup.tiles setup.sound");
     run("init.game setup.level");
 }
 
@@ -220,9 +256,96 @@ static void test_map_shape_and_encoding(void)
         TEST_ASSERT_EQUAL_INT_MESSAGE(COLS, (int)numf("count item %d :tt.map", r),
                                       "encoded row is not 28 characters");
     }
-    TEST_ASSERT_EQUAL_INT(ROWS, (int)num("count :tt.tiles"));
-    for (int r = 1; r <= ROWS; r++)
-        TEST_ASSERT_EQUAL_INT(COLS, (int)numf("count item %d :tt.tiles", r));
+    // The map is the whole 320x320 screen, because a bake always starts at
+    // the top left corner of the graphics area; the board sits inside it.
+    TEST_ASSERT_EQUAL_INT(MAP_DC, (int)num(":sl.dc"));
+    TEST_ASSERT_EQUAL_INT(MAP_DR, (int)num(":sl.dr"));
+    TEST_ASSERT_EQUAL_INT(MAP_KEEP, (int)num(":sl.keep"));
+    // tile.at spells the offsets out for speed, so pin the two spellings
+    // against each other at both corners of the board.
+    TEST_ASSERT_EQUAL_INT((int)numf("tile %d %d", 1 + MAP_DC, 1 + MAP_DR),
+                          (int)num("tile.at 1 1"));
+    TEST_ASSERT_EQUAL_INT((int)numf("tile %d %d", COLS + MAP_DC, ROWS + MAP_DR),
+                          (int)num("tile.at 28 36"));
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, (int)numf("tile 1 1"), "the map margin is not empty");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, (int)numf("tile 40 40"), "the map margin is not empty");
+    // A step off the board has to land on that margin, which is what lets
+    // tile.at drop its bounds tests.
+    TEST_ASSERT_EQUAL_INT(0, (int)num("tile.at 0 1"));
+    TEST_ASSERT_EQUAL_INT(0, (int)num("tile.at 29 36"));
+    TEST_ASSERT_EQUAL_INT(0, (int)num("tile.at 1 0"));
+    TEST_ASSERT_EQUAL_INT(0, (int)num("tile.at 28 37"));
+}
+
+// The C map is built from the encoded rows, and everything downstream -- the
+// rules and the picture alike -- reads only the map. So each cell's slot must
+// carry its letter's meaning, and carry the variant its neighbours ask for.
+static void test_the_built_map_agrees_with_the_encoding(void)
+{
+    static int m[ROWS][COLS];
+    static int s[ROWS][COLS];
+    read_map(m);
+    read_slots(s);
+
+    for (int r = 0; r < ROWS; r++) {
+        for (int c = 0; c < COLS; c++) {
+            char msg[64];
+            snprintf(msg, sizeof(msg), "col %d row %d", c + 1, r + 1);
+            int slot = s[r][c];
+
+            if (!walkable(m[r][c])) {
+                // Dead space is hedge; the nest floor and its door are the
+                // same picture but a number bugs may cross.
+                TEST_ASSERT_EQUAL_INT_MESSAGE(m[r][c] == T_DEAD ? S_HEDGE : S_NEST, slot, msg);
+                continue;
+            }
+
+            int mask = 0;
+            for (int d = 1; d <= 4; d++) {
+                int nc, nr;
+                if (!step_tile(c + 1, r + 1, d, &nc, &nr)) continue;
+                // The pen's runs never wrapped a tunnel, so neither does the
+                // mask: a tunnel mouth keeps its round cap.
+                if (nc != c + 1 + DC[d] || nr != r + 1 + DR[d]) continue;
+                if (!walkable(m[nr - 1][nc - 1])) continue;
+                mask |= (d == D_UP) ? 8 : (d == D_LEFT) ? 4 : (d == D_DOWN) ? 2 : 1;
+            }
+
+            int base = m[r][c] == T_PAINT ? S_SPECK : m[r][c] == T_BLOSSOM ? S_BLOSS : S_PATH;
+            TEST_ASSERT_EQUAL_INT_MESSAGE(base + mask, slot, msg);
+            TEST_ASSERT_TRUE_MESSAGE(slot > S_NEST, msg);
+        }
+    }
+}
+
+// The board is derived once into map rows below the screen and copied down at
+// every level start, so the copy has to be exact -- and the kept rows must
+// survive a level being played, or the next one starts half painted.
+static void test_the_kept_board_is_restored_at_every_level(void)
+{
+    static int s[ROWS][COLS];
+    read_slots(s);
+
+    for (int r = 0; r < ROWS; r++)
+        for (int c = 0; c < COLS; c++)
+            TEST_ASSERT_EQUAL_INT_MESSAGE(
+                s[r][c], (int)numf("tile %d %d", c + 1 + MAP_DC, r + 1 + MAP_KEEP),
+                "the kept board disagrees with the live one");
+
+    // Paint a tile, then start the next level: the kept copy is untouched and
+    // the live board comes back whole.
+    int left = (int)num(":tt.left");
+    put_actor(1, 2, 5, D_DOWN, 0, 0);
+    run("paint.tile");
+    TEST_ASSERT_EQUAL_INT(left - 1, (int)num(":tt.left"));
+    TEST_ASSERT_NOT_EQUAL(s[4][1], (int)num("tile.at 2 5"));
+
+    run("make \"tt.level (:tt.level + 1) setup.level");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(left, (int)num(":tt.left"), "tt.left was not restored");
+    for (int r = 0; r < ROWS; r++)
+        for (int c = 0; c < COLS; c++)
+            TEST_ASSERT_EQUAL_INT_MESSAGE((int)numf("tile.at %d %d", c + 1, r + 1), s[r][c],
+                                          "a level start did not restore the board");
 }
 
 static void test_decoded_counts_match_the_encoded_words(void)
@@ -304,9 +427,9 @@ static void test_paths_form_one_connected_network(void)
 }
 
 // Every corridor tile needs at least two exits. A one-exit tile is a pocket
-// the turtle can be cornered in with no escape, and the maze renderer also
-// relies on this: it skips runs of one tile because every walkable tile is
-// guaranteed to lie on a run of two or more along some axis.
+// the turtle can be cornered in with no escape, and the board renderer also
+// relies on it: a walkable cell with no walkable neighbour would be drawn
+// with the bare mask-0 tile, which is solid hedge.
 static void test_no_dead_ends(void)
 {
     static int m[ROWS][COLS];
@@ -644,12 +767,14 @@ static void test_painting_mutates_the_tile_and_scores(void)
     run("make \"tt.score 0");
     int left = (int)num(":tt.left");
 
-    // Column 2 row 5 is an ordinary unpainted path tile.
-    TEST_ASSERT_EQUAL_INT(T_PAINT, (int)num("tile.at 2 5"));
+    // Column 2 row 5 is an ordinary unpainted path tile. Painting subtracts
+    // 16, so the cell keeps the corridor shape it was drawn with.
+    int speck = (int)num("tile.at 2 5");
+    TEST_ASSERT_TRUE_MESSAGE(speck >= S_SPECK && speck < S_BLOSS, "col 2 row 5 carries no speck");
     put_actor(1, 2, 5, D_DOWN, 0, 0);
     run("paint.tile");
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(T_EMPTY, (int)num("tile.at 2 5"), "the tile was not painted");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(speck - 16, (int)num("tile.at 2 5"), "the tile was not painted");
     TEST_ASSERT_EQUAL_INT(10, (int)num(":tt.score"));
     TEST_ASSERT_EQUAL_INT(left - 1, (int)num(":tt.left"));
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, (int)num(":tt.pause"), "a fresh tile withholds one quantum");
@@ -663,7 +788,8 @@ static void test_painting_mutates_the_tile_and_scores(void)
 static void test_blossom_scores_pauses_and_turns_the_tables(void)
 {
     run("make \"tt.score 0");
-    TEST_ASSERT_EQUAL_INT(T_BLOSSOM, (int)num("tile.at 2 7"));
+    int bloss = (int)num("tile.at 2 7");
+    TEST_ASSERT_TRUE_MESSAGE(bloss >= S_BLOSS, "col 2 row 7 carries no blossom");
 
     // Two bugs hunting, one still waiting in the nest.
     put_actor(2, 10, 24, D_LEFT, 0, 1);
@@ -674,7 +800,7 @@ static void test_blossom_scores_pauses_and_turns_the_tables(void)
     put_actor(1, 2, 7, D_DOWN, 0, 0);
     run("paint.tile");
 
-    TEST_ASSERT_EQUAL_INT(T_EMPTY, (int)num("tile.at 2 7"));
+    TEST_ASSERT_EQUAL_INT(bloss - 32, (int)num("tile.at 2 7"));
     TEST_ASSERT_EQUAL_INT(50, (int)num(":tt.score"));
     TEST_ASSERT_EQUAL_INT_MESSAGE(3, (int)num(":tt.pause"), "a blossom withholds three quanta");
     TEST_ASSERT_GREATER_THAN_MESSAGE(0, (int)num(":tt.dizzy"), "the dizzy timer did not start");
@@ -1066,69 +1192,100 @@ static void test_high_score_tracks_the_session_best(void)
 // 8. The drawn maze, and the frame loop
 // ---------------------------------------------------------------------------
 
-// The picture is carved from the same map the rules read, so every corridor
-// the map declares must be swept, and nothing outside the board may be drawn.
-static void test_drawn_corridors_match_the_map(void)
+// A bank tile is one cell of hedge with a pen-8 stroke run into each walkable
+// neighbour, and those strokes are where the rounded corners come from: one
+// per set bit of the mask, out to the neighbour's centre and no further. The
+// bit order pinned here is the one build.map computes with.
+static void test_a_bank_tile_carves_one_stroke_per_walkable_neighbour(void)
 {
-    static int m[ROWS][COLS];
-    read_map(m);
+    // 8 up, 4 left, 2 down, 1 right, in the order make.tile draws them.
+    const int bit[4] = {8, 4, 2, 1};
+    const float dx[4] = {0.0f, -8.0f, 0.0f, 8.0f};
+    const float dy[4] = {8.0f, 0.0f, -8.0f, 0.0f};
 
-    mock_device_clear_graphics();
-    run("carve.paths");
-    const MockDeviceState *s = mock_device_get_state();
-    TEST_ASSERT_GREATER_THAN_MESSAGE(0, s->graphics.line_count, "no corridors were carved");
+    for (int m = 0; m < 16; m++) {
+        for (int ov = 0; ov <= 2; ov++) {
+            mock_device_clear_graphics();
+            runf("make.tile %d %d %d", S_PATH + m, m, ov);
+            const MockDeviceState *st = mock_device_get_state();
 
-    static bool covered[ROWS][COLS];
-    memset(covered, 0, sizeof(covered));
-
-    for (int i = 0; i < s->graphics.line_count; i++) {
-        const MockLine *l = &s->graphics.lines[i];
-        TEST_ASSERT_EQUAL_INT_MESSAGE(8, l->pen_size, "a corridor sweep used the wrong pen");
-        // Board bounds: tile centres run x -108..108 and y -140..140.
-        TEST_ASSERT_TRUE_MESSAGE(l->x1 >= -108.0f && l->x1 <= 108.0f, "sweep left the board");
-        TEST_ASSERT_TRUE_MESSAGE(l->y1 >= -140.0f && l->y1 <= 140.0f, "sweep left the board");
-
-        int c1 = (int)((l->x1 + 108.0f) / 8.0f) + 1, c2 = (int)((l->x2 + 108.0f) / 8.0f) + 1;
-        int r1 = (int)((140.0f - l->y1) / 8.0f) + 1, r2 = (int)((140.0f - l->y2) / 8.0f) + 1;
-        if (r1 == r2) {
-            for (int c = (c1 < c2 ? c1 : c2); c <= (c1 < c2 ? c2 : c1); c++)
-                covered[r1 - 1][c - 1] = true;
-        } else {
-            for (int r = (r1 < r2 ? r1 : r2); r <= (r1 < r2 ? r2 : r1); r++)
-                covered[r - 1][c1 - 1] = true;
-        }
-    }
-
-    for (int r = 0; r < ROWS; r++) {
-        for (int c = 0; c < COLS; c++) {
             char msg[64];
-            snprintf(msg, sizeof(msg), "col %d row %d", c + 1, r + 1);
-            if (walkable(m[r][c]))
-                TEST_ASSERT_TRUE_MESSAGE(covered[r][c], msg);
-            else
-                TEST_ASSERT_FALSE_MESSAGE(covered[r][c], msg);
+            snprintf(msg, sizeof(msg), "mask %d overlay %d", m, ov);
+            int n = 0;
+            for (int d = 0; d < 4; d++) {
+                if (!(m & bit[d])) continue;
+                TEST_ASSERT_GREATER_THAN_MESSAGE(n, st->graphics.line_count, msg);
+                const MockLine *l = &st->graphics.lines[n++];
+                TEST_ASSERT_EQUAL_INT_MESSAGE(8, l->pen_size, msg);
+                TEST_ASSERT_EQUAL_FLOAT(0.0f, l->x1);
+                TEST_ASSERT_EQUAL_FLOAT(0.0f, l->y1);
+                TEST_ASSERT_EQUAL_FLOAT(dx[d], l->x2);
+                TEST_ASSERT_EQUAL_FLOAT(dy[d], l->y2);
+            }
+            TEST_ASSERT_EQUAL_INT_MESSAGE(n, st->graphics.line_count, msg);
+            // The hedge patch under the cell, and one more dot for an
+            // overlay. The pen sizes are the tile: 16 covers the whole 8x8
+            // cell including its corners, and the speck and the blossom are
+            // the same 2 and 6 the pen drew them with before.
+            TEST_ASSERT_EQUAL_INT_MESSAGE(ov == 0 ? 1 : 2, st->graphics.dot_count, msg);
+            TEST_ASSERT_EQUAL_INT_MESSAGE(16, st->graphics.dots[0].pen_size, msg);
+            if (ov != 0)
+                TEST_ASSERT_EQUAL_INT_MESSAGE(ov == 1 ? 2 : 6, st->graphics.dots[1].pen_size, msg);
         }
     }
 }
 
-// Unpainted tiles carry a speck and blossoms a fatter disc, so the player can
-// see what is left.
-static void test_specks_are_drawn_on_every_unpainted_tile(void)
+// The board is baked rather than carved, so where the map lands on screen is
+// the thing to pin: 224x288 pixels centred on 320x320, and nothing outside
+// it. The mock does not rasterise the pen, so stage the canvas first -- every
+// tile the bank then captures is the same known index, and where that index
+// lands is the whole question. It also settles bank coverage: an empty slot
+// bakes as background, so a board painted edge to edge in the staged ink
+// means every slot the map names really was captured.
+static void test_the_bake_puts_the_board_where_the_pen_did(void)
 {
-    static int m[ROWS][COLS];
-    read_map(m);
+    const int ink = 77;
+    mock_device_paint_canvas(0, 0, MOCK_SCREEN_WIDTH_PX, MOCK_SCREEN_HEIGHT_PX, (uint8_t)ink);
+    run("setup.tiles");        // recapture the bank off the staged canvas
+    run("reset.board draw.board");
 
-    mock_device_clear_graphics();
-    run("draw.specks");
-    const MockDeviceState *s = mock_device_get_state();
+    int bg = (int)num(":c.bg");
+    for (int y = 0; y < MOCK_SCREEN_HEIGHT_PX; y++) {
+        for (int x = 0; x < MOCK_SCREEN_WIDTH_PX; x++) {
+            bool board = x >= BOARD_X0 && x < BOARD_X0 + COLS * 8 &&
+                         y >= BOARD_Y0 && y < BOARD_Y0 + ROWS * 8;
+            int want = board ? ink : bg;
+            if ((int)mock_device_get_canvas_point(x, y) == want) continue;
+            char msg[80];
+            snprintf(msg, sizeof(msg), "pixel %d,%d is %d, wanted %d", x, y,
+                     mock_device_get_canvas_point(x, y), want);
+            TEST_FAIL_MESSAGE(msg);
+        }
+    }
+}
 
-    int paintable = 0;
-    for (int r = 0; r < ROWS; r++)
-        for (int c = 0; c < COLS; c++)
-            if (m[r][c] == T_PAINT || m[r][c] == T_BLOSSOM) paintable++;
+// Repairing one cell has to hit that cell and no other: the blossom erase
+// leans on it, and an offset that is wrong by a cell would only show up here
+// or on a real screen.
+static void test_stamping_one_cell_repairs_exactly_that_cell(void)
+{
+    const int ink = 77;
+    mock_device_paint_canvas(0, 0, MOCK_SCREEN_WIDTH_PX, MOCK_SCREEN_HEIGHT_PX, (uint8_t)ink);
+    run("setup.tiles");
+    run("reset.board draw.board");
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(paintable, s->graphics.dot_count,
-                                  "one mark per unpainted tile");
+    run("set.tile 3 4 0 stamp.tile 3 4");
+    int bg = (int)num(":c.bg");
+    int x0 = BOARD_X0 + 2 * 8, y0 = BOARD_Y0 + 3 * 8;
+    for (int y = y0 - 1; y < y0 + 9; y++) {
+        for (int x = x0 - 1; x < x0 + 9; x++) {
+            bool cell = x >= x0 && x < x0 + 8 && y >= y0 && y < y0 + 8;
+            char msg[80];
+            snprintf(msg, sizeof(msg), "pixel %d,%d", x, y);
+            TEST_ASSERT_EQUAL_INT_MESSAGE(cell ? bg : ink,
+                                          (int)mock_device_get_canvas_point(x, y), msg);
+        }
+    }
 }
 
 // The score line lives in the three rows above the maze and the spare lives
@@ -1178,13 +1335,14 @@ static void test_frames_run_and_the_turtle_paints(void)
 static void test_respawn_keeps_painted_tiles(void)
 {
     run("setup.level");
+    int speck = (int)num("tile.at 2 5");
     put_actor(1, 2, 5, D_DOWN, 0, 0);
     run("paint.tile");
     int left = (int)num(":tt.left");
-    TEST_ASSERT_EQUAL_INT(T_EMPTY, (int)num("tile.at 2 5"));
+    TEST_ASSERT_EQUAL_INT(speck - 16, (int)num("tile.at 2 5"));
 
     run("respawn");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(T_EMPTY, (int)num("tile.at 2 5"), "respawn repainted the map");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(speck - 16, (int)num("tile.at 2 5"), "respawn repainted the map");
     TEST_ASSERT_EQUAL_INT_MESSAGE(left, (int)num(":tt.left"), "respawn reset the tile count");
     TEST_ASSERT_EQUAL_INT((int)num(":tt.start.col"), actor("col", 1));
     TEST_ASSERT_EQUAL_INT((int)num(":tt.start.row"), actor("row", 1));
@@ -1381,6 +1539,8 @@ int main(void)
     UNITY_BEGIN();
 
     RUN_TEST(test_map_shape_and_encoding);
+    RUN_TEST(test_the_built_map_agrees_with_the_encoding);
+    RUN_TEST(test_the_kept_board_is_restored_at_every_level);
     RUN_TEST(test_decoded_counts_match_the_encoded_words);
     RUN_TEST(test_map_is_left_right_symmetric);
     RUN_TEST(test_paths_form_one_connected_network);
@@ -1428,8 +1588,9 @@ int main(void)
     RUN_TEST(test_extra_life_is_awarded_once);
     RUN_TEST(test_high_score_tracks_the_session_best);
 
-    RUN_TEST(test_drawn_corridors_match_the_map);
-    RUN_TEST(test_specks_are_drawn_on_every_unpainted_tile);
+    RUN_TEST(test_a_bank_tile_carves_one_stroke_per_walkable_neighbour);
+    RUN_TEST(test_the_bake_puts_the_board_where_the_pen_did);
+    RUN_TEST(test_stamping_one_cell_repairs_exactly_that_cell);
     RUN_TEST(test_hud_stays_out_of_the_maze);
     RUN_TEST(test_frames_run_and_the_turtle_paints);
     RUN_TEST(test_respawn_keeps_painted_tiles);

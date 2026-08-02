@@ -103,6 +103,7 @@ void primitives_init(void)
     primitives_http_init();
     primitives_httpd_init();
     primitives_time_init();
+    primitives_tilemap_init();
 }
 
 // Index of a registered primitive, or -1 if the pointer is not one of ours.

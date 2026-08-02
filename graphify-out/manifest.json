@@ -170,8 +170,8 @@
     "semantic_hash": ""
   },
   "core/limits.h": {
-    "mtime": 1784847036.0921817,
-    "ast_hash": "6865fce35d4b77254f7641cd7298f11b",
+    "mtime": 1785678687.6406415,
+    "ast_hash": "7e83a5c07e9ba111bf65a397b5ef46e4",
     "semantic_hash": ""
   },
   "core/memory.c": {
@@ -195,13 +195,13 @@
     "semantic_hash": ""
   },
   "core/primitives.c": {
-    "mtime": 1785633553.3057806,
-    "ast_hash": "67c89f53f3dc931b83d28276c89c78b6",
+    "mtime": 1785678940.0861828,
+    "ast_hash": "8cc3f03085f7b7260d9f27e8d968965e",
     "semantic_hash": ""
   },
   "core/primitives.h": {
-    "mtime": 1785633553.3059444,
-    "ast_hash": "3ff6ffb46994cbcfe33d93642b472c30",
+    "mtime": 1785678914.819265,
+    "ast_hash": "1f6c462fd6a645769159f8cdcdc5d807",
     "semantic_hash": ""
   },
   "core/primitives_arithmetic.c": {
@@ -330,8 +330,8 @@
     "semantic_hash": ""
   },
   "core/primitives_turtle.c": {
-    "mtime": 1785596937.325448,
-    "ast_hash": "830239100bf4f34aa2a7d484c024a681",
+    "mtime": 1785678921.163464,
+    "ast_hash": "980c88f35c152148e9fbaade18a135a5",
     "semantic_hash": ""
   },
   "core/primitives_variables.c": {
@@ -440,8 +440,8 @@
     "semantic_hash": ""
   },
   "devices/console.h": {
-    "mtime": 1784401152.0671437,
-    "ast_hash": "347f06ce97dd5f3cd29e14c5652ff2c8",
+    "mtime": 1785678764.0352879,
+    "ast_hash": "f909d462453f1cb219b253b81ab18f11",
     "semantic_hash": ""
   },
   "devices/font.h": {
@@ -655,8 +655,8 @@
     "semantic_hash": ""
   },
   "devices/picocalc/picocalc_console.c": {
-    "mtime": 1785540547.3455005,
-    "ast_hash": "456bcec5473266709912248424ca1bc6",
+    "mtime": 1785690221.636239,
+    "ast_hash": "6417e4ad8288fa9616625fda80e333cc",
     "semantic_hash": ""
   },
   "devices/picocalc/picocalc_console.h": {
@@ -705,13 +705,13 @@
     "semantic_hash": ""
   },
   "devices/picocalc/screen.c": {
-    "mtime": 1785540547.3460267,
-    "ast_hash": "899470a3cf09e674d4ce53dce28ff7c7",
+    "mtime": 1785678793.1276996,
+    "ast_hash": "7209492b950806cee8e40d007075dff6",
     "semantic_hash": ""
   },
   "devices/picocalc/screen.h": {
-    "mtime": 1785540547.34645,
-    "ast_hash": "9a469f704d5bb44879ee2eb798c4df4d",
+    "mtime": 1785678799.4635901,
+    "ast_hash": "e02395c5471488192c83e6476f4f351d",
     "semantic_hash": ""
   },
   "devices/picocalc/screensaver.c": {
@@ -855,13 +855,13 @@
     "semantic_hash": ""
   },
   "tests/mock_device.c": {
-    "mtime": 1785250202.0872054,
-    "ast_hash": "77b17c8e4af9bf4b18af1f2579909dcf",
+    "mtime": 1785690034.4526541,
+    "ast_hash": "cfbafad24ded0cb2eb77feb0564111a3",
     "semantic_hash": ""
   },
   "tests/mock_device.h": {
-    "mtime": 1785250202.0873923,
-    "ast_hash": "0e36529b4e30385ecb910d67c6eb04ca",
+    "mtime": 1785690027.4561424,
+    "ast_hash": "b9244544da6e038fcf33abf3e66ab9b2",
     "semantic_hash": ""
   },
   "tests/mock_sdcard.c": {
@@ -1120,8 +1120,8 @@
     "semantic_hash": ""
   },
   "tests/test_primitives_turtle.c": {
-    "mtime": 1784401152.071188,
-    "ast_hash": "876a13cd63dea15dc109707a884159d2",
+    "mtime": 1785690057.015817,
+    "ast_hash": "428d593720aca78bf245b2a6cca9ca81",
     "semantic_hash": ""
   },
   "tests/test_primitives_variables.c": {
@@ -1265,8 +1265,8 @@
     "semantic_hash": ""
   },
   "CMakeLists.txt": {
-    "mtime": 1784561867.4216053,
-    "ast_hash": "da4de9c8b4caf2376028ab11dc425b1e",
+    "mtime": 1785678935.0681443,
+    "ast_hash": "1a01f6ad42317ab1dd4a42449c062d24",
     "semantic_hash": ""
   },
   "README.md": {
@@ -1325,13 +1325,13 @@
     "semantic_hash": ""
   },
   "reference/Pico_Logo_Reference.md": {
-    "mtime": 1785547415.3816483,
-    "ast_hash": "c507633bd3a4ac0cac584e3b54781a25",
+    "mtime": 1785679173.1890097,
+    "ast_hash": "caa1178b4dc16bba56d95c783f5ce31f",
     "semantic_hash": ""
   },
   "tests/CMakeLists.txt": {
-    "mtime": 1785621847.151293,
-    "ast_hash": "8e376daa8f91c62b1227ade0c2656cd8",
+    "mtime": 1785679382.8072963,
+    "ast_hash": "2dd4e8a13ca88915e3736f93dd121006",
     "semantic_hash": ""
   },
   "third_party/littlefs/LICENSE.md": {
@@ -1415,8 +1415,8 @@
     "semantic_hash": ""
   },
   "docs/turtle-trails-design.md": {
-    "mtime": 1785263359.3630223,
-    "ast_hash": "252a96ad9074fe712c2216f5903ef321",
+    "mtime": 1785685486.1827855,
+    "ast_hash": "045370b44a51538c90f21bdae684446c",
     "semantic_hash": ""
   },
   "tests/test_checkrun.c": {
@@ -1430,38 +1430,63 @@
     "semantic_hash": ""
   },
   "tests/test_trails.c": {
-    "mtime": 1785597503.7546234,
-    "ast_hash": "bb51eacd8d4dc9d56216653f3342d11d",
+    "mtime": 1785690279.7078414,
+    "ast_hash": "0b5fc889ff2edfc79daae59c52291d1e",
     "semantic_hash": ""
   },
   "docs/bugs.md": {
-    "mtime": 1785635476.5881789,
-    "ast_hash": "03273a882e21a3c5ad387b07c3bbdfbd",
+    "mtime": 1785690172.1142478,
+    "ast_hash": "4c7bee94d1d5607e959f1e550b350682",
     "semantic_hash": ""
   },
   "docs/roadmap.md": {
-    "mtime": 1785635494.7634797,
-    "ast_hash": "33bcfb60a0fe1bdf5fc092b353757e0a",
+    "mtime": 1785696713.8555722,
+    "ast_hash": "49c7703e06c117483cc07118a403bdf7",
     "semantic_hash": ""
   },
   "docs/tilemap-scrolling-design.md": {
-    "mtime": 1785621204.5865328,
-    "ast_hash": "ae113a41521dd8a03d9b5b109409dfb4",
+    "mtime": 1785696638.89182,
+    "ast_hash": "746cdf0b5372fa874943b1645ab2285b",
     "semantic_hash": ""
   },
   "docs/interpreter-throughput-design.md": {
-    "mtime": 1785635494.7628558,
-    "ast_hash": "c9bca3403d90586d03ac8d91dc3eb921",
+    "mtime": 1785696622.512073,
+    "ast_hash": "407d31da4c77ac9fa205b4773a7e506a",
     "semantic_hash": ""
   },
   "tests/test_bench_throughput.c": {
-    "mtime": 1785633934.1318781,
-    "ast_hash": "f62c8a080752decb26925dd2f6647cb9",
+    "mtime": 1785685339.5907772,
+    "ast_hash": "80c1ed38eff7c78e98dd44c4b628d305",
     "semantic_hash": ""
   },
   "core/atom_memo.h": {
     "mtime": 1785632800.2472472,
     "ast_hash": "1e20e58542cd52eee980352f48712646",
+    "semantic_hash": ""
+  },
+  "core/primitives_tilemap.c": {
+    "mtime": 1785678909.061996,
+    "ast_hash": "82cac09037130bb5bbaf218debd4c794",
+    "semantic_hash": ""
+  },
+  "core/tilemap.c": {
+    "mtime": 1785679524.5656068,
+    "ast_hash": "16569171a3be707c37ff2d56a9e4227f",
+    "semantic_hash": ""
+  },
+  "core/tilemap.h": {
+    "mtime": 1785678710.1023912,
+    "ast_hash": "882fb583904c0f2a47ddd381658e36c8",
+    "semantic_hash": ""
+  },
+  "tests/test_primitives_tilemap.c": {
+    "mtime": 1785679462.0532184,
+    "ast_hash": "3ac18e2fd158db91610797b54f01b7a0",
+    "semantic_hash": ""
+  },
+  "tests/test_tilemap.c": {
+    "mtime": 1785679306.104779,
+    "ast_hash": "764bdceec2dbda556a5fd3b397a6c402",
     "semantic_hash": ""
   }
 }

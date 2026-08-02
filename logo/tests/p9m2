@@ -1,0 +1,224 @@
+; P9 M1+M2 -- hardware acceptance for the tile bank, the map and the bake.
+; See docs/tilemap-scrolling-design.md section 13.1.
+;
+;   load "p9m2
+;   p9m2
+;
+; Written for a **Pimoroni Pico Plus 2 W**.  That board has PSRAM, so both
+; pools come from `mem_region_alloc` and the large tier applies; the SRAM
+; tier's heap allocation -- 8 KB of malloc on a Pico 2 linking at 93.94 % RAM
+; -- is therefore NOT exercised here and stays open until a Pico 2 session.
+;
+; Four things only hardware can answer:
+;
+;   1. the large tier's real capacity (no test binary can cover it: a pool is
+;      allocated once for the life of the process, so one build gets one tier)
+;   2. what a bake actually costs, against the 5,916 ms `draw.board` it is
+;      meant to replace
+;   3. whether `snaptile` captures through the real device path the right way
+;      up -- the mock reimplements the Logo-to-screen conversion rather than
+;      sharing it, so a flipped or off-by-one capture passes every unit test
+;   4. whether `snapsh` still makes background transparent, since the tile
+;      capture added an `opaque` flag to the function both paths now share
+;
+; Every procedure below is run by `p9m2`, so a session cannot end with half of
+; this file unexecuted.
+
+make "p9m2.reps 20
+
+; True when running :instructions raises an error.  The error message is
+; swallowed: these probes ask capacity questions, and the answer to half of
+; them is supposed to be "out of space".
+to p9m2.failed :instructions
+  local "caught
+  make "caught "true
+  catch "error [run :instructions make "caught "false]
+  output :caught
+end
+
+; Fill every cell of a :cols x :rows map with :slot, so the bake measures the
+; tile path (a memcpy per run) rather than the empty-cell path (a memset).
+to p9m2.fill :cols :rows :slot
+  local "r
+  repeat :rows [
+    make "r repcount
+    repeat :cols [settile repcount :r :slot]
+  ]
+end
+
+; Draw one tile of the current bank size under the turtle and capture it.  An
+; "L" is asymmetric in both axes and under transposition, so a capture that is
+; mirrored, flipped or rotated cannot look right.
+to p9m2.draw.L :slot
+  setpensize 1
+  setpc 12
+  pu setpos [-6 6] pd setpos [-6 -6] setpos [6 -6] pu
+  home
+  snaptile :slot
+end
+
+; (1) What the large tier really holds.  On a PSRAM board the design promises
+; 255 tiles of either size and a 512 x 512 world; the failures either side of
+; those numbers are what pin them.
+to p9m2.tier
+  local "slot200 local "slot255 local "slot256
+  local "map512 local "map513
+
+  cs fs ht window
+  newtiles 8
+  make "slot200 (not p9m2.failed [snaptile 200])
+  make "slot255 (not p9m2.failed [snaptile 255])
+  make "slot256 (p9m2.failed [snaptile 256])
+  make "map512 (not p9m2.failed [newmap 512 512])
+  make "map513 (p9m2.failed [newmap 513 512])
+
+  wrap cs ts st
+  pr [P9 M2 (1) -- tier and capacity]
+  pr []
+  pr (se [slot 200 accepted    :] :slot200)
+  pr (se [slot 255 accepted    :] :slot255)
+  pr (se [slot 256 refused     :] :slot256)
+  pr (se [512x512 map accepted :] :map512)
+  pr (se [513x512 map refused  :] :map513)
+  pr []
+  ifelse (and :slot255 :map512) [pr [PASS -- PSRAM tier, as designed]] [pr [FAIL -- not the PSRAM tier]]
+end
+
+; Milliseconds for one `stampmap`, split into the C bake and the present it
+; makes necessary.  Same subtraction as p9m0: a present is timed with the bake
+; in front of it, the bake is timed again alone, and the difference is the
+; wire.  `ticks` is whole milliseconds and a bake should be near one, so the
+; passes are repeated and averaged.
+to p9m2.measure :reps
+  local "t0 local "both local "bake
+  make "t0 ticks
+  repeat :reps [stampmap refresh]
+  make "both (ticks - :t0)
+  make "t0 ticks
+  repeat :reps [stampmap]
+  make "bake (ticks - :t0)
+  refresh
+  output (list (:bake / :reps) ((:both - :bake) / :reps))
+end
+
+; (2) The number M3 rests on: bake a full screen and bake Turtle Trails' board,
+; against the 5,916 ms `draw.board` and the 1,346 ms `draw.sector` that the
+; bake path exists to delete.
+to p9m2.bake
+  local "full local "trails
+
+  cs fs ht window
+  setrefresh "manual
+
+  newtiles 8
+  p9m2.draw.L 1
+  cs
+
+  newmap 40 40                  ; 320 x 320 px -- the whole graphics screen
+  p9m2.fill 40 40 1
+  make "full (p9m2.measure :p9m2.reps)
+
+  newmap 28 36                  ; 224 x 288 px -- the Turtle Trails board
+  p9m2.fill 28 36 1
+  make "trails (p9m2.measure :p9m2.reps)
+
+  setrefresh "auto
+  wrap cs ts st
+  pr [P9 M2 (2) -- bake wall time]
+  pr []
+  pr (se [full screen 40x40 cells, bake   :] (item 1 :full) [ms])
+  pr (se [                       present  :] (item 2 :full) [ms])
+  pr (se [Trails board 28x36 cells, bake  :] (item 1 :trails) [ms])
+  pr (se [                       present  :] (item 2 :trails) [ms])
+  pr []
+  pr (se [draw.board was 5916 ms, bake is :] (item 1 :trails))
+  pr []
+  pr [A bake far over 2 ms means the per row]
+  pr [dirty mark in screen_gfx_write_row is]
+  pr [the cost, not the pixels.]
+end
+
+; (3) Does a captured tile come back the right way up, in the right cell?
+; Cell (1,1) is flush in the top-left corner of the screen; cell (3,2) is two
+; cells right and one down from it.  Then one cell is emptied and repaired on
+; its own, which is `stamptile`'s whole job.
+to p9m2.look
+  cs fs ht window
+  newtiles 16
+  p9m2.draw.L 1
+  cs
+  newmap 20 20                  ; 320 x 320 px at 16 px a cell
+  settile 1 1 1
+  settile 3 2 1
+  stampmap
+end
+
+to p9m2.look.verdict
+  pr [P9 M2 (3) -- capture orientation]
+  pr []
+  pr [PASS if both L shapes are upright --]
+  pr [upright arm on the LEFT, foot along the]
+  pr [BOTTOM -- and the first sits flush in]
+  pr [the top left corner of the screen.]
+  pr []
+  pr [A mirrored, flipped or rotated L means]
+  pr [turtle_canvas_snap has its axes wrong.]
+end
+
+; (4) `snapsh` regression.  The tile capture is verbatim, and it reached that
+; by adding an `opaque` flag to screen_gfx_snap, which the costume capture
+; still calls with it false.  So a captured costume must still let the drawing
+; underneath show through: a fat dot is captured, a band is drawn across the
+; screen, and the turtle wears the dot on top of the band.
+to p9m2.costume
+  cs fs ht window
+  setpc 10 setpensize 12
+  pd fd 1 bk 1 pu
+  snapsh 1 16 16
+  cs
+  setpc 14 setpensize 24
+  pu setpos [-100 0] pd setpos [100 0] pu
+  home setsh 1 st
+end
+
+to p9m2.costume.verdict
+  pr [P9 M2 (4) -- snapsh still transparent]
+  pr []
+  pr [PASS if the coloured band runs unbroken]
+  pr [behind the round blob the turtle wears.]
+  pr []
+  pr [A square block of background cutting the]
+  pr [band means the opaque flag leaked into]
+  pr [the costume capture.]
+end
+
+to p9m2
+  p9m2.tier
+  pr []
+  pr [--- press a key ---]
+  ignore rc
+
+  p9m2.bake
+  pr []
+  pr [--- press a key for the visual checks ---]
+  ignore rc
+
+  p9m2.look
+  pr [--- press a key when you have looked ---]
+  ignore rc
+  ts
+  p9m2.look.verdict
+  pr []
+  pr [--- press a key ---]
+  ignore rc
+
+  p9m2.costume
+  pr [--- press a key when you have looked ---]
+  ignore rc
+  ts
+  p9m2.costume.verdict
+  pr []
+  pr [Still untested on this board: the SRAM]
+  pr [tier's 8 KB heap allocation, which needs]
+  pr [a Pico 2 with a game already loaded.]
+end

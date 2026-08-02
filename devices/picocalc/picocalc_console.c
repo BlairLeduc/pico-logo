@@ -997,7 +997,9 @@ static void turtle_dot(float x, float y)
     // - Y: Logo 0 -> Screen center, but Y axis is flipped (Logo Y up, Screen Y down)
     float screen_x = x + SCREEN_WIDTH / 2;
     float screen_y = -y + SCREEN_HEIGHT / 2;
-    screen_gfx_set_point(screen_x, screen_y, cur->colour);
+    // A dot is one stamp of the pen, so it is a zero-length line: a wide pen
+    // puts down the same filled disc it would stamp along a stroke (B11).
+    screen_gfx_line(screen_x, screen_y, screen_x, screen_y, cur->colour, false, cur->pen_size);
     screen_gfx_update();
 }
 
@@ -1237,7 +1239,7 @@ static bool turtle_snap_costume(uint8_t slot, uint8_t w, uint8_t h)
     static uint8_t pixels[TURTLE_RASTER_MAX * TURTLE_RASTER_MAX];
     int x0 = (int)(cur->x + 0.5f) - w / 2;
     int y0 = (int)(cur->y + 0.5f) - h / 2;
-    screen_gfx_snap(x0, y0, w, h, pixels);
+    screen_gfx_snap(x0, y0, w, h, pixels, false);
 
     if (!costume_put(slot, w, h, pixels))
     {
@@ -1246,6 +1248,23 @@ static bool turtle_snap_costume(uint8_t slot, uint8_t w, uint8_t h)
 
     refresh_shape_wearers(slot);
     return true;
+}
+
+// Capture the size x size canvas region centred on the selected turtle,
+// verbatim (the snaptile primitive). Tiles are background, so unlike a
+// costume capture no pixel becomes transparent.
+static bool turtle_canvas_snap(uint8_t size, uint8_t *out)
+{
+    int x0 = (int)(cur->x + 0.5f) - size / 2;
+    int y0 = (int)(cur->y + 0.5f) - size / 2;
+    screen_gfx_snap(x0, y0, size, size, out, true);
+    return true;
+}
+
+// Write a run of canvas pixels at a screen position (the tile baker).
+static void turtle_canvas_write_row(int x, int y, const uint8_t *pixels, int count)
+{
+    screen_gfx_write_row(x, y, pixels, count);
 }
 
 // Get shape data for shapes 1-15
@@ -1477,6 +1496,8 @@ static const LogoConsoleTurtle picocalc_turtle_ops = {
     .set_scale = turtle_set_scale,
     .stamp = turtle_stamp,
     .snap_costume = turtle_snap_costume,
+    .canvas_snap = turtle_canvas_snap,
+    .canvas_write_row = turtle_canvas_write_row,
     .get_raster = turtle_get_raster,
     .canvas_point = turtle_canvas_point,
     .sense_metrics = turtle_sense_metrics,

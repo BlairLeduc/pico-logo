@@ -1,11 +1,11 @@
 ; Turtle Trails -- an original maze-chase game themed on the Logo turtle.
 ; Load and play:  load "trails   trails
 ;
-; See docs/turtle-trails-design.md.  The encoded map is the only source of
-; truth: movement, bug decisions, painting and the drawn maze all read it, and
-; nothing reads canvas colour.  There are no picture assets -- setup.palette
-; defines every colour and the hedges are carved from the same map the rules
-; use, so the picture and the logic cannot drift apart.
+; See docs/turtle-trails-design.md.  The tile map is the only source of truth:
+; movement, bug decisions, painting and the board on screen all read the same
+; cell, and nothing reads canvas colour.  There are no picture assets --
+; setup.palette defines every colour and setup.tiles draws the whole tile bank
+; with the pen, so the picture and the logic cannot drift apart.
 ;
 ; Four interpreter rules govern this file:
 ;   * there is no >= or <=; write  not (a < b)
@@ -43,6 +43,48 @@ make "sh.bug 4         ; 4..5 bug body animation
 make "sh.wings 6       ; returning wings, rotated by heading
 make "sh.bonus 7       ; current bonus shape, redefined at level setup
 make "sh.shell 10      ; 10..15 shell-withdraw death sequence
+
+; -------------------------------------------------------------------------
+; Tile bank slots.  A map cell is the picture and the rule at once, so the
+; slots are ordered to make every question the game asks the map a single
+; comparison:
+;
+;    0        off the board -- painted as background
+;    1        hedge and dead space
+;    2        nest floor and door: the hedge picture, but bugs may enter
+;    3..18    open path, one variant per walkable-neighbour mask
+;   19..34    the same path carrying a speck
+;   35..50    the same path carrying a power blossom
+;   51..54    build.map's scratch codes, all replaced before the map is read
+;
+; So a cell is walkable above :sl.nest, paintable from :sl.speck, and a
+; blossom from :sl.bloss; painting one subtracts 16 or 32 to reach the plain
+; variant of the same shape.  The mask is 8 up + 4 left + 2 down + 1 right
+; over the walkable neighbours -- exactly what decides where the pen's round
+; cap left a corner, so a variant per mask gives a pen-carved board with no
+; pen.
+make "sl.hedge 1
+make "sl.nest 2
+make "sl.path 3
+make "sl.speck 19
+make "sl.bloss 35
+make "sc.walk 50       ; build.map scratch: :sc.walk + the tile code
+
+; The board is 28x36 cells of 8 pixels centred on the 320x320 screen, but a
+; bake always starts at the top left corner of the graphics area, so the map
+; is at least the whole screen -- 40 cells each way -- and the board sits at
+; this offset inside it.  The ring of empty cells around the board is also
+; what lets tile.at drop its bounds tests: a step off the board lands on
+; padding, which reads 0.
+;
+; The map is taller than the screen, and the rows past it hold the finished
+; board.  Deriving a cell's variant costs Logo arithmetic no game wants to
+; pay at every level start, and the world is 608 pixels tall against a
+; 320-pixel screen, so nothing ever samples them.  (A live scrolling view
+; would: P9 M4 must move this copy elsewhere if it ever lands.)
+make "sl.dc 6
+make "sl.dr 2
+make "sl.keep 40
 
 ; -------------------------------------------------------------------------
 ; The map.  Thirty-six encoded 28-character words, one `make` per line: the
@@ -135,44 +177,39 @@ make "tt.high 0
 make "tt.history []
 
 ; -------------------------------------------------------------------------
-; Map access.  The decoded map is 36 mutable row lists of 28 tile codes; a
-; junction lookup then walks at most 36 + 28 cons cells instead of the
-; hundreds a flat 1,008-member list would cost.
+; Map access.  The map is the C tile map, one byte a cell, so a junction
+; lookup is an index rather than the 36 + 28 cons cells a list of row lists
+; cost -- and the board is drawn from the very cells the rules read.  Board
+; coordinates are 1..28 by 1..36; the map is the whole screen, so both are
+; shifted by the board's offset inside it.
+;
+; A step off the board lands on the empty ring around it and reads 0, which
+; is neither walkable nor nest, so no bounds test is needed here.  next.col
+; already turns a step off a non-tunnel row into column 0.
+;
+; The offsets are written out as 6 and 2 rather than read from :sl.dc and
+; :sl.dr.  tile.at is the most-called procedure in the game, a dynamically
+; scoped name cannot be cached, and those two lookups cost more than the rest
+; of the procedure put together -- 3.5 % of a frame on the host.  The tests
+; pin the two spellings against each other.
 ; -------------------------------------------------------------------------
 
-to tile.code :ch
-  output ((ascii :ch) - 65)
-end
-
-; Build the rows back to front so every step is a constant-time fput: lput
-; would copy the list it appends to and leave 14,000 cells of garbage.
-to decode.map
-  local "w local "row
-  make "tt.tiles []
-  repeat 36 [
-    make "w (item (37 - repcount) :tt.map)
-    make "row []
-    repeat 28 [make "row (fput (tile.code (item (29 - repcount) :w)) :row)]
-    make "tt.tiles (fput :row :tt.tiles)
-  ]
-end
-
 to tile.at :col :row
-  if :col < 1 [output 0]
-  if :col > 28 [output 0]
-  if :row < 1 [output 0]
-  if :row > 36 [output 0]
-  output (item :col (item :row :tt.tiles))
+  output (tile (:col + 6) (:row + 2))
 end
 
-; Painting mutates a tile in place and allocates nothing.
+; Painting rewrites a cell and allocates nothing.
 to set.tile :col :row :value
-  .setitem :col (item :row :tt.tiles) :value
+  settile (:col + 6) (:row + 2) :value
 end
 
-to walk? :code
-  if :code < 1 [output "false]
-  output (:code < 5)
+; Repaint one board cell from the map, covering whatever the pen left there.
+to stamp.tile :col :row
+  stamptile (:col + 6) (:row + 2)
+end
+
+to walk? :slot
+  output (:slot > :sl.nest)
 end
 
 to tunnel.row? :row
@@ -240,7 +277,7 @@ end
 to nest.open? :col :row :d
   local "k
   make "k (tile.at (next.col :col :row :d) (next.row :row :d))
-  output (:k > 0)
+  output (:k > :sl.hedge)
 end
 
 ; -------------------------------------------------------------------------
@@ -289,101 +326,143 @@ to setup.turtles
 end
 
 ; -------------------------------------------------------------------------
-; Drawing.  Everything below draws with turtle 7 inside one ask block.
+; The tile bank.  Everything below draws with turtle 7 inside one ask block.
 ;
-; The board is filled with hedge and the corridors are then carved out of it
-; in the background colour, one pen-8 sweep per maximal run of walkable
-; tiles.  A pen wider than one pixel stamps a filled disc at each point, so
-; every corridor end and junction comes out rounded -- which is exactly the
-; curved hedge the design asks for, at no drawing cost.
+; One cell of the board is drawn once per variant and picked up with
+; snaptile, and the board itself is then a single stampmap.  A cell is a
+; patch of hedge with a pen-8 stroke run into each walkable neighbour: a pen
+; wider than one pixel stamps a filled disc at every point, so a stroke that
+; stops at the cell centre leaves a round cap and a stroke that runs on
+; leaves a square edge.  That is the curved hedge the design asks for, and it
+; is why the bank is indexed by the neighbour mask.
 ;
-; Sweeping by row and again by column matters: the discs at a run's ends
-; leave shallow notches along a block edge, and the perpendicular pass fills
-; them.  A run of one tile is skipped, because the maze has no dead ends and
-; so every walkable tile also belongs to a run of two or more on the other
-; axis.
+; Fifty tiles is far more than the board uses -- only thirteen masks occur,
+; and only one of those carries a blossom -- but drawing the unused ones
+; costs a few milliseconds once and keeps every slot number arithmetic.
 ; -------------------------------------------------------------------------
 
-to sweep.row :r :c1 :c2
-  if :c1 = :c2 [stop]
-  pu sety (tile.y :r) setx (tile.x :c1) pd setx (tile.x :c2) pu
-end
-
-to sweep.col :c :r1 :r2
-  if :r1 = :r2 [stop]
-  pu setx (tile.x :c) sety (tile.y :r1) pd sety (tile.y :r2) pu
-end
-
-to fill.board
+; :m is the walkable-neighbour mask and :ov the overlay: 0 bare path, 1 a
+; speck, 2 a power blossom.  The pensize-16 dot covers the whole 8x8 cell,
+; corners included, so no tile needs the screen cleared first.
+to make.tile :slot :m :ov
   ask 7 [
-    pu setpensize 8 setpc :c.hedge
-    repeat 36 [pu sety (tile.y repcount) setx -108 pd setx 108 pu]
-    repeat 28 [pu setx (tile.x repcount) sety 140 pd sety -140 pu]
+    pu setpos [0 0]
+    setpensize 16 setpc :c.hedge dot [0 0]
+    setpensize 8 setpc :c.bg
+    if not (:m < 8) [make "m (:m - 8) setpos [0 0] pd sety 8 pu]
+    if not (:m < 4) [make "m (:m - 4) setpos [0 0] pd setx -8 pu]
+    if not (:m < 2) [make "m (:m - 2) setpos [0 0] pd sety -8 pu]
+    if :m = 1 [setpos [0 0] pd setx 8 pu]
+    if :ov = 1 [setpensize 2 setpc :c.speck dot [0 0]]
+    if :ov = 2 [setpensize 6 setpc :c.trail dot [0 0]]
+    setpos [0 0]
+    snaptile :slot
   ]
 end
 
-to carve.paths
-  local "r local "c local "run
+; Draw the bank, make the world, and derive the board into the rows below the
+; screen.  All three outlive a level -- clearscreen does not touch the bank or
+; the map -- so this runs once a session, beside setup.shapes.  The map is 40
+; screen rows, 36 board rows and one margin row below them.
+to setup.tiles
+  local "m
+  newtiles 8
+  newmap 40 77
+  setbg :c.bg
+  clean
+  ; Dead space and the nest share one picture; only their numbers differ,
+  ; which is what makes nest.open? a comparison instead of a lookup.
   ask 7 [
-    pu setpensize 8 setpc :c.bg
-    repeat 36 [
-      make "r repcount
-      make "run 0
-      repeat 28 [
-        make "c repcount
-        ifelse (walk? (tile.at :c :r)) [
-          if :run = 0 [make "run :c]
-        ] [
-          if :run > 0 [sweep.row :r :run (:c - 1)]
-          make "run 0
-        ]
-      ]
-      if :run > 0 [sweep.row :r :run 28]
-    ]
+    pu setpos [0 0] setpensize 16 setpc :c.hedge dot [0 0]
+    snaptile :sl.hedge
+    snaptile :sl.nest
+  ]
+  repeat 16 [
+    make "m (repcount - 1)
+    make.tile (:sl.path + :m) :m 0
+    make.tile (:sl.speck + :m) :m 1
+    make.tile (:sl.bloss + :m) :m 2
+  ]
+  ask 7 [pu setpensize 8]
+  clean
+  build.map
+end
+
+; -------------------------------------------------------------------------
+; Building the board.  One pass lays the encoded rows down as scratch codes,
+; a second turns each walkable cell into the variant its neighbours ask for.
+; Walkability survives the conversion -- every walkable value is above
+; :sl.nest before and after -- so the second pass may read cells it has
+; already rewritten, and no copy of the board is needed.
+;
+; Both passes work in map coordinates and call the primitives directly: at
+; 1,008 cells a wrapper call each would be the cost of the whole build.  This
+; runs once a session, into the kept rows; a level start copies them down.
+; -------------------------------------------------------------------------
+
+to build.map
+  local "r local "c local "w local "k local "v local "m local "mc local "mr
+  repeat 36 [
+    make "r repcount
+    make "mr (:r + :sl.keep)
+    make "w (item :r :tt.map)
     repeat 28 [
       make "c repcount
-      make "run 0
-      repeat 36 [
-        make "r repcount
-        ifelse (walk? (tile.at :c :r)) [
-          if :run = 0 [make "run :r]
-        ] [
-          if :run > 0 [sweep.col :c :run (:r - 1)]
-          make "run 0
-        ]
+      make "k ((ascii (item :c :w)) - 65)
+      make "v :sl.nest
+      if :k = 0 [make "v :sl.hedge]
+      if :k > 0 [if :k < 5 [make "v (:sc.walk + :k)]]
+      settile (:c + :sl.dc) :mr :v
+    ]
+  ]
+  make "tt.full 0
+  repeat 36 [
+    make "r repcount
+    make "mr (:r + :sl.keep)
+    repeat 28 [
+      make "mc (repcount + :sl.dc)
+      make "v (tile :mc :mr)
+      if :v > :sc.walk [
+        make "m 0
+        make "k (tile :mc (:mr - 1))
+        if :k > :sl.nest [make "m 8]
+        make "k (tile (:mc - 1) :mr)
+        if :k > :sl.nest [make "m (:m + 4)]
+        make "k (tile :mc (:mr + 1))
+        if :k > :sl.nest [make "m (:m + 2)]
+        make "k (tile (:mc + 1) :mr)
+        if :k > :sl.nest [make "m (:m + 1)]
+        make "k (:v - :sc.walk)
+        make "v (:sl.path + :m)
+        if :k = 2 [make "v (:sl.speck + :m) make "tt.full (:tt.full + 1)]
+        if :k = 3 [make "v (:sl.bloss + :m) make "tt.full (:tt.full + 1)]
+        settile :mc :mr :v
       ]
-      if :run > 0 [sweep.col :c :run 36]
     ]
   ]
 end
 
-to mark.tile :c :r
-  dot (list (tile.x :c) (tile.y :r))
+; A level start puts the painted board back, which is a copy rather than a
+; rebuild: two primitives a cell against the twenty build.map spends.
+to reset.board
+  local "r local "mr local "kr
+  repeat 36 [
+    make "r repcount
+    make "mr (:r + :sl.dr)
+    make "kr (:r + :sl.keep)
+    repeat 28 [settile (repcount + :sl.dc) :mr (tile (repcount + :sl.dc) :kr)]
+  ]
+  make "tt.left :tt.full
 end
 
-; Unpainted tiles carry a faint speck and blossoms a fat disc.  The turtle's
-; 2-pixel trail runs straight through a tile centre, so painting covers a
-; speck with no extra drawing.
-to draw.specks
-  local "r local "c local "k
-  ask 7 [
-    pu
-    repeat 36 [
-      make "r repcount
-      repeat 28 [
-        make "c repcount
-        make "k (tile.at :c :r)
-        if :k = 2 [setpensize 2 setpc :c.speck mark.tile :c :r]
-        if :k = 3 [setpensize 6 setpc :c.trail mark.tile :c :r]
-      ]
-    ]
-    setpensize 8
-  ]
-end
+; -------------------------------------------------------------------------
+; Drawing.
+; -------------------------------------------------------------------------
 
 ; A blossom is wider than the trail, so covering it needs more than the
-; trail: black it out, then relay the half-trail the turtle drew coming in
-; so the painted path stays unbroken.
+; trail: repaint the cell from the map, then relay the half-trail the turtle
+; drew coming in so the painted path stays unbroken.  paint.tile has already
+; written the plain variant, so the repair is a stamp of the bare corridor.
 to erase.blossom :c :r :d
   local "cx local "cy local "bx local "by local "h
   make "cx (tile.x :c)
@@ -392,9 +471,9 @@ to erase.blossom :c :r :d
   make "bx (:cx - (:h * 4))
   make "h (dir.dr :d)
   make "by (:cy + (:h * 4))
+  stamp.tile :c :r
   ask 7 [
-    pu setpensize 8 setpc :c.bg mark.tile :c :r
-    setpensize 2 setpc :c.trail
+    pu setpensize 2 setpc :c.trail
     setx :bx sety :by
     pd setx :cx sety :cy pu
     setpensize 8
@@ -404,9 +483,7 @@ end
 to draw.board
   setbg :c.bg
   clean
-  fill.board
-  carve.paths
-  draw.specks
+  stampmap
   draw.lives
   draw.history
   draw.labels
@@ -644,23 +721,26 @@ end
 ; is what keeps clearing the last corridors tense.
 ; -------------------------------------------------------------------------
 
+; A speck and a blossom sit 16 and 32 slots above the bare corridor of the
+; same shape, so painting one is a subtraction: the cell keeps its variant
+; and loses only its contents.
 to paint.tile
   local "c local "r local "k
   make "c (item 1 :a.col)
   make "r (item 1 :a.row)
   make "k (tile.at :c :r)
-  if :k < 2 [stop]
-  if :k > 3 [stop]
-  set.tile :c :r 1
+  if :k < :sl.speck [stop]
   make "tt.left (:tt.left - 1)
   make "tt.painted (:tt.painted + 1)
   make "tt.idle 0
-  ifelse :k = 3 [
+  ifelse not (:k < :sl.bloss) [
+    set.tile :c :r (:k - 32)
     add.score 50
     make "tt.pause 3
     erase.blossom :c :r (item 1 :a.dir)
     eat.blossom
   ] [
+    set.tile :c :r (:k - 16)
     add.score 10
     make "tt.pause 1
     paint.sound
@@ -1210,28 +1290,11 @@ to setup.level
   make "tt.cleared "false
   make "tt.release [0 0 0 30 60]
   set.profile :tt.level
-  make "tt.tiles []
-  recycle
-  decode.map
-  make "tt.left (count.paint)
+  reset.board
   (rerandom 7)
   draw.board
   place.actors
   recycle
-end
-
-to count.paint
-  local "r local "n local "k
-  make "n 0
-  repeat 36 [
-    make "r repcount
-    repeat 28 [
-      make "k (tile.at repcount :r)
-      if :k = 2 [make "n (:n + 1)]
-      if :k = 3 [make "n (:n + 1)]
-    ]
-  ]
-  output :n
 end
 
 ; After a lost life a global release counter replaces the personal ones, so
@@ -1427,22 +1490,33 @@ to trails
   setup.palette
   setup.shapes
   setup.turtles
+  setup.tiles
   setup.sound
   forever [one.game]
 end
 
 ; -------------------------------------------------------------------------
 ; P9 M0 instrumentation (docs/tilemap-scrolling-design.md section 3.1, items
-; 2 and 3), mirroring Checkpoint Run's.  `draw.board` is the pen-carved board
-; the tile bake would replace; `play.frame` is the five-actor body that has to
-; fit beside a present.  Manual refresh, so the `sync` ending a frame presents
-; and returns rather than waiting for the 25 fps boundary.
+; 2 and 3), mirroring Checkpoint Run's.  `draw.board` was the 5,916 ms
+; pen-carved board and is now the tile bake that replaced it; `play.frame` is
+; the five-actor body that has to fit beside a present.  Manual refresh, so
+; the `sync` ending a frame presents and returns rather than waiting for the
+; 25 fps boundary.
 ; -------------------------------------------------------------------------
 
 to time.board
   local "t0
   make "t0 ticks
   draw.board
+  output (ticks - :t0)
+end
+
+; What a level start really costs now: the board copy plus the bake, against
+; the 5,916 ms decode-and-carve the two of them replaced.
+to time.level
+  local "t0
+  make "t0 ticks
+  setup.level
   output (ticks - :t0)
 end
 
@@ -1485,15 +1559,17 @@ to p9.frame
 end
 
 to p9m0.trails
-  local "b local "f local "one local "lo local "hi local "run
+  local "b local "f local "one local "lo local "hi local "run local "lv
   setup.palette
   setup.shapes
   setup.turtles
+  setup.tiles
   setup.sound
   init.game
   setup.level
   setrefresh "manual
   make "b (time.board)
+  make "lv (time.level)
   make "p9.sim 0
   make "p9.draw 0
   make "p9.show 0
@@ -1512,7 +1588,8 @@ to p9m0.trails
   textscreen
   pr [P9 M0 -- Turtle Trails]
   pr []
-  pr (se [draw.board :] :b [ms])
+  pr (se [draw.board  :] :b [ms])
+  pr (se [setup.level :] :lv [ms  was 5916])
   pr []
   pr (se [frame mean :] (:f / 20) [ms])
   pr (se [frame min  :] :lo [ms])
