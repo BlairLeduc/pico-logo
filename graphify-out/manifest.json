@@ -175,13 +175,13 @@
     "semantic_hash": ""
   },
   "core/memory.c": {
-    "mtime": 1785596937.322819,
-    "ast_hash": "4a6edb54376064b01debf78b1b98a4e7",
+    "mtime": 1785628545.1448836,
+    "ast_hash": "cf081d27cc11fae5d1c5793ad6cac774",
     "semantic_hash": ""
   },
   "core/memory.h": {
-    "mtime": 1785596937.323036,
-    "ast_hash": "1233d075585655002b3eccdc6832f8c2",
+    "mtime": 1785628545.1452127,
+    "ast_hash": "2788a2d363e90320b58f78c44c0d693e",
     "semantic_hash": ""
   },
   "core/parse_list.c": {
@@ -405,8 +405,8 @@
     "semantic_hash": ""
   },
   "core/token_source.c": {
-    "mtime": 1783090124.6278944,
-    "ast_hash": "8ee70eafe2be6590e8eee20a3e97302b",
+    "mtime": 1785628798.5168538,
+    "ast_hash": "2e245e8095335fc5d6a08bc58ba568e8",
     "semantic_hash": ""
   },
   "core/token_source.h": {
@@ -990,8 +990,8 @@
     "semantic_hash": ""
   },
   "tests/test_memory.c": {
-    "mtime": 1784847036.1144037,
-    "ast_hash": "ad582fe677d7a66f70ea3976ae58523c",
+    "mtime": 1785628023.3230064,
+    "ast_hash": "6a8ae1a01f856026d8e8329672a3754a",
     "semantic_hash": ""
   },
   "tests/test_mklfsimg.c": {
@@ -1135,8 +1135,8 @@
     "semantic_hash": ""
   },
   "tests/test_primitives_words_lists.c": {
-    "mtime": 1784594834.5355654,
-    "ast_hash": "afb913a44b3fdfc3744d451e9a5b6c63",
+    "mtime": 1785627956.423203,
+    "ast_hash": "2c40942398395cdc98f2c48e56dec00a",
     "semantic_hash": ""
   },
   "tests/test_primitives_workspace.c": {
@@ -1185,8 +1185,8 @@
     "semantic_hash": ""
   },
   "tests/test_token_source.c": {
-    "mtime": 1782574635.0577135,
-    "ast_hash": "133f382458f63ccb41a1fb724ef4ae82",
+    "mtime": 1785628428.5674086,
+    "ast_hash": "a130b6431545c32676ac647ca17aa128",
     "semantic_hash": ""
   },
   "tests/test_value.c": {
@@ -1440,8 +1440,8 @@
     "semantic_hash": ""
   },
   "docs/roadmap.md": {
-    "mtime": 1785622008.7623806,
-    "ast_hash": "862b8e141587d30b6e262ce0f77de959",
+    "mtime": 1785628768.466013,
+    "ast_hash": "74d55ba6115e13f91681a2db6976ee1f",
     "semantic_hash": ""
   },
   "docs/tilemap-scrolling-design.md": {
@@ -1450,13 +1450,13 @@
     "semantic_hash": ""
   },
   "docs/interpreter-throughput-design.md": {
-    "mtime": 1785621994.4563673,
-    "ast_hash": "d7dd333afb53e73be70e3560c8507c3c",
+    "mtime": 1785628711.3219774,
+    "ast_hash": "03b1a38542f7044890399770484d48f8",
     "semantic_hash": ""
   },
   "tests/test_bench_throughput.c": {
-    "mtime": 1785621933.0640826,
-    "ast_hash": "7caae17c64aa30ebbcd3f7c2e7c9fead",
+    "mtime": 1785628584.2453396,
+    "ast_hash": "e155efb16184db769dc547053a7932e9",
     "semantic_hash": ""
   }
 }

@@ -13,9 +13,9 @@
 // A loaded CI box inflates numerator and denominator together, so the guard
 // does not flap; a real regression moves the ratio.
 //
-// Bounds are ~3x the ratios measured at the 2026-08-01 baseline, so they
-// catch a 2x interpreter regression while tolerating machine variance.
-// After M1/M2 land, tighten them to ~3x the new baseline.
+// Bounds are ~3x the ratios measured at the current baseline, so they catch
+// a 2x interpreter regression while tolerating machine variance.  They were
+// re-tightened when M1 landed; do the same after M2.
 
 #include "test_scaffold.h"
 #include "core/repl.h"
@@ -33,11 +33,11 @@
 
 // Relative bounds (scenario time / calibration-loop time), set at ~3x the
 // baseline ratios recorded in the design doc.
-#define BOUND_REPEAT_ITER_X_CAL   800.0    // baseline x238
-#define BOUND_PROC1_ITER_X_CAL    600.0    // baseline x~150
-#define BOUND_PROC_SCAN_RATIO     8.0      // 128- vs 1-proc, baseline 4.8; M2 should take this to ~1
-#define BOUND_TRAILS_FRAME_X_CAL  8.0e5    // baseline x239k
-#define BOUND_CHECKRUN_FRAME_X_CAL 2.5e6   // baseline x780k
+#define BOUND_REPEAT_ITER_X_CAL   750.0    // M1 baseline x~220
+#define BOUND_PROC1_ITER_X_CAL    400.0    // M1 baseline x~117
+#define BOUND_PROC_SCAN_RATIO     8.0      // 128- vs 1-proc, baseline 5.0; M2 should take this to ~1
+#define BOUND_TRAILS_FRAME_X_CAL  6.5e5    // M1 baseline x215k
+#define BOUND_CHECKRUN_FRAME_X_CAL 2.2e6   // M1 baseline x694k
 
 void setUp(void)
 {

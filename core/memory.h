@@ -270,6 +270,22 @@ extern "C"
     // Compare two word nodes for equality (case-insensitive).
     bool mem_words_equal(Node a, Node b);
 
+    // One-shot view of a word for hot readers: its characters, its length, and
+    // a pointer to one byte of caller-owned memo storage on the interned atom.
+    // Atoms are immutable, so anything derivable from a word's characters can
+    // be derived once and kept in that byte; token_source.c uses it for word
+    // class. Zero means "nothing cached yet" and is what a freshly interned
+    // atom (including one that reuses collected storage) always reads back.
+    //
+    // Doing all three in one call matters: each is otherwise a separate
+    // out-of-line walk of the same entry, and this runs for every word of
+    // every list the evaluator touches.
+    //
+    // Returns false and touches no output if n is not a readable word. *memo
+    // is NULL for a blob, which has characters but no memo slot; the other
+    // pointers are valid until the next GC, as with mem_word_ptr.
+    bool mem_word_view(Node n, const char **str, size_t *len, uint8_t **memo);
+
     //==========================================================================
     // Garbage Collection
     //==========================================================================

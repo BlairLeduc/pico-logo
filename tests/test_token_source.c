@@ -928,6 +928,178 @@ void test_classify_rejects_n_with_sign(void)
 // Main
 //============================================================================
 
+//============================================================================
+// Cached word class (P10 M1)
+//
+// Word class is derived once and memoised on the interned atom, so these
+// tests pin the two things a memo can get wrong: giving a different answer
+// the second time round, and surviving into a word it does not belong to.
+//============================================================================
+
+// One shape per row: the word as stored in a list, and the token type it must
+// produce at the start of a list, where the previous token counts as a
+// delimiter. The number rows cover the grammar the design flags as
+// drift-prone, since it exists in three separate copies.
+static const struct
+{
+    const char *word;
+    TokenType type;
+} class_corpus[] = {
+    {"", TOKEN_QUOTED},
+    {"forward", TOKEN_WORD},
+    {"\"hello", TOKEN_QUOTED},
+    {":x", TOKEN_COLON},
+    {"123", TOKEN_NUMBER},
+    {"1.5", TOKEN_NUMBER},
+    {".5", TOKEN_NUMBER},
+    {"+7", TOKEN_NUMBER},
+    {"1e3", TOKEN_NUMBER},
+    {"1E3", TOKEN_NUMBER},
+    {"1n4", TOKEN_NUMBER},
+    {"1e+3", TOKEN_NUMBER},
+    {"1e", TOKEN_WORD},
+    {"1e+", TOKEN_WORD},
+    {"1n", TOKEN_WORD},
+    {"1n+4", TOKEN_WORD},
+    {"+", TOKEN_PLUS},
+    {"*", TOKEN_MULTIPLY},
+    {"/", TOKEN_DIVIDE},
+    {"=", TOKEN_EQUALS},
+    {"<", TOKEN_LESS_THAN},
+    {">", TOKEN_GREATER_THAN},
+    {"[", TOKEN_LEFT_BRACKET},
+    {"]", TOKEN_RIGHT_BRACKET},
+    {"(", TOKEN_LEFT_PAREN},
+    {")", TOKEN_RIGHT_PAREN},
+    {"-", TOKEN_UNARY_MINUS},
+    {"-5", TOKEN_NUMBER},
+    {"-foo", TOKEN_UNARY_MINUS},
+};
+
+void test_cached_class_matches_first_pass(void)
+{
+    // Every shape is classified twice: once with an empty memo, so the class
+    // is computed, and once with it filled, so the class is read back. A memo
+    // holding the wrong thing shows up as a second pass that disagrees.
+    for (size_t i = 0; i < sizeof(class_corpus) / sizeof(class_corpus[0]); i++)
+    {
+        const char *word = class_corpus[i].word;
+        Node w = mem_atom(word, strlen(word));
+        Node list = mem_cons(w, NODE_NIL);
+
+        TokenSource ts;
+        token_source_init_list(&ts, list);
+        Token cold = token_source_next(&ts);
+
+        token_source_init_list(&ts, list);
+        Token warm = token_source_next(&ts);
+
+        TEST_ASSERT_EQUAL_INT_MESSAGE(class_corpus[i].type, cold.type, word);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(cold.type, warm.type, word);
+        TEST_ASSERT_EQUAL_size_t_MESSAGE(cold.length, warm.length, word);
+    }
+}
+
+void test_minus_atom_classifies_by_context(void)
+{
+    // A lone '-' is the context-dependent case: the very same atom is binary
+    // after a number and unary at the start of a list, so its class must stay
+    // a "consult the previous token" marker rather than a concrete type.
+    Node minus = mem_atom("-", 1);
+    Node one = mem_atom("1", 1);
+
+    Node infix = mem_cons(one, mem_cons(minus, mem_cons(one, NODE_NIL)));
+    TokenSource ts;
+    token_source_init_list(&ts, infix);
+    assert_token_type(token_source_next(&ts), TOKEN_NUMBER);
+    assert_token_type(token_source_next(&ts), TOKEN_MINUS);
+
+    Node prefix = mem_cons(minus, mem_cons(one, NODE_NIL));
+    token_source_init_list(&ts, prefix);
+    assert_token_type(token_source_next(&ts), TOKEN_UNARY_MINUS);
+}
+
+void test_minus_word_atom_classifies_by_context(void)
+{
+    // Same for a longer word starting with '-': at the start of a list only
+    // the sign is taken, after a word the whole thing is one word.
+    Node neg = mem_atom("-foo", 4);
+    Node bar = mem_atom("bar", 3);
+
+    Node prefix = mem_cons(neg, NODE_NIL);
+    TokenSource ts;
+    token_source_init_list(&ts, prefix);
+    assert_token(token_source_next(&ts), TOKEN_UNARY_MINUS, "-");
+
+    Node after_word = mem_cons(bar, mem_cons(neg, NODE_NIL));
+    token_source_init_list(&ts, after_word);
+    assert_token(token_source_next(&ts), TOKEN_WORD, "bar");
+    assert_token(token_source_next(&ts), TOKEN_WORD, "-foo");
+}
+
+void test_signed_number_atom_is_a_number_in_both_contexts(void)
+{
+    // -5 is the case the design singles out as NOT context-dependent: the
+    // number grammar accepts the leading sign, so it is a number wherever it
+    // appears and may be cached as one.
+    Node neg = mem_atom("-5", 2);
+    Node bar = mem_atom("bar", 3);
+
+    Node prefix = mem_cons(neg, NODE_NIL);
+    TokenSource ts;
+    token_source_init_list(&ts, prefix);
+    assert_token(token_source_next(&ts), TOKEN_NUMBER, "-5");
+
+    Node after_word = mem_cons(bar, mem_cons(neg, NODE_NIL));
+    token_source_init_list(&ts, after_word);
+    assert_token(token_source_next(&ts), TOKEN_WORD, "bar");
+    assert_token(token_source_next(&ts), TOKEN_NUMBER, "-5");
+}
+
+void test_collected_atom_does_not_leave_its_class_behind(void)
+{
+    // The one hazard the memo has: a collected atom's bytes go on the free
+    // list and a later word of the same size is handed the same offset. That
+    // word must be classified afresh, not inherit what used to live there.
+    Node number = mem_atom("123", 3);
+    Node list = mem_cons(number, NODE_NIL);
+    TokenSource ts;
+    token_source_init_list(&ts, list);
+    assert_token(token_source_next(&ts), TOKEN_NUMBER, "123");
+
+    // Nothing is rooted, so the cell and the atom both go.
+    mem_gc(NULL, 0);
+
+    Node word = mem_atom("abc", 3);
+    TEST_ASSERT_EQUAL_MESSAGE(number, word,
+        "expected the collected atom's offset to be reused; "
+        "without reuse this test proves nothing");
+
+    Node reused = mem_cons(word, NODE_NIL);
+    token_source_init_list(&ts, reused);
+    assert_token(token_source_next(&ts), TOKEN_WORD, "abc");
+}
+
+void test_comment_word_skips_to_end_of_line(void)
+{
+    // The leading-';' check is folded into the same lookup as word class, so
+    // it has to keep working on a second pass over the same list.
+    Node list = mem_cons(mem_atom("show", 4),
+                mem_cons(mem_atom(";note", 5),
+                mem_cons(mem_atom("hidden", 6),
+                mem_cons(mem_newline_marker,
+                mem_cons(mem_atom("shown", 5), NODE_NIL)))));
+
+    for (int pass = 0; pass < 2; pass++)
+    {
+        TokenSource ts;
+        token_source_init_list(&ts, list);
+        assert_token(token_source_next(&ts), TOKEN_WORD, "show");
+        assert_token(token_source_next(&ts), TOKEN_WORD, "shown");
+        assert_token_type(token_source_next(&ts), TOKEN_EOF);
+    }
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -994,6 +1166,14 @@ int main(void)
     RUN_TEST(test_classify_rejects_trailing_e_with_sign);
     RUN_TEST(test_classify_rejects_trailing_n);
     RUN_TEST(test_classify_rejects_n_with_sign);
-    
+
+    // Cached word class (P10 M1)
+    RUN_TEST(test_cached_class_matches_first_pass);
+    RUN_TEST(test_minus_atom_classifies_by_context);
+    RUN_TEST(test_minus_word_atom_classifies_by_context);
+    RUN_TEST(test_signed_number_atom_is_a_number_in_both_contexts);
+    RUN_TEST(test_collected_atom_does_not_leave_its_class_behind);
+    RUN_TEST(test_comment_word_skips_to_end_of_line);
+
     return UNITY_END();
 }

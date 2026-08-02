@@ -605,7 +605,7 @@ bool mem_list_append(Node *head, Node *tail, Node item)
 //==========================================================================
 //
 // Each atom entry is aligned to a 4-byte boundary and laid out as:
-//     [next:2][len:1][chars:len][nul:1][padding]
+//     [next:2][len:1][chars:len][nul:1][memo:1][padding]
 // `next` chains entries whose names hash to the same bucket (0xFFFF ends
 // the chain), so interning is O(chain length) instead of a linear scan of
 // the whole table — mem_atom runs for every quoted word, list element,
@@ -642,7 +642,7 @@ static bool atom_entry_is_free(size_t offset)
 
 static size_t atom_live_size(size_t offset)
 {
-    return ALIGN4(2 + 1 + memory_block[offset + 2] + 1);
+    return ALIGN4(2 + 1 + memory_block[offset + 2] + 1 + 1);
 }
 
 static size_t atom_entry_size(size_t offset)
@@ -793,8 +793,8 @@ Node mem_atom(const char *str, size_t len)
     }
 
     // Calculate aligned size for this entry:
-    // [next:2][len:1][chars:len][nul:1][padding]
-    size_t entry_size = ALIGN4(2 + 1 + len + 1);
+    // [next:2][len:1][chars:len][nul:1][memo:1][padding]
+    size_t entry_size = ALIGN4(2 + 1 + len + 1 + 1);
 
     // Reuse a collected block before extending the atom region.  Atom offsets
     // stay stable for live entries; only unreachable storage is repurposed.
@@ -812,6 +812,10 @@ Node mem_atom(const char *str, size_t len)
     memory_block[offset + 2] = (uint8_t)len;
     memcpy(&memory_block[offset + 3], str, len);
     memory_block[offset + 3 + len] = '\0';  // Null terminator
+    // Clear the memo slot on BOTH allocation paths (this write covers the
+    // fresh-region one and the free-list-reuse one alike): collected storage
+    // may still hold the memo of the word that previously lived here.
+    memory_block[offset + 3 + len + 1] = 0;
     atom_buckets[bucket] = (uint16_t)offset;
     return NODE_MAKE_WORD(offset);
 }
@@ -1185,6 +1189,35 @@ size_t mem_word_len(Node n)
     }
 
     return memory_block[offset + 2];
+}
+
+// Characters, length and memo slot of a word in a single entry walk.
+// See mem_word_view in memory.h for the contract and why it is one call.
+bool mem_word_view(Node n, const char **str, size_t *len, uint8_t **memo)
+{
+    if (NODE_GET_TYPE(n) != NODE_TYPE_WORD)
+        return false;
+
+    if (NODE_WORD_IS_BLOB(n))
+    {
+        BlobDesc *d = blob_desc(n);
+        if (!d)
+            return false;
+        *str = (const char *)d->ptr;
+        *len = d->len;
+        *memo = NULL;  // blobs are not interned, so they carry no memo
+        return true;
+    }
+
+    uint32_t offset = NODE_GET_INDEX(n);
+    if (offset >= atom_next || atom_entry_is_free(offset))
+        return false;
+
+    size_t chars = memory_block[offset + 2];
+    *str = (const char *)&memory_block[offset + 3];
+    *len = chars;
+    *memo = &memory_block[offset + 3 + chars + 1];
+    return true;
 }
 
 // Compare a word node to a given string (case-insensitive).

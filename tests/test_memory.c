@@ -41,15 +41,15 @@ void test_init_free_nodes(void)
     // After init the only consumed space is the bootstrap atoms (newline
     // marker, "true", "false"); every remaining word of the shared block
     // is a potential node.
-    TEST_ASSERT_EQUAL((LOGO_MEMORY_SIZE - 28) / 4, mem_free_nodes());
+    TEST_ASSERT_EQUAL((LOGO_MEMORY_SIZE - 32) / 4, mem_free_nodes());
 }
 
 void test_init_free_atoms(void)
 {
     // After init the atom table holds the bootstrap atoms — the newline
-    // marker (8 bytes), "true" (8), and "false" (12) — each laid out as
-    // [next:2][len:1][chars][nul][pad-to-4].
-    TEST_ASSERT_EQUAL(mem_total_atoms() - 28, mem_free_atoms());
+    // marker (8 bytes), "true" (12), and "false" (12) — each laid out as
+    // [next:2][len:1][chars][nul][memo:1][pad-to-4].
+    TEST_ASSERT_EQUAL(mem_total_atoms() - 32, mem_free_atoms());
 }
 
 void test_total_nodes(void)
@@ -379,8 +379,9 @@ void test_atom_uses_memory(void)
     mem_atom("test", 4);
     size_t free_after = mem_free_atoms();
     
-    // Should have used 8 bytes (1 length + 4 chars + 3 padding to align to 4)
-    TEST_ASSERT_EQUAL(8, free_before - free_after);
+    // Should have used 12 bytes (2 chain link + 1 length + 4 chars + 1 nul
+    // + 1 memo + 3 padding to align to 4)
+    TEST_ASSERT_EQUAL(12, free_before - free_after);
 }
 
 void test_interned_atom_no_extra_memory(void)

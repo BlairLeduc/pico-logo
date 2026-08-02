@@ -1,6 +1,7 @@
 # P10 — Interpreter throughput (design)
 
-Status: **v1 design, drafted 2026-08-01.** Opened by P9's M0 measurement,
+Status: **v1 design, drafted 2026-08-01; M0 and M1 done 2026-08-01.**
+Opened by P9's M0 measurement,
 which failed its gate and found the display was never the bottleneck. Like
 P9, this design gates on measurement: M0 below is a benchmark harness and a
 baseline, and no optimisation lands without a before-and-after number from it.
@@ -61,6 +62,11 @@ Sampling a pure `repeat [make "x (:x + 1)]` loop — no device work at all:
 | Actual evaluation and everything else | 24 % |
 
 `classify_word` is the largest single leaf in the whole interpreter.
+
+**Corrected by M1 (§6.2):** this profile is a *board* profile and does not
+transfer. On the host, classification is a few per cent, not 34 %, and
+removing it entirely bought 1.5 %. Read this table as describing the Pico,
+where a character loop out of flash costs far more than it does here.
 
 ## 3. Diagnosis
 
@@ -124,10 +130,15 @@ header is an established home for per-atom metadata.
 
 ### 4.1 What gets cached
 
-- **Word class** — the `TokenType` `classify_word` would return.
+- **Word class** — the `TokenType` `classify_word` would return. *Done in M1.*
 - **Parsed numeric value** — for atoms that are numbers, so `is_number_word`
-  and the later `strtof` both disappear.
+  and the later `strtof` both disappear. *Dropped: §6.2 measured the whole of
+  number parsing at 2.2 %, too little for the variable-width entry it needs.*
 - **Resolved binding** — primitive index, user-procedure index, or unbound.
+
+M1 spends **one byte per atom** on this, a general-purpose memo slot in the
+entry (`mem_word_view`) rather than a class-specific field, so M2 can share
+it or widen it without another layout change.
 
 ### 4.2 The one context-dependent case
 
@@ -215,6 +226,12 @@ So roughly **+1 byte per atom on average** for the class, plus 4 bytes on
 each atom that classifies as a number — and numeric atoms are the distinct
 digit literals of loaded programs, dozens rather than thousands.
 
+**M1 took only the first column**, so the paragraph below is unspent design:
+the numeric payload was dropped (§6.2) and the entry stayed fixed-width at
+`ALIGN4(len + 5)`. Measured cost after loading each game is in §6.2 — 560 and
+740 atom bytes, 0.6–0.8 % of free nodes, `pico2` RAM unchanged at 95.62 %.
+It is kept because M2 may still want a variable-width entry.
+
 The variable-width entry needs a flag, and the header has exactly one spare
 bit: entries are 4-aligned so stored offsets leave bits 0 and 1 free, and
 offsets fit 15 bits under `LOGO_ATOM_LIMIT` (32 KB) — `ATOM_LINK_FREE` uses
@@ -249,10 +266,12 @@ materially (the atom region's high-water mark recorded alongside it).
   scenarios on a Pico 2 (the p9m0 pattern; frame bodies stay with
   `p9m0.trails`/`p9m0.checkrun`). Baseline in §6.1. **Nothing below lands
   without a before-and-after from this.**
-- **M1 — cached word class.** Class and parsed numeric value on the atom;
-  `classify_word` becomes a lookup with the `-` exception of §4.2, and the
-  leading-`;` comment peek in `node_iter_next` folds into the same lookup.
-  Targets the 34 %.
+- **M1 — cached word class. Done 2026-08-01.** Class on the atom's memo byte;
+  `classify_word` became a lookup with the `-` exception of §4.2, and the
+  leading-`;` comment peek in `node_iter_next` folded into the same lookup.
+  Parsed numeric value was **not** cached — §6.2 explains why the measurement
+  redirected the milestone. Host result: **1.25× on the profiled loop**,
+  Turtle Trails' frame −11 %, Checkpoint Run's −12 % (§6.1).
 - **M2 — cached name binding.** Resolve primitive/procedure once per atom
   with the §4.3 generation counter; kill the inline `output`/`op` compare
   too. Targets the 14 %. Placement decided with M1's numbers.
@@ -266,22 +285,123 @@ materially (the atom region's high-water mark recorded alongside it).
 
 ### 6.1 M0 baseline (2026-08-01)
 
-Host is the benchmark's machine of record; the Pico 2 column is filled by
-running `p10m0` on hardware (the game rows reuse P9's `p9m0` numbers).
+Host is the benchmark's machine of record. Both Pico 2 columns are measured
+on hardware by `p10m0` (the game rows reuse P9's `p9m0` numbers).
 
-| Scenario | Host | Pico 2 |
-|---|---:|---:|
-| `repeat [make "x (:x + 1)]` | 1.07 µs/iter | 92.4 µs/iter |
-| user-proc call, 1 defined | 0.43 µs | - |
-| user-proc call, 64 defined | 1.24 µs | - |
-| user-proc call, 128 defined (full table, target last) | 2.09 µs | 127.6 µs |
-| Turtle Trails `play.frame` | 0.84 ms | 87.3 ms (§2.1) |
-| Checkpoint Run `play.frame` | 2.73 ms | 258.6 ms (§2.1) |
+| Scenario | Host M0 | Host after M1 | Pico 2 M0 | Pico 2 after M1 |
+|---|---:|---:|---:|---:|
+| `repeat [make "x (:x + 1)]` | 1.07 µs/iter | **0.86 µs/iter** | 92.4 µs/iter | **65.9 µs/iter** |
+| user-proc call, small workspace | 0.43 µs | 0.40 µs | - | 32.6 µs |
+| user-proc call, 64 defined | 1.24 µs | 1.21 µs | - | - |
+| user-proc call, full table (target last) | 2.09 µs | 2.03 µs | 127.6 µs | 128.3 µs |
+| Turtle Trails `play.frame` | 0.84 ms | **0.75 ms** | 87.3 ms (§2.1) | **73.2 ms** |
+| Turtle Trails `draw.board` | 55.1 ms (§2.1) | - | 5,916 ms (§2.1) | 5,054 ms |
+| Checkpoint Run `play.frame` | 2.73 ms | **2.40 ms** | 258.6 ms (§2.1) | **232.7 ms** |
+| Checkpoint Run `draw.sector` | 18.0 ms (§2.1) | - | 1,346 ms (§2.1) | 1,173 ms |
 
 The frame rows sit slightly under §2.1's 0.96 / 3.42 ms because the method
 differs — M0 times a bare `repeat [play.frame]` in manual refresh, where the
 p9m0 harness collected per-frame min/max around each call. Before/afters
 must compare against *this* table, taken by *this* benchmark.
+
+Two readings matter. **The loop is 1.40× faster on the board against 1.25× on
+the host** — the board gains more, which is the direction §2.2 predicts. And
+the full-table procedure call is **unchanged**, 127.6 → 128.3 µs, 0.5 % apart:
+M1 does not touch name resolution, so this row is a control rather than a
+result, and reproducing M0's number to within noise is good evidence that both
+the baseline and the method are sound. The small-workspace row has no M0
+baseline, so 32.6 µs is a first measurement, not a comparison; taken against
+the full table it puts the board's workspace-scan spread at **3.9×**, close
+enough to the host's 5.1× to confirm M2 has the same problem to solve on both.
+
+**Both games gained, and both gained less than the synthetic loop:**
+
+| | Loop | Trails frame | Trails `draw.board` | Checkrun frame | Checkrun `draw.sector` |
+|---|---:|---:|---:|---:|---:|
+| Gain | 1.40× | 1.19× | 1.17× | 1.11× | 1.15× |
+
+Real code spends a share of itself on work M1 does not touch — `tile.at`'s
+cons-cell walks above all — so a synthetic loop of nothing but tokens is the
+optimistic end, not the representative one. Trails' 0.85 ratio of frame gain
+to loop gain is close to the 0.90 the host predicted, so the host is a fair
+guide to the *shape* of a change even where it is wrong about the absolute
+shares. Checkpoint Run gains least of the five, which fits: it is the game
+whose frame is most dominated by things other than tokenising.
+
+### 6.2 What M1 measured (2026-08-01)
+
+M1 was scoped by §2.2's claim that 34 % of runtime is re-lexing and
+classifying words. **On the board that claim held.** Removing classification
+took the profiled loop from 92.4 to 65.9 µs/iter — 28.7 % of runtime gone,
+against a ceiling of 34 % if the work vanished for free, the gap being what
+the memo lookup costs to read. §2.2 is confirmed, and M1 delivered on the
+hardware what the design promised.
+
+The host is the machine that disagrees, and understanding why is what saved
+the milestone. The first cut of M1 made classification a perfect memo —
+instrumented at 3,079,993 cache hits against 7 misses over the profiled loop —
+and the host loop got **1.5 % faster**, which is noise. Two findings follow.
+
+**The 34 % is a board figure and does not transfer.** A leaf profile of the
+post-M1 build (macOS ARM64, `sample`, 4,942 leaf samples) puts the costs at:
+
+| Cost centre | Share |
+|---|---:|
+| Cons-cell walk and index→pointer indirection | 16.6 % |
+| The memo lookup itself, as first written | 12.7 % |
+| `memmove`/`memset` | 9.8 % |
+| Name resolution (`primitive_find_n`, `strncasecmp`, variable lookup) | 7.6 % |
+| Re-interning the quoted word `"x` on every evaluation | 5.9 % |
+| `is_delimiter_token` | 4.2 % |
+| `mem_word_ptr` / `mem_word_len` | 4.0 % |
+| Number parsing (`parse_number`, `strtof`, `is_number_string`) | 2.2 % |
+| Everything else (`eval_primary`, `eval_expr_bp`, the trampoline, …) | 37.0 % |
+
+Classification was never a third of *host* runtime. On the Pico, code runs
+from flash through the XIP cache and a character loop costs far more relative
+to everything else — 1.40× against the host's 1.25× is that difference showing
+up. **The standing lesson is that host shares cannot be used to size a board
+milestone, in either direction**: this design's central number was right about
+the hardware and would have been abandoned on host evidence alone.
+
+**The memo has to be cheaper than the thing it replaces.** The first cut
+cost 12.7 % on the host — about what classification cost there — because
+`mem_atom_memo` was a separate out-of-line call that re-walked the entry (type
+check, blob check, bounds check, free check, length read) on top of the walks
+`mem_word_ptr` and `mem_word_len` were already doing for the same element.
+Collapsing all three into one `mem_word_view` call is what turned M1 from
+1.5 % into 1.25× on the host, and it is very likely part of why the board
+reached 1.40 %. The lesson generalises to M2: a lookup that reaches into
+`memory.c` per token must be *one* call, or the memo pays for itself and no
+more. That the board-visible win survived a host-visible one is the reason
+this was worth chasing on the machine that could be profiled.
+
+**Numeric caching was dropped from M1**: number parsing is 2.2 % of host
+runtime, and capturing it needs a variable-width atom entry, a new header flag
+bit with two GC invariants (§5), and a wider `Token`. Given the host/board
+divergence above, 2.2 % is weak evidence either way — but the cost is
+concrete and the benefit is not, so it stays dropped until a board profile
+argues for it.
+
+**Two further targets surfaced**, neither in the original plan and both
+bigger on the host than what M1 caught there: `eval_primary` re-interns `"x`
+on every evaluation of a quoted word (5.9 % — hash, chain walk and compare,
+for an answer that is a pure function of the atom, exactly the §4 argument),
+and `is_delimiter_token` re-derives from the token type per token (4.2 %) when
+it could fall out of the cached class. Both are M2-shaped and both are pure
+memoisation, the pattern the board has now shown pays better there than here.
+
+**Cost, measured** (§5's acceptance check). All three firmware presets link;
+`pico2` RAM is unchanged at 95.62 %, confirming the memo costs no new `bss`.
+Inside the shared block, after loading each game:
+
+| | Free nodes before | after | Atom bytes spent |
+|---|---:|---:|---:|
+| Turtle Trails | 23,946 | 23,806 (−0.6 %) | 560 |
+| Checkpoint Run | 22,567 | 22,382 (−0.8 %) | 740 |
+
+That is ~+1 byte per atom as §5 predicted, and well inside "does not fall
+materially".
 
 ## 7. Expected outcome, honestly
 
@@ -304,6 +424,33 @@ shows variable lookup hot.
 |---|---:|---:|---:|
 | Turtle Trails `play.frame` | 87.3 ms | ~46 ms | < 40 ms |
 | Checkpoint Run `play.frame` | 258.6 ms | ~136 ms | < 40 ms |
+
+**Measured after M1, on hardware.** The estimates above can now be replaced
+with a board number for the first half:
+
+| | M0 | After M1 | Still needed |
+|---|---:|---:|---:|
+| `repeat` loop | 92.4 µs/iter | 65.9 µs/iter (1.40×) | — |
+| Turtle Trails `play.frame` | 87.3 ms | **73.2 ms** (1.19×) | 1.83× (33.2 ms) |
+| Checkpoint Run `play.frame` | 258.6 ms | **232.7 ms** (1.11×) | 5.82× (192.7 ms) |
+
+Two things say M2 will not close either gap on its own: it targets §2.2's
+14 %, half the share M1 just spent to buy 1.19×, and part of that 14 % is
+variable lookup, which §7 above establishes cannot be cached on the atom at
+all. §2.1's original reading — that Checkpoint Run needs P9 and game-side
+work as well, and that P10 is necessary but not sufficient for it — is now
+measured rather than predicted, and it was right.
+
+**What closes the gap is P9, not P10.** P9's M0 attributes 59 % of a Trails
+frame to `tile.at` inside `step.bugs` — 43.2 ms of the 73.2 — and P9's C map
+(`tile`/`settile`) deletes exactly that walk. A frame without it is around
+30 ms, under budget with room to spare. So the honest ordering is that P10 M2
+is worth having and will not be decisive, while P9's map is decisive; the two
+are complementary as §10 says, but the weight sits with P9.
+
+This should inform M3's decision, and it argues against M4: representation
+work (the cons-cell walk, §3.3) attacks the same milliseconds P9's C map
+removes outright, and the C map is both cheaper and already designed.
 
 So the honest reading is:
 
@@ -334,6 +481,14 @@ turns these estimates into decisions.
   contract: 66 test binaries, including both games' full simulations. None of
   them may change. A performance change that needs a test edited is a
   semantic change in disguise.
+- **M1's tests are in `tests/test_token_source.c`** (6 added, all passing
+  alongside the untouched 67-binary suite): a 29-shape corpus classified cold
+  and then warm and asserted identical, the `-` / `-foo` atoms classified in
+  both contexts within one run, `-5` asserted context-*free*, comment skipping
+  over two passes of the same list, and an atom-reuse test that asserts the
+  collected offset really was handed back before checking the class did not
+  come with it. That last one was mutation-checked: deleting the memo-clearing
+  line in `mem_atom` makes it fail.
 - **New unit tests** for the cache itself: class agreed with `classify_word`
   for every token shape; the `-` cases in both contexts (§4.2); binding
   invalidation across `proc_define`/`proc_erase`/`erall`; atom collection and
