@@ -1,0 +1,213 @@
+to ttt
+  local [me you position]
+  draw.board
+  
+  init
+  
+  if equal? :me "x [meplay 5]
+  
+  forever [
+    if already.won? :me [
+      print [I win!]
+    stop
+    ]
+    if tied? [
+      print [Tie game!]
+    stop
+    ]
+    ; [ask person for move]
+    youplay getmove
+    if already.won? :you [
+      print [You win!]
+    stop
+    ]
+    if tied? [
+      print [Tie game!]
+    stop
+    ]
+    ; [compute program's move]
+    meplay pickmove make.triples
+  ]
+end
+
+to make.triples
+  op map "substitute.triple [123 456 789 147 258 369 159 357]
+end
+
+to substitute.triple :combination
+  op map [[i] item :i :position] :combination
+end
+
+to win.now? :triple
+  op equal? ( filter [[p] not number? :p] :triple ) ( word :who :who )
+end
+
+to youplay :square
+  draw :you :square
+  make "position replace :square :position :you
+end
+
+to meplay :square
+  draw :me :square
+  make "position replace :square :position :me
+end
+
+to draw.board
+  splitscreen clearscreen hideturtle
+  drawline [-20 -50] 0 120
+  drawline [20 -50] 0 120
+  drawline [-60 -10] 90 120
+  drawline [-60 30] 90 120
+end
+
+to drawline :pos :head :len
+  penup
+  setpos :pos
+  setheading :head
+  pendown
+  forward :len
+end
+
+to init
+  make "position [1 2 3 4 5 6 7 8 9]
+  pr [Do you want to play first ( X )]
+  type [or second ( O ) ? Type X or O:]
+  choose
+  pr [For each move, type a digit 1 - 9.]
+end
+
+to choose
+  local "side
+  forever [
+    make "side readchar
+    pr :side
+    if equal? :side "x [choosex stop]
+    if equal? :side "o [chooseo stop]
+    type [Huh? Type X or O:]
+  ]
+end
+
+to chooseo
+  make "me "x
+  make "you "o
+end
+
+to choosex
+  make "me "o
+  make "you "x
+end
+
+to getmove
+  local "square
+  forever [
+    type [Your move:]
+    make "square readchar
+    pr :square
+    if number? :square [
+      if and ( :square > 0 ) ( :square < 10 ) [
+        if free? :square [
+          output :square
+        ]
+      ]
+    ]
+    pr [not a valid move.]
+  ]
+end
+
+to pickmove :triples
+  local "try
+  make "try find.win :me
+  if not empty? :try [op :try]
+  make "try find.win :you
+  if not empty? :try [op :try]
+  make "try find.fork
+  if not empty? :try [op :try]
+  make "try find.advance
+  if not empty? :try [op :try]
+  op find [[p] member? :p :position] [5 1 3 7 9 2 4 6 8]
+end
+
+to find.win :who
+  op filter "number? find "win.now? :triples
+end
+
+to find.fork
+  local "singles
+  make "singles singles :me
+  if empty? :singles [output "]
+  op repeated.number reduce "word :singles
+end
+
+to singles :who
+  op filter [[p] single? :p :who] :triples
+end
+
+to repeated.number :squares
+  local "numbers
+  make "numbers filter "number? :squares
+  op find [[p] member? :p :numbers] :numbers
+end
+
+to find.advance
+  op best.move filter "number? find [[p] single? :p :me] :triples
+end
+
+to best.move :my.single
+  local "your.singles
+  if empty? :my.single [op "]
+  make "your.singles singles :you
+  if empty? :your.singles [op first :my.single]
+  ( if ( count filter [[p] :p = first :my.single] reduce "word :your.singles ) > 1 [
+    op first :my.single
+  ] [
+    op last :my.single
+  ] )
+end
+
+to draw :who :square
+  move :square
+  ( if :who = "x [drawx] [drawo] )
+end
+
+to move :square
+  pu
+  setpos thing word "box :square
+end
+
+to drawo
+  seth 270 fd 17 rt 90 bk 3
+  pd
+  repeat 18 [fd 6 rt 20]
+end
+
+to drawx
+  seth 45
+  pd
+  repeat 4 [fd 25.5 bk 25.5 rt 90]
+end
+
+to tied?
+  op not reduce "or map.se "number? :position
+end
+
+to free? :square
+  op number? item :square :position
+end
+
+to single? :triple :who
+  op equal? ( filter [[p] not number? :p] :triple ) :who
+end
+
+to already.won? :player
+  op member? ( word :player :player :player ) ( make.triples )
+end
+
+make "box1 [-40 50]
+make "box2 [0 50]
+make "box3 [40 50]
+make "box4 [-40 10]
+make "box5 [0 10]
+make "box6 [40 10]
+make "box7 [-40 -30]
+make "box8 [0 -30]
+make "box9 [40 -30]
