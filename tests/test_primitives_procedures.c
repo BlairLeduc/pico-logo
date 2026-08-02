@@ -2272,6 +2272,31 @@ void test_b9_layout_survives_and_propagates_harmlessly(void)
 // Each test therefore primes the cache with one pass and checks the second.
 //==========================================================================
 
+void test_redefining_a_procedure_replaces_its_body(void)
+{
+    // A second definition of the same name replaces the body in place, on the
+    // same table slot, and the name keeps working.
+    const char *np[] = {NULL};
+    define_proc("rd.f", np, 0, "output 1");
+    reset_output();
+    run_string("print rd.f");
+    TEST_ASSERT_EQUAL_STRING("1\n", output_buffer);
+
+    // Prime the binding cache from a list before redefining, so a stale
+    // cached slot would show up here rather than only in the erase tests.
+    reset_output();
+    run_string("run [print rd.f]");
+    TEST_ASSERT_EQUAL_STRING("1\n", output_buffer);
+
+    define_proc("rd.f", np, 0, "output 2");
+    reset_output();
+    run_string("print rd.f");
+    TEST_ASSERT_EQUAL_STRING("2\n", output_buffer);
+    reset_output();
+    run_string("run [print rd.f]");
+    TEST_ASSERT_EQUAL_STRING("2\n", output_buffer);
+}
+
 void test_binding_cache_does_not_survive_erase_into_a_reused_slot(void)
 {
     // The hazard the invalidation sweep exists for: `bc.alpha` caches the
@@ -2280,7 +2305,7 @@ void test_binding_cache_does_not_survive_erase_into_a_reused_slot(void)
     // whatever moved in.
     const char *no_params[] = {NULL};
     define_proc("bc.alpha", no_params, 0, "output 1");
-    output_buffer[0] = '\0';
+    reset_output();
     run_string("run [print bc.alpha]");
     TEST_ASSERT_EQUAL_STRING("1\n", output_buffer);
 
@@ -2302,7 +2327,7 @@ void test_binding_cache_learns_a_name_defined_after_it_failed(void)
 
     const char *no_params[] = {NULL};
     define_proc("bc.later", no_params, 0, "output 7");
-    output_buffer[0] = '\0';
+    reset_output();
     run_string("run [print bc.later]");
     TEST_ASSERT_EQUAL_STRING("7\n", output_buffer);
 }
@@ -2311,7 +2336,7 @@ void test_binding_cache_cleared_by_erall(void)
 {
     const char *no_params[] = {NULL};
     define_proc("bc.wiped", no_params, 0, "output 1");
-    output_buffer[0] = '\0';
+    reset_output();
     run_string("run [print bc.wiped]");
     TEST_ASSERT_EQUAL_STRING("1\n", output_buffer);
 
@@ -2330,7 +2355,7 @@ void test_binding_cache_learns_an_alias_made_by_copydef(void)
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 
     run_string("copydef \"print \"bc.say");
-    output_buffer[0] = '\0';
+    reset_output();
     run_string("run [bc.say \"hi]");
     TEST_ASSERT_EQUAL_STRING("hi\n", output_buffer);
 }
@@ -2344,7 +2369,7 @@ void test_binding_cache_repeated_call_is_the_same_procedure(void)
     define_proc("bc.bump", no_params, 0, "make \"bc.n (:bc.n + 1)");
     run_string("make \"bc.n 0");
     run_string("repeat 3 [bc.bump]");
-    output_buffer[0] = '\0';
+    reset_output();
     run_string("print :bc.n");
     TEST_ASSERT_EQUAL_STRING("3\n", output_buffer);
 }
@@ -2352,6 +2377,8 @@ void test_binding_cache_repeated_call_is_the_same_procedure(void)
 int main(void)
 {
     UNITY_BEGIN();
+
+    RUN_TEST(test_redefining_a_procedure_replaces_its_body);
 
     // Cached name binding (P10 M2)
     RUN_TEST(test_binding_cache_does_not_survive_erase_into_a_reused_slot);

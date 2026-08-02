@@ -165,8 +165,8 @@
     "semantic_hash": ""
   },
   "core/lexer.h": {
-    "mtime": 1785633842.1452627,
-    "ast_hash": "28aa4f2b1271dacee2b49045dd401308",
+    "mtime": 1785634149.5343688,
+    "ast_hash": "e9676e3baefebd8dda15ff5e8c24b75c",
     "semantic_hash": ""
   },
   "core/limits.h": {
@@ -175,7 +175,7 @@
     "semantic_hash": ""
   },
   "core/memory.c": {
-    "mtime": 1785633882.123219,
+    "mtime": 1785634877.277295,
     "ast_hash": "19c0f2564238f0e9d34bc6eadfa3caae",
     "semantic_hash": ""
   },
@@ -1440,8 +1440,8 @@
     "semantic_hash": ""
   },
   "docs/roadmap.md": {
-    "mtime": 1785634074.1553328,
-    "ast_hash": "6917d242173fcdb61e57f097e8077541",
+    "mtime": 1785634986.4471138,
+    "ast_hash": "6d03c505789689c07d25e40007dfdaf7",
     "semantic_hash": ""
   },
   "docs/tilemap-scrolling-design.md": {
@@ -1450,8 +1450,8 @@
     "semantic_hash": ""
   },
   "docs/interpreter-throughput-design.md": {
-    "mtime": 1785634052.1504245,
-    "ast_hash": "4aa2213d360a68d6c0e265d2ce3c9813",
+    "mtime": 1785634945.0283031,
+    "ast_hash": "67bf9216c225856798fb1a342936bb0a",
     "semantic_hash": ""
   },
   "tests/test_bench_throughput.c": {

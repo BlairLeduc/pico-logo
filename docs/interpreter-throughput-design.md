@@ -625,9 +625,17 @@ turns these estimates into decisions.
   not serve. They cover a slot freed by `erase` and refilled by the next
   definition (the hazard the sweep exists for), a name defined after it
   already resolved to "neither", `erall`, an alias created by `copydef`
-  mid-run, and the plain repeated call. A sixth — redefinition — was written,
-  failed, and turned out to have found a pre-existing defect rather than a
-  regression: see B11 in [`bugs.md`](bugs.md).
+  mid-run, the plain repeated call, and redefinition through both the lexer
+  and the cached list path.
+- **One harness trap, recorded because it cost an hour and a retracted bug
+  report.** `output_buffer` in `tests/test_scaffold.c` is written at a
+  separate cursor, `output_pos`. Clearing it with `output_buffer[0] = 0`
+  leaves that cursor where it was, so a *second* `print` in the same test
+  lands past the visible string and every later assertion reads an empty
+  buffer — which looks exactly like the interpreter having stopped working.
+  Use `reset_output()`. A first draft of the redefinition test did this and
+  produced a convincing false positive: a filed bug (B11) claiming
+  redefinition left a procedure defined but empty. Redefinition is fine.
 - **New unit tests** for the cache itself: class agreed with `classify_word`
   for every token shape; the `-` cases in both contexts (§4.2); binding
   invalidation across `proc_define`/`proc_erase`/`erall`; atom collection and
