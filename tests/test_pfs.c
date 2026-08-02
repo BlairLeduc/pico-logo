@@ -2,12 +2,12 @@
 //  Pico Logo
 //  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
-//  Tests for the file-server example (logo/fileserver).
+//  Tests for the file-server example (logo/pfs).
 //
 //  The example is pure Logo; the whole file is loaded into the interpreter
 //  (proving it parses and its helpers run on the mock device) and then driven
 //  end to end: real HTTP requests are queued through the mock connection,
-//  pumped until pending, routed with `fs.handle`, and the raw response bytes
+//  pumped until pending, routed with `pfs.handle`, and the raw response bytes
 //  are asserted. The source path is passed in as a compile definition.
 //
 //  The shared mock filesystem (test_mock_fs.h) is flat: its list_directory
@@ -26,8 +26,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifndef FILESERVER_PATH
-#error "FILESERVER_PATH must be defined (path to logo/fileserver)"
+#ifndef PFS_PATH
+#error "PFS_PATH must be defined (path to logo/pfs)"
 #endif
 
 // ---------------------------------------------------------------------------
@@ -74,13 +74,13 @@ static bool fs_list_children(const char *dir, LogoDirCallback cb, void *ud,
 }
 
 // ---------------------------------------------------------------------------
-// Load the whole fileserver file, defining its procedures (same line-buffering
+// Load the whole pfs file, defining its procedures (same line-buffering
 // as the `load` primitive and the galaxian test). Fails on any error.
 // ---------------------------------------------------------------------------
-static void load_fileserver(void)
+static void load_pfs(void)
 {
-    FILE *f = fopen(FILESERVER_PATH, "rb");
-    TEST_ASSERT_NOT_NULL_MESSAGE(f, "cannot open " FILESERVER_PATH);
+    FILE *f = fopen(PFS_PATH, "rb");
+    TEST_ASSERT_NOT_NULL_MESSAGE(f, "cannot open " PFS_PATH);
 
     char line[512];
     char proc[8192];
@@ -141,7 +141,7 @@ void setUp(void)
     primitives_set_io(&mock_io);
     mock_device_set_wifi_connected(true);   // http.listen requires a connection
     set_mock_ticks(0);
-    load_fileserver();
+    load_pfs();
 }
 
 void tearDown(void)
@@ -169,7 +169,7 @@ static const char *resp_str(void)
     return buf;
 }
 
-// Queue one request, pump until pending, route it with fs.handle, return the
+// Queue one request, pump until pending, route it with pfs.handle, return the
 // raw response text. Resets the server first so each request reuses slot 0,
 // letting a single test issue several requests in sequence.
 static const char *handle(const char *req)
@@ -179,7 +179,7 @@ static const char *handle(const char *req)
     mock_httpd_queue_connection(req, strlen(req));
     pump(3);
     TEST_ASSERT_TRUE_MESSAGE(httpd_request_pending(), req);
-    Result r = eval_string("fs.handle");
+    Result r = eval_string("pfs.handle");
     TEST_ASSERT_EQUAL_MESSAGE(RESULT_NONE, r.status, req);
     return resp_str();
 }
@@ -214,40 +214,40 @@ static void assert_word(const char *expr, const char *expected)
 // Pure helpers: path handling and content types
 //==========================================================================
 
-void test_fs_trim_normalizes_trailing_slash(void)
+void test_pfs_trim_normalizes_trailing_slash(void)
 {
-    assert_word("fs.trim \"/", "/");
-    assert_word("fs.trim \"/sub", "/sub");
-    assert_word("fs.trim \"/sub/", "/sub");
+    assert_word("pfs.trim \"/", "/");
+    assert_word("pfs.trim \"/sub", "/sub");
+    assert_word("pfs.trim \"/sub/", "/sub");
 }
 
-void test_fs_join_avoids_double_slash(void)
+void test_pfs_join_avoids_double_slash(void)
 {
-    assert_word("fs.join \"/ \"a.txt", "/a.txt");
-    assert_word("fs.join \"/sub \"a.txt", "/sub/a.txt");
+    assert_word("pfs.join \"/ \"a.txt", "/a.txt");
+    assert_word("pfs.join \"/sub \"a.txt", "/sub/a.txt");
 }
 
-void test_fs_parent(void)
+void test_pfs_parent(void)
 {
-    assert_word("fs.parent \"/sub", "/");
-    assert_word("fs.parent \"/a/b", "/a");
+    assert_word("pfs.parent \"/sub", "/");
+    assert_word("pfs.parent \"/a/b", "/a");
 }
 
-void test_fs_ext_takes_last_segment_lowercased(void)
+void test_pfs_ext_takes_last_segment_lowercased(void)
 {
-    assert_word("fs.ext \"index.html", "html");
-    assert_word("fs.ext \"a.tar.GZ", "gz");
-    assert_word("fs.ext \"noext", "");
+    assert_word("pfs.ext \"index.html", "html");
+    assert_word("pfs.ext \"a.tar.GZ", "gz");
+    assert_word("pfs.ext \"noext", "");
 }
 
-void test_fs_mime_maps_known_types(void)
+void test_pfs_mime_maps_known_types(void)
 {
-    assert_word("fs.mime \"page.html", "text/html");
-    assert_word("fs.mime \"style.css", "text/css");
-    assert_word("fs.mime \"pic.PNG", "image/png");     // case-insensitive
-    assert_word("fs.mime \"photo.jpeg", "image/jpeg");
-    assert_word("fs.mime \"vec.svg", "image/svg+xml"); // '+' survives (bar-quoted)
-    assert_word("fs.mime \"data", "application/octet-stream");
+    assert_word("pfs.mime \"page.html", "text/html");
+    assert_word("pfs.mime \"style.css", "text/css");
+    assert_word("pfs.mime \"pic.PNG", "image/png");     // case-insensitive
+    assert_word("pfs.mime \"photo.jpeg", "image/jpeg");
+    assert_word("pfs.mime \"vec.svg", "image/svg+xml"); // '+' survives (bar-quoted)
+    assert_word("pfs.mime \"data", "application/octet-stream");
 }
 
 //==========================================================================
@@ -386,10 +386,10 @@ void test_repeated_pages_recycle_temporary_lists(void)
     }
 }
 
-void test_fileserver_can_be_restarted(void)
+void test_pfs_can_be_restarted(void)
 {
-    TEST_ASSERT_EQUAL(RESULT_NONE, eval_string("fileserver").status);
-    TEST_ASSERT_EQUAL(RESULT_NONE, eval_string("fileserver").status);
+    TEST_ASSERT_EQUAL(RESULT_NONE, eval_string("pfs").status);
+    TEST_ASSERT_EQUAL(RESULT_NONE, eval_string("pfs").status);
 }
 
 //==========================================================================
@@ -397,11 +397,11 @@ void test_fileserver_can_be_restarted(void)
 int main(void)
 {
     UNITY_BEGIN();
-    RUN_TEST(test_fs_trim_normalizes_trailing_slash);
-    RUN_TEST(test_fs_join_avoids_double_slash);
-    RUN_TEST(test_fs_parent);
-    RUN_TEST(test_fs_ext_takes_last_segment_lowercased);
-    RUN_TEST(test_fs_mime_maps_known_types);
+    RUN_TEST(test_pfs_trim_normalizes_trailing_slash);
+    RUN_TEST(test_pfs_join_avoids_double_slash);
+    RUN_TEST(test_pfs_parent);
+    RUN_TEST(test_pfs_ext_takes_last_segment_lowercased);
+    RUN_TEST(test_pfs_mime_maps_known_types);
     RUN_TEST(test_root_lists_files_and_folders);
     RUN_TEST(test_subdir_lists_only_its_children_with_parent_link);
     RUN_TEST(test_download_text_file_with_type_and_body);
@@ -413,6 +413,6 @@ int main(void)
     RUN_TEST(test_unsupported_method_is_405);
     RUN_TEST(test_many_files_stream_in_one_page);
     RUN_TEST(test_repeated_pages_recycle_temporary_lists);
-    RUN_TEST(test_fileserver_can_be_restarted);
+    RUN_TEST(test_pfs_can_be_restarted);
     return UNITY_END();
 }

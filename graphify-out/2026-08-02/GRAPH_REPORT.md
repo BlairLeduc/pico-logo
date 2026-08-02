@@ -1,16 +1,16 @@
-# Graph Report - pico-logo-wt  (2026-08-02)
+# Graph Report - pico-logo  (2026-08-01)
 
 ## Corpus Check
-- 284 files · ~477,084 words
+- 285 files · ~477,172 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 7015 nodes · 22323 edges · 192 communities (182 shown, 10 thin omitted)
+- 7015 nodes · 22323 edges · 179 communities (172 shown, 7 thin omitted)
 - Extraction: 56% EXTRACTED · 44% INFERRED · 0% AMBIGUOUS · INFERRED: 9925 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `0940126d`
+- Built from commit: `5e9ddb4a`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -27,14 +27,14 @@
 - test_trails.c
 - iteration_callback
 - io.c
-- test_primitives_files_directory.c
+- test_primitives_files_load_save.c
 - picocalc_console.c
 - format_buffer_init
 - lexer_init
 - test_frame_arena.c
 - test_io.c
 - syntax_highlight_line
-- test_variables.c
+- value_number
 - primitives_sound.c
 - unity.c
 - test_httpd.c
@@ -51,18 +51,18 @@
 - test_notation.c
 - primitives_init
 - stdlib.h
-- mem_atom_cstr
+- primitives_get_io
 - lexer_next_token
 - eval_push_if
 - test_cross_fs_move.c
 - test_primitives_wifi.c
 - test_primitives_files.c
-- primitives_get_io
-- mem_cons
+- primitives_files_directory.c
+- test_primitives_properties.c
 - test_time.c
 - set_mock_input
 - picocalc_editor_edit
-- test_primitives_files_load_save.c
+- test_primitives_outside_world.c
 - repository
 - test_primitives_hardware.c
 - Turtle Trails (design)
@@ -72,7 +72,7 @@
 - ;
 - Checkpoint Run — a maze-driving game (design)
 - test_sound.c
-- test_galaxian.c
+- primitives_properties.c
 - picocalc_hardware.c
 - fat32_close
 - test_primitives_network.c
@@ -85,8 +85,8 @@
 - test_dirty_tiles.c
 - Words and Lists
 - eval_primary
-- test_frame_sync.c
-- procedures.c
+- picocalc_wifi_status
+- primitives.h
 - lfs_storage.c
 - mock_sdcard.c
 - screen.c
@@ -103,10 +103,10 @@
 - Code Review — 2026-07-02
 - Contributing
 - host_console.c
-- test_mock_device.c
-- primitives_text.c
+- mock_device_get_state
+- screensaver.c
 - prim_savel
-- history.c
+- picocalc_read_line
 - Design: LittleFS internal filesystem + `/sd` FAT32 mount
 - P5 — Multi-sprite turtles and the display pipeline (implemented)
 - Arithmetic Operations
@@ -118,18 +118,15 @@
 - host_hardware.c
 - sdcard.c
 - Managing your Workspace
-- southbridge.c
 - test_help.c
-- test_primitives_variables.c
 - test_tls_heap.c
 - storage_router.c
-- record_command
+- test_primitives_exceptions.c
 - mem_word_ptr
 - primitives_outside_world.c
 - mem_atom
 - primitives_workspace.c
 - P9 — Tile maps and smooth scrolling (design)
-- primitives_debug_control.c
 - Galaxian in Pico Logo (design)
 - File Management
 - proc_get_frame_stack
@@ -137,30 +134,26 @@
 - clib.c
 - P8 — Sound: a stereo PSG synthesizer (design)
 - Input and Output to Files, Network Connections and Devices
-- picocalc_network_tls_connect
+- ensure_wifi_initialized
 - Design: `launch` background processes (P6)
 - test_checkrun.c
-- prim_clearscreen
 - mklfsimg_lib.c
 - roadmap.md
 - sound.c
 - Using the Logo Editor
 - HTTP Server
-- run_editor_and_process
-- LogoStream
+- prim_define
 - Appendix B: Parsing
 - WiFi Management
-- prim_battery_level
 - The pick of five: plans
 - primitives.c
 - Managing Various Files
 - logo_lfs_backup
 - ms_to_datetime
 - value_to_string
-- logo_hardware_init
+- Text and Screen Commands
 - The Outside World
 - HTTP server (design)
-- logo_io_console_write
 - PR Review Checklist (CRITICAL)
 - test_primitives_editor.c
 - record_command_float
@@ -169,24 +162,18 @@
 - Atom Garbage Collection: Implementation Plan
 - Modifying Procedures Under Program Control
 - MockCommandType
-- prim_ntp
 - as_httpd_conn
 - Appendix A: Useful Tools
-- Property Lists
-- Time Management
-- raster_solid
-- mock_device_set_raster
-- LogoEditorResult
-- mock_sound_queue
+- ip_addr_t
+- primitives_turtle_init
+- mock_device_set_editor_result
 - Bitwise Operations
-- mock_sound_status
 - Pico Logo
 - result_ok
 - drain_tokens
-- mock_wifi_status
-- mock_text_set_width
 - gen_ca_certs.py
 - pandoc_slug
+- primitives_bitwise.c
 - dist.sh
 - generate_help.sh
 - run_e2e.sh
@@ -208,25 +195,25 @@
 10. `lexer_init()` - 173 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `test_nil_is_nil()` --calls--> `mem_is_nil()`  [INFERRED]
-  tests/test_memory.c → core/memory.c
-- `test_nil_is_not_list()` --calls--> `mem_is_list()`  [INFERRED]
-  tests/test_memory.c → core/memory.c
 - `test_nil_is_not_word()` --calls--> `mem_is_word()`  [INFERRED]
   tests/test_memory.c → core/memory.c
 - `test_value_number_content()` --calls--> `value_number()`  [INFERRED]
   tests/test_value.c → core/value.c
 - `test_value_number_negative()` --calls--> `value_number()`  [INFERRED]
   tests/test_value.c → core/value.c
+- `test_value_number_type()` --calls--> `value_number()`  [INFERRED]
+  tests/test_value.c → core/value.c
+- `test_value_number_zero()` --calls--> `value_number()`  [INFERRED]
+  tests/test_value.c → core/value.c
 
 ## Import Cycles
 - None detected.
 
-## Communities (192 total, 10 thin omitted)
+## Communities (179 total, 7 thin omitted)
 
 ### Community 0 - "run_string"
 Cohesion: 0.02
-Nodes (243): MockDeviceState, mock_device_get_output(), mock_device_get_state(), mock_device_has_line_from_to(), mock_device_paint_canvas(), mock_device_set_canvas_point(), test_cleartext_clears_screen(), test_cs_restores_auto_refresh() (+235 more)
+Nodes (199): mock_device_get_output(), mock_device_has_line_from_to(), mock_device_paint_canvas(), mock_device_set_canvas_point(), output_has(), stage_raster(), test_addressing_primitives_registered(), test_arc_angle_clamped_to_full_circle() (+191 more)
 
 ### Community 1 - "lfs.c"
 Cohesion: 0.06
@@ -238,27 +225,27 @@ Nodes (21): buf_appendf(), Evaluator, Result, Value, check_header_args(), ci_equ
 
 ### Community 3 - "test_value.c"
 Cohesion: 0.02
-Nodes (159): format_number(), Node, Result, Value, extract_number_list(), Node, Result, Value (+151 more)
+Nodes (162): format_number(), json_format_number(), Node, Result, Value, extract_number_list(), Node, Result (+154 more)
 
 ### Community 4 - "mem_is_nil"
-Cohesion: 0.04
-Nodes (125): BlobDesc, blob_desc(), Node, index_to_node(), mem_car(), mem_cdr(), mem_is_list(), mem_is_nil() (+117 more)
+Cohesion: 0.06
+Nodes (92): mem_car(), mem_cdr(), mem_is_nil(), Node, Value, find_entry(), find_property_in_entry(), prop_gc_mark_all() (+84 more)
 
 ### Community 5 - "reset_output"
 Cohesion: 0.02
-Nodes (166): proc_is_stepped(), proc_is_traced(), test_primitive_argument_survives_recycle_in_later_argument(), test_rerandom_affects_pick_and_shuffle(), test_comment_in_procedure(), test_comment_inline(), test_comment_with_list(), test_comment_with_word() (+158 more)
+Nodes (180): proc_is_stepped(), proc_is_traced(), test_rerandom_affects_pick_and_shuffle(), test_comment_in_procedure(), test_comment_inline(), test_comment_with_list(), test_comment_with_word(), test_do_until_basic() (+172 more)
 
 ### Community 6 - "eval_string"
 Cohesion: 0.02
-Nodes (171): test_abs_decimal(), test_abs_negative(), test_abs_positive(), test_abs_zero(), test_arctan(), test_arctan_too_many_inputs(), test_arctan_two_input(), test_arctan_two_input_vertical() (+163 more)
+Nodes (177): test_abs_decimal(), test_abs_negative(), test_abs_positive(), test_abs_zero(), test_arctan(), test_arctan_too_many_inputs(), test_arctan_two_input(), test_arctan_two_input_vertical() (+169 more)
 
 ### Community 7 - "result_none"
-Cohesion: 0.16
-Nodes (72): arg_turtle(), Evaluator, Result, Value, get_turtle_ops(), make_position_list(), make_rgb_list(), normalize_heading() (+64 more)
+Cohesion: 0.08
+Nodes (113): frame_sync_active(), frame_sync_period(), frame_sync_reset(), frame_sync_set(), frame_sync_wait_ms(), Evaluator, Result, Value (+105 more)
 
 ### Community 8 - "result_error_arg"
-Cohesion: 0.15
-Nodes (82): number_to_word(), mem_atom_unescape(), mem_first_cell(), mem_gc_roots_pop(), mem_gc_roots_push(), mem_is_word(), mem_list_append(), mem_next_cell() (+74 more)
+Cohesion: 0.17
+Nodes (76): number_to_word(), mem_first_cell(), mem_gc_roots_pop(), mem_gc_roots_push(), mem_is_word(), mem_list_append(), mem_next_cell(), mem_word_len() (+68 more)
 
 ### Community 9 - "test_trails.c"
 Cohesion: 0.11
@@ -270,19 +257,19 @@ Nodes (4): FrameHeader, FrameStack, iteration_callback(), stop_at_two()
 
 ### Community 11 - "io.c"
 Cohesion: 0.07
-Nodes (97): eval_instruction(), Evaluator, Result, Value, prim_allopen(), prim_close(), prim_closeall(), prim_dribble() (+89 more)
+Nodes (78): demons_maybe_poll(), demons_running(), eval_instruction(), httpd_maybe_poll(), LogoIO, LogoStream, create_network_stream(), logo_io_check_freeze_request() (+70 more)
 
-### Community 12 - "test_primitives_files_directory.c"
-Cohesion: 0.06
-Nodes (40): mock_fs_create_dir(), test_cat_lists_files(), test_cat_runs_without_error(), test_cat_with_invalid_input_error(), test_catalog_long_format_marks_directories(), test_catalog_long_format_shows_size(), test_catalog_runs_without_error(), test_catalog_with_absolute_pathname() (+32 more)
+### Community 12 - "test_primitives_files_load_save.c"
+Cohesion: 0.04
+Nodes (80): mock_device_get_gfx_load_call_count(), mock_device_get_gfx_save_call_count(), mock_device_get_last_gfx_load_filename(), mock_device_get_last_gfx_save_filename(), mock_device_set_gfx_load_result(), mock_device_set_gfx_save_result(), mock_fs_create_dir(), test_cat_lists_files() (+72 more)
 
 ### Community 13 - "picocalc_console.c"
 Cohesion: 0.05
-Nodes (68): picocalc_editor_get_ops(), keyboard_set_idle_callback(), lcd_enable_cursor(), lcd_restore_palette(), lcd_set_palette_rgb(), LogoConsole, LogoPen, LogoRotationStyle (+60 more)
+Nodes (55): lcd_restore_palette(), lcd_set_palette_rgb(), LogoPen, LogoRotationStyle, LogoStream, LogoTurtleRaster, ScreenSprite, error_output_flush() (+47 more)
 
 ### Community 14 - "format_buffer_init"
-Cohesion: 0.07
-Nodes (81): Node, UserProcedure, Value, format_body_element(), format_body_element_multiline(), format_body_indent(), format_buffer_init(), format_buffer_output() (+73 more)
+Cohesion: 0.06
+Nodes (91): Node, UserProcedure, Value, format_body_element(), format_body_element_multiline(), format_body_indent(), format_buffer_init(), format_buffer_output() (+83 more)
 
 ### Community 15 - "lexer_init"
 Cohesion: 0.06
@@ -294,15 +281,15 @@ Nodes (76): arena_alloc_words(), arena_available(), arena_available_bytes(), are
 
 ### Community 17 - "test_io.c"
 Cohesion: 0.04
-Nodes (47): logo_io_parse_network_address(), logo_io_resolve_path(), logo_io_set_prefix(), normalize_path(), LogoDirCallback, LogoEntryType, LogoStream, dribble_flush_fn() (+39 more)
+Nodes (53): logo_io_check_write_error(), logo_io_dribble_input(), logo_io_flush(), logo_io_is_dribbling(), logo_io_parse_network_address(), logo_io_set_writer(), logo_io_start_dribble(), logo_io_stop_dribble() (+45 more)
 
 ### Community 18 - "syntax_highlight_line"
 Cohesion: 0.06
 Nodes (80): bracket_category(), SyntaxCategory, ci_eq(), is_delimiter(), match_keyword(), read_word_span(), scan_comment(), scan_number() (+72 more)
 
-### Community 19 - "test_variables.c"
-Cohesion: 0.05
-Nodes (89): Value, find_global(), var_bury(), var_bury_all(), var_declare_local(), var_erase(), var_erase_all(), var_erase_all_globals() (+81 more)
+### Community 19 - "value_number"
+Cohesion: 0.07
+Nodes (80): value_number(), find_global(), var_bury(), var_bury_all(), var_declare_local(), var_erase(), var_erase_all(), var_erase_all_globals() (+72 more)
 
 ### Community 20 - "primitives_sound.c"
 Cohesion: 0.23
@@ -314,35 +301,35 @@ Nodes (65): IsStringInBiggerString(), UnityAddMsgIfSpecified(), UnityAssertBits(
 
 ### Community 22 - "test_httpd.c"
 Cohesion: 0.06
-Nodes (71): httpd_listening(), httpd_request_pending(), mock_httpd_conn_response(), mock_httpd_is_listening(), mock_httpd_listen_port(), mock_httpd_queue_connection(), mock_httpd_queue_connection_ex(), mock_httpd_queue_connection_stalled() (+63 more)
+Nodes (72): httpd_listening(), httpd_request_pending(), mock_httpd_conn_response(), mock_httpd_is_listening(), mock_httpd_listen_port(), mock_httpd_queue_connection(), mock_httpd_queue_connection_ex(), mock_httpd_queue_connection_stalled() (+64 more)
 
 ### Community 23 - "test_eval.c"
 Cohesion: 0.03
-Nodes (99): CaughtError, append_caller_suffix(), Result, error_format(), error_get_caught(), error_message(), error_set_caught(), test_error_format_cant_from_editor() (+91 more)
+Nodes (102): CaughtError, append_caller_suffix(), Result, error_format(), error_get_caught(), error_message(), error_set_caught(), test_error_format_cant_from_editor() (+94 more)
 
 ### Community 24 - "Turtle Graphics"
 Cohesion: 0.03
 Nodes (67): arc, ask, back (bk), background (bg), clean, cleardemons, clearscreen (cs), colourunder (colorunder) (+59 more)
 
 ### Community 25 - "test_scaffold_setUp"
-Cohesion: 0.04
-Nodes (71): error_clear_caught(), LogoIO, primitives_control_reset_test_state(), primitives_set_io(), procedures_init(), properties_init(), variables_init(), main() (+63 more)
+Cohesion: 0.03
+Nodes (89): error_clear_caught(), blob_reset(), logo_mem_init(), primitives_control_reset_test_state(), primitives_set_io(), procedures_init(), properties_init(), variables_init() (+81 more)
 
 ### Community 26 - "test_primitives_http.c"
 Cohesion: 0.06
-Nodes (68): logo_mem_set_aux_region(), mock_device_get_last_tcp_ip(), mock_device_get_last_tcp_port(), mock_device_get_last_tls_host(), mock_device_get_tcp_request(), mock_device_set_tcp_connect_result(), mock_device_set_tcp_response(), Result (+60 more)
+Nodes (67): logo_mem_set_aux_region(), mock_device_get_last_tcp_ip(), mock_device_get_last_tcp_port(), mock_device_get_last_tls_host(), mock_device_get_tcp_request(), mock_device_set_tcp_connect_result(), mock_device_set_tcp_response(), Result (+59 more)
 
 ### Community 27 - "fat32.c"
 Cohesion: 0.14
 Nodes (49): allocate_and_link_cluster(), fat32_error_t, clear_cluster(), cluster_to_sector(), delete_entry(), dir_offset_to_location(), fat32_dir_create(), fat32_dir_read() (+41 more)
 
 ### Community 28 - "primitives_httpd.c"
-Cohesion: 0.32
-Nodes (20): Evaluator, Result, Value, el_append(), el_append_cstr(), el_append_word(), no_request(), prim_http_body() (+12 more)
+Cohesion: 0.25
+Nodes (24): mem_word(), Evaluator, Result, Value, el_append(), el_append_cstr(), el_append_word(), no_request() (+16 more)
 
 ### Community 29 - "mock_device.c"
-Cohesion: 0.03
-Nodes (12): mock_device_add_wifi_scan_result(), mock_device_get_tcp_request_len(), mock_device_set_input(), mock_device_set_snap_result(), mock_device_set_tcp_close_after(), mock_device_set_tcp_read_chunk(), mock_device_set_tcp_write_chunk(), mock_device_verify_palette() (+4 more)
+Cohesion: 0.02
+Nodes (49): LogoStream, LogoTurtleRaster, SoundEvent, SoundStatus, WifiState, mock_device_add_wifi_scan_result(), mock_device_get_tcp_request_len(), mock_device_set_input() (+41 more)
 
 ### Community 30 - "test_primitives_json.c"
 Cohesion: 0.07
@@ -353,32 +340,32 @@ Cohesion: 0.03
 Nodes (59): test_false(), test_if_false_case_insensitive(), test_if_false_one_list_command(), test_if_false_operation_returns_value(), test_if_false_two_lists_command(), test_if_list_predicate_error(), test_if_list_with_empty_list_arg(), test_if_list_with_output() (+51 more)
 
 ### Community 32 - "test_scaffold.h"
-Cohesion: 0.03
-Nodes (61): tearDown(), tearDown(), tearDown(), tearDown(), tearDown(), mock_fs_reset(), mock_fs_tearDown(), tearDown() (+53 more)
+Cohesion: 0.04
+Nodes (45): tearDown(), tearDown(), tearDown(), tearDown(), tearDown(), tearDown(), tearDown(), tearDown() (+37 more)
 
 ### Community 33 - "test_notation.c"
 Cohesion: 0.12
 Nodes (33): NotationState, SoundEvent, duration_ms(), notation_parse_token(), notation_state_init(), note_freq(), parse_control(), pitch_class() (+25 more)
 
 ### Community 34 - "primitives_init"
-Cohesion: 0.11
-Nodes (35): primitives_arithmetic_init(), primitives_bitwise_init(), primitives_conditionals_init(), primitives_control_flow_init(), primitives_debug_control_init(), primitives_debug_init(), primitives_editor_init(), primitives_events_init() (+27 more)
+Cohesion: 0.12
+Nodes (32): primitives_arithmetic_init(), primitives_bitwise_init(), primitives_conditionals_init(), primitives_control_flow_init(), primitives_debug_control_init(), primitives_debug_init(), primitives_editor_init(), primitives_events_init() (+24 more)
 
 ### Community 35 - "stdlib.h"
-Cohesion: 0.07
-Nodes (26): picocalc_beep(), keyboard_get_key(), keyboard_init(), keyboard_key_available(), keyboard_peek_key(), keyboard_set_background_poll(), keyboard_set_key_available_callback(), lcd_get_palette_value() (+18 more)
+Cohesion: 0.08
+Nodes (36): repeating_timer_t, keyboard_get_key(), keyboard_init(), keyboard_key_available(), keyboard_peek_key(), keyboard_poll(), keyboard_set_background_poll(), keyboard_set_idle_callback() (+28 more)
 
-### Community 36 - "mem_atom_cstr"
-Cohesion: 0.37
-Nodes (17): mem_atom_cstr(), Evaluator, Result, Value, hostname_is_valid(), prim_tls_supported(), prim_wifi_connect(), prim_wifi_connected() (+9 more)
+### Community 36 - "primitives_get_io"
+Cohesion: 0.12
+Nodes (55): mem_atom_cstr(), LogoIO, Evaluator, Result, Value, prim_allopen(), prim_close(), prim_closeall() (+47 more)
 
 ### Community 37 - "lexer_next_token"
 Cohesion: 0.07
 Nodes (50): lexer_next_token(), lexer_token_text(), assert_token_type(), TokenType, test_digit_starting_word(), test_fuzz_all_operators_consecutive(), test_fuzz_backslash_before_delimiter(), test_fuzz_binary_mixed_with_delimiters() (+42 more)
 
 ### Community 38 - "eval_push_if"
-Cohesion: 0.44
-Nodes (12): eval_push_if(), Evaluator, Result, Value, prim_false(), prim_if(), prim_ifelse(), prim_iffalse() (+4 more)
+Cohesion: 0.23
+Nodes (19): eval_push_if(), Evaluator, Result, Value, prim_false(), prim_if(), prim_ifelse(), prim_iffalse() (+11 more)
 
 ### Community 39 - "test_cross_fs_move.c"
 Cohesion: 0.08
@@ -386,79 +373,79 @@ Nodes (36): logo_io_copy_file(), MemFile, bd_erase(), bd_prog(), bd_read(), lfs_
 
 ### Community 40 - "test_primitives_wifi.c"
 Cohesion: 0.05
-Nodes (59): mock_device_clear_wifi_scan_results(), mock_device_get_hostname(), mock_device_set_wifi_connect_result(), mock_device_set_wifi_connected(), mock_device_set_wifi_ip(), mock_device_set_wifi_mac(), mock_device_set_wifi_scan_result(), mock_device_set_wifi_ssid() (+51 more)
+Nodes (56): mock_device_get_hostname(), mock_device_set_wifi_connect_result(), mock_device_set_wifi_connected(), mock_device_set_wifi_ip(), mock_device_set_wifi_mac(), mock_device_set_wifi_scan_result(), mock_device_set_wifi_ssid(), mock_device_set_wifi_start_result() (+48 more)
 
 ### Community 41 - "test_primitives_files.c"
 Cohesion: 0.04
-Nodes (46): test_append_to_file(), test_close_file(), test_close_invalid_input(), test_close_unopened_file_error(), test_dribble_starts(), test_filelen_empty_file(), test_filelen_invalid_input(), test_filelen_returns_size() (+38 more)
+Nodes (52): test_allopen_empty(), test_append_to_file(), test_close_file(), test_close_invalid_input(), test_close_unopened_file_error(), test_closeall(), test_dribble_starts(), test_filelen_empty_file() (+44 more)
 
-### Community 42 - "primitives_get_io"
-Cohesion: 0.18
-Nodes (34): CatalogContext, CatalogEntry, Evaluator, LogoEntryType, LogoIO, Result, Value, catalog_callback() (+26 more)
+### Community 42 - "primitives_files_directory.c"
+Cohesion: 0.14
+Nodes (36): CatalogContext, CatalogEntry, Evaluator, LogoEntryType, LogoIO, Result, Value, catalog_callback() (+28 more)
 
-### Community 43 - "mem_cons"
+### Community 43 - "test_primitives_properties.c"
 Cohesion: 0.09
-Nodes (45): mem_cons(), mem_set_cdr(), node_to_index(), Node, proc_define(), value_extract_rgb(), value_extract_xy(), value_list() (+37 more)
+Nodes (21): tearDown(), test_erprops_clears_all_properties(), test_gprop_requires_word_for_name(), test_gprop_requires_word_for_property(), test_multiple_properties_on_same_name(), test_plist_requires_word(), test_pprop_and_gprop_number_value(), test_pprop_and_gprop_word_value() (+13 more)
 
 ### Community 44 - "test_time.c"
 Cohesion: 0.06
-Nodes (46): mock_device_set_time(), mock_device_set_time_enabled(), test_date_and_setdate_roundtrip(), test_date_error_when_not_available(), test_date_outputs_correct_day(), test_date_outputs_correct_month(), test_date_outputs_correct_year(), test_date_outputs_different_values() (+38 more)
+Nodes (48): mock_device_set_time(), mock_device_set_time_enabled(), test_date_and_setdate_roundtrip(), test_date_error_when_not_available(), test_date_outputs_correct_day(), test_date_outputs_correct_month(), test_date_outputs_correct_year(), test_date_outputs_different_values() (+40 more)
 
 ### Community 45 - "set_mock_input"
-Cohesion: 0.07
-Nodes (78): proc_clear_tail_call(), proc_reset_execution_state(), proc_restore_execution_state(), proc_save_execution_state(), LogoIO, Result, repl_cleanup(), repl_count_bracket_balance() (+70 more)
+Cohesion: 0.05
+Nodes (100): proc_clear_tail_call(), proc_reset_execution_state(), proc_restore_execution_state(), proc_save_execution_state(), LogoIO, Result, repl_cleanup(), repl_count_bracket_balance() (+92 more)
 
 ### Community 46 - "picocalc_editor_edit"
 Cohesion: 0.17
 Nodes (42): LogoEditorResult, editor_backspace(), editor_compute_depth_at_line(), editor_copy_line(), editor_copy_selection(), editor_count_lines(), editor_cut_line(), editor_decrease_indent() (+34 more)
 
-### Community 47 - "test_primitives_files_load_save.c"
-Cohesion: 0.09
-Nodes (39): mock_device_get_gfx_load_call_count(), mock_device_get_gfx_save_call_count(), mock_device_get_last_gfx_load_filename(), mock_device_get_last_gfx_save_filename(), mock_device_set_gfx_load_result(), mock_device_set_gfx_save_result(), setUp_with_turtle(), tearDown_with_turtle() (+31 more)
+### Community 47 - "test_primitives_outside_world.c"
+Cohesion: 0.04
+Nodes (45): test_keyp_no_input_returns_false(), test_keyp_with_input_returns_true(), test_pr_abbreviation(), test_print_empty_list(), test_print_list_no_outer_brackets(), test_print_multiple_args(), test_print_nested_list(), test_print_number() (+37 more)
 
 ### Community 48 - "repository"
 Cohesion: 0.04
 Nodes (45): name, name, match, name, 1, 2, match, name (+37 more)
 
 ### Community 49 - "test_primitives_hardware.c"
-Cohesion: 0.06
-Nodes (45): test_battery_charging(), test_battery_charging_in_procedure(), test_battery_in_procedure(), test_battery_level_empty(), test_battery_level_full(), test_battery_level_partial(), test_battery_level_unavailable(), test_battery_not_charging() (+37 more)
+Cohesion: 0.05
+Nodes (46): test_battery_charging(), test_battery_charging_in_procedure(), test_battery_in_procedure(), test_battery_level_empty(), test_battery_level_full(), test_battery_level_partial(), test_battery_level_unavailable(), test_battery_not_charging() (+38 more)
 
 ### Community 50 - "Turtle Trails (design)"
 Cohesion: 0.06
 Nodes (31): 10. Main loop and state order, 11. Memory and performance budget, 12. Design boundaries, 13. Tests, 14. Implementation milestones, 15. As built: divergences from this design, 1. Theme, 2. Display and board geometry (+23 more)
 
 ### Community 51 - "httpd.c"
-Cohesion: 0.10
-Nodes (43): demons_frozen(), demons_maybe_poll(), LogoHardwareOps, Result, Value, check_response_headers(), ci_eq(), close_conn() (+35 more)
+Cohesion: 0.12
+Nodes (36): LogoHardwareOps, Result, Value, check_response_headers(), ci_eq(), close_conn(), header_find(), httpd_body() (+28 more)
 
 ### Community 52 - "stream.c"
-Cohesion: 0.11
-Nodes (34): logo_io_write_error_line(), LogoStream, screen_gfx_load(), screen_gfx_save(), LogoStream, logo_stream_can_read(), logo_stream_clear_write_error(), logo_stream_close() (+26 more)
+Cohesion: 0.09
+Nodes (39): logo_io_write_error_line(), LogoStream, screen_gfx_load(), screen_gfx_save(), LogoStream, LogoStreamOps, logo_stream_can_read(), logo_stream_clear_write_error() (+31 more)
 
 ### Community 53 - "lcd.c"
-Cohesion: 0.11
-Nodes (34): repeating_timer_t, decode_char(), lcd_blit(), lcd_blit_begin(), lcd_blit_end(), lcd_clear_screen(), lcd_cursor_blink(), lcd_cursor_enabled() (+26 more)
+Cohesion: 0.08
+Nodes (46): picocalc_editor_get_ops(), repeating_timer_t, decode_char(), lcd_blit(), lcd_blit_begin(), lcd_blit_end(), lcd_clear_screen(), lcd_cursor_blink() (+38 more)
 
 ### Community 54 - ";"
 Cohesion: 0.04
-Nodes (48): ;, and, Appendix C: Useful Procedures, Appendix D: Error Messages, Appendix E: Colour Palette for Pico Logo, battery, .bootsel, Break (+40 more)
+Nodes (50): ;, and, Appendix C: Useful Procedures, Appendix D: Error Messages, Appendix E: Colour Palette for Pico Logo, battery, .bootsel, Break (+42 more)
 
 ### Community 55 - "Checkpoint Run — a maze-driving game (design)"
 Cohesion: 0.05
 Nodes (44): 10.1 Radar, 10.2 HUD, 10.3 Palette, 10.4 Shape slots, 10.5 Sound, 10. Radar, HUD, art, and sound, 11. State machine and frame order, 12. Logo coding constraints (+36 more)
 
 ### Community 56 - "test_sound.c"
-Cohesion: 0.08
-Nodes (35): mock_sound_set_status(), assert_word(), MockDeviceState, Result, snd(), tearDown(), test_env_default(), test_play_appends() (+27 more)
+Cohesion: 0.09
+Nodes (33): mock_sound_set_status(), assert_word(), MockDeviceState, Result, snd(), test_play_appends(), test_play_bad_notation_errors(), test_play_fans_out() (+25 more)
 
-### Community 57 - "test_galaxian.c"
-Cohesion: 0.18
-Nodes (21): assert_num(), assert_true(), load_galaxian(), seed_convoy(), setUp(), test_convoy_kill_scores_and_shrinks(), test_dive_detach_and_rejoin(), test_diver_breaks_away_near_bottom() (+13 more)
+### Community 57 - "primitives_properties.c"
+Cohesion: 0.39
+Nodes (11): Evaluator, Result, Value, prim_erprops(), prim_gprop(), prim_plist(), prim_pprop(), prim_pps() (+3 more)
 
 ### Community 58 - "picocalc_hardware.c"
 Cohesion: 0.06
-Nodes (30): cyw43_ev_scan_result_t, WifiState, ensure_wifi_initialized(), mbedtls_ms_time(), mdns_start(), mdns_stop(), ntp_dns_callback(), ntp_send_request() (+22 more)
+Nodes (16): cyw43_ev_scan_result_t, LogoHardware, logo_picocalc_hardware_create(), logo_picocalc_hardware_destroy(), mbedtls_ms_time(), mdns_stop(), picocalc_sleep(), picocalc_wifi_disconnect() (+8 more)
 
 ### Community 59 - "fat32_close"
 Cohesion: 0.14
@@ -466,19 +453,19 @@ Nodes (39): fat32_close(), fat32_create(), fat32_delete(), fat32_get_current_dir
 
 ### Community 60 - "test_primitives_network.c"
 Cohesion: 0.11
-Nodes (35): mock_device_get_last_ntp_server(), mock_device_get_last_ntp_timezone(), mock_device_get_last_ping_ip(), mock_device_get_last_resolve_hostname(), mock_device_set_ntp_result(), mock_device_set_ping_result(), mock_device_set_resolve_result(), test_http_get_dns_failure_errors() (+27 more)
+Nodes (34): mock_device_get_last_ntp_server(), mock_device_get_last_ntp_timezone(), mock_device_get_last_ping_ip(), mock_device_get_last_resolve_hostname(), mock_device_set_ntp_result(), mock_device_set_ping_result(), mock_device_set_resolve_result(), test_http_get_dns_failure_errors() (+26 more)
 
 ### Community 61 - "memory.c"
-Cohesion: 0.12
-Nodes (34): alloc_cell(), atom_chain_next(), atom_clear_marks(), atom_entry_is_free(), atom_entry_next(), atom_entry_set_next(), atom_entry_size(), atom_free_add() (+26 more)
+Cohesion: 0.07
+Nodes (59): BlobDesc, alloc_cell(), atom_chain_next(), atom_clear_marks(), atom_entry_is_free(), atom_entry_next(), atom_entry_set_next(), atom_entry_size() (+51 more)
 
 ### Community 62 - "Variables"
 Cohesion: 0.29
 Nodes (7): local, localmake, make, name, name? (namep), thing, Variables
 
 ### Community 63 - "primitives_json.c"
-Cohesion: 0.17
-Nodes (35): Evaluator, Node, Result, Value, enter_array(), enter_object(), extract_value(), hex_val() (+27 more)
+Cohesion: 0.18
+Nodes (34): Evaluator, Node, Result, Value, enter_array(), enter_object(), extract_value(), hex_val() (+26 more)
 
 ### Community 64 - "Conditionals and Control of Flow"
 Cohesion: 0.06
@@ -486,15 +473,15 @@ Nodes (34): catch, co, Conditionals and Control of Flow, do.until, do.while, err
 
 ### Community 65 - "test_mock_fs.h"
 Cohesion: 0.07
-Nodes (53): LogoDirCallback, LogoStream, MockFile, mock_file_can_read(), mock_file_close(), mock_file_flush(), mock_file_get_length(), mock_file_get_read_pos() (+45 more)
+Nodes (58): assert_word(), LogoDirCallback, fs_list_children(), handle(), pump(), resp_str(), seed_tree(), status_is() (+50 more)
 
 ### Community 66 - "demons_poll"
 Cohesion: 0.10
-Nodes (36): demons_poll(), MockTurtleState, mock_device_clear_output(), mock_device_get_turtle(), setUp(), test_action_does_not_reenter_poll(), test_cleardemons_disarms_all(), test_cleardemons_leaves_motion_and_freeze() (+28 more)
+Nodes (37): Value, demons_frozen(), demons_poll(), value_is_true(), MockTurtleState, mock_device_clear_output(), mock_device_get_turtle(), test_action_does_not_reenter_poll() (+29 more)
 
 ### Community 67 - "test_dirty_tiles.c"
-Cohesion: 0.11
-Nodes (35): dirty_tiles_any(), dirty_tiles_clear(), dirty_tiles_mark_all(), dirty_tiles_mark_rect(), dirty_tiles_mark_rect_wrap(), dirty_tiles_next_span(), wrap_coord(), ScreenSprite (+27 more)
+Cohesion: 0.13
+Nodes (30): dirty_tiles_any(), dirty_tiles_clear(), dirty_tiles_mark_all(), dirty_tiles_mark_rect(), dirty_tiles_mark_rect_wrap(), dirty_tiles_next_span(), wrap_coord(), ScreenSprite (+22 more)
 
 ### Community 68 - "Words and Lists"
 Cohesion: 0.06
@@ -504,13 +491,13 @@ Nodes (34): ascii, before? (beforep), butfirst (bf), butlast (bl), char, count, 
 Cohesion: 0.05
 Nodes (128): EvalOpKind, Evaluator, FrameStack, Lexer, Node, Result, UserProcedure, Value (+120 more)
 
-### Community 70 - "test_frame_sync.c"
-Cohesion: 0.24
-Nodes (16): frame_sync_active(), frame_sync_period(), frame_sync_reset(), frame_sync_set(), frame_sync_wait_ms(), setUp(), test_boundary_is_fixed_regardless_of_work(), test_clock_wraparound() (+8 more)
+### Community 70 - "picocalc_wifi_status"
+Cohesion: 0.33
+Nodes (6): WifiState, mdns_start(), picocalc_network_set_hostname(), picocalc_wifi_connect(), picocalc_wifi_status(), wifi_configure_link()
 
-### Community 71 - "procedures.c"
-Cohesion: 0.06
-Nodes (54): Node, Result, demons_gc_mark_all(), demons_resume(), demons_running(), demons_set(), demons_suspend(), Evaluator (+46 more)
+### Community 71 - "primitives.h"
+Cohesion: 0.08
+Nodes (42): demons_clear(), demons_freeze(), demons_gc_mark_all(), demons_print(), demons_reset(), demons_thaw(), Evaluator, Result (+34 more)
 
 ### Community 72 - "lfs_storage.c"
 Cohesion: 0.10
@@ -521,8 +508,8 @@ Cohesion: 0.12
 Nodes (20): clear_root_cluster(), compute_fat_size(), fat32_image_format_mbr(), fat32_image_format_superfloppy(), write_boot_sector(), write_fsinfo(), write_initial_fat(), sd_error_t (+12 more)
 
 ### Community 74 - "screen.c"
-Cohesion: 0.08
-Nodes (44): calc_cursor_pos(), picocalc_read_line(), redraw_input_line(), lcd_move_cursor(), lcd_set_background(), lcd_set_cursor_char(), error_output_write(), text_get_background() (+36 more)
+Cohesion: 0.07
+Nodes (40): lcd_enable_cursor(), lcd_move_cursor(), lcd_set_cursor_char(), text_get_background(), text_get_foreground(), text_set_background(), text_set_cursor(), turtle_canvas_point() (+32 more)
 
 ### Community 75 - "picocalc_storage.c"
 Cohesion: 0.14
@@ -530,7 +517,7 @@ Nodes (27): fat32_get_cluster_size(), fat32_get_generation(), fat32_seek(), fat3
 
 ### Community 76 - "proc_define_from_text"
 Cohesion: 0.03
-Nodes (109): append_to_list(), Lexer, Node, Token, parse_bracket_contents(), proc_define_from_text(), token_to_atom(), test_deep_nested_proc_in_repeat() (+101 more)
+Nodes (103): append_to_list(), Lexer, Node, Token, parse_bracket_contents(), proc_define_from_text(), token_to_atom(), test_deep_nested_proc_in_repeat() (+95 more)
 
 ### Community 77 - "lexer.c"
 Cohesion: 0.16
@@ -545,16 +532,16 @@ Cohesion: 0.07
 Nodes (6): LogoEntryType, LogoStream, collect_cb(), make_stream(), setUp(), spy_reset()
 
 ### Community 80 - "test_frame.c"
-Cohesion: 0.07
-Nodes (91): Binding, FrameHeader, FrameStack, UserProcedure, Value, word_offset_t, calc_frame_size(), frame_add_local() (+83 more)
+Cohesion: 0.08
+Nodes (88): Binding, FrameHeader, FrameStack, UserProcedure, Value, word_offset_t, calc_frame_size(), frame_add_local() (+80 more)
 
 ### Community 81 - "host_storage.c"
 Cohesion: 0.12
 Nodes (17): LogoDirCallback, LogoStream, host_file_can_read(), host_file_close(), host_file_flush(), host_file_get_length(), host_file_get_read_pos(), host_file_get_write_pos() (+9 more)
 
 ### Community 82 - "test_costumes.c"
-Cohesion: 0.20
-Nodes (20): costume_delete(), costume_get(), costume_pool_free(), costume_put(), costumes_clear(), pool_release(), turtles_init(), fill_pattern() (+12 more)
+Cohesion: 0.19
+Nodes (21): costume_delete(), costume_get(), costume_pool_free(), costume_put(), costumes_clear(), pool_release(), turtle_put_shape_data(), turtles_init() (+13 more)
 
 ### Community 83 - "Introduction"
 Cohesion: 0.17
@@ -573,24 +560,24 @@ Cohesion: 0.08
 Nodes (23): About Logo, Additional Features for the PicoCalc, Advanced Logo, Beginning Logo, Building and Running, Contributing, Credits, Dependencies (+15 more)
 
 ### Community 87 - "host_console.c"
-Cohesion: 0.26
-Nodes (13): LogoConsole, LogoStream, host_input_can_read(), host_input_read_char(), host_input_read_chars(), host_input_read_line(), host_output_flush(), host_output_write() (+5 more)
+Cohesion: 0.36
+Nodes (10): LogoStream, host_input_can_read(), host_input_read_char(), host_input_read_chars(), host_input_read_line(), host_output_flush(), host_output_write(), restore_mode() (+2 more)
 
-### Community 88 - "test_mock_device.c"
-Cohesion: 0.04
-Nodes (81): LogoConsole, LogoStreamOps, logo_console_has_editor(), logo_console_has_screen_modes(), logo_console_has_text(), logo_console_has_turtle(), logo_console_init(), MockCommand (+73 more)
+### Community 88 - "mock_device_get_state"
+Cohesion: 0.03
+Nodes (123): LogoConsole, logo_console_has_editor(), logo_console_has_screen_modes(), logo_console_has_text(), logo_console_has_turtle(), MockCommand, MockLine, LogoConsole (+115 more)
 
-### Community 89 - "primitives_text.c"
-Cohesion: 0.34
-Nodes (19): Evaluator, Result, Value, get_screen_ops(), get_text_ops(), prim_cleartext(), prim_cursor(), prim_fullscreen() (+11 more)
+### Community 89 - "screensaver.c"
+Cohesion: 0.24
+Nodes (11): lcd_get_palette_value(), lcd_set_palette_value(), turtle_set_bg_colour(), screen_get_mode(), advance_cycle(), backup_palette(), cycle_palette(), refresh_display() (+3 more)
 
 ### Community 90 - "prim_savel"
-Cohesion: 0.38
-Nodes (16): prim_editfile(), Evaluator, Result, Value, prim_load(), prim_loadpic(), prim_pofile(), prim_save() (+8 more)
+Cohesion: 0.27
+Nodes (21): demons_resume(), demons_suspend(), httpd_savebody(), prim_editfile(), Evaluator, Result, Value, prim_load() (+13 more)
 
-### Community 91 - "history.c"
-Cohesion: 0.24
-Nodes (11): history_add(), history_get(), history_get_start_index(), history_is_empty(), history_is_end_index(), history_next_index(), history_next_matching(), history_prev_index() (+3 more)
+### Community 91 - "picocalc_read_line"
+Cohesion: 0.17
+Nodes (17): history_add(), history_get(), history_get_start_index(), history_is_empty(), history_is_end_index(), history_next_index(), history_next_matching(), history_prev_index() (+9 more)
 
 ### Community 92 - "Design: LittleFS internal filesystem + `/sd` FAT32 mount"
 Cohesion: 0.08
@@ -620,10 +607,6 @@ Nodes (17): bd_erase(), bd_prog(), bd_read(), blob_get_read_pos(), blob_read_cha
 Cohesion: 0.09
 Nodes (73): Lexer, Node, Token, TokenType, classify_word(), is_comment_node(), is_delimiter_token(), is_number_word() (+65 more)
 
-### Community 100 - "host_hardware.c"
-Cohesion: 0.09
-Nodes (5): LogoHardware, host_network_tcp_connect(), init_winsock(), logo_host_hardware_create(), logo_host_hardware_destroy()
-
 ### Community 101 - "sdcard.c"
 Cohesion: 0.27
 Nodes (17): sd_error_t, sd_card_init(), sd_cs_deselect(), sd_cs_select(), sd_error_string(), sd_read_block(), sd_read_block_once(), sd_read_blocks() (+9 more)
@@ -632,17 +615,9 @@ Nodes (17): sd_error_t, sd_card_init(), sd_cs_deselect(), sd_cs_select(), sd_err
 Cohesion: 0.10
 Nodes (21): bury, buryall, buryname, erall, erase (er), ern, erns, erps (+13 more)
 
-### Community 103 - "southbridge.c"
-Cohesion: 0.23
-Nodes (18): repeating_timer_t, keyboard_poll(), on_keyboard_timer(), picocalc_get_battery_level(), picocalc_power_off(), sb_available(), sb_is_power_off_supported(), sb_read() (+10 more)
-
 ### Community 104 - "test_help.c"
 Cohesion: 0.12
 Nodes (12): help_check_sorted(), help_contains_nocase(), help_lookup(), test_help_contains_nocase(), test_help_lookup_is_case_insensitive(), test_help_lookup_returns_null_for_unknown(), test_help_lookup_returns_text_for_known_primitive(), test_help_table_is_sorted() (+4 more)
-
-### Community 105 - "test_primitives_variables.c"
-Cohesion: 0.12
-Nodes (15): setUp(), tearDown(), test_dots_variable(), test_error_no_value(), test_global_variable(), test_local_declaration(), test_local_with_list(), test_localmake_in_procedure() (+7 more)
 
 ### Community 106 - "test_tls_heap.c"
 Cohesion: 0.19
@@ -652,33 +627,29 @@ Nodes (15): picocalc_tls_heap_setup(), tls_heap_calloc(), tls_heap_free(), tls_h
 Cohesion: 0.18
 Nodes (19): LogoDirCallback, LogoStream, cross_fs_move(), is_root(), router_dir_create(), router_dir_delete(), router_dir_exists(), router_file_delete() (+11 more)
 
-### Community 108 - "record_command"
-Cohesion: 0.12
-Nodes (16): mock_screen_fullscreen(), mock_screen_refresh_now(), mock_screen_set_refresh_auto(), mock_screen_splitscreen(), mock_screen_textscreen(), mock_text_clear(), mock_turtle_clear(), mock_turtle_draw() (+8 more)
+### Community 108 - "test_primitives_exceptions.c"
+Cohesion: 0.14
+Nodes (12): tearDown(), test_catch_basic(), test_catch_through_calls_catch(), test_catch_through_calls_good(), test_catch_throw_match(), test_catch_throw_nomatch(), test_error_no_error(), test_throw_no_catch() (+4 more)
 
 ### Community 109 - "mem_word_ptr"
-Cohesion: 0.02
-Nodes (166): Value, value_is_true(), mem_word_ptr(), test_make_small_number_in_object_is_valid_json(), test_make_small_number_is_valid_json(), test_keyp_no_input_returns_false(), test_keyp_with_input_returns_true(), test_pr_abbreviation() (+158 more)
+Cohesion: 0.03
+Nodes (114): mem_word_ptr(), test_make_small_number_in_object_is_valid_json(), test_make_small_number_is_valid_json(), bind_long_blob_word(), exhaust_atom_table(), exhaust_node_pool(), test_ascii(), test_bar_list_literal_count() (+106 more)
 
 ### Community 110 - "primitives_outside_world.c"
-Cohesion: 0.31
-Nodes (18): Evaluator, Result, Value, flush_writer(), prim_keyp(), prim_print(), prim_readchar(), prim_readchars() (+10 more)
+Cohesion: 0.20
+Nodes (22): Lexer, parse_list_body(), parse_list_from_string(), Evaluator, Node, Result, Value, flush_writer() (+14 more)
 
 ### Community 111 - "mem_atom"
-Cohesion: 0.05
-Nodes (86): blob_alloc(), mem_atom(), mem_blob(), mem_blob_free_bytes(), mem_blob_used(), mem_free_atoms(), mem_free_nodes(), mem_gc() (+78 more)
+Cohesion: 0.04
+Nodes (129): Node, Result, demons_set(), mem_atom(), mem_atom_unescape(), mem_cons(), mem_free_atoms(), mem_free_nodes() (+121 more)
 
 ### Community 112 - "primitives_workspace.c"
-Cohesion: 0.16
-Nodes (40): Evaluator, LogoIO, Node, Result, UserProcedure, Value, help_list_add(), help_list_flush() (+32 more)
+Cohesion: 0.10
+Nodes (54): Evaluator, LogoIO, Node, Result, UserProcedure, Value, help_list_add(), help_list_flush() (+46 more)
 
 ### Community 113 - "P9 — Tile maps and smooth scrolling (design)"
 Cohesion: 0.08
 Nodes (24): 10. Checkpoint Run revamp, 11. Turtle Trails revamp (render-only, gameplay identical), 12. Budgets, 13. Milestones, 14. Tests, 15. Levers if M0 misses, 16. Rejected alternatives, 17. Roadmap gate questions, resolved (+16 more)
-
-### Community 114 - "primitives_debug_control.c"
-Cohesion: 0.31
-Nodes (13): Evaluator, Result, Value, pause_check_continue(), pause_request_continue(), pause_reset_state(), prim_co(), prim_go() (+5 more)
 
 ### Community 115 - "Galaxian in Pico Logo (design)"
 Cohesion: 0.11
@@ -689,8 +660,8 @@ Cohesion: 0.11
 Nodes (19): backup, cat, catalog, copyfile, createdir, dir? (dirp), directories, editfile (+11 more)
 
 ### Community 117 - "proc_get_frame_stack"
-Cohesion: 0.09
-Nodes (37): frame_binding_count(), frame_pop(), frame_stack_available_bytes(), frame_stack_depth(), frame_stack_is_empty(), frame_stack_used_bytes(), FrameStack, proc_get_frame_stack() (+29 more)
+Cohesion: 0.08
+Nodes (36): frame_pop(), frame_stack_available_bytes(), frame_stack_depth(), frame_stack_init(), frame_stack_is_empty(), frame_stack_used_bytes(), FrameStack, proc_get_frame_stack() (+28 more)
 
 ### Community 118 - "test_scaffold.c"
 Cohesion: 0.12
@@ -708,9 +679,9 @@ Nodes (29): 10. Rejected alternatives, 11. Resolved questions (user, 2026-07-10)
 Cohesion: 0.12
 Nodes (16): allopen, close, closeall, filelen, Input and Output to Files, Network Connections and Devices, open, reader, readpos (+8 more)
 
-### Community 122 - "picocalc_network_tls_connect"
+### Community 122 - "ensure_wifi_initialized"
 Cohesion: 0.18
-Nodes (15): ntp_recv_callback(), picocalc_dns_callback(), picocalc_network_tcp_connect(), picocalc_network_tcp_listen(), picocalc_network_tls_connect(), ping_recv_callback(), poll_lwip_with_timeout(), tcp_connect_and_wait() (+7 more)
+Nodes (18): ensure_wifi_initialized(), picocalc_network_ping(), picocalc_network_resolve(), picocalc_network_tcp_connect(), picocalc_network_tcp_listen(), picocalc_network_tls_connect(), picocalc_wifi_get_ip(), picocalc_wifi_get_mac() (+10 more)
 
 ### Community 123 - "Design: `launch` background processes (P6)"
 Cohesion: 0.13
@@ -719,10 +690,6 @@ Nodes (15): 10. Milestones, 11. Risks, 12. Decisions (gate closed 2026-07-12), 1
 ### Community 124 - "test_checkrun.c"
 Cohesion: 0.10
 Nodes (57): MockStamp, mock_device_clear_graphics(), mock_device_get_stamp(), mock_device_stamp_count(), check_world_invariants(), load_checkrun(), num(), numf() (+49 more)
-
-### Community 125 - "prim_clearscreen"
-Cohesion: 0.23
-Nodes (13): demons_clear(), demons_freeze(), demons_reset(), demons_thaw(), Evaluator, Result, Value, prim_cleardemons() (+5 more)
 
 ### Community 126 - "mklfsimg_lib.c"
 Cohesion: 0.17
@@ -744,13 +711,9 @@ Nodes (14): Block editing, Cursor motion, edall, edit (ed), Editing actions, edn
 Cohesion: 0.14
 Nodes (14): http.body, http.element, http.listen, http.method, http.path, http.query, http.remote, http.reqheader (+6 more)
 
-### Community 131 - "run_editor_and_process"
-Cohesion: 0.47
-Nodes (10): Evaluator, Result, Value, count_bracket_balance(), prim_edall(), prim_edit(), prim_edn(), prim_edns() (+2 more)
-
-### Community 132 - "LogoStream"
-Cohesion: 0.20
-Nodes (10): LogoStream, mock_stream_can_read(), mock_stream_close(), mock_stream_flush(), mock_stream_read_char(), mock_stream_read_chars(), mock_stream_read_line(), mock_stream_write() (+2 more)
+### Community 132 - "prim_define"
+Cohesion: 0.56
+Nodes (8): Evaluator, Result, Value, prim_copydef(), prim_define(), prim_definedp(), prim_primitivep(), prim_text()
 
 ### Community 133 - "Appendix B: Parsing"
 Cohesion: 0.25
@@ -760,16 +723,12 @@ Nodes (8): Appendix B: Parsing, Brackets and Parentheses, Delimiters and Spacing
 Cohesion: 0.14
 Nodes (14): Example, tls? (tlsp), wifi.connect, wifi.disconnect, wifi.hostname, wifi.ip, wifi.mac, WiFi Management (+6 more)
 
-### Community 135 - "prim_battery_level"
-Cohesion: 0.42
-Nodes (9): Evaluator, Result, Value, prim_battery_level(), prim_bootsel(), prim_goodbye(), prim_toot(), toot_gate_freq() (+1 more)
-
 ### Community 136 - "The pick of five: plans"
 Cohesion: 0.09
 Nodes (22): Documentation, Done — `setpensize` / `pensize`, Implementation refinements (code-review leftovers), Language: big bets, Language: cheap wins (small primitives, high classroom value), Language: medium, P1 — Host REPL stdin + CI, P2 — List utilities: `pick`, `reverse`, `shuffle` (+14 more)
 
 ### Community 137 - "primitives.c"
-Cohesion: 0.17
+Cohesion: 0.18
 Nodes (15): primitive_find(), primitive_find_n(), primitive_get_by_index(), primitive_get_count(), primitive_name_compare(), primitive_register_alias(), name_distance(), suggest_similar_name() (+7 more)
 
 ### Community 138 - "Managing Various Files"
@@ -785,12 +744,12 @@ Cohesion: 0.36
 Nodes (11): datetime_to_ms(), days_in_month_of_year(), ensure_software_clock_initialized(), get_current_epoch_ms(), is_leap_year(), ms_to_datetime(), picocalc_get_date(), picocalc_get_time() (+3 more)
 
 ### Community 141 - "value_to_string"
-Cohesion: 0.06
-Nodes (51): Evaluator, Result, Value, get_bool_arg(), prim_and(), prim_not(), prim_or(), value_to_string() (+43 more)
+Cohesion: 0.08
+Nodes (42): Evaluator, Result, Value, get_bool_arg(), prim_and(), prim_not(), prim_or(), value_to_string() (+34 more)
 
-### Community 142 - "logo_hardware_init"
-Cohesion: 0.22
-Nodes (7): LogoHardware, LogoHardwareOps, logo_hardware_init(), LogoHardware, logo_picocalc_hardware_create(), logo_picocalc_hardware_destroy(), test_play_no_sound_engine_is_noop()
+### Community 142 - "Text and Screen Commands"
+Cohesion: 0.18
+Nodes (11): cleartext (ct), cursor, fullscreen (fs), refresh, refreshmode, setcursor, setrefresh, splitscreen (ss) (+3 more)
 
 ### Community 143 - "The Outside World"
 Cohesion: 0.11
@@ -800,17 +759,13 @@ Nodes (19): env, key? (keyp), play, playing? (playingp), print (pr), readchar (r
 Cohesion: 0.17
 Nodes (11): 10. Decisions (resolved with the user), 1. Goal, 2. What already exists, 3. Primitive surface, 4. Execution model: a poll-driven pump, 5. Device interface changes (`devices/hardware.h`), 6. Core structure, 7. mDNS naming (added 2026-07-12) (+3 more)
 
-### Community 145 - "logo_io_console_write"
-Cohesion: 0.29
-Nodes (7): demons_print(), SyntaxCategory, highlight_write_span(), logo_io_console_write(), logo_io_console_write_line(), test_console_write(), test_console_write_line()
-
 ### Community 146 - "PR Review Checklist (CRITICAL)"
 Cohesion: 0.22
 Nodes (8): 1. Floating point — single precision only, 2. Static memory footprint, 3. Error handling conventions, 4. Logo semantics, 5. Project conventions, GitHub Copilot Instructions, PR Review Checklist (CRITICAL), What NOT to comment on
 
 ### Community 147 - "test_primitives_editor.c"
-Cohesion: 0.07
-Nodes (81): LogoStreamOps, logo_stream_init(), LogoStreamType, mock_device_clear_editor(), mock_device_get_editor_input(), mock_device_set_editor_content(), mock_device_set_editor_result(), mock_device_was_editor_called() (+73 more)
+Cohesion: 0.08
+Nodes (48): mock_device_clear_editor(), mock_device_get_editor_input(), mock_device_was_editor_called(), LogoDirCallback, LogoStream, mock_file_can_read(), mock_file_close(), mock_file_flush() (+40 more)
 
 ### Community 148 - "record_command_float"
 Cohesion: 0.18
@@ -836,10 +791,6 @@ Nodes (8): copydef, define, defined? (definedp), help, Modifying Procedures Unde
 Cohesion: 0.17
 Nodes (12): MockCommandType, LogoPen, mock_turtle_dot(), mock_turtle_get_pen_state(), mock_turtle_set_bg_colour(), mock_turtle_set_pen_colour(), mock_turtle_set_pen_state(), mock_turtle_set_position() (+4 more)
 
-### Community 155 - "prim_ntp"
-Cohesion: 0.57
-Nodes (6): Evaluator, Result, Value, prim_network_ping(), prim_network_resolve(), prim_ntp()
-
 ### Community 156 - "as_httpd_conn"
 Cohesion: 0.32
 Nodes (8): MockHttpdConn, as_httpd_conn(), httpd_conn_read(), httpd_conn_write(), mock_network_tcp_can_read(), mock_network_tcp_close(), mock_network_tcp_read(), mock_network_tcp_write()
@@ -848,21 +799,13 @@ Nodes (8): MockHttpdConn, as_httpd_conn(), httpd_conn_read(), httpd_conn_write()
 Cohesion: 0.25
 Nodes (8): Appendix A: Useful Tools, arcr and arcl, circler and circlel, divisor?, Graphics Tools, Math Tools, Program Logic or Debugging Tools, sort
 
-### Community 158 - "Property Lists"
-Cohesion: 0.29
-Nodes (7): erprops, gprop, plist, pprop, pps, Property Lists, remprop
+### Community 160 - "ip_addr_t"
+Cohesion: 0.25
+Nodes (8): ntp_dns_callback(), ntp_recv_callback(), ntp_send_request(), picocalc_dns_callback(), ping_recv_callback(), tcp_dns_callback(), ip_addr_t, u16_t
 
-### Community 159 - "Time Management"
-Cohesion: 0.33
-Nodes (6): date, setdate, settime, ticks, time, Time Management
-
-### Community 160 - "raster_solid"
-Cohesion: 1.00
-Nodes (3): LogoTurtleRaster, raster_solid(), rasters_overlap()
-
-### Community 161 - "mock_device_set_raster"
-Cohesion: 0.67
-Nodes (3): LogoTurtleRaster, mock_device_set_raster(), mock_turtle_get_raster()
+### Community 162 - "mock_device_set_editor_result"
+Cohesion: 0.15
+Nodes (30): LogoEditorResult, mock_device_set_editor_content(), mock_device_set_editor_result(), mock_editor_edit(), MockFile, mock_fs_create_file(), mock_fs_get_content(), mock_fs_get_file() (+22 more)
 
 ### Community 164 - "Bitwise Operations"
 Cohesion: 0.29
@@ -873,8 +816,8 @@ Cohesion: 0.33
 Nodes (5): Building, Features, File Extensions, Installation, Pico Logo
 
 ### Community 167 - "result_ok"
-Cohesion: 0.14
-Nodes (48): Evaluator, Result, Value, prim_abs(), prim_arctan(), prim_cos(), prim_difference(), prim_exp() (+40 more)
+Cohesion: 0.21
+Nodes (31): Evaluator, Result, Value, prim_abs(), prim_arctan(), prim_cos(), prim_difference(), prim_exp() (+23 more)
 
 ### Community 168 - "drain_tokens"
 Cohesion: 0.33
@@ -887,6 +830,10 @@ Nodes (3): main(), split_pem_blocks(), subject_cn()
 ### Community 174 - "pandoc_slug"
 Cohesion: 0.67
 Nodes (3): main(), pandoc_slug(), Compute pandoc's auto_identifiers slug for a heading.
+
+### Community 177 - "primitives_bitwise.c"
+Cohesion: 0.53
+Nodes (9): Evaluator, Result, Value, prim_ashift(), prim_bitand(), prim_bitnot(), prim_bitor(), prim_bitxor() (+1 more)
 
 ### Community 197 - "List Processing"
 Cohesion: 0.22
@@ -903,17 +850,17 @@ Nodes (8): http.delete, http.get, http.header, HTTP Operations, http.patch, http
 ## Knowledge Gaps
 - **721 isolated node(s):** `dist.sh script`, `flash.sh script`, `name`, `displayName`, `description` (+716 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **10 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **7 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `run_string()` connect `run_string` to `test_value.c`, `mem_is_nil`, `reset_output`, `eval_string`, `result_none`, `test_trails.c`, `io.c`, `test_primitives_files_directory.c`, `format_buffer_init`, `lexer_init`, `logo_hardware_init`, `test_primitives_editor.c`, `test_variables.c`, `test_eval.c`, `test_primitives_json.c`, `test_primitives_conditionals.c`, `test_scaffold.h`, `test_primitives_files.c`, `mem_cons`, `test_time.c`, `set_mock_input`, `test_primitives_files_load_save.c`, `test_primitives_hardware.c`, `test_sound.c`, `test_galaxian.c`, `demons_poll`, `eval_primary`, `proc_define_from_text`, `test_mock_device.c`, `test_primitives_variables.c`, `mem_word_ptr`, `mem_atom`, `proc_get_frame_stack`, `test_scaffold.c`, `test_checkrun.c`?**
-  _High betweenness centrality (0.140) - this node is a cross-community bridge._
-- **Why does `eval_string()` connect `eval_string` to `run_string`, `test_value.c`, `mem_is_nil`, `reset_output`, `result_error_arg`, `test_trails.c`, `test_primitives_files_directory.c`, `value_to_string`, `format_buffer_init`, `lexer_init`, `test_variables.c`, `test_httpd.c`, `test_eval.c`, `test_primitives_http.c`, `test_primitives_json.c`, `test_primitives_conditionals.c`, `test_scaffold.h`, `test_primitives_wifi.c`, `test_primitives_files.c`, `mem_cons`, `test_time.c`, `test_primitives_hardware.c`, `test_sound.c`, `test_galaxian.c`, `test_primitives_network.c`, `test_mock_fs.h`, `eval_primary`, `proc_define_from_text`, `test_primitives_variables.c`, `mem_word_ptr`, `mem_atom`, `proc_get_frame_stack`, `test_scaffold.c`, `test_checkrun.c`?**
-  _High betweenness centrality (0.101) - this node is a cross-community bridge._
-- **Why does `mem_word_ptr()` connect `mem_word_ptr` to `run_string`, `primitives_http.c`, `run_editor_and_process`, `mem_is_nil`, `test_value.c`, `reset_output`, `result_none`, `result_error_arg`, `eval_string`, `io.c`, `test_primitives_files_directory.c`, `value_to_string`, `format_buffer_init`, `test_primitives_editor.c`, `primitives_sound.c`, `test_variables.c`, `test_httpd.c`, `test_eval.c`, `test_primitives_http.c`, `prim_ntp`, `primitives_httpd.c`, `mem_atom_cstr`, `test_primitives_wifi.c`, `test_primitives_files.c`, `primitives_get_io`, `mem_cons`, `test_time.c`, `set_mock_input`, `test_primitives_hardware.c`, `httpd.c`, `test_sound.c`, `test_primitives_network.c`, `memory.c`, `primitives_json.c`, `eval_primary`, `procedures.c`, `prim_local`, `proc_define_from_text`, `prim_savel`, `test_token_source.c`, `test_primitives_variables.c`, `primitives_outside_world.c`, `mem_atom`, `primitives_workspace.c`, `primitives_debug_control.c`?**
-  _High betweenness centrality (0.046) - this node is a cross-community bridge._
+- **Why does `run_string()` connect `run_string` to `mem_is_nil`, `reset_output`, `eval_string`, `result_none`, `test_trails.c`, `io.c`, `test_primitives_files_load_save.c`, `format_buffer_init`, `lexer_init`, `test_primitives_editor.c`, `value_number`, `test_eval.c`, `test_scaffold_setUp`, `primitives_httpd.c`, `test_primitives_json.c`, `test_primitives_conditionals.c`, `test_scaffold.h`, `mock_device_set_editor_result`, `test_primitives_files.c`, `test_primitives_properties.c`, `test_time.c`, `set_mock_input`, `test_primitives_outside_world.c`, `test_primitives_hardware.c`, `test_sound.c`, `memory.c`, `demons_poll`, `eval_primary`, `proc_define_from_text`, `mock_device_get_state`, `test_primitives_exceptions.c`, `mem_word_ptr`, `proc_get_frame_stack`, `test_scaffold.c`, `test_checkrun.c`?**
+  _High betweenness centrality (0.131) - this node is a cross-community bridge._
+- **Why does `eval_string()` connect `eval_string` to `mem_is_nil`, `reset_output`, `test_trails.c`, `test_primitives_files_load_save.c`, `value_to_string`, `format_buffer_init`, `lexer_init`, `value_number`, `test_httpd.c`, `test_eval.c`, `test_primitives_http.c`, `primitives_httpd.c`, `test_primitives_json.c`, `test_primitives_conditionals.c`, `test_scaffold.h`, `test_primitives_wifi.c`, `test_primitives_files.c`, `test_primitives_properties.c`, `test_time.c`, `set_mock_input`, `test_primitives_outside_world.c`, `test_primitives_hardware.c`, `test_sound.c`, `test_primitives_network.c`, `memory.c`, `test_mock_fs.h`, `eval_primary`, `proc_define_from_text`, `mock_device_get_state`, `test_primitives_exceptions.c`, `mem_word_ptr`, `mem_atom`, `proc_get_frame_stack`, `test_scaffold.c`, `test_checkrun.c`?**
+  _High betweenness centrality (0.099) - this node is a cross-community bridge._
+- **Why does `mem_word_ptr()` connect `mem_word_ptr` to `run_string`, `primitives_http.c`, `test_value.c`, `prim_define`, `mem_is_nil`, `eval_string`, `result_none`, `result_error_arg`, `reset_output`, `test_primitives_files_load_save.c`, `value_to_string`, `format_buffer_init`, `test_primitives_editor.c`, `primitives_sound.c`, `value_number`, `test_httpd.c`, `test_eval.c`, `test_primitives_http.c`, `primitives_httpd.c`, `test_scaffold.h`, `primitives_get_io`, `test_primitives_wifi.c`, `test_primitives_files.c`, `primitives_files_directory.c`, `test_time.c`, `set_mock_input`, `test_primitives_outside_world.c`, `test_primitives_hardware.c`, `httpd.c`, `test_sound.c`, `test_primitives_network.c`, `memory.c`, `primitives_json.c`, `demons_poll`, `eval_primary`, `primitives.h`, `prim_local`, `proc_define_from_text`, `prim_savel`, `test_token_source.c`, `primitives_outside_world.c`, `mem_atom`, `primitives_workspace.c`?**
+  _High betweenness centrality (0.052) - this node is a cross-community bridge._
 - **Are the 937 inferred relationships involving `run_string()` (e.g. with `load_checkrun()` and `run()`) actually correct?**
   _`run_string()` has 937 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 908 inferred relationships involving `eval_string()` (e.g. with `num()` and `truth()`) actually correct?**

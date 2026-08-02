@@ -115,12 +115,12 @@ target_compile_definitions(test_game_huds PRIVATE
     INVADERS_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/invaders"
     GALAXIAN_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/galaxian")
 
-# File-server example test — loads logo/fileserver into the interpreter and
+# File-server example test — loads logo/pfs into the interpreter and
 # drives real HTTP requests through the mock connection. The source path is
 # passed in as a compile definition.
-add_logo_test(test_fileserver)
-target_compile_definitions(test_fileserver PRIVATE
-    FILESERVER_PATH="${CMAKE_SOURCE_DIR}/logo/fileserver")
+add_logo_test(test_pfs)
+target_compile_definitions(test_pfs PRIVATE
+    PFS_PATH="${CMAKE_SOURCE_DIR}/logo/pfs")
 
 # FAT32 driver test — compiles devices/picocalc/fat32.c on the host with a
 # mock SD-card backend and tiny Pico SDK shim headers.  Independent of

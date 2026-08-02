@@ -202,7 +202,7 @@ to pfs.handle
   http.respond 405 [method not allowed]
 end
 
-; Start serving. Connect to WiFi first, then run `fileserver`.
+; Start serving. Connect to WiFi first, then run `pfs`.
 to pfs
   ct ts
   cleardemons
