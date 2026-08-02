@@ -1,6 +1,6 @@
 # P10 — Interpreter throughput (design)
 
-Status: **v1 design, drafted 2026-08-01; M0 and M1 done 2026-08-01.**
+Status: **v1 design, drafted 2026-08-01; M0–M3 done 2026-08-01, M4 declined.**
 Opened by P9's M0 measurement,
 which failed its gate and found the display was never the bottleneck. Like
 P9, this design gates on measurement: M0 below is a benchmark harness and a
@@ -135,10 +135,18 @@ header is an established home for per-atom metadata.
   and the later `strtof` both disappear. *Dropped: §6.2 measured the whole of
   number parsing at 2.2 %, too little for the variable-width entry it needs.*
 - **Resolved binding** — primitive index, user-procedure index, or unbound.
+  *Done in M2.*
 
-M1 spends **one byte per atom** on this, a general-purpose memo slot in the
-entry (`mem_word_view`) rather than a class-specific field, so M2 can share
-it or widen it without another layout change.
+The memo is **16 bits per atom**, laid out in `core/atom_memo.h`: 5 bits of
+class, 2 bits of binding kind, 9 bits of table index. Making it one word
+rather than two fields is what kept M2's storage cost to nothing — the entry
+went from `ALIGN4(len + 5)` to `ALIGN4(len + 6)`, which only grows the one
+length class in four where that crosses an alignment boundary.
+
+`memory.c` owns the storage and knows none of the layout; `mem_word_view`
+hands out the characters, the length and a pointer to the memo in a single
+walk of the entry, which §6.2 records as the difference between M1 working
+and M1 being a wash.
 
 ### 4.2 The one context-dependent case
 
@@ -272,32 +280,42 @@ materially (the atom region's high-water mark recorded alongside it).
   Parsed numeric value was **not** cached — §6.2 explains why the measurement
   redirected the milestone. Host result: **1.25× on the profiled loop**,
   Turtle Trails' frame −11 %, Checkpoint Run's −12 % (§6.1).
-- **M2 — cached name binding.** Resolve primitive/procedure once per atom
-  with the §4.3 generation counter; kill the inline `output`/`op` compare
-  too. Targets the 14 %. Placement decided with M1's numbers.
-- **M3 — re-measure and decide.** Run M0's benchmark and P9's `p9m0`
-  scripts. If Turtle Trails is under 40 ms, P10 has met §1 and stops here.
-  If not, M4.
-- **M4 — representation, only if M3 says so.** The 20 % in `mem_car`/
-  `mem_cdr` indirection and the 8 % in `memmove`/`memset`. Deliberately last:
-  it is the invasive one, it touches the GC's assumptions, and §7 may make it
-  unnecessary.
+- **M2 — cached name binding. Done 2026-08-01.** Primitive and procedure
+  resolved once per atom and kept in the same memo word as the class; the
+  inline `output`/`op` compare became `primitive_is_output`, an identity
+  check. **No generation counter** — §6.3 explains why a sweep on table
+  mutation replaced it. Host result: the workspace-scan spread collapsed from
+  **4.97× to 1.00×**, a full-table call 2.03 → 0.32 µs, and both game frames
+  gained a further 1.17×.
+- **M3 — re-measure and decide. Done 2026-08-01.** Turtle Trails is
+  **73.4 ms**, not under 40, so §1 is not met by M1+M2 (§6.4). The decision is
+  nevertheless **not M4**: M4 targets the cons-cell walk, which is the same
+  cost P9's C map removes outright from `tile.at`, and P9's version is already
+  designed and cheaper. P10 stops here on the games; the one live lead is the
+  unexplained board regression in §6.4 and the unused 16 KB of XIP_RAM that
+  may explain it.
+- **M4 — representation. Not being done.** The 20 % in `mem_car`/`mem_cdr`
+  indirection and the 8 % in `memmove`/`memset`. M3 declined it: it is the
+  invasive option, it touches the GC's assumptions, and it attacks the same
+  milliseconds P9's C map removes from the data side for less risk. Revisit
+  only if P9 lands and Turtle Trails is still short.
 
 ### 6.1 M0 baseline (2026-08-01)
 
 Host is the benchmark's machine of record. Both Pico 2 columns are measured
 on hardware by `p10m0` (the game rows reuse P9's `p9m0` numbers).
 
-| Scenario | Host M0 | Host after M1 | Pico 2 M0 | Pico 2 after M1 |
-|---|---:|---:|---:|---:|
-| `repeat [make "x (:x + 1)]` | 1.07 µs/iter | **0.86 µs/iter** | 92.4 µs/iter | **65.9 µs/iter** |
-| user-proc call, small workspace | 0.43 µs | 0.40 µs | - | 32.6 µs |
-| user-proc call, 64 defined | 1.24 µs | 1.21 µs | - | - |
-| user-proc call, full table (target last) | 2.09 µs | 2.03 µs | 127.6 µs | 128.3 µs |
-| Turtle Trails `play.frame` | 0.84 ms | **0.75 ms** | 87.3 ms (§2.1) | **73.2 ms** |
-| Turtle Trails `draw.board` | 55.1 ms (§2.1) | - | 5,916 ms (§2.1) | 5,054 ms |
-| Checkpoint Run `play.frame` | 2.73 ms | **2.40 ms** | 258.6 ms (§2.1) | **232.7 ms** |
-| Checkpoint Run `draw.sector` | 18.0 ms (§2.1) | - | 1,346 ms (§2.1) | 1,173 ms |
+| Scenario | Host M0 | Host M1 | Host M2 | Pico 2 M0 | Pico 2 M1 | Pico 2 M2 |
+|---|---:|---:|---:|---:|---:|---:|
+| `repeat [make "x (:x + 1)]` | 1.07 µs/iter | 0.86 µs/iter | **0.80 µs/iter** | 92.4 µs/iter | 65.9 µs/iter | **108.1 µs/iter** |
+| user-proc call, small workspace | 0.43 µs | 0.40 µs | **0.32 µs** | - | 32.6 µs | **24.4 µs** |
+| user-proc call, 64 defined | 1.24 µs | 1.21 µs | **0.32 µs** | - | - | - |
+| user-proc call, full table (target last) | 2.09 µs | 2.03 µs | **0.32 µs** | 127.6 µs | 128.3 µs | **24.0 µs** |
+| workspace-scan spread (full : small) | 4.86× | 4.97× | **1.00×** | - | 3.94× | **0.98×** |
+| Turtle Trails `play.frame` | 0.84 ms | 0.75 ms | **0.64 ms** | 87.3 ms (§2.1) | 73.2 ms | **73.4 ms** |
+| Turtle Trails `draw.board` | 55.1 ms (§2.1) | - | - | 5,916 ms (§2.1) | 5,054 ms | **5,213 ms** |
+| Checkpoint Run `play.frame` | 2.73 ms | 2.40 ms | **2.06 ms** | 258.6 ms (§2.1) | 232.7 ms | **232.6 ms** |
+| Checkpoint Run `draw.sector` | 18.0 ms (§2.1) | - | - | 1,346 ms (§2.1) | 1,173 ms | **1,241 ms** |
 
 The frame rows sit slightly under §2.1's 0.96 / 3.42 ms because the method
 differs — M0 times a bare `repeat [play.frame]` in manual refresh, where the
@@ -403,6 +421,108 @@ Inside the shared block, after loading each game:
 That is ~+1 byte per atom as §5 predicted, and well inside "does not fall
 materially".
 
+### 6.3 What M2 measured (2026-08-01)
+
+M2 hit its target on the host and, unusually for this item, cost negative
+memory. The headline is the row the design predicted it would flatten:
+
+| | M1 | M2 |
+|---|---:|---:|
+| user-proc call, small workspace | 0.40 µs | 0.32 µs |
+| user-proc call, full table | 2.03 µs | 0.32 µs |
+| workspace-scan spread | 4.97× | **1.00×** |
+
+**A call no longer cares how large the workspace is.** That was §3.2's whole
+complaint, and it is gone: the binary search over ~390 primitives and the
+linear scan of the procedure table are both replaced by one read of the memo.
+Both game frames gained a further 1.17× on top of M1 (Trails 0.75 → 0.64 ms,
+Checkpoint Run 2.40 → 2.06 ms).
+
+Three departures from the design as written, all forced by measurement:
+
+**No generation counter.** §4.3 proposed a byte per atom recording the
+generation a binding was resolved under. Instead every mutator in
+`procedures.c` sweeps the atom region and drops all bindings
+(`mem_atom_memo_mask_all`). This is simpler, removes a field, and is covered
+by construction rather than by enumerating callers — and the cost lands where
+§4.3 said it would, at definition time rather than in a frame loop. It also
+made room for the whole binding to fit beside the class in 16 bits.
+`copydef` sweeps too, since `primitive_register_alias` can turn a name that
+already resolved to "neither" into a primitive mid-evaluation.
+
+**`Token` had to shrink to grow.** §4.4 called for a `Node` field on `Token`
+so the resolution sites can reach the atom, and noted only that a `Token`
+carries no atom identity. What it did not say is that a `Token` is embedded
+twice in every `TokenSource`, which is embedded in every `EvalOp`, in a
+768-deep static op stack — so four bytes on `Token` cost **6,144 bytes of
+`bss`** on a board at 95.6 %. Narrowing `type` and `length` to fit the atom
+for free was measured and **rejected**: it costs 16 % on the profiled loop and
+8 % on a game frame, giving back most of what M2 buys, and leaves the loop
+*slower than M1*. What paid instead was deleting `NodeIterator`'s
+`has_peeked`/`peeked_token`, a one-token lookahead buffer that nothing ever
+set to true — dead state larger than the atom that replaced it. Net result:
+`pico2` RAM **95.62 % → 93.86 %**, 9,208 bytes returned, and free nodes after
+loading each game down only 194 (Trails) and 258 (Checkpoint Run).
+
+**The lesson from §6.2 held twice.** M1's finding was that a memo must be
+cheaper than what it replaces, and that a lookup reaching into `memory.c` must
+be *one* call. M2 obeyed both from the start — `resolve_word` makes a single
+`mem_word_view` call that yields characters, error-message name and memo
+together — and needed no second attempt.
+
+### 6.4 M2 on hardware: goal met, games unmoved (2026-08-01)
+
+M2 did on the board exactly what it was designed to do, and it did not help
+the games at all.
+
+| | Pico 2 M1 | Pico 2 M2 | |
+|---|---:|---:|---|
+| user-proc call, full table | 128.3 µs | **24.0 µs** | 5.35× |
+| user-proc call, small workspace | 32.6 µs | **24.4 µs** | 1.34× |
+| workspace-scan spread | 3.94× | **0.98×** | flattened |
+| `repeat` loop | 65.9 µs/iter | **108.1 µs/iter** | **0.61× — a regression** |
+| Turtle Trails `play.frame` | 73.2 ms | 73.4 ms | unchanged |
+| Checkpoint Run `play.frame` | 232.7 ms | 232.6 ms | unchanged |
+
+**The win is real and is the one §3.2 asked for.** A call costs the same
+whether one procedure is defined or the table is full — 128.3 µs collapses to
+24.0. That removes a scalability cliff every growing Logo program was walking
+towards, and it is a bigger board effect than the host's already-large one.
+
+**The loss is real too, and unexplained.** The profiled loop went 1.64×
+*slower*, and the two games came out flat while the host predicted 1.17× for
+both. `draw.board` and `draw.sector` each slipped 3–6 %.
+
+What the shape of it says: on the loop the host:board ratio went from 77× at
+M1 to 135× at M2, a **1.76× board-specific penalty with no host counterpart**.
+M2 did not add work to that loop — the loop resolves exactly one name per
+iteration (`make`, a primitive), and it replaced a nine-step binary search
+plus a re-intern with one memo read. Nothing in the algorithm accounts for
+42 µs an iteration. A cost that appears only on the board, only after a code
+change, and not in the algorithm points at instruction fetch: the RP2350 runs
+from external flash through the XIP cache, and M2 moved and grew the hot path.
+
+**This is a hypothesis, not a finding** — it has not been measured, and
+measuring it needs a board. One concrete lead is on the record: `pico2`
+reports **XIP_RAM 0 B of 16 KB, 0 % used**. The Pico SDK can place chosen
+functions in that RAM (`__not_in_flash_func`), and the interpreter's token
+and resolution path is the obvious candidate. If instruction fetch is the
+cause, that would recover this regression and likely more besides — it is the
+first genuinely new lever this item has turned up since M0.
+
+**Should M2 stay?** On the evidence: yes, but the call is finely balanced and
+belongs to whoever owns the roadmap.
+
+- *For:* the workspace-scan cliff is gone, which matters for every program
+  that grows past a handful of procedures; it returns 9 KB of SRAM; and the
+  two shipped games are neutral, not worse.
+- *Against:* token-heavy code that calls few procedures is 1.64× slower on
+  the board, and the games — the thing §1 steers by — gained nothing.
+
+Reverting is defensible if the loop regression cannot be explained. Keeping it
+and chasing the XIP_RAM lead is the better bet, because the lead applies to
+M1's gains as well.
+
 ## 7. Expected outcome, honestly
 
 M1 and M2 together target 48 % of runtime. Removing it *entirely* would be
@@ -428,18 +548,28 @@ shows variable lookup hot.
 **Measured after M1, on hardware.** The estimates above can now be replaced
 with a board number for the first half:
 
-| | M0 | After M1 | Still needed |
+| | M0 | After M1 (board) | Still needed |
 |---|---:|---:|---:|
 | `repeat` loop | 92.4 µs/iter | 65.9 µs/iter (1.40×) | — |
 | Turtle Trails `play.frame` | 87.3 ms | **73.2 ms** (1.19×) | 1.83× (33.2 ms) |
 | Checkpoint Run `play.frame` | 258.6 ms | **232.7 ms** (1.11×) | 5.82× (192.7 ms) |
 
-Two things say M2 will not close either gap on its own: it targets §2.2's
-14 %, half the share M1 just spent to buy 1.19×, and part of that 14 % is
-variable lookup, which §7 above establishes cannot be cached on the atom at
-all. §2.1's original reading — that Checkpoint Run needs P9 and game-side
-work as well, and that P10 is necessary but not sufficient for it — is now
-measured rather than predicted, and it was right.
+M2 has now been run on hardware too (§6.4), and it moved neither game:
+
+| | M0 | After M1 | After M2 | Still needed |
+|---|---:|---:|---:|---:|
+| Turtle Trails `play.frame` | 87.3 ms | 73.2 ms | **73.4 ms** | 1.84× (33.4 ms) |
+| Checkpoint Run `play.frame` | 258.6 ms | 232.7 ms | **232.6 ms** | 5.81× (192.6 ms) |
+
+So the honest end state is that **P10 delivered 1.19× for Turtle Trails and
+1.11× for Checkpoint Run, all of it in M1**, and the target in §1 is not met.
+M2 bought a large structural win (a call no longer scales with workspace size)
+that neither shipped game was positioned to collect, and its board-side
+regression on the profiled loop (§6.4) is unexplained.
+
+§2.1's original reading — that Checkpoint Run needs P9 and game-side work as
+well, and that P10 is necessary but not sufficient — is now measured rather
+than predicted, and it was right for both games, not just the harder one.
 
 **What closes the gap is P9, not P10.** P9's M0 attributes 59 % of a Trails
 frame to `tile.at` inside `step.bugs` — 43.2 ms of the 73.2 — and P9's C map
@@ -489,6 +619,15 @@ turns these estimates into decisions.
   collected offset really was handed back before checking the class did not
   come with it. That last one was mutation-checked: deleting the memo-clearing
   line in `mem_atom` makes it fail.
+- **M2's tests are in `tests/test_primitives_procedures.c`** (5 added): every
+  one runs the call from inside a list, because a call typed at the REPL is
+  lexed from raw text and has no atom, so it is the one path the cache does
+  not serve. They cover a slot freed by `erase` and refilled by the next
+  definition (the hazard the sweep exists for), a name defined after it
+  already resolved to "neither", `erall`, an alias created by `copydef`
+  mid-run, and the plain repeated call. A sixth — redefinition — was written,
+  failed, and turned out to have found a pre-existing defect rather than a
+  regression: see B11 in [`bugs.md`](bugs.md).
 - **New unit tests** for the cache itself: class agreed with `classify_word`
   for every token shape; the `-` cases in both contexts (§4.2); binding
   invalidation across `proc_define`/`proc_erase`/`erall`; atom collection and

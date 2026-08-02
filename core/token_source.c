@@ -4,6 +4,7 @@
 //
 
 #include "token_source.h"
+#include "core/atom_memo.h"
 #include <string.h>
 #include <ctype.h>
 
@@ -160,20 +161,21 @@ static uint8_t word_view(Node element, const char **str, size_t *len)
     *len = 0;
     mem_word_view(element, str, len, &memo);
 
-    if (memo && *memo != ATOM_CLASS_NONE)
-        return *memo;
+    uint16_t word = mem_atom_memo_get(memo);
+    uint16_t cls = atom_memo_class(word);
+    if (cls != ATOM_CLASS_NONE)
+        return (uint8_t)cls;
 
-    uint8_t cls = compute_word_class(*str, *len);
-    if (memo)
-        *memo = cls;
-    return cls;
+    cls = compute_word_class(*str, *len);
+    mem_atom_memo_set(memo, atom_memo_set_class(word, cls));
+    return (uint8_t)cls;
 }
 
 // Turn a cached class into the token for this position in the list.
 static Token token_from_class(uint8_t cls, const char *str, size_t len,
                               bool prev_was_delimiter)
 {
-    Token t = {TOKEN_WORD, str, len};
+    Token t = {.type = TOKEN_WORD, .start = str, .length = (uint16_t)len};
 
     if (cls != ATOM_CLASS_CONTEXT)
     {
@@ -247,7 +249,6 @@ void token_source_init_list(TokenSource *ts, Node list)
     ts->node_iter.current = list;
     ts->node_iter.pending_sublist = NODE_NIL;
     ts->node_iter.has_pending_sublist = false;
-    ts->node_iter.has_peeked = false;
     ts->node_iter.previous_was_delimiter = true;  // Start of list acts like delimiter
     ts->has_current = false;
 }
@@ -255,15 +256,6 @@ void token_source_init_list(TokenSource *ts, Node list)
 // Get next token from node iterator
 static Token node_iter_next(NodeIterator *iter)
 {
-    // If we have a peeked token, return it
-    if (iter->has_peeked)
-    {
-        iter->has_peeked = false;
-        Token t = iter->peeked_token;
-        iter->previous_was_delimiter = is_delimiter_token(t.type);
-        return t;
-    }
-    
     // Skip newline markers - they are for formatting only - and comment runs,
     // then take the element that follows. A word is looked up once here and
     // the result carries through to the token below.
@@ -277,7 +269,7 @@ static Token node_iter_next(NodeIterator *iter)
         // Check for end of list
         if (mem_is_nil(iter->current))
         {
-            return (Token){TOKEN_EOF, NULL, 0};
+            return (Token){.type = TOKEN_EOF};
         }
 
         element = mem_car(iter->current);
@@ -317,6 +309,7 @@ static Token node_iter_next(NodeIterator *iter)
     if (mem_is_word(element))
     {
         Token t = token_from_class(cls, str, len, iter->previous_was_delimiter);
+        t.atom = element;
         iter->previous_was_delimiter = is_delimiter_token(t.type);
         return t;
     }
@@ -330,11 +323,11 @@ static Token node_iter_next(NodeIterator *iter)
         iter->pending_sublist = element;
         iter->has_pending_sublist = true;
         iter->previous_was_delimiter = true;
-        return (Token){TOKEN_LEFT_BRACKET, NULL, 0};
+        return (Token){.type = TOKEN_LEFT_BRACKET};
     }
     
     // Shouldn't reach here
-    return (Token){TOKEN_EOF, NULL, 0};
+    return (Token){.type = TOKEN_EOF};
 }
 
 // Get next token
@@ -447,8 +440,7 @@ void token_source_set_position(TokenSource *ts, Node position)
         ts->node_iter.current = position;
         ts->node_iter.pending_sublist = NODE_NIL;
         ts->node_iter.has_pending_sublist = false;
-        ts->node_iter.has_peeked = false;
-        ts->node_iter.previous_was_delimiter = true;
+            ts->node_iter.previous_was_delimiter = true;
         ts->has_current = false;
     }
 }

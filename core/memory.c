@@ -605,7 +605,7 @@ bool mem_list_append(Node *head, Node *tail, Node item)
 //==========================================================================
 //
 // Each atom entry is aligned to a 4-byte boundary and laid out as:
-//     [next:2][len:1][chars:len][nul:1][memo:1][padding]
+//     [next:2][len:1][chars:len][nul:1][memo:2][padding]
 // `next` chains entries whose names hash to the same bucket (0xFFFF ends
 // the chain), so interning is O(chain length) instead of a linear scan of
 // the whole table — mem_atom runs for every quoted word, list element,
@@ -642,7 +642,7 @@ static bool atom_entry_is_free(size_t offset)
 
 static size_t atom_live_size(size_t offset)
 {
-    return ALIGN4(2 + 1 + memory_block[offset + 2] + 1 + 1);
+    return ALIGN4(2 + 1 + memory_block[offset + 2] + 1 + 2);
 }
 
 static size_t atom_entry_size(size_t offset)
@@ -793,8 +793,8 @@ Node mem_atom(const char *str, size_t len)
     }
 
     // Calculate aligned size for this entry:
-    // [next:2][len:1][chars:len][nul:1][memo:1][padding]
-    size_t entry_size = ALIGN4(2 + 1 + len + 1 + 1);
+    // [next:2][len:1][chars:len][nul:1][memo:2][padding]
+    size_t entry_size = ALIGN4(2 + 1 + len + 1 + 2);
 
     // Reuse a collected block before extending the atom region.  Atom offsets
     // stay stable for live entries; only unreachable storage is repurposed.
@@ -816,6 +816,7 @@ Node mem_atom(const char *str, size_t len)
     // fresh-region one and the free-list-reuse one alike): collected storage
     // may still hold the memo of the word that previously lived here.
     memory_block[offset + 3 + len + 1] = 0;
+    memory_block[offset + 3 + len + 2] = 0;
     atom_buckets[bucket] = (uint16_t)offset;
     return NODE_MAKE_WORD(offset);
 }
@@ -1218,6 +1219,38 @@ bool mem_word_view(Node n, const char **str, size_t *len, uint8_t **memo)
     *len = chars;
     *memo = &memory_block[offset + 3 + chars + 1];
     return true;
+}
+
+// The memo sits after a variable-length character run, so its address carries
+// no alignment guarantee; go through memcpy as the header fields already do.
+uint16_t mem_atom_memo_get(const uint8_t *memo)
+{
+    if (!memo)
+        return 0;
+    uint16_t value;
+    memcpy(&value, memo, sizeof(value));
+    return value;
+}
+
+void mem_atom_memo_set(uint8_t *memo, uint16_t value)
+{
+    if (!memo)
+        return;
+    memcpy(memo, &value, sizeof(value));
+}
+
+// Drop one kind of cached fact across every live atom. Walks the region the
+// same way the GC sweep does; the free-list entries it steps over have no
+// memo to touch.
+void mem_atom_memo_mask_all(uint16_t mask)
+{
+    for (size_t offset = 0; offset < atom_next; offset += atom_entry_size(offset))
+    {
+        if (atom_entry_is_free(offset))
+            continue;
+        uint8_t *memo = &memory_block[offset + 3 + memory_block[offset + 2] + 1];
+        mem_atom_memo_set(memo, (uint16_t)(mem_atom_memo_get(memo) & mask));
+    }
 }
 
 // Compare a word node to a given string (case-insensitive).

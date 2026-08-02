@@ -15,7 +15,7 @@
 //
 // Bounds are ~3x the ratios measured at the current baseline, so they catch
 // a 2x interpreter regression while tolerating machine variance.  They were
-// re-tightened when M1 landed; do the same after M2.
+// re-tightened when M1 and M2 landed; do the same for any later milestone.
 
 #include "test_scaffold.h"
 #include "core/repl.h"
@@ -33,11 +33,11 @@
 
 // Relative bounds (scenario time / calibration-loop time), set at ~3x the
 // baseline ratios recorded in the design doc.
-#define BOUND_REPEAT_ITER_X_CAL   750.0    // M1 baseline x~220
-#define BOUND_PROC1_ITER_X_CAL    400.0    // M1 baseline x~117
-#define BOUND_PROC_SCAN_RATIO     8.0      // 128- vs 1-proc, baseline 5.0; M2 should take this to ~1
-#define BOUND_TRAILS_FRAME_X_CAL  6.5e5    // M1 baseline x215k
-#define BOUND_CHECKRUN_FRAME_X_CAL 2.2e6   // M1 baseline x694k
+#define BOUND_REPEAT_ITER_X_CAL   700.0    // M2 baseline x~215
+#define BOUND_PROC1_ITER_X_CAL    300.0    // M2 baseline x~91
+#define BOUND_PROC_SCAN_RATIO     2.0      // 128- vs 1-proc; M2 flattened this to 1.00
+#define BOUND_TRAILS_FRAME_X_CAL  5.5e5    // M2 baseline x181k
+#define BOUND_CHECKRUN_FRAME_X_CAL 1.8e6   // M2 baseline x587k
 
 void setUp(void)
 {

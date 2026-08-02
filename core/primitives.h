@@ -113,6 +113,16 @@ extern "C"
     // it into a fixed-size buffer, which truncated long names (B5).
     const Primitive *primitive_find_n(const char *name, size_t len);
 
+    // Index of a registered primitive, or -1 if it is not one. The table is
+    // append-only, so an index stays valid for the run and can be cached on
+    // the atom of the name that resolved to it (core/atom_memo.h).
+    int primitive_index_of(const Primitive *prim);
+    const Primitive *primitive_by_index(int index);
+
+    // Is this `output` or `op`? Their argument is in tail position, a check
+    // the evaluator makes once per collected argument.
+    bool primitive_is_output(const Primitive *prim);
+
     // Registration helper for primitive modules
     void primitive_register(const char *name, int default_args, PrimitiveFunc func);
 

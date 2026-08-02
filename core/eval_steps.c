@@ -48,8 +48,10 @@ static bool skip_primary(Evaluator *eval)
             return true;
         }
         
-        // Look up as primitive or user proc
-        const Primitive *prim = primitive_find_n(t.start, t.length);
+        // Look up as primitive or user proc, from the atom's memo where
+        // there is one
+        WordBinding binding = resolve_word(t);
+        const Primitive *prim = binding.prim;
         if (prim)
         {
             advance(eval);
@@ -65,7 +67,7 @@ static bool skip_primary(Evaluator *eval)
             return true;
         }
         
-        UserProcedure *user_proc = proc_find_n(t.start, t.length);
+        UserProcedure *user_proc = binding.proc;
         if (user_proc)
         {
             advance(eval);

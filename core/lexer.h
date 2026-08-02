@@ -9,6 +9,9 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
+
+#include "core/memory.h"  // Node, carried by tokens sourced from a list
 
 #ifdef __cplusplus
 extern "C"
@@ -39,12 +42,28 @@ extern "C"
         TOKEN_ERROR,        // Lexer error
     } TokenType;
 
-    // A token produced by the lexer
+    // A token produced by the lexer or by the node-list iterator.
+    //
+    // Size matters here out of proportion to the struct: a Token sits inside
+    // every TokenSource, which sits inside every EvalOp, which lives in a
+    // 768-deep static op stack -- so one word added here is 3 KB of bss on a
+    // board that was over 95 % full. Adding `atom` was paid for by deleting
+    // NodeIterator's unused second Token, not by narrowing the fields below;
+    // narrowing was measured and cost 16 % of the interpreter's throughput.
+    // Weigh both before growing this.
     typedef struct
     {
-        TokenType type;
         const char *start; // Pointer to start of token in source
+        // The interned word this token came from, or NODE_NIL when it came
+        // from raw text. A token sourced from a list carries its atom so the
+        // evaluator can reach the per-atom memo (core/atom_memo.h) instead of
+        // re-deriving the name's binding, and can use the atom directly where
+        // it would otherwise re-intern the same characters. Lexer tokens point
+        // into the input line buffer, not at an atom, so they keep the string
+        // path.
+        Node atom;
         size_t length;     // Length of token text
+        TokenType type;
     } Token;
 
     // Lexer state

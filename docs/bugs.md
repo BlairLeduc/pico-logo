@@ -22,7 +22,43 @@ edge case)
 
 | ID | Bug | Area | Severity | Found | Status |
 |---|---|---|---|---|---|
+| [B11](#b11--redefining-a-procedure-leaves-it-defined-but-empty) | Redefining a procedure leaves it defined but empty | procedures | high | 2026-08-01 | open |
 | [B6](#b6--penreverse-ignores-pen-size-always-1-px) | `penreverse` ignores pen size (always 1 px) | graphics | low | 2026-07-18 | won't fix (documented) |
+
+### B11 — Redefining a procedure leaves it defined but empty
+
+Defining a procedure a second time under the same name reports success and
+leaves the name defined, but the procedure no longer does anything.
+
+```
+to pr.a
+output 1
+end
+print pr.a          ; prints 1
+
+to pr.a
+output 2
+end                 ; proc_define_from_text returns RESULT_OK
+print pr.a          ; prints nothing; the call yields RESULT_NONE
+```
+
+After the second definition `proc_exists("pr.a")` is still true, so the name
+is bound, but calling it produces no output and no error — `print` does not
+even report "pr.a didn't output to print". Either outcome would be defensible
+(redefine, or refuse with "pr.a is already defined"); silently keeping a name
+that does nothing is not.
+
+This matters because redefining is the normal editing loop: a user who fixes
+a procedure and re-enters it gets a workspace that looks right and behaves as
+if the body were empty.
+
+- **Status:** open. Found while writing P10 M2's binding-cache tests, whose
+  first draft assumed redefinition worked; confirmed present before that
+  change by rebuilding without it, so it is not a regression from P10.
+- **Suspect:** `proc_define_from_text` (`core/primitives_procedures.c`) or the
+  redefine branch of `proc_define` (`core/procedures.c`), which updates
+  `param_count`/`params`/`body` in place on the existing slot.
+- **Found:** 2026-08-01.
 
 ### B6 — `penreverse` ignores pen size (always 1 px)
 

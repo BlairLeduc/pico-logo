@@ -6,6 +6,7 @@
 //
 
 #include "eval_internal.h"
+#include "core/atom_memo.h"
 #include "error.h"
 #include "primitives.h"
 #include "procedures.h"
@@ -15,6 +16,79 @@
 #include <strings.h>
 #include <stdlib.h>
 #include <ctype.h>
+
+// Record a resolved binding on the atom, so the next lookup of this name is a
+// single read. An index that will not fit the memo field is simply not cached
+// (the tables are sized to fit, so this is belt and braces).
+static void remember_binding(uint8_t *memo, uint16_t kind, int index)
+{
+    if (!memo || index < 0 || (unsigned)index >= ATOM_MEMO_INDEX_LIMIT)
+        return;
+    mem_atom_memo_set(memo,
+        atom_memo_set_binding(mem_atom_memo_get(memo), kind, (unsigned)index));
+}
+
+// See WordBinding in eval_internal.h.
+//
+// Two paths. A token from a list carries its atom, so one mem_word_view gives
+// the characters, the name for error messages, and the memo that answers the
+// lookup outright. A token from raw text has no atom, so it interns the name
+// as it always did and resolves by string; the REPL line is not the hot path.
+WordBinding resolve_word(Token t)
+{
+    WordBinding b = {NULL, NULL, NODE_NIL, NULL};
+    const char *str = t.start;
+    size_t len = t.length;
+    uint8_t *memo = NULL;
+
+    if (mem_is_nil(t.atom))
+    {
+        b.atom = mem_atom(t.start, t.length);
+        b.name = mem_word_ptr(b.atom);
+    }
+    else
+    {
+        b.atom = t.atom;
+        mem_word_view(t.atom, &str, &len, &memo);
+        b.name = str;
+
+        uint16_t word = mem_atom_memo_get(memo);
+        switch (atom_memo_bind_kind(word))
+        {
+        case ATOM_BIND_PRIMITIVE:
+            b.prim = primitive_by_index((int)atom_memo_bind_index(word));
+            if (b.prim)
+                return b;
+            break;
+        case ATOM_BIND_PROCEDURE:
+            b.proc = proc_by_index((int)atom_memo_bind_index(word));
+            if (b.proc)
+                return b;
+            break;
+        case ATOM_BIND_NONE:
+            return b;
+        default:
+            break;
+        }
+    }
+
+    b.prim = primitive_find_n(str, len);
+    if (b.prim)
+    {
+        remember_binding(memo, ATOM_BIND_PRIMITIVE, primitive_index_of(b.prim));
+        return b;
+    }
+
+    b.proc = proc_find_n(str, len);
+    if (b.proc)
+    {
+        remember_binding(memo, ATOM_BIND_PROCEDURE, proc_index_of(b.proc));
+        return b;
+    }
+
+    remember_binding(memo, ATOM_BIND_NONE, 0);
+    return b;
+}
 
 // Apply a binary infix operator to two values.
 // Returns RESULT_OK with the computed value, or RESULT_ERROR on type/divide errors.
@@ -310,13 +384,16 @@ Result eval_primary(Evaluator *eval)
         Token next = peek(eval);
         if (next.type == TOKEN_WORD && !is_number_string(next.start, next.length))
         {
-            // Check if it's a primitive
-            const Primitive *prim = primitive_find_n(next.start, next.length);
+            // Resolve the name once, from the atom's memo where there is one.
+            // A paren-form user procedure call is not handled here; it falls
+            // through to the grouping path and re-enters eval_primary, where
+            // this same lookup is answered from the memo just written.
+            WordBinding paren_binding = resolve_word(next);
+            const Primitive *prim = paren_binding.prim;
             if (prim)
             {
-                // Intern the user's name for error messages
-                Node user_name_atom = mem_atom(next.start, next.length);
-                const char *user_name = mem_word_ptr(user_name_atom);
+                Node user_name_atom = paren_binding.atom;   // for error messages
+                const char *user_name = paren_binding.name;
                 
                 advance(eval); // consume procedure name
                 
@@ -548,14 +625,14 @@ Result eval_primary(Evaluator *eval)
             return result_ok(value_number(parse_number(t.start, t.length)));
         }
 
-        // Look up primitive
-        const Primitive *prim = primitive_find_n(t.start, t.length);
+        // Resolve the name once, from the atom's memo where there is one
+        WordBinding binding = resolve_word(t);
+        const Primitive *prim = binding.prim;
         if (prim)
         {
-            // Intern the user's name for error messages
-            Node user_name_atom = mem_atom(t.start, t.length);
-            const char *user_name = mem_word_ptr(user_name_atom);
-            
+            Node user_name_atom = binding.atom;      // for error messages
+            const char *user_name = binding.name;
+
             advance(eval);
             // Collect default number of arguments
             Value args[MAX_PRIM_ARGS];
@@ -615,8 +692,7 @@ Result eval_primary(Evaluator *eval)
                 // position when inside a procedure, because output terminates
                 // the procedure regardless of where it appears (e.g. inside
                 // an if branch that isn't on the last body line).
-                bool is_output_prim = (t.length == 6 && strncasecmp(t.start, "output", 6) == 0) ||
-                                      (t.length == 2 && strncasecmp(t.start, "op", 2) == 0);
+                bool is_output_prim = primitive_is_output(prim);
                 bool old_tail = eval->in_tail_position;
                 if (is_output_prim && eval->proc_depth > 0)
                     eval->in_tail_position = true;
@@ -689,7 +765,7 @@ Result eval_primary(Evaluator *eval)
         }
 
         // Check for user-defined procedure
-        UserProcedure *user_proc = proc_find_n(t.start, t.length);
+        UserProcedure *user_proc = binding.proc;
         if (user_proc)
         {
             advance(eval);

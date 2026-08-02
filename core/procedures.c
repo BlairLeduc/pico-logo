@@ -9,6 +9,7 @@
 #include "error.h"
 #include "format.h"
 #include "memory.h"
+#include "atom_memo.h"
 #include "primitives.h"
 #include "frame.h"
 #include "limits.h"
@@ -29,6 +30,22 @@
 // Procedure storage
 static UserProcedure procedures[MAX_PROCEDURES];
 static int procedure_count = 0;
+
+// A resolved procedure is cached on the atom as an index into `procedures`
+// (core/atom_memo.h), so the table may not outgrow the field that holds it.
+_Static_assert(MAX_PROCEDURES <= ATOM_MEMO_INDEX_LIMIT,
+    "procedure index must fit the atom memo's binding field");
+
+// Drop every cached name binding. Called from the low-level mutators below
+// rather than from their callers, so `define`, `copydef`, `erase`, `erall`
+// and `load` are all covered by construction. A cached index would otherwise
+// survive into a slot that has been emptied or refilled with another name.
+// Defining happens at load time, not inside frame loops, so a sweep of the
+// atom region is paid where nobody is counting milliseconds.
+static void invalidate_name_bindings(void)
+{
+    mem_atom_memo_mask_all(ATOM_MEMO_KEEP_CLASS);
+}
 
 // Tail call state (global for trampoline)
 static TailCall tail_call_state;
@@ -56,6 +73,7 @@ void procedures_init(void)
     }
     proc_clear_tail_call();
     current_proc_depth = 0;
+    invalidate_name_bindings();
     
     // Initialize the global frame stack
     frame_stack_init(&global_frame_stack, frame_stack_memory, sizeof(frame_stack_memory));
@@ -105,6 +123,7 @@ bool proc_define(const char *name, const char **params, int param_count, Node bo
             procedures[idx].params[i] = params[i];
         }
         procedures[idx].body = body;
+        invalidate_name_bindings();
         return true;
     }
 
@@ -125,6 +144,7 @@ bool proc_define(const char *name, const char **params, int param_count, Node bo
             procedures[i].traced = false;
             if (i >= procedure_count)
                 procedure_count = i + 1;
+            invalidate_name_bindings();
             return true;
         }
     }
@@ -146,6 +166,22 @@ UserProcedure *proc_find_n(const char *name, size_t len)
     return NULL;
 }
 
+// Index of a defined procedure, or -1. Slots are stable between mutations of
+// the table, and every mutation drops the cached bindings that name them.
+int proc_index_of(const UserProcedure *proc)
+{
+    if (!proc || proc < procedures || proc >= procedures + MAX_PROCEDURES)
+        return -1;
+    return (int)(proc - procedures);
+}
+
+UserProcedure *proc_by_index(int index)
+{
+    if (index < 0 || index >= MAX_PROCEDURES || procedures[index].name == NULL)
+        return NULL;
+    return &procedures[index];
+}
+
 bool proc_exists(const char *name)
 {
     return find_procedure_index(name) >= 0;
@@ -159,6 +195,7 @@ void proc_erase(const char *name)
         procedures[idx].name = NULL;
         procedures[idx].param_count = 0;
         procedures[idx].body = NODE_NIL;
+        invalidate_name_bindings();
     }
 }
 
@@ -176,6 +213,7 @@ void proc_erase_all(bool check_buried)
             }
         }
     }
+    invalidate_name_bindings();
 }
 
 TailCall *proc_get_tail_call(void)
