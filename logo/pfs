@@ -1,9 +1,9 @@
-; File Server -- browse, download, upload and delete files over WiFi.
+; Pico-Logo File Server -- browse, download, upload and delete files over WiFi.
 ;
 ; On a WiFi board (Pico 2 W or Pico Plus 2 W):
 ;   wifi.connect "your-ssid "your-password
-;   load "fileserver.logo
-;   fileserver
+;   load "pfs
+;   pfs
 ; then, from a computer or phone on the same network:
 ;   * open  http://picologo.local/  in a browser to browse the file system:
 ;       click a folder to descend, "Parent directory" to go back up,
@@ -19,13 +19,13 @@
 ; a file. The page is streamed as a list of small HTML pieces, so a folder
 ; with many files fits even on the board without PSRAM, and files stream in
 ; small chunks, so they may be any size and binary. Browser uploads use a
-; raw PUT via fetch() (see fs.script), which sidesteps multipart/form-data.
+; raw PUT via fetch() (see pfs.script), which sidesteps multipart/form-data.
 
 ; --- paths ---------------------------------------------------------------
 
 ; Drop one trailing "/" (so "/sub/" and "/sub" name the same directory),
 ; but never strip the root "/" itself.
-to fs.trim :path
+to pfs.trim :path
   if emptyp :path [op "/]
   if not equalp last :path "/ [op :path]
   if emptyp butfirst :path [op :path]
@@ -34,28 +34,28 @@ end
 
 ; Join a directory and a bare entry name into an absolute path, avoiding a
 ; doubled slash at the root.
-to fs.join :dir :name
+to pfs.join :dir :name
   ifelse equalp :dir "/ [op word "/ :name] [op (word :dir "/ :name)]
 end
 
 ; The parent of an absolute directory path ("/a/b" -> "/a", "/a" -> "/").
-to fs.parent :dir
-  op fs.trim reverse member "/ reverse :dir
+to pfs.parent :dir
+  op pfs.trim reverse member "/ reverse :dir
 end
 
 ; --- content types -------------------------------------------------------
 
 ; The lowercased extension after the last dot, or the empty word if none.
-to fs.ext :name
+to pfs.ext :name
   if emptyp member ". :name [op "]
   localmake "rest butfirst member ". :name
   if emptyp member ". :rest [op lowercase :rest]
-  op fs.ext :rest
+  op pfs.ext :rest
 end
 
 ; A Content-Type for a file name, defaulting to a binary download.
-to fs.mime :name
-  localmake "e fs.ext :name
+to pfs.mime :name
+  localmake "e pfs.ext :name
   if emptyp :e [op "application/octet-stream]
   if equalp :e "html [op "text/html]
   if equalp :e "htm [op "text/html]
@@ -77,7 +77,7 @@ end
 
 ; The document shell and compact embedded CSS. It is split into small pieces so
 ; the listing still streams on boards with the normal Logo word-size limit.
-to fs.head
+to pfs.head
   localmake "s (list "|<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Pico Logo Files</title><style>|)
   make "s lput "|:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#101827;color:#e7edf7}*{box-sizing:border-box}body{margin:0;min-width:20rem}.app{max-width:58rem;margin:auto;padding:1rem}| :s
   make "s lput "|.masthead{display:flex;gap:.8rem;align-items:center;padding:1rem;background:#1b3455;border:1px solid #41658d;border-radius:.8rem}.mark{padding:.65rem;border-radius:.55rem;background:#50d2a6;color:#06271f;font-weight:bold}| :s
@@ -92,40 +92,40 @@ to fs.head
 end
 
 ; A "Parent directory" list item, or nothing at the root.
-to fs.parentlink :dir
+to pfs.parentlink :dir
   if equalp :dir "/ [op []]
-  localmake "link (http.element "a [Parent directory] "href fs.parent :dir)
+  localmake "link (http.element "a [Parent directory] "href pfs.parent :dir)
   op (list (word "|<nav class=toolbar>| (word :link "|</nav>|)))
 end
 
 ; A folder row with a link that descends into it.
-to fs.direntry :dir :name
-  localmake "target word (fs.join :dir :name) "/
+to pfs.direntry :dir :name
+  localmake "target word (pfs.join :dir :name) "/
   localmake "label word :name "/
   localmake "link (http.element "a :label "href :target)
   op (word "|<li class="entry dir"><span class=badge>DIR</span>| :link "|</li>|)
 end
 
-; A file row with a download link and delete action (fs.script handles it).
-to fs.fileentry :dir :name
-  localmake "target fs.join :dir :name
+; A file row with a download link and delete action (pfs.script handles it).
+to pfs.fileentry :dir :name
+  localmake "target pfs.join :dir :name
   localmake "link (http.element "a :name "href :target)
   localmake "del (http.element "button "Delete "class "delete "data-f :name "type "button)
   op (word "|<li class=entry><span class=badge>FILE</span>| :link :del "|</li>|)
 end
 
 ; The upload control followed by the client script (a list of pieces).
-to fs.uploadui
+to pfs.uploadui
   localmake "ui (list "|<section class=upload><div class=upload-row><input type=file id=f><button class=primary type=button onclick="up()">Upload file</button></div>|)
   make "ui lput "|<p class=hint>One transfer at a time. Keep this page open until it finishes.</p><p id=status aria-live=polite></p></section>| :ui
-  op sentence :ui fs.script
+  op sentence :ui pfs.script
 end
 
 ; The browser-side script: Upload PUTs the chosen file's raw bytes to the
 ; current path, and clicking a file's delete button DELETEs it -- both via
 ; fetch(), so no multipart form encoding is involved. Kept as short pieces so
 ; each stays within a word, and joined only when streamed.
-to fs.script
+to pfs.script
   localmake "s (list "|<script>var busy=false;function base(){var b=location.pathname;if(b.charAt(b.length-1)!='/')b+='/';return b}</script>|)
   make "s lput "|<script>function status(t,wait){document.getElementById('status').textContent=t;var x=document.querySelectorAll('button,input');for(var i=0;i<x.length;i++)x[i].disabled=wait}</script>| :s
   make "s lput "|<script>function fail(){busy=false;status('That did not finish. Please try again.',false)}function done(t){status(t+' Refreshing…',true);location.reload()}</script>| :s
@@ -139,40 +139,40 @@ end
 ; The full HTML page for one directory, as a list of pieces streamed by
 ; http.respond. Listing needs the prefix, so set it around the scan and put
 ; it back (the server may be serving while you work at the prompt).
-to fs.page :dir
+to pfs.page :dir
   localmake "save prefix
   setprefix :dir
   localmake "subs directories
   localmake "fils files
-  fs.restore :save
-  localmake "title (word "|<header class=masthead><span class=mark>PL</span><div><p class=eyebrow>Pico Logo</p>| (http.element "h1 :dir) "|</div></header><section aria-label="Files"><ul class=entries>|)
-  localmake "head sentence fs.head :title
-  localmake "up (fs.parentlink :dir)
-  localmake "dl (map [[d] fs.direntry :dir :d] :subs)
-  localmake "fl (map [[f] fs.fileentry :dir :f] :fils)
-  localmake "ui fput "|</ul></section>| fs.uploadui
+  pfs.restore :save
+  localmake "title (word "|<header class=masthead><div><p class=eyebrow>Pico Logo</p>| (http.element "h1 :dir) "|</div></header><section aria-label="Files"><ul class=entries>|)
+  localmake "head sentence pfs.head :title
+  localmake "up (pfs.parentlink :dir)
+  localmake "dl (map [[d] pfs.direntry :dir :d] :subs)
+  localmake "fl (map [[f] pfs.fileentry :dir :f] :fils)
+  localmake "ui fput "|</ul></section>| pfs.uploadui
   op (sentence :head :up :dl :fl :ui)
 end
 
 ; Restore a saved prefix, treating an empty one as the root.
-to fs.restore :save
+to pfs.restore :save
   ifelse emptyp :save [setprefix "/] [setprefix :save]
 end
 
 ; --- request handling ----------------------------------------------------
 
 ; Serve one file with its content type (so pages and images open in-browser).
-to fs.sendfile :path
-  localmake "type fs.mime :path
+to pfs.sendfile :path
+  localmake "type pfs.mime :path
   (http.respondfile 200 :path "Content-Type :type)
 end
 
 ; Answer a GET: a directory page (root or a real folder), else the file, else 404.
-to fs.get
-  localmake "p fs.trim http.path
-  if equalp :p "/ [(http.respond 200 fs.page "/ "Content-Type "text/html) stop]
-  if dir? :p [(http.respond 200 fs.page :p "Content-Type "text/html) stop]
-  if file? :p [fs.sendfile :p stop]
+to pfs.get
+  localmake "p pfs.trim http.path
+  if equalp :p "/ [(http.respond 200 pfs.page "/ "Content-Type "text/html) stop]
+  if dir? :p [(http.respond 200 pfs.page :p "Content-Type "text/html) stop]
+  if file? :p [pfs.sendfile :p stop]
   http.respond 404 [not found]
 end
 
@@ -181,37 +181,39 @@ end
 ; shared secret by adding, as the first line of this procedure:
 ;   if not equal? http.reqheader "X-Key "mysecret [http.respond 403 [no] stop]
 ; and send  -H "X-Key: mysecret"  with the upload.
-to fs.put
+to pfs.put
   http.savebody http.path
   http.respond 201 [saved]
 end
 
-; Delete a file, or 404 when it is missing (guard as in fs.put to restrict).
-to fs.delete
+; Delete a file, or 404 when it is missing (guard as in pfs.put to restrict).
+to pfs.delete
   ifelse file? http.path [erasefile http.path http.respond 200 [deleted]] [http.respond 404 [not found]]
 end
 
 ; Route each request by method.
-to fs.handle
+to pfs.handle
   ; Directory pages create temporary lists. Pico Logo collects explicitly, so
   ; reclaim the previous response before building the next one.
   recycle
-  if equalp http.method "GET [fs.get stop]
-  if equalp http.method "PUT [fs.put stop]
-  if equalp http.method "DELETE [fs.delete stop]
+  if equalp http.method "GET [pfs.get stop]
+  if equalp http.method "PUT [pfs.put stop]
+  if equalp http.method "DELETE [pfs.delete stop]
   http.respond 405 [method not allowed]
 end
 
 ; Start serving. Connect to WiFi first, then run `fileserver`.
-to fileserver
+to pfs
+  ct ts
+  cleardemons
   if not wifi? [pr [Connect to WiFi first, e.g. wifi.connect "ssid "password] stop]
   ; A previous handler error closes the listener, but explicitly closing here
   ; also makes a manual restart release any stale device listener first.
   http.unlisten
   http.listen 80
-  when [http.request?] [fs.handle]
-  pr [File server is running.]
+  when [http.request?] [pfs.handle]
+  pr "|The Pico-Logo File Server is running.|
   pr sentence [Open] (word "http:// wifi.hostname ".local "/)
 end
 
-make "startup [fileserver]
+make "startup [pfs]
