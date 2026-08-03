@@ -1330,8 +1330,8 @@
     "semantic_hash": ""
   },
   "tests/CMakeLists.txt": {
-    "mtime": 1785679382.8072963,
-    "ast_hash": "2dd4e8a13ca88915e3736f93dd121006",
+    "mtime": 1785697294.3643894,
+    "ast_hash": "f0f2df45368fefbf322e3cb4adc0042b",
     "semantic_hash": ""
   },
   "third_party/littlefs/LICENSE.md": {
@@ -1415,8 +1415,8 @@
     "semantic_hash": ""
   },
   "docs/turtle-trails-design.md": {
-    "mtime": 1785685486.1827855,
-    "ast_hash": "045370b44a51538c90f21bdae684446c",
+    "mtime": 1785718600.2282846,
+    "ast_hash": "0588e5b894f1af021ab6cdfd17b1b50f",
     "semantic_hash": ""
   },
   "tests/test_checkrun.c": {
@@ -1430,8 +1430,8 @@
     "semantic_hash": ""
   },
   "tests/test_trails.c": {
-    "mtime": 1785690279.7078414,
-    "ast_hash": "0b5fc889ff2edfc79daae59c52291d1e",
+    "mtime": 1785718549.0420556,
+    "ast_hash": "a90d9bc3ca1c00420c45090f497028b8",
     "semantic_hash": ""
   },
   "docs/bugs.md": {
@@ -1440,18 +1440,18 @@
     "semantic_hash": ""
   },
   "docs/roadmap.md": {
-    "mtime": 1785696713.8555722,
-    "ast_hash": "49c7703e06c117483cc07118a403bdf7",
+    "mtime": 1785718600.227799,
+    "ast_hash": "6d449ed4041d565ce1632b256259a0c6",
     "semantic_hash": ""
   },
   "docs/tilemap-scrolling-design.md": {
-    "mtime": 1785696638.89182,
-    "ast_hash": "746cdf0b5372fa874943b1645ab2285b",
+    "mtime": 1785704999.7341669,
+    "ast_hash": "d888c35fb7a6c8f18db9b6aab9d3811b",
     "semantic_hash": ""
   },
   "docs/interpreter-throughput-design.md": {
-    "mtime": 1785696622.512073,
-    "ast_hash": "407d31da4c77ac9fa205b4773a7e506a",
+    "mtime": 1785718575.139234,
+    "ast_hash": "7db6123c414ecb79d170d71f194c5e25",
     "semantic_hash": ""
   },
   "tests/test_bench_throughput.c": {

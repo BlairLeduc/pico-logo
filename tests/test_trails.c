@@ -14,6 +14,9 @@
 #include "test_scaffold.h"
 #include "core/repl.h"
 #include "core/error.h"
+#include "core/procedures.h"
+#include "core/variables.h"
+#include "core/limits.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -67,10 +70,10 @@
 // 256-byte line limit, so a file this harness accepts `load` must accept too.
 #define TEST_LOAD_MAX_LINE 256
 
-static void load_trails(void)
+static void load_logo(const char *path)
 {
-    FILE *f = fopen(TRAILS_SOURCE, "rb");
-    TEST_ASSERT_NOT_NULL_MESSAGE(f, TRAILS_SOURCE);
+    FILE *f = fopen(path, "rb");
+    TEST_ASSERT_NOT_NULL_MESSAGE(f, path);
     char line[1024], buf[8192];
     size_t used = 0;
     bool in_def = false;
@@ -82,6 +85,18 @@ static void load_trails(void)
         // A line `load` could not read whole would be silently truncated.
         TEST_ASSERT_LESS_THAN_MESSAGE(TEST_LOAD_MAX_LINE, n, line);
         if (n == 0) continue;
+
+        // A `;` inside a bracketed list starts a comment and swallows the
+        // rest of the line -- and, in a procedure, everything after it up to
+        // `end`. It raises no error: the procedure simply loses its tail, so
+        // only running the exact path shows it. Reject it at load instead.
+        int depth = 0;
+        for (size_t i = 0; i < n; i++) {
+            if (line[i] == '[') depth++;
+            else if (line[i] == ']') depth--;
+            else if (line[i] == ';' && depth > 0)
+                TEST_FAIL_MESSAGE(line);
+        }
 
         if (!in_def && repl_line_starts_with_to(line)) {
             in_def = true;
@@ -110,6 +125,8 @@ static void load_trails(void)
     TEST_ASSERT_FALSE_MESSAGE(in_def, "file ends inside a procedure definition");
     fclose(f);
 }
+
+static void load_trails(void) { load_logo(TRAILS_SOURCE); }
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -1534,6 +1551,46 @@ static void test_p9m0_instrumentation_runs(void)
     run("p9m0.trails");
 }
 
+// The frame profiler is a separate file loaded on top of the game, so its
+// parse hazards are runtime errors nothing else would catch until it ran on a
+// board. Run it whole, at a handful of frames rather than 200.
+static void test_p10prof_profiler_runs(void)
+{
+    // The two files together must leave real room in the procedure table:
+    // MAX_PROCEDURES is a hard 128, and a board whose workspace is not empty
+    // is the likeliest way this ever fails in the field.
+    int before = proc_count(true);
+    load_logo(P10PROF_SOURCE);
+    int after = proc_count(true);
+    char msg[96];
+    snprintf(msg, sizeof(msg), "trails+p10prof define %d of %d procedures",
+             after, MAX_PROCEDURES);
+    TEST_ASSERT_LESS_THAN_MESSAGE(MAX_PROCEDURES - 8, after, msg);
+    TEST_ASSERT_GREATER_THAN(before, after);
+
+    run("make \"p10prof.n 5");
+    run("p10prof");
+
+    // The other 128-wide table, and the one that actually broke first: the
+    // game alone holds ~94 globals, and the profiler's marks and sums are
+    // named globals too. Counted after the run, because most of them are
+    // only created when the frame first executes.
+    int globals = var_global_count(true);
+    snprintf(msg, sizeof(msg), "trails+p10prof hold %d of %d globals",
+             globals, MAX_GLOBAL_VARIABLES);
+    TEST_ASSERT_LESS_THAN_MESSAGE(MAX_GLOBAL_VARIABLES - 8, globals, msg);
+
+    // Every slot has to have been tallied, and the parts have to make up the
+    // whole: a mark left out of p10prof.tally would go unnoticed otherwise.
+    TEST_ASSERT_EQUAL_INT(13, (int)num("count :p10prof.s"));
+    for (int i = 1; i <= 13; i++)
+        TEST_ASSERT_TRUE_MESSAGE(numf("item %d :p10prof.s", i) >= 0,
+                                 "a slot was not tallied");
+    float sum = 0;
+    for (int i = 1; i <= 13; i++) sum += numf("item %d :p10prof.s", i);
+    TEST_ASSERT_EQUAL_FLOAT(num("(:k13 - :k0)"), sum);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -1600,6 +1657,7 @@ int main(void)
     RUN_TEST(test_level_profiles_escalate);
     RUN_TEST(test_speeds_are_sane_at_25_fps);
     RUN_TEST(test_p9m0_instrumentation_runs);
+    RUN_TEST(test_p10prof_profiler_runs);
 
     return UNITY_END();
 }

@@ -1599,5 +1599,3 @@ to p9m0.trails
   pr (se [drawing    total :] :p9.draw [ms])
   pr (se [present    total :] :p9.show [ms])
 end
-
-make "startup [trails]

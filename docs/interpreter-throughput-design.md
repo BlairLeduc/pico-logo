@@ -1,6 +1,11 @@
 # P10 — Interpreter throughput (design)
 
-Status: **v1 design, drafted 2026-08-01; M0–M3 done 2026-08-01, M4 declined.**
+Status: **v1 design, drafted 2026-08-01; M0–M3 done 2026-08-01, M4 declined.
+§1's 40 ms target is unmet, and §7's "what closes the gap is P9" was disproved
+on 2026-08-02 when P9's C map landed and moved the frame 0.2 ms. M5 (§11) is
+measured (§11.1): there is no hot spot, and the lever it did find is the cost
+of a `make` statement — 4.3× a procedure call on the board against 2.5× on
+the host.**
 Opened by P9's M0 measurement,
 which failed its gate and found the display was never the bottleneck. Like
 P9, this design gates on measurement: M0 below is a benchmark harness and a
@@ -578,9 +583,13 @@ frame to `tile.at` inside `step.bugs` — 43.2 ms of the 73.2 — and P9's C map
 is worth having and will not be decisive, while P9's map is decisive; the two
 are complementary as §10 says, but the weight sits with P9.
 
-> **Disproved 2026-08-02.** P9 M3 built the C map and Turtle Trails' frame
-> did not move: 73.4 → **73.6 ms** on a Pico 2
-> ([`tilemap-scrolling-design.md`](tilemap-scrolling-design.md) §13.4). The
+> **Contradicted 2026-08-02.** P9 M3 built the C map and Turtle Trails'
+> frame did not move: 0.616 → **0.597 ms** on the host, one machine before
+> and after, and 73.6 ms on a board against this section's 73.4
+> ([`tilemap-scrolling-design.md`](tilemap-scrolling-design.md) §13.4). Note
+> the board pair is **cross-board** — the M3 runs are a Plus 2 W, every
+> figure in §6's table is a Pico 2 — so the host is what carries this, and
+> P9 §13.5 has the same-board re-run that would settle it outright. The
 > paragraph above misread its own source. P9's M0 measured **`step.bugs`** at
 > 59 % of a frame, not `tile.at`; `step.bugs` is dozens of statements and
 > procedure calls of targeting arithmetic around a handful of lookups, and
@@ -684,6 +693,173 @@ P9's M0 opened this item, and the two now interlock:
 - P9's **C map** (`tile`/`settile`) is complementary to P10 rather than
   redundant: it removes the 36+28 cons-cell walk per `tile.at` from inside
   `step.bugs`, which is 59 % of a Turtle Trails frame.
+
+## 11. M5 — re-profile before choosing a lever (2026-08-02)
+
+Opened after P9 M3 disproved §7. The project has now twice picked a lever
+from a coarse measurement and been wrong, both times by the same mistake:
+P9 M0 timed `step.bugs` at 59 % of a Turtle Trails frame, and both §7 above
+and P9's §3.4 read that as `tile.at`'s cons walk being 59 % of a frame. P9
+M3 deleted the walk and the frame moved 0.2 ms. §1's 40 ms target now has
+no named lever, and the two candidates left — M4 (declined) and the
+bytecode body (§8) — were both turned down partly *because* P9's map was
+believed decisive. Neither should be reopened on the strength of another
+guess.
+
+**The question is not which procedure is slowest. It is whether a hot spot
+exists at all**, and the profile is built to answer that rather than to
+rank slots. `logo/tests/p10prof` splits `play.frame` into its thirteen
+parts on a board — thirteen `ticks` marks, tallied after `sync` so the
+arithmetic falls outside every slot, accumulated over 200 frames because
+`ticks` is whole milliseconds against slots well under one. Sampling a
+free-running clock is unbiased even when a single reading truncates to
+zero. The turtle is steered so it paints and corners, and death is
+suppressed, so every frame is the same work.
+
+**Each slot is reported twice: in milliseconds, and in *operations*** —
+where one operation is one pass of `make "x (:x + 1)`, timed on the same
+board seconds earlier by the same benchmark §6's M0 uses. That second
+column is the point. A slot's millisecond figure says nothing anyone can
+act on; a slot that is *n* operations, at the interpreter's ordinary rate
+for an operation, says the slot is simply *n* statements long.
+
+Two outcomes, and they lead opposite ways:
+
+- **No slot stands out** — the frame is a few hundred ordinary operations
+  and the whole cost is the per-operation rate. Then no data-structure or
+  game-logic change will help, and the honest options narrow to making an
+  operation cheaper (reopening M4 or §8 as a *fresh* decision, with the
+  ~1.85× needed stated up front) or executing fewer of them (game-side
+  simplification), or accepting the cadence. This is the outcome the host
+  numbers predict: a host frame is ~0.61 ms against a 781 ns benchmark
+  iteration, so roughly 800 operations, and 800 × the board's per-operation
+  rate should land near the measured 73.6 ms. If it does, the diagnosis is
+  closed.
+- **A slot is far above its operation count** — it is doing something the
+  others are not, and that is a real target. `place.all` and `draw.hud` are
+  the ones to watch, being the only slots that touch the device.
+
+`test_p10prof_profiler_runs` runs the whole file natively at five frames,
+so the parse hazards cannot wait for a board to show themselves, and
+asserts the thirteen slots sum to the frame.
+
+**The profiler writes its report to a file as well as the screen** (`p10out`,
+erased first, `pofile "p10out` to read it back), because a hardware screen
+cannot be copied off. A device with no filesystem still prints and says so
+rather than losing the run to a disk error — which is what the native test
+exercises, the mock having no disk.
+
+**Run it on a Pico 2.** Every figure in §6's table is a Pico 2, so a profile
+taken anywhere else cannot be laid against them; P9 §13.5 records how the M3
+runs came to be taken on a Plus 2 W and what it costs.
+
+**One constraint the first board run surfaced: `erall` before loading.**
+`MAX_PROCEDURES` is a hard 128 and Turtle Trails alone defines **104** of
+them, so anything loaded beside the game has about twenty slots to live in.
+A workspace still holding another program makes `load` stop with `out of
+space` — the procedure table talking, not memory, of which there is plenty
+(both files together leave over 22,000 free nodes). The profiler is written
+in six procedures for that reason, and the same test asserts the pair stays
+at least eight slots clear of the limit so it cannot creep back.
+
+### 11.1 First profile (2026-08-02, Pico Plus 2 W, 200 frames)
+
+| Slot | ms/frame | ops | | Slot | ms/frame | ops |
+|---|---:|---:|---|---|---:|---:|
+| step.bugs | 30.66 | 299 | | update.drone | 1.07 | 10 |
+| place.all | 24.23 | 236 | | mode.clock | 1.01 | 10 |
+| step.player | 7.13 | 70 | | draw.hud | 0.90 | 9 |
+| dress.bugs | 6.58 | 64 | | nest.clock | 0.71 | 7 |
+| collisions | 4.40 | 43 | | poll.input | 0.39 | 4 |
+| paint.tile | 2.00 | 20 | | step.bonus | 0.35 | 3 |
+| sync | 1.64 | 16 | | **FRAME** | **81.04** | **791** |
+
+A second run, with the statement decomposed, reproduces every slot within
+2 % (`step.bugs` 30.76, `place.all` 23.85, FRAME 81.15 ms / 800 ops) and
+prices the elementary operations. Minus the 4 µs bare loop:
+
+| Loop body | µs | Net of loop |
+|---|---:|---:|
+| *(empty)* | 4.0 | — |
+| `p10prof.nop` (user procedure call) | 21.5 | **17.5** |
+| `ignore :x` (primitive + variable read) | 41.0 | **37.0** |
+| `make "x 1` (primitive + variable write) | 52.0 | **48.0** |
+| `ignore (1 + 1)` (primitive + paren + add + two literals) | 71.5 | **67.5** |
+| `make "x (:x + 1)` | 101.5 | **97.5** |
+
+**A variable write costs 2.7× a user procedure call.** That is the result.
+M2 spent itself on calls and got them to 17.5 µs; variable access — the one
+name lookup §3.2 and §7 left uncached, on the grounds that dynamic scoping
+puts it out of reach of the atom memo — is now the most expensive elementary
+thing the interpreter does, and the hot slots are made of it.
+
+**Number literals were suspected and cleared.** A third run put
+`ignore (1 + 1)` at 73.5 µs against `ignore (:x + :x)` at 90.5 — the *variable*
+form is the dearer, so nothing expensive is happening to a literal, and
+§4.1's dropped parsed-numeric-value cache stays dropped. It also gives the
+per-operand cost twice over, from two independent pairs: 41.5 − 33 = 8.5 µs
+for one operand, (90.5 − 73.5) / 2 = 8.5 for two. **A variable reference
+costs 8.5 µs more than a number literal**, and the agreement to a tenth of a
+microsecond is the best evidence that these readings mean what they say.
+
+**What that leaves is the expression machinery itself, and it is the largest
+item in the statement.** `ignore (1 + 1)` is **40.5 µs** dearer than
+`ignore 1` — one addition costing more than two user procedure calls — and
+only ~8.5 of that is the extra operand. So roughly **32 µs goes on the
+grouping paren and the infix operator**, before any operand is read and
+before the addition itself. Against a 97.5 µs statement, that is a third of
+every `make "v (expr)` in the game, and the games are written almost
+entirely in parenthesised arithmetic because the parse hazard at the top of
+`logo/games/trails` forces it: *"a call's last argument absorbs trailing
+infix, so parenthesise."* Every `make "px (:px + (:h * :o))` pays it twice.
+
+The profiler now carries the pair that splits it: `ignore sum 1 1` — the same
+addition with no paren and no infix — and `ignore (sum 1 1)`, which adds the
+paren back without the infix. `add − psum` is the infix path (`eval_expr_bp`,
+operator dispatch, precedence); `psum − sum` is `OP_PAREN_GROUP` and the op
+stack. One more run says which, and neither is M4's cons-cell work nor §8's
+bytecode.
+
+Calibration, first run: one operation **102.5 µs**, one procedure call
+**24 µs**. The frame reads 81.0 ms here against
+`p9m0.trails`' 73.6 because the profiler steers the turtle — so `paint.tile`
+and `step.player` do real work — and pays a real present plus thirteen
+`ticks` reads of skew.
+
+**There is no hot spot, and the question is closed.** The two large slots are
+the two that iterate five and four actors through ~30 statements each; every
+slot is proportional to its statement count, and nothing is doing something
+the others are not. The confirmation is the total: a host frame is 0.615 ms
+against a 781 ns benchmark iteration, so **787 operations predicted**, and
+the board returns **791**. The composition is identical on the two machines
+and the board is uniformly ~131× slower per operation. No data-structure
+change and no board-specific effect is hiding in there — which is what P9 M3
+had already shown the expensive way.
+
+**But the calibration pair is a lever, and a new one.** A `make "x (:x + 1)`
+costs **102.5 µs against a procedure call's 24 µs — 4.3×**. On the host the
+same two numbers are 794 ns and 319 ns — **2.5×**. Both ratios are taken
+within one machine, so the comparison is sound where the frame figures are
+not. Put the other way: calls scale host→board at 75×, a `make` with
+arithmetic at 129×. M2 already made calls cheap (§6.3); **what is left is
+the statement itself**, and the hot slots are almost nothing but `make`
+statements — `place.all` is fourteen of them per actor, five times a frame.
+
+What is inside that statement and not inside a call: a variable read, a
+variable write, and an infix addition. **Variable resolution is the one name
+lookup this design left uncached** — §3.2 and §7 set it aside as dynamically
+scoped and therefore not cacheable on the atom. That is a reason it cannot
+use M2's mechanism, not a reason it must stay slow. The second run times the pieces
+apart, and the table above is the answer: the infix
+expression path first, variable access second, number literals not at all. Neither is M4 and neither is §8's bytecode —
+both of those were sized against a cost model this measurement replaces.
+
+For scale: 40 ms from 81 is 2.03×, or 1.84× from the unsteered 73.6.
+
+**One number worth keeping for P9: `sync` is 1.64 ms**, 2 % of the frame, and
+it is the first honest in-frame present this project has measured (§11's
+note on text mode). For a game that dirties only its sprites, the display is
+not the problem — measured now, rather than assumed.
 
 ## References
 

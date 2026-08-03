@@ -116,7 +116,8 @@ target_compile_definitions(test_bench_throughput PRIVATE
 # carves from that same map.
 add_logo_test(test_trails)
 target_compile_definitions(test_trails PRIVATE
-    TRAILS_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/trails")
+    TRAILS_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/trails"
+    P10PROF_SOURCE="${CMAKE_SOURCE_DIR}/logo/tests/p10prof")
 
 # Game HUD test — both games use the fullscreen graphics canvas and draw their
 # score/lives/level text into the lower part of it.

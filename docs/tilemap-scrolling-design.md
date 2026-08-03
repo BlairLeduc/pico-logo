@@ -142,7 +142,11 @@ The two game entries set a round up from cold and time `draw.sector` /
 frame presents and returns instead of waiting for the 25 fps boundary — the
 number wanted is the work, not the cadence. The frame figures include today's
 small dirty-rect present, so they are an **upper bound** on the body that a
-full-viewport present would be added to.
+full-viewport present would be added to. **[Corrected 2026-08-02, §13.4: they
+do not. Both game entries run from the prompt in text mode, where
+`screen_gfx_blit_dirty` returns immediately, so the present is not in those
+figures at all — they are the Logo body and a *lower* bound. `p9m0` itself is
+unaffected: it does `cs fs ht window` first.]**
 
 ### 3.3 Results
 
@@ -760,7 +764,17 @@ is entirely in `logo/games/trails`. Five things are worth recording.
   as §3.4 said it would be, the tile system does not touch the simulation,
   and `tile.at`'s cons walk was never the frame's problem on the host.
 
-### 13.4 M3 on hardware (2026-08-02) — accepted
+### 13.4 M3 on hardware (2026-08-02) — accepted, but on the wrong board
+
+> **Read every comparison in this section with care.** These runs are on a
+> **Pico Plus 2 W**; the 5,916 ms `draw.board` and the 87.3 / 73.4 ms frames
+> they are set against are **Pico 2** figures (§3.3, and P10's results table,
+> whose columns are labelled Pico 2). Same RP2350 and clock, different flash
+> part, so instruction fetch — the open lead in §13.2 and in P10 — is exactly
+> what differs. The two M3 runs are comparable *with each other*, so the
+> B11 and `tile.at` findings below stand. **The cross-board figures do not
+> establish what they were written to establish**, and §13.5 says what to do
+> about it.
 
 Two `p9m0.trails` runs. The first showed a blank maze and a frame 8 % the
 wrong way; the second, after the two fixes below, shows the board and puts
@@ -780,19 +794,33 @@ the frame back where it was.
   `:sl.dr` inside `tile.at` — the most-called procedure in the game, and a
   dynamically scoped name cannot be cached. Written out as literals (the
   tests pin the two spellings against each other), the frame comes back.
-- **The board build: 5,916 → 303 ms, 19.5×**, the same factor the host
-  measured, which is what a purely interpreter-bound build should give.
-  `draw.board` alone — the bake plus the HUD — is **20 ms**.
-- **The C map is frame-neutral: 73.6 ms mean** (min 68, max 79; simulation
-  48.6, drawing 24.8, present **0.25** a frame) against P10 M1's
-  **73.4 ms**. The present is worth a second look on its own: a quarter of
-  a millisecond in a 73.6 ms frame, which is §3.3's finding taken to its
-  limit — a game that moves five sprites dirties almost nothing, so the
-  wire this whole design was sized against is not in the picture at all
-  until something scrolls.
+- **The board build is 303 ms** (Plus 2 W) against **5,916 ms** (Pico 2).
+  Cross-board, so call it "about 19×" and not a measurement: the host, where
+  before and after are the same machine, independently shows 18×, which is
+  the number to lean on until §13.5's re-run lands. `draw.board` alone — the
+  bake plus the HUD — is **20 ms**.
+- **The frame is 73.6 ms mean** (min 68, max 79; simulation 48.6, drawing
+  24.8, present 0.25 a frame) on a Plus 2 W, against P10 M1's **73.4 ms** on
+  a Pico 2. The two numbers being within 0.2 ms of each other across
+  different boards is a coincidence nobody should build on: **"the C map is
+  frame-neutral" is not established, only unrefuted.** The host says the
+  same thing on one machine — 0.616 ms before, 0.597 after — which is the
+  better evidence, and it is what the paragraphs below rest on.
+  **Read that present figure as zero, not as a measurement.** `p9m0.trails`
+  never leaves text mode, and `screen_gfx_blit_dirty` returns immediately
+  there — so the whole 87.3 → 73.4 → 73.6 series is the Logo body with a
+  present that declined to happen, and a real fullscreen frame is 73.6 ms
+  *plus* whatever the dirty sprite tiles cost. Found 2026-08-02 while
+  writing P10's frame profiler, which switches to fullscreen itself for
+  exactly this reason (P10 §11). It does not affect the comparison between
+  the three figures, which were all taken the same way, and it does not
+  touch the bake numbers: `sense_metrics` reports 320×320 in every screen
+  mode, so `stampmap` covers the same rectangle either way.
   Not a regression, and not the win either half of this project predicted.
   **§3.4's "the C map attacks the remainder from the data side", and P10's
-  §7 "what closes the gap is P9, not P10", are both disproved.** The error
+  §7 "what closes the gap is P9, not P10", are both contradicted** — by the
+  host measurement, firmly, and by the board's only as far as a cross-board
+  pair allows. The error
   in both was one of scope: P9 M0 measured `step.bugs` at 59 % of a frame,
   and that was read as `tile.at`'s cons walk being 59 % of a frame, when
   `step.bugs` is dozens of statements and procedure calls of targeting
@@ -807,6 +835,37 @@ the frame back where it was.
 - One observation not worth much at n = 20: the first run's spread was
   64–115 ms and the second's 68–79. Nothing in the frame path recycles at
   that cadence, and it stays unexplained.
+
+### 13.5 The board mismatch, and how to settle it
+
+Everything P9 and P10 have measured of Turtle Trails since 2026-08-01 sits in
+two piles that were being read as one:
+
+| Figure | Board |
+|---|---|
+| `draw.board` 5,916 ms; frame 87.3 ms (P9 M0, §3.3) | Pico 2 |
+| Frame 73.4 ms after P10 M1 | Pico 2 |
+| Bake 7.45 ms; tier capacity (§13.2) | Pico Plus 2 W |
+| M3: build 303 ms, frame 73.6 ms (§13.4) | Pico Plus 2 W |
+
+The Plus 2 W runs were not a mistake at the time — §13.2 *needed* PSRAM to
+prove the large tier — but the M3 comparisons inherited the board and should
+not have. The fix is cheap, because the old game is still in git:
+
+1. `git show <pre-M3>:logo/games/trails` to a file, copy it to the board as
+   `trailsold`, `erall`, `load "trailsold`, `p9m0.trails`. That is a
+   same-board *before*.
+2. `erall`, `load "trails`, `p9m0.trails` for the *after*, and `p10prof` for
+   the split.
+
+Two runs on one board settle the build factor and the frame question
+together. Until then the host is the machine of record for both, which is
+what P10's M0 benchmark was built to be (`test_bench_throughput`, and its
+new `trails.board` line).
+
+**And the Pico 2 remains untested end to end** — its SRAM tier has still
+never allocated (§13.2), and it is the board every P10 figure is quoted
+against. A Pico 2 run is worth more than another Plus 2 W one.
 
 ## 14. Tests
 

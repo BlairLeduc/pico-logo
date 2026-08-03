@@ -606,6 +606,20 @@ four bug decisions plus a trail segment and HUD update. Profile with
 `ticks`; an occasional transition-frame overrun is acceptable, but ordinary
 play must not overrun.
 
+### 11.1 The procedure table
+
+Measured 2026-08-02, when a profiler loaded beside the game hit **both**
+128-wide tables in turn: the game defines **104 procedures against a
+`MAX_PROCEDURES` of 128** and holds about **94 globals against a
+`MAX_GLOBAL_VARIABLES` of 128**. The globals cap bit first and reported as
+`out of space` from deep inside the profiler's frame, nowhere near the cause
+— `var_set` returning false is surfaced as an out-of-space error wherever the
+next new name happens to appear. Those are the
+tightest budgets in the game — far tighter than storage, where a loaded,
+unrun game still leaves over 23,000 free nodes. Anything loaded alongside
+has about twenty procedure slots and thirty names, and a workspace holding
+another program has neither. `erall` first.
+
 ## 12. Design boundaries
 
 Intentional for v1:
