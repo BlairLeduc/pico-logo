@@ -9,15 +9,23 @@
 ;
 ; Four interpreter rules govern this file:
 ;   * there is no >= or <=; write  not (a < b)
-;   * a call's last argument absorbs trailing infix, so parenthesise:
-;     (item :i :a.dir) * (item :i :a.off)
+;   * a call's last argument absorbs trailing infix, so a call *inside* an
+;     expression needs parenthesising: (item :i :a.dir) * (item :i :a.off).
+;     This is ordinary Logo, not a defect -- and note it cuts the other way
+;     too: the outermost parens of `make "v (:a + 1)` are redundant, because
+;     the last argument would absorb the whole expression anyway.  They are
+;     not free (about 15 % of such a statement), so do not add them by habit.
 ;   * a bracketed list literal cannot span lines in a loadable file, so the
 ;     map gets one complete statement per row
-;   * a call to a procedure defined here may not sit inside a parenthesised
-;     arithmetic expression: `setx ((tile.x :c) - 4)` raises ") without (",
-;     because the deferred call eats the grouping paren's closing bracket.
-;     Put the call's result in a local first, then do the arithmetic.
+;   * a `;` inside a bracketed list starts a comment and silently swallows
+;     the rest of the procedure; keep semicolons out of printed lists
 ;   * every drawing sequence lives inside one  ask 7 [...]
+;
+; A fifth rule was here until 2026-08-01 and is gone: a call to a procedure
+; defined in this file could not sit inside a parenthesised arithmetic
+; expression (`setx ((tile.x :c) - 4)` raised ") without (").  That was B7,
+; and it is fixed; the locals this file introduces to work around it are
+; harmless but no longer required.
 
 ; -------------------------------------------------------------------------
 ; Palette slots.  Slot 255 is the reserved transparent index and cannot be a

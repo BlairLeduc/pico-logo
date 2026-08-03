@@ -802,23 +802,59 @@ for one operand, (90.5 − 73.5) / 2 = 8.5 for two. **A variable reference
 costs 8.5 µs more than a number literal**, and the agreement to a tenth of a
 microsecond is the best evidence that these readings mean what they say.
 
-**What that leaves is the expression machinery itself, and it is the largest
-item in the statement.** `ignore (1 + 1)` is **40.5 µs** dearer than
-`ignore 1` — one addition costing more than two user procedure calls — and
-only ~8.5 of that is the extra operand. So roughly **32 µs goes on the
-grouping paren and the infix operator**, before any operand is read and
-before the addition itself. Against a 97.5 µs statement, that is a third of
-every `make "v (expr)` in the game, and the games are written almost
-entirely in parenthesised arithmetic because the parse hazard at the top of
-`logo/games/trails` forces it: *"a call's last argument absorbs trailing
-infix, so parenthesise."* Every `make "px (:px + (:h * :o))` pays it twice.
+`ignore (1 + 1)` is **40.5 µs** dearer than `ignore 1` — one addition costing
+more than two user procedure calls — and only ~8.5 of that is the extra
+operand. I read the remaining ~32 µs as the grouping paren and the infix
+operator. **The host says that attribution is wrong**, and it can be checked
+there because the same interpreter runs on both (`test_bench_expr_shapes`,
+net of a 69.3 ns bare loop):
 
-The profiler now carries the pair that splits it: `ignore sum 1 1` — the same
-addition with no paren and no infix — and `ignore (sum 1 1)`, which adds the
-paren back without the infix. `add − psum` is the infix path (`eval_expr_bp`,
-operator dispatch, precedence); `psum − sum` is `OP_PAREN_GROUP` and the op
-stack. One more run says which, and neither is M4's cons-cell work nor §8's
-bytecode.
+| Loop body | net ns | |
+|---|---:|---|
+| `ignore 1` | 301 | |
+| `ignore :x` | 309 | a variable reference is **+8** over a literal |
+| `ignore sum 1 1` | 587 | prefix, no paren, no infix |
+| `ignore (1 + 1)` | 606 | infix is **55 ns cheaper** than the `sum` primitive |
+| `ignore (sum 1 1)` | 661 | the grouping paren alone is **+74** |
+| `make "x 1` | 425 | |
+| `make "x (:x + 1)` | 732 | |
+| `make "x :x + 1` | **609** | the outer paren is redundant: **−15 %** |
+
+So the infix path is not the problem — it is *cheaper* than calling `sum`,
+which is what an infix operator ought to be. What costs is evaluating a
+second operand and performing the operation, and the only removable overhead
+is the **grouping paren**, at ~11 % of an expression and ~15 % of a
+`make "v (expr)` statement. That is a game-side saving available today: the
+outermost parens in `make "v (…)` are redundant, because a call's last
+argument absorbs the whole expression anyway.
+
+**The real lead is a ratio.** Board against host, net of each machine's bare
+loop:
+
+| | Board | Host | Ratio |
+|---|---:|---:|---:|
+| bare `repeat` iteration | 4.5 µs | 69.3 ns | **65×** |
+| user procedure call | 17.0 µs | 249 ns | **68×** |
+| `make "x (:x + 1)` | 98.5 µs | 732 ns | **135×** |
+
+Loops and calls scale at ~66×; an arithmetic statement at 135×. **The board
+is twice as bad at arithmetic statements as it is at everything else**, so
+this is not the same slowness applied uniformly — something in that path is
+specifically hostile to the board, and the profile shape (§11.1) says it is
+not the operands and not the operator.
+
+The candidate is instruction fetch. The expression evaluator — `eval_expr_bp`,
+operator dispatch, precedence, the op stack, `OP_PAREN_GROUP` — is a lot of
+code entered once per statement, against the tight loops that calls and
+`repeat` run in; §2.2 already records the board punishing exactly this kind
+of spread-out code (word classification was 34 % on the board and a few per
+cent on the host), and P9 §13.2 hit the same wall from the other side.
+**All three presets report `XIP_RAM: 0 B of 16 KB, 0.00 %`** — the RP2350's
+16 KB of RAM-speed instruction memory is entirely unused. Putting the
+expression evaluator there is the one lever measured so far that could
+plausibly be worth the ~2× §1 needs, and it is a linker-script and
+attribute change rather than an interpreter rewrite: neither M4's cons-cell
+representation nor §8's bytecode.
 
 Calibration, first run: one operation **102.5 µs**, one procedure call
 **24 µs**. The frame reads 81.0 ms here against
@@ -850,8 +886,10 @@ variable write, and an infix addition. **Variable resolution is the one name
 lookup this design left uncached** — §3.2 and §7 set it aside as dynamically
 scoped and therefore not cacheable on the atom. That is a reason it cannot
 use M2's mechanism, not a reason it must stay slow. The second run times the pieces
-apart, and the table above is the answer: the infix
-expression path first, variable access second, number literals not at all. Neither is M4 and neither is §8's bytecode —
+apart, and the tables above are the answer: not the
+operator, not the operands, not the literals — an arithmetic *statement*
+costs twice what its parts should on this board, and 16 KB of XIP_RAM sits
+unused. Neither is M4 and neither is §8's bytecode —
 both of those were sized against a cost model this measurement replaces.
 
 For scale: 40 ms from 81 is 2.03×, or 1.84× from the unsteered 73.6.

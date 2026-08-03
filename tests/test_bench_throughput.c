@@ -243,6 +243,46 @@ void test_bench_trails_play_frame(void)
                              "Turtle Trails level build regressed vs calibration");
 }
 
+// P10 M5: the cost of an expression, by shape. The board profiler
+// (logo/tests/p10prof) times the same shapes there; the pair is what turns
+// "this statement is slow" into "slow relative to what", and it is how the
+// grouping paren was separated from the infix operator and the operands.
+// Printed for the record, like the other BENCH lines; the guard is on the
+// one ratio a regression would move.
+void test_bench_expr_shapes(void)
+{
+    static const char *const shape[] = {
+        "[]", "[ignore 1]", "[ignore :x]", "[ignore sum 1 1]",
+        "[ignore (1 + 1)]", "[ignore (:x + :x)]", "[ignore (sum 1 1)]",
+        "[make \"x 1]", "[make \"x (:x + 1)]", "[make \"x :x + 1]",
+    };
+    const int iters = 200000;
+    run_string("make \"x 1");
+
+    double bare = 0, paren = 0, bare_make = 0;
+    for (unsigned i = 0; i < sizeof(shape) / sizeof(*shape); i++)
+    {
+        char code[128];
+        snprintf(code, sizeof(code), "repeat %d %s", iters, shape[i]);
+        Result r = run_string(code);
+        TEST_ASSERT_TRUE_MESSAGE(r.status == RESULT_NONE || r.status == RESULT_OK,
+                                 shape[i]);
+        double ns = time_code_ms(code) * 1e6 / iters;
+        printf("SHAPE %-22s %7.1f ns\n", shape[i], ns);
+        if (i == 0) bare = ns;
+        if (strcmp(shape[i], "[make \"x (:x + 1)]") == 0) paren = ns;
+        if (strcmp(shape[i], "[make \"x :x + 1]") == 0) bare_make = ns;
+    }
+
+    // The outermost paren of `make "v (expr)` is redundant -- the last
+    // argument absorbs the expression anyway -- and it is not free. If this
+    // ever reaches parity the game's de-parenthesising is pointless; if it
+    // grows past a third, something in the grouping path regressed.
+    double cost = (paren - bare_make) / (bare_make - bare);
+    printf("SHAPE redundant-paren overhead %.1f %%\n", cost * 100.0);
+    TEST_ASSERT_TRUE_MESSAGE(cost < 0.5, "grouping-paren overhead regressed");
+}
+
 void test_bench_checkrun_play_frame(void)
 {
     double cal = calibrate_ns();
@@ -278,6 +318,7 @@ int main(void)
     UNITY_BEGIN();
     RUN_TEST(test_bench_repeat_loop);
     RUN_TEST(test_bench_proc_call_workspace_scaling);
+    RUN_TEST(test_bench_expr_shapes);
     RUN_TEST(test_bench_trails_play_frame);
     RUN_TEST(test_bench_checkrun_play_frame);
     RUN_TEST(test_p10m0_script_runs);

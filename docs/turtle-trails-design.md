@@ -816,13 +816,22 @@ recovery.
 frenzy; ordinary bugs never are. `test_speeds_are_sane_at_25_fps` enforces
 both, at every level.
 
-**One interpreter constraint shapes the source.** A call to a procedure
-defined in the file may not sit inside a parenthesised arithmetic
-expression: `setx ((tile.x :c) - 4)` raises `) without (`, because the
-deferred call consumes the grouping paren's closing bracket
-(`core/eval_expr.c`, the deferral at the end of the user-procedure case).
-Such calls put their result in a local first. This is an interpreter bug
-rather than a language rule, and is worth fixing separately.
+**One interpreter constraint shaped the source, and has since been fixed.**
+A call to a procedure defined in the file could not sit inside a
+parenthesised arithmetic expression: `setx ((tile.x :c) - 4)` raised
+`) without (`, because the deferred call consumed the grouping paren's
+closing bracket. Such calls put their result in a local first. That was
+**B7**, fixed 2026-08-01 (`docs/bugs.md`); the locals remain because they are
+harmless, but the rule no longer applies and the file's header no longer
+claims it does.
+
+The rule that *does* still apply is ordinary Logo: a call's last argument
+absorbs trailing infix, so a call inside an expression must be
+parenthesised. It cuts both ways — the outermost parens of
+`make "v (:a + 1)` are redundant, since the last argument would absorb the
+whole expression regardless, and P10's M5 profiling measured them at about
+15 % of such a statement (`make "x (:x + 1)` 801.6 ns against
+`make "x :x + 1` 678.0 ns on the host).
 
 The three open verification items are resolved: the arrow-key codes are
 `KEY_UP 0xB5` (181) and `KEY_DOWN 0xB6` (182), per
