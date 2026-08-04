@@ -494,6 +494,19 @@ void test_setpensize_records_on_drawn_line(void)
     TEST_ASSERT_EQUAL(4, line->pen_size);
 }
 
+// A dot is a stamp of the pen, so a wide pen puts a wide dot. The PicoCalc
+// plotted a single pixel whatever the pen size until B11 (docs/bugs.md), and
+// the mock recorded no pen size at all, so no test could see it.
+void test_setpensize_records_on_a_dot(void)
+{
+    run_string("setpensize 6");
+    Result r = run_string("dot [10 20]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    TEST_ASSERT_EQUAL(1, mock_device_dot_count());
+    TEST_ASSERT_EQUAL(6, mock_device_get_dot(0)->pen_size);
+}
+
 void test_setbg_sets_background_color(void)
 {
     Result r = run_string("setbg 3");
@@ -2340,6 +2353,7 @@ int main(void)
     RUN_TEST(test_setpensize_clamps_to_maximum);
     RUN_TEST(test_setpensize_rejects_non_positive);
     RUN_TEST(test_setpensize_records_on_drawn_line);
+    RUN_TEST(test_setpensize_records_on_a_dot);
     RUN_TEST(test_setbg_sets_background_color);
     RUN_TEST(test_setbg_accepts_zero);
     RUN_TEST(test_setbg_accepts_254);

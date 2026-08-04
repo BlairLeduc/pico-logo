@@ -63,6 +63,8 @@ add_logo_test(test_primitives_files_directory)
 add_logo_test(test_primitives_files_load_save)
 add_logo_test(test_primitives_text)
 add_logo_test(test_primitives_turtle)
+add_logo_test(test_tilemap)
+add_logo_test(test_primitives_tilemap)
 add_logo_test(test_demons)
 add_logo_test(test_primitives_hardware)
 add_logo_test(test_notation)
@@ -101,12 +103,22 @@ add_logo_test(test_checkrun)
 target_compile_definitions(test_checkrun PRIVATE
     CHECKRUN_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/checkrun")
 
+# P10 M0 interpreter throughput benchmark -- repeatable baseline plus a
+# regression guard on relative numbers (interpreter-throughput-design.md §6).
+add_logo_test(test_bench_throughput)
+target_compile_definitions(test_bench_throughput PRIVATE
+    CHECKRUN_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/checkrun"
+    TRAILS_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/trails"
+    P10M0_SOURCE="${CMAKE_SOURCE_DIR}/logo/tests/p10m0")
+
 # Turtle Trails is a pure-Logo maze chase.  Its test loads the program and
 # checks the encoded map, the deterministic 25 fps simulation, and the maze it
 # carves from that same map.
 add_logo_test(test_trails)
 target_compile_definitions(test_trails PRIVATE
-    TRAILS_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/trails")
+    TRAILS_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/trails"
+    P9TRAILS_SOURCE="${CMAKE_SOURCE_DIR}/logo/tests/p9trails"
+    P10PROF_SOURCE="${CMAKE_SOURCE_DIR}/logo/tests/p10prof")
 
 # Game HUD test — both games use the fullscreen graphics canvas and draw their
 # score/lives/level text into the lower part of it.

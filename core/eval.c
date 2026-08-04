@@ -16,6 +16,7 @@
 #include "httpd.h"
 #include "devices/io.h"
 #include <string.h>
+#include "hot.h"
 
 // Global operation stack (shared by all evaluators)
 OpStack global_op_stack;
@@ -54,7 +55,7 @@ bool eval_in_procedure(Evaluator *eval)
     return eval->frames != NULL && !frame_stack_is_empty(eval->frames);
 }
 
-Result eval_call_primitive(Evaluator *eval, const struct Primitive *prim,
+Result LOGO_HOT(eval_call_primitive)(Evaluator *eval, const struct Primitive *prim,
                            int argc, Value *args)
 {
     Node roots[MAX_PRIM_ARGS];
@@ -79,7 +80,7 @@ bool eval_at_end(Evaluator *eval)
 }
 
 
-Result eval_instruction(Evaluator *eval)
+Result LOGO_HOT(eval_instruction)(Evaluator *eval)
 {
     // Check for user interrupt at the start of each instruction
     LogoIO *io = primitives_get_io();
@@ -207,7 +208,7 @@ Result eval_instruction(Evaluator *eval)
 
 // Main trampoline dispatch loop.
 // Processes operations on the op stack until the stack returns to base_depth.
-Result eval_trampoline(Evaluator *eval, int base_depth)
+Result LOGO_HOT(eval_trampoline)(Evaluator *eval, int base_depth)
 {
     OpStack *stack = eval->op_stack;
     Result r = result_none();
@@ -297,7 +298,7 @@ Result eval_trampoline(Evaluator *eval, int base_depth)
     return r;
 }
 
-Result eval_run_list(Evaluator *eval, Node list)
+Result LOGO_HOT(eval_run_list)(Evaluator *eval, Node list)
 {
     // RE-ENTRANCY CONTRACT (P3-017)
     // ----------------------------------------------------------------
@@ -370,7 +371,7 @@ Result eval_run_list(Evaluator *eval, Node list)
 // Run a list as an expression - allows the list to output a value
 // Used by 'run' and 'if' when they act as operations
 // Propagates tail position for TCO
-Result eval_run_list_expr(Evaluator *eval, Node list)
+Result LOGO_HOT(eval_run_list_expr)(Evaluator *eval, Node list)
 {
     // If we're in tail position inside a procedure, the last instruction
     // in this list is also in tail position - enables TCO for:
@@ -551,7 +552,7 @@ Result eval_push_runresult(Evaluator *eval, Node body)
     return eval_trampoline(eval, base_depth);
 }
 
-Result eval_push_proc_call(Evaluator *eval, UserProcedure *proc, int argc, Value *args)
+Result LOGO_HOT(eval_push_proc_call)(Evaluator *eval, UserProcedure *proc, int argc, Value *args)
 {
     OpStack *stack = eval->op_stack;
     int base_depth = op_stack_depth(stack);

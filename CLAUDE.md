@@ -18,6 +18,8 @@ ctest --preset=tests        # run all tests
 
 Use the `tests-coverage` preset for coverage. Host REPL: `--preset=host` → `./build-host/logo`. Target firmware: `--preset=pico+2w` (also `pico2`, `pico2w`).
 
+Note: We only have a Pimoroni Pico Plus 2 W for hardware testing.
+
 # How to work
 
 - **Think before coding.** State assumptions; if multiple interpretations exist, present them rather than picking silently. If something is unclear or a simpler approach exists, say so before implementing.

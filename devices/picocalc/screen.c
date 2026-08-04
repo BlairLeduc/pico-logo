@@ -496,7 +496,7 @@ void screen_gfx_stamp(const ScreenSprite *s)
 // mapping background pixels to SCREEN_SPRITE_TRANSPARENT (the snapsh
 // primitive). Wrap mode reads wrapped; otherwise off-canvas pixels read
 // as transparent.
-void screen_gfx_snap(int x0, int y0, int w, int h, uint8_t *out)
+void screen_gfx_snap(int x0, int y0, int w, int h, uint8_t *out, bool opaque)
 {
     bool wrap = (screen_boundary_mode == SCREEN_BOUNDARY_WRAP);
 
@@ -506,7 +506,7 @@ void screen_gfx_snap(int x0, int y0, int w, int h, uint8_t *out)
         {
             int py = y0 + r;
             int px = x0 + c;
-            uint8_t v = SCREEN_SPRITE_TRANSPARENT;
+            uint8_t v = opaque ? GFX_DEFAULT_BACKGROUND : SCREEN_SPRITE_TRANSPARENT;
 
             if (wrap)
             {
@@ -528,6 +528,33 @@ void screen_gfx_snap(int x0, int y0, int w, int h, uint8_t *out)
             out[r * w + c] = v;
         }
     }
+}
+
+// Write a run of palette indices straight into the canvas, clipped to the
+// screen (the tile baker: stampmap/stamptile). One dirty mark for the run.
+void screen_gfx_write_row(int x, int y, const uint8_t *pixels, int count)
+{
+    if (y < 0 || y >= SCREEN_HEIGHT || count <= 0)
+    {
+        return;
+    }
+    if (x < 0)
+    {
+        pixels -= x;    // skip the clipped-off head
+        count += x;
+        x = 0;
+    }
+    if (x + count > SCREEN_WIDTH)
+    {
+        count = SCREEN_WIDTH - x;
+    }
+    if (count <= 0)
+    {
+        return;
+    }
+
+    memcpy(&gfx_buffer[y * SCREEN_WIDTH + x], pixels, (size_t)count);
+    screen_gfx_mark_dirty_rect(x, y, x + count - 1, y);
 }
 
 // Clear the graphics buffer

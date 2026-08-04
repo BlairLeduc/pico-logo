@@ -92,6 +92,16 @@ static void select_first_active(const LogoConsoleTurtle *turtle)
     select_turtle(turtle, active_set[0]);
 }
 
+// Same, for primitive modules outside this file (the tile capture).
+void turtle_select_first_active(void)
+{
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle)
+    {
+        select_first_active(turtle);
+    }
+}
+
 // Reset the active set to turtle 0 (boot state; also applied by cs)
 static void reset_active_set(void)
 {

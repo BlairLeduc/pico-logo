@@ -4,8 +4,10 @@
 //
 
 #include "token_source.h"
+#include "core/atom_memo.h"
 #include <string.h>
 #include <ctype.h>
+#include "hot.h"
 
 // Check if a word string represents a number
 static bool is_number_word(const char *str, size_t len)
@@ -67,92 +69,132 @@ static bool is_number_word(const char *str, size_t len)
     return has_digit && i == len;
 }
 
-// Classify a word from a Node list into a token type
-// Words in lists are stored WITHOUT their prefix characters, so:
+// Word class cached on the interned atom (P10 M1; design section 4).
+// A word's characters never change, so its class is a pure function of the
+// atom and is derived once instead of on every evaluation. The byte lives in
+// the atom's memo slot, where 0 means "not computed yet".
+#define ATOM_CLASS_NONE    0u  // nothing cached yet
+#define ATOM_CLASS_CONTEXT 1u  // leading '-': class depends on the previous token
+#define ATOM_CLASS_COMMENT 2u  // leading ';': starts a comment, never a token
+#define ATOM_CLASS_BASE    3u  // classes from here up are ATOM_CLASS_BASE + TokenType
+#define ATOM_CLASS_OF(tok) ((uint8_t)(ATOM_CLASS_BASE + (tok)))
+
+// Derive the class of a word from its characters.
+// Words in lists keep their prefix characters, so:
 // - Quoted words: stored as "hello (with leading quote)
 // - Variables: stored as :var (with leading colon)
 // - Numbers: stored as 123 (just the number)
 // - Procedure names: stored as forward (just the name)
-static Token classify_word(const char *str, size_t len, bool prev_was_delimiter)
+static uint8_t compute_word_class(const char *str, size_t len)
 {
-    Token t = {TOKEN_WORD, str, len};
-    
     if (len == 0)
     {
         // Empty word - treated as quoted empty string
-        t.type = TOKEN_QUOTED;
-        return t;
+        return ATOM_CLASS_OF(TOKEN_QUOTED);
     }
-    
+
     char first = str[0];
-    
-    // Check for quoted word
+
+    if (first == ';')
+        return ATOM_CLASS_COMMENT;
+
+    // Quoted word: start includes the quote, evaluator will skip it
     if (first == '"')
-    {
-        t.type = TOKEN_QUOTED;
-        // Note: start includes the quote, evaluator will skip it
-        return t;
-    }
-    
-    // Check for variable reference
+        return ATOM_CLASS_OF(TOKEN_QUOTED);
+
+    // Variable reference
     if (first == ':')
+        return ATOM_CLASS_OF(TOKEN_COLON);
+
+    // The one context-dependent shape. A signed number such as -5 is NOT one
+    // of them: is_number_word accepts the leading sign, so it is a number in
+    // every position. Everything else starting with '-' is unary or binary
+    // depending on what came before, and is resolved at token time.
+    if (first == '-')
     {
-        t.type = TOKEN_COLON;
-        return t;
+        return is_number_word(str, len)
+            ? ATOM_CLASS_OF(TOKEN_NUMBER) : ATOM_CLASS_CONTEXT;
     }
-    
-    // Check for operators (single character words)
+
+    // Operators (single character words)
     if (len == 1)
     {
         switch (first)
         {
         case '+':
-            t.type = TOKEN_PLUS;
-            return t;
+            return ATOM_CLASS_OF(TOKEN_PLUS);
         case '*':
-            t.type = TOKEN_MULTIPLY;
-            return t;
+            return ATOM_CLASS_OF(TOKEN_MULTIPLY);
         case '/':
-            t.type = TOKEN_DIVIDE;
-            return t;
+            return ATOM_CLASS_OF(TOKEN_DIVIDE);
         case '=':
-            t.type = TOKEN_EQUALS;
-            return t;
+            return ATOM_CLASS_OF(TOKEN_EQUALS);
         case '<':
-            t.type = TOKEN_LESS_THAN;
-            return t;
+            return ATOM_CLASS_OF(TOKEN_LESS_THAN);
         case '>':
-            t.type = TOKEN_GREATER_THAN;
-            return t;
+            return ATOM_CLASS_OF(TOKEN_GREATER_THAN);
         case '[':
-            t.type = TOKEN_LEFT_BRACKET;
-            return t;
+            return ATOM_CLASS_OF(TOKEN_LEFT_BRACKET);
         case ']':
-            t.type = TOKEN_RIGHT_BRACKET;
-            return t;
+            return ATOM_CLASS_OF(TOKEN_RIGHT_BRACKET);
         case '(':
-            t.type = TOKEN_LEFT_PAREN;
-            return t;
+            return ATOM_CLASS_OF(TOKEN_LEFT_PAREN);
         case ')':
-            t.type = TOKEN_RIGHT_PAREN;
-            return t;
-        case '-':
-            // Minus is binary unless at start or after delimiter
-            t.type = prev_was_delimiter ? TOKEN_UNARY_MINUS : TOKEN_MINUS;
-            return t;
+            return ATOM_CLASS_OF(TOKEN_RIGHT_PAREN);
         }
     }
-    
-    // Check for number (possibly with leading minus)
+
     if (is_number_word(str, len))
+        return ATOM_CLASS_OF(TOKEN_NUMBER);
+
+    // Default: it's a word (procedure name or keyword)
+    return ATOM_CLASS_OF(TOKEN_WORD);
+}
+
+// Read a word element in one entry walk: its characters, its length, and its
+// class, the last computed once per atom and memoised on it. A word with no
+// memo slot (a blob) or an unreadable node is classified afresh every time;
+// an unreadable one reads as the empty word, as it did before the memo.
+static uint8_t word_view(Node element, const char **str, size_t *len)
+{
+    uint8_t *memo = NULL;
+    *str = NULL;
+    *len = 0;
+    mem_word_view(element, str, len, &memo);
+
+    uint16_t word = mem_atom_memo_get(memo);
+    uint16_t cls = atom_memo_class(word);
+    if (cls != ATOM_CLASS_NONE)
+        return (uint8_t)cls;
+
+    cls = compute_word_class(*str, *len);
+    mem_atom_memo_set(memo, atom_memo_set_class(word, cls));
+    return (uint8_t)cls;
+}
+
+// Turn a cached class into the token for this position in the list.
+static Token token_from_class(uint8_t cls, const char *str, size_t len,
+                              bool prev_was_delimiter)
+{
+    Token t = {.type = TOKEN_WORD, .start = str, .length = len};
+
+    if (cls != ATOM_CLASS_CONTEXT)
     {
-        t.type = TOKEN_NUMBER;
+        t.type = (TokenType)(cls - ATOM_CLASS_BASE);
         return t;
     }
-    
-    // Check if minus followed by number (negative number)
-    if (first == '-' && len > 1 && prev_was_delimiter)
+
+    // Minus is binary unless at the start or after a delimiter.
+    if (len == 1)
     {
+        t.type = prev_was_delimiter ? TOKEN_UNARY_MINUS : TOKEN_MINUS;
+        return t;
+    }
+
+    if (prev_was_delimiter)
+    {
+        // Minus followed by a number (the word itself is not one, or it would
+        // have classified as TOKEN_NUMBER above).
         if (is_number_word(str + 1, len - 1))
         {
             t.type = TOKEN_NUMBER;
@@ -166,8 +208,7 @@ static Token classify_word(const char *str, size_t len, bool prev_was_delimiter)
         t.length = 1;
         return t;
     }
-    
-    // Default: it's a word (procedure name or keyword)
+
     t.type = TOKEN_WORD;
     return t;
 }
@@ -194,14 +235,6 @@ static bool is_delimiter_token(TokenType type)
     }
 }
 
-static bool is_comment_node(Node element)
-{
-    if (!mem_is_word(element))
-        return false;
-    const char *str = mem_word_ptr(element);
-    return str && str[0] == ';';
-}
-
 // Initialize token source from a Lexer
 void token_source_init_lexer(TokenSource *ts, Lexer *lexer)
 {
@@ -217,7 +250,6 @@ void token_source_init_list(TokenSource *ts, Node list)
     ts->node_iter.current = list;
     ts->node_iter.pending_sublist = NODE_NIL;
     ts->node_iter.has_pending_sublist = false;
-    ts->node_iter.has_peeked = false;
     ts->node_iter.previous_was_delimiter = true;  // Start of list acts like delimiter
     ts->has_current = false;
 }
@@ -225,55 +257,60 @@ void token_source_init_list(TokenSource *ts, Node list)
 // Get next token from node iterator
 static Token node_iter_next(NodeIterator *iter)
 {
-    // If we have a peeked token, return it
-    if (iter->has_peeked)
+    // Skip newline markers - they are for formatting only - and comment runs,
+    // then take the element that follows. A word is looked up once here and
+    // the result carries through to the token below.
+    Node element = NODE_NIL;
+    const char *str = NULL;
+    size_t len = 0;
+    uint8_t cls = ATOM_CLASS_NONE;
+
+    for (;;)
     {
-        iter->has_peeked = false;
-        Token t = iter->peeked_token;
-        iter->previous_was_delimiter = is_delimiter_token(t.type);
-        return t;
-    }
-    
-    // Skip newline markers - they are for formatting only
-    while (!mem_is_nil(iter->current))
-    {
-        Node element = mem_car(iter->current);
-        if (is_comment_node(element))
+        // Check for end of list
+        if (mem_is_nil(iter->current))
+        {
+            return (Token){.type = TOKEN_EOF};
+        }
+
+        element = mem_car(iter->current);
+
+        if (mem_is_newline(element))
         {
             iter->current = mem_cdr(iter->current);
-            while (!mem_is_nil(iter->current))
-            {
-                Node skipped = mem_car(iter->current);
-                iter->current = mem_cdr(iter->current);
-                if (mem_is_newline(skipped))
-                {
-                    break;
-                }
-            }
             continue;
         }
-        if (!mem_is_newline(element))
+        if (!mem_is_word(element))
         {
             break;
         }
+
+        cls = word_view(element, &str, &len);
+        if (cls != ATOM_CLASS_COMMENT)
+        {
+            break;
+        }
+
+        // Drop the comment and the rest of its line.
         iter->current = mem_cdr(iter->current);
+        while (!mem_is_nil(iter->current))
+        {
+            Node skipped = mem_car(iter->current);
+            iter->current = mem_cdr(iter->current);
+            if (mem_is_newline(skipped))
+            {
+                break;
+            }
+        }
     }
-    
-    // Check for end of list
-    if (mem_is_nil(iter->current))
-    {
-        return (Token){TOKEN_EOF, NULL, 0};
-    }
-    
-    Node element = mem_car(iter->current);
+
     iter->current = mem_cdr(iter->current);
-    
+
     // Handle word elements
     if (mem_is_word(element))
     {
-        const char *str = mem_word_ptr(element);
-        size_t len = mem_word_len(element);
-        Token t = classify_word(str, len, iter->previous_was_delimiter);
+        Token t = token_from_class(cls, str, len, iter->previous_was_delimiter);
+        t.atom = element;
         iter->previous_was_delimiter = is_delimiter_token(t.type);
         return t;
     }
@@ -287,15 +324,15 @@ static Token node_iter_next(NodeIterator *iter)
         iter->pending_sublist = element;
         iter->has_pending_sublist = true;
         iter->previous_was_delimiter = true;
-        return (Token){TOKEN_LEFT_BRACKET, NULL, 0};
+        return (Token){.type = TOKEN_LEFT_BRACKET};
     }
     
     // Shouldn't reach here
-    return (Token){TOKEN_EOF, NULL, 0};
+    return (Token){.type = TOKEN_EOF};
 }
 
 // Get next token
-Token token_source_next(TokenSource *ts)
+Token LOGO_HOT(token_source_next)(TokenSource *ts)
 {
     // If we have a cached token, consume and return it
     if (ts->has_current)
@@ -404,8 +441,7 @@ void token_source_set_position(TokenSource *ts, Node position)
         ts->node_iter.current = position;
         ts->node_iter.pending_sublist = NODE_NIL;
         ts->node_iter.has_pending_sublist = false;
-        ts->node_iter.has_peeked = false;
-        ts->node_iter.previous_was_delimiter = true;
+            ts->node_iter.previous_was_delimiter = true;
         ts->has_current = false;
     }
 }

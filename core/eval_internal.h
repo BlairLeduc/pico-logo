@@ -12,6 +12,8 @@
 #include "eval_ops.h"
 #include "token_source.h"
 #include "value.h"
+#include "primitives.h"
+#include "procedures.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -76,6 +78,26 @@ extern "C"
 
     // Check if a string looks like a number
     bool is_number_string(const char *str, size_t len);
+
+    //==========================================================================
+    // Name resolution (P10 M2)
+    //==========================================================================
+
+    // What a word token's name resolves to. At most one of `prim` and `proc`
+    // is non-NULL; both NULL means the name is neither, which is itself a
+    // cached answer rather than a failure to look.
+    typedef struct
+    {
+        const Primitive *prim;
+        UserProcedure *proc;
+        Node atom;         // the interned name, NODE_NIL if interning failed
+        const char *name;  // the interned characters, for error messages
+    } WordBinding;
+
+    // Resolve a word token's name, memoising the answer on its atom when the
+    // token came from a list. Replaces a binary search over ~390 primitives
+    // followed by a linear scan of the procedure table, per call, per frame.
+    WordBinding resolve_word(Token t);
 
     // Parse a primary expression (number, word, list, proc call, etc.)
     Result eval_primary(Evaluator *eval);

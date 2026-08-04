@@ -167,6 +167,7 @@ static Token make_token(Lexer *lexer, TokenType type, const char *start, size_t 
     token.type = type;
     token.start = start;
     token.length = length;
+    token.atom = NODE_NIL;  // raw text points into the line buffer, not an atom
     lexer->previous = token;
     return token;
 }

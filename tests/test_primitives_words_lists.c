@@ -1002,6 +1002,19 @@ static void exhaust_atom_table(void)
         int len = snprintf(buf, sizeof(buf), "a%d", i);
         if (mem_is_nil(mem_atom(buf, (size_t)len)))
         {
+            break;
+        }
+    }
+    // The names above grow, so the first refusal can leave a gap that a
+    // shorter word still fits into. Top the table up with the smallest fresh
+    // names until one of those is refused too — otherwise how much room is
+    // left depends on the atom entry layout, and so does every test that
+    // exhausts the table.
+    for (char c = '0'; c <= '9'; c++)
+    {
+        char name[2] = {'z', c};
+        if (mem_is_nil(mem_atom(name, sizeof(name))))
+        {
             return;
         }
     }

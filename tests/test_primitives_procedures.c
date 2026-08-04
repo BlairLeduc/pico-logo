@@ -2262,9 +2262,130 @@ void test_b9_layout_survives_and_propagates_harmlessly(void)
         "multi-line layout must still be reproduced");
 }
 
+//==========================================================================
+// Cached name binding (P10 M2)
+//
+// A word's binding is memoised on its atom and dropped whenever the
+// procedure table changes. Every test here runs the call from inside a list
+// (`run [...]`, `repeat 2 [...]`), because that is the only path the cache
+// serves — a call typed at the REPL is lexed from raw text and has no atom.
+// Each test therefore primes the cache with one pass and checks the second.
+//==========================================================================
+
+void test_redefining_a_procedure_replaces_its_body(void)
+{
+    // A second definition of the same name replaces the body in place, on the
+    // same table slot, and the name keeps working.
+    const char *np[] = {NULL};
+    define_proc("rd.f", np, 0, "output 1");
+    reset_output();
+    run_string("print rd.f");
+    TEST_ASSERT_EQUAL_STRING("1\n", output_buffer);
+
+    // Prime the binding cache from a list before redefining, so a stale
+    // cached slot would show up here rather than only in the erase tests.
+    reset_output();
+    run_string("run [print rd.f]");
+    TEST_ASSERT_EQUAL_STRING("1\n", output_buffer);
+
+    define_proc("rd.f", np, 0, "output 2");
+    reset_output();
+    run_string("print rd.f");
+    TEST_ASSERT_EQUAL_STRING("2\n", output_buffer);
+    reset_output();
+    run_string("run [print rd.f]");
+    TEST_ASSERT_EQUAL_STRING("2\n", output_buffer);
+}
+
+void test_binding_cache_does_not_survive_erase_into_a_reused_slot(void)
+{
+    // The hazard the invalidation sweep exists for: `bc.alpha` caches the
+    // slot it occupies, `erase` frees that slot, and the next definition
+    // takes it. Calling `bc.alpha` again must report it unknown, not run
+    // whatever moved in.
+    const char *no_params[] = {NULL};
+    define_proc("bc.alpha", no_params, 0, "output 1");
+    reset_output();
+    run_string("run [print bc.alpha]");
+    TEST_ASSERT_EQUAL_STRING("1\n", output_buffer);
+
+    run_string("erase \"bc.alpha");
+    define_proc("bc.gamma", no_params, 0, "output 3");
+
+    Result r = eval_string("run [bc.alpha]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
+}
+
+void test_binding_cache_learns_a_name_defined_after_it_failed(void)
+{
+    // "neither a primitive nor a procedure" is itself a cached answer, so
+    // defining the name afterwards has to invalidate it.
+    Result r = eval_string("run [bc.later]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
+
+    const char *no_params[] = {NULL};
+    define_proc("bc.later", no_params, 0, "output 7");
+    reset_output();
+    run_string("run [print bc.later]");
+    TEST_ASSERT_EQUAL_STRING("7\n", output_buffer);
+}
+
+void test_binding_cache_cleared_by_erall(void)
+{
+    const char *no_params[] = {NULL};
+    define_proc("bc.wiped", no_params, 0, "output 1");
+    reset_output();
+    run_string("run [print bc.wiped]");
+    TEST_ASSERT_EQUAL_STRING("1\n", output_buffer);
+
+    run_string("erall");
+
+    Result r = eval_string("run [bc.wiped]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
+}
+
+void test_binding_cache_learns_an_alias_made_by_copydef(void)
+{
+    // copydef registers a primitive mid-evaluation, so a name already cached
+    // as unbound becomes a primitive.
+    Result r = eval_string("run [bc.say \"hi]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+
+    run_string("copydef \"print \"bc.say");
+    reset_output();
+    run_string("run [bc.say \"hi]");
+    TEST_ASSERT_EQUAL_STRING("hi\n", output_buffer);
+}
+
+void test_binding_cache_repeated_call_is_the_same_procedure(void)
+{
+    // The plain case the cache exists for: the second and third passes over
+    // the body list read the memo rather than the tables, and must call the
+    // same thing.
+    const char *no_params[] = {NULL};
+    define_proc("bc.bump", no_params, 0, "make \"bc.n (:bc.n + 1)");
+    run_string("make \"bc.n 0");
+    run_string("repeat 3 [bc.bump]");
+    reset_output();
+    run_string("print :bc.n");
+    TEST_ASSERT_EQUAL_STRING("3\n", output_buffer);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
+
+    RUN_TEST(test_redefining_a_procedure_replaces_its_body);
+
+    // Cached name binding (P10 M2)
+    RUN_TEST(test_binding_cache_does_not_survive_erase_into_a_reused_slot);
+    RUN_TEST(test_binding_cache_learns_a_name_defined_after_it_failed);
+    RUN_TEST(test_binding_cache_cleared_by_erall);
+    RUN_TEST(test_binding_cache_learns_an_alias_made_by_copydef);
+    RUN_TEST(test_binding_cache_repeated_call_is_the_same_procedure);
 
     RUN_TEST(test_simple_procedure_no_args);
     RUN_TEST(test_procedure_with_one_arg);

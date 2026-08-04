@@ -39,8 +39,6 @@ extern "C"
         Node current;           // Current position in list
         Node pending_sublist;   // Sublist element (when TOKEN_LEFT_BRACKET returned)
         bool has_pending_sublist; // True if a sublist (including empty) is pending
-        bool has_peeked;        // True if we have a peeked token
-        Token peeked_token;     // The peeked token
         bool previous_was_delimiter; // For unary minus detection
     } NodeIterator;
 

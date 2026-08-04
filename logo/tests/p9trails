@@ -1,0 +1,141 @@
+; P9 -- what a Turtle Trails level start and frame cost, on hardware.
+;
+;   erall           <-- REQUIRED: see below
+;   load "trails    (do NOT run it)
+;   load "p9trails
+;   p9m0.trails
+;
+; Written for docs/tilemap-scrolling-design.md section 3.1, items 2 and 3, and
+; mirroring Checkpoint Run's.  `draw.board` was the 5,916 ms pen-carved board
+; and is now the tile bake that replaced it; `play.frame` is the five-actor
+; body that has to fit beside a present.  Manual refresh, so the `sync` ending
+; a frame presents and returns rather than waiting for the 25 fps boundary --
+; the number wanted is the work, not the cadence.
+;
+; It runs its frames in *graphics* mode, so `sync` is a real present of the
+; dirty sprite tiles.  That is a correction: every figure in the
+; 87.3 -> 73.6 ms series was taken from the prompt in text mode, where
+; `screen_gfx_blit_dirty` returns immediately, so those were Logo bodies with
+; no present in them at all (design section 3.2).  It also means `clean`
+; inside `draw.board` now does its full-panel LCD write instead of skipping
+; it, which is why `draw.board` reads ~66 ms here against an old text-mode
+; 20 ms and is not a regression (section 13.7).
+;
+; `erall` is not optional.  MAX_PROCEDURES is a hard 128; Turtle Trails alone
+; defines 99 of them and this file adds 6, so a workspace still holding
+; another program can run out of procedure slots and `load` stops with `out of
+; space` -- which is the procedure table talking, not memory.  There is plenty
+; of memory.
+;
+; This lives beside the game rather than inside it (as `p10prof` already did)
+; so the shipped game is only the game.  The cost of that: `p9.frame` below
+; mirrors the unpaused body of `play.frame`, and nothing enforces it -- keep
+; the two in step by hand when either changes.
+
+to time.board
+  local "t0
+  make "t0 ticks
+  draw.board
+  output (ticks - :t0)
+end
+
+; `draw.board` is a `clean` and four HUD draws around the bake, so its total
+; cannot say what the tile code costs.  Ten bakes, because one is a handful of
+; whole-millisecond `ticks`; `stampmap` only overwrites, so repeating it is
+; safe and leaves the screen exactly as one call would.
+to time.bake
+  local "t0
+  make "t0 ticks
+  repeat 10 [stampmap]
+  output ((ticks - :t0) / 10)
+end
+
+; What a level start really costs now: the board copy plus the bake, against
+; the 5,916 ms decode-and-carve the two of them replaced.
+to time.level
+  local "t0
+  make "t0 ticks
+  setup.level
+  output (ticks - :t0)
+end
+
+to time.frame
+  local "t0
+  make "t0 ticks
+  play.frame
+  output (ticks - :t0)
+end
+
+; A mean alone does not say where a frame goes, so it is split three ways --
+; simulation, the per-frame drawing, the present -- with min and max beside
+; the mean.  `p9.frame` mirrors the unpaused body of `play.frame`.
+to p9.frame
+  local "t0
+  make "t0 ticks
+  poll.input
+  make "tt.frame :tt.frame + 1
+  step.mode.clock
+  step.nest.clock
+  step.player
+  paint.tile
+  step.bugs
+  step.bonus
+  check.collisions
+  update.drone
+  dress.bugs
+  reclaim
+  make "p9.sim :p9.sim + (ticks - :t0)
+  make "t0 ticks
+  place.all
+  draw.hud
+  make "p9.draw :p9.draw + (ticks - :t0)
+  make "t0 ticks
+  sync
+  make "p9.show :p9.show + (ticks - :t0)
+  output :p9.sim + :p9.draw + :p9.show
+end
+
+to p9m0.trails
+  local "b local "f local "one local "lo local "hi local "run local "lv
+  local "bk
+  setup.palette
+  setup.shapes
+  setup.turtles
+  setup.tiles
+  setup.sound
+  init.game
+  setup.level
+  setrefresh "manual
+  make "b (time.board)
+  make "bk (time.bake)
+  make "lv (time.level)
+  make "p9.sim 0
+  make "p9.draw 0
+  make "p9.show 0
+  make "f 0
+  make "lo 99999
+  make "hi 0
+  repeat 20 [
+    make "run (p9.frame)
+    make "one :run - :f
+    make "f :run
+    if :one < :lo [make "lo :one]
+    if :one > :hi [make "hi :one]
+  ]
+  setrefresh "auto
+  stopsound
+  textscreen
+  pr [P9 M0 -- Turtle Trails]
+  pr []
+  pr (se [draw.board  :] :b [ms])
+  pr (se [  stampmap  :] :bk [ms  was 7.45])
+  pr (se [setup.level :] :lv [ms  was 5916])
+  pr []
+  pr (se [frame mean :] (:f / 20) [ms])
+  pr (se [frame min  :] :lo [ms])
+  pr (se [frame max  :] :hi [ms])
+  pr []
+  pr (se [simulation total :] :p9.sim [ms])
+  pr (se [drawing    total :] :p9.draw [ms])
+  pr (se [present    total :] :p9.show [ms])
+end

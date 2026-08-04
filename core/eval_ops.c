@@ -4,6 +4,7 @@
 //
 
 #include "eval_ops.h"
+#include "hot.h"
 #include <string.h>
 
 void op_stack_init(OpStack *stack)
@@ -12,7 +13,7 @@ void op_stack_init(OpStack *stack)
     stack->prim_arg_top = 0;
 }
 
-EvalOp *op_stack_push(OpStack *stack)
+EvalOp *LOGO_HOT(op_stack_push)(OpStack *stack)
 {
     if (stack->top >= MAX_OP_STACK_DEPTH)
         return NULL;
@@ -22,7 +23,7 @@ EvalOp *op_stack_push(OpStack *stack)
     return op;
 }
 
-void op_stack_pop(OpStack *stack)
+void LOGO_HOT(op_stack_pop)(OpStack *stack)
 {
     if (stack->top > 0)
     {

@@ -25,7 +25,13 @@
 // Global State (defined in test_scaffold.c)
 // ============================================================================
 
-// Buffer for capturing print output
+// Buffer for capturing print output.
+//
+// Clear it with reset_output(), never with `output_buffer[0] = '\0'`: writes
+// land at output_pos, which that leaves untouched, so a second print in the
+// same test writes past the terminator and every later assertion reads an
+// empty buffer — which reads as the interpreter having silently stopped
+// working, and has produced at least one false bug report.
 extern char output_buffer[1024];
 extern int output_pos;
 

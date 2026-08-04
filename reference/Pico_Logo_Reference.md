@@ -1881,6 +1881,153 @@ thaw
 
 
 ===
+# Tile Maps
+
+A **tile** is a small square picture - 8 by 8 or 16 by 16 pixels - that you draw once with the pen and then pick up off the screen, the way [`snapsh`](#snapsh) picks up a shape. A **map** is a grid of numbers saying which tile goes in each square of a world. Together they let you build a board far bigger than anything you would want to draw square by square: a maze, a race track, a dungeon floor.
+
+Tiles are cheap in two ways. The bank keeps one copy of each tile no matter how often the map uses it, and the map itself costs one byte per square, so a 64 by 64 world is 4096 bytes - where the same world as a list of lists would use up most of your workspace. And because [`tile`](#tile) reads a square directly, the map is not just a picture: it is the thing your program asks "what is here?", instead of keeping a second copy of the world in a list.
+
+Building a tile board goes like this:
+
+1. [`newtiles`](#newtiles) chooses the tile size and empties the bank.
+2. Draw each tile with the pen and pick it up with [`snaptile`](#snaptile).
+3. [`newmap`](#newmap) makes the world, and [`settile`](#settile) fills in the squares.
+4. [`stampmap`](#stampmap) paints the whole map onto the graphics screen at once.
+
+After `stampmap` the board is an ordinary drawing: the turtle's pen draws over it, [`dot?`](#dot-dotp) sees it, and [`savepic`](#savepic) saves it. When one square changes - a treasure is collected, a door opens - change the square with `settile` and repaint just that square with [`stamptile`](#stamptile).
+
+How big a bank and a map can be depends on your board. On a Pico 2 or Pico 2 W the bank holds 4096 bytes of tiles (63 tiles of 8 by 8, or 15 of 16 by 16) and a map holds 4096 squares - a 64 by 64 world. On a Pimoroni Pico Plus 2 W, which has PSRAM, the bank holds 255 tiles of either size and a map holds 262144 squares - a 512 by 512 world. Asking for more than that says you are out of space. The bank and the map survive [`clearscreen`](#clearscreen-cs) and an error, so clearing the screen never throws away a world you are in the middle of building.
+
+
+## newtiles
+
+newtiles _size_
+
+`command`
+
+`newtiles` empties the tile bank and says how big its tiles are. _size_ must be 8 or 16, and every tile in the bank is that many pixels square. Use 8 for fine detail such as a maze of narrow corridors, and 16 for chunky scenery such as a road with cars on it.
+
+You can call `newtiles` again at any time to start over with a different size; the whole bank is emptied, and the map (if you have one) keeps its numbers but now describes squares of the new size. The number of tiles the bank holds depends on the size and on your board: with 8 by 8 tiles a Pico 2 holds 63 of them, and with 16 by 16 tiles it holds 15. A Pimoroni Pico Plus 2 W holds 255 of either.
+
+**Example**:
+
+```logo
+?newtiles 8       ; a bank of 8 by 8 tiles
+```
+
+
+## snaptile
+
+snaptile _tilenumber_
+
+`command`
+
+Stands for `snap tile`. `snaptile` captures the square of the graphics screen centred on the turtle - as many pixels across as [`newtiles`](#newtiles) chose - and stores it in the bank as tile _tilenumber_. Tile numbers start at 1; the largest one depends on your board and the tile size.
+
+Unlike [`snapsh`](#snapsh), nothing becomes transparent: a tile is background, so every pixel is kept exactly as it is on the screen, including the background colour. Draw your tile with the pen, snap it, clear the screen, and draw the next one. When you are talking to several turtles, `snaptile` captures around the lowest-numbered one.
+
+Tile 0 is not a tile you can capture. It means "nothing here" in a map, and is painted in the background colour.
+
+**Example**:
+
+```logo
+?newtiles 8
+?repeat 4 [fd 8 rt 90]    ; a small box
+?fill
+?snaptile 1               ; keep it as tile 1
+```
+
+
+## newmap
+
+newmap _columns_ _rows_
+
+`command`
+
+`newmap` makes a new world _columns_ squares across and _rows_ squares down, with every square set to 0 (nothing). Both numbers must be at least 1, and the number of squares - _columns_ times _rows_ - must fit in your board's map: 4096 squares on a Pico 2 or Pico 2 W, 262144 on a Pimoroni Pico Plus 2 W. A bigger map than that says you are out of space.
+
+The map is a grid of squares, not of pixels. How big it is on the screen depends on the tile size: a 28 by 36 map of 8 by 8 tiles covers 224 by 288 pixels.
+
+**Example**:
+
+```logo
+?newmap 28 36     ; a world of 28 x 36 squares
+```
+
+
+## settile
+
+settile _column_ _row_ _tilenumber_
+
+`command`
+
+`settile` puts a tile number into one square of the map. _column_ and _row_ start at 1, like the positions [`item`](#item) counts, with column 1 row 1 at the top left. _tilenumber_ is 0 to 255: 0 means "nothing here" and is painted in the background colour, and any other number names a tile in the bank. A number naming a tile you never captured is also painted as background, so you can fill a map in before you finish drawing its tiles.
+
+Changing a square does not change the screen. Repaint it with [`stamptile`](#stamptile), or repaint the whole board with [`stampmap`](#stampmap).
+
+**Example**:
+
+```logo
+?settile 3 4 1      ; square (3,4) shows tile 1
+?stamptile 3 4      ; and show it now
+```
+
+
+## tile
+
+tile _column_ _row_
+
+`operation`
+
+`tile` outputs the tile number in one square of the map - the number [`settile`](#settile) put there, or 0 for an empty square. _column_ and _row_ start at 1.
+
+This is how a program asks the world a question. Because the answer comes straight out of the map, it is just as fast in a 512 by 512 world as in a tiny one, and it is always the same world your board was painted from - there is no second copy to keep in step.
+
+**Example**:
+
+```logo
+to walkable? :col :row
+op (tile :col :row) = 0     ; empty squares can be walked on
+end
+```
+
+
+## stampmap
+
+stampmap
+
+`command`
+
+`stampmap` paints the whole map onto the graphics screen: every square of the world is drawn with the tile it names, and empty squares are painted in the background colour. It is the fast way to lay down a board - what would be hundreds of Logo commands is one command here.
+
+What `stampmap` leaves behind is an ordinary drawing. The pen draws over it, [`dot?`](#dot-dotp) sees it, [`savepic`](#savepic) saves it, and [`clearscreen`](#clearscreen-cs) wipes it (the map itself is not touched, so you can `stampmap` it again). If you have no map or no tiles yet, `stampmap` does nothing.
+
+**Example**:
+
+```logo
+?stampmap       ; paint the board
+```
+
+
+## stamptile
+
+stamptile _column_ _row_
+
+`command`
+
+`stamptile` repaints one square of the map onto the graphics screen, where [`stampmap`](#stampmap) would have put it. It is the repair command: when a square changes during a game - a treasure taken, a wall knocked down, a door opened - change it with [`settile`](#settile) and then repaint just that square, instead of the whole board.
+
+_column_ and _row_ start at 1. Anything the pen drew over that square is covered up.
+
+**Example**:
+
+```logo
+?settile 3 4 0      ; the treasure is collected
+?stamptile 3 4      ; wipe it off the board
+```
+
+
+===
 # Text and Screen Commands
 
 Your PicoCalc has 32 lines of text on the screen, with 40 characters on each line. You can use the screen entirely for text or entirely for graphics. The PicoCalc also lets you use the top 24 lines (240 turtle units) for graphics and the bottom eight for text at the same time. When you start up Logo, the entire screen is available for text. 

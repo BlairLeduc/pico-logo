@@ -4,6 +4,8 @@
 //
 
 #include "primitives.h"
+#include "core/atom_memo.h"
+#include "core/memory.h"
 #include "random.h"
 #include "frame_sync.h"
 #include "devices/io.h"
@@ -13,6 +15,11 @@
 #include <strings.h>
 
 #define MAX_PRIMITIVES 512
+
+// A resolved primitive is cached on the atom as an index into `primitives`
+// (core/atom_memo.h), so the table may not outgrow the field that holds it.
+_Static_assert(MAX_PRIMITIVES <= ATOM_MEMO_INDEX_LIMIT,
+    "primitive index must fit the atom memo's binding field");
 
 static Primitive primitives[MAX_PRIMITIVES];
 static int primitive_count = 0;
@@ -27,6 +34,14 @@ static int primitive_count = 0;
 // flag), so registration order carries no contract.
 static uint16_t primitive_order[MAX_PRIMITIVES];
 static bool primitives_sorted = false;
+
+// `output` and `op` put their argument in tail position, which the evaluator
+// checks once per collected argument.  Resolving them by name there cost a
+// strncasecmp per argument; caching the two entries here keeps the check to a
+// pointer compare and keeps the cache with the table it points into, so
+// primitives_init clears it rather than leaving it dangling.
+static const Primitive *output_prim;
+static const Primitive *op_prim;
 
 static int primitive_order_compare(const void *a, const void *b)
 {
@@ -52,6 +67,8 @@ void primitives_init(void)
 {
     primitive_count = 0;
     primitives_sorted = false;
+    output_prim = NULL;
+    op_prim = NULL;
     logo_random_reset(); // default (device/TRNG) randomness until rerandom
     frame_sync_reset();  // start unpaced; setrefresh "sync opts in
 
@@ -86,6 +103,38 @@ void primitives_init(void)
     primitives_http_init();
     primitives_httpd_init();
     primitives_time_init();
+    primitives_tilemap_init();
+}
+
+// Index of a registered primitive, or -1 if the pointer is not one of ours.
+// The table is append-only, so an index stays valid for the run.
+int primitive_index_of(const Primitive *prim)
+{
+    if (!prim || prim < primitives || prim >= primitives + primitive_count)
+        return -1;
+    return (int)(prim - primitives);
+}
+
+const Primitive *primitive_by_index(int index)
+{
+    if (index < 0 || index >= primitive_count)
+        return NULL;
+    return &primitives[index];
+}
+
+// Is this the `output` or `op` primitive? Identity, not name: an alias made by
+// copydef is a separate entry and is not output, which is exactly what the
+// evaluator's old comparison against the token text did.
+bool primitive_is_output(const Primitive *prim)
+{
+    if (!prim)
+        return false;
+    if (!output_prim)
+    {
+        output_prim = primitive_find("output");
+        op_prim = primitive_find("op");
+    }
+    return prim == output_prim || prim == op_prim;
 }
 
 void primitive_register(const char *name, int default_args, PrimitiveFunc func)
@@ -172,6 +221,10 @@ bool primitive_register_alias(const char *alias_name, const Primitive *source)
         .default_args = source->default_args,
         .func = source->func};
     primitives_sorted = false;
+    // copydef can register an alias mid-evaluation, so a name that already
+    // resolved to "neither a primitive nor a procedure" -- or to a user
+    // procedure -- may now be a primitive. Drop the cached bindings.
+    mem_atom_memo_mask_all(ATOM_MEMO_KEEP_CLASS);
     return true;
 }
 

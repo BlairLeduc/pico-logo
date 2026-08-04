@@ -344,6 +344,7 @@ static void mock_turtle_dot(float x, float y)
         dot->x = x;
         dot->y = y;
         dot->colour = mock_state.turtle.pen_colour;
+        dot->pen_size = mock_state.turtle.pen_size;
     }
     record_command_position(MOCK_CMD_DOT, x, y);
 }
@@ -559,6 +560,35 @@ static uint8_t mock_turtle_canvas_point(int x, int y)
     return mock_state.sensing.canvas[y * SCREEN_WIDTH + x];
 }
 
+// Tile ops. Both work on the same staged canvas the sensing ops read, so a
+// test can paint a tile, snaptile it, bake it back with stampmap, and assert
+// the pixels. The mock's turtle position is in Logo coordinates and the
+// canvas is in screen pixels, so convert exactly as the device does.
+static bool mock_turtle_canvas_snap(uint8_t size, uint8_t *out)
+{
+    float sx = mock_state.turtle.x + MOCK_SCREEN_WIDTH_PX / 2.0f;
+    float sy = MOCK_SCREEN_HEIGHT_PX / 2.0f - mock_state.turtle.y;
+    int x0 = (int)(sx + 0.5f) - size / 2;
+    int y0 = (int)(sy + 0.5f) - size / 2;
+
+    for (int r = 0; r < size; r++)
+    {
+        for (int c = 0; c < size; c++)
+        {
+            out[r * size + c] = mock_turtle_canvas_point(x0 + c, y0 + r);
+        }
+    }
+    return true;
+}
+
+static void mock_turtle_canvas_write_row(int x, int y, const uint8_t *pixels, int count)
+{
+    for (int i = 0; i < count; i++)
+    {
+        mock_device_set_canvas_point(x + i, y, pixels[i]);
+    }
+}
+
 static void mock_turtle_sense_metrics(int *width, int *height, bool *wrap)
 {
     if (width) *width = SCREEN_WIDTH;
@@ -682,6 +712,8 @@ static const LogoConsoleTurtle mock_turtle_ops = {
     .set_scale = mock_turtle_set_scale,
     .stamp = mock_turtle_stamp,
     .snap_costume = mock_turtle_snap_costume,
+    .canvas_snap = mock_turtle_canvas_snap,
+    .canvas_write_row = mock_turtle_canvas_write_row,
     .get_raster = mock_turtle_get_raster,
     .canvas_point = mock_turtle_canvas_point,
     .sense_metrics = mock_turtle_sense_metrics,
@@ -1375,6 +1407,15 @@ void mock_device_paint_canvas(int x, int y, int w, int h, uint8_t index)
             mock_device_set_canvas_point(i, j, index);
         }
     }
+}
+
+uint8_t mock_device_get_canvas_point(int x, int y)
+{
+    if (x < 0 || x >= MOCK_SCREEN_WIDTH_PX || y < 0 || y >= MOCK_SCREEN_HEIGHT_PX)
+    {
+        return 0;
+    }
+    return mock_state.sensing.canvas[y * MOCK_SCREEN_WIDTH_PX + x];
 }
 
 LogoConsole *mock_device_get_console(void)

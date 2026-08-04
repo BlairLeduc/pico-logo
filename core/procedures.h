@@ -88,6 +88,13 @@ extern "C"
     int proc_count(bool include_buried);
     UserProcedure *proc_get_by_index(int index);
 
+    // Raw slot access, for the name-binding cache: proc_index_of gives the
+    // slot a procedure occupies and proc_by_index gives it back. Every
+    // mutation of the table drops the cached bindings that name a slot, so an
+    // index handed out here is only ever read back against the same table.
+    int proc_index_of(const UserProcedure *proc);
+    UserProcedure *proc_by_index(int index);
+
     // Bury/unbury procedures
     void proc_bury(const char *name);
     void proc_unbury(const char *name);

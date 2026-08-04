@@ -11,6 +11,7 @@
 #include <string.h>
 #include <strings.h>
 #include <stdio.h>
+#include "hot.h"
 
 // (MAX_GLOBAL_VARIABLES lives in limits.h)
 
@@ -114,7 +115,7 @@ bool var_set_local(const char *name, Value value)
     return var_set(name, value);
 }
 
-bool var_set(const char *name, Value value)
+bool LOGO_HOT(var_set)(const char *name, Value value)
 {
     // Logo uses dynamic scoping. `make` (this function) walks the frame
     // chain looking for an existing binding of `name` in any *ancestor*
@@ -168,7 +169,7 @@ bool var_set(const char *name, Value value)
     return false;
 }
 
-bool var_get(const char *name, Value *out)
+bool LOGO_HOT(var_get)(const char *name, Value *out)
 {
     // First, search frame stack for local bindings (if in a procedure)
     FrameStack *frames = proc_get_frame_stack();

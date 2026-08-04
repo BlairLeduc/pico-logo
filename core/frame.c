@@ -4,6 +4,7 @@
 //
 
 #include "frame.h"
+#include "hot.h"
 #include "procedures.h"
 #include <string.h>
 #include <strings.h>
@@ -104,7 +105,7 @@ size_t frame_stack_available_bytes(FrameStack *stack)
 // Frame Operations
 //==========================================================================
 
-word_offset_t frame_push(FrameStack *stack, UserProcedure *proc,
+word_offset_t LOGO_HOT(frame_push)(FrameStack *stack, UserProcedure *proc,
                          Value *args, int argc)
 {
     // Determine parameter count
@@ -167,7 +168,7 @@ word_offset_t frame_push(FrameStack *stack, UserProcedure *proc,
     return offset;
 }
 
-bool frame_reuse(FrameStack *stack, UserProcedure *proc,
+bool LOGO_HOT(frame_reuse)(FrameStack *stack, UserProcedure *proc,
                  Value *args, int argc)
 {
     if (stack->current == OFFSET_NONE)
@@ -274,7 +275,7 @@ FrameHeader *frame_current(FrameStack *stack)
     return frame_at(stack, stack->current);
 }
 
-FrameHeader *frame_at_depth(FrameStack *stack, int depth)
+FrameHeader *LOGO_HOT(frame_at_depth)(FrameStack *stack, int depth)
 {
     if (depth < 0 || depth >= stack->depth)
     {
@@ -323,7 +324,7 @@ int frame_binding_count(FrameHeader *frame)
     return frame->param_count + frame->local_count;
 }
 
-Binding *frame_find_binding(FrameHeader *frame, const char *name)
+Binding *LOGO_HOT(frame_find_binding)(FrameHeader *frame, const char *name)
 {
     if (frame == NULL || name == NULL)
     {
@@ -356,7 +357,7 @@ Binding *frame_find_binding(FrameHeader *frame, const char *name)
     return NULL;
 }
 
-Binding *frame_find_binding_in_chain(FrameStack *stack, const char *name,
+Binding *LOGO_HOT(frame_find_binding_in_chain)(FrameStack *stack, const char *name,
                                      FrameHeader **found_frame)
 {
     if (name == NULL)
@@ -391,7 +392,7 @@ Binding *frame_find_binding_in_chain(FrameStack *stack, const char *name,
 // Local Variable Operations
 //==========================================================================
 
-bool frame_add_local(FrameStack *stack, const char *name, Value value)
+bool LOGO_HOT(frame_add_local)(FrameStack *stack, const char *name, Value value)
 {
     FrameHeader *frame = frame_current(stack);
     if (frame == NULL)
@@ -458,7 +459,7 @@ bool frame_declare_local(FrameStack *stack, const char *name)
     return frame_add_local(stack, name, value_none());
 }
 
-bool frame_set_binding(FrameHeader *frame, const char *name, Value value)
+bool LOGO_HOT(frame_set_binding)(FrameHeader *frame, const char *name, Value value)
 {
     Binding *binding = frame_find_binding(frame, name);
     if (binding == NULL)

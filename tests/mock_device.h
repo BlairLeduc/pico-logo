@@ -129,6 +129,7 @@ extern "C"
     {
         float x, y;
         uint16_t colour;
+        uint8_t pen_size;   // Pen width in pixels at the time the dot was put
     } MockDot;
 
     //
@@ -492,6 +493,11 @@ extern "C"
     void mock_device_set_raster(uint8_t n, const LogoTurtleRaster *raster);
     void mock_device_set_canvas_point(int x, int y, uint8_t index);
     void mock_device_paint_canvas(int x, int y, int w, int h, uint8_t index);
+
+    // Read the canvas back, so tests can assert what a bake (stampmap /
+    // stamptile) or any other canvas write actually landed. Outside the
+    // canvas reads as 0, like the sensing op.
+    uint8_t mock_device_get_canvas_point(int x, int y);
 
     // Get the mock console (to register with IO)
     LogoConsole *mock_device_get_console(void);

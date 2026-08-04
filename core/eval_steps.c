@@ -18,6 +18,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include "hot.h"
 
 //==========================================================================
 // Skip/peek helpers for tail-call lookahead (no execution)
@@ -48,8 +49,10 @@ static bool skip_primary(Evaluator *eval)
             return true;
         }
         
-        // Look up as primitive or user proc
-        const Primitive *prim = primitive_find_n(t.start, t.length);
+        // Look up as primitive or user proc, from the atom's memo where
+        // there is one
+        WordBinding binding = resolve_word(t);
+        const Primitive *prim = binding.prim;
         if (prim)
         {
             advance(eval);
@@ -65,7 +68,7 @@ static bool skip_primary(Evaluator *eval)
             return true;
         }
         
-        UserProcedure *user_proc = proc_find_n(t.start, t.length);
+        UserProcedure *user_proc = binding.proc;
         if (user_proc)
         {
             advance(eval);
@@ -176,7 +179,7 @@ static bool skip_instruction(Evaluator *eval)
 
 // Step function for OP_RUN_LIST and OP_RUN_LIST_EXPR.
 // Processes one instruction per call, or handles a child op result.
-Result step_run_list(Evaluator *eval, EvalOp *op)
+Result LOGO_HOT(step_run_list)(Evaluator *eval, EvalOp *op)
 {
     bool is_expr = (op->kind == OP_RUN_LIST_EXPR);
     bool enable_tco = (op->flags & OP_FLAG_ENABLE_TCO) != 0;
@@ -351,7 +354,7 @@ Result step_if(Evaluator *eval, EvalOp *op)
 }
 
 // Step function for OP_REPEAT.
-Result step_repeat(Evaluator *eval, EvalOp *op)
+Result LOGO_HOT(step_repeat)(Evaluator *eval, EvalOp *op)
 {
     RepeatState *st = &op->repeat;
 
@@ -401,7 +404,7 @@ Result step_repeat(Evaluator *eval, EvalOp *op)
 }
 
 // Step function for OP_FOREVER.
-Result step_forever(Evaluator *eval, EvalOp *op)
+Result LOGO_HOT(step_forever)(Evaluator *eval, EvalOp *op)
 {
     ForeverState *st = &op->forever;
 
@@ -844,7 +847,7 @@ static Result proc_call_cleanup(Evaluator *eval, EvalOp *op, Result body_result)
     return body_result; // RESULT_THROW, RESULT_NONE, etc.
 }
 
-Result step_proc_call(Evaluator *eval, EvalOp *op)
+Result LOGO_HOT(step_proc_call)(Evaluator *eval, EvalOp *op)
 {
     ProcCallState *st = &op->proc_call;
 
@@ -1080,7 +1083,7 @@ Result step_proc_call(Evaluator *eval, EvalOp *op)
 // Expression evaluation resume and deferred primitive call
 //==========================================================================
 
-Result step_expr_eval(Evaluator *eval, EvalOp *op)
+Result LOGO_HOT(step_expr_eval)(Evaluator *eval, EvalOp *op)
 {
     ExprEvalState *st = &op->expr_eval;
 
@@ -1200,7 +1203,7 @@ Result step_paren_group(Evaluator *eval, EvalOp *op)
     return r;
 }
 
-Result step_prim_call(Evaluator *eval, EvalOp *op)
+Result LOGO_HOT(step_prim_call)(Evaluator *eval, EvalOp *op)
 {
     PrimCallState *st = &op->prim_call;
     const struct Primitive *prim = st->prim;

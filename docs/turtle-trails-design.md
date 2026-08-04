@@ -168,6 +168,10 @@ hidden. If it does not, turtle 7 shows, stamps, and re-hides inside a single
 
 ### 5.2 Tile map
 
+> Superseded by P9 M3 — the board is the C tile map now, and a cell holds a
+> bank slot rather than one of the codes below. See §15, "The board is a tile
+> map". The encoded words and their letters are unchanged.
+
 At the start of each level, the 36 encoded words are decoded into a nested
 Logo list: 36 mutable row lists, each containing 28 small integer tile codes.
 
@@ -602,6 +606,20 @@ four bug decisions plus a trail segment and HUD update. Profile with
 `ticks`; an occasional transition-frame overrun is acceptable, but ordinary
 play must not overrun.
 
+### 11.1 The procedure table
+
+Measured 2026-08-02, when a profiler loaded beside the game hit **both**
+128-wide tables in turn: the game defines **104 procedures against a
+`MAX_PROCEDURES` of 128** and holds about **94 globals against a
+`MAX_GLOBAL_VARIABLES` of 128**. The globals cap bit first and reported as
+`out of space` from deep inside the profiler's frame, nowhere near the cause
+— `var_set` returning false is surfaced as an out-of-space error wherever the
+next new name happens to appear. Those are the
+tightest budgets in the game — far tighter than storage, where a loaded,
+unrun game still leaves over 23,000 free nodes. Anything loaded alongside
+has about twenty procedure slots and thirty names, and a workspace holding
+another program has neither. `erall` first.
+
 ## 12. Design boundaries
 
 Intentional for v1:
@@ -711,18 +729,58 @@ repository has no BMP-generation tooling, the mock device implements no
 and Checkpoint Run — the newest shipped game — had already gone the other way
 ("the encoded map is the only source of truth… there are no picture assets").
 
-`setup.palette` now defines every colour, and `draw.board` fills the board
-with hedge and then carves the corridors out of it in the background colour,
-one pen-8 sweep per maximal run of walkable tiles, by row and again by
-column. A pen wider than one pixel stamps a filled disc at each point, so
-every corridor end and junction comes out rounded — the curved hedge §3 asks
-for, at no drawing cost. The perpendicular pass matters: the discs at a run's
-ends leave shallow notches along a block edge, and the second pass fills
-them. Runs of a single tile are skipped, which is safe because the maze has
-no dead ends, so every walkable tile also lies on a run of two or more along
-the other axis; `test_no_dead_ends` pins that. The blossom erase mask (shape
-slot 8) is gone with it: eating a blossom blacks out a disc and relays the
-half-trail the turtle drew coming in.
+`setup.palette` now defines every colour, and the board is built from the
+map. Until P9 M3 that meant filling the board with hedge and carving the
+corridors out of it in the background colour, one pen-8 sweep per maximal
+run of walkable tiles, by row and again by column — 5,916 ms on a Pico 2.
+See "**The board is a tile map**" below for what replaced it; the rounded
+hedge it produced is preserved, because the tiles are drawn with the same
+pen.
+
+**The board is a tile map (P9 M3,
+[`tilemap-scrolling-design.md`](tilemap-scrolling-design.md) §11).** §5.2's
+nested Logo list and the pen-carved board are both gone. The board lives in
+the C tile map, one byte a cell, and a cell holds a *bank slot* — the picture
+and the rule at once:
+
+| Slot | Meaning |
+|---:|---|
+| 0 | off the board (map margin), painted as background |
+| 1 | hedge and dead space |
+| 2 | nest floor and door |
+| 3..18 | open path, one variant per walkable-neighbour mask |
+| 19..34 | the same path carrying a speck |
+| 35..50 | the same path carrying a power blossom |
+
+The order is what makes every question the game asks a single comparison:
+walkable is `> 2`, a bug may enter at `> 1`, paintable is `>= 19`, a blossom
+is `>= 35`, and painting one subtracts 16 or 32 to reach the plain variant of
+the same shape. So codes 1 and 4 of §5.2's table share a picture (a tunnel
+looks like any other empty corridor) and so do 5 and 6; nothing in the game
+ever distinguished them except through `walk?` and `nest.open?`.
+
+`setup.tiles` draws all 50 tiles once with the pen — a fat hedge dot, then a
+pen-8 stroke into each walkable neighbour, then a speck or a blossom — and
+picks each up with `snaptile`. A stroke that stops at the cell centre leaves
+a round cap and one that runs on leaves a square edge, so the mask *is* the
+rounded corner, and `draw.board` becomes `stampmap`. What changes against the
+carved board is one pixel: the old pen-8 disc spanned nine pixels, so a
+corridor was nine pixels wide and ate a pixel off the hedge beside it; tiles
+make it eight, uniformly.
+
+The map is 40 × 77 cells. It is at least the whole 320×320 screen because a
+bake always starts at the top left corner of the graphics area, so the 28×36
+board sits at cell offset (6, 2) inside it, and the margin that leaves is
+what lets `tile.at` drop its bounds tests — a step off the board reads 0.
+Rows 41–76 hold the finished board, off the bottom of the 608-pixel-tall
+world where nothing samples it: deriving a cell's variant costs about twenty
+Logo statements, and `reset.board` copies the kept rows down at a level start
+for two. (A live scrolling view would sample them; P9 M4 must move the copy
+if it ever lands.)
+
+The blossom erase mask (shape slot 8) is gone: eating a blossom is a
+`settile` to the plain variant, a `stamptile`, and the half-trail the turtle
+drew coming in relaid.
 
 **Palette slot 245, not 255, is the background.** Slot 255 is the reserved
 transparent index and cannot be a background. Slots 246–254 are exactly as
@@ -758,13 +816,22 @@ recovery.
 frenzy; ordinary bugs never are. `test_speeds_are_sane_at_25_fps` enforces
 both, at every level.
 
-**One interpreter constraint shapes the source.** A call to a procedure
-defined in the file may not sit inside a parenthesised arithmetic
-expression: `setx ((tile.x :c) - 4)` raises `) without (`, because the
-deferred call consumes the grouping paren's closing bracket
-(`core/eval_expr.c`, the deferral at the end of the user-procedure case).
-Such calls put their result in a local first. This is an interpreter bug
-rather than a language rule, and is worth fixing separately.
+**One interpreter constraint shaped the source, and has since been fixed.**
+A call to a procedure defined in the file could not sit inside a
+parenthesised arithmetic expression: `setx ((tile.x :c) - 4)` raised
+`) without (`, because the deferred call consumed the grouping paren's
+closing bracket. Such calls put their result in a local first. That was
+**B7**, fixed 2026-08-01 (`docs/bugs.md`); the locals remain because they are
+harmless, but the rule no longer applies and the file's header no longer
+claims it does.
+
+The rule that *does* still apply is ordinary Logo: a call's last argument
+absorbs trailing infix, so a call inside an expression must be
+parenthesised. It cuts both ways — the outermost parens of
+`make "v (:a + 1)` are redundant, since the last argument would absorb the
+whole expression regardless, and P10's M5 profiling measured them at about
+15 % of such a statement (`make "x (:x + 1)` 801.6 ns against
+`make "x :x + 1` 678.0 ns on the host).
 
 The three open verification items are resolved: the arrow-key codes are
 `KEY_UP 0xB5` (181) and `KEY_DOWN 0xB6` (182), per
