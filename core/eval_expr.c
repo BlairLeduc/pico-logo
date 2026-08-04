@@ -16,6 +16,7 @@
 #include <strings.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include "hot.h"
 
 // Record a resolved binding on the atom, so the next lookup of this name is a
 // single read. An index that will not fit the memo field is simply not cached
@@ -307,7 +308,7 @@ static int parse_list(Evaluator *eval, Node *out)
 }
 
 // Evaluate a primary expression
-Result eval_primary(Evaluator *eval)
+Result LOGO_HOT(eval_primary)(Evaluator *eval)
 {
     Token t = peek(eval);
 
@@ -944,7 +945,7 @@ Result eval_primary(Evaluator *eval)
 // eval_primary defers a user procedure call (pushes OP_PROC_CALL and returns
 // result_none()), we can save our state to OP_EXPR_EVAL on the op stack and
 // yield to the trampoline instead of blocking on the C stack.
-Result eval_expr_bp(Evaluator *eval, int min_bp)
+Result LOGO_HOT(eval_expr_bp)(Evaluator *eval, int min_bp)
 {
     PendingBinOp op_stack[MAX_EXPR_OPS];
     int depth = 0;

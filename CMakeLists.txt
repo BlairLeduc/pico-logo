@@ -141,6 +141,19 @@ target_include_directories(logo_core
         ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+# P10 M5 experiment: place the hot expression-evaluator functions in SRAM
+# rather than executing them from flash through the XIP cache. Worth 1.24x
+# on a Trails frame, measured. Off by default so the host and test builds
+# never see it; the pico2w and pico+2w presets turn it on, pico2 does not
+# (§11.3). See core/hot.h and docs/interpreter-throughput-design.md §11.1.
+option(LOGO_HOT_IN_RAM "Place the hot evaluator functions in RAM (device only)" OFF)
+if(LOGO_HOT_IN_RAM AND PICO_SDK)
+    target_compile_definitions(logo_core PUBLIC LOGO_HOT_IN_RAM=1)
+    # core/ does not otherwise see the SDK; hot.h needs pico.h for
+    # __not_in_flash_func, and headers only -- no link dependency is added.
+    target_link_libraries(logo_core pico_base_headers)
+endif()
+
 # Allow LOGO_MEMORY_SIZE to be set via CMake cache variable
 if(DEFINED LOGO_MEMORY_SIZE)
     target_compile_definitions(logo_core PUBLIC LOGO_MEMORY_SIZE=${LOGO_MEMORY_SIZE})

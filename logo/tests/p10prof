@@ -146,7 +146,8 @@ to p10prof.body
   pr (se [set] :p10prof.set [get] :p10prof.get [us])
   pr (se [lit] :p10prof.lit [add] :p10prof.add [us])
   pr (se [vadd] :p10prof.vadd [sum] :p10prof.sum [us])
-  pr (se [psum] :p10prof.psum [op] :p10prof.op [us])
+  pr (se [psum] :p10prof.psum [pvar] :p10prof.pvar [us])
+  pr (se [op] :p10prof.op [us])
   pr []
   pr [slot / ms per frame / operations]
   p10prof.line [poll.input] (item 1 :p10prof.s)
@@ -165,8 +166,8 @@ to p10prof.body
   pr []
   p10prof.line [FRAME] :total
   pr []
-  pr [add minus psum is the infix path.]
-  pr [psum minus sum is the grouping paren.]
+  pr [pvar minus get is the grouping paren.]
+  pr [psum minus sum is the paren call form.]
 end
 
 ; Screen first, then the file, and say which of the two happened: a device
@@ -216,31 +217,33 @@ to p10prof
   make "t0 ticks
   repeat 2000 [ignore (1 + 1)]
   make "p10prof.add (((ticks - :t0) * 1000) / 2000)
-  ; The decisive pair.  `add` and `vadd` are the same expression shape --
-  ; grouping paren, one infix add, two operands -- differing only in whether
-  ; the operands are number literals or variable reads.  If `add` is the
-  ; dearer, then a literal costs more to evaluate than a variable does, which
-  ; can only be the number being re-parsed on every pass, and section 4.1's
-  ; dropped numeric-value cache goes back on the table.  `lit` is the same
-  ; question without the arithmetic.
+  ; `add` and `vadd` are the same expression shape -- grouping paren, one
+  ; infix add, two operands -- differing only in whether the operands are
+  ; number literals or variable reads.  Answered: `vadd` is the dearer, so
+  ; nothing costly happens to a literal and section 4.1's dropped numeric
+  ; cache stays dropped.  `lit` is the same question without the arithmetic.
   make "t0 ticks
   repeat 2000 [ignore (:x + :x)]
   make "p10prof.vadd (((ticks - :t0) * 1000) / 2000)
   make "t0 ticks
   repeat 2000 [ignore 1]
   make "p10prof.lit (((ticks - :t0) * 1000) / 2000)
-  ; `ignore (1 + 1)` came back 40.5 us dearer than `ignore 1` -- more than
-  ; two procedure calls to evaluate one addition, and the operands are not
-  ; where it went (a variable reference is only 8.5 us over a literal).  So
-  ; the cost is the expression machinery itself, and these two split it:
-  ; `sum 1 1` is the same addition with no paren and no infix, and
-  ; `(sum 1 1)` adds the paren back without the infix.
+  ; Two paren costs, and they are NOT the same thing.  `(sum 1 1)` is Logo's
+  ; parenthesised *call* form -- a different branch of eval_primary, with its
+  ; own staging op and varargs arg loop -- so `psum - sum` prices that path,
+  ; not a grouping paren.  `pvar - get` is the grouping paren proper, since
+  ; `(:x)` has no name after the `(` and can only be a group.  The board put
+  ; `psum - sum` at 22 us against the host's 104 ns: 212x, where every other
+  ; operation here scales at 60-137x.  That gap is the lead.
   make "t0 ticks
   repeat 2000 [ignore sum 1 1]
   make "p10prof.sum (((ticks - :t0) * 1000) / 2000)
   make "t0 ticks
   repeat 2000 [ignore (sum 1 1)]
   make "p10prof.psum (((ticks - :t0) * 1000) / 2000)
+  make "t0 ticks
+  repeat 2000 [ignore (:x)]
+  make "p10prof.pvar (((ticks - :t0) * 1000) / 2000)
   ; A clock too coarse to see the loop at all -- the mock's, or a host build
   ; faster than one millisecond over 2,000 passes -- would divide by zero in
   ; the report.  On a board this never fires.

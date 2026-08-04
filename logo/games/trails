@@ -217,7 +217,7 @@ to stamp.tile :col :row
 end
 
 to walk? :slot
-  output (:slot > :sl.nest)
+  output :slot > :sl.nest
 end
 
 to tunnel.row? :row
@@ -231,11 +231,11 @@ end
 ; -------------------------------------------------------------------------
 
 to tile.x :col
-  output (-108 + (8 * (:col - 1)))
+  output -108 + (8 * (:col - 1))
 end
 
 to tile.y :row
-  output (140 - (8 * (:row - 1)))
+  output 140 - (8 * (:row - 1))
 end
 
 to dir.dc :d
@@ -258,7 +258,7 @@ to dir.heading :d
 end
 
 to opposite :d
-  output (1 + (remainder (:d + 1) 4))
+  output 1 + (remainder (:d + 1) 4)
 end
 
 ; The tunnel rows are the only place where column 1 and column 28 are
@@ -266,14 +266,14 @@ end
 to next.col :col :row :d
   local "c local "dc
   make "dc (dir.dc :d)
-  make "c (:col + :dc)
+  make "c :col + :dc
   if :c < 1 [ifelse (tunnel.row? :row) [output 28] [output 0]]
   if :c > 28 [ifelse (tunnel.row? :row) [output 1] [output 0]]
   output :c
 end
 
 to next.row :row :d
-  output (:row + (dir.dr :d))
+  output :row + (dir.dr :d)
 end
 
 to open? :col :row :d
@@ -285,7 +285,7 @@ end
 to nest.open? :col :row :d
   local "k
   make "k (tile.at (next.col :col :row :d) (next.row :row :d))
-  output (:k > :sl.hedge)
+  output :k > :sl.hedge
 end
 
 ; -------------------------------------------------------------------------
@@ -412,11 +412,11 @@ to build.map
   local "r local "c local "w local "k local "v local "m local "mc local "mr
   repeat 36 [
     make "r repcount
-    make "mr (:r + :sl.keep)
+    make "mr :r + :sl.keep
     make "w (item :r :tt.map)
     repeat 28 [
       make "c repcount
-      make "k ((ascii (item :c :w)) - 65)
+      make "k (ascii (item :c :w)) - 65
       make "v :sl.nest
       if :k = 0 [make "v :sl.hedge]
       if :k > 0 [if :k < 5 [make "v (:sc.walk + :k)]]
@@ -426,7 +426,7 @@ to build.map
   make "tt.full 0
   repeat 36 [
     make "r repcount
-    make "mr (:r + :sl.keep)
+    make "mr :r + :sl.keep
     repeat 28 [
       make "mc (repcount + :sl.dc)
       make "v (tile :mc :mr)
@@ -440,8 +440,8 @@ to build.map
         if :k > :sl.nest [make "m (:m + 2)]
         make "k (tile (:mc + 1) :mr)
         if :k > :sl.nest [make "m (:m + 1)]
-        make "k (:v - :sc.walk)
-        make "v (:sl.path + :m)
+        make "k :v - :sc.walk
+        make "v :sl.path + :m
         if :k = 2 [make "v (:sl.speck + :m) make "tt.full (:tt.full + 1)]
         if :k = 3 [make "v (:sl.bloss + :m) make "tt.full (:tt.full + 1)]
         settile :mc :mr :v
@@ -456,8 +456,8 @@ to reset.board
   local "r local "mr local "kr
   repeat 36 [
     make "r repcount
-    make "mr (:r + :sl.dr)
-    make "kr (:r + :sl.keep)
+    make "mr :r + :sl.dr
+    make "kr :r + :sl.keep
     repeat 28 [settile (repcount + :sl.dc) :mr (tile (repcount + :sl.dc) :kr)]
   ]
   make "tt.left :tt.full
@@ -476,9 +476,9 @@ to erase.blossom :c :r :d
   make "cx (tile.x :c)
   make "cy (tile.y :r)
   make "h (dir.dc :d)
-  make "bx (:cx - (:h * 4))
+  make "bx :cx - (:h * 4)
   make "h (dir.dr :d)
-  make "by (:cy + (:h * 4))
+  make "by :cy + (:h * 4)
   stamp.tile :c :r
   ask 7 [
     pu setpensize 2 setpc :c.trail
@@ -588,14 +588,14 @@ to place.actor :i
   local "d local "o local "t local "px local "py local "h
   make "d (item :i :a.dir)
   make "o (item :i :a.off)
-  make "t (:i - 1)
+  make "t :i - 1
   make "o (intquotient :o 16)
   make "px (tile.x (item :i :a.col))
   make "py (tile.y (item :i :a.row))
   make "h (dir.dc :d)
-  make "px (:px + (:h * :o))
+  make "px :px + (:h * :o)
   make "h (dir.dr :d)
-  make "py (:py - (:h * :o))
+  make "py :py - (:h * :o)
   make "h (dir.heading :d)
   ask :t [seth :h setx :px sety :py]
 end
@@ -634,9 +634,9 @@ end
 ; the centre instead, with its walk animation still running.
 to move.actor :i :dist
   local "o local "was
-  make "o ((item :i :a.off) + :dist)
+  make "o (item :i :a.off) + :dist
   while [not (:o < 128)] [
-    make "o (:o - 128)
+    make "o :o - 128
     make "was (item :i :a.col)
     advance.tile :i
     if :i = 1 [warp.check :was]
@@ -650,7 +650,7 @@ end
 ; one column is the only evidence a teleport happened.
 to warp.check :was
   local "d
-  make "d ((item 1 :a.col) - :was)
+  make "d (item 1 :a.col) - :was
   if :d < -1 [make "tt.warp "true]
   if :d > 1 [make "tt.warp "true]
 end
@@ -684,7 +684,7 @@ to reverse.player :o :n
     make "r (item 1 :a.row)
     .setitem 1 :a.col (next.col :c :r :d)
     .setitem 1 :a.row (next.row :r :d)
-    .setitem 1 :a.off (128 - :o)
+    .setitem 1 :a.off 128 - :o
   ]
   .setitem 1 :a.dir :n
   .setitem 1 :a.next 0
@@ -738,8 +738,8 @@ to paint.tile
   make "r (item 1 :a.row)
   make "k (tile.at :c :r)
   if :k < :sl.speck [stop]
-  make "tt.left (:tt.left - 1)
-  make "tt.painted (:tt.painted + 1)
+  make "tt.left :tt.left - 1
+  make "tt.painted :tt.painted + 1
   make "tt.idle 0
   ifelse not (:k < :sl.bloss) [
     set.tile :c :r (:k - 32)
@@ -758,12 +758,12 @@ to paint.tile
 end
 
 to add.score :n
-  make "tt.score (:tt.score + :n)
+  make "tt.score :tt.score + :n
   if :tt.score > :tt.high [make "tt.high :tt.score]
   if not :tt.extra [
     if not (:tt.score < 10000) [
       make "tt.extra "true
-      make "tt.lives (:tt.lives + 1)
+      make "tt.lives :tt.lives + 1
       draw.lives
       (sound [2 6] 1200 220 11)
     ]
@@ -779,13 +779,13 @@ end
 to step.mode.clock
   if :tt.dizzy > 0 [step.dizzy.clock stop]
   if :tt.phase > (count :tt.sched) [stop]
-  make "tt.mtimer (:tt.mtimer - 1)
+  make "tt.mtimer :tt.mtimer - 1
   if :tt.mtimer > 0 [stop]
-  make "tt.phase (:tt.phase + 1)
-  make "tt.mode (1 - :tt.mode)
+  make "tt.phase :tt.phase + 1
+  make "tt.mode 1 - :tt.mode
   reverse.bugs
   if :tt.phase > (count :tt.sched) [stop]
-  make "tt.mtimer (25 * (item :tt.phase :tt.sched))
+  make "tt.mtimer 25 * (item :tt.phase :tt.sched)
 end
 
 to reverse.bugs
@@ -798,7 +798,7 @@ end
 
 to step.dizzy.clock
   local "i
-  make "tt.dizzy (:tt.dizzy - 1)
+  make "tt.dizzy :tt.dizzy - 1
   if :tt.dizzy > 0 [stop]
   repeat 4 [
     make "i (repcount + 1)
@@ -839,8 +839,8 @@ to hunt.col :i
   if :i = 2 [output :pc]
   if :i = 3 [output (:pc + (4 * :dc))]
   if :i = 4 [
-    make "ahead (:pc + (2 * :dc))
-    output ((2 * :ahead) - (item 2 :a.col))
+    make "ahead :pc + (2 * :dc)
+    output (2 * :ahead) - (item 2 :a.col)
   ]
   if (moss.far?) [output :pc]
   output (item 5 :tt.corner.col)
@@ -853,8 +853,8 @@ to hunt.row :i
   if :i = 2 [output :pr]
   if :i = 3 [output (:pr + (4 * :dr))]
   if :i = 4 [
-    make "ahead (:pr + (2 * :dr))
-    output ((2 * :ahead) - (item 2 :a.row))
+    make "ahead :pr + (2 * :dr)
+    output (2 * :ahead) - (item 2 :a.row)
   ]
   if (moss.far?) [output :pr]
   output (item 5 :tt.corner.row)
@@ -863,8 +863,8 @@ end
 ; Moss hunts only from a distance and turns for home once inside eight tiles.
 to moss.far?
   local "dc local "dr
-  make "dc ((item 5 :a.col) - (item 1 :a.col))
-  make "dr ((item 5 :a.row) - (item 1 :a.row))
+  make "dc (item 5 :a.col) - (item 1 :a.col)
+  make "dr (item 5 :a.row) - (item 1 :a.row)
   output (not (((:dc * :dc) + (:dr * :dr)) < 64))
 end
 
@@ -872,7 +872,7 @@ end
 ; during patrol once few tiles remain.
 to frenzy? :i
   if not (:i = 2) [output "false]
-  output (:tt.left < :tt.frenzy1)
+  output :tt.left < :tt.frenzy1
 end
 
 to target.col :i
@@ -911,7 +911,7 @@ to best.dir :i :c :r :d :tc :tr
       if (exit.open? :i :c :r :k) [
         make "nc (next.col :c :r :k)
         make "nr (next.row :r :k)
-        make "s (((:nc - :tc) * (:nc - :tc)) + ((:nr - :tr) * (:nr - :tr)))
+        make "s ((:nc - :tc) * (:nc - :tc)) + ((:nr - :tr) * (:nr - :tr))
         if :s < :bs [make "bs :s make "bd :k]
       ]
     ]
@@ -928,7 +928,7 @@ to dizzy.dir :i :c :r :d
   make "back (opposite :d)
   make "start (random 4)
   repeat 4 [
-    make "k (1 + (remainder (:start + repcount) 4))
+    make "k 1 + (remainder (:start + repcount) 4)
     if not (:k = :back) [if (exit.open? :i :c :r :k) [output :k]]
   ]
   output :back
@@ -985,7 +985,7 @@ to nest.bob :i
   make "p (remainder (intquotient :tt.frame 4) 8)
   if :p > 4 [make "p (8 - :p)]
   .setitem :i :a.dir 1
-  .setitem :i :a.off (:p * 16)
+  .setitem :i :a.off :p * 16
 end
 
 to nest.leave :i
@@ -1034,7 +1034,7 @@ end
 
 to step.nest.clock
   local "i
-  make "tt.idle (:tt.idle + 1)
+  make "tt.idle :tt.idle + 1
   if :tt.idle < :tt.p.idle [stop]
   make "tt.idle 0
   repeat 4 [
@@ -1100,14 +1100,14 @@ to bonus.check
   if :tt.bonus > 0 [stop]
   if :tt.bonus.done > 1 [stop]
   if :tt.painted < (item (:tt.bonus.done + 1) :tt.bonus.at) [stop]
-  make "tt.bonus.done (:tt.bonus.done + 1)
-  make "tt.bonus (200 + (random 50))
+  make "tt.bonus.done :tt.bonus.done + 1
+  make "tt.bonus 200 + (random 50)
   ask 5 [setsh :sh.bonus setpc :c.trail setx (tile.x :tt.gate.col) sety (tile.y :tt.gate.row) st]
 end
 
 to step.bonus
   if :tt.bonus = 0 [stop]
-  make "tt.bonus (:tt.bonus - 1)
+  make "tt.bonus :tt.bonus - 1
   if :tt.bonus > 0 [stop]
   ask 5 [ht]
 end
@@ -1132,11 +1132,11 @@ end
 
 to same.tile? :i
   if not ((item :i :a.col) = (item 1 :a.col)) [output "false]
-  output ((item :i :a.row) = (item 1 :a.row))
+  output (item :i :a.row) = (item 1 :a.row)
 end
 
 to eat.bug :i
-  make "tt.chain (:tt.chain + 1)
+  make "tt.chain :tt.chain + 1
   add.score (100 * (pwr 2 :tt.chain))
   .setitem :i :a.state 5
   .setitem :i :a.next 0
@@ -1175,7 +1175,7 @@ end
 
 ; Alternating dabs, so a painted run reads as a rhythm rather than one tone.
 to paint.sound
-  make "tt.dab (1 - :tt.dab)
+  make "tt.dab 1 - :tt.dab
   (sound [0 4] (330 + (70 * :tt.dab)) 40 5)
 end
 
@@ -1274,7 +1274,7 @@ to place.actors
   make "tt.idle 0
   make "tt.mode 0
   make "tt.phase 1
-  make "tt.mtimer (25 * (item 1 :tt.sched))
+  make "tt.mtimer 25 * (item 1 :tt.sched)
   make "tt.dizzy 0
   make "tt.chain 0
   make "tt.drone -1
@@ -1374,7 +1374,7 @@ end
 
 to handle.death
   death.animation
-  make "tt.lives (:tt.lives - 1)
+  make "tt.lives :tt.lives - 1
   draw.lives
   if :tt.lives < 1 [stop]
   respawn
@@ -1401,7 +1401,7 @@ to handle.level.clear
   level.flash
   make "tt.history (fput (item :tt.bonus.shape :tt.shapes) :tt.history)
   if (count :tt.history) > 7 [make "tt.history (bl :tt.history)]
-  make "tt.level (:tt.level + 1)
+  make "tt.level :tt.level + 1
 end
 
 to gameover.screen
@@ -1421,7 +1421,7 @@ end
 to play.frame
   poll.input
   if not :tt.paused [
-    make "tt.frame (:tt.frame + 1)
+    make "tt.frame :tt.frame + 1
     step.mode.clock
     step.nest.clock
     step.player
@@ -1469,7 +1469,7 @@ end
 
 to game.over?
   if :tt.quit [output "true]
-  output (:tt.lives < 1)
+  output :tt.lives < 1
 end
 
 to init.game
@@ -1544,7 +1544,7 @@ to p9.frame
   local "t0
   make "t0 ticks
   poll.input
-  make "tt.frame (:tt.frame + 1)
+  make "tt.frame :tt.frame + 1
   step.mode.clock
   step.nest.clock
   step.player
@@ -1555,15 +1555,15 @@ to p9.frame
   update.drone
   dress.bugs
   reclaim
-  make "p9.sim (:p9.sim + (ticks - :t0))
+  make "p9.sim :p9.sim + (ticks - :t0)
   make "t0 ticks
   place.all
   draw.hud
-  make "p9.draw (:p9.draw + (ticks - :t0))
+  make "p9.draw :p9.draw + (ticks - :t0)
   make "t0 ticks
   sync
-  make "p9.show (:p9.show + (ticks - :t0))
-  output (:p9.sim + :p9.draw + :p9.show)
+  make "p9.show :p9.show + (ticks - :t0)
+  output :p9.sim + :p9.draw + :p9.show
 end
 
 to p9m0.trails
@@ -1586,7 +1586,7 @@ to p9m0.trails
   make "hi 0
   repeat 20 [
     make "run (p9.frame)
-    make "one (:run - :f)
+    make "one :run - :f
     make "f :run
     if :one < :lo [make "lo :one]
     if :one > :hi [make "hi :one]

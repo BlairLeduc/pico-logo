@@ -25,6 +25,7 @@
 #include <assert.h>
 #include <ctype.h>
 #include <string.h>
+#include "hot.h"
 
 // Compile-time invariant:
 //   The high bit of a 16-bit cell index is reserved as the "word" marker
@@ -950,7 +951,7 @@ static BlobDesc *blob_desc(Node n)
 
 // Get the car (first element) of a list node.
 // Returns NODE_NIL if node is not a list.
-Node mem_car(Node n)
+Node LOGO_HOT(mem_car)(Node n)
 {
     if (n == NODE_NIL)
     {
@@ -982,7 +983,7 @@ Node mem_car(Node n)
 
 // Get the cdr (rest) of a list node.
 // Returns NODE_NIL if node is not a list or at end.
-Node mem_cdr(Node n)
+Node LOGO_HOT(mem_cdr)(Node n)
 {
     if (n == NODE_NIL)
     {
@@ -1194,7 +1195,7 @@ size_t mem_word_len(Node n)
 
 // Characters, length and memo slot of a word in a single entry walk.
 // See mem_word_view in memory.h for the contract and why it is one call.
-bool mem_word_view(Node n, const char **str, size_t *len, uint8_t **memo)
+bool LOGO_HOT(mem_word_view)(Node n, const char **str, size_t *len, uint8_t **memo)
 {
     if (NODE_GET_TYPE(n) != NODE_TYPE_WORD)
         return false;

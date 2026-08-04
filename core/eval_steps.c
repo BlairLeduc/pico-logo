@@ -18,6 +18,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include "hot.h"
 
 //==========================================================================
 // Skip/peek helpers for tail-call lookahead (no execution)
@@ -846,7 +847,7 @@ static Result proc_call_cleanup(Evaluator *eval, EvalOp *op, Result body_result)
     return body_result; // RESULT_THROW, RESULT_NONE, etc.
 }
 
-Result step_proc_call(Evaluator *eval, EvalOp *op)
+Result LOGO_HOT(step_proc_call)(Evaluator *eval, EvalOp *op)
 {
     ProcCallState *st = &op->proc_call;
 
@@ -1082,7 +1083,7 @@ Result step_proc_call(Evaluator *eval, EvalOp *op)
 // Expression evaluation resume and deferred primitive call
 //==========================================================================
 
-Result step_expr_eval(Evaluator *eval, EvalOp *op)
+Result LOGO_HOT(step_expr_eval)(Evaluator *eval, EvalOp *op)
 {
     ExprEvalState *st = &op->expr_eval;
 
@@ -1202,7 +1203,7 @@ Result step_paren_group(Evaluator *eval, EvalOp *op)
     return r;
 }
 
-Result step_prim_call(Evaluator *eval, EvalOp *op)
+Result LOGO_HOT(step_prim_call)(Evaluator *eval, EvalOp *op)
 {
     PrimCallState *st = &op->prim_call;
     const struct Primitive *prim = st->prim;

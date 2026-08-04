@@ -1,11 +1,14 @@
 # P10 — Interpreter throughput (design)
 
 Status: **v1 design, drafted 2026-08-01; M0–M3 done 2026-08-01, M4 declined.
-§1's 40 ms target is unmet, and §7's "what closes the gap is P9" was disproved
-on 2026-08-02 when P9's C map landed and moved the frame 0.2 ms. M5 (§11) is
-measured (§11.1): there is no hot spot, and the lever it did find is the cost
-of a `make` statement — 4.3× a procedure call on the board against 2.5× on
-the host.**
+§7's "what closes the gap is P9" was disproved on 2026-08-02 when P9's C map
+landed and moved the frame 0.2 ms. M5 (§11) profiled instead of guessing and
+found the answer: no hot spot among the procedures, but the interpreter
+executing from flash through a 16 KB XIP cache. **Moving 6 KB of the
+evaluator into SRAM took a Turtle Trails frame from 81.0 to 65.5 ms — 1.24×
+— and collapsed the worst path from 212× the host to 38×** (§11.3). §1's
+40 ms needs 1.64× more; a second RAM tier is built and unmeasured. Off by
+default until a Pico 2 boots it.**
 Opened by P9's M0 measurement,
 which failed its gate and found the display was never the bottleneck. Like
 P9, this design gates on measurement: M0 below is a benchmark harness and a
@@ -821,12 +824,32 @@ net of a 69.3 ns bare loop):
 | `make "x :x + 1` | **609** | the outer paren is redundant: **−15 %** |
 
 So the infix path is not the problem — it is *cheaper* than calling `sum`,
-which is what an infix operator ought to be. What costs is evaluating a
-second operand and performing the operation, and the only removable overhead
-is the **grouping paren**, at ~11 % of an expression and ~15 % of a
-`make "v (expr)` statement. That is a game-side saving available today: the
-outermost parens in `make "v (…)` are redundant, because a call's last
-argument absorbs the whole expression anyway.
+which is what an infix operator ought to be.
+
+**One correction to how that pair was read.** `(sum 1 1)` is not a grouping
+paren at all: a `(` followed by a name takes `eval_primary`'s *parenthesised
+call* branch, with its own staging op, spilled argument array and varargs
+loop (`core/eval_expr.c`). So `psum − sum` prices that path, not a group.
+The grouping paren proper needs `(:x)`, which has no name after the `(` and
+can only be a group; `p10prof` now measures it, and the host puts it at
+**138.5 ns**.
+
+Both are removable from Logo source, and both are all over the games:
+
+| Host, net of loop | ns | share of the statement |
+|---|---:|---:|
+| `make "x (:x + 1)` vs `make "x :x + 1` | +132.7 | **18 %** |
+| `make "x (item 1 :l)` vs `make "x item 1 :l` | +82.6 | **10 %** |
+
+A call's last argument absorbs the whole expression anyway, so the outermost
+parens in `make "v (…)`, `output (…)` and `.setitem i :l (…)` are redundant.
+Sixty of them came out of `logo/games/trails` — only the expression-form
+ones, since a `(name …)` may be a varargs call whose bare arity differs —
+for a measured **2.8 % off `place.all` and 2.6 % off `step.bugs`** on the
+host, with the full suite green including the bit-exact simulation and the
+soak. Real, reproducible, and nowhere near the 2× §1 needs; the call-form
+parens are a further ~10 % of the statements that carry them, and would need
+an arity table to strip safely.
 
 **The real lead is a ratio.** Board against host, net of each machine's bare
 loop:
@@ -849,12 +872,145 @@ code entered once per statement, against the tight loops that calls and
 `repeat` run in; §2.2 already records the board punishing exactly this kind
 of spread-out code (word classification was 34 % on the board and a few per
 cent on the host), and P9 §13.2 hit the same wall from the other side.
-**All three presets report `XIP_RAM: 0 B of 16 KB, 0.00 %`** — the RP2350's
-16 KB of RAM-speed instruction memory is entirely unused. Putting the
-expression evaluator there is the one lever measured so far that could
-plausibly be worth the ~2× §1 needs, and it is a linker-script and
-attribute change rather than an interpreter rewrite: neither M4's cons-cell
-representation nor §8's bytecode.
+All three presets report `XIP_RAM: 0 B of 16 KB, 0.00 %`, which looks like
+free RAM-speed instruction memory — **but it is not usable here.** That
+region is the XIP *cache* reconfigured as RAM (`PICO_USE_XIP_CACHE_AS_RAM`),
+and the SDK offers it only "for binaries that are not executing from flash
+(e.g. copy_to_ram and no_flash), as the XIP AHB ports would be otherwise
+unused" (`pico/platform/sections.h`). Pico Logo executes from flash, so
+claiming those 16 KB would turn off the cache that every flash-resident part
+of the interpreter depends on — almost certainly a large net loss. The zero
+in that column is correct and should stay zero.
+
+**The reachable form of the lever is `__not_in_flash_func`**, which places a
+function in SRAM, and which the project already uses for `lcd_blit_row` and
+the sound DMA path.
+
+### 11.2 The instruction-fetch experiment, built and ready to measure
+
+`core/hot.h` gives it a portable spelling — `LOGO_HOT(name)` — because the
+SDK macro does not exist on the host and `core/` compiles for both. That is
+the same shim P9 §13.2 recorded as needed before `core/tilemap.c`'s sampler
+could be made RAM-resident, so it is now available for that too.
+
+Four functions carry it, chosen by size and by position on the expression
+path (sizes from the `pico2` image):
+
+| Function | Bytes | |
+|---|---:|---|
+| `eval_primary` | 3,134 | the paren branches live here; largest function in the interpreter |
+| `token_source_next` | 1,288 | every token of every pass |
+| `eval_expr_bp` | 1,176 | the Pratt loop |
+| `step_expr_eval` | 776 | the trampoline's expression step |
+
+Off by default at the CMake level, so the host and test builds and any board
+without a preset opinion are untouched; §11.3 settles which presets ask for
+it. Cost of turning it on:
+
+| Preset | RAM before | RAM after | Δ |
+|---|---:|---:|---:|
+| `pico2` | 93.94 % | **95.11 %** | +6,144 B (25.6 KB still free) |
+| `pico2w` | 87.02 % | 88.58 % | +8,192 B |
+| `pico+2w` | 89.10 % | 90.27 % | +6,144 B |
+
+Verified in the image: all four symbols move from `0x1…` (flash XIP) to
+`0x2…` (SRAM), and back again when the option is off. The host and test
+builds are untouched — the option is gated on the SDK being present.
+
+```
+cmake --preset=pico2 -DLOGO_HOT_IN_RAM=ON && cmake --build --preset=pico2
+```
+
+### 11.3 Measured: instruction fetch confirmed (2026-08-04, Plus 2 W)
+
+**The frame went 81.0 → 65.5 ms, a 1.24× speedup, for 6 KB of SRAM.**
+Against five baseline runs that reproduced within 2 %, so the move is far
+outside the noise. The internal control is `sync`: 1.74 → 1.745 ms,
+unmoved, exactly as it should be for device work that never left flash —
+this is not measurement drift.
+
+The elementary costs say precisely what happened (µs, net of the bare loop,
+with each machine's own ratio):
+
+| | flash | RAM | change | ratio flash | ratio RAM |
+|---|---:|---:|---:|---:|---:|
+| **paren-call path** (`psum − sum`) | **22.0** | **4.0** | **−82 %** | **212×** | **38×** |
+| `make "x (:x + 1)` | 97.0 | 82.0 | −15 % | 129× | 109× |
+| `ignore (1 + 1)` | 68.0 | 49.5 | −27 % | 109× | 79× |
+| `ignore (:x + :x)` | 84.0 | 62.0 | −26 % | 133× | 98× |
+| user procedure call | 17.0 | 22.0 | **+29 %** | 67× | **87×** |
+| `make "x 1` | 47.5 | 51.5 | +8 % | 108× | 117× |
+
+**The 212× anomaly collapses to 38×** — below the 60× a bare `repeat`
+iteration costs. That was the whole question, and the answer is instruction
+fetch: `eval_primary` is the largest function in the build and holds both
+paren branches, and reaching it from flash cost 18 µs a time.
+
+**But the code left behind got worse.** A procedure call went 17 → 22 µs and
+its ratio 67× → 87×, because moving 6 KB out reshuffles the flash layout and
+the remaining code falls differently against the XIP cache. That is a
+finding, not a side effect: it says the boundary is arbitrary and whatever
+sits on the flash side of it pays.
+
+So a second tier followed the same evidence — the call path, the variable
+path (`make "x 1` is the dearest elementary operation), and the cons-cell
+accessors §3.3 named at 20 %:
+
+| Function | Bytes | |
+|---|---:|---|
+| `step_proc_call` | 1,300 | |
+| `step_prim_call` | 842 | |
+| `eval_instruction` | 376 | trampoline body |
+| `eval_trampoline` | 304 | |
+| `var_set` / `var_get` | 344 | the dearest elementary operation |
+| `eval_call_primitive` | 128 | |
+| `mem_word_view` | 120 | |
+| `mem_car` / `mem_cdr` | 164 | tiny, and called constantly |
+
+3.6 KB for all of it — the small ones are the best value per byte.
+
+| Preset | baseline | tier 1 | tier 1+2 |
+|---|---:|---:|---:|
+| `pico2` | 93.94 % | 95.11 % | **95.90 %** (21 KB free) |
+| `pico2w` | 87.02 % | 88.58 % | 89.36 % |
+| `pico+2w` | 89.10 % | 90.27 % | 91.05 % |
+
+All fourteen symbols verified at `0x2…` with the option on and `0x1…` with
+it off; the host and test builds never see it.
+
+**The default, settled without a Pico 2.** What held the option off was
+`pico2`'s 21 KB — a tile game takes 8 KB of it for the bank and the map
+(P9 §4), and SRAM pressure is what panics `repl_init` (`CLAUDE.md`). But
+that 21 KB is not the board, it is a preset. `pico2` carries
+`LOGO_OP_STACK_DEPTH: 768` from the single-board era (`dc32481`); the other
+two were given 256 when multi-board landed (`3caa75e`) and `pico2` was never
+revisited. `EvalOp` is 144 bytes, so measured: the same tier-1+2 firmware
+links at **81.83 %, 93 KB free**, when `pico2` uses 256 like everyone else.
+The 768-deep stack alone is **108 KB** — five times the headroom it appears
+to be short of, and the reason `pico2` reads as tighter than `pico2w`, which
+carries a whole WiFi stack and still links smaller.
+
+So the option is on for the boards that can be verified and off for the one
+that cannot:
+
+| Preset | RAM, option on | free | |
+|---|---:|---:|---|
+| `pico+2w` | 91.05 % | 46 KB | **on** — the board M5 was measured on |
+| `pico2w` | 89.36 % | 55 KB | **on** — less pressured than the board that boots |
+| `pico2` | 95.90 % | 21 KB | **off** — no hardware to boot it on |
+
+`pico2` is off for want of evidence, not on evidence against: nobody on this
+project owns one, so neither this option nor its 768-deep op stack has ever
+been exercised there. If a Pico 2 turns up, the order is boot it as it ships,
+then `-DLOGO_HOT_IN_RAM=ON`, then take the op stack to 256 if the RAM is
+wanted — 108 KB is a lot to hold for a recursion depth no board has been
+observed to need.
+
+**Where this leaves §1.** 65.5 ms against 40 needs **1.64×** more, and tier 2
+is unmeasured. Instruction fetch is no longer a hypothesis, so the honest
+next question is how much of the interpreter can live in RAM before the
+budget runs out — a design question with a known shape, and a much better
+place to be than choosing between two rejected rewrites.
 
 Calibration, first run: one operation **102.5 µs**, one procedure call
 **24 µs**. The frame reads 81.0 ms here against
@@ -888,8 +1044,8 @@ scoped and therefore not cacheable on the atom. That is a reason it cannot
 use M2's mechanism, not a reason it must stay slow. The second run times the pieces
 apart, and the tables above are the answer: not the
 operator, not the operands, not the literals — an arithmetic *statement*
-costs twice what its parts should on this board, and 16 KB of XIP_RAM sits
-unused. Neither is M4 and neither is §8's bytecode —
+costs twice what its parts should on this board, and `__not_in_flash_func`
+on the evaluator is how to find out why. Neither is M4 and neither is §8's bytecode —
 both of those were sized against a cost model this measurement replaces.
 
 For scale: 40 ms from 81 is 2.03×, or 1.84× from the unsteered 73.6.

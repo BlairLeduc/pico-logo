@@ -7,6 +7,7 @@
 #include "core/atom_memo.h"
 #include <string.h>
 #include <ctype.h>
+#include "hot.h"
 
 // Check if a word string represents a number
 static bool is_number_word(const char *str, size_t len)
@@ -331,7 +332,7 @@ static Token node_iter_next(NodeIterator *iter)
 }
 
 // Get next token
-Token token_source_next(TokenSource *ts)
+Token LOGO_HOT(token_source_next)(TokenSource *ts)
 {
     // If we have a cached token, consume and return it
     if (ts->has_current)

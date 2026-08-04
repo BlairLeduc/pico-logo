@@ -109,8 +109,8 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "core_demons_demons_set",
-      "community": 71,
-      "community_name": "procedures.c",
+      "community": 8,
+      "community_name": "result_none",
       "norm_label": "demons_set()"
     },
     {
@@ -131,8 +131,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_demons_c_node",
-      "community": 71,
-      "community_name": "procedures.c",
+      "community": 8,
+      "community_name": "result_none",
       "norm_label": "node"
     },
     {
@@ -142,8 +142,8 @@
       "source_location": "L105",
       "_origin": "ast",
       "id": "core_demons_demons_print",
-      "community": 71,
-      "community_name": "procedures.c",
+      "community": 8,
+      "community_name": "result_none",
       "norm_label": "demons_print()"
     },
     {
@@ -153,8 +153,8 @@
       "source_location": "L127",
       "_origin": "ast",
       "id": "core_demons_demons_freeze",
-      "community": 71,
-      "community_name": "procedures.c",
+      "community": 8,
+      "community_name": "result_none",
       "norm_label": "demons_freeze()"
     },
     {
@@ -164,8 +164,8 @@
       "source_location": "L129",
       "_origin": "ast",
       "id": "core_demons_demons_thaw",
-      "community": 71,
-      "community_name": "procedures.c",
+      "community": 8,
+      "community_name": "result_none",
       "norm_label": "demons_thaw()"
     },
     {
@@ -1275,7 +1275,7 @@
       "source_location": "L456",
       "_origin": "ast",
       "id": "core_eval_steps_read_predicate_bool",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "read_predicate_bool()"
     },
@@ -1628,7 +1628,7 @@
       "_origin": "ast",
       "id": "core_format_number_to_word",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "number_to_word()"
     },
     {
@@ -3673,7 +3673,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_memory_c_node",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "node"
     },
@@ -3707,7 +3707,7 @@
       "_origin": "ast",
       "id": "core_memory_mem_list_append",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "mem_list_append()"
     },
     {
@@ -3882,8 +3882,8 @@
       "source_location": "L830",
       "_origin": "ast",
       "id": "core_memory_mem_atom_unescape",
-      "community": 204,
-      "community_name": "mem_atom_unescape",
+      "community": 112,
+      "community_name": "value_to_string",
       "norm_label": "mem_atom_unescape()"
     },
     {
@@ -4003,7 +4003,7 @@
       "source_location": "L1109",
       "_origin": "ast",
       "id": "core_memory_mem_is_word",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "mem_is_word()"
     },
@@ -4036,7 +4036,7 @@
       "source_location": "L1127",
       "_origin": "ast",
       "id": "core_memory_mem_first_cell",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "mem_first_cell()"
     },
@@ -4047,7 +4047,7 @@
       "source_location": "L1137",
       "_origin": "ast",
       "id": "core_memory_mem_next_cell",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "mem_next_cell()"
     },
@@ -4070,7 +4070,7 @@
       "_origin": "ast",
       "id": "core_memory_mem_word_len",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "mem_word_len()"
     },
     {
@@ -4179,7 +4179,7 @@
       "source_location": "L1439",
       "_origin": "ast",
       "id": "core_memory_mem_gc_roots_push",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "mem_gc_roots_push()"
     },
@@ -4190,7 +4190,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "memgcrootscope",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "memgcrootscope"
     },
@@ -4201,7 +4201,7 @@
       "source_location": "L1448",
       "_origin": "ast",
       "id": "core_memory_mem_gc_roots_pop",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "mem_gc_roots_pop()"
     },
@@ -4476,8 +4476,8 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "core_parse_list_parse_list_body",
-      "community": 204,
-      "community_name": "mem_atom_unescape",
+      "community": 90,
+      "community_name": "mem_atom_cstr",
       "norm_label": "parse_list_body()"
     },
     {
@@ -4498,8 +4498,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_parse_list_c_lexer",
-      "community": 204,
-      "community_name": "mem_atom_unescape",
+      "community": 90,
+      "community_name": "mem_atom_cstr",
       "norm_label": "lexer"
     },
     {
@@ -5477,7 +5477,7 @@
       "source_location": "L171",
       "_origin": "ast",
       "id": "core_primitives_control_flow_prim_for",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "prim_for()"
     },
@@ -5532,8 +5532,8 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "core_primitives_debug_prim_step",
-      "community": 8,
-      "community_name": "value_to_string",
+      "community": 4,
+      "community_name": "mem_is_nil",
       "norm_label": "prim_step()"
     },
     {
@@ -5543,8 +5543,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_primitives_debug_c_result",
-      "community": 8,
-      "community_name": "value_to_string",
+      "community": 4,
+      "community_name": "mem_is_nil",
       "norm_label": "result"
     },
     {
@@ -5554,8 +5554,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_primitives_debug_c_evaluator",
-      "community": 8,
-      "community_name": "value_to_string",
+      "community": 4,
+      "community_name": "mem_is_nil",
       "norm_label": "evaluator"
     },
     {
@@ -5565,8 +5565,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_primitives_debug_c_value",
-      "community": 8,
-      "community_name": "value_to_string",
+      "community": 4,
+      "community_name": "mem_is_nil",
       "norm_label": "value"
     },
     {
@@ -5576,8 +5576,8 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "core_primitives_debug_prim_unstep",
-      "community": 8,
-      "community_name": "value_to_string",
+      "community": 4,
+      "community_name": "mem_is_nil",
       "norm_label": "prim_unstep()"
     },
     {
@@ -5587,8 +5587,8 @@
       "source_location": "L122",
       "_origin": "ast",
       "id": "core_primitives_debug_prim_trace",
-      "community": 8,
-      "community_name": "value_to_string",
+      "community": 4,
+      "community_name": "mem_is_nil",
       "norm_label": "prim_trace()"
     },
     {
@@ -5598,8 +5598,8 @@
       "source_location": "L166",
       "_origin": "ast",
       "id": "core_primitives_debug_prim_untrace",
-      "community": 8,
-      "community_name": "value_to_string",
+      "community": 4,
+      "community_name": "mem_is_nil",
       "norm_label": "prim_untrace()"
     },
     {
@@ -5620,8 +5620,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "core_primitives_debug_control",
-      "community": 194,
-      "community_name": "primitives_debug_control.c",
+      "community": 71,
+      "community_name": "procedures.c",
       "norm_label": "primitives_debug_control.c"
     },
     {
@@ -5631,8 +5631,8 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "core_primitives_debug_control_prim_wait",
-      "community": 194,
-      "community_name": "primitives_debug_control.c",
+      "community": 71,
+      "community_name": "procedures.c",
       "norm_label": "prim_wait()"
     },
     {
@@ -5642,8 +5642,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_primitives_debug_control_c_result",
-      "community": 194,
-      "community_name": "primitives_debug_control.c",
+      "community": 71,
+      "community_name": "procedures.c",
       "norm_label": "result"
     },
     {
@@ -5653,8 +5653,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_primitives_debug_control_c_evaluator",
-      "community": 194,
-      "community_name": "primitives_debug_control.c",
+      "community": 71,
+      "community_name": "procedures.c",
       "norm_label": "evaluator"
     },
     {
@@ -5664,8 +5664,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_primitives_debug_control_c_value",
-      "community": 194,
-      "community_name": "primitives_debug_control.c",
+      "community": 71,
+      "community_name": "procedures.c",
       "norm_label": "value"
     },
     {
@@ -5675,8 +5675,8 @@
       "source_location": "L62",
       "_origin": "ast",
       "id": "core_primitives_debug_control_pause_check_continue",
-      "community": 194,
-      "community_name": "primitives_debug_control.c",
+      "community": 71,
+      "community_name": "procedures.c",
       "norm_label": "pause_check_continue()"
     },
     {
@@ -5686,8 +5686,8 @@
       "source_location": "L70",
       "_origin": "ast",
       "id": "core_primitives_debug_control_pause_request_continue",
-      "community": 194,
-      "community_name": "primitives_debug_control.c",
+      "community": 71,
+      "community_name": "procedures.c",
       "norm_label": "pause_request_continue()"
     },
     {
@@ -5697,8 +5697,8 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "core_primitives_debug_control_pause_reset_state",
-      "community": 194,
-      "community_name": "primitives_debug_control.c",
+      "community": 71,
+      "community_name": "procedures.c",
       "norm_label": "pause_reset_state()"
     },
     {
@@ -5708,8 +5708,8 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "core_primitives_debug_control_prim_pause",
-      "community": 194,
-      "community_name": "primitives_debug_control.c",
+      "community": 71,
+      "community_name": "procedures.c",
       "norm_label": "prim_pause()"
     },
     {
@@ -5719,8 +5719,8 @@
       "source_location": "L112",
       "_origin": "ast",
       "id": "core_primitives_debug_control_prim_co",
-      "community": 194,
-      "community_name": "primitives_debug_control.c",
+      "community": 71,
+      "community_name": "procedures.c",
       "norm_label": "prim_co()"
     },
     {
@@ -5730,8 +5730,8 @@
       "source_location": "L125",
       "_origin": "ast",
       "id": "core_primitives_debug_control_prim_go",
-      "community": 194,
-      "community_name": "primitives_debug_control.c",
+      "community": 71,
+      "community_name": "procedures.c",
       "norm_label": "prim_go()"
     },
     {
@@ -5741,8 +5741,8 @@
       "source_location": "L142",
       "_origin": "ast",
       "id": "core_primitives_debug_control_prim_label",
-      "community": 194,
-      "community_name": "primitives_debug_control.c",
+      "community": 71,
+      "community_name": "procedures.c",
       "norm_label": "prim_label()"
     },
     {
@@ -5785,8 +5785,8 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "core_primitives_editor_count_bracket_balance",
-      "community": 8,
-      "community_name": "value_to_string",
+      "community": 41,
+      "community_name": "prim_savel",
       "norm_label": "count_bracket_balance()"
     },
     {
@@ -5796,8 +5796,8 @@
       "source_location": "L74",
       "_origin": "ast",
       "id": "core_primitives_editor_run_editor_and_process",
-      "community": 8,
-      "community_name": "value_to_string",
+      "community": 41,
+      "community_name": "prim_savel",
       "norm_label": "run_editor_and_process()"
     },
     {
@@ -5807,8 +5807,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_primitives_editor_c_result",
-      "community": 8,
-      "community_name": "value_to_string",
+      "community": 41,
+      "community_name": "prim_savel",
       "norm_label": "result"
     },
     {
@@ -5818,8 +5818,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_primitives_editor_c_evaluator",
-      "community": 8,
-      "community_name": "value_to_string",
+      "community": 41,
+      "community_name": "prim_savel",
       "norm_label": "evaluator"
     },
     {
@@ -5829,8 +5829,8 @@
       "source_location": "L369",
       "_origin": "ast",
       "id": "core_primitives_editor_prim_edit",
-      "community": 8,
-      "community_name": "value_to_string",
+      "community": 41,
+      "community_name": "prim_savel",
       "norm_label": "prim_edit()"
     },
     {
@@ -5840,8 +5840,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_primitives_editor_c_value",
-      "community": 8,
-      "community_name": "value_to_string",
+      "community": 41,
+      "community_name": "prim_savel",
       "norm_label": "value"
     },
     {
@@ -5851,8 +5851,8 @@
       "source_location": "L481",
       "_origin": "ast",
       "id": "core_primitives_editor_prim_edn",
-      "community": 8,
-      "community_name": "value_to_string",
+      "community": 41,
+      "community_name": "prim_savel",
       "norm_label": "prim_edn()"
     },
     {
@@ -5862,8 +5862,8 @@
       "source_location": "L538",
       "_origin": "ast",
       "id": "core_primitives_editor_prim_edns",
-      "community": 8,
-      "community_name": "value_to_string",
+      "community": 41,
+      "community_name": "prim_savel",
       "norm_label": "prim_edns()"
     },
     {
@@ -5873,8 +5873,8 @@
       "source_location": "L563",
       "_origin": "ast",
       "id": "core_primitives_editor_prim_edall",
-      "community": 8,
-      "community_name": "value_to_string",
+      "community": 41,
+      "community_name": "prim_savel",
       "norm_label": "prim_edall()"
     },
     {
@@ -5917,8 +5917,8 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "core_primitives_events_prim_when",
-      "community": 71,
-      "community_name": "procedures.c",
+      "community": 8,
+      "community_name": "result_none",
       "norm_label": "prim_when()"
     },
     {
@@ -5928,8 +5928,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_primitives_events_c_result",
-      "community": 71,
-      "community_name": "procedures.c",
+      "community": 8,
+      "community_name": "result_none",
       "norm_label": "result"
     },
     {
@@ -5939,8 +5939,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_primitives_events_c_evaluator",
-      "community": 71,
-      "community_name": "procedures.c",
+      "community": 8,
+      "community_name": "result_none",
       "norm_label": "evaluator"
     },
     {
@@ -5950,8 +5950,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_primitives_events_c_value",
-      "community": 71,
-      "community_name": "procedures.c",
+      "community": 8,
+      "community_name": "result_none",
       "norm_label": "value"
     },
     {
@@ -5961,8 +5961,8 @@
       "source_location": "L38",
       "_origin": "ast",
       "id": "core_primitives_events_prim_freeze",
-      "community": 71,
-      "community_name": "procedures.c",
+      "community": 8,
+      "community_name": "result_none",
       "norm_label": "prim_freeze()"
     },
     {
@@ -5972,8 +5972,8 @@
       "source_location": "L46",
       "_origin": "ast",
       "id": "core_primitives_events_prim_thaw",
-      "community": 71,
-      "community_name": "procedures.c",
+      "community": 8,
+      "community_name": "result_none",
       "norm_label": "prim_thaw()"
     },
     {
@@ -5983,8 +5983,8 @@
       "source_location": "L55",
       "_origin": "ast",
       "id": "core_primitives_events_prim_cleardemons",
-      "community": 71,
-      "community_name": "procedures.c",
+      "community": 8,
+      "community_name": "result_none",
       "norm_label": "prim_cleardemons()"
     },
     {
@@ -6742,8 +6742,8 @@
       "source_location": "L249",
       "_origin": "ast",
       "id": "core_primitives_files_load_save_save_output",
-      "community": 83,
-      "community_name": "result_error_arg",
+      "community": 41,
+      "community_name": "prim_savel",
       "norm_label": "save_output()"
     },
     {
@@ -6764,8 +6764,8 @@
       "source_location": "L336",
       "_origin": "ast",
       "id": "core_primitives_files_load_save_prim_savel",
-      "community": 8,
-      "community_name": "value_to_string",
+      "community": 41,
+      "community_name": "prim_savel",
       "norm_label": "prim_savel()"
     },
     {
@@ -6830,8 +6830,8 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "core_primitives_hardware_prim_battery_level",
-      "community": 71,
-      "community_name": "procedures.c",
+      "community": 83,
+      "community_name": "result_error_arg",
       "norm_label": "prim_battery_level()"
     },
     {
@@ -6841,8 +6841,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_primitives_hardware_c_result",
-      "community": 71,
-      "community_name": "procedures.c",
+      "community": 83,
+      "community_name": "result_error_arg",
       "norm_label": "result"
     },
     {
@@ -6852,8 +6852,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_primitives_hardware_c_evaluator",
-      "community": 71,
-      "community_name": "procedures.c",
+      "community": 83,
+      "community_name": "result_error_arg",
       "norm_label": "evaluator"
     },
     {
@@ -6863,8 +6863,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_primitives_hardware_c_value",
-      "community": 71,
-      "community_name": "procedures.c",
+      "community": 83,
+      "community_name": "result_error_arg",
       "norm_label": "value"
     },
     {
@@ -6874,8 +6874,8 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "core_primitives_hardware_prim_goodbye",
-      "community": 71,
-      "community_name": "procedures.c",
+      "community": 83,
+      "community_name": "result_error_arg",
       "norm_label": "prim_goodbye()"
     },
     {
@@ -6885,8 +6885,8 @@
       "source_location": "L82",
       "_origin": "ast",
       "id": "core_primitives_hardware_prim_bootsel",
-      "community": 71,
-      "community_name": "procedures.c",
+      "community": 83,
+      "community_name": "result_error_arg",
       "norm_label": "prim_bootsel()"
     },
     {
@@ -6896,8 +6896,8 @@
       "source_location": "L106",
       "_origin": "ast",
       "id": "core_primitives_hardware_toot_gate_freq",
-      "community": 71,
-      "community_name": "procedures.c",
+      "community": 83,
+      "community_name": "result_error_arg",
       "norm_label": "toot_gate_freq()"
     },
     {
@@ -6907,8 +6907,8 @@
       "source_location": "L123",
       "_origin": "ast",
       "id": "core_primitives_hardware_prim_toot",
-      "community": 71,
-      "community_name": "procedures.c",
+      "community": 83,
+      "community_name": "result_error_arg",
       "norm_label": "prim_toot()"
     },
     {
@@ -7842,7 +7842,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "core_primitives_list_processing",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "primitives_list_processing.c"
     },
@@ -7853,7 +7853,7 @@
       "source_location": "L70",
       "_origin": "ast",
       "id": "core_primitives_list_processing_parse_proc_spec",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "parse_proc_spec()"
     },
@@ -7864,7 +7864,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_primitives_list_processing_c_result",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "result"
     },
@@ -7875,7 +7875,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_primitives_list_processing_c_value",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "value"
     },
@@ -7886,7 +7886,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "procspec",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "procspec"
     },
@@ -7897,7 +7897,7 @@
       "source_location": "L186",
       "_origin": "ast",
       "id": "core_primitives_list_processing_invoke_proc_spec",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "invoke_proc_spec()"
     },
@@ -7908,7 +7908,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_primitives_list_processing_c_evaluator",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "evaluator"
     },
@@ -7919,7 +7919,7 @@
       "source_location": "L333",
       "_origin": "ast",
       "id": "core_primitives_list_processing_prim_apply",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "prim_apply()"
     },
@@ -7930,7 +7930,7 @@
       "source_location": "L382",
       "_origin": "ast",
       "id": "core_primitives_list_processing_prim_foreach",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "prim_foreach()"
     },
@@ -7941,7 +7941,7 @@
       "source_location": "L577",
       "_origin": "ast",
       "id": "core_primitives_list_processing_prim_map",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "prim_map()"
     },
@@ -7952,7 +7952,7 @@
       "source_location": "L897",
       "_origin": "ast",
       "id": "core_primitives_list_processing_prim_map_se",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "prim_map_se()"
     },
@@ -7963,7 +7963,7 @@
       "source_location": "L1137",
       "_origin": "ast",
       "id": "core_primitives_list_processing_prim_filter",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "prim_filter()"
     },
@@ -7974,7 +7974,7 @@
       "source_location": "L1312",
       "_origin": "ast",
       "id": "core_primitives_list_processing_prim_find",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "prim_find()"
     },
@@ -7985,7 +7985,7 @@
       "source_location": "L1438",
       "_origin": "ast",
       "id": "core_primitives_list_processing_prim_reduce",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "prim_reduce()"
     },
@@ -7996,7 +7996,7 @@
       "source_location": "L1623",
       "_origin": "ast",
       "id": "core_primitives_list_processing_prim_crossmap",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "prim_crossmap()"
     },
@@ -8205,8 +8205,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "core_primitives_outside_world",
-      "community": 71,
-      "community_name": "procedures.c",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "primitives_outside_world.c"
     },
     {
@@ -8216,8 +8216,8 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "core_primitives_outside_world_print_output",
-      "community": 112,
-      "community_name": "result_ok",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "print_output()"
     },
     {
@@ -8227,8 +8227,8 @@
       "source_location": "L41",
       "_origin": "ast",
       "id": "core_primitives_outside_world_flush_writer",
-      "community": 112,
-      "community_name": "result_ok",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "flush_writer()"
     },
     {
@@ -8238,8 +8238,8 @@
       "source_location": "L55",
       "_origin": "ast",
       "id": "core_primitives_outside_world_prim_keyp",
-      "community": 112,
-      "community_name": "result_ok",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "prim_keyp()"
     },
     {
@@ -8249,8 +8249,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_primitives_outside_world_c_result",
-      "community": 112,
-      "community_name": "result_ok",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "result"
     },
     {
@@ -8260,8 +8260,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_primitives_outside_world_c_evaluator",
-      "community": 112,
-      "community_name": "result_ok",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "evaluator"
     },
     {
@@ -8271,8 +8271,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_primitives_outside_world_c_value",
-      "community": 112,
-      "community_name": "result_ok",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "value"
     },
     {
@@ -8282,8 +8282,8 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "core_primitives_outside_world_prim_readchar",
-      "community": 112,
-      "community_name": "result_ok",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "prim_readchar()"
     },
     {
@@ -8293,8 +8293,8 @@
       "source_location": "L107",
       "_origin": "ast",
       "id": "core_primitives_outside_world_prim_readchars",
-      "community": 112,
-      "community_name": "result_ok",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "prim_readchars()"
     },
     {
@@ -8304,8 +8304,8 @@
       "source_location": "L154",
       "_origin": "ast",
       "id": "core_primitives_outside_world_prim_readlist",
-      "community": 112,
-      "community_name": "result_ok",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "prim_readlist()"
     },
     {
@@ -8315,8 +8315,8 @@
       "source_location": "L187",
       "_origin": "ast",
       "id": "core_primitives_outside_world_prim_readword",
-      "community": 112,
-      "community_name": "result_ok",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "prim_readword()"
     },
     {
@@ -8326,8 +8326,8 @@
       "source_location": "L232",
       "_origin": "ast",
       "id": "core_primitives_outside_world_prim_print",
-      "community": 112,
-      "community_name": "result_ok",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "prim_print()"
     },
     {
@@ -8337,8 +8337,8 @@
       "source_location": "L257",
       "_origin": "ast",
       "id": "core_primitives_outside_world_prim_show",
-      "community": 112,
-      "community_name": "result_ok",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "prim_show()"
     },
     {
@@ -8348,8 +8348,8 @@
       "source_location": "L278",
       "_origin": "ast",
       "id": "core_primitives_outside_world_prim_type",
-      "community": 112,
-      "community_name": "result_ok",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "prim_type()"
     },
     {
@@ -8359,8 +8359,8 @@
       "source_location": "L304",
       "_origin": "ast",
       "id": "core_primitives_outside_world_standout_string",
-      "community": 71,
-      "community_name": "procedures.c",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "standout_string()"
     },
     {
@@ -8370,8 +8370,8 @@
       "source_location": "L319",
       "_origin": "ast",
       "id": "core_primitives_outside_world_standout_value",
-      "community": 71,
-      "community_name": "procedures.c",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "standout_value()"
     },
     {
@@ -8381,8 +8381,8 @@
       "source_location": "L343",
       "_origin": "ast",
       "id": "core_primitives_outside_world_standout_list_contents",
-      "community": 71,
-      "community_name": "procedures.c",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "standout_list_contents()"
     },
     {
@@ -8392,8 +8392,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_primitives_outside_world_c_node",
-      "community": 71,
-      "community_name": "procedures.c",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "node"
     },
     {
@@ -8403,8 +8403,8 @@
       "source_location": "L386",
       "_origin": "ast",
       "id": "core_primitives_outside_world_prim_standout",
-      "community": 112,
-      "community_name": "result_ok",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "prim_standout()"
     },
     {
@@ -8613,7 +8613,7 @@
       "_origin": "ast",
       "id": "core_primitives_properties",
       "community": 41,
-      "community_name": "properties.c",
+      "community_name": "prim_savel",
       "norm_label": "primitives_properties.c"
     },
     {
@@ -8624,7 +8624,7 @@
       "_origin": "ast",
       "id": "core_primitives_properties_prop_output",
       "community": 41,
-      "community_name": "properties.c",
+      "community_name": "prim_savel",
       "norm_label": "prop_output()"
     },
     {
@@ -8635,7 +8635,7 @@
       "_origin": "ast",
       "id": "core_primitives_properties_prim_pprop",
       "community": 41,
-      "community_name": "properties.c",
+      "community_name": "prim_savel",
       "norm_label": "prim_pprop()"
     },
     {
@@ -8646,7 +8646,7 @@
       "_origin": "ast",
       "id": "core_primitives_properties_c_result",
       "community": 41,
-      "community_name": "properties.c",
+      "community_name": "prim_savel",
       "norm_label": "result"
     },
     {
@@ -8657,7 +8657,7 @@
       "_origin": "ast",
       "id": "core_primitives_properties_c_evaluator",
       "community": 41,
-      "community_name": "properties.c",
+      "community_name": "prim_savel",
       "norm_label": "evaluator"
     },
     {
@@ -8668,7 +8668,7 @@
       "_origin": "ast",
       "id": "core_primitives_properties_c_value",
       "community": 41,
-      "community_name": "properties.c",
+      "community_name": "prim_savel",
       "norm_label": "value"
     },
     {
@@ -8679,7 +8679,7 @@
       "_origin": "ast",
       "id": "core_primitives_properties_prim_gprop",
       "community": 41,
-      "community_name": "properties.c",
+      "community_name": "prim_savel",
       "norm_label": "prim_gprop()"
     },
     {
@@ -8690,7 +8690,7 @@
       "_origin": "ast",
       "id": "core_primitives_properties_prim_plist",
       "community": 41,
-      "community_name": "properties.c",
+      "community_name": "prim_savel",
       "norm_label": "prim_plist()"
     },
     {
@@ -8701,7 +8701,7 @@
       "_origin": "ast",
       "id": "core_primitives_properties_prim_remprop",
       "community": 41,
-      "community_name": "properties.c",
+      "community_name": "prim_savel",
       "norm_label": "prim_remprop()"
     },
     {
@@ -8712,7 +8712,7 @@
       "_origin": "ast",
       "id": "core_primitives_properties_prim_pps",
       "community": 41,
-      "community_name": "properties.c",
+      "community_name": "prim_savel",
       "norm_label": "prim_pps()"
     },
     {
@@ -8723,7 +8723,7 @@
       "_origin": "ast",
       "id": "core_primitives_properties_prim_erprops",
       "community": 41,
-      "community_name": "properties.c",
+      "community_name": "prim_savel",
       "norm_label": "prim_erprops()"
     },
     {
@@ -9701,7 +9701,7 @@
       "source_location": "L115",
       "_origin": "ast",
       "id": "core_primitives_turtle_parse_turtle_set",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "parse_turtle_set()"
     },
@@ -10229,7 +10229,7 @@
       "source_location": "L1286",
       "_origin": "ast",
       "id": "core_primitives_turtle_prim_putsh",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "prim_putsh()"
     },
@@ -10494,7 +10494,7 @@
       "_origin": "ast",
       "id": "core_primitives_variables",
       "community": 70,
-      "community_name": "prim_local",
+      "community_name": "result_error",
       "norm_label": "primitives_variables.c"
     },
     {
@@ -10505,7 +10505,7 @@
       "_origin": "ast",
       "id": "core_primitives_variables_prim_make",
       "community": 70,
-      "community_name": "prim_local",
+      "community_name": "result_error",
       "norm_label": "prim_make()"
     },
     {
@@ -10516,7 +10516,7 @@
       "_origin": "ast",
       "id": "core_primitives_variables_c_result",
       "community": 70,
-      "community_name": "prim_local",
+      "community_name": "result_error",
       "norm_label": "result"
     },
     {
@@ -10527,7 +10527,7 @@
       "_origin": "ast",
       "id": "core_primitives_variables_c_evaluator",
       "community": 70,
-      "community_name": "prim_local",
+      "community_name": "result_error",
       "norm_label": "evaluator"
     },
     {
@@ -10538,7 +10538,7 @@
       "_origin": "ast",
       "id": "core_primitives_variables_c_value",
       "community": 70,
-      "community_name": "prim_local",
+      "community_name": "result_error",
       "norm_label": "value"
     },
     {
@@ -10549,7 +10549,7 @@
       "_origin": "ast",
       "id": "core_primitives_variables_prim_thing",
       "community": 70,
-      "community_name": "prim_local",
+      "community_name": "result_error",
       "norm_label": "prim_thing()"
     },
     {
@@ -10560,7 +10560,7 @@
       "_origin": "ast",
       "id": "core_primitives_variables_prim_local",
       "community": 70,
-      "community_name": "prim_local",
+      "community_name": "result_error",
       "norm_label": "prim_local()"
     },
     {
@@ -10571,7 +10571,7 @@
       "_origin": "ast",
       "id": "core_primitives_variables_prim_localmake",
       "community": 70,
-      "community_name": "prim_local",
+      "community_name": "result_error",
       "norm_label": "prim_localmake()"
     },
     {
@@ -10582,7 +10582,7 @@
       "_origin": "ast",
       "id": "core_primitives_variables_prim_name",
       "community": 70,
-      "community_name": "prim_local",
+      "community_name": "result_error",
       "norm_label": "prim_name()"
     },
     {
@@ -10593,7 +10593,7 @@
       "_origin": "ast",
       "id": "core_primitives_variables_prim_namep",
       "community": 70,
-      "community_name": "prim_local",
+      "community_name": "result_error",
       "norm_label": "prim_namep()"
     },
     {
@@ -10813,7 +10813,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "primitives_words_lists.c"
     },
     {
@@ -10824,7 +10824,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_normalize_to_word",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "normalize_to_word()"
     },
     {
@@ -10835,7 +10835,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_c_value",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "value"
     },
     {
@@ -10846,7 +10846,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_first",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_first()"
     },
     {
@@ -10857,7 +10857,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_c_result",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "result"
     },
     {
@@ -10868,7 +10868,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_c_evaluator",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "evaluator"
     },
     {
@@ -10879,7 +10879,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_last",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_last()"
     },
     {
@@ -10890,7 +10890,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_butfirst",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_butfirst()"
     },
     {
@@ -10901,7 +10901,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_butlast",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_butlast()"
     },
     {
@@ -10912,7 +10912,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_count",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_count()"
     },
     {
@@ -10923,7 +10923,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_emptyp",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_emptyp()"
     },
     {
@@ -10934,7 +10934,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_item",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_item()"
     },
     {
@@ -10945,7 +10945,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_replace",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_replace()"
     },
     {
@@ -10956,7 +10956,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_value_as_word_str",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "value_as_word_str()"
     },
     {
@@ -10967,7 +10967,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_find_word_in_word",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "find_word_in_word()"
     },
     {
@@ -10978,7 +10978,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_find_element_in_list",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "find_element_in_list()"
     },
     {
@@ -10989,7 +10989,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_c_node",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "node"
     },
     {
@@ -11000,7 +11000,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_member_value_to_node",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "member_value_to_node()"
     },
     {
@@ -11011,7 +11011,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_dsetfirst",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_dsetfirst()"
     },
     {
@@ -11022,7 +11022,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_dsetbf",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_dsetbf()"
     },
     {
@@ -11033,7 +11033,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_dsetitem",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_dsetitem()"
     },
     {
@@ -11044,7 +11044,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_member",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_member()"
     },
     {
@@ -11055,7 +11055,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_pick",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_pick()"
     },
     {
@@ -11066,7 +11066,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_reverse",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_reverse()"
     },
     {
@@ -11077,7 +11077,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_shuffle",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_shuffle()"
     },
     {
@@ -11088,7 +11088,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_remove",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_remove()"
     },
     {
@@ -11099,7 +11099,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_remdup",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_remdup()"
     },
     {
@@ -11110,7 +11110,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_fput",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_fput()"
     },
     {
@@ -11121,7 +11121,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_list",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_list()"
     },
     {
@@ -11132,7 +11132,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_lput",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_lput()"
     },
     {
@@ -11143,7 +11143,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_parse",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_parse()"
     },
     {
@@ -11154,7 +11154,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_sentence",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_sentence()"
     },
     {
@@ -11165,7 +11165,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_word",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_word()"
     },
     {
@@ -11176,7 +11176,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_ascii",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_ascii()"
     },
     {
@@ -11187,7 +11187,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_beforep",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_beforep()"
     },
     {
@@ -11198,7 +11198,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_char",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_char()"
     },
     {
@@ -11209,7 +11209,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_equalp",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_equalp()"
     },
     {
@@ -11220,7 +11220,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_listp",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_listp()"
     },
     {
@@ -11231,7 +11231,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_memberp",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_memberp()"
     },
     {
@@ -11242,7 +11242,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_numberp",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_numberp()"
     },
     {
@@ -11253,7 +11253,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_wordp",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_wordp()"
     },
     {
@@ -11264,7 +11264,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_lowercase",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_lowercase()"
     },
     {
@@ -11275,7 +11275,7 @@
       "_origin": "ast",
       "id": "core_primitives_words_lists_prim_uppercase",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "prim_uppercase()"
     },
     {
@@ -11297,7 +11297,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "primitives_workspace.c"
     },
     {
@@ -11308,7 +11308,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_ws_output",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "ws_output()"
     },
     {
@@ -11319,7 +11319,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_ws_newline",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "ws_newline()"
     },
     {
@@ -11330,7 +11330,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_ws_write_text",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "ws_write_text()"
     },
     {
@@ -11341,7 +11341,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_c_logoio",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "logoio"
     },
     {
@@ -11352,7 +11352,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_ws_write_procedure_definition",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "ws_write_procedure_definition()"
     },
     {
@@ -11363,7 +11363,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_c_userprocedure",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "userprocedure"
     },
     {
@@ -11374,7 +11374,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_ws_write_procedure_title",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "ws_write_procedure_title()"
     },
     {
@@ -11385,7 +11385,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_ws_write_variable",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "ws_write_variable()"
     },
     {
@@ -11396,7 +11396,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_c_value",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "value"
     },
     {
@@ -11407,7 +11407,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_ws_write_property_list",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "ws_write_property_list()"
     },
     {
@@ -11418,7 +11418,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_c_node",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "node"
     },
     {
@@ -11429,7 +11429,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_prim_po",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "prim_po()"
     },
     {
@@ -11440,7 +11440,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_c_result",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "result"
     },
     {
@@ -11451,7 +11451,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_c_evaluator",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "evaluator"
     },
     {
@@ -11462,7 +11462,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_prim_poall",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "prim_poall()"
     },
     {
@@ -11473,7 +11473,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_prim_pon",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "prim_pon()"
     },
     {
@@ -11484,7 +11484,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_prim_pons",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "prim_pons()"
     },
     {
@@ -11495,7 +11495,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_prim_pops",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "prim_pops()"
     },
     {
@@ -11506,7 +11506,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_prim_pot",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "prim_pot()"
     },
     {
@@ -11517,7 +11517,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_prim_pots",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "prim_pots()"
     },
     {
@@ -11528,7 +11528,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_prim_bury",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "prim_bury()"
     },
     {
@@ -11539,7 +11539,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_prim_buryall",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "prim_buryall()"
     },
     {
@@ -11550,7 +11550,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_prim_buryname",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "prim_buryname()"
     },
     {
@@ -11561,7 +11561,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_prim_unbury",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "prim_unbury()"
     },
     {
@@ -11572,7 +11572,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_prim_unburyall",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "prim_unburyall()"
     },
     {
@@ -11583,7 +11583,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_prim_unburyname",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "prim_unburyname()"
     },
     {
@@ -11594,7 +11594,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_prim_erall",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "prim_erall()"
     },
     {
@@ -11605,7 +11605,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_prim_erase",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "prim_erase()"
     },
     {
@@ -11616,7 +11616,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_prim_ern",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "prim_ern()"
     },
     {
@@ -11627,7 +11627,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_prim_erns",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "prim_erns()"
     },
     {
@@ -11638,7 +11638,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_prim_erps",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "prim_erps()"
     },
     {
@@ -11649,7 +11649,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_compare_strings",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "compare_strings()"
     },
     {
@@ -11660,7 +11660,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_prim_primitives",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "prim_primitives()"
     },
     {
@@ -11671,7 +11671,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_prim_nodes",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "prim_nodes()"
     },
     {
@@ -11693,7 +11693,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_help_list_add",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "help_list_add()"
     },
     {
@@ -11704,7 +11704,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_help_list_flush",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "help_list_flush()"
     },
     {
@@ -11715,7 +11715,7 @@
       "_origin": "ast",
       "id": "core_primitives_workspace_prim_help",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "prim_help()"
     },
     {
@@ -11891,7 +11891,7 @@
       "_origin": "ast",
       "id": "core_procedures_proc_erase_all",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "proc_erase_all()"
     },
     {
@@ -11935,7 +11935,7 @@
       "_origin": "ast",
       "id": "core_procedures_proc_count",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "proc_count()"
     },
     {
@@ -11946,7 +11946,7 @@
       "_origin": "ast",
       "id": "core_procedures_proc_get_by_index",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "proc_get_by_index()"
     },
     {
@@ -12199,7 +12199,7 @@
       "_origin": "ast",
       "id": "core_properties_c_core_properties",
       "community": 41,
-      "community_name": "properties.c",
+      "community_name": "prim_savel",
       "norm_label": "properties.c"
     },
     {
@@ -12221,7 +12221,7 @@
       "_origin": "ast",
       "id": "core_properties_prop_value_to_node",
       "community": 41,
-      "community_name": "properties.c",
+      "community_name": "prim_savel",
       "norm_label": "prop_value_to_node()"
     },
     {
@@ -12232,7 +12232,7 @@
       "_origin": "ast",
       "id": "core_properties_c_node",
       "community": 41,
-      "community_name": "properties.c",
+      "community_name": "prim_savel",
       "norm_label": "node"
     },
     {
@@ -12243,7 +12243,7 @@
       "_origin": "ast",
       "id": "core_properties_c_value",
       "community": 41,
-      "community_name": "properties.c",
+      "community_name": "prim_savel",
       "norm_label": "value"
     },
     {
@@ -12254,7 +12254,7 @@
       "_origin": "ast",
       "id": "core_properties_prop_node_to_value",
       "community": 41,
-      "community_name": "properties.c",
+      "community_name": "prim_savel",
       "norm_label": "prop_node_to_value()"
     },
     {
@@ -12265,7 +12265,7 @@
       "_origin": "ast",
       "id": "core_properties_find_entry",
       "community": 41,
-      "community_name": "properties.c",
+      "community_name": "prim_savel",
       "norm_label": "find_entry()"
     },
     {
@@ -12276,7 +12276,7 @@
       "_origin": "ast",
       "id": "core_properties_find_property_in_entry",
       "community": 41,
-      "community_name": "properties.c",
+      "community_name": "prim_savel",
       "norm_label": "find_property_in_entry()"
     },
     {
@@ -12287,7 +12287,7 @@
       "_origin": "ast",
       "id": "core_properties_prop_put",
       "community": 41,
-      "community_name": "properties.c",
+      "community_name": "prim_savel",
       "norm_label": "prop_put()"
     },
     {
@@ -12298,7 +12298,7 @@
       "_origin": "ast",
       "id": "core_properties_prop_get",
       "community": 41,
-      "community_name": "properties.c",
+      "community_name": "prim_savel",
       "norm_label": "prop_get()"
     },
     {
@@ -12309,7 +12309,7 @@
       "_origin": "ast",
       "id": "core_properties_prop_remove",
       "community": 41,
-      "community_name": "properties.c",
+      "community_name": "prim_savel",
       "norm_label": "prop_remove()"
     },
     {
@@ -12320,7 +12320,7 @@
       "_origin": "ast",
       "id": "core_properties_prop_get_list",
       "community": 41,
-      "community_name": "properties.c",
+      "community_name": "prim_savel",
       "norm_label": "prop_get_list()"
     },
     {
@@ -12331,7 +12331,7 @@
       "_origin": "ast",
       "id": "core_properties_prop_has_properties",
       "community": 41,
-      "community_name": "properties.c",
+      "community_name": "prim_savel",
       "norm_label": "prop_has_properties()"
     },
     {
@@ -12342,7 +12342,7 @@
       "_origin": "ast",
       "id": "core_properties_prop_erase_all",
       "community": 41,
-      "community_name": "properties.c",
+      "community_name": "prim_savel",
       "norm_label": "prop_erase_all()"
     },
     {
@@ -12352,8 +12352,8 @@
       "source_location": "L317",
       "_origin": "ast",
       "id": "core_properties_prop_name_count",
-      "community": 8,
-      "community_name": "value_to_string",
+      "community": 41,
+      "community_name": "prim_savel",
       "norm_label": "prop_name_count()"
     },
     {
@@ -12363,8 +12363,8 @@
       "source_location": "L334",
       "_origin": "ast",
       "id": "core_properties_prop_get_name_by_index",
-      "community": 8,
-      "community_name": "value_to_string",
+      "community": 41,
+      "community_name": "prim_savel",
       "norm_label": "prop_get_name_by_index()"
     },
     {
@@ -12441,7 +12441,7 @@
       "_origin": "ast",
       "id": "core_random_logo_random_next",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "logo_random_next()"
     },
     {
@@ -12452,7 +12452,7 @@
       "_origin": "ast",
       "id": "core_random_c_logoio",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "logoio"
     },
     {
@@ -13441,8 +13441,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "core_value_c_core_value",
-      "community": 112,
-      "community_name": "result_ok",
+      "community": 71,
+      "community_name": "procedures.c",
       "norm_label": "value.c"
     },
     {
@@ -13464,7 +13464,7 @@
       "_origin": "ast",
       "id": "core_value_c_value",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "value"
     },
     {
@@ -13486,7 +13486,7 @@
       "_origin": "ast",
       "id": "core_value_value_word",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "value_word()"
     },
     {
@@ -13497,7 +13497,7 @@
       "_origin": "ast",
       "id": "core_value_c_node",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "node"
     },
     {
@@ -13508,7 +13508,7 @@
       "_origin": "ast",
       "id": "core_value_value_list",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "value_list()"
     },
     {
@@ -13552,7 +13552,7 @@
       "_origin": "ast",
       "id": "core_value_value_is_number",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "value_is_number()"
     },
     {
@@ -13562,7 +13562,7 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "core_value_value_is_word",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "value_is_word()"
     },
@@ -13629,7 +13629,7 @@
       "_origin": "ast",
       "id": "core_value_extract_number_list",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "extract_number_list()"
     },
     {
@@ -13639,8 +13639,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_value_c_result",
-      "community": 112,
-      "community_name": "result_ok",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "result"
     },
     {
@@ -13672,7 +13672,7 @@
       "source_location": "L293",
       "_origin": "ast",
       "id": "core_value_list_to_buf",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "list_to_buf()"
     },
@@ -13683,7 +13683,7 @@
       "source_location": "L326",
       "_origin": "ast",
       "id": "core_value_value_to_string",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "value_to_string()"
     },
@@ -13695,7 +13695,7 @@
       "_origin": "ast",
       "id": "core_value_result_ok",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "result_ok()"
     },
     {
@@ -13706,7 +13706,7 @@
       "_origin": "ast",
       "id": "core_value_result_none",
       "community": 8,
-      "community_name": "value_to_string",
+      "community_name": "result_none",
       "norm_label": "result_none()"
     },
     {
@@ -13738,8 +13738,8 @@
       "source_location": "L374",
       "_origin": "ast",
       "id": "core_value_result_error",
-      "community": 112,
-      "community_name": "result_ok",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "result_error()"
     },
     {
@@ -13782,8 +13782,8 @@
       "source_location": "L410",
       "_origin": "ast",
       "id": "core_value_result_eof",
-      "community": 112,
-      "community_name": "result_ok",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "result_eof()"
     },
     {
@@ -13804,8 +13804,8 @@
       "source_location": "L426",
       "_origin": "ast",
       "id": "core_value_result_error_in",
-      "community": 112,
-      "community_name": "result_ok",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "result_error_in()"
     },
     {
@@ -13815,8 +13815,8 @@
       "source_location": "L435",
       "_origin": "ast",
       "id": "core_value_result_set_error_proc",
-      "community": 112,
-      "community_name": "result_ok",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "result_set_error_proc()"
     },
     {
@@ -15421,8 +15421,8 @@
       "source_location": "L253",
       "_origin": "ast",
       "id": "devices_io_logo_io_set_prefix",
-      "community": 36,
-      "community_name": "logo_io_resolve_path",
+      "community": 11,
+      "community_name": "io.c",
       "norm_label": "logo_io_set_prefix()"
     },
     {
@@ -15465,8 +15465,8 @@
       "source_location": "L342",
       "_origin": "ast",
       "id": "devices_io_logo_io_set_timeout",
-      "community": 11,
-      "community_name": "io.c",
+      "community": 194,
+      "community_name": "logo_io_get_timeout",
       "norm_label": "logo_io_set_timeout()"
     },
     {
@@ -15476,8 +15476,8 @@
       "source_location": "L351",
       "_origin": "ast",
       "id": "devices_io_logo_io_get_timeout",
-      "community": 11,
-      "community_name": "io.c",
+      "community": 194,
+      "community_name": "logo_io_get_timeout",
       "norm_label": "logo_io_get_timeout()"
     },
     {
@@ -15509,8 +15509,8 @@
       "source_location": "L371",
       "_origin": "ast",
       "id": "devices_io_normalize_path",
-      "community": 36,
-      "community_name": "logo_io_resolve_path",
+      "community": 11,
+      "community_name": "io.c",
       "norm_label": "normalize_path()"
     },
     {
@@ -15520,8 +15520,8 @@
       "source_location": "L487",
       "_origin": "ast",
       "id": "devices_io_logo_io_resolve_path",
-      "community": 36,
-      "community_name": "logo_io_resolve_path",
+      "community": 11,
+      "community_name": "io.c",
       "norm_label": "logo_io_resolve_path()"
     },
     {
@@ -15652,8 +15652,8 @@
       "source_location": "L925",
       "_origin": "ast",
       "id": "devices_io_logo_io_dir_create",
-      "community": 36,
-      "community_name": "logo_io_resolve_path",
+      "community": 11,
+      "community_name": "io.c",
       "norm_label": "logo_io_dir_create()"
     },
     {
@@ -15663,8 +15663,8 @@
       "source_location": "L943",
       "_origin": "ast",
       "id": "devices_io_logo_io_dir_delete",
-      "community": 36,
-      "community_name": "logo_io_resolve_path",
+      "community": 11,
+      "community_name": "io.c",
       "norm_label": "logo_io_dir_delete()"
     },
     {
@@ -15674,8 +15674,8 @@
       "source_location": "L961",
       "_origin": "ast",
       "id": "devices_io_logo_io_rename",
-      "community": 36,
-      "community_name": "logo_io_resolve_path",
+      "community": 11,
+      "community_name": "io.c",
       "norm_label": "logo_io_rename()"
     },
     {
@@ -15729,8 +15729,8 @@
       "source_location": "L1090",
       "_origin": "ast",
       "id": "devices_io_logo_io_file_size",
-      "community": 36,
-      "community_name": "logo_io_resolve_path",
+      "community": 11,
+      "community_name": "io.c",
       "norm_label": "logo_io_file_size()"
     },
     {
@@ -25540,8 +25540,8 @@
       "source_location": "L549",
       "_origin": "ast",
       "id": "tests_mock_device_mock_turtle_canvas_point",
-      "community": 29,
-      "community_name": "mock_device.c",
+      "community": 204,
+      "community_name": "mock_turtle_canvas_point",
       "norm_label": "mock_turtle_canvas_point()"
     },
     {
@@ -25551,8 +25551,8 @@
       "source_location": "L567",
       "_origin": "ast",
       "id": "tests_mock_device_mock_turtle_canvas_snap",
-      "community": 29,
-      "community_name": "mock_device.c",
+      "community": 204,
+      "community_name": "mock_turtle_canvas_point",
       "norm_label": "mock_turtle_canvas_snap()"
     },
     {
@@ -25639,8 +25639,8 @@
       "source_location": "L738",
       "_origin": "ast",
       "id": "tests_mock_device_mock_text_set_cursor",
-      "community": 205,
-      "community_name": "mock_text_set_cursor",
+      "community": 29,
+      "community_name": "mock_device.c",
       "norm_label": "mock_text_set_cursor()"
     },
     {
@@ -25958,8 +25958,8 @@
       "source_location": "L1059",
       "_origin": "ast",
       "id": "tests_mock_device_record_command_cursor",
-      "community": 205,
-      "community_name": "mock_text_set_cursor",
+      "community": 29,
+      "community_name": "mock_device.c",
       "norm_label": "record_command_cursor()"
     },
     {
@@ -35506,8 +35506,8 @@
       "source_location": "L199",
       "_origin": "ast",
       "id": "tests_test_io_test_prefix_management",
-      "community": 36,
-      "community_name": "logo_io_resolve_path",
+      "community": 11,
+      "community_name": "io.c",
       "norm_label": "test_prefix_management()"
     },
     {
@@ -35517,8 +35517,8 @@
       "source_location": "L223",
       "_origin": "ast",
       "id": "tests_test_io_test_resolve_path_with_parent_dir",
-      "community": 36,
-      "community_name": "logo_io_resolve_path",
+      "community": 11,
+      "community_name": "io.c",
       "norm_label": "test_resolve_path_with_parent_dir()"
     },
     {
@@ -35649,8 +35649,8 @@
       "source_location": "L421",
       "_origin": "ast",
       "id": "tests_test_io_test_file_operations",
-      "community": 36,
-      "community_name": "logo_io_resolve_path",
+      "community": 11,
+      "community_name": "io.c",
       "norm_label": "test_file_operations()"
     },
     {
@@ -35715,8 +35715,8 @@
       "source_location": "L562",
       "_origin": "ast",
       "id": "tests_test_io_test_network_timeout",
-      "community": 11,
-      "community_name": "io.c",
+      "community": 194,
+      "community_name": "logo_io_get_timeout",
       "norm_label": "test_network_timeout()"
     },
     {
@@ -35990,8 +35990,8 @@
       "source_location": "L1040",
       "_origin": "ast",
       "id": "tests_test_io_test_resolve_path_relative_dotdot",
-      "community": 36,
-      "community_name": "logo_io_resolve_path",
+      "community": 11,
+      "community_name": "io.c",
       "norm_label": "test_resolve_path_relative_dotdot()"
     },
     {
@@ -36001,8 +36001,8 @@
       "source_location": "L1058",
       "_origin": "ast",
       "id": "tests_test_io_test_resolve_path_buffer_too_small",
-      "community": 36,
-      "community_name": "logo_io_resolve_path",
+      "community": 11,
+      "community_name": "io.c",
       "norm_label": "test_resolve_path_buffer_too_small()"
     },
     {
@@ -36012,8 +36012,8 @@
       "source_location": "L1071",
       "_origin": "ast",
       "id": "tests_test_io_test_resolve_path_prefix_no_trailing_slash",
-      "community": 36,
-      "community_name": "logo_io_resolve_path",
+      "community": 11,
+      "community_name": "io.c",
       "norm_label": "test_resolve_path_prefix_no_trailing_slash()"
     },
     {
@@ -36023,8 +36023,8 @@
       "source_location": "L1086",
       "_origin": "ast",
       "id": "tests_test_io_test_resolve_path_consecutive_slashes",
-      "community": 36,
-      "community_name": "logo_io_resolve_path",
+      "community": 11,
+      "community_name": "io.c",
       "norm_label": "test_resolve_path_consecutive_slashes()"
     },
     {
@@ -36188,8 +36188,8 @@
       "source_location": "L1355",
       "_origin": "ast",
       "id": "tests_test_io_test_set_negative_timeout",
-      "community": 11,
-      "community_name": "io.c",
+      "community": 194,
+      "community_name": "logo_io_get_timeout",
       "norm_label": "test_set_negative_timeout()"
     },
     {
@@ -38718,7 +38718,7 @@
       "source_location": "L113",
       "_origin": "ast",
       "id": "tests_test_memory_test_atom_max_length",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "test_atom_max_length()"
     },
@@ -38740,8 +38740,8 @@
       "source_location": "L134",
       "_origin": "ast",
       "id": "tests_test_memory_test_atom_unescape_too_long_is_error",
-      "community": 204,
-      "community_name": "mem_atom_unescape",
+      "community": 112,
+      "community_name": "value_to_string",
       "norm_label": "test_atom_unescape_too_long_is_error()"
     },
     {
@@ -38751,8 +38751,8 @@
       "source_location": "L144",
       "_origin": "ast",
       "id": "tests_test_memory_test_atom_unescape_strips_backslash",
-      "community": 204,
-      "community_name": "mem_atom_unescape",
+      "community": 112,
+      "community_name": "value_to_string",
       "norm_label": "test_atom_unescape_strips_backslash()"
     },
     {
@@ -38762,8 +38762,8 @@
       "source_location": "L153",
       "_origin": "ast",
       "id": "tests_test_memory_test_atom_unescape_strips_bars",
-      "community": 204,
-      "community_name": "mem_atom_unescape",
+      "community": 112,
+      "community_name": "value_to_string",
       "norm_label": "test_atom_unescape_strips_bars()"
     },
     {
@@ -38773,8 +38773,8 @@
       "source_location": "L162",
       "_origin": "ast",
       "id": "tests_test_memory_test_atom_unescape_bar_with_delimiters",
-      "community": 204,
-      "community_name": "mem_atom_unescape",
+      "community": 112,
+      "community_name": "value_to_string",
       "norm_label": "test_atom_unescape_bar_with_delimiters()"
     },
     {
@@ -38784,8 +38784,8 @@
       "source_location": "L171",
       "_origin": "ast",
       "id": "tests_test_memory_test_atom_unescape_escaped_bar_inside_bars",
-      "community": 204,
-      "community_name": "mem_atom_unescape",
+      "community": 112,
+      "community_name": "value_to_string",
       "norm_label": "test_atom_unescape_escaped_bar_inside_bars()"
     },
     {
@@ -38795,8 +38795,8 @@
       "source_location": "L181",
       "_origin": "ast",
       "id": "tests_test_memory_test_atom_unescape_bar_and_backslash_agree",
-      "community": 204,
-      "community_name": "mem_atom_unescape",
+      "community": 112,
+      "community_name": "value_to_string",
       "norm_label": "test_atom_unescape_bar_and_backslash_agree()"
     },
     {
@@ -39015,7 +39015,7 @@
       "source_location": "L444",
       "_origin": "ast",
       "id": "tests_test_memory_test_empty_word",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "test_empty_word()"
     },
@@ -42667,7 +42667,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "tests_test_primitives_conditionals_test_true",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "test_true()"
     },
@@ -42678,7 +42678,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "tests_test_primitives_conditionals_test_false",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "test_false()"
     },
@@ -42777,7 +42777,7 @@
       "source_location": "L107",
       "_origin": "ast",
       "id": "tests_test_primitives_conditionals_test_if_true_operation_returns_value",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "test_if_true_operation_returns_value()"
     },
@@ -42788,7 +42788,7 @@
       "source_location": "L116",
       "_origin": "ast",
       "id": "tests_test_primitives_conditionals_test_if_false_operation_returns_value",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "test_if_false_operation_returns_value()"
     },
@@ -42843,7 +42843,7 @@
       "source_location": "L156",
       "_origin": "ast",
       "id": "tests_test_primitives_conditionals_test_if_operation_nested",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "test_if_operation_nested()"
     },
@@ -43030,7 +43030,7 @@
       "source_location": "L340",
       "_origin": "ast",
       "id": "tests_test_primitives_conditionals_test_ifelse_true_operation_returns_value",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "test_ifelse_true_operation_returns_value()"
     },
@@ -43041,7 +43041,7 @@
       "source_location": "L348",
       "_origin": "ast",
       "id": "tests_test_primitives_conditionals_test_ifelse_false_operation_returns_value",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "test_ifelse_false_operation_returns_value()"
     },
@@ -43085,7 +43085,7 @@
       "source_location": "L376",
       "_origin": "ast",
       "id": "tests_test_primitives_conditionals_test_ifelse_nested",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "test_ifelse_nested()"
     },
@@ -44537,8 +44537,8 @@
       "source_location": "L294",
       "_origin": "ast",
       "id": "tests_test_primitives_debug_control_test_pause_reset_state",
-      "community": 194,
-      "community_name": "primitives_debug_control.c",
+      "community": 71,
+      "community_name": "procedures.c",
       "norm_label": "test_pause_reset_state()"
     },
     {
@@ -45582,7 +45582,7 @@
       "source_location": "L65",
       "_origin": "ast",
       "id": "tests_test_primitives_exceptions_test_toplevel_outputs_word",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "test_toplevel_outputs_word()"
     },
@@ -45670,8 +45670,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_primitives_files",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_primitives_files.c"
     },
     {
@@ -45703,8 +45703,8 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_open_creates_new_file",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_open_creates_new_file()"
     },
     {
@@ -45714,8 +45714,8 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_open_existing_file",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_open_existing_file()"
     },
     {
@@ -45725,8 +45725,8 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_open_already_open_file_error",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_open_already_open_file_error()"
     },
     {
@@ -45736,8 +45736,8 @@
       "source_location": "L53",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_close_file",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_close_file()"
     },
     {
@@ -45747,8 +45747,8 @@
       "source_location": "L62",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_close_unopened_file_error",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_close_unopened_file_error()"
     },
     {
@@ -45791,8 +45791,8 @@
       "source_location": "L106",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_setread_to_file",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_setread_to_file()"
     },
     {
@@ -45813,8 +45813,8 @@
       "source_location": "L131",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_setread_unopened_file_error",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_setread_unopened_file_error()"
     },
     {
@@ -45824,8 +45824,8 @@
       "source_location": "L137",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_setwrite_to_file",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_setwrite_to_file()"
     },
     {
@@ -45846,8 +45846,8 @@
       "source_location": "L160",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_setwrite_unopened_file_error",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_setwrite_unopened_file_error()"
     },
     {
@@ -45890,8 +45890,8 @@
       "source_location": "L216",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_readpos_at_start",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_readpos_at_start()"
     },
     {
@@ -45901,8 +45901,8 @@
       "source_location": "L228",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_readpos_after_read",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_readpos_after_read()"
     },
     {
@@ -45912,8 +45912,8 @@
       "source_location": "L240",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_setreadpos",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_setreadpos()"
     },
     {
@@ -45923,8 +45923,8 @@
       "source_location": "L252",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_readpos_keyboard_error",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_readpos_keyboard_error()"
     },
     {
@@ -45934,8 +45934,8 @@
       "source_location": "L259",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_writepos_at_start",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_writepos_at_start()"
     },
     {
@@ -45945,8 +45945,8 @@
       "source_location": "L270",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_writepos_after_write",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_writepos_after_write()"
     },
     {
@@ -45956,8 +45956,8 @@
       "source_location": "L281",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_setwritepos",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_setwritepos()"
     },
     {
@@ -45967,8 +45967,8 @@
       "source_location": "L293",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_writepos_screen_error",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_writepos_screen_error()"
     },
     {
@@ -45978,8 +45978,8 @@
       "source_location": "L300",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_writepos_at_end_for_existing_file",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_writepos_at_end_for_existing_file()"
     },
     {
@@ -45989,8 +45989,8 @@
       "source_location": "L324",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_filelen_returns_size",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_filelen_returns_size()"
     },
     {
@@ -46000,8 +46000,8 @@
       "source_location": "L335",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_filelen_empty_file",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_filelen_empty_file()"
     },
     {
@@ -46011,8 +46011,8 @@
       "source_location": "L345",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_filelen_unopened_file_error",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_filelen_unopened_file_error()"
     },
     {
@@ -46022,8 +46022,8 @@
       "source_location": "L357",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_dribble_starts",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_dribble_starts()"
     },
     {
@@ -46033,8 +46033,8 @@
       "source_location": "L363",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_nodribble_stops",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_nodribble_stops()"
     },
     {
@@ -46044,8 +46044,8 @@
       "source_location": "L370",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_nodribble_when_not_dribbling",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_nodribble_when_not_dribbling()"
     },
     {
@@ -46055,8 +46055,8 @@
       "source_location": "L381",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_write_and_read_file",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_write_and_read_file()"
     },
     {
@@ -46066,8 +46066,8 @@
       "source_location": "L400",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_append_to_file",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_append_to_file()"
     },
     {
@@ -46077,8 +46077,8 @@
       "source_location": "L417",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_readlist_from_file",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_readlist_from_file()"
     },
     {
@@ -46088,8 +46088,8 @@
       "source_location": "L433",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_readchar_from_file",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_readchar_from_file()"
     },
     {
@@ -46099,8 +46099,8 @@
       "source_location": "L454",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_open_invalid_input",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_open_invalid_input()"
     },
     {
@@ -46110,8 +46110,8 @@
       "source_location": "L460",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_close_invalid_input",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_close_invalid_input()"
     },
     {
@@ -46121,8 +46121,8 @@
       "source_location": "L466",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_setread_invalid_input",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_setread_invalid_input()"
     },
     {
@@ -46132,8 +46132,8 @@
       "source_location": "L472",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_setwrite_invalid_input",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_setwrite_invalid_input()"
     },
     {
@@ -46143,8 +46143,8 @@
       "source_location": "L478",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_filelen_invalid_input",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_filelen_invalid_input()"
     },
     {
@@ -46154,8 +46154,8 @@
       "source_location": "L484",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_setreadpos_invalid_input",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_setreadpos_invalid_input()"
     },
     {
@@ -46165,8 +46165,8 @@
       "source_location": "L494",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_setreadpos_negative",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_setreadpos_negative()"
     },
     {
@@ -46176,8 +46176,8 @@
       "source_location": "L504",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_setreadpos_extreme_value",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_setreadpos_extreme_value()"
     },
     {
@@ -46187,8 +46187,8 @@
       "source_location": "L517",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_readpos_no_file_selected",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_readpos_no_file_selected()"
     },
     {
@@ -46198,8 +46198,8 @@
       "source_location": "L526",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_setreadpos_no_file_selected",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_setreadpos_no_file_selected()"
     },
     {
@@ -46209,8 +46209,8 @@
       "source_location": "L535",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_writepos_no_file_selected",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_writepos_no_file_selected()"
     },
     {
@@ -46220,8 +46220,8 @@
       "source_location": "L544",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_setwritepos_no_file_selected",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_setwritepos_no_file_selected()"
     },
     {
@@ -46231,8 +46231,8 @@
       "source_location": "L553",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_setwritepos_invalid_input",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_setwritepos_invalid_input()"
     },
     {
@@ -46242,8 +46242,8 @@
       "source_location": "L562",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_setwritepos_negative",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_setwritepos_negative()"
     },
     {
@@ -46275,8 +46275,8 @@
       "source_location": "L617",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_timeout_returns_default",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_timeout_returns_default()"
     },
     {
@@ -46286,8 +46286,8 @@
       "source_location": "L626",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_settimeout_changes_timeout",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_settimeout_changes_timeout()"
     },
     {
@@ -46297,8 +46297,8 @@
       "source_location": "L637",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_settimeout_zero_allowed",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_settimeout_zero_allowed()"
     },
     {
@@ -46308,8 +46308,8 @@
       "source_location": "L648",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_settimeout_negative_error",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_settimeout_negative_error()"
     },
     {
@@ -46319,8 +46319,8 @@
       "source_location": "L654",
       "_origin": "ast",
       "id": "tests_test_primitives_files_test_settimeout_non_number_error",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "test_settimeout_non_number_error()"
     },
     {
@@ -46330,8 +46330,8 @@
       "source_location": "L664",
       "_origin": "ast",
       "id": "tests_test_primitives_files_main",
-      "community": 0,
-      "community_name": "run_string",
+      "community": 36,
+      "community_name": "test_primitives_files.c",
       "norm_label": "main()"
     },
     {
@@ -49267,8 +49267,8 @@
       "source_location": "L485",
       "_origin": "ast",
       "id": "tests_test_primitives_json_test_get_unescapes_bmp_escape",
-      "community": 80,
-      "community_name": "primitives_httpd.c",
+      "community": 112,
+      "community_name": "value_to_string",
       "norm_label": "test_get_unescapes_bmp_escape()"
     },
     {
@@ -49278,8 +49278,8 @@
       "source_location": "L497",
       "_origin": "ast",
       "id": "tests_test_primitives_json_test_get_unescapes_surrogate_pair",
-      "community": 80,
-      "community_name": "primitives_httpd.c",
+      "community": 112,
+      "community_name": "value_to_string",
       "norm_label": "test_get_unescapes_surrogate_pair()"
     },
     {
@@ -64976,7 +64976,7 @@
       "_origin": "ast",
       "id": "tests_test_value_test_value_is_number_false_for_list",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "test_value_is_number_false_for_list()"
     },
     {
@@ -65019,7 +65019,7 @@
       "source_location": "L170",
       "_origin": "ast",
       "id": "tests_test_value_test_value_is_word_false_for_list",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "test_value_is_word_false_for_list()"
     },
@@ -65536,7 +65536,7 @@
       "source_location": "L524",
       "_origin": "ast",
       "id": "tests_test_value_test_value_to_string_empty_list",
-      "community": 8,
+      "community": 112,
       "community_name": "value_to_string",
       "norm_label": "test_value_to_string_empty_list()"
     },
@@ -65592,7 +65592,7 @@
       "_origin": "ast",
       "id": "tests_test_value_test_result_ok_value",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "test_result_ok_value()"
     },
     {
@@ -65833,8 +65833,8 @@
       "source_location": "L719",
       "_origin": "ast",
       "id": "tests_test_value_test_result_error_in_sets_caller",
-      "community": 112,
-      "community_name": "result_ok",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "test_result_error_in_sets_caller()"
     },
     {
@@ -65844,8 +65844,8 @@
       "source_location": "L726",
       "_origin": "ast",
       "id": "tests_test_value_test_result_error_in_preserves_existing_caller",
-      "community": 112,
-      "community_name": "result_ok",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "test_result_error_in_preserves_existing_caller()"
     },
     {
@@ -65855,8 +65855,8 @@
       "source_location": "L735",
       "_origin": "ast",
       "id": "tests_test_value_test_result_error_in_non_error_unchanged",
-      "community": 112,
-      "community_name": "result_ok",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "test_result_error_in_non_error_unchanged()"
     },
     {
@@ -66449,8 +66449,8 @@
       "source_location": "L1235",
       "_origin": "ast",
       "id": "tests_test_value_test_result_set_error_proc_sets_proc",
-      "community": 112,
-      "community_name": "result_ok",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "test_result_set_error_proc_sets_proc()"
     },
     {
@@ -66460,8 +66460,8 @@
       "source_location": "L1244",
       "_origin": "ast",
       "id": "tests_test_value_test_result_set_error_proc_preserves_existing",
-      "community": 112,
-      "community_name": "result_ok",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "test_result_set_error_proc_preserves_existing()"
     },
     {
@@ -66471,8 +66471,8 @@
       "source_location": "L1254",
       "_origin": "ast",
       "id": "tests_test_value_test_result_set_error_proc_noop_for_non_error",
-      "community": 112,
-      "community_name": "result_ok",
+      "community": 70,
+      "community_name": "result_error",
       "norm_label": "test_result_set_error_proc_noop_for_non_error()"
     },
     {
@@ -67055,7 +67055,7 @@
       "_origin": "ast",
       "id": "tests_test_variables_test_gc_mark_all_no_crash",
       "community": 112,
-      "community_name": "result_ok",
+      "community_name": "value_to_string",
       "norm_label": "test_gc_mark_all_no_crash()"
     },
     {
@@ -72188,7 +72188,7 @@
       "label": "11.3 Measured: instruction fetch confirmed (2026-08-04, Plus 2 W)",
       "file_type": "document",
       "source_file": "docs/interpreter-throughput-design.md",
-      "source_location": "L924",
+      "source_location": "L923",
       "_origin": "ast",
       "id": "docs_interpreter_throughput_design_11_3_measured_instruction_fetch_confirmed_2026_08_04_plus_2_w",
       "community": 135,
@@ -72199,7 +72199,7 @@
       "label": "References",
       "file_type": "document",
       "source_file": "docs/interpreter-throughput-design.md",
-      "source_location": "L1058",
+      "source_location": "L1035",
       "_origin": "ast",
       "id": "docs_interpreter_throughput_design_references",
       "community": 135,
@@ -335659,7 +335659,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "docs/interpreter-throughput-design.md",
-      "source_location": "L1060",
+      "source_location": "L1037",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_interpreter_throughput_design",
@@ -335802,7 +335802,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/interpreter-throughput-design.md",
-      "source_location": "L1058",
+      "source_location": "L1035",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_interpreter_throughput_design_p10_interpreter_throughput_design",
@@ -335989,7 +335989,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/interpreter-throughput-design.md",
-      "source_location": "L924",
+      "source_location": "L923",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_interpreter_throughput_design_11_m5_re_profile_before_choosing_a_lever_2026_08_02",
