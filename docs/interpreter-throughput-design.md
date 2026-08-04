@@ -1006,11 +1006,131 @@ then `-DLOGO_HOT_IN_RAM=ON`, then take the op stack to 256 if the RAM is
 wanted — 108 KB is a lot to hold for a recursion depth no board has been
 observed to need.
 
-**Where this leaves §1.** 65.5 ms against 40 needs **1.64×** more, and tier 2
-is unmeasured. Instruction fetch is no longer a hypothesis, so the honest
-next question is how much of the interpreter can live in RAM before the
-budget runs out — a design question with a known shape, and a much better
-place to be than choosing between two rejected rewrites.
+### 11.4 Tier 2 measured: 53.2 ms, and every moved function shows (Plus 2 W)
+
+**65.5 → 53.165 ms**, another 1.23×, for 3.6 KB. Cumulative **81.0 → 53.2,
+1.52×**. `sync` is 1.775 ms against 1.74 and 1.745 — three runs, one
+control, unmoved.
+
+The calibration is the confirmation, because tier 2 moved a *named* set and
+the named set is exactly what improved (µs, net of the bare loop):
+
+| | tier 1 | tier 2 | change | moved? |
+|---|---:|---:|---:|:--|
+| variable read (`get`) | 34.5 | **19.5** | **−43 %** | `var_get` |
+| variable write (`set`) | 51.5 | **34.0** | **−34 %** | `var_set` |
+| `ignore (:x + :x)` | 62.0 | 38.0 | −39 % | two reads |
+| grouping paren (`pvar − get`) | 7.5 | 5.5 | −27 % | |
+| whole statement (`op`) | 82.0 | 56.0 | −32 % | |
+| procedure call | 22.0 | **15.5** | **−30 %** | `step_proc_call` |
+| `ignore (1 + 1)` | 49.5 | 44.0 | −11 % | no variables |
+| literal | 29.5 | 25.5 | −14 % | no variables |
+| **bare loop (raw)** | **4.5** | **7.5** | **+67 %** | **not moved** |
+
+Everything that touches moved code falls by a third or more; the two lines
+with no variable in them fall by a tenth. **Variable access was "the dearest
+elementary operation" (§11.1) and is no longer** — a read is now cheaper
+than a literal expression.
+
+And the procedure call recovered: **17.0 flash → 22.0 tier 1 → 15.5 tier 2**.
+Tier 1's regression was the layout reshuffle, and moving the call path
+undid it and then some.
+
+**The loop is now the thing left behind.** It is the only line that got
+worse, +67 %, and it is per-iteration, so it taxes everything. That is the
+same signature `step_proc_call` showed after tier 1, and the same evidence
+points the same way: **tier 3 is the loop and run-list path** —
+`step_run_list` (616 B), `step_repeat` (240), `step_forever` (210),
+`eval_run_list_expr` (160), `eval_push_proc_call` (146), `eval_run_list`
+(132), `op_stack_push`/`op_stack_pop` (160). **1,664 bytes, and the reported
+RAM does not move** (`pico2w` 89.36 % before and after): it fits inside the
+alignment padding tiers 1–2 already paid for. Built, unmeasured.
+
+**A second reading of the same numbers.** The frame fell ×0.811 while the
+`op` calibration unit fell ×0.734 — the frame is improving *more slowly*
+than a `make "x (:x + 1)` does, which is why the profiler's operation count
+appears to rise (758 → 837; it is `frame ÷ op`, so a shrinking unit inflates
+it). The frame is no longer mostly statement evaluation. What is left is
+loop overhead and primitive bodies, and tier 3 addresses the first of them.
+
+### 11.5 Tier 3 measured, and the pattern is now the finding (Plus 2 W)
+
+**53.165 → 48.095 ms**, 1.105×. Cumulative **81.0 → 48.1, 1.68×**. `sync`
+1.76 ms, four runs, still the control. Tier 3 did exactly what it was aimed
+at: the bare loop went **7.5 → 4.5 µs raw**, back to its tier-1 value, and
+every expression line improved 6–10 % on top.
+
+**But the procedure call regressed again: 15.5 → 24.0 µs net** — and
+`step_proc_call` and `eval_push_proc_call` are *both* in RAM. So this is not
+"we forgot the call path". It is the third instance of one effect:
+
+| tier | what moved | what got worse |
+|---|---|---|
+| 1 | the expression evaluator | procedure call, 17.0 → 22.0 |
+| 2 | the call path and variables | bare loop, 4.5 → 7.5 |
+| 3 | the loop and run-list path | procedure call, 15.5 → 24.0 |
+
+**Every tier moves the boundary, and whatever is left adjacent to it pays.**
+That is the finding, not an annoyance: piecemeal tiering has an unstable
+cost surface, because the flash residue is re-laid-out against a 16 KB cache
+each time. It is also self-limiting — the frame improved each time anyway,
+because the regressing line is always smaller than the set that improved.
+
+**Tier 4 follows the same evidence.** What is still in flash on the call
+path is `frame.c`: `frame_push` (512 B), `frame_reuse` (514), the binding
+lookups `frame_find_binding_in_chain` (122) / `frame_find_binding` (62),
+`frame_add_local` (238), `frame_set_binding` (84), `frame_at_depth` (98).
+That last group matters twice over — `var_get` and `var_set` are in RAM but
+call straight back out to flash to find a binding, which caps how much
+§11.4's −43 % could ever have been. **+2,048 B reported** (`pico2w`
+89.36 → 89.75 %). Built, unmeasured.
+
+**How far this can go.** All of `core/` is 160 KB, far past any budget. But
+the evaluator proper — `eval*.c`, `token_source.c`, `variables.c`,
+`memory.c`, `frame*.c` — is **23 KB**, and about 13 KB of it is resident
+already. So ending the boundary game *inside the evaluator* costs roughly
+**10 KB more**, against 54 KB free on `pico2w` and 44 KB on `pico+2w`.
+There would still be a seam, at the primitive bodies (`primitives_*.c` is
+most of the other 137 KB), but it would be a natural one instead of a cut
+through the middle of a call.
+
+### 11.6 Tier 4, and where the tiering stops (Plus 2 W)
+
+**48.095 → 46.985 ms**, 1.024×. Cumulative **81.0 → 47.0, 1.72×, for
+13.6 KB of SRAM**. The call recovered part of tier 3's regression — 24.0 →
+**21.0 µs** — and `set` and `op` came down 5 %; everything else is flat to a
+half microsecond. **No new regression appeared**, the first tier of which
+that is true, which is what a boundary settling down looks like.
+
+`sync` read 1.635 ms against 1.74–1.775 across the previous four runs. It is
+the first movement in the control, and it is worth naming: at 0.125 ms it is
+still an order of magnitude under tier 4's 1.11 ms, so the result stands —
+but a 2 % tier is now close enough to the floor that the next one could not
+be told from drift.
+
+**So the tiering is finished, and the reason is the curve, not the budget:**
+
+| tier | frame | speedup | cost |
+|---|---:|---:|---:|
+| — | 81.0 ms | | |
+| 1 expression evaluator | 65.5 | **1.24×** | 6.0 KB |
+| 2 call path + variables | 53.2 | **1.23×** | 3.6 KB |
+| 3 loop + run-list | 48.1 | 1.105× | 1.7 KB (free — alignment) |
+| 4 frames + bindings | 47.0 | 1.024× | 2.0 KB |
+
+Returns halve every tier. Taking the rest of the evaluator is **10 KB more**
+(§11.5) for something the curve puts at a few percent, on boards where SRAM
+is the resource that panics `repl_init`. That is a bad trade, and the point
+to stop is before making it, not after.
+
+**Where this leaves §1.** 47.0 ms against 40 — **1.17× short**, from 2.03×
+when M5 opened, and from 87.3 ms when P10 opened. What is left is not an
+interpreter number any more. `step.bugs` (17.5 ms) and `place.all` (13.1)
+are **65 % of the frame**, they are almost nothing but `make` statements,
+and a statement now costs 48 µs net. Closing 7 ms means removing about 145
+statements from those two procedures, or finding a cheaper shape for them —
+game-side work, of the kind that already returned 2.8 % and 2.6 % when sixty
+redundant parens came out (§11.1). The interpreter's own lever is spent.
 
 Calibration, first run: one operation **102.5 µs**, one procedure call
 **24 µs**. The frame reads 81.0 ms here against

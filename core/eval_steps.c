@@ -179,7 +179,7 @@ static bool skip_instruction(Evaluator *eval)
 
 // Step function for OP_RUN_LIST and OP_RUN_LIST_EXPR.
 // Processes one instruction per call, or handles a child op result.
-Result step_run_list(Evaluator *eval, EvalOp *op)
+Result LOGO_HOT(step_run_list)(Evaluator *eval, EvalOp *op)
 {
     bool is_expr = (op->kind == OP_RUN_LIST_EXPR);
     bool enable_tco = (op->flags & OP_FLAG_ENABLE_TCO) != 0;
@@ -354,7 +354,7 @@ Result step_if(Evaluator *eval, EvalOp *op)
 }
 
 // Step function for OP_REPEAT.
-Result step_repeat(Evaluator *eval, EvalOp *op)
+Result LOGO_HOT(step_repeat)(Evaluator *eval, EvalOp *op)
 {
     RepeatState *st = &op->repeat;
 
@@ -404,7 +404,7 @@ Result step_repeat(Evaluator *eval, EvalOp *op)
 }
 
 // Step function for OP_FOREVER.
-Result step_forever(Evaluator *eval, EvalOp *op)
+Result LOGO_HOT(step_forever)(Evaluator *eval, EvalOp *op)
 {
     ForeverState *st = &op->forever;
 

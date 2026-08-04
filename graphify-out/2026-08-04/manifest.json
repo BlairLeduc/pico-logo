@@ -40,8 +40,8 @@
     "semantic_hash": ""
   },
   "CMakePresets.json": {
-    "mtime": 1785854127.075538,
-    "ast_hash": "5102c0651b68df972aba0185c344f9e9",
+    "mtime": 1785857342.992398,
+    "ast_hash": "c9fd9186af2ff5620694dcfab23e5c6d",
     "semantic_hash": ""
   },
   "core/demons.c": {
@@ -65,8 +65,8 @@
     "semantic_hash": ""
   },
   "core/eval.c": {
-    "mtime": 1785854509.698859,
-    "ast_hash": "398d13eb5b964fa06d25537c058a3e24",
+    "mtime": 1785858002.7009232,
+    "ast_hash": "b7d0094bbc94623c7aa8a4081dbae3fc",
     "semantic_hash": ""
   },
   "core/eval.h": {
@@ -85,8 +85,8 @@
     "semantic_hash": ""
   },
   "core/eval_ops.c": {
-    "mtime": 1785591118.0883393,
-    "ast_hash": "9bf57dc9a0c1b89c38860f606238a6f0",
+    "mtime": 1785858009.884719,
+    "ast_hash": "3ea034d1d44cf8c3d0a23319191cd7a2",
     "semantic_hash": ""
   },
   "core/eval_ops.h": {
@@ -95,8 +95,8 @@
     "semantic_hash": ""
   },
   "core/eval_steps.c": {
-    "mtime": 1785854509.6982462,
-    "ast_hash": "a931831daef1ee94591aa245d8a08bf9",
+    "mtime": 1785858002.6998181,
+    "ast_hash": "f3083685cd9d65ab54490d5bd2fe9c79",
     "semantic_hash": ""
   },
   "core/format.c": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "core/frame.c": {
-    "mtime": 1784847036.0917065,
-    "ast_hash": "10a696bab9529ad84ab34457f4861cd5",
+    "mtime": 1785858927.339044,
+    "ast_hash": "88b0aec9fd1c9fa3cf0ad9c9d9ce6412",
     "semantic_hash": ""
   },
   "core/frame.h": {
@@ -1265,8 +1265,8 @@
     "semantic_hash": ""
   },
   "CMakeLists.txt": {
-    "mtime": 1785849438.3338442,
-    "ast_hash": "4fa2817a83008d33576007e250444fb8",
+    "mtime": 1785857365.890755,
+    "ast_hash": "25cfbdd8ad3a4894184d81d57344de3b",
     "semantic_hash": ""
   },
   "README.md": {
@@ -1440,8 +1440,8 @@
     "semantic_hash": ""
   },
   "docs/roadmap.md": {
-    "mtime": 1785854707.1538873,
-    "ast_hash": "44ad691570594b24d7f4ddffc7a38511",
+    "mtime": 1785858998.6971667,
+    "ast_hash": "b64ae26da29a44aa0f36a1f51e589025",
     "semantic_hash": ""
   },
   "docs/tilemap-scrolling-design.md": {
@@ -1450,8 +1450,8 @@
     "semantic_hash": ""
   },
   "docs/interpreter-throughput-design.md": {
-    "mtime": 1785854707.109012,
-    "ast_hash": "1a80c8bf3d6915d7c27fd60c6d7fc936",
+    "mtime": 1785858987.306821,
+    "ast_hash": "c48fe869b6072d6ecd940015cad6f873",
     "semantic_hash": ""
   },
   "tests/test_bench_throughput.c": {
@@ -1490,8 +1490,8 @@
     "semantic_hash": ""
   },
   "core/hot.h": {
-    "mtime": 1785849438.3069232,
-    "ast_hash": "f169bfb21c8031da50303e1427d5cf73",
+    "mtime": 1785857354.7577689,
+    "ast_hash": "5f4814edba659c1340a1b9090e3494d1",
     "semantic_hash": ""
   }
 }

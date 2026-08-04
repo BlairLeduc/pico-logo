@@ -298,7 +298,7 @@ Result LOGO_HOT(eval_trampoline)(Evaluator *eval, int base_depth)
     return r;
 }
 
-Result eval_run_list(Evaluator *eval, Node list)
+Result LOGO_HOT(eval_run_list)(Evaluator *eval, Node list)
 {
     // RE-ENTRANCY CONTRACT (P3-017)
     // ----------------------------------------------------------------
@@ -371,7 +371,7 @@ Result eval_run_list(Evaluator *eval, Node list)
 // Run a list as an expression - allows the list to output a value
 // Used by 'run' and 'if' when they act as operations
 // Propagates tail position for TCO
-Result eval_run_list_expr(Evaluator *eval, Node list)
+Result LOGO_HOT(eval_run_list_expr)(Evaluator *eval, Node list)
 {
     // If we're in tail position inside a procedure, the last instruction
     // in this list is also in tail position - enables TCO for:
@@ -552,7 +552,7 @@ Result eval_push_runresult(Evaluator *eval, Node body)
     return eval_trampoline(eval, base_depth);
 }
 
-Result eval_push_proc_call(Evaluator *eval, UserProcedure *proc, int argc, Value *args)
+Result LOGO_HOT(eval_push_proc_call)(Evaluator *eval, UserProcedure *proc, int argc, Value *args)
 {
     OpStack *stack = eval->op_stack;
     int base_depth = op_stack_depth(stack);
