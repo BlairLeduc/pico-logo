@@ -997,6 +997,15 @@ So the honest split of M4, replacing the single blocked milestone:
   fetch-bound**, with the pools sitting in PSRAM on every board measured. What
   a live view costs per frame is unknown and §3's ~1–1.5 ms estimate assumed
   SRAM, so pricing that is the first M4 measurement, before any surface.
+- **The budget above assumes one core, and the second one has never been
+  started.** The present is ~85 % core 0 blocked in a DMA wait, so moving the
+  blit to core 1 would make a frame `max(body, present)` rather than
+  `body + present` — taking the scrolling budget from a 14 ms body to 40 ms
+  and putting Trails-scale gameplay back in range. That is a larger lever than
+  anything in §15, and it is drafted separately as
+  [`concurrent-present-design.md`](concurrent-present-design.md), gated on its
+  own contention probe. **If that gate passes, the conclusion above is the one
+  to revisit first.**
 
 ### 13.7 The second run, and what `draw.board` was hiding (2026-08-04)
 

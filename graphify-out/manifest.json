@@ -1440,13 +1440,13 @@
     "semantic_hash": ""
   },
   "docs/roadmap.md": {
-    "mtime": 1785874678.7970257,
-    "ast_hash": "47686cb5c992afb5bdcb3838518ec87b",
+    "mtime": 1785877188.16395,
+    "ast_hash": "5d6fea0ef1e5be13161553881a0a5545",
     "semantic_hash": ""
   },
   "docs/tilemap-scrolling-design.md": {
-    "mtime": 1785874656.7955222,
-    "ast_hash": "62b993966556cd438bd5815017595530",
+    "mtime": 1785877199.4116728,
+    "ast_hash": "690a6ff3f42fac2e865f141467ffe9bf",
     "semantic_hash": ""
   },
   "docs/interpreter-throughput-design.md": {
@@ -1492,6 +1492,11 @@
   "core/hot.h": {
     "mtime": 1785857354.7577689,
     "ast_hash": "5f4814edba659c1340a1b9090e3494d1",
+    "semantic_hash": ""
+  },
+  "docs/concurrent-present-design.md": {
+    "mtime": 1785877171.2159176,
+    "ast_hash": "d9d13f6b35468a7825032180552322cf",
     "semantic_hash": ""
   }
 }

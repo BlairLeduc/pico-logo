@@ -142,8 +142,8 @@
       "source_location": "L105",
       "_origin": "ast",
       "id": "core_demons_demons_print",
-      "community": 11,
-      "community_name": "io.c",
+      "community": 83,
+      "community_name": "primitives_get_io",
       "norm_label": "demons_print()"
     },
     {
@@ -406,7 +406,7 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "core_eval_eval_init",
-      "community": 87,
+      "community": 78,
       "community_name": "main",
       "norm_label": "eval_init()"
     },
@@ -428,7 +428,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_eval_c_lexer",
-      "community": 87,
+      "community": 78,
       "community_name": "main",
       "norm_label": "lexer"
     },
@@ -1991,7 +1991,7 @@
       "_origin": "ast",
       "id": "core_frame_frame_current",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "frame_current()"
     },
     {
@@ -2013,7 +2013,7 @@
       "_origin": "ast",
       "id": "core_frame_frame_get_bindings",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "frame_get_bindings()"
     },
     {
@@ -2111,8 +2111,8 @@
       "source_location": "L568",
       "_origin": "ast",
       "id": "core_frame_frame_set_test",
-      "community": 36,
-      "community_name": "test_frame.c",
+      "community": 19,
+      "community_name": "test_variables.c",
       "norm_label": "frame_set_test()"
     },
     {
@@ -2122,8 +2122,8 @@
       "source_location": "L578",
       "_origin": "ast",
       "id": "core_frame_frame_get_test",
-      "community": 36,
-      "community_name": "test_frame.c",
+      "community": 19,
+      "community_name": "test_variables.c",
       "norm_label": "frame_get_test()"
     },
     {
@@ -2144,8 +2144,8 @@
       "source_location": "L608",
       "_origin": "ast",
       "id": "core_frame_frame_save_continuation",
-      "community": 36,
-      "community_name": "test_frame.c",
+      "community": 158,
+      "community_name": "frame.c",
       "norm_label": "frame_save_continuation()"
     },
     {
@@ -2167,7 +2167,7 @@
       "_origin": "ast",
       "id": "core_frame_frame_has_pending_continuation",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "frame_has_pending_continuation()"
     },
     {
@@ -3376,8 +3376,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "core_limits",
-      "community": 131,
-      "community_name": "limits.h",
+      "community": 2,
+      "community_name": "test_tilemap.c",
       "norm_label": "limits.h"
     },
     {
@@ -3398,8 +3398,8 @@
       "source_location": "L163",
       "_origin": "ast",
       "id": "core_memory_blob_reset",
-      "community": 26,
-      "community_name": "test_primitives_http.c",
+      "community": 109,
+      "community_name": "mem_word_ptr",
       "norm_label": "blob_reset()"
     },
     {
@@ -3486,8 +3486,8 @@
       "source_location": "L411",
       "_origin": "ast",
       "id": "core_memory_logo_mem_set_aux_region",
-      "community": 26,
-      "community_name": "test_primitives_http.c",
+      "community": 109,
+      "community_name": "mem_word_ptr",
       "norm_label": "logo_mem_set_aux_region()"
     },
     {
@@ -4598,7 +4598,7 @@
       "_origin": "ast",
       "id": "core_primitives_arithmetic",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "primitives_arithmetic.c"
     },
     {
@@ -4609,7 +4609,7 @@
       "_origin": "ast",
       "id": "core_primitives_arithmetic_prim_abs",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "prim_abs()"
     },
     {
@@ -4620,7 +4620,7 @@
       "_origin": "ast",
       "id": "core_primitives_arithmetic_c_result",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "result"
     },
     {
@@ -4631,7 +4631,7 @@
       "_origin": "ast",
       "id": "core_primitives_arithmetic_c_evaluator",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "evaluator"
     },
     {
@@ -4642,7 +4642,7 @@
       "_origin": "ast",
       "id": "core_primitives_arithmetic_c_value",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "value"
     },
     {
@@ -4653,7 +4653,7 @@
       "_origin": "ast",
       "id": "core_primitives_arithmetic_prim_sum",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "prim_sum()"
     },
     {
@@ -4664,7 +4664,7 @@
       "_origin": "ast",
       "id": "core_primitives_arithmetic_prim_difference",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "prim_difference()"
     },
     {
@@ -4675,7 +4675,7 @@
       "_origin": "ast",
       "id": "core_primitives_arithmetic_prim_product",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "prim_product()"
     },
     {
@@ -4686,7 +4686,7 @@
       "_origin": "ast",
       "id": "core_primitives_arithmetic_prim_quotient",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "prim_quotient()"
     },
     {
@@ -4697,7 +4697,7 @@
       "_origin": "ast",
       "id": "core_primitives_arithmetic_prim_random",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "prim_random()"
     },
     {
@@ -4708,7 +4708,7 @@
       "_origin": "ast",
       "id": "core_primitives_arithmetic_prim_rerandom",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "prim_rerandom()"
     },
     {
@@ -4719,7 +4719,7 @@
       "_origin": "ast",
       "id": "core_primitives_arithmetic_prim_arctan",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "prim_arctan()"
     },
     {
@@ -4730,7 +4730,7 @@
       "_origin": "ast",
       "id": "core_primitives_arithmetic_prim_tan",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "prim_tan()"
     },
     {
@@ -4741,7 +4741,7 @@
       "_origin": "ast",
       "id": "core_primitives_arithmetic_prim_cos",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "prim_cos()"
     },
     {
@@ -4752,7 +4752,7 @@
       "_origin": "ast",
       "id": "core_primitives_arithmetic_prim_sin",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "prim_sin()"
     },
     {
@@ -4763,7 +4763,7 @@
       "_origin": "ast",
       "id": "core_primitives_arithmetic_prim_int",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "prim_int()"
     },
     {
@@ -4774,7 +4774,7 @@
       "_origin": "ast",
       "id": "core_primitives_arithmetic_prim_intquotient",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "prim_intquotient()"
     },
     {
@@ -4785,7 +4785,7 @@
       "_origin": "ast",
       "id": "core_primitives_arithmetic_prim_remainder",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "prim_remainder()"
     },
     {
@@ -4796,7 +4796,7 @@
       "_origin": "ast",
       "id": "core_primitives_arithmetic_prim_modulo",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "prim_modulo()"
     },
     {
@@ -4807,7 +4807,7 @@
       "_origin": "ast",
       "id": "core_primitives_arithmetic_prim_round",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "prim_round()"
     },
     {
@@ -4818,7 +4818,7 @@
       "_origin": "ast",
       "id": "core_primitives_arithmetic_prim_sqrt",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "prim_sqrt()"
     },
     {
@@ -4829,7 +4829,7 @@
       "_origin": "ast",
       "id": "core_primitives_arithmetic_prim_log",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "prim_log()"
     },
     {
@@ -4840,7 +4840,7 @@
       "_origin": "ast",
       "id": "core_primitives_arithmetic_prim_ln",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "prim_ln()"
     },
     {
@@ -4851,7 +4851,7 @@
       "_origin": "ast",
       "id": "core_primitives_arithmetic_prim_pwr",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "prim_pwr()"
     },
     {
@@ -4862,7 +4862,7 @@
       "_origin": "ast",
       "id": "core_primitives_arithmetic_prim_exp",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "prim_exp()"
     },
     {
@@ -5774,8 +5774,8 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "core_primitives_events_prim_when",
-      "community": 11,
-      "community_name": "io.c",
+      "community": 83,
+      "community_name": "primitives_get_io",
       "norm_label": "prim_when()"
     },
     {
@@ -6688,7 +6688,7 @@
       "_origin": "ast",
       "id": "core_primitives_hardware_prim_battery_level",
       "community": 62,
-      "community_name": "logo_io_init",
+      "community_name": "prim_battery_level",
       "norm_label": "prim_battery_level()"
     },
     {
@@ -6699,7 +6699,7 @@
       "_origin": "ast",
       "id": "core_primitives_hardware_c_result",
       "community": 62,
-      "community_name": "logo_io_init",
+      "community_name": "prim_battery_level",
       "norm_label": "result"
     },
     {
@@ -6710,7 +6710,7 @@
       "_origin": "ast",
       "id": "core_primitives_hardware_c_evaluator",
       "community": 62,
-      "community_name": "logo_io_init",
+      "community_name": "prim_battery_level",
       "norm_label": "evaluator"
     },
     {
@@ -6721,7 +6721,7 @@
       "_origin": "ast",
       "id": "core_primitives_hardware_c_value",
       "community": 62,
-      "community_name": "logo_io_init",
+      "community_name": "prim_battery_level",
       "norm_label": "value"
     },
     {
@@ -6732,7 +6732,7 @@
       "_origin": "ast",
       "id": "core_primitives_hardware_prim_goodbye",
       "community": 62,
-      "community_name": "logo_io_init",
+      "community_name": "prim_battery_level",
       "norm_label": "prim_goodbye()"
     },
     {
@@ -6743,7 +6743,7 @@
       "_origin": "ast",
       "id": "core_primitives_hardware_prim_bootsel",
       "community": 62,
-      "community_name": "logo_io_init",
+      "community_name": "prim_battery_level",
       "norm_label": "prim_bootsel()"
     },
     {
@@ -6754,7 +6754,7 @@
       "_origin": "ast",
       "id": "core_primitives_hardware_toot_gate_freq",
       "community": 62,
-      "community_name": "logo_io_init",
+      "community_name": "prim_battery_level",
       "norm_label": "toot_gate_freq()"
     },
     {
@@ -6765,7 +6765,7 @@
       "_origin": "ast",
       "id": "core_primitives_hardware_prim_toot",
       "community": 62,
-      "community_name": "logo_io_init",
+      "community_name": "prim_battery_level",
       "norm_label": "prim_toot()"
     },
     {
@@ -9129,8 +9129,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "core_primitives_tilemap",
-      "community": 131,
-      "community_name": "limits.h",
+      "community": 2,
+      "community_name": "test_tilemap.c",
       "norm_label": "primitives_tilemap.c"
     },
     {
@@ -9140,8 +9140,8 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "core_primitives_tilemap_get_turtle_ops",
-      "community": 131,
-      "community_name": "limits.h",
+      "community": 2,
+      "community_name": "test_tilemap.c",
       "norm_label": "get_turtle_ops()"
     },
     {
@@ -9151,8 +9151,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_primitives_tilemap_c_logoconsoleturtle",
-      "community": 131,
-      "community_name": "limits.h",
+      "community": 2,
+      "community_name": "test_tilemap.c",
       "norm_label": "logoconsoleturtle"
     },
     {
@@ -9162,8 +9162,8 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "core_primitives_tilemap_is_int_in",
-      "community": 131,
-      "community_name": "limits.h",
+      "community": 2,
+      "community_name": "test_tilemap.c",
       "norm_label": "is_int_in()"
     },
     {
@@ -9173,8 +9173,8 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "core_primitives_tilemap_wrap_mod",
-      "community": 131,
-      "community_name": "limits.h",
+      "community": 2,
+      "community_name": "test_tilemap.c",
       "norm_label": "wrap_mod()"
     },
     {
@@ -9184,8 +9184,8 @@
       "source_location": "L51",
       "_origin": "ast",
       "id": "core_primitives_tilemap_view_rect",
-      "community": 131,
-      "community_name": "limits.h",
+      "community": 2,
+      "community_name": "test_tilemap.c",
       "norm_label": "view_rect()"
     },
     {
@@ -9195,8 +9195,8 @@
       "source_location": "L71",
       "_origin": "ast",
       "id": "core_primitives_tilemap_bake_rect",
-      "community": 131,
-      "community_name": "limits.h",
+      "community": 2,
+      "community_name": "test_tilemap.c",
       "norm_label": "bake_rect()"
     },
     {
@@ -9206,8 +9206,8 @@
       "source_location": "L90",
       "_origin": "ast",
       "id": "core_primitives_tilemap_bake_ready",
-      "community": 131,
-      "community_name": "limits.h",
+      "community": 2,
+      "community_name": "test_tilemap.c",
       "norm_label": "bake_ready()"
     },
     {
@@ -9217,8 +9217,8 @@
       "source_location": "L101",
       "_origin": "ast",
       "id": "core_primitives_tilemap_prim_newtiles",
-      "community": 131,
-      "community_name": "limits.h",
+      "community": 2,
+      "community_name": "test_tilemap.c",
       "norm_label": "prim_newtiles()"
     },
     {
@@ -9228,8 +9228,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_primitives_tilemap_c_result",
-      "community": 131,
-      "community_name": "limits.h",
+      "community": 2,
+      "community_name": "test_tilemap.c",
       "norm_label": "result"
     },
     {
@@ -9239,8 +9239,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_primitives_tilemap_c_evaluator",
-      "community": 131,
-      "community_name": "limits.h",
+      "community": 2,
+      "community_name": "test_tilemap.c",
       "norm_label": "evaluator"
     },
     {
@@ -9250,8 +9250,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "core_primitives_tilemap_c_value",
-      "community": 131,
-      "community_name": "limits.h",
+      "community": 2,
+      "community_name": "test_tilemap.c",
       "norm_label": "value"
     },
     {
@@ -9261,8 +9261,8 @@
       "source_location": "L122",
       "_origin": "ast",
       "id": "core_primitives_tilemap_prim_snaptile",
-      "community": 131,
-      "community_name": "limits.h",
+      "community": 2,
+      "community_name": "test_tilemap.c",
       "norm_label": "prim_snaptile()"
     },
     {
@@ -9272,8 +9272,8 @@
       "source_location": "L153",
       "_origin": "ast",
       "id": "core_primitives_tilemap_prim_newmap",
-      "community": 131,
-      "community_name": "limits.h",
+      "community": 2,
+      "community_name": "test_tilemap.c",
       "norm_label": "prim_newmap()"
     },
     {
@@ -9283,8 +9283,8 @@
       "source_location": "L179",
       "_origin": "ast",
       "id": "core_primitives_tilemap_prim_settile",
-      "community": 131,
-      "community_name": "limits.h",
+      "community": 2,
+      "community_name": "test_tilemap.c",
       "norm_label": "prim_settile()"
     },
     {
@@ -9294,8 +9294,8 @@
       "source_location": "L205",
       "_origin": "ast",
       "id": "core_primitives_tilemap_prim_tile",
-      "community": 131,
-      "community_name": "limits.h",
+      "community": 2,
+      "community_name": "test_tilemap.c",
       "norm_label": "prim_tile()"
     },
     {
@@ -9305,8 +9305,8 @@
       "source_location": "L229",
       "_origin": "ast",
       "id": "core_primitives_tilemap_prim_stampmap",
-      "community": 131,
-      "community_name": "limits.h",
+      "community": 2,
+      "community_name": "test_tilemap.c",
       "norm_label": "prim_stampmap()"
     },
     {
@@ -9316,8 +9316,8 @@
       "source_location": "L244",
       "_origin": "ast",
       "id": "core_primitives_tilemap_prim_stamptile",
-      "community": 131,
-      "community_name": "limits.h",
+      "community": 2,
+      "community_name": "test_tilemap.c",
       "norm_label": "prim_stamptile()"
     },
     {
@@ -10472,7 +10472,7 @@
       "_origin": "ast",
       "id": "core_primitives_wifi",
       "community": 147,
-      "community_name": "value_bool",
+      "community_name": "primitives_wifi.c",
       "norm_label": "primitives_wifi.c"
     },
     {
@@ -10483,7 +10483,7 @@
       "_origin": "ast",
       "id": "core_primitives_wifi_hostname_is_valid",
       "community": 147,
-      "community_name": "value_bool",
+      "community_name": "primitives_wifi.c",
       "norm_label": "hostname_is_valid()"
     },
     {
@@ -10494,7 +10494,7 @@
       "_origin": "ast",
       "id": "core_primitives_wifi_prim_wifi_connected",
       "community": 147,
-      "community_name": "value_bool",
+      "community_name": "primitives_wifi.c",
       "norm_label": "prim_wifi_connected()"
     },
     {
@@ -10505,7 +10505,7 @@
       "_origin": "ast",
       "id": "core_primitives_wifi_c_result",
       "community": 147,
-      "community_name": "value_bool",
+      "community_name": "primitives_wifi.c",
       "norm_label": "result"
     },
     {
@@ -10516,7 +10516,7 @@
       "_origin": "ast",
       "id": "core_primitives_wifi_c_evaluator",
       "community": 147,
-      "community_name": "value_bool",
+      "community_name": "primitives_wifi.c",
       "norm_label": "evaluator"
     },
     {
@@ -10527,7 +10527,7 @@
       "_origin": "ast",
       "id": "core_primitives_wifi_c_value",
       "community": 147,
-      "community_name": "value_bool",
+      "community_name": "primitives_wifi.c",
       "norm_label": "value"
     },
     {
@@ -10538,7 +10538,7 @@
       "_origin": "ast",
       "id": "core_primitives_wifi_prim_wifi_connect",
       "community": 147,
-      "community_name": "value_bool",
+      "community_name": "primitives_wifi.c",
       "norm_label": "prim_wifi_connect()"
     },
     {
@@ -10549,7 +10549,7 @@
       "_origin": "ast",
       "id": "core_primitives_wifi_prim_wifi_start",
       "community": 147,
-      "community_name": "value_bool",
+      "community_name": "primitives_wifi.c",
       "norm_label": "prim_wifi_start()"
     },
     {
@@ -10560,7 +10560,7 @@
       "_origin": "ast",
       "id": "core_primitives_wifi_prim_wifi_status",
       "community": 147,
-      "community_name": "value_bool",
+      "community_name": "primitives_wifi.c",
       "norm_label": "prim_wifi_status()"
     },
     {
@@ -10571,7 +10571,7 @@
       "_origin": "ast",
       "id": "core_primitives_wifi_prim_wifi_disconnect",
       "community": 147,
-      "community_name": "value_bool",
+      "community_name": "primitives_wifi.c",
       "norm_label": "prim_wifi_disconnect()"
     },
     {
@@ -10582,7 +10582,7 @@
       "_origin": "ast",
       "id": "core_primitives_wifi_prim_wifi_ip",
       "community": 147,
-      "community_name": "value_bool",
+      "community_name": "primitives_wifi.c",
       "norm_label": "prim_wifi_ip()"
     },
     {
@@ -10593,7 +10593,7 @@
       "_origin": "ast",
       "id": "core_primitives_wifi_prim_wifi_mac",
       "community": 147,
-      "community_name": "value_bool",
+      "community_name": "primitives_wifi.c",
       "norm_label": "prim_wifi_mac()"
     },
     {
@@ -10604,7 +10604,7 @@
       "_origin": "ast",
       "id": "core_primitives_wifi_prim_wifi_ssid",
       "community": 147,
-      "community_name": "value_bool",
+      "community_name": "primitives_wifi.c",
       "norm_label": "prim_wifi_ssid()"
     },
     {
@@ -10615,7 +10615,7 @@
       "_origin": "ast",
       "id": "core_primitives_wifi_prim_wifi_scan",
       "community": 147,
-      "community_name": "value_bool",
+      "community_name": "primitives_wifi.c",
       "norm_label": "prim_wifi_scan()"
     },
     {
@@ -10626,7 +10626,7 @@
       "_origin": "ast",
       "id": "core_primitives_wifi_prim_tls_supported",
       "community": 147,
-      "community_name": "value_bool",
+      "community_name": "primitives_wifi.c",
       "norm_label": "prim_tls_supported()"
     },
     {
@@ -10637,7 +10637,7 @@
       "_origin": "ast",
       "id": "core_primitives_wifi_prim_wifi_sethostname",
       "community": 147,
-      "community_name": "value_bool",
+      "community_name": "primitives_wifi.c",
       "norm_label": "prim_wifi_sethostname()"
     },
     {
@@ -10648,7 +10648,7 @@
       "_origin": "ast",
       "id": "core_primitives_wifi_prim_wifi_hostname",
       "community": 147,
-      "community_name": "value_bool",
+      "community_name": "primitives_wifi.c",
       "norm_label": "prim_wifi_hostname()"
     },
     {
@@ -12254,7 +12254,7 @@
       "_origin": "ast",
       "id": "core_random_c_core_random",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "random.c"
     },
     {
@@ -12265,7 +12265,7 @@
       "_origin": "ast",
       "id": "core_random_pcg32_next",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "pcg32_next()"
     },
     {
@@ -12276,7 +12276,7 @@
       "_origin": "ast",
       "id": "core_random_logo_random_reset",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "logo_random_reset()"
     },
     {
@@ -12287,7 +12287,7 @@
       "_origin": "ast",
       "id": "core_random_logo_random_seed",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "logo_random_seed()"
     },
     {
@@ -12320,7 +12320,7 @@
       "_origin": "ast",
       "id": "core_random_h_core_random",
       "community": 167,
-      "community_name": "value_number",
+      "community_name": "primitives_arithmetic.c",
       "norm_label": "random.h"
     },
     {
@@ -12341,8 +12341,8 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "core_repl_name_distance",
-      "community": 137,
-      "community_name": "primitives.c",
+      "community": 110,
+      "community_name": "repl_evaluate_line",
       "norm_label": "name_distance()"
     },
     {
@@ -12352,8 +12352,8 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "core_repl_suggest_similar_name",
-      "community": 137,
-      "community_name": "primitives.c",
+      "community": 110,
+      "community_name": "repl_evaluate_line",
       "norm_label": "suggest_similar_name()"
     },
     {
@@ -12396,8 +12396,8 @@
       "source_location": "L128",
       "_origin": "ast",
       "id": "core_repl_repl_line_starts_with_to",
-      "community": 176,
-      "community_name": "repl_line_starts_with_to",
+      "community": 142,
+      "community_name": "test_bench_throughput.c",
       "norm_label": "repl_line_starts_with_to()"
     },
     {
@@ -12407,8 +12407,8 @@
       "source_location": "L142",
       "_origin": "ast",
       "id": "core_repl_repl_line_is_end",
-      "community": 176,
-      "community_name": "repl_line_starts_with_to",
+      "community": 142,
+      "community_name": "test_bench_throughput.c",
       "norm_label": "repl_line_is_end()"
     },
     {
@@ -13001,8 +13001,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "core_tilemap_h_core_tilemap",
-      "community": 131,
-      "community_name": "limits.h",
+      "community": 2,
+      "community_name": "test_tilemap.c",
       "norm_label": "tilemap.h"
     },
     {
@@ -13331,7 +13331,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "core_value_value_number",
-      "community": 167,
+      "community": 36,
       "community_name": "value_number",
       "norm_label": "value_number()"
     },
@@ -13386,8 +13386,8 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "core_value_value_bool",
-      "community": 147,
-      "community_name": "value_bool",
+      "community": 7,
+      "community_name": "result_none",
       "norm_label": "value_bool()"
     },
     {
@@ -14200,8 +14200,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "devices_console_h_devices_console",
-      "community": 126,
-      "community_name": "storage.h",
+      "community": 107,
+      "community_name": "storage_router.c",
       "norm_label": "console.h"
     },
     {
@@ -14222,8 +14222,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "devices_hardware_c_devices_hardware",
-      "community": 25,
-      "community_name": "test_scaffold_setUp",
+      "community": 104,
+      "community_name": "logo_hardware_init",
       "norm_label": "hardware.c"
     },
     {
@@ -14233,8 +14233,8 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "devices_hardware_logo_hardware_init",
-      "community": 25,
-      "community_name": "test_scaffold_setUp",
+      "community": 104,
+      "community_name": "logo_hardware_init",
       "norm_label": "logo_hardware_init()"
     },
     {
@@ -14244,8 +14244,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "devices_hardware_c_logohardware",
-      "community": 25,
-      "community_name": "test_scaffold_setUp",
+      "community": 104,
+      "community_name": "logo_hardware_init",
       "norm_label": "logohardware"
     },
     {
@@ -14255,8 +14255,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "devices_hardware_c_logohardwareops",
-      "community": 25,
-      "community_name": "test_scaffold_setUp",
+      "community": 104,
+      "community_name": "logo_hardware_init",
       "norm_label": "logohardwareops"
     },
     {
@@ -14266,8 +14266,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "devices_hardware_h_devices_hardware",
-      "community": 25,
-      "community_name": "test_scaffold_setUp",
+      "community": 104,
+      "community_name": "logo_hardware_init",
       "norm_label": "hardware.h"
     },
     {
@@ -14673,8 +14673,8 @@
       "source_location": "L500",
       "_origin": "ast",
       "id": "devices_host_host_hardware_logo_host_hardware_create",
-      "community": 87,
-      "community_name": "main",
+      "community": 100,
+      "community_name": "host_hardware.c",
       "norm_label": "logo_host_hardware_create()"
     },
     {
@@ -14684,8 +14684,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "devices_host_host_hardware_c_logohardware",
-      "community": 87,
-      "community_name": "main",
+      "community": 100,
+      "community_name": "host_hardware.c",
       "norm_label": "logohardware"
     },
     {
@@ -14695,8 +14695,8 @@
       "source_location": "L512",
       "_origin": "ast",
       "id": "devices_host_host_hardware_logo_host_hardware_destroy",
-      "community": 87,
-      "community_name": "main",
+      "community": 100,
+      "community_name": "host_hardware.c",
       "norm_label": "logo_host_hardware_destroy()"
     },
     {
@@ -15070,7 +15070,7 @@
       "_origin": "ast",
       "id": "devices_io_c_devices_io",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "io.c"
     },
     {
@@ -15081,7 +15081,7 @@
       "_origin": "ast",
       "id": "devices_io_highlight_write_span",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "highlight_write_span()"
     },
     {
@@ -15092,7 +15092,7 @@
       "_origin": "ast",
       "id": "devices_io_c_syntaxcategory",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "syntaxcategory"
     },
     {
@@ -15102,8 +15102,8 @@
       "source_location": "L80",
       "_origin": "ast",
       "id": "devices_io_logo_io_init",
-      "community": 62,
-      "community_name": "logo_io_init",
+      "community": 11,
+      "community_name": "test_io.c",
       "norm_label": "logo_io_init()"
     },
     {
@@ -15114,7 +15114,7 @@
       "_origin": "ast",
       "id": "devices_io_c_logoio",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logoio"
     },
     {
@@ -15124,8 +15124,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "devices_io_c_logoconsole",
-      "community": 62,
-      "community_name": "logo_io_init",
+      "community": 11,
+      "community_name": "test_io.c",
       "norm_label": "logoconsole"
     },
     {
@@ -15135,8 +15135,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "devices_io_c_logostorage",
-      "community": 62,
-      "community_name": "logo_io_init",
+      "community": 11,
+      "community_name": "test_io.c",
       "norm_label": "logostorage"
     },
     {
@@ -15146,8 +15146,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "devices_io_c_logohardware",
-      "community": 62,
-      "community_name": "logo_io_init",
+      "community": 11,
+      "community_name": "test_io.c",
       "norm_label": "logohardware"
     },
     {
@@ -15157,8 +15157,8 @@
       "source_location": "L106",
       "_origin": "ast",
       "id": "devices_io_logo_io_cleanup",
-      "community": 62,
-      "community_name": "logo_io_init",
+      "community": 11,
+      "community_name": "test_io.c",
       "norm_label": "logo_io_cleanup()"
     },
     {
@@ -15169,7 +15169,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_sleep",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_sleep()"
     },
     {
@@ -15191,7 +15191,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_has_ticks_ms",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_has_ticks_ms()"
     },
     {
@@ -15202,7 +15202,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_random",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_random()"
     },
     {
@@ -15213,7 +15213,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_get_battery_level",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_get_battery_level()"
     },
     {
@@ -15224,7 +15224,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_check_user_interrupt",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_check_user_interrupt()"
     },
     {
@@ -15235,7 +15235,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_check_pause_request",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_check_pause_request()"
     },
     {
@@ -15246,7 +15246,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_clear_pause_request",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_clear_pause_request()"
     },
     {
@@ -15257,7 +15257,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_check_freeze_request",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_check_freeze_request()"
     },
     {
@@ -15268,7 +15268,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_clear_freeze_request",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_clear_freeze_request()"
     },
     {
@@ -15279,7 +15279,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_set_prefix",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_set_prefix()"
     },
     {
@@ -15289,8 +15289,8 @@
       "source_location": "L271",
       "_origin": "ast",
       "id": "devices_io_logo_io_get_prefix",
-      "community": 83,
-      "community_name": "primitives_get_io",
+      "community": 11,
+      "community_name": "test_io.c",
       "norm_label": "logo_io_get_prefix()"
     },
     {
@@ -15300,7 +15300,7 @@
       "source_location": "L284",
       "_origin": "ast",
       "id": "devices_io_logo_io_parse_network_address",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "logo_io_parse_network_address()"
     },
@@ -15322,8 +15322,8 @@
       "source_location": "L342",
       "_origin": "ast",
       "id": "devices_io_logo_io_set_timeout",
-      "community": 41,
-      "community_name": "primitives_files.c",
+      "community": 11,
+      "community_name": "test_io.c",
       "norm_label": "logo_io_set_timeout()"
     },
     {
@@ -15333,8 +15333,8 @@
       "source_location": "L351",
       "_origin": "ast",
       "id": "devices_io_logo_io_get_timeout",
-      "community": 41,
-      "community_name": "primitives_files.c",
+      "community": 11,
+      "community_name": "test_io.c",
       "norm_label": "logo_io_get_timeout()"
     },
     {
@@ -15356,7 +15356,7 @@
       "_origin": "ast",
       "id": "devices_io_c_logostream",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logostream"
     },
     {
@@ -15367,7 +15367,7 @@
       "_origin": "ast",
       "id": "devices_io_normalize_path",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "normalize_path()"
     },
     {
@@ -15378,7 +15378,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_resolve_path",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_resolve_path()"
     },
     {
@@ -15400,7 +15400,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_open_network",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_open_network()"
     },
     {
@@ -15421,8 +15421,8 @@
       "source_location": "L738",
       "_origin": "ast",
       "id": "devices_io_logo_io_close_all",
-      "community": 62,
-      "community_name": "logo_io_init",
+      "community": 41,
+      "community_name": "primitives_files.c",
       "norm_label": "logo_io_close_all()"
     },
     {
@@ -15466,7 +15466,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_get_open",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_get_open()"
     },
     {
@@ -15487,8 +15487,8 @@
       "source_location": "L889",
       "_origin": "ast",
       "id": "devices_io_logo_io_dir_exists",
-      "community": 83,
-      "community_name": "primitives_get_io",
+      "community": 11,
+      "community_name": "test_io.c",
       "norm_label": "logo_io_dir_exists()"
     },
     {
@@ -15498,8 +15498,8 @@
       "source_location": "L907",
       "_origin": "ast",
       "id": "devices_io_logo_io_file_delete",
-      "community": 83,
-      "community_name": "primitives_get_io",
+      "community": 11,
+      "community_name": "test_io.c",
       "norm_label": "logo_io_file_delete()"
     },
     {
@@ -15510,7 +15510,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_dir_create",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_dir_create()"
     },
     {
@@ -15521,7 +15521,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_dir_delete",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_dir_delete()"
     },
     {
@@ -15532,7 +15532,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_rename",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_rename()"
     },
     {
@@ -15553,8 +15553,8 @@
       "source_location": "L1057",
       "_origin": "ast",
       "id": "devices_io_logo_io_is_external_path",
-      "community": 83,
-      "community_name": "primitives_get_io",
+      "community": 11,
+      "community_name": "test_io.c",
       "norm_label": "logo_io_is_external_path()"
     },
     {
@@ -15565,7 +15565,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_fs_image_backup",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_fs_image_backup()"
     },
     {
@@ -15576,7 +15576,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_fs_image_restore",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_fs_image_restore()"
     },
     {
@@ -15587,7 +15587,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_file_size",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_file_size()"
     },
     {
@@ -15597,8 +15597,8 @@
       "source_location": "L1108",
       "_origin": "ast",
       "id": "devices_io_logo_io_list_directory",
-      "community": 83,
-      "community_name": "primitives_get_io",
+      "community": 11,
+      "community_name": "test_io.c",
       "norm_label": "logo_io_list_directory()"
     },
     {
@@ -15608,8 +15608,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "devices_io_c_logodircallback",
-      "community": 83,
-      "community_name": "primitives_get_io",
+      "community": 11,
+      "community_name": "test_io.c",
       "norm_label": "logodircallback"
     },
     {
@@ -15620,7 +15620,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_free_blocks",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_free_blocks()"
     },
     {
@@ -15631,7 +15631,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_mount_available",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_mount_available()"
     },
     {
@@ -15642,7 +15642,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_set_reader",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_set_reader()"
     },
     {
@@ -15653,7 +15653,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_set_writer",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_set_writer()"
     },
     {
@@ -15664,7 +15664,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_get_reader_name",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_get_reader_name()"
     },
     {
@@ -15675,7 +15675,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_get_writer_name",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_get_writer_name()"
     },
     {
@@ -15708,7 +15708,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_start_dribble",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_start_dribble()"
     },
     {
@@ -15719,7 +15719,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_stop_dribble",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_stop_dribble()"
     },
     {
@@ -15730,7 +15730,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_is_dribbling",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_is_dribbling()"
     },
     {
@@ -15741,7 +15741,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_dribble_input",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_dribble_input()"
     },
     {
@@ -15752,7 +15752,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_read_char",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_read_char()"
     },
     {
@@ -15763,7 +15763,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_read_chars",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_read_chars()"
     },
     {
@@ -15774,7 +15774,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_read_line",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_read_line()"
     },
     {
@@ -15785,7 +15785,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_key_available",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_key_available()"
     },
     {
@@ -15817,8 +15817,8 @@
       "source_location": "L1408",
       "_origin": "ast",
       "id": "devices_io_logo_io_write_line",
-      "community": 110,
-      "community_name": "repl_evaluate_line",
+      "community": 10,
+      "community_name": "primitives_workspace.c",
       "norm_label": "logo_io_write_line()"
     },
     {
@@ -15828,8 +15828,8 @@
       "source_location": "L1422",
       "_origin": "ast",
       "id": "devices_io_logo_io_write_error_line",
-      "community": 110,
-      "community_name": "repl_evaluate_line",
+      "community": 52,
+      "community_name": "stream.c",
       "norm_label": "logo_io_write_error_line()"
     },
     {
@@ -15840,7 +15840,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_flush",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_flush()"
     },
     {
@@ -15851,7 +15851,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_check_write_error",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_check_write_error()"
     },
     {
@@ -15862,7 +15862,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_console_write",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_console_write()"
     },
     {
@@ -15873,7 +15873,7 @@
       "_origin": "ast",
       "id": "devices_io_logo_io_console_write_line",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "logo_io_console_write_line()"
     },
     {
@@ -15884,7 +15884,7 @@
       "_origin": "ast",
       "id": "devices_io_network_stream_read_char",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "network_stream_read_char()"
     },
     {
@@ -15895,7 +15895,7 @@
       "_origin": "ast",
       "id": "devices_io_network_stream_read_chars",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "network_stream_read_chars()"
     },
     {
@@ -15906,7 +15906,7 @@
       "_origin": "ast",
       "id": "devices_io_network_stream_read_line",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "network_stream_read_line()"
     },
     {
@@ -15917,7 +15917,7 @@
       "_origin": "ast",
       "id": "devices_io_network_stream_can_read",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "network_stream_can_read()"
     },
     {
@@ -15928,7 +15928,7 @@
       "_origin": "ast",
       "id": "devices_io_network_stream_write",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "network_stream_write()"
     },
     {
@@ -15939,7 +15939,7 @@
       "_origin": "ast",
       "id": "devices_io_network_stream_flush",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "network_stream_flush()"
     },
     {
@@ -15950,7 +15950,7 @@
       "_origin": "ast",
       "id": "devices_io_network_stream_close",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "network_stream_close()"
     },
     {
@@ -15961,7 +15961,7 @@
       "_origin": "ast",
       "id": "devices_io_create_network_stream",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "create_network_stream()"
     },
     {
@@ -15982,8 +15982,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "devices_lfs_backup_c_devices_lfs_backup",
-      "community": 104,
-      "community_name": "logo_lfs_backup",
+      "community": 149,
+      "community_name": "test_lfs_backup.c",
       "norm_label": "lfs_backup.c"
     },
     {
@@ -15993,8 +15993,8 @@
       "source_location": "L38",
       "_origin": "ast",
       "id": "devices_lfs_backup_put_u32",
-      "community": 104,
-      "community_name": "logo_lfs_backup",
+      "community": 149,
+      "community_name": "test_lfs_backup.c",
       "norm_label": "put_u32()"
     },
     {
@@ -16004,8 +16004,8 @@
       "source_location": "L46",
       "_origin": "ast",
       "id": "devices_lfs_backup_get_u32",
-      "community": 104,
-      "community_name": "logo_lfs_backup",
+      "community": 149,
+      "community_name": "test_lfs_backup.c",
       "norm_label": "get_u32()"
     },
     {
@@ -16015,8 +16015,8 @@
       "source_location": "L53",
       "_origin": "ast",
       "id": "devices_lfs_backup_read_exact",
-      "community": 104,
-      "community_name": "logo_lfs_backup",
+      "community": 149,
+      "community_name": "test_lfs_backup.c",
       "norm_label": "read_exact()"
     },
     {
@@ -16026,8 +16026,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "devices_lfs_backup_c_logostream",
-      "community": 104,
-      "community_name": "logo_lfs_backup",
+      "community": 149,
+      "community_name": "test_lfs_backup.c",
       "norm_label": "logostream"
     },
     {
@@ -16037,8 +16037,8 @@
       "source_location": "L71",
       "_origin": "ast",
       "id": "devices_lfs_backup_write_exact",
-      "community": 104,
-      "community_name": "logo_lfs_backup",
+      "community": 149,
+      "community_name": "test_lfs_backup.c",
       "norm_label": "write_exact()"
     },
     {
@@ -16048,8 +16048,8 @@
       "source_location": "L87",
       "_origin": "ast",
       "id": "devices_lfs_backup_mark_block",
-      "community": 104,
-      "community_name": "logo_lfs_backup",
+      "community": 149,
+      "community_name": "test_lfs_backup.c",
       "norm_label": "mark_block()"
     },
     {
@@ -16059,8 +16059,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "devices_lfs_backup_c_lfs_block_t",
-      "community": 104,
-      "community_name": "logo_lfs_backup",
+      "community": 149,
+      "community_name": "test_lfs_backup.c",
       "norm_label": "lfs_block_t"
     },
     {
@@ -16070,8 +16070,8 @@
       "source_location": "L97",
       "_origin": "ast",
       "id": "devices_lfs_backup_logo_lfs_backup",
-      "community": 104,
-      "community_name": "logo_lfs_backup",
+      "community": 149,
+      "community_name": "test_lfs_backup.c",
       "norm_label": "logo_lfs_backup()"
     },
     {
@@ -16081,8 +16081,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "devices_lfs_backup_c_lfs_t",
-      "community": 104,
-      "community_name": "logo_lfs_backup",
+      "community": 149,
+      "community_name": "test_lfs_backup.c",
       "norm_label": "lfs_t"
     },
     {
@@ -16092,8 +16092,8 @@
       "source_location": "L176",
       "_origin": "ast",
       "id": "devices_lfs_backup_logo_lfs_restore",
-      "community": 104,
-      "community_name": "logo_lfs_backup",
+      "community": 149,
+      "community_name": "test_lfs_backup.c",
       "norm_label": "logo_lfs_restore()"
     },
     {
@@ -16433,8 +16433,8 @@
       "source_location": "L514",
       "_origin": "ast",
       "id": "devices_lfs_storage_logo_lfs_storage_init",
-      "community": 165,
-      "community_name": "logo_storage_init",
+      "community": 84,
+      "community_name": "test_lfs_storage.c",
       "norm_label": "logo_lfs_storage_init()"
     },
     {
@@ -16444,8 +16444,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "devices_lfs_storage_c_logostorage",
-      "community": 165,
-      "community_name": "logo_storage_init",
+      "community": 84,
+      "community_name": "test_lfs_storage.c",
       "norm_label": "logostorage"
     },
     {
@@ -16455,8 +16455,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "devices_lfs_storage_c_lfs_t",
-      "community": 165,
-      "community_name": "logo_storage_init",
+      "community": 84,
+      "community_name": "test_lfs_storage.c",
       "norm_label": "lfs_t"
     },
     {
@@ -16466,8 +16466,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "devices_lfs_storage_h_devices_lfs_storage",
-      "community": 126,
-      "community_name": "storage.h",
+      "community": 107,
+      "community_name": "storage_router.c",
       "norm_label": "lfs_storage.h"
     },
     {
@@ -20712,8 +20712,8 @@
       "source_location": "L854",
       "_origin": "ast",
       "id": "devices_picocalc_picocalc_hardware_ping_recv_callback",
-      "community": 197,
-      "community_name": "ip_addr_t",
+      "community": 180,
+      "community_name": "picocalc_network_tls_connect",
       "norm_label": "ping_recv_callback()"
     },
     {
@@ -20723,8 +20723,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "ip_addr_t",
-      "community": 197,
-      "community_name": "ip_addr_t",
+      "community": 180,
+      "community_name": "picocalc_network_tls_connect",
       "norm_label": "ip_addr_t"
     },
     {
@@ -20745,8 +20745,8 @@
       "source_location": "L975",
       "_origin": "ast",
       "id": "devices_picocalc_picocalc_hardware_picocalc_dns_callback",
-      "community": 197,
-      "community_name": "ip_addr_t",
+      "community": 180,
+      "community_name": "picocalc_network_tls_connect",
       "norm_label": "picocalc_dns_callback()"
     },
     {
@@ -20767,8 +20767,8 @@
       "source_location": "L1088",
       "_origin": "ast",
       "id": "devices_picocalc_picocalc_hardware_ntp_recv_callback",
-      "community": 197,
-      "community_name": "ip_addr_t",
+      "community": 180,
+      "community_name": "picocalc_network_tls_connect",
       "norm_label": "ntp_recv_callback()"
     },
     {
@@ -20778,8 +20778,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "u16_t",
-      "community": 197,
-      "community_name": "ip_addr_t",
+      "community": 180,
+      "community_name": "picocalc_network_tls_connect",
       "norm_label": "u16_t"
     },
     {
@@ -20789,8 +20789,8 @@
       "source_location": "L1119",
       "_origin": "ast",
       "id": "devices_picocalc_picocalc_hardware_ntp_send_request",
-      "community": 197,
-      "community_name": "ip_addr_t",
+      "community": 58,
+      "community_name": "picocalc_hardware.c",
       "norm_label": "ntp_send_request()"
     },
     {
@@ -20800,8 +20800,8 @@
       "source_location": "L1137",
       "_origin": "ast",
       "id": "devices_picocalc_picocalc_hardware_ntp_dns_callback",
-      "community": 197,
-      "community_name": "ip_addr_t",
+      "community": 58,
+      "community_name": "picocalc_hardware.c",
       "norm_label": "ntp_dns_callback()"
     },
     {
@@ -20888,8 +20888,8 @@
       "source_location": "L1406",
       "_origin": "ast",
       "id": "devices_picocalc_picocalc_hardware_tcp_dns_callback",
-      "community": 197,
-      "community_name": "ip_addr_t",
+      "community": 180,
+      "community_name": "picocalc_network_tls_connect",
       "norm_label": "tcp_dns_callback()"
     },
     {
@@ -21097,8 +21097,8 @@
       "source_location": "L2157",
       "_origin": "ast",
       "id": "devices_picocalc_picocalc_hardware_logo_picocalc_hardware_create",
-      "community": 58,
-      "community_name": "picocalc_hardware.c",
+      "community": 104,
+      "community_name": "logo_hardware_init",
       "norm_label": "logo_picocalc_hardware_create()"
     },
     {
@@ -21108,8 +21108,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "devices_picocalc_picocalc_hardware_c_logohardware",
-      "community": 58,
-      "community_name": "picocalc_hardware.c",
+      "community": 104,
+      "community_name": "logo_hardware_init",
       "norm_label": "logohardware"
     },
     {
@@ -21119,8 +21119,8 @@
       "source_location": "L2171",
       "_origin": "ast",
       "id": "devices_picocalc_picocalc_hardware_logo_picocalc_hardware_destroy",
-      "community": 58,
-      "community_name": "picocalc_hardware.c",
+      "community": 104,
+      "community_name": "logo_hardware_init",
       "norm_label": "logo_picocalc_hardware_destroy()"
     },
     {
@@ -23154,8 +23154,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "devices_storage_c_devices_storage",
-      "community": 126,
-      "community_name": "storage.h",
+      "community": 107,
+      "community_name": "storage_router.c",
       "norm_label": "storage.c"
     },
     {
@@ -23165,8 +23165,8 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "devices_storage_logo_storage_init",
-      "community": 165,
-      "community_name": "logo_storage_init",
+      "community": 25,
+      "community_name": "test_scaffold_setUp",
       "norm_label": "logo_storage_init()"
     },
     {
@@ -23176,8 +23176,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "devices_storage_c_logostorage",
-      "community": 165,
-      "community_name": "logo_storage_init",
+      "community": 25,
+      "community_name": "test_scaffold_setUp",
       "norm_label": "logostorage"
     },
     {
@@ -23187,8 +23187,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "devices_storage_c_logostorageops",
-      "community": 165,
-      "community_name": "logo_storage_init",
+      "community": 25,
+      "community_name": "test_scaffold_setUp",
       "norm_label": "logostorageops"
     },
     {
@@ -23198,8 +23198,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "devices_storage_h_devices_storage",
-      "community": 126,
-      "community_name": "storage.h",
+      "community": 107,
+      "community_name": "storage_router.c",
       "norm_label": "storage.h"
     },
     {
@@ -23330,8 +23330,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "devices_storage_router_c_logostorageops",
-      "community": 165,
-      "community_name": "logo_storage_init",
+      "community": 107,
+      "community_name": "storage_router.c",
       "norm_label": "logostorageops"
     },
     {
@@ -23440,8 +23440,8 @@
       "source_location": "L267",
       "_origin": "ast",
       "id": "devices_storage_router_logo_storage_router_init",
-      "community": 165,
-      "community_name": "logo_storage_init",
+      "community": 107,
+      "community_name": "storage_router.c",
       "norm_label": "logo_storage_router_init()"
     },
     {
@@ -23451,8 +23451,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "devices_storage_router_c_logostorage",
-      "community": 165,
-      "community_name": "logo_storage_init",
+      "community": 107,
+      "community_name": "storage_router.c",
       "norm_label": "logostorage"
     },
     {
@@ -23462,8 +23462,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "logomountavailablefn",
-      "community": 165,
-      "community_name": "logo_storage_init",
+      "community": 107,
+      "community_name": "storage_router.c",
       "norm_label": "logomountavailablefn"
     },
     {
@@ -23473,8 +23473,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "devices_storage_router_h_devices_storage_router",
-      "community": 126,
-      "community_name": "storage.h",
+      "community": 107,
+      "community_name": "storage_router.c",
       "norm_label": "storage_router.h"
     },
     {
@@ -23561,8 +23561,8 @@
       "source_location": "L71",
       "_origin": "ast",
       "id": "devices_stream_logo_stream_read_line",
-      "community": 52,
-      "community_name": "stream.c",
+      "community": 83,
+      "community_name": "primitives_get_io",
       "norm_label": "logo_stream_read_line()"
     },
     {
@@ -23583,8 +23583,8 @@
       "source_location": "L100",
       "_origin": "ast",
       "id": "devices_stream_logo_stream_write",
-      "community": 11,
-      "community_name": "io.c",
+      "community": 52,
+      "community_name": "stream.c",
       "norm_label": "logo_stream_write()"
     },
     {
@@ -23715,8 +23715,8 @@
       "source_location": "L262",
       "_origin": "ast",
       "id": "devices_stream_logo_stream_close",
-      "community": 83,
-      "community_name": "primitives_get_io",
+      "community": 52,
+      "community_name": "stream.c",
       "norm_label": "logo_stream_close()"
     },
     {
@@ -23726,8 +23726,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "devices_stream_h_devices_stream",
-      "community": 126,
-      "community_name": "storage.h",
+      "community": 107,
+      "community_name": "storage_router.c",
       "norm_label": "stream.h"
     },
     {
@@ -25870,8 +25870,8 @@
       "source_location": "L1253",
       "_origin": "ast",
       "id": "tests_mock_device_mock_sound_queue",
-      "community": 200,
-      "community_name": "mock_sound_queue",
+      "community": 29,
+      "community_name": "mock_device.c",
       "norm_label": "mock_sound_queue()"
     },
     {
@@ -25881,8 +25881,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "tests_mock_device_c_soundevent",
-      "community": 200,
-      "community_name": "mock_sound_queue",
+      "community": 29,
+      "community_name": "mock_device.c",
       "norm_label": "soundevent"
     },
     {
@@ -26739,8 +26739,8 @@
       "source_location": "L1940",
       "_origin": "ast",
       "id": "tests_mock_device_mock_device_set_tcp_read_chunk",
-      "community": 29,
-      "community_name": "mock_device.c",
+      "community": 26,
+      "community_name": "test_primitives_http.c",
       "norm_label": "mock_device_set_tcp_read_chunk()"
     },
     {
@@ -26750,8 +26750,8 @@
       "source_location": "L1945",
       "_origin": "ast",
       "id": "tests_mock_device_mock_device_set_tcp_write_chunk",
-      "community": 29,
-      "community_name": "mock_device.c",
+      "community": 26,
+      "community_name": "test_primitives_http.c",
       "norm_label": "mock_device_set_tcp_write_chunk()"
     },
     {
@@ -26772,8 +26772,8 @@
       "source_location": "L1955",
       "_origin": "ast",
       "id": "tests_mock_device_mock_device_set_tcp_close_after",
-      "community": 29,
-      "community_name": "mock_device.c",
+      "community": 26,
+      "community_name": "test_primitives_http.c",
       "norm_label": "mock_device_set_tcp_close_after()"
     },
     {
@@ -26794,8 +26794,8 @@
       "source_location": "L1965",
       "_origin": "ast",
       "id": "tests_mock_device_mock_device_get_tcp_request_len",
-      "community": 29,
-      "community_name": "mock_device.c",
+      "community": 26,
+      "community_name": "test_primitives_http.c",
       "norm_label": "mock_device_get_tcp_request_len()"
     },
     {
@@ -28851,8 +28851,8 @@
       "source_location": "L192",
       "_origin": "ast",
       "id": "tests_test_cross_fs_move_setup",
-      "community": 165,
-      "community_name": "logo_storage_init",
+      "community": 84,
+      "community_name": "test_lfs_storage.c",
       "norm_label": "setup()"
     },
     {
@@ -32130,7 +32130,7 @@
       "_origin": "ast",
       "id": "tests_test_frame",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "test_frame.c"
     },
     {
@@ -32152,7 +32152,7 @@
       "_origin": "ast",
       "id": "tests_test_frame_teardown",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "teardown()"
     },
     {
@@ -32239,7 +32239,7 @@
       "source_location": "L110",
       "_origin": "ast",
       "id": "tests_test_frame_test_push_argument_mismatch_fails",
-      "community": 167,
+      "community": 36,
       "community_name": "value_number",
       "norm_label": "test_push_argument_mismatch_fails()"
     },
@@ -32305,8 +32305,8 @@
       "source_location": "L184",
       "_origin": "ast",
       "id": "tests_test_frame_test_frame_at_none_returns_null",
-      "community": 158,
-      "community_name": "frame.c",
+      "community": 36,
+      "community_name": "value_number",
       "norm_label": "test_frame_at_none_returns_null()"
     },
     {
@@ -32317,7 +32317,7 @@
       "_origin": "ast",
       "id": "tests_test_frame_test_frame_current_empty_returns_null",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "test_frame_current_empty_returns_null()"
     },
     {
@@ -32328,7 +32328,7 @@
       "_origin": "ast",
       "id": "tests_test_frame_test_frame_current_returns_top",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "test_frame_current_returns_top()"
     },
     {
@@ -32339,7 +32339,7 @@
       "_origin": "ast",
       "id": "tests_test_frame_test_frame_has_correct_proc",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "test_frame_has_correct_proc()"
     },
     {
@@ -32350,7 +32350,7 @@
       "_origin": "ast",
       "id": "tests_test_frame_test_frame_has_correct_param_count",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "test_frame_has_correct_param_count()"
     },
     {
@@ -32361,7 +32361,7 @@
       "_origin": "ast",
       "id": "tests_test_frame_test_bindings_count",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "test_bindings_count()"
     },
     {
@@ -32372,7 +32372,7 @@
       "_origin": "ast",
       "id": "tests_test_frame_test_bindings_have_correct_names",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "test_bindings_have_correct_names()"
     },
     {
@@ -32383,7 +32383,7 @@
       "_origin": "ast",
       "id": "tests_test_frame_test_bindings_have_correct_values",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "test_bindings_have_correct_values()"
     },
     {
@@ -32394,7 +32394,7 @@
       "_origin": "ast",
       "id": "tests_test_frame_test_find_binding_exists",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "test_find_binding_exists()"
     },
     {
@@ -32405,7 +32405,7 @@
       "_origin": "ast",
       "id": "tests_test_frame_test_find_binding_case_insensitive",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "test_find_binding_case_insensitive()"
     },
     {
@@ -32416,7 +32416,7 @@
       "_origin": "ast",
       "id": "tests_test_frame_test_find_binding_not_found",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "test_find_binding_not_found()"
     },
     {
@@ -32427,7 +32427,7 @@
       "_origin": "ast",
       "id": "tests_test_frame_test_find_binding_in_chain",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "test_find_binding_in_chain()"
     },
     {
@@ -32438,7 +32438,7 @@
       "_origin": "ast",
       "id": "tests_test_frame_test_set_binding",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "test_set_binding()"
     },
     {
@@ -32449,7 +32449,7 @@
       "_origin": "ast",
       "id": "tests_test_frame_test_add_local",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "test_add_local()"
     },
     {
@@ -32460,7 +32460,7 @@
       "_origin": "ast",
       "id": "tests_test_frame_test_add_local_find",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "test_add_local_find()"
     },
     {
@@ -32471,7 +32471,7 @@
       "_origin": "ast",
       "id": "tests_test_frame_test_add_multiple_locals",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "test_add_multiple_locals()"
     },
     {
@@ -32482,7 +32482,7 @@
       "_origin": "ast",
       "id": "tests_test_frame_test_declare_local_unbound",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "test_declare_local_unbound()"
     },
     {
@@ -32493,7 +32493,7 @@
       "_origin": "ast",
       "id": "tests_test_frame_test_add_local_with_params",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "test_add_local_with_params()"
     },
     {
@@ -32525,8 +32525,8 @@
       "source_location": "L440",
       "_origin": "ast",
       "id": "tests_test_frame_test_value_pop_empty_returns_none",
-      "community": 158,
-      "community_name": "frame.c",
+      "community": 36,
+      "community_name": "value_number",
       "norm_label": "test_value_pop_empty_returns_none()"
     },
     {
@@ -32580,8 +32580,8 @@
       "source_location": "L506",
       "_origin": "ast",
       "id": "tests_test_frame_test_values_with_locals",
-      "community": 158,
-      "community_name": "frame.c",
+      "community": 36,
+      "community_name": "value_number",
       "norm_label": "test_values_with_locals()"
     },
     {
@@ -32591,8 +32591,8 @@
       "source_location": "L533",
       "_origin": "ast",
       "id": "tests_test_frame_test_test_not_valid_initially",
-      "community": 158,
-      "community_name": "frame.c",
+      "community": 36,
+      "community_name": "value_number",
       "norm_label": "test_test_not_valid_initially()"
     },
     {
@@ -32602,8 +32602,8 @@
       "source_location": "L539",
       "_origin": "ast",
       "id": "tests_test_frame_test_set_test_true",
-      "community": 36,
-      "community_name": "test_frame.c",
+      "community": 19,
+      "community_name": "test_variables.c",
       "norm_label": "test_set_test_true()"
     },
     {
@@ -32613,8 +32613,8 @@
       "source_location": "L551",
       "_origin": "ast",
       "id": "tests_test_frame_test_set_test_false",
-      "community": 36,
-      "community_name": "test_frame.c",
+      "community": 19,
+      "community_name": "test_variables.c",
       "norm_label": "test_set_test_false()"
     },
     {
@@ -32624,8 +32624,8 @@
       "source_location": "L563",
       "_origin": "ast",
       "id": "tests_test_frame_test_test_inherited_from_parent",
-      "community": 36,
-      "community_name": "test_frame.c",
+      "community": 19,
+      "community_name": "test_variables.c",
       "norm_label": "test_test_inherited_from_parent()"
     },
     {
@@ -32635,8 +32635,8 @@
       "source_location": "L578",
       "_origin": "ast",
       "id": "tests_test_frame_test_test_shadowed_by_child",
-      "community": 36,
-      "community_name": "test_frame.c",
+      "community": 19,
+      "community_name": "test_variables.c",
       "norm_label": "test_test_shadowed_by_child()"
     },
     {
@@ -32647,7 +32647,7 @@
       "_origin": "ast",
       "id": "tests_test_frame_test_no_pending_continuation_initially",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "test_no_pending_continuation_initially()"
     },
     {
@@ -32658,7 +32658,7 @@
       "_origin": "ast",
       "id": "tests_test_frame_test_save_continuation",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "test_save_continuation()"
     },
     {
@@ -32668,8 +32668,8 @@
       "source_location": "L615",
       "_origin": "ast",
       "id": "tests_test_frame_test_clear_continuation",
-      "community": 36,
-      "community_name": "test_frame.c",
+      "community": 158,
+      "community_name": "frame.c",
       "norm_label": "test_clear_continuation()"
     },
     {
@@ -32679,8 +32679,8 @@
       "source_location": "L630",
       "_origin": "ast",
       "id": "tests_test_frame_iteration_callback",
-      "community": 36,
-      "community_name": "test_frame.c",
+      "community": 151,
+      "community_name": "iteration_callback",
       "norm_label": "iteration_callback()"
     },
     {
@@ -32690,8 +32690,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "tests_test_frame_c_framestack",
-      "community": 36,
-      "community_name": "test_frame.c",
+      "community": 151,
+      "community_name": "iteration_callback",
       "norm_label": "framestack"
     },
     {
@@ -32701,8 +32701,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "tests_test_frame_c_frameheader",
-      "community": 36,
-      "community_name": "test_frame.c",
+      "community": 151,
+      "community_name": "iteration_callback",
       "norm_label": "frameheader"
     },
     {
@@ -32734,8 +32734,8 @@
       "source_location": "L658",
       "_origin": "ast",
       "id": "tests_test_frame_stop_at_two",
-      "community": 36,
-      "community_name": "test_frame.c",
+      "community": 151,
+      "community_name": "iteration_callback",
       "norm_label": "stop_at_two()"
     },
     {
@@ -32779,7 +32779,7 @@
       "_origin": "ast",
       "id": "tests_test_frame_init_reuse_procs",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "init_reuse_procs()"
     },
     {
@@ -32790,7 +32790,7 @@
       "_origin": "ast",
       "id": "tests_test_frame_test_reuse_empty_stack_fails",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "test_reuse_empty_stack_fails()"
     },
     {
@@ -32801,7 +32801,7 @@
       "_origin": "ast",
       "id": "tests_test_frame_test_reuse_same_params",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "test_reuse_same_params()"
     },
     {
@@ -32812,7 +32812,7 @@
       "_origin": "ast",
       "id": "tests_test_frame_test_reuse_fewer_params",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "test_reuse_fewer_params()"
     },
     {
@@ -32823,7 +32823,7 @@
       "_origin": "ast",
       "id": "tests_test_frame_test_reuse_more_params_fails",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "test_reuse_more_params_fails()"
     },
     {
@@ -32834,7 +32834,7 @@
       "_origin": "ast",
       "id": "tests_test_frame_test_reuse_clears_locals",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "test_reuse_clears_locals()"
     },
     {
@@ -32844,8 +32844,8 @@
       "source_location": "L857",
       "_origin": "ast",
       "id": "tests_test_frame_test_reuse_clears_test_state",
-      "community": 36,
-      "community_name": "test_frame.c",
+      "community": 19,
+      "community_name": "test_variables.c",
       "norm_label": "test_reuse_clears_test_state()"
     },
     {
@@ -32855,8 +32855,8 @@
       "source_location": "L877",
       "_origin": "ast",
       "id": "tests_test_frame_test_reuse_clears_value_stack",
-      "community": 158,
-      "community_name": "frame.c",
+      "community": 36,
+      "community_name": "value_number",
       "norm_label": "test_reuse_clears_value_stack()"
     },
     {
@@ -32867,7 +32867,7 @@
       "_origin": "ast",
       "id": "tests_test_frame_test_reuse_many_times_no_memory_growth",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "test_reuse_many_times_no_memory_growth()"
     },
     {
@@ -32878,7 +32878,7 @@
       "_origin": "ast",
       "id": "tests_test_frame_main",
       "community": 36,
-      "community_name": "test_frame.c",
+      "community_name": "value_number",
       "norm_label": "main()"
     },
     {
@@ -33713,8 +33713,8 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "tests_test_galaxian_load_galaxian",
-      "community": 176,
-      "community_name": "repl_line_starts_with_to",
+      "community": 25,
+      "community_name": "test_scaffold_setUp",
       "norm_label": "load_galaxian()"
     },
     {
@@ -34076,8 +34076,8 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "tests_test_graphics_demo_load_graphics_demo",
-      "community": 176,
-      "community_name": "repl_line_starts_with_to",
+      "community": 142,
+      "community_name": "test_bench_throughput.c",
       "norm_label": "load_graphics_demo()"
     },
     {
@@ -34098,8 +34098,8 @@
       "source_location": "L84",
       "_origin": "ast",
       "id": "tests_test_graphics_demo_setup",
-      "community": 176,
-      "community_name": "repl_line_starts_with_to",
+      "community": 142,
+      "community_name": "test_bench_throughput.c",
       "norm_label": "setup()"
     },
     {
@@ -34307,8 +34307,8 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "tests_test_httpd_setup",
-      "community": 165,
-      "community_name": "logo_storage_init",
+      "community": 25,
+      "community_name": "test_scaffold_setUp",
       "norm_label": "setup()"
     },
     {
@@ -35088,7 +35088,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_io",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "test_io.c"
     },
@@ -35099,7 +35099,7 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "tests_test_io_reset_mock_storage",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "reset_mock_storage()"
     },
@@ -35110,7 +35110,7 @@
       "source_location": "L55",
       "_origin": "ast",
       "id": "tests_test_io_mock_file_exists",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "mock_file_exists()"
     },
@@ -35121,7 +35121,7 @@
       "source_location": "L60",
       "_origin": "ast",
       "id": "tests_test_io_mock_dir_exists",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "mock_dir_exists()"
     },
@@ -35132,7 +35132,7 @@
       "source_location": "L65",
       "_origin": "ast",
       "id": "tests_test_io_mock_file_delete",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "mock_file_delete()"
     },
@@ -35143,7 +35143,7 @@
       "source_location": "L71",
       "_origin": "ast",
       "id": "tests_test_io_mock_dir_create",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "mock_dir_create()"
     },
@@ -35154,7 +35154,7 @@
       "source_location": "L77",
       "_origin": "ast",
       "id": "tests_test_io_mock_dir_delete",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "mock_dir_delete()"
     },
@@ -35165,7 +35165,7 @@
       "source_location": "L83",
       "_origin": "ast",
       "id": "tests_test_io_mock_rename",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "mock_rename()"
     },
@@ -35176,7 +35176,7 @@
       "source_location": "L90",
       "_origin": "ast",
       "id": "tests_test_io_mock_file_size",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "mock_file_size()"
     },
@@ -35187,7 +35187,7 @@
       "source_location": "L95",
       "_origin": "ast",
       "id": "tests_test_io_mock_list_directory",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "mock_list_directory()"
     },
@@ -35198,7 +35198,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "tests_test_io_c_logodircallback",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "logodircallback"
     },
@@ -35209,7 +35209,7 @@
       "source_location": "L100",
       "_origin": "ast",
       "id": "tests_test_io_mock_open",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "mock_open()"
     },
@@ -35220,7 +35220,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "tests_test_io_c_logostream",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "logostream"
     },
@@ -35231,7 +35231,7 @@
       "source_location": "L126",
       "_origin": "ast",
       "id": "tests_test_io_mock_sleep",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "mock_sleep()"
     },
@@ -35242,7 +35242,7 @@
       "source_location": "L127",
       "_origin": "ast",
       "id": "tests_test_io_mock_random",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "mock_random()"
     },
@@ -35253,7 +35253,7 @@
       "source_location": "L128",
       "_origin": "ast",
       "id": "tests_test_io_mock_get_battery_level",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "mock_get_battery_level()"
     },
@@ -35264,7 +35264,7 @@
       "source_location": "L130",
       "_origin": "ast",
       "id": "tests_test_io_mock_check_user_interrupt",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "mock_check_user_interrupt()"
     },
@@ -35275,7 +35275,7 @@
       "source_location": "L131",
       "_origin": "ast",
       "id": "tests_test_io_mock_clear_user_interrupt",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "mock_clear_user_interrupt()"
     },
@@ -35286,7 +35286,7 @@
       "source_location": "L134",
       "_origin": "ast",
       "id": "tests_test_io_mock_check_pause",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "mock_check_pause()"
     },
@@ -35297,7 +35297,7 @@
       "source_location": "L135",
       "_origin": "ast",
       "id": "tests_test_io_mock_clear_pause",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "mock_clear_pause()"
     },
@@ -35308,7 +35308,7 @@
       "source_location": "L138",
       "_origin": "ast",
       "id": "tests_test_io_mock_check_freeze",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "mock_check_freeze()"
     },
@@ -35319,7 +35319,7 @@
       "source_location": "L139",
       "_origin": "ast",
       "id": "tests_test_io_mock_clear_freeze",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "mock_clear_freeze()"
     },
@@ -35330,7 +35330,7 @@
       "source_location": "L168",
       "_origin": "ast",
       "id": "tests_test_io_setup",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "setup()"
     },
@@ -35341,8 +35341,8 @@
       "source_location": "L178",
       "_origin": "ast",
       "id": "tests_test_io_teardown",
-      "community": 62,
-      "community_name": "logo_io_init",
+      "community": 11,
+      "community_name": "test_io.c",
       "norm_label": "teardown()"
     },
     {
@@ -35352,7 +35352,7 @@
       "source_location": "L187",
       "_origin": "ast",
       "id": "tests_test_io_test_init_defaults",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "test_init_defaults()"
     },
@@ -35364,7 +35364,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_prefix_management",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_prefix_management()"
     },
     {
@@ -35375,7 +35375,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_resolve_path_with_parent_dir",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_resolve_path_with_parent_dir()"
     },
     {
@@ -35385,7 +35385,7 @@
       "source_location": "L266",
       "_origin": "ast",
       "id": "tests_test_io_test_file_exists",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "test_file_exists()"
     },
@@ -35407,8 +35407,8 @@
       "source_location": "L306",
       "_origin": "ast",
       "id": "tests_test_io_test_reader_writer_control",
-      "community": 11,
-      "community_name": "io.c",
+      "community": 41,
+      "community_name": "primitives_files.c",
       "norm_label": "test_reader_writer_control()"
     },
     {
@@ -35418,7 +35418,7 @@
       "source_location": "L340",
       "_origin": "ast",
       "id": "tests_test_io_mock_read_char",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "mock_read_char()"
     },
@@ -35429,7 +35429,7 @@
       "source_location": "L343",
       "_origin": "ast",
       "id": "tests_test_io_mock_write",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "mock_write()"
     },
@@ -35440,7 +35440,7 @@
       "source_location": "L347",
       "_origin": "ast",
       "id": "tests_test_io_mock_stream_close",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "mock_stream_close()"
     },
@@ -35451,7 +35451,7 @@
       "source_location": "L348",
       "_origin": "ast",
       "id": "tests_test_io_mock_stream_write",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "mock_stream_write()"
     },
@@ -35462,7 +35462,7 @@
       "source_location": "L351",
       "_origin": "ast",
       "id": "tests_test_io_mock_stream_set_write_pos",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "mock_stream_set_write_pos()"
     },
@@ -35473,7 +35473,7 @@
       "source_location": "L352",
       "_origin": "ast",
       "id": "tests_test_io_mock_stream_get_length",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "mock_stream_get_length()"
     },
@@ -35485,7 +35485,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_dribble",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_dribble()"
     },
     {
@@ -35496,7 +35496,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_dribble_input",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_dribble_input()"
     },
     {
@@ -35507,7 +35507,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_file_operations",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_file_operations()"
     },
     {
@@ -35518,7 +35518,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_read_write_operations",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_read_write_operations()"
     },
     {
@@ -35529,7 +35529,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_hardware_wrappers",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_hardware_wrappers()"
     },
     {
@@ -35539,7 +35539,7 @@
       "source_location": "L488",
       "_origin": "ast",
       "id": "tests_test_io_test_parse_network_address_valid",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "test_parse_network_address_valid()"
     },
@@ -35550,7 +35550,7 @@
       "source_location": "L516",
       "_origin": "ast",
       "id": "tests_test_io_test_parse_network_address_invalid",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "test_parse_network_address_invalid()"
     },
@@ -35561,7 +35561,7 @@
       "source_location": "L543",
       "_origin": "ast",
       "id": "tests_test_io_test_is_network_address",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "test_is_network_address()"
     },
@@ -35572,8 +35572,8 @@
       "source_location": "L562",
       "_origin": "ast",
       "id": "tests_test_io_test_network_timeout",
-      "community": 41,
-      "community_name": "primitives_files.c",
+      "community": 11,
+      "community_name": "test_io.c",
       "norm_label": "test_network_timeout()"
     },
     {
@@ -35584,7 +35584,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_check_pause_request",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_check_pause_request()"
     },
     {
@@ -35595,7 +35595,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_clear_pause_request",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_clear_pause_request()"
     },
     {
@@ -35606,7 +35606,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_check_freeze_request",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_check_freeze_request()"
     },
     {
@@ -35617,7 +35617,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_clear_freeze_request",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_clear_freeze_request()"
     },
     {
@@ -35638,7 +35638,7 @@
       "source_location": "L653",
       "_origin": "ast",
       "id": "tests_test_io_test_get_open_by_index",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "test_get_open_by_index()"
     },
@@ -35649,7 +35649,7 @@
       "source_location": "L680",
       "_origin": "ast",
       "id": "tests_test_io_test_is_network_stream",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "test_is_network_stream()"
     },
@@ -35660,7 +35660,7 @@
       "source_location": "L698",
       "_origin": "ast",
       "id": "tests_test_io_test_dir_exists",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "test_dir_exists()"
     },
@@ -35671,7 +35671,7 @@
       "source_location": "L714",
       "_origin": "ast",
       "id": "tests_test_io_rw_write_capture",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "rw_write_capture()"
     },
@@ -35682,7 +35682,7 @@
       "source_location": "L726",
       "_origin": "ast",
       "id": "tests_test_io_rw_flush",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "rw_flush()"
     },
@@ -35693,7 +35693,7 @@
       "source_location": "L731",
       "_origin": "ast",
       "id": "tests_test_io_rw_read_char",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "rw_read_char()"
     },
@@ -35704,7 +35704,7 @@
       "source_location": "L738",
       "_origin": "ast",
       "id": "tests_test_io_rw_read_chars",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "rw_read_chars()"
     },
@@ -35715,7 +35715,7 @@
       "source_location": "L749",
       "_origin": "ast",
       "id": "tests_test_io_rw_read_line",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "rw_read_line()"
     },
@@ -35726,7 +35726,7 @@
       "source_location": "L764",
       "_origin": "ast",
       "id": "tests_test_io_rw_can_read",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "rw_can_read()"
     },
@@ -35738,7 +35738,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_read_chars_operation",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_read_chars_operation()"
     },
     {
@@ -35749,7 +35749,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_read_line_operation",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_read_line_operation()"
     },
     {
@@ -35760,7 +35760,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_key_available",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_key_available()"
     },
     {
@@ -35771,7 +35771,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_write_line_operation",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_write_line_operation()"
     },
     {
@@ -35782,7 +35782,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_write_line_null_text",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_write_line_null_text()"
     },
     {
@@ -35793,7 +35793,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_flush_operation",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_flush_operation()"
     },
     {
@@ -35804,7 +35804,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_check_write_error",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_check_write_error()"
     },
     {
@@ -35815,7 +35815,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_console_write",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_console_write()"
     },
     {
@@ -35826,7 +35826,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_console_write_line",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_console_write_line()"
     },
     {
@@ -35837,7 +35837,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_null_io_safety",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_null_io_safety()"
     },
     {
@@ -35848,7 +35848,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_resolve_path_relative_dotdot",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_resolve_path_relative_dotdot()"
     },
     {
@@ -35859,7 +35859,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_resolve_path_buffer_too_small",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_resolve_path_buffer_too_small()"
     },
     {
@@ -35870,7 +35870,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_resolve_path_prefix_no_trailing_slash",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_resolve_path_prefix_no_trailing_slash()"
     },
     {
@@ -35881,7 +35881,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_resolve_path_consecutive_slashes",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_resolve_path_consecutive_slashes()"
     },
     {
@@ -35891,7 +35891,7 @@
       "source_location": "L1100",
       "_origin": "ast",
       "id": "tests_test_io_test_open_already_open",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "test_open_already_open()"
     },
@@ -35902,7 +35902,7 @@
       "source_location": "L1120",
       "_origin": "ast",
       "id": "tests_test_io_test_open_max_files",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "test_open_max_files()"
     },
@@ -35913,8 +35913,8 @@
       "source_location": "L1151",
       "_origin": "ast",
       "id": "tests_test_io_test_open_no_storage",
-      "community": 62,
-      "community_name": "logo_io_init",
+      "community": 11,
+      "community_name": "test_io.c",
       "norm_label": "test_open_no_storage()"
     },
     {
@@ -35936,7 +35936,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_write_with_dribble",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_write_with_dribble()"
     },
     {
@@ -35946,7 +35946,7 @@
       "source_location": "L1226",
       "_origin": "ast",
       "id": "tests_test_io_dribble_flush_fn",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "dribble_flush_fn()"
     },
@@ -35958,7 +35958,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_flush_with_dribble",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_flush_with_dribble()"
     },
     {
@@ -35969,7 +35969,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_check_write_error_with_dribble",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_check_write_error_with_dribble()"
     },
     {
@@ -35980,7 +35980,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_start_dribble_already_active",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_start_dribble_already_active()"
     },
     {
@@ -35990,8 +35990,8 @@
       "source_location": "L1312",
       "_origin": "ast",
       "id": "tests_test_io_test_start_dribble_no_storage",
-      "community": 62,
-      "community_name": "logo_io_init",
+      "community": 11,
+      "community_name": "test_io.c",
       "norm_label": "test_start_dribble_no_storage()"
     },
     {
@@ -36001,7 +36001,7 @@
       "source_location": "L1326",
       "_origin": "ast",
       "id": "tests_test_io_test_parse_network_address_host_buffer_small",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "test_parse_network_address_host_buffer_small()"
     },
@@ -36012,7 +36012,7 @@
       "source_location": "L1339",
       "_origin": "ast",
       "id": "tests_test_io_mock_dir_callback",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "mock_dir_callback()"
     },
@@ -36023,7 +36023,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "tests_test_io_c_logoentrytype",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "logoentrytype"
     },
@@ -36034,8 +36034,8 @@
       "source_location": "L1345",
       "_origin": "ast",
       "id": "tests_test_io_test_list_directory",
-      "community": 83,
-      "community_name": "primitives_get_io",
+      "community": 11,
+      "community_name": "test_io.c",
       "norm_label": "test_list_directory()"
     },
     {
@@ -36045,8 +36045,8 @@
       "source_location": "L1355",
       "_origin": "ast",
       "id": "tests_test_io_test_set_negative_timeout",
-      "community": 41,
-      "community_name": "primitives_files.c",
+      "community": 11,
+      "community_name": "test_io.c",
       "norm_label": "test_set_negative_timeout()"
     },
     {
@@ -36057,7 +36057,7 @@
       "_origin": "ast",
       "id": "tests_test_io_test_user_interrupt_fires",
       "community": 11,
-      "community_name": "io.c",
+      "community_name": "test_io.c",
       "norm_label": "test_user_interrupt_fires()"
     },
     {
@@ -36067,8 +36067,8 @@
       "source_location": "L1377",
       "_origin": "ast",
       "id": "tests_test_io_test_init_no_console",
-      "community": 62,
-      "community_name": "logo_io_init",
+      "community": 11,
+      "community_name": "test_io.c",
       "norm_label": "test_init_no_console()"
     },
     {
@@ -36078,7 +36078,7 @@
       "source_location": "L1389",
       "_origin": "ast",
       "id": "tests_test_io_main",
-      "community": 17,
+      "community": 11,
       "community_name": "test_io.c",
       "norm_label": "main()"
     },
@@ -38212,8 +38212,8 @@
       "source_location": "L63",
       "_origin": "ast",
       "id": "tests_test_lfs_storage_setup",
-      "community": 165,
-      "community_name": "logo_storage_init",
+      "community": 84,
+      "community_name": "test_lfs_storage.c",
       "norm_label": "setup()"
     },
     {
@@ -40390,8 +40390,8 @@
       "source_location": "L280",
       "_origin": "ast",
       "id": "tests_test_mock_fs_mock_fs_reset",
-      "community": 178,
-      "community_name": "mock_fs_setUp",
+      "community": 65,
+      "community_name": "test_mock_fs.h",
       "norm_label": "mock_fs_reset()"
     },
     {
@@ -40522,8 +40522,8 @@
       "source_location": "L445",
       "_origin": "ast",
       "id": "tests_test_mock_fs_mock_fs_setup",
-      "community": 178,
-      "community_name": "mock_fs_setUp",
+      "community": 65,
+      "community_name": "test_mock_fs.h",
       "norm_label": "mock_fs_setup()"
     },
     {
@@ -40533,8 +40533,8 @@
       "source_location": "L458",
       "_origin": "ast",
       "id": "tests_test_mock_fs_mock_fs_teardown",
-      "community": 178,
-      "community_name": "mock_fs_setUp",
+      "community": 65,
+      "community_name": "test_mock_fs.h",
       "norm_label": "mock_fs_teardown()"
     },
     {
@@ -45538,8 +45538,8 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "tests_test_primitives_files_setup",
-      "community": 178,
-      "community_name": "mock_fs_setUp",
+      "community": 65,
+      "community_name": "test_mock_fs.h",
       "norm_label": "setup()"
     },
     {
@@ -45549,8 +45549,8 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "tests_test_primitives_files_teardown",
-      "community": 178,
-      "community_name": "mock_fs_setUp",
+      "community": 65,
+      "community_name": "test_mock_fs.h",
       "norm_label": "teardown()"
     },
     {
@@ -46209,8 +46209,8 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "tests_test_primitives_files_directory_setup",
-      "community": 178,
-      "community_name": "mock_fs_setUp",
+      "community": 65,
+      "community_name": "test_mock_fs.h",
       "norm_label": "setup()"
     },
     {
@@ -46220,8 +46220,8 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "tests_test_primitives_files_directory_teardown",
-      "community": 178,
-      "community_name": "mock_fs_setUp",
+      "community": 65,
+      "community_name": "test_mock_fs.h",
       "norm_label": "teardown()"
     },
     {
@@ -46649,8 +46649,8 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "tests_test_primitives_files_load_save_setup",
-      "community": 178,
-      "community_name": "mock_fs_setUp",
+      "community": 65,
+      "community_name": "test_mock_fs.h",
       "norm_label": "setup()"
     },
     {
@@ -46660,8 +46660,8 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "tests_test_primitives_files_load_save_teardown",
-      "community": 178,
-      "community_name": "mock_fs_setUp",
+      "community": 65,
+      "community_name": "test_mock_fs.h",
       "norm_label": "teardown()"
     },
     {
@@ -50510,8 +50510,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_primitives_outside_world.c"
     },
     {
@@ -50543,8 +50543,8 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_print_number",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_print_number()"
     },
     {
@@ -50554,8 +50554,8 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_print_word",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_print_word()"
     },
     {
@@ -50565,8 +50565,8 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_print_list_no_outer_brackets",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_print_list_no_outer_brackets()"
     },
     {
@@ -50576,8 +50576,8 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_print_nested_list",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_print_nested_list()"
     },
     {
@@ -50587,8 +50587,8 @@
       "source_location": "L51",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_print_multiple_args",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_print_multiple_args()"
     },
     {
@@ -50598,8 +50598,8 @@
       "source_location": "L57",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_pr_abbreviation",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_pr_abbreviation()"
     },
     {
@@ -50609,8 +50609,8 @@
       "source_location": "L63",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_show_number",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_show_number()"
     },
     {
@@ -50620,8 +50620,8 @@
       "source_location": "L69",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_show_word",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_show_word()"
     },
     {
@@ -50631,8 +50631,8 @@
       "source_location": "L75",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_show_list_with_brackets",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_show_list_with_brackets()"
     },
     {
@@ -50642,8 +50642,8 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_show_nested_list",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_show_nested_list()"
     },
     {
@@ -50653,8 +50653,8 @@
       "source_location": "L87",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_show_empty_list",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_show_empty_list()"
     },
     {
@@ -50664,8 +50664,8 @@
       "source_location": "L93",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_print_empty_list",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_print_empty_list()"
     },
     {
@@ -50675,8 +50675,8 @@
       "source_location": "L99",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_type_empty_list",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_type_empty_list()"
     },
     {
@@ -50686,8 +50686,8 @@
       "source_location": "L105",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_show_list_with_empty_list",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_show_list_with_empty_list()"
     },
     {
@@ -50697,8 +50697,8 @@
       "source_location": "L111",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_type_number_no_newline",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_type_number_no_newline()"
     },
     {
@@ -50708,8 +50708,8 @@
       "source_location": "L117",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_type_word_no_newline",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_type_word_no_newline()"
     },
     {
@@ -50719,8 +50719,8 @@
       "source_location": "L123",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_type_list_no_outer_brackets",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_type_list_no_outer_brackets()"
     },
     {
@@ -50730,8 +50730,8 @@
       "source_location": "L129",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_type_multiple_args",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_type_multiple_args()"
     },
     {
@@ -50741,8 +50741,8 @@
       "source_location": "L135",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_type_then_print",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_type_then_print()"
     },
     {
@@ -50752,8 +50752,8 @@
       "source_location": "L147",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_standout_word",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_standout_word()"
     },
     {
@@ -50763,8 +50763,8 @@
       "source_location": "L161",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_standout_number",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_standout_number()"
     },
     {
@@ -50774,8 +50774,8 @@
       "source_location": "L174",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_standout_list_no_outer_brackets",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_standout_list_no_outer_brackets()"
     },
     {
@@ -50785,8 +50785,8 @@
       "source_location": "L190",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_standout_nested_list",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_standout_nested_list()"
     },
     {
@@ -50796,8 +50796,8 @@
       "source_location": "L211",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_standout_empty_list",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_standout_empty_list()"
     },
     {
@@ -50807,8 +50807,8 @@
       "source_location": "L222",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_standout_empty_word",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_standout_empty_word()"
     },
     {
@@ -50818,8 +50818,8 @@
       "source_location": "L233",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_standout_can_be_printed",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_standout_can_be_printed()"
     },
     {
@@ -50829,8 +50829,8 @@
       "source_location": "L247",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_keyp_no_input_returns_false",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_keyp_no_input_returns_false()"
     },
     {
@@ -50840,8 +50840,8 @@
       "source_location": "L256",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_keyp_with_input_returns_true",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_keyp_with_input_returns_true()"
     },
     {
@@ -50851,8 +50851,8 @@
       "source_location": "L265",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_readchar_returns_single_character",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_readchar_returns_single_character()"
     },
     {
@@ -50862,8 +50862,8 @@
       "source_location": "L274",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_readchar_multiple_calls",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_readchar_multiple_calls()"
     },
     {
@@ -50873,8 +50873,8 @@
       "source_location": "L288",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_rc_abbreviation",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_rc_abbreviation()"
     },
     {
@@ -50895,8 +50895,8 @@
       "source_location": "L306",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_readchars_returns_multiple_characters",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_readchars_returns_multiple_characters()"
     },
     {
@@ -50906,8 +50906,8 @@
       "source_location": "L315",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_rcs_abbreviation",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_rcs_abbreviation()"
     },
     {
@@ -50917,8 +50917,8 @@
       "source_location": "L324",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_readchars_partial_read",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_readchars_partial_read()"
     },
     {
@@ -50939,8 +50939,8 @@
       "source_location": "L342",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_readchars_invalid_count",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_readchars_invalid_count()"
     },
     {
@@ -50950,8 +50950,8 @@
       "source_location": "L349",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_readchars_negative_count",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_readchars_negative_count()"
     },
     {
@@ -50961,8 +50961,8 @@
       "source_location": "L356",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_readword_returns_line_as_word",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_readword_returns_line_as_word()"
     },
     {
@@ -50972,8 +50972,8 @@
       "source_location": "L365",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_rw_abbreviation",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_rw_abbreviation()"
     },
     {
@@ -50983,8 +50983,8 @@
       "source_location": "L374",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_readword_empty_line_returns_empty_word",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_readword_empty_line_returns_empty_word()"
     },
     {
@@ -51016,8 +51016,8 @@
       "source_location": "L417",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_rl_abbreviation",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_rl_abbreviation()"
     },
     {
@@ -51038,8 +51038,8 @@
       "source_location": "L434",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_test_readlist_eof_returns_empty_word",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "test_readlist_eof_returns_empty_word()"
     },
     {
@@ -51082,8 +51082,8 @@
       "source_location": "L539",
       "_origin": "ast",
       "id": "tests_test_primitives_outside_world_main",
-      "community": 109,
-      "community_name": "mem_word_ptr",
+      "community": 17,
+      "community_name": "test_primitives_outside_world.c",
       "norm_label": "main()"
     },
     {
@@ -55922,8 +55922,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_primitives_variables",
-      "community": 164,
-      "community_name": "test_primitives_variables.c",
+      "community": 6,
+      "community_name": "eval_string",
       "norm_label": "test_primitives_variables.c"
     },
     {
@@ -55933,8 +55933,8 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "tests_test_primitives_variables_setup",
-      "community": 164,
-      "community_name": "test_primitives_variables.c",
+      "community": 6,
+      "community_name": "eval_string",
       "norm_label": "setup()"
     },
     {
@@ -55944,8 +55944,8 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "tests_test_primitives_variables_teardown",
-      "community": 164,
-      "community_name": "test_primitives_variables.c",
+      "community": 6,
+      "community_name": "eval_string",
       "norm_label": "teardown()"
     },
     {
@@ -55955,8 +55955,8 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "tests_test_primitives_variables_test_make_and_thing",
-      "community": 164,
-      "community_name": "test_primitives_variables.c",
+      "community": 6,
+      "community_name": "eval_string",
       "norm_label": "test_make_and_thing()"
     },
     {
@@ -55966,8 +55966,8 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "tests_test_primitives_variables_test_thing_unknown_raises_no_value",
-      "community": 164,
-      "community_name": "test_primitives_variables.c",
+      "community": 6,
+      "community_name": "eval_string",
       "norm_label": "test_thing_unknown_raises_no_value()"
     },
     {
@@ -55977,8 +55977,8 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "tests_test_primitives_variables_test_thing_and_colon_agree_on_unknown",
-      "community": 164,
-      "community_name": "test_primitives_variables.c",
+      "community": 6,
+      "community_name": "eval_string",
       "norm_label": "test_thing_and_colon_agree_on_unknown()"
     },
     {
@@ -55988,8 +55988,8 @@
       "source_location": "L51",
       "_origin": "ast",
       "id": "tests_test_primitives_variables_test_dots_variable",
-      "community": 164,
-      "community_name": "test_primitives_variables.c",
+      "community": 6,
+      "community_name": "eval_string",
       "norm_label": "test_dots_variable()"
     },
     {
@@ -55999,8 +55999,8 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "tests_test_primitives_variables_test_global_variable",
-      "community": 164,
-      "community_name": "test_primitives_variables.c",
+      "community": 6,
+      "community_name": "eval_string",
       "norm_label": "test_global_variable()"
     },
     {
@@ -56010,8 +56010,8 @@
       "source_location": "L68",
       "_origin": "ast",
       "id": "tests_test_primitives_variables_test_local_declaration",
-      "community": 164,
-      "community_name": "test_primitives_variables.c",
+      "community": 6,
+      "community_name": "eval_string",
       "norm_label": "test_local_declaration()"
     },
     {
@@ -56087,8 +56087,8 @@
       "source_location": "L196",
       "_origin": "ast",
       "id": "tests_test_primitives_variables_test_localmake_in_procedure",
-      "community": 164,
-      "community_name": "test_primitives_variables.c",
+      "community": 6,
+      "community_name": "eval_string",
       "norm_label": "test_localmake_in_procedure()"
     },
     {
@@ -56109,8 +56109,8 @@
       "source_location": "L234",
       "_origin": "ast",
       "id": "tests_test_primitives_variables_test_local_with_list",
-      "community": 164,
-      "community_name": "test_primitives_variables.c",
+      "community": 6,
+      "community_name": "eval_string",
       "norm_label": "test_local_with_list()"
     },
     {
@@ -56120,8 +56120,8 @@
       "source_location": "L255",
       "_origin": "ast",
       "id": "tests_test_primitives_variables_test_name_primitive",
-      "community": 164,
-      "community_name": "test_primitives_variables.c",
+      "community": 6,
+      "community_name": "eval_string",
       "norm_label": "test_name_primitive()"
     },
     {
@@ -56131,8 +56131,8 @@
       "source_location": "L264",
       "_origin": "ast",
       "id": "tests_test_primitives_variables_test_namep_true",
-      "community": 164,
-      "community_name": "test_primitives_variables.c",
+      "community": 6,
+      "community_name": "eval_string",
       "norm_label": "test_namep_true()"
     },
     {
@@ -56142,8 +56142,8 @@
       "source_location": "L272",
       "_origin": "ast",
       "id": "tests_test_primitives_variables_test_namep_false",
-      "community": 164,
-      "community_name": "test_primitives_variables.c",
+      "community": 6,
+      "community_name": "eval_string",
       "norm_label": "test_namep_false()"
     },
     {
@@ -56153,8 +56153,8 @@
       "source_location": "L279",
       "_origin": "ast",
       "id": "tests_test_primitives_variables_test_name_question_alias",
-      "community": 164,
-      "community_name": "test_primitives_variables.c",
+      "community": 6,
+      "community_name": "eval_string",
       "norm_label": "test_name_question_alias()"
     },
     {
@@ -56175,8 +56175,8 @@
       "source_location": "L317",
       "_origin": "ast",
       "id": "tests_test_primitives_variables_test_error_no_value",
-      "community": 164,
-      "community_name": "test_primitives_variables.c",
+      "community": 6,
+      "community_name": "eval_string",
       "norm_label": "test_error_no_value()"
     },
     {
@@ -56186,8 +56186,8 @@
       "source_location": "L328",
       "_origin": "ast",
       "id": "tests_test_primitives_variables_main",
-      "community": 164,
-      "community_name": "test_primitives_variables.c",
+      "community": 6,
+      "community_name": "eval_string",
       "norm_label": "main()"
     },
     {
@@ -57770,8 +57770,8 @@
       "source_location": "L889",
       "_origin": "ast",
       "id": "tests_test_primitives_words_lists_test_word_long_blob_on_psram",
-      "community": 26,
-      "community_name": "test_primitives_http.c",
+      "community": 109,
+      "community_name": "mem_word_ptr",
       "norm_label": "test_word_long_blob_on_psram()"
     },
     {
@@ -59387,8 +59387,8 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "tests_test_repl_test_repl_line_starts_with_to_basic",
-      "community": 176,
-      "community_name": "repl_line_starts_with_to",
+      "community": 142,
+      "community_name": "test_bench_throughput.c",
       "norm_label": "test_repl_line_starts_with_to_basic()"
     },
     {
@@ -59398,8 +59398,8 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "tests_test_repl_test_repl_line_starts_with_to_with_whitespace",
-      "community": 176,
-      "community_name": "repl_line_starts_with_to",
+      "community": 142,
+      "community_name": "test_bench_throughput.c",
       "norm_label": "test_repl_line_starts_with_to_with_whitespace()"
     },
     {
@@ -59409,8 +59409,8 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "tests_test_repl_test_repl_line_starts_with_to_false_cases",
-      "community": 176,
-      "community_name": "repl_line_starts_with_to",
+      "community": 142,
+      "community_name": "test_bench_throughput.c",
       "norm_label": "test_repl_line_starts_with_to_false_cases()"
     },
     {
@@ -59420,8 +59420,8 @@
       "source_location": "L52",
       "_origin": "ast",
       "id": "tests_test_repl_test_repl_line_starts_with_to_just_to",
-      "community": 176,
-      "community_name": "repl_line_starts_with_to",
+      "community": 142,
+      "community_name": "test_bench_throughput.c",
       "norm_label": "test_repl_line_starts_with_to_just_to()"
     },
     {
@@ -59431,8 +59431,8 @@
       "source_location": "L60",
       "_origin": "ast",
       "id": "tests_test_repl_test_repl_line_is_end_basic",
-      "community": 176,
-      "community_name": "repl_line_starts_with_to",
+      "community": 142,
+      "community_name": "test_bench_throughput.c",
       "norm_label": "test_repl_line_is_end_basic()"
     },
     {
@@ -59442,8 +59442,8 @@
       "source_location": "L68",
       "_origin": "ast",
       "id": "tests_test_repl_test_repl_line_is_end_with_whitespace",
-      "community": 176,
-      "community_name": "repl_line_starts_with_to",
+      "community": 142,
+      "community_name": "test_bench_throughput.c",
       "norm_label": "test_repl_line_is_end_with_whitespace()"
     },
     {
@@ -59453,8 +59453,8 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "tests_test_repl_test_repl_line_is_end_false_cases",
-      "community": 176,
-      "community_name": "repl_line_starts_with_to",
+      "community": 142,
+      "community_name": "test_bench_throughput.c",
       "norm_label": "test_repl_line_is_end_false_cases()"
     },
     {
@@ -60850,8 +60850,8 @@
       "source_location": "L284",
       "_origin": "ast",
       "id": "tests_test_sound_test_play_no_sound_engine_is_noop",
-      "community": 25,
-      "community_name": "test_scaffold_setUp",
+      "community": 104,
+      "community_name": "logo_hardware_init",
       "norm_label": "test_play_no_sound_engine_is_noop()"
     },
     {
@@ -64576,7 +64576,7 @@
       "label": "test_p9m0_instrumentation_runs()",
       "file_type": "code",
       "source_file": "tests/test_trails.c",
-      "source_location": "L1546",
+      "source_location": "L1548",
       "_origin": "ast",
       "id": "tests_test_trails_test_p9m0_instrumentation_runs",
       "community": 9,
@@ -64587,7 +64587,7 @@
       "label": "test_p10prof_profiler_runs()",
       "file_type": "code",
       "source_file": "tests/test_trails.c",
-      "source_location": "L1557",
+      "source_location": "L1569",
       "_origin": "ast",
       "id": "tests_test_trails_test_p10prof_profiler_runs",
       "community": 9,
@@ -64598,7 +64598,7 @@
       "label": "main()",
       "file_type": "code",
       "source_file": "tests/test_trails.c",
-      "source_location": "L1594",
+      "source_location": "L1606",
       "_origin": "ast",
       "id": "tests_test_trails_main",
       "community": 9,
@@ -64656,7 +64656,7 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "tests_test_value_test_value_number_type",
-      "community": 167,
+      "community": 36,
       "community_name": "value_number",
       "norm_label": "test_value_number_type()"
     },
@@ -64667,7 +64667,7 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "tests_test_value_test_value_number_content",
-      "community": 167,
+      "community": 36,
       "community_name": "value_number",
       "norm_label": "test_value_number_content()"
     },
@@ -64678,7 +64678,7 @@
       "source_location": "L48",
       "_origin": "ast",
       "id": "tests_test_value_test_value_number_negative",
-      "community": 167,
+      "community": 36,
       "community_name": "value_number",
       "norm_label": "test_value_number_negative()"
     },
@@ -64689,7 +64689,7 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "tests_test_value_test_value_number_zero",
-      "community": 167,
+      "community": 36,
       "community_name": "value_number",
       "norm_label": "test_value_number_zero()"
     },
@@ -64799,7 +64799,7 @@
       "source_location": "L126",
       "_origin": "ast",
       "id": "tests_test_value_test_value_is_number_true",
-      "community": 167,
+      "community": 36,
       "community_name": "value_number",
       "norm_label": "test_value_is_number_true()"
     },
@@ -64865,7 +64865,7 @@
       "source_location": "L164",
       "_origin": "ast",
       "id": "tests_test_value_test_value_is_word_false_for_number",
-      "community": 167,
+      "community": 36,
       "community_name": "value_number",
       "norm_label": "test_value_is_word_false_for_number()"
     },
@@ -64920,7 +64920,7 @@
       "source_location": "L196",
       "_origin": "ast",
       "id": "tests_test_value_test_value_is_list_false_for_number",
-      "community": 167,
+      "community": 36,
       "community_name": "value_number",
       "norm_label": "test_value_is_list_false_for_number()"
     },
@@ -65294,7 +65294,7 @@
       "source_location": "L469",
       "_origin": "ast",
       "id": "tests_test_value_test_value_to_string_number_integer",
-      "community": 167,
+      "community": 36,
       "community_name": "value_number",
       "norm_label": "test_value_to_string_number_integer()"
     },
@@ -65305,7 +65305,7 @@
       "source_location": "L475",
       "_origin": "ast",
       "id": "tests_test_value_test_value_to_string_number_float",
-      "community": 167,
+      "community": 36,
       "community_name": "value_number",
       "norm_label": "test_value_to_string_number_float()"
     },
@@ -65316,7 +65316,7 @@
       "source_location": "L481",
       "_origin": "ast",
       "id": "tests_test_value_test_value_to_string_number_negative",
-      "community": 167,
+      "community": 36,
       "community_name": "value_number",
       "norm_label": "test_value_to_string_number_negative()"
     },
@@ -65327,7 +65327,7 @@
       "source_location": "L487",
       "_origin": "ast",
       "id": "tests_test_value_test_value_to_string_number_decimal",
-      "community": 167,
+      "community": 36,
       "community_name": "value_number",
       "norm_label": "test_value_to_string_number_decimal()"
     },
@@ -65338,7 +65338,7 @@
       "source_location": "L493",
       "_origin": "ast",
       "id": "tests_test_value_test_value_to_string_number_small_decimal",
-      "community": 167,
+      "community": 36,
       "community_name": "value_number",
       "norm_label": "test_value_to_string_number_small_decimal()"
     },
@@ -65349,7 +65349,7 @@
       "source_location": "L499",
       "_origin": "ast",
       "id": "tests_test_value_test_value_to_string_number_trailing_zeros",
-      "community": 167,
+      "community": 36,
       "community_name": "value_number",
       "norm_label": "test_value_to_string_number_trailing_zeros()"
     },
@@ -65360,7 +65360,7 @@
       "source_location": "L505",
       "_origin": "ast",
       "id": "tests_test_value_test_value_to_string_number_large",
-      "community": 167,
+      "community": 36,
       "community_name": "value_number",
       "norm_label": "test_value_to_string_number_large()"
     },
@@ -65371,7 +65371,7 @@
       "source_location": "L511",
       "_origin": "ast",
       "id": "tests_test_value_test_value_to_string_number_zero",
-      "community": 167,
+      "community": 36,
       "community_name": "value_number",
       "norm_label": "test_value_to_string_number_zero()"
     },
@@ -65437,7 +65437,7 @@
       "source_location": "L561",
       "_origin": "ast",
       "id": "tests_test_value_test_result_ok_status",
-      "community": 167,
+      "community": 36,
       "community_name": "value_number",
       "norm_label": "test_result_ok_status()"
     },
@@ -65459,7 +65459,7 @@
       "source_location": "L576",
       "_origin": "ast",
       "id": "tests_test_value_test_result_ok_no_throw_tag",
-      "community": 167,
+      "community": 36,
       "community_name": "value_number",
       "norm_label": "test_result_ok_no_throw_tag()"
     },
@@ -72023,7 +72023,7 @@
       "label": "11.1 First profile (2026-08-02, Pico Plus 2 W, 200 frames)",
       "file_type": "document",
       "source_file": "docs/interpreter-throughput-design.md",
-      "source_location": "L768",
+      "source_location": "L770",
       "_origin": "ast",
       "id": "docs_interpreter_throughput_design_11_1_first_profile_2026_08_02_pico_plus_2_w_200_frames",
       "community": 135,
@@ -72034,7 +72034,7 @@
       "label": "11.2 The instruction-fetch experiment, built and ready to measure",
       "file_type": "document",
       "source_file": "docs/interpreter-throughput-design.md",
-      "source_location": "L889",
+      "source_location": "L891",
       "_origin": "ast",
       "id": "docs_interpreter_throughput_design_11_2_the_instruction_fetch_experiment_built_and_ready_to_measure",
       "community": 135,
@@ -72045,7 +72045,7 @@
       "label": "11.3 Measured: instruction fetch confirmed (2026-08-04, Plus 2 W)",
       "file_type": "document",
       "source_file": "docs/interpreter-throughput-design.md",
-      "source_location": "L924",
+      "source_location": "L926",
       "_origin": "ast",
       "id": "docs_interpreter_throughput_design_11_3_measured_instruction_fetch_confirmed_2026_08_04_plus_2_w",
       "community": 135,
@@ -72056,7 +72056,7 @@
       "label": "11.4 Tier 2 measured: 53.2 ms, and every moved function shows (Plus 2 W)",
       "file_type": "document",
       "source_file": "docs/interpreter-throughput-design.md",
-      "source_location": "L1009",
+      "source_location": "L1011",
       "_origin": "ast",
       "id": "docs_interpreter_throughput_design_11_4_tier_2_measured_53_2_ms_and_every_moved_function_shows_plus_2_w",
       "community": 135,
@@ -72067,7 +72067,7 @@
       "label": "11.5 Tier 3 measured, and the pattern is now the finding (Plus 2 W)",
       "file_type": "document",
       "source_file": "docs/interpreter-throughput-design.md",
-      "source_location": "L1056",
+      "source_location": "L1058",
       "_origin": "ast",
       "id": "docs_interpreter_throughput_design_11_5_tier_3_measured_and_the_pattern_is_now_the_finding_plus_2_w",
       "community": 135,
@@ -72078,7 +72078,7 @@
       "label": "11.6 Tier 4, and where the tiering stops (Plus 2 W)",
       "file_type": "document",
       "source_file": "docs/interpreter-throughput-design.md",
-      "source_location": "L1097",
+      "source_location": "L1099",
       "_origin": "ast",
       "id": "docs_interpreter_throughput_design_11_6_tier_4_and_where_the_tiering_stops_plus_2_w",
       "community": 135,
@@ -72089,7 +72089,7 @@
       "label": "References",
       "file_type": "document",
       "source_file": "docs/interpreter-throughput-design.md",
-      "source_location": "L1178",
+      "source_location": "L1180",
       "_origin": "ast",
       "id": "docs_interpreter_throughput_design_references",
       "community": 135,
@@ -73992,7 +73992,7 @@
       "label": "3.3 Results",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L151",
+      "source_location": "L158",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_3_3_results",
       "community": 113,
@@ -74003,7 +74003,7 @@
       "label": "3.4 What this changes",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L215",
+      "source_location": "L222",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_3_4_what_this_changes",
       "community": 113,
@@ -74014,7 +74014,7 @@
       "label": "3.5 Where the time actually goes",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L262",
+      "source_location": "L269",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_3_5_where_the_time_actually_goes",
       "community": 113,
@@ -74025,7 +74025,7 @@
       "label": "4. Availability and the memory plan",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L308",
+      "source_location": "L315",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_4_availability_and_the_memory_plan",
       "community": 113,
@@ -74036,7 +74036,7 @@
       "label": "5. Model",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L361",
+      "source_location": "L368",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_5_model",
       "community": 113,
@@ -74047,7 +74047,7 @@
       "label": "5.1 Tile bank",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L363",
+      "source_location": "L370",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_5_1_tile_bank",
       "community": 113,
@@ -74058,7 +74058,7 @@
       "label": "5.2 Map",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L381",
+      "source_location": "L388",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_5_2_map",
       "community": 113,
@@ -74069,7 +74069,7 @@
       "label": "5.3 View: viewport, scroll, wrap",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L396",
+      "source_location": "L403",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_5_3_view_viewport_scroll_wrap",
       "community": 113,
@@ -74080,7 +74080,7 @@
       "label": "5.4 The bake path: `stampmap` and `stamptile`",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L417",
+      "source_location": "L424",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_5_4_the_bake_path_stampmap_and_stamptile",
       "community": 113,
@@ -74091,7 +74091,7 @@
       "label": "6. Logo surface",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L433",
+      "source_location": "L440",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_6_logo_surface",
       "community": 113,
@@ -74102,7 +74102,7 @@
       "label": "7. Architecture",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L458",
+      "source_location": "L465",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_7_architecture",
       "community": 113,
@@ -74113,7 +74113,7 @@
       "label": "8. Interactions with existing semantics",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L486",
+      "source_location": "L493",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_8_interactions_with_existing_semantics",
       "community": 113,
@@ -74124,7 +74124,7 @@
       "label": "9. Lifecycle",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L501",
+      "source_location": "L508",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_9_lifecycle",
       "community": 113,
@@ -74135,7 +74135,7 @@
       "label": "10. Checkpoint Run revamp",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L515",
+      "source_location": "L522",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_10_checkpoint_run_revamp",
       "community": 113,
@@ -74146,7 +74146,7 @@
       "label": "11. Turtle Trails revamp (render-only, gameplay identical)",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L549",
+      "source_location": "L556",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_11_turtle_trails_revamp_render_only_gameplay_identical",
       "community": 113,
@@ -74157,7 +74157,7 @@
       "label": "12. Budgets",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L578",
+      "source_location": "L585",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_12_budgets",
       "community": 113,
@@ -74168,7 +74168,7 @@
       "label": "13. Milestones",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L600",
+      "source_location": "L607",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_13_milestones",
       "community": 113,
@@ -74179,7 +74179,7 @@
       "label": "13.1 M1+M2 as built (2026-08-02)",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L638",
+      "source_location": "L645",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_13_1_m1_m2_as_built_2026_08_02",
       "community": 113,
@@ -74190,7 +74190,7 @@
       "label": "13.2 M1+M2 on hardware (2026-08-02, Pico Plus 2 W)",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L687",
+      "source_location": "L694",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_13_2_m1_m2_on_hardware_2026_08_02_pico_plus_2_w",
       "community": 113,
@@ -74201,7 +74201,7 @@
       "label": "13.3 M3 as built (2026-08-02)",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L772",
+      "source_location": "L779",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_13_3_m3_as_built_2026_08_02",
       "community": 113,
@@ -74212,7 +74212,7 @@
       "label": "13.4 M3 on hardware (2026-08-02) \u2014 accepted, but on the wrong board",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L816",
+      "source_location": "L823",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_13_4_m3_on_hardware_2026_08_02_accepted_but_on_the_wrong_board",
       "community": 113,
@@ -74223,7 +74223,7 @@
       "label": "13.5 The board mismatch, and how to settle it",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L888",
+      "source_location": "L895",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_13_5_the_board_mismatch_and_how_to_settle_it",
       "community": 113,
@@ -74234,7 +74234,7 @@
       "label": "13.6 The M4 gate, measured (2026-08-04, Plus 2 W)",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L922",
+      "source_location": "L929",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_13_6_the_m4_gate_measured_2026_08_04_plus_2_w",
       "community": 113,
@@ -74245,7 +74245,7 @@
       "label": "13.7 The second run, and what `draw.board` was hiding (2026-08-04)",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L994",
+      "source_location": "L1001",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_13_7_the_second_run_and_what_draw_board_was_hiding_2026_08_04",
       "community": 113,
@@ -74256,7 +74256,7 @@
       "label": "14. Tests",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L1030",
+      "source_location": "L1037",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_14_tests",
       "community": 113,
@@ -74267,7 +74267,7 @@
       "label": "15. Levers if M0 misses",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L1043",
+      "source_location": "L1050",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_15_levers_if_m0_misses",
       "community": 113,
@@ -74278,7 +74278,7 @@
       "label": "16. Rejected alternatives",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L1057",
+      "source_location": "L1064",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_16_rejected_alternatives",
       "community": 113,
@@ -74289,7 +74289,7 @@
       "label": "17. Roadmap gate questions, resolved",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L1072",
+      "source_location": "L1079",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_17_roadmap_gate_questions_resolved",
       "community": 113,
@@ -74300,7 +74300,7 @@
       "label": "References",
       "file_type": "document",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L1083",
+      "source_location": "L1090",
       "_origin": "ast",
       "id": "docs_tilemap_scrolling_design_references",
       "community": 113,
@@ -76459,8 +76459,8 @@
       "source_location": "L2918",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_variables",
-      "community": 184,
-      "community_name": "Variables",
+      "community": 54,
+      "community_name": ";",
       "norm_label": "variables"
     },
     {
@@ -76470,8 +76470,8 @@
       "source_location": "L2922",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_local",
-      "community": 184,
-      "community_name": "Variables",
+      "community": 54,
+      "community_name": ";",
       "norm_label": "local"
     },
     {
@@ -76481,8 +76481,8 @@
       "source_location": "L2946",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_localmake",
-      "community": 184,
-      "community_name": "Variables",
+      "community": 54,
+      "community_name": ";",
       "norm_label": "localmake"
     },
     {
@@ -76492,8 +76492,8 @@
       "source_location": "L2968",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_make",
-      "community": 184,
-      "community_name": "Variables",
+      "community": 54,
+      "community_name": ";",
       "norm_label": "make"
     },
     {
@@ -76503,8 +76503,8 @@
       "source_location": "L2985",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_name",
-      "community": 184,
-      "community_name": "Variables",
+      "community": 54,
+      "community_name": ";",
       "norm_label": "name"
     },
     {
@@ -76514,8 +76514,8 @@
       "source_location": "L3004",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_name_namep",
-      "community": 184,
-      "community_name": "Variables",
+      "community": 54,
+      "community_name": ";",
       "norm_label": "name? (namep)"
     },
     {
@@ -76525,8 +76525,8 @@
       "source_location": "L3024",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_thing",
-      "community": 184,
-      "community_name": "Variables",
+      "community": 54,
+      "community_name": ";",
       "norm_label": "thing"
     },
     {
@@ -78164,8 +78164,8 @@
       "source_location": "L5984",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_managing_various_files",
-      "community": 54,
-      "community_name": ";",
+      "community": 126,
+      "community_name": "Managing Various Files",
       "norm_label": "managing various files"
     },
     {
@@ -78175,8 +78175,8 @@
       "source_location": "L5986",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_load",
-      "community": 54,
-      "community_name": ";",
+      "community": 126,
+      "community_name": "Managing Various Files",
       "norm_label": "load"
     },
     {
@@ -78186,8 +78186,8 @@
       "source_location": "L6006",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_save",
-      "community": 54,
-      "community_name": ";",
+      "community": 126,
+      "community_name": "Managing Various Files",
       "norm_label": "save"
     },
     {
@@ -78197,8 +78197,8 @@
       "source_location": "L6023",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_savel",
-      "community": 54,
-      "community_name": ";",
+      "community": 126,
+      "community_name": "Managing Various Files",
       "norm_label": "savel"
     },
     {
@@ -78208,8 +78208,8 @@
       "source_location": "L6042",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_loadpic",
-      "community": 54,
-      "community_name": ";",
+      "community": 126,
+      "community_name": "Managing Various Files",
       "norm_label": "loadpic"
     },
     {
@@ -78219,8 +78219,8 @@
       "source_location": "L6058",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_savepic",
-      "community": 54,
-      "community_name": ";",
+      "community": 126,
+      "community_name": "Managing Various Files",
       "norm_label": "savepic"
     },
     {
@@ -78230,8 +78230,8 @@
       "source_location": "L6075",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_dribble",
-      "community": 54,
-      "community_name": ";",
+      "community": 126,
+      "community_name": "Managing Various Files",
       "norm_label": "dribble"
     },
     {
@@ -78241,8 +78241,8 @@
       "source_location": "L6094",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_nodribble",
-      "community": 54,
-      "community_name": ";",
+      "community": 126,
+      "community_name": "Managing Various Files",
       "norm_label": "nodribble"
     },
     {
@@ -78692,8 +78692,8 @@
       "source_location": "L6883",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_http_operations",
-      "community": 151,
-      "community_name": "HTTP Operations",
+      "community": 54,
+      "community_name": ";",
       "norm_label": "http operations"
     },
     {
@@ -78703,8 +78703,8 @@
       "source_location": "L6902",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_http_get",
-      "community": 151,
-      "community_name": "HTTP Operations",
+      "community": 54,
+      "community_name": ";",
       "norm_label": "http.get"
     },
     {
@@ -78714,8 +78714,8 @@
       "source_location": "L6925",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_http_post",
-      "community": 151,
-      "community_name": "HTTP Operations",
+      "community": 54,
+      "community_name": ";",
       "norm_label": "http.post"
     },
     {
@@ -78725,8 +78725,8 @@
       "source_location": "L6948",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_http_put",
-      "community": 151,
-      "community_name": "HTTP Operations",
+      "community": 54,
+      "community_name": ";",
       "norm_label": "http.put"
     },
     {
@@ -78736,8 +78736,8 @@
       "source_location": "L6971",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_http_patch",
-      "community": 151,
-      "community_name": "HTTP Operations",
+      "community": 54,
+      "community_name": ";",
       "norm_label": "http.patch"
     },
     {
@@ -78747,8 +78747,8 @@
       "source_location": "L6994",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_http_delete",
-      "community": 151,
-      "community_name": "HTTP Operations",
+      "community": 54,
+      "community_name": ";",
       "norm_label": "http.delete"
     },
     {
@@ -78758,8 +78758,8 @@
       "source_location": "L7017",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_http_status",
-      "community": 151,
-      "community_name": "HTTP Operations",
+      "community": 54,
+      "community_name": ";",
       "norm_label": "http.status"
     },
     {
@@ -78769,8 +78769,8 @@
       "source_location": "L7035",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_http_header",
-      "community": 151,
-      "community_name": "HTTP Operations",
+      "community": 54,
+      "community_name": ";",
       "norm_label": "http.header"
     },
     {
@@ -79011,8 +79011,8 @@
       "source_location": "L7457",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_json",
-      "community": 54,
-      "community_name": ";",
+      "community": 131,
+      "community_name": "JSON",
       "norm_label": "json"
     },
     {
@@ -79022,8 +79022,8 @@
       "source_location": "L7461",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_json_get",
-      "community": 54,
-      "community_name": ";",
+      "community": 131,
+      "community_name": "JSON",
       "norm_label": "json.get"
     },
     {
@@ -79033,8 +79033,8 @@
       "source_location": "L7486",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_json_count",
-      "community": 54,
-      "community_name": ";",
+      "community": 131,
+      "community_name": "JSON",
       "norm_label": "json.count"
     },
     {
@@ -79044,8 +79044,8 @@
       "source_location": "L7507",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_json_object",
-      "community": 54,
-      "community_name": ";",
+      "community": 131,
+      "community_name": "JSON",
       "norm_label": "json.object"
     },
     {
@@ -79055,8 +79055,8 @@
       "source_location": "L7525",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_json_array",
-      "community": 54,
-      "community_name": ";",
+      "community": 131,
+      "community_name": "JSON",
       "norm_label": "json.array"
     },
     {
@@ -79066,8 +79066,8 @@
       "source_location": "L7543",
       "_origin": "ast",
       "id": "reference_pico_logo_reference_json_make",
-      "community": 54,
-      "community_name": ";",
+      "community": 131,
+      "community_name": "JSON",
       "norm_label": "json.make"
     },
     {
@@ -172631,10 +172631,22 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "tests/test_trails.c",
-      "source_location": "L1562",
+      "source_location": "L1574",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_trails_test_p10prof_profiler_runs",
+      "target": "core_procedures_proc_count"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "tests/test_trails.c",
+      "source_location": "L1550",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_trails_test_p9m0_instrumentation_runs",
       "target": "core_procedures_proc_count"
     },
     {
@@ -189427,7 +189439,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "tests/test_trails.c",
-      "source_location": "L1578",
+      "source_location": "L1590",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_trails_test_p10prof_profiler_runs",
@@ -310588,7 +310600,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_trails.c",
-      "source_location": "L1594",
+      "source_location": "L1606",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_trails",
@@ -311050,7 +311062,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_trails.c",
-      "source_location": "L1557",
+      "source_location": "L1569",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_trails",
@@ -311061,7 +311073,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_trails.c",
-      "source_location": "L1546",
+      "source_location": "L1548",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_trails",
@@ -311371,10 +311383,22 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_trails.c",
-      "source_location": "L1563",
+      "source_location": "L1575",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_trails_test_p10prof_profiler_runs",
+      "target": "tests_test_trails_load_logo",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/test_trails.c",
+      "source_location": "L1551",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_trails_test_p9m0_instrumentation_runs",
       "target": "tests_test_trails_load_logo",
       "confidence_score": 1.0
     },
@@ -311623,7 +311647,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_trails.c",
-      "source_location": "L1585",
+      "source_location": "L1597",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_trails_test_p10prof_profiler_runs",
@@ -311635,7 +311659,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_trails.c",
-      "source_location": "L1549",
+      "source_location": "L1560",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_trails_test_p9m0_instrumentation_runs",
@@ -312139,7 +312163,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_trails.c",
-      "source_location": "L1571",
+      "source_location": "L1583",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_trails_test_p10prof_profiler_runs",
@@ -312151,7 +312175,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_trails.c",
-      "source_location": "L1548",
+      "source_location": "L1559",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_trails_test_p9m0_instrumentation_runs",
@@ -312751,7 +312775,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_trails.c",
-      "source_location": "L1587",
+      "source_location": "L1599",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_trails_test_p10prof_profiler_runs",
@@ -331762,7 +331786,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L1089",
+      "source_location": "L1096",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design",
@@ -332884,7 +332908,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "docs/interpreter-throughput-design.md",
-      "source_location": "L1180",
+      "source_location": "L1182",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_interpreter_throughput_design",
@@ -333027,7 +333051,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/interpreter-throughput-design.md",
-      "source_location": "L1178",
+      "source_location": "L1180",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_interpreter_throughput_design_p10_interpreter_throughput_design",
@@ -333192,7 +333216,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/interpreter-throughput-design.md",
-      "source_location": "L768",
+      "source_location": "L770",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_interpreter_throughput_design_11_m5_re_profile_before_choosing_a_lever_2026_08_02",
@@ -333203,7 +333227,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/interpreter-throughput-design.md",
-      "source_location": "L889",
+      "source_location": "L891",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_interpreter_throughput_design_11_m5_re_profile_before_choosing_a_lever_2026_08_02",
@@ -333214,7 +333238,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/interpreter-throughput-design.md",
-      "source_location": "L924",
+      "source_location": "L926",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_interpreter_throughput_design_11_m5_re_profile_before_choosing_a_lever_2026_08_02",
@@ -333225,7 +333249,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/interpreter-throughput-design.md",
-      "source_location": "L1009",
+      "source_location": "L1011",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_interpreter_throughput_design_11_m5_re_profile_before_choosing_a_lever_2026_08_02",
@@ -333236,7 +333260,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/interpreter-throughput-design.md",
-      "source_location": "L1056",
+      "source_location": "L1058",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_interpreter_throughput_design_11_m5_re_profile_before_choosing_a_lever_2026_08_02",
@@ -333247,7 +333271,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/interpreter-throughput-design.md",
-      "source_location": "L1097",
+      "source_location": "L1099",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_interpreter_throughput_design_11_m5_re_profile_before_choosing_a_lever_2026_08_02",
@@ -333918,7 +333942,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L1087",
+      "source_location": "L1094",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design",
@@ -335172,7 +335196,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L1091",
+      "source_location": "L1098",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design",
@@ -335183,7 +335207,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L515",
+      "source_location": "L522",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_p9_tile_maps_and_smooth_scrolling_design",
@@ -335194,7 +335218,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L549",
+      "source_location": "L556",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_p9_tile_maps_and_smooth_scrolling_design",
@@ -335205,7 +335229,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L578",
+      "source_location": "L585",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_p9_tile_maps_and_smooth_scrolling_design",
@@ -335216,7 +335240,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L600",
+      "source_location": "L607",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_p9_tile_maps_and_smooth_scrolling_design",
@@ -335227,7 +335251,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L1030",
+      "source_location": "L1037",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_p9_tile_maps_and_smooth_scrolling_design",
@@ -335238,7 +335262,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L1043",
+      "source_location": "L1050",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_p9_tile_maps_and_smooth_scrolling_design",
@@ -335249,7 +335273,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L1057",
+      "source_location": "L1064",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_p9_tile_maps_and_smooth_scrolling_design",
@@ -335260,7 +335284,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L1072",
+      "source_location": "L1079",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_p9_tile_maps_and_smooth_scrolling_design",
@@ -335304,7 +335328,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L308",
+      "source_location": "L315",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_p9_tile_maps_and_smooth_scrolling_design",
@@ -335315,7 +335339,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L361",
+      "source_location": "L368",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_p9_tile_maps_and_smooth_scrolling_design",
@@ -335326,7 +335350,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L433",
+      "source_location": "L440",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_p9_tile_maps_and_smooth_scrolling_design",
@@ -335337,7 +335361,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L458",
+      "source_location": "L465",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_p9_tile_maps_and_smooth_scrolling_design",
@@ -335348,7 +335372,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L486",
+      "source_location": "L493",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_p9_tile_maps_and_smooth_scrolling_design",
@@ -335359,7 +335383,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L501",
+      "source_location": "L508",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_p9_tile_maps_and_smooth_scrolling_design",
@@ -335370,7 +335394,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L1083",
+      "source_location": "L1090",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_p9_tile_maps_and_smooth_scrolling_design",
@@ -335403,7 +335427,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L151",
+      "source_location": "L158",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_3_feasibility_the_numbers_m0",
@@ -335414,7 +335438,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L215",
+      "source_location": "L222",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_3_feasibility_the_numbers_m0",
@@ -335425,7 +335449,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L262",
+      "source_location": "L269",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_3_feasibility_the_numbers_m0",
@@ -335436,7 +335460,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L363",
+      "source_location": "L370",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_5_model",
@@ -335447,7 +335471,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L381",
+      "source_location": "L388",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_5_model",
@@ -335458,7 +335482,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L396",
+      "source_location": "L403",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_5_model",
@@ -335469,7 +335493,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L417",
+      "source_location": "L424",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_5_model",
@@ -335480,7 +335504,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L638",
+      "source_location": "L645",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_13_milestones",
@@ -335491,7 +335515,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L687",
+      "source_location": "L694",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_13_milestones",
@@ -335502,7 +335526,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L772",
+      "source_location": "L779",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_13_milestones",
@@ -335513,7 +335537,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L816",
+      "source_location": "L823",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_13_milestones",
@@ -335524,7 +335548,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L888",
+      "source_location": "L895",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_13_milestones",
@@ -335535,7 +335559,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L922",
+      "source_location": "L929",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_13_milestones",
@@ -335546,7 +335570,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/tilemap-scrolling-design.md",
-      "source_location": "L994",
+      "source_location": "L1001",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_tilemap_scrolling_design_13_milestones",
