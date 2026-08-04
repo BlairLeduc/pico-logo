@@ -79,7 +79,7 @@ Companion documents (everything in `docs/`):
 | HTTP server (`http.listen`, `when [http.request?]`, `http.respond`, file transfer) | done | M0–M5 implemented, merged to `main` (#108, 2026-07-16): mDNS + `wifi.hostname`/`wifi.sethostname`, TCP server ops, demon-driven pump/parser, handler surface + `http.element`, `webturtle` example, file transfer. Browser + mDNS hardware-validated; `curl -T` upload validation pending. Design: [P7](#p7--http-server-implemented) |
 | Arrays (`array`/`setitem`) | deferred | O(1) indexing; needs a new object kind (likely blob-backed). Wait for demonstrated need |
 | Atom reclamation / `erall` soft reset | done / deferred | Atom reclamation landed 2026-07-23; `erall` soft reset remains deferred. See `memory-reclamation-design.md` |
-| Tile maps + smooth scrolling (accelerated tile games) | in progress | M1+M2 done and **hardware-accepted** 2026-08-02 — Trails' board bakes in **7.45 ms** against the 5,916 ms `draw.board` it replaces (794×) (bank, map, bake path: `newtiles`/`snaptile`/`newmap`/`settile`/`tile`/`stampmap`/`stamptile`). **M3 done and hardware-accepted 2026-08-02**: Turtle Trails revamped in place — the board is the C map and `draw.board` is a `stampmap`. The level build is **56.7 → 3.1 ms on the host (18×)** and 303 ms on a Plus 2 W against a 5,916 ms Pico 2 figure. Two things the run caught: a blank maze, which was **B11** (`dot` ignored the pen size on the PicoCalc) and not the tile system; and that **the C map does not move the frame** (host 0.616 → 0.597 ms). So §3.4's and P10 §7's expectation that it closes Trails is contradicted. **Caveat: the hardware runs are on a Plus 2 W and every baseline is a Pico 2** — design §13.5 has the same-board re-run that settles it. Design drafted 2026-07-29 ([`tilemap-scrolling-design.md`](tilemap-scrolling-design.md)); M0 measured 2026-08-01 and the gate **failed** — the interpreter, not the wire, is the bottleneck, which opened [P10](#p10--interpreter-throughput). Split (design §3.4): the bake half (`stampmap`/`stamptile` + C map, deleting the 5,916 ms `draw.board` and 1,346 ms `draw.sector`) proceeds now; the scrolling half waits on P10's M3 re-measure. All boards, tiered capacity. See [P9](#p9--tile-maps-and-smooth-scrolling-design-first) |
+| Tile maps + smooth scrolling (accelerated tile games) | bake half done; scrolling half open | Design drafted 2026-07-29 ([`tilemap-scrolling-design.md`](tilemap-scrolling-design.md)); M0 measured 2026-08-01 and the gate **failed** — the interpreter, not the wire, was the bottleneck, which opened [P10](#p10--interpreter-throughput) and split the item (§3.4). **The bake half shipped**: `newtiles`/`snaptile`/`newmap`/`settile`/`tile`/`stampmap`/`stamptile` over `core/tilemap.c` (M1+M2, hardware-accepted 2026-08-02), and M3 revamped Turtle Trails in place — the board is the C map and `draw.board` is a `stampmap`, replacing a **5,916 ms** pen-carved build with a **7.6 ms** bake. Two findings came out of it: **B11** (`dot` ignored the pen size on the PicoCalc — the blank maze was that, not the tile system), and that **the C map does not move the frame**, contradicting §3.4's and P10 §7's expectation that it would close Trails. **The scrolling half's gate was measured 2026-08-04** (§13.6–§13.7), on one board before and after, settling the Plus-2-W-vs-Pico-2 mismatch §13.5 flagged: the frame is **73.6 → 42.55 ms (1.73×)** and the body **73.35 → 40.15**, essentially at the 40 ms gate. But **the gate omitted the present it was meant to leave room for** — a scroll dirties the whole viewport, so a scrolled frame is 61–66 ms and the real budget is a body under 14–19 ms. So **M4 is unblocked only for a new, simpler scroller** sized to that (~300–400 statements, ~540 under §15's half-rate lever), and **M5 (Checkpoint Run) is closed** at ~150 ms against a ~19 ms need. Whether to design such a game is the open question. All boards, tiered capacity. See [P9](#p9--tile-maps-and-smooth-scrolling-design-first) |
 | Interpreter throughput (games hit their frame budgets) | done | Opened 2026-08-01 by P9's failed M0 gate, design drafted ([`interpreter-throughput-design.md`](interpreter-throughput-design.md)): the display was never the bottleneck — both shipped games run at ~9 fps and ~4 fps against a designed 25, and ~48 % of interpreter runtime is spent re-deriving facts that cannot change (word class re-lexed every evaluation, names resolved by `strncasecmp` every call). Memoise them on the interned atom. Target: Turtle Trails' `play.frame` under 40 ms, from 87.3 ms. M0–M3 done 2026-08-01, M4 declined. M1 (word class) delivered all of it on hardware — Trails 87.3 → **73.4 ms**, Checkpoint Run 258.6 → **232.6 ms**. M2 (name binding) flattened the workspace-scan cliff (**128.3 → 24.0 µs** per call) and returned 9 KB of SRAM, but moved neither game and regressed the profiled loop 1.64× on the board. **§1's 40 ms is not met**, and P9's C map — named here as what would close Trails — landed on 2026-08-02 and moved the frame by 0.2 ms (73.4 → 73.6). That expectation is **disproved** (P9 design §13.4): it misread P9 M0, which measured `step.bugs` at 59 % of a frame rather than the `tile.at` walk inside it. **M5 profiled the frame on 2026-08-02 (design §11.1) and found one.** There is no hot spot — 791 operations on the board against 787 predicted from the host, every slot proportional to its statement count — but a `make "x (:x + 1)` costs **102.5 µs against a procedure call's 24 µs, 4.3×, where the host ratio is 2.5×**. Calls scale host→board at 75×, a `make` with arithmetic at 129×. M2 made calls cheap; the statement itself is what is left, and the hot slots are almost nothing but `make` statements. The uncached piece inside it is **variable resolution**, which §3.2/§7 set aside as dynamically scoped — a reason it cannot use M2's mechanism, not a reason it must stay slow. Before M5, the target had no named lever, and M4 and the bytecode body — the only candidates then left — had both been rejected partly on the strength of the disproved claim. **M5 (design §11) is therefore to re-profile before choosing**: `logo/tests/p10prof` splits a frame into its thirteen parts on a board and reports each in *operations* as well as milliseconds, so "no hot spot exists" is a result the profile can actually return. **It returned exactly that, and the answer was the flash.** The board:host ratios were 60× for a bare loop and 67× for a call against 132× for an arithmetic statement and 212× for the parenthesised-call path -- the RP2350 executes the interpreter from flash through a 16 KB XIP cache, and the code entered once per statement pays for it. Four tiers of `__not_in_flash_func` (design §11.2–§11.6) took the frame **81.0 → 47.0 ms, 1.72×, for 13.6 KB of SRAM**, `sync` flat at 1.6-1.8 ms throughout as the control. Returns halved every tier — 1.24×, 1.23×, 1.105×, 1.024× — so the tiering is done. **§1's 40 ms is still not met**, by 1.17×, but it is now a game-side number: `step.bugs` and `place.all` are 65 % of the frame and are nothing but statements. Enabled on the `pico2w` and `pico+2w` presets. See [P10](#p10--interpreter-throughput) |
 
 ### Platform
@@ -472,8 +472,9 @@ and its gate is those numbers.
 - **Milestones** (resequenced 2026-08-01 after the M0 verdict; design §13):
   M0 measure + gate (done, failed) → M1 tile bank and capture (done) → M2 map
   storage and the bake path (done) → M3 Turtle Trails render revamp (done) →
-  M4 live view and pixel scrolling (**gated on P10 M3**) → M5 Checkpoint Run
-  camera retrofit as the before/after.
+  M4 live view and pixel scrolling (**gate measured 2026-08-04; unblocked for
+  a new scroller, out of reach for the shipped games**) → M5 Checkpoint Run
+  camera retrofit (**closed** — 4× over even after P10).
 
 **M1+M2 landed 2026-08-02** (design §13.1), taken together because a bank
 nothing can draw is not reviewable on its own: `newtiles`, `snaptile`,
@@ -516,6 +517,38 @@ P10's declined M4 and its rejected bytecode body would attack. One correction fo
 87.3 → 73.4 → 73.6 series **never presented** — `p9m0.trails` runs in text
 mode, where the blit returns immediately — so those are Logo-body figures and
 a real fullscreen frame is 73.6 ms plus the dirty sprite tiles.
+
+**The M4 gate was measured 2026-08-04** (design §13.6), on the Plus 2 W
+against §13.4's run on the same board — the same-board before/after §13.5
+asked for. The frame is **73.6 → 42.55 ms (1.73×)** and the body
+**73.35 → 40.15 ms (1.83×)**, better than P10's own cumulative 1.72× and
+agreeing with it across two independent harnesses. Against the gate's 40 ms
+the body is short by 0.15 ms — met to within noise. **But the gate omitted
+the present it was meant to leave room for:** a scroll dirties the whole
+viewport, so the 2.4 ms sprite present becomes M0's 21–26 ms and a scrolled
+frame is **61–66 ms**. The real budget is a body under **14–19 ms**, about
+300–400 statements at P10's 48 µs each, against the 791 a Trails frame runs.
+Two consequences. §3.3's "no §15 lever can rescue it" is **stale** — the body
+was the problem then, the present is the binding constraint now, and the §15
+levers are what narrow it (half-rate scrolling buys a ~26 ms body, ~540
+statements). And M4 splits: **a new, simpler scroller is in budget for the
+first time**, while retrofitting a shipped game is not — **M5 (Checkpoint
+Run) is closed**, ~150 ms after P10 against a ~19 ms need. Which scroller to
+build, if any, is a game-design call and the open question.
+
+A second run settled two loose ends (design §13.2, §13.7). The `draw.board`
+figure that looked like a 20 → 66 ms regression is **not one**: the bake is
+**7.6 ms against 7.45**, unmoved, and the growth is `clean`, which skips its
+panel write entirely in text mode — the same correction that moved the
+present from 0.25 to 2.4 ms. And §13.2's suspicion that the sampler was
+starved of instruction fetch is **disproved**: `LOGO_HOT` on the sampler moved
+the bake 7.45 → 7.6 ms, i.e. not at all, and was reverted rather than spend
+2 KB of SRAM on a no-op. The pools live in **PSRAM** on every board measured
+(`ensure_pool` prefers the aux region, which `main.c` backs with PSRAM), so
+the bake is a PSRAM→SRAM copy and the cost is the data path, not the code.
+That is harmless at once per level, but it is the **first thing M4 must
+price** — §3's "~1–1.5 ms of CPU per full frame" for row sampling assumed
+SRAM.
 
 ### `.reset` — clear the workspace for the next program
 

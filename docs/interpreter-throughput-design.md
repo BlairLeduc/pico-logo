@@ -757,8 +757,10 @@ taken anywhere else cannot be laid against them; P9 §13.5 records how the M3
 runs came to be taken on a Plus 2 W and what it costs.
 
 **One constraint the first board run surfaced: `erall` before loading.**
-`MAX_PROCEDURES` is a hard 128 and Turtle Trails alone defines **104** of
-them, so anything loaded beside the game has about twenty slots to live in.
+`MAX_PROCEDURES` is a hard 128 and Turtle Trails alone defines **99** of
+them — 104 when this was written, until P9's instrumentation moved out to
+`logo/tests/p9trails` on 2026-08-04 and took six with it — so anything loaded
+beside the game has about twenty-five slots to live in.
 A workspace still holding another program makes `load` stop with `out of
 space` — the procedure table talking, not memory, of which there is plenty
 (both files together leave over 22,000 free nodes). The profiler is written

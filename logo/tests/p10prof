@@ -13,9 +13,10 @@
 ; It switches to `fullscreen` itself and back to `textscreen` to report, and
 ; that is not cosmetic: `screen_gfx_blit_dirty` returns immediately in text
 ; mode, so a present costs nothing there and the `sync` slot would measure a
-; function that declined to do anything.  `p9m0.trails` never leaves text
-; mode, which is why its present column has always been ~0 -- its frame
-; figure is the Logo body, not a whole frame.
+; function that declined to do anything.  `p9m0.trails` used to have the same
+; problem, which is why every figure in its 87.3 -> 73.6 ms series was a Logo
+; body rather than a whole frame; it runs in graphics mode now and its present
+; column is real (~2.4 ms of dirty sprite tiles).
 ;
 ; `erall` is not optional.  MAX_PROCEDURES is a hard 128; Turtle Trails alone
 ; defines 104 of them and this file adds 6, so a workspace still holding

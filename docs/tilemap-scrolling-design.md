@@ -123,7 +123,14 @@ Three throwaway scripts, all running on today's firmware:
 |---|---|
 | `logo/tests/p9m0` → `p9m0` | items 1 and 4 |
 | `logo/games/checkrun` → `p9m0.checkrun` | items 2 and 3, Checkpoint Run |
-| `logo/games/trails` → `p9m0.trails` | items 2 and 3, Turtle Trails |
+| `logo/tests/p9trails` → `p9m0.trails` | items 2 and 3, Turtle Trails |
+
+**[Moved 2026-08-04.** The Turtle Trails half started out inside
+`logo/games/trails` and now sits beside it, loaded on top as `p10prof` always
+was — six procedures out of the game, so what ships is only the game. The
+coupling that buys: `p9.frame` mirrors the unpaused body of `play.frame` and
+nothing enforces it. Checkpoint Run's half is untouched and still lives in the
+game, since P9's Checkpoint Run work (M5) is closed.**]**
 
 `p9m0` works the present cost out by difference. A present only sends tiles
 that are dirty, so each pass must repaint first; the repainting is timed a
@@ -617,17 +624,23 @@ first, the live view waits for P10 to create the frame budget it needs.
 - **M3 — Turtle Trails revamp (§11): done 2026-08-02** (§13.3). The
   5,916 ms `draw.board` and the ~1,050-cell Logo map are both gone; the
   level build is 56.7 → **3.3 ms** on the host. Hardware numbers pending.
-- **M4 — live view and scrolling — GATED on P10 M3:** `showmap`/`hidemap`,
-  viewport clipping, `compose_row` integration, `map_changed` and dirty
-  marking, `setscroll`/`scroll` wrap rules, remaining reference sections.
-  Proceeds only when P10's re-measure shows a frame body under 40 ms. Also
-  the A/B check on the Pico Plus 2 W: time the same scrolled frame from the
-  PSRAM tier and confirm the present stays wire-bound (§4) — M0 ran on the
-  SRAM tier and does not cover this by itself.
-- **M5 — Checkpoint Run revamp (§10):** the camera replaces sector paging,
-  with before/after numbers; full test suite rework; hardware soak on a
-  Pico 2. Needs M4 *and* the game-side work §3.4 records — P10 alone does
-  not rescue a 6.5× shortfall.
+- **M4 — live view and scrolling — gate measured 2026-08-04, §13.6:**
+  `showmap`/`hidemap`, viewport clipping, `compose_row` integration,
+  `map_changed` and dirty marking, `setscroll`/`scroll` wrap rules, remaining
+  reference sections. Also the A/B check on the Pico Plus 2 W: time the same
+  scrolled frame from the PSRAM tier and confirm the present stays wire-bound
+  (§4) — M0 ran on the SRAM tier and does not cover this by itself. **The
+  body is 40.15 ms against the 40 ms gate, but the gate omitted the present:
+  a scrolled frame is 61–66 ms, and the real budget is a body under 14–19 ms.
+  So M4 is unblocked for a *new* scroller sized to that budget (~300–400
+  statements, or ~540 under §15's half-rate lever) and remains out of reach
+  for the shipped games.** Which of those to build is a game-design decision
+  and is the open question, not a tile-map one. §13.2's sampler work is the
+  prerequisite for either.
+- **M5 — Checkpoint Run revamp (§10): closed, not blocked.** The camera
+  replacing sector paging needs a 258.6 ms frame to reach ~19 ms; P10's
+  1.73× leaves it at ~150 ms, 4× over before a full-viewport present is
+  added. No named lever covers that, and §13.6 records the arithmetic.
 
 ### 13.1 M1+M2 as built (2026-08-02)
 
@@ -719,6 +732,49 @@ matters to **M4**: extrapolating this rate to a full screen (102,400 px)
 gives ~11.8 ms of CPU on top of M0's 25.6 ms present, which does not leave a
 40 ms frame anywhere to stand — so if P10's re-measure ever reopens the live
 view, the three items above are the first work, not the last.
+
+**All three are now settled, 2026-08-04 — and none of them was the cause.**
+`p9m0.trails` gained a `stampmap` line (ten bakes averaged), because
+`draw.board` is a `clean` and four HUD draws around the bake and its total
+cannot say what the tile code costs. It reads **7.6 ms**, against the 7.45 ms
+above. The bake has not moved.
+
+- **Suspect 2 is a red herring, by inspection.** `screen_gfx_write_row` marks
+  one rect per row, but a single-row rect touches exactly one tile row inside
+  `dirty_tiles_mark_rect` — about ten comparisons and two byte writes. At 288
+  rows that is on the order of 20 µs against a 7.6 ms bake. The per-row mark
+  stays.
+- **Suspect 3 is disproved, by experiment.** `tilemap_fill_row`,
+  `tilemap_slot_pixels` and `tilemap_slot_filled` were given `LOGO_HOT` and
+  verified resident (`0x20004924`, `0x200048fc`; `tilemap_slot_filled` inlined
+  away), for +2,048 B on `pico+2w` and +0 on `pico2w`. **The bake went 7.45 →
+  7.6 ms: no change, or very slightly worse.** The change was reverted — a
+  measured no-op has no business costing 2 KB of the resource that panics
+  `repl_init`. Two independent reasons to believe the negative: the 7.45 ms
+  figure was taken *before* P10 moved 13.6 KB of evaluator into SRAM, so the
+  flash layout underneath these two readings is completely different and the
+  bake did not care, which is what §11.5's boundary effect would have shown up
+  in if the bake were fetch-bound at all.
+- **Suspect 1 is therefore not a code-placement problem either.** The run loop
+  is now known not to be instruction-starved, so if the 8-byte runs are the
+  cost it is the data side, not the fetch side.
+
+**The leading explanation is now the memory the pools live in, not the code.**
+`ensure_pool` prefers `mem_region_alloc` over `malloc`, and on a Plus 2 W
+`logo_mem_set_aux_region(__psram_start__, …)` (`devices/picocalc/main.c`)
+backs the blob heap with **PSRAM** — so on every board measured so far the
+tile bank and map are in PSRAM while `gfx_buffer` is in SRAM, and the bake is
+a PSRAM-to-SRAM copy in 8-byte runs. That is a data path no amount of
+`__not_in_flash_func` touches, and it fits ~118 ns/px far better than
+instruction fetch does.
+
+**It is cheap to test and nobody should do it yet.** Trails' 50 slots are
+3.2 KB and fit the 4 KB `TILE_BANK_SIZE` SRAM tier, so forcing `ensure_pool`
+past the region would price PSRAM directly. But the bake is a once-per-level
+7.6 ms that replaced 5,916 ms, so this matters **only if M4 proceeds**, where
+the sampler runs once per row per frame instead. If it does, this is the first
+measurement to take, and §3's "map row sampling adds ~1–1.5 ms of CPU per full
+frame" is the estimate it would be checking — an estimate that assumed SRAM.
 
 ### 13.3 M3 as built (2026-08-02)
 
@@ -865,7 +921,118 @@ new `trails.board` line).
 
 **And the Pico 2 remains untested end to end** — its SRAM tier has still
 never allocated (§13.2), and it is the board every P10 figure is quoted
-against. A Pico 2 run is worth more than another Plus 2 W one.
+against. A Pico 2 run is worth more than another Plus 2 W one. **[P10 §11.3
+settles why it will not happen soon: nobody on this project owns one. The
+Plus 2 W is the machine of record for hardware, and §13.6 takes the
+same-board before/after this section asked for.]**
+
+### 13.6 The M4 gate, measured (2026-08-04, Plus 2 W)
+
+`p9m0.trails` on the tier-4 firmware, against §13.4's run on the same board —
+so this is the same-board before/after §13.5 asked for, and the first P9
+comparison that does not cross boards:
+
+| | §13.4 (pre-P10 tiering) | now | |
+|---|---:|---:|---:|
+| simulation | 48.6 ms | **27.10** | 1.79× |
+| drawing | 24.8 | **13.05** | 1.90× |
+| **body** (sim + drawing) | **73.35** | **40.15** | **1.83×** |
+| present (`sync`) | 0.25 | 2.40 | not comparable — see below |
+| **frame mean** | **73.6** | **42.55** | **1.73×** |
+
+(Totals over 20 frames — sim 542 ms, drawing 261, present 48 — divided out;
+they sum to the reported mean exactly. Frame min 33 ms, max 65.)
+
+**The body improved 1.83×, better than P10's own cumulative 1.72×**, which
+was taken on the steered profiler where device-heavy slots dilute it. The
+1.73× frame agreement across two independent harnesses on one board is the
+strongest evidence either item has produced.
+
+**The present is no longer near-zero and that is a correction, not a
+regression.** §3.2 recorded that both game entries ran from the prompt in
+text mode, where `screen_gfx_blit_dirty` returns immediately, making the old
+0.25 ms meaningless. `p9m0.trails` now runs its loop in graphics mode under
+`manual` refresh, so 2.40 ms is a real present of the dirty sprite tiles —
+consistent with P10 §11.6's independently measured `sync` of 1.64 ms. **Every
+figure in the 87.3 → 73.6 series was a Logo body with no present in it**; this
+is the first one that is a whole frame.
+
+**Gate verdict: the body is 40.15 ms against the 40 ms gate — short by
+0.15 ms, four parts in a thousand.** After the 2.03× that stood when P10 M5
+opened, the gate is met to within measurement noise. But it should not be
+read as a pass, because **the gate's arithmetic omitted the present it was
+supposed to leave room for**:
+
+| | body | present | frame | vs 40 ms |
+|---|---:|---:|---:|---:|
+| today (dirty sprites only) | 40.15 | 2.40 | 42.55 | 1.06× over |
+| scrolled, road view 256×320 | 40.15 | 21.1 | **61.25** | 1.53× over |
+| scrolled, full screen 320×320 | 40.15 | 25.6 | **65.75** | 1.64× over |
+
+A scroll dirties the whole viewport (§3), so the 2.40 ms becomes M0's 21–26 ms.
+The real scrolling budget is therefore a body under **14.4 ms** full screen or
+**18.9 ms** in a road view — not under 40. At P10 §11.6's 48 µs per statement
+that is **300 and 394 statements** respectively, against the 791 operations a
+Turtle Trails frame runs.
+
+**What this changes: §3.3's "no §15 lever can rescue it" is now stale.** It
+was correct when written — the body alone was 2.7× the gate with the present
+set to zero, so narrowing the present could not help. The body is now
+40.15 ms and **the present is the binding constraint again**, which is
+precisely what the §15 levers narrow. Lever 2 (half-rate scrolling) halves the
+average present to ~14 ms and buys a ~26 ms body, about 540 statements — a
+real game.
+
+So the honest split of M4, replacing the single blocked milestone:
+
+- **Retrofitting a shipped game to scroll is still out.** Checkpoint Run was
+  258.6 ms; even at P10's 1.73× it is ~150 ms, 4× over before a full-viewport
+  present is added. M5 stays closed.
+- **A new, simpler scroller is in budget for the first time** — 2–3 actors
+  rather than five, and probably §15 lever 2. That is a game design question,
+  not a tile-map one, and it needs the user's call before any code.
+- **§13.2's sampler work is the prerequisite either way**, since M4's
+  `compose_row` calls `tilemap_fill_row` once per row per frame rather than
+  once per level — and §13.2 now says the sampler is **data-bound, not
+  fetch-bound**, with the pools sitting in PSRAM on every board measured. What
+  a live view costs per frame is unknown and §3's ~1–1.5 ms estimate assumed
+  SRAM, so pricing that is the first M4 measurement, before any surface.
+
+### 13.7 The second run, and what `draw.board` was hiding (2026-08-04)
+
+The same script with §13.2's `stampmap` split, taken to explain the first
+run's `draw.board` of 67 ms against §13.4's 20 ms on the same board:
+
+| | run 1 | run 2 |
+|---|---:|---:|
+| `draw.board` | 67 ms | 66 |
+| ↳ `stampmap` alone | — | **7.6** |
+| `setup.level` | 245 | 244 |
+| simulation | 27.10 | 25.80 |
+| drawing | 13.05 | 13.45 |
+| present | 2.40 | 2.70 |
+| **body** | **40.15** | **39.25** |
+| **frame mean** | **42.55** | **41.95** |
+
+**Nothing in the frame path changed between these runs**, so the second run is
+a repeatability control, and it says the spread is about **2 %**. The body is
+39–40 ms: it straddles the 40 ms gate rather than clearing it, which does not
+change §13.6's conclusion, since the gate was the wrong test anyway.
+
+**`draw.board` did not regress, and the bake is not what grew.** `stampmap` is
+7.6 ms against §13.2's 7.45 — flat. The other ~58 ms is `setbg`, `clean` and
+four HUD draws, and the reason it was 20 ms in §13.4 is the same text-mode
+correction that moved the present from 0.25 to 2.40: `screen_gfx_clear` guards
+its panel write with `if (screen_mode == SCREEN_MODE_GFX)`, so in text mode
+`clean` was a bare `memset` of `gfx_buffer` and cost nothing. In graphics mode
+it is `lcd_clear_screen` → `lcd_solid_rectangle` over the **whole panel**,
+which is ~25 ms at M0's measured 4.0 Mpx/s. So §13.4's 20 ms was never a
+figure for the work `draw.board` does; the 66 ms is, and it is a level-start
+cost against the 5,916 ms it replaced.
+
+(The full ~58 ms is not attributed — `clean` accounts for ~25 of it and the
+HUD draws for the rest. Splitting further would need another line in the
+profiler, and at once per level it is not worth the board time.)
 
 ## 14. Tests
 

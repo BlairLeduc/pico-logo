@@ -1542,11 +1542,23 @@ static void test_speeds_are_sane_at_25_fps(void)
 
 // The P9 M0 instrumentation (docs/tilemap-scrolling-design.md 3.1) is taken on
 // hardware, where a script that fails half way through wastes the session, so
-// it has to run end to end here first.
+// it has to run end to end here first. It is a separate file loaded on top of
+// the game, as p10prof is, so its parse hazards are runtime errors nothing
+// else would catch until it ran on a board.
 static void test_p9m0_instrumentation_runs(void)
 {
+    int before = proc_count(true);
+    load_logo(P9TRAILS_SOURCE);
+    int after = proc_count(true);
+    char msg[96];
+    snprintf(msg, sizeof(msg), "trails+p9trails define %d of %d procedures",
+             after, MAX_PROCEDURES);
+    TEST_ASSERT_LESS_THAN_MESSAGE(MAX_PROCEDURES - 8, after, msg);
+    TEST_ASSERT_GREATER_THAN(before, after);
+
     run("setup.level");
     TEST_ASSERT_TRUE(num("time.board") >= 0);
+    TEST_ASSERT_TRUE(num("time.bake") >= 0);
     TEST_ASSERT_TRUE(num("time.frame") >= 0);
     run("p9m0.trails");
 }
