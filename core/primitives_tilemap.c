@@ -136,10 +136,11 @@ static Result prim_snaptile(Evaluator *eval, int argc, Value *args)
     if (turtle && turtle->canvas_snap)
     {
         turtle_select_first_active();
-        if (turtle->canvas_snap((uint8_t)tilemap_tile_size(), tilemap_slot_pixels((int)slot)))
+        if (!turtle->canvas_snap((uint8_t)tilemap_tile_size(), tilemap_slot_pixels((int)slot)))
         {
-            tilemap_slot_fill_done((int)slot);
+            return result_error(ERR_OUT_OF_SPACE);
         }
+        tilemap_slot_fill_done((int)slot);
     }
 
     return result_none();

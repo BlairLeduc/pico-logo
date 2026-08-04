@@ -176,7 +176,7 @@ static uint8_t word_view(Node element, const char **str, size_t *len)
 static Token token_from_class(uint8_t cls, const char *str, size_t len,
                               bool prev_was_delimiter)
 {
-    Token t = {.type = TOKEN_WORD, .start = str, .length = (uint16_t)len};
+    Token t = {.type = TOKEN_WORD, .start = str, .length = len};
 
     if (cls != ATOM_CLASS_CONTEXT)
     {

@@ -58,6 +58,11 @@ many speculative ones. Never ask the author to run or add tests first.
   depth is intentional.
 - `graphify-out/` is machine-generated, committed as-is; never flag it. Dated snapshots
   archive the *prior* state, so a header trailing its directory date is by design.
+- A blob word can never be a list element: `mem_cons` returns NODE_NIL for a blob
+  operand (the 16-bit cell encoding cannot hold one). Code walking list elements —
+  `token_source.c`'s node iterator above all — therefore only ever sees interned atoms,
+  whose length is capped at 255 by the 1-byte prefix. Don't flag blob-length overflow
+  on those paths.
 - Pure style or formatting that already matches the surrounding code.
 - Pre-existing issues outside the diff.
 - The wide pen stamps a disc centred on an integer pixel, so drawn diameter is always
