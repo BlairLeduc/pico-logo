@@ -13,4 +13,8 @@ if [ -z "$INPUT" ] || [ -z "$OUTPUT" ]; then
     exit 1
 fi
 
-awk -f "${SCRIPT_DIR}/generate_help.awk" "$INPUT" > "$OUTPUT"
+# LC_ALL=C forces byte-order (ASCII) string comparison in awk. Under a UTF-8
+# locale awk collates punctuation loosely (e.g. ";" sorts before "."), which
+# breaks the ascending-strcasecmp invariant that help_lookup's binary search
+# relies on.
+LC_ALL=C awk -f "${SCRIPT_DIR}/generate_help.awk" "$INPUT" > "$OUTPUT"

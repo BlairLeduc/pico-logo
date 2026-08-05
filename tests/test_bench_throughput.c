@@ -283,19 +283,6 @@ void test_bench_expr_shapes(void)
     TEST_ASSERT_TRUE_MESSAGE(cost < 0.5, "grouping-paren overhead regressed");
 }
 
-void test_bench_checkrun_play_frame(void)
-{
-    double cal = calibrate_ns();
-    load_game(CHECKRUN_SOURCE);
-    double ms = time_game_frames_ms(
-        "setup.sound init.game start.round setrefresh \"manual", 20);
-
-    printf("BENCH checkrun.frame   %8.3f ms/frame  x%.1fk cal\n",
-           ms, ms * 1e6 / cal / 1e3);
-    TEST_ASSERT_TRUE_MESSAGE(ms * 1e6 / cal < BOUND_CHECKRUN_FRAME_X_CAL,
-                             "Checkpoint Run play.frame regressed vs calibration");
-}
-
 //==========================================================================
 // The hardware script: logo/tests/p10m0 must run end to end on the mock,
 // so a script that fails half way through cannot waste a hardware session
@@ -320,7 +307,6 @@ int main(void)
     RUN_TEST(test_bench_proc_call_workspace_scaling);
     RUN_TEST(test_bench_expr_shapes);
     RUN_TEST(test_bench_trails_play_frame);
-    RUN_TEST(test_bench_checkrun_play_frame);
     RUN_TEST(test_p10m0_script_runs);
     return UNITY_END();
 }

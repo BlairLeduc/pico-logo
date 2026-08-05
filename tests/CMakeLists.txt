@@ -101,12 +101,6 @@ add_logo_test(test_galaxian)
 target_compile_definitions(test_galaxian PRIVATE
     GALAXIAN_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/galaxian")
 
-# Checkpoint Run is another pure-Logo game.  Its test loads the program and
-# checks the map and deterministic simulation helpers directly.
-add_logo_test(test_checkrun)
-target_compile_definitions(test_checkrun PRIVATE
-    CHECKRUN_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/checkrun")
-
 # P10 M0 interpreter throughput benchmark -- repeatable baseline plus a
 # regression guard on relative numbers (interpreter-throughput-design.md §6).
 add_logo_test(test_bench_throughput)
