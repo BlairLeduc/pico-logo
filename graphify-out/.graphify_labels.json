@@ -1,13 +1,21 @@
 {
   "0": "run_string",
   "1": "lfs.c",
+<<<<<<< HEAD
   "2": "test_tilemap.c",
+=======
+  "2": "test_primitives_outside_world.c",
+>>>>>>> d01c3c6 (Add xkcd #2601 sample)
   "3": "test_value.c",
   "4": "mem_is_word",
   "5": "reset_output",
   "6": "eval_string",
   "7": "result_none",
+<<<<<<< HEAD
   "8": "test_io.c",
+=======
+  "8": "value_to_string",
+>>>>>>> d01c3c6 (Add xkcd #2601 sample)
   "9": "test_trails.c",
   "10": "primitives_workspace.c",
   "11": "io.c",
@@ -15,8 +23,13 @@
   "13": "picocalc_console.c",
   "14": "LOGO_HOT",
   "15": "lexer_init",
+<<<<<<< HEAD
   "16": "test_frame_arena.c",
   "17": "test_primitives_outside_world.c",
+=======
+  "16": "arena_alloc_words",
+  "17": "test_io.c",
+>>>>>>> d01c3c6 (Add xkcd #2601 sample)
   "18": "syntax_highlight_line",
   "19": "test_variables.c",
   "20": "primitives_sound.c",
@@ -27,22 +40,37 @@
   "25": "test_scaffold_setUp",
   "26": "test_primitives_http.c",
   "27": "fat32.c",
+<<<<<<< HEAD
   "28": "test_primitives_conditionals.c",
+=======
+  "28": "value_word",
+>>>>>>> d01c3c6 (Add xkcd #2601 sample)
   "29": "mock_device.c",
   "30": "test_primitives_json.c",
   "31": "error_format",
   "32": "test_scaffold.h",
   "33": "test_notation.c",
   "34": "primitives_init",
+<<<<<<< HEAD
   "35": "test_primitives_control_flow.c",
   "36": "value_number",
+=======
+  "35": "stdlib.h",
+  "36": "primitives_get_io",
+>>>>>>> d01c3c6 (Add xkcd #2601 sample)
   "37": "lexer_next_token",
   "38": "mem_is_nil",
   "39": "test_cross_fs_move.c",
   "40": "test_primitives_wifi.c",
+<<<<<<< HEAD
   "41": "primitives_get_io",
   "42": "primitives_properties.c",
   "43": "mock_device_get_state",
+=======
+  "41": "test_primitives_list_processing.c",
+  "42": "primitives_files_directory.c",
+  "43": "mem_cons",
+>>>>>>> d01c3c6 (Add xkcd #2601 sample)
   "44": "test_time.c",
   "45": "set_mock_input",
   "46": "picocalc_editor_edit",
@@ -68,9 +96,15 @@
   "66": "demons_poll",
   "67": "test_dirty_tiles.c",
   "68": "Words and Lists",
+<<<<<<< HEAD
   "69": "test_primitives_list_processing.c",
   "70": "procedures.c",
   "71": "primitives.h",
+=======
+  "69": "op_stack_push",
+  "70": "test_frame_sync.c",
+  "71": "procedures.c",
+>>>>>>> d01c3c6 (Add xkcd #2601 sample)
   "72": "lfs_storage.c",
   "73": "mock_sdcard.c",
   "74": "stdlib.h",
@@ -87,14 +121,24 @@
   "85": "Code Review — 2026-07-02",
   "86": "Contributing",
   "87": "host_console.c",
+<<<<<<< HEAD
   "88": "primitives_bitwise.c",
   "89": "op_stack_depth",
   "90": "token_source.c",
+=======
+  "88": "mock_device_get_state",
+  "89": "step_proc_call",
+  "90": "prim_load",
+>>>>>>> d01c3c6 (Add xkcd #2601 sample)
   "91": "picocalc_read_line",
   "92": "Design: LittleFS internal filesystem + `/sd` FAT32 mount",
   "93": "P5 — Multi-sprite turtles and the display pipeline (implemented)",
   "94": "Arithmetic Operations",
+<<<<<<< HEAD
   "95": "sound.c",
+=======
+  "95": "eval.c",
+>>>>>>> d01c3c6 (Add xkcd #2601 sample)
   "96": "Space Invaders in Pico Logo (design & implementation)",
   "97": "package.json",
   "98": "test_mklfsimg.c",
@@ -102,18 +146,31 @@
   "100": "host_hardware.c",
   "101": "sdcard.c",
   "102": "Managing your Workspace",
+<<<<<<< HEAD
   "103": "screen_set_mode",
   "104": "record_command_float",
   "105": "primitives.c",
   "106": "test_tls_heap.c",
   "107": "storage_router.c",
   "108": "test_galaxian.c",
+=======
+  "103": "southbridge.c",
+  "104": "test_help.c",
+  "105": "mock_device_clear_editor",
+  "106": "test_tls_heap.c",
+  "107": "storage_router.c",
+  "108": "eval_primary",
+>>>>>>> d01c3c6 (Add xkcd #2601 sample)
   "109": "mem_word_ptr",
   "110": "repl_evaluate_line",
   "111": "List Processing",
   "112": "value_to_string",
   "113": "P9 — Tile maps and smooth scrolling (design)",
+<<<<<<< HEAD
   "114": "prim_cleardemons",
+=======
+  "114": "repl_evaluate_line",
+>>>>>>> d01c3c6 (Add xkcd #2601 sample)
   "115": "Galaxian in Pico Logo (design)",
   "116": "File Management",
   "117": "test_primitives_editor.c",
@@ -121,15 +178,24 @@
   "119": "clib.c",
   "120": "P8 — Sound: a stereo PSG synthesizer (design)",
   "121": "Input and Output to Files, Network Connections and Devices",
+<<<<<<< HEAD
   "122": "LOGO_HOT",
   "123": "Design: `launch` background processes (P6)",
   "124": "test_checkrun.c",
   "125": "eval.c",
   "126": "Managing Various Files",
+=======
+  "122": "ensure_wifi_initialized",
+  "123": "Design: `launch` background processes (P6)",
+  "124": "test_checkrun.c",
+  "125": "test_frame_arena.c",
+  "126": "mklfsimg_lib.c",
+>>>>>>> d01c3c6 (Add xkcd #2601 sample)
   "127": "roadmap.md",
   "128": "mklfsimg_lib.c",
   "129": "Using the Logo Editor",
   "130": "HTTP Server",
+<<<<<<< HEAD
   "131": "JSON",
   "132": "Appendix B: Parsing",
   "133": "prim_not",
@@ -145,6 +211,23 @@
   "143": "The Outside World",
   "144": "HTTP server (design)",
   "145": "southbridge.c",
+=======
+  "131": "run_editor_and_process",
+  "132": "arena_offset_to_ptr",
+  "133": "Appendix B: Parsing",
+  "134": "WiFi Management",
+  "135": "mem_blob",
+  "136": "The pick of five: plans",
+  "137": "primitives.c",
+  "138": "prim_for",
+  "139": "logo_lfs_backup",
+  "140": "ms_to_datetime",
+  "141": "output_has",
+  "142": "frame_stack_is_empty",
+  "143": "The Outside World",
+  "144": "HTTP server (design)",
+  "145": "main",
+>>>>>>> d01c3c6 (Add xkcd #2601 sample)
   "146": "PR Review Checklist (CRITICAL)",
   "147": "mem_atom_cstr",
   "148": "MockCommandType",
@@ -152,6 +235,7 @@
   "150": "primitives_variables.c",
   "151": "stream.c",
   "152": "Atom Garbage Collection: Implementation Plan",
+<<<<<<< HEAD
   "153": "Tile Maps",
   "154": "test_drawn_sector_matches_the_map",
   "155": "Introduction",
@@ -184,6 +268,40 @@
   "182": "generate_help.sh",
   "183": "run_e2e.sh",
   "184": "main",
+=======
+  "153": "test_stream.c",
+  "154": "MockCommandType",
+  "155": "primitives_properties.c",
+  "156": "as_httpd_conn",
+  "157": "Appendix A: Useful Tools",
+  "158": "Property Lists",
+  "159": "Time Management",
+  "160": "logo_io_resolve_path",
+  "161": "Text and Screen Commands",
+  "162": "primitives_bitwise.c",
+  "163": "prim_setdate",
+  "164": "Bitwise Operations",
+  "165": "repl_line_starts_with_to",
+  "166": "Pico Logo",
+  "167": "value_number",
+  "168": "drain_tokens",
+  "169": "ip_addr_t",
+  "170": "logo_random_next",
+  "171": "index-filter.lua",
+  "172": "gen_ca_certs.py",
+  "173": "logo_picocalc_console_create",
+  "174": "pandoc_slug",
+  "175": "gen_palette.py",
+  "176": "repl_extract_proc_name",
+  "177": "bd_prog",
+  "178": "unity.h",
+  "179": "dist.sh",
+  "180": "repl_count_bracket_balance",
+  "181": "gen_palette_svg.py",
+  "182": "generate_help.sh",
+  "183": "run_e2e.sh",
+  "184": "logo_stream_init",
+>>>>>>> d01c3c6 (Add xkcd #2601 sample)
   "185": "VENDOR.md",
   "186": "syntax_highlight.h",
   "187": "host_console.h",
@@ -193,6 +311,7 @@
   "191": "mbedtls_config.h",
   "192": "picocalc_flash.h",
   "193": "picocalc_lfs.h",
+<<<<<<< HEAD
   "194": "prim_define",
   "195": "LICENSE.md",
   "196": "Concurrent present on core 1 (design)",
@@ -204,4 +323,11 @@
   "203": "prim_pause",
   "207": "storage.h",
   "210": "repl_line_starts_with_to"
+=======
+  "194": "mock_storage_list_directory",
+  "195": "LICENSE.md",
+  "197": "List Processing",
+  "202": "value_bool",
+  "203": "HTTP Operations"
+>>>>>>> d01c3c6 (Add xkcd #2601 sample)
 }

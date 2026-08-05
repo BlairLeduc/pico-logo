@@ -1330,8 +1330,13 @@
     "semantic_hash": ""
   },
   "tests/CMakeLists.txt": {
+<<<<<<< HEAD
     "mtime": 1785877879.8992865,
     "ast_hash": "88e1e12cf6dd5283aa29ce002fe978c1",
+=======
+    "mtime": 1785869107.5273447,
+    "ast_hash": "374ee470169a1f6530caebe44f9dbaab",
+>>>>>>> d01c3c6 (Add xkcd #2601 sample)
     "semantic_hash": ""
   },
   "third_party/littlefs/LICENSE.md": {
@@ -1497,6 +1502,11 @@
   "tests/test_pfs.c": {
     "mtime": 1785877862.5332181,
     "ast_hash": "f7e9231406dc449fde85496b1a33f1fe",
+    "semantic_hash": ""
+  },
+  "tests/test_xkcd2601.c": {
+    "mtime": 1785869151.208238,
+    "ast_hash": "d43797e959d523ca8438492a036da4c5",
     "semantic_hash": ""
   }
 }

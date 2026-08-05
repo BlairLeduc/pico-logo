@@ -90,6 +90,10 @@ add_logo_test(test_graphics_demo)
 target_compile_definitions(test_graphics_demo PRIVATE
     GRAPHICS_DEMO_SOURCE="${CMAKE_SOURCE_DIR}/logo/demos/graphics")
 
+add_logo_test(test_xkcd2601)
+target_compile_definitions(test_xkcd2601 PRIVATE
+    XKCD2601_SOURCE="${CMAKE_SOURCE_DIR}/logo/samples/xkcd2601")
+
 # Galaxian game test — loads logo/games/galaxian into the interpreter (proving
 # it parses and its init path runs on the mock device) and checks the game's
 # pure logic helpers. The source path is passed in as a compile definition.
