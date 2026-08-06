@@ -1,0 +1,109 @@
+; What a Galaxian or Space Invaders frame costs on hardware, and whether the
+; frame loop's storage stays flat while it runs.
+;
+;   erall                        <-- REQUIRED: see below
+;   load "galaxian   (or "invaders -- do NOT run the game)
+;   load "p10games
+;   p10games
+;
+; Neither game had ever been timed on a board.  That is not an oversight
+; peculiar to them: `sync` does not wait when a frame overruns, it presents
+; late, so a game that misses its 25 fps budget degrades quietly instead of
+; failing -- which is exactly how Turtle Trails and Checkpoint Run reached
+; hardware at ~9 and ~4 fps against a designed 25 (P9 M0,
+; docs/tilemap-scrolling-design.md section 3.3).  This script is the same
+; measurement for the two older games, and it works on either of them
+; unchanged because both now define `play.frame`, `init.game` and
+; `setup.level` under those names.
+;
+; Manual refresh, so the `sync` ending a frame presents and returns rather
+; than waiting for the frame boundary -- the number wanted is the work, not
+; the cadence.  Run it in graphics mode (`setup.level` leaves the screen
+; there): in text mode the present is skipped entirely and the figure is a
+; Logo body with no present in it, which is the correction P9 had to make to
+; its whole first series of numbers.
+;
+; `erall` is not optional.  MAX_PROCEDURES is a hard 128; Galaxian defines 74
+; (Space Invaders 68) and this file adds 3, so a workspace still holding
+; another program can run out of procedure slots and `load` stops with `out of
+; space` -- the procedure table talking, not memory.
+;
+; The 300 frames are enough to cross one `reclaim` (the games recycle every
+; 250), so the two `nodes` readings say whether a frame's storage comes back:
+; before should be near after, and both far from zero.
+;
+; The report goes to `p10games.txt` as well as the screen, because numbers on
+; the PicoCalc's display cannot be copied anywhere.  Runs append, so a session
+; of them accumulates in one file; note beside each which game you loaded.
+
+to time.frame
+  local "t0
+  make "t0 ticks
+  play.frame
+  output (ticks - :t0)
+end
+
+; Which game is loaded, since the file appends and a run otherwise cannot be
+; told from the one before it.  `conv.rows` is Galaxian's convoy and only
+; Galaxian defines it; `alien.rows` is the Invaders formation.
+to p10.game
+  if name? "conv.rows [output [Galaxian]]
+  if name? "alien.rows [output [Space Invaders]]
+  output [unknown -- load a game first]
+end
+
+; Printed twice -- once to the file, once to the screen -- so it is one list of
+; lines rather than two that can drift apart.  The measurements are the
+; caller's locals, which Logo's dynamic scope makes visible here.
+to p10.report
+  pr (se [Game       :] p10.game)
+  pr [Frame cost -- 300 frames, manual refresh]
+  pr []
+  pr (se [frame mean :] (:total / 300) [ms])
+  pr (se [frame min  :] :lo [ms])
+  pr (se [frame max  :] :hi [ms])
+  pr [budget     : 40 ms at 25 fps]
+  pr []
+  pr (se [nodes at start :] :n0)
+  pr (se [nodes at end   :] :n1)
+  pr (se [after recycle  :] :n2)
+  pr []
+end
+
+to p10games
+  local "one local "total local "lo local "hi local "n0 local "n1 local "n2
+  init.game
+  make "score 0
+  make "lives 3
+  make "level 1
+  setup.level
+  setrefresh "manual
+  recycle
+  make "n0 nodes
+  make "total 0
+  make "lo 99999
+  make "hi 0
+  repeat 300 [
+    make "one (time.frame)
+    make "total :total + :one
+    if :one < :lo [make "lo :one]
+    if :one > :hi [make "hi :one]
+  ]
+  make "n1 nodes
+  recycle
+  ; Read the recovered figure *here*, not inside the report: printing the
+  ; report builds a `sentence` per line, so a `nodes` evaluated down there
+  ; reads the report's own garbage back as if the recycle had under-recovered
+  ; (it showed ~25 cells low on the first hardware run, 2026-08-06).
+  make "n2 nodes
+  setrefresh "auto
+  stopsound
+  textscreen
+  open "p10games.txt
+  setwrite "p10games.txt
+  p10.report
+  setwrite []
+  close "p10games.txt
+  p10.report
+  pr [Also written to p10games.txt]
+end

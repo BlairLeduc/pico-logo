@@ -99,7 +99,16 @@ target_compile_definitions(test_xkcd2601 PRIVATE
 # pure logic helpers. The source path is passed in as a compile definition.
 add_logo_test(test_galaxian)
 target_compile_definitions(test_galaxian PRIVATE
-    GALAXIAN_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/galaxian")
+    GALAXIAN_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/galaxian"
+    P10GAMES_SOURCE="${CMAKE_SOURCE_DIR}/logo/tests/p10games")
+
+# Space Invaders game test — the same treatment as Galaxian: the file loads and
+# its init path runs on the mock device, the pure helpers are checked directly,
+# and the frame is run for as long as a level lasts to prove it reclaims.
+add_logo_test(test_invaders)
+target_compile_definitions(test_invaders PRIVATE
+    INVADERS_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/invaders"
+    P10GAMES_SOURCE="${CMAKE_SOURCE_DIR}/logo/tests/p10games")
 
 # P10 M0 interpreter throughput benchmark -- repeatable baseline plus a
 # regression guard on relative numbers (interpreter-throughput-design.md §6).
@@ -107,7 +116,12 @@ add_logo_test(test_bench_throughput)
 target_compile_definitions(test_bench_throughput PRIVATE
     CHECKRUN_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/checkrun"
     TRAILS_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/trails"
-    P10M0_SOURCE="${CMAKE_SOURCE_DIR}/logo/tests/p10m0")
+    GALAXIAN_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/galaxian"
+    INVADERS_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/invaders"
+    P10M0_SOURCE="${CMAKE_SOURCE_DIR}/logo/tests/p10m0"
+    # Every BENCH line is written here as well as to the terminal, so the
+    # numbers can be pasted into a design doc instead of read off a screen.
+    BENCH_REPORT="${CMAKE_BINARY_DIR}/bench-throughput.txt")
 
 # Turtle Trails is a pure-Logo maze chase.  Its test loads the program and
 # checks the encoded map, the deterministic 25 fps simulation, and the maze it
