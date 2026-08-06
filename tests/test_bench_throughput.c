@@ -245,7 +245,7 @@ static double frame_storage_cells(int frames)
     TEST_ASSERT_EQUAL(RESULT_OK, before.status);
     char code[64];
     snprintf(code, sizeof(code), "repeat %d [play.frame]", frames);
-    run_string(code);
+    time_code_ms(code);          // asserts the frames ran without error
     Result after = eval_string("nodes");
     TEST_ASSERT_EQUAL(RESULT_OK, after.status);
     return (double)(before.value.as.number - after.value.as.number) / frames;

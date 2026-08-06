@@ -1440,10 +1440,10 @@ to play.frame
     check.collisions
     update.drone
     dress.bugs
+    reclaim
   ]
   place.all
   draw.hud
-  reclaim
   sync
 end
 
@@ -1452,7 +1452,10 @@ end
 ; collects on its own, so a level lasting several minutes has to reclaim as
 ; it goes.  Once every ten seconds is far from every frame -- the design
 ; forbids that -- and it keeps free storage flat instead of sliding towards
-; the `out of space` that ends the program.
+; the `out of space` that ends the program.  Called from inside the unpaused
+; block: while it sat outside, a pause landing on a multiple of 250 left the
+; remainder at zero and recycled every paused frame (found by review on the
+; sibling games, 2026-08-06).
 to reclaim
   if not ((remainder :tt.frame 250) = 0) [stop]
   recycle

@@ -848,7 +848,11 @@ end
 ; old line before drawing the new. That follows every kill, so the cost is
 ; proportional to how well the player is doing, and it is not returned until
 ; something recycles. Once every 250 frames is ten seconds at 25 fps, far from
-; the every-frame the design rules out; Turtle Trails reclaims the same way.
+; the every-frame the design rules out; Turtle Trails reclaims the same way. Called from inside the
+; unpaused block: a paused frame counts no frames and allocates nothing, and
+; while it sat outside, a pause landing on a multiple of 250 left the remainder
+; at zero and recycled on *every* paused frame -- an every-frame recycle, the
+; one thing the design forbids (found by review, 2026-08-06).
 to reclaim
   if not ((remainder :frame.count 250) = 0) [stop]
   recycle
@@ -871,9 +875,9 @@ to play.frame
     check.shot
     recycle.offscreen
     recycle.divers
+    reclaim
   ]
   draw.hud
-  reclaim
   sync
 end
 

@@ -80,6 +80,7 @@ static void load_file(const char *path)
         TEST_ASSERT_MESSAGE(r.status == RESULT_NONE || r.status == RESULT_OK, line);
     }
 
+    TEST_ASSERT_FALSE_MESSAGE(in_def, "file ends inside a procedure definition");
     fclose(f);
 }
 
@@ -324,6 +325,25 @@ void test_scoring_frames_are_reclaimed(void)
                              "free storage slid: the reclaim timer is not keeping up");
 }
 
+// A paused frame must not recycle. The frame counter stops while paused, so a
+// pause landing on a multiple of 250 leaves `remainder :frame.count 250` at
+// zero for as long as the pause lasts -- and `reclaim` sat outside the paused
+// block, so it recycled on every one of those frames. Garbage left lying
+// around is the probe: a recycle would hand it back and free `nodes` would
+// jump.
+void test_a_paused_frame_never_recycles(void)
+{
+    start_level();
+    run_frames(20);
+    run_string("make \"frame.count 250 make \"paused true");
+    run_string("repeat 200 [make \"junk fput 1 [1 2 3]]");   // ~800 cells of garbage
+
+    int before = (int)num("nodes");
+    run_frames(5);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(before, (int)num("nodes"),
+                                  "a paused frame recycled -- reclaim is outside the pause");
+}
+
 // The hardware timing script must run end to end on the mock, so a script that
 // fails half way through cannot waste a board session (the p9m0 convention).
 void test_p10games_script_runs(void)
@@ -362,6 +382,7 @@ int main(void)
     RUN_TEST(test_play_frame_is_the_loop_body);
     RUN_TEST(test_an_idle_frame_allocates_nothing);
     RUN_TEST(test_scoring_frames_are_reclaimed);
+    RUN_TEST(test_a_paused_frame_never_recycles);
     RUN_TEST(test_p10games_script_runs);
     return UNITY_END();
 }
