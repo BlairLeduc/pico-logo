@@ -1,2 +1,9 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# graphify's report is generated and line-wise unmergeable. Take one side on a
+# conflict and regenerate with `graphify update .`, which is AST-only and free.
+# The graph itself (graphify-out/graph.json) is no longer tracked at all, after
+# a merge of it produced 1,149 conflicts and the conflicted file was committed,
+# which left `graphify query` unable to load the graph; see .gitignore.
+graphify-out/GRAPH_REPORT.md merge=ours
