@@ -8,22 +8,23 @@ Testing/
 *.log
 *.o
 
-# Graphify: track the current graph outputs, drop the heavy rebuildable cache,
-# the local cost log, and the dated snapshots. The snapshots are a full copy of
-# the graph (~10 MB) written on every rebuild, nothing reads them — no graphify
-# command takes a snapshot, and no script or doc references one — and the 14 of
-# them were 81 % of this repository's entire object history.
-graphify-out/cache/
-graphify-out/cost.json
-graphify-out/20*/
-
-# The graph and its viewer are generated: `graphify update .` rebuilds both from
-# source in about five seconds with no API cost (verified 2026-08-06 from a
-# clone's worth of files). Tracking an 11 MB JSON that every rebuild rewrites is
-# what let a git merge corrupt it with 1,149 conflict markers. GRAPH_REPORT.md
-# stays tracked -- it is small, readable in a diff, and nothing parses it.
-graphify-out/graph.json
-graphify-out/graph.html
+# Graphify: everything under graphify-out/ is generated, so none of it is
+# tracked.  `graphify update .` rebuilds the lot from source in about five
+# seconds with no API cost, and CLAUDE.md already asks for that after a code
+# change, so there is nothing to commit and no rule to remember.
+#
+# Why not track any of it: the graph is an 11 MB JSON that every rebuild
+# rewrites, and a git merge of it once produced 1,149 conflict markers that
+# were committed, leaving `graphify query` unable to load it at all;
+# manifest.json records file *mtimes*, so it differs on every machine and every
+# fresh clone whatever the code does; the labels renumber their communities on
+# every re-cluster; and the dated snapshots are a ~10 MB copy of the graph
+# written per rebuild that nothing reads -- 14 of them were 81 % of this
+# repository's entire object history.
+#
+# The one exception is .graphify_root, a one-byte marker that never changes.
+graphify-out/*
+!graphify-out/.graphify_root
 
 # MacOS specific files
 .DS_Store
