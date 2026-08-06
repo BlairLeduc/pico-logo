@@ -41,10 +41,10 @@
 // Bank slots, as laid out at the top of logo/games/trails. A map cell holds
 // one of these: the picture and the rule at once.
 #define S_HEDGE   1
-#define S_NEST    2
-#define S_PATH    3
+#define S_NEST   17
+#define S_PATH   18
 #define S_SPECK  19
-#define S_BLOSS  35
+#define S_BLOSS  20
 
 // The board's offset inside the whole-screen map, and the screen rectangle it
 // therefore occupies: 28x36 cells of 8 pixels centred on 320x320.
@@ -311,25 +311,34 @@ static void test_the_built_map_agrees_with_the_encoding(void)
             int slot = s[r][c];
 
             if (!walkable(m[r][c])) {
-                // Dead space is hedge; the nest floor and its door are the
-                // same picture but a number bugs may cross.
-                TEST_ASSERT_EQUAL_INT_MESSAGE(m[r][c] == T_DEAD ? S_HEDGE : S_NEST, slot, msg);
+                // The nest floor and its door are solid hedge to look at but
+                // a number bugs may cross. Dead space is the hedge the maze
+                // is drawn from, and carries the variant its neighbours ask
+                // for: the mask counts the sides it does *not* have to stand
+                // back from, which are the hedge ones, the nest (hedge to
+                // look at) and the margin off the board.
+                if (m[r][c] != T_DEAD) {
+                    TEST_ASSERT_EQUAL_INT_MESSAGE(S_NEST, slot, msg);
+                    continue;
+                }
+
+                int mask = 0;
+                for (int d = 1; d <= 4; d++) {
+                    int nc = c + 1 + DC[d], nr = r + 1 + DR[d];
+                    bool hedge = nc < 1 || nc > COLS || nr < 1 || nr > ROWS ||
+                                 !walkable(m[nr - 1][nc - 1]);
+                    if (!hedge) continue;
+                    mask |= (d == D_UP) ? 8 : (d == D_LEFT) ? 4 : (d == D_DOWN) ? 2 : 1;
+                }
+                TEST_ASSERT_EQUAL_INT_MESSAGE(S_HEDGE + mask, slot, msg);
+                TEST_ASSERT_TRUE_MESSAGE(slot < S_NEST, msg);
                 continue;
             }
 
-            int mask = 0;
-            for (int d = 1; d <= 4; d++) {
-                int nc, nr;
-                if (!step_tile(c + 1, r + 1, d, &nc, &nr)) continue;
-                // The pen's runs never wrapped a tunnel, so neither does the
-                // mask: a tunnel mouth keeps its round cap.
-                if (nc != c + 1 + DC[d] || nr != r + 1 + DR[d]) continue;
-                if (!walkable(m[nr - 1][nc - 1])) continue;
-                mask |= (d == D_UP) ? 8 : (d == D_LEFT) ? 4 : (d == D_DOWN) ? 2 : 1;
-            }
-
-            int base = m[r][c] == T_PAINT ? S_SPECK : m[r][c] == T_BLOSSOM ? S_BLOSS : S_PATH;
-            TEST_ASSERT_EQUAL_INT_MESSAGE(base + mask, slot, msg);
+            // A path cell is the background and what sits on it: no variant,
+            // because no hedge pixel lives in a path tile any more.
+            int want = m[r][c] == T_PAINT ? S_SPECK : m[r][c] == T_BLOSSOM ? S_BLOSS : S_PATH;
+            TEST_ASSERT_EQUAL_INT_MESSAGE(want, slot, msg);
             TEST_ASSERT_TRUE_MESSAGE(slot > S_NEST, msg);
         }
     }
@@ -784,14 +793,14 @@ static void test_painting_mutates_the_tile_and_scores(void)
     run("make \"tt.score 0");
     int left = (int)num(":tt.left");
 
-    // Column 2 row 5 is an ordinary unpainted path tile. Painting subtracts
-    // 16, so the cell keeps the corridor shape it was drawn with.
+    // Column 2 row 5 is an ordinary unpainted path tile. Painting it leaves
+    // the bare corridor the speck was sitting on.
     int speck = (int)num("tile.at 2 5");
-    TEST_ASSERT_TRUE_MESSAGE(speck >= S_SPECK && speck < S_BLOSS, "col 2 row 5 carries no speck");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(S_SPECK, speck, "col 2 row 5 carries no speck");
     put_actor(1, 2, 5, D_DOWN, 0, 0);
     run("paint.tile");
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(speck - 16, (int)num("tile.at 2 5"), "the tile was not painted");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(S_PATH, (int)num("tile.at 2 5"), "the tile was not painted");
     TEST_ASSERT_EQUAL_INT(10, (int)num(":tt.score"));
     TEST_ASSERT_EQUAL_INT(left - 1, (int)num(":tt.left"));
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, (int)num(":tt.pause"), "a fresh tile withholds one quantum");
@@ -806,7 +815,7 @@ static void test_blossom_scores_pauses_and_turns_the_tables(void)
 {
     run("make \"tt.score 0");
     int bloss = (int)num("tile.at 2 7");
-    TEST_ASSERT_TRUE_MESSAGE(bloss >= S_BLOSS, "col 2 row 7 carries no blossom");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(S_BLOSS, bloss, "col 2 row 7 carries no blossom");
 
     // Two bugs hunting, one still waiting in the nest.
     put_actor(2, 10, 24, D_LEFT, 0, 1);
@@ -817,7 +826,7 @@ static void test_blossom_scores_pauses_and_turns_the_tables(void)
     put_actor(1, 2, 7, D_DOWN, 0, 0);
     run("paint.tile");
 
-    TEST_ASSERT_EQUAL_INT(bloss - 32, (int)num("tile.at 2 7"));
+    TEST_ASSERT_EQUAL_INT(S_PATH, (int)num("tile.at 2 7"));
     TEST_ASSERT_EQUAL_INT(50, (int)num(":tt.score"));
     TEST_ASSERT_EQUAL_INT_MESSAGE(3, (int)num(":tt.pause"), "a blossom withholds three quanta");
     TEST_ASSERT_GREATER_THAN_MESSAGE(0, (int)num(":tt.dizzy"), "the dizzy timer did not start");
@@ -1255,47 +1264,74 @@ static void test_high_score_tracks_the_session_best(void)
 // 8. The drawn maze, and the frame loop
 // ---------------------------------------------------------------------------
 
-// A bank tile is one cell of hedge with a pen-8 stroke run into each walkable
-// neighbour, and those strokes are where the rounded corners come from: one
-// per set bit of the mask, out to the neighbour's centre and no further. The
-// bit order pinned here is the one build.map computes with.
-static void test_a_bank_tile_carves_one_stroke_per_walkable_neighbour(void)
+// A hedge tile is a band of :tt.wall pixels run out to each hedge neighbour:
+// one stroke per set bit of the mask, out to the neighbour's centre and no
+// further, so a face with no stroke stands back from the cell edge and gives
+// its pixels to the corridor. The bit order pinned here is the one build.map
+// computes with. Two crossing bands miss the cell's four corner pixels, so an
+// inner corner -- both of its sides hedge -- takes a dot as well.
+static void test_a_hedge_tile_runs_one_band_per_hedge_neighbour(void)
 {
-    // 8 up, 4 left, 2 down, 1 right, in the order make.tile draws them.
+    // 8 up, 4 left, 2 down, 1 right, in the order make.hedge draws them.
     const int bit[4] = {8, 4, 2, 1};
     const float dx[4] = {0.0f, -8.0f, 0.0f, 8.0f};
     const float dy[4] = {8.0f, 0.0f, -8.0f, 0.0f};
+    // The corners, in the order make.hedge fills them: up-left, up-right,
+    // down-left, down-right.
+    const int corner[4][2] = {{8, 4}, {8, 1}, {2, 4}, {2, 1}};
+    const float cx[4] = {-4.0f, 4.0f, -4.0f, 4.0f};
+    const float cy[4] = {4.0f, 4.0f, -4.0f, -4.0f};
+
+    int wall = (int)num(":tt.wall");
 
     for (int m = 0; m < 16; m++) {
-        for (int ov = 0; ov <= 2; ov++) {
-            mock_device_clear_graphics();
-            runf("make.tile %d %d %d", S_PATH + m, m, ov);
-            const MockDeviceState *st = mock_device_get_state();
+        mock_device_clear_graphics();
+        runf("make.hedge %d %d", S_HEDGE + m, m);
+        const MockDeviceState *st = mock_device_get_state();
 
-            char msg[64];
-            snprintf(msg, sizeof(msg), "mask %d overlay %d", m, ov);
-            int n = 0;
-            for (int d = 0; d < 4; d++) {
-                if (!(m & bit[d])) continue;
-                TEST_ASSERT_GREATER_THAN_MESSAGE(n, st->graphics.line_count, msg);
-                const MockLine *l = &st->graphics.lines[n++];
-                TEST_ASSERT_EQUAL_INT_MESSAGE(8, l->pen_size, msg);
-                TEST_ASSERT_EQUAL_FLOAT(0.0f, l->x1);
-                TEST_ASSERT_EQUAL_FLOAT(0.0f, l->y1);
-                TEST_ASSERT_EQUAL_FLOAT(dx[d], l->x2);
-                TEST_ASSERT_EQUAL_FLOAT(dy[d], l->y2);
-            }
-            TEST_ASSERT_EQUAL_INT_MESSAGE(n, st->graphics.line_count, msg);
-            // The hedge patch under the cell, and one more dot for an
-            // overlay. The pen sizes are the tile: 16 covers the whole 8x8
-            // cell including its corners, and the speck and the blossom are
-            // the same 2 and 6 the pen drew them with before.
-            TEST_ASSERT_EQUAL_INT_MESSAGE(ov == 0 ? 1 : 2, st->graphics.dot_count, msg);
-            TEST_ASSERT_EQUAL_INT_MESSAGE(16, st->graphics.dots[0].pen_size, msg);
-            if (ov != 0)
-                TEST_ASSERT_EQUAL_INT_MESSAGE(ov == 1 ? 2 : 6, st->graphics.dots[1].pen_size, msg);
+        char msg[64];
+        snprintf(msg, sizeof(msg), "mask %d", m);
+        int n = 0;
+        for (int d = 0; d < 4; d++) {
+            if (!(m & bit[d])) continue;
+            TEST_ASSERT_GREATER_THAN_MESSAGE(n, st->graphics.line_count, msg);
+            const MockLine *l = &st->graphics.lines[n++];
+            TEST_ASSERT_EQUAL_INT_MESSAGE(wall, l->pen_size, msg);
+            TEST_ASSERT_EQUAL_FLOAT(0.0f, l->x1);
+            TEST_ASSERT_EQUAL_FLOAT(0.0f, l->y1);
+            TEST_ASSERT_EQUAL_FLOAT(dx[d], l->x2);
+            TEST_ASSERT_EQUAL_FLOAT(dy[d], l->y2);
         }
+        TEST_ASSERT_EQUAL_INT_MESSAGE(n, st->graphics.line_count, msg);
+
+        // The background patch that clears the cell -- pen 16 covers the
+        // whole 8x8 cell including its corners, so no tile needs the screen
+        // cleared first -- then the hedge, then a dot per inner corner.
+        int k = 0;
+        TEST_ASSERT_EQUAL_INT_MESSAGE(16, st->graphics.dots[k++].pen_size, msg);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(wall, st->graphics.dots[k++].pen_size, msg);
+        for (int i = 0; i < 4; i++) {
+            if ((m & corner[i][0]) == 0 || (m & corner[i][1]) == 0) continue;
+            TEST_ASSERT_GREATER_THAN_MESSAGE(k, st->graphics.dot_count, msg);
+            TEST_ASSERT_EQUAL_INT_MESSAGE(4, st->graphics.dots[k].pen_size, msg);
+            TEST_ASSERT_EQUAL_FLOAT(cx[i], st->graphics.dots[k].x);
+            TEST_ASSERT_EQUAL_FLOAT(cy[i], st->graphics.dots[k].y);
+            k++;
+        }
+        TEST_ASSERT_EQUAL_INT_MESSAGE(k, st->graphics.dot_count, msg);
     }
+}
+
+// The corridor is what the hedge gives up: a cell is 8 pixels, a hedge keeps
+// :tt.wall of them on a face it turns toward a corridor, and the corridor
+// takes the rest on each side. Two hedges facing each other across a lane is
+// the widest a corridor gets.
+static void test_the_corridor_is_wider_than_its_cell(void)
+{
+    int wall = (int)num(":tt.wall");
+    TEST_ASSERT_TRUE_MESSAGE(wall > 0 && wall < 8, "the hedge must be thinner than its cell");
+    TEST_ASSERT_TRUE_MESSAGE((8 - wall) % 2 == 0, "an odd inset cannot be centred in the cell");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(10, 8 + (8 - wall), "the corridor is not 10 pixels wide");
 }
 
 // The board is baked rather than carved, so where the map lands on screen is
@@ -1398,14 +1434,14 @@ static void test_frames_run_and_the_turtle_paints(void)
 static void test_respawn_keeps_painted_tiles(void)
 {
     run("setup.level");
-    int speck = (int)num("tile.at 2 5");
+    TEST_ASSERT_EQUAL_INT(S_SPECK, (int)num("tile.at 2 5"));
     put_actor(1, 2, 5, D_DOWN, 0, 0);
     run("paint.tile");
     int left = (int)num(":tt.left");
-    TEST_ASSERT_EQUAL_INT(speck - 16, (int)num("tile.at 2 5"));
+    TEST_ASSERT_EQUAL_INT(S_PATH, (int)num("tile.at 2 5"));
 
     run("respawn");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(speck - 16, (int)num("tile.at 2 5"), "respawn repainted the map");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(S_PATH, (int)num("tile.at 2 5"), "respawn repainted the map");
     TEST_ASSERT_EQUAL_INT_MESSAGE(left, (int)num(":tt.left"), "respawn reset the tile count");
     TEST_ASSERT_EQUAL_INT((int)num(":tt.start.col"), actor("col", 1));
     TEST_ASSERT_EQUAL_INT((int)num(":tt.start.row"), actor("row", 1));
@@ -1705,7 +1741,8 @@ int main(void)
     RUN_TEST(test_extra_life_is_awarded_once);
     RUN_TEST(test_high_score_tracks_the_session_best);
 
-    RUN_TEST(test_a_bank_tile_carves_one_stroke_per_walkable_neighbour);
+    RUN_TEST(test_a_hedge_tile_runs_one_band_per_hedge_neighbour);
+    RUN_TEST(test_the_corridor_is_wider_than_its_cell);
     RUN_TEST(test_the_bake_puts_the_board_where_the_pen_did);
     RUN_TEST(test_stamping_one_cell_repairs_exactly_that_cell);
     RUN_TEST(test_hud_stays_out_of_the_maze);

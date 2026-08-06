@@ -746,27 +746,47 @@ and the rule at once:
 | Slot | Meaning |
 |---:|---|
 | 0 | off the board (map margin), painted as background |
-| 1 | hedge and dead space |
-| 2 | nest floor and door |
-| 3..18 | open path, one variant per walkable-neighbour mask |
-| 19..34 | the same path carrying a speck |
-| 35..50 | the same path carrying a power blossom |
+| 1..16 | hedge and dead space, one variant per hedge-neighbour mask |
+| 17 | nest floor and door |
+| 18 | open path |
+| 19 | the same path carrying a speck |
+| 20 | the same path carrying a power blossom |
 
 The order is what makes every question the game asks a single comparison:
-walkable is `> 2`, a bug may enter at `> 1`, paintable is `>= 19`, a blossom
-is `>= 35`, and painting one subtracts 16 or 32 to reach the plain variant of
-the same shape. So codes 1 and 4 of §5.2's table share a picture (a tunnel
-looks like any other empty corridor) and so do 5 and 6; nothing in the game
-ever distinguished them except through `walk?` and `nest.open?`.
+walkable is `> 17`, a bug may enter at `>= 17`, paintable is `>= 19`, a
+blossom is `>= 20`, and painting one is a `settile` back to 18. So codes 1
+and 4 of §5.2's table share a picture (a tunnel looks like any other empty
+corridor) and so do 5 and 6; nothing in the game ever distinguished them
+except through `walk?` and `nest.open?`.
 
-`setup.tiles` draws all 50 tiles once with the pen — a fat hedge dot, then a
-pen-8 stroke into each walkable neighbour, then a speck or a blossom — and
-picks each up with `snaptile`. A stroke that stops at the cell centre leaves
-a round cap and one that runs on leaves a square edge, so the mask *is* the
-rounded corner, and `draw.board` becomes `stampmap`. What changes against the
-carved board is one pixel: the old pen-8 disc spanned nine pixels, so a
-corridor was nine pixels wide and ate a pixel off the hedge beside it; tiles
-make it eight, uniformly.
+`setup.tiles` draws all 20 tiles once with the pen — sixteen hedges, the
+solid nest, and the three path cells — and picks each up with `snaptile`, so
+`draw.board` becomes `stampmap`. A hedge is a band six pixels wide run out to
+each hedge neighbour: a stroke that stops at the cell centre leaves a round
+cap and one that runs on leaves a square edge, so the mask *is* the rounded
+corner, and a face turned toward a corridor stands a pixel back from the cell
+edge. Two crossing bands miss the cell's four corner pixels, so an inner
+corner — both of its sides hedge — takes a pen-4 dot as well, or a solid wall
+block would show a background speck at every crossing.
+
+**The corridors are ten pixels wide (2026-08-06).** They were eight — the
+full cell — because it was the *hedge* that filled its square and the path
+tile that carved the corridor out of it with a pen-8 stroke per walkable
+neighbour, which left a path tile at a bend holding a rounded lump of hedge
+in the corner the strokes missed, and gave the path a variant per mask. A
+hedge that stands off the corridor cannot be drawn that way: the lump would
+sit a pixel proud of the wall it belongs to, with a hairline of background
+between. So the mask moved to the hedge and the path gave it up. Every hedge
+pixel now belongs to a hedge cell, a path cell is plain background under its
+overlay, and the bank went from 50 tiles to 20. The cost is at the outside of
+a turn, where the wall corner is now square rather than concave; the pen's
+round cap still rounds every corner the wall turns into a corridor.
+
+Only the pictures changed. The map letters, the geometry, the movement
+quantum and the collision rules are untouched: a corridor is still one cell
+wide as far as the rules are concerned, and the extra pixels come out of the
+hedge on either side. `:tt.wall` is the one number that sets it — the hedge
+keeps that many of its 8 pixels on a face it turns toward a corridor.
 
 The map is 40 × 77 cells. It is at least the whole 320×320 screen because a
 bake always starts at the top left corner of the graphics area, so the 28×36

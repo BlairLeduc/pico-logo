@@ -1,0 +1,14 @@
+to stars
+  cs fs window
+  setbg 0
+  repeat 50 [
+    repeat 5 [ fd 20 rt 144 ]
+    pu
+    setpos se ( ( random 320 ) - 160 ) ( ( random 320 ) - 160 )
+    pd
+    setpc 18 + ( random 17 ) * 8
+  ]
+  wrap
+end
+
+make "startup [stars]

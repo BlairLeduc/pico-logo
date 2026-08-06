@@ -60,25 +60,38 @@ make "sh.shell 10      ; 10..15 shell-withdraw death sequence
 ; comparison:
 ;
 ;    0        off the board -- painted as background
-;    1        hedge and dead space
-;    2        nest floor and door: the hedge picture, but bugs may enter
-;    3..18    open path, one variant per walkable-neighbour mask
-;   19..34    the same path carrying a speck
-;   35..50    the same path carrying a power blossom
-;   51..54    build.map's scratch codes, all replaced before the map is read
+;    1..16    hedge and dead space, one variant per hedge-neighbour mask
+;   17        nest floor and door: solid hedge, but a number bugs may enter
+;   18        open path
+;   19        the same path carrying a speck
+;   20        the same path carrying a power blossom
 ;
-; So a cell is walkable above :sl.nest, paintable from :sl.speck, and a
-; blossom from :sl.bloss; painting one subtracts 16 or 32 to reach the plain
-; variant of the same shape.  The mask is 8 up + 4 left + 2 down + 1 right
-; over the walkable neighbours -- exactly what decides where the pen's round
-; cap left a corner, so a variant per mask gives a pen-carved board with no
-; pen.
+; So a cell is walkable above :sl.nest, a bug may enter it from :sl.nest,
+; paintable from :sl.speck, and a blossom from :sl.bloss; painting one is a
+; `settile` back to :sl.path.  The mask is 8 up + 4 left + 2 down + 1 right
+; over the *hedge* neighbours, and it is the whole of the board's drawing:
+; every hedge pixel belongs to a hedge cell, and a path cell is plain
+; background under its overlay.
+;
+; It was the other way round until the corridors were widened.  A hedge cell
+; used to fill its 8x8 square and the corridor was carved out of the path
+; tile with a pen-8 stroke per walkable neighbour, so a path tile at a bend
+; kept a rounded lump of hedge in the corner the strokes missed, and the path
+; needed a variant per mask.  A hedge that stands off the corridor cannot be
+; drawn that way -- the lump would stand a pixel proud of the wall it belongs
+; to -- so the hedge took the mask over and the path gave it up.
 make "sl.hedge 1
-make "sl.nest 2
-make "sl.path 3
+make "sl.nest 17
+make "sl.path 18
 make "sl.speck 19
-make "sl.bloss 35
-make "sc.walk 50       ; build.map scratch: :sc.walk + the tile code
+make "sl.bloss 20
+
+; Hedge thickness in pixels, out of the 8 a cell has.  A hedge cell keeps the
+; middle :tt.wall pixels of every face it turns toward a corridor and gives
+; the rest away, so a corridor between two hedges is 8 + (8 - :tt.wall)
+; pixels wide -- 10 at 6.  A face turned toward more hedge is not inset at
+; all, so a wall block stays solid.
+make "tt.wall 6
 
 ; The board is 28x36 cells of 8 pixels centred on the 320x320 screen, but a
 ; bake always starts at the top left corner of the graphics area, so the map
@@ -111,42 +124,42 @@ make "sl.keep 40
 ; -------------------------------------------------------------------------
 
 make "tt.map []
-make "tt.map lput "AAAAAAAAAAAAAAAAAAAAAAAAAAAA :tt.map
-make "tt.map lput "AAAAAAAAAAAAAAAAAAAAAAAAAAAA :tt.map
-make "tt.map lput "AAAAAAAAAAAAAAAAAAAAAAAAAAAA :tt.map
-make "tt.map lput "AAAAAAAAAAAAAAAAAAAAAAAAAAAA :tt.map
-make "tt.map lput "ACCCCCCCCCCCCCCCCCCCCCCCCCCA :tt.map
-make "tt.map lput "ACAAAACAAAAACAACAAAAACAAAACA :tt.map
-make "tt.map lput "ADAAAACAAAAACAACAAAAACAAAADA :tt.map
-make "tt.map lput "ACAAAACAAAAACAACAAAAACAAAACA :tt.map
-make "tt.map lput "ACCCCCCAACCCCCCCCCCAACCCCCCA :tt.map
-make "tt.map lput "ACACAAAAACAAAAAAAACAAAAACACA :tt.map
-make "tt.map lput "ACACAAAAACAAAAAAAACAAAAACACA :tt.map
-make "tt.map lput "ACCCCCCAACCCCAACCCCAACCCCCCA :tt.map
-make "tt.map lput "AAAAAACAAAAACAACAAAAACAAAAAA :tt.map
-make "tt.map lput "AAAAAACAAAAACAACAAAAACAAAAAA :tt.map
-make "tt.map lput "AAAAAACBBBBBBBBBBBBBBCAAAAAA :tt.map
-make "tt.map lput "AAAAAACAABAAAGGAAABAACAAAAAA :tt.map
-make "tt.map lput "AAAAAACAABAFFFFFFABAACAAAAAA :tt.map
-make "tt.map lput "EEEEEECAABAFFFFFFABAACEEEEEE :tt.map
-make "tt.map lput "AAAAAACAABAFFFFFFABAACAAAAAA :tt.map
-make "tt.map lput "AAAAAACAABAAAAAAAABAACAAAAAA :tt.map
-make "tt.map lput "AAAAAACBBBBBBBBBBBBBBCAAAAAA :tt.map
-make "tt.map lput "AAAAAAAAABAABAABAABAAAAAAAAA :tt.map
-make "tt.map lput "AAAAAAAAABAABAABAABAAAAAAAAA :tt.map
-make "tt.map lput "ACCCCCCCCCAACBBCAACCCCCCCCCA :tt.map
-make "tt.map lput "ACAAAACAAAAACAACAAAAACAAAACA :tt.map
-make "tt.map lput "ACAAAACAAAAACAACAAAAACAAAACA :tt.map
-make "tt.map lput "EEECCCCAAAAACCCCAAAAACCCCEEE :tt.map
-make "tt.map lput "AAACAACAAAAAACCAAAAAACAACAAA :tt.map
-make "tt.map lput "AAACAACAAAAAACCAAAAAACAACAAA :tt.map
-make "tt.map lput "ACCCCCCAACCCCCCCCCCAACCCCCCA :tt.map
-make "tt.map lput "ACAAAACAACAAAAAAAACAACAAAACA :tt.map
-make "tt.map lput "ADAAAACAACAAAAAAAACAACAAAADA :tt.map
-make "tt.map lput "ACCCCCCCCCCCCCCCCCCCCCCCCCCA :tt.map
-make "tt.map lput "AAAAAAAAAAAAAAAAAAAAAAAAAAAA :tt.map
-make "tt.map lput "AAAAAAAAAAAAAAAAAAAAAAAAAAAA :tt.map
-make "tt.map lput "AAAAAAAAAAAAAAAAAAAAAAAAAAAA :tt.map
+make "tt.map lput "AAAAAAAAAAAAAAAAAAAAAAAAAAAA :tt.map ; 1
+make "tt.map lput "AAAAAAAAAAAAAAAAAAAAAAAAAAAA :tt.map ; 2
+make "tt.map lput "AAAAAAAAAAAAAAAAAAAAAAAAAAAA :tt.map ; 3
+make "tt.map lput "AAAAAAAAAAAAAAAAAAAAAAAAAAAA :tt.map ; 4
+make "tt.map lput "ACCCCCCCCCCCCCCCCCCCCCCCCCCA :tt.map ; 5
+make "tt.map lput "ACAAAACAAAAACAACAAAAACAAAACA :tt.map ; 6
+make "tt.map lput "ADAAAACAAAAACAACAAAAACAAAADA :tt.map ; 7
+make "tt.map lput "ACAAAACAAAAACAACAAAAACAAAACA :tt.map ; 8
+make "tt.map lput "ACCCCCCAACCCCCCCCCCAACCCCCCA :tt.map ; 9
+make "tt.map lput "ACACAAAAACAAAAAAAACAAAAACACA :tt.map ; 10
+make "tt.map lput "ACACAAAAACAAAAAAAACAAAAACACA :tt.map ; 11
+make "tt.map lput "ACCCCCCAACCCCAACCCCAACCCCCCA :tt.map ; 12
+make "tt.map lput "AAAAAACAAAAACAACAAAAACAAAAAA :tt.map ; 13
+make "tt.map lput "AAAAAACAAAAACAACAAAAACAAAAAA :tt.map ; 14
+make "tt.map lput "AAAAAACBBBBBBBBBBBBBBCAAAAAA :tt.map ; 15
+make "tt.map lput "AAAAAACAABAAAGGAAABAACAAAAAA :tt.map ; 16
+make "tt.map lput "AAAAAACAABAFFFFFFABAACAAAAAA :tt.map ; 17
+make "tt.map lput "EEEEEECAABAFFFFFFABAACEEEEEE :tt.map ; 18
+make "tt.map lput "AAAAAACAABAFFFFFFABAACAAAAAA :tt.map ; 19
+make "tt.map lput "AAAAAACAABAAAAAAAABAACAAAAAA :tt.map ; 20
+make "tt.map lput "AAAAAACBBBBBBBBBBBBBBCAAAAAA :tt.map ; 21
+make "tt.map lput "AAAAAAAAABAABAABAABAAAAAAAAA :tt.map ; 22
+make "tt.map lput "AAAAAAAAABAABAABAABAAAAAAAAA :tt.map ; 23
+make "tt.map lput "ACCCCCCCCCAACBBCAACCCCCCCCCA :tt.map ; 24
+make "tt.map lput "ACAAAACAAAAACAACAAAAACAAAACA :tt.map ; 25
+make "tt.map lput "ACAAAACAAAAACAACAAAAACAAAACA :tt.map ; 26
+make "tt.map lput "EEECCCCAAAACCCCCCAAAACCCCEEE :tt.map ; 27
+make "tt.map lput "AAACAACAAAACAAAACAAAACAACAAA :tt.map ; 28
+make "tt.map lput "AAACAACAAAACAAAACAAAACAACAAA :tt.map ; 29
+make "tt.map lput "ACCCCCCAACCCCCCCCCCAACCCCCCA :tt.map ; 30
+make "tt.map lput "ACAAAACAACAAAAAAAACAACAAAACA :tt.map ; 31
+make "tt.map lput "ADAAAACAACAAAAAAAACAACAAAADA :tt.map ; 32
+make "tt.map lput "ACCCCCCCCCCCCCCCCCCCCCCCCCCA :tt.map ; 33
+make "tt.map lput "AAAAAAAAAAAAAAAAAAAAAAAAAAAA :tt.map ; 34
+make "tt.map lput "AAAAAAAAAAAAAAAAAAAAAAAAAAAA :tt.map ; 35
+make "tt.map lput "AAAAAAAAAAAAAAAAAAAAAAAAAAAA :tt.map ; 36
 
 ; -------------------------------------------------------------------------
 ; Fixed map landmarks.  All in map coordinates: column 1..28, row 1..36.
@@ -287,7 +300,7 @@ end
 to nest.open? :col :row :d
   local "k
   make "k (tile.at (next.col :col :row :d) (next.row :row :d))
-  output :k > :sl.hedge
+  output not (:k < :sl.nest)
 end
 
 ; -------------------------------------------------------------------------
@@ -339,32 +352,49 @@ end
 ; The tile bank.  Everything below draws with turtle 7 inside one ask block.
 ;
 ; One cell of the board is drawn once per variant and picked up with
-; snaptile, and the board itself is then a single stampmap.  A cell is a
-; patch of hedge with a pen-8 stroke run into each walkable neighbour: a pen
-; wider than one pixel stamps a filled disc at every point, so a stroke that
-; stops at the cell centre leaves a round cap and a stroke that runs on
-; leaves a square edge.  That is the curved hedge the design asks for, and it
-; is why the bank is indexed by the neighbour mask.
+; snaptile, and the board itself is then a single stampmap.  A hedge cell is
+; a :tt.wall-wide band run out to each hedge neighbour: a pen wider than one
+; pixel stamps a filled disc at every point, so a stroke that stops at the
+; cell centre leaves a round cap and a stroke that runs on leaves a square
+; edge.  A face turned toward a corridor therefore stands :tt.wall/2 pixels
+; back from the cell edge and is rounded off, which is both the curved hedge
+; the design asks for and the pixel the corridor gains on that side.
 ;
-; Fifty tiles is far more than the board uses -- only thirteen masks occur,
-; and only one of those carries a blossom -- but drawing the unused ones
-; costs a few milliseconds once and keeps every slot number arithmetic.
+; Sixteen hedge tiles is more than the board uses -- only fifteen masks occur,
+; a hedge cell with no hedge neighbour at all being the one the maze never
+; asks for -- but drawing it costs a fraction of a millisecond once and keeps
+; every slot number arithmetic.
 ; -------------------------------------------------------------------------
 
-; :m is the walkable-neighbour mask and :ov the overlay: 0 bare path, 1 a
-; speck, 2 a power blossom.  The pensize-16 dot covers the whole 8x8 cell,
-; corners included, so no tile needs the screen cleared first.
-to make.tile :slot :m :ov
+; :m is the hedge-neighbour mask.  The background dot clears the cell (the
+; pensize-16 dot covers the whole 8x8 cell, corners included, so no tile
+; needs the screen cleared first) and the hedge is then laid on top.
+;
+; Two :tt.wall-wide bands crossing an 8-pixel cell leave its four corner
+; pixels bare.  An inner corner -- both of its sides hedge -- has to keep
+; them, or a solid wall block shows a background speck at every crossing; the
+; pen-4 dot that fills one reaches the corner pixel and spills only into the
+; band beside it and the cell's neighbour, which the snap discards.
+to make.hedge :slot :m
+  local "u local "l local "d local "r
+  make "u "false make "l "false make "d "false make "r "false
+  if not (:m < 8) [make "u "true make "m (:m - 8)]
+  if not (:m < 4) [make "l "true make "m (:m - 4)]
+  if not (:m < 2) [make "d "true make "m (:m - 2)]
+  if :m = 1 [make "r "true]
   ask 7 [
     pu setpos [0 0]
-    setpensize 16 setpc :c.hedge dot [0 0]
-    setpensize 8 setpc :c.bg
-    if not (:m < 8) [make "m (:m - 8) setpos [0 0] pd sety 8 pu]
-    if not (:m < 4) [make "m (:m - 4) setpos [0 0] pd setx -8 pu]
-    if not (:m < 2) [make "m (:m - 2) setpos [0 0] pd sety -8 pu]
-    if :m = 1 [setpos [0 0] pd setx 8 pu]
-    if :ov = 1 [setpensize 2 setpc :c.speck dot [0 0]]
-    if :ov = 2 [setpensize 6 setpc :c.trail dot [0 0]]
+    setpensize 16 setpc :c.bg dot [0 0]
+    setpensize :tt.wall setpc :c.hedge dot [0 0]
+    if :u [setpos [0 0] pd sety 8 pu]
+    if :l [setpos [0 0] pd setx -8 pu]
+    if :d [setpos [0 0] pd sety -8 pu]
+    if :r [setpos [0 0] pd setx 8 pu]
+    setpensize 4
+    if (and :u :l) [dot [-4 4]]
+    if (and :u :r) [dot [4 4]]
+    if (and :d :l) [dot [-4 -4]]
+    if (and :d :r) [dot [4 -4]]
     setpos [0 0]
     snaptile :slot
   ]
@@ -380,18 +410,24 @@ to setup.tiles
   newmap 40 77
   setbg :c.bg
   clean
-  ; Dead space and the nest share one picture; only their numbers differ,
-  ; which is what makes nest.open? a comparison instead of a lookup.
-  ask 7 [
-    pu setpos [0 0] setpensize 16 setpc :c.hedge dot [0 0]
-    snaptile :sl.hedge
-    snaptile :sl.nest
-  ]
   repeat 16 [
     make "m (repcount - 1)
-    make.tile (:sl.path + :m) :m 0
-    make.tile (:sl.speck + :m) :m 1
-    make.tile (:sl.bloss + :m) :m 2
+    make.hedge (:sl.hedge + :m) :m
+  ]
+  ; The nest is the one solid cell: it is hedge to look at, but a number bugs
+  ; may cross, which is what makes nest.open? a comparison instead of a
+  ; lookup.  The three path tiles are the background and what sits on it.
+  ask 7 [
+    pu setpos [0 0]
+    setpensize 16 setpc :c.hedge dot [0 0]
+    snaptile :sl.nest
+    setpc :c.bg dot [0 0]
+    snaptile :sl.path
+    setpensize 2 setpc :c.speck dot [0 0]
+    snaptile :sl.speck
+    setpensize 16 setpc :c.bg dot [0 0]
+    setpensize 6 setpc :c.trail dot [0 0]
+    snaptile :sl.bloss
   ]
   ask 7 [pu setpensize 8]
   clean
@@ -399,11 +435,12 @@ to setup.tiles
 end
 
 ; -------------------------------------------------------------------------
-; Building the board.  One pass lays the encoded rows down as scratch codes,
-; a second turns each walkable cell into the variant its neighbours ask for.
-; Walkability survives the conversion -- every walkable value is above
-; :sl.nest before and after -- so the second pass may read cells it has
-; already rewritten, and no copy of the board is needed.
+; Building the board.  One pass lays the encoded rows down -- every cell but
+; a hedge one arrives at its final slot there -- and a second turns each
+; hedge cell into the variant its neighbours ask for.  Hedge-ness survives
+; that conversion, every hedge variant being below :sl.nest before and after,
+; so the second pass may read cells it has already rewritten, and no copy of
+; the board is needed.
 ;
 ; Both passes work in map coordinates and call the primitives directly: at
 ; 1,008 cells a wrapper call each would be the cost of the whole build.  This
@@ -412,6 +449,7 @@ end
 
 to build.map
   local "r local "c local "w local "k local "v local "m local "mc local "mr
+  make "tt.full 0
   repeat 36 [
     make "r repcount
     make "mr :r + :sl.keep
@@ -421,32 +459,34 @@ to build.map
       make "k (ascii (item :c :w)) - 65
       make "v :sl.nest
       if :k = 0 [make "v :sl.hedge]
-      if :k > 0 [if :k < 5 [make "v (:sc.walk + :k)]]
+      if :k = 1 [make "v :sl.path]
+      if :k = 4 [make "v :sl.path]
+      if :k = 2 [make "v :sl.speck make "tt.full (:tt.full + 1)]
+      if :k = 3 [make "v :sl.bloss make "tt.full (:tt.full + 1)]
       settile (:c + :sl.dc) :mr :v
     ]
   ]
-  make "tt.full 0
+  ; The margin around the board reads 0, which is below :sl.path and so
+  ; counts as hedge: the board's outer wall stays flush with its edge rather
+  ; than standing off a corridor that is not there.  The nest counts too --
+  ; it is hedge to look at, so a wall meeting it should join it.
   repeat 36 [
     make "r repcount
     make "mr :r + :sl.keep
     repeat 28 [
       make "mc (repcount + :sl.dc)
       make "v (tile :mc :mr)
-      if :v > :sc.walk [
+      if :v < :sl.nest [
         make "m 0
         make "k (tile :mc (:mr - 1))
-        if :k > :sl.nest [make "m 8]
+        if :k < :sl.path [make "m 8]
         make "k (tile (:mc - 1) :mr)
-        if :k > :sl.nest [make "m (:m + 4)]
+        if :k < :sl.path [make "m (:m + 4)]
         make "k (tile :mc (:mr + 1))
-        if :k > :sl.nest [make "m (:m + 2)]
+        if :k < :sl.path [make "m (:m + 2)]
         make "k (tile (:mc + 1) :mr)
-        if :k > :sl.nest [make "m (:m + 1)]
-        make "k :v - :sc.walk
-        make "v :sl.path + :m
-        if :k = 2 [make "v (:sl.speck + :m) make "tt.full (:tt.full + 1)]
-        if :k = 3 [make "v (:sl.bloss + :m) make "tt.full (:tt.full + 1)]
-        settile :mc :mr :v
+        if :k < :sl.path [make "m (:m + 1)]
+        settile :mc :mr (:sl.hedge + :m)
       ]
     ]
   ]
@@ -740,9 +780,9 @@ end
 ; is what keeps clearing the last corridors tense.
 ; -------------------------------------------------------------------------
 
-; A speck and a blossom sit 16 and 32 slots above the bare corridor of the
-; same shape, so painting one is a subtraction: the cell keeps its variant
-; and loses only its contents.
+; A speck and a blossom are the bare corridor with something on it, so
+; painting one is a `settile` back to :sl.path: the cell loses its contents
+; and nothing else.
 to paint.tile
   local "c local "r local "k
   make "c (item 1 :a.col)
@@ -752,14 +792,13 @@ to paint.tile
   make "tt.left :tt.left - 1
   make "tt.painted :tt.painted + 1
   make "tt.idle 0
+  set.tile :c :r :sl.path
   ifelse not (:k < :sl.bloss) [
-    set.tile :c :r (:k - 32)
     add.score 50
     make "tt.pause 3
     erase.blossom :c :r (item 1 :a.dir)
     eat.blossom
   ] [
-    set.tile :c :r (:k - 16)
     add.score 10
     make "tt.pause 1
     paint.sound
