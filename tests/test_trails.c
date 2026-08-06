@@ -1072,6 +1072,52 @@ static void test_respawn_switches_to_the_global_release_counters(void)
     TEST_ASSERT_EQUAL_INT(0, (int)num(":tt.painted"));
 }
 
+// A lost life always resumes play.  Otherwise a latched game pause leaves
+// every bug frozen after respawn, including the nest bugs that should bob.
+static void test_respawn_unpauses_the_bug_simulation(void)
+{
+    run("make \"tt.frame 0 make \"tt.paused \"true make \"tt.lives 3 handle.death");
+    truth(":tt.paused", "false");
+
+    TEST_ASSERT_EQUAL_INT(2, actor("state", 4));
+    TEST_ASSERT_EQUAL_INT(0, actor("off", 4));
+    run("repeat 4 [play.frame]");
+    TEST_ASSERT_TRUE_MESSAGE(actor("col", 2) != 14 || actor("off", 2) != 0,
+                             "the path bug did not resume moving");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(16, actor("off", 4),
+                                  "the waiting bug did not resume bobbing");
+}
+
+// place.actors has to hand back genuinely fresh state lists.  Written as bare
+// literals they belonged to the procedure's own body, so the frame loop's
+// .setitems scribbled on them permanently and a respawn rebound the same
+// scribbled lists: the bugs stood on the right tiles carrying the previous
+// life's states, part-tile offsets and pending reversals, and any left dizzy
+// or eyes-only simply froze.
+static void test_place_actors_resets_every_state_list(void)
+{
+    put_actor(2, 9, 9, D_DOWN, 7, 4);
+    put_actor(3, 11, 5, D_LEFT, 3, 5);
+    put_actor(4, 17, 18, D_RIGHT, 9, 6);
+    run(".setitem 4 :a.next 2 .setitem 2 :a.rev 1");
+
+    run("place.actors");
+
+    const int dir[5] = {2, 2, 1, 1, 1};
+    const int state[5] = {0, 1, 3, 2, 2};
+    for (int i = 1; i <= 5; i++) {
+        TEST_ASSERT_EQUAL_INT_MESSAGE(dir[i - 1], actor("dir", i), "stale a.dir");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(state[i - 1], actor("state", i), "stale a.state");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(0, actor("off", i), "stale a.off");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(0, actor("rev", i), "stale a.rev");
+    }
+    // Bug 1 is the only one given a turn up front, by choose.dir.
+    TEST_ASSERT_EQUAL_INT(0, actor("next", 1));
+    for (int i = 3; i <= 5; i++) {
+        TEST_ASSERT_EQUAL_INT_MESSAGE(0, actor("next", i), "stale a.next");
+    }
+}
+
 // A no-painting timer forces the preferred waiting bug out, whatever the
 // counters say.
 static void test_idle_timer_forces_one_bug_out(void)
@@ -1647,6 +1693,8 @@ int main(void)
 
     RUN_TEST(test_release_counters_free_waiting_bugs);
     RUN_TEST(test_respawn_switches_to_the_global_release_counters);
+    RUN_TEST(test_respawn_unpauses_the_bug_simulation);
+    RUN_TEST(test_place_actors_resets_every_state_list);
     RUN_TEST(test_idle_timer_forces_one_bug_out);
     RUN_TEST(test_leaving_bug_aligns_with_the_door_then_rises);
     RUN_TEST(test_wings_return_regrow_and_leave);

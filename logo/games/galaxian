@@ -145,12 +145,15 @@ to setup.level
   make "shriek.p 700
   ; Per-diver bookkeeping, indexed by (turtle - 1): idle == phase 0.
   ; Shared 3-element lists, mutated in place with .setitem (zero allocation
-  ; per dive, same argument as the liveness list).
-  make "diver.cell  [0 0 0]
-  make "diver.phase [0 0 0]
-  make "diver.timer [0 0 0]
+  ; per dive, same argument as the liveness list).  Built with `list`, never
+  ; as literals: a literal belongs to this procedure's body, so the .setitems
+  ; would scribble on it for good and the next level would start with the
+  ; previous one's divers still counted as airborne.
+  make "diver.cell  (list 0 0 0)
+  make "diver.phase (list 0 0 0)
+  make "diver.timer (list 0 0 0)
   ; Scratch target point for towards, mutated in place each frame (no alloc).
-  make "ppos [0 0]
+  make "ppos (list 0 0)
   ; HUD is repainted only when a value changes; seed impossible values.
   make "hud.score -1
   make "hud.lives -1

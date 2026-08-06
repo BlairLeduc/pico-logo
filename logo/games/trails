@@ -1,5 +1,7 @@
 ; Turtle Trails -- an original maze-chase game themed on the Logo turtle.
-; Load and play:  load "trails   trails
+; Load and play:
+;   load "trails
+;   trails
 ;
 ; See docs/turtle-trails-design.md.  The tile map is the only source of truth:
 ; movement, bug decisions, painting and the board on screen all read the same
@@ -1274,11 +1276,15 @@ end
 to place.actors
   make "a.col (list :tt.start.col 14 14 12 17)
   make "a.row (list :tt.start.row 15 18 18 18)
-  make "a.dir [2 2 1 1 1]
-  make "a.off [0 0 0 0 0]
-  make "a.next [0 0 0 0 0]
-  make "a.state [0 1 3 2 2]
-  make "a.rev [0 0 0 0 0]
+  ; These must be built with `list`, not written as literals: a literal is
+  ; part of this procedure's stored body, and the `.setitem`s in the frame
+  ; loop would mutate it permanently, so a respawn would rebind the same
+  ; already-scribbled-on list and the bugs would keep last life's state.
+  make "a.dir (list 2 2 1 1 1)
+  make "a.off (list 0 0 0 0 0)
+  make "a.next (list 0 0 0 0 0)
+  make "a.state (list 0 1 3 2 2)
+  make "a.rev (list 0 0 0 0 0)
   make "tt.pause 0
   make "tt.idle 0
   make "tt.mode 0
@@ -1320,6 +1326,7 @@ to respawn
   make "tt.release [0 0 7 17 32]
   make "tt.painted 0
   make "tt.dying "false
+  make "tt.paused "false
   make "tt.pause 0
   (rerandom 7)
   place.actors

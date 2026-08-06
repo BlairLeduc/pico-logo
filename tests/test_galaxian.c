@@ -277,6 +277,24 @@ void test_setup_level_runs(void)
     assert_true("32 = count :aliens");   // 4x8 flat liveness list
 }
 
+// The per-diver lists have to be genuinely new each level.  As literals they
+// were part of setup.level's own body, so the frame loop's .setitems marked
+// them for good and a level begun while a diver was airborne started with
+// that diver still counted as flying: all.divers.idle? stayed false and no
+// new dive could launch.
+void test_setup_level_gives_the_divers_fresh_state(void)
+{
+    run_string("make \"level 1 setup.level");
+    run_string(".setitem 1 :diver.phase 2 .setitem 1 :diver.timer 9 "
+               ".setitem 1 :diver.cell 7");
+
+    run_string("setup.level");
+    assert_true("0 = item 1 :diver.phase");
+    assert_true("0 = item 1 :diver.timer");
+    assert_true("0 = item 1 :diver.cell");
+    assert_true("all.divers.idle?");
+}
+
 void test_convoy_kill_scores_and_shrinks(void)
 {
     run_string("make \"level 1 setup.level make \"score 0");
@@ -515,6 +533,7 @@ int main(void)
     RUN_TEST(test_locate_alien_exact_and_tolerant);
     RUN_TEST(test_locate_alien_misses);
     RUN_TEST(test_setup_level_runs);
+    RUN_TEST(test_setup_level_gives_the_divers_fresh_state);
     RUN_TEST(test_convoy_kill_scores_and_shrinks);
     RUN_TEST(test_dive_detach_and_rejoin);
     RUN_TEST(test_flight_kill_scores_doubled);
