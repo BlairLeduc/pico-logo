@@ -559,7 +559,6 @@ end
 to steer.divers
   ; Once per frame: aim every active diver. The target point (the player) is
   ; the same for all divers, so build it once, mutated in place.
-  make "frame.count :frame.count + 1
   .setitem 1 :ppos ask 0 [xcor]
   .setitem 2 :ppos ask 0 [ycor]
   steer.diver 2
@@ -841,23 +840,53 @@ to draw.hud
   make "hud.level :level
 end
 
+; Logo never collects on its own, so a game that runs for a long session has to
+; reclaim as it goes. A frame with nothing to redraw allocates *nothing* here --
+; every list is mutated in place, and none of the frame arithmetic needs a cell
+; (measured: zero cells over 100 frames) -- but a HUD repaint costs about 14,
+; because `write.hud` builds three `sentence`s and does it twice, erasing the
+; old line before drawing the new. That follows every kill, so the cost is
+; proportional to how well the player is doing, and it is not returned until
+; something recycles. Once every 250 frames is ten seconds at 25 fps, far from
+; the every-frame the design rules out; Turtle Trails reclaims the same way. Called from inside the
+; unpaused block: a paused frame counts no frames and allocates nothing, and
+; while it sat outside, a pause landing on a multiple of 250 left the remainder
+; at zero and recycled on *every* paused frame -- an every-frame recycle, the
+; one thing the design forbids (found by review, 2026-08-06).
+to reclaim
+  if not ((remainder :frame.count 250) = 0) [stop]
+  recycle
+end
+
+; One frame, in a fixed order. This is a procedure rather than the body of the
+; loop below so that a test or a hardware script can call exactly what the game
+; runs and time it (tests/test_galaxian.c, logo/tests/p10games): a frame whose
+; body is inline in its loop cannot be measured, which is how two other games
+; reached hardware at a third of their designed rate unnoticed -- `sync` does
+; not wait when a frame overruns, it just presents late.
+to play.frame
+  poll.input
+  if not :paused [
+    make "frame.count :frame.count + 1
+    sway.if.due
+    steer.divers
+    maybe.launch.dive
+    maybe.diver.fire
+    check.shot
+    recycle.offscreen
+    recycle.divers
+    reclaim
+  ]
+  draw.hud
+  sync
+end
+
 to play.level
   setup.level
   (setrefresh "sync 25)
   make "over false
   until [:over] [
-    poll.input
-    if not :paused [
-      sway.if.due
-      steer.divers
-      maybe.launch.dive
-      maybe.diver.fire
-      check.shot
-      recycle.offscreen
-      recycle.divers
-    ]
-    draw.hud
-    sync
+    play.frame
     if :dying [handle.death]
     if :alive = 0 [make "over true]
   ]

@@ -578,10 +578,19 @@ end
 ; repeatable.
 ;
 ; The unit is a sixteenth of a pixel, so a tile is 128 units and half a tile
-; is 64.  Sub-pixel *integers* rather than fractional pixels: a float result
-; stored into an actor list is retained rather than recycled, which drains
-; the node pool in about a minute of play, and integers also make the
-; simulation bit-identical on every board.
+; is 64.  Sub-pixel *integers* rather than fractional pixels, for two reasons.
+; The frame arithmetic costs storage -- measured at ~5 cells a frame with
+; floats, which drains the node pool in about a minute of play unless
+; something recycles -- and integers cost about one, which is what `reclaim`
+; below is sized for.  They also make the simulation bit-identical on every
+; board.
+;
+; An earlier version of this comment blamed the float *type*: a computed float
+; stored into a list was said to be retained rather than recycled.  That is
+; wrong and was disproved by measurement (design section 15) -- 6,000 float
+; stores across twelve recycles left free `nodes` flat.  Floats cost more per
+; frame than integers here, but nothing about them is unreclaimable, and no
+; interpreter defect is implied.
 ; -------------------------------------------------------------------------
 
 to place.actor :i
@@ -1431,19 +1440,22 @@ to play.frame
     check.collisions
     update.drone
     dress.bugs
+    reclaim
   ]
   place.all
   draw.hud
-  reclaim
   sync
 end
 
-; Actors move by fractional pixels, so the frame arithmetic is floating point
-; and costs a few cells a frame however carefully it is written.  Logo never
+; A frame costs about one cell however carefully it is written -- the integer
+; offsets above brought it down from ~5, they did not reach zero.  Logo never
 ; collects on its own, so a level lasting several minutes has to reclaim as
 ; it goes.  Once every ten seconds is far from every frame -- the design
 ; forbids that -- and it keeps free storage flat instead of sliding towards
-; the `out of space` that ends the program.
+; the `out of space` that ends the program.  Called from inside the unpaused
+; block: while it sat outside, a pause landing on a multiple of 250 left the
+; remainder at zero and recycled every paused frame (found by review on the
+; sibling games, 2026-08-06).
 to reclaim
   if not ((remainder :tt.frame 250) = 0) [stop]
   recycle

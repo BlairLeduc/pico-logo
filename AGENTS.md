@@ -52,3 +52,4 @@ When the task concerns the codebase and `graphify-out/graph.json` exists, start 
 - Dirty `graphify-out/` files may be expected after hooks or incremental updates; they are not a reason to skip Graphify. Skip it only when the task is about stale/incorrect graph output or the user explicitly asks not to use it.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only; no API cost).
 - When the user types `/graphify`, use the installed Graphify skill or instructions before doing anything else.
+- **Nothing under `graphify-out/` is committed** — it is all generated. A fresh clone has no graph until you run `graphify update .` once (about five seconds, no API cost), which is also what regenerates `GRAPH_REPORT.md`.

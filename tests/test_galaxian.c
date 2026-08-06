@@ -13,7 +13,7 @@
 //     checked directly, since those are where the bugs would hide.
 //
 
-#include "test_scaffold.h"
+#include "test_mock_fs.h"
 #include "mock_device.h"
 #include "core/repl.h"
 #include <stdio.h>
@@ -24,15 +24,19 @@
 #error "GALAXIAN_SOURCE must be defined (path to logo/games/galaxian)"
 #endif
 
-// Load the whole game file, defining its procedures and running its top-level
+#ifndef P10GAMES_SOURCE
+#error "P10GAMES_SOURCE must be defined (path to logo/tests/p10games)"
+#endif
+
+// Load a whole Logo file, defining its procedures and running its top-level
 // colour/tuning `make`s. Procedure definitions (`to ... end`) are not handled
 // by the bare evaluator, so we buffer them and hand them to
 // proc_define_from_text the same way the `load` primitive does; other lines go
 // straight to run_string. Fails the test on any error.
-static void load_galaxian(void)
+static void load_file(const char *path)
 {
-    FILE *f = fopen(GALAXIAN_SOURCE, "rb");
-    TEST_ASSERT_NOT_NULL_MESSAGE(f, "cannot open " GALAXIAN_SOURCE);
+    FILE *f = fopen(path, "rb");
+    TEST_ASSERT_NOT_NULL_MESSAGE(f, path);
 
     char line[512];
     char proc[8192];
@@ -80,19 +84,27 @@ static void load_galaxian(void)
         Result r = run_string(line);
         TEST_ASSERT_MESSAGE(r.status == RESULT_NONE || r.status == RESULT_OK, line);
     }
+    TEST_ASSERT_FALSE_MESSAGE(in_def, "file ends inside a procedure definition");
     fclose(f);
 }
 
 void setUp(void)
 {
     // _and_hardware gives a controllable clock so when-demon registration and
-    // sound (called by kill.alien) have a backend.
+    // sound (called by kill.alien) have a backend; the mock filesystem is here
+    // for the timing script, which writes its report to a file as well as the
+    // screen (numbers on the PicoCalc's display cannot be copied off it).
     test_scaffold_setUp_with_device_and_hardware();
-    load_galaxian();
+    mock_fs_reset();
+    logo_storage_init(&mock_storage, &mock_storage_ops);
+    logo_io_init(&mock_io, mock_device_get_console(), &mock_storage, &mock_hardware);
+    primitives_set_io(&mock_io);
+    load_file(GALAXIAN_SOURCE);
 }
 
 void tearDown(void)
 {
+    logo_io_close_all(&mock_io);
     test_scaffold_tearDown();
 }
 
@@ -102,6 +114,14 @@ static void assert_num(const char *expr, float expected)
     Result r = eval_string(expr);
     TEST_ASSERT_EQUAL_MESSAGE(RESULT_OK, r.status, expr);
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(expected, r.value.as.number, expr);
+}
+
+// Evaluate a Logo expression and return its number.
+static float num(const char *expr)
+{
+    Result r = eval_string(expr);
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_OK, r.status, expr);
+    return r.value.as.number;
 }
 
 // Assert a Logo predicate evaluates to true.
@@ -338,6 +358,149 @@ void test_diver_breaks_away_near_bottom(void)
 }
 
 //==========================================================================
+// The frame: one callable procedure, and a level that can run for minutes
+//==========================================================================
+
+// Run frames one at a time with the clock advancing a frame's worth each, so
+// the collision demons really poll (DEMON_POLL_MS is 20) and the turtles really
+// glide. `repeat 100 [play.frame]` with a stopped clock would suppress every
+// poll after the first and measure the game with its collisions switched off.
+static void run_frames(int frames)
+{
+    for (int i = 0; i < frames; i++)
+    {
+        set_mock_ticks(mock_ticks_value + 40);
+        Result r = run_string("play.frame");
+        TEST_ASSERT_TRUE_MESSAGE(r.status == RESULT_NONE || r.status == RESULT_OK,
+                                 error_format(r));
+    }
+}
+
+// The same, with the score changed before each frame so draw.hud repaints --
+// the game's one allocating path, and the reason play.frame reclaims.
+static void run_scoring_frames(int frames)
+{
+    for (int i = 0; i < frames; i++)
+    {
+        run_string("make \"score :score + 10");
+        set_mock_ticks(mock_ticks_value + 40);
+        Result r = run_string("play.frame");
+        TEST_ASSERT_TRUE_MESSAGE(r.status == RESULT_NONE || r.status == RESULT_OK,
+                                 error_format(r));
+    }
+}
+
+// Put the game where play.frame can be called: level built, refresh manual so
+// the sync ending a frame presents and returns instead of pacing to 25 fps.
+static void start_level(void)
+{
+    run_string("make \"level 1 make \"score 0 make \"lives 3 setup.level");
+    run_string("setrefresh \"manual");
+}
+
+void test_play_frame_is_the_loop_body(void)
+{
+    start_level();
+    run_string("repeat 5 [play.frame]");
+    assert_num(":frame.count", 5);
+    // A paused frame still polls, draws the HUD and presents, but runs no
+    // simulation -- so the frame counter (and everything clocked off it) stops.
+    run_string("make \"paused true repeat 5 [play.frame]");
+    assert_num(":frame.count", 5);
+}
+
+// A frame with nothing to redraw allocates nothing: every actor list is
+// mutated in place, and unlike Turtle Trails -- whose fractional-pixel
+// arithmetic costs about five cells a frame -- neither of these games computes
+// anything per frame that needs a cons cell. That is the property keeping a
+// level alive, so it is worth a guard.
+void test_an_idle_frame_allocates_nothing(void)
+{
+    start_level();
+    run_frames(20);                         // settle: the first frames draw the HUD
+    run_string("recycle");
+    int before = (int)num("nodes");
+    run_frames(100);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(before, (int)num("nodes"),
+                                  "a frame with nothing to redraw now costs storage");
+}
+
+// Scoring does allocate. draw.hud builds `sentence [SCORE:] :s` for each of its
+// three fields and does it twice (erase the old line, draw the new), about 14
+// cells a repaint -- and a repaint follows every kill. Logo frees none of it on
+// its own, so a long session slides towards `out of space`; the reclaim timer
+// in play.frame is what holds free storage flat.
+void test_scoring_frames_are_reclaimed(void)
+{
+    start_level();
+    run_frames(20);
+    run_string("recycle");
+    int before = (int)num("nodes");
+
+    run_scoring_frames(100);
+    int spent = before - (int)num("nodes");
+    TEST_ASSERT_TRUE_MESSAGE(spent > 0,
+                             "the HUD repaint costs nothing now -- has draw.hud changed?");
+
+    // All of it is garbage rather than retention: recycle brings it back.
+    run_string("recycle");
+    TEST_ASSERT_INT_WITHIN_MESSAGE(20, before, (int)num("nodes"),
+                                   "scoring frames retained storage recycle cannot free");
+
+    // And the game reclaims on its own, without the test asking: over 600 more
+    // scoring frames free storage must stay within one 250-frame window of
+    // where it started, rather than sliding the whole way down.
+    int start = (int)num("nodes");
+    run_scoring_frames(600);
+    int now = (int)num("nodes");
+    TEST_ASSERT_TRUE_MESSAGE(now > 0, "the pool ran dry despite the reclaim timer");
+    TEST_ASSERT_TRUE_MESSAGE(start - now < (250 * spent / 100) + 200,
+                             "free storage slid: the reclaim timer is not keeping up");
+}
+
+// A paused frame must not recycle. The frame counter stops while paused, so a
+// pause landing on a multiple of 250 leaves `remainder :frame.count 250` at
+// zero for as long as the pause lasts -- and `reclaim` sat outside the paused
+// block, so it recycled on every one of those frames. Garbage left lying
+// around is the probe: a recycle would hand it back and free `nodes` would
+// jump.
+void test_a_paused_frame_never_recycles(void)
+{
+    start_level();
+    run_frames(20);
+    run_string("make \"frame.count 250 make \"paused true");
+    run_string("repeat 200 [make \"junk fput 1 [1 2 3]]");   // ~800 cells of garbage
+
+    int before = (int)num("nodes");
+    run_frames(5);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(before, (int)num("nodes"),
+                                  "a paused frame recycled -- reclaim is outside the pause");
+}
+
+// The hardware timing script must run end to end on the mock, so a script that
+// fails half way through cannot waste a board session (the p9m0 convention).
+void test_p10games_script_runs(void)
+{
+    load_file(P10GAMES_SOURCE);
+    mock_device_clear_output();
+    Result r = run_string("p10games");
+    TEST_ASSERT_TRUE_MESSAGE(r.status == RESULT_NONE || r.status == RESULT_OK,
+                             error_format(r));
+    const char *screen = mock_device_get_output();
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "frame mean"), screen);
+    // The report names the game it measured: the file appends, so a run has to
+    // be tellable from the one before it.
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Galaxian"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "nodes at end"), screen);
+
+    // And the same report reached the file, which is the copy that leaves the
+    // board -- a screenful of numbers on the PicoCalc cannot be typed out.
+    MockFile *report = mock_fs_get_file("p10games.txt", false);
+    TEST_ASSERT_NOT_NULL_MESSAGE(report, "p10games.txt was not written");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(report->data, "frame mean"), report->data);
+}
+
+//==========================================================================
 
 int main(void)
 {
@@ -358,5 +521,10 @@ int main(void)
     RUN_TEST(test_find_flank_walks_inward);
     RUN_TEST(test_flank_dive_launches_a_diver);
     RUN_TEST(test_diver_breaks_away_near_bottom);
+    RUN_TEST(test_play_frame_is_the_loop_body);
+    RUN_TEST(test_an_idle_frame_allocates_nothing);
+    RUN_TEST(test_scoring_frames_are_reclaimed);
+    RUN_TEST(test_a_paused_frame_never_recycles);
+    RUN_TEST(test_p10games_script_runs);
     return UNITY_END();
 }

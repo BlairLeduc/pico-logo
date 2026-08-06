@@ -796,21 +796,37 @@ open. `test_calm_tiles_do_not_strand_bugs` flood-fills the maze under the
 restriction and asserts every path tile stays reachable.
 
 **The simulation counts sixteenths of a pixel, not fractional pixels.** §6.1
-specified fractional pixel offsets. A float result stored into an actor list
-is *retained* rather than recycled — measured at ~5 cells a frame, which
-drains the node pool in about a minute of play and ends the program with
-`out of space`. `a.off` therefore runs 0..128 in sixteenths of a pixel and
-every speed is a whole number of those units, which makes the hot path
-integer, costs about one cell a frame, and makes the simulation
-bit-identical on every board. The design's px/s figures survive as the unit
-conversion: 64 px/s is 41 units a frame.
+specified fractional pixel offsets. The fractional-pixel frame cost ~5 cells a
+frame, which drains the node pool in about a minute of play and ends the
+program with `out of space`; the soak test died after ~2,000 frames. `a.off`
+therefore runs 0..128 in sixteenths of a pixel and every speed is a whole
+number of those units, which makes the hot path integer, costs about one cell
+a frame, and makes the simulation bit-identical on every board. The design's
+px/s figures survive as the unit conversion: 64 px/s is 41 units a frame.
+
+> **Correction (2026-07-28).** This section, and the game's own comment above
+> `place.actor`, used to attribute that cost to the float *type*: a computed
+> float stored into a list with `.setitem` was said to be **retained** rather
+> than recycled, while an integer was not. That is **disproved**. Twelve passes
+> of `repeat 500 [.setitem 1 :L ((repcount * 0.37) + :k)]`, each followed by
+> `recycle`, left free `nodes` flat (31,217 → 31,196) — no unbounded leak from
+> float stores at all — and in smaller probes the integer/float asymmetry
+> reversed between runs, so the original measurement was reading how far the
+> bug AI got in each variant rather than the value type. What survives is the
+> *observation*: a frame of this arithmetic costs storage, floats cost several
+> times what integers do, and nothing frees either without a `recycle`. The
+> mechanism is ordinary per-frame garbage, not an interpreter defect — which
+> is why it is not in [`bugs.md`](bugs.md). Do not repeat the retention
+> explanation.
 
 **The frame loop reclaims on a timer.** §11 said to recycle at level setup
 and between lives. Even at one cell a frame that is 25 cells a second, so
 `play.frame` calls `reclaim`, which recycles once every 250 frames — ten
 seconds, far from the every-frame the design rules out.
 `test_the_frame_loop_reclaims_what_it_spends` pins both the cost and the
-recovery.
+recovery. Galaxian and Space Invaders adopted the same timer on 2026-08-06,
+for a different reason: *their* frame bodies allocate nothing at all, and the
+whole cost is a HUD repaint (~14 cells, after every kill).
 
 **A frenzied Dart is allowed to outrun the turtle**, which is the point of
 frenzy; ordinary bugs never are. `test_speeds_are_sane_at_25_fps` enforces

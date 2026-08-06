@@ -20,6 +20,7 @@
 #include "test_scaffold.h"
 #include "core/repl.h"
 #include "core/error.h"
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -30,6 +31,12 @@
 #ifndef CHECKRUN_SOURCE
 #error "CHECKRUN_SOURCE must be defined"
 #endif
+#ifndef GALAXIAN_SOURCE
+#error "GALAXIAN_SOURCE must be defined"
+#endif
+#ifndef INVADERS_SOURCE
+#error "INVADERS_SOURCE must be defined"
+#endif
 
 // Relative bounds (scenario time / calibration-loop time), set at ~3x the
 // baseline ratios recorded in the design doc.
@@ -39,6 +46,8 @@
 #define BOUND_TRAILS_FRAME_X_CAL  5.5e5    // M2 baseline x181k
 #define BOUND_TRAILS_BOARD_X_CAL  3.0e6    // P9 M3 baseline x~0.9M (was x~16M)
 #define BOUND_CHECKRUN_FRAME_X_CAL 1.8e6   // M2 baseline x587k
+#define BOUND_GALAXIAN_FRAME_X_CAL 2.0e5   // baseline x66k (2026-08-06)
+#define BOUND_INVADERS_FRAME_X_CAL 1.3e5   // baseline x41k (2026-08-06)
 
 void setUp(void)
 {
@@ -48,6 +57,26 @@ void setUp(void)
 void tearDown(void)
 {
     test_scaffold_tearDown();
+}
+
+// Every BENCH/SHAPE line goes to a file as well as the terminal: these are the
+// numbers the design docs keep, and a metric you can only read off a screen is
+// a metric you cannot paste anywhere. BENCH_REPORT is set by CMake to a path
+// in the build directory; each run truncates it (see main).
+static void bench_line(const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    vprintf(fmt, ap);
+    va_end(ap);
+
+    FILE *f = fopen(BENCH_REPORT, "a");
+    if (!f)
+        return;
+    va_start(ap, fmt);
+    vfprintf(f, fmt, ap);
+    va_end(ap);
+    fclose(f);
 }
 
 static double now_ms(void)
@@ -98,7 +127,7 @@ void test_bench_repeat_loop(void)
     double per_iter_ns = ms * 1e6 / iters;
     double ratio = per_iter_ns / cal;
 
-    printf("BENCH repeat.loop      %8.1f ns/iter   x%.0f cal (cal %.2f ns)\n",
+    bench_line("BENCH repeat.loop      %8.1f ns/iter   x%.0f cal (cal %.2f ns)\n",
            per_iter_ns, ratio, cal);
     TEST_ASSERT_TRUE_MESSAGE(ratio < BOUND_REPEAT_ITER_X_CAL,
                              "repeat-loop iteration regressed vs calibration");
@@ -146,9 +175,9 @@ void test_bench_proc_call_workspace_scaling(void)
     double t128 = time_proc_call_ns(128);
     double scan_ratio = t128 / t1;
 
-    printf("BENCH proc.call.1      %8.1f ns/call   x%.0f cal\n", t1, t1 / cal);
-    printf("BENCH proc.call.64     %8.1f ns/call\n", t64);
-    printf("BENCH proc.call.128    %8.1f ns/call   x%.2f of 1-proc\n",
+    bench_line("BENCH proc.call.1      %8.1f ns/call   x%.0f cal\n", t1, t1 / cal);
+    bench_line("BENCH proc.call.64     %8.1f ns/call\n", t64);
+    bench_line("BENCH proc.call.128    %8.1f ns/call   x%.2f of 1-proc\n",
            t128, scan_ratio);
 
     TEST_ASSERT_TRUE_MESSAGE(t1 / cal < BOUND_PROC1_ITER_X_CAL,
@@ -206,6 +235,22 @@ static void load_game(const char *path)
     fclose(f);
 }
 
+// Cells of list storage a frame consumes. Logo frees nothing on its own, so
+// this is what the games' `reclaim` timer has to keep up with -- the reason a
+// long level used to end in `out of space`.
+static double frame_storage_cells(int frames)
+{
+    run_string("recycle");
+    Result before = eval_string("nodes");
+    TEST_ASSERT_EQUAL(RESULT_OK, before.status);
+    char code[64];
+    snprintf(code, sizeof(code), "repeat %d [play.frame]", frames);
+    time_code_ms(code);          // asserts the frames ran without error
+    Result after = eval_string("nodes");
+    TEST_ASSERT_EQUAL(RESULT_OK, after.status);
+    return (double)(before.value.as.number - after.value.as.number) / frames;
+}
+
 // Time `frames` play.frames after `setup` and report ms per frame.
 static double time_game_frames_ms(const char *setup, int frames)
 {
@@ -227,7 +272,7 @@ void test_bench_trails_play_frame(void)
         "setup.palette setup.shapes setup.turtles setup.tiles setup.sound "
         "init.game setup.level setrefresh \"manual", 30);
 
-    printf("BENCH trails.frame     %8.3f ms/frame  x%.1fk cal\n",
+    bench_line("BENCH trails.frame     %8.3f ms/frame  x%.1fk cal\n",
            ms, ms * 1e6 / cal / 1e3);
     TEST_ASSERT_TRUE_MESSAGE(ms * 1e6 / cal < BOUND_TRAILS_FRAME_X_CAL,
                              "Turtle Trails play.frame regressed vs calibration");
@@ -237,10 +282,43 @@ void test_bench_trails_play_frame(void)
     // stampmap.  It is not a frame cost, but it is the largest single stall
     // the game has, so it belongs in the record beside the frame.
     double board = time_code_ms("setup.level");
-    printf("BENCH trails.board     %8.3f ms/build x%.1fM cal\n",
+    bench_line("BENCH trails.board     %8.3f ms/build x%.1fM cal\n",
            board, board * 1e6 / cal / 1e6);
     TEST_ASSERT_TRUE_MESSAGE(board * 1e6 / cal < BOUND_TRAILS_BOARD_X_CAL,
                              "Turtle Trails level build regressed vs calibration");
+}
+
+// The two older shipped games, measured the same way.  Neither had ever been
+// timed anywhere until their frames were factored into `play.frame`; both are
+// far lighter than Turtle Trails (no five-actor simulation, no per-frame tile
+// arithmetic), so these lines are as much a floor for the interpreter as a
+// budget for the games.
+void test_bench_galaxian_play_frame(void)
+{
+    double cal = calibrate_ns();
+    load_game(GALAXIAN_SOURCE);
+    double ms = time_game_frames_ms(
+        "init.game make \"score 0 make \"lives 3 make \"level 1 setup.level "
+        "setrefresh \"manual", 100);
+
+    bench_line("BENCH galaxian.frame   %8.3f ms/frame  x%.1fk cal  %.2f cells/frame\n",
+           ms, ms * 1e6 / cal / 1e3, frame_storage_cells(200));
+    TEST_ASSERT_TRUE_MESSAGE(ms * 1e6 / cal < BOUND_GALAXIAN_FRAME_X_CAL,
+                             "Galaxian play.frame regressed vs calibration");
+}
+
+void test_bench_invaders_play_frame(void)
+{
+    double cal = calibrate_ns();
+    load_game(INVADERS_SOURCE);
+    double ms = time_game_frames_ms(
+        "init.game make \"score 0 make \"lives 3 make \"level 1 setup.level "
+        "setrefresh \"manual", 100);
+
+    bench_line("BENCH invaders.frame   %8.3f ms/frame  x%.1fk cal  %.2f cells/frame\n",
+           ms, ms * 1e6 / cal / 1e3, frame_storage_cells(200));
+    TEST_ASSERT_TRUE_MESSAGE(ms * 1e6 / cal < BOUND_INVADERS_FRAME_X_CAL,
+                             "Space Invaders play.frame regressed vs calibration");
 }
 
 // P10 M5: the cost of an expression, by shape. The board profiler
@@ -268,7 +346,7 @@ void test_bench_expr_shapes(void)
         TEST_ASSERT_TRUE_MESSAGE(r.status == RESULT_NONE || r.status == RESULT_OK,
                                  shape[i]);
         double ns = time_code_ms(code) * 1e6 / iters;
-        printf("SHAPE %-22s %7.1f ns\n", shape[i], ns);
+        bench_line("SHAPE %-22s %7.1f ns\n", shape[i], ns);
         if (i == 0) bare = ns;
         if (strcmp(shape[i], "[make \"x (:x + 1)]") == 0) paren = ns;
         if (strcmp(shape[i], "[make \"x :x + 1]") == 0) bare_make = ns;
@@ -279,7 +357,7 @@ void test_bench_expr_shapes(void)
     // ever reaches parity the game's de-parenthesising is pointless; if it
     // grows past a third, something in the grouping path regressed.
     double cost = (paren - bare_make) / (bare_make - bare);
-    printf("SHAPE redundant-paren overhead %.1f %%\n", cost * 100.0);
+    bench_line("SHAPE redundant-paren overhead %.1f %%\n", cost * 100.0);
     TEST_ASSERT_TRUE_MESSAGE(cost < 0.5, "grouping-paren overhead regressed");
 }
 
@@ -302,11 +380,19 @@ void test_p10m0_script_runs(void)
 
 int main(void)
 {
+    // One file per run, not an ever-growing log: the last run is the record.
+    FILE *f = fopen(BENCH_REPORT, "w");
+    if (f)
+        fclose(f);
+    printf("BENCH report: %s\n", BENCH_REPORT);
+
     UNITY_BEGIN();
     RUN_TEST(test_bench_repeat_loop);
     RUN_TEST(test_bench_proc_call_workspace_scaling);
     RUN_TEST(test_bench_expr_shapes);
     RUN_TEST(test_bench_trails_play_frame);
+    RUN_TEST(test_bench_galaxian_play_frame);
+    RUN_TEST(test_bench_invaders_play_frame);
     RUN_TEST(test_p10m0_script_runs);
     return UNITY_END();
 }

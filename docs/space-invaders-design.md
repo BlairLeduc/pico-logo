@@ -278,29 +278,60 @@ boundary instead of sleeping a fixed amount keeps the rate steady regardless of
 per-frame work, the way a game locked to the TV's vertical blank did.
 
 ```logo
+to play.frame
+  poll.input
+  if not :paused [
+    make "frame.count :frame.count + 1
+    march.if.due
+    check.shot
+    check.bombs
+    maybe.drop.bomb
+    maybe.launch.ufo
+    recycle.offscreen
+    recycle.ufo
+    if ask 2 [shown?] [ufo.warble]
+  ]
+  draw.hud
+  reclaim
+  sync
+end
+
 to play.level
   setup.level
-  (setrefresh "sync 30)
+  (setrefresh "sync 25)
   make "over false
   until [:over] [
-    poll.input
-    if not :paused [
-      march.if.due
-      check.shot
-      check.bombs
-      maybe.drop.bomb
-      maybe.launch.ufo
-      recycle.offscreen
-      recycle.ufo
-    ]
-    draw.hud
-    sync
+    play.frame
     if :dying [handle.death]
     if :alive = 0 [make "over true]
   ]
   setrefresh "auto
 end
 ```
+
+The frame is a **procedure**, not the body of the loop, so that a test or a
+timing script can call exactly what the game runs (2026-08-06). That is not
+cosmetic: `sync` does not wait when a frame overruns, it presents late, so a
+game that misses its budget degrades quietly — which is how Turtle Trails and
+Checkpoint Run reached hardware at ~9 and ~4 fps against a designed 25 without
+anyone noticing (P9 M0). This frame is now on the record in
+`tests/test_bench_throughput.c` — **0.15 ms on the host**, the lightest of the
+four games, against Turtle Trails' 0.63 — and `logo/tests/p10games` takes the
+same measurement on a board.
+
+Taken on a Pimoroni Pico Plus 2 W, 300 frames, manual refresh, 2026-08-06:
+**11.55 ms mean, 3 ms min, 23 ms max, against the 40 ms budget** — 3.5× of
+headroom, and the first time this game had been timed anywhere since it
+shipped. Galaxian measured 11.22 ms in the same run despite being 1.6× heavier
+on the host, so the board frame is dominated by the `sync` present (a cost
+proportional to dirty area, which the host does not pay) rather than by
+interpretation; the 3 ms floor is a frame with almost nothing dirty and the
+23 ms ceiling one carrying a sliced formation redraw. With `LOGO_HOT` absent
+on the `pico2` preset, a Pico 2 would scale to roughly 20 ms mean — inside
+budget, unmeasured.
+
+Storage held up on hardware too: free `nodes` was **22,689 before and after**
+300 frames, exactly the zero the mock predicted.
 
 Bombs, shot and UFO advance on their own via `setspeed` between iterations
 (the evaluator's motion tick), and the `when` demons fire whenever a
@@ -462,13 +493,31 @@ this program:
   moves — identical either way).
 - **`recycle` is still worth calling, just for a much smaller residual
   source.** Procedure bodies are re-lexed from source text on every call
-  in this interpreter, so a bracketed list *literal* (e.g. `march.note`'s
-  four-entry frequency table, or a HUD label like `[SCORE:]`) allocates
-  fresh cons cells every time that line executes, even though it looks
-  like a constant. That's a few cells per march step and a few per HUD
-  change — orders of magnitude less than the eliminated `setpos` traffic, but
-  still non-zero over a long session, so `march.step` still calls
-  `recycle` once per march.
+  in this interpreter, so a bracketed list *literal* (e.g. a HUD label
+  like `[SCORE:]`) allocates fresh cons cells every time that line
+  executes, even though it looks like a constant. That's orders of
+  magnitude less than the eliminated `setpos` traffic, but still non-zero
+  over a long session.
+
+  This paragraph used to say that `march.step` called `recycle` once per
+  march. It did not, and there is no `march.step` in the shipped file:
+  the game reached hardware with **no `recycle` anywhere in it**, and the
+  claim went unchecked because nothing measured it. Both halves are now
+  measured on the mock (`test_invaders.c`, 2026-08-06):
+
+  | Frame | Cells |
+  |---|---:|
+  | nothing changed | **0** per 100 frames |
+  | score changed | ~14 per frame |
+
+  So the frame body itself is free — every list is mutated in place and
+  the arithmetic needs no cell — and the whole cost is `draw.hud`, which
+  builds three `sentence`s and does it twice (erase the old line, draw the
+  new) whenever a value changes. That follows every kill, so the leak is
+  proportional to how well the player is doing. `play.frame` now calls
+  `reclaim`, which recycles every 250 frames (ten seconds at 25 fps),
+  which is the shape Turtle Trails arrived at independently. Played through on
+  a board, the recycle produces no visible hitch (2026-08-06).
 
 ### `ask` as an operation
 

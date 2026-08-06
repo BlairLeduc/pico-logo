@@ -321,9 +321,10 @@ Same skeleton and `(setrefresh "sync 25)` pacing as Invaders — only the
 `if not :paused` body changes:
 
 ```logo
-until [:over] [
+to play.frame
   poll.input
   if not :paused [
+    make "frame.count :frame.count + 1
     sway.if.due          ; sliced convoy redraw (was march.if.due)
     steer.divers         ; NEW: per-frame clamped turning, <=3 turtles
     maybe.launch.dive    ; NEW: flank / flagship dive selection
@@ -333,11 +334,60 @@ until [:over] [
     recycle.divers       ; exit at bottom -> rejoin convoy
   ]
   draw.hud
+  reclaim                ; recycle every 250 frames -- see below
   sync
+end
+
+until [:over] [
+  play.frame
   if :dying [handle.death]
   if :alive = 0 [make "over true]
 ]
 ```
+
+The frame is a **procedure**, not the body of the loop, so a test or a timing
+script can call exactly what the game runs (2026-08-06). `sync` does not wait
+when a frame overruns — it presents late — so a game that misses its budget
+degrades quietly, which is how two other games reached hardware at a third of
+their designed rate unnoticed (P9 M0). Measured on the host by
+`tests/test_bench_throughput.c`: **0.23 ms a frame**, against Turtle Trails'
+0.63 and Space Invaders' 0.15.
+
+**And on hardware, for the first time in the game's life** — 300 frames on a
+Pimoroni Pico Plus 2 W (`logo/tests/p10games`, manual refresh, graphics mode,
+2026-08-06):
+
+| | Galaxian | Space Invaders | budget |
+|---|---:|---:|---:|
+| frame mean | **11.22 ms** | 11.55 ms | 40 ms |
+| frame min | 3 ms | 3 ms | |
+| frame max | 23 ms | 23 ms | |
+
+So §10's claim that "the 40 ms budget that held for Invaders holds here with
+margin" is true, with **3.6× of headroom** — the opposite of what P9 M0 found
+when it timed the two newer games. Note that the board figures do *not* keep
+the host's ordering: Galaxian's frame is 1.6× Invaders' on the host and
+0.97× on the board. A frame's cost there is dominated by something the host
+does not pay and neither game's Logo controls — the `sync` present, which is
+proportional to the dirty area rather than to the interpretation. The 3 ms
+minimum and 23 ms maximum are the same two numbers in both games, which is
+that cost with and without a sliced formation redraw in the frame. Splitting
+the frame into simulation / drawing / present (as `p9trails` does for Turtle
+Trails) would confirm it; nothing yet has.
+
+These are Plus-2-W numbers with P10's `LOGO_HOT` enabled, which the `pico2`
+preset does not get. Scaling by P10 M5's 1.72×, a Pico 2 would sit near
+**19 ms mean and 39 ms worst** — inside the budget, but only just, and
+unmeasured.
+
+**Storage.** A frame that redraws nothing allocates **nothing** — every list
+is mutated in place and none of the frame arithmetic needs a cell (measured:
+zero cells over 100 frames). The whole cost is `draw.hud`: three `sentence`s
+built twice, about **14 cells a repaint**, and a repaint follows every kill.
+Logo frees none of it on its own, so `play.frame` calls `reclaim`, which
+recycles every 250 frames — ten seconds at 25 fps, never every frame.
+`test_galaxian.c` pins both halves, and the game was played through on a board with
+no hitch visible at the recycle boundary (2026-08-06).
 
 Worst frame = sway slice (6 stamps) + 3 steered divers + 2 gliding
 shots + HUD deltas. Every line item is at or below its Invaders
