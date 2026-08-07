@@ -189,6 +189,11 @@ static void put_actor(int i, int col, int row, int dir, float off, int state)
     runf(".setitem %d :a.state %d", i, state);
     runf(".setitem %d :a.next 0", i);
     runf(".setitem %d :a.rev 0", i);
+    // The frame snapshots the tile before movement, so an actor just placed
+    // has not moved: the swap half of the collision test must see no exchange
+    // until this actor is stepped.
+    runf(".setitem %d :a.was %d", i, col);
+    runf(".setitem %d :a.was %d", i + 5, row);
 }
 
 static int actor(const char *field, int i)
@@ -1286,10 +1291,10 @@ static void test_dizzy_chain_scores_200_400_800_1600(void)
     truth(":tt.dying", "false");
 }
 
-// Two actors passing in opposite directions swap tiles without ever sharing
-// one. There is deliberately no swept test, so this stays a rule rather than
-// an accident.
-static void test_opposite_direction_tile_swap_does_not_collide(void)
+// A head-on meeting: two actors closing from adjacent tiles exchange tiles in
+// one frame and so never share one. The swap half of the test catches them,
+// or a bug walking straight into the turtle would pass through it.
+static void test_opposite_direction_tile_swap_collides(void)
 {
     run("make \"tt.dying \"false");
     put_actor(1, 10, 30, D_RIGHT, 0, 0);
@@ -1301,8 +1306,58 @@ static void test_opposite_direction_tile_swap_does_not_collide(void)
     run("move.actor 1 128 move.actor 2 128");
     TEST_ASSERT_EQUAL_INT(11, actor("col", 1));
     TEST_ASSERT_EQUAL_INT(10, actor("col", 2));
+    truth("same.tile? 2", "false");   // or the swap half is not what is being tested
+    run("check.collisions");
+    truth(":tt.dying", "true");
+}
+
+// The same crossing while the bug is dizzy eats it, on the same rule.
+static void test_dizzy_bug_is_eaten_on_a_tile_swap(void)
+{
+    run("make \"tt.dying \"false make \"tt.score 0 make \"tt.chain 0");
+    put_actor(1, 10, 30, D_RIGHT, 0, 0);
+    put_actor(2, 11, 30, D_LEFT, 0, 4);
+    put_actor(3, 5, 5, D_UP, 0, 1);
+    put_actor(4, 5, 6, D_UP, 0, 1);
+    put_actor(5, 5, 8, D_UP, 0, 1);
+
+    run("move.actor 1 128 move.actor 2 128");
+    run("check.collisions");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(5, actor("state", 2), "a dizzy bug crossed the turtle and was not eaten");
+    TEST_ASSERT_EQUAL_INT(200, (int)num(":tt.score"));
+    truth(":tt.dying", "false");
+}
+
+// Only an exchange counts. A bug following the turtle moves onto the tile the
+// turtle just left, which is not a crossing and must not kill.
+static void test_a_bug_following_the_turtle_does_not_collide(void)
+{
+    run("make \"tt.dying \"false");
+    put_actor(1, 10, 30, D_RIGHT, 0, 0);
+    put_actor(2, 9, 30, D_RIGHT, 0, 1);
+    put_actor(3, 5, 5, D_UP, 0, 1);
+    put_actor(4, 5, 6, D_UP, 0, 1);
+    put_actor(5, 5, 8, D_UP, 0, 1);
+
+    run("move.actor 1 128 move.actor 2 128");
+    TEST_ASSERT_EQUAL_INT(11, actor("col", 1));
+    TEST_ASSERT_EQUAL_INT(10, actor("col", 2));
     run("check.collisions");
     truth(":tt.dying", "false");
+}
+
+// The snapshot is taken before anything moves, so a frame that has only just
+// placed its actors cannot report a crossing.
+static void test_snap_tiles_records_the_pre_movement_tiles(void)
+{
+    put_actor(1, 10, 30, D_RIGHT, 0, 0);
+    put_actor(2, 11, 30, D_LEFT, 0, 1);
+    run("snap.tiles");
+    truth("swapped.tile? 2", "false");   // nothing has moved yet
+    run("move.actor 1 128 move.actor 2 128");
+    truth("swapped.tile? 2", "true");
+    run("snap.tiles");
+    truth("swapped.tile? 2", "false");   // the snapshot follows the actors
 }
 
 static void test_extra_life_is_awarded_once(void)
@@ -1897,7 +1952,10 @@ int main(void)
 
     RUN_TEST(test_collision_outcomes_by_bug_state);
     RUN_TEST(test_dizzy_chain_scores_200_400_800_1600);
-    RUN_TEST(test_opposite_direction_tile_swap_does_not_collide);
+    RUN_TEST(test_opposite_direction_tile_swap_collides);
+    RUN_TEST(test_dizzy_bug_is_eaten_on_a_tile_swap);
+    RUN_TEST(test_a_bug_following_the_turtle_does_not_collide);
+    RUN_TEST(test_snap_tiles_records_the_pre_movement_tiles);
     RUN_TEST(test_extra_life_is_awarded_once);
     RUN_TEST(test_high_score_tracks_the_session_best);
 

@@ -317,7 +317,7 @@ to setup.palette
   setpalette :c.swoop [236 130 220]
   setpalette :c.echo [86 214 226]
   setpalette :c.moss [240 152 62]
-  setpalette :c.hedge [70 179 110]
+  setpalette :c.hedge [1 130 49]
   setpalette :c.dizzy [70 96 232]
   setpalette :c.text [236 240 246]
   make "tt.bug.pc (list 0 :c.dart :c.swoop :c.echo :c.moss)
@@ -1209,14 +1209,43 @@ end
 ; -------------------------------------------------------------------------
 ; Collisions.  Checked after all five actors have moved, so eating a blossom
 ; changes bug state before the test.  Two actors collide when their centres
-; occupy the same logical tile: there is deliberately no swept test, so the
-; rare opposite-direction tile swap passes through, as a rule that is
-; deterministic and testable rather than an accident.
+; occupy the same logical tile, or when they exchanged tiles during the frame.
+;
+; The swap half is what catches a head-on meeting.  Two actors closing on each
+; other from adjacent tiles step past one another in the same frame: the bug
+; ends on the tile the turtle started from and the turtle on the bug's, so
+; their centres never share a tile and the same-tile test alone let them pass
+; straight through.  Comparing against the tiles held at the start of the
+; frame keeps that deterministic -- still one comparison per bug, no swept
+; geometry -- and a tile exchange can only happen by crossing, including
+; across a tunnel, where the two edge columns are adjacent.
 ; -------------------------------------------------------------------------
+
+; The tile every actor stood on before this frame's movement: columns in
+; slots 1..5 and rows in 6..10.  One list of ten rather than two of five
+; because the game and its profiler already sit within a few slots of the
+; 128-wide global table.
+;
+; Written in place, and only ever with a value read straight out of another
+; list.  Both matter: rebuilding the list each frame would cost storage, and
+; storing a *computed* number -- a packed col*64+row key was the first attempt
+; -- retains about 2.5 cells a frame that `recycle` cannot give back.  The
+; index may be computed, since that number is only read.
+to snap.tiles
+  repeat 5 [.setitem repcount :a.was (item repcount :a.col)]
+  repeat 5 [.setitem (repcount + 5) :a.was (item repcount :a.row)]
+end
 
 to same.tile? :i
   if not ((item :i :a.col) = (item 1 :a.col)) [output "false]
   output (item :i :a.row) = (item 1 :a.row)
+end
+
+to swapped.tile? :i
+  if not ((item :i :a.col) = (item 1 :a.was)) [output "false]
+  if not ((item :i :a.row) = (item 6 :a.was)) [output "false]
+  if not ((item 1 :a.col) = (item :i :a.was)) [output "false]
+  output ((item 1 :a.row) = (item (:i + 5) :a.was))
 end
 
 to eat.bug :i
@@ -1234,7 +1263,7 @@ to check.collisions
   repeat 4 [
     make "i (repcount + 1)
     make "st (item :i :a.state)
-    if (same.tile? :i) [
+    if (or (same.tile? :i) (swapped.tile? :i)) [
       if :st = 4 [eat.bug :i]
       if :st = 1 [make "tt.dying "true]
     ]
@@ -1349,6 +1378,7 @@ end
 to place.actors
   make "a.col (list :tt.start.col 14 14 12 17)
   make "a.row (list :tt.start.row 15 18 18 18)
+  make "a.was (list 0 0 0 0 0 0 0 0 0 0)
   ; These must be built with `list`, not written as literals: a literal is
   ; part of this procedure's stored body, and the `.setitem`s in the frame
   ; loop would mutate it permanently, so a respawn would rebind the same
@@ -1367,6 +1397,7 @@ to place.actors
   make "tt.chain 0
   make "tt.drone -1
   make "tt.warp "false
+  snap.tiles
   .setitem 2 :a.next (choose.dir 2)
   ask 0 [pu setanim :sh.walk (:sh.walk + 2) 110 setpc :c.trail]
   dress.bugs
@@ -1512,7 +1543,7 @@ to level.flash
     setpalette :c.hedge [236 240 246]
     refresh
     wait 150
-    setpalette :c.hedge [70 179 110]
+    setpalette :c.hedge [1 130 49]
     refresh
     wait 150
   ]
@@ -1544,6 +1575,7 @@ to play.frame
   poll.input
   if not :tt.paused [
     make "tt.frame :tt.frame + 1
+    snap.tiles
     step.mode.clock
     step.nest.clock
     step.player

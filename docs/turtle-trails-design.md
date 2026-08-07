@@ -417,9 +417,28 @@ On reaching its home spot it regrows its body colour and exits immediately.
 ## 8. Collisions and scoring
 
 Collision is checked after all five actors move for the frame. The turtle
-collides with a bug when both actor centres occupy the same logical tile.
-There is deliberately no swept test: the rare opposite-direction tile-swap
-pass-through remains possible, and is kept as a deterministic, testable rule.
+collides with a bug when both actor centres occupy the same logical tile, or
+when the two exchanged tiles during the frame.
+
+The exchange half is what catches a head-on meeting. Two actors closing from
+adjacent tiles step past one another within one frame — the bug ends on the
+tile the turtle started from and the turtle on the bug's — so their centres
+never share a tile, and a same-tile test alone let a bug walking straight at
+the turtle pass through it. `snap.tiles` records every actor's tile at the top
+of the frame, before anything moves, and the test compares against that. It
+stays deterministic and needs no swept geometry: a tile exchange can only
+happen by crossing, including through a tunnel, where the two edge columns are
+adjacent. An actor that merely follows another onto the tile it just left has
+not exchanged, and does not collide.
+
+The snapshot is one ten-slot list, `a.was`, columns in 1..5 and rows in 6..10:
+a single global, because the game and its profiler already sit within a few
+slots of the 128-wide global table. It is written in place with values read
+straight out of `a.col`/`a.row`. Storing a *computed* number into a list
+instead — a packed `col * 64 + row` key was the first attempt — retains about
+2.5 cells a frame that `recycle` cannot give back, which section 15's
+measurement harness catches immediately. A computed *index* is free, since
+that number is only read.
 
 For each collision:
 
@@ -557,6 +576,7 @@ One frame has a fixed order:
 to play.frame
   poll.input
   if not :paused [
+    snap.tiles
     step.mode.clock
     step.nest.clock
     step.player
@@ -573,6 +593,8 @@ end
 
 Ordering rules:
 
+- the tile snapshot is taken before anything moves, so the collision test can
+  see the frame's tile exchanges;
 - eating a blossom changes bug state before that frame's collision test;
 - all bugs move before any collision is resolved;
 - a death or level-clear request is handled after `sync`, outside the hot
@@ -659,7 +681,7 @@ Intentional for v1:
 - two tunnels, a paint-the-trail objective, and polygon bonuses as visible
   points of divergence from the source of inspiration;
 - 25 fps simulation with fractional movement, not 60 Hz emulation;
-- same-tile collision including the tile-swap pass-through;
+- tile-granular collision: same tile, or a tile exchange within one frame;
 - session-local high score.
 
 ## 13. Tests
@@ -702,7 +724,8 @@ Required tests:
 7. **Collisions and scoring**
    - lethal, dizzy, and harmless wings/nest cases;
    - 200/400/800/1,600 chain;
-   - same-tile swap remains non-colliding;
+   - a head-on tile exchange collides, and a bug following the turtle onto
+     the tile it just left does not;
    - one 10,000-point extra life.
 8. **State-machine soak**
    - repeated deaths do not erase painted tiles;
