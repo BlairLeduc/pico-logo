@@ -364,6 +364,14 @@ tile centre. Hunting bugs may not choose upward in the calm rows; dizzy bugs
 ignore the restriction. Nest, door, and tunnel access are enforced by actor
 state, not treated as ordinary paths.
 
+Choosing a tile early assumes something is always chosen. A state change that
+clears the pending exit — an eaten bug keeps the heading it died on — leaves a
+bug committed to a heading that may face a hedge one tile later, and a bug
+that only chooses on arrival never arrives again. So a bug that finds its
+committed heading blocked chooses again from the tile it is standing on,
+under the same rules. Nothing else reaches that path: the map has no dead
+ends, so an exit chosen a tile early is always open.
+
 Hunt targets, per personality:
 
 | Bug | Hunt target |
@@ -477,6 +485,14 @@ dizzy timer, not extra frames. At death, slots 10–15 show the turtle drawing
 its head and legs into its shell; movement and collisions are suspended
 until the sequence completes.
 
+A costume is only put on a turtle that is not already wearing it. `setanim`
+starts the animation clock over, so arming the body frames every frame — the
+frame loop dresses every bug once a frame, for the dizzy colour — holds the
+walk cycle on whichever frame the turtle stands on. The body frames are also
+the only thing that ever takes the wings off a bug returning from the nest,
+so a regrown bug that is never re-dressed keeps the wings for the rest of the
+life. Only the pen colour is written every frame.
+
 To draw the bottom bonus history, setup walks the last seven levels,
 redefines slot 7, stamps each shape onto the canvas, then restores the
 current shape. The bonus turtle subsequently wears that slot.
@@ -501,6 +517,17 @@ The attract screen shows the title `TURTLE TRAILS`, the four bugs with their
 names and colours, the score table, and `PRESS SPACE`. `READY!`, death, the
 level-clear hedge flash, and `GAME OVER` all occur on the graphics screen
 without discarding the painted map.
+
+`READY` is written across the corridor below the nest and taken away again a
+second later. It sits over corridor the turtle has driven a trail through, so
+neither obvious erase will do: writing the word again in the background
+colour — the trick the HUD uses over dead space — punches it out of the
+trail, and repainting the cells from the map takes the trail with them.
+Instead the fifteen cells it covers are photographed into spare tile-bank
+slots (21–35) with `snaptile` before the word goes on, and stamped back
+afterwards, so what was under it survives exactly. `stamptile` draws the slot
+the *map* holds, so a cell is put back by lending it the snapped slot for one
+stamp and handing the map its own slot back.
 
 ### 9.3 PSG sound plan
 

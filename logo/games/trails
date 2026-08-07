@@ -65,6 +65,8 @@ make "sh.shell 10      ; 10..15 shell-withdraw death sequence
 ;   18        open path
 ;   19        the same path carrying a speck
 ;   20        the same path carrying a power blossom
+;   21..35    scratch: ready.screen photographs the cells READY covers into
+;             these and stamps them back, so they hold nothing between lives
 ;
 ; So a cell is walkable above :sl.nest, a bug may enter it from :sl.nest,
 ; paintable from :sl.speck, and a blossom from :sl.bloss; painting one is a
@@ -309,13 +311,13 @@ end
 
 to setup.palette
   setpalette :c.bg [0 0 0]
-  setpalette :c.speck [104 108 120]
+  setpalette :c.speck [71 209 74]
   setpalette :c.trail [248 214 84]
   setpalette :c.dart [232 74 62]
   setpalette :c.swoop [236 130 220]
   setpalette :c.echo [86 214 226]
   setpalette :c.moss [240 152 62]
-  setpalette :c.hedge [42 106 66]
+  setpalette :c.hedge [70 179 110]
   setpalette :c.dizzy [70 96 232]
   setpalette :c.text [236 240 246]
   make "tt.bug.pc (list 0 :c.dart :c.swoop :c.echo :c.moss)
@@ -984,13 +986,18 @@ to dizzy.dir :i :c :r :d
   output :back
 end
 
-to choose.dir :i
-  local "c local "r local "d
-  make "d (item :i :a.dir)
-  make "c (next.col (item :i :a.col) (item :i :a.row) :d)
-  make "r (next.row (item :i :a.row) :d)
+; The exit a bug would take out of tile :c :r if it arrived there travelling
+; :d.  Normally that tile is the one ahead; a bug that has to turn where it
+; stands asks about its own.
+to choose.at :i :c :r :d
   if (item :i :a.state) = 4 [output (dizzy.dir :i :c :r :d)]
   output (best.dir :i :c :r :d (target.col :i) (target.row :i))
+end
+
+to choose.dir :i
+  local "d
+  make "d (item :i :a.dir)
+  output (choose.at :i (next.col (item :i :a.col) (item :i :a.row) :d) (next.row (item :i :a.row) :d) :d)
 end
 
 ; A bug reaching a tile centre commits the exit it chose a tile ago, then
@@ -1008,6 +1015,15 @@ to bug.arrive :i
   make "d (item :i :a.next)
   if :d > 0 [.setitem :i :a.dir :d]
   if :st = 5 [if (wings.home? :i) [stop]]
+  ; A committed exit is open by construction, but nothing is committed when
+  ; :a.next was cleared -- an eaten bug keeps the heading it was killed on --
+  ; and that heading may run into a hedge one tile later.  A bug facing a
+  ; hedge never reaches another centre, so it would never choose again: it
+  ; would sit there for the rest of the life, or fly the maze as wings
+  ; forever.  Choose from the tile it stands on instead.
+  if not (can.go? :i) [
+    .setitem :i :a.dir (choose.at :i (item :i :a.col) (item :i :a.row) (item :i :a.dir))
+  ]
   .setitem :i :a.next (choose.dir :i)
 end
 
@@ -1122,6 +1138,15 @@ end
 
 ; Bugs wear the common body frames in their own pen colour; dizzy bugs turn
 ; blue and flash white as their time runs out.
+;
+; A costume is only put on a turtle not already wearing it.  `setanim` starts
+; the animation clock over, so arming the body frames every frame -- this runs
+; once a frame for every bug -- held the walk cycle on whichever frame the
+; turtle stood on and no bug ever animated.  Worse for a bug coming back from
+; the nest: the frames are the only thing that ever puts the body back on
+; after the wings, so a regrown bug kept the wings for the rest of the life.
+; The colour is a plain write and has to change every few frames while dizzy,
+; so that is still set every time.
 to dress.bug :i
   local "st local "pc
   make "st (item :i :a.state)
@@ -1131,10 +1156,19 @@ to dress.bug :i
     if :tt.dizzy < 50 [if (remainder (intquotient :tt.dizzy 4) 2) = 1 [make "pc :c.text]]
   ]
   ifelse :st = 5 [
-    ask (:i - 1) [setrot "full setanim 0 0 0 setsh :sh.wings setpc :c.text]
+    make "pc :c.text
+    ask (:i - 1) [if not (shape = :sh.wings) [setrot "full setanim 0 0 0 setsh :sh.wings]]
   ] [
-    ask (:i - 1) [setrot "fixed setanim :sh.bug (:sh.bug + 1) 140 setpc :pc]
+    ask (:i - 1) [if not (body? shape) [setrot "fixed setsh :sh.bug setanim :sh.bug (:sh.bug + 1) 140]]
   ]
+  ask (:i - 1) [setpc :pc]
+end
+
+; True while a turtle wears one of the two body frames, either of which the
+; animation may have left it on.
+to body? :sh
+  if :sh < :sh.bug [output "false]
+  output :sh < (:sh.bug + 2)
 end
 
 to dress.bugs
@@ -1385,28 +1419,61 @@ end
 to attract.screen
   stopsound
   textscreen ct
-  setcursor [13 4] print [TURTLE TRAILS]
-  setcursor [7 7] print [PAINT EVERY PATH WITH YOUR PEN]
-  setcursor [9 9] print [DART    RELENTLESS]
-  setcursor [9 10] print [SWOOP   AMBUSHER]
-  setcursor [9 11] print [ECHO    FLANKER]
-  setcursor [9 12] print [MOSS    TIMID]
-  setcursor [7 14] print [A BLOSSOM MAKES THEM DIZZY]
-  setcursor [7 16] print [PATH 10   BLOSSOM 50   BUG 200+]
-  setcursor [8 18] print [ARROWS MOVE  P PAUSE  Q QUIT]
-  if :tt.high > 0 [setcursor [13 20] (print [TOP] :tt.high)]
-  setcursor [12 22] print [PRESS SPACE]
+  setcursor [13 4] print "|TURTLE TRAILS|
+  setcursor [5 7] print "|Paint every path with your pen|
+  setcursor [11 9] print "|Dart    Relentless|
+  setcursor [11 10] print "|Swoop   Ambusher|
+  setcursor [11 11] print "|Echo    Flanker|
+  setcursor [11 12] print "|Moss    Timid|
+  setcursor [5 14] print "|A blossom makes them dizzy|
+  setcursor [5 16] print "|Points 10   Blossom 50   Bug 200+|
+  setcursor [6 18] print "|ARROWS Move  P Pause  Q Quit|
+  if :tt.high > 0 [setcursor [15 20] (print "|Top| :tt.high)]
+  setcursor [14 22] print "|Press Space|
   wait.for.space
   fullscreen
 end
 
+; READY is written across the corridor below the nest for a moment and then
+; taken away, and neither obvious way of taking it away is right.  Writing it
+; a second time in the background colour -- the trick the HUD uses, over dead
+; space where nothing is drawn but the HUD -- punches the word out of the pen
+; trail crossing those cells.  Repainting the cells from the map takes the
+; trail with them.  So the cells are photographed into spare bank slots
+; first and stamped back afterwards: corridor, trail and all.
+;
+; The word is five 8x10 glyphs, laid from the left edge of column 11 and
+; centred on row 21, so it covers five cells across and three down from
+; column 11, row 20.  Those numbers and the first spare slot are landmarks in
+; nothing but this procedure, so they are spelled out in one place here
+; rather than spent on the eight global names the workspace keeps in reserve.
 to ready.screen
-  write.at -32 -20 [READY]
+  ready.cells "true
+  write.at ((tile.x 11) - 4) (tile.y 21) [READY]
   refresh
   wait 1200
-  ask 7 [setpc :c.bg]
-  write.at -32 -20 [READY]
-  ask 7 [setpc :c.text]
+  ready.cells "false
+end
+
+; Photograph the fifteen cells READY covers into bank slots 21..35, or put
+; them back.  `stamptile` draws the slot the map holds, so a cell is put back
+; by lending it the snapped slot for one stamp and handing the map its own
+; slot back afterwards.
+to ready.cells :save
+  local "k local "c local "r local "was
+  repeat 15 [
+    make "k (repcount - 1)
+    make "c 11 + (remainder :k 5)
+    make "r 20 + (intquotient :k 5)
+    ifelse :save [
+      ask 7 [pu setx (tile.x :c) sety (tile.y :r) snaptile (21 + :k)]
+    ] [
+      make "was (tile.at :c :r)
+      set.tile :c :r (21 + :k)
+      stamp.tile :c :r
+      set.tile :c :r :was
+    ]
+  ]
 end
 
 ; The shell-withdraw sequence: the turtle draws its head and legs in and the
@@ -1445,7 +1512,7 @@ to level.flash
     setpalette :c.hedge [236 240 246]
     refresh
     wait 150
-    setpalette :c.hedge [42 106 66]
+    setpalette :c.hedge [70 179 110]
     refresh
     wait 150
   ]
@@ -1461,7 +1528,7 @@ end
 
 to gameover.screen
   stopsound
-  write.at -44 -20 [GAME OVER]
+  write.at -36 -20 [GAME OVER]
   refresh
   wait 2400
 end

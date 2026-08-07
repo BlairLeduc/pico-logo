@@ -1178,6 +1178,71 @@ static void test_wings_return_regrow_and_leave(void)
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, actor("state", 3), "the regrown bug never resumed hunting");
 }
 
+// A bug is eaten wherever it happens to be, and eat.bug clears the exit it
+// had chosen, so the wings set off on the heading it died on. Nothing is
+// committed for the tile it arrives at next, and that heading may face a
+// hedge there -- at which point a bug that only chooses on arrival never
+// arrives again and flies the maze as wings for the rest of the life. So
+// every tile and legal heading has to reach the nest.
+static void test_wings_home_from_every_tile_and_heading(void)
+{
+    static int m[ROWS][COLS];
+    read_map(m);
+    put_actor(1, 2, 30, D_LEFT, 0, 0);
+
+    for (int r = 1; r <= ROWS; r++) {
+        for (int c = 1; c <= COLS; c++) {
+            if (!walkable(m[r - 1][c - 1])) continue;
+            for (int d = 1; d <= 4; d++) {
+                int nc, nr;
+                if (!step_tile(c, r, d, &nc, &nr)) continue;
+                if (!walkable(m[nr - 1][nc - 1])) continue;
+
+                put_actor(3, c, r, d, 0, 5);
+                run("recycle");
+                int guard = 0;
+                while (actor("state", 3) == 5 && guard++ < 40) run("repeat 40 [step.one.bug 3]");
+
+                char msg[80];
+                snprintf(msg, sizeof(msg), "wings from col %d row %d dir %d stopped at col %d row %d",
+                         c, r, d, actor("col", 3), actor("row", 3));
+                TEST_ASSERT_NOT_EQUAL_MESSAGE(5, actor("state", 3), msg);
+            }
+        }
+    }
+}
+
+// The body frames are what put a bug back in its own shape after it has been
+// wings -- nothing else ever sets one. They only arrive if the animation
+// actually runs, and setanim restarts the animation clock, so dressing a bug
+// that is already dressed holds the walk cycle on whatever frame it is on:
+// for a regrown bug, the wings, for the rest of the life.
+static void test_a_regrown_bug_puts_its_body_back_on(void)
+{
+    const int wings = (int)num(":sh.wings"), body = (int)num(":sh.bug");
+    uint32_t t = 100000;
+    set_mock_ticks(t);
+    run("dress.bugs");
+
+    put_actor(3, 14, 18, D_UP, 0, 5);
+    run("dress.bug 3");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(wings, mock_device_get_state()->turtles[2].shape,
+                                  "an eaten bug is not wearing the wings");
+
+    // Regrown, and then a second of frames at 25 fps, dressed every frame the
+    // way play.frame dresses them.
+    runf(".setitem 3 :a.state 1");
+    for (int k = 0; k < 25; k++) {
+        set_mock_ticks(t += 40);
+        run("dress.bugs");
+    }
+
+    int shape = mock_device_get_state()->turtles[2].shape;
+    char msg[80];
+    snprintf(msg, sizeof(msg), "the regrown bug is wearing shape %d", shape);
+    TEST_ASSERT_TRUE_MESSAGE(shape == body || shape == body + 1, msg);
+}
+
 // ---------------------------------------------------------------------------
 // 7. Collisions and scoring
 // ---------------------------------------------------------------------------
@@ -1382,6 +1447,99 @@ static void test_stamping_one_cell_repairs_exactly_that_cell(void)
             char msg[80];
             snprintf(msg, sizeof(msg), "pixel %d,%d", x, y);
             TEST_ASSERT_EQUAL_INT_MESSAGE(cell ? bg : ink,
+                                          (int)mock_device_get_canvas_point(x, y), msg);
+        }
+    }
+}
+
+// The cell of the k'th of the fifteen cells READY covers, 1-based board
+// coordinates, as ready.cells walks them.
+static void ready_cell(int k, int *col, int *row)
+{
+    *col = 11 + k % 5;
+    *row = 20 + k / 5;
+}
+
+// READY is written over the corridor below the nest, where the turtle has
+// been and left a trail. Neither obvious erase will do: writing the word
+// again in the background colour punches it out of the trail, and repainting
+// the cells from the map takes the trail with them. The cells are
+// photographed and stamped back instead, so what was under the word survives
+// it exactly -- and the mock does not rasterise text, so the round trip is
+// staged here by scribbling over the cells in the interval the glyphs would
+// have occupied.
+static void test_ready_puts_back_the_trail_it_covered(void)
+{
+    const int ink = 77;
+    mock_device_paint_canvas(0, 0, MOCK_SCREEN_WIDTH_PX, MOCK_SCREEN_HEIGHT_PX, (uint8_t)ink);
+    run("setup.tiles");        // every tile in the bank is now the staged ink
+    run("reset.board draw.board");
+
+    // Stand in for the pen trail, a different colour in every cell so a
+    // photograph put back in the wrong cell cannot pass.
+    for (int k = 0; k < 15; k++) {
+        int c, r;
+        ready_cell(k, &c, &r);
+        mock_device_paint_canvas(BOARD_X0 + (c - 1) * 8, BOARD_Y0 + (r - 1) * 8, 8, 8,
+                                 (uint8_t)(40 + k));
+    }
+    static int slot_before[15];
+    for (int k = 0; k < 15; k++) {
+        int c, r;
+        ready_cell(k, &c, &r);
+        slot_before[k] = (int)numf("tile.at %d %d", c, r);
+    }
+
+    run("ready.cells \"true");
+    // Whatever the glyphs would have put there.
+    mock_device_paint_canvas(BOARD_X0 + 10 * 8, BOARD_Y0 + 19 * 8, 5 * 8, 3 * 8, 99);
+    run("ready.cells \"false");
+
+    for (int k = 0; k < 15; k++) {
+        int c, r;
+        ready_cell(k, &c, &r);
+        char msg[80];
+        snprintf(msg, sizeof(msg), "col %d row %d", c, r);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(slot_before[k], (int)numf("tile.at %d %d", c, r),
+                                      "a cell was left holding its scratch slot");
+        for (int y = 0; y < 8; y++)
+            for (int x = 0; x < 8; x++)
+                TEST_ASSERT_EQUAL_INT_MESSAGE(
+                    40 + k,
+                    (int)mock_device_get_canvas_point(BOARD_X0 + (c - 1) * 8 + x,
+                                                      BOARD_Y0 + (r - 1) * 8 + y), msg);
+    }
+
+    // And the whole screen comes back through ready.screen untouched, with
+    // the word written once and never in the background colour.
+    static uint8_t before[MOCK_SCREEN_HEIGHT_PX][MOCK_SCREEN_WIDTH_PX];
+    for (int y = 0; y < MOCK_SCREEN_HEIGHT_PX; y++)
+        for (int x = 0; x < MOCK_SCREEN_WIDTH_PX; x++)
+            before[y][x] = mock_device_get_canvas_point(x, y);
+
+    int labels = mock_device_get_state()->label.count;
+    run("ready.screen");
+    const MockDeviceState *s = mock_device_get_state();
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, s->label.count - labels, "READY was written more than once");
+    TEST_ASSERT_EQUAL_STRING("READY", s->label.last_text);
+    TEST_ASSERT_EQUAL_INT_MESSAGE((int)num(":c.text"), s->label.last_colour,
+                                  "READY was erased with the background colour");
+
+    // The glyph box, in screen pixels, from where the game actually wrote it:
+    // 8 wide and 10 tall a glyph, laid rightwards from the write position and
+    // centred on it vertically. The cells photographed have to cover it.
+    int gx0 = (int)(s->label.last_x + MOCK_SCREEN_WIDTH_PX / 2);
+    int gy0 = (int)(MOCK_SCREEN_HEIGHT_PX / 2 - s->label.last_y) - 5;
+    TEST_ASSERT_EQUAL_INT_MESSAGE(BOARD_X0 + 10 * 8, gx0, "READY does not start on column 11");
+    TEST_ASSERT_TRUE_MESSAGE(gy0 >= BOARD_Y0 + 19 * 8 && gy0 + 9 < BOARD_Y0 + 22 * 8,
+                             "READY does not fall inside rows 20 to 22");
+
+    for (int y = 0; y < MOCK_SCREEN_HEIGHT_PX; y++) {
+        for (int x = 0; x < MOCK_SCREEN_WIDTH_PX; x++) {
+            char msg[80];
+            snprintf(msg, sizeof(msg), "pixel %d,%d", x, y);
+            TEST_ASSERT_EQUAL_INT_MESSAGE(before[y][x],
                                           (int)mock_device_get_canvas_point(x, y), msg);
         }
     }
@@ -1734,6 +1892,8 @@ int main(void)
     RUN_TEST(test_idle_timer_forces_one_bug_out);
     RUN_TEST(test_leaving_bug_aligns_with_the_door_then_rises);
     RUN_TEST(test_wings_return_regrow_and_leave);
+    RUN_TEST(test_wings_home_from_every_tile_and_heading);
+    RUN_TEST(test_a_regrown_bug_puts_its_body_back_on);
 
     RUN_TEST(test_collision_outcomes_by_bug_state);
     RUN_TEST(test_dizzy_chain_scores_200_400_800_1600);
@@ -1745,6 +1905,7 @@ int main(void)
     RUN_TEST(test_the_corridor_is_wider_than_its_cell);
     RUN_TEST(test_the_bake_puts_the_board_where_the_pen_did);
     RUN_TEST(test_stamping_one_cell_repairs_exactly_that_cell);
+    RUN_TEST(test_ready_puts_back_the_trail_it_covered);
     RUN_TEST(test_hud_stays_out_of_the_maze);
     RUN_TEST(test_frames_run_and_the_turtle_paints);
     RUN_TEST(test_respawn_keeps_painted_tiles);
