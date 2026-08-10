@@ -636,11 +636,14 @@ static void turtle_update_raster(void)
     cur->raster_flipped = flip_now;
 }
 
-// Describe the selected turtle's rendered raster as a compositor sprite:
-// shape 0 and colour costumes centre on the turtle position (so a snapsh
-// capture worn as a costume round-trips exactly); mono bitmaps keep the
-// shape system's historical anchor (centred horizontally, bottom row at
-// the turtle). Caller must have run turtle_update_raster().
+// Describe the selected turtle's rendered raster as a compositor sprite.
+// Every costume centres on the turtle position: shape 0, colour costumes
+// (so a snapsh capture worn as a costume round-trips exactly) and mono
+// bitmaps alike. Mono bitmaps once anchored their bottom row at the turtle
+// instead, but only while unrotated -- `setrot "full` grows the raster past
+// 16x16 and so silently centred the same shape 7 pixels lower, which put a
+// rotating costume and a fixed one at the same position out of line.
+// Caller must have run turtle_update_raster().
 static void turtle_sprite_geometry(ScreenSprite *sprite)
 {
     sprite->visible = true;
@@ -650,17 +653,8 @@ static void turtle_sprite_geometry(ScreenSprite *sprite)
     sprite->w = cur->raster_w;
     sprite->h = cur->raster_h;
 
-    if (cur->shape == 0 || cur->raster_indexed ||
-        cur->raster_w != BITMAP_RASTER_SIZE || cur->raster_h != BITMAP_RASTER_SIZE)
-    {
-        sprite->x = (int16_t)((int)(cur->x + 0.5f) - cur->raster_w / 2);
-        sprite->y = (int16_t)((int)(cur->y + 0.5f) - cur->raster_h / 2);
-    }
-    else
-    {
-        sprite->x = (int16_t)((int)cur->x - BITMAP_RASTER_SIZE / 2);
-        sprite->y = (int16_t)((int)cur->y - (BITMAP_RASTER_SIZE - 1));
-    }
+    sprite->x = (int16_t)((int)(cur->x + 0.5f) - cur->raster_w / 2);
+    sprite->y = (int16_t)((int)(cur->y + 0.5f) - cur->raster_h / 2);
 }
 
 // Show the turtle sprite at the current position (or hide it when the

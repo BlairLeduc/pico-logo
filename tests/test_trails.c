@@ -1629,6 +1629,48 @@ static void test_hud_stays_out_of_the_maze(void)
                                       "the lives row must be capped, not run off the board");
 }
 
+// Both HUD rows take the old picture away by painting the background over it
+// and then stamping the new one, so a band has to cover the whole footprint of
+// every stamp it is responsible for -- the full row, not just the count drawn
+// this time, or losing a life leaves the one that went behind.
+static void assert_band_covers_its_row(const char *fill, const char *drawer, int want)
+{
+    run(fill);
+    mock_device_clear_graphics();
+    run(drawer);
+
+    const MockDeviceState *s = mock_device_get_state();
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, s->graphics.line_count, "one erase band per redraw");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(want, s->graphics.stamp_count, drawer);
+
+    // A pen wider than one pixel stamps a filled disc at every point, so the
+    // band reaches half its width past each end and either side of the line.
+    const MockLine *band = &s->graphics.lines[0];
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(band->y1, band->y2, "the band must be level");
+    float half = band->pen_size / 2.0f;
+    float x1 = band->x1 < band->x2 ? band->x1 : band->x2;
+    float x2 = band->x1 < band->x2 ? band->x2 : band->x1;
+
+    for (int i = 0; i < s->graphics.stamp_count; i++) {
+        const MockStamp *st = &s->graphics.stamps[i];
+        char msg[128];
+        snprintf(msg, sizeof(msg), "%s: the stamp at %g,%g is not covered by the band",
+                 drawer, (double)st->x, (double)st->y);
+        // A shape is 16 pixels square, centred on the turtle.
+        TEST_ASSERT_TRUE_MESSAGE(st->x - 8.0f >= x1 - half && st->x + 8.0f <= x2 + half, msg);
+        TEST_ASSERT_TRUE_MESSAGE(st->y - 8.0f >= band->y1 - half &&
+                                 st->y + 8.0f <= band->y1 + half, msg);
+    }
+}
+
+static void test_the_hud_bands_erase_the_whole_stamp(void)
+{
+    assert_band_covers_its_row("make \"tt.lives 5", "draw.lives", 5);
+    assert_band_covers_its_row(
+        "make \"tt.history [] repeat 7 [make \"tt.history lput (item 1 :tt.shapes) :tt.history]",
+        "draw.history", 7);
+}
+
 // A whole frame must run without error, and repeatedly: the parse hazards in
 // this file are runtime errors that reading the source does not catch.
 static void test_frames_run_and_the_turtle_paints(void)
@@ -1965,6 +2007,7 @@ int main(void)
     RUN_TEST(test_stamping_one_cell_repairs_exactly_that_cell);
     RUN_TEST(test_ready_puts_back_the_trail_it_covered);
     RUN_TEST(test_hud_stays_out_of_the_maze);
+    RUN_TEST(test_the_hud_bands_erase_the_whole_stamp);
     RUN_TEST(test_frames_run_and_the_turtle_paints);
     RUN_TEST(test_respawn_keeps_painted_tiles);
     RUN_TEST(test_repeated_level_builds_keep_free_nodes_stable);

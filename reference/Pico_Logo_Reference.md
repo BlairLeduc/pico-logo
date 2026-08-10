@@ -890,6 +890,8 @@ setsh _shapenumber_
 
 Stands for `set sh`ape. Sets the shape of each turtle you are talking to. _shapenumber_ 0 is the line-drawn turtle; slots 1 to 15 hold shapes you define - either a bitmap from [`putsh`](#putsh) or a full-colour picture captured with [`snapsh`](#snapsh); `setsh` wears whichever the slot holds. Shapes 1 through 15 are blank when Logo starts.
 
+Whatever the slot holds, the shape is centred on the turtle's position, and [`setrot`](#setrot) does not change that. Two turtles at the same position line up whichever rotation styles they wear.
+
 **Example**:
 
 ```logo
