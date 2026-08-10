@@ -605,15 +605,22 @@ end
 ; The band must span the row's *capacity*, not the count drawn this time, or
 ; the fifth life stays on screen after it is lost.  Turtle 7 draws at pen 8
 ; everywhere else, so both put it back.
+;
+; A stamp is twice the width of a cell, so a row that starts on a cell centre
+; hangs four pixels into its neighbour: the board's side walls are columns 1
+; and 28, and a life or a bonus laid over one bites a hole in the wall the
+; band then paints black.  Each row therefore starts a stamp's half-width
+; clear of its own wall -- lives from -96 rightward, history from 96 leftward,
+; which is the same inset on both sides.
 to draw.lives
   local "n
   ask 7 [
     pu setpensize 16 setpc :c.bg
-    sety -136 setx -100 pd setx -36 pu
+    sety -136 setx -96 pd setx -32 pu
     setpensize 8 setsh :sh.walk setpc :c.trail seth 0
     make "n :tt.lives
     if :n > 5 [make "n 5]
-    repeat :n [setx (-100 + (16 * (repcount - 1))) stamp]
+    repeat :n [setx (-96 + (16 * (repcount - 1))) stamp]
   ]
 end
 
@@ -621,14 +628,14 @@ to draw.history
   local "n
   ask 7 [
     pu setpensize 16 setpc :c.bg
-    sety -136 setx 4 pd setx 100 pu
+    sety -136 setx 0 pd setx 96 pu
     setpensize 8
     make "n (count :tt.history)
     if :n > 7 [make "n 7]
     repeat :n [
       putsh :sh.bonus (item repcount :tt.history)
       setsh :sh.bonus setpc :c.trail seth 0
-      setx (100 - (16 * (repcount - 1))) stamp
+      setx (96 - (16 * (repcount - 1))) stamp
     ]
     putsh :sh.bonus (item :tt.bonus.shape :tt.shapes)
     setsh :sh.walk

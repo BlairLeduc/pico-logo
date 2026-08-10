@@ -1663,12 +1663,52 @@ static void assert_band_covers_its_row(const char *fill, const char *drawer, int
     }
 }
 
+#define FILL_LIVES "make \"tt.lives 5"
+#define FILL_HISTORY \
+    "make \"tt.history [] repeat 7 [make \"tt.history lput (item 1 :tt.shapes) :tt.history]"
+
 static void test_the_hud_bands_erase_the_whole_stamp(void)
 {
-    assert_band_covers_its_row("make \"tt.lives 5", "draw.lives", 5);
-    assert_band_covers_its_row(
-        "make \"tt.history [] repeat 7 [make \"tt.history lput (item 1 :tt.shapes) :tt.history]",
-        "draw.history", 7);
+    assert_band_covers_its_row(FILL_LIVES, "draw.lives", 5);
+    assert_band_covers_its_row(FILL_HISTORY, "draw.history", 7);
+}
+
+// A stamp is 16 pixels square against an 8-pixel cell, so a HUD row laid out
+// from the outermost column hangs half a cell into the board's side wall and
+// the band that erases it takes a bite out of that wall. Both rows must keep
+// clear of columns 1 and 28 along their whole width.
+static void assert_row_clears_the_walls(const char *fill, const char *drawer)
+{
+    // The walls are one cell wide, centred on the outermost column centres.
+    float inside_left = num("tile.x 1") + 4.0f;
+    float inside_right = num("tile.x 28") - 4.0f;
+
+    run(fill);
+    mock_device_clear_graphics();
+    run(drawer);
+
+    const MockDeviceState *s = mock_device_get_state();
+    const MockLine *band = &s->graphics.lines[0];
+    float half = band->pen_size / 2.0f;
+    char msg[128];
+
+    snprintf(msg, sizeof(msg), "%s: the erase band runs into a wall", drawer);
+    TEST_ASSERT_TRUE_MESSAGE(band->x1 - half >= inside_left, msg);
+    TEST_ASSERT_TRUE_MESSAGE(band->x2 + half <= inside_right, msg);
+
+    for (int i = 0; i < s->graphics.stamp_count; i++) {
+        const MockStamp *st = &s->graphics.stamps[i];
+        snprintf(msg, sizeof(msg), "%s: the stamp at %g,%g sits in a wall",
+                 drawer, (double)st->x, (double)st->y);
+        TEST_ASSERT_TRUE_MESSAGE(st->x - 8.0f >= inside_left, msg);
+        TEST_ASSERT_TRUE_MESSAGE(st->x + 8.0f <= inside_right, msg);
+    }
+}
+
+static void test_the_hud_rows_clear_the_board_walls(void)
+{
+    assert_row_clears_the_walls(FILL_LIVES, "draw.lives");
+    assert_row_clears_the_walls(FILL_HISTORY, "draw.history");
 }
 
 // A whole frame must run without error, and repeatedly: the parse hazards in
@@ -2008,6 +2048,7 @@ int main(void)
     RUN_TEST(test_ready_puts_back_the_trail_it_covered);
     RUN_TEST(test_hud_stays_out_of_the_maze);
     RUN_TEST(test_the_hud_bands_erase_the_whole_stamp);
+    RUN_TEST(test_the_hud_rows_clear_the_board_walls);
     RUN_TEST(test_frames_run_and_the_turtle_paints);
     RUN_TEST(test_respawn_keeps_painted_tiles);
     RUN_TEST(test_repeated_level_builds_keep_free_nodes_stable);
