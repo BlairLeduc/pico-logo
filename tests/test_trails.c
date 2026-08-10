@@ -1960,10 +1960,10 @@ static void test_p10prof_profiler_runs(void)
     run("make \"p10prof.n 5");
     run("p10prof");
 
-    // The other 128-wide table, and the one that actually broke first: the
-    // game alone holds ~94 globals, and the profiler's marks and sums are
-    // named globals too. Counted after the run, because most of them are
-    // only created when the frame first executes.
+    // The other table, and the one that actually broke first: the game alone
+    // holds ~94 globals, and the profiler's marks and sums are named globals
+    // too. Counted after the run, because most of them are only created when
+    // the frame first executes.
     int globals = var_global_count(true);
     snprintf(msg, sizeof(msg), "trails+p10prof hold %d of %d globals",
              globals, MAX_GLOBAL_VARIABLES);

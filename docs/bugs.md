@@ -22,27 +22,7 @@ edge case)
 
 | ID | Bug | Area | Severity | Found | Status |
 |---|---|---|---|---|---|
-| [B14](#b14--trailsp10prof-hold-125-of-128-globals) | Trails + p10prof hold 125 of 128 globals | games | medium | 2026-08-10 | open |
 | [B6](#b6--penreverse-ignores-pen-size-always-1-px) | `penreverse` ignores pen size (always 1 px) | graphics | low | 2026-07-18 | won't fix (documented) |
-
-### B14 — Trails + p10prof hold 125 of 128 globals
-
-`test_p10prof_profiler_runs` requires the game and the frame profiler together
-to leave eight free slots in the 128-wide global table, and they now hold 125.
-Commit `061e878` added six text-colour globals for the attract screen's legend
-(`tc.text`, `tc.bg`, `tc.dart`, `tc.swoop`, `tc.echo`, `tc.moss`, lines 50-55),
-taking the count from 119 to 125. Reproduced in a clean worktree: `HEAD~1`
-passes, `HEAD` fails, with no local changes in either.
-
-The margin is not cosmetic — it is what lets the profiler, or `p9trails`, or
-any workspace that is not empty load on top of the game on a board. The six are
-text-palette indices for `settc` and are *not* duplicates of the `c.*` graphics
-palette slots, so they cannot simply be folded into those; the legend's four
-bug colours are the obvious candidates to derive or inline instead.
-
-- **Status:** open, and not a regression from the sprite-anchor or HUD work of
-  2026-08-10 — that work adds no globals and the failure predates it.
-- **Found:** 2026-08-10, running the suite after the HUD fixes.
 
 ### B6 — `penreverse` ignores pen size (always 1 px)
 
@@ -60,6 +40,7 @@ pixels twice and speckle the line. Thick reverse drawing is therefore left at
 
 | Date | Bug | Area | Fix | Ref |
 |---|---|---|---|---|
+| 2026-08-10 | Trails + p10prof hold 125 of 128 globals (B14) | interpreter/games | `test_p10prof_profiler_runs` requires the game and the frame profiler together to leave eight free slots, and they held 125 of 128. Fixed from both ends. Trails' six text-colour globals from commit `061e878` (`tc.text`, `tc.bg`, `tc.dart`, `tc.swoop`, `tc.echo`, `tc.moss`) are gone: they are `settc` slot numbers used in exactly two procedures, `setup.palette` and `attract.screen`, and are now literals there, which also drops the four `(list :tc.x :tc.bg)` allocations the legend made per call. That puts the count back at 119, where it was before the attract screen was written. `MAX_GLOBAL_VARIABLES` also went 128 → 192, because 119 was already uncomfortably close and the margin is the whole point — it is what lets the profiler, `p9trails`, or any non-empty workspace load on top of a game on a board. Measured on `pico+2w` firmware, that costs exactly 1 KB: a slot is a 16-byte `Variable`, so the table goes 2048 → 3072 bytes of `.bss`, RAM 479,412 → 480,436 of 512 KB (91.44% → 91.64%), `.text` unchanged, leaving ~43 KB free. It costs no time: `find_global` scans `global_count`, not the bound, so a lookup costs what the workspace holds; only creating a new global walks the array, once per name. Trails + p10prof now hold 119 of 192 | |
 | 2026-08-10 | Galaxian died with "Out of space in arm.demons" after Invaders had run | games | Reported from hardware: the attract screen and the convoy both drew, then the game stopped on `arm.demons`. Nothing disarms a demon when a program ends, and Galaxian's eight collision pairs fill `MAX_DEMONS` (8) *exactly*, so it can only arm them if it owns the whole table. Invaders leaves five armed; four of Galaxian's eight match one of those by condition and are replaced in place, but the remaining four need four free slots and only three are left, so the eighth `when` failed. `arm.demons` is the tail of `setup.level`, which is why the convoy was already on the screen when it died. The order also matters the other way — Galaxian first fills all eight and Invaders' fifth `when` then has nowhere to go — and inheriting a foreign demon is its own hazard: Invaders' `[(alien.bottom.y) < -130]` would have called `invasion` inside a Galaxian whose globals it does not have. Both games now take the table back with `cleardemons` at the top of `arm.demons`, which costs nothing on the per-level re-arm since `when` already replaces a demon whose condition it matches. `test_arm_demons_takes_a_table_an_earlier_program_left_behind` in both test files strands foreign demons and pins that `setup.level` still runs and that the stranger is gone | |
 | 2026-08-10 | Turtle Trails' HUD rows were laid over the board's side walls | games | Reported from hardware: the leftmost spare life sat in the hedge. Both HUD rows were laid out from the outermost column centre — lives from x −100, history from x 100, which are the centres of columns 2 and 27 — but a stamp is 16 pixels square against an 8-pixel cell, so each end stamp hung four pixels into column 1 or 28, the board's side walls, and the band that erases the row then painted that bite black. The rows now start a stamp's half-width clear of their own wall: lives run −96 → −32 and history 96 → 0, the same inset on both sides, which is the outermost position at which a 16-wide shape still clears an 8-wide wall. The right-hand overlap was the same defect mirrored and was fixed with it, though only the left was visible when it was reported. `test_the_hud_rows_clear_the_board_walls` fills both rows to capacity and pins every stamp *and* the erase band inside the walls, reading the wall positions from the game's own `tile.x` so it cannot drift from the board | |
 | 2026-08-06 | Turtle Trails' HUD rows never erased a whole stamp | games | Found while fixing the sprite-anchor entry below, and independent of it. `draw.lives` and `draw.history` take the old row away by painting `:c.bg` over it before stamping the new one, but both bands were drawn at `setpensize 8` against stamps 16 pixels square — so the band was half the height it needed and a lost life left the top of its turtle on screen. `draw.history`'s band was short in the other axis too: it ran from x 20 to 100, five slots' worth, while the row holds seven and reaches down to x 4, so the two leftmost entries could never be erased. Both bands are now pen 16 and span the row's *capacity* rather than the count drawn this time (lives −100→−36, history 4→100), which with a pen's filled disc covers each row's footprint exactly and no more; both put turtle 7 back to its resting pen 8, which the rest of the file assumes. The sprite-anchor fix moved the stamps from screen rows 281–296 to 288–303, so they now sit squarely on the two bottom board rows the HUD owns, which is what makes an exact band possible. `test_the_hud_bands_erase_the_whole_stamp` fills both rows to capacity and pins every stamp's 16×16 footprint inside the band its drawer painted | |
