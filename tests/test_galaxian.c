@@ -518,12 +518,67 @@ void test_p10games_script_runs(void)
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(report->data, "frame mean"), report->data);
 }
 
+// The attract screen is where a player is told how to play and what a rank is
+// worth, so the instructions and the score table have to reach the screen, and
+// the four numbers in the table have to be the ones rank.score pays out.
+void test_attract_screen_shows_instructions_and_scores(void)
+{
+    mock_device_clear_output();
+    set_mock_input(" "); // wait.for.space reads one character and returns
+    Result r = run_string("attract.screen");
+    TEST_ASSERT_TRUE_MESSAGE(r.status == RESULT_NONE || r.status == RESULT_OK,
+                             error_format(r));
+
+    const char *screen = mock_device_get_output();
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "GALAXIAN"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Flagship"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Purple"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "ARROWS Move"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "SPACE Fire"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "P Pause"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Press Space"), screen);
+
+    // The legend's four convoy values, its "worth double" line and its diving
+    // flagship are all rank.score, so the table cannot drift from the payout.
+    assert_num("rank.score 1 1", 60);
+    assert_num("rank.score 2 1", 50);
+    assert_num("rank.score 3 1", 40);
+    assert_num("rank.score 4 1", 30);
+    assert_num("rank.score 2 2", 100);
+    assert_num("rank.score 1 2", 300);
+}
+
+// The eight collision pairs fill MAX_DEMONS exactly, so the game can only
+// arm them if it owns the whole table. Nothing disarms a demon on the way
+// out of a program, so a workspace that ran anything using `when` first --
+// Invaders, most obviously -- leaves the table part full and arm.demons runs
+// out of slots part way through, after the convoy is already on the screen.
+void test_arm_demons_takes_a_table_an_earlier_program_left_behind(void)
+{
+    Result r = run_string("when [1 = 2] [stop]"); // a demon from an earlier game
+    TEST_ASSERT_TRUE_MESSAGE(r.status == RESULT_NONE || r.status == RESULT_OK,
+                             error_format(r));
+
+    r = run_string("setup.level");
+    TEST_ASSERT_TRUE_MESSAGE(r.status == RESULT_NONE || r.status == RESULT_OK,
+                             error_format(r));
+
+    // And the stale demon is gone, not merely displaced: its action belongs to
+    // a program whose globals this one does not have.
+    mock_device_clear_output();
+    run_string("demons");
+    TEST_ASSERT_NULL_MESSAGE(strstr(mock_device_get_output(), "1 = 2"),
+                             mock_device_get_output());
+}
+
 //==========================================================================
 
 int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_file_loads_and_sets_globals);
+    RUN_TEST(test_attract_screen_shows_instructions_and_scores);
+    RUN_TEST(test_arm_demons_takes_a_table_an_earlier_program_left_behind);
     RUN_TEST(test_pyramid_occupancy);
     RUN_TEST(test_pyramid_total_is_20);
     RUN_TEST(test_row_col_mapping);

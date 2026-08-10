@@ -99,13 +99,32 @@ to one.game
   show.game.over
 end
 
+; A rank is worth what its colour says, so the legend is printed in the four
+; rank colours -- the table is unreadable in one colour, since the ranks have
+; no other name.  `settc` only reaches palette slots 0-15 and the rank colours
+; are primaries (251 yellow, 248 red, 253 magenta, 250 blue) well out of that
+; range, so they are copied into the editor's four syntax slots 12-15 here.
+; Written as literals rather than globals: the workspace has to leave room for
+; a profiler on top of the game (see B14 in docs/bugs.md).
+;
+; Every line is a bar-quoted word, not a list -- `print` puts a single space
+; between the words of a list, which would collapse the columns.
 to attract.screen
-  textscreen
-  ct
-  setcursor [15 10]
-  print [GALAXIAN]
-  setcursor [10 14]
-  print [PRESS SPACE TO PLAY]
+  setpalette 12 [255 255 0]
+  setpalette 13 [255 0 0]
+  setpalette 14 [255 0 255]
+  setpalette 15 [0 0 255]
+  textscreen ct settc [3 4]
+  setcursor [16 4] print "|GALAXIAN|
+  setcursor [4 7] print "|Break the convoy before it dives|
+  setcursor [13 10] settc [12 4] print "|Flagship    60|
+  setcursor [13 11] settc [13 4] print "|Red         50|
+  setcursor [13 12] settc [14 4] print "|Purple      40|
+  setcursor [13 13] settc [15 4] print "|Blue        30|
+  setcursor [4 16] settc [3 4] print "|In flight they are worth double|
+  setcursor [6 18] print "|A diving flagship scores 300|
+  setcursor [4 21] print "|ARROWS Move  SPACE Fire  P Pause|
+  setcursor [14 28] print "|Press Space|
   wait.for.space
 end
 
@@ -179,6 +198,13 @@ end
 
 to arm.demons
   ; Eight collision pairs, MAX_DEMONS is 8 -- exactly full (design section 3).
+  ; Exactly full means the table has to be ours: nothing disarms a demon when a
+  ; program ends, so a workspace that has already run Invaders (or anything
+  ; else using `when`) holds slots we need, and the eighth `when` below fails
+  ; with "Out of space" -- after the convoy is drawn, so the game dies on the
+  ; screen it just built.  Re-arming is safe either way: `when` replaces a
+  ; demon whose condition it matches, so calling this each level costs nothing.
+  cleardemons
   when [touching? 1 2] [diver.shot 2]   ; player shot hits a diver
   when [touching? 1 3] [diver.shot 3]
   when [touching? 1 4] [diver.shot 4]

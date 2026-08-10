@@ -89,13 +89,27 @@ to one.game
   show.game.over
 end
 
+; The score legend is printed in the colours the two targets are drawn in, so
+; the table reads the way the screen looks.  `settc` only reaches palette slots
+; 0-15, and the sprite colours are primaries (249 green, 253 magenta) well out
+; of that range, so the two are copied into the editor's syntax slots 12 and 13
+; here.  Written as literals rather than globals: the workspace has to leave
+; room for a profiler on top of the game (see B14 in docs/bugs.md).
+;
+; Every line is a bar-quoted word, not a list -- `print` puts a single space
+; between the words of a list, which would collapse the columns.
 to attract.screen
-  textscreen
-  ct
-  setcursor [12 10]
-  print [SPACE INVADERS]
-  setcursor [10 14]
-  print [PRESS SPACE TO PLAY]
+  setpalette 12 [0 255 0]
+  setpalette 13 [255 0 255]
+  textscreen ct settc [3 4]
+  setcursor [13 4] print "|SPACE INVADERS|
+  setcursor [5 7] print "|Hold the line as they descend|
+  setcursor [13 10] settc [12 4] print "|Alien       10|
+  setcursor [13 11] settc [13 4] print "|Saucer     100|
+  setcursor [5 14] settc [3 4] print "|Shields erode from both sides|
+  setcursor [4 16] print "|They speed up as their ranks thin|
+  setcursor [4 20] print "|ARROWS Move  SPACE Fire  P Pause|
+  setcursor [14 28] print "|Press Space|
   wait.for.space
 end
 
@@ -160,6 +174,12 @@ to setup.turtles
 end
 
 to arm.demons
+  ; Nothing disarms a demon when a program ends, so a workspace that has
+  ; already run Galaxian (which fills all eight slots) holds the table we need
+  ; and these `when`s run out of space part way through.  Take it back first.
+  ; Re-arming is safe either way: `when` replaces a demon whose condition it
+  ; matches, so calling this each level costs nothing.
+  cleardemons
   when [touching? 1 2] [ufo.hit]
   when [touching? 0 3] [player.hit]
   when [touching? 0 4] [player.hit]

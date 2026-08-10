@@ -367,12 +367,64 @@ void test_p10games_script_runs(void)
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(report->data, "frame mean"), report->data);
 }
 
+// The attract screen is where a player is told how to play and what a target
+// is worth, so the instructions and the score table have to reach the screen,
+// and the numbers in the table have to be the ones the game awards.
+void test_attract_screen_shows_instructions_and_scores(void)
+{
+    mock_device_clear_output();
+    set_mock_input(" "); // wait.for.space reads one character and returns
+    Result r = run_string("attract.screen");
+    TEST_ASSERT_TRUE_MESSAGE(r.status == RESULT_NONE || r.status == RESULT_OK,
+                             error_format(r));
+
+    const char *screen = mock_device_get_output();
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "SPACE INVADERS"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Alien"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Saucer"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "ARROWS Move"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "SPACE Fire"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "P Pause"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Press Space"), screen);
+
+    // The two numbers the legend prints are the two the game pays out: an
+    // alien through kill.alien, the saucer through ufo.hit.
+    start_level();
+    run_string("make \"score 0  kill.alien 1");
+    assert_num(":score", 10);
+    run_string("make \"score 0  ufo.hit");
+    assert_num(":score", 100);
+}
+
+// Nothing disarms a demon on the way out of a program, so a workspace that
+// ran Galaxian first (it fills all eight slots) leaves no room for these five
+// and arm.demons runs out of slots part way through setup.level.
+void test_arm_demons_takes_a_table_an_earlier_program_left_behind(void)
+{
+    // Four foreign demons: with the five below that is nine, past MAX_DEMONS.
+    run_string("when [1 = 2] [stop]");
+    run_string("when [1 = 3] [stop]");
+    run_string("when [1 = 4] [stop]");
+    run_string("when [1 = 5] [stop]");
+
+    Result r = run_string("setup.level");
+    TEST_ASSERT_TRUE_MESSAGE(r.status == RESULT_NONE || r.status == RESULT_OK,
+                             error_format(r));
+
+    mock_device_clear_output();
+    run_string("demons");
+    TEST_ASSERT_NULL_MESSAGE(strstr(mock_device_get_output(), "1 = 2"),
+                             mock_device_get_output());
+}
+
 //==========================================================================
 
 int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_file_loads_and_sets_globals);
+    RUN_TEST(test_attract_screen_shows_instructions_and_scores);
+    RUN_TEST(test_arm_demons_takes_a_table_an_earlier_program_left_behind);
     RUN_TEST(test_row_col_mapping);
     RUN_TEST(test_cell_positions_and_bottom_row);
     RUN_TEST(test_setup_level_runs);
