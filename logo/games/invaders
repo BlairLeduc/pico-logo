@@ -688,10 +688,17 @@ end
 to poll.input
   if key? [
     make "k ascii readchar
+    ; The pause key first, and it is the only one a paused game answers.
+    ; play.frame runs this outside its paused guard so P can be read at all,
+    ; and `freeze` only suspends demons and autonomous turtle motion -- the
+    ; whole of the formation, which is why a pause looked right. None of the
+    ; three handlers below is either of those: they place and start turtles
+    ; from here, so a pause has to turn them away itself.
+    if :k = 112 [toggle.pause stop]
+    if :paused [stop]
     if :k = 180 [ask 0 [move.cannon -6]]
     if :k = 183 [ask 0 [move.cannon 6]]
     if :k = 32 [fire]
-    if :k = 112 [toggle.pause]
   ]
 end
 
