@@ -681,8 +681,14 @@ that this item attacks from the interpreter side.
 
 ### P11 — Asteroids (design first)
 
-Status: **design drafted 2026-08-11; M0 not run — gate open**
-([`asteroids-design.md`](asteroids-design.md)). A fourth game, and the first
+Status: **design drafted 2026-08-11; M0 measured the same day — gate PASSED,
+and it rewrote the design** ([`asteroids-design.md`](asteroids-design.md)
+§3.3). Clear-and-redraw beat erase-in-place at every rock count the game
+plays at; the rate came down from 20 fps to 15 because a full-screen present
+is 26.3 ms whatever the scene holds; the drawing statement the whole budget
+rested on is 60 µs against an assumed 35. M1 is unblocked.
+
+A fourth game, and the first
 that is not a sprite game: the 1979 machine had no raster, so its rocks are
 hollow rotating outlines and its ship is three strokes. That is turtle
 graphics — `fd`/`rt` with the pen down *is* a vector display list, `seth`
@@ -691,32 +697,55 @@ the way the arcade playfield does. Like the other three games it is pure Logo
 against primitives that already exist; **no interpreter or device work is
 proposed**.
 
-**The one open question is how a frame gets erased** (design §3), and it is
-the whole of the risk. Two candidates: clear the screen and re-trace the
-display list, or re-draw each shape in `pe` from last frame's state before
-moving it. Erase-in-place is the design's default on the arithmetic in §12,
-but that arithmetic rests on two numbers nobody has measured — the cost of a
-literal-argument primitive call (`fd 17`, assumed **35 µs**, bracketed by
-P10's 21 µs call and 48 µs statement) and the present cost of a dozen
-scattered thin strokes with wrap, where the shipped games' compact sprites
-measure 1.6–2.7 ms and this design guesses 9–12.
+**The one open question was how a frame gets erased** (design §3), and M0
+answered it. Two candidates: clear the screen and re-trace the display list,
+or re-draw each shape from last frame's state before moving it.
+Erase-in-place was the design's default on §12's arithmetic — and that
+arithmetic rested on two numbers nobody had measured. **Both were wrong, and
+both in the same direction.**
 
-**[B16](bugs.md) is what reopened the comparison.** Until it was fixed
-(2026-08-11) `clean`/`cs` wrote through to the panel in manual and `sync`
-mode, so clear-and-redraw flashed the whole screen every frame and lost on
-appearance rather than on time. With the wipe deferred to the present, it is
-a ~0.3 ms memset against a full-screen 25.6 ms present — behind
-erase-in-place on paper, but it is the simpler code (no ordering rule, no
-stale-state class of bug, no overlap artefact), so it is a real candidate
-again and M0 measures both.
+| | assumed | measured |
+|---|---:|---:|
+| drawing statement (`fd 17`, pen down) | 35 µs | **60 µs** |
+| present, 12 scattered rocks | 9–12 ms | **21.9 ms** |
+| present, full screen | 25.6 ms | 26.3 ms |
+| 9-way shape dispatch, per rock | not costed | **370 µs** |
 
-**M0 builds neither game.** It draws a static scene of 6, 9 and 12 rocks and
-times both strategies, body against present, plus the literal-call
-calibration — `logo/tests/p11rocks`, in the shape of `logo/tests/p10games`,
-**writing its numbers to a file** because a number on a display cannot be
-pasted into a design doc. Its output either confirms §12 or deletes §3.2.
-M1–M5 (rocks, ship and shots, lives and levels, saucer and sound, hardware
-tuning) do not start until it has run on a board.
+The frame comparison, in milliseconds, twelve rocks: erase-in-place body 50.5
++ present 21.9 = **72.4**, clear-and-redraw body 25.9 + present 26.3 =
+**52.1**. The two are level at six rocks and clear wins by 20 at twelve, so
+**erase-in-place never wins during play** — and it is also the more
+complicated of the two, so nothing was traded for the speed. §3.2 comes out
+with its ordering rule, its overlap artefact and the HUD-last constraint §10
+was built around; the main loop is three procedures shorter.
+
+**The mechanism is the dirty tracker's row spans.** It keeps one inclusive
+span per tile row, so a rock near each end of a row dirties the whole row, and
+a dozen scattered rocks reach 84 % of the screen while their outlines cover a
+few per cent of it. Sparsity in pixels does not survive contact with a
+row-span tracker — which is also why a vector game is a different animal from
+a sprite game here: **Asteroids' present alone is 2.3× Galaxian's entire
+11.22 ms frame.**
+
+**[B16](bugs.md) is what made the comparison possible at all.** Until it was
+fixed, on the morning of the same day, `clean`/`cs` wrote through to the panel
+in manual and `sync` mode, so clear-and-redraw flashed the whole screen every
+frame and lost on appearance rather than on time. Without that fix this design
+would have been written around the slower strategy on the strength of an
+artefact.
+
+**Consequences.** The present is a 26.3 ms floor that no game-side lever
+reaches, so half of a 50 ms frame is gone before a rock is drawn: the rate
+comes down to **15 fps** (decided with the user — 20 fps is reachable only at
+seven or eight rocks, which makes the split cap bind on every kill and takes
+away the board filling up, which is what Asteroids is). Outlines go from nine
+to three, one per size, because M0 priced the lookup at a fifth of what a rock
+costs. Segment counts go 8/6/5 → 6/5/4. Every per-frame tuning constant is
+re-cut by a third. The worst case then fits by 0.5 ms, which is not a margin —
+**the physics third of the frame is still estimated, and M1 measures it.**
+
+M2–M5 (ship and shots, lives and levels, saucer and sound, hardware tuning)
+follow M1.
 
 ---
 
@@ -799,3 +828,4 @@ tuning) do not start until it has run on a board.
 | 2026-08-11 | Editor | Incremental search in the full-screen editor, the last unimplemented key in the reference's editor chapter (user request). `Ctrl` `F` starts it; typing extends the search text and jumps to the first match at or after the current position, `↓`/`↑` cycle forward and backward through every occurrence (both wrap), `←Back` widens the search back out, and the match is selected as block editing already selects — so `Ctrl` `X`/`C`/`V` and the indent keys work on it the moment `Esc` leaves the search. The footer carries the typed text left-justified in reverse video, up to its 40-column width. **The documented key could not be used**: `Ctrl` `I` is `0x09`, which is exactly `KEY_TAB`, because `keyboard_poll` maps `Ctrl`+letter as `ch &= 0x1F`; binding it would have cost the documented `Tab` tab-stop insert, so the reference now says `Ctrl` `F` (`0x06`, unused). Matching is case-insensitive — Logo's own names are, and `fd` should find `FD`; with no match anywhere the selection is dropped and the cursor returns to the last match, which is what makes `←Back` symmetric. The search itself is a pure wrapping matcher in `devices/picocalc/editor_search.c` so it is testable on the host without mocking the LCD (new `test_editor_search.c`, 15 tests, the pattern `dirty_tiles`/`costumes` already use); the ~40 lines of state and key handling in `editor.c` remain board-only. 71/71 green, all four presets build |
 | 2026-08-11 | Editor | **Replace, on top of the incremental search** (user request). `Ctrl` `R` during a search turns the footer into a `Replace:` prompt; `Enter` replaces every match in the buffer and leaves the search, `Esc` abandons the replacement and drops back into it with the match still selected. The footer now names which prompt it is — `Search: ` and `Replace:`, both padded to 8 columns so the text starts in the same place — which is what set the field at **32 characters** rather than the 40 the search shipped with. The replacement is a *typed field*, not the search's append-only text: `←`/`→` move through it, `←Back` erases to the left and `Del` at the cursor, and `Tab` (`0x09`) falls out as ignored along with every other non-printable, since the field takes `0x20`–`0x7E` only. **The cursor had to leave the content area**, and a block cursor in the footer would have been invisible: `lcd_draw_cursor`'s block branch draws the cell's background on a fixed `TXT_WHITE`, which is *exactly* what the reverse-video footer already looks like, so the replacement field uses the underline cursor packed as the editor background on white. Its one soft edge is a full 32-character field, where the last insert point would sit in column 40 and is clamped to 39, under the last character. Replacement is case-insensitive in what it matches and verbatim in what it writes (`fd` → `forward` also rewrites `FD`), and matches do not overlap — `aa` in `aaaa` is two replacements, and a replacement containing the search text is never matched again, so `fd` → `fd fd` terminates. `editor_search_replace_all` **counts the matches before it moves a byte** and refuses the whole rewrite if the result would not fit the edit buffer, because a buffer that filled up part way through would leave the text half replaced; an empty replacement is legal and erases every match. It joins the matcher in `editor_search.c`, host-testable without an LCD (13 more tests, 28 in `test_editor_search.c`); the field editing in `editor.c` stays board-only. 71/71 green, all four presets build, `pico+2w` RAM 91.64 → 91.65 %. **Verified on a Pimoroni Pico Plus 2 W**, which is the only part of this that a host test can reach — the footer prompts, the underline cursor in reverse video and the field editing all draw straight to the LCD |
 | 2026-08-11 | P11 | **Asteroids designed, and its M0 harness built and green on the host** (user request). A fourth game and the first that is not a sprite game: the 1979 machine had no raster, so the rocks are hollow rotating outlines, which is turtle graphics — `fd`/`rt` with the pen down *is* a vector display list, `seth` rotates a whole shape for free, and `wrap` splits a segment across the edge the way the playfield does. Pure Logo against primitives that already exist; no interpreter or device work proposed. **The design's one open question is how a frame gets erased** (§3) and M0 exists to settle it: erase-in-place (two drawing passes, a present of only the strokes) against clear-and-redraw (one pass, a full-screen present). [B16](bugs.md) reopened that comparison the same day — until the clear was buffered in manual mode the second strategy blanked the screen every frame and lost on appearance rather than on time. `logo/tests/p11rocks` draws a static scene of 6, 9 and 12 rocks and times both, body and present read apart, and calibrates a drawing statement, an arithmetic statement and a bare `repeat` **in the same run**, so §12's assumed 35 µs for `fd 17` is bracketed within one machine instead of against P10's Pico 2 numbers. **Two corrections fell out of building it, both invisible on paper.** The design's erase idiom `pe place :i draw.rock :i` cannot work: pen up/down/erase/reverse are one enum (`LogoPen`, `devices/console.h`), and every outline's prologue contains a `pd` to reach its first vertex with the pen up — so the shape would cancel the `pe` and draw a second rock on top of the first. The eraser is a **pen colour** instead, which is what the HUD erase already does, costs two statements a frame rather than two per rock per pass, and unlike `pe` leaves a trace the mock records (it logs a segment only with the pen `LOGO_PEN_DOWN`), so the retrace test is possible at all. And §12's table counts drawing statements but not the **9-way shape dispatch** that reaches them, which erase-in-place pays 24 times a frame; M0 now measures it separately. The nine outlines are generated by `scripts/gen_rocks.py` from radii at equal angular spacing, carry one decimal place (a single literal token, so it evaluates at an integer's cost, and it holds closure under half a pixel where integer turns drift by two or three), and drop the turn after the final segment since `place` sets the heading every pass — which is what makes the statement counts 19/15/13. New `tests/test_asteroids.c` (8 tests) pins the closure of all nine, that the walk out to the first vertex does not draw, that the dispatch reaches the outline it names, that an erase pass retraces its draw pass segment for segment, the one-pixel pen, and that the script runs end to end and its report reaches the file. **73/73 green.** Also fixed on the way: [B15](bugs.md), the reference describing `sin` as outputting a cosine — which is help text on a board, not just prose. **Not run on hardware**, and that run is the gate: M1 does not start until M0 says which strategy the game is written around |
+| 2026-08-11 | P11 | **M0 measured on hardware, and it rewrote the design** (design §3.3, §3.4). Two runs on a Pimoroni Pico Plus 2 W, 60 frames a point, every figure reproducing within 1 %. The question M0 existed for — how an Asteroids frame gets erased — came back **against** the design's default. Twelve rocks: erase-in-place body 50.5 ms + present 21.9 = **72.4**; clear-and-redraw body 25.9 + present 26.3 = **52.1**. The two are level at six rocks and clear wins by 9 ms at nine and 20 at twelve, so erase-in-place never wins during play, and it is the *more* complicated of the two — so §3.2 comes out and takes with it the erase-before-step ordering rule the design called its signature failure mode, the crossing-outline artefact, and the HUD-last constraint §10 was built around. `play.frame` is three procedures shorter than the one designed. **The decisive number is the one §3.3 predicted would decide it**: a 12-rock dirty region is 21.9 ms of a 26.3 ms full screen, **84 %**, against a guess of 9–12 ms. The mechanism is the tracker's row spans — one inclusive span per tile row, so a rock near each end dirties the whole row, and a dozen scattered rocks reach almost every row while their outlines cover a few per cent of the pixels. **Sparsity in pixels does not survive a row-span tracker**, which is the general result: a vector game is a different animal from a sprite game on this display, and Asteroids' present alone is 2.3× Galaxian's entire 11.22 ms frame. **§12's central assumption was also wrong, and instructively**: it bracketed a literal-argument primitive call between a procedure call (21 µs) and an arithmetic statement (48) and took the midpoint, 35 — but a pen-down `fd 17` *rasterises*, so it measures **60 µs**, above the arithmetic statement rather than below it. Every drawing line in the budget was 72 % low. The bracket was sound for a primitive that computes and never applied to one that draws. The calibration cross-checks: the arithmetic statement (43 µs) and the bare `repeat` (4.5) land on P10 M5's numbers for the same board, so the drawing figure is not a broken clock. A third finding was nobody's estimate at all — the **9-way shape dispatch costs 370 µs a rock**, a fifth of the 2.10 ms a rock costs in total, because reaching one of nine outlines is two procedure calls and up to four `if`s each walking an `item`. Decomposed, two thirds of a rock is spent *getting to* the drawing rather than drawing: outline 0.94 ms, `place` 0.77, dispatch 0.37. **Consequences, decided with the user.** The present is a 26.3 ms floor no game-side lever reaches, so half a 50 ms frame is gone before a rock is drawn: the rate goes **20 → 15 fps**, since 20 is reachable only at seven or eight rocks and that makes the split cap bind on every kill — which removes the board filling up, the thing Asteroids is about. Outlines go nine → three, one per size (the `rshape` list disappears; rotation already varies how a rock reads in motion). Segments go 8/6/5 → 6/5/4. Every per-frame tuning constant is re-cut by a third, rotation 12° → 16° a frame among them. The worst case then fits by **0.5 ms**, which is not a margin: the physics third of the frame is still estimated and **M1 measures it**, with the reserve lever (segregating rocks into three per-size lists, removing dispatch entirely) held for if it comes in over. **B16, fixed the same morning, is what made the comparison possible** — unfixed, clear-and-redraw flashed the whole screen every frame and lost on appearance rather than on time, and this design would have been written around the slower strategy on the strength of an artefact. One thing M0 could not see and M1 must: it held the scene still, so the physics, the wrap arithmetic and the collision passes are unmeasured. 73/73 green |
