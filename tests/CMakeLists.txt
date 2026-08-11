@@ -194,6 +194,8 @@ target_include_directories(test_screen_refresh PRIVATE
     ${CMAKE_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/devices/picocalc
 )
+# screen.c rounds with floorf; glibc keeps that in libm (macOS does not).
+target_link_libraries(test_screen_refresh PRIVATE m)
 add_test(NAME test_screen_refresh COMMAND test_screen_refresh)
 
 # Editor incremental search test — compiles devices/picocalc/editor_search.c
