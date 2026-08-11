@@ -446,8 +446,8 @@ void test_pause_holds_the_cannon_as_well_as_the_formation(void)
 
     set_mock_input("\264");
     run_string("play.frame");
-    TEST_ASSERT_NOT_EQUAL_MESSAGE((int)x, (int)num("ask 0 [xcor]"),
-                                  "the cannon did not steer after the pause was lifted");
+    TEST_ASSERT_NOT_EQUAL_FLOAT_MESSAGE(x, num("ask 0 [xcor]"),
+                                        "the cannon did not steer after the pause was lifted");
 }
 
 //==========================================================================
