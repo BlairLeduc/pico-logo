@@ -2,7 +2,7 @@
 //  Pico Logo
 //  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
-//  Incremental search over the editor buffer
+//  Incremental search and replace over the editor buffer
 //
 
 #pragma once
@@ -24,3 +24,19 @@
 bool editor_search_find(const char *text, size_t text_len,
                         const char *needle, size_t needle_len,
                         size_t from, bool forward, size_t *out_pos);
+
+// Replace every occurrence of needle with replacement, matching case-insensitively
+// as editor_search_find does. Occurrences do not overlap: matching resumes after
+// each replacement, so replacing "aa" in "aaaa" changes two occurrences and a
+// replacement that contains the needle is not matched again.
+//
+// text/text_len: the buffer to rewrite; text_len is updated to the new length
+// capacity: the size of text, including room for the terminating NUL
+// needle/needle_len: the text to match
+// replacement/replacement_len: the text to put in its place (may be empty)
+//
+// Returns the number of occurrences replaced. Nothing is changed when there is
+// no match, or when the result would not fit in capacity.
+size_t editor_search_replace_all(char *text, size_t *text_len, size_t capacity,
+                                 const char *needle, size_t needle_len,
+                                 const char *replacement, size_t replacement_len);

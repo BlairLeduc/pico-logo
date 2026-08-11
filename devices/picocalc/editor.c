@@ -32,7 +32,8 @@
 #define EDITOR_SCROLL_MARGIN  5      // Columns from edge before horizontal scroll triggers
 #define EDITOR_LEFT_ARROW     30     // Left arrow glyph (content scrolled left)
 #define EDITOR_RIGHT_ARROW    31     // Right arrow glyph (content continues right)
-#define EDITOR_SEARCH_MAX     40     // Longest incremental search text (fills the footer)
+#define EDITOR_SEARCH_MAX     32     // Longest search or replacement text
+#define EDITOR_PROMPT_COLS    8      // Width of the footer's "Search: "/"Replace:" prompt
 #define EDITOR_HIGHLIGHT_MAX  512    // Longest line the syntax highlighter is run on
 
 // Tab width for indentation (2 spaces per tab stop)
@@ -106,6 +107,12 @@ typedef struct {
     size_t search_len;                       // Length of search_text
     size_t search_origin;                    // Where the next search starts (last match, or
                                              // the cursor position when the search began)
+
+    // Replace state (entered from a search with Ctrl+R)
+    bool replacing;                           // True while the replacement text is being typed
+    char replace_text[EDITOR_SEARCH_MAX + 1]; // Text every match is replaced with
+    size_t replace_len;                       // Length of replace_text
+    size_t replace_cursor;                    // Insert point within replace_text
 
     // Graphics preview state
     bool in_graphics_preview;  // True when viewing graphics screen (F3)
@@ -181,13 +188,17 @@ static void editor_draw_header(void)
 }
 
 //
-// The footer shows the search text while incremental search is active,
-// otherwise the exit prompt
+// The footer shows the search or replacement text while incremental search is
+// active, otherwise the exit prompt. Both prompts are EDITOR_PROMPT_COLS wide,
+// so the text starts in the same column either way.
 //
 static void editor_draw_footer(void)
 {
     if (editor.searching) {
-        editor_draw_reverse_row(EDITOR_FOOTER_ROW, editor.search_text, false);
+        char footer[EDITOR_PROMPT_COLS + EDITOR_SEARCH_MAX + 1];
+        strcpy(footer, editor.replacing ? "Replace:" : "Search: ");
+        strcat(footer, editor.replacing ? editor.replace_text : editor.search_text);
+        editor_draw_reverse_row(EDITOR_FOOTER_ROW, footer, false);
     } else {
         editor_draw_reverse_row(EDITOR_FOOTER_ROW, "ESC - ACCEPT    BRK - CANCEL", true);
     }
@@ -676,6 +687,20 @@ static uint8_t editor_palette_at(size_t pos)
 //
 static void editor_position_cursor(void)
 {
+    if (editor.replacing) {
+        // The replacement is typed in the footer, so the cursor goes there. A
+        // full field puts the last insert point one column past the row, where
+        // the underline sits under the last character instead.
+        int screen_col = EDITOR_PROMPT_COLS + (int)editor.replace_cursor;
+        if (screen_col >= EDITOR_MAX_COLS) screen_col = EDITOR_MAX_COLS - 1;
+        screen_txt_set_cursor(screen_col, EDITOR_FOOTER_ROW);
+
+        // The footer is reverse video, so the underline takes the editor's
+        // background colour and is erased with the white the footer is drawn on
+        lcd_set_cursor_char(TXT_PACK(PALETTE_SYNTAX_BG, TXT_WHITE, ' '));
+        return;
+    }
+
     int cursor_line = editor_get_line_at_pos(editor.cursor_pos);
     int cursor_col = editor_get_col_at_pos(editor.cursor_pos);
     
@@ -1356,6 +1381,19 @@ static bool editor_handle_search_key(char key)
             editor_search_apply(editor.search_origin, false);
             break;
 
+        case 0x12:  // Ctrl+R - type the text every match is replaced with
+            if (editor.search_len > 0) {
+                editor.replacing = true;
+                editor.replace_text[0] = '\0';
+                editor.replace_len = 0;
+                editor.replace_cursor = 0;
+                // The cursor moves to the footer, where a block would be
+                // indistinguishable from the reverse video around it
+                lcd_set_cursor_style(LCD_CURSOR_UNDERLINE);
+                editor_draw_footer();
+            }
+            break;
+
         case KEY_BACKSPACE:
             // Remove the last letter to widen the search back out
             if (editor.search_len > 0) {
@@ -1371,6 +1409,108 @@ static bool editor_handle_search_key(char key)
                 editor.search_text[editor.search_len++] = key;
                 editor.search_text[editor.search_len] = '\0';
                 editor_search_apply(editor.search_origin, true);
+                editor_draw_footer();
+            }
+            break;
+    }
+
+    return true;
+}
+
+//
+// Replace every match of the search text with the replacement and leave the
+// search. The matches are all over the buffer, so the selection is dropped and
+// the cursor keeps its place only as far as the rewritten text allows.
+//
+static void editor_replace_all(void)
+{
+    editor_search_replace_all(editor.buffer, &editor.content_length, editor.buffer_size,
+                              editor.search_text, editor.search_len,
+                              editor.replace_text, editor.replace_len);
+
+    if (editor.cursor_pos > editor.content_length) {
+        editor.cursor_pos = editor.content_length;
+    }
+
+    editor.replacing = false;
+    editor.searching = false;
+    editor.selecting = false;
+    lcd_set_cursor_style(LCD_CURSOR_UNDERLINE);
+    editor_draw_footer();
+    editor_mark_all_dirty();
+}
+
+//
+// Handle a key while the replacement text is being typed
+// Returns false to let the main loop handle the key as well (BRK cancels)
+//
+static bool editor_handle_replace_key(char key)
+{
+    switch (key) {
+        case KEY_ESC:
+            // Abandon the replacement and go back to the search
+            editor.replacing = false;
+            if (editor.selecting) {
+                lcd_set_cursor_style(LCD_CURSOR_BLOCK);
+            }
+            editor_draw_footer();
+            break;
+
+        case KEY_BREAK:
+            // Fall through to the editor's cancel handling
+            editor.replacing = false;
+            editor.searching = false;
+            return false;
+
+        case KEY_ENTER:
+        case KEY_RETURN:
+            editor_replace_all();
+            break;
+
+        case KEY_LEFT:
+            if (editor.replace_cursor > 0) {
+                editor.replace_cursor--;
+            }
+            break;
+
+        case KEY_RIGHT:
+            if (editor.replace_cursor < editor.replace_len) {
+                editor.replace_cursor++;
+            }
+            break;
+
+        case KEY_BACKSPACE:
+            // Delete the character to the left of the cursor
+            if (editor.replace_cursor > 0) {
+                editor.replace_cursor--;
+                memmove(&editor.replace_text[editor.replace_cursor],
+                        &editor.replace_text[editor.replace_cursor + 1],
+                        editor.replace_len - editor.replace_cursor);
+                editor.replace_len--;
+                editor_draw_footer();
+            }
+            break;
+
+        case KEY_DEL:
+            // Delete the character at the cursor
+            if (editor.replace_cursor < editor.replace_len) {
+                memmove(&editor.replace_text[editor.replace_cursor],
+                        &editor.replace_text[editor.replace_cursor + 1],
+                        editor.replace_len - editor.replace_cursor);
+                editor.replace_len--;
+                editor_draw_footer();
+            }
+            break;
+
+        default:
+            // Printable characters are inserted at the cursor; everything else,
+            // TAB included, is ignored
+            if (key >= 0x20 && key <= 0x7E && editor.replace_len < EDITOR_SEARCH_MAX) {
+                memmove(&editor.replace_text[editor.replace_cursor + 1],
+                        &editor.replace_text[editor.replace_cursor],
+                        editor.replace_len - editor.replace_cursor + 1);
+                editor.replace_text[editor.replace_cursor++] = key;
+                editor.replace_len++;
                 editor_draw_footer();
             }
             break;
@@ -1409,6 +1549,10 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
     editor.search_text[0] = '\0';
     editor.search_len = 0;
     editor.search_origin = 0;
+    editor.replacing = false;
+    editor.replace_text[0] = '\0';
+    editor.replace_len = 0;
+    editor.replace_cursor = 0;
     editor.in_graphics_preview = false;
     editor.dirty_flags = DIRTY_NONE;
     
@@ -1475,9 +1619,13 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
         // Reset dirty flags at start of each key press
         editor.dirty_flags = DIRTY_NONE;
 
-        // Incremental search consumes every key it handles; clearing the key
-        // leaves the normal handling below with nothing to do
-        if (editor.searching && editor_handle_search_key(key)) {
+        // Incremental search and its replacement prompt consume every key they
+        // handle; clearing the key leaves the normal handling below with nothing to do
+        if (editor.replacing) {
+            if (editor_handle_replace_key(key)) {
+                key = 0;
+            }
+        } else if (editor.searching && editor_handle_search_key(key)) {
             key = 0;
         }
 

@@ -555,9 +555,19 @@ Incremental search finds and highlights text matches in real time as you type ea
 
 Matching ignores the difference between upper and lower case, so `fd` finds `FD`. When the typed phrase matches nowhere in the buffer, nothing is selected and the cursor stays at the last match found.
 
-During incremental search, the bottom line now displays (left justified in reverse video) the characters in the search text. A maximum of 40 characters may be used to match text.
+During incremental search, the bottom line now displays (left justified in reverse video) `Search:` followed by the characters in the search text. A maximum of 32 characters may be used to match text.
 
 Pressing `Esc` leaves incremental search and any selected text remains selected. Pressing `Brk` leaves the Editor, cancelling your changes as usual.
+
+### Replacing text
+
+`Ctrl` `R`, during an incremental search, replaces every match of the search text. The bottom line changes to `Replace:` and the text you type after it is what each match is replaced with, up to 32 characters. The replacement is used exactly as typed, whatever the case of the text it matched, so searching for `fd` and replacing with `forward` changes `FD` to `forward` as well.
+
+While typing the replacement, `←` and `→` move the cursor through it, `←Back` erases the character to the left of the cursor and `Del` erases the character at the cursor. `Tab` and the other non-printable keys are ignored.
+
+Pressing `Enter` replaces every match in the buffer and leaves incremental search. An empty replacement is allowed and erases every match. Nothing is replaced if the result would not fit in the Editor's buffer.
+
+Pressing `Esc` cancels the replacement and returns to the incremental search, where the match found so far is still selected. Pressing `Brk` leaves the Editor, cancelling your changes as usual.
 
 
 ### Viewing screens
