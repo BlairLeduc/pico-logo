@@ -1,0 +1,713 @@
+; The Snake Temple -- a port of RAX's 2022 BASIC 10Liner entry for the Oric
+; Atmos (PUR-80 category, Oric BASIC 1.1b), published on itch.io as
+; "The Snake Temple (Oric) by RAX".
+;
+; Load and play:
+;   load "temple
+;   temple
+;
+; See docs/snake-temple-design.md.  The rules ported are the ones the original
+; publishes:
+;
+;   Among the labyrinth of tunnels is a treasure chest that you must find.
+;   The temple is full of snakes, so be careful!
+;   A snake inflicts damage on 1 to 4 health points.
+;   Each flask you find restores 2 health points.
+;   Use the arrow keys to control Bocco.
+;
+; The original's BASIC listing was not available when this was written, so
+; everything the published rules do not fix -- starting health, how many
+; snakes and flasks, how the labyrinth is generated, the tick rates -- is
+; chosen here and recorded in section 3 of the design document.  Bocco is
+; RAX's character and the title is RAX's; this port carries both by
+; permission-pending attribution, not by claim.
+;
+; The tile map is the only source of truth: walls, floor, flasks and the chest
+; all live in map cells, and movement, pickups and painting read those same
+; cells.  Actors are not in the map -- they are drawn into a cell and the cell
+; is put straight back (see draw.actor), so a lookup never sees a snake where
+; a floor tile is.
+;
+; Four interpreter rules govern this file, as they do logo/games/trails:
+;   * there is no >= or <=; write  not (a < b)
+;   * a call's last argument absorbs trailing infix, so a call *inside* an
+;     expression needs parenthesising: (:c + (dir.dc :d))
+;   * a bracketed list literal cannot span lines in a loadable file
+;   * a `;` inside a bracketed list starts a comment and silently swallows
+;     the rest of the procedure; keep semicolons out of bracketed lists
+
+; -------------------------------------------------------------------------
+; Tile bank slots.  A map cell holds one of these: the picture and the rule
+; at once.  The order is load-bearing -- everything a walker may stand on is
+; above :sl.bocco, so `walkable?` is one comparison.  Slot 0 is "nothing
+; here" and paints as background; it is the HUD's empty heart.
+; -------------------------------------------------------------------------
+
+make "sl.wall 1
+make "sl.heart 2
+make "sl.snake 3
+make "sl.bocco 4
+make "sl.floor 5
+make "sl.flask 6
+make "sl.chest 7
+
+; Palette slots from the stock palette, so this game defines no colours of
+; its own and `restorepalette` is never needed.  Stone for the masonry, amber
+; for gold, emerald for the flasks, lime for the snakes, sky for Bocco.
+
+make "c.mortar 168
+make "c.stone 171
+make "c.floor 169
+make "c.flask 68
+make "c.chest 36
+make "c.bocco 93
+make "c.snake 52
+make "c.heart 20
+make "c.text 254
+
+; -------------------------------------------------------------------------
+; Geometry.  The map is 40x40 cells of 8 pixels, covering the 320x320 screen
+; exactly, so map cell (col,row) is at
+;     x = -156 + 8(col-1)      y = 156 - 8(row-1)
+;
+; The labyrinth is a grid of 19x17 chambers.  Chamber (i,j) sits at map cell
+; (2i, 2j), so chambers occupy the even coordinates 2..38 by 2..34 and the
+; walls between them occupy the odd ones.  Every cell outside that -- column
+; 1, column 39, row 1, row 35 -- stays wall, which is what lets movement skip
+; bounds tests entirely: a walker cannot reach the edge of the map, so no
+; step can leave it.
+;
+; Rows 36..40 are below the labyrinth's south wall and hold the HUD.
+; -------------------------------------------------------------------------
+
+make "st.cols 19
+make "st.rows 17
+
+make "st.snakes 6
+make "st.flasks 8
+make "st.max.health 10
+
+; Frames between steps at 25 fps, and the frames of mercy a hit buys.
+make "st.bocco.tick 4
+make "st.snake.tick 6
+make "st.mercy.frames 25
+
+; -------------------------------------------------------------------------
+; Game state.
+; -------------------------------------------------------------------------
+
+make "st.col 2
+make "st.row 2
+make "st.want 0
+make "st.health 10
+make "st.mercy 0
+make "st.frame 0
+make "st.hud -1
+make "st.won "false
+make "st.quit "false
+make "st.paused "false
+
+; One entry per snake, mutated in place with `.setitem` so a frame allocates
+; nothing.  setup.state gives them their length.
+make "st.s.col []
+make "st.s.row []
+make "st.s.dir []
+
+; -------------------------------------------------------------------------
+; Directions: 1 up, 2 left, 3 down, 4 right.  Row 1 is the top, so up is
+; row - 1.
+; -------------------------------------------------------------------------
+
+to dir.dc :d
+  if :d = 2 [output -1]
+  if :d = 4 [output 1]
+  output 0
+end
+
+to dir.dr :d
+  if :d = 1 [output -1]
+  if :d = 3 [output 1]
+  output 0
+end
+
+to opposite :d
+  output 1 + (remainder (:d + 1) 4)
+end
+
+to tile.x :col
+  output -156 + (8 * (:col - 1))
+end
+
+to tile.y :row
+  output 156 - (8 * (:row - 1))
+end
+
+; -------------------------------------------------------------------------
+; Map questions.  Anything above :sl.bocco can be stood on: floor, a flask,
+; the chest.  Wall, background and the two actor slots cannot.
+; -------------------------------------------------------------------------
+
+to walkable? :slot
+  output :slot > :sl.bocco
+end
+
+to open? :c :r :d
+  output (walkable? (tile (:c + (dir.dc :d)) (:r + (dir.dr :d))))
+end
+
+; -------------------------------------------------------------------------
+; The tile bank.  Every tile is drawn with the pen and picked up with
+; `snaptile`, so the game ships without a picture asset and the art cannot
+; drift away from the code that uses it.  `snaptile` captures the 8x8 square
+; centred on the turtle, so each tile is drawn around the origin: a pen 16
+; wide covers the whole square, and smaller discs sit on top of it.
+; -------------------------------------------------------------------------
+
+to setup.tiles
+  newtiles 8
+  newmap 40 40
+  clean
+  ask 7 [
+    ht pu setpos [0 0]
+
+    setpensize 16 setpc :c.mortar dot [0 0]
+    setpensize 6 setpc :c.stone dot [0 0]
+    snaptile :sl.wall
+
+    setpensize 16 setpc :c.floor dot [0 0]
+    snaptile :sl.floor
+
+    setpensize 3 setpc :c.flask dot [0 1]
+    setpensize 2 dot [0 -2]
+    snaptile :sl.flask
+
+    setpensize 16 setpc :c.floor dot [0 0]
+    setpensize 6 setpc :c.chest dot [0 0]
+    setpensize 2 setpc :c.mortar dot [0 0]
+    snaptile :sl.chest
+
+    setpensize 16 setpc :c.floor dot [0 0]
+    setpensize 3 setpc :c.bocco dot [0 1]
+    setpensize 4 dot [0 -2]
+    snaptile :sl.bocco
+
+    setpensize 16 setpc :c.floor dot [0 0]
+    setpensize 3 setpc :c.snake dot [-2 2]
+    dot [0 0]
+    dot [2 -2]
+    snaptile :sl.snake
+
+    setpensize 16 setpc 255 dot [0 0]
+    setpensize 3 setpc :c.heart dot [-1 1]
+    dot [1 1]
+    setpensize 4 dot [0 -1]
+    snaptile :sl.heart
+
+    setpensize 1
+  ]
+  clean
+end
+
+; -------------------------------------------------------------------------
+; Building the labyrinth.  A depth-first carve with an explicit stack: the
+; map itself records which chambers have been visited (a carved chamber is
+; floor, an unvisited one is still wall), so no second copy of the grid is
+; needed and the maze that gets walked is the maze that got drawn.
+;
+; A chamber is held on the stack as a single number, (j-1) * 19 + i, because
+; a stack of pairs would cons two cells per push.
+; -------------------------------------------------------------------------
+
+to chamber.no :i :j
+  output ((:j - 1) * :st.cols) + :i
+end
+
+to chamber.i :k
+  output 1 + (remainder (:k - 1) :st.cols)
+end
+
+to chamber.j :k
+  output 1 + (intquotient (:k - 1) :st.cols)
+end
+
+to chamber.slot :k
+  output (tile (2 * (chamber.i :k)) (2 * (chamber.j :k)))
+end
+
+; The chamber one step from (i,j), or 0 when that step leaves the grid.
+to neighbour :i :j :d
+  local "ni local "nj
+  make "ni :i + (dir.dc :d)
+  make "nj :j + (dir.dr :d)
+  if :ni < 1 [output 0]
+  if :nj < 1 [output 0]
+  if :ni > :st.cols [output 0]
+  if :nj > :st.rows [output 0]
+  output (chamber.no :ni :nj)
+end
+
+; An unvisited neighbour of :k, tried in a random rotation of the four
+; directions so the maze differs every game.  Scanning from a random offset
+; costs nothing; `shuffle` would cons a four-cell list per chamber.
+to unvisited.neighbour :k
+  local "i local "j local "o local "d local "n
+  make "i (chamber.i :k)
+  make "j (chamber.j :k)
+  make "o (random 4)
+  repeat 4 [
+    make "d (1 + (remainder (:o + repcount) 4))
+    make "n (neighbour :i :j :d)
+    if :n > 0 [
+      if ((chamber.slot :n) = :sl.wall) [output :n]
+    ]
+  ]
+  output 0
+end
+
+; Carve from one chamber into another.  Chamber (i,j) is at map (2i,2j), so
+; the wall between two adjacent chambers is at the sum of their indices:
+; between 2i and 2i+2 lies 2i+1, which is i + (i+1).
+to carve :k :n
+  settile ((chamber.i :k) + (chamber.i :n)) ((chamber.j :k) + (chamber.j :n)) :sl.floor
+  settile (2 * (chamber.i :n)) (2 * (chamber.j :n)) :sl.floor
+end
+
+to fill.walls
+  local "r
+  repeat 35 [
+    make "r repcount
+    repeat 39 [settile repcount :r :sl.wall]
+  ]
+  repeat 5 [
+    make "r (35 + repcount)
+    repeat 40 [settile repcount :r 0]
+  ]
+  repeat 40 [settile 40 repcount :sl.wall]
+end
+
+to build.maze
+  local "stack local "k local "n
+  fill.walls
+  settile 2 2 :sl.floor
+  make "stack (list (chamber.no 1 1))
+  until [empty? :stack] [
+    make "k (first :stack)
+    make "n (unvisited.neighbour :k)
+    ifelse :n = 0 [
+      make "stack (butfirst :stack)
+    ] [
+      carve :k :n
+      make "stack (fput :n :stack)
+    ]
+  ]
+end
+
+; A perfect maze has exactly one route between any two chambers, which makes
+; a snake in the corridor ahead a dead end rather than a hazard.  Knocking a
+; few walls out gives the labyrinth loops to dodge around.
+to open.loops :n
+  repeat :n [
+    ifelse ((random 2) = 0) [
+      settile (1 + (2 * (1 + (random (:st.cols - 1))))) (2 * (1 + (random :st.rows))) :sl.floor
+    ] [
+      settile (2 * (1 + (random :st.cols))) (1 + (2 * (1 + (random (:st.rows - 1))))) :sl.floor
+    ]
+  ]
+end
+
+; -------------------------------------------------------------------------
+; Placing the chest, the flasks and the snakes.  All three go in chambers --
+; never in the gap between two -- so nothing is ever hidden inside a wall
+; join.  A chamber's map coordinates are both even, and Bocco starts at
+; (2,2), so `(:c + :r) > 4` is "not the chamber Bocco is standing in" and
+; `((:c + :r) / 2) > 21` is "at least twenty chambers away from him".
+; -------------------------------------------------------------------------
+
+to random.chamber.col
+  output 2 * (1 + (random :st.cols))
+end
+
+to random.chamber.row
+  output 2 * (1 + (random :st.rows))
+end
+
+; A free chamber whose map coordinates sum to more than :away, as a [col row]
+; pair.  Both coordinates are even and Bocco starts at (2,2), so the sum is
+; twice the chamber distance from his corner: 42 is "at least twenty chambers
+; away", 14 is "not within three", and 4 is "not the chamber he is standing
+; in".  This runs fifteen times at the start of a game, so the pair it conses
+; is not worth the two procedures avoiding it would cost.
+to free.chamber :away
+  local "c local "r
+  forever [
+    make "c (random.chamber.col)
+    make "r (random.chamber.row)
+    if ((tile :c :r) = :sl.floor) [
+      if ((:c + :r) > :away) [output (list :c :r)]
+    ]
+  ]
+end
+
+to place.chest
+  local "p
+  make "p (free.chamber 42)
+  settile (first :p) (last :p) :sl.chest
+end
+
+to place.flasks
+  local "p
+  repeat :st.flasks [
+    make "p (free.chamber 4)
+    settile (first :p) (last :p) :sl.flask
+  ]
+end
+
+to place.snakes
+  local "i
+  make "st.s.col []
+  make "st.s.row []
+  make "st.s.dir []
+  repeat :st.snakes [
+    make "st.s.col (lput 0 :st.s.col)
+    make "st.s.row (lput 0 :st.s.row)
+    make "st.s.dir (lput 1 :st.s.dir)
+  ]
+  repeat :st.snakes [
+    make "i repcount
+    place.snake :i
+  ]
+end
+
+to place.snake :i
+  local "p
+  make "p (free.chamber 14)
+  .setitem :i :st.s.col (first :p)
+  .setitem :i :st.s.row (last :p)
+  .setitem :i :st.s.dir (1 + (random 4))
+end
+
+; -------------------------------------------------------------------------
+; Drawing actors.  The map holds the world and nothing else, so an actor is
+; drawn by lending its cell the actor's slot for exactly one `stamptile` and
+; handing the cell straight back.  Erasing is the same repaint without the
+; loan -- whatever the actor covered is still in the map, so it comes back
+; by itself.
+; -------------------------------------------------------------------------
+
+to draw.actor :c :r :slot
+  local "w
+  make "w (tile :c :r)
+  settile :c :r :slot
+  stamptile :c :r
+  settile :c :r :w
+end
+
+to erase.actors
+  local "i
+  stamptile :st.col :st.row
+  repeat :st.snakes [
+    make "i repcount
+    stamptile (item :i :st.s.col) (item :i :st.s.row)
+  ]
+end
+
+; Snakes first, so Bocco is never hidden under one at the moment he is hit.
+; A hit makes him blink: while mercy is running he is skipped for three
+; frames in every six, which is slow enough to read at 25 fps.
+to draw.actors
+  local "i
+  repeat :st.snakes [
+    make "i repcount
+    draw.actor (item :i :st.s.col) (item :i :st.s.row) :sl.snake
+  ]
+  if :st.mercy > 0 [
+    if ((remainder :st.mercy 6) < 3) [stop]
+  ]
+  draw.actor :st.col :st.row :sl.bocco
+end
+
+; -------------------------------------------------------------------------
+; The heads-up display: ten hearts below the labyrinth's south wall, redrawn
+; only when the count changes.  An empty heart is slot 0, which paints as
+; background.
+; -------------------------------------------------------------------------
+
+to draw.hud.label
+  ask 7 [
+    pu setpos (list (tile.x 2) (tile.y 38))
+    setpc :c.text
+    write "HEALTH
+  ]
+end
+
+to update.hud
+  local "i
+  if :st.hud = :st.health [stop]
+  make "st.hud :st.health
+  repeat :st.max.health [
+    make "i repcount
+    ifelse (:i > :st.health) [
+      settile (8 + :i) 38 0
+    ] [
+      settile (8 + :i) 38 :sl.heart
+    ]
+    stamptile (8 + :i) 38
+  ]
+end
+
+; -------------------------------------------------------------------------
+; Input.  Every queued arrow byte is drained and the most recent one wins;
+; the direction persists, so Bocco keeps walking until a wall stops him or
+; another arrow turns him.  The pause key is answered first and alone: a
+; paused game that could not read its own unpause key would be stuck, and a
+; paused game that still read arrows would let a player line Bocco up for
+; free (the defect fixed in Galaxian and Invaders on 2026-08-10).
+; -------------------------------------------------------------------------
+
+to poll.input
+  local "k
+  while [key?] [
+    make "k (ascii readchar)
+    if :k = 112 [make "st.paused (not :st.paused)]
+    if :k = 113 [make "st.quit "true]
+    if not :st.paused [
+      if :k = 181 [make "st.want 1]
+      if :k = 180 [make "st.want 2]
+      if :k = 182 [make "st.want 3]
+      if :k = 183 [make "st.want 4]
+    ]
+  ]
+end
+
+; -------------------------------------------------------------------------
+; Movement.
+; -------------------------------------------------------------------------
+
+to step.bocco
+  if :st.want = 0 [stop]
+  if not (open? :st.col :st.row :st.want) [
+    make "st.want 0
+    stop
+  ]
+  make "st.col :st.col + (dir.dc :st.want)
+  make "st.row :st.row + (dir.dr :st.want)
+  take.item
+end
+
+to take.item
+  local "s
+  make "s (tile :st.col :st.row)
+  if :s = :sl.flask [
+    make "st.health :st.health + 2
+    if :st.health > :st.max.health [make "st.health :st.max.health]
+    settile :st.col :st.row :sl.floor
+    toot 90 880
+    stop
+  ]
+  if :s = :sl.chest [make "st.won "true]
+end
+
+; A snake keeps going while it can and turns at a junction one time in four.
+; Reverse is the last resort, so a snake works its way down a corridor
+; instead of shuffling on the spot.
+to snake.dir :c :r :d
+  local "o local "n
+  if (open? :c :r :d) [
+    if ((random 4) > 0) [output :d]
+  ]
+  make "o (random 4)
+  repeat 4 [
+    make "n (1 + (remainder (:o + repcount) 4))
+    if not (:n = (opposite :d)) [
+      if (open? :c :r :n) [output :n]
+    ]
+  ]
+  if (open? :c :r (opposite :d)) [output (opposite :d)]
+  output 0
+end
+
+to step.snakes
+  local "i local "c local "r local "d
+  repeat :st.snakes [
+    make "i repcount
+    make "c (item :i :st.s.col)
+    make "r (item :i :st.s.row)
+    make "d (snake.dir :c :r (item :i :st.s.dir))
+    if :d > 0 [
+      .setitem :i :st.s.dir :d
+      .setitem :i :st.s.col (:c + (dir.dc :d))
+      .setitem :i :st.s.row (:r + (dir.dr :d))
+    ]
+  ]
+end
+
+; -------------------------------------------------------------------------
+; Snakebite.  Checked after Bocco moves and again after the snakes move, so
+; a head-on swap is caught by the first of the two: Bocco steps onto the cell
+; the snake has not left yet.  A bite costs 1 to 4 health, as the original
+; says, and buys a second of mercy so a snake sharing a corridor cannot
+; drain ten points in ten frames.
+; -------------------------------------------------------------------------
+
+to bitten?
+  local "i
+  repeat :st.snakes [
+    make "i repcount
+    if ((item :i :st.s.col) = :st.col) [
+      if ((item :i :st.s.row) = :st.row) [output "true]
+    ]
+  ]
+  output "false
+end
+
+to check.bite
+  if :st.mercy > 0 [stop]
+  if not (bitten?) [stop]
+  make "st.health :st.health - (1 + (random 4))
+  make "st.mercy :st.mercy.frames
+  toot 120 160
+end
+
+; -------------------------------------------------------------------------
+; The frame.
+; -------------------------------------------------------------------------
+
+to play.frame
+  poll.input
+  if :st.paused [sync stop]
+  make "st.frame :st.frame + 1
+  if :st.mercy > 0 [make "st.mercy :st.mercy - 1]
+  erase.actors
+  if ((remainder :st.frame :st.bocco.tick) = 0) [
+    step.bocco
+    check.bite
+  ]
+  if ((remainder :st.frame :st.snake.tick) = 0) [
+    step.snakes
+    check.bite
+  ]
+  draw.actors
+  update.hud
+  reclaim
+  sync
+end
+
+; Logo never collects on its own, and a game can run for minutes.  Once every
+; ten seconds keeps free storage flat, as it does in the sibling games.
+to reclaim
+  if not ((remainder :st.frame 250) = 0) [stop]
+  recycle
+end
+
+to game.over?
+  if :st.quit [output "true]
+  if :st.won [output "true]
+  output :st.health < 1
+end
+
+; -------------------------------------------------------------------------
+; Screens.
+; -------------------------------------------------------------------------
+
+; A bracketed list loses its spacing when it is printed -- the words come
+; back separated by one space each -- so every line of laid-out text is a
+; single vertical-bar quoted word placed with `setcursor`, as the sibling
+; games do.  The blurb is the original's own, quoted from its itch.io page.
+to title.screen
+  textscreen ct settc [3 4]
+  setcursor [12 3] print "|THE SNAKE TEMPLE|
+  setcursor [4 5] print "|a port of the 2022 BASIC 10Liner for|
+  setcursor [4 6] print "|the Oric Atmos, by RAX|
+  setcursor [2 9] print "|Bocco is hunting for treasure in the|
+  setcursor [2 10] print "|Temple of the Snakes.  Among the|
+  setcursor [2 11] print "|labyrinth of tunnels is a treasure|
+  setcursor [2 12] print "|chest that you must find.  The temple|
+  setcursor [2 13] print "|is full of snakes, so be careful!|
+  setcursor [2 16] print "|A snake inflicts damage on 1 to 4|
+  setcursor [2 17] print "|health points.|
+  setcursor [2 19] print "|Each flask you find restores 2 health|
+  setcursor [2 20] print "|points.|
+  setcursor [2 23] print "|ARROWS Move   P Pause   Q Give up|
+  setcursor [14 26] print "|Press Space|
+  wait.for.space
+end
+
+to wait.for.space
+  local "k
+  make "k 0
+  until [:k = 32] [
+    if key? [make "k (ascii readchar)]
+  ]
+end
+
+to banner :text
+  ask 7 [
+    pu setpos (list (tile.x 6) (tile.y 20))
+    setpc :c.text
+    write :text
+  ]
+  refresh
+end
+
+to end.screen
+  if :st.quit [stop]
+  ifelse :st.won [
+    banner "|YOU FOUND THE TREASURE!|
+    toot 200 660
+    toot 200 880
+  ] [
+    banner "|BOCCO HAS FALLEN...|
+    toot 400 200
+  ]
+  wait.for.space
+end
+
+; -------------------------------------------------------------------------
+; A game.
+; -------------------------------------------------------------------------
+
+to setup.state
+  make "st.col 2
+  make "st.row 2
+  make "st.want 0
+  make "st.health :st.max.health
+  make "st.mercy 0
+  make "st.frame 0
+  make "st.hud -1
+  make "st.won "false
+  make "st.quit "false
+  make "st.paused "false
+end
+
+to setup.temple
+  setup.state
+  build.maze
+  open.loops 20
+  place.chest
+  place.flasks
+  place.snakes
+end
+
+to one.game
+  setup.temple
+  fullscreen
+  clean
+  stampmap
+  draw.hud.label
+  update.hud
+  draw.actors
+  refresh
+  (setrefresh "sync 25)
+  until [game.over?] [play.frame]
+  setrefresh "auto
+  end.screen
+  recycle
+end
+
+to temple
+  setup.tiles
+  forever [
+    title.screen
+    one.game
+  ]
+end

@@ -148,6 +148,13 @@ target_compile_definitions(test_trails PRIVATE
     P9TRAILS_SOURCE="${CMAKE_SOURCE_DIR}/tests/logo/p9trails"
     P10PROF_SOURCE="${CMAKE_SOURCE_DIR}/tests/logo/p10prof")
 
+# The Snake Temple is a pure-Logo port of RAX's Oric BASIC 10Liner.  Its test
+# loads the program, checks the labyrinth it carves as a graph, and runs the
+# published rules -- 1-4 damage a bite, 2 health a flask -- against the frame.
+add_logo_test(test_temple)
+target_compile_definitions(test_temple PRIVATE
+    TEMPLE_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/temple")
+
 # Game HUD test — both games use the fullscreen graphics canvas and draw their
 # score/lives/level text into the lower part of it.
 add_logo_test(test_game_huds)

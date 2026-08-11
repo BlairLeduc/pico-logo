@@ -34,6 +34,9 @@ Companion documents (everything in `docs/`):
   from its own map, so it ships without a picture asset.
 - [`asteroids-design.md`](asteroids-design.md) — P11 Asteroids, the first
   *vector* game in the tree (design drafted, gated on its own M0 measurement).
+- [`snake-temple-design.md`](snake-temple-design.md) — a port of RAX's 2022
+  Oric BASIC 10Liner (implemented; **release blocked on RAX's permission**,
+  since a port carries the original author's title and character).
 - [`code-review-2026-07-02.md`](code-review-2026-07-02.md) — the review that
   produced PR #86; a few small refinements from it are tracked below, its
   defects in [`bugs.md`](bugs.md).
