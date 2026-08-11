@@ -42,9 +42,11 @@ extern "C" {
 //
 // COST: one slot is a 16-byte `Variable` (name pointer, Value, three
 // flags) in .bss, so this table is 3 KB on the target. Raising it does
-// not slow anything down: `find_global` scans `global_count`, not this
-// bound, so a lookup costs what the workspace actually holds. Only
-// creating a *new* global walks the whole array, once per name.
+// not slow *reads* down: `find_global` scans `global_count`, not this
+// bound, so a lookup costs what the workspace actually holds. The two
+// paths that do walk the whole array are `variables_init` (once, at
+// startup) and creating a global that does not exist yet (once per
+// name) -- neither is on a frame loop's path.
 //
 // A big workspace is still a linear scan on every global read, so this
 // is not free to keep raising -- 192 is what lets a game (Turtle Trails
