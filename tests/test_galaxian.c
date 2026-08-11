@@ -571,6 +571,39 @@ void test_arm_demons_takes_a_table_an_earlier_program_left_behind(void)
                              mock_device_get_output());
 }
 
+// A pause has to hold the player as well as the aliens. `freeze` suspends
+// demons and autonomous turtle motion, which is what stops the convoy, but
+// steering and firing are neither -- they are poll.input writing to the
+// turtle directly, and poll.input runs outside the paused guard so the pause
+// key can still be read.
+void test_pause_holds_the_ship_as_well_as_the_aliens(void)
+{
+    start_level();
+    run_string("toggle.pause");
+    assert_true(":paused");
+
+    float x = num("ask 0 [xcor]");
+    set_mock_input("\264"); // left arrow (180)
+    run_string("play.frame");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(x, num("ask 0 [xcor]"),
+                                    "the ship steered while the game was paused");
+
+    set_mock_input(" "); // fire
+    run_string("play.frame");
+    assert_true("not (ask 1 [shown?])");
+
+    // ...but P itself still has to reach the game, or the pause could never
+    // be lifted, and the ship has to steer again once it is.
+    set_mock_input("p");
+    run_string("play.frame");
+    assert_true("not :paused");
+
+    set_mock_input("\264");
+    run_string("play.frame");
+    TEST_ASSERT_NOT_EQUAL_MESSAGE((int)x, (int)num("ask 0 [xcor]"),
+                                  "the ship did not steer after the pause was lifted");
+}
+
 //==========================================================================
 
 int main(void)
@@ -579,6 +612,7 @@ int main(void)
     RUN_TEST(test_file_loads_and_sets_globals);
     RUN_TEST(test_attract_screen_shows_instructions_and_scores);
     RUN_TEST(test_arm_demons_takes_a_table_an_earlier_program_left_behind);
+    RUN_TEST(test_pause_holds_the_ship_as_well_as_the_aliens);
     RUN_TEST(test_pyramid_occupancy);
     RUN_TEST(test_pyramid_total_is_20);
     RUN_TEST(test_row_col_mapping);

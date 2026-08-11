@@ -688,10 +688,16 @@ end
 to poll.input
   if key? [
     make "k ascii readchar
+    ; The pause key first, and it is the only one a paused game answers.
+    ; play.frame runs this outside its paused guard so P can be read at all,
+    ; and `freeze` stops the formation but not the player: steering and firing
+    ; are not autonomous motion, they are these two lines writing to the
+    ; turtle directly, so the pause has to turn them away itself.
+    if :k = 112 [toggle.pause stop]
+    if :paused [stop]
     if :k = 180 [ask 0 [move.cannon -6]]
     if :k = 183 [ask 0 [move.cannon 6]]
     if :k = 32 [fire]
-    if :k = 112 [toggle.pause]
   ]
 end
 
