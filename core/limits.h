@@ -40,9 +40,22 @@ extern "C" {
 
 // Maximum global variable slots.
 //
+// COST: one slot is a 16-byte `Variable` (name pointer, Value, three
+// flags) in .bss, so this table is 3 KB on the target. Raising it does
+// not slow *reads* down: `find_global` scans `global_count`, not this
+// bound, so a lookup costs what the workspace actually holds. The two
+// paths that do walk the whole array are `variables_init` (once, at
+// startup) and creating a global that does not exist yet (once per
+// name) -- neither is on a frame loop's path.
+//
+// A big workspace is still a linear scan on every global read, so this
+// is not free to keep raising -- 192 is what lets a game (Turtle Trails
+// is the fattest at ~119) load with the frame profiler or a second
+// program on top, which 128 no longer did.
+//
 // OVERFLOW: `var_set` returns `false` when the table is full; callers
 // surface this as `ERR_OUT_OF_SPACE`.
-#define MAX_GLOBAL_VARIABLES 128
+#define MAX_GLOBAL_VARIABLES 192
 
 // Maximum depth of the "currently executing procedure" name stack used
 // for the pause prompt and trace output. This is independent of the

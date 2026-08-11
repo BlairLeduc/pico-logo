@@ -46,13 +46,13 @@ make "c.hedge 252
 make "c.dizzy 253
 make "c.text 254
 
-; Set text colours
-make "tc.text 3
-make "tc.bg 4
-make "tc.dart 12
-make "tc.swoop 13
-make "tc.echo 14
-make "tc.moss 15
+; The attract screen's legend needs the four bug colours on the *text* screen,
+; and `settc` only reaches palette slots 0-15, so they cannot be the `c.*`
+; slots above.  Their text-screen slots (3 and 4 for the default foreground and
+; background, 12-15 for the bugs) are written as literals where they are used,
+; in `setup.palette` and `attract.screen` and nowhere else: this workspace has
+; to leave room for the frame profiler or p9trails to load on top of it, and
+; six globals is more than that margin can spare.
 
 
 ; Shape slots.  All sprites are mono 8x16 bitmaps drawn 16x16, painted in
@@ -329,11 +329,12 @@ to setup.palette
   setpalette :c.hedge [1 130 49]
   setpalette :c.dizzy [70 96 232]
   setpalette :c.text [236 240 246]
-  ; set bug colours for text screen
-  setpalette :tc.dart [232 74 62]
-  setpalette :tc.swoop [236 130 220]
-  setpalette :tc.echo [86 214 226]
-  setpalette :tc.moss [240 152 62]
+  ; The same four bug colours again, in the text-screen slots the attract
+  ; screen's legend prints them in (12 Dart, 13 Swoop, 14 Echo, 15 Moss).
+  setpalette 12 [232 74 62]
+  setpalette 13 [236 130 220]
+  setpalette 14 [86 214 226]
+  setpalette 15 [240 152 62]
   make "tt.bug.pc (list 0 :c.dart :c.swoop :c.echo :c.moss)
 end
 
@@ -1480,14 +1481,14 @@ end
 
 to attract.screen
   stopsound
-  textscreen ct settc (list :tc.text :tc.bg)
+  textscreen ct settc [3 4]
   setcursor [13 4] print "|TURTLE TRAILS|
   setcursor [5 7] print "|Paint every path with your pen|
-  setcursor [11 9] settc (list :tc.dart :tc.bg) print "|Dart    Relentless|
-  setcursor [11 10] settc (list :tc.swoop :tc.bg) print "|Swoop   Ambusher|
-  setcursor [11 11] settc (list :tc.echo :tc.bg) print "|Echo    Flanker|
-  setcursor [11 12] settc (list :tc.moss :tc.bg) print "|Moss    Timid|
-  setcursor [5 14] settc (list :tc.text :tc.bg) print "|A blossom makes them dizzy|
+  setcursor [11 9] settc [12 4] print "|Dart    Relentless|
+  setcursor [11 10] settc [13 4] print "|Swoop   Ambusher|
+  setcursor [11 11] settc [14 4] print "|Echo    Flanker|
+  setcursor [11 12] settc [15 4] print "|Moss    Timid|
+  setcursor [5 14] settc [3 4] print "|A blossom makes them dizzy|
   setcursor [3 18] print "|Points 10   Blossom 50   Bug 200+|
   setcursor [6 20] print "|ARROWS Move  P Pause  Q Quit|
   if :tt.high > 0 [setcursor [15 24] (print "|Top| :tt.high)]
