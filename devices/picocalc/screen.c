@@ -562,18 +562,30 @@ void screen_gfx_clear(void)
 {
     memset(gfx_buffer, GFX_DEFAULT_BACKGROUND, sizeof(gfx_buffer)); // Clear the graphics buffer
 
-    if (screen_mode == SCREEN_MODE_GFX)
+    if (gfx_refresh_auto)
     {
-        lcd_clear_screen(GFX_DEFAULT_BACKGROUND); // Clear the LCD screen in graphics mode
-    }
-    else if (screen_mode == SCREEN_MODE_SPLIT)
-    {
-        // Clear the graphics area in split mode
-        lcd_solid_rectangle(GFX_DEFAULT_BACKGROUND, 0, 0, SCREEN_WIDTH, SCREEN_SPLIT_GFX_HEIGHT);
-    }
+        // Automatic mode: fill the panel directly. That costs less than
+        // composing the whole canvas back through the blit pipeline, and
+        // buffer and LCD are then in sync — so reset the dirty state.
+        if (screen_mode == SCREEN_MODE_GFX)
+        {
+            lcd_clear_screen(GFX_DEFAULT_BACKGROUND); // Clear the LCD screen in graphics mode
+        }
+        else if (screen_mode == SCREEN_MODE_SPLIT)
+        {
+            // Clear the graphics area in split mode
+            lcd_solid_rectangle(GFX_DEFAULT_BACKGROUND, 0, 0, SCREEN_WIDTH, SCREEN_SPLIT_GFX_HEIGHT);
+        }
 
-    // Buffer and LCD are now in sync — reset dirty state
-    dirty_tiles_clear(&gfx_tiles);
+        dirty_tiles_clear(&gfx_tiles);
+    }
+    else
+    {
+        // Manual (or sync) mode: nothing may reach the panel until the
+        // program says refresh, or a clear-and-redraw frame would flash
+        // black. Defer the wipe to the next present.
+        dirty_tiles_mark_all(&gfx_tiles);
+    }
 
     // Sprites were wiped from the LCD along with everything else; mark
     // them so the next present redraws them over the cleared canvas.
