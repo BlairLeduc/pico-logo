@@ -56,6 +56,10 @@ many speculative ones. Never ask the author to run or add tests first.
 - A lone `end` closes a `to` definition even inside an unclosed `[`/`(` (#127), so an
   unbalanced bracket can't swallow later procedures. `repl_find_end_token`'s per-line
   depth is intentional.
+- `docs/roadmap.md` and `docs/bugs.md` are **append-only dated logs**: a row records what
+  shipped on that date, and a later row amends an earlier one rather than rewriting it.
+  Don't flag an older entry as inaccurate because a later change superseded it — including
+  when both entries land in the same PR.
 - `graphify-out/` is machine-generated, committed as-is; never flag it. Dated snapshots
   archive the *prior* state, so a header trailing its directory date is by design.
 - A blob word can never be a list element: `mem_cons` returns NODE_NIL for a blob
