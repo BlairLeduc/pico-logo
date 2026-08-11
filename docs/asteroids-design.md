@@ -1,9 +1,10 @@
 # Asteroids in Pico Logo (design)
 
-Status: **no game code. §16 M0 is done — measured on a Plus 2 W on
-2026-08-11, and it rewrote this document.** The frame gets erased by clearing
-and redrawing, not in place (§3.3); the rate is 15 fps, not 20 (§12); the
-outlines are three, not nine (§13). M1 is unblocked.
+Status: **M0 done — measured on a Plus 2 W on 2026-08-11, and it rewrote this
+document.** The frame gets erased by clearing and redrawing, not in place
+(§3.3); the rate is 15 fps, not 20 (§12); the outlines are three, not nine
+(§13). **M1 is written and green on the host** (`logo/games/asteroids`) and
+waiting on its board run, which is the gate on M2.
 
 The three games in the tree so far — [Space Invaders](space-invaders-design.md),
 [Galaxian](galaxian-design.md), [Turtle Trails](turtle-trails-design.md) —
@@ -727,20 +728,39 @@ Logo against primitives that already exist.
 
 ## 14. Memory
 
-The Galaxian rule applies unchanged: **a frame must allocate nothing.** Every
-rock field is `.setitem` into a pre-built flat list; positions and velocities
-are floats held in those lists; `wrapc`'s output is a number, not a cell.
+**The Galaxian rule does not apply, and M1 found out why.** This design opened
+by asserting it — *a frame must allocate nothing*, as the three shipped games
+measure — and that is not a rule, it is a property of what those games happen
+to store.
 
-The two places that do allocate:
+`.setitem` of a **number** interns it as a word atom
+(`member_value_to_node`, [core/primitives_words_lists.c](../core/primitives_words_lists.c)).
+The shipped games measure zero a frame because the values they write back come
+out of other lists already interned, or are drawn from a handful of distinct
+constants. Continuous physics has neither property: every rock's new x, y and
+angle is a value nothing has held before, so **a twelve-rock frame mints 36
+atoms**, ~9,000 between reclaims.
 
-- The HUD text is rebuilt with `sentence` when a displayed value changes — a
-  kill, a death, a level. Galaxian measured this shape at ~14 cells. Note this
-  is *not* in `draw.hud`, which under clear-and-redraw writes an already-built
-  word (§10); it is in the code that changes the value.
-- Level setup rebuilds nothing; it writes into the existing lists.
+Measured on the mock over 2,000 frames at twelve rocks: the working set
+settles at **~2,950 cells and stays there**, varying by ±60 between 250-frame
+blocks with no trend. So the contract is a steady state, not a zero, and the
+collector keeps up with it.
+
+Two consequences:
+
+- **`reclaim` is load-bearing here**, where in Galaxian it was a precaution
+  against a slow HUD drip. A burst of rock physics with no recycle in it will
+  exhaust the pool: 1,300 `step.rock` calls in one uninterrupted loop raised
+  `Out of space in step.rock` while the harness was being written.
+- The rule to write to is **"a frame must not allocate anything it does not
+  hand back"** — no `sentence`, no `list`, no `fput` on the frame path. The
+  HUD text is rebuilt only where a displayed value changes, which at M1 is
+  level setup and nothing else; `wrapc` outputs a number rather than a cell.
 
 So `play.frame` calls `reclaim`, which runs `recycle` every 250 frames —
-seventeen seconds at 15 fps, never per frame. `test_asteroids.c` pins both
+seventeen seconds at 15 fps, never per frame.
+`test_the_frame_loop_holds_free_storage_flat` soaks 1,250 frames and fails on
+growth rather than on spend. `test_asteroids.c` pins both
 halves: zero cells over 100 quiet frames, and a bounded count over 100 frames
 of continuous scoring.
 
@@ -817,13 +837,26 @@ refresh and silently end the measurement; and it ran `fullscreen`, because
 measured at the prompt is zero — the correction P9 had to make to its entire
 first series of numbers.
 
-**M1 — rocks only.** The 12 slots, three shape procedures, wrap, spin,
-clear-and-redraw, `sync` at 15 fps. Nothing to shoot with. **This is still the
-frame budget's real test**, and more so than when it was written: M0 measured
-the drawing two thirds of the body but the physics third is estimated, and
-§12's worst case fits by 0.5 ms. M1 measures a real `play.frame` at 6, 9 and
-12 rocks with the body/present split, and if it comes in over, the reserve
-levers are in §12 in order.
+**M1 — rocks only. Built and green on the host; not yet run on a board.**
+`logo/games/asteroids` (12 slots, three outlines, wrap, spin,
+clear-and-redraw, `sync` at 15 fps, nothing to shoot with),
+`tests/test_asteroids.c` (23 tests), and `logo/tests/p11m1`, which times a
+real frame at 6, 9 and 12 rocks with the body and the present read apart —
+the split P9 M5 wished it had.
+
+**The board run is the gate**, and it is still the frame budget's real test:
+M0 measured the drawing two thirds of the body, the physics third is
+estimated, and §12's worst case fits by 0.5 ms. If it comes in over, the
+reserve levers are in §12 in order.
+
+Two things M1 settled on the host without a board. It **disproved this
+document's memory rule** — an Asteroids frame does allocate, ~36 atoms a
+frame at twelve rocks, and the contract is a flat working set rather than a
+zero (§14). And the harness has to spell `play.frame` out again minus its
+`sync`, because the present must be timed on its own and `sync` is the last
+thing the frame does; `test_the_harness_frame_matches_the_game_frame` drives
+both from one state and requires the same drawing and the same physics, since
+a harness frame that drifts from the game measures a game nobody plays.
 
 **M2 — ship and shots.** Rotation, thrust, momentum, firing, shot×rock
 collisions, splitting, scoring, the HUD.
@@ -844,17 +877,26 @@ thrust impulse, speed clamp, shot speed, saucer accuracy.
 `tests/test_asteroids.c`, mock device, mirroring `test_galaxian.c`'s split
 between pure logic and driven paths.
 
-**In already, for M0:** the scene tables are all twelve long and each subset
-holds an equal mix of sizes; all nine outlines close on themselves and draw
-the segment count §6.3 claims; the walk out to the first vertex does not draw
-(or every rock would wear a spoke); the dispatch reaches the outline it names;
-an erase pass retraces its draw pass segment for segment and differs only in
-the pen colour — §3.2's failure mode, and the reason the eraser is a colour;
-every rock is drawn with a one-pixel pen (§3.2); and the harness runs end to
-end and its report reaches the file, because a script that dies half way
-through wastes a board session.
+**In, for M1** (23 tests): the eight rock lists are all `MAX.ROCKS` long;
+`wrapc` at both edges, exactly on the boundary, and its one-correction
+contract; all three outlines close on themselves and draw the segment count
+§6.3 claims; the walk out to the first vertex does not draw, or every rock
+would wear a spoke; the dispatch reaches the outline its size names; a
+rotation past 360° still places, since the angle is never normalised; slot
+allocation, including that a full board yields no slot and creates no rock;
+wrap on a rock leaving the field, and that a free slot is never stepped; a
+level never exceeds the slot count and does not inherit the last one's rocks;
+a frame draws the world and nothing else; the one-pixel pen; the frame loop
+holds free storage flat over 1,250 frames (§14); a paused frame neither steps
+nor recycles; `P` is the only key a paused game answers; a level ends on `Q`
+and hands the screen back out of `sync` mode; and the M1 harness runs end to
+end, writes its file, and steps and draws exactly what `play.frame` does.
 
-**To come with the game:**
+The M0 harness has its own binary, `tests/test_p11rocks.c` — both Logo files
+define `place` and `draw.rock`, and the harness has to keep the shape it was
+measured in.
+
+**To come with the rest of the game:**
 
 - `wrapc` at both edges, exactly on the boundary, and beyond one full width.
 - The split table: large → 2 medium, medium → 2 small, small → nothing; child

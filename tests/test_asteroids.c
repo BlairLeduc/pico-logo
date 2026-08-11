@@ -2,20 +2,21 @@
 //  Pico Logo
 //  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
-//  Tests for Asteroids (docs/asteroids-design.md).
+//  Tests for the Asteroids game (logo/games/asteroids), M1: rocks only.
 //
-//  Nothing of the game exists yet: M0 is a measurement and it gates
-//  everything after it, so what this file covers today is the M0 harness
-//  (logo/tests/p11rocks) -- the timing script that decides how a frame gets
-//  erased.  It grows into the game's test file at M1.
+//  The game is pure Logo; this exercises it the two ways test_galaxian.c does:
+//  loading the whole file proves it parses and that the init path runs on the
+//  mock device, and the pure logic (wrap, slot allocation, the outline walks)
+//  is checked directly, since that is where the bugs would hide.
 //
-//  Two things are worth pinning even in a timing script.  The outlines are
-//  generated (scripts/gen_rocks.py) and pasted in, so the file is the only
-//  place a bad paste would show; and an unclosed rock leaves a gap that the
-//  erase still takes away correctly but that looks broken, which is exactly
-//  the kind of defect a screenful of numbers hides.  And the script has to
-//  run end to end before it is worth carrying to a board -- a script that
-//  dies half way through wastes a hardware session (the p9m0 convention).
+//  M1's own question is the frame budget, and no host test can answer it --
+//  that needs logo/tests/p11m1 on a board.  What these tests can hold is
+//  everything the budget assumes: that a frame draws the world and nothing
+//  else, that the frame loop holds free storage flat, and that the outlines
+//  carry the segment counts the budget was cut from.
+//
+//  The M0 harness tests are in test_p11rocks.c, a separate binary because
+//  both files define `place` and `draw.rock`.
 //
 
 #include "test_mock_fs.h"
@@ -26,13 +27,25 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifndef P11ROCKS_SOURCE
-#error "P11ROCKS_SOURCE must be defined (path to logo/tests/p11rocks)"
+#ifndef ASTEROIDS_SOURCE
+#error "ASTEROIDS_SOURCE must be defined (path to logo/games/asteroids)"
 #endif
 
+#ifndef P11M1_SOURCE
+#error "P11M1_SOURCE must be defined (path to logo/tests/p11m1)"
+#endif
+
+// Segments per outline, from the design's section 6.3 table. Statements per
+// draw are 15/13/11: four for the prologue, then two per segment less the
+// turn after the last one.
+#define SEG_LARGE  6
+#define SEG_MEDIUM 5
+#define SEG_SMALL  4
+
 // Load a whole Logo file, defining its procedures and running its top-level
-// `make`s. Procedure definitions are not handled by the bare evaluator, so we
-// buffer them and hand them to proc_define_from_text the way `load` does.
+// tuning `make`s. Procedure definitions are not handled by the bare
+// evaluator, so we buffer them and hand them to proc_define_from_text the way
+// the `load` primitive does.
 static void load_file(const char *path)
 {
     FILE *f = fopen(path, "rb");
@@ -90,15 +103,15 @@ static void load_file(const char *path)
 
 void setUp(void)
 {
-    // _and_hardware gives a clock for `ticks`; the mock filesystem is here for
-    // the report, which goes to a file as well as the screen because numbers
-    // on the PicoCalc's display cannot be copied off it.
+    // _and_hardware gives a controllable clock, which `sync` and the frame
+    // pacing need; the mock filesystem is unused here but keeps the scaffold
+    // the same shape as the other game tests.
     test_scaffold_setUp_with_device_and_hardware();
     mock_fs_reset();
     logo_storage_init(&mock_storage, &mock_storage_ops);
     logo_io_init(&mock_io, mock_device_get_console(), &mock_storage, &mock_hardware);
     primitives_set_io(&mock_io);
-    load_file(P11ROCKS_SOURCE);
+    load_file(ASTEROIDS_SOURCE);
 }
 
 void tearDown(void)
@@ -115,48 +128,86 @@ static float num(const char *expr)
     return r.value.as.number;
 }
 
+// An element of a flat list is a word until something does arithmetic on it,
+// so read one through a `0 +` the way the game's own comparisons coerce it.
+static float item_of(const char *list, int i)
+{
+    char expr[64];
+    snprintf(expr, sizeof(expr), "0 + item %d :%s", i, list);
+    return num(expr);
+}
+
 static void run(const char *input)
 {
     Result r = run_string(input);
     TEST_ASSERT_TRUE_MESSAGE(r.status == RESULT_NONE || r.status == RESULT_OK, input);
 }
 
-//==========================================================================
-// The scene
-//==========================================================================
-
-// Five parallel lists, hand-written, read by index every frame -- so a table
-// edited unevenly is a silent out-of-range read rather than a visible defect.
-void test_the_scene_tables_are_all_twelve_long(void)
+// Segments the live rocks should draw between them, straight from `rsize`.
+static int expected_segments(void)
 {
-    TEST_ASSERT_EQUAL_FLOAT(12, num("count :p11.x"));
-    TEST_ASSERT_EQUAL_FLOAT(12, num("count :p11.y"));
-    TEST_ASSERT_EQUAL_FLOAT(12, num("count :p11.sz"));
-    TEST_ASSERT_EQUAL_FLOAT(12, num("count :p11.sh"));
-    TEST_ASSERT_EQUAL_FLOAT(12, num("count :p11.a"));
-
-    // Both subsets the script measures hold an equal number of each size, so
-    // a 6- and a 9-rock reading are not secretly a heavier or lighter mix.
-    // `0 +` because an element of a list literal is a word until something
-    // does arithmetic on it, and the game's own `=` tests coerce it too.
-    for (int size = 1; size <= 3; size++)
+    int max = (int)num(":max.rocks");
+    int total = 0;
+    for (int i = 1; i <= max; i++)
     {
-        char expr[64];
-        for (int upto = 6; upto <= 12; upto += 3)
+        switch ((int)item_of("rsize", i))
         {
-            int seen = 0;
-            for (int i = 1; i <= upto; i++)
-            {
-                snprintf(expr, sizeof(expr), "0 + item %d :p11.sz", i);
-                if ((int)num(expr) == size)
-                    seen++;
-            }
-            char msg[96];
-            snprintf(msg, sizeof(msg), "size %d appears %d times in the first %d rocks",
-                     size, seen, upto);
-            TEST_ASSERT_EQUAL_INT_MESSAGE(upto / 3, seen, msg);
+        case 3: total += SEG_LARGE;   break;
+        case 2: total += SEG_MEDIUM;  break;
+        case 1: total += SEG_SMALL;   break;
+        default: break;
         }
     }
+    return total;
+}
+
+//==========================================================================
+// The file loads
+//==========================================================================
+
+void test_file_loads_and_sets_its_tuning(void)
+{
+    TEST_ASSERT_EQUAL_FLOAT(12, num(":max.rocks"));
+    TEST_ASSERT_EQUAL_FLOAT(4, num(":start.rocks"));
+    TEST_ASSERT_EQUAL_FLOAT(254, num(":rock.colour"));
+
+    // Eight parallel lists, all MAX.ROCKS long. A list edited to a different
+    // length is a silent out-of-range read rather than a visible defect.
+    const char *lists[] = {"rx", "ry", "rdx", "rdy", "rang", "rspin", "rsize", "rrad"};
+    for (size_t i = 0; i < sizeof(lists) / sizeof(lists[0]); i++)
+    {
+        char expr[64];
+        snprintf(expr, sizeof(expr), "count :%s", lists[i]);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(12, num(expr), lists[i]);
+    }
+}
+
+//==========================================================================
+// wrapc
+//==========================================================================
+
+void test_wrapc_wraps_at_both_edges(void)
+{
+    TEST_ASSERT_EQUAL_FLOAT(0, num("wrapc 0"));
+    TEST_ASSERT_EQUAL_FLOAT(100, num("wrapc 100"));
+    TEST_ASSERT_EQUAL_FLOAT(-159, num("wrapc 161"));
+    TEST_ASSERT_EQUAL_FLOAT(159, num("wrapc -161"));
+
+    // Exactly on the boundary is inside it: the tests are `>` and `<`, so a
+    // rock centred on 160 stays there rather than flipping every frame.
+    TEST_ASSERT_EQUAL_FLOAT(160, num("wrapc 160"));
+    TEST_ASSERT_EQUAL_FLOAT(-160, num("wrapc -160"));
+}
+
+// One correction, not a modulo. Beyond a full width it lands out of bounds,
+// and that is the documented contract rather than an oversight: a rock moves
+// about 0.9 steps a frame, so it can only ever be a step or two outside.
+// `wrapc` is on the hottest path in the game and two failed comparisons are
+// what it costs; a `modulo` would cost more on every rock on every frame to
+// handle a case the physics cannot produce.
+void test_wrapc_corrects_once_and_only_once(void)
+{
+    TEST_ASSERT_EQUAL_FLOAT(180, num("wrapc 500"));
 }
 
 //==========================================================================
@@ -164,10 +215,10 @@ void test_the_scene_tables_are_all_twelve_long(void)
 //==========================================================================
 
 // A rock is authored as radii and converted to a turtle walk by
-// scripts/gen_rocks.py, because hand-written turns do not close.  Walk each
+// scripts/gen_rocks.py, because hand-written turns do not close. Walk each
 // outline at the origin and check it arrives back at the vertex it started
-// from -- the design's section 6.3 promise, and the one property of the
-// pasted-in literals that a bad paste would break.
+// from -- the one property of a pasted-in block of literals that a bad paste
+// would break, and an unclosed rock has a gap that reads as broken.
 static void assert_outline_closes(const char *name, int segments)
 {
     run("clean  setpc 254  pu setx 0 sety 0 seth 0");
@@ -190,107 +241,193 @@ static void assert_outline_closes(const char *name, int segments)
 
 void test_every_outline_closes_on_itself(void)
 {
-    // Segment counts fall with size, which is where the saving belongs: the
-    // small rocks are the numerous ones.
-    assert_outline_closes("rock.a.l", 8);
-    assert_outline_closes("rock.b.l", 8);
-    assert_outline_closes("rock.c.l", 8);
-    assert_outline_closes("rock.a.m", 6);
-    assert_outline_closes("rock.b.m", 6);
-    assert_outline_closes("rock.c.m", 6);
-    assert_outline_closes("rock.a.s", 5);
-    assert_outline_closes("rock.b.s", 5);
-    assert_outline_closes("rock.c.s", 5);
+    assert_outline_closes("rock.l", SEG_LARGE);
+    assert_outline_closes("rock.m", SEG_MEDIUM);
+    assert_outline_closes("rock.s", SEG_SMALL);
 }
 
 // The prologue walks from the rock's stored centre out to its first vertex
 // with the pen up, which is what lets the stored position mean the centre.
-// If that ever drew, every rock would wear a spoke.
+// If it ever drew, every rock would wear a spoke.
 void test_the_walk_out_to_the_first_vertex_does_not_draw(void)
 {
     run("clean  setpc 254  pu setx 0 sety 0 seth 0");
     mock_device_clear_graphics();
-    run("rock.a.l");
-    // Eight segments and not nine: the reach is pen-up, and there is no turn
-    // after the last segment because `place` sets the heading every pass.
-    TEST_ASSERT_EQUAL_INT(8, mock_device_line_count());
-    // The first vertex is 21.1 steps straight ahead of the centre.
+    run("rock.l");
+    TEST_ASSERT_EQUAL_INT(SEG_LARGE, mock_device_line_count());
+    // The first vertex is 21.4 steps straight ahead of the centre.
     const MockLine *first = mock_device_get_line(0);
     TEST_ASSERT_FLOAT_WITHIN(0.05f, 0.0f, first->x1);
-    TEST_ASSERT_FLOAT_WITHIN(0.05f, 21.1f, first->y1);
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, 21.4f, first->y1);
 }
 
-//==========================================================================
-// Dispatch
-//==========================================================================
-
-// Nine outlines behind a two-level `if` chain, and the harness times what
-// that chain costs.  It has to pick the right one, or the timing is of a
-// scene nobody asked for.  Rock 1 is large outline A, which calib.dispatch
-// also depends on.
-void test_the_dispatch_draws_the_outline_it_names(void)
+// One outline per size, reached by a single three-way test. M0 priced the
+// nine-outline version's lookup at 370 us a rock, a fifth of what a rock
+// costs, which is why there is one per size to reach.
+void test_draw_rock_picks_the_outline_for_the_size(void)
 {
-    run("clean  setpc 254  pu setx 0 sety 0 seth 0");
-    mock_device_clear_graphics();
-    run("rock.a.l");
-    int direct = mock_device_line_count();
-    float x2 = mock_device_get_line(direct - 1)->x2;
-
-    run("clean  pu setx 0 sety 0 seth 0");
-    mock_device_clear_graphics();
-    run("draw.rock 1");
-    TEST_ASSERT_EQUAL_INT(direct, mock_device_line_count());
-    TEST_ASSERT_FLOAT_WITHIN(0.05f, x2, mock_device_get_line(direct - 1)->x2);
-}
-
-//==========================================================================
-// The erase pass
-//==========================================================================
-
-// The design's signature failure mode: an erase that does not retrace what
-// drew the pixels leaves permanent litter on the canvas.  Here the two
-// passes are one frame apart with nothing moving between them, so they must
-// be identical segment for segment and differ only in the pen colour.
-//
-// Note what makes this checkable at all.  The erase is a pen *colour*, not
-// `pe`: pen up/down/erase/reverse are one enum, so a `pe` would both be
-// cancelled by the `pd` inside every outline's prologue and stop the mock
-// recording the pass (mock_device.c records a line only with the pen DOWN).
-void test_the_erase_pass_retraces_the_draw_pass(void)
-{
-    run("clean");
-    mock_device_clear_graphics();
-    run("frame.inplace 12");
-
-    int drawn = mock_device_line_count();
-    // 4 large, 4 medium, 4 small -> 76 segments a pass, twice.
-    TEST_ASSERT_EQUAL_INT_MESSAGE(152, drawn, "one erase pass and one draw pass");
-
-    int half = drawn / 2;
-    for (int i = 0; i < half; i++)
+    const int sizes[] = {3, 2, 1};
+    const int segs[] = {SEG_LARGE, SEG_MEDIUM, SEG_SMALL};
+    for (int k = 0; k < 3; k++)
     {
-        const MockLine *erased = mock_device_get_line(i);
-        const MockLine *redrawn = mock_device_get_line(i + half);
-        char msg[96];
-        snprintf(msg, sizeof(msg), "segment %d of the erase does not retrace the draw", i);
-        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, redrawn->x1, erased->x1, msg);
-        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, redrawn->y1, erased->y1, msg);
-        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, redrawn->x2, erased->x2, msg);
-        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, redrawn->y2, erased->y2, msg);
-        TEST_ASSERT_EQUAL_INT_MESSAGE(255, erased->colour, "the erase pass is not in the background colour");
-        TEST_ASSERT_EQUAL_INT_MESSAGE(254, redrawn->colour, "the draw pass is not in the pen colour");
+        char cmd[96];
+        snprintf(cmd, sizeof(cmd), ".setitem 1 :rsize %d", sizes[k]);
+        run(cmd);
+        run("clean  setpc 254  pu setx 0 sety 0 seth 0");
+        mock_device_clear_graphics();
+        run("draw.rock 1");
+        snprintf(cmd, sizeof(cmd), "size %d drew %d segments", sizes[k],
+                 mock_device_line_count());
+        TEST_ASSERT_EQUAL_INT_MESSAGE(segs[k], mock_device_line_count(), cmd);
     }
 }
 
-// Pen size stays 1.  A wide pen's round caps spill outside the stroke and, in
-// wrap mode, across the screen edge -- the effect that made an early
-// present-cost harness read every frame as a full screen (hardware-notes
-// section 9.1), which would make M0's present column meaningless.
-void test_the_rocks_are_drawn_with_a_one_pixel_pen(void)
+// A rock spins every frame and its angle is never normalised -- one `if` a
+// rock a frame is 0.8 ms at twelve rocks, and `seth` is documented to take
+// any heading. If it did not, the game would break after a couple of minutes
+// rather than at once, which is the worst way for it to break.
+void test_a_rock_angle_past_360_still_places(void)
 {
-    run("clean");
+    run(".setitem 1 :rx 0  .setitem 1 :ry 0  .setitem 1 :rang 3600  .setitem 1 :rsize 3");
+    run("place 1");
+    TEST_ASSERT_TRUE_MESSAGE(mock_device_verify_heading(0.0f, 0.5f),
+                             "seth did not normalise a heading past 360");
+}
+
+//==========================================================================
+// Slots
+//==========================================================================
+
+void test_free_slot_finds_the_first_zero(void)
+{
+    run("clear.rocks");
+    TEST_ASSERT_EQUAL_FLOAT(1, num("free.slot"));
+    run(".setitem 1 :rsize 3  .setitem 2 :rsize 3");
+    TEST_ASSERT_EQUAL_FLOAT(3, num("free.slot"));
+}
+
+// Zero, not an error and not slot 13: the caller's contract is that a rock
+// which cannot be placed is simply not created, which is what the split table
+// at M2 needs.
+void test_a_full_board_has_no_free_slot(void)
+{
+    run("clear.rocks");
+    run("repeat :max.rocks [.setitem repcount :rsize 3]");
+    TEST_ASSERT_EQUAL_FLOAT(0, num("free.slot"));
+}
+
+void test_spawn_fills_a_slot_inside_the_field(void)
+{
+    run("clear.rocks");
+    run("spawn.rock 3 22");
+    TEST_ASSERT_EQUAL_FLOAT(1, num(":rocks.alive"));
+    TEST_ASSERT_EQUAL_FLOAT(3, item_of("rsize", 1));
+    TEST_ASSERT_EQUAL_FLOAT(22, item_of("rrad", 1));
+
+    // Centres always stay in bounds, so setx/sety never asks the turtle to
+    // leave the field -- the outline crossing an edge is `wrap`'s job.
+    TEST_ASSERT_TRUE(item_of("rx", 1) >= -160 && item_of("rx", 1) < 160);
+    TEST_ASSERT_TRUE(item_of("ry", 1) >= -160 && item_of("ry", 1) < 160);
+
+    // Speed comes from an angle, so no rock is ever left nearly stationary.
+    float dx = item_of("rdx", 1), dy = item_of("rdy", 1);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, num(":speed.l"), sqrtf(dx * dx + dy * dy));
+}
+
+void test_spawning_onto_a_full_board_creates_nothing(void)
+{
+    run("clear.rocks");
+    run("repeat :max.rocks [spawn.rock 3 22]");
+    TEST_ASSERT_EQUAL_FLOAT(12, num(":rocks.alive"));
+    run("spawn.rock 3 22");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(12, num(":rocks.alive"),
+                                    "a rock was created with no slot to hold it");
+}
+
+//==========================================================================
+// Motion
+//==========================================================================
+
+void test_a_rock_leaving_the_field_comes_back_on_the_far_side(void)
+{
+    run("clear.rocks");
+    run(".setitem 1 :rsize 3  .setitem 1 :rx 159.5  .setitem 1 :ry 0");
+    run(".setitem 1 :rdx 2  .setitem 1 :rdy 0  .setitem 1 :rspin 0  .setitem 1 :rang 0");
+    run("step.rock 1");
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, -158.5f, item_of("rx", 1));
+}
+
+void test_step_all_moves_only_live_rocks(void)
+{
+    run("clear.rocks");
+    run(".setitem 2 :rsize 3  .setitem 2 :rx 0  .setitem 2 :rdx 1");
+    run(".setitem 3 :rx 0  .setitem 3 :rdx 1");   // slot 3 stays free
+    run("step.all");
+    TEST_ASSERT_EQUAL_FLOAT(1, item_of("rx", 2));
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, item_of("rx", 3), "a free slot was stepped");
+}
+
+//==========================================================================
+// The frame
+//==========================================================================
+
+static void setup_with(int rocks)
+{
+    char cmd[64];
+    run("init.game");
+    snprintf(cmd, sizeof(cmd), "make \"level.rocks %d", rocks);
+    run(cmd);
+    run("setup.level");
+}
+
+void test_setup_level_puts_the_asked_for_rocks_on_the_board(void)
+{
+    setup_with(9);
+    TEST_ASSERT_EQUAL_FLOAT(9, num(":rocks.alive"));
+
+    // And a second level does not inherit the first one's rocks.
+    setup_with(3);
+    TEST_ASSERT_EQUAL_FLOAT(3, num(":rocks.alive"));
+}
+
+// The board never holds more than MAX.ROCKS however many a level asks for --
+// the ceiling that makes the frame budget's worst case a real bound.
+void test_setup_level_never_exceeds_the_slot_count(void)
+{
+    setup_with(30);
+    TEST_ASSERT_EQUAL_FLOAT(12, num(":rocks.alive"));
+}
+
+// The frame clears and redraws, so what reaches the canvas each frame is
+// exactly the live rocks and nothing else. Under erase-in-place this was the
+// file's most valuable test, because stale state showed up as leftover pixels
+// and as nothing else; here there is no stale state to get wrong and it is a
+// regression guard on the drawing pass.
+void test_a_frame_draws_the_world_and_nothing_else(void)
+{
+    setup_with(6);
+    int expected = expected_segments();
+    TEST_ASSERT_EQUAL_INT(6 * SEG_LARGE, expected);
+
+    for (int frame = 0; frame < 5; frame++)
+    {
+        mock_device_clear_graphics();
+        run("play.frame");
+        char msg[96];
+        snprintf(msg, sizeof(msg), "frame %d drew %d segments, expected %d",
+                 frame, mock_device_line_count(), expected);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(expected, mock_device_line_count(), msg);
+    }
+}
+
+void test_every_rock_is_drawn_with_a_one_pixel_pen(void)
+{
+    // A wide pen's round caps spill outside the stroke and, in wrap mode,
+    // across the screen edge -- the effect that made an early present-cost
+    // harness read every frame as a full screen.
+    setup_with(6);
     mock_device_clear_graphics();
-    run("frame.inplace 12");
+    run("play.frame");
     for (int i = 0; i < mock_device_line_count(); i++)
     {
         TEST_ASSERT_EQUAL_INT_MESSAGE(1, mock_device_get_line(i)->pen_size,
@@ -298,41 +435,156 @@ void test_the_rocks_are_drawn_with_a_one_pixel_pen(void)
     }
 }
 
+// An Asteroids frame is NOT free, and this is the test that found it out.
+//
+// The other three games mutate their lists in place and measure zero cells a
+// frame, and the design took that for a rule. It is not one. `.setitem` of a
+// *number* interns it as a word atom (`member_value_to_node`,
+// core/primitives_words_lists.c), so every rock's new x, y and angle mints an
+// atom -- 36 a frame at twelve rocks, ~9,000 between reclaims. The three
+// shipped games measure zero because the values they store come back out of
+// other lists already interned, or from a handful of distinct constants;
+// continuous physics has neither property.
+//
+// So the contract is a steady state rather than a zero, and it is what
+// `reclaim` is for -- in this game it is load-bearing rather than a
+// precaution. Soaked over 2,000 frames the working set settles near 2,950
+// cells and stays there; what would fail here is *growth*.
+void test_the_frame_loop_holds_free_storage_flat(void)
+{
+    setup_with(12);
+    run("repeat 250 [play.frame]");
+    run("recycle");
+    int settled = (int)num("nodes");
+
+    run("repeat 1000 [play.frame]");
+    run("recycle");
+    int later = (int)num("nodes");
+
+    char msg[128];
+    snprintf(msg, sizeof(msg),
+             "free storage fell %d cells over 1000 frames -- the frame loop is growing",
+             settled - later);
+    TEST_ASSERT_TRUE_MESSAGE(settled - later < 400, msg);
+}
+
+// `reclaim` sits inside the unpaused block. Outside it, a pause landing on a
+// multiple of 250 leaves `remainder :frame.count 250` at zero for the whole
+// pause and recycles on every paused frame -- the every-frame recycle all
+// three shipped games explicitly forbid.
+void test_a_paused_frame_neither_steps_nor_recycles(void)
+{
+    setup_with(6);
+    run(".setitem 1 :rx 0  .setitem 1 :rdx 1");
+    run("make \"paused true");
+    run("make \"frame.count 250");
+    run("repeat 200 [make \"junk fput 1 [1 2 3]]");   // ~800 cells of garbage
+
+    // A recycle would hand that garbage back, so free storage would jump. The
+    // test is that it does not: a few cells either way is the frame's own
+    // noise, 800 is a recycle.
+    int before = (int)num("nodes");
+    run("repeat 5 [play.frame]");
+    TEST_ASSERT_TRUE_MESSAGE((int)num("nodes") - before < 100,
+                             "a paused frame recycled -- reclaim is outside the pause");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, item_of("rx", 1), "a paused frame stepped a rock");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(250, num(":frame.count"), "a paused frame counted");
+}
+
 //==========================================================================
-// The script itself
+// Input and the level loop
+//==========================================================================
+
+// P is read outside the paused guard, or a paused game could never read the
+// key that unpauses it; every other key has to be turned away while paused,
+// which is the defect both shipped shooters had.
+void test_pause_answers_p_and_nothing_else(void)
+{
+    setup_with(3);
+    set_mock_input("p");
+    run("play.frame");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", value_to_string(eval_string(":paused").value),
+                                     "P did not pause");
+
+    set_mock_input("q");
+    run("play.frame");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("false", value_to_string(eval_string(":over").value),
+                                     "a paused game answered the quit key");
+
+    set_mock_input("p");
+    run("play.frame");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("false", value_to_string(eval_string(":paused").value),
+                                     "P did not lift the pause");
+}
+
+// A level that ends has to hand the screen back: leaving it in `sync` mode
+// freezes the prompt, since nothing the user types appears until something
+// presents.
+void test_a_level_ends_on_q_and_puts_the_screen_back(void)
+{
+    run("init.game");
+    run("make \"level.rocks 3");
+    set_mock_input("q");
+    run("play.level");
+    TEST_ASSERT_EQUAL_STRING("auto", value_to_string(eval_string("refreshmode").value));
+}
+
+//==========================================================================
+// The M1 hardware harness
 //==========================================================================
 
 // It must run end to end before it is worth carrying to a board: a script
-// that dies half way through wastes a hardware session, and its own numbers
-// are only readable if the report reaches the file.
-void test_p11rocks_script_runs(void)
+// that dies half way through wastes a hardware session, and its numbers only
+// leave the board through the file.
+void test_p11m1_script_runs(void)
 {
-    // The board runs 60 frames a point; the mock only has to reach every line.
-    run("make \"p11.frames 2  make \"p11.calib 20");
+    load_file(P11M1_SOURCE);
+    run("make \"p11m1.frames 3");
     mock_device_clear_output();
-    run("p11rocks");
+    run("p11m1");
 
     const char *screen = mock_device_get_output();
-    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "in place"), screen);
-    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "clear redraw"), screen);
-    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "drawing statement"), screen);
-    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "the decision"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "body"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "present"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "nodes at start"), screen);
 
-    // And the same report reached the file, which is the copy that leaves the
-    // board -- a screenful of numbers on the PicoCalc cannot be typed out.
-    MockFile *report = mock_fs_get_file("p11rocks.txt", false);
-    TEST_ASSERT_NOT_NULL_MESSAGE(report, "p11rocks.txt was not written");
-    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(report->data, "the decision"), report->data);
+    MockFile *report = mock_fs_get_file("p11m1.txt", false);
+    TEST_ASSERT_NOT_NULL_MESSAGE(report, "p11m1.txt was not written");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(report->data, "budget at 15 fps"), report->data);
 }
 
-// A timing script that leaves the screen in manual refresh hands the prompt
-// back frozen: nothing the user types afterwards appears until something
-// presents.  It is also how a board session gets thrown away.
-void test_the_script_puts_the_screen_back(void)
+// The harness spells `play.frame` out again minus its `sync`, because the
+// present has to be timed on its own and `sync` is the last thing the frame
+// does. That duplication is the whole risk in it: a harness frame that drifts
+// from the game measures a game nobody plays. Drive both from the same state
+// and require the same drawing and the same physics.
+void test_the_harness_frame_matches_the_game_frame(void)
 {
-    run("make \"p11.frames 2  make \"p11.calib 20");
-    run("p11rocks");
-    TEST_ASSERT_EQUAL_STRING("auto", value_to_string(eval_string("refreshmode").value));
+    load_file(P11M1_SOURCE);
+
+    const char *state =
+        "make \"paused false  clear.rocks  make \"hud.text [ROCKS 2]  make \"frame.count 0 "
+        ".setitem 1 :rsize 3  .setitem 1 :rx 10  .setitem 1 :ry 20 "
+        ".setitem 1 :rdx 1.5  .setitem 1 :rdy -0.5  .setitem 1 :rang 30  .setitem 1 :rspin 2 "
+        ".setitem 2 :rsize 1  .setitem 2 :rx -140  .setitem 2 :ry 155 "
+        ".setitem 2 :rdx -0.5  .setitem 2 :rdy 1.5  .setitem 2 :rang 200  .setitem 2 :rspin -1";
+
+    run(state);
+    mock_device_clear_graphics();
+    run("play.frame");
+    int game_segments = mock_device_line_count();
+    float game_x = item_of("rx", 1), game_a = item_of("rang", 2);
+    TEST_ASSERT_EQUAL_INT(SEG_LARGE + SEG_SMALL, game_segments);
+
+    run(state);
+    mock_device_clear_graphics();
+    run("frame.body");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(game_segments, mock_device_line_count(),
+                                  "the harness frame does not draw what the game frame draws");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(game_x, item_of("rx", 1),
+                                    "the harness frame does not step what the game frame steps");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(game_a, item_of("rang", 2),
+                                    "the harness frame does not spin what the game frame spins");
 }
 
 //==========================================================================
@@ -340,13 +592,28 @@ void test_the_script_puts_the_screen_back(void)
 int main(void)
 {
     UNITY_BEGIN();
-    RUN_TEST(test_the_scene_tables_are_all_twelve_long);
+    RUN_TEST(test_file_loads_and_sets_its_tuning);
+    RUN_TEST(test_wrapc_wraps_at_both_edges);
+    RUN_TEST(test_wrapc_corrects_once_and_only_once);
     RUN_TEST(test_every_outline_closes_on_itself);
     RUN_TEST(test_the_walk_out_to_the_first_vertex_does_not_draw);
-    RUN_TEST(test_the_dispatch_draws_the_outline_it_names);
-    RUN_TEST(test_the_erase_pass_retraces_the_draw_pass);
-    RUN_TEST(test_the_rocks_are_drawn_with_a_one_pixel_pen);
-    RUN_TEST(test_p11rocks_script_runs);
-    RUN_TEST(test_the_script_puts_the_screen_back);
+    RUN_TEST(test_draw_rock_picks_the_outline_for_the_size);
+    RUN_TEST(test_a_rock_angle_past_360_still_places);
+    RUN_TEST(test_free_slot_finds_the_first_zero);
+    RUN_TEST(test_a_full_board_has_no_free_slot);
+    RUN_TEST(test_spawn_fills_a_slot_inside_the_field);
+    RUN_TEST(test_spawning_onto_a_full_board_creates_nothing);
+    RUN_TEST(test_a_rock_leaving_the_field_comes_back_on_the_far_side);
+    RUN_TEST(test_step_all_moves_only_live_rocks);
+    RUN_TEST(test_setup_level_puts_the_asked_for_rocks_on_the_board);
+    RUN_TEST(test_setup_level_never_exceeds_the_slot_count);
+    RUN_TEST(test_a_frame_draws_the_world_and_nothing_else);
+    RUN_TEST(test_every_rock_is_drawn_with_a_one_pixel_pen);
+    RUN_TEST(test_the_frame_loop_holds_free_storage_flat);
+    RUN_TEST(test_a_paused_frame_neither_steps_nor_recycles);
+    RUN_TEST(test_pause_answers_p_and_nothing_else);
+    RUN_TEST(test_a_level_ends_on_q_and_puts_the_screen_back);
+    RUN_TEST(test_the_harness_frame_matches_the_game_frame);
+    RUN_TEST(test_p11m1_script_runs);
     return UNITY_END();
 }

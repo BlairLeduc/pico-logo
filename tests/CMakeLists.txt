@@ -110,12 +110,20 @@ target_compile_definitions(test_invaders PRIVATE
     INVADERS_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/invaders"
     P10GAMES_SOURCE="${CMAKE_SOURCE_DIR}/logo/tests/p10games")
 
-# Asteroids (P11). The game does not exist yet -- M0 is a measurement and it
-# gates everything after it -- so this covers the M0 timing harness: the nine
-# generated outlines close, the erase pass retraces the draw pass, and the
-# script runs end to end before it is carried to a board.
+# Asteroids (P11), M1: rocks only. The game is pure Logo -- the file loads and
+# its init path runs on the mock, and wrap, slot allocation and the outline
+# walks are checked directly. The frame budget itself needs a board
+# (logo/tests/p11m1).
 add_logo_test(test_asteroids)
 target_compile_definitions(test_asteroids PRIVATE
+    ASTEROIDS_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/asteroids"
+    P11M1_SOURCE="${CMAKE_SOURCE_DIR}/logo/tests/p11m1")
+
+# The P11 M0 timing harness, which decided how an Asteroids frame gets erased.
+# A separate binary from test_asteroids because both Logo files define `place`
+# and `draw.rock`, and the harness has to keep the shape it was measured in.
+add_logo_test(test_p11rocks)
+target_compile_definitions(test_p11rocks PRIVATE
     P11ROCKS_SOURCE="${CMAKE_SOURCE_DIR}/logo/tests/p11rocks")
 
 # P10 M0 interpreter throughput benchmark -- repeatable baseline plus a
