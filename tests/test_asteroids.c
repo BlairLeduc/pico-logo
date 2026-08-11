@@ -594,6 +594,28 @@ void test_p11m1_script_runs(void)
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(report->data, "budget at 15 fps"), report->data);
 }
 
+// The harness has to measure the board it says it measured, and the first
+// hardware run did not: `measure` set `level.rocks` and then called
+// `init.game`, which resets it to `start.rocks`, so all three points ran on a
+// four-rock board and came back within 0.03 ms of each other. Three identical
+// numbers is what gave it away, which is a poor substitute for a test.
+void test_the_harness_measures_the_rock_counts_it_reports(void)
+{
+    load_file(P11M1_SOURCE);
+    run("make \"p11m1.frames 2");
+    run("p11m1");
+
+    const float wanted[] = {6, 9, 12};
+    for (int k = 0; k < 3; k++)
+    {
+        char expr[64], msg[112];
+        snprintf(expr, sizeof(expr), "0 + item %d :p11m1.rocks", k + 1);
+        snprintf(msg, sizeof(msg), "point %d timed %d rocks, not %d",
+                 k + 1, (int)num(expr), (int)wanted[k]);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(wanted[k], num(expr), msg);
+    }
+}
+
 // The harness spells `play.frame` out again minus its `sync`, because the
 // present has to be timed on its own and `sync` is the last thing the frame
 // does. That duplication is the whole risk in it: a harness frame that drifts
@@ -657,5 +679,6 @@ int main(void)
     RUN_TEST(test_a_level_ends_on_q_and_puts_the_screen_back);
     RUN_TEST(test_the_harness_frame_matches_the_game_frame);
     RUN_TEST(test_p11m1_script_runs);
+    RUN_TEST(test_the_harness_measures_the_rock_counts_it_reports);
     return UNITY_END();
 }

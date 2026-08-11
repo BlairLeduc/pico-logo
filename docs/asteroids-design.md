@@ -765,8 +765,13 @@ workspace has less atom room than the host measuring it.
 **`reclaim.every` is 25 frames** — a 26× margin against the same measurement,
 and 1.7 s at 15 fps. `test_the_reclaim_interval_stays_inside_the_atom_budget`
 measures the deadline rather than assuming it and fails if the interval creeps
-back towards it. What one recycle costs is still unmeasured and now matters,
-since it lands inside a 66.7 ms budget every 1.7 s; `p11m1` reports it.
+back towards it.
+
+**A recycle costs 1.3 ms**, measured on a Plus 2 W (`p11m1`), so recycling ten
+times more often than the design first said costs 0.05 ms a frame amortised
+and puts a 1.3 ms bump inside a 66.7 ms budget every 1.7 s. It is invisible,
+and the tighter interval is free. Free storage over 900 frames: 27,017 →
+27,015.
 
 The rule to write to is **"a frame must not allocate anything it does not hand
 back, and must hand it back long before the deadline"** — no `sentence`, no

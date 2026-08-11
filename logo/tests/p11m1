@@ -49,6 +49,7 @@ make "p11m1.body (list 0 0 0)      ; ms, mean
 make "p11m1.pres (list 0 0 0)      ; ms, mean
 make "p11m1.lo (list 0 0 0)        ; ms, whole frame
 make "p11m1.hi (list 0 0 0)
+make "p11m1.rocks (list 0 0 0)     ; rocks actually on the board, not asked for
 
 ; `play.frame` without its `sync`.  THIS MUST STAY IN STEP WITH THE GAME: it
 ; is the same statements in the same order, and it is spelled out here rather
@@ -65,11 +66,18 @@ to frame.body
   reclaim
 end
 
+; `init.game` FIRST, then the rock count: init.game resets `level.rocks` to
+; `start.rocks`, so setting it before the call is silently thrown away and
+; every point measures a four-rock board.  That is exactly what the first
+; hardware run did -- all three points came back at 14.07 ms, and three
+; identical numbers is what gave it away.  `p11m1.rocks` records what was
+; actually on the board so the report can never hide it again.
 to measure :k :n
   local "b local "p local "one local "t0 local "lo local "hi
-  make "level.rocks :n
   init.game
+  make "level.rocks :n
   setup.level
+  .setitem :k :p11m1.rocks :rocks.alive
   setrefresh "manual
   make "b 0
   make "p 0
@@ -97,8 +105,10 @@ end
 ; lines rather than two that can drift apart.  Punctuation is spelled out in
 ; words: every mark in a printed list is tokenised as a word of its own, so
 ; `clear+redraw` comes out as `clear + redraw` and `--` as `- -`.
+; The count printed is the one the board actually carried, read back from the
+; game after `setup.level`, not the one this script asked for.
 to line.for :k :n
-  pr (se :n [rocks])
+  pr (se item :k :p11m1.rocks [rocks])
   pr (se [  body] item :k :p11m1.body [ms   present] item :k :p11m1.pres [ms])
   pr (se [  frame] (item :k :p11m1.body) + (item :k :p11m1.pres)
       [ms   min] item :k :p11m1.lo [ms   max] item :k :p11m1.hi [ms])
