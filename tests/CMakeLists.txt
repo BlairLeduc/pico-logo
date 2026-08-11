@@ -110,6 +110,14 @@ target_compile_definitions(test_invaders PRIVATE
     INVADERS_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/invaders"
     P10GAMES_SOURCE="${CMAKE_SOURCE_DIR}/logo/tests/p10games")
 
+# Asteroids (P11). The game does not exist yet -- M0 is a measurement and it
+# gates everything after it -- so this covers the M0 timing harness: the nine
+# generated outlines close, the erase pass retraces the draw pass, and the
+# script runs end to end before it is carried to a board.
+add_logo_test(test_asteroids)
+target_compile_definitions(test_asteroids PRIVATE
+    P11ROCKS_SOURCE="${CMAKE_SOURCE_DIR}/logo/tests/p11rocks")
+
 # P10 M0 interpreter throughput benchmark -- repeatable baseline plus a
 # regression guard on relative numbers (interpreter-throughput-design.md §6).
 add_logo_test(test_bench_throughput)
