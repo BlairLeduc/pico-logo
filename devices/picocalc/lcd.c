@@ -619,10 +619,13 @@ void lcd_draw_cursor()
 
     if (cursor_style == LCD_CURSOR_BLOCK)
     {
-        // Block cursor: draw character in reverse video using per-character colors
+        // Block cursor: the character's background colour on a white block, which
+        // is how selected text is drawn — the character's own colour is not used,
+        // so the block looks the same wherever it lands. It comes back on the
+        // blink's hidden phase, which redraws the cell from cursor_char.
         uint8_t c = cursor_char & 0xFF;
         lcd_putc_attr(cursor_column, cursor_row,
-                      (uint16_t)(((uint16_t)bg_idx << 12) | ((uint16_t)fg_idx << 8) | (c & 0x7F)));
+                      (uint16_t)(((uint16_t)bg_idx << 12) | ((uint16_t)TXT_WHITE << 8) | (c & 0x7F)));
     }
     else
     {

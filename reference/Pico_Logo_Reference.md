@@ -530,6 +530,7 @@ The cursor will not move if that position is not valid.
 - `←Back` - erases the character to the left of the cursor
 - `Del` - erases the character at the cursor position
 - `Tab` - inserts spaces until the next tab stop (tab stops are every 2 columns)
+- `Ctrl` `F` - starts incremental search (finds text)
 - `Ctrl` `X` or `Ctrl` `T` - erases (or takes) the current line and stores the text in the copy buffer, including the new line
 - `Ctrl` `C` or `Ctrl` `Y` - copies (or yanks) the current line and stores the text in the copy buffer, including the new line
 - `Ctrl` `V` or `Ctrl` `P` - inserts (or pastes) the text in the copy buffer at the cursor position
@@ -547,6 +548,17 @@ Selected text is between the start anchor and the cursor and is shown in reverse
 
 
 Typing any other key (except `Esc` or `Brk`) is ignored while the selection of text is active.
+
+### Incremental Search
+
+Incremental search finds and highlights text matches in real time as you type each letter. `Ctrl` `F` starts incremental search. In this mode, typing characters will cause the editor to jump to the first match of the accumulated match text starting at the current cursor position. The match (if found) is selected (block editing). Pressing `↓` will jump to the next match of your typed phrase, and `↑` will jump to the previous match of your typed phrase, both cycling through all occurrences. Pressing `←Back` removes the last letter to widen the search back out.
+
+Matching ignores the difference between upper and lower case, so `fd` finds `FD`. When the typed phrase matches nowhere in the buffer, nothing is selected and the cursor stays at the last match found.
+
+During incremental search, the bottom line now displays (left justified in reverse video) the characters in the search text. A maximum of 40 characters may be used to match text.
+
+Pressing `Esc` leaves incremental search and any selected text remains selected. Pressing `Brk` leaves the Editor, cancelling your changes as usual.
+
 
 ### Viewing screens
 

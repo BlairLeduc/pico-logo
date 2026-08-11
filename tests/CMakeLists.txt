@@ -178,6 +178,19 @@ target_include_directories(test_dirty_tiles PRIVATE
 )
 add_test(NAME test_dirty_tiles COMMAND test_dirty_tiles)
 
+# Editor incremental search test — compiles devices/picocalc/editor_search.c
+# on the host. Portable (no Pico SDK / Logo runtime dependencies).
+add_executable(test_editor_search
+    test_editor_search.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/editor_search.c
+    unity.c
+)
+target_include_directories(test_editor_search PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/devices/picocalc
+)
+add_test(NAME test_editor_search COMMAND test_editor_search)
+
 # Colour costume pool test — compiles devices/picocalc/costumes.c on the
 # host. Portable (no Pico SDK / Logo runtime dependencies).
 add_executable(test_costumes
