@@ -178,6 +178,24 @@ target_include_directories(test_dirty_tiles PRIVATE
 )
 add_test(NAME test_dirty_tiles COMMAND test_dirty_tiles)
 
+# Screen refresh policy test — compiles devices/picocalc/screen.c on the host
+# against tests/fake_lcd.c, which records what reaches the panel.
+add_executable(test_screen_refresh
+    test_screen_refresh.c
+    fake_lcd.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/screen.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/dirty_tiles.c
+    ${CMAKE_SOURCE_DIR}/devices/stream.c
+    unity.c
+)
+target_include_directories(test_screen_refresh PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/mocks
+    ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/devices/picocalc
+)
+add_test(NAME test_screen_refresh COMMAND test_screen_refresh)
+
 # Editor incremental search test — compiles devices/picocalc/editor_search.c
 # on the host. Portable (no Pico SDK / Logo runtime dependencies).
 add_executable(test_editor_search

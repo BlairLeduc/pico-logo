@@ -13,6 +13,10 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+// Microsecond clock.  Provided by a test fixture (e.g. tests/fake_lcd.c) so
+// tests that compile a device file with a rate limiter in it can drive time.
+uint64_t time_us_64(void);
+
 // Repeating timer support — fat32.c only stores the handle and registers a
 // callback at init time.  The host shim ignores the registration entirely;
 // tests drive the SD-card-presence callback directly when needed.
