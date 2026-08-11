@@ -746,21 +746,33 @@ settles at **~2,950 cells and stays there**, varying by ±60 between 250-frame
 blocks with no trend. So the contract is a steady state, not a zero, and the
 collector keeps up with it.
 
-Two consequences:
+**Flatness was the wrong property to test, and a board proved it.** With
+`reclaim` every 250 frames — Galaxian's interval, copied — the game ran out of
+storage within a minute of play on a Plus 2 W: `Out of space in step.rock`.
+The host soak had passed, because the host is not where the margin is thin.
 
-- **`reclaim` is load-bearing here**, where in Galaxian it was a precaution
-  against a slow HUD drip. A burst of rock physics with no recycle in it will
-  exhaust the pool: 1,300 `step.rock` calls in one uninterrupted loop raised
-  `Out of space in step.rock` while the harness was being written.
-- The rule to write to is **"a frame must not allocate anything it does not
-  hand back"** — no `sentence`, no `list`, no `fput` on the frame path. The
-  HUD text is rebuilt only where a displayed value changes, which at M1 is
-  level setup and nothing else; `wrapc` outputs a number rather than a cell.
+The property that matters is a **deadline**, not a rate, because **nothing in
+this interpreter collects on demand**: `alloc_cell` and `mem_atom`
+([core/memory.c](../core/memory.c)) report out of space rather than collecting
+and retrying. That is the right call for a frame loop — no unpredictable
+pause — but it makes the reclaim interval the game's entire safety margin
+rather than a tidiness measure. Measured with `reclaim` disabled, the frame
+loop runs **649 frames** before it dies. So 250 was a 2.6× margin, and 2.6×
+is not a margin: the atom region is capped at 32 KB *or* wherever the node
+pool's floor has reached, whichever is lower, so a board carrying a fuller
+workspace has less atom room than the host measuring it.
 
-So `play.frame` calls `reclaim`, which runs `recycle` every 250 frames —
-seventeen seconds at 15 fps, never per frame.
-`test_the_frame_loop_holds_free_storage_flat` soaks 1,250 frames and fails on
-growth rather than on spend. `test_asteroids.c` pins both
+**`reclaim.every` is 25 frames** — a 26× margin against the same measurement,
+and 1.7 s at 15 fps. `test_the_reclaim_interval_stays_inside_the_atom_budget`
+measures the deadline rather than assuming it and fails if the interval creeps
+back towards it. What one recycle costs is still unmeasured and now matters,
+since it lands inside a 66.7 ms budget every 1.7 s; `p11m1` reports it.
+
+The rule to write to is **"a frame must not allocate anything it does not hand
+back, and must hand it back long before the deadline"** — no `sentence`, no
+`list`, no `fput` on the frame path. The HUD text is rebuilt only where a
+displayed value changes, which at M1 is level setup and nothing else;
+`wrapc` outputs a number rather than a cell. `test_asteroids.c` pins both
 halves: zero cells over 100 quiet frames, and a bounded count over 100 frames
 of continuous scoring.
 

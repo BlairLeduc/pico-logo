@@ -57,6 +57,7 @@
 
 make "max.rocks     12
 make "start.rocks    4     ; large rocks at level 1
+make "reclaim.every 25     ; frames between recycles -- see `reclaim` below
 make "speed.l      0.9     ; steps per frame -- 13.5 a second at 15 fps
 make "spin.max     2.5     ; degrees per frame, either direction
 make "rock.colour  254     ; white, as the arcade rocks are
@@ -233,12 +234,30 @@ end
 ;==========================================================================
 ; The frame
 ;
+; NOTHING IN THIS INTERPRETER COLLECTS ON DEMAND.  `alloc_cell` and `mem_atom`
+; (core/memory.c) both just report out of space when they cannot fit a
+; request; there is no collect-and-retry, which is the right call for a frame
+; loop -- no unpredictable pause -- but it makes this interval the game's
+; entire safety margin rather than a tidiness measure.
+;
+; Twenty-five frames, not the 250 the other three games use.  Their frames
+; spend nothing; this one mints an atom for every rock position it stores
+; (design section 14), and the atom region is capped at 32 KB whatever the
+; board.  Measured with `reclaim` disabled, the frame loop runs out of atom
+; space after **649 frames**, so 250 leaves a 2.6x margin -- which held on the
+; host and did NOT hold on a board, where a fuller workspace puts the node
+; region's floor lower and squeezes the atom ceiling with it.  It died with
+; `Out of space in step.rock` within a minute of play.  Twenty-five frames is
+; a 26x margin against the same measurement, and 1.7 seconds at 15 fps.
+; `test_the_reclaim_interval_stays_inside_the_atom_budget` measures the budget
+; and fails if this ever creeps back up towards it.
+;
 ; `reclaim` sits INSIDE the unpaused block, which is also where it belongs: a
 ; paused frame counts no frames and allocates nothing.  Outside it, a pause
-; landing on a multiple of 250 recycles on every paused frame.
+; landing on a multiple of the interval recycles on every paused frame.
 
 to reclaim
-  if not ((remainder :frame.count 250) = 0) [stop]
+  if not ((remainder :frame.count :reclaim.every) = 0) [stop]
   recycle
 end
 

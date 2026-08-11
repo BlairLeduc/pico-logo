@@ -450,6 +450,47 @@ void test_every_rock_is_drawn_with_a_one_pixel_pen(void)
 // `reclaim` is for -- in this game it is load-bearing rather than a
 // precaution. Soaked over 2,000 frames the working set settles near 2,950
 // cells and stays there; what would fail here is *growth*.
+// The test that was missing, and the one that would have caught the crash.
+//
+// Storage flatness (below) is not the property that matters, because nothing
+// in this interpreter collects on demand: `alloc_cell` and `mem_atom`
+// (core/memory.c) report out of space rather than collecting and retrying. So
+// what the game must respect is a *deadline* -- how long the frame loop can
+// run before it needs a recycle -- and `reclaim.every` has to sit well inside
+// it.
+//
+// Measure the deadline rather than assume it: disable `reclaim` and run until
+// the loop dies. It survives ~649 frames at twelve rocks on the host. The
+// original interval of 250 was copied from Galaxian, whose frame spends
+// nothing, and left a 2.6x margin -- which held here and did not hold on a
+// board, where a fuller workspace puts the node region's floor lower and
+// squeezes the shared atom ceiling with it.
+void test_the_reclaim_interval_stays_inside_the_atom_budget(void)
+{
+    setup_with(12);
+    run("recycle");
+    proc_define_from_text("to reclaim\nend");   // nothing collects now
+
+    int deadline = 0;
+    for (; deadline < 4000; deadline++)
+    {
+        if (run_string("play.frame").status == RESULT_ERROR)
+            break;
+    }
+    TEST_ASSERT_TRUE_MESSAGE(deadline < 4000,
+                             "the frame loop no longer runs out of storage -- "
+                             "re-derive this test, the interpreter changed");
+
+    // A margin of 8x, so the interval survives a board whose workspace leaves
+    // the atom region a quarter of the room this host gives it.
+    int interval = (int)num(":reclaim.every");
+    char msg[160];
+    snprintf(msg, sizeof(msg),
+             "reclaim every %d frames against a %d-frame budget -- less than 8x margin",
+             interval, deadline);
+    TEST_ASSERT_TRUE_MESSAGE(interval * 8 < deadline, msg);
+}
+
 void test_the_frame_loop_holds_free_storage_flat(void)
 {
     setup_with(12);
@@ -609,6 +650,7 @@ int main(void)
     RUN_TEST(test_setup_level_never_exceeds_the_slot_count);
     RUN_TEST(test_a_frame_draws_the_world_and_nothing_else);
     RUN_TEST(test_every_rock_is_drawn_with_a_one_pixel_pen);
+    RUN_TEST(test_the_reclaim_interval_stays_inside_the_atom_budget);
     RUN_TEST(test_the_frame_loop_holds_free_storage_flat);
     RUN_TEST(test_a_paused_frame_neither_steps_nor_recycles);
     RUN_TEST(test_pause_answers_p_and_nothing_else);

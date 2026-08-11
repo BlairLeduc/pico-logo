@@ -104,6 +104,23 @@ to line.for :k :n
       [ms   min] item :k :p11m1.lo [ms   max] item :k :p11m1.hi [ms])
 end
 
+; What one `recycle` costs, which nobody has measured and which now matters:
+; the game recycles every 25 frames rather than every 250, so whatever this is
+; lands inside a 66.7 ms budget every 1.7 seconds.  Ten of them, after a
+; frame's worth of garbage each, so the figure is a recycle with something to
+; do rather than an empty one.
+to time.recycle
+  local "t0 local "total
+  make "total 0
+  repeat 10 [
+    frame.body
+    make "t0 ticks
+    recycle
+    make "total :total + (ticks - :t0)
+  ]
+  output :total / 10
+end
+
 to p11m1.report
   pr [P11 M1 what an Asteroids frame costs]
   pr (se [frames per point] :p11m1.frames)
@@ -115,6 +132,8 @@ to p11m1.report
   pr [budget at 15 fps is 66.7 ms]
   pr (se [design estimate at 12 rocks is 66.2 ms])
   pr []
+  pr (se [one recycle] :rec [ms, and the game does one every 25 frames])
+  pr []
   pr (se [nodes at start] :n0)
   pr (se [nodes at end  ] :n1)
   pr (se [after recycle ] :n2)
@@ -122,12 +141,13 @@ to p11m1.report
 end
 
 to p11m1
-  local "n0 local "n1 local "n2
+  local "n0 local "n1 local "n2 local "rec
   recycle
   make "n0 nodes
   measure 1 6
   measure 2 9
   measure 3 12
+  make "rec time.recycle
   make "n1 nodes
   recycle
   ; Read the recovered figure HERE, not inside the report: printing builds a
