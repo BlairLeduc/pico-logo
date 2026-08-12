@@ -805,7 +805,11 @@ That is where the levers are, and it is not where §12 originally looked.
 
 ### The measured frame (M1, 2026-08-11)
 
-**A real `play.frame` on a Plus 2 W**, 300 frames a point, `logo/tests/p11m1`:
+**A real `play.frame` on a Plus 2 W**, 300 frames a point, measured by
+`logo/tests/p11m1` — **which no longer exists.** M2's fusion (§15) removed the
+procedures it called by name, so these numbers are archival: they are the last
+record of a rocks-only frame and cannot be reproduced against the game as it
+stands. `logo/tests/p11m2` measures the frame the game actually runs.
 
 | rocks | body | present | **frame** | min | max |
 |---:|---:|---:|---:|---:|---:|
@@ -1292,9 +1296,11 @@ the levers priced in §12.
 The build:
 `logo/games/asteroids` (12 slots, three outlines, wrap, spin,
 clear-and-redraw, `sync` at 15 fps, nothing to shoot with),
-`tests/test_asteroids.c` (23 tests), and `logo/tests/p11m1`, which times a
+`tests/test_asteroids.c` (23 tests), and `logo/tests/p11m1`, which timed a
 real frame at 6, 9 and 12 rocks with the body and the present read apart —
-the split P9 M5 wished it had.
+the split P9 M5 wished it had. **That harness was removed at M2** and is
+described here in the past tense for that reason; `logo/tests/p11m2` replaces
+it.
 
 Two things M1 settled on the host before the board saw it. It **disproved this
 document's memory rule** — an Asteroids frame does allocate, ~36 atoms a
