@@ -1,7 +1,7 @@
-; Asteroids -- M1: rocks only.  See docs/asteroids-design.md.
+; Asteroids -- M2: the ship and the shots.  See docs/asteroids-design.md.
 ;
 ;   load "asteroids
-;   asteroids            (Q quits, P pauses)
+;   asteroids            (arrows steer and thrust, space fires, Q quits, P pauses)
 ;
 ; The first game in this tree that is not a sprite game.  The 1979 machine had
 ; no raster at all: an XY monitor traced a display list of line segments, which
@@ -10,9 +10,10 @@
 ; `seth` before the walk rotates the whole shape for free, and `wrap` splits a
 ; segment across the screen edge the way the arcade playfield does.
 ;
-; M1 is the frame budget's real test and carries nothing else: twelve rock
-; slots, three outlines, drift, spin, wrap, and the frame loop.  Nothing to
-; shoot with.  M2 brings the ship.
+; M1 was the frame budget's real test and carried rocks and nothing else.  M2
+; adds the ship (rotation, thrust, momentum), three shots, shot-on-rock
+; collisions, splitting and scoring.  Still to come: lives, deaths, level
+; advance and hyperspace (M3), the saucer and the sound (M4).
 ;
 ; THE FRAME CLEARS AND REDRAWS.  It does not un-draw last frame's lines.  That
 ; was this design's default until M0 measured both on a board (design section
@@ -35,8 +36,10 @@
 ;
 ; Five rules this file is written to, four of them learned the hard way:
 ;
-;   * A frame must allocate NOTHING.  Every rock field is `.setitem` into a
-;     pre-built flat list, never rebuilt.  `reclaim` recycles every 250 frames.
+;   * A frame ALLOCATES.  This is the rule M1 disproved: `.setitem` of a number
+;     interns it, so twelve rocks mint 36 atoms a frame and the contract is a
+;     flat working set rather than a zero.  `reclaim` is load-bearing, not
+;     tidiness -- see the note above it.
 ;   * A call's last argument absorbs trailing infix, so `item :i :rsize = 3`
 ;     asks for item :i of (:rsize = 3).  Comparisons here put the literal on
 ;     the LEFT, which needs no parenthesis at all.
@@ -49,11 +52,20 @@
 ;==========================================================================
 ; Tuning
 ;
-; Every per-frame constant here is cut for 15 fps.  The rate is not a
-; preference: a full-screen present is 26.3 ms whatever the scene holds, so
-; half of a 50 ms frame would be gone before a rock was drawn (design 3.3).
-; These are the first things to tune on hardware and are not knowable from the
-; host.
+; Every per-frame constant here is cut for `fps`, and the rate is not a
+; preference.  A full-screen present is 26.4 ms whatever the scene holds
+; (design 3.3), so more than a third of the frame is gone before a rock is
+; drawn, and no game-side lever reaches it.  Fourteen rather than fifteen
+; because M2 measured twelve rocks at 68.3 ms against a 66.7 ms budget: the
+; alternative was to buy 3 ms by capping the shots at two, and 7 % of the frame
+; rate is cheaper than a third of the shots.
+;
+; CHANGING `fps` RE-CUTS EVERY CONSTANT BELOW THAT IS PER FRAME -- the drift
+; speed, the spin, the turn rate, the thrust impulse, the speed clamp and the
+; shot life all scale with it, and only `shot.speed` does not, because
+; `setspeed` is per second.  That is why the rate is settled before M3 and M4
+; tune anything: doing it afterwards invalidates their work as well as this.
+make "fps           14     ; frames a second -- a 71.4 ms budget
 
 make "max.rocks     12
 ; Three, not the arcade's four, and the reason is the slot count: three larges
@@ -62,10 +74,57 @@ make "max.rocks     12
 ; children on an ordinary level rather than only on a deliberately awkward one.
 make "start.rocks    3     ; large rocks at level 1
 make "reclaim.every 25     ; frames between recycles -- see `reclaim` below
-make "speed.l      0.9     ; steps per frame -- 13.5 a second at 15 fps
-make "spin.max     2.5     ; degrees per frame, either direction
+make "speed.l     0.96     ; steps per frame -- 13.5 a second at 14 fps
+make "spin.max     2.7     ; degrees per frame, either direction
+make "split.boost 1.25     ; a child drifts this much faster than its parent
 make "rock.colour  254     ; white, as the arcade rocks are
+make "ship.colour  254
 make "hud.colour   254
+
+; The ship.  Rotation is degrees a FRAME, thrust is an impulse added to the
+; velocity, and there is no drag -- the arcade's is very slight and leaving it
+; out is one fewer statement a frame.  `speed.max` is what stops the ship
+; becoming unplayable and is the first of these to tune.
+make "turn.rate     17     ; degrees a frame -- 238 a second
+make "thrust.imp  0.43     ; steps a frame added to the velocity
+make "speed.max    4.8     ; steps a frame -- about 67 a second
+
+; The shots, and the one number here that is not per-frame: `setspeed` is in
+; turtle steps per SECOND, because the engine flies the shot on wall-clock time
+; while Logo does other things.  That mismatch is the trap this design flagged
+; for Galaxian from the other direction, and here it has a hard bound:
+;
+;   A SHOT MUST NOT OUTRUN A ROCK'S COLLISION BOX IN ONE FRAME.
+;
+; Collisions are sampled once a frame, so if the shot and the rock CLOSE by more
+; than the full width of the rock's box between two samples, the shot passes
+; through and is seen on neither side.  Written out, with every term coming from
+; a constant in this file:
+;
+;   (shot.speed / fps  +  fastest rock)  *  overrun   <=   2 * smallest rrad
+;
+; The fastest rock is a small one that came from a split of a split: a child
+; leaves at `sqrt(split.boost^2 + kick^2)` times its parent's speed and the kick
+; reaches 1, so two splits multiply `speed.l` by `split.boost^2 + 1`.  The
+; overrun allowance is for a frame that misses its budget, because `setspeed` is
+; wall-clock and a slow frame moves the shot FURTHER, not less far.
+;
+;   (160/14 + 0.96 * 2.5625) * 1.3  =  18.1   <=   2 * 10  =  20
+;
+; `shot.reach` is what buys the margin, and it is 2 rather than 4 because THE
+; FIRST VERSION WAS TOO GENEROUS TO PLAY WITH: at 4 a shot passing a small rock
+; by half its own width again still counted as a hit, which reads as the game
+; awarding misses.  The bound was the reason -- it was first written at half its
+; true value, as `travel <= rrad`, which is safe but blunt: sized properly the
+; smallest box is 10 rather than 12 and no shot speed had to change.  Worth
+; noticing that the excess was WORST on the smallest rock, because `shot.reach`
+; is a flat number added to radii of 22, 14 and 8.
+; `test_a_shot_cannot_outrun_the_smallest_collision_box` pins the arithmetic --
+; and caught this constant set once already, at `shot.speed` 200.
+make "max.shots      3
+make "shot.speed   160     ; turtle steps per SECOND, not per frame
+make "shot.life     17     ; frames -- 1.2 s at 14 fps, about 190 steps
+make "shot.reach     2     ; added to every rock radius, see `rad.for`
 
 ;==========================================================================
 ; Rock state -- eight parallel flat lists, `max.rocks` long
@@ -86,7 +145,28 @@ make "rdy   (list 0 0 0 0 0 0 0 0 0 0 0 0)
 make "rang  (list 0 0 0 0 0 0 0 0 0 0 0 0)   ; rotation now, degrees
 make "rspin (list 0 0 0 0 0 0 0 0 0 0 0 0)   ; degrees per frame, may be < 0
 make "rsize (list 0 0 0 0 0 0 0 0 0 0 0 0)   ; 0 free, 1 small, 2 med, 3 large
-make "rrad  (list 0 0 0 0 0 0 0 0 0 0 0 0)   ; collision radius, from size
+make "rrad  (list 0 0 0 0 0 0 0 0 0 0 0 0)   ; collision half-width, from size
+
+; Shot state.  The turtles hold the positions; `slife` holds what they cannot,
+; how long each shot has left, and 0 marks an idle shot as `rsize` = 0 marks a
+; free rock.
+make "slife (list 0 0 0)   ; frames of life left
+
+; The sampled positions are six PLAIN VARIABLES and not a list, which is the
+; one place in this file where a flat list would have been the obvious choice
+; and is the wrong one.  The rock pass reads them three times per rock -- 36
+; reads a frame -- and an `item` walk costs about 115 us against 43 for an
+; arithmetic statement, so holding them in a list cost 4 ms a frame to index.
+; Six variables cost nothing to read and the price is that `step.shots` and
+; `kill.shot` have to name each shot rather than loop over them.
+;
+; An IDLE shot is PARKED at 9999 rather than guarded by an `if`.  The x test in
+; `shot.on` then turns it away as part of a comparison that was going to run
+; anyway, which is one statement a pair instead of two, and it is what makes a
+; shot that dies mid-pass stop hitting rocks for the rest of the same pass.
+make "s1x 9999  make "s1y 0
+make "s2x 9999  make "s2y 0
+make "s3x 9999  make "s3y 0
 
 ;==========================================================================
 ; The outlines
@@ -99,10 +179,10 @@ make "rrad  (list 0 0 0 0 0 0 0 0 0 0 0 0)   ; collision radius, from size
 ; than a fraction of it, because it rasterises a line as well as evaluating
 ; one.  Literals are still right; they are not free.)
 ;
-; `pu fd <r> rt <t> pd` walks from the rock's centre out to its first vertex,
+; `pu fd <r> rt <t> pd` walks from the shape's centre out to its first vertex,
 ; which is what lets the stored position mean the centre while the walk starts
-; at a corner.  There is no turn after the last segment: `place` sets the
-; heading before every pass, so it would never be read.
+; at a corner.  There is no turn after the last segment: `place` and
+; `draw.ship` set the heading before every pass, so it would never be read.
 
 to rock.l
   pu fd 21.4  rt 120.6  pd
@@ -122,6 +202,24 @@ to rock.s
   fd 10.5
 end
 
+; The ship is a notched triangle, and the thrust flame is FOLDED INTO THE SAME
+; closed walk rather than drawn as a shape of its own.  Drawing it separately
+; would need a second `pu setx sety seth` to get back to the ship's centre --
+; four statements, which is most of what the flame costs to draw at all.  So a
+; thrusting ship is one dispatch and one walk, exactly like a still one.
+
+to ship
+  pu fd 12  rt 156.8  pd
+  fd 22.8  rt 137.2  fd 9.8  lt 48  fd 9.8  rt 137.2
+  fd 22.8
+end
+
+to ship.flame
+  pu fd 12  rt 156.8  pd
+  fd 22.8  rt 139.8  fd 6.7  lt 99.9  fd 10.4  rt 146.6
+  fd 10.4  lt 99.9  fd 6.7  rt 139.8  fd 22.8
+end
+
 ;==========================================================================
 ; Drawing
 ;
@@ -133,27 +231,36 @@ end
 ; `setx`/`sety` and not `setpos`, which takes a list and would allocate one per
 ; rock per frame.
 
-to place :i
-  pu  setx item :i :rx  sety item :i :ry  seth item :i :rang
-end
-
-to draw.rock :i
-  if 3 = item :i :rsize [rock.l stop]
-  if 2 = item :i :rsize [rock.m stop]
+; The size comes in as an argument rather than being read again.  The rock pass
+; has already walked `rsize` to find out the slot is live, and an `item` walk is
+; the most expensive thing in that loop that is not a drawing statement --
+; reading it twice more here was a fifth of what the nine-outline dispatch cost
+; and none of what it bought.
+to draw.rock :size
+  if 3 = :size [rock.l stop]
+  if 2 = :size [rock.m stop]
   rock.s
 end
 
-to draw.all
-  setpc :rock.colour
-  repeat :max.rocks [
-    if 0 < item repcount :rsize [place repcount  draw.rock repcount]
-  ]
+; The flame alternates on and off every other frame, as the arcade one does.
+; Without it a held thrust key draws a steady cone, which reads as a nozzle
+; rather than a burn.
+to draw.ship
+  pu setx :shipx sety :shipy seth :sh
+  setpc :ship.colour
+  if not :thrusting [ship stop]
+  if 0 = remainder :frame.count 2 [ship stop]
+  ship.flame
 end
 
 ; The HUD is written every frame because `clean` took it with the rocks, and it
 ; allocates nothing: `hud.text` is built only where a displayed value changes.
 to draw.hud
   pu setx -155 sety 150  setpc :hud.colour  write :hud.text
+end
+
+to refresh.hud
+  make "hud.text (se [SCORE] :score [ROCKS] :rocks.alive)
 end
 
 ;==========================================================================
@@ -163,7 +270,9 @@ end
 ; edge on perhaps one frame in fifty, and the common path should be two failed
 ; tests.  Object centres are wrapped here and always stay in bounds, so
 ; `setx`/`sety` never asks the turtle to leave the field; the OUTLINE crossing
-; an edge is `wrap`'s job and is free.
+; an edge is `wrap`'s job and is free.  Shots are not wrapped here at all --
+; the engine wraps them, because `setspeed` "obeys `wrap` exactly as `forward`
+; would".
 
 to wrapc :v
   if :v > 160 [output :v - 320]
@@ -171,20 +280,167 @@ to wrapc :v
   output :v
 end
 
-to step.rock :i
-  .setitem :i :rx wrapc ((item :i :rx) + (item :i :rdx))
-  .setitem :i :ry wrapc ((item :i :ry) + (item :i :rdy))
-  .setitem :i :rang (item :i :rang) + (item :i :rspin)
+; Velocity is state and thrust is an impulse, so the ship keeps its momentum
+; and there is nothing to do on a frame the player does not press anything.
+to step.ship
+  make "shipx wrapc (:shipx + :svx)
+  make "shipy wrapc (:shipy + :svy)
 end
 
-to step.all
-  repeat :max.rocks [
-    if 0 < item repcount :rsize [step.rock repcount]
+; `sin`/`cos` take degrees and this Logo's heading is clockwise from north,
+; which is what `seth` wants -- so `sh` is both the ship's heading variable and
+; its drawing heading, with no conversion anywhere.
+to thrust
+  local "spd
+  make "thrusting true
+  make "svx :svx + (:thrust.imp * sin :sh)
+  make "svy :svy + (:thrust.imp * cos :sh)
+  make "spd sqrt ((:svx * :svx) + (:svy * :svy))
+  if :spd > :speed.max [
+    make "svx :svx * :speed.max / :spd
+    make "svy :svy * :speed.max / :spd
   ]
 end
 
 ;==========================================================================
-; Slots
+; Shots
+;
+; Turtles 1-3, and that is the whole reason they are turtles: `setspeed` flies
+; and wraps a shot with NO Logo per frame.  All this code does is count the
+; life down and read the position back once a frame, which is what the
+; collision pass needs.  `pu` is mandatory -- a shot turtle with its pen down
+; would draw a permanent trail across the canvas.
+
+to free.shot
+  repeat :max.shots [if 0 = item repcount :slife [output repcount]]
+  output 0
+end
+
+to fire
+  local "n
+  make "n free.shot
+  if :n = 0 [stop]
+  .setitem :n :slife :shot.life
+  ask :n [pu setx :shipx sety :shipy seth :sh fd 12 st setspeed :shot.speed]
+end
+
+; Parking the x at 9999 is what takes a dead shot out of `shot.on` without
+; costing the rock pass an `if` -- see the shot state at the top of the file.
+; It has to happen the moment the shot dies, because the shot that kills a rock
+; is killed inside the rock pass and must not go on to hit a second one.
+to kill.shot :n
+  .setitem :n :slife 0
+  ask :n [ht setspeed 0]
+  if 1 = :n [make "s1x 9999 stop]
+  if 2 = :n [make "s2x 9999 stop]
+  make "s3x 9999
+end
+
+to age.shot :n
+  .setitem :n :slife (item :n :slife) - 1
+  if 0 = item :n :slife [kill.shot :n]
+end
+
+; Spelled out per shot rather than looped, because the position has to land in
+; a named variable rather than a list slot.  That is the whole trade described
+; at the top of the file: three repeated lines here buy 4 ms a frame in the
+; rock pass, which reads these 36 times.
+to step.shots
+  if 0 < item 1 :slife [age.shot 1  if 0 < item 1 :slife [ask 1 [make "s1x xcor  make "s1y ycor]]]
+  if 0 < item 2 :slife [age.shot 2  if 0 < item 2 :slife [ask 2 [make "s2x xcor  make "s2y ycor]]]
+  if 0 < item 3 :slife [age.shot 3  if 0 < item 3 :slife [ask 3 [make "s3x xcor  make "s3y ycor]]]
+end
+
+;==========================================================================
+; Collisions
+;
+; A square overlap on numbers the caller already holds, with the cheap reject
+; first, so the common case is one comparison per shot.  Not a circle: one
+; statement instead of a squared-distance expression, and against a jagged rock
+; whose outline is nowhere near its bounding circle anyway the extra reach in
+; the corners is not perceptible.  `:r` goes on the LEFT of every test so none
+; of them needs a parenthesis around the `abs`.
+;
+; Three shots unrolled and no `hit?` procedure, which is not premature: the
+; first board run measured this pass at 20.9 ms a frame against 7.5 estimated,
+; and a call plus three `item` walks per PAIR was most of it.  Here a pair is
+; one comparison against a variable.
+;
+; Outputs the shot that hit, or 0.  The caller needs the index to kill it.
+
+to shot.on :x :y :r
+  if :r > abs (:x - :s1x) [if :r > abs (:y - :s1y) [output 1]]
+  if :r > abs (:x - :s2x) [if :r > abs (:y - :s2y) [output 2]]
+  if :r > abs (:x - :s3x) [if :r > abs (:y - :s3y) [output 3]]
+  output 0
+end
+
+;==========================================================================
+; The rock pass
+;
+; ONE loop that steps, tests and draws each rock, rather than three loops that
+; each walk the same lists.  This is not tidiness, and it is not what the design
+; specified: M2's first board run measured the frame at 86.4 ms against a
+; 66.7 ms budget, and the cause was `item`.  A walk into a twelve-element flat
+; list costs about 115 us -- two and a half times an arithmetic statement -- and
+; a three-pass frame did about 290 of them, a third of the whole frame, of which
+; roughly 130 re-read a value another pass had already read that same frame.
+;
+; Fused, every field is read once.  The step computes the new x and y, the
+; collision test uses them, and the placement uses them again without going back
+; to the list.  Eight `item` walks a rock instead of twenty-three.
+;
+; Two ordering consequences, both one frame long and neither visible at 15 fps:
+;
+;   * A rock that dies is skipped rather than drawn, which is exactly what a
+;     separate collision pass running before the drawing pass bought.
+;   * A child landing in a slot BELOW the one being processed appears next
+;     frame; one landing above is stepped and drawn in this one.
+;
+; So `clean` runs BEFORE this loop rather than between passes.
+;
+; `wrapc` is spelled out here rather than called, which is the one duplication
+; in this file.  It is a user procedure -- a call plus an `output` on top of the
+; two comparisons -- and this loop makes 24 of those a frame, which measured out
+; at 1.4 ms.  The ship still calls the procedure, twice a frame, where it costs
+; nothing worth having; `test_a_rock_leaving_the_field_comes_back_on_the_far_side`
+; drives this copy so the two cannot drift apart unnoticed.
+
+to step.draw.all
+  local "s local "x local "y local "a local "h
+  setpc :rock.colour
+  repeat :max.rocks [
+    make "s item repcount :rsize
+    if 0 < :s [
+      make "x (item repcount :rx) + (item repcount :rdx)
+      if :x > 160 [make "x :x - 320]
+      if :x < -160 [make "x :x + 320]
+      make "y (item repcount :ry) + (item repcount :rdy)
+      if :y > 160 [make "y :y - 320]
+      if :y < -160 [make "y :y + 320]
+      make "a (item repcount :rang) + (item repcount :rspin)
+      .setitem repcount :rx :x
+      .setitem repcount :ry :y
+      .setitem repcount :rang :a
+      make "h shot.on :x :y (item repcount :rrad)
+      ifelse 0 < :h [kill.shot :h  split.rock repcount]
+                    [pu setx :x sety :y seth :a  draw.rock :s]
+    ]
+  ]
+end
+
+;==========================================================================
+; Slots, spawning and splitting
+
+; One place defines what a size is worth in pixels, because M2 needs it twice:
+; once when a level spawns a large rock and once when a large one splits.  The
+; number stored is the COLLISION half-width, not the drawn radius -- see
+; `shot.reach` in the tuning.
+to rad.for :size
+  if 3 = :size [output 22 + :shot.reach]
+  if 2 = :size [output 14 + :shot.reach]
+  output 8 + :shot.reach
+end
 
 to free.slot
   repeat :max.rocks [if 0 = item repcount :rsize [output repcount]]
@@ -196,9 +452,31 @@ to clear.rocks
   make "rocks.alive 0
 end
 
+; The default turtle shape is the line-drawn arrow and would read as a second
+; spaceship, so slot 1 gets a two-pixel dot -- 8 columns by 16 rows, bits 8 and
+; 16 set on the two middle rows.  Turtle numbers are fixed by the design's
+; object table (section 5) and are spelled out because `ask` wants a list.
+to clear.shots
+  repeat :max.shots [.setitem repcount :slife 0]
+  make "s1x 9999
+  make "s2x 9999
+  make "s3x 9999
+  putsh 1 [0 0 0 0 0 0 0 24 24 0 0 0 0 0 0 0]
+  ask [1 2 3] [ht setspeed 0 setsh 1]
+end
+
+to reset.ship
+  make "shipx 0
+  make "shipy 0
+  make "svx 0
+  make "svy 0
+  make "sh 0
+  make "thrusting false
+end
+
 ; A rock that cannot be placed is simply not created -- the rule the split
-; table will need at M2, stated once here.
-to spawn.rock :size :radius
+; table below needs, stated once here.
+to spawn.rock :size
   local "i local "h
   make "i free.slot
   if :i = 0 [stop]
@@ -208,10 +486,60 @@ to spawn.rock :size :radius
   .setitem :i :rdx :speed.l * sin :h
   .setitem :i :rdy :speed.l * cos :h
   .setitem :i :rang random 360
-  .setitem :i :rspin ((random 41) - 20) / 8
+  .setitem :i :rspin ((random 41) - 20) * :spin.max / 20
   .setitem :i :rsize :size
-  .setitem :i :rrad :radius
+  .setitem :i :rrad rad.for :size
   make "rocks.alive :rocks.alive + 1
+end
+
+; A child inherits its parent's velocity, boosted, plus a kick perpendicular to
+; it -- (-dy, dx) is the perpendicular, so the two children of a split are
+; given opposite signs and always separate.  A kick drawn independently for
+; each could come out near zero for both and leave them travelling together.
+to child :x :y :dx :dy :size :sign
+  local "i local "k
+  make "i free.slot
+  if :i = 0 [stop]
+  make "k :sign * (((random 7) + 4) / 10)
+  .setitem :i :rx :x
+  .setitem :i :ry :y
+  .setitem :i :rdx (:dx * :split.boost) - (:k * :dy)
+  .setitem :i :rdy (:dy * :split.boost) + (:k * :dx)
+  .setitem :i :rang random 360
+  .setitem :i :rspin ((random 41) - 20) * :spin.max / 20
+  .setitem :i :rsize :size
+  .setitem :i :rrad rad.for :size
+  make "rocks.alive :rocks.alive + 1
+end
+
+; Large -> two medium, medium -> two small, small -> nothing.  The parent's
+; slot is freed BEFORE the children are made, so a split can reuse it: that is
+; what lets three larges become six mediums and then twelve smalls in exactly
+; `max.rocks` slots.  A child with no slot to go in is not created, which is
+; the only thing that keeps the worst case a real bound.
+to split.rock :i
+  local "s local "x local "y local "dx local "dy
+  make "s item :i :rsize
+  make "x item :i :rx
+  make "y item :i :ry
+  make "dx item :i :rdx
+  make "dy item :i :rdy
+  .setitem :i :rsize 0
+  make "rocks.alive :rocks.alive - 1
+  score.rock :s
+  if 1 < :s [
+    child :x :y :dx :dy (:s - 1) 1
+    child :x :y :dx :dy (:s - 1) -1
+  ]
+  refresh.hud
+end
+
+; The arcade table.  Smaller is worth more, which is what makes shooting a
+; large rock down to nothing worth 240 rather than 20.
+to score.rock :s
+  if 3 = :s [make "score :score + 20 stop]
+  if 2 = :s [make "score :score + 50 stop]
+  make "score :score + 100
 end
 
 ;==========================================================================
@@ -221,14 +549,23 @@ end
 ; `poll.input` runs OUTSIDE the paused guard in play.frame, or a paused game
 ; could never read the key that unpauses it; so it has to turn every other key
 ; away itself while paused, which is the defect both shipped shooters had.
+;
+; One key a frame also means thrust is only held on frames where thrust was the
+; key read, so `thrusting` is cleared before the guard rather than after it --
+; on a frame with no key at all the flame must go out.
 
 to poll.input
   local "k
+  make "thrusting false
   if not key? [stop]
   make "k ascii readchar
   if :k = 112 [toggle.pause stop]
   if :paused [stop]
-  if :k = 113 [make "over true]
+  if :k = 113 [make "over true stop]
+  if :k = 180 [make "sh :sh - :turn.rate stop]
+  if :k = 183 [make "sh :sh + :turn.rate stop]
+  if :k = 181 [thrust stop]
+  if :k = 32 [fire]
 end
 
 to toggle.pause
@@ -248,11 +585,10 @@ end
 ; spend nothing; this one mints an atom for every rock position it stores
 ; (design section 14), and the atom region is capped at 32 KB whatever the
 ; board.  Measured with `reclaim` disabled, the frame loop runs out of atom
-; space after **649 frames**, so 250 leaves a 2.6x margin -- which held on the
-; host and did NOT hold on a board, where a fuller workspace puts the node
-; region's floor lower and squeezes the atom ceiling with it.  It died with
-; `Out of space in step.rock` within a minute of play.  Twenty-five frames is
-; a 26x margin against the same measurement, and 1.7 seconds at 15 fps.
+; space after a few hundred frames, so 250 leaves a 2.6x margin -- which held
+; on the host and did NOT hold on a board, where a fuller workspace puts the
+; node region's floor lower and squeezes the atom ceiling with it.  It died
+; with `Out of space in step.rock` within a minute of play.
 ; `test_the_reclaim_interval_stays_inside_the_atom_budget` measures the budget
 ; and fails if this ever creeps back up towards it.
 ;
@@ -267,13 +603,20 @@ end
 
 ; One frame, in a fixed order.  A procedure and not the body of the loop below,
 ; so a test or a timing script can call exactly what the game runs.
+;
+; The one ordering that is load-bearing is `step.shots` before `step.draw.all`:
+; the rock pass tests against the sampled shot positions, so they have to be
+; this frame's.  `clean` is before the rock pass and not after the stepping,
+; because that pass draws as well as steps.
 to play.frame
   poll.input
   if not :paused [
     make "frame.count :frame.count + 1
-    step.all
+    step.ship
+    step.shots
     clean
-    draw.all
+    step.draw.all
+    draw.ship
     draw.hud
     reclaim
   ]
@@ -284,7 +627,8 @@ end
 ; Level and game
 
 ; `cs` also restores automatic refresh, so it has to happen before play.level
-; asks for `sync` -- not after.
+; asks for `sync` -- not after.  It stops autonomous motion too, which is why
+; `clear.shots` comes after it and not before.
 to setup.level
   local "n
   cs
@@ -292,19 +636,30 @@ to setup.level
   wrap
   ht
   clear.rocks
+  clear.shots
+  reset.ship
   make "n :level.rocks
   if :n > :max.rocks [make "n :max.rocks]
-  repeat :n [spawn.rock 3 22]
-  make "hud.text sentence [ROCKS] :rocks.alive
+  repeat :n [spawn.rock 3]
+  refresh.hud
   make "frame.count 0
   make "paused false
 end
 
+; Clearing the board ends the level.  M3 turns that into an advance; until then
+; it is where the game ends, and it is the only reason M2 needs the test at all.
 to play.level
   setup.level
-  (setrefresh "sync 15)
+  (setrefresh "sync :fps)
   make "over false
-  until [:over] [play.frame]
+  until [:over] [
+    play.frame
+    if 0 = :rocks.alive [make "over true]
+  ]
+  ; A shot in flight is a turtle the ENGINE is moving, so it keeps gliding and
+  ; keeps the demon poll working after the game hands the screen back.  Stop
+  ; them here rather than leaving it to the next `cs`.
+  clear.shots
   setrefresh "auto
 end
 
@@ -312,6 +667,7 @@ to init.game
   make "level 1
   make "level.rocks :start.rocks
   make "rocks.alive 0
+  make "score 0
   make "paused false
   make "over false
   make "frame.count 0
