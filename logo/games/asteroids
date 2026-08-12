@@ -56,7 +56,11 @@
 ; host.
 
 make "max.rocks     12
-make "start.rocks    4     ; large rocks at level 1
+; Three, not the arcade's four, and the reason is the slot count: three larges
+; split to six mediums and then to twelve smalls, which fills `max.rocks`
+; exactly.  Four would want sixteen and the split cap would start eating
+; children on an ordinary level rather than only on a deliberately awkward one.
+make "start.rocks    3     ; large rocks at level 1
 make "reclaim.every 25     ; frames between recycles -- see `reclaim` below
 make "speed.l      0.9     ; steps per frame -- 13.5 a second at 15 fps
 make "spin.max     2.5     ; degrees per frame, either direction

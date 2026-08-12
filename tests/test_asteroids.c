@@ -168,7 +168,8 @@ static int expected_segments(void)
 void test_file_loads_and_sets_its_tuning(void)
 {
     TEST_ASSERT_EQUAL_FLOAT(12, num(":max.rocks"));
-    TEST_ASSERT_EQUAL_FLOAT(4, num(":start.rocks"));
+    // Three, so that 3 -> 6 -> 12 fills the slot count exactly (§13).
+    TEST_ASSERT_EQUAL_FLOAT(3, num(":start.rocks"));
     TEST_ASSERT_EQUAL_FLOAT(254, num(":rock.colour"));
 
     // Eight parallel lists, all MAX.ROCKS long. A list edited to a different
