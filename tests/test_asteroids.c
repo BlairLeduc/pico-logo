@@ -1426,6 +1426,38 @@ void test_an_extra_ship_every_ten_thousand_points(void)
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(5, num(":lives"), "no extra ship at 20,000");
 }
 
+// The HUD refresh belongs with the value that moved. `split.rock` used to do it
+// -- from M2, when the HUD carried the live rock count and a kill changed it --
+// and the HUD carries the level now, so a kill is a *score* event. Raised on
+// PR #145: any future scorer that did not know the convention would leave the
+// HUD stale, and M4's saucer is exactly that caller.
+void test_scoring_repaints_the_hud_wherever_the_points_come_from(void)
+{
+    run("init.game  make \"level 1  make \"lives 3");
+
+    run("make \"hud.text [stale]");
+    run("add.score 50");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("[SCORE 50 LEVEL 1 \x10\x10\x10]",
+                                     value_to_string(eval_string(":hud.text").value),
+                                     "add.score left the HUD stale");
+
+    // An extra ship moves `lives`, which is on the same line.
+    run("make \"hud.text [stale]  add.score 9950");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("[SCORE 10000 LEVEL 1 \x10\x10\x10\x10]",
+                                     value_to_string(eval_string(":hud.text").value),
+                                     "an extra ship did not reach the HUD");
+
+    // And a kill still repaints, through `score.rock` -- exactly once, not
+    // once here and once in `split.rock`.
+    run("clear.rocks  clear.shots");
+    run(".setitem 1 :rsize 1  .setitem 1 :rrad rad.for 1  make \"rocks.alive 1");
+    run("make \"hud.text [stale]");
+    run("split.rock 1");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("[SCORE 10100 LEVEL 1 \x10\x10\x10\x10]",
+                                     value_to_string(eval_string(":hud.text").value),
+                                     "a kill left the HUD stale");
+}
+
 // One more large rock a level, to a ceiling: five larges split into ten mediums
 // and the eleventh has nowhere to go, so the cap bites at the top level and not
 // below it.
@@ -1824,6 +1856,7 @@ int main(void)
     RUN_TEST(test_hyperspace_moves_the_ship_and_stops_it);
     RUN_TEST(test_hyperspace_sometimes_ends_badly);
     RUN_TEST(test_an_extra_ship_every_ten_thousand_points);
+    RUN_TEST(test_scoring_repaints_the_hud_wherever_the_points_come_from);
     RUN_TEST(test_a_level_advance_adds_a_rock_up_to_the_ceiling);
     RUN_TEST(test_the_hud_carries_the_score_the_level_and_a_heart_a_life);
     RUN_TEST(test_pause_answers_p_and_nothing_else);

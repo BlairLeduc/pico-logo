@@ -831,7 +831,12 @@ end
 
 Five statements, every frame, and **no allocation at all** — the `sentence`
 is built only where a displayed value changes (a kill, a death, an extra ship,
-a level), in the code that changes it. Lives are drawn as that many **heart
+a level), **in the procedure that changes it**: `add.score` for anything that
+moves the score or awards a ship, `ship.hit` for a life, `setup.level` for a
+level. `split.rock` used to hold the refresh, from M2 when the HUD carried the
+live rock count and a kill changed it — but the HUD carries the level now, so
+a kill is a *score* event and the refresh followed the value. Raised on PR #145,
+and M4's saucer is the caller that would otherwise have found it out. Lives are drawn as that many **heart
 glyphs** in the same string rather than as drawn ships, which keeps the whole
 HUD one `write`: a ship costume would be a second drawing pass and a second
 thing for `clean` to take, for a picture the font can carry.
@@ -1720,7 +1725,7 @@ and quit;
 Q ends the game rather than the level; the state machine plays levels until the
 ships run out and shows a card, and shows no card when the player quits; the
 attract screen prints the score table and the keys; the game-over card prints
-the final score; and — added after the play report — the ship's collision box
+the final score; scoring repaints the HUD wherever the points come from; and — added after the play report — the ship's collision box
 sits between the ship's own beam and the rock's longest spike plus that beam,
 which fails at the `ship.rad` the board sent back. The harness-matches-the-game
 test gained a **death frame**, because that is the branch M3 added to the frame.

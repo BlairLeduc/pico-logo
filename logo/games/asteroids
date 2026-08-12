@@ -705,22 +705,35 @@ to split.rock :i
   make "dy item :i :rdy
   .setitem :i :rsize 0
   make "rocks.alive :rocks.alive - 1
+  ; The HUD refresh lives in `add.score`, which this reaches through
+  ; `score.rock` -- so a kill still repaints exactly once, and it does it in the
+  ; procedure that changed the displayed value rather than by convention here.
   score.rock :s
   if 1 < :s [
     child :x :y :dx :dy (:s - 1) 1
     child :x :y :dx :dy (:s - 1) -1
   ]
-  refresh.hud
 end
 
 ; Every point in the game arrives through here, so the extra ship is tested in
-; one place.  `next.extra` is a moving threshold rather than a remainder test:
-; a score can step over a boundary by 100 and `remainder` would miss it.
+; one place -- and so is the HUD, because this is the only procedure that moves
+; `score` and one of only two that move `lives`.  `split.rock` used to do the
+; refresh, from M2 when the HUD carried the live rock count and a kill changed
+; it; the HUD carries the level now, so a kill is a SCORE event and the refresh
+; belongs where the score changes.  M4's saucer is the caller that would
+; otherwise have found this out.
+;
+; `next.extra` is a moving threshold rather than a remainder test: a score can
+; step over a boundary by 100 and `remainder` would miss it.  Written as
+; `not <` rather than an early `stop`, because the refresh has to happen on both
+; paths and this Logo has no `>=`.
 to add.score :n
   make "score :score + :n
-  if :score < :next.extra [stop]
-  make "lives :lives + 1
-  make "next.extra :next.extra + :extra.every
+  if not (:score < :next.extra) [
+    make "lives :lives + 1
+    make "next.extra :next.extra + :extra.every
+  ]
+  refresh.hud
 end
 
 ; The arcade table.  Smaller is worth more, which is what makes shooting a
