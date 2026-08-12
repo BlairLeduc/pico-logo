@@ -46,9 +46,9 @@ game info at the top of the display. All three are taken as given below.
 | | |
 |---|---|
 | Game | `logo/games/asteroids` — one Logo file, no extension (flash fs files are extensionless), no `-` or `/` in the name so `load "asteroids` parses |
-| Tests | `tests/test_asteroids.c` (Unity + mock device, 49 tests), mirroring `tests/test_galaxian.c`; the M0 harness has its own binary, `tests/test_p11rocks.c` |
+| Tests | `tests/test_asteroids.c` (Unity + mock device, 71 tests), mirroring `tests/test_galaxian.c`; the M0 harness has its own binary, `tests/test_p11rocks.c` |
 | Design | this document |
-| Measurement | `logo/tests/p11m2` times a real frame at 6, 9 and 12 rocks with the rock pass read apart from the rest — it writes its numbers to a file, because numbers on a display cannot be copied off it. `logo/tests/p11rocks` is M0's standalone erase-strategy harness and survives because nothing else reproduces that question; `logo/tests/p11m1` is **gone**, since the fusion removed the procedures it called by name |
+| Measurement | `logo/tests/p11m3` times a real frame at 6, 9 and 12 rocks with the rock pass read apart from the rest — it writes its numbers to a file, because numbers on a display cannot be copied off it. `logo/tests/p11rocks` is M0's standalone erase-strategy harness and survives because nothing else reproduces that question; `logo/tests/p11m1` is **gone**, since the fusion removed the procedures it called by name |
 | Outline generator | [`scripts/gen_rocks.py`](../scripts/gen_rocks.py), host-side, output pasted in (§6.3) |
 
 Play: `load "asteroids` then `asteroids`.
@@ -299,7 +299,7 @@ dot.
 | Rocks | ≤12 | **canvas**, pen-drawn, one flat-list slot each | more of them than there are turtles; and a pen-drawn polygon rotates for free |
 | Ship | 1 | **canvas**, pen-drawn | three strokes, rotates to any heading; a 16×16 costume under `setrot "full` would be a visibly coarser ship |
 | Saucer | ≤1 | **canvas**, pen-drawn | the arcade saucer is a distinctive outline |
-| Explosions | ≤2 | **canvas**, `arc 360 r` | one primitive call per ring (§9) |
+| Explosion | 1, the ship's | **canvas**, `arc 360 r` | one primitive call per ring, in the ship's place on death frames (§9) |
 | Player shots | ≤3 | **turtles 1–3** | `setspeed` flies and wraps them with no Logo per frame |
 | Saucer shot | ≤1 | **turtle 4** | same |
 | The pen | — | **turtle 0**, hidden | draws every canvas object and the HUD |
@@ -644,7 +644,7 @@ The pair counts are the frame's second-largest line item (§12):
 | Pair | Where | Worst-case tests/frame |
 |---|---|---:|
 | shot × rock | inside the rock pass, three shots unrolled | 36 |
-| ship × rock | same loop, one more test | 12 |
+| ship × rock | same loop, one more test (M3) | 12 |
 | shot × saucer | once per shot | 3 |
 | ship × saucer, ship × saucer shot | once each | 2 |
 
@@ -670,6 +670,64 @@ A pair is one comparison in the common case rather than a procedure call and
 three list walks. It outputs *which* shot hit, because the caller has to kill
 it.
 
+**M3's ship test is the same shape and one addition more.** The rock's radius
+is already in hand from the shot test, but the box a *ship* is tested against
+is a different one — `rrad` carries the rock plus `shot.reach`, and a ship is
+ten steps wide — so the pass adds `ship.rad` to it:
+
+```logo
+make "r :r + :ship.rad
+if :r > abs (:x - :shipcx) [if :r > abs (:y - :shipcy) [ship.hit]]
+```
+
+A second radius list would have been an `item` walk (115 µs) where the sum is
+an arithmetic statement (43): the same "count list walks, not statements"
+lesson as everything else in this loop.
+
+#### `ship.rad` is 6, and the play report is why
+
+It was 10, and M3's board report was that **the ship died before rocks reached
+it, worst on the medium and small ones** — which is the *same finding*
+`shot.reach` produced at M2 (§7.3), from the same cause: a flat number added to
+radii of 22, 14 and 8 is proportionally largest on the 8, so the excess a player
+sees grows as the rock shrinks. Twice now, this design's collision constants
+have been too generous, and both times the report came from the small end.
+
+Two things set the number:
+
+- **The ship is a thin triangle, not a disc.** Its rear corners are 12.68 steps
+  from the centre and its **beam is 8.95**, and most bearings meet the beam.
+  Ten was the corner radius rounded down; it should never have been the corner.
+- **`rrad` already carries `shot.reach`**, which exists so a 160-step-a-second
+  shot cannot tunnel between samples. A ship closes at 7.3 steps a frame at
+  worst, so that 2 has no business in a ship test — and since it cannot be taken
+  out of `rrad` without an arithmetic statement a rock, it comes out of
+  `ship.rad` instead, for free.
+
+So the addend over the rock's *drawn* radius is 6 + 2 = 8, which puts the box
+exactly where the rock's longest spike meets the ship's beam:
+
+| size | box | spike + beam | was |
+|---|---:|---:|---:|
+| large | 30 | 21.68 + 8.95 = 30.63 | 34 |
+| medium | 22 | 13.24 + 8.95 = 22.19 | 26 |
+| small | 16 | 7.49 + 8.95 = 16.44 | 20 |
+
+Just inside contact at every size. **It errs towards a graze that should have
+killed and away from a kill the player can see past**, which is the right side
+of the error: the second reads as the game cheating and the first reads as luck.
+`test_the_ship_box_is_not_wider_than_the_shapes_it_is_drawn_from` holds it
+between those two bounds — above the ship's own beam, below spike-plus-beam —
+and fails at 10, so the next change to this constant has to answer for how it
+plays as well as whether it is safe.
+
+**And the ship is parked at 9999 exactly as a spent shot is** — `ship.hit` does
+it before it returns. That is not tidiness, it is what stops one frame taking
+every life the player has: without it, a board of twelve rocks sitting on the
+ship ends a full game in a single pass. It also removes the `if` per rock that
+an "is the ship alive" guard would have cost, so an exploding or newly
+respawned ship costs the same first comparison and no more.
+
 **An idle shot is parked at x = 9999 rather than guarded by an `if`.** The x
 test then turns it away as part of a comparison that was going to run anyway —
 one statement a pair instead of two — and, more importantly, it is what stops a
@@ -686,7 +744,10 @@ frame. `kill.shot` parks it, which is why that procedure names each shot.
 | Large saucer | 200 |
 | Small saucer | 1000 |
 
-An extra ship every 10,000 points.
+An extra ship every 10,000 points. Every point in the game arrives through one
+procedure, `add.score`, so that is tested in one place — and against a **moving
+threshold** (`next.extra`) rather than a `remainder`, because a score steps over
+a boundary rather than landing on it.
 
 ### Splitting, and the slot cap
 
@@ -718,13 +779,38 @@ bound rather than an estimate.
 - **Explosions.** The arcade shatters a rock into drifting line fragments. A
   fragment system would cost more per frame than the rocks do, so instead an
   explosion is an **expanding ring**: `arc 360 :r` at the death point, radius
-  growing over four frames, erased and redrawn each frame. One primitive call
-  per frame per explosion, two explosions live at once, and it reads correctly
-  at speed. Ship death gets a bigger, slower ring and a two-second freeze.
-- **Hyperspace.** Erase the ship, set position to a random point, zero the
-  velocity, redraw. The arcade's chance of materialising inside a rock is
-  kept — it is the mechanic's entire point — but a 1-in-8 flat chance rather
-  than the original's velocity-dependent formula.
+  growing as a countdown falls. **As built at M3 there is exactly one, and it
+  is the ship's**: ten frames, the radius growing four steps a frame, drawn
+  where the ship would have been. Rocks die without a ring, which is a
+  difference from the arcade that nobody has yet asked to close; the cost of
+  closing it is a per-frame list of live rings in the hot path, and the
+  measurement to justify it does not exist.
+  `arc` sweeps four degrees a segment, so a full circle is 90 strokes inside
+  **one** primitive call with no interpreter between them — which is the whole
+  reason a ring is affordable where fragments were not.
+  **The two-second freeze this section used to specify is gone.** It came from
+  Galaxian, whose actors are engine-driven turtles and which can therefore
+  sleep through a death; here every rock is Logo's to move, and the arcade
+  keeps them drifting while the ship burns. So the death is a **countdown
+  inside the frame loop** (`dying`) rather than a `wait`, the rocks carry on
+  under it, and nothing in the game blocks — a player can pause or quit through
+  a death.
+- **Respawn.** The ship comes back at the centre, stopped, facing north, and
+  **invulnerable for `safe.frames`** (21, about 1.5 s), blinking on alternate
+  frames so the player can see both facts. The arcade waits for the middle of
+  the screen to be clear instead; that is a twelve-slot scan on every waiting
+  frame, and invulnerability covers the same case — a rock sitting on the
+  spawn point — for one countdown and no scan. A level starts the ship the
+  same way, because rocks are spawned at random positions and one of them can
+  be on the origin.
+- **Hyperspace.** Set the position to a random point, zero the velocity. There
+  is nothing to erase — the frame clears and redraws (§3.3) — so the mechanic
+  is five statements. The arcade's chance of materialising inside a rock is
+  kept, since it is the mechanic's entire point, but a 1-in-8 flat chance
+  rather than the original's velocity-dependent formula. The collision position
+  is deliberately *not* set by the jump: `step.ship` runs after `poll.input` in
+  the same frame and copies it across, so a jump can never be tested against
+  the place the ship left.
 
 ## 10. HUD via `write`
 
@@ -744,9 +830,26 @@ end
 ```
 
 Five statements, every frame, and **no allocation at all** — the `sentence`
-is built only where a displayed value changes (a kill, a death, a level), in
-the code that changes it. Lives are drawn as that many `^` characters in the
-same string rather than as ship glyphs, which keeps the whole HUD one `write`.
+is built only where a displayed value changes (a kill, a death, an extra ship,
+a level), **in the procedure that changes it**: `add.score` for anything that
+moves the score or awards a ship, `ship.hit` for a life, `setup.level` for a
+level. `split.rock` used to hold the refresh, from M2 when the HUD carried the
+live rock count and a kill changed it — but the HUD carries the level now, so
+a kill is a *score* event and the refresh followed the value. Raised on PR #145,
+and M4's saucer is the caller that would otherwise have found it out. Lives are drawn as that many **heart
+glyphs** in the same string rather than as drawn ships, which keeps the whole
+HUD one `write`: a ship costume would be a second drawing pass and a second
+thing for `clean` to take, for a picture the font can carry.
+
+As built at M3 the line is `SCORE 240 LEVEL 2 ♥♥♥`. The heart is **`char 16`**,
+glyph 0x10 of [`devices/logo-font.h`](../devices/logo-font.h) — a spare
+control-code slot, filled for this game — and `lives.word` builds the run of
+them with `word` into an empty word, inside `refresh.hud` and nowhere else.
+This is the design's one change to anything outside `logo/`, and it is six
+bytes of font rather than an interpreter or device feature.
+
+M2's line carried the live rock count instead of the level, because at M2 there
+was nothing else to carry.
 
 What this replaces is worth recording, because it was the more intricate half
 of the original design: under erase-in-place the HUD had to be redrawn *last*
@@ -809,7 +912,7 @@ That is where the levers are, and it is not where §12 originally looked.
 `logo/tests/p11m1` — **which no longer exists.** M2's fusion (§15) removed the
 procedures it called by name, so these numbers are archival: they are the last
 record of a rocks-only frame and cannot be reproduced against the game as it
-stands. `logo/tests/p11m2` measures the frame the game actually runs.
+stands. `logo/tests/p11m3` measures the frame the game actually runs.
 
 | rocks | body | present | **frame** | min | max |
 |---:|---:|---:|---:|---:|---:|
@@ -878,7 +981,9 @@ of them takes away the board filling up, which is what Asteroids *is* — agains
 a third such number would have traded real gameplay for arithmetic nobody had
 checked.
 
-So M2 was built whole, and `logo/tests/p11m2` measured it.
+So M2 was built whole, and its harness measured it (that harness is now
+`logo/tests/p11m3`: M3 added a branch to the frame, and a harness that does not
+follow the frame measures a game nobody plays).
 
 ### The measured M2 frame, and it is not 6 ms over
 
@@ -1077,6 +1182,108 @@ still the number no game-side lever reaches.
 
 
 
+## 12b. M3 measured: the frame fits, the worst frame does not
+
+**300 frames a point on a Plus 2 W** (`logo/tests/p11m3`), the same worst case —
+twelve rocks with three shots live on every frame:
+
+| rocks | body | present | **frame** | min | max | rock pass |
+|---:|---:|---:|---:|---:|---:|---:|
+| 6 | 25.51 | 26.54 | **52.05** | 48 | 60 | 19.08 |
+| 9 | 34.07 | 26.46 | **60.54** | 56 | 66 | 27.66 |
+| 12 | 42.69 | 26.52 | **69.21** | 64 | 74 | 36.27 |
+
+> **frame = 34.86 + 2.860 n ms**, against a **71.4 ms** budget. It predicts the
+> nine-rock frame at 60.60 against 60.54 measured.
+
+**Twelve rocks fit, with 2.2 ms rather than M2's 6.0.** Correcting for the
+harness's unreachable all-large board (−1.9 to −2.9 ms, §12), a real twelve-rock
+frame is about **66.5 ms**.
+
+### What the ship test cost, and it is the first estimate in this design inside its own margin
+
+The rock-pass slope went **2.620 → 2.865 ms a rock**: the ship test is
+**0.245 ms a rock, 2.9 ms at twelve**, against ~1.5 ms estimated (§18). That is
+1.9× the estimate — still high, and still in the same direction as every other
+estimate here, but this is the first time the miss has been smaller than the
+margin it was spent from. Decomposed against §12's units it is close to its
+floor: an arithmetic statement to widen the box (43 µs), one comparison with an
+`abs` and a subtraction inside it (~95), and the `make` that holds the radius
+for both tests (~43) — which is itself the cheap side of the choice, since
+reading `rrad` twice would be a 115 µs `item` walk.
+
+The intercept moved **33.9 → 34.86**. About 0.2 ms of that is the frame's new
+branch and `step.ship`'s two extra statements, and about 0.07 is the bigger
+recycle amortised over 25 frames. The remaining ~0.7 ms is not explained by
+anything M3 added, and is recorded here as unexplained rather than attributed.
+
+### The worst frame is a recycle frame, and the arithmetic says so exactly
+
+**74 ms against 71.4** — the property M2 had just gained, lost. But it is not a
+spike of unknown origin, which is the only kind the "worst frame meets the
+budget" rule (§18) exists to catch:
+
+> 69.21 (the mean twelve-rock frame) + 4.1 (one recycle) = **73.3**, against 74
+> observed.
+
+**The recycle is the finding of this run: 1.3 ms at M1, 2.2 at M2, 4.1 at M3.**
+Nothing about the *frame* tripled it. A recycle walks the whole node pool, so it
+scales with the **workspace** — 48 procedures and their bodies where M1 had
+26 — and it will grow again at M4 when the saucer and the sound arrive. It is
+0.16 ms a frame amortised, which is nothing, and a 4.1 ms bump once every 1.8 s,
+which is the whole of the overshoot.
+
+Two things follow. **The bump cannot be spread**: nothing in this interpreter
+collects incrementally, and recycling *more* often makes it worse rather than
+better, since the cost is the pool walk and not the garbage. And **the interval
+is not the lever it looks like**: raising `reclaim.every` halves how often the
+hitch lands but not how big it is, and it spends the safety margin on the one
+thing that has already crashed a board (§14).
+
+### What this does not cost
+
+An overrun costs frame rate and not correctness — `sync` presents late rather
+than failing — so a 74 ms frame is a 2.6 ms slip on one frame in 25, 3.6 % late,
+on a board that measures 1.9–2.9 ms pessimistic to begin with. The rate stays at
+14 fps and the board stays at twelve rocks: the alternatives are 13 fps (a 7 %
+cut for a bump on 4 % of frames) or `MAX.ROCKS` 11 (−2.86 ms, and it is the one
+lever that takes away the board filling up, which is what Asteroids is).
+
+**And how it plays is now settled: the hitch is undetectable** (played
+2026-08-12). A 4 ms slip once every 1.8 s cannot be seen at 14 fps, so the
+overshoot is real arithmetic with no consequence, and the two levers stay
+unspent.
+
+That is worth stating as more than a result, because this design has now spent
+three milestones treating "the worst frame meets the budget" as the rule a rate
+must satisfy (§18). It is the right rule for an *unknown* worst frame, which is
+what it was written against — a spike nobody has decomposed can be any size and
+can land anywhere. It is the wrong rule for a **known, priced, periodic** one:
+here the overshoot has a named cause, a fixed period and a measured size, and
+`sync` turns it into lateness rather than failure. The rule should be read as
+"no unexplained frame may exceed the budget", and M3's worst frame is explained
+to within 0.7 ms.
+
+### The rest of the run
+
+| | ms |
+|---|---:|
+| one `shot.on` | 0.38 (0.42 and 0.53 at M2 — scene-dependent, §12a) |
+| one `thrust` | 0.99 (0.86 at M2) |
+| **one explosion ring** | **0.90** |
+| one recycle | 4.10 |
+
+**The explosion ring is cheap, and it is the design decision this run
+vindicates.** 0.90 ms is about fifteen drawing statements for ninety strokes —
+which is what "one primitive call with no interpreter between the segments"
+(§9) predicted — and it *replaces* the ship rather than adding to it, so a death
+frame costs about **+0.65 ms** over a live one. A fragment system would have
+been per-object Logo in the hot path for the same picture.
+
+Storage was flat: 23,415 → 23,345 nodes over the run, and the closing recycle
+recovered nothing because there was nothing to recover. The present held at
+**26.46–26.54 ms** at every rock count, the **sixth** independent time.
+
 ## 13. Reduced-resource choices
 
 | Arcade Asteroids | This port | Saving |
@@ -1136,11 +1343,22 @@ and 1.8 s at 14 fps. `test_the_reclaim_interval_stays_inside_the_atom_budget`
 measures the deadline rather than assuming it and fails if the interval creeps
 back towards it.
 
-**A recycle costs 2.0 ms** at M2, measured on a Plus 2 W (it was 1.3 at M1 —
-the frame allocates more now), so recycling ten times more often than the design
-first said costs 0.08 ms a frame amortised and puts a 2 ms bump inside a 71.4 ms
-budget every 1.8 s. It is invisible, and the tighter interval is free. The frame
-loop holds flat: **4 cells over 1,000 frames** on the host.
+**A recycle costs 1.3 ms at M1, 2.2 at M2 and 4.1 at M3**, all measured on a
+Plus 2 W — and the growth is not the frame's. A recycle walks the whole node
+pool, so it scales with the **workspace**: 48 procedures and their bodies where
+M1 had 26. Recycling ten times more often than the design first said therefore
+costs 0.16 ms a frame amortised, which is nothing, and puts a **4.1 ms bump**
+inside a 71.4 ms budget every 1.8 s — which is no longer nothing, because it is
+the whole of M3's worst-frame overshoot (§12b). The frame loop holds flat:
+**4 cells over 1,000 frames** on the host, and 70 nodes over 900 frames on the
+board.
+
+The interval is not the lever it looks like. Recycling *more* often makes the
+total worse rather than better, since the cost is the pool walk and not the
+garbage; recycling less often halves how often the hitch lands but not how big
+it is, and spends the margin on the one thing that has already crashed a board.
+**M4 should expect this number to grow again**, because the saucer and the sound
+are more workspace.
 
 The rule to write to is **"a frame must not allocate anything it does not hand
 back, and must hand it back long before the deadline"** — no `sentence`, no
@@ -1172,7 +1390,7 @@ to play.frame
   poll.input
   if not :paused [
     make "frame.count :frame.count + 1
-    step.ship              ; momentum; thrust is an impulse from poll.input
+    ifelse 0 < :dying [step.death] [step.ship]   ; a dying ship has nothing to move
     step.shots             ; life countdown, and read the turtles back
     clean                  ; buffered in sync mode since B16 (§3.1.1)
     step.draw.all          ; step, test and draw each rock, in one visit
@@ -1248,7 +1466,7 @@ forced on Galaxian.
 ```logo
 to play.level
   setup.level
-  (setrefresh "sync 15)
+  (setrefresh "sync :fps)
   make "over false
   until [:over] [
     play.frame
@@ -1263,8 +1481,33 @@ end
 moving, so one still in flight when the player quits keeps gliding and keeps the
 demon poll working at the prompt.
 
-M3 adds the death handling to the loop and turns the cleared board into a level
-advance; M4 adds `heartbeat` to the frame.
+**A level ends three ways and `over` is all three of them** — the board is
+clear, the last life is gone (`step.death` sets it from inside the frame), or
+the player pressed Q. Which one it was is read back afterwards, by the state
+machine above it, so this loop stays two lines:
+
+```logo
+to one.game
+  attract.screen
+  init.game
+  make "playing true
+  until [not :playing] [
+    play.level
+    if :quit [make "playing false]
+    if :lives < 1 [make "playing false]
+    if :playing [next.level]
+  ]
+  if not :quit [show.game.over]
+end
+```
+
+Iterative and not recursive, as the two shipped shooters are: a game that called
+itself for the next level would grow the stack for as long as the player kept
+playing. **Q means "back to the attract screen" and not "the game ended"**, and
+the difference between them is the game-over card — which is the whole reason
+`quit` exists as a flag rather than being folded into `over`.
+
+M4 adds `heartbeat` to the frame.
 
 ## 16. Milestones
 
@@ -1299,8 +1542,8 @@ clear-and-redraw, `sync` at 15 fps, nothing to shoot with),
 `tests/test_asteroids.c` (23 tests), and `logo/tests/p11m1`, which timed a
 real frame at 6, 9 and 12 rocks with the body and the present read apart —
 the split P9 M5 wished it had. **That harness was removed at M2** and is
-described here in the past tense for that reason; `logo/tests/p11m2` replaces
-it.
+described here in the past tense for that reason; M2's harness replaced it
+(and is now `logo/tests/p11m3`).
 
 Two things M1 settled on the host before the board saw it. It **disproved this
 document's memory rule** — an Asteroids frame does allocate, ~36 atoms a
@@ -1327,7 +1570,8 @@ inlining `wrapc` took another **2.9 ms**, double its estimate. **Accepted at
 six-segment larges all survive.
 
 The build: `logo/games/asteroids` (36 procedures), `tests/test_asteroids.c`
-(49 tests) and `logo/tests/p11m2`, which reads the rock pass apart from the rest
+(49 tests) and `logo/tests/p11m2` — renamed `p11m3` when M3 changed the frame —
+which reads the rock pass apart from the rest
 of the body and times one `shot.on` on its own — between them those price every
 remaining lever. `logo/tests/p11m1` is **gone**: the fusion removed `step.all`,
 `draw.all` and `place`, which it called by name, so it could no longer run
@@ -1347,14 +1591,62 @@ still interns it, so M1's memory contract carries over unchanged — the frame
 loop is soaked for flat storage and the reclaim deadline is re-measured rather
 than assumed.
 
-**M3 — lives, levels, deaths.** Ship explosion, respawn, level advance,
-attract screen, game over, hyperspace. It inherits a frame that **fits with its
-worst case inside the budget** (§12a) — roughly 9 ms of headroom to share with
-M4 on a reachable board — and three levers still priced against a measured
-slope if that runs out. M2's play report closed the last of
-this document's original risks (§18): the rate reads smooth, the ship feels
-right, and the two constants that played badly — the hit-box generosity and the
-ship's size — are fixed and held by tests.
+**M3 — lives, levels, deaths. BUILT, and MEASURED on hardware 2026-08-12.**
+Ship × rock collisions, the explosion, respawn with a grace, lives, the extra
+ship at 10,000, level advance, hyperspace, the attract screen and game over.
+
+**Twelve rocks are 69.2 ms against the 71.4 ms budget** — `frame = 34.86 +
+2.860 n`, about 66.5 on a reachable board — so the game fits, with 2.2 ms where
+M2 had 6.0. The ship test cost **0.245 ms a rock** against ~1.5 ms estimated at
+twelve, which is 1.9× and **the first estimate in this design to miss by less
+than the margin it was spent from**.
+
+**The worst frame is 74 ms, 2.6 over, and it is a recycle frame** — 69.2 + 4.1 =
+73.3 against 74 observed. So the property M2 had just gained is lost, but not to
+a spike of unknown origin, which is the only kind §18's rule exists to catch.
+The finding underneath it is that **a recycle has gone 1.3 → 2.2 → 4.1 ms across
+the three milestones**, scaling with the workspace rather than the frame (§12b,
+§14). The rate stays at 14 fps and the board stays at twelve rocks.
+
+**Played on hardware the same day, and it closed both open questions.** The
+heart glyph reads, and **the 4 ms recycle hitch is undetectable** — so the
+worst-frame overshoot is arithmetic with no consequence, and neither lever was
+spent. The one thing the board sent back was a constant: the ship died *before*
+rocks reached it, worst on the medium and small ones, so `ship.rad` is 6 rather
+than 10 (§8). That pattern has now happened twice from the same end — a
+collision constant chosen as a safety margin is generous in pixels and ruinous
+in proportion on the smallest object, exactly as `shot.reach` was at M2.
+
+**M3 is done.**
+
+The build: `logo/games/asteroids` (48 procedures), `tests/test_asteroids.c`
+(71 tests) and `logo/tests/p11m3`, which replaces `p11m2` — the frame gained a
+branch, and a harness that kept calling `step.ship` unconditionally would time a
+ship the game is not flying. It also prices the explosion ring on its own, since
+that is the one M3 cost that is not in any per-rock figure.
+
+Four things M3 settled that the document had not:
+
+- **The death is a countdown, not a freeze** (§9). The design specified a
+  two-second freeze, copied from Galaxian — which can sleep through a death
+  because its actors are engine-driven turtles. Every rock here is Logo's to
+  move, and the arcade keeps them drifting, so the explosion counts down inside
+  the frame loop instead. Nothing in the game blocks, and a player can pause or
+  quit through a death.
+- **Invulnerability is spelled as a parked ship**, reusing the idle-shot idiom
+  rather than adding a guard: `shipcx` is the ship's collision position and 9999
+  means "not there". That is what stops a full board taking every life in one
+  pass, and it is why the frames where the ship cannot be hit cost the same
+  first comparison and no more.
+- **A rock explosion is not in the game**, and the milestone list never said it
+  was. §9 described rings for both; only the ship's is built, because a list of
+  live rock rings is per-frame work in the hot path and no measurement justifies
+  it yet.
+- **`arc` sweeps with the pen it finds.** `draw.boom` arrives from a
+  `pu setx sety` like every other drawing procedure in the file, and every other
+  one puts the pen down inside its own walk — so the first ring was swept with
+  the pen up and a death was invisible. Found by the test that counts the ring's
+  strokes, which is the kind of thing only a segment count catches.
 
 **M4 — saucer and sound.** Both saucer sizes; the full PSG arrangement with
 the heartbeat.
@@ -1413,10 +1705,33 @@ measures the rock counts it reports, that it holds three shots live and the
 board still, and that its frame matches the game's in drawing, physics, ship
 and shot bookkeeping.
 
-**Still to come with M3 and M4:**
+**Added for M3** (22 more, 71 in all): a rock on the ship kills it, and the
+rock survives and is still drawn; **one frame takes only one life**, driven with
+twelve rocks stacked on the ship, which is the test the parked-ship idiom exists
+for; a ship inside its respawn grace cannot be hit on any frame of it, and *can*
+be on the frame after; the explosion counts down while the rocks keep drifting,
+and the last frame of it puts the ship back at the centre, stopped, facing
+north and in a new grace; the last life ends the level and puts no ship back;
+a dying ship draws one full ring and no hull, and the ring expands with the
+countdown; the grace blinks on exactly half its frames; hyperspace stops the
+ship and lands it inside the field, and sometimes kills it — the last of those
+needs `(rerandom 1)`, because the mock device's hardware RNG returns a constant
+and no chance in this game is observable on the host without a seed; the extra
+ship at 10,000 including a score that steps *over* the boundary rather than
+landing on it, and that a second one does not arrive at the same threshold;
+a level advance adds a large rock up to the ceiling; the HUD line carries the
+score, the level and one heart glyph a life; a dying ship answers only pause
+and quit;
+Q ends the game rather than the level; the state machine plays levels until the
+ships run out and shows a card, and shows no card when the player quits; the
+attract screen prints the score table and the keys; the game-over card prints
+the final score; scoring repaints the HUD wherever the points come from; and — added after the play report — the ship's collision box
+sits between the ship's own beam and the rock's longest spike plus that beam,
+which fails at the `ship.rad` the board sent back. The harness-matches-the-game
+test gained a **death frame**, because that is the branch M3 added to the frame.
 
-- The 10,000-point extra ship, and level advance rather than level end.
-- Ship × rock, and the death and respawn it implies.
+**Still to come with M4:**
+
 - The saucer's pairs, and its firing.
 - Allocation: the frame loop is soaked for flat storage over 1,250 frames and
   the reclaim deadline is re-measured; both carry over from M1 unchanged and
@@ -1490,6 +1805,38 @@ that is the useful part.
   — a legibility change that turned out to be a difficulty change. The general
   shape is worth keeping: the constants that came from arithmetic were right,
   and the one that came from a *safety margin* was the one that played badly.
+- ~~**What M3 adds to the frame is unmeasured.**~~ **Closed, and for once the
+  estimate was nearly right**: the ship test is 0.245 ms a rock against ~1.5 ms
+  estimated at twelve — 1.9×, where M0's drawing statement was 1.7× and M2's
+  collision pass was 2.8×. Twelve rocks are 69.2 ms against 71.4 (§12b). The
+  explosion ring came in at **0.90 ms** and replaces the ship rather than adding
+  to it, so the "90 strokes inside one primitive call" argument (§9) holds.
+- ~~**The worst frame is over the budget again, and it is the recycle.**~~
+  **Closed by playing it, 2026-08-12: the hitch is undetectable.** 74 ms against
+  71.4, with 69.2 + 4.1 accounting for it exactly — and a 4 ms slip once every
+  1.8 s cannot be seen at 14 fps, so neither lever was spent. **It also refines
+  the rule below.** "The worst frame must meet the budget" is the right test for
+  an *unmeasured* worst frame, which is what it was written against: a spike
+  nobody has decomposed can be any size and land anywhere. For a **known, priced,
+  periodic** overshoot that `sync` turns into lateness rather than failure, the
+  rule to apply is "**no unexplained frame may exceed the budget**" — and this
+  one is explained to within 0.7 ms.
+- **A recycle scales with the workspace, and M4 is more workspace.** 1.3 ms at
+  M1, 2.2 at M2, 4.1 at M3, for a frame whose per-frame allocation has barely
+  moved since M1 (§14). The saucer and the sound will push it further, and it is
+  the first number M4 should re-read rather than assume.
+- ~~**`ship.rad` is a feel constant with a play report waiting on it.**~~
+  **Closed by playing it, 2026-08-12, and it was too generous — for the second
+  time in this design and from the same end.** Ten steps killed before rocks
+  reached the ship, worst on the medium and small ones; it is **6** (§8), which
+  puts the box just inside where the rock's longest spike meets the ship's beam.
+  The pattern is worth naming, because it has now happened twice: **a collision
+  constant chosen as a safety margin is generous in pixels and *ruinous* in
+  proportion on the smallest object**, and the report always comes from the
+  small end. `shot.reach` 4 → 2 was the same correction at M2. The remaining
+  untested side is the opposite failure — a rock that visibly clips the ship and
+  does not kill it — which the new bound allows by up to half a step and which
+  no report has yet described.
 - **A board of all large rocks is not reachable in play, and the harness builds
   one anyway** (§12). It over-measures by 1.9–2.9 ms depending on how far levels
   have advanced. Kept deliberately, because it is reproducible and errs against

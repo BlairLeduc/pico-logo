@@ -1,7 +1,8 @@
-; Asteroids -- M2: the ship and the shots.  See docs/asteroids-design.md.
+; Asteroids -- M3: lives, levels and deaths.  See docs/asteroids-design.md.
 ;
 ;   load "asteroids
-;   asteroids            (arrows steer and thrust, space fires, Q quits, P pauses)
+;   asteroids     (arrows steer and thrust, space fires, down hyperspaces,
+;                  P pauses, Q quits to the attract screen)
 ;
 ; The first game in this tree that is not a sprite game.  The 1979 machine had
 ; no raster at all: an XY monitor traced a display list of line segments, which
@@ -11,9 +12,11 @@
 ; segment across the screen edge the way the arcade playfield does.
 ;
 ; M1 was the frame budget's real test and carried rocks and nothing else.  M2
-; adds the ship (rotation, thrust, momentum), three shots, shot-on-rock
-; collisions, splitting and scoring.  Still to come: lives, deaths, level
-; advance and hyperspace (M3), the saucer and the sound (M4).
+; added the ship (rotation, thrust, momentum), three shots, shot-on-rock
+; collisions, splitting and scoring.  M3 makes it a game: rocks kill the ship,
+; the ship explodes and comes back, lives run out, levels advance, hyperspace
+; is a gamble, and there is an attract screen to come back to.  Still to come:
+; the saucer and the sound (M4).
 ;
 ; THE FRAME CLEARS AND REDRAWS.  It does not un-draw last frame's lines.  That
 ; was this design's default until M0 measured both on a board (design section
@@ -73,6 +76,11 @@ make "max.rocks     12
 ; exactly.  Four would want sixteen and the split cap would start eating
 ; children on an ordinary level rather than only on a deliberately awkward one.
 make "start.rocks    3     ; large rocks at level 1
+; One more large rock a level, up to five.  Five larges split into ten mediums
+; and the eleventh medium has nowhere to go, so the split cap starts to bite at
+; the top level and not below it -- which is the ceiling the arcade's rising
+; count runs into as well, arrived at from twelve slots rather than twenty-seven.
+make "rocks.top      5     ; large rocks a level never exceeds
 make "reclaim.every 25     ; frames between recycles -- see `reclaim` below
 make "speed.l     0.96     ; steps per frame -- 13.5 a second at 14 fps
 make "spin.max     2.7     ; degrees per frame, either direction
@@ -88,6 +96,47 @@ make "hud.colour   254
 make "turn.rate     17     ; degrees a frame -- 238 a second
 make "thrust.imp  0.43     ; steps a frame added to the velocity
 make "speed.max    4.8     ; steps a frame -- about 67 a second
+
+; Dying, and coming back.  `ship.rad` is the ship's collision half-width, and it
+; is the number M3's play report sent back: at ten the ship died before rocks
+; reached it, worst on the medium and small ones.  That is the SAME finding
+; `shot.reach` produced at M2, from the same cause -- a flat number added to
+; radii of 22, 14 and 8 is proportionally largest on the 8, so the excess a
+; player sees grows as the rock shrinks.
+;
+; Six, and here is where six comes from.  The ship is a thin triangle, not a
+; disc: its rear corners are 12.7 steps out but its BEAM is 8.95, and most
+; bearings meet the beam.  The rock's `rrad` already carries `shot.reach`, which
+; exists so a 160-step-a-second shot cannot tunnel and has no business in a ship
+; test -- the ship closes at 7.3 steps a frame at worst.  So the addend over the
+; rock's drawn radius is 6 + 2 = 8, which puts the box at the point where the
+; rock's LONGEST spike touches the ship's beam:
+;
+;   large 30 (spike 21.7 + beam 8.95 = 30.6)   medium 22 (13.2 + 8.95 = 22.2)
+;   small 16 (7.5 + 8.95 = 16.4)
+;
+; Just inside contact at every size, rather than 34 / 26 / 20.  It errs towards
+; a graze that should have killed and away from a kill the player can see past,
+; which is the right side: the second one reads as the game cheating and the
+; first reads as luck.  `test_the_ship_box_is_not_wider_than_the_shapes_it_is
+; _drawn_from` holds it there.
+;
+; The explosion is an expanding ring rather than the arcade's drifting line
+; fragments (design section 9): one `arc` a frame instead of a particle system,
+; and the rocks keep moving under it, which is what the arcade does too.
+;
+; `safe.frames` is what stops a respawn being a death: the ship comes back at
+; the centre, which is where a rock may well be drifting.  The arcade waits for
+; the middle to be clear; that is a twelve-slot scan on every waiting frame, and
+; invulnerability covers the same case for one countdown -- so this game blinks
+; instead of waiting, which also tells the player which ship is theirs.
+make "start.lives    3
+make "extra.every 10000    ; points between extra ships
+make "ship.rad       6     ; collision half-width, added to a rock's radius
+make "death.frames  10     ; frames the explosion lasts -- 0.7 s at 14 fps
+make "boom.grow      4     ; steps the ring's radius grows a frame
+make "safe.frames   21     ; invulnerable frames after a respawn -- 1.5 s
+make "hyper.risk     8     ; one jump in this many ends inside a rock
 
 ; The shots, and the one number here that is not per-frame: `setspeed` is in
 ; turtle steps per SECOND, because the engine flies the shot on wall-clock time
@@ -168,6 +217,19 @@ make "s1x 9999  make "s1y 0
 make "s2x 9999  make "s2y 0
 make "s3x 9999  make "s3y 0
 
+; The ship is parked the same way, and for the same reason: the rock pass tests
+; every live rock against it, and a ship that is exploding or newly respawned
+; must not be hittable.  `shipcx` is the ship's COLLISION position and 9999
+; means "not there" -- `step.ship` copies the drawn position into it on every
+; frame the ship can be hit, and nothing copies it on the frames it cannot.  A
+; guard would have cost the rock pass an `if` per rock; this costs one
+; assignment a frame.
+;
+; It is also what stops one frame taking every life the player has: `ship.hit`
+; parks the ship before it returns, so the eleven rocks after the one that
+; killed it test against 9999 and miss.
+make "shipcx 9999  make "shipcy 0
+
 ;==========================================================================
 ; The outlines
 ;
@@ -242,15 +304,44 @@ to draw.rock :size
   rock.s
 end
 
+; A dying ship is a ring and not a ship, and an invulnerable one is drawn on
+; every other frame so the player can see that it is.  Both tests are before
+; the placement rather than inside it, because a frame that draws neither must
+; not pay for a `setx sety seth` it throws away.
+;
 ; The flame alternates on and off every other frame, as the arcade one does.
 ; Without it a held thrust key draws a steady cone, which reads as a nozzle
 ; rather than a burn.
 to draw.ship
+  if 0 < :dying [draw.boom stop]
+  if 0 < :safe [if 1 = remainder :safe 2 [stop]]
   pu setx :shipx sety :shipy seth :sh
   setpc :ship.colour
   if not :thrusting [ship stop]
   if 0 = remainder :frame.count 2 [ship stop]
   ship.flame
+end
+
+; The arcade shatters the ship into drifting line fragments.  A fragment system
+; costs more a frame than the rocks do, so this is one expanding ring: `arc`
+; sweeps 4 degrees a segment, so a full circle is 90 short strokes inside ONE
+; primitive call, with no interpreter between them.  It runs on death frames
+; only, and the rocks keep moving under it.
+;
+; The radius grows as the countdown falls, so the ring is drawn at
+; `boom.grow` on the first death frame and at nine times that on the last.  The
+; multiplication is the `arc`'s last argument and absorbs the trailing infix,
+; which is what is wanted here for once.
+; The `pd` is not decoration: `arc` draws with the pen it finds, and every other
+; drawing procedure in this file arrives with the pen UP from a `pu setx sety`
+; and puts it down itself inside the walk.  Without it the ring is swept with
+; the pen up and a death is invisible -- which is exactly what
+; `test_a_dying_ship_draws_a_ring_and_not_a_ship` caught.
+to draw.boom
+  pu setx :shipx sety :shipy seth 0
+  setpc :ship.colour
+  pd
+  arc 360 :boom.grow * (:death.frames - :dying)
 end
 
 ; The HUD is written every frame because `clean` took it with the rocks, and it
@@ -259,8 +350,21 @@ to draw.hud
   pu setx -155 sety 150  setpc :hud.colour  write :hud.text
 end
 
+; Lives are drawn as that many HEART glyphs -- `char 16`, which is 0x10 of
+; devices/logo-font.h and was a spare control-code slot until this game wanted
+; it.  A glyph rather than a drawn ship keeps the whole HUD one `write` and one
+; `sentence`; a stamped ship costume would be a second drawing pass and a second
+; thing for `clean` to take.  Rebuilt only where a displayed value moves -- a
+; kill, a death, an extra ship, a level -- and never on a quiet frame.
+to lives.word
+  local "w
+  make "w "||
+  repeat :lives [make "w word :w char 16]
+  output :w
+end
+
 to refresh.hud
-  make "hud.text (se [SCORE] :score [ROCKS] :rocks.alive)
+  make "hud.text (se [SCORE] :score [LEVEL] :level lives.word)
 end
 
 ;==========================================================================
@@ -282,9 +386,16 @@ end
 
 ; Velocity is state and thrust is an impulse, so the ship keeps its momentum
 ; and there is nothing to do on a frame the player does not press anything.
+;
+; The collision position is copied from the drawn one here and nowhere else, so
+; there is exactly one statement in the game that makes the ship hittable and it
+; is the last one an invulnerable ship reaches.
 to step.ship
   make "shipx wrapc (:shipx + :svx)
   make "shipy wrapc (:shipy + :svy)
+  if 0 < :safe [make "safe :safe - 1  stop]
+  make "shipcx :shipx
+  make "shipcy :shipy
 end
 
 ; `sin`/`cos` take degrees and this Logo's heading is clockwise from north,
@@ -300,6 +411,60 @@ to thrust
     make "svx :svx * :speed.max / :spd
     make "svy :svy * :speed.max / :spd
   ]
+end
+
+; Hyperspace is the panic button and it is meant to cost something: the ship
+; leaves wherever it was and arrives somewhere random with no velocity, and one
+; jump in `hyper.risk` arrives inside a rock and kills it.  A flat chance rather
+; than the arcade's velocity-dependent formula (design section 13) -- no
+; formula, and the mechanic still has teeth.
+;
+; The collision position is deliberately NOT set here: `step.ship` runs after
+; `poll.input` in the same frame and copies it across, so a jump can never be
+; tested against the place the ship left.
+to hyperspace
+  make "shipx (random 320) - 160
+  make "shipy (random 320) - 160
+  make "svx 0
+  make "svy 0
+  if 0 = random :hyper.risk [ship.hit]
+end
+
+;==========================================================================
+; Dying
+;
+; A death is a countdown and not a wait.  Galaxian freezes the world and sleeps
+; through its explosion, which suits a game whose actors are engine-driven
+; turtles; here every rock is Logo's to move, and the arcade keeps them drifting
+; while the ship burns, so the frame loop keeps running and `dying` counts the
+; explosion down inside it.  That also means no part of this game blocks: the
+; player can pause or quit through a death.
+
+to ship.hit
+  make "shipcx 9999
+  make "dying :death.frames
+  make "lives :lives - 1
+  refresh.hud
+end
+
+; The last frame of the explosion is where a game ends or a ship comes back.
+to step.death
+  make "dying :dying - 1
+  if 0 < :dying [stop]
+  ifelse :lives < 1 [make "over true] [respawn]
+end
+
+; Where a ship starts, whether it is the first of a level or the fourth of a
+; game.  Parked and invulnerable for `safe.frames`, because the centre is not
+; guaranteed to be empty.
+to respawn
+  make "shipx 0
+  make "shipy 0
+  make "svx 0
+  make "svy 0
+  make "sh 0
+  make "safe :safe.frames
+  make "shipcx 9999
 end
 
 ;==========================================================================
@@ -406,8 +571,21 @@ end
 ; nothing worth having; `test_a_rock_leaving_the_field_comes_back_on_the_far_side`
 ; drives this copy so the two cannot drift apart unnoticed.
 
+; M3 adds the ship to this pass, which is where the design always said it went:
+; the rock's position and radius are already in hand, so a ship test is one
+; addition and two comparisons on top of a shot test that reads the same
+; numbers.  The addition is the price of the ship having a size at all --
+; `rrad` carries the rock's box and `shot.reach`, and a ship is ten steps wide,
+; so the box a SHIP is tested against is a different one from the box a shot is.
+; A second radius list would have been an `item` walk (115 us) where the sum is
+; an arithmetic statement (43), which is the same lesson as everything else in
+; this loop: count list walks, not statements.
+;
+; An exploding or newly respawned ship is parked at 9999 rather than guarded, so
+; the frames where it cannot be hit cost the same first comparison and no more.
+
 to step.draw.all
-  local "s local "x local "y local "a local "h
+  local "s local "x local "y local "a local "h local "r
   setpc :rock.colour
   repeat :max.rocks [
     make "s item repcount :rsize
@@ -422,9 +600,13 @@ to step.draw.all
       .setitem repcount :rx :x
       .setitem repcount :ry :y
       .setitem repcount :rang :a
-      make "h shot.on :x :y (item repcount :rrad)
-      ifelse 0 < :h [kill.shot :h  split.rock repcount]
-                    [pu setx :x sety :y seth :a  draw.rock :s]
+      make "r item repcount :rrad
+      make "h shot.on :x :y :r
+      ifelse 0 < :h [kill.shot :h  split.rock repcount] [
+        make "r :r + :ship.rad
+        if :r > abs (:x - :shipcx) [if :r > abs (:y - :shipcy) [ship.hit]]
+        pu setx :x sety :y seth :a  draw.rock :s
+      ]
     ]
   ]
 end
@@ -466,12 +648,9 @@ to clear.shots
 end
 
 to reset.ship
-  make "shipx 0
-  make "shipy 0
-  make "svx 0
-  make "svy 0
-  make "sh 0
+  make "dying 0
   make "thrusting false
+  respawn
 end
 
 ; A rock that cannot be placed is simply not created -- the rule the split
@@ -526,10 +705,33 @@ to split.rock :i
   make "dy item :i :rdy
   .setitem :i :rsize 0
   make "rocks.alive :rocks.alive - 1
+  ; The HUD refresh lives in `add.score`, which this reaches through
+  ; `score.rock` -- so a kill still repaints exactly once, and it does it in the
+  ; procedure that changed the displayed value rather than by convention here.
   score.rock :s
   if 1 < :s [
     child :x :y :dx :dy (:s - 1) 1
     child :x :y :dx :dy (:s - 1) -1
+  ]
+end
+
+; Every point in the game arrives through here, so the extra ship is tested in
+; one place -- and so is the HUD, because this is the only procedure that moves
+; `score` and one of only two that move `lives`.  `split.rock` used to do the
+; refresh, from M2 when the HUD carried the live rock count and a kill changed
+; it; the HUD carries the level now, so a kill is a SCORE event and the refresh
+; belongs where the score changes.  M4's saucer is the caller that would
+; otherwise have found this out.
+;
+; `next.extra` is a moving threshold rather than a remainder test: a score can
+; step over a boundary by 100 and `remainder` would miss it.  Written as
+; `not <` rather than an early `stop`, because the refresh has to happen on both
+; paths and this Logo has no `>=`.
+to add.score :n
+  make "score :score + :n
+  if not (:score < :next.extra) [
+    make "lives :lives + 1
+    make "next.extra :next.extra + :extra.every
   ]
   refresh.hud
 end
@@ -537,9 +739,9 @@ end
 ; The arcade table.  Smaller is worth more, which is what makes shooting a
 ; large rock down to nothing worth 240 rather than 20.
 to score.rock :s
-  if 3 = :s [make "score :score + 20 stop]
-  if 2 = :s [make "score :score + 50 stop]
-  make "score :score + 100
+  if 3 = :s [add.score 20 stop]
+  if 2 = :s [add.score 50 stop]
+  add.score 100
 end
 
 ;==========================================================================
@@ -561,10 +763,16 @@ to poll.input
   make "k ascii readchar
   if :k = 112 [toggle.pause stop]
   if :paused [stop]
-  if :k = 113 [make "over true stop]
+  if :k = 113 [make "quit true  make "over true stop]
+  ; A ship that is exploding does not steer, thrust, fire or hyperspace, and
+  ; the guard is here rather than in each handler.  Pause and quit are above it
+  ; deliberately: a death lasts most of a second and a player who wants out
+  ; should not have to wait for the ring to finish.
+  if 0 < :dying [stop]
   if :k = 180 [make "sh :sh - :turn.rate stop]
   if :k = 183 [make "sh :sh + :turn.rate stop]
   if :k = 181 [thrust stop]
+  if :k = 182 [hyperspace stop]
   if :k = 32 [fire]
 end
 
@@ -608,11 +816,16 @@ end
 ; the rock pass tests against the sampled shot positions, so they have to be
 ; this frame's.  `clean` is before the rock pass and not after the stepping,
 ; because that pass draws as well as steps.
+;
+; A dying ship steps nothing -- it is not there to move -- so the explosion
+; countdown takes `step.ship`'s place rather than being another statement.  The
+; rocks and the shots carry on either way, which is the arcade's behaviour and
+; costs a branch a frame to have.
 to play.frame
   poll.input
   if not :paused [
     make "frame.count :frame.count + 1
-    step.ship
+    ifelse 0 < :dying [step.death] [step.ship]
     step.shots
     clean
     step.draw.all
@@ -646,8 +859,10 @@ to setup.level
   make "paused false
 end
 
-; Clearing the board ends the level.  M3 turns that into an advance; until then
-; it is where the game ends, and it is the only reason M2 needs the test at all.
+; A level ends three ways and `over` is all three of them: the board is clear,
+; the last life is gone (`step.death` sets it), or the player pressed Q.  Which
+; one it was is read back off `rocks.alive`, `lives` and `quit` by `one.game`,
+; so this loop stays two lines.
 to play.level
   setup.level
   (setrefresh "sync :fps)
@@ -663,18 +878,92 @@ to play.level
   setrefresh "auto
 end
 
+; One more large rock a level, to a ceiling.  `level.rocks` stays the input
+; `setup.level` reads rather than something computed inside it, because the
+; timing harness sets it directly to build a board of a size play would take
+; several levels to reach.
+to next.level
+  make "level :level + 1
+  make "level.rocks :start.rocks + :level - 1
+  if :level.rocks > :rocks.top [make "level.rocks :rocks.top]
+end
+
 to init.game
   make "level 1
   make "level.rocks :start.rocks
   make "rocks.alive 0
   make "score 0
+  make "lives :start.lives
+  make "next.extra :extra.every
+  make "quit false
   make "paused false
   make "over false
   make "frame.count 0
+  ; The ship state has to exist before anything reads it, and the rock pass
+  ; reads `shipcx` on every rock of every frame.
+  reset.ship
+end
+
+;==========================================================================
+; The attract screen, the game, and game over
+;
+; Iterative and not recursive, as the two shipped shooters are: a game that
+; called itself for the next level would grow the stack for as long as the
+; player kept playing.
+
+to one.game
+  attract.screen
+  init.game
+  make "playing true
+  until [not :playing] [
+    play.level
+    if :quit [make "playing false]
+    if :lives < 1 [make "playing false]
+    if :playing [next.level]
+  ]
+  ; Q goes straight back to the attract screen, which is what quitting means
+  ; here; only running out of ships is worth a game-over card.
+  if not :quit [show.game.over]
+end
+
+; Every line is a bar-quoted word rather than a list -- `print` puts a single
+; space between the words of a list, which would collapse the score columns.
+to attract.screen
+  textscreen ct settc [3 4]
+  setcursor [15 4] print "|ASTEROIDS|
+  setcursor [4 7] print "|Break the rocks down and stay clear|
+  setcursor [13 10] print "|Large rock     20|
+  setcursor [13 11] print "|Medium rock    50|
+  setcursor [13 12] print "|Small rock    100|
+  setcursor [5 15] print "|A large rock broken all the way|
+  setcursor [11 16] print "|down is worth 240|
+  setcursor [6 19] print "|An extra ship every 10000 points|
+  setcursor [3 22] print "|ARROWS Steer and thrust  SPACE Fire|
+  setcursor [5 23] print "|DOWN Hyperspace  P Pause  Q Quit|
+  setcursor [14 27] print "|Press Space|
+  wait.for.space
+end
+
+to wait.for.space
+  local "k
+  make "k 0
+  until [:k = 32] [
+    if key? [make "k ascii readchar]
+  ]
+end
+
+to show.game.over
+  textscreen
+  ct
+  setcursor [15 10]
+  print [GAME OVER]
+  setcursor [11 12]
+  (print [FINAL SCORE:] :score)
+  setcursor [11 14]
+  (print [LEVEL REACHED:] :level)
+  wait 2000
 end
 
 to asteroids
-  init.game
-  play.level
-  textscreen
+  forever [one.game]
 end
