@@ -992,8 +992,16 @@ that is the useful part.
 - ~~**Erase-in-place is a new technique in this tree.**~~ **Closed by not
   doing it** (§3.3). The risk is retired along with the technique, and with it
   the ordering rule, the overlap artefact and the HUD-last constraint.
-- **Feel is the game, and it is all constants** — and 15 fps changes all of
-  them. Rotation rate, thrust impulse, speed clamp, shot speed and life,
+- ~~**15 fps might read as sluggish.**~~ **Closed by playing it**, 2026-08-11:
+  twelve rocks drifting and spinning at 15 fps looks *smooth*, not slow, and
+  the six/five/four-segment outlines read as rocks. This was the one risk no
+  host test could reach and the one that could have invalidated §12's whole
+  trade, since every lever that buys frame rate costs rocks. It is worth
+  stating why the rate survives what a 15 fps *sprite* game would not: nothing
+  here accelerates, the motion is constant-velocity drift, and a rotating
+  polygon has no animation phase to stutter.
+- **Feel is the rest of the game, and it is all constants** — and 15 fps
+  changes all of them. Rotation rate, thrust impulse, speed clamp, shot speed and life,
   small-saucer accuracy are all per-*frame* quantities against a frame that is
   now 66.7 ms rather than 50, so every one of them needs re-cutting by a third
   before it is even worth iterating on. This is the hazard flagged for
