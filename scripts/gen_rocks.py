@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the Asteroids rock outlines as Logo turtle walks.
+"""Generate the Asteroids rock and ship outlines as Logo turtle walks.
 
 docs/asteroids-design.md section 6.3: an outline is authored as N radii at
 equal angular spacing around a centre, and this script converts that to the
@@ -24,6 +24,11 @@ Run it and paste the output into the Logo file:
 The walk drops the turn after the final segment -- `place` sets the heading
 before every pass, so that turn is never read.  That is what makes the
 statement counts 19/15/13 in the design's table.
+
+M2 added the ship (section 6.4), which is the same problem: a closed polygon
+whose first vertex sits straight ahead of the turtle, so the same `walk` and
+the same closure check apply.  Its vertices are authored rather than jittered,
+and there are two of them -- see SHIPS.
 """
 
 import math
@@ -45,6 +50,26 @@ JITTER = (0.74, 1.0)
 # apart at similar radii draw a square, which reads as a box and not a rock.
 # Under half a spacing, so the vertices keep their order and cannot cross.
 ANGLE_JITTER = 0.22
+
+# The ship (design section 6.4).  Two outlines rather than a hull plus a
+# separate flame: the flame is folded into the SAME closed walk, because
+# drawing it on its own would need a second `pu setx sety seth` to get back to
+# the ship's centre -- four statements, which is most of what the flame costs
+# to draw in the first place.  So a thrusting ship is one dispatch and one
+# walk, exactly like a still one.
+#
+# Both start at the nose, which is straight ahead of a turtle at heading 0, so
+# the prologue is the single `fd` the rocks use.  Vertices run clockwise, the
+# direction `rt` turns.  The notch is a reflex vertex; `walk` handles that.
+# Tried at 0.85 on a board and REJECTED, which is worth recording because the
+# first play report asked for it: a smaller ship reads tidier, and it also makes
+# the game easier, because the thing the rocks have to hit is the thing you are
+# steering.  Full size is the harder game and the one that ships.
+SHIPS = [
+    ("ship", [(0.0, 12.0), (9.0, -9.0), (0.0, -5.0), (-9.0, -9.0)]),
+    ("ship.flame", [(0.0, 12.0), (9.0, -9.0), (3.0, -6.0),
+                    (0.0, -16.0), (-3.0, -6.0), (-9.0, -9.0)]),
+]
 
 
 def vertices(n, radius, rng):
@@ -130,8 +155,8 @@ def step(kind, value):
     return f"{kind} {fmt(value)}"
 
 
-def emit(size, n, radius, rng):
-    pts = vertices(n, radius, rng)
+def emit(name, pts):
+    """The Logo procedure for a closed polygon whose first vertex is ahead."""
     reach, first_turn, legs = walk(pts)
     err = closure_error(pts, reach, first_turn, legs)
 
@@ -139,14 +164,22 @@ def emit(size, n, radius, rng):
     for length, t in legs:
         body.append(f"fd {fmt(length)}" + ("" if t is None else f"  {step('rt', t)}"))
 
-    lines = [f"to rock.{size}"]
+    lines = [f"to {name}"]
     lines.append(f"  pu fd {fmt(reach)}  {step('rt', first_turn)}  pd")
     for i in range(0, len(body), 3):
         lines.append("  " + "  ".join(body[i:i + 3]))
     lines.append("end")
 
-    statements = 4 + (2 * n - 1)
+    statements = 4 + (2 * len(pts) - 1)
     return "\n".join(lines), err, statements
+
+
+def report(name, pts):
+    text, err, statements = emit(name, pts)
+    print()
+    print(f"; {len(pts)} segments, {statements} statements, "
+          f"closes to {err:.2f} px")
+    print(text)
 
 
 def main():
@@ -154,12 +187,9 @@ def main():
     print("; Outlines close to within a pixel; see the design section 6.3.")
     for size, n, radius in SIZES:
         # Seeded per outline so a regeneration reproduces the file exactly.
-        rng = random.Random(size)
-        text, err, statements = emit(size, n, radius, rng)
-        print()
-        print(f"; {n} segments, {statements} statements, "
-              f"closes to {err:.2f} px")
-        print(text)
+        report(f"rock.{size}", vertices(n, radius, random.Random(size)))
+    for name, pts in SHIPS:
+        report(name, pts)
 
 
 if __name__ == "__main__":

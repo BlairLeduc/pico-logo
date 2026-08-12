@@ -1,11 +1,23 @@
 # Asteroids in Pico Logo (design)
 
-Status: **M0 and M1 done, both measured on a Plus 2 W on 2026-08-11.** M0
-rewrote this document — the frame clears and redraws rather than erasing in
-place (§3.3), the rate is 15 fps rather than 20 (§12), the outlines are three
-rather than nine (§13). M1 is the game with rocks only, and it **fits: 60.5 ms
-at twelve rocks against a 66.7 ms budget**, `frame = 30.5 + 2.507 n`. It also
-shows **M2 opening about 6 ms over**, which is M2's first decision (§12).
+Status: **M0, M1 and M2 measured on a Plus 2 W, 2026-08-11.** Each measurement
+has rewritten this document, and that is the point of the milestone structure
+rather than a failure of it.
+
+- **M0** — the frame clears and redraws rather than erasing in place (§3.3),
+  the rate is 15 fps rather than 20 (§12), the outlines are three rather than
+  nine (§13).
+- **M1** — rocks only, and it fits: 60.5 ms at twelve rocks against a 66.7 ms
+  budget, `frame = 30.5 + 2.507 n`, and it plays smoothly.
+- **M2** — the ship and the shots, measured at **86.4 ms**, nineteen over. The
+  cause was not any of the levers §12 had priced: it was `item`. Fusing the
+  three passes over the rocks into one (§15) and taking the rate to **14 fps**
+  brings twelve rocks to **65.4 ms against a 71.4 ms budget, with the worst
+  observed frame inside it** — the first time in this design that has been true
+  (§12a). Twelve rocks, three shots and six-segment larges all survive, with
+  roughly 9 ms for M3 and M4. **Played and accepted 2026-08-12**: 14 fps reads
+  smooth and the ship feels right; the hit boxes were too generous and the ship
+  slightly too big, both now fixed.
 
 The three games in the tree so far — [Space Invaders](space-invaders-design.md),
 [Galaxian](galaxian-design.md), [Turtle Trails](turtle-trails-design.md) —
@@ -34,9 +46,9 @@ game info at the top of the display. All three are taken as given below.
 | | |
 |---|---|
 | Game | `logo/games/asteroids` — one Logo file, no extension (flash fs files are extensionless), no `-` or `/` in the name so `load "asteroids` parses |
-| Tests | `tests/test_asteroids.c` (Unity + mock device), mirroring `tests/test_galaxian.c` — **written**, covering the M0 harness until there is a game to cover |
+| Tests | `tests/test_asteroids.c` (Unity + mock device, 49 tests), mirroring `tests/test_galaxian.c`; the M0 harness has its own binary, `tests/test_p11rocks.c` |
 | Design | this document |
-| Measurement | `logo/tests/p11rocks`, a timing harness in the shape of `logo/tests/p10games` — **written, not yet run on a board**; it writes its numbers to a file, because numbers on a display cannot be copied off it |
+| Measurement | `logo/tests/p11m2` times a real frame at 6, 9 and 12 rocks with the rock pass read apart from the rest — it writes its numbers to a file, because numbers on a display cannot be copied off it. `logo/tests/p11rocks` is M0's standalone erase-strategy harness and survives because nothing else reproduces that question; `logo/tests/p11m1` is **gone**, since the fusion removed the procedures it called by name |
 | Outline generator | [`scripts/gen_rocks.py`](../scripts/gen_rocks.py), host-side, output pasted in (§6.3) |
 
 Play: `load "asteroids` then `asteroids`.
@@ -315,8 +327,13 @@ make "rdy   [...]
 make "rang  [...]                        ; current rotation, degrees
 make "rspin [...]                        ; degrees/frame, may be negative
 make "rsize [...]                        ; 0 free, 1 small, 2 medium, 3 large
-make "rrad  [...]                        ; collision radius, from size
+make "rrad  [...]                        ; collision half-width, from size
 ```
+
+`rrad` is the **collision half-width, not the drawn radius**: it is the drawn
+radius plus `shot.reach`, for the sampling reason in §7.3. One procedure,
+`rad.for`, decides it, because M2 needs the size-to-radius map in two places —
+once when a level spawns a large and once when a large splits.
 
 Fixed length `MAX.ROCKS` = 12, mutated in place with `.setitem`, never rebuilt:
 a frame that moves twelve rocks must allocate nothing (§14). `rsize` = 0 is
@@ -368,9 +385,7 @@ keeps `rx`/`ry` meaning the same thing for physics, wrapping and collision.
 ### 6.2 Rotation is free
 
 ```logo
-to place :i
-  pu  setx (item :i :rx)  sety (item :i :ry)  seth (item :i :rang)
-end
+pu setx :x sety :y seth :a
 ```
 
 Because the walk is entirely turtle-relative, `seth` before it rotates the
@@ -380,6 +395,10 @@ stamped costume, which would need one bitmap per angle.
 
 `setx`/`sety` and not `setpos`, following Invaders and Galaxian: `setpos`
 takes a list, and building one per object per frame allocates.
+
+This was a `place :i` procedure that re-read `rx`, `ry` and `rang` out of the
+lists. It is four bare statements inside the rock pass now, using the values
+that pass has already computed — see §15.
 
 ### 6.3 The outlines are generated, not hand-typed
 
@@ -418,15 +437,45 @@ before anything else does.
 
 ### 6.4 The ship
 
-Five strokes: a triangle plus the two rear notch lines, drawn the same way.
-Thrust adds a sixth and seventh — the flame — on frames where thrust is held,
-alternating on/off every other frame so it flickers as the arcade one does.
+A notched triangle — nose, right rear, notch, left rear — and it comes off the
+same generator as the rocks, because it is the same problem: a closed polygon
+whose first vertex sits straight ahead of the turtle, so `walk` and the closure
+check apply unchanged. The walk this section originally carried was hand
+written and did **not** close; it landed two steps from the nose and then drew
+a fifth stroke off into space.
+
+**The flame is folded into the same closed walk**, not drawn as a shape of its
+own. Drawing it separately would need a second `pu setx sety seth` to get back
+to the ship's centre — four statements, which is most of what the flame costs
+to draw at all — so there are two generated outlines and a thrusting ship costs
+exactly one dispatch and one placement, like a still one.
+
+| Outline | Segments | Statements |
+|---|---:|---:|
+| `ship` | 4 | 11 |
+| `ship.flame` | 6 | 15 |
+
+**Scaled to 0.85 after the first play report, then put back** — and the reason
+is the useful part. A smaller ship reads tidier, which is what the report asked
+for; seen next to the rocks it also **makes the game easier**, because the ship
+is the one thing on the playfield the rocks have to hit. Full size is the harder
+game and the one that ships. The ship is about the size of a **medium rock**,
+and `test_the_ship_is_smaller_than_a_large_rock` holds the size class rather
+than the walk: bigger than a small, under a medium's radius.
 
 ```logo
 to draw.ship
-  pu fd 10 rt 145 pd  fd 15 rt 110  fd 8 rt 110  fd 15 rt 145  fd 10
+  pu setx :shipx sety :shipy seth :sh
+  setpc :ship.colour
+  if not :thrusting [ship stop]
+  if 0 = remainder :frame.count 2 [ship stop]
+  ship.flame
 end
 ```
+
+The flame alternates on and off every other frame, as the arcade one does: a
+held thrust key would otherwise draw a steady cone, which reads as a nozzle
+rather than a burn. The common path is three statements.
 
 ## 7. Motion and input
 
@@ -435,11 +484,12 @@ end
 Constant velocity, wrapped:
 
 ```logo
-to step.rock :i
-  .setitem :i :rx  (wrapc ((item :i :rx) + (item :i :rdx)))
-  .setitem :i :ry  (wrapc ((item :i :ry) + (item :i :rdy)))
-  .setitem :i :rang ((item :i :rang) + (item :i :rspin))
-end
+make "x wrapc ((item repcount :rx) + (item repcount :rdx))
+make "y wrapc ((item repcount :ry) + (item repcount :rdy))
+make "a (item repcount :rang) + (item repcount :rspin)
+.setitem repcount :rx :x
+.setitem repcount :ry :y
+.setitem repcount :rang :a
 
 to wrapc :v
   if :v > 160 [output (:v - 320)]
@@ -447,6 +497,10 @@ to wrapc :v
   output :v
 end
 ```
+
+The new values go into locals first and the list second, because the collision
+test and the placement both want them and neither should walk the list again
+(§15). This was a `step.rock :i` procedure in its own loop.
 
 `wrapc` is two comparisons rather than `modulo` arithmetic because a rock
 crosses an edge on perhaps one frame in fifty, and the common path should be
@@ -462,10 +516,15 @@ and plays nearly the same):
 
 ```logo
 to thrust
-  make "svx (:svx + (0.55 * (sin :sh)))
-  make "svy (:svy + (0.55 * (cos :sh)))
-  make "spd (sqrt ((:svx * :svx) + (:svy * :svy)))
-  if :spd > 7 [make "svx (:svx * 7 / :spd)  make "svy (:svy * 7 / :spd)]
+  local "spd
+  make "thrusting true
+  make "svx :svx + (:thrust.imp * sin :sh)
+  make "svy :svy + (:thrust.imp * cos :sh)
+  make "spd sqrt ((:svx * :svx) + (:svy * :svy))
+  if :spd > :speed.max [
+    make "svx :svx * :speed.max / :spd
+    make "svy :svy * :speed.max / :spd
+  ]
 end
 ```
 
@@ -474,6 +533,13 @@ first constant to tune on hardware. `sin`/`cos` take degrees and Logo's
 heading is clockwise-from-north, which is what `seth` wants — so the ship's
 heading variable and its drawing heading are the same number, with no
 conversion anywhere.
+
+As built: `thrust.imp` 0.4 and `speed.max` 4.5 steps a frame — about 68 steps
+a second, against a shot's 160. That **ratio is the constraint the numbers were
+picked to**, not the absolute speeds: a ship that closes on its own shots makes
+firing forward useless, and the arcade keeps the shot at three or four times
+the ship's top speed. The clamp is on the magnitude, not per component, which
+is why the test checks it on a diagonal as well as on an axis.
 
 ### 7.3 Input
 
@@ -502,43 +568,113 @@ held key repeats and rotation is smooth. `poll.input` runs *outside* the
 paused guard so `p` can be read while paused.
 
 Firing takes the lowest idle shot turtle: `seth :sh`, place it at the ship's
-nose, `pu`, `st`, `setspeed 220`. From then on the engine flies and wraps it
+nose, `pu`, `st`, `setspeed`. From then on the engine flies and wraps it
 — `setspeed` "obeys `wrap`, `window` and `fence` exactly as `forward` would"
 — and Logo's only per-frame duty is counting the shot's life down. `pu` is
 mandatory: a shot turtle with its pen down would draw a permanent trail
-across the canvas.
+across the canvas. The turtle wears a two-pixel dot from `putsh`, because the
+default line-drawn turtle reads as a second spaceship.
+
+#### A shot must not outrun a rock's collision box
+
+`setspeed` is the one quantity in this game that is **per second**, because the
+engine flies the shot on wall-clock time while Logo does something else. That
+is the hazard P10's log flagged for Galaxian arriving from the other direction,
+and here it is not a matter of feel — it has a bound.
+
+Collisions are sampled once a frame (§8), so a shot travelling further between
+samples than the full *width* of a rock's box can pass through it and be seen
+on neither side. Two things eat into that width and neither is a constant: the
+rock is moving too — a small rock that came from a split of a split drifts over
+twice as fast as a spawned large — and a frame that overruns its budget moves
+the shot **further**, not less far. So the bound is asserted at half the true
+one, which absorbs both with room:
+
+> **(shot travel + fastest rock) × overrun ≤ 2 × the smallest collision
+> half-width** — (160/14 + 2.46) × 1.3 = 18.1 against 20.
+
+Every term is a constant in the game file. The fastest rock is a small one from
+a split of a split: a child leaves at `sqrt(split.boost² + kick²)` times its
+parent and the kick reaches 1, so two splits multiply `speed.l` by
+`split.boost² + 1`. The overrun allowance covers a frame that misses its budget,
+which moves the shot **further**, not less far.
+
+`shot.speed` is the one constant the rate does **not** re-cut, because it is
+already per second — but `fps` is in the denominator, so a rate change still has
+to be checked against this.
+
+**This bound was first written at half its true value**, as `travel ≤ rrad`.
+That is safe, and it is blunt, and bluntness has a price a player pays: it
+demanded `shot.reach` = 4, which made the game award visible misses as hits —
+reported from the board, and **worst on the smallest rocks**, because a flat
+number added to radii of 22, 14 and 8 is proportionally largest on the 8. Sized
+properly the smallest box is **10 rather than 12** and no shot speed had to
+change. A conservative bound is not free; it spends somewhere else.
+
+`shot.reach` is what buys it: **2 steps** added to every rock's radius, so the
+smallest box is 10 rather than 8. The generosity that costs is a couple of steps
+around an outline that already jags in and out by a quarter of its own radius —
+the same "close enough, and stated" reasoning as the square hit test itself, and
+`test_the_collision_boxes_are_not_far_wider_than_the_rocks_drawn_in_them` now
+holds the excess under 30 % at every size so the next change to this constant
+has to answer for how it looks as well as whether it is safe.
+
+`test_a_shot_cannot_outrun_the_smallest_collision_box` pins the arithmetic, and
+it caught one constant set already: at `shot.speed` 200 with `shot.reach` 5, a
+small rock was 0.7 steps a frame away from being shot-proof. Nothing else in
+the build would have shown that — it is not a crash, it is a shot that
+occasionally passes through a rock, which reads as bad aim.
 
 ## 8. Collisions and scoring
 
-Every test is a circle overlap on numbers Logo already holds. Written as
-nested `if`s with a cheap reject first, so the common case is one comparison:
+Every test is a box overlap on numbers Logo already holds, written as nested
+`if`s with a cheap reject first, so the common case is one comparison. `:r` goes
+on the **left** of every test, following this file's rule about trailing infix:
+written the other way round each `abs` needs a parenthesis around it, and
+parentheses are not free here.
 
-```logo
-to hit? :ax :ay :bx :by :r
-  if (abs (:ax - :bx)) > :r [output "false]
-  if (abs (:ay - :by)) > :r [output "false]
-  output "true
-end
-```
-
-A square test, not a circle: it is two statements instead of a squared-
+A square test, not a circle: it is one statement instead of a squared-
 distance expression, and against a jagged rock whose outline is nowhere near
 its bounding circle anyway, the extra reach in the corners is not perceptible.
 This is the same "close enough, and stated" reasoning as Invaders' ±10 bitmap
 anchor tolerance.
 
-The pair counts are the frame's second-largest line item (§12), so the tests
-are folded into loops that already exist:
+The pair counts are the frame's second-largest line item (§12):
 
 | Pair | Where | Worst-case tests/frame |
 |---|---|---:|
-| shot × rock | inside the rock loop, over the ≤3 live shots | 36 |
+| shot × rock | inside the rock pass, three shots unrolled | 36 |
 | ship × rock | same loop, one more test | 12 |
 | shot × saucer | once per shot | 3 |
 | ship × saucer, ship × saucer shot | once each | 2 |
 
 Shot positions are read once a frame with `ask :n [xcor]` / `[ycor]` into a
 flat list, never re-read inside the rock loop.
+
+**As built, there is no collision loop at all.** M2's board run measured a
+shots-outside-rocks-inside pass at 20.95 ms against 7.5 estimated, and the three
+`item` walks per pair were most of it (§12). The test now lives inside the rock
+pass that already holds each rock's position (§15), the three shots are unrolled
+against six plain variables, and `hit?` is inlined:
+
+```logo
+to shot.on :x :y :r
+  if :r > abs (:x - :s1x) [if :r > abs (:y - :s1y) [output 1]]
+  if :r > abs (:x - :s2x) [if :r > abs (:y - :s2y) [output 2]]
+  if :r > abs (:x - :s3x) [if :r > abs (:y - :s3y) [output 3]]
+  output 0
+end
+```
+
+A pair is one comparison in the common case rather than a procedure call and
+three list walks. It outputs *which* shot hit, because the caller has to kill
+it.
+
+**An idle shot is parked at x = 9999 rather than guarded by an `if`.** The x
+test then turns it away as part of a comparison that was going to run anyway —
+one statement a pair instead of two — and, more importantly, it is what stops a
+shot that kills a rock mid-pass from going on to kill a second one in the same
+frame. `kill.shot` parks it, which is why that procedure names each shot.
 
 **Scoring** is the arcade table, which is already small:
 
@@ -669,7 +805,11 @@ That is where the levers are, and it is not where §12 originally looked.
 
 ### The measured frame (M1, 2026-08-11)
 
-**A real `play.frame` on a Plus 2 W**, 300 frames a point, `logo/tests/p11m1`:
+**A real `play.frame` on a Plus 2 W**, 300 frames a point, measured by
+`logo/tests/p11m1` — **which no longer exists.** M2's fusion (§15) removed the
+procedures it called by name, so these numbers are archival: they are the last
+record of a rocks-only frame and cannot be reproduced against the game as it
+stands. `logo/tests/p11m2` measures the frame the game actually runs.
 
 | rocks | body | present | **frame** | min | max |
 |---:|---:|---:|---:|---:|---:|
@@ -692,7 +832,8 @@ rock and §13's two savings took back about 0.5.
 would carry 14 rocks. The worst frame observed is **67 ms** — 0.3 ms over, one
 frame in 300, and it is a recycle frame (§14's 1.3 ms) landing on an already
 heavy one. That is close enough to the line to confirm 15 fps was the right
-call and to rule out 20.
+call for a rocks-only frame and to rule out 20. **M2 took it to 14** once the
+ship and the shots were in it.
 
 The present held at **26.4 ms at every rock count**, reproducing M0's 26.3 on
 a different day through a different code path. It is a floor, not a variable.
@@ -712,8 +853,8 @@ model that under-predicted the rocks-only body by 16 % (29.4 estimated against
 | **projected M2 frame** | **~72.6** |
 
 **That is 6 ms over budget**, and M3's saucer and M4's sound are still to
-come. So M2 opens with a decision rather than a keyboard, and the levers are
-now priced against a measured slope of 2.507 ms a rock:
+come. So M2 opened with a decision rather than a keyboard, and the levers were
+priced against a measured slope of 2.507 ms a rock:
 
 | Lever | Saving |
 |---|---:|
@@ -726,25 +867,215 @@ Any two of the first three clear it. **The first is the one that costs the
 game something** — ten slots makes the split cap bind more often — so it is
 the last to reach for, not the first.
 
-So: **`(setrefresh "sync 15)`, a 66.7 ms budget** — down from the 20 fps this
-document opened with, and the change is not a tuning preference but the
-present. A full-screen present is 26.3 ms whatever the scene holds, so **half
-of a 50 ms frame is gone before a rock is drawn**, and no game-side lever
-reaches it. 20 fps is available only at seven or eight rocks, which makes the
-split cap bind on almost every kill and takes away the thing Asteroids is
-about — a board that fills up. Twelve rocks at 15 fps keeps the game and
-misses smoothness; eight rocks at 20 fps keeps smoothness and misses the game.
+### The decision, taken 2026-08-11: measure first, spend after
 
-**M1 confirmed the rate and left it with no room above.** The worst frame at
-twelve rocks is 67 ms against a 66.7 ms budget, so 15 fps is the highest rate
-this game can be trusted at — and `sync` presents late rather than failing, so
-an overrun costs frame rate and not correctness. That graceful failure is
-exactly why P9's two games shipped at a third of their designed rate with
-nobody noticing, and exactly why every number in this section is measured
-rather than argued.
+**No lever was spent.** The 72.6 ms above is an estimate scaled from a model
+that under-predicted M1's own body by 16 %, and every estimate this design has
+made has been wrong by more than its own margin: the drawing statement (35 µs
+assumed, 60 measured), the present (9–12 ms guessed, 26.3 measured), the reclaim
+interval (250 frames copied, 25 needed). Spending two levers — and the cheapest
+of them takes away the board filling up, which is what Asteroids *is* — against
+a third such number would have traded real gameplay for arithmetic nobody had
+checked.
 
-A rate the *worst* frame meets is the only rate that can be trusted without a
-per-frame profiler, which is the lesson P9 M0 paid for.
+So M2 was built whole, and `logo/tests/p11m2` measured it.
+
+### The measured M2 frame, and it is not 6 ms over
+
+**300 frames a point on a Plus 2 W, three shots live on every frame** — the
+worst case, held there by parking the rocks' collision boxes at zero so nothing
+splits and no shot is consumed:
+
+| rocks | body | present | **frame** | min | max | of which collisions |
+|---:|---:|---:|---:|---:|---:|---:|
+| 6 | 36.63 | 26.53 | **63.15** | 59 | 72 | 12.95 |
+| 9 | 48.42 | 26.51 | **74.92** | 70 | 84 | 16.94 |
+| 12 | 59.89 | 26.54 | **86.43** | 80 | 93 | 20.95 |
+
+> **frame = 39.9 + 3.877 n ms.** 15 fps held to **six rocks**, not twelve.
+
+**19.7 ms over, not 6** — and the miss is not spread out. The ship, shots and
+HUD came in at **4.8 ms against 4.6 estimated**, which is the part this document
+guessed correctly. The entire overrun is the collision pass: **20.95 ms against
+7.5**, nearly 3×.
+
+### The cause was `item`, which nothing had costed
+
+The two measured coefficients pin it. Collisions fit `4.95 + 1.333 n`, and both
+terms fall out of one number:
+
+| | |
+|---|---:|
+| an `item` walk into a 12-element flat list | **~115 µs** |
+| an arithmetic statement (M0) | 43 µs |
+
+- the **4.95 ms intercept** is 3 shots × 12 slot scans × 137 µs — the inner
+  loop ran all twelve slots whatever `n` was
+- the **1.333 ms slope** is 456 µs per pair: three `item` walks (`rx`, `ry`,
+  `rrad`) plus the `hit?` call plus a comparison
+
+At twelve rocks the three-pass frame did roughly **290 `item` walks — a third
+of the whole frame** — and about 130 of them re-read a value another pass had
+already read that same frame. §12 counted statements from the beginning; it
+never counted list indexing, and list indexing is what this interpreter charges
+most for outside of drawing.
+
+### The levers, re-priced — and they are not enough
+
+| Lever | designed | **measured** |
+|---|---:|---:|
+| `MAX.ROCKS` 12 → 10 | 5.0 | **~9.2** |
+| cap shots at 2 | 2.5 | **~7.0** |
+| large rock 6 → 5 segments | 1.4 | ~1.4 |
+
+**All three together are ~17.6 ms against a 19.7 ms deficit.** Spending every
+priced lever — cutting the game to ten rocks and two shots, which is most of
+what makes it Asteroids — still would not have reached 15 fps. That is the
+finding that decided M2: the problem was never which levers to spend.
+
+### What was done instead: one pass over the rocks
+
+The fix matches the cause. `step.all`, `check.hits` and `draw.all` are now a
+single `step.draw.all` that visits each rock once (§15), so every field is read
+once — **eight `item` walks a rock instead of twenty-three** — and the shot
+positions live in six plain variables rather than a list, since the rock pass
+reads them 36 times a frame.
+
+### Measured again, and the fusion beat its estimate
+
+| rocks | body | present | **frame** | min | max | rock pass |
+|---:|---:|---:|---:|---:|---:|---:|
+| 6 | 24.59 | 26.54 | **51.14** | 48 | 56 | 18.87 |
+| 9 | 33.21 | 26.49 | **59.70** | 56 | 67 | 27.51 |
+| 12 | 41.88 | 26.38 | **68.26** | 63 | 74 | 36.05 |
+
+> **frame = 34.0 + 2.853 n ms**, down from `39.9 + 3.877 n`.
+
+**18.2 ms saved at twelve rocks** against the ~15 estimated, and the slope fell
+by 1.02 ms a rock. The collision cost went from 20.95 ms to about 7.8 — which
+finally lands near the 7.5 this section guessed before anyone had costed `item`.
+
+The rock pass fits `1.69 + 2.863 n`, so essentially the whole per-rock slope is
+inside it. Everything else — ship, shot ageing, HUD, `clean`, amortised
+recycle — is a flat **5.75 ms** at all three points. `shot.on` is **0.53 ms a
+rock**, 18 % of the pass; thrust **0.9 ms**; a recycle **2.0 ms**. The present
+held at 26.4 for the **fourth** independent time.
+
+### The harness over-measures, and by how much
+
+Its board is all **large** rocks, and that board cannot occur in play: a level
+spawns `level.rocks` larges, and twelve rocks is only reachable by splitting
+down. In M2, with three starting larges, a twelve-rock board is twelve *smalls*
+— 11 drawing statements each against a large's 15, so **2.9 ms cheaper**. Once
+levels advance to five starting larges the worst reachable twelve-rock board is
+8 mediums + 4 smalls, **1.9 ms cheaper**.
+
+The pessimism is kept deliberately: it is reproducible, it compares with M0 and
+M1, and it errs on the side that does not flatter the budget. But the real
+worst frame is **1.9–2.9 ms below the table**, and that is the number the rate
+was chosen against.
+
+### The rate: 15 → 14 fps
+
+Twelve rocks at 68.3 ms against a 66.7 ms budget is 1.6 over on the harness's
+board and about level on a reachable one — a fit with **nothing left for M3's
+explosions or M4's saucer and sound**. Closing it at 15 fps meant capping the
+shots at two (~2.1 ms), the one remaining lever that changes how the game
+*plays* rather than how it looks.
+
+**14 fps costs 7 % of the frame rate; two shots costs a third of them.** A
+71.4 ms budget keeps twelve rocks, three shots and six-segment larges, puts the
+worst observed frame inside the budget rather than at it, and leaves about 5 ms
+for the milestones still to come.
+
+It is settled **now** rather than after M3 and M4, because every per-frame
+constant is the rate's arithmetic on a per-second quantity the player actually
+feels — and deciding later would invalidate their tuning as well as this
+section's (§18). `fps` is a single constant at the top of the game file;
+`play.level` asks `sync` for it, and
+`test_the_per_frame_constants_are_cut_from_the_frame_rate` checks the
+per-second quantities rather than the per-frame ones, so the constant that gets
+missed on the next move fails a test instead of shipping.
+
+The constants that moved with it: drift 0.9 → 0.96, spin 2.5 → 2.7, turn 16 →
+17, thrust 0.4 → 0.43, clamp 4.5 → 4.8, shot life 18 → 17. `shot.speed` did
+**not** move, because it is per second — and the tunnelling bound it lives
+under (§7.3) had to be re-checked against the new rate: 160/14 = 11.4 against a
+12-step half-width, still inside.
+
+One of them was a trap. **`spin.max` was declared and never read** — the
+spawner used a literal `/ 8` — so it would have been re-cut with the rest and
+changed nothing. It is wired now.
+
+### One saving taken, one not
+
+**`wrapc` is spelled out inside the rock pass** rather than called: a user
+procedure call plus an `output` on top of two comparisons, 24 times a frame.
+That is the one duplication in the game file — the ship still calls the
+procedure — and the rock test drives the inlined copy against `wrapc` at all
+four edges so the two cannot drift apart unnoticed.
+
+**Not taken, and still priced:** `MAX.ROCKS` 12 → 11 (~2.7 ms), cap shots at 2
+(~1.7 ms), large rock 6 → 5 segments (~1.4 ms). All three remain available if
+M3 or M4 need them, and all three are now priced against a measured slope
+rather than a model.
+
+## 12a. M2 accepted: the frame at 14 fps
+
+**300 frames a point on a Plus 2 W**, the same worst case — twelve rocks with
+three shots live on every frame:
+
+| rocks | body | present | **frame** | min | max | rock pass |
+|---:|---:|---:|---:|---:|---:|---:|
+| 6 | 23.13 | 26.55 | **49.68** | 46 | 55 | 17.45 |
+| 9 | 31.13 | 26.46 | **57.58** | 53 | 62 | 25.32 |
+| 12 | 39.01 | 26.43 | **65.44** | 61 | 70 | 33.17 |
+
+> **frame = 33.9 + 2.627 n ms**, against a **71.4 ms** budget.
+
+**Twelve rocks fit with 6.0 ms to spare, and — for the first time in this
+design — the worst observed frame meets the budget with room**: 70 ms against
+71.4. M1's worst frame was 67 against 66.7, *over*; M2's first run was 93
+against 66.7. A rate the worst frame meets is the only rate that can be trusted
+without a per-frame profiler (§18), and this is the first time that has been
+true.
+
+Correcting for the harness's unreachable all-large board (−2.9 ms), a real
+twelve-rock frame is about **62.5 ms — roughly 9 ms of headroom** for M3 and M4.
+
+**It also confirms 14 was the right call rather than a cautious one.** At a
+66.7 ms budget the mean would now fit by 1.3 ms, but the worst frame is 70 and
+would not — so 15 fps was never available at twelve rocks and three shots, and
+buying it would still have cost the shot cap.
+
+### The `wrapc` inline paid double
+
+Estimated 1.4 ms; measured **2.9**. The rock-pass slope fell from 2.863 to
+2.620 ms a rock, and the frame slope from 2.853 to 2.627.
+
+The reason is a number worth keeping: **a user procedure call that `output`s
+costs about as much as an `item` walk — roughly 110 µs**, not the ~60 assumed.
+Two of them a rock is 0.23 ms, and it is the same lesson as §12's, one level
+down — the interpreter charges most for the things that are not statements.
+
+One caveat on the attribution: `shot.on` reported 0.42 ms against 0.53 in the
+previous run, and its code did not change. That figure is scene-dependent —
+whether the sampled shots reject on the first comparison or run the second
+depends on where they happen to be — so some of the 2.9 ms may be that variance
+rather than `wrapc`. The frame total is what was measured; the split between
+those two is not exact.
+
+**And the storage question from the previous run is closed.** Free storage went
+25,753 → 25,749 → 25,749: flat across the whole run, and the recycle recovered
+nothing because there was nothing to recover. The 808-cell drop the run before
+did not reproduce, which fits it having been one-off workspace state rather than
+anything the frame does.
+
+A recycle is **2.2 ms** and thrust **0.86 ms**. The present held at **26.4 ms**
+at every rock count for the **fifth** independent time — 37 % of the frame, and
+still the number no game-side lever reaches.
+
+
 
 ## 13. Reduced-resource choices
 
@@ -754,7 +1085,7 @@ per-frame profiler, which is the lesson P9 M0 paid for.
 | 4 shots, generous range | 3 shots, ~1.2 s life | a third off the collision pair count |
 | 12-vertex rocks at every size | **6 / 5 / 4** by size | 1.9 ms at twelve rocks; the small ones are the numerous ones |
 | three rock outlines at every size | **one outline per size** | 2.2 ms at twelve rocks — the dispatch collapses to a single three-way test in one procedure, with no second call. The nine generated outlines stay in the file; rotation already varies how a rock reads in motion, and the variety comes back the moment M1's measurements say it can be afforded |
-| 60 fps | **15 fps** | the present is 26.3 ms whatever the scene holds (§12) |
+| 60 fps | **14 fps** | the present is 26.4 ms whatever the scene holds; 15 after M0, 14 after M2 (§12) |
 | rocks shatter into drifting line fragments | 4-frame expanding `arc` ring | one primitive per frame instead of a particle system |
 | both saucer sizes can coexist | one saucer at a time | one object, one collision pair |
 | velocity-scaled hyperspace risk | flat 1-in-8 | no formula |
@@ -801,75 +1132,139 @@ pool's floor has reached, whichever is lower, so a board carrying a fuller
 workspace has less atom room than the host measuring it.
 
 **`reclaim.every` is 25 frames** — a 26× margin against the same measurement,
-and 1.7 s at 15 fps. `test_the_reclaim_interval_stays_inside_the_atom_budget`
+and 1.8 s at 14 fps. `test_the_reclaim_interval_stays_inside_the_atom_budget`
 measures the deadline rather than assuming it and fails if the interval creeps
 back towards it.
 
-**A recycle costs 1.3 ms**, measured on a Plus 2 W (`p11m1`), so recycling ten
-times more often than the design first said costs 0.05 ms a frame amortised
-and puts a 1.3 ms bump inside a 66.7 ms budget every 1.7 s. It is invisible,
-and the tighter interval is free. Free storage over 900 frames: 27,017 →
-27,015.
+**A recycle costs 2.0 ms** at M2, measured on a Plus 2 W (it was 1.3 at M1 —
+the frame allocates more now), so recycling ten times more often than the design
+first said costs 0.08 ms a frame amortised and puts a 2 ms bump inside a 71.4 ms
+budget every 1.8 s. It is invisible, and the tighter interval is free. The frame
+loop holds flat: **4 cells over 1,000 frames** on the host.
 
 The rule to write to is **"a frame must not allocate anything it does not hand
 back, and must hand it back long before the deadline"** — no `sentence`, no
 `list`, no `fput` on the frame path. The HUD text is rebuilt only where a
-displayed value changes, which at M1 is level setup and nothing else;
-`wrapc` outputs a number rather than a cell. `test_asteroids.c` pins both
-halves: zero cells over 100 quiet frames, and a bounded count over 100 frames
-of continuous scoring.
+displayed value changes, which at M2 is level setup and a kill; `wrapc` outputs
+a number rather than a cell. `test_asteroids.c` pins both the deadline and the
+flatness of the working set over 1,250 frames.
+
+**M2 leaves the per-frame count where M1 found it, and the reason is worth
+knowing.** The ship and the sampled shot positions are plain `make` on globals,
+and it is `.setitem` into a *list* that interns a number as a word atom — so
+the same physics costs nothing when it is held in a variable and two atoms a
+frame when it is held in a list. Only the twelve rocks are in lists, so the
+worst frame still mints 36.
+
+That is the same fact from two directions: holding the shot positions in a list
+would have cost atoms *and* 4 ms a frame to index (§15). A list is the right
+shape for twelve rocks that need a free-slot scan and the wrong shape for three
+shots that are only ever read. It will decide how the saucer stores its position
+at M4.
 
 ## 15. Main loop
+
+**One pass over the rocks, not three.** This is the largest change any
+measurement has forced on this document, and §12's re-priced table is why.
 
 ```logo
 to play.frame
   poll.input
   if not :paused [
     make "frame.count :frame.count + 1
-    step.all               ; physics: rocks, ship, saucer, shot timers
-    check.hits             ; collisions, splits, scoring, deaths
+    step.ship              ; momentum; thrust is an impulse from poll.input
+    step.shots             ; life countdown, and read the turtles back
     clean                  ; buffered in sync mode since B16 (§3.1.1)
-    draw.all               ; one pass over the survivors
+    step.draw.all          ; step, test and draw each rock, in one visit
+    draw.ship
     draw.hud               ; the clean took it too, so it goes back every frame
-    heartbeat              ; tempo from the live rock count
     reclaim
   ]
   sync
 end
 
+to step.draw.all
+  local "s local "x local "y local "a local "h
+  setpc :rock.colour
+  repeat :max.rocks [
+    make "s item repcount :rsize
+    if 0 < :s [
+      make "x wrapc ((item repcount :rx) + (item repcount :rdx))
+      make "y wrapc ((item repcount :ry) + (item repcount :rdy))
+      make "a (item repcount :rang) + (item repcount :rspin)
+      .setitem repcount :rx :x
+      .setitem repcount :ry :y
+      .setitem repcount :rang :a
+      make "h shot.on :x :y (item repcount :rrad)
+      ifelse 0 < :h [kill.shot :h  split.rock repcount]
+                    [pu setx :x sety :y seth :a  draw.rock :s]
+    ]
+  ]
+end
+```
+
+### Why it is one loop
+
+The design specified three passes — `step.all`, `check.hits`, `draw.all` —
+because that is how the game reads. M2's board run measured what it costs.
+**An `item` walk into a twelve-element flat list is about 115 µs**, two and a
+half times an arithmetic statement, and the three-pass frame did roughly **290
+of them: a third of the whole frame**. About 130 re-read a value another pass
+had already read that same frame — `check.hits` re-walking the `rsize` that
+`step.all` and `draw.all` had both walked, and the `rx`/`ry` that `step.all`
+had in hand when it wrote them.
+
+Fused, every field is read once: **eight `item` walks a rock instead of
+twenty-three.** The step computes the new x, y and angle into locals, the
+collision test uses them, and the placement uses them again.
+
+Two ordering consequences, both one frame long and neither visible at 14 fps:
+
+- A rock that dies is **skipped rather than drawn**, which is exactly what a
+  separate collision pass running before the drawing pass bought.
+- A child landing in a slot **below** the one being processed appears next
+  frame; one landing **above** is stepped and drawn in this one.
+
+And one ordering that is load-bearing: **`step.shots` before the rock pass**,
+because the pass tests against the sampled shot positions and they have to be
+this frame's. `clean` moves to *before* the pass rather than between passes,
+since the pass draws as well as steps.
+
+### What this cost, and what it did not
+
+It cost the readability the three-pass shape had: `step.draw.all` is the
+biggest procedure in the file and it does three things. That is a real loss and
+it is worth being honest that it is a loss.
+
+It cost **no gameplay at all** — twelve rocks, three shots and six-segment
+larges all survive, which none of §12's four priced levers would have allowed.
+That is the trade, and it is only available because the levers were left unspent
+until something measured them.
+
+`play.frame` is a procedure and not the body of the `until` below, so a test or
+a timing harness can call exactly what the game runs — the correction P9 M0
+forced on Galaxian.
+
+```logo
 to play.level
   setup.level
   (setrefresh "sync 15)
   make "over false
   until [:over] [
     play.frame
-    if :dying [handle.death]
-    if :rocks.alive = 0 [make "over true]
+    if 0 = :rocks.alive [make "over true]
   ]
+  clear.shots
   setrefresh "auto
 end
 ```
 
-**This loop is three procedures shorter than the one this design opened
-with**, and that is clear-and-redraw's second dividend after the 20 ms. There
-is no erase pass, so there is no rule that the erase must run against the
-state that drew the pixels — the ordering bug §3.2 called this design's
-signature failure mode cannot be written. There is no stale-state class of bug
-at all: every frame draws the world from the world's current state, and
-nothing on the canvas outlives a frame.
+`clear.shots` at the end is not tidiness: a shot is a turtle the **engine** is
+moving, so one still in flight when the player quits keeps gliding and keeps the
+demon poll working at the prompt.
 
-One ordering is still load-bearing, and it is the obvious one:
-**`check.hits` sits between `step.all` and `clean`**, so a rock that dies this
-frame is never drawn, and one that splits has its children drawn in the same
-frame they appear.
-
-One that is *no longer* load-bearing, and is worth naming because §10 was
-built around it: the HUD does not have to be drawn last. It is drawn last only
-because that reads in the order things appear.
-
-`play.frame` is a procedure and not the body of the `until`, so a test or a
-timing harness can call exactly what the game runs — the correction P9 M0
-forced on Galaxian.
+M3 adds the death handling to the loop and turns the cleared board into a level
+advance; M4 adds `heartbeat` to the frame.
 
 ## 16. Milestones
 
@@ -901,9 +1296,11 @@ the levers priced in §12.
 The build:
 `logo/games/asteroids` (12 slots, three outlines, wrap, spin,
 clear-and-redraw, `sync` at 15 fps, nothing to shoot with),
-`tests/test_asteroids.c` (23 tests), and `logo/tests/p11m1`, which times a
+`tests/test_asteroids.c` (23 tests), and `logo/tests/p11m1`, which timed a
 real frame at 6, 9 and 12 rocks with the body and the present read apart —
-the split P9 M5 wished it had.
+the split P9 M5 wished it had. **That harness was removed at M2** and is
+described here in the past tense for that reason; `logo/tests/p11m2` replaces
+it.
 
 Two things M1 settled on the host before the board saw it. It **disproved this
 document's memory rule** — an Asteroids frame does allocate, ~36 atoms a
@@ -914,14 +1311,50 @@ thing the frame does; `test_the_harness_frame_matches_the_game_frame` drives
 both from one state and requires the same drawing and the same physics, since
 a harness frame that drifts from the game measures a game nobody plays.
 
-**M2 — ship and shots.** Rotation, thrust, momentum, firing, shot×rock
-collisions, splitting, scoring, the HUD. **It opens over budget by about
-6 ms** on M1's measured slope (§12), so the first thing it does is spend two
-of the four priced levers — and `MAX.ROCKS` is the last of them to reach for,
-because ten slots is the only one that costs the game something.
+**M2 — ship and shots. MEASURED on hardware 2026-08-11, and it forced the
+biggest structural change in this document.** Rotation, thrust, momentum, firing, shot×rock collisions, splitting,
+scoring, the HUD.
+
+It opened projected 6 ms over and **no lever was spent** on that projection; it
+was built whole and measured instead. The board said **86.4 ms at twelve rocks,
+19.7 over**, with the whole miss in the collision pass and the cause in `item`
+rather than in anything §12 had priced — and **all three priced levers together
+would not have closed it**. Fusing the three passes over the rocks into one
+took it to **68.3 ms**, 18.2 saved against ~15 estimated; the rate went **15 →
+14 fps**, because 7 % of the rate is cheaper than a third of the shots; and
+inlining `wrapc` took another **2.9 ms**, double its estimate. **Accepted at
+65.4 ms against 71.4, worst frame 70** (§12a). Twelve rocks, three shots and
+six-segment larges all survive.
+
+The build: `logo/games/asteroids` (36 procedures), `tests/test_asteroids.c`
+(49 tests) and `logo/tests/p11m2`, which reads the rock pass apart from the rest
+of the body and times one `shot.on` on its own — between them those price every
+remaining lever. `logo/tests/p11m1` is **gone**: the fusion removed `step.all`,
+`draw.all` and `place`, which it called by name, so it could no longer run
+against this game at all. Its numbers live in §12's table. `p11rocks` survives
+because it defines its own drawing and measures a question nothing else
+reproduces.
+
+Three things M2 settled on the host. The ship walk this document carried in
+§6.4 **did not close** — hand written, it landed two steps from the nose and
+then drew a fifth stroke off into space; the ship now comes off the rock
+generator and gets the rocks' closure test, with the thrust flame folded into
+the same closed walk so a thrusting ship costs one dispatch and one placement.
+`shot.speed` has a **hard bound rather than a feel** (§7.3), and the test that
+states it caught the first constant set: at 200 steps a second a shot could
+pass clean through a small rock between samples. And `.setitem` of a number
+still interns it, so M1's memory contract carries over unchanged — the frame
+loop is soaked for flat storage and the reclaim deadline is re-measured rather
+than assumed.
 
 **M3 — lives, levels, deaths.** Ship explosion, respawn, level advance,
-attract screen, game over, hyperspace.
+attract screen, game over, hyperspace. It inherits a frame that **fits with its
+worst case inside the budget** (§12a) — roughly 9 ms of headroom to share with
+M4 on a reachable board — and three levers still priced against a measured
+slope if that runs out. M2's play report closed the last of
+this document's original risks (§18): the rate reads smooth, the ship feels
+right, and the two constants that played badly — the hit-box generosity and the
+ship's size — are fixed and held by tests.
 
 **M4 — saucer and sound.** Both saucer sizes; the full PSG arrangement with
 the heartbeat.
@@ -955,24 +1388,39 @@ The M0 harness has its own binary, `tests/test_p11rocks.c` — both Logo files
 define `place` and `draw.rock`, and the harness has to keep the shape it was
 measured in.
 
-**To come with the rest of the game:**
+**Added for M2** (26 more, 49 in all): both ship outlines close and draw their
+segment counts; the flame appears only when thrusting and only every other
+frame; the ship keeps its momentum and wraps like a rock; thrust pushes along
+the heading; the speed clamp holds on an axis *and* on a diagonal, which is
+what separates a clamp on the magnitude from one written per component; a ship
+heading outside 0–360 still thrusts and draws, in both directions; the arrows
+turn both ways; a frame with no key at all puts the flame out, which is the
+thing that fails if `thrusting` is cleared after the input guard rather than
+before it; firing takes the lowest idle turtle and a fourth shot is simply not
+fired; a shot expires, hides its turtle and stops it; a shot flies on its own
+and its position is read back, driven off the mock clock because `setspeed` is
+wall-clock; `shot.on` inside and outside the square, and a parked shot hitting
+nothing anywhere on the field; one shot killing exactly one rock a frame, with
+the rock it killed not drawn; the split
+table at all three sizes, with the children separating rather than travelling
+together; a split fills the slots it finds and never writes past `MAX.ROCKS`;
+three larges split all the way down into exactly twelve slots, with the score
+that implies; a shot on a rock splits it, scores it and is consumed; an idle
+shot hits nothing, which is what fails if the outer loop loses its guard and
+starts testing a stale position; a level ends when the board is clear; the
+shot-speed bound of §7.3; and the M2 harness — that it runs end to end, that it
+measures the rock counts it reports, that it holds three shots live and the
+board still, and that its frame matches the game's in drawing, physics, ship
+and shot bookkeeping.
 
-- `wrapc` at both edges, exactly on the boundary, and beyond one full width.
-- The split table: large → 2 medium, medium → 2 small, small → nothing; child
-  velocity inherits the parent's; the slot cap yields 2 / 1 / 0 children as
-  slots allow, and never writes past `MAX.ROCKS`.
-- `hit?` — inside, outside, and on each edge of the square.
-- Scoring, including the 10,000-point extra ship, and level advance when the
-  last rock dies.
-- Ship physics: the speed clamp holds at the boundary; heading wraps through
-  0 and 360 in both directions.
-- **The frame draws the world and nothing else.** Run N frames on the mock,
-  then `clean` and one `draw.all`, and assert the recorded segments match the
-  previous frame's exactly. Under erase-in-place this test was the file's most
-  valuable, because a stale-state ordering bug showed up as leftover pixels
-  and as nothing else; under clear-and-redraw there is no stale state to get
-  wrong, and this is a cheap regression guard rather than a mitigation.
-- Allocation: zero cells over 100 quiet frames (§14).
+**Still to come with M3 and M4:**
+
+- The 10,000-point extra ship, and level advance rather than level end.
+- Ship × rock, and the death and respawn it implies.
+- The saucer's pairs, and its firing.
+- Allocation: the frame loop is soaked for flat storage over 1,250 frames and
+  the reclaim deadline is re-measured; both carry over from M1 unchanged and
+  need re-checking once the saucer allocates too.
 
 ## 18. Risks
 
@@ -1000,17 +1448,60 @@ that is the useful part.
   stating why the rate survives what a 15 fps *sprite* game would not: nothing
   here accelerates, the motion is constant-velocity drift, and a rotating
   polygon has no animation phase to stutter.
-- **Feel is the rest of the game, and it is all constants** — and 15 fps
-  changes all of them. Rotation rate, thrust impulse, speed clamp, shot speed and life,
+- **Feel is the rest of the game, and it is all constants** — and the frame
+  rate changes all of them, which is why it is settled before M3 and M4 tune
+  anything. It has moved twice: 20 → 15 at M0, 15 → 14 at M2. Rotation rate, thrust impulse, speed clamp, shot speed and life,
   small-saucer accuracy are all per-*frame* quantities against a frame that is
   now 66.7 ms rather than 50, so every one of them needs re-cutting by a third
   before it is even worth iterating on. This is the hazard flagged for
   Galaxian in P10's log (per-frame constants against per-second `setspeed`
   motion) arriving from the other direction. Isolated at the top of the file,
   expected to need on-hardware iteration, and not knowable from the host.
-- **The physics third of the frame is still estimated** (§12), and the worst
-  case fits by 0.5 ms. M1 measures it. This is now the largest open number in
-  the design.
+- ~~**The physics third of the frame is still estimated.**~~ **Closed by M1**,
+  which measured a whole rocks-only frame at 60.5 ms and fitted all three
+  points to 2.507 ms a rock.
+- ~~**What M2 adds to the frame is unmeasured.**~~ **Closed, and it was wrong
+  by three times the margin it allowed itself**: 86.4 ms at twelve rocks,
+  19.7 over rather than 6, with the whole miss in the collision pass (§12).
+- **`item` is the frame's hidden line item, and only one pass has been fixed.**
+  A walk into a twelve-element list is ~115 µs, two and a half times an
+  arithmetic statement, and §12 counted statements from the beginning. The
+  rock pass is now fused so each field is read once, but nothing has audited
+  the ship, the shots or anything M3 and M4 will add against the same yardstick.
+  The habit to keep: **count list walks, not statements.**
+- ~~**The fusion is unmeasured.**~~ **Closed, and it beat its estimate**: 18.2
+  ms against ~15, taking twelve rocks to 68.3 ms (§12). The rate went to 14 fps
+  rather than spend the last gameplay lever.
+- ~~**The fused frame has not been run at 14 fps.**~~ **Closed: 65.4 ms at
+  twelve rocks against 71.4, worst frame 70** (§12a) — the first frame in this
+  design whose worst case meets its budget. Roughly 9 ms of headroom on a
+  reachable board for M3's explosion rings and M4's saucer and sound, with
+  three levers still priced if that runs out.
+- ~~**Nobody has played it.**~~ **Closed, 2026-08-12, and it found two
+  things.** 14 fps reads **smooth with no jitter**, so the rate that M2's
+  budget bought is not one the game pays for. Ship movement — momentum, no
+  drag, the magnitude clamp — **feels natural**, which is the one part of §7.2
+  that was pure arithmetic against a document. What was wrong was the two
+  numbers a player can see rather than feel: **shots landed on visible misses,
+  worst on the smallest rocks** (`shot.reach`, §7.3), and the **ship read
+  slightly too big** (§6.4). The hit boxes were the real defect and are fixed.
+  The ship was **tried smaller and put back**: it reads tidier, and it also
+  makes the game easier, since the ship is the one thing the rocks have to hit
+  — a legibility change that turned out to be a difficulty change. The general
+  shape is worth keeping: the constants that came from arithmetic were right,
+  and the one that came from a *safety margin* was the one that played badly.
+- **A board of all large rocks is not reachable in play, and the harness builds
+  one anyway** (§12). It over-measures by 1.9–2.9 ms depending on how far levels
+  have advanced. Kept deliberately, because it is reproducible and errs against
+  the budget rather than for it — but the real worst frame sits below the table,
+  and anything cut fine enough for that difference to matter should be decided
+  on a reachable board instead.
+- **Per-second and per-frame constants are mixed, and only one of them is
+  bounded.** `setspeed` is the only wall-clock quantity in the game, and §7.3
+  turns that into an inequality with a test behind it. Everything else the
+  saucer and the sound bring in should be checked the same way before it is
+  tuned by feel: the failure is not a crash, it is a shot that occasionally
+  passes through a rock.
 - **A pico2 is unmeasured**, and M0 makes the gap worse rather than better.
   Scaling by P10's 1.72× puts a 12-rock frame near 114 ms — about 9 fps — and
   the present alone, which does not scale with the interpreter, is 26 ms of
