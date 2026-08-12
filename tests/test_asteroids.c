@@ -12,7 +12,7 @@
 //  hide.
 //
 //  The frame budget is what M2 is really about, and no host test can answer it
-//  -- that needs logo/tests/p11m2 on a board.  What these tests can hold is
+//  -- that needs logo/tests/p11m3 on a board.  What these tests can hold is
 //  everything the budget assumes: that a frame draws the world and nothing
 //  else, that the frame loop holds free storage flat, that the outlines carry
 //  the segment counts the budget was cut from, and that the split table can
@@ -34,8 +34,8 @@
 #error "ASTEROIDS_SOURCE must be defined (path to logo/games/asteroids)"
 #endif
 
-#ifndef P11M2_SOURCE
-#error "P11M2_SOURCE must be defined (path to logo/tests/p11m2)"
+#ifndef P11M3_SOURCE
+#error "P11M3_SOURCE must be defined (path to logo/tests/p11m3)"
 #endif
 
 // Segments per outline, from the design's section 6.3 table. Statements per
@@ -293,6 +293,46 @@ void test_the_collision_boxes_are_not_far_wider_than_the_rocks_drawn_in_them(voi
                  "shots will land on visible misses", rocks[k].size, box,
                  rocks[k].drawn, excess * 100.0f);
         TEST_ASSERT_TRUE_MESSAGE(excess <= 0.30f, msg);
+    }
+}
+
+// The same test for the box a SHIP is tested against, and it is the constant
+// M3's play report sent back: at `ship.rad` 10 the ship died before rocks
+// reached it, worst on the medium and small ones -- the identical failure
+// `shot.reach` produced at M2, from the identical cause.
+//
+// The ship is a thin triangle and not a disc: its rear corners are 12.68 steps
+// from the centre, its beam is 8.95, and most bearings meet the beam. The rock
+// side is its longest spike, because that is the part a player watches come in.
+// So the box must not exceed spike + beam -- above that it kills at a distance
+// the two drawn shapes could not have closed on any bearing.
+//
+// It also must not be cut to nothing: below the beam alone, a rock could sit on
+// the hull without killing, which reads as badly as the reverse.
+void test_the_ship_box_is_not_wider_than_the_shapes_it_is_drawn_from(void)
+{
+    // Longest vertex radius of each outline, from scripts/gen_rocks.py's walks.
+    const struct { int size; float spike; } rocks[] = {{3, 21.68f}, {2, 13.24f}, {1, 7.49f}};
+    const float beam = 8.95f;        // ship half-width across the beam
+    float ship = num(":ship.rad");
+
+    for (size_t k = 0; k < sizeof(rocks) / sizeof(rocks[0]); k++)
+    {
+        char expr[32], msg[192];
+        snprintf(expr, sizeof(expr), "rad.for %d", rocks[k].size);
+        float box = num(expr) + ship;
+        float contact = rocks[k].spike + beam;
+
+        snprintf(msg, sizeof(msg),
+                 "size %d kills at %.1f steps where the drawn shapes touch at %.1f -- "
+                 "lower ship.rad, or the game kills on visible misses",
+                 rocks[k].size, box, contact);
+        TEST_ASSERT_TRUE_MESSAGE(box <= contact, msg);
+
+        snprintf(msg, sizeof(msg),
+                 "size %d kills at %.1f steps, inside the ship's own beam at %.1f -- "
+                 "a rock can sit on the hull without killing", rocks[k].size, box, beam);
+        TEST_ASSERT_TRUE_MESSAGE(box > beam, msg);
     }
 }
 
@@ -608,6 +648,13 @@ void test_setup_level_never_exceeds_the_slot_count(void)
 void test_a_frame_draws_the_world_and_nothing_else(void)
 {
     setup_with(6);
+    // A level starts the ship in its respawn grace, where it blinks (M3) and
+    // cannot be hit. Settle it: what is under test is that a frame draws the
+    // world, and the blink has a test of its own. `ship.rad` goes to zero for
+    // the same reason the timing harness zeroes it -- rocks are spawned at
+    // random, so a ship that can be hit makes this test's segment count depend
+    // on where they landed.
+    run("make \"safe 0  make \"ship.rad 0");
     // The ship too, and with no thrust key pressed it is always the plain
     // hull -- so a flame appearing on a quiet frame fails here.
     int expected = expected_segments() + SEG_SHIP;
@@ -810,7 +857,10 @@ void test_a_ship_heading_outside_zero_to_360_still_thrusts_and_draws(void)
     run("reset.ship  make \"sh -355  thrust");   // -355 is 5 degrees too
     TEST_ASSERT_TRUE_MESSAGE(num(":svy") > 0, "a negative heading did not thrust north");
 
-    run("make \"thrusting false  make \"frame.count 1  make \"sh 725");
+    // `safe` is cleared because `reset.ship` respawns the ship, and a
+    // respawned ship blinks for `safe.frames` (M3). What is under test here is
+    // the heading, so settle it first.
+    run("make \"thrusting false  make \"frame.count 1  make \"sh 725  make \"safe 0");
     mock_device_clear_graphics();
     run("draw.ship");
     TEST_ASSERT_EQUAL_INT(SEG_SHIP, mock_device_line_count());
@@ -822,7 +872,7 @@ void test_a_ship_heading_outside_zero_to_360_still_thrusts_and_draws(void)
 // so a thrusting ship costs one dispatch and one placement rather than two.
 void test_the_flame_shows_only_when_thrusting_and_only_every_other_frame(void)
 {
-    run("reset.ship  make \"thrusting false  make \"frame.count 0");
+    run("reset.ship  make \"thrusting false  make \"frame.count 0  make \"safe 0");
     mock_device_clear_graphics();
     run("draw.ship");
     TEST_ASSERT_EQUAL_INT_MESSAGE(SEG_SHIP, mock_device_line_count(),
@@ -1140,6 +1190,275 @@ void test_an_idle_shot_hits_nothing(void)
 }
 
 //==========================================================================
+// Dying, lives and levels
+//==========================================================================
+
+// A ship at rest with a rock on top of it. `ship.rad` is added to the rock's
+// radius in the rock pass, so this is the one collision in the game whose box
+// is not `rrad` alone.
+static void ship_under_a_rock(void)
+{
+    run("init.game  clear.rocks  clear.shots");
+    run(".setitem 1 :rsize 3  .setitem 1 :rrad rad.for 3  make \"rocks.alive 1");
+    run(".setitem 1 :rx 0  .setitem 1 :ry 0  .setitem 1 :rdx 0  .setitem 1 :rdy 0");
+    // Out of the respawn grace and hittable, which is `step.ship`'s job.
+    run("make \"safe 0  step.ship");
+}
+
+void test_a_rock_on_the_ship_kills_it(void)
+{
+    ship_under_a_rock();
+    TEST_ASSERT_EQUAL_FLOAT(3, num(":lives"));
+
+    mock_device_clear_graphics();
+    run("step.draw.all");
+
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2, num(":lives"), "a rock on the ship did not kill it");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":death.frames"), num(":dying"),
+                                    "the explosion did not start");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(9999, num(":shipcx"),
+                                    "a dead ship was left where a rock could hit it again");
+    // The rock is not consumed by killing the ship -- it is still drawn, and
+    // still there.
+    TEST_ASSERT_EQUAL_INT_MESSAGE(SEG_LARGE, mock_device_line_count(),
+                                  "the rock that killed the ship was not drawn");
+    TEST_ASSERT_EQUAL_FLOAT(1, num(":rocks.alive"));
+}
+
+// The ship is parked the moment it dies, exactly as a spent shot is, so the
+// rocks after it in the same pass test against 9999 and miss. Without that, a
+// board of twelve rocks sitting on the ship would take twelve lives in one
+// frame and end the game from full.
+void test_one_frame_takes_only_one_life(void)
+{
+    run("init.game  clear.rocks  clear.shots");
+    for (int i = 1; i <= 12; i++)
+    {
+        char cmd[144];
+        snprintf(cmd, sizeof(cmd),
+                 ".setitem %d :rsize 1  .setitem %d :rrad rad.for 1  "
+                 ".setitem %d :rx 0  .setitem %d :ry 0  "
+                 ".setitem %d :rdx 0  .setitem %d :rdy 0", i, i, i, i, i, i);
+        run(cmd);
+    }
+    run("make \"rocks.alive 12  make \"safe 0  step.ship");
+    run("step.draw.all");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2, num(":lives"),
+                                    "one frame took more than one life");
+}
+
+// The respawn grace is invulnerability, and it is spelled as a parked ship
+// rather than as a guard in the rock pass -- so what proves it is that the
+// collision position never leaves 9999 while it lasts.
+void test_a_ship_in_its_respawn_grace_cannot_be_hit(void)
+{
+    ship_under_a_rock();
+    run("respawn");
+    TEST_ASSERT_TRUE(num(":safe") > 0);
+
+    // Every frame of the grace, with the rock sitting on the ship's centre.
+    int grace = (int)num(":safe.frames");
+    for (int i = 0; i < grace; i++)
+    {
+        run("step.ship  step.draw.all");
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(3, num(":lives"),
+                                        "a rock hit a ship inside its respawn grace");
+    }
+
+    // And it ends: one more frame makes the ship hittable again, and the rock
+    // it has been sitting under kills it.
+    run("step.ship  step.draw.all");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2, num(":lives"),
+                                    "the respawn grace never ended");
+}
+
+// A death is a countdown inside the frame loop and not a `wait`: the rocks keep
+// drifting under the explosion, which is what the arcade does, and the player
+// can still pause or quit through it.
+void test_the_explosion_counts_down_and_the_ship_comes_back(void)
+{
+    ship_under_a_rock();
+    run(".setitem 1 :rdx 1");           // and it drifts off while the ship burns
+    run("make \"shipx 40  make \"shipy -40  make \"svx 3  make \"svy 3");
+    run("ship.hit");
+
+    int frames = (int)num(":death.frames");
+    for (int i = 1; i < frames; i++)
+    {
+        run("play.frame");
+        char msg[96];
+        snprintf(msg, sizeof(msg), "frame %d of the explosion", i);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(frames - i, num(":dying"), msg);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(40, num(":shipx"), "a dying ship moved");
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2, num(":lives"), "the explosion took a second life");
+    }
+
+    // The last frame of the countdown is the one that brings the ship back:
+    // centre of the field, stopped, facing north, and in its grace.
+    run("play.frame");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":dying"), "the explosion did not end");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":shipx"), "the ship did not come back to the centre");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":svx"), "the ship came back still moving");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":sh"), "the ship came back on its old heading");
+    TEST_ASSERT_EQUAL_FLOAT(num(":safe.frames"), num(":safe"));
+    TEST_ASSERT_TRUE_MESSAGE(item_of("rx", 1) > 0, "the rocks stood still through the death");
+}
+
+// The last life ends the level rather than respawning into an unplayable game,
+// and it ends it from inside the frame -- `play.level` reads `over` and stops.
+void test_the_last_life_ends_the_level(void)
+{
+    run("init.game  clear.rocks  clear.shots");
+    run("make \"lives 1  make \"over false  ship.hit");
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":lives"));
+
+    run("repeat :death.frames [play.frame]");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", value_to_string(eval_string(":over").value),
+                                     "the last life did not end the level");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(9999, num(":shipcx"),
+                                    "a game that is over put the ship back");
+}
+
+// A dying ship is a ring and not a ship. `arc` sweeps four degrees a segment,
+// so a full circle is 90 strokes inside one primitive call -- the reason an
+// explosion is affordable at all where a fragment system was not.
+void test_a_dying_ship_draws_a_ring_and_not_a_ship(void)
+{
+    run("init.game  clear.rocks  clear.shots  make \"safe 0");
+    run("make \"dying 1");
+    mock_device_clear_graphics();
+    run("draw.ship");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(90, mock_device_line_count(),
+                                  "a dying ship did not draw one full ring");
+
+    // And the ring grows as the countdown falls: the first death frame is the
+    // smallest, the last is the widest. The sweep starts at the turtle's
+    // heading, which `draw.boom` sets to north, so the first stroke begins one
+    // radius above the ship and its y is the radius.
+    run("make \"dying :death.frames - 1");
+    mock_device_clear_graphics();
+    run("draw.ship");
+    float first = mock_device_get_line(0)->y1;
+    TEST_ASSERT_EQUAL_FLOAT(num(":boom.grow"), first);
+
+    run("make \"dying 1");
+    mock_device_clear_graphics();
+    run("draw.ship");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":boom.grow * (:death.frames - 1)"),
+                                    mock_device_get_line(0)->y1,
+                                    "the explosion ring did not expand with the countdown");
+}
+
+// The blink is what tells a player which ship is theirs and that it is still
+// safe, and it costs one `remainder` on the frames it hides.
+void test_a_ship_in_its_respawn_grace_blinks(void)
+{
+    run("init.game  clear.rocks  clear.shots  respawn");
+    int shown = 0, hidden = 0;
+    for (int i = 0; i < 8; i++)
+    {
+        mock_device_clear_graphics();
+        run("draw.ship");
+        if (mock_device_line_count() == 0)
+            hidden++;
+        else
+            shown++;
+        run("step.ship");
+    }
+    TEST_ASSERT_EQUAL_INT_MESSAGE(4, shown, "the ship did not blink through its grace");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(4, hidden, "the ship did not blink through its grace");
+}
+
+// Hyperspace is the panic button and it is meant to cost something: no
+// velocity on the far side, and one jump in `hyper.risk` arrives inside a rock.
+void test_hyperspace_moves_the_ship_and_stops_it(void)
+{
+    run("init.game  clear.rocks  clear.shots  make \"safe 0");
+    run("make \"shipx 100  make \"shipy 100  make \"svx 3  make \"svy -2");
+    run("make \"dying 0  hyperspace");
+
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":svx"), "a jump kept the ship's velocity");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":svy"), "a jump kept the ship's velocity");
+    TEST_ASSERT_TRUE_MESSAGE(num("abs :shipx") <= 160 && num("abs :shipy") <= 160,
+                             "a jump put the ship outside the field");
+}
+
+// The risk is a flat one in `hyper.risk` rather than the arcade's
+// velocity-dependent formula, so it can be counted. 200 jumps at one in eight
+// is 25 deaths; the bounds are wide enough that only a broken chance fails.
+//
+// `rerandom` with a seed is what makes this testable at all: the mock device's
+// hardware RNG returns a constant, so unseeded `random 8` is the same number
+// 200 times and no chance in this game can be observed on the host.
+void test_hyperspace_sometimes_ends_badly(void)
+{
+    run("init.game  clear.rocks  clear.shots");
+    run("(rerandom 1)");
+    int deaths = 0;
+    for (int i = 0; i < 200; i++)
+    {
+        run("make \"dying 0  make \"lives 3  hyperspace");
+        if (num(":dying") > 0)
+            deaths++;
+    }
+    char msg[96];
+    snprintf(msg, sizeof(msg), "%d deaths in 200 jumps at one in %d",
+             deaths, (int)num(":hyper.risk"));
+    TEST_ASSERT_TRUE_MESSAGE(deaths > 5 && deaths < 70, msg);
+}
+
+// Every point in the game arrives through `add.score`, so the extra ship is
+// tested in one place -- and against a moving threshold rather than a
+// remainder, because a score can step over a boundary rather than land on it.
+void test_an_extra_ship_every_ten_thousand_points(void)
+{
+    run("init.game");
+    run("add.score 9950");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(3, num(":lives"), "an extra ship arrived early");
+
+    run("add.score 100");            // steps over 10,000 rather than landing on it
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(4, num(":lives"), "no extra ship at 10,000");
+
+    run("add.score 100");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(4, num(":lives"), "a second extra ship at the same threshold");
+
+    run("add.score 9900");           // 20,050
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(5, num(":lives"), "no extra ship at 20,000");
+}
+
+// One more large rock a level, to a ceiling: five larges split into ten mediums
+// and the eleventh has nowhere to go, so the cap bites at the top level and not
+// below it.
+void test_a_level_advance_adds_a_rock_up_to_the_ceiling(void)
+{
+    run("init.game");
+    TEST_ASSERT_EQUAL_FLOAT(3, num(":level.rocks"));
+    run("next.level");
+    TEST_ASSERT_EQUAL_FLOAT(2, num(":level"));
+    TEST_ASSERT_EQUAL_FLOAT(4, num(":level.rocks"));
+    run("repeat 6 [next.level]");
+    TEST_ASSERT_EQUAL_FLOAT(8, num(":level"));
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":rocks.top"), num(":level.rocks"),
+                                    "a level asked for more larges than the ceiling");
+}
+
+// Score, level, and one heart a life -- one `write` and one `sentence`, built
+// only where a displayed value moves. The heart is glyph 0x10 of
+// devices/logo-font.h, which is why the expectation here is a raw byte: the
+// HUD is one word of `char 16`s and not a printable stand-in.
+void test_the_hud_carries_the_score_the_level_and_a_heart_a_life(void)
+{
+    run("init.game  make \"score 240  make \"level 2  make \"lives 3");
+    run("refresh.hud");
+    TEST_ASSERT_EQUAL_STRING("[SCORE 240 LEVEL 2 \x10\x10\x10]",
+                             value_to_string(eval_string(":hud.text").value));
+
+    run("make \"lives 1  refresh.hud");
+    TEST_ASSERT_EQUAL_STRING("[SCORE 240 LEVEL 2 \x10]",
+                             value_to_string(eval_string(":hud.text").value));
+}
+
+//==========================================================================
 // Input and the level loop
 //==========================================================================
 
@@ -1188,9 +1507,9 @@ void test_a_level_ends_on_q_and_puts_the_screen_back(void)
                                      "a shot was left on screen after the level ended");
 }
 
-// Clearing the board ends the level. M3 turns that into an advance; until then
-// it is where the game ends, and the check belongs in the loop rather than in
-// `play.frame` -- a frame that ended the game would still have to draw it.
+// Clearing the board ends the level, and the check belongs in the loop rather
+// than in `play.frame` -- a frame that ended the level would still have to draw
+// it. Which of the three endings it was is read back by `one.game`.
 void test_a_level_ends_when_the_board_is_clear(void)
 {
     run("init.game");
@@ -1199,7 +1518,112 @@ void test_a_level_ends_when_the_board_is_clear(void)
     run("play.level");
     TEST_ASSERT_EQUAL_STRING_MESSAGE("true", value_to_string(eval_string(":over").value),
                                      "a cleared board did not end the level");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("false", value_to_string(eval_string(":quit").value),
+                                     "a cleared board read as a quit");
     TEST_ASSERT_EQUAL_STRING("auto", value_to_string(eval_string("refreshmode").value));
+}
+
+// A dying ship steers nothing, fires nothing and cannot hyperspace out of its
+// own explosion -- one guard in `poll.input` rather than one in each handler.
+// Pause and quit sit ABOVE it deliberately: a death lasts most of a second and
+// a player who wants out should not have to wait for the ring.
+void test_a_dying_ship_answers_only_pause_and_quit(void)
+{
+    setup_with(3);
+    run("make \"sh 90  make \"dying 5  make \"over false");
+
+    set_mock_input(KEY_LEFT);
+    run("poll.input");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(90, num(":sh"), "a dying ship steered");
+
+    set_mock_input(" ");
+    run("poll.input");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, item_of("slife", 1), "a dying ship fired");
+
+    set_mock_input("p");
+    run("poll.input");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", value_to_string(eval_string(":paused").value),
+                                     "a dying game could not be paused");
+    run("make \"paused false");
+
+    set_mock_input("q");
+    run("poll.input");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", value_to_string(eval_string(":quit").value),
+                                     "a dying game could not be quit");
+}
+
+// Q means "back to the attract screen", not "the game ended": the difference is
+// the game-over card, and `quit` is what tells them apart.
+void test_q_quits_the_game_and_not_just_the_level(void)
+{
+    run("init.game");
+    run("make \"level.rocks 3");
+    set_mock_input("q");
+    run("play.level");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", value_to_string(eval_string(":quit").value),
+                                     "Q ended the level without ending the game");
+    TEST_ASSERT_TRUE_MESSAGE(num(":rocks.alive") > 0, "the board was cleared, not quit");
+}
+
+// The state machine: levels advance while there are ships, the game ends when
+// there are none, and only running out is worth a game-over card. `play.level`
+// is stubbed to cost a life, so three levels is the whole game.
+void test_a_game_plays_levels_until_the_ships_run_out(void)
+{
+    proc_define_from_text("to play.level\nmake \"lives :lives - 1\nend");
+    proc_define_from_text("to attract.screen\nend");
+    proc_define_from_text("to show.game.over\nmake \"card true\nend");
+    run("make \"card false");
+    run("one.game");
+
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(3, num(":level"), "the game did not advance a level a board");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(5, num(":level.rocks"),
+                                    "the third level did not ask for five larges");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", value_to_string(eval_string(":card").value),
+                                     "running out of ships showed no game-over card");
+}
+
+// Q leaves without a card, which is the only difference between quitting and
+// losing.
+void test_quitting_shows_no_game_over_card(void)
+{
+    proc_define_from_text("to play.level\nmake \"quit true\nend");
+    proc_define_from_text("to attract.screen\nend");
+    proc_define_from_text("to show.game.over\nmake \"card true\nend");
+    run("make \"card false");
+    run("one.game");
+
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("false", value_to_string(eval_string(":card").value),
+                                     "quitting showed a game-over card");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(3, num(":lives"), "quitting cost a ship");
+}
+
+// The attract screen carries the score table and the keys, as the two shipped
+// shooters' do. It waits on space and nothing else.
+void test_the_attract_screen_prints_the_scores_and_the_keys(void)
+{
+    mock_device_clear_output();
+    set_mock_input("xy ");            // two keys it must ignore, then space
+    run("attract.screen");
+
+    const char *screen = mock_device_get_output();
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "ASTEROIDS"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Large rock     20"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Small rock    100"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Hyperspace"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Press Space"), screen);
+}
+
+void test_game_over_prints_the_final_score(void)
+{
+    run("init.game  make \"score 1240  make \"level 4");
+    mock_device_clear_output();
+    run("show.game.over");
+
+    const char *screen = mock_device_get_output();
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "GAME OVER"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "1240"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "LEVEL REACHED: 4"), screen);
 }
 
 //==========================================================================
@@ -1220,7 +1644,7 @@ void test_a_level_ends_when_the_board_is_clear(void)
 // else reproduces.
 void test_the_harness_frame_matches_the_game_frame(void)
 {
-    load_file(P11M2_SOURCE);
+    load_file(P11M3_SOURCE);
 
     // The rocks are kept clear of the origin, where an unfired shot turtle
     // sits: a hit here would split a rock with `random` velocities and the two
@@ -1257,14 +1681,36 @@ void test_the_harness_frame_matches_the_game_frame(void)
                                     "the harness frame does not fly the ship the game flies");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(game_life, item_of("slife", 1),
                                     "the harness frame does not age the shots the game ages");
+
+    // And a death frame, because that is the branch M3 added to the frame: a
+    // dying ship counts its explosion down where a live one steps. A harness
+    // that kept calling `step.ship` would time a ship the game is not flying.
+    const char *dying = "make \"dying 5  make \"shipx 20  make \"shipy 20  make \"svx 4";
+    run(state);
+    run(dying);
+    mock_device_clear_graphics();
+    run("play.frame");
+    int game_death_segments = mock_device_line_count();
+    float game_dying = num(":dying"), game_death_x = num(":shipx");
+
+    run(state);
+    run(dying);
+    mock_device_clear_graphics();
+    run("frame.body");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(game_dying, num(":dying"),
+                                    "the harness frame does not count the explosion down");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(game_death_x, num(":shipx"),
+                                    "the harness frame flew a ship that is exploding");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(game_death_segments, mock_device_line_count(),
+                                  "the harness frame does not draw the explosion the game draws");
 }
 
-void test_p11m2_script_runs(void)
+void test_p11m3_script_runs(void)
 {
-    load_file(P11M2_SOURCE);
-    run("make \"p11m2.frames 3");
+    load_file(P11M3_SOURCE);
+    run("make \"p11m3.frames 3");
     mock_device_clear_output();
-    run("p11m2");
+    run("p11m3");
 
     const char *screen = mock_device_get_output();
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "the rock pass"), screen);
@@ -1272,22 +1718,22 @@ void test_p11m2_script_runs(void)
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "one thrust"), screen);
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "nodes at start"), screen);
 
-    MockFile *report = mock_fs_get_file("p11m2.txt", false);
-    TEST_ASSERT_NOT_NULL_MESSAGE(report, "p11m2.txt was not written");
+    MockFile *report = mock_fs_get_file("p11m3.txt", false);
+    TEST_ASSERT_NOT_NULL_MESSAGE(report, "p11m3.txt was not written");
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(report->data, "budget at 14 fps"), report->data);
 }
 
-void test_the_m2_harness_measures_the_rock_counts_it_reports(void)
+void test_the_m3_harness_measures_the_rock_counts_it_reports(void)
 {
-    load_file(P11M2_SOURCE);
-    run("make \"p11m2.frames 2");
-    run("p11m2");
+    load_file(P11M3_SOURCE);
+    run("make \"p11m3.frames 2");
+    run("p11m3");
 
     const float wanted[] = {6, 9, 12};
     for (int k = 0; k < 3; k++)
     {
         char expr[64], msg[112];
-        snprintf(expr, sizeof(expr), "0 + item %d :p11m2.rocks", k + 1);
+        snprintf(expr, sizeof(expr), "0 + item %d :p11m3.rocks", k + 1);
         snprintf(msg, sizeof(msg), "point %d timed %d rocks, not %d",
                  k + 1, (int)num(expr), (int)wanted[k]);
         TEST_ASSERT_EQUAL_FLOAT_MESSAGE(wanted[k], num(expr), msg);
@@ -1299,9 +1745,9 @@ void test_the_m2_harness_measures_the_rock_counts_it_reports(void)
 // rock count that does not drain. It gets both without redefining anything in
 // the game -- `arm.shots` tops the life up, and zeroing every `rrad` means no
 // shot can connect, so nothing splits and nothing is consumed.
-void test_the_m2_harness_holds_three_shots_live_and_the_board_still(void)
+void test_the_m3_harness_holds_three_shots_live_and_the_board_still(void)
 {
-    load_file(P11M2_SOURCE);
+    load_file(P11M3_SOURCE);
     run("init.game  make \"level.rocks 6  setup.level");
     run("repeat :max.rocks [.setitem repcount :rrad 0]");
     run("launch.shots");
@@ -1326,6 +1772,7 @@ int main(void)
     RUN_TEST(test_the_per_frame_constants_are_cut_from_the_frame_rate);
     RUN_TEST(test_a_shot_cannot_outrun_the_smallest_collision_box);
     RUN_TEST(test_the_collision_boxes_are_not_far_wider_than_the_rocks_drawn_in_them);
+    RUN_TEST(test_the_ship_box_is_not_wider_than_the_shapes_it_is_drawn_from);
     RUN_TEST(test_wrapc_wraps_at_both_edges);
     RUN_TEST(test_wrapc_corrects_once_and_only_once);
     RUN_TEST(test_every_outline_closes_on_itself);
@@ -1367,12 +1814,30 @@ int main(void)
     RUN_TEST(test_a_shot_on_a_rock_splits_it_scores_it_and_is_consumed);
     RUN_TEST(test_one_shot_kills_one_rock_per_frame);
     RUN_TEST(test_an_idle_shot_hits_nothing);
+    RUN_TEST(test_a_rock_on_the_ship_kills_it);
+    RUN_TEST(test_one_frame_takes_only_one_life);
+    RUN_TEST(test_a_ship_in_its_respawn_grace_cannot_be_hit);
+    RUN_TEST(test_the_explosion_counts_down_and_the_ship_comes_back);
+    RUN_TEST(test_the_last_life_ends_the_level);
+    RUN_TEST(test_a_dying_ship_draws_a_ring_and_not_a_ship);
+    RUN_TEST(test_a_ship_in_its_respawn_grace_blinks);
+    RUN_TEST(test_hyperspace_moves_the_ship_and_stops_it);
+    RUN_TEST(test_hyperspace_sometimes_ends_badly);
+    RUN_TEST(test_an_extra_ship_every_ten_thousand_points);
+    RUN_TEST(test_a_level_advance_adds_a_rock_up_to_the_ceiling);
+    RUN_TEST(test_the_hud_carries_the_score_the_level_and_a_heart_a_life);
     RUN_TEST(test_pause_answers_p_and_nothing_else);
+    RUN_TEST(test_a_dying_ship_answers_only_pause_and_quit);
+    RUN_TEST(test_q_quits_the_game_and_not_just_the_level);
+    RUN_TEST(test_a_game_plays_levels_until_the_ships_run_out);
+    RUN_TEST(test_quitting_shows_no_game_over_card);
+    RUN_TEST(test_the_attract_screen_prints_the_scores_and_the_keys);
+    RUN_TEST(test_game_over_prints_the_final_score);
     RUN_TEST(test_a_level_ends_on_q_and_puts_the_screen_back);
     RUN_TEST(test_a_level_ends_when_the_board_is_clear);
     RUN_TEST(test_the_harness_frame_matches_the_game_frame);
-    RUN_TEST(test_p11m2_script_runs);
-    RUN_TEST(test_the_m2_harness_measures_the_rock_counts_it_reports);
-    RUN_TEST(test_the_m2_harness_holds_three_shots_live_and_the_board_still);
+    RUN_TEST(test_p11m3_script_runs);
+    RUN_TEST(test_the_m3_harness_measures_the_rock_counts_it_reports);
+    RUN_TEST(test_the_m3_harness_holds_three_shots_live_and_the_board_still);
     return UNITY_END();
 }

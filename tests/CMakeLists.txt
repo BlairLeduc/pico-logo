@@ -113,11 +113,11 @@ target_compile_definitions(test_invaders PRIVATE
 # Asteroids (P11), M2: rocks, ship and shots. The game is pure Logo -- the file
 # loads and its init path runs on the mock, and wrap, slot allocation, the split
 # table and the outline walks are checked directly. The frame budget itself
-# needs a board (logo/tests/p11m2).
+# needs a board (logo/tests/p11m3).
 add_logo_test(test_asteroids)
 target_compile_definitions(test_asteroids PRIVATE
     ASTEROIDS_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/asteroids"
-    P11M2_SOURCE="${CMAKE_SOURCE_DIR}/logo/tests/p11m2")
+    P11M3_SOURCE="${CMAKE_SOURCE_DIR}/logo/tests/p11m3")
 
 # The P11 M0 timing harness, which decided how an Asteroids frame gets erased.
 # A separate binary from test_asteroids because both Logo files define `place`
