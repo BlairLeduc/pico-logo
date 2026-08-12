@@ -3413,7 +3413,7 @@ sin _number_
 
 `operation`
 
-Outputs the cosine of _number_ in degrees.
+Outputs the sine of _number_ in degrees.
 
 **Examples**:
 

@@ -1,0 +1,399 @@
+; P11 M0 -- how an Asteroids frame should erase itself, measured before any
+; game code is written.  See docs/asteroids-design.md section 3 and section 16.
+;
+;   erall                     <-- REQUIRED: see below
+;   load "p11rocks
+;   p11rocks
+;
+; Asteroids is the first game in this tree that is not a sprite game: its
+; rocks are hollow rotating outlines, which is turtle graphics.  The one
+; question that shape raises, and the whole of the design's risk, is how last
+; frame's lines get taken away.  Two candidates, and this script builds
+; neither game and times both on a static scene of 6, 9 and 12 rocks:
+;
+;   erase in place  -- draw every shape again in the background colour from
+;                      the state that drew it, then draw it at its new place.
+;                      Two drawing passes, but the present touches only the
+;                      tiles the strokes covered.
+;   clear + redraw  -- wipe the canvas and re-trace the display list.  One
+;                      drawing pass, but the present is the whole screen.
+;
+; Until B16 was fixed (2026-08-11) the second one was not a candidate at all:
+; `clean` wrote through to the panel even in manual refresh mode, so the
+; screen visibly blanked every frame.  With the wipe deferred to the present
+; it is a memset, and the comparison is a real one -- which is why this
+; script exists and why it runs before M1.
+;
+; Six things it measures, all of them to a FILE:
+;
+;   1-2. body and present, separately, for each strategy at 6, 9 and 12 rocks
+;   3.   the present a 12-rock dirty region actually costs, against the
+;        full-screen present the clear strategy pays -- the number that
+;        decides section 3
+;   4.   a drawing statement (`fd 17`), which section 12 assumes at 35 us and
+;        nobody has measured; it is the number the whole frame budget rests on
+;   5.   an arithmetic statement and a bare `repeat`, the two brackets P10
+;        measured, on this board in this run so the comparison is within one
+;        machine
+;   6.   the shape dispatch, which section 12's table does not count and which
+;        the erase strategy pays twice a frame per rock
+;
+; Four things about how it measures, each of which took a bug to learn:
+;
+;   `fullscreen`, not the prompt's text mode.  `screen_gfx_blit_dirty` returns
+;   immediately in text mode, so a present measured there is zero and the
+;   frame figure is a Logo body with no present in it -- the correction P9 had
+;   to make to its entire first series of numbers.
+;
+;   `refresh`, not `sync`.  The number wanted is what the work costs, not the
+;   cadence; `sync` would wait out the rest of the frame and report it.
+;
+;   `clean`, not `cs`.  A full reset also restores automatic refresh
+;   (`prim_clearscreen`, core/primitives_turtle.c), which would silently end
+;   the manual-mode measurement half way through it.
+;
+;   The scene does not move.  In the game a rock steps a couple of pixels and
+;   rotates between the erase and the draw, so the two passes cover slightly
+;   different pixels -- but both stay inside the same bounding box, and the
+;   dirty tracker works in 16-pixel tiles, so the dirty region is the same to
+;   within a tile.  Holding the scene still keeps the body figure free of
+;   physics that M1 will measure properly.
+;
+; THE ERASE IS A PEN COLOUR, NOT `pe`.  The design's section 3.2 wrote it as
+; `pe place :i draw.rock :i`, and that cannot work: pen up/down/erase/reverse
+; are one enum (`LogoPen`, devices/console.h), and every outline procedure
+; contains a `pd` in its prologue -- so the shape's own `pd` would cancel the
+; `pe` before a single segment was drawn.  Drawing in the background colour is
+; what the tree already does for HUD text, it needs the canvas to be otherwise
+; empty in exactly the same way, and it is cheaper: two statements a frame
+; instead of two per rock per pass.
+;
+; `erall` is not optional.  MAX_PROCEDURES is a hard 128 and this file defines
+; 24; a workspace still holding a game can run out of procedure slots, and
+; `load` then stops with `out of space` -- the procedure table talking, not
+; memory.
+;
+; The report goes to `p11rocks.txt` as well as the screen, because numbers on
+; the PicoCalc's display cannot be copied anywhere.  Runs append, so a session
+; accumulates in one file; note beside each which board it was.
+
+make "p11.frames 60      ; frames averaged per point
+make "p11.calib 2000     ; iterations per calibration loop
+
+make "p11.fg 254         ; white, as the arcade rocks are
+make "p11.bg 255         ; the current background slot -- this is the eraser
+
+;==========================================================================
+; The scene
+;
+; Twelve rocks on a fixed lattice, ordered so that the first 6 and the first 9
+; are each spread over the field and each hold an equal number of large,
+; medium and small.  Rocks 6 and 10 straddle an edge, which is the case
+; section 4 costs separately: a straddling rock dirties tiles at both ends of
+; its tile rows and a row's span is inclusive, so it pays its full rows.
+; Nothing overlaps, so a reading is not confounded by the one-pixel hole an
+; erase punches in a crossing outline.
+
+make "p11.x  [-105   95  -85   80    0 -155  -30   45 -120  135   25  110]
+make "p11.y  [  95   85  -80  -95   10    0  120  -25 -140  120  152  -10]
+make "p11.sz [   3    2    1    3    2    1    3    2    1    3    2    1]
+make "p11.sh [   1    2    3    2    3    1    3    1    2    2    3    1]
+make "p11.a  [   0   40   80  120  160  200  240  280  320   20   60  100]
+
+; Where the answers land, so the report is one list of lines rather than two
+; that can drift apart.  Built with `list`, not as literals: a literal belongs
+; to the procedure's stored body and `.setitem` would scribble on it for good.
+make "p11.ib (list 0 0 0)    ; erase in place -- body, ms
+make "p11.ip (list 0 0 0)    ; erase in place -- present, ms
+make "p11.cb (list 0 0 0)    ; clear + redraw -- body, ms
+make "p11.cp (list 0 0 0)    ; clear + redraw -- present, ms
+
+;==========================================================================
+; The outlines
+;
+; Generated by scripts/gen_rocks.py -- do not hand-edit.  Each is nothing but
+; `fd`/`rt` with literal arguments: on this board an arithmetic statement
+; costs 48 us and a literal-argument primitive call is a fraction of that, so
+; computing a vertex would cost more than drawing it.  The scale is baked into
+; the literals, three sizes per outline, rather than multiplied by a radius.
+;
+; `pu fd <r> rt <t> pd` walks from the rock's centre out to its first vertex,
+; which is what lets the stored position mean the centre while the walk starts
+; at a corner.  There is no turn after the last segment -- `place` sets the
+; heading before every pass, so that turn would never be read.
+
+to rock.a.l
+  pu fd 21.1  rt 112.8  pd
+  fd 16.1  rt 47.5  fd 15.8  rt 48.8  fd 14.8  rt 32.1  fd 14.8  rt 56.1
+  fd 14.9  rt 47.3  fd 13.8  rt 28.5  fd 14.1  rt 48.5  fd 15.6
+end
+
+to rock.a.m
+  pu fd 12.4  rt 122.8  pd
+  fd 12.1  rt 56  fd 11.8  rt 58.5  fd 12.3  rt 58.2  fd 13.3  rt 75
+  fd 12.7  rt 44.4  fd 11.8
+end
+
+to rock.a.s
+  pu fd 7.6  rt 131.7  pd
+  fd 8.4  rt 60.5  fd 8.4  rt 83.1  fd 8.4  rt 61.3  fd 8.5  rt 77.6
+  fd 9
+end
+
+to rock.b.l
+  pu fd 19.4  rt 120  pd
+  fd 14.2  rt 26.5  fd 14.7  rt 67.7  fd 14.7  rt 18.2  fd 15.3  rt 66.1
+  fd 15.8  rt 44.2  fd 14.6  rt 38.4  fd 14.1  rt 43.6  fd 14.5
+end
+
+to rock.b.m
+  pu fd 11.5  rt 120.9  pd
+  fd 11.4  rt 57  fd 11.6  rt 63.3  fd 11.6  rt 54.9  fd 12  rt 66
+  fd 12.2  rt 59.6  fd 11.7
+end
+
+to rock.b.s
+  pu fd 6.9  rt 129.1  pd
+  fd 7.9  rt 65.8  fd 7.9  rt 79.7  fd 7.7  rt 60  fd 8.1  rt 82.1
+  fd 8.5
+end
+
+to rock.c.l
+  pu fd 17.5  rt 104.1  pd
+  fd 14.4  rt 66.3  fd 14.2  rt 28.9  fd 12.8  rt 50.6  fd 12.9  rt 38.2
+  fd 13.1  rt 43.9  fd 14.1  rt 51.8  fd 14.4  rt 48.3  fd 13.9
+end
+
+to rock.c.m
+  pu fd 12.7  rt 128  pd
+  fd 11.8  rt 40.8  fd 12.4  rt 69.9  fd 13.7  rt 64.9  fd 13.4  rt 63.6
+  fd 12.1  rt 46.6  fd 12
+end
+
+to rock.c.s
+  pu fd 7.8  rt 128.7  pd
+  fd 8.9  rt 66.1  fd 9  rt 77.5  fd 9.1  rt 74.2  fd 8.4  rt 61.3
+  fd 8.6
+end
+
+;==========================================================================
+; Drawing a rock
+;
+; `seth` before a turtle-relative walk rotates the whole polygon about the
+; stored centre, so a rotating rock costs exactly what a still one costs.
+; `setx`/`sety` rather than `setpos`, which takes a list and would allocate
+; one per rock per pass.
+
+to place :i
+  pu  setx item :i :p11.x  sety item :i :p11.y  seth item :i :p11.a
+end
+
+; The literal goes on the LEFT of every comparison here.  A call's last
+; argument absorbs trailing infix, so `item :i :p11.sz = 3` would ask for
+; item :i of (:p11.sz = 3); the alternative spelling is `(item ...) = 3`, and
+; the grouping paren costs 11 % of an expression for nothing.
+to draw.rock :i
+  if 3 = item :i :p11.sz [draw.large :i stop]
+  if 2 = item :i :p11.sz [draw.medium :i stop]
+  draw.small :i
+end
+
+to draw.large :i
+  if 1 = item :i :p11.sh [rock.a.l stop]
+  if 2 = item :i :p11.sh [rock.b.l stop]
+  rock.c.l
+end
+
+to draw.medium :i
+  if 1 = item :i :p11.sh [rock.a.m stop]
+  if 2 = item :i :p11.sh [rock.b.m stop]
+  rock.c.m
+end
+
+to draw.small :i
+  if 1 = item :i :p11.sh [rock.a.s stop]
+  if 2 = item :i :p11.sh [rock.b.s stop]
+  rock.c.s
+end
+
+to pass :n
+  repeat :n [place repcount  draw.rock repcount]
+end
+
+;==========================================================================
+; The two frames
+
+to frame.inplace :n
+  setpc :p11.bg  pass :n
+  setpc :p11.fg  pass :n
+end
+
+to frame.clear :n
+  clean
+  setpc :p11.fg  pass :n
+end
+
+;==========================================================================
+; Timing
+;
+; Body and present are read apart, which is what P9 M5 wished it had: a frame
+; that misses its budget is a different problem depending on which half is
+; over.  The two answers come back in globals because a procedure outputs one
+; value and both are wanted.
+
+to time.inplace :n
+  local "t0
+  make "p11.body 0
+  make "p11.pres 0
+  repeat :p11.frames [
+    make "t0 ticks
+    frame.inplace :n
+    make "p11.body :p11.body + (ticks - :t0)
+    make "t0 ticks
+    refresh
+    make "p11.pres :p11.pres + (ticks - :t0)
+  ]
+  make "p11.body :p11.body / :p11.frames
+  make "p11.pres :p11.pres / :p11.frames
+end
+
+to time.clear :n
+  local "t0
+  make "p11.body 0
+  make "p11.pres 0
+  repeat :p11.frames [
+    make "t0 ticks
+    frame.clear :n
+    make "p11.body :p11.body + (ticks - :t0)
+    make "t0 ticks
+    refresh
+    make "p11.pres :p11.pres + (ticks - :t0)
+  ]
+  make "p11.body :p11.body / :p11.frames
+  make "p11.pres :p11.pres / :p11.frames
+end
+
+to measure :k :n
+  clean
+  refresh
+  setpc :p11.fg
+  pass :n            ; the scene has to be on the canvas before an erase can
+  refresh            ; take it away, or the first frame erases nothing
+  time.inplace :n
+  .setitem :k :p11.ib :p11.body
+  .setitem :k :p11.ip :p11.pres
+  time.clear :n
+  .setitem :k :p11.cb :p11.body
+  .setitem :k :p11.cp :p11.pres
+end
+
+;==========================================================================
+; Calibration
+;
+; Run last, because the first of these scribbles a rosette over the whole
+; canvas and every present after it would be a full screen.
+
+; Microseconds per drawing statement -- the number section 12 assumes at 35 us
+; and leans on hardest.  `fd 17 rt 41` with the pen down is exactly the shape
+; the outlines are made of, so the pair is timed and halved.  Some of these
+; strokes cross an edge and are split by `wrap`, as a rock's are.
+to calib.draw
+  local "t0
+  pd
+  make "t0 ticks
+  repeat :p11.calib [fd 17 rt 41]
+  output (ticks - :t0) * 1000 / (:p11.calib * 2)
+end
+
+; The upper bracket: an arithmetic statement, P10 M5's 48 us.
+to calib.arith
+  local "t0 local "x
+  make "x 0
+  make "t0 ticks
+  repeat :p11.calib [make "x :x + 1]
+  output (ticks - :t0) * 1000 / :p11.calib
+end
+
+; The floor: a `repeat` iteration with nothing in it, so the two lines above
+; can be read net of the loop that carried them.
+to calib.bare
+  local "t0
+  make "t0 ticks
+  repeat :p11.calib []
+  output (ticks - :t0) * 1000 / :p11.calib
+end
+
+; Microseconds the 9-way shape dispatch adds to one rock, one pass -- a
+; procedure call plus two `if` chains, which section 12's table does not
+; count and the erase strategy pays 24 times a frame.  Rock 1 is large
+; outline A, so the second loop is the same drawing with the dispatch
+; taken out.
+to calib.dispatch
+  local "t0 local "with local "without
+  make "t0 ticks
+  repeat :p11.calib [place 1  draw.rock 1]
+  make "with ticks - :t0
+  make "t0 ticks
+  repeat :p11.calib [place 1  rock.a.l]
+  make "without ticks - :t0
+  output (:with - :without) * 1000 / :p11.calib
+end
+
+;==========================================================================
+; The report
+
+; Every punctuation mark in a printed list is tokenised as a word of its own,
+; so `clear+redraw` comes out as `clear + redraw` and `--` as `- -`.  The
+; report therefore spells everything in words.
+
+to line.for :k :n
+  pr (se :n [rocks])
+  pr (se [  in place    body] item :k :p11.ib [ms   present] item :k :p11.ip [ms])
+  pr (se [  clear redraw body] item :k :p11.cb [ms   present] item :k :p11.cp [ms])
+  pr (se [  frame       in place] (item :k :p11.ib) + (item :k :p11.ip) [ms   clear redraw] (item :k :p11.cb) + (item :k :p11.cp) [ms])
+  pr []
+end
+
+to p11.report
+  pr [P11 M0 how an Asteroids frame gets erased]
+  pr (se [frames per point] :p11.frames)
+  pr []
+  line.for 1 6
+  line.for 2 9
+  line.for 3 12
+  pr [calibration, microseconds]
+  pr (se [  drawing statement    ] :p11.stmt)
+  pr (se [  arithmetic statement ] :p11.arith)
+  pr (se [  bare repeat iteration] :p11.bare)
+  pr (se [  shape dispatch       ] :p11.disp)
+  pr []
+  pr [the decision at 12 rocks]
+  pr (se [  dirty present] item 3 :p11.ip [ms of a full screen at] item 3 :p11.cp [ms])
+  pr [  budget at 20 fps is 50 ms]
+  pr []
+end
+
+to p11rocks
+  fullscreen
+  setrefresh "manual
+  clean
+  refresh
+  measure 1 6
+  measure 2 9
+  measure 3 12
+  make "p11.stmt calib.draw
+  make "p11.arith calib.arith
+  make "p11.bare calib.bare
+  make "p11.disp calib.dispatch
+  clean
+  refresh
+  setrefresh "auto
+  textscreen
+  open "p11rocks.txt
+  setwrite "p11rocks.txt
+  p11.report
+  setwrite []
+  close "p11rocks.txt
+  p11.report
+  pr [Also written to p11rocks.txt]
+end
