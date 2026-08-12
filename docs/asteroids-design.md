@@ -1,10 +1,11 @@
 # Asteroids in Pico Logo (design)
 
-Status: **M0 done — measured on a Plus 2 W on 2026-08-11, and it rewrote this
-document.** The frame gets erased by clearing and redrawing, not in place
-(§3.3); the rate is 15 fps, not 20 (§12); the outlines are three, not nine
-(§13). **M1 is written and green on the host** (`logo/games/asteroids`) and
-waiting on its board run, which is the gate on M2.
+Status: **M0 and M1 done, both measured on a Plus 2 W on 2026-08-11.** M0
+rewrote this document — the frame clears and redraws rather than erasing in
+place (§3.3), the rate is 15 fps rather than 20 (§12), the outlines are three
+rather than nine (§13). M1 is the game with rocks only, and it **fits: 60.5 ms
+at twelve rocks against a 66.7 ms budget**, `frame = 30.5 + 2.507 n`. It also
+shows **M2 opening about 6 ms over**, which is M2's first decision (§12).
 
 The three games in the tree so far — [Space Invaders](space-invaders-design.md),
 [Galaxian](galaxian-design.md), [Turtle Trails](turtle-trails-design.md) —
@@ -666,24 +667,64 @@ decomposes from M0's `body(n) = 2.10n + 0.7 ms`:
 Two thirds of a rock is spent getting to the drawing rather than drawing.
 That is where the levers are, and it is not where §12 originally looked.
 
-**Worst case** — 12 rocks, 3 shots, saucer alive, with the two cheap savings
-in (§13: three outlines instead of nine, and 6/5/4 segments instead of 8/6/5):
+### The measured frame (M1, 2026-08-11)
 
-| Line item | ms | |
-|---|---:|---|
-| rock drawing, 156 statements | 9.4 | measured basis |
-| `place` × 12 | 9.2 | measured basis |
-| dispatch × 12 | 2.2 | measured basis |
-| `clean`, loop, calls | 1.0 | measured basis |
-| rock physics | 7.6 | estimated |
-| collisions, 36 + 12 tests | 6.5 | estimated |
-| ship, saucer, shots, HUD | 4.0 | estimated |
-| **body** | **39.9** | |
-| present | 26.3 | measured |
-| **frame** | **66.2** | |
+**A real `play.frame` on a Plus 2 W**, 300 frames a point, `logo/tests/p11m1`:
 
-**Typical mid-level frame** — 6 rocks, 2 shots, no saucer: body ~21.5,
-present 26.3, **frame ~48**.
+| rocks | body | present | **frame** | min | max |
+|---:|---:|---:|---:|---:|---:|
+| 6 | 19.13 | 26.41 | **45.54** | 42 | 51 |
+| 9 | 26.58 | 26.46 | **53.04** | 48 | 62 |
+| 12 | 34.17 | 26.37 | **60.53** | 56 | 67 |
+
+Almost perfectly linear, which is what a frame made of one loop over one list
+should be:
+
+> **body = 4.09 + 2.507 n ms**, and so **frame = 30.5 + 2.507 n ms.**
+
+The fit predicts the nine-rock body at 26.65 against 26.58 measured. **A rock
+costs 2.51 ms all-in** — drawing, `place`, dispatch, physics and its share of
+the loop — against the 2.10 ms M0 measured for drawing alone at nine
+outlines and 8/6/5 segments, so physics and the slot scan are about 0.9 ms a
+rock and §13's two savings took back about 0.5.
+
+**M1 fits, with room.** Twelve rocks is 60.5 ms against 66.7, and the budget
+would carry 14 rocks. The worst frame observed is **67 ms** — 0.3 ms over, one
+frame in 300, and it is a recycle frame (§14's 1.3 ms) landing on an already
+heavy one. That is close enough to the line to confirm 15 fps was the right
+call and to rule out 20.
+
+The present held at **26.4 ms at every rock count**, reproducing M0's 26.3 on
+a different day through a different code path. It is a floor, not a variable.
+
+### What this says about M2, which is the problem
+
+M1 carries rocks and nothing else. §12's estimates for what M2 adds —
+collisions at 6.5 ms and ship, shots and HUD at 4.0 — were built on the same
+model that under-predicted the rocks-only body by 16 % (29.4 estimated against
+34.17 measured). Scaling them by that error and adding:
+
+| | ms |
+|---|---:|
+| measured 12-rock frame (M1) | 60.5 |
+| collisions, 36 + 12 tests | ~7.5 |
+| ship, shots, HUD | ~4.6 |
+| **projected M2 frame** | **~72.6** |
+
+**That is 6 ms over budget**, and M3's saucer and M4's sound are still to
+come. So M2 opens with a decision rather than a keyboard, and the levers are
+now priced against a measured slope of 2.507 ms a rock:
+
+| Lever | Saving |
+|---|---:|
+| `MAX.ROCKS` 12 → 10 | **5.0 ms** |
+| segregate rocks into three per-size lists (kills the dispatch) | ~2.2 ms |
+| cap shots at 2 rather than 3 | ~2.5 ms |
+| large rock 6 → 5 segments | ~1.4 ms |
+
+Any two of the first three clear it. **The first is the one that costs the
+game something** — ten slots makes the split cap bind more often — so it is
+the last to reach for, not the first.
 
 So: **`(setrefresh "sync 15)`, a 66.7 ms budget** — down from the 20 fps this
 document opened with, and the change is not a tuning preference but the
@@ -694,16 +735,13 @@ split cap bind on almost every kill and takes away the thing Asteroids is
 about — a board that fills up. Twelve rocks at 15 fps keeps the game and
 misses smoothness; eight rocks at 20 fps keeps smoothness and misses the game.
 
-The worst case fits by **0.5 ms**, which is not a margin. Three things about
-that. The estimated rows are the last unmeasured third of the frame and M1
-measures them, so the number will move. `sync` presents late rather than
-failing, so an overrun costs frame rate and not correctness — the failure mode
-is graceful, which is exactly why P9's games shipped at a third of their rate
-unnoticed and exactly why M1 has to measure rather than assume. And there is
-one further lever held in reserve: **segregating the rocks into three
-per-size lists removes the dispatch entirely** (2.2 ms), at the cost of a
-more complicated split. If M1 comes in over, that goes in before `MAX.ROCKS`
-comes down.
+**M1 confirmed the rate and left it with no room above.** The worst frame at
+twelve rocks is 67 ms against a 66.7 ms budget, so 15 fps is the highest rate
+this game can be trusted at — and `sync` presents late rather than failing, so
+an overrun costs frame rate and not correctness. That graceful failure is
+exactly why P9's two games shipped at a third of their designed rate with
+nobody noticing, and exactly why every number in this section is measured
+rather than argued.
 
 A rate the *worst* frame meets is the only rate that can be trusted without a
 per-frame profiler, which is the lesson P9 M0 paid for.
@@ -854,19 +892,20 @@ refresh and silently end the measurement; and it ran `fullscreen`, because
 measured at the prompt is zero — the correction P9 had to make to its entire
 first series of numbers.
 
-**M1 — rocks only. Built and green on the host; not yet run on a board.**
+**M1 — rocks only. DONE and accepted on hardware, 2026-08-11.** Twelve rocks
+is **60.5 ms against the 66.7 ms budget**, body 34.2 and present 26.4, with
+`frame = 30.5 + 2.507 n` fitting all three points (§12). It fits with room,
+and it leaves **M2 about 6 ms short** — which is M2's opening decision, with
+the levers priced in §12.
+
+The build:
 `logo/games/asteroids` (12 slots, three outlines, wrap, spin,
 clear-and-redraw, `sync` at 15 fps, nothing to shoot with),
 `tests/test_asteroids.c` (23 tests), and `logo/tests/p11m1`, which times a
 real frame at 6, 9 and 12 rocks with the body and the present read apart —
 the split P9 M5 wished it had.
 
-**The board run is the gate**, and it is still the frame budget's real test:
-M0 measured the drawing two thirds of the body, the physics third is
-estimated, and §12's worst case fits by 0.5 ms. If it comes in over, the
-reserve levers are in §12 in order.
-
-Two things M1 settled on the host without a board. It **disproved this
+Two things M1 settled on the host before the board saw it. It **disproved this
 document's memory rule** — an Asteroids frame does allocate, ~36 atoms a
 frame at twelve rocks, and the contract is a flat working set rather than a
 zero (§14). And the harness has to spell `play.frame` out again minus its
@@ -876,7 +915,10 @@ both from one state and requires the same drawing and the same physics, since
 a harness frame that drifts from the game measures a game nobody plays.
 
 **M2 — ship and shots.** Rotation, thrust, momentum, firing, shot×rock
-collisions, splitting, scoring, the HUD.
+collisions, splitting, scoring, the HUD. **It opens over budget by about
+6 ms** on M1's measured slope (§12), so the first thing it does is spend two
+of the four priced levers — and `MAX.ROCKS` is the last of them to reach for,
+because ten slots is the only one that costs the game something.
 
 **M3 — lives, levels, deaths.** Ship explosion, respawn, level advance,
 attract screen, game over, hyperspace.
