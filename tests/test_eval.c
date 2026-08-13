@@ -844,7 +844,9 @@ void test_a_quoted_word_reports_a_full_workspace_instead_of_crashing(void)
     Result r = eval_string("make \"a.name.that.is.not.interned.yet 1");
     TEST_ASSERT_EQUAL_MESSAGE(RESULT_ERROR, r.status,
                               "a quoted word was built out of a failed intern");
-    TEST_ASSERT_EQUAL_MESSAGE(ERR_OUT_OF_SPACE, r.error_code,
+    // Through the accessor rather than the member: #148 moves the error detail
+    // out of `Result`, and this reads correctly either side of that.
+    TEST_ASSERT_EQUAL_MESSAGE(ERR_OUT_OF_SPACE, result_get_error_code(r),
                               "a full workspace reported something other than out of space");
 
     // A word already interned still evaluates -- the failure is the intern and
