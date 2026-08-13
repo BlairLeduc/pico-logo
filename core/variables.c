@@ -178,6 +178,7 @@ bool var_declare_local(const char *name)
             global_variables[i].name = name;
             global_variables[i].active = true;
             global_variables[i].has_value = false;
+            global_variables[i].buried = false;  // slot may be a burial's leftover
             if (i >= global_count)
                 global_count = i + 1;
             global_hash_insert(i);
@@ -248,6 +249,7 @@ bool LOGO_HOT(var_set)(const char *name, Value value)
             global_variables[i].value = value;
             global_variables[i].active = true;
             global_variables[i].has_value = true;
+            global_variables[i].buried = false;  // slot may be a burial's leftover
             if (i >= global_count)
                 global_count = i + 1;
             global_hash_insert(i);

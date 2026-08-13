@@ -595,6 +595,26 @@ void test_a_reused_slot_answers_to_its_new_name_only(void)
     TEST_ASSERT_EQUAL_FLOAT(9, v.as.number);
 }
 
+// B20: a slot carries its `buried` flag past the variable that set it. Erasing a
+// buried global leaves the flag standing, so the next variable to land in that
+// slot is born buried — invisible to `pons` and immune to `erall`.
+void test_a_reused_slot_does_not_inherit_burial(void)
+{
+    var_set("hidden", value_number(1));
+    var_bury("hidden");
+    var_erase("hidden");
+
+    var_set("plain", value_number(2));
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, var_global_count(false),
+                                  "a new variable was born buried");
+
+    // And `erall`, which spares buried names, must still take this one.
+    var_erase_all_globals(true);
+    TEST_ASSERT_FALSE_MESSAGE(var_exists("plain"),
+                              "a new variable survived erall as if buried");
+}
+
 // `erall` clears the table wholesale, and the index has to be cleared with it
 // or every name would still appear to exist.
 void test_erasing_everything_leaves_nothing_findable(void)
@@ -771,6 +791,7 @@ int main(void)
     RUN_TEST(test_every_variable_is_found_however_full_the_table_is);
     RUN_TEST(test_erasing_one_variable_leaves_the_others_findable);
     RUN_TEST(test_a_reused_slot_answers_to_its_new_name_only);
+    RUN_TEST(test_a_reused_slot_does_not_inherit_burial);
     RUN_TEST(test_erasing_everything_leaves_nothing_findable);
     RUN_TEST(test_case_folding_agrees_with_the_index);
     RUN_TEST(test_the_index_does_not_reorder_the_table);
