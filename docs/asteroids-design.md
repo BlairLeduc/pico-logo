@@ -1006,6 +1006,18 @@ Three things follow, and all three are the arcade's:
   signal — a ship that has appeared is a ship that can be hit. And the saucer and
   its shot reach `ship.hit` too, so an area with a saucer crossing it does not
   count as clear, which is right and cost nothing to arrange.
+
+  **The wait is capped at `wait.max` (28 frames, 2 s), and the controls are dead
+  while it runs** — both added after B24. The box a rock has to leave is
+  `clear.rad` *plus the rock's own radius*, 50 steps for a large one, and rocks
+  cross at 0.96 steps a frame: one rock drifting through the middle can own the
+  spawn point for over a hundred frames, and the worst measured over 60 respawns
+  was 127 — nine seconds of empty screen. A rule with no upper bound on it is a
+  hang. The cap is affordable because the clear box is 20 steps wider than the
+  box that kills, so a rock still inside it at the cap is usually not touching.
+  And `poll.input` guarded only `dying`, so a player could steer, thrust, fire
+  and hyperspace a ship that was drawn nowhere; `waiting` now stops it at the
+  same guard, with pause and quit still live above it.
 - **Hyperspace.** Set the position to a random point, zero the velocity. There
   is nothing to erase — the frame clears and redraws (§3.3) — so the mechanic
   is five statements. The arcade's chance of materialising inside a rock is
@@ -2013,10 +2025,48 @@ is not a margin: the atom region is capped at 32 KB *or* wherever the node
 pool's floor has reached, whichever is lower, so a board carrying a fuller
 workspace has less atom room than the host measuring it.
 
-**`reclaim.every` is 25 frames** — a 26× margin against the same measurement,
-and 1.8 s at 14 fps. `test_the_reclaim_interval_stays_inside_the_atom_budget`
-measures the deadline rather than assuming it and fails if the interval creeps
-back towards it.
+**`reclaim` collects on `atoms`, not on a frame count** (B25). The interval was
+250, then 25, then 4, and the board ran out of space in play at every one of
+them. Each was measured honestly and each was a guess, because **the number
+that decides it was not observable from Logo.** `nodes` reports free *cells*;
+this game runs out of the *word table*, since `.setitem` interns every position
+it stores. At the moment the loop dies there are 21,000 free nodes and **20 free
+bytes of word table**.
+
+The re-measurements were real and still not enough. `step.draw.all` is the
+frame's only allocator — `step.saucer`, `step.shots`, `warble`, `draw.saucer`,
+`heartbeat` each measure zero — at 9 cells and 45 word bytes on a quiet frame
+and about 91 on a busy one, so the deadline on the frame the game actually
+plays is 89 frames rather than 365, and 25 was a 3.6× margin wearing a 26×
+label. But a frame count cannot know the other half either: how much room a
+given board left the game after loading it, which is precisely what differs
+between the host that measures and the board that dies.
+
+So `atoms` was added to the interpreter (a language addition, in its own
+change) and the frame asks:
+
+```logo
+to reclaim
+  if atoms < :atom.floor [recycle]
+end
+```
+
+`atom.floor` is 2000 — about twenty busy frames of headroom against a check
+that runs every frame. A roomy workspace collects rarely, a cramped one often,
+one too small to hold the floor collects every frame: slow and alive rather
+than fast and dead. **Free bytes are not all allocatable**, though — the
+every-4 run died with 1,900 still reported free, which is fragmentation in the
+size-binned atom free lists — so the floor is a margin and not a guarantee.
+
+`test_the_reclaim_floor_clears_what_a_busy_frame_spends` measures the spend on
+the expensive frame and requires the floor to clear it by 8×, and
+`test_the_frame_loop_survives_a_squeezed_workspace` plays 2,000 busy frames
+with live ballast holding the word table down to a **tenth** — the board the
+host does not otherwise have. The floor survives that; the every-4 interval
+died at frame 151. **The deeper fix is still open**: the churn is
+`.setitem` interning a fresh float string per rock per frame, and storing coarser
+numbers would let atoms be *reused* rather than minted, which caps the working
+set instead of racing it.
 
 **A recycle costs 1.3 ms at M1, 2.2 at M2 and 4.1 at M3**, all measured on a
 Plus 2 W — and the growth is not the frame's. A recycle walks the whole node
@@ -2035,6 +2085,14 @@ it is, and spends the margin on the one thing that has already crashed a board.
 **M4 should expect this number to grow again**, because the saucer and the sound
 are more workspace.
 
+**B25 ended this argument by removing the interval.** Recycling more often is
+still worse per bump, and choosing *how* often is still the trade this
+paragraph describes — but the choice is no longer made in advance by a
+constant. `reclaim` fires when the word table falls below `atom.floor` (§14),
+so the frequency is set by the board's own room rather than by a host's guess
+at it. How expensive that is on a given board is exactly what `p11m4`'s
+word-space figures now report.
+
 ### M4 re-measured the deadline, and it moved the way §14 said it would
 
 The deadline is **486 frames** on the host with M4 in it, against M1's 649 —
@@ -2046,10 +2104,13 @@ is 17 more procedures and their bodies, and the atom region is capped at 32 KB
 *or* wherever the node pool's floor has reached, whichever is lower. A bigger
 program leaves less room for atoms.
 
-`reclaim.every` 25 is a **19× margin** against that rather than M1's 26×, and
-`test_the_reclaim_interval_stays_inside_the_atom_budget` requires 8× — so the
-interval holds without moving, and the test would have failed rather than the
-board if it had not.
+`reclaim.every` 25 read as a **19× margin** against that rather than M1's 26×,
+and the test required 8× — so the interval held without moving. **It should
+have moved, and then it should have stopped being an interval.** Both numbers
+were taken on a quiet frame, and B25 is what that cost: the same 486-frame
+measurement on a frame with a saucer up and shots in the air is 89, so the
+margin was 3.6×. Cutting it to 4 did not save the board either. What did was
+giving the game a way to see the space it runs out of (§14).
 
 **A recycle is 4.4 ms on the board at M4**, against 4.1 at M3: 1.3 → 2.2 → 4.1 →
 4.4 across four milestones. The growth has flattened, which fits the cause — it

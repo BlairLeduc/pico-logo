@@ -89,7 +89,7 @@ make "start.rocks    3     ; large rocks at level 1
 ; the top level and not below it -- which is the ceiling the arcade's rising
 ; count runs into as well, arrived at from twelve slots rather than twenty-seven.
 make "rocks.top      5     ; large rocks a level never exceeds
-make "reclaim.every 25     ; frames between recycles -- see `reclaim` below
+make "atom.floor  2000     ; word bytes that trigger a recycle -- see `reclaim`
 make "speed.l     0.96     ; steps per frame -- 13.5 a second at 14 fps
 make "spin.max     2.7     ; degrees per frame, either direction
 make "split.boost 1.25     ; a child drifts this much faster than its parent
@@ -151,11 +151,23 @@ make "speed.max    4.8     ; steps a frame -- about 67 a second
 ;
 ; `ship.rad` therefore holds the CURRENT box and is not a constant: `clear.rad`
 ; while a ship is waiting to appear, `ship.rad.hull` once it has.
+;
+; `wait.max` IS WHAT MAKES THE WAIT A WAIT AND NOT A HANG (B24).  The box a new
+; ship waits for is `clear.rad` plus the rock's own radius -- 50 steps for a
+; large one -- and a rock crosses at 0.96 steps a frame, so a single rock
+; drifting through the middle holds the spawn point for up to 2 * 50 / 0.96 =
+; 104 frames, and diagonally for half as many again.  Measured on the host, one
+; respawn in ten waits longer than two seconds and the worst seen was 127 frames
+; -- nine seconds of an empty screen the player can do nothing about.  So the
+; wait is capped, and the cap is affordable because the clear box is 20 steps
+; wider than the box that kills: a rock still inside it at the cap is, almost
+; always, not yet touching the hull.
 make "start.lives    3
 make "extra.every 10000    ; points between extra ships
 make "ship.rad.hull  6     ; collision half-width, added to a rock's radius
 make "ship.rad       6     ; the box in use now -- see `respawn` and `land.ship`
 make "clear.rad     26     ; how much space a new ship waits for
+make "wait.max      28     ; frames it waits for it -- 2 s at 14 fps, then lands
 make "death.frames  10     ; frames the explosion lasts -- 0.7 s at 14 fps
 make "boom.drift     3     ; steps a fragment floats from the centre a frame
 make "hyper.risk     8     ; one jump in this many ends inside a rock
@@ -798,8 +810,14 @@ end
 ; It reads LAST frame's answer, because the pass that sets `blocked` runs after
 ; this does -- so the ship arrives one frame after the field cleared, which at
 ; 14 fps nobody can see, and the frame order stays exactly as it was.
+;
+; And it gives up after `wait.max`, because "wait for a clear space" with no
+; bound on it is a hang wearing a rule's clothes -- see the tuning.
 to step.wait
-  ifelse :blocked [make "blocked false] [land.ship]
+  make "waited :waited + 1
+  if not :blocked [land.ship stop]
+  if :waited > :wait.max [land.ship stop]
+  make "blocked false
 end
 
 to land.ship
@@ -893,6 +911,7 @@ to respawn
   make "sh 0
   make "waiting true
   make "blocked true
+  make "waited 0
   make "ship.rad :clear.rad
   make "shipcx 0
   make "shipcy 0
@@ -1474,7 +1493,16 @@ to poll.input
   ; the guard is here rather than in each handler.  Pause and quit are above it
   ; deliberately: a death lasts most of a second and a player who wants out
   ; should not have to wait for the ring to finish.
+  ;
+  ; NEITHER DOES A SHIP THAT HAS NOT LANDED YET (B24).  A waiting ship is parked
+  ; on the spawn point and drawn nowhere, and the controls were live through the
+  ; whole wait: the player could turn and thrust a ship they could not see, and
+  ; `fire` put shots on the screen out of an empty spawn point.  Hyperspace was
+  ; the worst of the four -- it writes `shipx`/`shipy` while the clear-check goes
+  ; on reading the spawn point, so the ship landed somewhere the check never
+  ; looked at.  Reported from a board as firing while the ship stayed hidden.
   if 0 < :dying [stop]
+  if :waiting [stop]
   if :k = 180 [make "sh :sh - :turn.rate stop]
   if :k = 183 [make "sh :sh + :turn.rate stop]
   if :k = 181 [thrust stop]
@@ -1505,27 +1533,39 @@ end
 ; NOTHING IN THIS INTERPRETER COLLECTS ON DEMAND.  `alloc_cell` and `mem_atom`
 ; (core/memory.c) both just report out of space when they cannot fit a
 ; request; there is no collect-and-retry, which is the right call for a frame
-; loop -- no unpredictable pause -- but it makes this interval the game's
-; entire safety margin rather than a tidiness measure.
+; loop -- no unpredictable pause -- but it makes this the game's entire safety
+; margin rather than a tidiness measure.
 ;
-; Twenty-five frames, not the 250 the other three games use.  Their frames
-; spend nothing; this one mints an atom for every rock position it stores
-; (design section 14), and the atom region is capped at 32 KB whatever the
-; board.  Measured with `reclaim` disabled, the frame loop runs out of atom
-; space after a few hundred frames, so 250 leaves a 2.6x margin -- which held
-; on the host and did NOT hold on a board, where a fuller workspace puts the
-; node region's floor lower and squeezes the atom ceiling with it.  It died
-; with `Out of space in step.rock` within a minute of play.
-; `test_the_reclaim_interval_stays_inside_the_atom_budget` measures the budget
-; and fails if this ever creeps back up towards it.
+; COUNTING FRAMES WAS ALWAYS A GUESS (B25), and it has now been wrong three
+; times: 250 frames, then 25, then 4, each measured honestly on a host and each
+; still dying on a board.  The guess was forced, because the number that decides
+; it could not be seen from Logo: `nodes` reports free CELLS, and this game does
+; not run out of cells.  It runs out of the WORD TABLE -- every rock position
+; `.setitem` stores is interned as a word (design section 14) -- and at the
+; moment the loop dies there are 21,000 free nodes and 20 free bytes of word
+; table.  No frame count can see that, and neither could this file.
+;
+; `atoms` reports it, so the frame asks instead of counting.  A busy frame
+; spends about 91 bytes on the host and 137 in the board's harness, so a floor
+; of 2000 is around twenty frames of headroom against a check that runs every
+; frame -- room to be wrong in and still recover.
+;
+; WHAT THIS FIXES THAT NO INTERVAL COULD: an interval has to be chosen for the
+; board with the least room, by a host that has the most.  This adapts to the
+; board it is on.  A roomy workspace collects rarely, a cramped one often, and
+; one too small to hold twenty frames collects every frame -- slow and alive
+; rather than fast and dead.
+;
+; The cost when it fires is unchanged and still the thing to watch: a recycle is
+; 4.3 ms on a Plus 2 W against a 71.4 ms budget.  `logo/tests/p11m4` now reports
+; the word space beside it, which is what says whether this floor is right on a
+; given board.
 ;
 ; `reclaim` sits INSIDE the unpaused block, which is also where it belongs: a
-; paused frame counts no frames and allocates nothing.  Outside it, a pause
-; landing on a multiple of the interval recycles on every paused frame.
+; paused frame allocates nothing, so it has nothing to collect.
 
 to reclaim
-  if not ((remainder :frame.count :reclaim.every) = 0) [stop]
-  recycle
+  if atoms < :atom.floor [recycle]
 end
 
 ; One frame, in a fixed order.  A procedure and not the body of the loop below,

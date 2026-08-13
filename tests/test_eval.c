@@ -4,6 +4,7 @@
 //
 
 #include "test_scaffold.h"
+#include <string.h>
 
 void setUp(void)
 {
@@ -810,6 +811,50 @@ void test_long_proc_name_tail_recursion(void)
     TEST_ASSERT_EQUAL_STRING("done\n", output_buffer);
 }
 
+
+//==========================================================================
+// A full workspace (B26)
+//==========================================================================
+
+// Fill the atom region so nothing new can be interned.
+static void exhaust_the_atom_region(void)
+{
+    char w[16];
+    for (int i = 0; i < 200000; i++)
+    {
+        snprintf(w, sizeof(w), "w%d", i);
+        if (mem_is_nil(mem_atom(w, strlen(w))))
+            return;
+    }
+    TEST_FAIL_MESSAGE("the atom region did not fill");
+}
+
+// B26. A quoted word is interned as it is evaluated, and on a full atom region
+// `mem_atom_unescape` interns nothing and hands back NODE_NIL. That was wrapped
+// in a Value and returned as a word regardless -- a word with no characters
+// behind it, whose `mem_word_ptr` is NULL -- so the first primitive to read the
+// name dereferenced NULL. `make` was the one that did: a hard crash on the host
+// and a fault on a board, in place of the "Out of space" the interpreter had
+// already worked out. Found while tracing an Asteroids board crash, where the
+// game runs the workspace to exactly this point.
+void test_a_quoted_word_reports_a_full_workspace_instead_of_crashing(void)
+{
+    exhaust_the_atom_region();
+
+    Result r = eval_string("make \"a.name.that.is.not.interned.yet 1");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_ERROR, r.status,
+                              "a quoted word was built out of a failed intern");
+    // Through the accessor rather than the member: #148 moves the error detail
+    // out of `Result`, and this reads correctly either side of that.
+    TEST_ASSERT_EQUAL_MESSAGE(ERR_OUT_OF_SPACE, result_get_error_code(r),
+                              "a full workspace reported something other than out of space");
+
+    // A word already interned still evaluates -- the failure is the intern and
+    // not the quote.
+    r = eval_string("\"w1");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -904,6 +949,8 @@ int main(void)
     RUN_TEST(test_b10_bare_n_exponent_word_is_not_a_number);
     RUN_TEST(test_b10_bare_exponent_in_list_path_is_not_a_number);
     RUN_TEST(test_b10_valid_exponent_forms_still_numbers);
+
+    RUN_TEST(test_a_quoted_word_reports_a_full_workspace_instead_of_crashing);
 
     return UNITY_END();
 }

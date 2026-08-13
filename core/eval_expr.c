@@ -325,6 +325,19 @@ Result LOGO_HOT(eval_primary)(Evaluator *eval)
         advance(eval);
         // Skip the quote character and process escape sequences
         Node atom = mem_atom_unescape(t.start + 1, t.length - 1);
+        // `mem_atom_unescape` returns NODE_NIL for two reasons: the atom region
+        // is full, or the unescaped word is longer than the 255 bytes an atom's
+        // length prefix can describe. Both are "no room for this word", and
+        // both used to produce `value_word(NODE_NIL)` -- a word with no
+        // characters behind it, whose `mem_word_ptr` is NULL, which the first
+        // primitive to read the name dereferences (B26).
+        //
+        // The empty word `"` interns like any other, so a nil node here is
+        // always one of those two failures and never a legitimate word.
+        if (mem_is_nil(atom))
+        {
+            return result_error(ERR_OUT_OF_SPACE);
+        }
         return result_ok(value_word(atom));
     }
 
@@ -337,6 +350,16 @@ Result LOGO_HOT(eval_primary)(Evaluator *eval)
         // Process escape sequences in variable names
         Node name_atom = mem_atom_unescape(t.start + 1, t.length - 1);
         const char *name = mem_word_ptr(name_atom);
+        // The same failure the quoted case reports above, and the same crash
+        // if it is not: on a full atom region the name interns to nothing,
+        // `mem_word_ptr` gives NULL, and `var_get` hashes it. `:x` reaches
+        // `var_get` directly rather than through `REQUIRE_WORD_STR`, so it
+        // needs its own check -- found by the test suite running a workspace
+        // to exhaustion and then reading a variable.
+        if (name == NULL)
+        {
+            return result_error(ERR_OUT_OF_SPACE);
+        }
 
         Value v;
         if (!var_get(name, &v))

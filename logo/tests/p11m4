@@ -265,13 +265,40 @@ to line.for :k :what
       [ms   min] item :k :p11m4.lo [ms   max] item :k :p11m4.hi [ms])
 end
 
-; What one `recycle` costs.  The game recycles every 25 frames, so whatever this
-; is lands inside a 71.4 ms budget every 1.8 seconds.  It has grown at every
+; What one `recycle` costs.  The game recycles when the word table falls below
+; `atom.floor` (B25), so how often that happens depends on the board -- which
+; is the point of the change, and the reason the word-space figures below are
+; the ones to read beside this: together they say how many frames a recycle
+; buys HERE.  It has grown at every
 ; milestone -- 1.3 ms at M1, 2.2 at M2, 4.1 at M3 -- and NOT because the frame
 ; allocates more: a recycle walks the whole node pool, so it scales with the
 ; workspace, and M4 is 14 more procedures than M3.  It is the first number this
 ; run should be read for after the frame itself, because at M3 it was the whole
 ; of the worst frame's overshoot.
+; What a frame SPENDS of the word table, which is the number that sizes
+; `atom.floor` -- and it has to be measured rather than inferred from the
+; readings around the run.  Free space at the start against free space at the
+; end says nothing: `reclaim` may have fired between them, and what is left at
+; the end is the live working set rather than what the frames spent.  So this
+; turns the floor off, collects once, and reads the fall across fifty frames.
+;
+; IT IS A LOWER BOUND ON PLAY, and knowingly so.  This harness holds a fixed
+; board: no rock ever splits, no score ever changes and no ship ever dies, and
+; those are the three things that mint words fastest.  A frame here is the
+; game's cheapest frame, so a floor sized on it is sized on the quiet case --
+; which is exactly the mistake B25 made twice with the frame count.  Read this
+; as "at least this much", and leave the floor room above it.
+to word.spend
+  local "a0 local "was
+  make "was :atom.floor
+  make "atom.floor 0          ; nothing collects while we measure
+  recycle
+  make "a0 atoms
+  repeat 50 [frame.body]
+  make "atom.floor :was
+  output (:a0 - atoms) / 50
+end
+
 to time.recycle
   local "t0 local "total
   make "total 0
@@ -377,7 +404,7 @@ to p11m4.report
   pr (se [one explosion ring] :bm [ms, on death frames instead of the ship])
   pr (se [one saucer outline] :sau [ms, on frames a saucer is up])
   pr (se [one sound] :snd [ms, about one frame in eight])
-  pr (se [one recycle] :rec [ms, and the game does one every 25 frames])
+  pr (se [one recycle] :rec [ms, and the game does one when the word table falls below] :atom.floor)
   pr []
   pr (se [nodes at start] :n0)
   pr (se [nodes at end  ] :n1)
@@ -387,15 +414,16 @@ to p11m4.report
   ; could report it.  The game dies on the atom table, not on nodes: measured
   ; on the host at the moment the frame loop stops, there are 21,000 free
   ; nodes and 20 free bytes here.  So this is the figure that says whether
-  ; `reclaim.every` is right on THIS board, and the one to read if the game
+  ; `atom.floor` is right on THIS board, and the one to read if the game
   ; ever reports `Out of space` again.
   pr (se [word bytes free] :a0 [at start,] :a1 [at end,] :a2 [after recycle])
-  make "spend (:a0 - :a1) / :p11m4.frames
+  make "spend word.spend
   ifelse :spend > 0 [
-    pr (se [a frame spends] :spend [bytes of it, so a recycle every]
-        :reclaim.every [frames needs] :spend * :reclaim.every [against] :a2 [free])
+    pr (se [a frame spends at least] :spend [bytes of it, so the floor of]
+        :atom.floor [covers] :atom.floor / :spend [frames])
+    pr [and a frame that splits a rock, scores, or kills a ship spends more]
   ] [
-    pr [a frame spent no word space -- too few frames to size the interval]
+    pr [a frame spent no word space, which cannot be right -- check `atoms`]
   ]
   pr []
 end
