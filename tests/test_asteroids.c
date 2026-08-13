@@ -2064,10 +2064,11 @@ void test_the_gap_between_saucers_shortens_with_every_saucer(void)
 }
 
 // `BMI SetScrStatus` in the arcade's routine: while the reload value still has
-// bit 7 set -- 128 or more -- every saucer is large, which is the first three of
-// a game. Then 30,000 points makes every saucer small, and in between it is a
-// coin flip. So a player on level one meets large saucers only, and the small
-// one has to be earned rather than waited for.
+// bit 7 set -- 128 or more -- every saucer is large, which is the first four of
+// a game, because the size is read before the gap is stepped down. Then 30,000
+// points makes every saucer small, and in between it is a coin flip. So a player
+// on level one meets large saucers only, and the small one has to be earned
+// rather than waited for.
 void test_the_saucer_size_follows_the_gap_and_the_score(void)
 {
     run("init.game  (rerandom 1)");
@@ -2080,6 +2081,18 @@ void test_the_saucer_size_follows_the_gap_and_the_score(void)
         TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2, num(":sau.on"),
                                         "a small saucer appeared while the gap was still wide");
     }
+
+    // And the run is four long, not three: `spawn.saucer` reads the size before
+    // it steps the gap down, so the fourth spawn still sees 146 - 3*6 = 128.
+    run("init.game");
+    for (int i = 0; i < 4; i++)
+    {
+        run("spawn.saucer");
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2, num(":sau.on"),
+                                        "one of the first four saucers of a game was not large");
+    }
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(122, num(":sau.gap"),
+                                    "four spawns did not step the gap past the large-saucer bound");
 
     // 30,000 points: small only, however wide the gap.
     run("make \"score :sau.small.score");

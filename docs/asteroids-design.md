@@ -912,7 +912,9 @@ L6C1E:  CMP #$30                ;If so, branch to create a small saucer.
 ```
 
 `BMI` tests bit 7 of the reload value, so **while the gap is 128 or more every
-saucer is large** — the first three of a game, since 146 − 3×6 = 128. Above
+saucer is large** — the first *four* of a game: the size is read before the gap
+is stepped down, so the fourth spawn still sees 146 − 3×6 = 128, and $80 has bit
+7 set, so the arcade counts the same four. Above
 **30,000 points every saucer is small**. Between the two, a coin flip. A player
 on level one therefore meets large saucers only, at the longest interval in the
 game: the small one has to be *earned*, not waited for.

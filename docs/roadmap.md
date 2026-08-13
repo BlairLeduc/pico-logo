@@ -723,7 +723,7 @@ the position effect entirely for every Logo program in the tree (see P10).
 Then five changes from a play report, of which the **arcade's own disassembly**
 settled the biggest: saucers are paced by one countdown for the whole game
 (reload `$92`, less `$06` per spawn, floored at `$20`), every saucer is large
-while that value is 128 or more — the first three of a game — and 30,000 points
+while that value is 128 or more — the first four of a game — and 30,000 points
 makes every saucer small, with the small one's aim tightening until it is nearly
 exact past 35,000. That replaced a level-based rule of our own which put a
 saucer in front of a new player inside seven seconds and a homing one on level

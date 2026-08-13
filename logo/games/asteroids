@@ -232,9 +232,11 @@ make "shot.reach     2     ; added to every rock radius, see `rad.for`
 ;   L6C1E:  CMP #$30        ;If so, branch to create a small saucer.
 ;
 ; `BMI` on the reload value tests bit 7, so while the gap is still 128 or more
-; EVERY saucer is large -- which is the first three, since 146 - 3*6 = 128.  Above
-; 30,000 points every saucer is small.  Between those, a coin flip.  So a player
-; on level one meets large saucers only, at the longest interval in the game.
+; EVERY saucer is large -- which is the first FOUR, because the size is read
+; before the gap is stepped down and the fourth spawn still sees 146 - 3*6 = 128.
+; ($80 has bit 7 set, so the arcade counts the same four.)  Above 30,000 points
+; every saucer is small.  Between those, a coin flip.  So a player on level one
+; meets large saucers only, at the longest interval in the game.
 make "sau.gap.start 146    ; frames to the first saucer -- the arcade's $92
 make "sau.gap.step    6    ; taken off after every saucer -- its $06
 make "sau.gap.min    32    ; and never below this -- its $20
