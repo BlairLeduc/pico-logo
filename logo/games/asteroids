@@ -1554,7 +1554,7 @@ end
 ; the SAME bump on one frame in four instead of one in 25: about 1 ms a frame
 ; amortised, and a quarter of frames carrying it.  That is a worse frame profile
 ; bought deliberately, because the alternative has now crashed a board twice.
-; `logo/tests/p11m1` measures the bump and is the check to run on hardware.
+; `logo/tests/p11m4` measures the bump and is the check to run on hardware.
 ;
 ; Counting frames is crude but it is the only signal available: `nodes` reports
 ; free CELLS, and this game does not run out of cells -- it runs out of ATOM

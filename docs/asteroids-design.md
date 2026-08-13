@@ -2074,7 +2074,7 @@ the bump does not get smaller, it lands on one frame in four rather than one in
 25 — about 1 ms a frame amortised, and a quarter of frames carrying a 4.4 ms
 hitch. That is a worse frame profile bought deliberately, for a margin measured
 on the frame the game actually plays rather than on a quiet one (§14).
-`logo/tests/p11m1` on hardware is what says whether the hitch is visible.
+`logo/tests/p11m4` on hardware is what says whether the hitch is visible.
 
 ### M4 re-measured the deadline, and it moved the way §14 said it would
 
