@@ -1037,11 +1037,23 @@ Three things follow, and all three are the arcade's:
 
   So past the cap the spawn point **hunts**: every frame it moves to a new random
   place and the same free scan answers for that one, until one comes back clear.
-  The ship still lands with a full `clear.rad` of space around it and the wait is
-  still bounded — a twelve-rock board gives a mean of 19 frames and a worst of 40,
-  a dozen probes past the cap, and that mean is *shorter* than the old give-up's
-  — and the only promise given up is that the space is in the middle, which is
-  the one the field could not keep. It is a handful of statements because the
+  The ship still lands with a full `clear.rad` of space around it — a twelve-rock
+  board gives a mean of 19 frames and a worst of 40, a dozen probes past the cap,
+  and that mean is *shorter* than the old give-up's — and the only promise given
+  up is that the space is in the middle, which is the one the field could not
+  keep.
+
+  **What `wait.max` bounds is the wait for the centre, not the wait**, and this
+  section should be read exactly that way: the cap says how long the ship insists
+  on the origin, and the hunt after it has no hard ceiling — it ends when a probe
+  comes back clear. That is deliberately a weaker guarantee than a cap, and a far
+  stronger one than B24 had. B24 re-tested the *same* point while a rock sat on it
+  for a deterministic ~104 frames; each probe here is an independent draw against
+  a field whose points are clear about half the time at twelve large rocks, so the
+  chance of still waiting falls off geometrically rather than waiting out one
+  rock's crossing. A hunt that ran long would mean the field had no clear point
+  at all, which is a different failure from the one B27 fixes. It is a handful of
+  statements because the
   check was never tied to the origin, and it is the hyperspace mechanic below
   with the risk taken out. The order inside `step.wait` is load-bearing: `blocked`
   is last frame's answer about where the ship stood last frame, so the move comes

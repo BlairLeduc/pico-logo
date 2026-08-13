@@ -1395,9 +1395,21 @@ void test_a_waiting_ship_does_not_appear_until_the_space_is_clear(void)
 //
 // B27. What the cap expires on is the SPAWN POINT and not the rule: past
 // `wait.max` the spawn point moves to a new random place every frame and the
-// same free scan answers for that one, until one comes back clear. So the wait
-// is still bounded and the ship still lands with a full `clear.rad` of space
-// around it -- it just does not promise that space is in the middle.
+// same free scan answers for that one, until one comes back clear. The ship
+// still lands with a full `clear.rad` of space around it -- it just does not
+// promise that space is in the middle.
+//
+// WHAT IS BOUNDED IS THE WAIT FOR THE CENTRE, and it is worth being exact about
+// that here because a future hang will be read against this comment. `wait.max`
+// caps how long the ship insists on the origin; the hunt that follows has no
+// hard ceiling and ends when a probe comes back clear. That is a weaker
+// guarantee than a cap and a much stronger one than B24 had: B24 re-tested the
+// SAME point while a rock sat on it for a deterministic ~104 frames, where each
+// probe here is an independent draw, so the chance of still waiting falls off
+// geometrically -- about half a board's points are clear at twelve large rocks.
+// Measured, it ends in a dozen probes at the worst. A hunt that ran long would
+// mean the field itself had no clear point, which is a different bug from this
+// one.
 //
 // This is the extreme case: a rock parked dead centre, which nothing in play
 // can hold there, so the centre NEVER clears and only the hunt can end the
