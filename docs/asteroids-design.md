@@ -1052,7 +1052,7 @@ arrangement:
 
 | Sound | Voices | Timbre | Trigger |
 |---|---|---|---|
-| Heartbeat | `[0 4]` | triangle, percussive | the two alternating low notes, whose interval shortens as the rock count falls — the game's signature |
+| Heartbeat | `[0 4]` | **square, 25 ms attack, sustained** (§11.2) | the two alternating low notes, whose interval shortens as the rock count falls **and as the wave wears on** — the game's signature |
 | Fire, **and the saucer's warble** | `[1 5]` | sawtooth zap | a shot launches; a two-tone beep every third frame while a saucer is up |
 | Thrust | `[2 6]` | **narrow pulse at 96 Hz**, re-triggered each held frame | held while thrust is held |
 | Explosions | `[3 7]` | white noise | rock death (pitched by size), ship death, saucer death |
@@ -1092,6 +1092,82 @@ rather than a dispatch. And **`stopsound` runs when a level ends**, not because
 of tidiness but because the PSG keeps sounding on its own: a thrust rumble left
 gated on follows the player back to the attract screen. It preserves the
 timbres, which is why `setup.sound` runs once a game.
+
+### 11.2 What the board said about the heartbeat (2026-08-13)
+
+This section wrote the heartbeat three times before a speaker heard it, and the
+speaker corrected two of the three things it had picked. Reported from a board:
+*"the heartbeat sound is now clicks instead of being tones."* It was, and the
+game was making exactly the sound it asked for.
+
+**A 78 Hz triangle is not a note on this hardware.** A triangle's harmonics fall
+away as 1/n², so at 78 Hz the third is 19 dB down at 234 Hz and the fifth 28 dB
+down at 390 Hz — there was nothing in the note the PicoCalc's small speaker
+could move air with, and the fundamental itself is far below where it starts to.
+What a small speaker reproduces *perfectly* is a step, and the note began with
+one: `setenv [0 4] [0 90 0 70]` asked for a 0 ms attack, and the square/triangle
+oscillators start each gate from phase 0, so the first sample was a full-scale
+jump. The note was inaudible and its onset was not, so the heartbeat was a
+metronome of clicks — a *tempo* still, which is why the tempo half of the design
+was never in doubt.
+
+Three changes, and each is a different layer of the same mistake:
+
+- **An octave up, at the same 6:5 interval** — 156 Hz and 130 Hz, exactly double
+  78 and 65. Still two low notes; now with harmonics at 468, 780 and 1092 Hz.
+- **A square, not a triangle.** A square's harmonics fall as 1/n, so a small
+  speaker hears a low fundamental *through* them. It is the reason chip music on
+  tiny speakers has audible bass at all, and the arcade heartbeat is a buzzy
+  thump rather than a pure tone anyway.
+- **A 25 ms attack and a sustain of 9.** The attack replaces the step with a
+  ramp, and the sustain gives the note a steady part to hear as a pitch — a note
+  that decays straight to zero, as `[0 90 0 70]` did, has none.
+
+**The number that made the attack worth writing down: the envelope only moves
+once a refill block, 3.5 ms** (`SOUND_RING_HALF`, [sound-design.md](sound-design.md)
+§6). `steps_for` counts blocks and clamps to one, so *any* attack under 7 ms is a
+full-scale step no matter what number is asked for — which is why 0 ms and the
+engine's "click-free default" of 5 ms sound identical, and why 25 ms rather than
+5 is what actually buys a ramp. Anything shaping a note in this interpreter has
+to be written in multiples of 3.5 ms to mean anything.
+
+### 11.3 The heartbeat's second pressure: time in the wave
+
+M4's heartbeat read the rock count alone, so a player who stopped shooting
+stopped the acceleration. The arcade's does not work that way — the cabinet's
+beat quickens the longer a wave lasts, whether the player is clearing it or
+hiding from it, and that is the half that makes hiding cost something.
+
+The gap is now `beat.floor + beat.rock × rocks.alive − ⌊frame.count ÷ beat.ramp⌋`,
+floored at `beat.min`. The wave clock is **free**: `frame.count` already exists
+for `reclaim`, `setup.level` already zeroes it, and it is incremented inside
+`play.frame`'s paused guard — so a pause does not advance the tempo, which is
+the behaviour a player expects and would have had to be written deliberately
+otherwise. `beat.ramp` is 140 frames, ten seconds at 14 fps, so the time term
+stays *secondary* to the rock count over a normal wave and only dominates a wave
+the player is dragging out. The arithmetic runs on the frames a beat fires, not
+on every frame; a quiet frame is still a decrement and a failed comparison.
+
+**`beat.min` is 3 frames and it is not tidiness.** A beat is a 110 ms note with
+a 45 ms release on it, ~155 ms of sound against a 71.4 ms frame. At a two-frame
+gap the beats overlap into one continuous tone and the game loses the tempo that
+is the entire point of the sound; at three there is ~60 ms of silence between
+them. The floor is therefore set by the note's *length*, and moving one without
+the other is the mistake to watch for.
+
+| Frames into the wave | Rocks alive | Gap | Beat |
+|---|---|---|---|
+| 0 | 12 | 16 frames | 1.14 s |
+| 0 | 3 | 7 | 0.50 s |
+| 420 (30 s) | 8 | 9 | 0.64 s |
+| 700 (50 s) | 8 | 7 | 0.50 s |
+| 1120 (80 s) | 4 | 3 (floored) | 0.21 s |
+
+`test_the_heartbeat_speeds_up_as_the_wave_wears_on` holds the count still and
+moves only the clock, then pins the floor and that a new wave restarts the
+clock. Its sibling `test_the_heartbeat_speeds_up_as_the_board_thins` is unchanged
+and still passes, because it leaves `frame.count` at zero — the two pressures are
+separable by construction.
 
 ## 12. Frame budget
 

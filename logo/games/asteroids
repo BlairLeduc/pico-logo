@@ -310,17 +310,25 @@ make "sau.score.s 1000
 ; under a player who is running away, which is the moment the warning is for.
 ;
 ; The heartbeat is the point of all of this.  It is a TEMPO, not a note: two low
-; notes alternating, and the gap between them is the live rock count, so a board
-; thinning out speeds up on its own.  A blocking `toot` could not have produced
-; it -- the voice has to keep sounding while the frame loop gets on with its
-; work, which is what P8's PSG bought.
+; notes alternating, and the gap between them closes as the wave goes on -- with
+; the live rock count AND with the time the player has spent in the wave, so a
+; board that is thinning out and a board the player is being slow about both
+; press.  A blocking `toot` could not have produced it -- the voice has to keep
+; sounding while the frame loop gets on with its work, which is what P8's PSG
+; bought.
 ;
-; Frequencies and volumes are the one part of this file no host test can judge
-; and the first thing to tune on hardware (M5).
-make "beat.hz.a     78     ; the heartbeat's two notes
-make "beat.hz.b     65
+; Frequencies and volumes were the one part of this file no host test could
+; judge and the first thing to tune on hardware.  They HAVE been tuned now, and
+; the heartbeat is why: at 78 Hz it was not a note on the PicoCalc's speaker,
+; it was a click every few frames (B21).  The two notes are an octave up from
+; where this design first put them, at the same 6:5 interval, and the timbre is
+; a square rather than a triangle -- see `setup.sound` and `heartbeat`.
+make "beat.hz.a    156     ; the heartbeat's two notes
+make "beat.hz.b    130
 make "beat.floor     4     ; frames between beats on an empty board ...
 make "beat.rock      1     ; ... plus this many per live rock
+make "beat.ramp    140     ; ... less one frame per this many frames in the wave
+make "beat.min       3     ; ... and never closer together than this
 make "thrust.hz     96     ; the rumble under the ship
 make "warble.a    1100     ; the saucer's two-tone warble
 make "warble.b     760
@@ -642,8 +650,20 @@ end
 ; carrying every explosion in the game and an explosion must never be silenced
 ; by a held thrust key.
 
+; The heartbeat's timbre is the one the board corrected.  A triangle's harmonics
+; fall away as 1/n^2, so at 78 Hz there was nothing in the note the PicoCalc's
+; speaker could move air with EXCEPT its onset -- and with an attack of 0 the
+; onset is a full-scale step, which a small speaker reproduces perfectly.  The
+; note was inaudible and the click was not, so the heartbeat was a metronome of
+; clicks.  A square carries a low fundamental through a small speaker on its
+; harmonics (156 Hz puts them at 468, 780, 1092 ...), and an attack of 25 ms
+; replaces the step with a ramp: the envelope only moves once a REFILL BLOCK --
+; 3.5 ms, `SOUND_RING_HALF` -- so any attack under 7 ms is a step no matter what
+; number is asked for, which is why 0 and the engine's click-free default of 5
+; sounded identical.  The sustain of 9 is the other half: a note that decays
+; straight to zero has no steady part to hear as a pitch.
 to setup.sound
-  setwave [0 4] "triangle  setenv [0 4] [0 90 0 70]    ; the heartbeat
+  setwave [0 4] "square    setenv [0 4] [25 30 9 45]    ; the heartbeat
   setwave [1 5] "sawtooth  setenv [1 5] [0 40 0 40]    ; fire, and the saucer
   (setwave [2 6] "pulse 12)
   setenv [2 6] [5 0 12 40]                             ; the thrust rumble
@@ -651,19 +671,31 @@ to setup.sound
 end
 
 ; The signature of the game, and the one sound that is a tempo rather than a
-; note: two low notes alternating, with the gap between them set by how many
-; rocks are still alive.  A full board beats about once a second; the last small
-; rock is chased at better than twice that.
+; note: two low notes alternating, with the gap between them closed by TWO
+; pressures.  The rock count is one, so a board thinning out speeds up.  Time in
+; the wave is the other, and it is the arcade's: the cabinet's beat quickens the
+; longer a wave lasts whether the player is clearing it or hiding from it, so
+; there is no way to sit still and keep the board quiet.  `frame.count` already
+; counts unpaused frames and `setup.level` already zeroes it, so the wave clock
+; is free and a pause does not advance it.
+;
+; A full board at the start of a wave beats about once a second; the last small
+; rock of a long wave is chased at the floor, `beat.min` frames apart.  The floor
+; is not tidiness -- a beat is a 110 ms note with a 45 ms release on it, so a gap
+; under three frames would run the beats together into one tone and lose the
+; tempo that is the whole point.
 ;
 ; It is a countdown and not a `remainder`, because the period changes underneath
 ; it -- a remainder against a moving divisor either double-beats or skips when
-; the count drops.  Three statements on a quiet frame.
+; the count drops.  Two statements on a quiet frame; the arithmetic below them
+; runs only on the frames a beat actually fires.
 to heartbeat
   make "beat.in :beat.in - 1
   if 0 < :beat.in [stop]
-  make "beat.in :beat.floor + (:beat.rock * :rocks.alive)
+  make "beat.in (:beat.floor + (:beat.rock * :rocks.alive)) - (intquotient :frame.count :beat.ramp)
+  if :beat.in < :beat.min [make "beat.in :beat.min]
   make "beat.alt not :beat.alt
-  ifelse :beat.alt [(sound [0 4] :beat.hz.a 90 9)] [(sound [0 4] :beat.hz.b 90 9)]
+  ifelse :beat.alt [(sound [0 4] :beat.hz.a 110 9)] [(sound [0 4] :beat.hz.b 110 9)]
 end
 
 ; The saucer's warble, on the same pair as the fire zap.  A fire wins the voice

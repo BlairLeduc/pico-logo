@@ -1548,13 +1548,13 @@ void test_scoring_repaints_the_hud_wherever_the_points_come_from(void)
 
     run("make \"hud.text [stale]");
     run("add.score 50");
-    TEST_ASSERT_EQUAL_STRING_MESSAGE("[SCORE 50 LEVEL 1 \x10\x10\x10]",
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("[SCORE 50 WAVE 1 \x10\x10\x10]",
                                      value_to_string(eval_string(":hud.text").value),
                                      "add.score left the HUD stale");
 
     // An extra ship moves `lives`, which is on the same line.
     run("make \"hud.text [stale]  add.score 9950");
-    TEST_ASSERT_EQUAL_STRING_MESSAGE("[SCORE 10000 LEVEL 1 \x10\x10\x10\x10]",
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("[SCORE 10000 WAVE 1 \x10\x10\x10\x10]",
                                      value_to_string(eval_string(":hud.text").value),
                                      "an extra ship did not reach the HUD");
 
@@ -1564,7 +1564,7 @@ void test_scoring_repaints_the_hud_wherever_the_points_come_from(void)
     run(".setitem 1 :rsize 1  .setitem 1 :rrad rad.for 1  make \"rocks.alive 1");
     run("make \"hud.text [stale]");
     run("split.rock 1 true");
-    TEST_ASSERT_EQUAL_STRING_MESSAGE("[SCORE 10100 LEVEL 1 \x10\x10\x10\x10]",
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("[SCORE 10100 WAVE 1 \x10\x10\x10\x10]",
                                      value_to_string(eval_string(":hud.text").value),
                                      "a kill left the HUD stale");
 }
@@ -1593,11 +1593,11 @@ void test_the_hud_carries_the_score_the_level_and_a_heart_a_life(void)
 {
     run("init.game  make \"score 240  make \"level 2  make \"lives 3");
     run("refresh.hud");
-    TEST_ASSERT_EQUAL_STRING("[SCORE 240 LEVEL 2 \x10\x10\x10]",
+    TEST_ASSERT_EQUAL_STRING("[SCORE 240 WAVE 2 \x10\x10\x10]",
                              value_to_string(eval_string(":hud.text").value));
 
     run("make \"lives 1  refresh.hud");
-    TEST_ASSERT_EQUAL_STRING("[SCORE 240 LEVEL 2 \x10]",
+    TEST_ASSERT_EQUAL_STRING("[SCORE 240 WAVE 2 \x10]",
                              value_to_string(eval_string(":hud.text").value));
 }
 
@@ -1751,8 +1751,8 @@ void test_the_attract_screen_prints_the_scores_and_the_keys(void)
 
     const char *screen = mock_device_get_output();
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "ASTEROIDS"), screen);
-    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Large rock     20"), screen);
-    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Small rock    100"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Large rock      20"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Small rock     100"), screen);
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Hyperspace"), screen);
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Press Space"), screen);
 }
@@ -1766,7 +1766,7 @@ void test_game_over_prints_the_final_score(void)
     const char *screen = mock_device_get_output();
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "GAME OVER"), screen);
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "1240"), screen);
-    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "LEVEL REACHED: 4"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "WAVE REACHED: 4"), screen);
 }
 
 //==========================================================================
@@ -2585,7 +2585,10 @@ void test_the_timbres_are_set_once_and_match_the_voice_kinds(void)
     run("setup.sound");
     const MockDeviceState *st = mock_device_get_state();
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(SOUND_WAVE_TRIANGLE, st->sound.wave[0].wave, "the heartbeat");
+    // A square and not a triangle, and that is a hardware finding rather than a
+    // taste: a triangle's harmonics fall as 1/n^2, so a low triangle on the
+    // PicoCalc's speaker is only its onset click (B21).
+    TEST_ASSERT_EQUAL_INT_MESSAGE(SOUND_WAVE_SQUARE, st->sound.wave[0].wave, "the heartbeat");
     TEST_ASSERT_EQUAL_INT_MESSAGE(SOUND_WAVE_SAWTOOTH, st->sound.wave[1].wave, "fire and the saucer");
     TEST_ASSERT_EQUAL_INT_MESSAGE(SOUND_WAVE_PULSE, st->sound.wave[2].wave, "the thrust rumble");
     TEST_ASSERT_EQUAL_INT_MESSAGE(SOUND_WAVE_WHITE, st->sound.wave[3].wave, "the explosions");
@@ -2631,6 +2634,46 @@ void test_the_heartbeat_speeds_up_as_the_board_thins(void)
     uint32_t first = last_freq_on(0);
     run("make \"beat.in 1  heartbeat");
     TEST_ASSERT_TRUE_MESSAGE(last_freq_on(0) != first, "the heartbeat is one note, not two");
+}
+
+// The arcade's other pressure, and the one this game did not have at M4: the
+// beat quickens the longer a wave lasts, whether the player is clearing it or
+// hiding from it. The wave clock is `frame.count`, which `setup.level` zeroes,
+// so the count is held still here and only the clock moved -- a board of the
+// same size beats faster deeper into the wave.
+void test_the_heartbeat_speeds_up_as_the_wave_wears_on(void)
+{
+    run("init.game  setup.sound  make \"rocks.alive 8");
+
+    run("make \"frame.count 0  make \"beat.in 1");
+    int mark = mock_sound_gate_count();
+    run("repeat 100 [heartbeat]");
+    int early = notes_on(0, mark);
+
+    run("make \"frame.count 700  make \"beat.in 1");
+    mark = mock_sound_gate_count();
+    run("repeat 100 [heartbeat]");
+    int late = notes_on(0, mark);
+
+    char msg[128];
+    snprintf(msg, sizeof(msg), "%d beats in 100 frames at the start of the wave, %d 700 frames in",
+             early, late);
+    TEST_ASSERT_TRUE_MESSAGE(early > 0, msg);
+    TEST_ASSERT_TRUE_MESSAGE(late > early, msg);
+
+    // The floor holds, and it is not tidiness: a beat is a 110 ms note with a
+    // 45 ms release on it, so beats closer than `beat.min` frames would run
+    // together into one tone and lose the tempo.
+    run("make \"rocks.alive 0  make \"frame.count 100000  make \"beat.in 1  heartbeat");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":beat.min"), num(":beat.in"),
+                                    "the heartbeat ran past its floor");
+    TEST_ASSERT_TRUE_MESSAGE(num(":beat.in") > 0, "the heartbeat's period reached zero");
+
+    // A new wave starts the clock again, so the beat is not still at the floor
+    // from the last one.
+    run("make \"level.rocks 3  setup.level");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":frame.count"),
+                                    "a new wave did not restart the heartbeat's clock");
 }
 
 // What the rest of the game sounds like, checked where each noise is made
@@ -2730,9 +2773,13 @@ void test_a_level_end_silences_every_voice(void)
                              "a level ended with the voices still sounding");
 
     // And the timbres survive it, or every level after the first would play in
-    // the default square wave.
-    TEST_ASSERT_EQUAL_INT_MESSAGE(SOUND_WAVE_TRIANGLE, st->sound.wave[0].wave,
+    // the engine's default voice. Checked on the zap's WAVE and the heartbeat's
+    // ENVELOPE, because the heartbeat's own wave is a square and so is the
+    // default -- an assertion on that one would pass either way.
+    TEST_ASSERT_EQUAL_INT_MESSAGE(SOUND_WAVE_SAWTOOTH, st->sound.wave[1].wave,
                                   "stopsound cleared the timbres");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(25, st->sound.env[0].attack,
+                                     "stopsound cleared the envelopes");
 }
 
 //==========================================================================
@@ -3043,6 +3090,7 @@ int main(void)
     RUN_TEST(test_a_saucer_that_is_not_there_hits_nothing);
     RUN_TEST(test_the_timbres_are_set_once_and_match_the_voice_kinds);
     RUN_TEST(test_the_heartbeat_speeds_up_as_the_board_thins);
+    RUN_TEST(test_the_heartbeat_speeds_up_as_the_wave_wears_on);
     RUN_TEST(test_the_game_makes_its_noises);
     RUN_TEST(test_the_thrust_rumble_sounds_only_while_it_is_held);
     RUN_TEST(test_the_saucer_warbles_only_while_it_is_up);
