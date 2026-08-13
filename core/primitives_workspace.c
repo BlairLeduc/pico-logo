@@ -738,6 +738,22 @@ static Result prim_nodes(Evaluator *eval, int argc, Value *args)
     return result_ok(value_number((float)free));
 }
 
+// atoms
+// Outputs the free bytes in the word (atom) table
+//
+// The companion to `nodes`, and it exists because the two are not
+// interchangeable: `nodes` counts free cells, the atom table holds the
+// characters of every distinct word, and a program can exhaust one with plenty
+// of the other left. Asteroids is the case that proved it -- at the moment its
+// frame loop died there were 21,000 free nodes and 20 free bytes here, so
+// nothing the program could ask about could see the wall it was hitting.
+static Result prim_atoms(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
+
+    return result_ok(value_number((float)mem_free_atoms()));
+}
+
 // recycle
 // Runs garbage collection to free up as many nodes as possible
 static Result prim_recycle(Evaluator *eval, int argc, Value *args)
@@ -897,6 +913,7 @@ void primitives_workspace_init(void)
     
     // Memory management
     primitive_register("nodes", 0, prim_nodes);
+    primitive_register("atoms", 0, prim_atoms);
     primitive_register("primitives", 0, prim_primitives);
     primitive_register("recycle", 0, prim_recycle);
     
