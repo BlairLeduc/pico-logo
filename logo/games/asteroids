@@ -89,7 +89,7 @@ make "start.rocks    3     ; large rocks at level 1
 ; the top level and not below it -- which is the ceiling the arcade's rising
 ; count runs into as well, arrived at from twelve slots rather than twenty-seven.
 make "rocks.top      5     ; large rocks a level never exceeds
-make "reclaim.every 25     ; frames between recycles -- see `reclaim` below
+make "reclaim.every  4     ; frames between recycles -- see `reclaim` below
 make "speed.l     0.96     ; steps per frame -- 13.5 a second at 14 fps
 make "spin.max     2.7     ; degrees per frame, either direction
 make "split.boost 1.25     ; a child drifts this much faster than its parent
@@ -151,11 +151,23 @@ make "speed.max    4.8     ; steps a frame -- about 67 a second
 ;
 ; `ship.rad` therefore holds the CURRENT box and is not a constant: `clear.rad`
 ; while a ship is waiting to appear, `ship.rad.hull` once it has.
+;
+; `wait.max` IS WHAT MAKES THE WAIT A WAIT AND NOT A HANG (B24).  The box a new
+; ship waits for is `clear.rad` plus the rock's own radius -- 50 steps for a
+; large one -- and a rock crosses at 0.96 steps a frame, so a single rock
+; drifting through the middle holds the spawn point for up to 2 * 50 / 0.96 =
+; 104 frames, and diagonally for half as many again.  Measured on the host, one
+; respawn in ten waits longer than two seconds and the worst seen was 127 frames
+; -- nine seconds of an empty screen the player can do nothing about.  So the
+; wait is capped, and the cap is affordable because the clear box is 20 steps
+; wider than the box that kills: a rock still inside it at the cap is, almost
+; always, not yet touching the hull.
 make "start.lives    3
 make "extra.every 10000    ; points between extra ships
 make "ship.rad.hull  6     ; collision half-width, added to a rock's radius
 make "ship.rad       6     ; the box in use now -- see `respawn` and `land.ship`
 make "clear.rad     26     ; how much space a new ship waits for
+make "wait.max      28     ; frames it waits for it -- 2 s at 14 fps, then lands
 make "death.frames  10     ; frames the explosion lasts -- 0.7 s at 14 fps
 make "boom.drift     3     ; steps a fragment floats from the centre a frame
 make "hyper.risk     8     ; one jump in this many ends inside a rock
@@ -798,8 +810,14 @@ end
 ; It reads LAST frame's answer, because the pass that sets `blocked` runs after
 ; this does -- so the ship arrives one frame after the field cleared, which at
 ; 14 fps nobody can see, and the frame order stays exactly as it was.
+;
+; And it gives up after `wait.max`, because "wait for a clear space" with no
+; bound on it is a hang wearing a rule's clothes -- see the tuning.
 to step.wait
-  ifelse :blocked [make "blocked false] [land.ship]
+  make "waited :waited + 1
+  if not :blocked [land.ship stop]
+  if :waited > :wait.max [land.ship stop]
+  make "blocked false
 end
 
 to land.ship
@@ -893,6 +911,7 @@ to respawn
   make "sh 0
   make "waiting true
   make "blocked true
+  make "waited 0
   make "ship.rad :clear.rad
   make "shipcx 0
   make "shipcy 0
@@ -1474,7 +1493,16 @@ to poll.input
   ; the guard is here rather than in each handler.  Pause and quit are above it
   ; deliberately: a death lasts most of a second and a player who wants out
   ; should not have to wait for the ring to finish.
+  ;
+  ; NEITHER DOES A SHIP THAT HAS NOT LANDED YET (B24).  A waiting ship is parked
+  ; on the spawn point and drawn nowhere, and the controls were live through the
+  ; whole wait: the player could turn and thrust a ship they could not see, and
+  ; `fire` put shots on the screen out of an empty spawn point.  Hyperspace was
+  ; the worst of the four -- it writes `shipx`/`shipy` while the clear-check goes
+  ; on reading the spawn point, so the ship landed somewhere the check never
+  ; looked at.  Reported from a board as firing while the ship stayed hidden.
   if 0 < :dying [stop]
+  if :waiting [stop]
   if :k = 180 [make "sh :sh - :turn.rate stop]
   if :k = 183 [make "sh :sh + :turn.rate stop]
   if :k = 181 [thrust stop]
@@ -1505,19 +1533,34 @@ end
 ; NOTHING IN THIS INTERPRETER COLLECTS ON DEMAND.  `alloc_cell` and `mem_atom`
 ; (core/memory.c) both just report out of space when they cannot fit a
 ; request; there is no collect-and-retry, which is the right call for a frame
-; loop -- no unpredictable pause -- but it makes this interval the game's
-; entire safety margin rather than a tidiness measure.
+; loop -- no unpredictable pause -- but it makes this the game's entire safety
+; margin rather than a tidiness measure.
 ;
-; Twenty-five frames, not the 250 the other three games use.  Their frames
-; spend nothing; this one mints an atom for every rock position it stores
-; (design section 14), and the atom region is capped at 32 KB whatever the
-; board.  Measured with `reclaim` disabled, the frame loop runs out of atom
-; space after a few hundred frames, so 250 leaves a 2.6x margin -- which held
-; on the host and did NOT hold on a board, where a fuller workspace puts the
-; node region's floor lower and squeezes the atom ceiling with it.  It died
-; with `Out of space in step.rock` within a minute of play.
-; `test_the_reclaim_interval_stays_inside_the_atom_budget` measures the budget
-; and fails if this ever creeps back up towards it.
+; THE DEADLINE WAS MEASURED ON THE WRONG FRAME (B25), and that is why this
+; number has now been wrong twice.  The first crash (2026-08-11) cut the
+; interval from 250 frames to 25 against a measured deadline: with `reclaim`
+; disabled the loop ran 649 frames before it died, so 25 read as a 26x margin.
+; It died on a board again.  Re-measured properly: that deadline was taken on a
+; frame with nothing in it but drifting rocks, which spends 9 cells and 45 atom
+; bytes; a frame in a GAME -- a saucer up, shots in the air, rocks splitting --
+; spends about 91 bytes, and the deadline on that frame is 89 frames.  So 25 was
+; a 3.6x margin and not a 26x one, and a board with less atom room than the host
+; ate the rest of it.  Four frames is a 22x margin on the busy deadline.
+;
+; IT IS NOT FREE, and the cost is the one the design already measured: a recycle
+; walks the whole node pool, so it costs the same every time it runs -- 118 us
+; on the host against a frame's 657, and 4.4 ms on a Plus 2 W against a 71.4 ms
+; budget.  Collecting six times as often does not make the bump smaller, it puts
+; the SAME bump on one frame in four instead of one in 25: about 1 ms a frame
+; amortised, and a quarter of frames carrying it.  That is a worse frame profile
+; bought deliberately, because the alternative has now crashed a board twice.
+; `logo/tests/p11m1` measures the bump and is the check to run on hardware.
+;
+; Counting frames is crude but it is the only signal available: `nodes` reports
+; free CELLS, and this game does not run out of cells -- it runs out of ATOM
+; bytes, which no primitive reports.  At the moment the loop dies there are
+; still 21,000 free cells and 20 bytes of atom room, so a `nodes` floor cannot
+; see the wall the game actually hits.
 ;
 ; `reclaim` sits INSIDE the unpaused block, which is also where it belongs: a
 ; paused frame counts no frames and allocates nothing.  Outside it, a pause

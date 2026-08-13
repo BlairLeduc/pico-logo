@@ -58,6 +58,7 @@
 #define KEY_LEFT   "\264"
 #define KEY_RIGHT  "\267"
 #define KEY_THRUST "\265"
+#define KEY_HYPER  "\266"
 
 // Load a whole Logo file, defining its procedures and running its top-level
 // tuning `make`s. Procedure definitions are not handled by the bare
@@ -725,21 +726,30 @@ void test_every_rock_is_drawn_with_a_one_pixel_pen(void)
 // run before it needs a recycle -- and `reclaim.every` has to sit well inside
 // it.
 //
-// Measure the deadline rather than assume it: disable `reclaim` and run until
-// the loop dies. It survives ~649 frames at twelve rocks on the host. The
-// original interval of 250 was copied from Galaxian, whose frame spends
-// nothing, and left a 2.6x margin -- which held here and did not hold on a
-// board, where a fuller workspace puts the node region's floor lower and
-// squeezes the shared atom ceiling with it.
-void test_the_reclaim_interval_stays_inside_the_atom_budget(void)
+// B25. A DEADLINE MEASURED ON A QUIET FRAME IS NOT THE GAME'S DEADLINE, and
+// this test is the second version of that lesson. The first one disabled
+// `reclaim`, ran the loop until it died, and asked for an interval eight times
+// inside the number it got -- but the frame it ran had drifting rocks and
+// nothing else in it. That frame spends 9 cells and 45 atom bytes. A frame in
+// a GAME -- a saucer up, shots in the air, rocks splitting -- spends about 91
+// bytes, and dies in 89 frames rather than 365. So the old 25-frame interval
+// was a 3.6x margin wearing a 26x label, and the board ate the difference.
+//
+// The frame this measures is therefore the expensive one, and it stays the
+// expensive one: `fire` every frame keeps three shots live and the respawn
+// keeps a saucer crossing.
+void test_the_reclaim_interval_stays_inside_the_busy_frame_budget(void)
 {
     setup_with(12);
+    land_the_ship();
     run("recycle");
     proc_define_from_text("to reclaim\nend");   // nothing collects now
 
     int deadline = 0;
     for (; deadline < 4000; deadline++)
     {
+        run_string("fire");
+        run_string("if 0 = :sau.on [spawn.saucer]");
         if (run_string("play.frame").status == RESULT_ERROR)
             break;
     }
@@ -752,9 +762,49 @@ void test_the_reclaim_interval_stays_inside_the_atom_budget(void)
     int interval = (int)num(":reclaim.every");
     char msg[160];
     snprintf(msg, sizeof(msg),
-             "reclaim every %d frames against a %d-frame budget -- less than 8x margin",
+             "reclaim every %d frames against a %d-frame busy budget -- less than 8x margin",
              interval, deadline);
     TEST_ASSERT_TRUE_MESSAGE(interval * 8 < deadline, msg);
+}
+
+// The other half of B25, and the half a host cannot measure by itself: the
+// board that died had less room than the host that signed the interval off.
+// The ballast list is that board -- it holds free storage down where a recycle
+// cannot lift it, so every frame has to fit in what is left.
+void test_the_frame_loop_survives_a_squeezed_workspace(void)
+{
+    setup_with(12);
+    land_the_ship();
+    run("recycle");
+
+    // Eat ATOM bytes -- the resource this game actually runs out of, and the
+    // one no Logo primitive reports -- until a fifth of them are left. The
+    // ballast is live, so a recycle cannot give them back.
+    size_t room = mem_free_atoms();
+    run("make \"ballast []");
+    while (mem_free_atoms() > room / 5)
+    {
+        if (run_string("repeat 100 [make \"ballast fput (random 100000) :ballast]").status
+            == RESULT_ERROR)
+            break;
+    }
+    size_t squeezed = mem_free_atoms();
+    TEST_ASSERT_TRUE_MESSAGE(squeezed < room / 4, "the ballast did not squeeze the atom region");
+
+    // A busy game in what is left.
+    for (int f = 0; f < 2000; f++)
+    {
+        run_string("fire");
+        run_string("if 0 = :sau.on [spawn.saucer]");
+        if (run_string("play.frame").status == RESULT_ERROR)
+        {
+            char msg[160];
+            snprintf(msg, sizeof(msg),
+                     "the frame loop ran out of storage after %d frames with %d atom bytes free",
+                     f, (int)squeezed);
+            TEST_FAIL_MESSAGE(msg);
+        }
+    }
 }
 
 
@@ -769,7 +819,7 @@ void test_the_reclaim_interval_stays_inside_the_atom_budget(void)
 // measured over five windows in a row, this game gives -666, +500, +841 and
 // +1617 with nothing touched between them. The first window is the worst of
 // them, because it is the one still settling after
-// `test_the_reclaim_interval_stays_inside_the_atom_budget` ran the workspace to
+// `test_the_reclaim_interval_stays_inside_the_busy_frame_budget` ran the workspace to
 // exhaustion just before it -- and it moves by ~160 cells for a change as small
 // as one more procedure called on a death frame, which is not growth and must
 // not read as growth.
@@ -936,6 +986,7 @@ void test_the_flame_shows_only_when_thrusting_and_only_every_other_frame(void)
 void test_the_arrows_turn_the_ship_both_ways(void)
 {
     setup_with(3);
+    land_the_ship();          // a ship still waiting answers no key at all (B24)
     float turn = num(":turn.rate");
     set_mock_input(KEY_RIGHT);
     run("play.frame");
@@ -951,6 +1002,7 @@ void test_the_arrows_turn_the_ship_both_ways(void)
 void test_a_frame_with_no_key_puts_the_flame_out(void)
 {
     setup_with(3);
+    land_the_ship();          // a ship still waiting answers no key at all (B24)
     set_mock_input(KEY_THRUST);
     run("play.frame");
     TEST_ASSERT_EQUAL_STRING_MESSAGE("true",
@@ -1331,6 +1383,85 @@ void test_a_waiting_ship_does_not_appear_until_the_space_is_clear(void)
     run(".setitem 1 :rx 0  .setitem 1 :ry 0");
     run("step.ship  step.draw.all");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2, num(":lives"), "a landed ship could not be hit");
+}
+
+// B24. "Wait for a clear space" with no bound on it is a hang wearing a rule's
+// clothes. The box a new ship waits for is `clear.rad` plus the rock's own
+// radius -- 50 steps for a large rock -- and rocks cross at 0.96 steps a frame,
+// so ONE rock drifting through the middle can hold the spawn point for over a
+// hundred frames. Measured on the host before the cap: a mean wait of 10 frames,
+// a worst of 127, and one respawn in ten over two seconds. Reported from a board
+// as a ship that stayed hidden for several seconds after a respawn.
+//
+// The cap is affordable because the clear box is 20 steps wider than the box
+// that kills: a rock still inside it when the cap expires is, almost always,
+// not yet touching the hull. This is the extreme case -- a rock parked dead
+// centre, which nothing in play can hold there -- so it lands and dies, and
+// even that is better than an empty screen with no way out.
+void test_a_respawn_wait_gives_up_and_lands_the_ship(void)
+{
+    ship_under_a_rock();
+    run("respawn");
+    int cap = (int)num(":wait.max");
+
+    int f = 0;
+    while (strcmp(value_to_string(eval_string(":waiting").value), "true") == 0 && f < cap * 4)
+    {
+        run("step.wait  step.draw.all");
+        f++;
+    }
+
+    char msg[128];
+    snprintf(msg, sizeof(msg), "the ship waited %d frames against a cap of %d", f, cap);
+    TEST_ASSERT_TRUE_MESSAGE(f <= cap + 1, msg);
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":ship.rad.hull"), num(":ship.rad"),
+                                    "the ship landed still testing the wide box");
+}
+
+// B24. A waiting ship is parked on the spawn point and drawn nowhere, and the
+// controls were live for the whole wait -- so a player could turn and thrust a
+// ship they could not see, and `fire` put shots on the screen out of an empty
+// spawn point. That is what the board reported: firing while the ship stayed
+// hidden. Hyperspace was the worst of the four, because it writes `shipx`/
+// `shipy` while the clear-check goes on reading the spawn point.
+void test_a_waiting_ship_answers_no_key_but_pause_and_quit(void)
+{
+    setup_with(3);
+    run("respawn");
+
+    set_mock_input(KEY_RIGHT);
+    run("play.frame");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":sh"), "a waiting ship steered");
+
+    run("respawn");
+    set_mock_input(KEY_THRUST);
+    run("play.frame");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":svx"), "a waiting ship thrusted");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":svy"), "a waiting ship thrusted");
+
+    run("respawn");
+    set_mock_input(" ");
+    run("play.frame");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, item_of("slife", 1), "a waiting ship fired");
+
+    run("respawn");
+    set_mock_input(KEY_HYPER);
+    run("play.frame");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":shipx"), "a waiting ship jumped");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":shipy"), "a waiting ship jumped");
+
+    // Pause and quit still answer, as they do through a death.
+    run("respawn");
+    set_mock_input("p");
+    run("play.frame");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", value_to_string(eval_string(":paused").value),
+                                     "a waiting ship could not be paused");
+    set_mock_input("p");
+    run("play.frame");
+    set_mock_input("q");
+    run("play.frame");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", value_to_string(eval_string(":quit").value),
+                                     "a waiting ship could not be quit");
 }
 
 // The wide box is what makes the wait mean something, and it is held against
@@ -3184,7 +3315,8 @@ int main(void)
     RUN_TEST(test_setup_level_never_exceeds_the_slot_count);
     RUN_TEST(test_a_frame_draws_the_world_and_nothing_else);
     RUN_TEST(test_every_rock_is_drawn_with_a_one_pixel_pen);
-    RUN_TEST(test_the_reclaim_interval_stays_inside_the_atom_budget);
+    RUN_TEST(test_the_reclaim_interval_stays_inside_the_busy_frame_budget);
+    RUN_TEST(test_the_frame_loop_survives_a_squeezed_workspace);
     RUN_TEST(test_the_frame_loop_holds_free_storage_flat);
     RUN_TEST(test_a_paused_frame_neither_steps_nor_recycles);
     RUN_TEST(test_the_ship_keeps_its_momentum);
@@ -3210,6 +3342,8 @@ int main(void)
     RUN_TEST(test_a_rock_on_the_ship_kills_it);
     RUN_TEST(test_one_frame_takes_only_one_life);
     RUN_TEST(test_a_waiting_ship_does_not_appear_until_the_space_is_clear);
+    RUN_TEST(test_a_respawn_wait_gives_up_and_lands_the_ship);
+    RUN_TEST(test_a_waiting_ship_answers_no_key_but_pause_and_quit);
     RUN_TEST(test_the_clear_radius_is_wider_than_the_ship_it_protects);
     RUN_TEST(test_the_explosion_counts_down_and_the_ship_comes_back);
     RUN_TEST(test_the_last_life_ends_the_level);

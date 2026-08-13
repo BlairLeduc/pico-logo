@@ -54,12 +54,15 @@ extern "C"
         do { if (!value_is_word(arg) && !value_is_list(arg)) \
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(arg)); } while(0)
 
-    // Extract a non-empty word string from an argument
+    // Extract a non-empty word string from an argument.
+    // A word whose atom could not be interned has no characters behind it, so
+    // the pointer is NULL and every caller here would dereference it.
     #define REQUIRE_WORD_STR(arg, var) \
         const char *var; \
         do { if (!value_is_word(arg)) \
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(arg)); \
-            var = mem_word_ptr((arg).as.node); } while(0)
+            var = mem_word_ptr((arg).as.node); \
+            if (!var) return result_error(ERR_OUT_OF_SPACE); } while(0)
 
     // Extract a non-empty list from an argument
     #define REQUIRE_LIST_NONEMPTY(arg, var) \

@@ -325,6 +325,15 @@ Result LOGO_HOT(eval_primary)(Evaluator *eval)
         advance(eval);
         // Skip the quote character and process escape sequences
         Node atom = mem_atom_unescape(t.start + 1, t.length - 1);
+        // A full atom region interns nothing, and `value_word(NODE_NIL)` is a
+        // word with no characters behind it: `mem_word_ptr` gives NULL and the
+        // first primitive to read the name dereferences it. Report the space
+        // we could not find instead. The empty word `"` still interns, so a
+        // nil node here can only be the failure.
+        if (mem_is_nil(atom))
+        {
+            return result_error(ERR_OUT_OF_SPACE);
+        }
         return result_ok(value_word(atom));
     }
 
