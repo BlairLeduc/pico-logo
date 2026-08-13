@@ -54,9 +54,15 @@ extern "C"
         do { if (!value_is_word(arg) && !value_is_list(arg)) \
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(arg)); } while(0)
 
-    // Extract a non-empty word string from an argument.
-    // A word whose atom could not be interned has no characters behind it, so
-    // the pointer is NULL and every caller here would dereference it.
+    // Extract a word's characters from an argument.
+    //
+    // It does NOT check the word is non-empty, whatever this comment used to
+    // say: `"` is a legitimate word and interns like any other, so callers
+    // that care about emptiness check the length themselves.
+    //
+    // What it does refuse is a word with no characters BEHIND it -- a word
+    // whose atom could not be interned reads back as a NULL pointer, and every
+    // caller here would dereference it (B26).
     #define REQUIRE_WORD_STR(arg, var) \
         const char *var; \
         do { if (!value_is_word(arg)) \

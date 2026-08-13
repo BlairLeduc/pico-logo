@@ -325,11 +325,15 @@ Result LOGO_HOT(eval_primary)(Evaluator *eval)
         advance(eval);
         // Skip the quote character and process escape sequences
         Node atom = mem_atom_unescape(t.start + 1, t.length - 1);
-        // A full atom region interns nothing, and `value_word(NODE_NIL)` is a
-        // word with no characters behind it: `mem_word_ptr` gives NULL and the
-        // first primitive to read the name dereferences it. Report the space
-        // we could not find instead. The empty word `"` still interns, so a
-        // nil node here can only be the failure.
+        // `mem_atom_unescape` returns NODE_NIL for two reasons: the atom region
+        // is full, or the unescaped word is longer than the 255 bytes an atom's
+        // length prefix can describe. Both are "no room for this word", and
+        // both used to produce `value_word(NODE_NIL)` -- a word with no
+        // characters behind it, whose `mem_word_ptr` is NULL, which the first
+        // primitive to read the name dereferences (B26).
+        //
+        // The empty word `"` interns like any other, so a nil node here is
+        // always one of those two failures and never a legitimate word.
         if (mem_is_nil(atom))
         {
             return result_error(ERR_OUT_OF_SPACE);
