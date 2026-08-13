@@ -316,7 +316,7 @@ dot.
 | Rocks | ≤12 | **canvas**, pen-drawn, one flat-list slot each | more of them than there are turtles; and a pen-drawn polygon rotates for free |
 | Ship | 1 | **canvas**, pen-drawn | three strokes, rotates to any heading; a 16×16 costume under `setrot "full` would be a visibly coarser ship |
 | Saucer | ≤1 | **canvas**, pen-drawn | the arcade saucer is a distinctive outline |
-| Explosion | 1, the ship's | **canvas**, `arc 360 r` | one primitive call per ring, in the ship's place on death frames (§9) |
+| Explosion | 1, the ship's | **canvas**, four pen-drawn fragments | the ship's own four segments, floating apart from where it died (§9) |
 | Player shots | ≤3 | **turtles 1–3** | `setspeed` flies and wraps them with no Logo per frame |
 | Saucer shot | ≤1 | **turtle 4** | same |
 | The pen | — | **turtle 0**, hidden | draws every canvas object and the HUD |
@@ -948,18 +948,24 @@ Three things follow, and all three are the arcade's:
 - **`shot.on` now answers "what hit this rock"** — 1–3 a player's shot, 4 the
   saucer's, 5 the saucer — and the caller does the rest. It kept its name so that
   its measurement stays comparable across milestones.
-- **Explosions.** The arcade shatters a rock into drifting line fragments. A
-  fragment system would cost more per frame than the rocks do, so instead an
-  explosion is an **expanding ring**: `arc 360 :r` at the death point, radius
-  growing as a countdown falls. **As built at M3 there is exactly one, and it
-  is the ship's**: ten frames, the radius growing four steps a frame, drawn
-  where the ship would have been. Rocks die without a ring, which is a
-  difference from the arcade that nobody has yet asked to close; the cost of
-  closing it is a per-frame list of live rings in the hot path, and the
-  measurement to justify it does not exist.
-  `arc` sweeps four degrees a segment, so a full circle is 90 strokes inside
-  **one** primitive call with no interpreter between them — which is the whole
-  reason a ring is affordable where fragments were not.
+- **Explosions.** The arcade shatters a rock into drifting line fragments.
+  **As built there is exactly one explosion and it is the ship's**: ten frames,
+  in which the ship comes apart into **the four segments of its own outline**,
+  each floating out from where the ship died at three steps a frame. Rocks die
+  without one, which is a difference from the arcade that nobody has yet asked
+  to close; the cost of closing it is a per-frame list of live explosions in the
+  hot path, and the measurement to justify it does not exist.
+
+  **This is a fragment system only in name, which is why it is affordable.**
+  The objection this section raised against fragments was per-frame *state* — a
+  list of particles to allocate, step and reap. There is none: the fragments are
+  fixed shapes at fixed places in the ship's frame, so each one is a `rt`/`fd`
+  walk out from the ship's centre by a distance that grows as the countdown
+  falls, then the segment itself. Four strokes a death frame against the
+  **ninety** the expanding ring it replaced swept — less drawing, but four
+  procedure calls where the ring was one `arc`, so more interpretation. That
+  trade is bought on death frames only, which come ten at a time and never in
+  the steady state.
   **The two-second freeze this section used to specify is gone.** It came from
   Galaxian, whose actors are engine-driven turtles and which can therefore
   sleep through a death; here every rock is Logo's to move, and the arcade

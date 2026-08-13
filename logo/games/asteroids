@@ -135,9 +135,12 @@ make "speed.max    4.8     ; steps a frame -- about 67 a second
 ; first reads as luck.  `test_the_ship_box_is_not_wider_than_the_shapes_it_is
 ; _drawn_from` holds it there.
 ;
-; The explosion is an expanding ring rather than the arcade's drifting line
-; fragments (design section 9): one `arc` a frame instead of a particle system,
-; and the rocks keep moving under it, which is what the arcade does too.
+; The explosion is the arcade's: the ship comes apart into the FOUR SEGMENTS
+; ITS OWN OUTLINE IS MADE OF, each floating out from where the ship was.  That
+; is a particle system only in name -- the particles are fixed, there are four
+; of them, and each is one line -- so it costs four short walks a death frame
+; and nothing at all on the other frames.  The rocks keep moving under it,
+; which is what the arcade does too.
 ;
 ; A NEW SHIP WAITS FOR A CLEAR SPACE, which is the arcade's rule.  M3 used
 ; invulnerability instead, on the grounds that waiting costs a twelve-slot scan
@@ -154,7 +157,7 @@ make "ship.rad.hull  6     ; collision half-width, added to a rock's radius
 make "ship.rad       6     ; the box in use now -- see `respawn` and `land.ship`
 make "clear.rad     26     ; how much space a new ship waits for
 make "death.frames  10     ; frames the explosion lasts -- 0.7 s at 14 fps
-make "boom.grow      4     ; steps the ring's radius grows a frame
+make "boom.drift     3     ; steps a fragment floats from the centre a frame
 make "hyper.risk     8     ; one jump in this many ends inside a rock
 
 ; The shots, and the one number here that is not per-frame: `setspeed` is in
@@ -522,10 +525,10 @@ to draw.rock :size
   rock.s
 end
 
-; A dying ship is a ring and not a ship, and an invulnerable one is drawn on
-; every other frame so the player can see that it is.  Both tests are before
-; the placement rather than inside it, because a frame that draws neither must
-; not pay for a `setx sety seth` it throws away.
+; A dying ship is four fragments and not a ship, and an invulnerable one is
+; drawn on every other frame so the player can see that it is.  Both tests are
+; before the placement rather than inside it, because a frame that draws neither
+; must not pay for a `setx sety seth` it throws away.
 ;
 ; The flame alternates on and off every other frame, as the arcade one does.
 ; Without it a held thrust key draws a steady cone, which reads as a nozzle
@@ -540,26 +543,57 @@ to draw.ship
   ship.flame
 end
 
-; The arcade shatters the ship into drifting line fragments.  A fragment system
-; costs more a frame than the rocks do, so this is one expanding ring: `arc`
-; sweeps 4 degrees a segment, so a full circle is 90 short strokes inside ONE
-; primitive call, with no interpreter between them.  It runs on death frames
-; only, and the rocks keep moving under it.
+; The arcade shatters the ship into drifting line fragments, and here the
+; fragments ARE the four segments of `ship` -- the two long hull edges and the
+; two short ones either side of the notch.  There is no particle list and
+; nothing to step: a fragment is a fixed shape at a fixed place in the ship's
+; own frame, and the whole explosion is that frame's four segments pushed
+; radially apart by a distance that grows as the countdown falls.
 ;
-; The radius grows as the countdown falls, so the ring is drawn at
-; `boom.grow` on the first death frame and at nine times that on the last.  The
-; multiplication is the `arc`'s last argument and absorbs the trailing infix,
-; which is what is wanted here for once.
-; The `pd` is not decoration: `arc` draws with the pen it finds, and every other
-; drawing procedure in this file arrives with the pen UP from a `pu setx sety`
-; and puts it down itself inside the walk.  Without it the ring is swept with
-; the pen up and a death is invisible -- which is exactly what
-; `test_a_dying_ship_draws_a_ring_and_not_a_ship` caught.
+; A fragment is THREE WALKS AND A STROKE, and every one of them is turtle
+; motion, so there is no trigonometry anywhere in this: from the ship's centre,
+; `fd` out to where the fragment's middle sits, `fd` again by the drift, then
+; `bk` half the segment to the end it is drawn from.  Walking rather than
+; computing is also what makes a death near an edge free -- `wrap` puts the
+; turtle on the far side mid-leg, exactly as it does for a rock's outline.
+;
+; The turns are RELATIVE and the placement is one `seth :sh`, which is the same
+; trick every shape in this file uses and the reason the wreck comes apart along
+; the axes the ship was pointing at no cost: `rt :a` swings onto the fragment's
+; outward bearing, `rt :d` from there onto the fragment's own heading, and both
+; are constants of the ship's frame rather than sums with `sh`.  All four
+; numbers -- bearing, radius, turn, length -- are the midpoints and headings of
+; `ship`'s walk and nothing else, and
+; `test_the_fragments_are_the_ship_segments` re-derives them from it: at
+; `dying = death.frames` the drift is zero and the explosion must land exactly
+; on the outline `ship` draws.
+;
+; `t` is a `local` and not four repeats of the same expression, because a number
+; this game computes is an atom it has to reclaim later (see `reclaim`).  Four
+; short walks a death frame is also LESS drawing than the expanding ring this
+; replaced -- four strokes against the ring's ninety -- but not less
+; interpretation: the ring was one `arc` and this is four calls, which is the
+; trade the arcade's look costs on frames that happen ten at a time and never in
+; the steady state.
+;
+; The `pd` is not decoration: every drawing procedure in this file arrives with
+; the pen UP from a `pu setx sety` and puts it down itself inside the walk, and
+; the pen has to stay up for all three legs or each fragment trails a line back
+; to the ship.
 to draw.boom
-  pu setx :shipx sety :shipy seth 0
+  local "t
+  make "t :boom.drift * (:death.frames - :dying)
   setpc :ship.colour
-  pd
-  arc 360 :boom.grow * (:death.frames - :dying)
+  frag  71.3 4.74  85.5 22.8 :t
+  frag 147.1 8.29 146.9  9.8 :t
+  frag 212.6 8.26  33.4  9.8 :t
+  frag 288.9 4.72  94.3 22.8 :t
+end
+
+to frag :a :r :d :len :t
+  pu setx :shipx sety :shipy seth :sh
+  rt :a  fd :r  fd :t
+  rt :d  bk :len / 2  pd  fd :len
 end
 
 ; Three statements and a walk, and it runs only on the frames a saucer is on
@@ -591,7 +625,7 @@ to lives.word
 end
 
 to refresh.hud
-  make "hud.text (se [SCORE] :score [LEVEL] :level lives.word)
+  make "hud.text (se [SCORE] :score [WAVE] :level lives.word)
 end
 
 ;==========================================================================
@@ -1534,19 +1568,19 @@ end
 to attract.screen
   textscreen ct settc [3 4]
   setcursor [15 4] print "|ASTEROIDS|
-  setcursor [4 7] print "|Break the rocks down and stay clear|
-  setcursor [13 10] print "|Large rock     20|
-  setcursor [13 11] print "|Medium rock    50|
-  setcursor [13 12] print "|Small rock    100|
-  setcursor [13 13] print "|Large saucer  200|
-  setcursor [13 14] print "|Small saucer 1000|
-  setcursor [4 16] print "|A large rock broken all the way down|
-  setcursor [13 17] print "|is worth 240|
-  setcursor [7 19] print "|The small saucer aims at you|
-  setcursor [6 21] print "|An extra ship every 10000 points|
-  setcursor [3 22] print "|ARROWS Steer and thrust  SPACE Fire|
-  setcursor [5 23] print "|DOWN Hyperspace  P Pause  Q Quit|
-  setcursor [14 27] print "|Press Space|
+  setcursor [2 7] print "|Break the rocks down and stay clear|
+  setcursor [11 10] print "|Large rock      20|
+  setcursor [11 11] print "|Medium rock     50|
+  setcursor [11 12] print "|Small rock     100|
+  setcursor [11 13] print "|Large saucer   200|
+  setcursor [11 14] print "|Small saucer  1000|
+  setcursor [2 17] print "|A large rock broken all the way down|
+  setcursor [13 18] print "|is worth 520|
+  setcursor [6 20] print "|The small saucer aims at you|
+  setcursor [4 22] print "|An extra ship every 10000 points|
+  setcursor [2 23] print "|ARROWS Steer and thrust  SPACE Fire|
+  setcursor [4 24] print "|DOWN Hyperspace  P Pause  Q Quit|
+  setcursor [14 28] print "|Press Space|
   wait.for.space
 end
 
@@ -1566,7 +1600,7 @@ to show.game.over
   setcursor [11 12]
   (print [FINAL SCORE:] :score)
   setcursor [11 14]
-  (print [LEVEL REACHED:] :level)
+  (print [WAVE REACHED:] :level)
   wait 2000
 end
 
