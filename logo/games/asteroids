@@ -159,15 +159,30 @@ make "speed.max    4.8     ; steps a frame -- about 67 a second
 ; 104 frames, and diagonally for half as many again.  Measured on the host, one
 ; respawn in ten waits longer than two seconds and the worst seen was 127 frames
 ; -- nine seconds of an empty screen the player can do nothing about.  So the
-; wait is capped, and the cap is affordable because the clear box is 20 steps
-; wider than the box that kills: a rock still inside it at the cap is, almost
-; always, not yet touching the hull.
+; wait is capped.
+;
+; WHAT THE CAP EXPIRES ON IS THE SPAWN POINT, NOT THE RULE (B27).  It first
+; landed the ship wherever it stood, on the argument that the clear box is 20
+; steps wider than the box that kills, so a rock still inside it at the cap is
+; usually not touching the hull.  That argument is wrong, and measurably: the
+; two boxes are squares, 100 steps across against 60, so 36% of the blocking
+; area kills outright -- and a rock that has held the point for 28 straight
+; frames is not uniformly placed in that area, it is crossing the middle of it.
+; Over 400 respawns on a twelve-rock board, 60% ran the cap out and 35% died on
+; the frame after landing.
+;
+; Waiting longer cannot fix it either, and that is the measurement worth
+; keeping: a large rock's blocking box covers a tenth of the field in each
+; axis, so twelve of them leave the centre clear only about half the time, and
+; a wait with no cap has a tail in the hundreds of frames on EVERY board size --
+; 191 frames at four rocks, 400 at twelve.  The centre of a 320-step field is
+; simply not reliably empty.  So `step.wait` moves the spawn point instead.
 make "start.lives    3
 make "extra.every 10000    ; points between extra ships
 make "ship.rad.hull  6     ; collision half-width, added to a rock's radius
 make "ship.rad       6     ; the box in use now -- see `respawn` and `land.ship`
 make "clear.rad     26     ; how much space a new ship waits for
-make "wait.max      28     ; frames it waits for it -- 2 s at 14 fps, then lands
+make "wait.max      28     ; frames it waits at the centre -- 2 s at 14 fps
 make "death.frames  10     ; frames the explosion lasts -- 0.7 s at 14 fps
 make "boom.drift     3     ; steps a fragment floats from the centre a frame
 make "hyper.risk     8     ; one jump in this many ends inside a rock
@@ -811,12 +826,47 @@ end
 ; this does -- so the ship arrives one frame after the field cleared, which at
 ; 14 fps nobody can see, and the frame order stays exactly as it was.
 ;
-; And it gives up after `wait.max`, because "wait for a clear space" with no
-; bound on it is a hang wearing a rule's clothes -- see the tuning.
+; After `wait.max` it gives up on the CENTRE and not on the rule (B27).  It used
+; to give up on the rule -- land wherever it was, clear or not -- and that is
+; what the cap could not afford: on a full board the centre is inside something
+; roughly half the time, so 60% of respawns ran the cap out and 35% of them died
+; on the very next frame.  The player got the life taken back before they had a
+; frame to move.
+;
+; So past the cap the spawn point HUNTS.  Every frame it moves to a new random
+; place and the same free scan answers for that one instead, until one comes
+; back clear -- which is the same idea as `hyperspace`, minus the risk, and it
+; is a handful of statements because the check was never tied to the origin.
+; The ship still lands with a full `clear.rad` of space around it; it just does
+; not promise that space is in the middle.  Measured on a twelve-rock board, the
+; mean wait is 19 frames and the worst 40 -- a dozen probes past the cap, and
+; SHORTER on average than the old give-up that landed the ship on a rock.
+;
+; WHAT `wait.max` BOUNDS IS THE WAIT FOR THE CENTRE, not the wait.  Read that
+; carefully before chasing a hang through here: the cap says how long the ship
+; insists on the origin, and the hunt after it has no ceiling -- it ends when a
+; probe comes back clear.  That is weaker than a cap on purpose and much stronger
+; than what B24 had: B24 re-tested the SAME point while a rock sat on it for a
+; deterministic 104 frames, where each probe here is an independent draw against
+; a field that is clear about half the time at twelve large rocks, so the odds of
+; still waiting fall off geometrically instead of waiting out one rock's
+; crossing.  A hunt that ran long would mean the field held no clear point at
+; all, which is a different bug from this one.
+;
+; The ORDER inside this is what makes the probe legal: `blocked` is last frame's
+; answer about wherever the ship stood last frame, so the move has to come after
+; the decision not to land and before `blocked` is cleared.  Then the pass that
+; runs later this frame tests the new point, and the next frame reads an answer
+; about the place the ship is actually standing.
 to step.wait
   make "waited :waited + 1
   if not :blocked [land.ship stop]
-  if :waited > :wait.max [land.ship stop]
+  if :waited > :wait.max [
+    make "shipx (random 320) - 160
+    make "shipy (random 320) - 160
+    make "shipcx :shipx
+    make "shipcy :shipy
+  ]
   make "blocked false
 end
 
@@ -894,7 +944,8 @@ end
 
 ; Where a ship starts, whether it is the first of a level or the fourth of a
 ; game.  It waits there, unhittable and undrawn, until the rock pass reports the
-; spawn point clear.
+; spawn point clear -- and if the centre will not clear, `step.wait` goes and
+; finds a point that is.
 ; A ship does not appear until the space it appears in is empty.  It is put at
 ; the spawn point with the wide `clear.rad` box and `blocked` set, so at least
 ; one whole rock pass has to report the area clear before it lands -- which is

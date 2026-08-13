@@ -1013,11 +1013,51 @@ Three things follow, and all three are the arcade's:
   cross at 0.96 steps a frame: one rock drifting through the middle can own the
   spawn point for over a hundred frames, and the worst measured over 60 respawns
   was 127 — nine seconds of empty screen. A rule with no upper bound on it is a
-  hang. The cap is affordable because the clear box is 20 steps wider than the
-  box that kills, so a rock still inside it at the cap is usually not touching.
-  And `poll.input` guarded only `dying`, so a player could steer, thrust, fire
-  and hyperspace a ship that was drawn nowhere; `waiting` now stops it at the
-  same guard, with pause and quit still live above it.
+  hang. And `poll.input` guarded only `dying`, so a player could steer, thrust,
+  fire and hyperspace a ship that was drawn nowhere; `waiting` now stops it at
+  the same guard, with pause and quit still live above it.
+
+  **What the cap expires on is the spawn point, not the rule** — B27, and the
+  correction to what B24 wrote here. B24 landed the ship wherever it stood when
+  the cap ran out, on the argument that the clear box is 20 steps wider than the
+  box that kills, so a rock still inside it is usually not touching. Both boxes
+  are squares, 100 steps across against 60, so 36% of the blocking *area* kills
+  outright — and a rock that has held the point for 28 straight frames is not
+  uniformly placed in that area, it is crossing the middle of it. Over 400
+  respawns on a twelve-rock board, 60% ran the cap out and **35% of all respawns
+  lost a life on the frame after landing**. Reported from a board as ships
+  appearing over rocks and saucers.
+
+  Waiting longer is not the alternative, and this is the number this section was
+  missing: a large rock's blocking box covers a tenth of the field in each axis,
+  so twelve of them leave the centre clear only about half the time, and an
+  uncapped wait has a tail in the hundreds of frames at *every* board size — 191
+  frames at four rocks, 400+ at twelve. **The centre of a 320-step field is not
+  reliably empty**, which is the thing this design assumed and never measured.
+
+  So past the cap the spawn point **hunts**: every frame it moves to a new random
+  place and the same free scan answers for that one, until one comes back clear.
+  The ship still lands with a full `clear.rad` of space around it — a twelve-rock
+  board gives a mean of 19 frames and a worst of 40, a dozen probes past the cap,
+  and that mean is *shorter* than the old give-up's — and the only promise given
+  up is that the space is in the middle, which is the one the field could not
+  keep.
+
+  **What `wait.max` bounds is the wait for the centre, not the wait**, and this
+  section should be read exactly that way: the cap says how long the ship insists
+  on the origin, and the hunt after it has no hard ceiling — it ends when a probe
+  comes back clear. That is deliberately a weaker guarantee than a cap, and a far
+  stronger one than B24 had. B24 re-tested the *same* point while a rock sat on it
+  for a deterministic ~104 frames; each probe here is an independent draw against
+  a field whose points are clear about half the time at twelve large rocks, so the
+  chance of still waiting falls off geometrically rather than waiting out one
+  rock's crossing. A hunt that ran long would mean the field had no clear point
+  at all, which is a different failure from the one B27 fixes. It is a handful of
+  statements because the
+  check was never tied to the origin, and it is the hyperspace mechanic below
+  with the risk taken out. The order inside `step.wait` is load-bearing: `blocked`
+  is last frame's answer about where the ship stood last frame, so the move comes
+  *after* the decision not to land and *before* `blocked` is cleared.
 - **Hyperspace.** Set the position to a random point, zero the velocity. There
   is nothing to erase — the frame clears and redraws (§3.3) — so the mechanic
   is five statements. The arcade's chance of materialising inside a rock is
