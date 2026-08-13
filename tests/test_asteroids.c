@@ -1393,13 +1393,18 @@ void test_a_waiting_ship_does_not_appear_until_the_space_is_clear(void)
 // a worst of 127, and one respawn in ten over two seconds. Reported from a board
 // as a ship that stayed hidden for several seconds after a respawn.
 //
-// The cap is affordable because the clear box is 20 steps wider than the box
-// that kills: a rock still inside it when the cap expires is, almost always,
-// not yet touching the hull. This is the extreme case -- a rock parked dead
-// centre, which nothing in play can hold there -- so it lands and dies, and
-// even that is better than an empty screen with no way out.
-void test_a_respawn_wait_gives_up_and_lands_the_ship(void)
+// B27. What the cap expires on is the SPAWN POINT and not the rule: past
+// `wait.max` the spawn point moves to a new random place every frame and the
+// same free scan answers for that one, until one comes back clear. So the wait
+// is still bounded and the ship still lands with a full `clear.rad` of space
+// around it -- it just does not promise that space is in the middle.
+//
+// This is the extreme case: a rock parked dead centre, which nothing in play
+// can hold there, so the centre NEVER clears and only the hunt can end the
+// wait. Before B27 the ship landed on top of that rock at the cap and died.
+void test_a_respawn_wait_gives_up_on_the_centre_and_not_on_the_rule(void)
 {
+    run("(rerandom 7)");
     ship_under_a_rock();
     run("respawn");
     int cap = (int)num(":wait.max");
@@ -1413,9 +1418,79 @@ void test_a_respawn_wait_gives_up_and_lands_the_ship(void)
 
     char msg[128];
     snprintf(msg, sizeof(msg), "the ship waited %d frames against a cap of %d", f, cap);
-    TEST_ASSERT_TRUE_MESSAGE(f <= cap + 1, msg);
+    TEST_ASSERT_TRUE_MESSAGE(f > cap, "the ship landed on a spawn point that never cleared");
+    TEST_ASSERT_TRUE_MESSAGE(f <= cap + 8, msg);
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":ship.rad.hull"), num(":ship.rad"),
                                     "the ship landed still testing the wide box");
+
+    // It landed somewhere else, and the collision position went with it -- a
+    // ship that lands on a hunted point has to be hittable AT that point, not
+    // at the origin the hunt walked away from.
+    TEST_ASSERT_TRUE_MESSAGE(fabsf(num(":shipx")) > num(":clear.rad") ||
+                                 fabsf(num(":shipy")) > num(":clear.rad"),
+                             "the ship landed back on the blocked centre");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":shipx"), num(":shipcx"),
+                                    "the landed ship is tested at a place it is not");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":shipy"), num(":shipcy"),
+                                    "the landed ship is tested at a place it is not");
+
+    // And the point it found is genuinely clear: the next frame costs no life.
+    run("step.ship  step.draw.all");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(3, num(":lives"),
+                                    "the ship materialised inside the rock it was waiting out");
+}
+
+// B27, and the measurement that found it. Reported from a board as ships
+// appearing over rocks and saucers, and it was not rare: the old cap landed the
+// ship wherever it stood whether or not the point was clear, on the argument
+// that the clear box is 20 steps wider than the box that kills. The two boxes
+// are squares, 100 steps across against 60, so 36% of the blocking AREA kills
+// outright -- and a rock that has held the point for 28 straight frames is not
+// uniformly placed in that area, it is crossing the middle of it. Measured over
+// 400 respawns on a twelve-rock board, 60% ran the cap out and 35% of all
+// respawns died on the frame after landing.
+//
+// Waiting longer is not the fix and that is worth pinning too: twelve large
+// rocks leave the centre clear only about half the time, so an uncapped wait
+// has a tail in the hundreds of frames on every board size. The hunt is what
+// makes both numbers acceptable at once.
+void test_no_respawn_lands_the_ship_where_it_dies(void)
+{
+    int trials = 40;
+    int cap = 0;
+
+    for (int t = 0; t < trials; t++)
+    {
+        char seed[32];
+        snprintf(seed, sizeof(seed), "(rerandom %d)", t + 1);
+        run(seed);
+        setup_with(12);
+        cap = (int)num(":wait.max");
+
+        // Somewhere into the wave, so the rocks are not where they spawned.
+        for (int i = 0; i < t; i++)
+            run("step.draw.all  reclaim");
+        run("respawn");
+
+        int f = 0;
+        while (strcmp(value_to_string(eval_string(":waiting").value), "true") == 0 &&
+               f < cap * 4)
+        {
+            run("step.wait  step.draw.all  reclaim");
+            f++;
+        }
+
+        char msg[128];
+        snprintf(msg, sizeof(msg), "respawn %d never landed (%d frames)", t, f);
+        TEST_ASSERT_EQUAL_STRING_MESSAGE("false",
+                                         value_to_string(eval_string(":waiting").value), msg);
+
+        // The frame after it lands is the one the report was about.
+        float before = num(":lives");
+        run("step.ship  step.draw.all  reclaim");
+        snprintf(msg, sizeof(msg), "respawn %d landed inside a rock after %d frames", t, f);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(before, num(":lives"), msg);
+    }
 }
 
 // B24. A waiting ship is parked on the spawn point and drawn nowhere, and the
@@ -3287,8 +3362,6 @@ void test_the_m4_harness_keeps_the_saucer_off_the_plain_points(void)
 
 //==========================================================================
 
-
-
 int main(void)
 {
     UNITY_BEGIN();
@@ -3342,7 +3415,8 @@ int main(void)
     RUN_TEST(test_a_rock_on_the_ship_kills_it);
     RUN_TEST(test_one_frame_takes_only_one_life);
     RUN_TEST(test_a_waiting_ship_does_not_appear_until_the_space_is_clear);
-    RUN_TEST(test_a_respawn_wait_gives_up_and_lands_the_ship);
+    RUN_TEST(test_a_respawn_wait_gives_up_on_the_centre_and_not_on_the_rule);
+    RUN_TEST(test_no_respawn_lands_the_ship_where_it_dies);
     RUN_TEST(test_a_waiting_ship_answers_no_key_but_pause_and_quit);
     RUN_TEST(test_the_clear_radius_is_wider_than_the_ship_it_protects);
     RUN_TEST(test_the_explosion_counts_down_and_the_ship_comes_back);
