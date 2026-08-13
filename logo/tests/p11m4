@@ -275,6 +275,30 @@ end
 ; workspace, and M4 is 14 more procedures than M3.  It is the first number this
 ; run should be read for after the frame itself, because at M3 it was the whole
 ; of the worst frame's overshoot.
+; What a frame SPENDS of the word table, which is the number that sizes
+; `atom.floor` -- and it has to be measured rather than inferred from the
+; readings around the run.  Free space at the start against free space at the
+; end says nothing: `reclaim` may have fired between them, and what is left at
+; the end is the live working set rather than what the frames spent.  So this
+; turns the floor off, collects once, and reads the fall across fifty frames.
+;
+; IT IS A LOWER BOUND ON PLAY, and knowingly so.  This harness holds a fixed
+; board: no rock ever splits, no score ever changes and no ship ever dies, and
+; those are the three things that mint words fastest.  A frame here is the
+; game's cheapest frame, so a floor sized on it is sized on the quiet case --
+; which is exactly the mistake B25 made twice with the frame count.  Read this
+; as "at least this much", and leave the floor room above it.
+to word.spend
+  local "a0 local "was
+  make "was :atom.floor
+  make "atom.floor 0          ; nothing collects while we measure
+  recycle
+  make "a0 atoms
+  repeat 50 [frame.body]
+  make "atom.floor :was
+  output (:a0 - atoms) / 50
+end
+
 to time.recycle
   local "t0 local "total
   make "total 0
@@ -393,12 +417,13 @@ to p11m4.report
   ; `atom.floor` is right on THIS board, and the one to read if the game
   ; ever reports `Out of space` again.
   pr (se [word bytes free] :a0 [at start,] :a1 [at end,] :a2 [after recycle])
-  make "spend (:a0 - :a1) / :p11m4.frames
+  make "spend word.spend
   ifelse :spend > 0 [
-    pr (se [a frame spends] :spend [bytes of it, and the floor of] :atom.floor
-        [covers] :atom.floor / :spend [frames])
+    pr (se [a frame spends at least] :spend [bytes of it, so the floor of]
+        :atom.floor [covers] :atom.floor / :spend [frames])
+    pr [and a frame that splits a rock, scores, or kills a ship spends more]
   ] [
-    pr [a frame spent no word space -- too few frames to size the interval]
+    pr [a frame spent no word space, which cannot be right -- check `atoms`]
   ]
   pr []
 end
