@@ -5260,6 +5260,7 @@ Every distinct word costs its characters once, however many places refer to it â
 **Example**:
 
 ```logo
+?make "l (list 0)
 ?recycle
 ?pr atoms
 19536
@@ -5268,7 +5269,7 @@ Every distinct word costs its characters once, however many places refer to it â
 18664
 ?recycle
 ?pr atoms
-19536
+19528
 ```
 
 
