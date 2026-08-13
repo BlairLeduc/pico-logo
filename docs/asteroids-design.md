@@ -1056,6 +1056,7 @@ arrangement:
 | Fire, **and the saucer's warble** | `[1 5]` | sawtooth zap | a shot launches; a two-tone beep every third frame while a saucer is up |
 | Thrust | `[2 6]` | **narrow pulse at 96 Hz**, re-triggered each held frame | held while thrust is held |
 | Explosions | `[3 7]` | white noise | rock death (pitched by size), ship death, saucer death |
+| **Extra ship** | `[0 4]` | the heartbeat's square, borrowed (§11.4) | a fixed burst of eight high notes, ~1.1 s, when `add.score` crosses the threshold |
 
 The heartbeat is the retrofit's payoff, the same way the dive shriek was
 Galaxian's: it is a *tempo*, not a note, so it needs a voice that keeps
@@ -1168,6 +1169,41 @@ moves only the clock, then pins the floor and that a new wave restarts the
 clock. Its sibling `test_the_heartbeat_speeds_up_as_the_board_thins` is unchanged
 and still passes, because it leaves `frame.count` at zero — the two pressures are
 separable by construction.
+
+### 11.4 The extra ship's alarm, and why it takes the heartbeat's voice
+
+The arcade announces an extra ship with a rapid high beeping, and nothing here
+announced it at all — the ship count on the HUD just went up. `extra.alarm` is
+that beeping: two notes at 1760 and 1170 Hz, alternating every two frames for
+eight notes, about 1.1 s. High deliberately, because nothing else in the game is
+a *tone* above 1100 Hz (the warble's top note), so the alarm cannot be mistaken
+for a saucer.
+
+**The voice is the whole decision, and it went to `[0 4]` with the heartbeat.**
+Every other pair is worse for the same reason: an award arrives on a *scoring*
+frame, and a scoring frame is very often one the player is firing on (`[1 5]`)
+or being chased by a saucer on (`[1 5]` again, warbling every third frame), or
+running away on (`[2 6]`). Those are exactly the sounds that would chop the
+alarm into fragments, and the 1000-point small saucer is a plausible trigger for
+the award in the first place. The beat is the one pair nothing else competes
+for, so the alarm gets a clean second of it.
+
+The heartbeat is not silenced by a flag. `add.score` sets
+`beat.in = extra.beeps × extra.gap`, which lands the next beat on the frame
+*after* the last alarm note, so the two never gate `[0 4]` in the same frame and
+the tempo resumes on its own with nothing to clear. Costs are one line at a site
+that runs a handful of times a game, and one comparison a frame in the loop:
+`extra.alarm` tests `extra.left` **first** and returns, so a quiet frame does not
+even pay the countdown the other two alternators do.
+
+`setup.level` zeroes `extra.left` because a level end already ran `stopsound` —
+an alarm still owing notes would otherwise resume into a board it did not belong
+to. The corollary is that clearing a wave with the shot that pays for a ship
+means hearing the level's silence instead of the alarm, which is the same deal
+every other sound in the game gets at a level boundary.
+`test_an_extra_ship_sounds_an_alarm_the_heartbeat_makes_room_for` holds all of
+it: the burst length, the two notes, that `add.score` itself is silent, that no
+beat interleaves, and that the beat comes back.
 
 ## 12. Frame budget
 

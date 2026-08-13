@@ -2757,6 +2757,49 @@ void test_the_saucer_warbles_only_while_it_is_up(void)
                                   "the warble went on after the saucer left");
 }
 
+// The extra ship's alarm is a fixed burst played out by the frame loop, not a
+// note made where the ship is awarded -- and it borrows the heartbeat's pair,
+// so the interesting assertion is that the beat stays out of its way rather
+// than interleaving with it for a second.
+void test_an_extra_ship_sounds_an_alarm_the_heartbeat_makes_room_for(void)
+{
+    run("init.game  setup.sound  make \"rocks.alive 12  make \"beat.in 1");
+
+    int mark = mock_sound_gate_count();
+    run("make \"score 9900  add.score 100");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(4, num(":lives"), "no extra ship to sound an alarm for");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, notes_on(0, mark), "`add.score` made the noise itself");
+
+    // Every note of the burst, and nothing else on the pair while it runs: the
+    // beat was due on the very next frame and `add.score` pushed it past the end.
+    run("make \"n (:extra.beeps * :extra.gap) - 1  repeat :n [heartbeat  extra.alarm]");
+    char msg[96];
+    snprintf(msg, sizeof(msg), "%d notes on the alarm's pair, expected %d",
+             notes_on(0, mark), (int)num(":extra.beeps"));
+    TEST_ASSERT_EQUAL_INT_MESSAGE((int)num(":extra.beeps"), notes_on(0, mark), msg);
+
+    // Two notes and not one, so it reads as an alarm rather than a tone, and
+    // both sit above everything else in the game (nothing else is over 1100 Hz).
+    run("make \"extra.left 4  make \"extra.in 1  extra.alarm");
+    uint32_t first = last_freq_on(0);
+    run("extra.alarm  extra.alarm");
+    TEST_ASSERT_TRUE_MESSAGE(last_freq_on(0) != first, "the alarm is one note, not two");
+    TEST_ASSERT_TRUE_MESSAGE(first > 1100 && last_freq_on(0) > 1100,
+                             "the alarm does not sit above the rest of the game");
+
+    // It ends by itself, and the beat comes back with no flag to clear.
+    run("make \"extra.left 0  make \"beat.in 1");
+    mark = mock_sound_gate_count();
+    run("repeat 30 [heartbeat  extra.alarm]");
+    TEST_ASSERT_TRUE_MESSAGE(notes_on(0, mark) > 0, "the heartbeat never came back");
+
+    // A level end already silenced the voices, so an alarm still owed notes must
+    // not resume into a board it did not belong to.
+    run("make \"extra.left 5  make \"level.rocks 1  setup.level");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":extra.left"),
+                                    "an alarm survived into the next level");
+}
+
 // A level that ends has to silence the voices as well as stop the turtles: the
 // PSG keeps sounding on its own, so a thrust rumble or a warble left gated on
 // would follow the player back to the attract screen. `stopsound` keeps the
@@ -3094,6 +3137,7 @@ int main(void)
     RUN_TEST(test_the_game_makes_its_noises);
     RUN_TEST(test_the_thrust_rumble_sounds_only_while_it_is_held);
     RUN_TEST(test_the_saucer_warbles_only_while_it_is_up);
+    RUN_TEST(test_an_extra_ship_sounds_an_alarm_the_heartbeat_makes_room_for);
     RUN_TEST(test_a_level_end_silences_every_voice);
     RUN_TEST(test_the_harness_frame_matches_the_game_frame);
     RUN_TEST(test_p11m4_script_runs);

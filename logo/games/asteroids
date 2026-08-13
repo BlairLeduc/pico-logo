@@ -334,6 +334,24 @@ make "warble.a    1100     ; the saucer's two-tone warble
 make "warble.b     760
 make "warble.gap     3     ; frames between its two notes
 
+; The extra ship's alarm, the arcade's one piece of good news.  It borrows the
+; heartbeat's pair rather than taking a fifth one, because the two sounds are
+; the two that are ALWAYS available to collide: an award arrives on a scoring
+; frame, and a scoring frame is one the player may well be firing (which owns
+; [1 5]) or running from a saucer on (which owns it too).  The beat is the one
+; voice nothing else competes for, so the alarm can have a clean second of it --
+; and `add.score` pushes the beat out for exactly that long rather than letting
+; the two interleave.  Losing the tempo for a second at the moment the player
+; earns a ship is a flourish, not a loss.
+;
+; Two notes an octave and a bit apart, high enough to sit above everything else
+; in the game (nothing else here is a tone over 1100 Hz), fast enough to read as
+; an alarm rather than a tune.
+make "extra.a     1760     ; the extra ship's two-note alarm
+make "extra.b     1170
+make "extra.gap      2     ; frames between its notes
+make "extra.beeps    8     ; how many -- about 1.1 s at 14 fps
+
 ;==========================================================================
 ; Rock state -- eight parallel flat lists, `max.rocks` long
 ;
@@ -434,6 +452,10 @@ make "sau.shot.x 9999  make "sau.shot.y 0
 ; many frames until it plays.
 make "beat.in 0  make "beat.alt false
 make "warble.in 0  make "warble.alt false
+; The alarm needs a second counter the other two do not: it is a burst of a
+; known length rather than something that runs while a condition holds, so
+; `extra.left` says how many notes are still owed and 0 is the idle state.
+make "extra.in 0  make "extra.left 0  make "extra.alt false
 
 ;==========================================================================
 ; The outlines
@@ -707,6 +729,21 @@ to warble
   make "warble.in :warble.gap
   make "warble.alt not :warble.alt
   ifelse :warble.alt [(sound [1 5] :warble.a 70 8)] [(sound [1 5] :warble.b 70 8)]
+end
+
+; The extra ship's alarm: a fixed burst rather than something that runs while a
+; condition holds, so the idle test is `extra.left` and it comes FIRST -- a quiet
+; frame costs one comparison and no countdown, which is what the frame budget
+; buys by not making this a third alternator.  `add.score` starts it and also
+; pushes `beat.in` past it, so nothing has to be silenced here.
+to extra.alarm
+  if 0 = :extra.left [stop]
+  make "extra.in :extra.in - 1
+  if 0 < :extra.in [stop]
+  make "extra.in :extra.gap
+  make "extra.left :extra.left - 1
+  make "extra.alt not :extra.alt
+  ifelse :extra.alt [(sound [0 4] :extra.a 80 11)] [(sound [0 4] :extra.b 80 11)]
 end
 
 ; A rock's death is one noise burst whose pitch says which rock it was: a large
@@ -1364,6 +1401,12 @@ to add.score :n
   if not (:score < :next.extra) [
     make "lives :lives + 1
     make "next.extra :next.extra + :extra.every
+    ; Arm the alarm, and hand it the heartbeat's voice for as long as it runs.
+    ; `extra.in 1` fires the first note on the next frame; the beat is pushed to
+    ; the frame after the last one, so the two never gate [0 4] in the same
+    ; frame and the tempo comes back by itself with no second flag to clear.
+    make "extra.in 1  make "extra.left :extra.beeps  make "extra.alt false
+    make "beat.in :extra.beeps * :extra.gap
   ]
   refresh.hud
 end
@@ -1486,6 +1529,7 @@ to play.frame
     step.shots
     step.saucer
     heartbeat
+    extra.alarm
     clean
     step.draw.all
     draw.ship
@@ -1513,6 +1557,10 @@ to setup.level
   clear.saucer
   reset.ship
   make "beat.in 1
+  ; A level end already ran `stopsound`, so an alarm still owed notes here would
+  ; resume into a board it did not belong to.  The last rock of a wave can be the
+  ; one that pays for the ship, and that award is heard as the level's silence.
+  make "extra.left 0
   make "n :level.rocks
   if :n > :max.rocks [make "n :max.rocks]
   repeat :n [spawn.rock 3]
