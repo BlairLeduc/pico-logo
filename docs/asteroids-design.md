@@ -76,7 +76,8 @@ The arcade rules, kept:
 
 - Rocks drift at constant velocity, rotating, wrapping at every edge.
 - Shooting a **large** rock yields two **medium**; a medium yields two
-  **small**; a small vanishes. The level ends when no rock is alive.
+  **small**; a small vanishes. The level ends when no rock and no saucer is
+  alive.
 - The ship rotates, thrusts along its facing, and keeps its momentum. It does
   not stop when you stop thrusting; it has no brake.
 - A flying saucer crosses at intervals and shoots back.
@@ -2176,7 +2177,18 @@ demon poll working at the prompt.
 **A level ends three ways and `over` is all three of them** — the board is
 clear, the last life is gone (`step.death` sets it from inside the frame), or
 the player pressed Q. Which one it was is read back afterwards, by the state
-machine above it, so this loop stays two lines:
+machine above it, so this loop stays two lines.
+
+**Clear means clear of saucers as well as of rocks.** A saucer still crossing
+when the last rock breaks would otherwise be wiped by the next level's `cs`,
+along with the points it was worth and the shot it had in the air — the player
+watching a 200-point target evaporate mid-aim. So the end test is
+`if 0 = :rocks.alive [if 0 = :sau.on [make "over true]]`, and `step.saucer`
+spawns no replacement once the rocks are gone: it holds its countdown where it
+is and returns. Both halves are needed. Without the second, a cleared board
+would keep minting saucers and the wave would never end; with it, the wait is
+bounded by one crossing — about six seconds — so a player who ignores the
+saucer still gets their next wave.
 
 ```logo
 to one.game
@@ -2473,7 +2485,8 @@ together; a split fills the slots it finds and never writes past `MAX.ROCKS`;
 three larges split all the way down into exactly twelve slots, with the score
 that implies; a shot on a rock splits it, scores it and is consumed; an idle
 shot hits nothing, which is what fails if the outer loop loses its guard and
-starts testing a stale position; a level ends when the board is clear; the
+starts testing a stale position; a level ends when the board is clear, and a
+saucer still crossing holds it open while spawning no replacement; the
 shot-speed bound of §7.3; and the M2 harness — that it runs end to end, that it
 measures the rock counts it reports, that it holds three shots live and the
 board still, and that its frame matches the game's in drawing, physics, ship

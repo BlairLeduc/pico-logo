@@ -1211,6 +1211,12 @@ end
 to step.saucer
   local "h
   if 0 = :sau.on [
+    ; A cleared board takes no new saucer.  The wave ends when the last rock AND
+    ; the last saucer are gone, so a spawn here would put the level end back by
+    ; another crossing for as long as the player let it happen.  The countdown
+    ; is held rather than run down, so the gap the next wave opens with is the
+    ; one this wave left.
+    if 0 = :rocks.alive [stop]
     make "sau.wait :sau.wait - 1
     if 0 < :sau.wait [stop]
     spawn.saucer
@@ -1573,13 +1579,20 @@ end
 ; the last life is gone (`step.death` sets it), or the player pressed Q.  Which
 ; one it was is read back off `rocks.alive`, `lives` and `quit` by `one.game`,
 ; so this loop stays two lines.
+;
+; CLEAR means clear of saucers as well as of rocks: a saucer still crossing when
+; the last rock breaks would otherwise be wiped by the next `cs`, along with the
+; points it was worth and the shot it had in the air.  It is bounded -- a saucer
+; crosses the field in about six seconds and `step.saucer` spawns no replacement
+; once the rocks are gone -- so the wave still ends on its own if the player
+; leaves it alone.
 to play.level
   setup.level
   (setrefresh "sync :fps)
   make "over false
   until [:over] [
     play.frame
-    if 0 = :rocks.alive [make "over true]
+    if 0 = :rocks.alive [if 0 = :sau.on [make "over true]]
   ]
   ; A shot in flight is a turtle the ENGINE is moving, so it keeps gliding and
   ; keeps the demon poll working after the game hands the screen back.  Stop

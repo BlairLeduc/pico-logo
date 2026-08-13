@@ -1666,6 +1666,50 @@ void test_a_level_ends_when_the_board_is_clear(void)
     TEST_ASSERT_EQUAL_STRING("auto", value_to_string(eval_string("refreshmode").value));
 }
 
+// Clear means clear of SAUCERS too. A saucer still crossing when the last rock
+// breaks would otherwise be wiped by the next level's `cs`, taking the points it
+// was worth with it, so the wave stays open until it leaves or dies. `poll.input`
+// runs first in every frame, which is where the first frame gets its saucer.
+void test_a_saucer_holds_the_level_open_until_it_is_gone(void)
+{
+    run("init.game");
+    run("make \"level.rocks 1");
+    proc_define_from_text("to spawn.rock :size\nend");   // an empty board
+    proc_define_from_text("to poll.input\n"
+                          "if :frame.count > 0 [stop]\n"
+                          "make \"sau.on 2  make \"sau.x 150  make \"sau.y 0\n"
+                          "make \"sau.dx :sau.speed  make \"sau.dy 0\n"
+                          "make \"sau.w 0  make \"sau.h 0\n"           // crossing, not hunting
+                          "make \"sau.turn.in 999  make \"sau.fire.in 999  make \"warble.in 999\n"
+                          "end");
+    run("play.level");
+
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", value_to_string(eval_string(":over").value),
+                                     "the level did not end once the saucer left");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":sau.on"), "the level ended with a saucer still on it");
+    TEST_ASSERT_TRUE_MESSAGE(num(":frame.count") > 1,
+                             "a cleared board ended the level with a saucer still crossing");
+}
+
+// And nothing takes its place: a cleared board holds the countdown where it is,
+// so the wave cannot be held open by saucer after saucer, and the gap the next
+// wave opens with is the one this wave left.
+void test_a_cleared_board_spawns_no_further_saucer(void)
+{
+    setup_with(3);
+    land_the_ship();
+    run("make \"rocks.alive 0  make \"sau.on 0  make \"sau.wait 1");
+
+    run("repeat 5 [step.saucer]");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":sau.on"), "a cleared board spawned a saucer");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":sau.wait"),
+                                    "a cleared board ran the countdown down anyway");
+
+    // One rock left and the countdown runs as it always did.
+    run("make \"rocks.alive 1  step.saucer");
+    TEST_ASSERT_TRUE_MESSAGE(num(":sau.on") > 0, "the countdown stayed held with a rock on the board");
+}
+
 // A dying ship steers nothing, fires nothing and cannot hyperspace out of its
 // own explosion -- one guard in `poll.input` rather than one in each handler.
 // Pause and quit sit ABOVE it deliberately: a death lasts most of a second and
@@ -3105,6 +3149,8 @@ int main(void)
     RUN_TEST(test_game_over_prints_the_final_score);
     RUN_TEST(test_a_level_ends_on_q_and_puts_the_screen_back);
     RUN_TEST(test_a_level_ends_when_the_board_is_clear);
+    RUN_TEST(test_a_saucer_holds_the_level_open_until_it_is_gone);
+    RUN_TEST(test_a_cleared_board_spawns_no_further_saucer);
     RUN_TEST(test_both_saucer_outlines_close_on_themselves);
     RUN_TEST(test_draw_saucer_picks_the_outline_for_the_size);
     RUN_TEST(test_the_saucer_boxes_are_not_far_wider_than_the_shapes_drawn_in_them);
