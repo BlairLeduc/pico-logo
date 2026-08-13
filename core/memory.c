@@ -115,6 +115,16 @@ static size_t node_count;
 #define ATOM_LINK_FREE 0x0001u
 static uint16_t atom_buckets[ATOM_BUCKET_COUNT];
 static uint16_t atom_free_lists[LOGO_ATOM_FREE_LIST_COUNT];
+
+// Bytes currently on those free lists, maintained rather than counted.
+//
+// `mem_free_atoms` used to sum this by walking every atom entry, which is fine
+// for a REPL asking `atoms` once and not fine for what the primitive is now
+// for: Asteroids calls it once a frame to decide whether to collect (B25), and
+// the walk measured 30.7 us against `nodes`' 0.58 -- 52x, and growing with the
+// workspace, on the hot path it was added to serve. The free lists change in
+// exactly two places, so the count is cheap to keep exact.
+static size_t atom_free_bytes;
 static MemGcRootScope *gc_root_scopes;
 
 //==========================================================================
@@ -382,6 +392,7 @@ void logo_mem_init(void)
         atom_buckets[i] = ATOM_CHAIN_END;
     for (size_t i = 0; i < LOGO_ATOM_FREE_LIST_COUNT; i++)
         atom_free_lists[i] = ATOM_CHAIN_END;
+    atom_free_bytes = 0;
     gc_root_scopes = NULL;
 
     // Initialize node region (grows downward from top)
@@ -681,6 +692,7 @@ static void atom_free_add(size_t offset, size_t size)
     uint16_t stored_size = (uint16_t)size;
     memcpy(&memory_block[offset + 2], &stored_size, sizeof(stored_size));
     atom_free_lists[bin] = (uint16_t)offset;
+    atom_free_bytes += size;
 }
 
 static bool atom_free_take(size_t size, size_t *offset_out)
@@ -702,6 +714,7 @@ static bool atom_free_take(size_t size, size_t *offset_out)
                     atom_entry_set_next(previous,
                         (uint16_t)(next | ATOM_LINK_FREE));
 
+                atom_free_bytes -= block_size;
                 size_t remainder = block_size - size;
                 if (remainder >= 4)
                     atom_free_add(offset + size, remainder);
@@ -1564,6 +1577,7 @@ void mem_gc_sweep(void)
         atom_buckets[i] = ATOM_CHAIN_END;
     for (size_t i = 0; i < LOGO_ATOM_FREE_LIST_COUNT; i++)
         atom_free_lists[i] = ATOM_CHAIN_END;
+    atom_free_bytes = 0;
     for (offset = 0; offset < atom_next; )
     {
         size_t size = atom_entry_size(offset);
@@ -1600,6 +1614,13 @@ void mem_gc_sweep(void)
     // Clear any remaining marks (nodes and blobs)
     memset(gc_marks, 0, sizeof(gc_marks));
     memset(blob_mark, 0, sizeof(blob_mark));
+
+    // The maintained count and the walk must agree. A collection is the one
+    // moment both are cheap to have, and a drift here means an allocation path
+    // stopped telling the free lists what it did.
+    assert(atom_free_bytes + ((node_bottom < LOGO_ATOM_LIMIT ? node_bottom : LOGO_ATOM_LIMIT) > atom_next
+                              ? (node_bottom < LOGO_ATOM_LIMIT ? node_bottom : LOGO_ATOM_LIMIT) - atom_next : 0)
+           == mem_free_atoms_by_scan());
 }
 
 // Run garbage collection over an explicit root array.
@@ -1665,6 +1686,16 @@ size_t mem_total_nodes(void)
 // Get the number of free bytes in the atom table.
 // This represents the free space between atoms and nodes.
 size_t mem_free_atoms(void)
+{
+    size_t limit = node_bottom < LOGO_ATOM_LIMIT ? node_bottom : LOGO_ATOM_LIMIT;
+    size_t tail = (limit > atom_next) ? limit - atom_next : 0;
+    return atom_free_bytes + tail;
+}
+
+// The same figure counted the slow way, for the assertion that keeps the
+// maintained one honest. Test builds check them against each other after every
+// collection; release builds never call it.
+size_t mem_free_atoms_by_scan(void)
 {
     size_t free_bytes = 0;
     for (size_t offset = 0; offset < atom_next; offset += atom_entry_size(offset))

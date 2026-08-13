@@ -346,6 +346,10 @@ extern "C"
     // Get the number of bytes free in the atom table.
     size_t mem_free_atoms(void);
 
+    // The same figure by walking the table. Only for the invariant check in
+    // debug builds and the test that pins it -- `mem_free_atoms` is O(1).
+    size_t mem_free_atoms_by_scan(void);
+
     // Get the total size of the atom table in bytes.
     size_t mem_total_atoms(void);
 
