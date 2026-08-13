@@ -2406,22 +2406,90 @@ void test_the_small_saucer_aims_at_the_ship_and_the_large_one_does_not(void)
     TEST_ASSERT_TRUE_MESSAGE(away > 10, "a large saucer fired at the ship every time");
 }
 
-// It fires at the ship's DRAWN position and not its collision one, because a
-// ship inside its respawn grace is parked at 9999 -- a saucer aiming there
-// would fire off the edge of the world instead of at the player it can see.
-void test_a_saucer_aims_at_a_ship_it_cannot_yet_hit(void)
+// B22. A ship that is exploding or waiting to appear is NOT a target, which is
+// the arcade's arrangement for a structural reason: there, a destroyed ship is
+// a deactivated object with no position at all until a new one is created at
+// the centre, so the aiming routine has nothing to read.
+//
+// This port has a position to read, and that is the whole bug. `respawn` parks
+// the waiting ship ON the spawn point so the rock pass doubles as the
+// clear-check, and `saucer.fires` reads the DRAWN position -- so the small
+// saucer spent the death and the wait walking tightly-aimed shots into the
+// exact point the player was about to materialise at, stationary, with the fire
+// gap (17 frames) longer than the explosion (10) so the next one landed just
+// after the ship did. Reported from a board as dying to the small saucer over
+// and over with no chance to escape.
+//
+// The count is what this has to test rather than a single shot: the spread is
+// 4 degrees at this score, so one unaimed shot lands near the ship often enough
+// to pass by luck.
+static int shots_near_north(int n)
+{
+    int near = 0;
+    for (int i = 0; i < n; i++)
+    {
+        run("saucer.fires");
+        float h = num("ask 4 [heading]");
+        float spread = num("aim.spread") + 0.5f;
+        if (fabsf(h) <= spread || fabsf(h - 360.0f) <= spread)
+            near++;
+    }
+    return near;
+}
+
+void test_a_saucer_does_not_range_on_a_ship_that_is_not_there(void)
 {
     setup_with(0);
-    run("(rerandom 1)  respawn");                       // parks shipcx at 9999
-    run("make \"shipx 0  make \"shipy 100");            // and the ship is due north
-    saucer_of_size(1, 0, 0);
-    run("saucer.fires");
 
-    float h = num("ask 4 [heading]");
-    char msg[128];
-    snprintf(msg, sizeof(msg), "a saucer fired on heading %g at a ship due north", h);
-    TEST_ASSERT_TRUE_MESSAGE(fabsf(h) <= num("aim.spread") + 0.5f
-                             || fabsf(h - 360.0f) <= num("aim.spread") + 0.5f, msg);
+    // The control: a live ship due north of the saucer is aimed at every time.
+    land_the_ship();
+    run("(rerandom 1)  make \"shipx 0  make \"shipy 100");
+    saucer_of_size(1, 0, 0);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(20, shots_near_north(20),
+                                  "a small saucer did not aim at a live ship");
+
+    // Waiting: parked on the spawn point, due north of the saucer. An aimed
+    // saucer would be ranging on the point the player is about to appear at.
+    run("respawn");
+    run("make \"sau.x 0  make \"sau.y -100");
+    TEST_ASSERT_TRUE_MESSAGE(shots_near_north(20) < 10,
+                             "a small saucer ranged on the spawn point during a respawn wait");
+
+    // Dying: the same, while the explosion is still counting down.
+    run("land.ship  make \"shipx 0  make \"shipy 100  make \"dying :death.frames");
+    TEST_ASSERT_TRUE_MESSAGE(shots_near_north(20) < 10,
+                             "a small saucer ranged on a ship that was still exploding");
+}
+
+// B23. `step.saucer`'s ship test runs `ship.hit` and then `kill.saucer`. During
+// a respawn wait `ship.hit` returns early -- it sets `blocked` and takes no
+// life -- but `kill.saucer` ran anyway, so a saucer that crossed an EMPTY spawn
+// point was destroyed and paid the player 200 or 1000 points for it. With
+// `ship.rad` widened to `clear.rad` for the wait, the box that handed out those
+// points was 26 steps bigger than the ship's, too.
+//
+// The saucer is supposed to block the respawn there, which is the design's own
+// rule -- "an area with a saucer crossing it is not clear" -- not die on it.
+void test_a_saucer_over_the_spawn_point_blocks_the_respawn_without_dying(void)
+{
+    setup_with(0);
+    saucer_of_size(2, 0, 0);                  // sitting right on the spawn point
+    run("respawn");                           // waiting, parked on it, wide box
+    run("make \"score 0  make \"blocked false");
+
+    run("step.saucer");
+
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2, num(":sau.on"),
+                                    "the saucer died on an empty spawn point");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":score"),
+                                    "an empty spawn point paid the player for a saucer");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", value_to_string(eval_string(":blocked").value),
+                                     "a saucer over the spawn point did not block the respawn");
+
+    // And the wait really does hold: `step.wait` reads last frame's answer.
+    run("step.wait");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", value_to_string(eval_string(":waiting").value),
+                                     "the ship landed under a saucer");
 }
 
 // The frame draws the world, the ship AND the saucer, and the guard is in the
@@ -3183,7 +3251,8 @@ int main(void)
     RUN_TEST(test_a_saucer_shot_expires_and_stops_its_turtle);
     RUN_TEST(test_a_saucer_shot_outlives_the_saucer_that_fired_it);
     RUN_TEST(test_the_small_saucer_aims_at_the_ship_and_the_large_one_does_not);
-    RUN_TEST(test_a_saucer_aims_at_a_ship_it_cannot_yet_hit);
+    RUN_TEST(test_a_saucer_does_not_range_on_a_ship_that_is_not_there);
+    RUN_TEST(test_a_saucer_over_the_spawn_point_blocks_the_respawn_without_dying);
     RUN_TEST(test_a_frame_with_a_saucer_up_draws_it);
     RUN_TEST(test_a_level_starts_with_no_saucer_and_nothing_in_the_air);
     RUN_TEST(test_a_pause_holds_the_shots_where_they_are);

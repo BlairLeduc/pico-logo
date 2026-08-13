@@ -1157,9 +1157,26 @@ end
 ; it -- which is one statement and no list, where `towards` would have wanted a
 ; two-element list built for every shot.
 ;
-; It fires at the ship's DRAWN position rather than its collision one, because a
-; ship inside its respawn grace is parked at 9999 and a saucer that aimed there
-; would fire off the edge of the world.
+; A DEAD SHIP IS NOT A TARGET, and the arcade gets that for nothing: there a
+; destroyed ship is a deactivated object with no position at all until a new one
+; is created at the centre, so the aiming routine has nothing to read.  This port
+; HAS something to read, and B22 is what that cost.  `respawn` parks the waiting
+; ship ON the spawn point so the rock pass can double as the clear-check, and
+; aiming at the drawn position therefore handed the small saucer a perfect firing
+; solution on a stationary target that was about to materialise -- for the whole
+; death AND the whole wait, at 4 degrees of spread, on a point that never moves
+; between deaths.  The fire gap is 17 frames and the explosion is 10, so the next
+; shot landed just after the ship did.  Reported from a board as dying to the
+; small saucer over and over with no chance to escape.
+;
+; So the aim is guarded on `dying` and `waiting`: a small saucer with nothing to
+; shoot at fires anywhere, exactly as the large one does.  That is the guard the
+; parked position needs -- not a different variable to read, which was this
+; design's first answer and is why the bug is here rather than in the arcade.
+;
+; With the guard in place the DRAWN position is the right one for every shot
+; that is actually aimed, because the only states where it differs from the
+; collision position are the two this now refuses to fire at.
 ; How wide the small saucer's aim scatters, in degrees either side. The arcade
 ; tightens it as the score climbs until the saucer is "extremely accurate" past
 ; about 35,000, so this runs from `sau.aim.wide` at nothing to `sau.aim.tight`
@@ -1174,11 +1191,11 @@ end
 to saucer.fires
   local "h local "spread
   make "h random 360
-  if 1 = :sau.on [
+  if 1 = :sau.on [if 0 = :dying [if not :waiting [
     make "spread aim.spread
     make "h 90 - (arctan (:shipx - :sau.x) (:shipy - :sau.y))
     make "h :h + (random 2 * :spread) - :spread
-  ]
+  ]]]
   make "sau.shot.in :sau.shot.life
   ask 4 [pu setx :sau.x sety :sau.y seth :h fd 10 st setspeed :sau.shot.speed]
   (sound [1 5] 500 60 8)
@@ -1239,8 +1256,14 @@ to step.saucer
   ]
   make "h sau.shot.on
   if 0 < :h [kill.shot :h  kill.saucer  stop]
+  ; A saucer over a WAITING ship blocks the respawn and does not die on it (B23).
+  ; `ship.hit` already knows the difference -- it sets `blocked` and takes no life
+  ; -- but `kill.saucer` ran regardless, so a saucer crossing an empty spawn point
+  ; was destroyed and PAID the player for it, through a box widened to `clear.rad`
+  ; for the wait.  `waiting` is not touched by `ship.hit`, so reading it after is
+  ; the same answer as reading it before and costs no second test.
   if :sau.w + :ship.rad > abs (:sau.x - :shipcx) [
-    if :sau.h + :ship.rad > abs (:sau.y - :shipcy) [ship.hit  kill.saucer  stop]
+    if :sau.h + :ship.rad > abs (:sau.y - :shipcy) [ship.hit  if not :waiting [kill.saucer]  stop]
   ]
   warble
 end

@@ -924,6 +924,19 @@ the small saucer frightening — the arcade's becomes "extremely accurate" past
 about 35,000. Here the spread runs linearly from `sau.aim.wide` (24°) at nothing
 to `sau.aim.tight` (4°) at `sau.aim.score`, and stays there.
 
+**A dead ship is not a target** (B22), and the arcade gets that for nothing:
+there a destroyed ship is a *deactivated object* with no position at all until a
+new one is created at the centre, so the aiming routine has nothing to read.
+This port has something to read, because §7's respawn trick parks the waiting
+ship **on the spawn point** so the rock pass can double as the clear-check — and
+an aimed saucer therefore spent the whole death and the whole wait walking 4°
+shots into the exact point the player was about to appear at, motionless, on a
+point that does not move between deaths. So `saucer.fires` is guarded on `dying`
+and `waiting`, and a small saucer with no target fires anywhere, as the large one
+does. **The lesson is that the parked position leaked out of the collision system
+it was invented for**: a value chosen to make one test cheap became an input to
+an unrelated one that had no business reading it.
+
 What this replaces was a level-based rule of this design's own invention — 90
 frames at level 1, 10 fewer per level, small saucers from level 3 — which put a
 saucer in front of a new player inside seven seconds and a homing one on level
