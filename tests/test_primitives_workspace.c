@@ -559,6 +559,57 @@ void test_nodes_returns_correct_type(void)
     TEST_ASSERT_EQUAL_STRING("true\n", output_buffer);
 }
 
+// `atoms` is the companion to `nodes`, and it exists because the two are not
+// interchangeable: a program can be rich in free nodes and out of word space.
+// Storing a stream of distinct numbers is the way to spend the one and not the
+// other -- a number stored in a list is interned as a word.
+void test_atoms_reports_the_word_table_and_recycle_gives_it_back(void)
+{
+    reset_output();
+    run_string("print atoms > 0");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true\n", output_buffer,
+                                     "atoms did not report a positive figure");
+
+    run_string("recycle");
+    reset_output();
+    run_string("print atoms");
+    int before = atoi(output_buffer);
+
+    // Distinct numbers into a list slot: each one mints a word.
+    run_string("make \"l (list 0)");
+    run_string("repeat 300 [make \"n 100000 + repcount  .setitem 1 :l :n]");
+    reset_output();
+    run_string("print atoms");
+    int during = atoi(output_buffer);
+    TEST_ASSERT_TRUE_MESSAGE(during < before,
+                             "storing 300 distinct numbers did not spend any word space");
+
+    // And the room comes back, since nothing refers to those words now.
+    run_string("recycle");
+    reset_output();
+    run_string("print atoms");
+    int after = atoi(output_buffer);
+    TEST_ASSERT_TRUE_MESSAGE(after > during, "recycle gave no word space back");
+}
+
+// The two figures answer different questions, which is the whole reason this
+// primitive was added: Asteroids died with 21,000 free nodes and 20 free bytes
+// of word table, and nothing the program could ask about could see that.
+void test_atoms_and_nodes_are_not_the_same_number(void)
+{
+    run_string("recycle");
+    reset_output();
+    run_string("print nodes");
+    int free_nodes = atoi(output_buffer);
+    reset_output();
+    run_string("print atoms");
+    int free_atoms = atoi(output_buffer);
+
+    TEST_ASSERT_TRUE(free_nodes > 0 && free_atoms > 0);
+    TEST_ASSERT_TRUE_MESSAGE(free_nodes != free_atoms,
+                             "atoms is reporting the same figure as nodes");
+}
+
 void test_recycle_runs_without_error(void)
 {
     // Create some garbage
@@ -1330,6 +1381,8 @@ int main(void)
     // Memory management tests
     RUN_TEST(test_nodes_returns_number);
     RUN_TEST(test_nodes_returns_correct_type);
+    RUN_TEST(test_atoms_reports_the_word_table_and_recycle_gives_it_back);
+    RUN_TEST(test_atoms_and_nodes_are_not_the_same_number);
     RUN_TEST(test_recycle_runs_without_error);
     RUN_TEST(test_recycle_frees_memory);
     RUN_TEST(test_recycle_preserves_live_data);

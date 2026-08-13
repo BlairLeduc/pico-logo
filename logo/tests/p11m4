@@ -383,13 +383,30 @@ to p11m4.report
   pr (se [nodes at end  ] :n1)
   pr (se [after recycle ] :n2)
   pr []
+  ; WORD SPACE IS THE ONE THAT RUNS OUT, and until `atoms` existed no run
+  ; could report it.  The game dies on the atom table, not on nodes: measured
+  ; on the host at the moment the frame loop stops, there are 21,000 free
+  ; nodes and 20 free bytes here.  So this is the figure that says whether
+  ; `reclaim.every` is right on THIS board, and the one to read if the game
+  ; ever reports `Out of space` again.
+  pr (se [word bytes free] :a0 [at start,] :a1 [at end,] :a2 [after recycle])
+  make "spend (:a0 - :a1) / :p11m4.frames
+  ifelse :spend > 0 [
+    pr (se [a frame spends] :spend [bytes of it, so a recycle every]
+        :reclaim.every [frames needs] :spend * :reclaim.every [against] :a2 [free])
+  ] [
+    pr [a frame spent no word space -- too few frames to size the interval]
+  ]
+  pr []
 end
 
 to p11m4
-  local "n0 local "n1 local "n2 local "rec local "thr local "son local "bm
+  local "n0 local "n1 local "n2 local "a0 local "a1 local "a2
+  local "spend
+  local "rec local "thr local "son local "bm
   local "sau local "snd
   recycle
-  make "n0 nodes
+  make "n0 nodes  make "a0 atoms
   measure 1 6 false
   measure 2 9 false
   measure 3 12 false
@@ -400,13 +417,13 @@ to p11m4
   make "bm time.boom
   make "sau time.saucer.draw
   make "snd time.sound
-  make "n1 nodes
+  make "n1 nodes  make "a1 atoms
   recycle
   ; Read the recovered figure HERE, not inside the report: printing builds a
   ; `sentence` per line, so a `nodes` evaluated down there reads the report's
   ; own garbage back as if the recycle had under-recovered.  P10's script lost
   ; its first hardware run to exactly that.
-  make "n2 nodes
+  make "n2 nodes  make "a2 atoms
   setrefresh "auto
   textscreen
   stopsound
