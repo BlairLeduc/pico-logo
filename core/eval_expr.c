@@ -346,6 +346,16 @@ Result LOGO_HOT(eval_primary)(Evaluator *eval)
         // Process escape sequences in variable names
         Node name_atom = mem_atom_unescape(t.start + 1, t.length - 1);
         const char *name = mem_word_ptr(name_atom);
+        // The same failure the quoted case reports above, and the same crash
+        // if it is not: on a full atom region the name interns to nothing,
+        // `mem_word_ptr` gives NULL, and `var_get` hashes it. `:x` reaches
+        // `var_get` directly rather than through `REQUIRE_WORD_STR`, so it
+        // needs its own check -- found by the test suite running a workspace
+        // to exhaustion and then reading a variable.
+        if (name == NULL)
+        {
+            return result_error(ERR_OUT_OF_SPACE);
+        }
 
         Value v;
         if (!var_get(name, &v))

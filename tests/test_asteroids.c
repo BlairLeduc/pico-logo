@@ -726,45 +726,43 @@ void test_every_rock_is_drawn_with_a_one_pixel_pen(void)
 // run before it needs a recycle -- and `reclaim.every` has to sit well inside
 // it.
 //
-// B25. A DEADLINE MEASURED ON A QUIET FRAME IS NOT THE GAME'S DEADLINE, and
-// this test is the second version of that lesson. The first one disabled
-// `reclaim`, ran the loop until it died, and asked for an interval eight times
-// inside the number it got -- but the frame it ran had drifting rocks and
-// nothing else in it. That frame spends 9 cells and 45 atom bytes. A frame in
-// a GAME -- a saucer up, shots in the air, rocks splitting -- spends about 91
-// bytes, and dies in 89 frames rather than 365. So the old 25-frame interval
-// was a 3.6x margin wearing a 26x label, and the board ate the difference.
+// B25, third time. A DEADLINE MEASURED ON A HOST IS NOT A BOARD'S DEADLINE,
+// and no frame count could have been. The interval went 250 -> 25 -> 4, each
+// one measured honestly and each one still dying on hardware, because the
+// number that decides it was not observable from Logo: `nodes` reports free
+// CELLS and this game runs out of the WORD TABLE. At the moment the loop dies
+// there are 21,000 free nodes and 20 free bytes of word table.
 //
-// The frame this measures is therefore the expensive one, and it stays the
-// expensive one: `fire` every frame keeps three shots live and the respawn
-// keeps a saucer crossing.
-void test_the_reclaim_interval_stays_inside_the_busy_frame_budget(void)
+// `atoms` reports that table, so `reclaim` now collects on it and there is no
+// interval left to check. What replaces the check is the floor: it has to sit
+// well above what one frame can spend, because the test runs once a frame and
+// has to be able to be wrong for a frame and still recover. So measure the
+// spend on the EXPENSIVE frame -- a saucer up, shots in the air, rocks
+// splitting -- and require the floor to clear it by 8x.
+void test_the_reclaim_floor_clears_what_a_busy_frame_spends(void)
 {
     setup_with(12);
     land_the_ship();
     run("recycle");
-    proc_define_from_text("to reclaim\nend");   // nothing collects now
 
-    int deadline = 0;
-    for (; deadline < 4000; deadline++)
+    size_t before = mem_free_atoms();
+    const int frames = 40;
+    for (int f = 0; f < frames; f++)
     {
         run_string("fire");
         run_string("if 0 = :sau.on [spawn.saucer]");
-        if (run_string("play.frame").status == RESULT_ERROR)
-            break;
+        run("play.frame");
     }
-    TEST_ASSERT_TRUE_MESSAGE(deadline < 4000,
-                             "the frame loop no longer runs out of storage -- "
-                             "re-derive this test, the interpreter changed");
+    size_t after = mem_free_atoms();
+    TEST_ASSERT_TRUE_MESSAGE(after < before, "a busy frame spent no word space at all");
 
-    // A margin of 8x, so the interval survives a board whose workspace leaves
-    // the atom region a quarter of the room this host gives it.
-    int interval = (int)num(":reclaim.every");
+    float spend = (before - after) / (float)frames;
+    float floor = num(":atom.floor");
     char msg[160];
     snprintf(msg, sizeof(msg),
-             "reclaim every %d frames against a %d-frame busy budget -- less than 8x margin",
-             interval, deadline);
-    TEST_ASSERT_TRUE_MESSAGE(interval * 8 < deadline, msg);
+             "a busy frame spends %.0f word bytes against a floor of %.0f -- less than 8x",
+             spend, floor);
+    TEST_ASSERT_TRUE_MESSAGE(floor > spend * 8, msg);
 }
 
 // The other half of B25, and the half a host cannot measure by itself: the
@@ -777,19 +775,20 @@ void test_the_frame_loop_survives_a_squeezed_workspace(void)
     land_the_ship();
     run("recycle");
 
-    // Eat ATOM bytes -- the resource this game actually runs out of, and the
-    // one no Logo primitive reports -- until a fifth of them are left. The
-    // ballast is live, so a recycle cannot give them back.
+    // Eat ATOM bytes -- the resource this game actually runs out of -- until a
+    // TENTH of them are left. The ballast is live, so a recycle cannot give
+    // them back: this is the cramped board the host does not otherwise have,
+    // and it is twice as cramped as the fixed interval could survive.
     size_t room = mem_free_atoms();
     run("make \"ballast []");
-    while (mem_free_atoms() > room / 5)
+    while (mem_free_atoms() > room / 10)
     {
         if (run_string("repeat 100 [make \"ballast fput (random 100000) :ballast]").status
             == RESULT_ERROR)
             break;
     }
     size_t squeezed = mem_free_atoms();
-    TEST_ASSERT_TRUE_MESSAGE(squeezed < room / 4, "the ballast did not squeeze the atom region");
+    TEST_ASSERT_TRUE_MESSAGE(squeezed < room / 8, "the ballast did not squeeze the atom region");
 
     // A busy game in what is left.
     for (int f = 0; f < 2000; f++)
@@ -3315,7 +3314,7 @@ int main(void)
     RUN_TEST(test_setup_level_never_exceeds_the_slot_count);
     RUN_TEST(test_a_frame_draws_the_world_and_nothing_else);
     RUN_TEST(test_every_rock_is_drawn_with_a_one_pixel_pen);
-    RUN_TEST(test_the_reclaim_interval_stays_inside_the_busy_frame_budget);
+    RUN_TEST(test_the_reclaim_floor_clears_what_a_busy_frame_spends);
     RUN_TEST(test_the_frame_loop_survives_a_squeezed_workspace);
     RUN_TEST(test_the_frame_loop_holds_free_storage_flat);
     RUN_TEST(test_a_paused_frame_neither_steps_nor_recycles);

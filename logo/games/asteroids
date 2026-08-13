@@ -89,7 +89,7 @@ make "start.rocks    3     ; large rocks at level 1
 ; the top level and not below it -- which is the ceiling the arcade's rising
 ; count runs into as well, arrived at from twelve slots rather than twenty-seven.
 make "rocks.top      5     ; large rocks a level never exceeds
-make "reclaim.every  4     ; frames between recycles -- see `reclaim` below
+make "atom.floor  2000     ; word bytes that trigger a recycle -- see `reclaim`
 make "speed.l     0.96     ; steps per frame -- 13.5 a second at 14 fps
 make "spin.max     2.7     ; degrees per frame, either direction
 make "split.boost 1.25     ; a child drifts this much faster than its parent
@@ -1536,39 +1536,36 @@ end
 ; loop -- no unpredictable pause -- but it makes this the game's entire safety
 ; margin rather than a tidiness measure.
 ;
-; THE DEADLINE WAS MEASURED ON THE WRONG FRAME (B25), and that is why this
-; number has now been wrong twice.  The first crash (2026-08-11) cut the
-; interval from 250 frames to 25 against a measured deadline: with `reclaim`
-; disabled the loop ran 649 frames before it died, so 25 read as a 26x margin.
-; It died on a board again.  Re-measured properly: that deadline was taken on a
-; frame with nothing in it but drifting rocks, which spends 9 cells and 45 atom
-; bytes; a frame in a GAME -- a saucer up, shots in the air, rocks splitting --
-; spends about 91 bytes, and the deadline on that frame is 89 frames.  So 25 was
-; a 3.6x margin and not a 26x one, and a board with less atom room than the host
-; ate the rest of it.  Four frames is a 22x margin on the busy deadline.
+; COUNTING FRAMES WAS ALWAYS A GUESS (B25), and it has now been wrong three
+; times: 250 frames, then 25, then 4, each measured honestly on a host and each
+; still dying on a board.  The guess was forced, because the number that decides
+; it could not be seen from Logo: `nodes` reports free CELLS, and this game does
+; not run out of cells.  It runs out of the WORD TABLE -- every rock position
+; `.setitem` stores is interned as a word (design section 14) -- and at the
+; moment the loop dies there are 21,000 free nodes and 20 free bytes of word
+; table.  No frame count can see that, and neither could this file.
 ;
-; IT IS NOT FREE, and the cost is the one the design already measured: a recycle
-; walks the whole node pool, so it costs the same every time it runs -- 118 us
-; on the host against a frame's 657, and 4.4 ms on a Plus 2 W against a 71.4 ms
-; budget.  Collecting six times as often does not make the bump smaller, it puts
-; the SAME bump on one frame in four instead of one in 25: about 1 ms a frame
-; amortised, and a quarter of frames carrying it.  That is a worse frame profile
-; bought deliberately, because the alternative has now crashed a board twice.
-; `logo/tests/p11m4` measures the bump and is the check to run on hardware.
+; `atoms` reports it, so the frame asks instead of counting.  A busy frame
+; spends about 91 bytes on the host and 137 in the board's harness, so a floor
+; of 2000 is around twenty frames of headroom against a check that runs every
+; frame -- room to be wrong in and still recover.
 ;
-; Counting frames is crude but it is the only signal available: `nodes` reports
-; free CELLS, and this game does not run out of cells -- it runs out of ATOM
-; bytes, which no primitive reports.  At the moment the loop dies there are
-; still 21,000 free cells and 20 bytes of atom room, so a `nodes` floor cannot
-; see the wall the game actually hits.
+; WHAT THIS FIXES THAT NO INTERVAL COULD: an interval has to be chosen for the
+; board with the least room, by a host that has the most.  This adapts to the
+; board it is on.  A roomy workspace collects rarely, a cramped one often, and
+; one too small to hold twenty frames collects every frame -- slow and alive
+; rather than fast and dead.
+;
+; The cost when it fires is unchanged and still the thing to watch: a recycle is
+; 4.3 ms on a Plus 2 W against a 71.4 ms budget.  `logo/tests/p11m4` now reports
+; the word space beside it, which is what says whether this floor is right on a
+; given board.
 ;
 ; `reclaim` sits INSIDE the unpaused block, which is also where it belongs: a
-; paused frame counts no frames and allocates nothing.  Outside it, a pause
-; landing on a multiple of the interval recycles on every paused frame.
+; paused frame allocates nothing, so it has nothing to collect.
 
 to reclaim
-  if not ((remainder :frame.count :reclaim.every) = 0) [stop]
-  recycle
+  if atoms < :atom.floor [recycle]
 end
 
 ; One frame, in a fixed order.  A procedure and not the body of the loop below,
