@@ -5247,6 +5247,32 @@ Words and lists share the interpreter's memory. `recycle` reclaims storage for w
 ```
 
 
+## atoms
+
+atoms  
+
+`operation`
+
+`atoms` outputs the number of free bytes in the word table. Words and lists share the interpreter's memory, but they do not share the same shelf: [`nodes`](#nodes) counts the free nodes that lists and procedure bodies are built from, while `atoms` counts the room left for the *characters* of distinct words. A program can be rich in one and out of the other, so a program that runs out of space with plenty of `nodes` free is a program to point `atoms` at.
+
+Every distinct word costs its characters once, however many places refer to it — and a *number* stored in a list is a word, so a program storing continuously changing numbers mints a new word for each one. That is the usual reason this figure falls during a loop that looks like it allocates nothing. [`recycle`](#recycle) gives back the room used by words nothing refers to any more.
+
+**Example**:
+
+```logo
+?make "l (list 0)
+?recycle
+?pr atoms
+19536
+?repeat 100 [make "n random 100000  .setitem 1 :l :n]
+?pr atoms
+18664
+?recycle
+?pr atoms
+19528
+```
+
+
 ## recycle
 
 recycle  

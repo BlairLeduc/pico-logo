@@ -559,6 +559,105 @@ void test_nodes_returns_correct_type(void)
     TEST_ASSERT_EQUAL_STRING("true\n", output_buffer);
 }
 
+// `atoms` is the companion to `nodes`, and it exists because the two are not
+// interchangeable: a program can be rich in free nodes and out of word space.
+// Storing a stream of distinct numbers is the way to spend the one and not the
+// other -- a number stored in a list is interned as a word.
+void test_atoms_reports_the_word_table_and_recycle_gives_it_back(void)
+{
+    reset_output();
+    run_string("print atoms > 0");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true\n", output_buffer,
+                                     "atoms did not report a positive figure");
+
+    run_string("recycle");
+    reset_output();
+    run_string("print atoms");
+    int before = atoi(output_buffer);
+
+    // Distinct numbers into a list slot: each one mints a word.
+    run_string("make \"l (list 0)");
+    run_string("repeat 300 [make \"n 100000 + repcount  .setitem 1 :l :n]");
+    reset_output();
+    run_string("print atoms");
+    int during = atoi(output_buffer);
+    TEST_ASSERT_TRUE_MESSAGE(during < before,
+                             "storing 300 distinct numbers did not spend any word space");
+
+    // And the room comes back, since nothing refers to those words now.
+    run_string("recycle");
+    reset_output();
+    run_string("print atoms");
+    int after = atoi(output_buffer);
+    TEST_ASSERT_TRUE_MESSAGE(after > during, "recycle gave no word space back");
+}
+
+// The two figures answer different questions, which is the whole reason this
+// primitive was added: Asteroids died with 21,000 free nodes and 20 free bytes
+// of word table, and nothing the program could ask about could see that.
+//
+// Pinned as behaviour rather than as `nodes != atoms`, which two different
+// units can satisfy or fail by coincidence: storing distinct numbers into an
+// EXISTING list slot mints a word per number and mutates in place, so it must
+// spend word table without spending cells to match.
+void test_storing_numbers_spends_word_table_and_not_nodes(void)
+{
+    run_string("make \"l (list 0)");
+    run_string("recycle");
+    reset_output();
+    run_string("print nodes");
+    int nodes_before = atoi(output_buffer);
+    reset_output();
+    run_string("print atoms");
+    int atoms_before = atoi(output_buffer);
+
+    run_string("repeat 300 [make \"n 100000 + repcount  .setitem 1 :l :n]");
+
+    reset_output();
+    run_string("print nodes");
+    int nodes_after = atoi(output_buffer);
+    reset_output();
+    run_string("print atoms");
+    int atoms_after = atoi(output_buffer);
+
+    TEST_ASSERT_TRUE_MESSAGE(atoms_after < atoms_before,
+                             "storing 300 distinct numbers spent no word table");
+
+    // `.setitem` writes in place, so no cells are consumed to hold them. Free
+    // nodes still drift, because the atom region grows into the arena beneath
+    // them -- that coupling is exactly why `nodes` alone is a bad reading --
+    // but they must not track the word table's spend.
+    int nodes_spent = nodes_before - nodes_after;
+    int atoms_spent = atoms_before - atoms_after;
+    char msg[160];
+    snprintf(msg, sizeof(msg),
+             "nodes fell %d against the word table's %d bytes -- these should not track",
+             nodes_spent, atoms_spent);
+    TEST_ASSERT_TRUE_MESSAGE(nodes_spent < atoms_spent / 2, msg);
+}
+
+// `mem_free_atoms` maintains its figure rather than counting it, because the
+// primitive is called once a frame by a game -- the walk measured 30.7 us
+// against `nodes`' 0.58. The count and the walk have to agree: `mem_gc_sweep`
+// asserts it after every collection, and this pins it across the allocation
+// paths in between.
+void test_the_maintained_word_count_matches_a_full_scan(void)
+{
+    run_string("make \"l (list 0)");
+    run_string("recycle");
+    TEST_ASSERT_EQUAL_MESSAGE(mem_free_atoms_by_scan(), mem_free_atoms(),
+                              "the count and the walk disagree after a collection");
+
+    run_string("repeat 200 [make \"n 500000 + repcount  .setitem 1 :l :n]");
+    TEST_ASSERT_EQUAL_MESSAGE(mem_free_atoms_by_scan(), mem_free_atoms(),
+                              "the count and the walk disagree after allocating");
+
+    run_string("recycle");
+    run_string("repeat 50 [make \"n 900000 + repcount  .setitem 1 :l :n]");
+    TEST_ASSERT_EQUAL_MESSAGE(mem_free_atoms_by_scan(), mem_free_atoms(),
+                              "the count and the walk disagree after reusing freed blocks");
+}
+
 void test_recycle_runs_without_error(void)
 {
     // Create some garbage
@@ -1330,6 +1429,9 @@ int main(void)
     // Memory management tests
     RUN_TEST(test_nodes_returns_number);
     RUN_TEST(test_nodes_returns_correct_type);
+    RUN_TEST(test_atoms_reports_the_word_table_and_recycle_gives_it_back);
+    RUN_TEST(test_storing_numbers_spends_word_table_and_not_nodes);
+    RUN_TEST(test_the_maintained_word_count_matches_a_full_scan);
     RUN_TEST(test_recycle_runs_without_error);
     RUN_TEST(test_recycle_frees_memory);
     RUN_TEST(test_recycle_preserves_live_data);
