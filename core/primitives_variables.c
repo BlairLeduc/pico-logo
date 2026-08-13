@@ -14,7 +14,7 @@ static Result prim_make(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc);
     REQUIRE_WORD_STR(args[0], name);
-    if (!var_set(name, args[1]))
+    if (!var_set_atom(args[0].as.node, name, args[1]))
     {
         return result_error(ERR_OUT_OF_SPACE);
     }
@@ -32,7 +32,7 @@ static Result prim_thing(Evaluator *eval, int argc, Value *args)
     UNUSED(eval); UNUSED(argc);
     REQUIRE_WORD_STR(args[0], name);
     Value v;
-    if (!var_get(name, &v))
+    if (!var_get_atom(args[0].as.node, name, &v))
     {
         // Use error_arg to store the variable name
         return result_error_arg(ERR_NO_VALUE, NULL, name);

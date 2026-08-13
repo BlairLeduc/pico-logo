@@ -80,6 +80,45 @@ extern "C"
         return (unsigned)((memo & ATOM_MEMO_INDEX_MASK) >> ATOM_MEMO_INDEX_SHIFT);
     }
 
+    //======================================================================
+    // The global-variable slot, cached in the INDEX field.
+    //
+    // The index belongs to the call binding and is only meaningful there when
+    // the kind is PRIMITIVE or PROCEDURE. For a name that is neither -- which
+    // is every name only ever read as `:x` -- those nine bits are dead, and
+    // variables.c parks the global's slot + 1 in them (0 = not known).
+    //
+    // The two uses cannot be confused, because both readers of the binding
+    // ignore the index: `resolve_word`'s UNRESOLVED case falls through to a
+    // full lookup and its NONE case returns without reading it. And if a call
+    // binding later claims the field -- the name turns out to be a procedure
+    // too -- the slot simply stops being cached, which costs a lookup and
+    // nothing else.
+    //
+    // NOTHING INVALIDATES THIS, deliberately. A slot number is only a hint:
+    // variables.c checks that the slot is still active and still holds this
+    // exact interned name before trusting it, so an erased-and-reused slot
+    // fails the check and re-resolves.
+    //======================================================================
+
+    static inline unsigned atom_memo_global_slot(uint16_t memo)
+    {
+        uint16_t kind = atom_memo_bind_kind(memo);
+        if (kind != ATOM_BIND_UNRESOLVED && kind != ATOM_BIND_NONE)
+        {
+            return 0;   // the index means a call binding here, not a slot
+        }
+        return (unsigned)((memo & ATOM_MEMO_INDEX_MASK) >> ATOM_MEMO_INDEX_SHIFT);
+    }
+
+    // `slot_plus_1` is the global's slot + 1, so 0 stays "not known".
+    static inline uint16_t atom_memo_set_global_slot(uint16_t memo,
+                                                     unsigned slot_plus_1)
+    {
+        return (uint16_t)((memo & ~ATOM_MEMO_INDEX_MASK) |
+                          (uint16_t)(slot_plus_1 << ATOM_MEMO_INDEX_SHIFT));
+    }
+
     static inline uint16_t atom_memo_set_binding(uint16_t memo, uint16_t kind,
                                                  unsigned index)
     {

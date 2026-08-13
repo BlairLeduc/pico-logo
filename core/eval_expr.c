@@ -339,7 +339,9 @@ Result LOGO_HOT(eval_primary)(Evaluator *eval)
         const char *name = mem_word_ptr(name_atom);
 
         Value v;
-        if (!var_get(name, &v))
+        // The atom goes with the name: it carries the memo where the global's
+        // slot is remembered, so a repeat read costs no lookup.
+        if (!var_get_atom(name_atom, name, &v))
         {
             return result_error_arg(ERR_NO_VALUE, NULL, name);
         }

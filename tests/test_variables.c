@@ -726,6 +726,89 @@ void test_set_after_declare_local(void)
 // Main
 //============================================================================
 
+//============================================================================
+// The global slot cached on the atom (core/atom_memo.h)
+//
+// These go through `var_get_atom`/`var_set_atom` deliberately: the plain
+// `var_get` passes NODE_NIL and never reaches the memo, so a test written
+// against it would pass with the cache broken.
+//============================================================================
+
+// A remembered slot is a hint and never an answer. Erasing a global frees its
+// slot for the next name to claim, so a name that remembered it has to notice.
+// Nothing invalidates the memo -- the check is that the slot still holds this
+// exact interned name -- and this is the case that check exists for.
+void test_a_reused_slot_is_not_reached_through_a_remembered_one(void)
+{
+    Node a_atom = mem_atom_cstr("alpha");
+    Node b_atom = mem_atom_cstr("beta");
+    const char *a = mem_word_ptr(a_atom);
+    const char *b = mem_word_ptr(b_atom);
+
+    TEST_ASSERT_TRUE(var_set_atom(a_atom, a, value_number(1)));
+    TEST_ASSERT_TRUE(var_set_atom(b_atom, b, value_number(2)));
+
+    Value v;
+    TEST_ASSERT_TRUE(var_get_atom(a_atom, a, &v));   // remembers alpha's slot
+    TEST_ASSERT_EQUAL_FLOAT(1, v.as.number);
+
+    var_erase(a);                                    // frees it for the next name
+    Node c_atom = mem_atom_cstr("gamma");
+    const char *c = mem_word_ptr(c_atom);
+    TEST_ASSERT_TRUE(var_set_atom(c_atom, c, value_number(3)));   // claims that slot
+
+    TEST_ASSERT_FALSE_MESSAGE(var_get_atom(a_atom, a, &v),
+                              "an erased global was read back through a stale slot");
+    TEST_ASSERT_TRUE(var_get_atom(c_atom, c, &v));
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(3, v.as.number, "gamma read another name's value");
+    TEST_ASSERT_TRUE(var_get_atom(b_atom, b, &v));
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2, v.as.number, "beta moved when gamma took a slot");
+}
+
+// Logo matches variable names case-insensitively, but interning is case
+// SENSITIVE -- `X` and `x` are two atoms with two memos. A slot is only
+// remembered for a name reached by the pointer path, so the second spelling
+// misses the memo and takes the `strcasecmp` path that has always answered it.
+void test_a_cross_case_read_finds_the_same_global(void)
+{
+    Node upper_atom = mem_atom_cstr("Counter");
+    const char *upper = mem_word_ptr(upper_atom);
+    TEST_ASSERT_TRUE(var_set_atom(upper_atom, upper, value_number(7)));
+
+    Value v;
+    TEST_ASSERT_TRUE(var_get_atom(upper_atom, upper, &v));   // remembers the slot
+    Node lower_atom = mem_atom_cstr("counter");
+    const char *lower = mem_word_ptr(lower_atom);
+    TEST_ASSERT_TRUE_MESSAGE(var_get_atom(lower_atom, lower, &v),
+                             "a lower-case read lost the global");
+    TEST_ASSERT_EQUAL_FLOAT(7, v.as.number);
+
+    TEST_ASSERT_TRUE(var_set_atom(lower_atom, lower, value_number(9)));
+    TEST_ASSERT_TRUE(var_get_atom(upper_atom, upper, &v));
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(9, v.as.number,
+                                    "the two spellings became two variables");
+}
+
+// A local shadows a global of the same name, and a remembered slot must not
+// reach past it -- the frame chain is searched first either way.
+void test_a_remembered_slot_does_not_outrank_a_local(void)
+{
+    Node atom = mem_atom_cstr("shadowed");
+    const char *n = mem_word_ptr(atom);
+    TEST_ASSERT_TRUE(var_set_atom(atom, n, value_number(1)));
+    Value v;
+    TEST_ASSERT_TRUE(var_get_atom(atom, n, &v));   // remembers the global's slot
+
+    test_push_scope();
+    TEST_ASSERT_TRUE(var_set_local(n, value_number(42)));
+    TEST_ASSERT_TRUE(var_get_atom(atom, n, &v));
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(42, v.as.number, "a remembered slot outran a local");
+    test_pop_scope();
+
+    TEST_ASSERT_TRUE(var_get_atom(atom, n, &v));
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, v.as.number, "the global did not come back");
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -800,6 +883,10 @@ int main(void)
     // Declared but unbound
     RUN_TEST(test_declared_local_unbound);
     RUN_TEST(test_set_after_declare_local);
+
+    RUN_TEST(test_a_reused_slot_is_not_reached_through_a_remembered_one);
+    RUN_TEST(test_a_cross_case_read_finds_the_same_global);
+    RUN_TEST(test_a_remembered_slot_does_not_outrank_a_local);
 
     return UNITY_END();
 }

@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include "hot.h"
+#include "atom_memo.h"
 
 // (MAX_GLOBAL_VARIABLES lives in limits.h)
 
@@ -152,6 +153,45 @@ static int LOGO_HOT(find_global)(const char *name)
     return -1;
 }
 
+// `find_global` with the answer remembered on the atom the name came from.
+//
+// The hash index made a lookup independent of where a name was declared, which
+// was the point -- but it is still a hash of every character plus a probe, on a
+// path a game frame walks a couple of hundred times. This makes the *second*
+// lookup of a name cheaper: the slot lands in the atom's memo, and a hit is a
+// bounds check, an `active` test and a pointer compare.
+//
+// The pointer compare is what makes it safe with no invalidation hook. A slot
+// can be erased and handed to another name, so a remembered slot is a HINT:
+// if it no longer holds this exact interned name the lookup falls through and
+// re-remembers. Cross-case reads (`make "X 5` then `:x`) fail it too and stay
+// on the slow path, which is where case-insensitive matching has to live.
+_Static_assert(MAX_GLOBAL_VARIABLES + 1 <= 511,
+               "a global slot + 1 has to fit the memo's 9 index bits");
+
+static int LOGO_HOT(find_global_memoised)(Node name_atom, const char *name)
+{
+    uint16_t word = mem_atom_memo_read(name_atom);
+    unsigned slot = atom_memo_global_slot(word);
+    if (slot != 0)
+    {
+        int idx = (int)slot - 1;
+        if (idx < MAX_GLOBAL_VARIABLES && global_variables[idx].active &&
+            global_variables[idx].name == name)
+        {
+            return idx;
+        }
+    }
+
+    int idx = find_global(name);
+    // Only remember a slot the pointer check above can confirm later.
+    if (idx >= 0 && global_variables[idx].name == name)
+    {
+        mem_atom_memo_write(name_atom, atom_memo_set_global_slot(word, (unsigned)idx + 1));
+    }
+    return idx;
+}
+
 bool var_declare_local(const char *name)
 {
     // Check if we're inside a procedure (frame stack not empty)
@@ -206,6 +246,11 @@ bool var_set_local(const char *name, Value value)
 
 bool LOGO_HOT(var_set)(const char *name, Value value)
 {
+    return var_set_atom(NODE_NIL, name, value);
+}
+
+bool LOGO_HOT(var_set_atom)(Node name_atom, const char *name, Value value)
+{
     // Logo uses dynamic scoping. `make` (this function) walks the frame
     // chain looking for an existing binding of `name` in any *ancestor*
     // procedure, and updates the innermost one it finds. If no frame in
@@ -232,7 +277,7 @@ bool LOGO_HOT(var_set)(const char *name, Value value)
     }
 
     // Not in any local frame, check/create global
-    int idx = find_global(name);
+    int idx = find_global_memoised(name_atom, name);
     if (idx >= 0)
     {
         global_variables[idx].value = value;
@@ -262,6 +307,11 @@ bool LOGO_HOT(var_set)(const char *name, Value value)
 
 bool LOGO_HOT(var_get)(const char *name, Value *out)
 {
+    return var_get_atom(NODE_NIL, name, out);
+}
+
+bool LOGO_HOT(var_get_atom)(Node name_atom, const char *name, Value *out)
+{
     // First, search frame stack for local bindings (if in a procedure)
     FrameStack *frames = proc_get_frame_stack();
     
@@ -276,7 +326,7 @@ bool LOGO_HOT(var_get)(const char *name, Value *out)
     }
 
     // Check globals
-    int idx = find_global(name);
+    int idx = find_global_memoised(name_atom, name);
     if (idx >= 0)
     {
         if (!global_variables[idx].has_value)

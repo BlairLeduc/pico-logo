@@ -291,6 +291,11 @@ extern "C"
 
     // Read and write a memo through the pointer mem_word_view handed back.
     // Unaligned-safe; a NULL memo reads 0 and ignores writes.
+    // The memo word straight off a word node, for hot paths that want the memo
+    // and not the characters. See memory.c.
+    uint16_t mem_atom_memo_read(Node n);
+    void mem_atom_memo_write(Node n, uint16_t value);
+
     uint16_t mem_atom_memo_get(const uint8_t *memo);
     void mem_atom_memo_set(uint8_t *memo, uint16_t value);
 

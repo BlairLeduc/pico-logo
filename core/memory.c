@@ -1222,6 +1222,32 @@ bool LOGO_HOT(mem_word_view)(Node n, const char **str, size_t *len, uint8_t **me
     return true;
 }
 
+// The memo word of an interned word node, in one call and without deriving
+// the characters with it. `mem_word_view` is the general read and costs more
+// than this path can afford. Returns 0 -- "nothing known" -- for anything that
+// is not an interned atom.
+uint16_t LOGO_HOT(mem_atom_memo_read)(Node n)
+{
+    if (NODE_GET_TYPE(n) != NODE_TYPE_WORD || NODE_WORD_IS_BLOB(n))
+        return 0;
+    uint32_t offset = NODE_GET_INDEX(n);
+    if (offset >= atom_next)
+        return 0;
+    uint16_t value;
+    memcpy(&value, &memory_block[offset + 3 + memory_block[offset + 2] + 1], sizeof(value));
+    return value;
+}
+
+void LOGO_HOT(mem_atom_memo_write)(Node n, uint16_t value)
+{
+    if (NODE_GET_TYPE(n) != NODE_TYPE_WORD || NODE_WORD_IS_BLOB(n))
+        return;
+    uint32_t offset = NODE_GET_INDEX(n);
+    if (offset >= atom_next)
+        return;
+    memcpy(&memory_block[offset + 3 + memory_block[offset + 2] + 1], &value, sizeof(value));
+}
+
 // The memo sits after a variable-length character run, so its address carries
 // no alignment guarantee; go through memcpy as the header fields already do.
 uint16_t mem_atom_memo_get(const uint8_t *memo)

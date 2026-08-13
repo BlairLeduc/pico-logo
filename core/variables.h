@@ -48,6 +48,12 @@ extern "C"
     // Returns false if not found
     bool var_get(const char *name, Value *out);
 
+    // The same two, given the interned atom the name came from. The atom carries
+    // the memo where the global's slot is remembered, so a repeat read skips the
+    // hash lookup. Callers holding the atom -- `:x`, `thing`, `make` -- use these.
+    bool var_get_atom(Node name_atom, const char *name, Value *out);
+    bool var_set_atom(Node name_atom, const char *name, Value value);
+
     // Check if variable exists (in scope chain or globals)
     bool var_exists(const char *name);
 
