@@ -655,17 +655,20 @@ void test_result_error_status(void)
 void test_result_error_code(void)
 {
     Result r = result_error(42);
-    TEST_ASSERT_EQUAL(42, r.error_code);
+    TEST_ASSERT_EQUAL(42, result_get_error_code(r));
 }
 
 void test_result_error_nulls(void)
 {
     Result r = result_error(42);
-    TEST_ASSERT_NULL(r.error_proc);
-    TEST_ASSERT_NULL(r.error_arg);
-    TEST_ASSERT_NULL(r.error_caller);
-    // Note: throw_tag is in a union with error fields,
-    // so it cannot be checked when status is RESULT_ERROR
+    TEST_ASSERT_NULL(result_get_error_proc(r));
+    TEST_ASSERT_NULL(result_get_error_arg(r));
+    TEST_ASSERT_NULL(result_get_error_caller(r));
+    // The tag used to share a union with the error fields and could not be
+    // read here. It is its own member now, so an error result carrying one is
+    // a real thing to catch -- an error constructor that sets `tag` would let
+    // a stale throw tag ride along into `catch`.
+    TEST_ASSERT_NULL_MESSAGE(r.tag, "an error result is carrying a throw tag");
 }
 
 void test_result_throw_status(void)
@@ -677,7 +680,7 @@ void test_result_throw_status(void)
 void test_result_throw_tag(void)
 {
     Result r = result_throw("toplevel");
-    TEST_ASSERT_EQUAL_STRING("toplevel", r.throw_tag);
+    TEST_ASSERT_EQUAL_STRING("toplevel", result_get_throw_tag(r));
 }
 
 void test_result_throw_value(void)
@@ -695,41 +698,41 @@ void test_result_error_arg_status(void)
 void test_result_error_arg_code(void)
 {
     Result r = result_error_arg(41, "sum", "hello");
-    TEST_ASSERT_EQUAL(41, r.error_code);
+    TEST_ASSERT_EQUAL(41, result_get_error_code(r));
 }
 
 void test_result_error_arg_proc(void)
 {
     Result r = result_error_arg(41, "sum", "hello");
-    TEST_ASSERT_EQUAL_STRING("sum", r.error_proc);
+    TEST_ASSERT_EQUAL_STRING("sum", result_get_error_proc(r));
 }
 
 void test_result_error_arg_arg(void)
 {
     Result r = result_error_arg(41, "sum", "hello");
-    TEST_ASSERT_EQUAL_STRING("hello", r.error_arg);
+    TEST_ASSERT_EQUAL_STRING("hello", result_get_error_arg(r));
 }
 
 void test_result_error_arg_caller_null(void)
 {
     Result r = result_error_arg(41, "sum", "hello");
-    TEST_ASSERT_NULL(r.error_caller);
+    TEST_ASSERT_NULL(result_get_error_caller(r));
 }
 
 void test_result_error_in_sets_caller(void)
 {
     Result r = result_error(42);
     r = result_error_in(r, "myproc");
-    TEST_ASSERT_EQUAL_STRING("myproc", r.error_caller);
+    TEST_ASSERT_EQUAL_STRING("myproc", result_get_error_caller(r));
 }
 
 void test_result_error_in_preserves_existing_caller(void)
 {
     Result r = result_error_arg(41, "sum", "hello");
-    r.error_caller = "firstproc";
+    r = result_error_in(r, "firstproc");
     r = result_error_in(r, "secondproc");
     // Should preserve the first caller
-    TEST_ASSERT_EQUAL_STRING("firstproc", r.error_caller);
+    TEST_ASSERT_EQUAL_STRING("firstproc", result_get_error_caller(r));
 }
 
 void test_result_error_in_non_error_unchanged(void)
@@ -1211,7 +1214,7 @@ void test_result_pause_status(void)
 void test_result_pause_proc(void)
 {
     Result r = result_pause("myproc");
-    TEST_ASSERT_EQUAL_STRING("myproc", r.pause_proc);
+    TEST_ASSERT_EQUAL_STRING("myproc", result_get_pause_proc(r));
 }
 
 void test_result_goto_status(void)
@@ -1223,7 +1226,7 @@ void test_result_goto_status(void)
 void test_result_goto_label(void)
 {
     Result r = result_goto("loop");
-    TEST_ASSERT_EQUAL_STRING("loop", r.goto_label);
+    TEST_ASSERT_EQUAL_STRING("loop", result_get_goto_label(r));
 }
 
 void test_result_eof_status(void)
@@ -1235,20 +1238,20 @@ void test_result_eof_status(void)
 void test_result_set_error_proc_sets_proc(void)
 {
     Result r = result_error(1);
-    TEST_ASSERT_NULL(r.error_proc);
+    TEST_ASSERT_NULL(result_get_error_proc(r));
     
     r = result_set_error_proc(r, "myproc");
-    TEST_ASSERT_EQUAL_STRING("myproc", r.error_proc);
+    TEST_ASSERT_EQUAL_STRING("myproc", result_get_error_proc(r));
 }
 
 void test_result_set_error_proc_preserves_existing(void)
 {
     Result r = result_error_arg(1, "original", NULL);
-    TEST_ASSERT_EQUAL_STRING("original", r.error_proc);
+    TEST_ASSERT_EQUAL_STRING("original", result_get_error_proc(r));
     
     r = result_set_error_proc(r, "new_proc");
     // Should preserve the original proc name
-    TEST_ASSERT_EQUAL_STRING("original", r.error_proc);
+    TEST_ASSERT_EQUAL_STRING("original", result_get_error_proc(r));
 }
 
 void test_result_set_error_proc_noop_for_non_error(void)

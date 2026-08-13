@@ -128,7 +128,7 @@ void test_error_dont_know_how(void)
     // I don't know how to foobar
     Result r = eval_string("foobar");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, result_get_error_code(r));
     
     const char *msg = error_format(r);
     TEST_ASSERT_EQUAL_STRING("I don't know how to foobar", msg);
@@ -142,7 +142,7 @@ void test_b10_bare_exponent_word_is_not_a_number(void)
 {
     Result r = eval_string("1e");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, result_get_error_code(r));
 
     const char *msg = error_format(r);
     TEST_ASSERT_EQUAL_STRING("I don't know how to 1e", msg);
@@ -152,7 +152,7 @@ void test_b10_bare_n_exponent_word_is_not_a_number(void)
 {
     Result r = eval_string("1n");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, result_get_error_code(r));
 }
 
 void test_b10_bare_exponent_in_list_path_is_not_a_number(void)
@@ -160,7 +160,7 @@ void test_b10_bare_exponent_in_list_path_is_not_a_number(void)
     // Same word arriving through the node-iterator path.
     Result r = eval_string("run [1e]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, result_get_error_code(r));
 }
 
 void test_b10_valid_exponent_forms_still_numbers(void)
@@ -183,7 +183,7 @@ void test_error_not_enough_inputs(void)
     // Not enough inputs to sum
     Result r = eval_string("sum 1");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_NOT_ENOUGH_INPUTS, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_NOT_ENOUGH_INPUTS, result_get_error_code(r));
     
     const char *msg = error_format(r);
     TEST_ASSERT_EQUAL_STRING("Not enough inputs to sum", msg);
@@ -194,7 +194,7 @@ void test_error_uses_alias_name_fd(void)
     // When using alias "fd" instead of "forward", error should say "fd"
     Result r = eval_string("fd \"hello");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
     
     const char *msg = error_format(r);
     TEST_ASSERT_EQUAL_STRING("fd doesn't like hello as input", msg);
@@ -205,7 +205,7 @@ void test_error_uses_full_name_forward(void)
     // When using full name "forward", error should say "forward"
     Result r = eval_string("forward \"hello");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
     
     const char *msg = error_format(r);
     TEST_ASSERT_EQUAL_STRING("forward doesn't like hello as input", msg);
@@ -216,7 +216,7 @@ void test_error_uses_alias_name_bk(void)
     // When using alias "bk" instead of "back", error should say "bk"
     Result r = eval_string("bk \"hello");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
     
     const char *msg = error_format(r);
     TEST_ASSERT_EQUAL_STRING("bk doesn't like hello as input", msg);
@@ -227,7 +227,7 @@ void test_error_infix_doesnt_like(void)
     // + doesn't like hello as input
     Result r = eval_string("1 + \"hello");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
     
     const char *msg = error_format(r);
     TEST_ASSERT_EQUAL_STRING("+ doesn't like hello as input", msg);
@@ -238,7 +238,7 @@ void test_error_bracket_mismatch(void)
     // Unmatched right bracket - use run_string since fd is a command
     Result r = run_string("fd 8]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_BRACKET_MISMATCH, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_BRACKET_MISMATCH, result_get_error_code(r));
     
     const char *msg = error_format(r);
     TEST_ASSERT_EQUAL_STRING("] without [", msg);
@@ -249,7 +249,7 @@ void test_error_paren_mismatch(void)
     // Unmatched right parenthesis - use run_string since print is a command
     Result r = run_string("print 3)");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_PAREN_MISMATCH, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_PAREN_MISMATCH, result_get_error_code(r));
     
     const char *msg = error_format(r);
     TEST_ASSERT_EQUAL_STRING(") without (", msg);
@@ -263,8 +263,8 @@ void test_error_in_procedure_includes_proc_name(void)
     
     Result r = run_string("badproc");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
-    TEST_ASSERT_EQUAL_STRING("badproc", r.error_caller);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
+    TEST_ASSERT_EQUAL_STRING("badproc", result_get_error_caller(r));
     
     const char *msg = error_format(r);
     TEST_ASSERT_EQUAL_STRING("sum doesn't like hello as input in badproc", msg);
@@ -279,9 +279,9 @@ void test_error_in_nested_procedure_includes_innermost_proc_name(void)
     
     Result r = run_string("outer");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
     // Error should report innermost procedure where error occurred
-    TEST_ASSERT_EQUAL_STRING("inner", r.error_caller);
+    TEST_ASSERT_EQUAL_STRING("inner", result_get_error_caller(r));
     
     const char *msg = error_format(r);
     TEST_ASSERT_EQUAL_STRING("sum doesn't like hello as input in inner", msg);
@@ -295,8 +295,8 @@ void test_error_divide_by_zero_in_procedure(void)
     
     Result r = run_string("divzero");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DIVIDE_BY_ZERO, r.error_code);
-    TEST_ASSERT_EQUAL_STRING("divzero", r.error_caller);
+    TEST_ASSERT_EQUAL(ERR_DIVIDE_BY_ZERO, result_get_error_code(r));
+    TEST_ASSERT_EQUAL_STRING("divzero", result_get_error_caller(r));
     
     const char *msg = error_format(r);
     TEST_ASSERT_EQUAL_STRING("Can't divide by zero in divzero", msg);
@@ -310,8 +310,8 @@ void test_error_no_value_in_procedure(void)
     
     Result r = run_string("usevar");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_NO_VALUE, r.error_code);
-    TEST_ASSERT_EQUAL_STRING("usevar", r.error_caller);
+    TEST_ASSERT_EQUAL(ERR_NO_VALUE, result_get_error_code(r));
+    TEST_ASSERT_EQUAL_STRING("usevar", result_get_error_caller(r));
     
     const char *msg = error_format(r);
     TEST_ASSERT_EQUAL_STRING("undefined has no value in usevar", msg);
@@ -523,7 +523,7 @@ void test_deep_recursion_100_levels(void)
     if (r.status == RESULT_ERROR)
     {
         char msg[128];
-        snprintf(msg, sizeof(msg), "Direct depth 100: error code %d", r.error_code);
+        snprintf(msg, sizeof(msg), "Direct depth 100: error code %d", result_get_error_code(r));
         TEST_FAIL_MESSAGE(msg);
     }
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
@@ -699,7 +699,7 @@ void test_error_unclosed_bracket(void)
 {
     Result r = run_string("show [a b");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_UNCLOSED_BRACKET, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_UNCLOSED_BRACKET, result_get_error_code(r));
     TEST_ASSERT_EQUAL_STRING("[ without ]", error_format(r));
 }
 
@@ -707,7 +707,7 @@ void test_error_unclosed_nested_bracket(void)
 {
     Result r = run_string("show [a [b c]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_UNCLOSED_BRACKET, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_UNCLOSED_BRACKET, result_get_error_code(r));
 }
 
 void test_error_comment_swallows_closing_bracket(void)
@@ -716,7 +716,7 @@ void test_error_comment_swallows_closing_bracket(void)
     // list is unterminated. It used to print `[a]` and drop `b` silently.
     Result r = run_string("show [a ; b]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_UNCLOSED_BRACKET, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_UNCLOSED_BRACKET, result_get_error_code(r));
 }
 
 void test_closed_bracket_still_parses(void)
@@ -763,7 +763,7 @@ void test_long_name_does_not_alias_shorter_proc(void)
 
     Result r = run_string(PREFIX63 ".other");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, result_get_error_code(r));
     TEST_ASSERT_EQUAL_STRING("", output_buffer);
 }
 
@@ -785,7 +785,7 @@ void test_word_that_is_a_prefix_of_a_primitive_is_not_a_primitive(void)
     // character. It must not resolve as an abbreviation.
     Result r = run_string("prin 1");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, result_get_error_code(r));
 }
 
 void test_word_that_extends_a_primitive_is_not_a_primitive(void)
@@ -793,7 +793,7 @@ void test_word_that_extends_a_primitive_is_not_a_primitive(void)
     // The mirror case: the token runs past the end of the stored name.
     Result r = run_string("prints 1");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, result_get_error_code(r));
 }
 
 void test_long_proc_name_tail_recursion(void)

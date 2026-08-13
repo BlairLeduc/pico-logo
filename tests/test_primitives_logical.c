@@ -79,9 +79,9 @@ void test_and_error_not_bool(void)
 {
     Result r = eval_string("and \"true \"hello");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_NOT_BOOL, r.error_code);
-    TEST_ASSERT_EQUAL_STRING("and", r.error_proc);
-    TEST_ASSERT_EQUAL_STRING("hello", r.error_arg);
+    TEST_ASSERT_EQUAL(ERR_NOT_BOOL, result_get_error_code(r));
+    TEST_ASSERT_EQUAL_STRING("and", result_get_error_proc(r));
+    TEST_ASSERT_EQUAL_STRING("hello", result_get_error_arg(r));
 }
 
 //==========================================================================
@@ -141,9 +141,9 @@ void test_or_error_not_bool(void)
 {
     Result r = eval_string("or \"false 42");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_NOT_BOOL, r.error_code);
-    TEST_ASSERT_EQUAL_STRING("or", r.error_proc);
-    TEST_ASSERT_EQUAL_STRING("42", r.error_arg);
+    TEST_ASSERT_EQUAL(ERR_NOT_BOOL, result_get_error_code(r));
+    TEST_ASSERT_EQUAL_STRING("or", result_get_error_proc(r));
+    TEST_ASSERT_EQUAL_STRING("42", result_get_error_arg(r));
 }
 
 //==========================================================================
@@ -182,16 +182,16 @@ void test_not_error_not_bool(void)
 {
     Result r = eval_string("not \"hello");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_NOT_BOOL, r.error_code);
-    TEST_ASSERT_EQUAL_STRING("not", r.error_proc);
-    TEST_ASSERT_EQUAL_STRING("hello", r.error_arg);
+    TEST_ASSERT_EQUAL(ERR_NOT_BOOL, result_get_error_code(r));
+    TEST_ASSERT_EQUAL_STRING("not", result_get_error_proc(r));
+    TEST_ASSERT_EQUAL_STRING("hello", result_get_error_arg(r));
 }
 
 void test_not_error_number(void)
 {
     Result r = eval_string("not 1");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_NOT_BOOL, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_NOT_BOOL, result_get_error_code(r));
 }
 
 void test_and_accepts_uppercase_bool(void)

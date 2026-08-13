@@ -94,7 +94,7 @@ void test_when_table_full_errors(void)
     }
     Result r = run_string("when [:x = 99] [make \"n 1]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, result_get_error_code(r));
 }
 
 void test_when_print_lists_armed_demons(void)
@@ -126,7 +126,7 @@ void test_when_bad_condition_errors(void)
     run_string("when [sum 1 2] [make \"n 1]");  // condition outputs a number
     Result r = demons_poll();
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_NOT_BOOL, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_NOT_BOOL, result_get_error_code(r));
 }
 
 void test_action_does_not_reenter_poll(void)

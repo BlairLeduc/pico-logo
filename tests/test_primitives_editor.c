@@ -612,7 +612,7 @@ void test_edn_unknown_variable_error(void)
     
     Result r = run_string("edn \"nonexistent");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_NO_VALUE, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_NO_VALUE, result_get_error_code(r));
 }
 
 void test_edns_formats_all_variables(void)
@@ -1010,7 +1010,7 @@ void test_editfile_requires_word_argument(void)
     // List argument should fail
     Result r = run_string("editfile [test.txt]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_editfile_multiline_content(void)
@@ -1108,7 +1108,7 @@ void test_editfile_already_open_error(void)
     // Try to editfile - should fail because file is open
     Result r = run_string("editfile \"alreadyopen.txt");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_FILE_ALREADY_OPEN, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_FILE_ALREADY_OPEN, result_get_error_code(r));
     
     // Editor should not have been called
     TEST_ASSERT_FALSE(mock_device_was_editor_called());

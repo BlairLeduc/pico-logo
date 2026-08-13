@@ -107,67 +107,67 @@ static void append_caller_suffix(char *buf, size_t bufsize, const char *caller)
 const char *error_format(Result r)
 {
     static char buf[256];
-    
+
     if (r.status != RESULT_ERROR)
     {
         return "";
     }
-    
-    int code = r.error_code;
+
+    int code = result_get_error_code(r);
     const char *tmpl = error_message(code);
-    
+
     // Format based on which context fields are present
     switch (code)
     {
     case ERR_DOESNT_LIKE_INPUT:
         // "proc doesn't like arg as input"
-        if (r.error_proc && r.error_arg)
+        if (result_get_error_proc(r) && result_get_error_arg(r))
         {
             snprintf(buf, sizeof(buf), "%s doesn't like %s as input",
-                     r.error_proc, r.error_arg);
-            append_caller_suffix(buf, sizeof(buf), r.error_caller);
+                     result_get_error_proc(r), result_get_error_arg(r));
+            append_caller_suffix(buf, sizeof(buf), result_get_error_caller(r));
             return buf;
         }
         break;
-        
+
     case ERR_DIDNT_OUTPUT_TO:
         // "proc didn't output to caller"
-        if (r.error_proc && r.error_caller)
+        if (result_get_error_proc(r) && result_get_error_caller(r))
         {
             snprintf(buf, sizeof(buf), "%s didn't output to %s",
-                     r.error_proc, r.error_caller);
+                     result_get_error_proc(r), result_get_error_caller(r));
             // Note: error_caller is already used in the message itself
             return buf;
         }
-        else if (r.error_proc)
+        else if (result_get_error_proc(r))
         {
-            snprintf(buf, sizeof(buf), "%s didn't output", r.error_proc);
-            append_caller_suffix(buf, sizeof(buf), r.error_caller);
+            snprintf(buf, sizeof(buf), "%s didn't output", result_get_error_proc(r));
+            append_caller_suffix(buf, sizeof(buf), result_get_error_caller(r));
             return buf;
         }
         break;
-        
+
     case ERR_TOO_FEW_ITEMS:
     case ERR_TOO_FEW_ITEMS_LIST:
         // "Too few items in [list]"
-        if (r.error_arg)
+        if (result_get_error_arg(r))
         {
-            snprintf(buf, sizeof(buf), "Too few items in %s", r.error_arg);
-            append_caller_suffix(buf, sizeof(buf), r.error_caller);
+            snprintf(buf, sizeof(buf), "Too few items in %s", result_get_error_arg(r));
+            append_caller_suffix(buf, sizeof(buf), result_get_error_caller(r));
             return buf;
         }
         break;
-        
+
     case ERR_NO_VALUE:
         // For ERR_NO_VALUE, the variable name is in error_arg
-        if (r.error_arg)
+        if (result_get_error_arg(r))
         {
-            snprintf(buf, sizeof(buf), tmpl, r.error_arg);
-            append_caller_suffix(buf, sizeof(buf), r.error_caller);
+            snprintf(buf, sizeof(buf), tmpl, result_get_error_arg(r));
+            append_caller_suffix(buf, sizeof(buf), result_get_error_caller(r));
             return buf;
         }
         break;
-        
+
     case ERR_DONT_KNOW_HOW:
     case ERR_NOT_PROCEDURE:
     case ERR_UNDEFINED:
@@ -195,16 +195,16 @@ const char *error_format(Result r)
     case ERR_CANT_ON_NETWORK:
     case ERR_DONT_KNOW_ABOUT:
         // Single %s placeholder - use error_proc or error_arg
-        if (r.error_proc)
+        if (result_get_error_proc(r))
         {
-            snprintf(buf, sizeof(buf), tmpl, r.error_proc);
-            append_caller_suffix(buf, sizeof(buf), r.error_caller);
+            snprintf(buf, sizeof(buf), tmpl, result_get_error_proc(r));
+            append_caller_suffix(buf, sizeof(buf), result_get_error_caller(r));
             return buf;
         }
-        else if (r.error_arg)
+        else if (result_get_error_arg(r))
         {
-            snprintf(buf, sizeof(buf), tmpl, r.error_arg);
-            append_caller_suffix(buf, sizeof(buf), r.error_caller);
+            snprintf(buf, sizeof(buf), tmpl, result_get_error_arg(r));
+            append_caller_suffix(buf, sizeof(buf), result_get_error_caller(r));
             return buf;
         }
         break;
@@ -214,24 +214,24 @@ const char *error_format(Result r)
     case ERR_INVALID_IP_PORT:
     case ERR_NETWORK_ALREADY_OPEN:
         // Network errors - always use error_arg (the target address)
-        if (r.error_arg)
+        if (result_get_error_arg(r))
         {
-            snprintf(buf, sizeof(buf), tmpl, r.error_arg);
-            append_caller_suffix(buf, sizeof(buf), r.error_caller);
+            snprintf(buf, sizeof(buf), tmpl, result_get_error_arg(r));
+            append_caller_suffix(buf, sizeof(buf), result_get_error_caller(r));
             return buf;
         }
         break;
-        
+
     default:
         // No placeholders or context not needed - still append caller if present
-        if (r.error_caller)
+        if (result_get_error_caller(r))
         {
-            snprintf(buf, sizeof(buf), "%s in %s", tmpl, r.error_caller);
+            snprintf(buf, sizeof(buf), "%s in %s", tmpl, result_get_error_caller(r));
             return buf;
         }
         break;
     }
-    
+
     // Fallback: strip any unsubstituted %s from the template
     if (strstr(tmpl, "%s"))
     {
@@ -264,13 +264,13 @@ void error_set_caught(const Result *r)
     if (r && r->status == RESULT_ERROR)
     {
         caught_error.valid = true;
-        caught_error.code = r->error_code;
+        caught_error.code = result_get_error_code(*r);
         // Use error_format to get the fully formatted error message
         const char *formatted = error_format(*r);
         strncpy(caught_error.message, formatted, sizeof(caught_error.message) - 1);
         caught_error.message[sizeof(caught_error.message) - 1] = '\0';
-        caught_error.proc = r->error_proc;
-        caught_error.caller = r->error_caller;
+        caught_error.proc = result_get_error_proc(*r);
+        caught_error.caller = result_get_error_caller(*r);
     }
 }
 

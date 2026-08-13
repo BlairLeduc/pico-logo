@@ -374,7 +374,7 @@ void test_load_recursive_loading_prevented(void)
     
     Result r = run_string("load \"outer.logo");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_NO_FILE_BUFFERS, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_NO_FILE_BUFFERS, result_get_error_code(r));
     
     // The inner file should not have been loaded
     TEST_ASSERT_FALSE(var_exists("inner_ran"));
@@ -683,7 +683,7 @@ void test_load_oversize_procedure_reports_error(void)
 
     Result r = run_string("load \"big.logo");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, result_get_error_code(r));
 
     // The truncated procedure must NOT have been defined.
     TEST_ASSERT_FALSE(proc_exists("bigproc"));

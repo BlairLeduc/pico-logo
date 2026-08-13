@@ -26,99 +26,71 @@ void test_error_message_returns_unknown_for_invalid_code(void)
 
 void test_error_format_returns_empty_for_non_error(void)
 {
-    Result r = {0};
-    r.status = RESULT_OK;
+    Result r = result_ok(value_none());
     TEST_ASSERT_EQUAL_STRING("", error_format(r));
 }
 
 void test_error_format_doesnt_like_input(void)
 {
-    Result r = {0};
-    r.status = RESULT_ERROR;
-    r.error_code = ERR_DOESNT_LIKE_INPUT;
-    r.error_proc = "sum";
-    r.error_arg = "hello";
+    Result r = result_error_arg(ERR_DOESNT_LIKE_INPUT, "sum", "hello");
     
     TEST_ASSERT_EQUAL_STRING("sum doesn't like hello as input", error_format(r));
 }
 
 void test_error_format_doesnt_like_input_with_caller(void)
 {
-    Result r = {0};
-    r.status = RESULT_ERROR;
-    r.error_code = ERR_DOESNT_LIKE_INPUT;
-    r.error_proc = "sum";
-    r.error_arg = "hello";
-    r.error_caller = "myproc";
+    Result r = result_error_arg(ERR_DOESNT_LIKE_INPUT, "sum", "hello");
+    r = result_error_in(r, "myproc");
     
     TEST_ASSERT_EQUAL_STRING("sum doesn't like hello as input in myproc", error_format(r));
 }
 
 void test_error_format_didnt_output_to(void)
 {
-    Result r = {0};
-    r.status = RESULT_ERROR;
-    r.error_code = ERR_DIDNT_OUTPUT_TO;
-    r.error_proc = "print";
-    r.error_caller = "myproc";
+    Result r = result_error_arg(ERR_DIDNT_OUTPUT_TO, "print", NULL);
+    r = result_error_in(r, "myproc");
     
     TEST_ASSERT_EQUAL_STRING("print didn't output to myproc", error_format(r));
 }
 
 void test_error_format_didnt_output_to_no_caller(void)
 {
-    Result r = {0};
-    r.status = RESULT_ERROR;
-    r.error_code = ERR_DIDNT_OUTPUT_TO;
-    r.error_proc = "print";
+    Result r = result_error_arg(ERR_DIDNT_OUTPUT_TO, "print", NULL);
     
     TEST_ASSERT_EQUAL_STRING("print didn't output", error_format(r));
 }
 
 void test_error_format_too_few_items(void)
 {
-    Result r = {0};
-    r.status = RESULT_ERROR;
-    r.error_code = ERR_TOO_FEW_ITEMS;
-    r.error_arg = "[1 2]";
+    Result r = result_error_arg(ERR_TOO_FEW_ITEMS, NULL, "[1 2]");
     
     TEST_ASSERT_EQUAL_STRING("Too few items in [1 2]", error_format(r));
 }
 
 void test_error_format_single_placeholder_proc(void)
 {
-    Result r = {0};
-    r.status = RESULT_ERROR;
-    r.error_code = ERR_NOT_PROCEDURE;
-    r.error_proc = "foo";
+    Result r = result_error_arg(ERR_NOT_PROCEDURE, "foo", NULL);
     
     TEST_ASSERT_EQUAL_STRING("foo isn't a procedure", error_format(r));
 }
 
 void test_error_format_single_placeholder_arg(void)
 {
-    Result r = {0};
-    r.status = RESULT_ERROR;
-    r.error_code = ERR_NOT_PROCEDURE;
-    r.error_arg = "foo";
+    Result r = result_error_arg(ERR_NOT_PROCEDURE, NULL, "foo");
     
     TEST_ASSERT_EQUAL_STRING("foo isn't a procedure", error_format(r));
 }
 
 void test_error_format_no_placeholder(void)
 {
-    Result r = {0};
-    r.status = RESULT_ERROR;
-    r.error_code = ERR_DISK_FULL;
+    Result r = result_error_arg(ERR_DISK_FULL, NULL, NULL);
     
     TEST_ASSERT_EQUAL_STRING("Disk full", error_format(r));
 }
 
 void test_error_format_doesnt_like_input_missing_fields(void)
 {
-    Result r = {0};
-    r.status = RESULT_ERROR;
-    r.error_code = ERR_DOESNT_LIKE_INPUT;
+    Result r = result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, NULL);
     // Missing proc and arg
     
     // Should strip %s placeholders
@@ -127,9 +99,7 @@ void test_error_format_doesnt_like_input_missing_fields(void)
 
 void test_error_format_didnt_output_to_missing_proc(void)
 {
-    Result r = {0};
-    r.status = RESULT_ERROR;
-    r.error_code = ERR_DIDNT_OUTPUT_TO;
+    Result r = result_error_arg(ERR_DIDNT_OUTPUT_TO, NULL, NULL);
     // Missing proc
     
     TEST_ASSERT_EQUAL_STRING(" didn't output to ", error_format(r));
@@ -137,9 +107,7 @@ void test_error_format_didnt_output_to_missing_proc(void)
 
 void test_error_format_too_few_items_missing_arg(void)
 {
-    Result r = {0};
-    r.status = RESULT_ERROR;
-    r.error_code = ERR_TOO_FEW_ITEMS;
+    Result r = result_error_arg(ERR_TOO_FEW_ITEMS, NULL, NULL);
     // Missing arg
     
     TEST_ASSERT_EQUAL_STRING("Too few items in ", error_format(r));
@@ -147,9 +115,7 @@ void test_error_format_too_few_items_missing_arg(void)
 
 void test_error_format_single_placeholder_missing_fields(void)
 {
-    Result r = {0};
-    r.status = RESULT_ERROR;
-    r.error_code = ERR_NOT_PROCEDURE;
+    Result r = result_error_arg(ERR_NOT_PROCEDURE, NULL, NULL);
     // Missing proc/arg
     
     TEST_ASSERT_EQUAL_STRING(" isn't a procedure", error_format(r));
@@ -157,93 +123,68 @@ void test_error_format_single_placeholder_missing_fields(void)
 
 void test_error_format_single_placeholder_with_caller(void)
 {
-    Result r = {0};
-    r.status = RESULT_ERROR;
-    r.error_code = ERR_NOT_PROCEDURE;
-    r.error_proc = "foo";
-    r.error_caller = "myproc";
+    Result r = result_error_arg(ERR_NOT_PROCEDURE, "foo", NULL);
+    r = result_error_in(r, "myproc");
     
     TEST_ASSERT_EQUAL_STRING("foo isn't a procedure in myproc", error_format(r));
 }
 
 void test_error_format_no_placeholder_with_caller(void)
 {
-    Result r = {0};
-    r.status = RESULT_ERROR;
-    r.error_code = ERR_DISK_FULL;
-    r.error_caller = "save_data";
+    Result r = result_error_arg(ERR_DISK_FULL, NULL, NULL);
+    r = result_error_in(r, "save_data");
     
     TEST_ASSERT_EQUAL_STRING("Disk full in save_data", error_format(r));
 }
 
 void test_error_format_too_few_items_with_caller(void)
 {
-    Result r = {0};
-    r.status = RESULT_ERROR;
-    r.error_code = ERR_TOO_FEW_ITEMS;
-    r.error_arg = "[1 2]";
-    r.error_caller = "my_list_proc";
+    Result r = result_error_arg(ERR_TOO_FEW_ITEMS, NULL, "[1 2]");
+    r = result_error_in(r, "my_list_proc");
     
     TEST_ASSERT_EQUAL_STRING("Too few items in [1 2] in my_list_proc", error_format(r));
 }
 
 void test_error_format_no_value_with_caller(void)
 {
-    Result r = {0};
-    r.status = RESULT_ERROR;
-    r.error_code = ERR_NO_VALUE;
-    r.error_arg = "x";
-    r.error_caller = "calculate";
+    Result r = result_error_arg(ERR_NO_VALUE, NULL, "x");
+    r = result_error_in(r, "calculate");
     
     TEST_ASSERT_EQUAL_STRING("x has no value in calculate", error_format(r));
 }
 
 void test_error_format_divide_by_zero_with_caller(void)
 {
-    Result r = {0};
-    r.status = RESULT_ERROR;
-    r.error_code = ERR_DIVIDE_BY_ZERO;
-    r.error_caller = "average";
+    Result r = result_error_arg(ERR_DIVIDE_BY_ZERO, NULL, NULL);
+    r = result_error_in(r, "average");
     
     TEST_ASSERT_EQUAL_STRING("Can't divide by zero in average", error_format(r));
 }
 
 void test_error_format_cant_use_toplevel(void)
 {
-    Result r = {0};
-    r.status = RESULT_ERROR;
-    r.error_code = ERR_CANT_USE_TOPLEVEL;
-    r.error_proc = "stop";
+    Result r = result_error_arg(ERR_CANT_USE_TOPLEVEL, "stop", NULL);
     
     TEST_ASSERT_EQUAL_STRING("stop can't be used at toplevel", error_format(r));
 }
 
 void test_error_format_cant_use_procedure(void)
 {
-    Result r = {0};
-    r.status = RESULT_ERROR;
-    r.error_code = ERR_CANT_USE_PROCEDURE;
-    r.error_proc = "to";
+    Result r = result_error_arg(ERR_CANT_USE_PROCEDURE, "to", NULL);
     
     TEST_ASSERT_EQUAL_STRING("to can't be used in a procedure", error_format(r));
 }
 
 void test_error_format_cant_from_editor(void)
 {
-    Result r = {0};
-    r.status = RESULT_ERROR;
-    r.error_code = ERR_CANT_FROM_EDITOR;
-    r.error_proc = "edit";
+    Result r = result_error_arg(ERR_CANT_FROM_EDITOR, "edit", NULL);
     
     TEST_ASSERT_EQUAL_STRING("Can't edit from the editor", error_format(r));
 }
 
 void test_error_format_not_found(void)
 {
-    Result r = {0};
-    r.status = RESULT_ERROR;
-    r.error_code = ERR_NOT_FOUND;
-    r.error_arg = "startup";
+    Result r = result_error_arg(ERR_NOT_FOUND, NULL, "startup");
     
     TEST_ASSERT_EQUAL_STRING("startup not found", error_format(r));
 }
@@ -252,22 +193,16 @@ void test_error_format_not_found(void)
 // This is important because the evaluator sets error_proc to the primitive name
 void test_error_format_cant_open_network(void)
 {
-    Result r = {0};
-    r.status = RESULT_ERROR;
-    r.error_code = ERR_CANT_OPEN_NETWORK;
-    r.error_proc = "open";  // Set by evaluator
-    r.error_arg = "192.168.1.100:12345";
+    // The evaluator fills the primitive name in as the error unwinds.
+    Result r = result_error_arg(ERR_CANT_OPEN_NETWORK, "open", "192.168.1.100:12345");
     
     TEST_ASSERT_EQUAL_STRING("Can't open 192.168.1.100:12345", error_format(r));
 }
 
 void test_error_format_invalid_ip_port(void)
 {
-    Result r = {0};
-    r.status = RESULT_ERROR;
-    r.error_code = ERR_INVALID_IP_PORT;
-    r.error_proc = "open";  // Set by evaluator
-    r.error_arg = "badhost:notaport";
+    // The evaluator fills the primitive name in as the error unwinds.
+    Result r = result_error_arg(ERR_INVALID_IP_PORT, "open", "badhost:notaport");
     
     TEST_ASSERT_EQUAL_STRING("Invalid IP address or port badhost:notaport", error_format(r));
 }

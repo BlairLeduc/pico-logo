@@ -111,7 +111,7 @@ void test_stop(void)
     // stop at toplevel should error
     Result r = run_string("stop");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_ONLY_IN_PROCEDURE, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_ONLY_IN_PROCEDURE, result_get_error_code(r));
 }
 
 void test_output(void)
@@ -119,7 +119,7 @@ void test_output(void)
     // output at toplevel should error
     Result r = run_string("output 99");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_ONLY_IN_PROCEDURE, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_ONLY_IN_PROCEDURE, result_get_error_code(r));
 }
 
 void test_output_in_if_expression_at_toplevel(void)
@@ -128,7 +128,7 @@ void test_output_in_if_expression_at_toplevel(void)
     run_string("make \"x 5");
     Result r = run_string("pr (if :x > 5 [op \"big] [op \"small])");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_ONLY_IN_PROCEDURE, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_ONLY_IN_PROCEDURE, result_get_error_code(r));
 }
 
 void test_run_list(void)
@@ -189,7 +189,7 @@ void test_runresult_propagates_error(void)
 {
     Result r = eval_string("runresult [sum 1 \"notanumber]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 // Test infix subtraction inside lists - Logo evaluates infix operators when list is run

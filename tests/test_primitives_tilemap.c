@@ -94,14 +94,14 @@ void test_newtiles_rejects_other_sizes(void)
 {
     Result r = run_string("newtiles 12");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 
     r = run_string("newtiles 0");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 
     r = run_string("newtiles \"eight");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 //==========================================================================
@@ -114,7 +114,7 @@ void test_snaptile_without_a_bank_is_refused(void)
     // of range -- which is how "you need newtiles first" reaches the user.
     Result r = run_string("snaptile 1");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_snaptile_rejects_slots_outside_the_bank(void)
@@ -124,7 +124,7 @@ void test_snaptile_rejects_slots_outside_the_bank(void)
     // Slot 0 is the background cell, not a tile.
     Result r = run_string("snaptile 0");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 
     // 4 KB of 8x8 tiles is 64 slots, so 63 is the last one.
     TEST_ASSERT_EQUAL(RESULT_NONE, run_string("snaptile 63").status);
@@ -143,7 +143,7 @@ void test_snaptile_rejects_fractional_slots(void)
     TEST_ASSERT_EQUAL(RESULT_NONE, run_string("newtiles 8").status);
     Result r = run_string("snaptile 1.5");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 //==========================================================================
@@ -154,11 +154,11 @@ void test_newmap_rejects_bad_dimensions(void)
 {
     Result r = run_string("newmap 0 4");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 
     r = run_string("newmap 4 -1");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_newmap_over_the_tier_cap_is_out_of_space(void)
@@ -167,7 +167,7 @@ void test_newmap_over_the_tier_cap_is_out_of_space(void)
 
     Result r = run_string("newmap 65 64");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, result_get_error_code(r));
 }
 
 void test_settile_and_tile_round_trip(void)
@@ -191,7 +191,7 @@ void test_map_cells_are_one_based_and_bounded(void)
 
     Result r = run_string("settile 0 1 1");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 
     r = run_string("settile 5 1 1");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
@@ -214,7 +214,7 @@ void test_settile_rejects_values_outside_a_byte(void)
 
     Result r = run_string("settile 1 1 256");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 
     r = run_string("settile 1 1 -1");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
@@ -224,11 +224,11 @@ void test_map_primitives_without_a_map_are_refused(void)
 {
     Result r = run_string("settile 1 1 1");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 
     r = eval_string("tile 1 1");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 //==========================================================================
@@ -306,7 +306,7 @@ void test_stamptile_bounds_match_tile(void)
 
     Result r = run_string("stamptile 3 1");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 
     r = run_string("stamptile 1 0");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);

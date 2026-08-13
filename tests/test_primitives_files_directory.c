@@ -308,7 +308,7 @@ void test_setprefix_nonexistent_directory(void)
     // Try to set prefix to a directory that doesn't exist
     Result r = run_string("setprefix \"nonexistent");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_SUBDIR_NOT_FOUND, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_SUBDIR_NOT_FOUND, result_get_error_code(r));
 }
 
 void test_setprefix_root_directory(void)

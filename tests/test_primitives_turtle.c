@@ -1596,7 +1596,7 @@ void test_arc_fence_out_of_bounds(void)
     run_string("fence");
     Result r = run_string("arc 360 1000");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_TURTLE_BOUNDS, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_TURTLE_BOUNDS, result_get_error_code(r));
 
     // Turtle restored to the centre with the pen back down
     ASSERT_POSITION(0, 0);
@@ -1608,11 +1608,11 @@ void test_arc_requires_numbers(void)
 {
     Result r = run_string("arc \"abc 10");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 
     r = run_string("arc 90 \"abc");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 //==========================================================================
@@ -1653,7 +1653,7 @@ void test_tell_out_of_range_errors(void)
 
     r = run_string("tell 8");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 
     r = run_string("tell [0 9]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
@@ -1962,7 +1962,7 @@ void test_snapsh_reports_full_pool(void)
 
     Result r = run_string("snapsh 1 16 16");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, result_get_error_code(r));
 }
 
 void test_setrot_is_per_turtle(void)
@@ -1979,7 +1979,7 @@ void test_setrot_rejects_unknown_style(void)
 {
     Result r = run_string("setrot \"sideways");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_setrot_case_insensitive(void)
@@ -2002,7 +2002,7 @@ void test_setmag_rejects_other_values(void)
 {
     Result r = run_string("setmag 3");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 
     r = run_string("setmag 0");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
@@ -2079,7 +2079,7 @@ void test_distance_rejects_bad_turtle(void)
 {
     Result r = run_string("print distance 8");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_touching_true_when_masks_overlap(void)
@@ -2181,7 +2181,7 @@ void test_touching_rejects_bad_turtle(void)
 {
     Result r = run_string("print touching? 0 9");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_over_true_when_canvas_matches(void)
@@ -2243,7 +2243,7 @@ void test_over_rejects_bad_colour(void)
 {
     Result r = run_string("print over? 300");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_colourunder_reads_turtle_position(void)

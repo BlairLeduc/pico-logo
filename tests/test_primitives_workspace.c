@@ -958,7 +958,7 @@ void test_erall_then_new_procedure_no_stale_references(void)
     // Run it to get an error - this might leave stale state
     Result r = run_string("oldproc");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, result_get_error_code(r));
     
     // Erase everything
     run_string("erall");
@@ -1327,7 +1327,7 @@ void test_help_command_unknown_gives_error(void)
     reset_output();
     Result r = run_string("help \"xyznotreal");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_ABOUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_ABOUT, result_get_error_code(r));
 }
 
 void test_help_shows_description(void)
@@ -1386,7 +1386,7 @@ void test_help_too_many_inputs(void)
 {
     Result r = run_string("(help \"a \"b)");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_TOO_MANY_INPUTS, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_TOO_MANY_INPUTS, result_get_error_code(r));
 }
 
 int main(void)

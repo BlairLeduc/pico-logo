@@ -99,7 +99,7 @@ void test_divide_by_zero(void)
 {
     Result r = eval_string("quotient 10 0");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(13, r.error_code); // ERR_DIVIDE_BY_ZERO
+    TEST_ASSERT_EQUAL(13, result_get_error_code(r)); // ERR_DIVIDE_BY_ZERO
 }
 
 void test_error_divide_by_zero_msg(void)
@@ -107,7 +107,7 @@ void test_error_divide_by_zero_msg(void)
     // Can't divide by zero
     Result r = eval_string("quotient 5 0");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DIVIDE_BY_ZERO, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DIVIDE_BY_ZERO, result_get_error_code(r));
     
     const char *msg = error_format(r);
     TEST_ASSERT_EQUAL_STRING("Can't divide by zero", msg);
@@ -118,9 +118,9 @@ void test_error_sum_doesnt_like(void)
     // sum doesn't like hello as input
     Result r = eval_string("sum 1 \"hello");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
-    TEST_ASSERT_EQUAL_STRING("sum", r.error_proc);
-    TEST_ASSERT_EQUAL_STRING("hello", r.error_arg);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
+    TEST_ASSERT_EQUAL_STRING("sum", result_get_error_proc(r));
+    TEST_ASSERT_EQUAL_STRING("hello", result_get_error_arg(r));
     
     const char *msg = error_format(r);
     TEST_ASSERT_EQUAL_STRING("sum doesn't like hello as input", msg);
@@ -139,7 +139,7 @@ void test_random_error_negative(void)
 {
     Result r = eval_string("random -5");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_random_default_mode_uses_device_source(void)
@@ -197,7 +197,7 @@ void test_rerandom_rejects_extra_inputs(void)
 {
     Result r = eval_string("(rerandom 1 2)");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_TOO_MANY_INPUTS, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_TOO_MANY_INPUTS, result_get_error_code(r));
 }
 
 void test_rerandom_rejects_non_finite_seed(void)
@@ -206,7 +206,7 @@ void test_rerandom_rejects_non_finite_seed(void)
     // non-finite value would be undefined behaviour, so it must error.
     Result r = eval_string("(rerandom 1e99)");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_rerandom_bounds_respected(void)
@@ -239,7 +239,7 @@ void test_rerandom_rejects_non_number(void)
 {
     Result r = eval_string("(rerandom \"abc)");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_arctan(void)
@@ -283,7 +283,7 @@ void test_arctan_too_many_inputs(void)
 {
     Result r = eval_string("(arctan 1 2 3)");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_TOO_MANY_INPUTS, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_TOO_MANY_INPUTS, result_get_error_code(r));
 }
 
 void test_tan(void)
@@ -335,7 +335,7 @@ void test_modulo_divide_by_zero(void)
 {
     Result r = eval_string("modulo 10 0");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DIVIDE_BY_ZERO, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DIVIDE_BY_ZERO, result_get_error_code(r));
 }
 
 void test_cos(void)
@@ -430,7 +430,7 @@ void test_intquotient_divide_by_zero(void)
 {
     Result r = eval_string("intquotient 10 0");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DIVIDE_BY_ZERO, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DIVIDE_BY_ZERO, result_get_error_code(r));
 }
 
 void test_remainder(void)
@@ -453,7 +453,7 @@ void test_remainder_divide_by_zero(void)
 {
     Result r = eval_string("remainder 10 0");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DIVIDE_BY_ZERO, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DIVIDE_BY_ZERO, result_get_error_code(r));
 }
 
 void test_round(void)
@@ -517,7 +517,7 @@ void test_sqrt_negative_error(void)
     // sqrt of negative number should error
     Result r = eval_string("sqrt -4");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 //==========================================================================
@@ -589,7 +589,7 @@ void test_ln_zero_error(void)
     // ln 0 should error
     Result r = eval_string("ln 0");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_ln_negative_error(void)
@@ -597,7 +597,7 @@ void test_ln_negative_error(void)
     // ln of negative number should error
     Result r = eval_string("ln -5");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 //==========================================================================
@@ -633,7 +633,7 @@ void test_log_zero_error(void)
     // log 0 should error
     Result r = eval_string("log 0");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_log_negative_error(void)
@@ -641,7 +641,7 @@ void test_log_negative_error(void)
     // log of negative number should error
     Result r = eval_string("log -5");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 //==========================================================================
@@ -804,7 +804,7 @@ void test_form_width_zero_error(void)
     // form 1 0 2 should error (width <= 0)
     Result r = eval_string("form 1 0 2");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_form_width_negative_error(void)
@@ -812,7 +812,7 @@ void test_form_width_negative_error(void)
     // form 1 -5 2 should error (width <= 0)
     Result r = eval_string("form 1 -5 2");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_form_decimal_places_negative_error(void)
@@ -820,7 +820,7 @@ void test_form_decimal_places_negative_error(void)
     // form 1 10 -1 should error (decimalplaces < 0)
     Result r = eval_string("form 1 10 -1");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_form_width_too_large_error(void)
@@ -830,7 +830,7 @@ void test_form_width_too_large_error(void)
     // overflowing the stack buffer.
     Result r = eval_string("form 1.5 1000 2");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 //==========================================================================

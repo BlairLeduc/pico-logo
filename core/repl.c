@@ -112,9 +112,9 @@ static const char *suggest_similar_name(const char *unknown)
 // Print "Did you mean X?" after an "I don't know how to" error
 static void repl_suggest_name(ReplState *state, Result r)
 {
-    if (r.error_code != ERR_DONT_KNOW_HOW || !r.error_proc)
+    if (result_get_error_code(r) != ERR_DONT_KNOW_HOW || !result_get_error_proc(r))
         return;
-    const char *suggestion = suggest_similar_name(r.error_proc);
+    const char *suggestion = suggest_similar_name(result_get_error_proc(r));
     if (suggestion)
     {
         char msg[96];
@@ -130,10 +130,10 @@ bool repl_line_starts_with_to(const char *line)
     // Skip leading whitespace
     while (*line && isspace((unsigned char)*line))
         line++;
-    
+
     if (strncasecmp(line, "to", 2) != 0)
         return false;
-    
+
     // Must be followed by whitespace or end of line
     char c = line[2];
     return c == '\0' || isspace((unsigned char)c);
@@ -144,17 +144,17 @@ bool repl_line_is_end(const char *line)
     // Skip leading whitespace
     while (*line && isspace((unsigned char)*line))
         line++;
-    
+
     if (strncasecmp(line, "end", 3) != 0)
         return false;
-    
+
     // Must be followed by whitespace or end of string
     line += 3;
-    
+
     // Skip any trailing whitespace
     while (*line && isspace((unsigned char)*line))
         line++;
-    
+
     // Line must be empty after "end" and whitespace
     return *line == '\0';
 }
@@ -227,17 +227,17 @@ const char *repl_extract_proc_name(const char *line, char *buffer, size_t buffer
     // Skip leading whitespace
     while (*line && isspace((unsigned char)*line))
         line++;
-    
+
     // Skip "to"
     line += 2;
-    
+
     // Skip whitespace after "to"
     while (*line && isspace((unsigned char)*line))
         line++;
-    
+
     if (*line == '\0')
         return NULL;  // No name provided
-    
+
     // Copy name until whitespace or end
     size_t i = 0;
     while (*line && !isspace((unsigned char)*line) && i < buffer_size - 1)
@@ -245,7 +245,7 @@ const char *repl_extract_proc_name(const char *line, char *buffer, size_t buffer
         buffer[i++] = *line++;
     }
     buffer[i] = '\0';
-    
+
     return i > 0 ? buffer : NULL;
 }
 
@@ -271,10 +271,10 @@ bool repl_init(ReplState *state, LogoIO *io, ReplFlags flags, const char *proc_p
     state->io = io;
     state->flags = flags;
     state->proc_prefix = proc_prefix ? proc_prefix : "";
-    
+
     state->proc_buffer = malloc(REPL_MAX_PROC_BUFFER);
     state->expr_buffer = malloc(REPL_MAX_PROC_BUFFER);
-    
+
     if (!state->proc_buffer || !state->expr_buffer)
     {
         free(state->proc_buffer);
@@ -283,7 +283,7 @@ bool repl_init(ReplState *state, LogoIO *io, ReplFlags flags, const char *proc_p
         state->expr_buffer = NULL;
         return false;
     }
-    
+
     state->proc_len = 0;
     state->in_procedure_def = false;
     state->expr_len = 0;
@@ -338,7 +338,7 @@ static Result repl_evaluate_line(ReplState *state, const char *input)
     while (!eval_at_end(&eval))
     {
         Result r = eval_instruction(&eval);
-        
+
         if (r.status == RESULT_ERROR)
         {
             // Clean up execution state from the failed command
@@ -359,7 +359,7 @@ static Result repl_evaluate_line(ReplState *state, const char *input)
         }
         else if (r.status == RESULT_THROW)
         {
-            if (strcasecmp(r.throw_tag, "toplevel") == 0)
+            if (strcasecmp(result_get_throw_tag(r), "toplevel") == 0)
             {
                 // throw "toplevel exits the REPL - reset execution state first
                 proc_reset_execution_state();
@@ -379,7 +379,7 @@ static Result repl_evaluate_line(ReplState *state, const char *input)
                     repl_restore_refresh(state);
                 }
                 char msg[128];
-                snprintf(msg, sizeof(msg), "Can't find a catch for %s", r.throw_tag);
+                snprintf(msg, sizeof(msg), "Can't find a catch for %s", result_get_throw_tag(r));
                 logo_io_write_error_line(state->io, msg);
                 return result_none();  // Error handled, continue REPL
             }
@@ -388,10 +388,10 @@ static Result repl_evaluate_line(ReplState *state, const char *input)
         {
             // Nested pause - recursively run pause REPL
             ReplState pause_state;
-            if (repl_init(&pause_state, state->io, REPL_FLAGS_PAUSE, r.pause_proc))
+            if (repl_init(&pause_state, state->io, REPL_FLAGS_PAUSE, result_get_pause_proc(r)))
             {
                 logo_io_write_line(state->io, "Pausing...");
-                
+
                 Result pr = repl_run(&pause_state);
                 repl_cleanup(&pause_state);
                 if (pr.status == RESULT_THROW)
@@ -405,14 +405,14 @@ static Result repl_evaluate_line(ReplState *state, const char *input)
         {
             // Expression returned a value - show "I don't know what to do with" error
             char msg[128];
-            snprintf(msg, sizeof(msg), "I don't know what to do with %s", 
+            snprintf(msg, sizeof(msg), "I don't know what to do with %s",
                      value_to_string(r.value));
             logo_io_write_error_line(state->io, msg);
             return result_none();  // Error handled, continue REPL
         }
         // RESULT_NONE, RESULT_STOP, RESULT_OUTPUT - continue evaluation
     }
-    
+
     return result_none();
 }
 
@@ -421,7 +421,7 @@ Result repl_run(ReplState *state)
 {
     // Buffer for building prompts
     char prompt[128];
-    
+
     while (1)
     {
         // Build and print appropriate prompt (prefix + suffix)
@@ -452,7 +452,7 @@ Result repl_run(ReplState *state)
 
         // Read input line
         int len = logo_stream_read_line(&state->io->console->input, state->line, sizeof(state->line));
-        
+
         if (len == LOGO_STREAM_INTERRUPTED)
         {
             // User pressed BRK at the prompt
@@ -465,7 +465,7 @@ Result repl_run(ReplState *state)
             logo_io_write_error_line(state->io, "Stopped!");
             continue;
         }
-        
+
         if (len < 0)
         {
             // EOF or error. Return RESULT_EOF so callers can distinguish
@@ -501,7 +501,7 @@ Result repl_run(ReplState *state)
                 logo_io_write_error_line(state->io, error_format(r));
                 continue;
             }
-            
+
             // Start collecting the definition. The "to" line goes through the
             // same append as the rest, since it may close the definition too.
             state->in_procedure_def = true;
@@ -550,20 +550,20 @@ Result repl_run(ReplState *state)
                 state->expr_buffer[state->expr_len + line_len] = ' ';
                 state->expr_len += line_len + 1;
                 state->expr_buffer[state->expr_len] = '\0';
-                
+
                 state->bracket_depth = repl_next_bracket_depth(state->bracket_depth,
                                                                state->line);
-                
+
                 if (state->bracket_depth <= 0)
                 {
                     state->expr_buffer[state->expr_len] = '\0';
-                    
+
                     Result r = repl_evaluate_line(state, state->expr_buffer);
                     if (r.status == RESULT_THROW)
                     {
                         return r;
                     }
-                    
+
                     state->bracket_depth = 0;
                     state->expr_len = 0;
                 }
@@ -585,7 +585,7 @@ Result repl_run(ReplState *state)
             {
                 state->bracket_depth = next_depth;
                 state->expr_len = 0;
-                
+
                 size_t line_len = strlen(state->line);
                 if (line_len < REPL_MAX_PROC_BUFFER - 1)
                 {
@@ -610,7 +610,7 @@ Result repl_run(ReplState *state)
         {
             return r;
         }
-        
+
         // Check if co was called (for pause REPL)
         if ((state->flags & REPL_FLAG_EXIT_ON_CO) && pause_check_continue())
         {

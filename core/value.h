@@ -62,24 +62,34 @@ extern "C"
 
     // Evaluation result (FP-style)
     //
-    // Uses a union for status-specific fields to minimize size.
+    // EVERY EXPRESSION AND EVERY PRIMITIVE RETURNS ONE OF THESE, so its size is
+    // paid on the hottest path there is. It used to carry the error detail
+    // inline in a union -- 48 bytes on the host, 28 on a board -- and because
+    // the constructors are designated initialisers, the compiler zeroed all of
+    // it on `result_ok` and `result_none` too. Profiling an Asteroids frame put
+    // 12 % of interpreter time in `memset`/`memmove` of this struct, and
+    // dropping the zeroing alone measured 4.5 % of the frame.
+    //
+    // So the error detail moved out, to a module-level record in value.c that
+    // the constructors write and `result_get_error_*` read -- C's own `errno`
+    // shape, and sound for the same reason: an error is raised, decorated as it
+    // unwinds, and consumed. It is never held beside a second live error.
+    //
+    // `tag` stays INLINE and is not part of that trade. `catch` and `go` really
+    // do hold two results at once (`step_catch` copies the child, then calls
+    // `result_none()` before reading the tag off it), so a shared record would
+    // be a live aliasing bug rather than a theoretical one.
+    //
+    // WHAT THE CALLER OWES: read the detail before raising the next error. An
+    // error is raised, decorated as it unwinds, and consumed, so nothing in
+    // the interpreter holds one across a second -- but a caller that keeps two
+    // error results side by side is comparing one record with itself. Copilot
+    // caught exactly that in a test comparing `thing "x` against `:x`.
     typedef struct
     {
         ResultStatus status;
-        Value value;           // Valid for RESULT_OK, RESULT_OUTPUT, RESULT_THROW
-        union
-        {
-            struct                       // RESULT_ERROR
-            {
-                int error_code;
-                const char *error_proc;  // Procedure that caused error (e.g., "sum")
-                const char *error_arg;   // Bad argument as string (e.g., "hello")
-                const char *error_caller; // User procedure where error occurred
-            };
-            const char *throw_tag;   // RESULT_THROW (e.g., "error", "toplevel")
-            const char *pause_proc;  // RESULT_PAUSE
-            const char *goto_label;  // RESULT_GOTO
-        };
+        Value value;       // Valid for RESULT_OK, RESULT_OUTPUT, RESULT_THROW
+        const char *tag;   // RESULT_THROW / RESULT_PAUSE / RESULT_GOTO
     } Result;
 
     //==========================================================================
@@ -212,28 +222,58 @@ extern "C"
         return r.value;
     }
 
+    // The error detail of the last error raised. The `Result` argument is what
+    // makes the read legible at the call site and lets the assert check that
+    // asking is meaningful -- the storage itself is the record in value.c.
+    int result_error_detail_code(void);
+    const char *result_error_detail_proc(void);
+    const char *result_error_detail_arg(void);
+    const char *result_error_detail_caller(void);
+
     static inline int result_get_error_code(Result r)
     {
         assert(r.status == RESULT_ERROR);
-        return r.error_code;
+        (void)r;
+        return result_error_detail_code();
+    }
+
+    static inline const char *result_get_error_proc(Result r)
+    {
+        assert(r.status == RESULT_ERROR);
+        (void)r;
+        return result_error_detail_proc();
+    }
+
+    static inline const char *result_get_error_arg(Result r)
+    {
+        assert(r.status == RESULT_ERROR);
+        (void)r;
+        return result_error_detail_arg();
+    }
+
+    static inline const char *result_get_error_caller(Result r)
+    {
+        assert(r.status == RESULT_ERROR);
+        (void)r;
+        return result_error_detail_caller();
     }
 
     static inline const char *result_get_throw_tag(Result r)
     {
         assert(r.status == RESULT_THROW);
-        return r.throw_tag;
+        return r.tag;
     }
 
     static inline const char *result_get_pause_proc(Result r)
     {
         assert(r.status == RESULT_PAUSE);
-        return r.pause_proc;
+        return r.tag;
     }
 
     static inline const char *result_get_goto_label(Result r)
     {
         assert(r.status == RESULT_GOTO);
-        return r.goto_label;
+        return r.tag;
     }
 
 #ifdef __cplusplus
