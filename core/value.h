@@ -79,6 +79,12 @@ extern "C"
     // do hold two results at once (`step_catch` copies the child, then calls
     // `result_none()` before reading the tag off it), so a shared record would
     // be a live aliasing bug rather than a theoretical one.
+    //
+    // WHAT THE CALLER OWES: read the detail before raising the next error. An
+    // error is raised, decorated as it unwinds, and consumed, so nothing in
+    // the interpreter holds one across a second -- but a caller that keeps two
+    // error results side by side is comparing one record with itself. Copilot
+    // caught exactly that in a test comparing `thing "x` against `:x`.
     typedef struct
     {
         ResultStatus status;

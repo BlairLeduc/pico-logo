@@ -41,11 +41,18 @@ void test_thing_and_colon_agree_on_unknown(void)
 {
     // Reference §1665 says `thing "any` is equivalent to `:any`.
     // Both forms must raise the same error code on an unbound name.
+    //
+    // THE FIRST CODE HAS TO BE READ BEFORE THE SECOND ERROR IS RAISED. Error
+    // detail lives in one module-level record now, not in the `Result`, so
+    // `result_get_error_code(r1)` after the second `eval_string` would report
+    // r2's code and the comparison would pass whatever the two forms did.
     Result r1 = eval_string("thing \"zzz_unbound_x");
-    Result r2 = eval_string(":zzz_unbound_x");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r1.status);
+    int first_code = result_get_error_code(r1);
+
+    Result r2 = eval_string(":zzz_unbound_x");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r2.status);
-    TEST_ASSERT_EQUAL(result_get_error_code(r2), result_get_error_code(r1));
+    TEST_ASSERT_EQUAL(first_code, result_get_error_code(r2));
 }
 
 void test_dots_variable(void)

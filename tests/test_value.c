@@ -664,8 +664,11 @@ void test_result_error_nulls(void)
     TEST_ASSERT_NULL(result_get_error_proc(r));
     TEST_ASSERT_NULL(result_get_error_arg(r));
     TEST_ASSERT_NULL(result_get_error_caller(r));
-    // Note: throw_tag is in a union with error fields,
-    // so it cannot be checked when status is RESULT_ERROR
+    // The tag used to share a union with the error fields and could not be
+    // read here. It is its own member now, so an error result carrying one is
+    // a real thing to catch -- an error constructor that sets `tag` would let
+    // a stale throw tag ride along into `catch`.
+    TEST_ASSERT_NULL_MESSAGE(r.tag, "an error result is carrying a throw tag");
 }
 
 void test_result_throw_status(void)
