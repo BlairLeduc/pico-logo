@@ -1,4 +1,4 @@
-; Asteroids -- M3: lives, levels and deaths.  See docs/asteroids-design.md.
+; Asteroids -- M4: the saucer and the sound.  See docs/asteroids-design.md.
 ;
 ;   load "asteroids
 ;   asteroids     (arrows steer and thrust, space fires, down hyperspaces,
@@ -15,8 +15,10 @@
 ; added the ship (rotation, thrust, momentum), three shots, shot-on-rock
 ; collisions, splitting and scoring.  M3 makes it a game: rocks kill the ship,
 ; the ship explodes and comes back, lives run out, levels advance, hyperspace
-; is a gamble, and there is an attract screen to come back to.  Still to come:
-; the saucer and the sound (M4).
+; is a gamble, and there is an attract screen to come back to.  M4 brings the
+; last two things the arcade cabinet had: a saucer that crosses and shoots
+; back, and the sound -- of which the heartbeat is the point, because it is a
+; TEMPO rather than a note and it is what makes a thinning board frightening.
 ;
 ; THE FRAME CLEARS AND REDRAWS.  It does not un-draw last frame's lines.  That
 ; was this design's default until M0 measured both on a board (design section
@@ -37,7 +39,7 @@
 ; before that it wrote through to the panel even in manual and `sync` mode, so
 ; the screen visibly blanked at the frame rate.
 ;
-; Five rules this file is written to, four of them learned the hard way:
+; Six rules this file is written to, five of them learned the hard way:
 ;
 ;   * A frame ALLOCATES.  This is the rule M1 disproved: `.setitem` of a number
 ;     interns it, so twelve rocks mint 36 atoms a frame and the contract is a
@@ -51,6 +53,12 @@
 ;   * A `;` inside a bracketed list silently swallows the rest of a procedure.
 ;   * Lists are built with `list`, never as literals: a literal belongs to the
 ;     procedure's stored body and `.setitem` would scribble on it for good.
+;   * EVERY NAME HERE IS ONE FLAT GLOBAL NAMESPACE.  M4 had a tuning constant
+;     `warble.b` (a frequency) and an alternation flag `warble.b`, which is not
+;     a shadow -- it is one variable, and the second `make` quietly turned a
+;     frequency into `false`.  What it looked like from the outside was `sound`
+;     being handed `false` 143 frames into a game.  Flags are `.alt` here for
+;     that reason, and a new name is worth a `grep` before it is worth a `make`.
 
 ;==========================================================================
 ; Tuning
@@ -115,6 +123,12 @@ make "speed.max    4.8     ; steps a frame -- about 67 a second
 ;   large 30 (spike 21.7 + beam 8.95 = 30.6)   medium 22 (13.2 + 8.95 = 22.2)
 ;   small 16 (7.5 + 8.95 = 16.4)
 ;
+; (Note this is the ROCK test, and it is why `ship.rad` is the beam where
+; `sau.shot.rad` is the hull: a rock is 16 to 44 steps wide and meets the ship
+; broadside, so a few steps either way is invisible against it.  A shot is a
+; single dot, and a dot inside the drawn hull that does not kill is the most
+; visible failure a collision test has.)
+;
 ; Just inside contact at every size, rather than 34 / 26 / 20.  It errs towards
 ; a graze that should have killed and away from a kill the player can see past,
 ; which is the right side: the second one reads as the game cheating and the
@@ -125,17 +139,22 @@ make "speed.max    4.8     ; steps a frame -- about 67 a second
 ; fragments (design section 9): one `arc` a frame instead of a particle system,
 ; and the rocks keep moving under it, which is what the arcade does too.
 ;
-; `safe.frames` is what stops a respawn being a death: the ship comes back at
-; the centre, which is where a rock may well be drifting.  The arcade waits for
-; the middle to be clear; that is a twelve-slot scan on every waiting frame, and
-; invulnerability covers the same case for one countdown -- so this game blinks
-; instead of waiting, which also tells the player which ship is theirs.
+; A NEW SHIP WAITS FOR A CLEAR SPACE, which is the arcade's rule.  M3 used
+; invulnerability instead, on the grounds that waiting costs a twelve-slot scan
+; on every waiting frame -- and that was true of a scan written as its own loop.
+; It is not true of this one: the rock pass already tests every rock against the
+; ship's collision box, so a waiting ship parked ON the spawn point with a wide
+; box turns that test into the clear-check for nothing (see `respawn`).
+;
+; `ship.rad` therefore holds the CURRENT box and is not a constant: `clear.rad`
+; while a ship is waiting to appear, `ship.rad.hull` once it has.
 make "start.lives    3
 make "extra.every 10000    ; points between extra ships
-make "ship.rad       6     ; collision half-width, added to a rock's radius
+make "ship.rad.hull  6     ; collision half-width, added to a rock's radius
+make "ship.rad       6     ; the box in use now -- see `respawn` and `land.ship`
+make "clear.rad     26     ; how much space a new ship waits for
 make "death.frames  10     ; frames the explosion lasts -- 0.7 s at 14 fps
 make "boom.grow      4     ; steps the ring's radius grows a frame
-make "safe.frames   21     ; invulnerable frames after a respawn -- 1.5 s
 make "hyper.risk     8     ; one jump in this many ends inside a rock
 
 ; The shots, and the one number here that is not per-frame: `setspeed` is in
@@ -175,8 +194,146 @@ make "shot.speed   160     ; turtle steps per SECOND, not per frame
 make "shot.life     17     ; frames -- 1.2 s at 14 fps, about 190 steps
 make "shot.reach     2     ; added to every rock radius, see `rad.for`
 
+; The saucer.  One at a time, in two sizes: the large one fires anywhere and is
+; worth 200, the small one fires at the SHIP and is worth 1000, which is the
+; arcade's arrangement and the reason the small one is frightening.  It crosses
+; horizontally from one edge, jinks up or down now and then, and leaves at the
+; far side; it does not wrap in x, because leaving is how it ends.
+;
+; It is the first object in this game with a RECTANGULAR collision box, and the
+; reason is the shape: a saucer is 32 steps wide and 18 tall, so a square box
+; either kills a shot passing well above it or lets one through its nose.  Two
+; half-widths cost the same two comparisons a square one does.
+;
+; `sau.reach` is `shot.reach` under another name -- the sampling allowance that
+; stops a shot crossing the box between two frames -- and 2 is the same 2 the
+; rocks use.  What is NOT free here is the vertical bound: a shot travels 11.4
+; steps a frame and a flat saucer is a short target, so the drawn HEIGHT is what
+; the bound really constrains, and it is why the saucer is 1.8:1 rather than the
+; arcade's 2.5:1.  `test_a_saucer_shot_cannot_outrun_the_ship` and
+; `test_a_shot_cannot_outrun_the_saucer` hold both directions of it.
+; WHEN A SAUCER COMES, and these five constants are the arcade's own.  The 1979
+; ROM keeps one countdown for the whole GAME rather than per level: a reload
+; value starts at $92 (146), a saucer spawning takes $06 (6) off it, and it
+; floors at $20 (32) -- so saucers arrive more often the longer you survive,
+; whatever level you are on.  (nmikstas/asteroids-disassembly, L6BD0: `SBC #$06`
+; / `CMP #$20`.)  The numbers are used here as FRAMES, which at 14 fps is 10.4
+; seconds between the first saucers and 2.3 between the last.
+;
+; The size rule is the same routine, and it is why the early game is gentle:
+;
+;   L6C12:  LDX #$02        ;Prepare to make a large saucer.
+;   L6C14:  LDA ScrTmrReload;Is it still early in the asteroid wave?
+;   L6C17:  BMI SetScrStatus;If so, branch to create a large saucer.
+;   L6C19:  LDY ScoreIndex  ;Is the player's score above 30000?
+;   L6C1E:  CMP #$30        ;If so, branch to create a small saucer.
+;
+; `BMI` on the reload value tests bit 7, so while the gap is still 128 or more
+; EVERY saucer is large -- which is the first three, since 146 - 3*6 = 128.  Above
+; 30,000 points every saucer is small.  Between those, a coin flip.  So a player
+; on level one meets large saucers only, at the longest interval in the game.
+make "sau.gap.start 146    ; frames to the first saucer -- the arcade's $92
+make "sau.gap.step    6    ; taken off after every saucer -- its $06
+make "sau.gap.min    32    ; and never below this -- its $20
+make "sau.large.until 128  ; while the gap is this or more, every saucer is large
+make "sau.small.score 30000 ; at or above this, every saucer is small
+
+; The small saucer's aim tightens with the score, which is the other half of what
+; makes it frightening: the arcade's gets "extremely accurate" past about 35,000.
+; Here the spread runs from `sau.aim.wide` at nothing to `sau.aim.tight` at
+; `sau.aim.score`, and stays there.
+make "sau.aim.wide   24    ; degrees of spread at zero score
+make "sau.aim.tight   4    ; degrees of spread once the player is dangerous
+make "sau.aim.score 35000
+make "sau.speed    1.8     ; steps a frame across -- 25 a second
+make "sau.jink     1.2     ; steps a frame up or down after a course change
+make "sau.turn      14     ; frames between course changes -- one a second
+make "sau.reach      2     ; added to the drawn half-width and half-height
+make "sau.fire.gap  17     ; frames between its shots -- 1.2 s
+make "sau.colour   254
+
+; The saucer's shot is SLOWER than the player's, and that is the bound talking
+; rather than mercy.  The box it has to hit is the ship, and a ship is 9 steps
+; across the beam where a large rock's box is 24 -- so the same 160 steps a
+; second would fly through it:
+;
+;   (110/14 + 4.8) * 1.3  =  16.5   <=   2 * 9  =  18
+;
+; The ship's top speed is in there because the ship is the thing closing.
+;
+; `sau.shot.rad` IS THE SHIP'S HULL AND NOT ITS BEAM, and the difference was a
+; bug reported from a board: "saucer shots never kill the player, they just pass
+; right through".  They did.  The ship is a triangle 24 steps long -- its nose
+; reaches 12 steps from the centre and its rear corners 12.7 -- while its beam is
+; 9, and this constant was 9.  A shot crossing the nose or the tail was therefore
+; 10 to 12 steps out: plainly inside the drawn hull, and outside the box that
+; decides.
+;
+; It is the mirror of the mistake this design made twice the other way, with
+; `shot.reach` at M2 and `ship.rad` at M3.  Both times a box built from a shape's
+; WIDEST measurement awarded hits a player could see were misses; this time a box
+; built from the NARROWEST refused hits a player could see land.  The rule that
+; covers both: a box stands for the shape a player is looking at, so it is built
+; from the part of that shape the other object actually meets -- and for a shot,
+; which is a point, that is the hull's reach.
+;
+; 12.8, which is just past the rear corners at 12.73 -- the hull's longest reach.
+; It has to be PAST rather than equal, because every box test in this file is a
+; strict `>`, and the nose sits at exactly 12.0: at 12 the test that walks the
+; drawn outline still refused a shot sitting on the nose.
+;
+; The cost of taking the longest reach rather than an average is about three
+; steps of over-reach abeam, where the hull is only 9 wide.  That is the side to
+; err on here and the design says why: a shot the player can see land and which
+; does nothing reads as the game cheating, where a shot that kills from three
+; steps off a 24-step ship reads as bad luck.  `test_a_saucer_shot_through_the
+; _ships_nose_kills_it` walks the drawn outline and puts a shot on every vertex,
+; and `test_a_saucer_shot_clear_of_the_ship_misses` holds the far side, so this
+; constant answers to the shape rather than to an argument.
+make "sau.shot.speed 110   ; turtle steps per SECOND
+make "sau.shot.life   22   ; frames -- 1.6 s, long enough to cross most of it
+make "sau.shot.rad  12.8   ; the ship's hull reach -- see above
+
+; Scores for the two saucers, from the arcade table.
+make "sau.score.l  200
+make "sau.score.s 1000
+
+; Sound.  Four voice-pairs, one per ear, and FIVE things that want to make a
+; noise -- so one pair is shared, and which one is a gameplay decision rather
+; than a tidy one.  Fire and the saucer's warble share [1 5]: a fire is one
+; frame of zap and the warble is a beep every third frame, and (because
+; `poll.input` reads ONE key a frame) a player who is firing is not thrusting.
+; Sharing with thrust instead would have cut the saucer's warning out from
+; under a player who is running away, which is the moment the warning is for.
+;
+; The heartbeat is the point of all of this.  It is a TEMPO, not a note: two low
+; notes alternating, and the gap between them is the live rock count, so a board
+; thinning out speeds up on its own.  A blocking `toot` could not have produced
+; it -- the voice has to keep sounding while the frame loop gets on with its
+; work, which is what P8's PSG bought.
+;
+; Frequencies and volumes are the one part of this file no host test can judge
+; and the first thing to tune on hardware (M5).
+make "beat.hz.a     78     ; the heartbeat's two notes
+make "beat.hz.b     65
+make "beat.floor     4     ; frames between beats on an empty board ...
+make "beat.rock      1     ; ... plus this many per live rock
+make "thrust.hz     96     ; the rumble under the ship
+make "warble.a    1100     ; the saucer's two-tone warble
+make "warble.b     760
+make "warble.gap     3     ; frames between its two notes
+
 ;==========================================================================
 ; Rock state -- eight parallel flat lists, `max.rocks` long
+;
+; WHERE THIS BLOCK SITS IN THE FILE USED TO MATTER, and M4 is why it no longer
+; does.  A global was found by a linear scan of the global table in creation
+; order, so a name defined late cost more to read than one defined early -- and
+; M4's board run measured this game's rock pass 6 % slower with its own code
+; untouched, purely because 35 new tuning constants had been defined above these
+; lists (design section 12c).  The fix went into the interpreter rather than into
+; this file: `find_global` (core/variables.c) is a hash lookup now, and the
+; position effect measures zero.  So this block is where it reads best.
 ;
 ; Parallel flat lists rather than a list of records because `item` and
 ; `.setitem` are the only indexing this Logo has, and a record would cost a
@@ -230,6 +387,43 @@ make "s3x 9999  make "s3y 0
 ; killed it test against 9999 and miss.
 make "shipcx 9999  make "shipcy 0
 
+; A ship waiting for its spawn point to clear, and what the rock pass found
+; there.  `blocked` is written by `ship.hit` during a wait and read by
+; `step.wait` on the next frame.
+make "waiting false  make "blocked false
+
+; The saucer, and its shot, in PLAIN VARIABLES rather than a list -- which is
+; the choice M2's memory finding decided in advance (design section 14).  A
+; `.setitem` of a number interns it as a word atom and a `make` does not, so the
+; same physics costs two atoms a frame in a list and nothing at all in a
+; variable.  Twelve rocks need a list because they need a free-slot scan; one
+; saucer never does.
+;
+; `sau.on` is 0 for no saucer, 2 for the large one and 1 for the small, so it
+; carries the size the way `rsize` does -- score, outline and box all come off
+; it and there is no second field to keep in step.  `sau.w` and `sau.h` are the
+; COLLISION half-width and half-height, set when it spawns.
+; `sau.x` starts at 9999 like a spent shot: `shot.on` tests every rock against
+; the saucer, so a saucer that does not exist has to be somewhere no rock can be.
+make "sau.on 0
+make "sau.x 9999  make "sau.y 0  make "sau.dx 0  make "sau.dy 0
+make "sau.w 0  make "sau.h 0
+make "sau.wait 0       ; frames until the next one appears
+make "sau.turn.in 0    ; frames until its next course change
+make "sau.fire.in 0    ; frames until its next shot
+
+; Turtle 4 flies the saucer's shot, exactly as turtles 1-3 fly the player's, and
+; it is parked at 9999 by the same idiom.  It outlives its saucer -- a shot
+; already in the air when the saucer leaves or dies keeps coming -- so it is
+; stepped from `step.shots` and not from `step.saucer`.
+make "sau.shot.in 0    ; frames of life left, 0 idle
+make "sau.shot.x 9999  make "sau.shot.y 0
+
+; Sound state: which of the two notes each alternating pair plays next, and how
+; many frames until it plays.
+make "beat.in 0  make "beat.alt false
+make "warble.in 0  make "warble.alt false
+
 ;==========================================================================
 ; The outlines
 ;
@@ -282,6 +476,30 @@ to ship.flame
   fd 10.4  lt 99.9  fd 6.7  rt 139.8  fd 22.8
 end
 
+; The saucers: dome, dome slant, a short vertical rim at the widest point, then
+; the hull sloping in to a flat bottom -- eight segments, one closed walk.  They
+; are the first shapes here whose prologue TURNS before it walks, because a
+; saucer has no vertex on its centreline and inventing one would spend a segment
+; on a corner that is not there.  The generator emits that `lt` only for a shape
+; that needs it, so the rock and ship walks above are unchanged.
+;
+; Drawn at heading 0 always: a saucer crosses, it does not rotate, which is why
+; there is one outline per size rather than a rotation to place.
+
+to saucer.l
+  pu lt 33.7  fd 10.8  rt 123.7  pd
+  fd 12  rt 31  fd 11.7  rt 59  fd 3  rt 45
+  fd 12.7  rt 45  fd 14  rt 45  fd 12.7  rt 45
+  fd 3  rt 59  fd 11.7
+end
+
+to saucer.s
+  pu lt 29.7  fd 8.1  rt 119.7  pd
+  fd 8  rt 39.8  fd 7.8  rt 50.2  fd 2  rt 40.6
+  fd 9.2  rt 49.4  fd 8  rt 49.4  fd 9.2  rt 40.6
+  fd 2  rt 50.2  fd 7.8
+end
+
 ;==========================================================================
 ; Drawing
 ;
@@ -314,7 +532,7 @@ end
 ; rather than a burn.
 to draw.ship
   if 0 < :dying [draw.boom stop]
-  if 0 < :safe [if 1 = remainder :safe 2 [stop]]
+  if :waiting [stop]
   pu setx :shipx sety :shipy seth :sh
   setpc :ship.colour
   if not :thrusting [ship stop]
@@ -344,6 +562,15 @@ to draw.boom
   arc 360 :boom.grow * (:death.frames - :dying)
 end
 
+; Three statements and a walk, and it runs only on the frames a saucer is on
+; screen -- the frame guards it rather than this procedure, so a quiet frame
+; pays one comparison rather than a call.
+to draw.saucer
+  pu setx :sau.x sety :sau.y seth 0
+  setpc :sau.colour
+  ifelse 2 = :sau.on [saucer.l] [saucer.s]
+end
+
 ; The HUD is written every frame because `clean` took it with the rocks, and it
 ; allocates nothing: `hud.text` is built only where a displayed value changes.
 to draw.hud
@@ -365,6 +592,64 @@ end
 
 to refresh.hud
   make "hud.text (se [SCORE] :score [LEVEL] :level lives.word)
+end
+
+;==========================================================================
+; Sound
+;
+; One voice-pair per sound, centred (left ear + right ear), timbres set once
+; because `stopsound` preserves them -- the arrangement both shipped shooters
+; use.  The pairs and what shares one are argued in the tuning above.
+;
+; NOTE the waveform rule: voices 3 and 7 are the noise voices and 0-2 / 4-6 are
+; the tone voices, and asking for a tone wave on a noise voice or the reverse is
+; an ERROR, not a shrug.  So the thrust rumble -- which the arcade makes out of
+; noise -- is a narrow pulse down at 96 Hz here, because [3 7] is already
+; carrying every explosion in the game and an explosion must never be silenced
+; by a held thrust key.
+
+to setup.sound
+  setwave [0 4] "triangle  setenv [0 4] [0 90 0 70]    ; the heartbeat
+  setwave [1 5] "sawtooth  setenv [1 5] [0 40 0 40]    ; fire, and the saucer
+  (setwave [2 6] "pulse 12)
+  setenv [2 6] [5 0 12 40]                             ; the thrust rumble
+  setwave [3 7] "white     setenv [3 7] [0 0 15 200]   ; every explosion
+end
+
+; The signature of the game, and the one sound that is a tempo rather than a
+; note: two low notes alternating, with the gap between them set by how many
+; rocks are still alive.  A full board beats about once a second; the last small
+; rock is chased at better than twice that.
+;
+; It is a countdown and not a `remainder`, because the period changes underneath
+; it -- a remainder against a moving divisor either double-beats or skips when
+; the count drops.  Three statements on a quiet frame.
+to heartbeat
+  make "beat.in :beat.in - 1
+  if 0 < :beat.in [stop]
+  make "beat.in :beat.floor + (:beat.rock * :rocks.alive)
+  make "beat.alt not :beat.alt
+  ifelse :beat.alt [(sound [0 4] :beat.hz.a 90 9)] [(sound [0 4] :beat.hz.b 90 9)]
+end
+
+; The saucer's warble, on the same pair as the fire zap.  A fire wins the voice
+; for one frame, which is the whole cost of that sharing and is why the pair
+; shared is this one rather than the thrust rumble.
+to warble
+  make "warble.in :warble.in - 1
+  if 0 < :warble.in [stop]
+  make "warble.in :warble.gap
+  make "warble.alt not :warble.alt
+  ifelse :warble.alt [(sound [1 5] :warble.a 70 8)] [(sound [1 5] :warble.b 70 8)]
+end
+
+; A rock's death is one noise burst whose pitch says which rock it was: a large
+; one is a low crump at 1500 Hz and a small one a sharp tick at 4500, so the
+; player hears the split table without looking at it.  The arithmetic is
+; parenthesised into its own argument, because an unparenthesised `-` would go
+; on absorbing the duration and the volume after it.
+to rock.boom :s
+  (sound [3 7] (6000 - (1500 * :s)) 80 10)
 end
 
 ;==========================================================================
@@ -393,17 +678,41 @@ end
 to step.ship
   make "shipx wrapc (:shipx + :svx)
   make "shipy wrapc (:shipy + :svy)
-  if 0 < :safe [make "safe :safe - 1  stop]
   make "shipcx :shipx
   make "shipcy :shipy
+end
+
+; Waiting for the middle of the screen to clear, which is what the arcade does
+; instead of making a new ship invulnerable.  THE SCAN IS FREE, and that is the
+; whole trick: the rock pass already tests every rock against `shipcx`/`shipcy`,
+; so parking the waiting ship ON the spawn point and widening `ship.rad` to
+; `clear.rad` turns that test into "is anything near where the ship wants to
+; be?" at no cost per rock.  `ship.hit` reads `waiting` and sets `blocked`
+; instead of taking a life.
+;
+; It reads LAST frame's answer, because the pass that sets `blocked` runs after
+; this does -- so the ship arrives one frame after the field cleared, which at
+; 14 fps nobody can see, and the frame order stays exactly as it was.
+to step.wait
+  ifelse :blocked [make "blocked false] [land.ship]
+end
+
+to land.ship
+  make "waiting false
+  make "ship.rad :ship.rad.hull
 end
 
 ; `sin`/`cos` take degrees and this Logo's heading is clockwise from north,
 ; which is what `seth` wants -- so `sh` is both the ship's heading variable and
 ; its drawing heading, with no conversion anywhere.
+; The rumble is re-triggered on every frame thrust is held rather than gated on
+; once and off at release, which is Galaxian's dive-siren idiom: with a 5 ms
+; attack and a 110 ms note against a 71 ms frame, a held key sounds continuous
+; and a released one decays inside a frame with no gate-off statement anywhere.
 to thrust
   local "spd
   make "thrusting true
+  (sound [2 6] :thrust.hz 110 7)
   make "svx :svx + (:thrust.imp * sin :sh)
   make "svy :svy + (:thrust.imp * cos :sh)
   make "spd sqrt ((:svx * :svx) + (:svy * :svy))
@@ -440,10 +749,16 @@ end
 ; explosion down inside it.  That also means no part of this game blocks: the
 ; player can pause or quit through a death.
 
+; During a respawn wait this is not a death -- it is the answer to "is the spawn
+; point clear?", and it arrives through the same test because the waiting ship
+; is parked on the spawn point (see `step.wait`).  The saucer and its shot reach
+; here too, which is right: an area with a saucer crossing it is not clear.
 to ship.hit
+  if :waiting [make "blocked true  stop]
   make "shipcx 9999
   make "dying :death.frames
   make "lives :lives - 1
+  (sound [3 7] 400 600 15)   ; the one long, low, loud noise in the game
   refresh.hud
 end
 
@@ -455,16 +770,27 @@ to step.death
 end
 
 ; Where a ship starts, whether it is the first of a level or the fourth of a
-; game.  Parked and invulnerable for `safe.frames`, because the centre is not
-; guaranteed to be empty.
+; game.  It waits there, unhittable and undrawn, until the rock pass reports the
+; spawn point clear.
+; A ship does not appear until the space it appears in is empty.  It is put at
+; the spawn point with the wide `clear.rad` box and `blocked` set, so at least
+; one whole rock pass has to report the area clear before it lands -- which is
+; what stops a respawn being an immediate second death, and replaces the
+; invulnerable, blinking ship this design carried at M3.
+;
+; The arcade's rule, and the reason it is affordable here: the scan it needs is
+; the collision test the frame already runs.
 to respawn
   make "shipx 0
   make "shipy 0
   make "svx 0
   make "svy 0
   make "sh 0
-  make "safe :safe.frames
-  make "shipcx 9999
+  make "waiting true
+  make "blocked true
+  make "ship.rad :clear.rad
+  make "shipcx 0
+  make "shipcy 0
 end
 
 ;==========================================================================
@@ -487,6 +813,7 @@ to fire
   if :n = 0 [stop]
   .setitem :n :slife :shot.life
   ask :n [pu setx :shipx sety :shipy seth :sh fd 12 st setspeed :shot.speed]
+  (sound [1 5] 900 70 9)
 end
 
 ; Parking the x at 9999 is what takes a dead shot out of `shot.on` without
@@ -494,6 +821,7 @@ end
 ; It has to happen the moment the shot dies, because the shot that kills a rock
 ; is killed inside the rock pass and must not go on to hit a second one.
 to kill.shot :n
+  if 4 = :n [kill.sau.shot stop]
   .setitem :n :slife 0
   ask :n [ht setspeed 0]
   if 1 = :n [make "s1x 9999 stop]
@@ -514,6 +842,7 @@ to step.shots
   if 0 < item 1 :slife [age.shot 1  if 0 < item 1 :slife [ask 1 [make "s1x xcor  make "s1y ycor]]]
   if 0 < item 2 :slife [age.shot 2  if 0 < item 2 :slife [ask 2 [make "s2x xcor  make "s2y ycor]]]
   if 0 < item 3 :slife [age.shot 3  if 0 < item 3 :slife [ask 3 [make "s3x xcor  make "s3y ycor]]]
+  step.sau.shot
 end
 
 ;==========================================================================
@@ -531,12 +860,28 @@ end
 ; and a call plus three `item` walks per PAIR was most of it.  Here a pair is
 ; one comparison against a variable.
 ;
-; Outputs the shot that hit, or 0.  The caller needs the index to kill it.
-
+; Outputs WHAT hit this rock, and the caller kills it: 1-3 a player shot, 4 the
+; saucer's shot, 5 the saucer itself.
+;
+; The last two are here rather than in a test of their own, and the reason is
+; the shape of the loop rather than tidiness.  Both have to be tested against
+; every rock, and a test outside this call would need either its own pass over
+; the twelve slots -- three `item` walks a rock, 4 ms a frame, the mistake M2
+; measured -- or a branch inside the rock pass, which costs a comparison a rock
+; whether or not anything is there.  Folded in here they cost exactly what they
+; are: one comparison for the saucer's shot, one comparison and one addition for
+; the saucer, and both fall out on the first test in the common case because
+; both are PARKED at 9999 when they do not exist.
+;
+; The saucer needs the addition because the box is its own size plus the rock's,
+; where a shot is a point and needs only the rock's.  It is also the one test
+; here that is rectangular, because a saucer is twice as wide as it is tall.
 to shot.on :x :y :r
   if :r > abs (:x - :s1x) [if :r > abs (:y - :s1y) [output 1]]
   if :r > abs (:x - :s2x) [if :r > abs (:y - :s2y) [output 2]]
   if :r > abs (:x - :s3x) [if :r > abs (:y - :s3y) [output 3]]
+  if :r > abs (:x - :sau.shot.x) [if :r > abs (:y - :sau.shot.y) [output 4]]
+  if :sau.w + :r > abs (:x - :sau.x) [if :sau.h + :r > abs (:y - :sau.y) [output 5]]
   output 0
 end
 
@@ -602,13 +947,201 @@ to step.draw.all
       .setitem repcount :rang :a
       make "r item repcount :rrad
       make "h shot.on :x :y :r
-      ifelse 0 < :h [kill.shot :h  split.rock repcount] [
+      ifelse 0 < :h [rock.struck repcount :h] [
         make "r :r + :ship.rad
         if :r > abs (:x - :shipcx) [if :r > abs (:y - :shipcy) [ship.hit]]
         pu setx :x sety :y seth :a  draw.rock :s
       ]
     ]
   ]
+end
+
+;==========================================================================
+; The saucer
+;
+; One at a time, crossing from one edge to the other.  It is the only object in
+; the game that does not wrap in x -- leaving is how its visit ends -- and it is
+; the only one with a rectangular collision box, because it is twice as wide as
+; it is tall and a square box would either kill shots that passed over it or let
+; them through its nose.
+;
+; Everything below runs once a frame rather than once a rock, which is why it can
+; afford to be written for reading: a quiet frame is `step.saucer`'s first two
+; statements and nothing else, and a frame with a saucer up costs one outline and
+; about a dozen statements.  Contrast the rock pass, where every statement is
+; multiplied by twelve.
+;
+; The saucer's shot does NOT hit rocks, which is the design's decision and not an
+; oversight (section 8's pair table): rocks would be twelve more pairs a frame,
+; on the frame budget's hottest loop, to add a thing the player does not aim.
+
+; Which saucer, and it follows the arcade's routine exactly (see the tuning).
+; Large while the game-long gap is still wide, small once the player has 30,000
+; points, and a coin flip in between.  So level one meets large saucers only, at
+; the longest interval in the game, and the small one has to be earned.
+to saucer.size
+  if not (:sau.gap < :sau.large.until) [output 2]
+  if not (:score < :sau.small.score) [output 1]
+  if 0 = random 2 [output 1]
+  output 2
+end
+
+; The box is the drawn half-size plus `sau.reach`, computed here rather than
+; stored as four more constants, so the numbers in this file stay the numbers
+; the generator drew.
+;
+; SPAWNING IS WHAT SHORTENS THE GAP, not the level advance -- the arcade keeps
+; one countdown for the whole GAME and takes `sau.gap.step` off it every time a
+; saucer appears (L6BD0).  So a player who survives meets saucers steadily more
+; often, and a new game starts gentle again.
+to spawn.saucer
+  make "sau.on saucer.size
+  ifelse 2 = :sau.on [
+    make "sau.w 16 + :sau.reach
+    make "sau.h 9 + :sau.reach
+  ] [
+    make "sau.w 10 + :sau.reach
+    make "sau.h 7 + :sau.reach
+  ]
+  ifelse 0 = random 2 [
+    make "sau.x -160  make "sau.dx :sau.speed
+  ] [
+    make "sau.x 160  make "sau.dx 0 - :sau.speed
+  ]
+  ; Clear of the HUD band, which is the top ~14 steps of the field: a saucer
+  ; crossing under the score is a saucer the player cannot see.
+  make "sau.y (random 260) - 130
+  make "sau.dy 0
+  make "sau.turn.in :sau.turn
+  make "sau.fire.in :sau.fire.gap
+  make "warble.in 1
+  make "sau.gap :sau.gap - :sau.gap.step
+  if :sau.gap < :sau.gap.min [make "sau.gap :sau.gap.min]
+end
+
+; A saucer that leaves or dies is PARKED at 9999, as a spent shot is, because
+; the rock pass tests every rock against it: parked, the first comparison turns
+; it away and costs exactly what a guard would have cost.
+to leave.saucer
+  make "sau.on 0
+  make "sau.x 9999
+  make "sau.wait :sau.gap
+end
+
+to kill.saucer
+  ifelse 2 = :sau.on [add.score :sau.score.l] [add.score :sau.score.s]
+  (sound [3 7] 2000 200 12)
+  leave.saucer
+end
+
+; The same unrolled three-pair test `shot.on` makes against a rock, with a
+; separate half-width and half-height.  It is a second copy of that shape and
+; not an argument added to the first, deliberately: `shot.on` runs twelve times
+; a frame and a fourth argument would cost every one of those calls, where this
+; one runs once.  Count the callers, not the lines.
+to sau.shot.on
+  if :sau.w > abs (:sau.x - :s1x) [if :sau.h > abs (:sau.y - :s1y) [output 1]]
+  if :sau.w > abs (:sau.x - :s2x) [if :sau.h > abs (:sau.y - :s2y) [output 2]]
+  if :sau.w > abs (:sau.x - :s3x) [if :sau.h > abs (:sau.y - :s3y) [output 3]]
+  output 0
+end
+
+; The large saucer fires anywhere; the small one fires at where the ship IS, up
+; to `sau.aim` degrees out.  `arctan` with two inputs gives the angle from the
+; x axis and Logo's heading is clockwise from north, so the heading is 90 minus
+; it -- which is one statement and no list, where `towards` would have wanted a
+; two-element list built for every shot.
+;
+; It fires at the ship's DRAWN position rather than its collision one, because a
+; ship inside its respawn grace is parked at 9999 and a saucer that aimed there
+; would fire off the edge of the world.
+; How wide the small saucer's aim scatters, in degrees either side. The arcade
+; tightens it as the score climbs until the saucer is "extremely accurate" past
+; about 35,000, so this runs from `sau.aim.wide` at nothing to `sau.aim.tight`
+; there, and stays.  Whole degrees, because `random` wants a count.
+to aim.spread
+  local "s
+  make "s :sau.aim.wide - ((:sau.aim.wide - :sau.aim.tight) * :score / :sau.aim.score)
+  if :s < :sau.aim.tight [output :sau.aim.tight]
+  output round :s
+end
+
+to saucer.fires
+  local "h local "spread
+  make "h random 360
+  if 1 = :sau.on [
+    make "spread aim.spread
+    make "h 90 - (arctan (:shipx - :sau.x) (:shipy - :sau.y))
+    make "h :h + (random 2 * :spread) - :spread
+  ]
+  make "sau.shot.in :sau.shot.life
+  ask 4 [pu setx :sau.x sety :sau.y seth :h fd 10 st setspeed :sau.shot.speed]
+  (sound [1 5] 500 60 8)
+end
+
+to kill.sau.shot
+  make "sau.shot.in 0
+  make "sau.shot.x 9999
+  ask 4 [ht setspeed 0]
+end
+
+; Stepped from `step.shots` rather than from `step.saucer`, because a shot in
+; the air outlives the saucer that fired it -- the engine is flying it, and
+; nothing about its saucer leaving or dying should make it vanish mid-flight.
+;
+; The ship test is here rather than in the rock pass for the same reason the
+; saucer's own is: it is one pair, once a frame.
+to step.sau.shot
+  if 0 = :sau.shot.in [stop]
+  make "sau.shot.in :sau.shot.in - 1
+  if 0 = :sau.shot.in [kill.sau.shot stop]
+  ask 4 [make "sau.shot.x xcor  make "sau.shot.y ycor]
+  if :sau.shot.rad > abs (:sau.shot.x - :shipcx) [
+    if :sau.shot.rad > abs (:sau.shot.y - :shipcy) [ship.hit  kill.sau.shot]
+  ]
+end
+
+; One frame of saucer: wait, or move, jink, fire, be shot, and hit the ship.
+; The order matters in one place only -- the shot test runs before the ship
+; test, so a saucer that is shot on the same frame it reaches the ship dies
+; rather than taking a life with it, which is the player's way round.
+to step.saucer
+  local "h
+  if 0 = :sau.on [
+    make "sau.wait :sau.wait - 1
+    if 0 < :sau.wait [stop]
+    spawn.saucer
+    stop
+  ]
+  make "sau.x :sau.x + :sau.dx
+  make "sau.y wrapc (:sau.y + :sau.dy)
+  if 160 < abs :sau.x [leave.saucer  stop]
+  make "sau.turn.in :sau.turn.in - 1
+  if 0 = :sau.turn.in [
+    make "sau.turn.in :sau.turn
+    make "sau.dy ((random 3) - 1) * :sau.jink
+  ]
+  make "sau.fire.in :sau.fire.in - 1
+  if 0 = :sau.fire.in [
+    make "sau.fire.in :sau.fire.gap
+    saucer.fires
+  ]
+  make "h sau.shot.on
+  if 0 < :h [kill.shot :h  kill.saucer  stop]
+  if :sau.w + :ship.rad > abs (:sau.x - :shipcx) [
+    if :sau.h + :ship.rad > abs (:sau.y - :shipcy) [ship.hit  kill.saucer  stop]
+  ]
+  warble
+end
+
+; A level starts with no saucer, and the countdown to the next one carries the
+; game-long gap rather than resetting to the opening one -- the arcade's timer
+; belongs to the game, not the wave.
+to clear.saucer
+  make "sau.on 0
+  make "sau.x 9999
+  make "sau.wait :sau.gap
+  make "sau.dy 0
 end
 
 ;==========================================================================
@@ -638,13 +1171,20 @@ end
 ; spaceship, so slot 1 gets a two-pixel dot -- 8 columns by 16 rows, bits 8 and
 ; 16 set on the two middle rows.  Turtle numbers are fixed by the design's
 ; object table (section 5) and are spelled out because `ask` wants a list.
+;
+; Turtle 4 is the saucer's shot and is stopped here with the player's three.
+; That is not tidiness: a shot is a turtle the ENGINE is moving, so one left
+; flying when a level ends keeps gliding across the attract screen and keeps
+; the demon poll working at the prompt.
 to clear.shots
   repeat :max.shots [.setitem repcount :slife 0]
   make "s1x 9999
   make "s2x 9999
   make "s3x 9999
+  make "sau.shot.in 0
+  make "sau.shot.x 9999
   putsh 1 [0 0 0 0 0 0 0 24 24 0 0 0 0 0 0 0]
-  ask [1 2 3] [ht setspeed 0 setsh 1]
+  ask [1 2 3 4] [ht setspeed 0 setsh 1]
 end
 
 to reset.ship
@@ -691,12 +1231,35 @@ to child :x :y :dx :dy :size :sign
   make "rocks.alive :rocks.alive + 1
 end
 
+; A rock has been hit, and by what decides who pays for it.  Only the player's
+; own shots score: the arcade lets a saucer clear rocks out of its way and the
+; player gets nothing for them, which is what makes a saucer overhead expensive
+; rather than merely dangerous -- it is eating the board you were about to be
+; paid for.  A saucer that flies into a rock dies with it, and neither of them
+; pays.
+to rock.struck :i :by
+  ifelse 5 = :by [smash.saucer] [kill.shot :by]
+  split.rock :i (:by < 4)
+end
+
+; The saucer flew into a rock.  It dies exactly as a shot one does, minus the
+; score -- nobody aimed it.
+to smash.saucer
+  (sound [3 7] 2000 200 12)
+  leave.saucer
+end
+
 ; Large -> two medium, medium -> two small, small -> nothing.  The parent's
 ; slot is freed BEFORE the children are made, so a split can reuse it: that is
 ; what lets three larges become six mediums and then twelve smalls in exactly
 ; `max.rocks` slots.  A child with no slot to go in is not created, which is
 ; the only thing that keeps the worst case a real bound.
-to split.rock :i
+;
+; `award` is false when the saucer or its shot did the breaking.  The rock still
+; splits, still bangs and still leaves children -- the only thing the player
+; loses is the points, which is the arcade's rule and the reason a saucer
+; hanging about is worth chasing off.
+to split.rock :i :award
   local "s local "x local "y local "dx local "dy
   make "s item :i :rsize
   make "x item :i :rx
@@ -705,10 +1268,13 @@ to split.rock :i
   make "dy item :i :rdy
   .setitem :i :rsize 0
   make "rocks.alive :rocks.alive - 1
+  rock.boom :s
   ; The HUD refresh lives in `add.score`, which this reaches through
   ; `score.rock` -- so a kill still repaints exactly once, and it does it in the
   ; procedure that changed the displayed value rather than by convention here.
-  score.rock :s
+  ; A rock the player did not shoot changes no displayed value at all, so it
+  ; needs no repaint either.
+  if :award [score.rock :s]
   if 1 < :s [
     child :x :y :dx :dy (:s - 1) 1
     child :x :y :dx :dy (:s - 1) -1
@@ -776,8 +1342,21 @@ to poll.input
   if :k = 32 [fire]
 end
 
+; PAUSING HAS TO STOP THE TURTLES, and this game had missed it.  A shot is flown
+; by the ENGINE on wall-clock time (`setspeed`), not by anything in `play.frame`
+; -- so a pause that only stops calling the frame body leaves every shot in the
+; air still travelling, and a player who pauses to think comes back to a shot
+; that crossed the field without them.  Reported from a board; logged as B17.
+;
+; `freeze` is the primitive for exactly this -- "turtles given a `setspeed` hold
+; their position", and `thaw` resumes them where they stopped -- and it is what
+; both shipped shooters already use.  It also takes the demon table, which this
+; game does not use, so here it is precisely the four shot turtles.
+;
+; Nothing else in the frame needs holding: the rocks, the ship and the saucer
+; are moved by Logo, and a paused frame does not run that.
 to toggle.pause
-  make "paused not :paused
+  ifelse :paused [thaw make "paused false] [freeze make "paused true]
 end
 
 ;==========================================================================
@@ -821,15 +1400,30 @@ end
 ; countdown takes `step.ship`'s place rather than being another statement.  The
 ; rocks and the shots carry on either way, which is the arcade's behaviour and
 ; costs a branch a frame to have.
+;
+; M4 adds three things to it.  `step.saucer` and `heartbeat` both cost a
+; countdown and a failed comparison on a quiet frame; the saucer's DRAWING is
+; guarded by the frame rather than by `draw.saucer`, so a frame with no saucer
+; on it pays one comparison and not a call.
+;
+; Sound sits in the stepping half rather than the drawing half, and where in the
+; frame it sits changes nothing a player can hear: a note is gated by the PSG
+; and goes on sounding by itself.  So `heartbeat` reads the rock count as it
+; stood at the START of the frame -- a rock shot down this frame speeds the beat
+; up on the next one, and against a period of five to sixteen frames that lag
+; does not exist to anybody listening.
 to play.frame
   poll.input
   if not :paused [
     make "frame.count :frame.count + 1
-    ifelse 0 < :dying [step.death] [step.ship]
+    ifelse 0 < :dying [step.death] [ifelse :waiting [step.wait] [step.ship]]
     step.shots
+    step.saucer
+    heartbeat
     clean
     step.draw.all
     draw.ship
+    if 0 < :sau.on [draw.saucer]
     draw.hud
     reclaim
   ]
@@ -850,7 +1444,9 @@ to setup.level
   ht
   clear.rocks
   clear.shots
+  clear.saucer
   reset.ship
+  make "beat.in 1
   make "n :level.rocks
   if :n > :max.rocks [make "n :max.rocks]
   repeat :n [spawn.rock 3]
@@ -875,6 +1471,11 @@ to play.level
   ; keeps the demon poll working after the game hands the screen back.  Stop
   ; them here rather than leaving it to the next `cs`.
   clear.shots
+  ; The PSG keeps sounding on its own too -- a thrust rumble or a warble left
+  ; gated on would follow the player back to the attract screen.  `stopsound`
+  ; silences every voice and keeps the timbres, so `setup.sound` is not needed
+  ; again on the next level.
+  stopsound
   setrefresh "auto
 end
 
@@ -889,6 +1490,7 @@ to next.level
 end
 
 to init.game
+  make "sau.gap :sau.gap.start
   make "level 1
   make "level.rocks :start.rocks
   make "rocks.alive 0
@@ -902,6 +1504,7 @@ to init.game
   ; The ship state has to exist before anything reads it, and the rock pass
   ; reads `shipcx` on every rock of every frame.
   reset.ship
+  clear.saucer
 end
 
 ;==========================================================================
@@ -935,9 +1538,12 @@ to attract.screen
   setcursor [13 10] print "|Large rock     20|
   setcursor [13 11] print "|Medium rock    50|
   setcursor [13 12] print "|Small rock    100|
-  setcursor [5 15] print "|A large rock broken all the way|
-  setcursor [11 16] print "|down is worth 240|
-  setcursor [6 19] print "|An extra ship every 10000 points|
+  setcursor [13 13] print "|Large saucer  200|
+  setcursor [13 14] print "|Small saucer 1000|
+  setcursor [4 16] print "|A large rock broken all the way down|
+  setcursor [13 17] print "|is worth 240|
+  setcursor [7 19] print "|The small saucer aims at you|
+  setcursor [6 21] print "|An extra ship every 10000 points|
   setcursor [3 22] print "|ARROWS Steer and thrust  SPACE Fire|
   setcursor [5 23] print "|DOWN Hyperspace  P Pause  Q Quit|
   setcursor [14 27] print "|Press Space|
@@ -964,6 +1570,9 @@ to show.game.over
   wait 2000
 end
 
+; The timbres are set once here rather than per level, because `stopsound`
+; preserves them -- the arrangement both shipped shooters use.
 to asteroids
+  setup.sound
   forever [one.game]
 end

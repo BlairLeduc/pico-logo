@@ -29,6 +29,13 @@ M2 added the ship (section 6.4), which is the same problem: a closed polygon
 whose first vertex sits straight ahead of the turtle, so the same `walk` and
 the same closure check apply.  Its vertices are authored rather than jittered,
 and there are two of them -- see SHIPS.
+
+M4 added the saucer (section 9), which is the first shape here whose first
+vertex is NOT straight ahead: a saucer has no vertex on its centreline, and
+inventing one would spend a segment on a corner that is not there.  So the
+prologue turns before it walks -- `pu rt <bearing> fd <reach> rt <turn> pd` --
+and that turn is emitted only for a shape that needs it, so the rock and ship
+walks come out byte-identical to what M0 measured.
 """
 
 import math
@@ -71,6 +78,26 @@ SHIPS = [
                     (0.0, -16.0), (-3.0, -6.0), (-9.0, -9.0)]),
 ]
 
+# The saucer (design section 9), and it is authored the same way: dome top,
+# dome slant, a short vertical rim at the widest point, then the hull sloping
+# in to a flat bottom.  Eight segments, one closed walk, drawn at heading 0
+# because a saucer does not rotate -- it crosses.
+#
+# The proportions are not the arcade's 2.5:1, and the reason is the collision
+# bound rather than taste.  A shot travels 11.4 steps a frame and collisions are
+# sampled once a frame, so a box shorter than that in HALF-height can be flown
+# straight through by a shot coming down on it (design section 9).  At 32 x 18
+# and 20 x 14 the boxes clear that bound with a `sau.reach` of 2, which is the
+# same 2 the rocks use and keeps the excess over the drawn shape under 30 %.
+# Flatter saucers would need a box half again as tall as the thing drawn in it,
+# which is the failure this design has already had twice from the other end.
+SAUCERS = [
+    ("saucer.l", [(-6.0, 9.0), (6.0, 9.0), (16.0, 3.0), (16.0, 0.0),
+                  (7.0, -9.0), (-7.0, -9.0), (-16.0, 0.0), (-16.0, 3.0)]),
+    ("saucer.s", [(-4.0, 7.0), (4.0, 7.0), (10.0, 2.0), (10.0, 0.0),
+                  (4.0, -7.0), (-4.0, -7.0), (-10.0, 0.0), (-10.0, 2.0)]),
+]
+
 
 def vertices(n, radius, rng):
     """N points spaced around the centre at jittered angles and radii.
@@ -101,16 +128,21 @@ def turn_to(current, wanted):
 
 
 def walk(pts):
-    """The turtle walk for a closed polygon: (prologue, [(len, turn), ...]).
+    """The turtle walk for a closed polygon: (lead, reach, turn, [(len, turn)]).
 
     Every number is rounded to one decimal.  That is still one literal token,
     so it costs exactly what an integer costs to evaluate, and it holds the
     closure error under half a pixel -- integer turns alone would drift by
     two or three across eight segments.
+
+    `lead` is the turn that aims the turtle at the first vertex, and it is 0
+    for every shape whose first vertex is straight ahead -- the rocks and the
+    ship.  A saucer has no vertex on its centreline, so it turns first.
     """
     n = len(pts)
     reach = round(math.hypot(*pts[0]), 1)
-    heading = 0.0
+    lead = round(turn_to(0.0, bearing((0.0, 0.0), pts[0])), 1) if reach else 0.0
+    heading = lead
     first_turn = round(turn_to(heading, bearing(pts[0], pts[1])), 1)
     heading += first_turn
 
@@ -125,13 +157,13 @@ def walk(pts):
         t = round(turn_to(heading, wanted), 1)
         heading += t
         legs.append((length, t))
-    return reach, first_turn, legs
+    return lead, reach, first_turn, legs
 
 
-def closure_error(pts, reach, first_turn, legs):
+def closure_error(lead, reach, first_turn, legs):
     """How far the *emitted* walk lands from where it started, in pixels."""
     x = y = 0.0
-    heading = 0.0
+    heading = lead
     x += reach * math.sin(math.radians(heading))
     y += reach * math.cos(math.radians(heading))
     start = (x, y)
@@ -156,21 +188,22 @@ def step(kind, value):
 
 
 def emit(name, pts):
-    """The Logo procedure for a closed polygon whose first vertex is ahead."""
-    reach, first_turn, legs = walk(pts)
-    err = closure_error(pts, reach, first_turn, legs)
+    """The Logo procedure for a closed polygon, walked from its centre."""
+    lead, reach, first_turn, legs = walk(pts)
+    err = closure_error(lead, reach, first_turn, legs)
 
     body = []
     for length, t in legs:
         body.append(f"fd {fmt(length)}" + ("" if t is None else f"  {step('rt', t)}"))
 
+    aim = "" if lead == 0.0 else f"{step('rt', lead)}  "
     lines = [f"to {name}"]
-    lines.append(f"  pu fd {fmt(reach)}  {step('rt', first_turn)}  pd")
+    lines.append(f"  pu {aim}fd {fmt(reach)}  {step('rt', first_turn)}  pd")
     for i in range(0, len(body), 3):
         lines.append("  " + "  ".join(body[i:i + 3]))
     lines.append("end")
 
-    statements = 4 + (2 * len(pts) - 1)
+    statements = 4 + (0 if lead == 0.0 else 1) + (2 * len(pts) - 1)
     return "\n".join(lines), err, statements
 
 
@@ -189,6 +222,8 @@ def main():
         # Seeded per outline so a regeneration reproduces the file exactly.
         report(f"rock.{size}", vertices(n, radius, random.Random(size)))
     for name, pts in SHIPS:
+        report(name, pts)
+    for name, pts in SAUCERS:
         report(name, pts)
 
 

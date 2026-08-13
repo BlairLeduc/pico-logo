@@ -9,6 +9,7 @@
 #include "test_scaffold.h"
 #include "core/variables.h"
 #include "core/memory.h"
+#include "core/limits.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -491,6 +492,167 @@ void test_case_insensitive_exists(void)
     TEST_ASSERT_TRUE(var_exists("TEST"));
 }
 
+// The table stores the name POINTER it is given, so a test that creates many
+// variables has to hand it a stable string -- which is exactly what the
+// interpreter does for every name it parses.
+static const char *interned(const char *name)
+{
+    return mem_word_ptr(mem_atom(name, (int)strlen(name)));
+}
+
+//============================================================================
+// The global hash index
+//
+// `find_global` keeps a hash index beside the table so a lookup does not
+// depend on where the variable was defined. The table itself is unchanged --
+// same order, same slots, same listings -- so what these hold is that the
+// index cannot disagree with it. The failure modes of an open-addressed index
+// are all about erasure: a probe chain broken by a removed entry hides every
+// name behind it, and a slot reused by a new name resurrects the old one.
+//============================================================================
+
+// A full table, looked up in reverse. Before the index this was a linear scan,
+// so the last name defined was the most expensive to read; now nothing about
+// the order should matter -- but what a *test* can hold is that every one of
+// them is still findable, which is what a broken probe chain would break.
+void test_every_variable_is_found_however_full_the_table_is(void)
+{
+    char name[32];
+    const int n = MAX_GLOBAL_VARIABLES - 8;   // room to spare in the table
+    for (int i = 0; i < n; i++)
+    {
+        snprintf(name, sizeof(name), "v%d", i);
+        // Interned, because the table stores the caller's POINTER: a reused
+        // stack buffer would alias every entry onto one string. This is what
+        // the interpreter itself always passes (the NAMING POLICY in frame.h).
+        TEST_ASSERT_TRUE_MESSAGE(var_set(interned(name), value_number(i)), name);
+    }
+
+    for (int i = n - 1; i >= 0; i--)
+    {
+        Value v;
+        snprintf(name, sizeof(name), "v%d", i);
+        TEST_ASSERT_TRUE_MESSAGE(var_get(interned(name), &v), name);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(i, v.as.number, name);
+    }
+}
+
+// Erasing one name must not hide the others. With linear probing an entry
+// removed from the middle of a chain cuts off everything behind it, so this
+// erases from the middle of a run of names that were created together.
+void test_erasing_one_variable_leaves_the_others_findable(void)
+{
+    char name[32];
+    for (int i = 0; i < 40; i++)
+    {
+        snprintf(name, sizeof(name), "e%d", i);
+        var_set(interned(name), value_number(i));
+    }
+
+    for (int i = 10; i < 20; i++)
+    {
+        snprintf(name, sizeof(name), "e%d", i);
+        var_erase(interned(name));
+    }
+
+    for (int i = 0; i < 40; i++)
+    {
+        Value v;
+        snprintf(name, sizeof(name), "e%d", i);
+        if (i >= 10 && i < 20)
+        {
+            TEST_ASSERT_FALSE_MESSAGE(var_exists(interned(name)), name);
+        }
+        else
+        {
+            TEST_ASSERT_TRUE_MESSAGE(var_get(interned(name), &v), name);
+            TEST_ASSERT_EQUAL_FLOAT_MESSAGE(i, v.as.number, name);
+        }
+    }
+}
+
+// An erased slot is reused by the next variable created. The index must follow
+// it: a stale entry would either resurrect the erased name or answer with the
+// new one under the old name.
+void test_a_reused_slot_answers_to_its_new_name_only(void)
+{
+    var_set("gone", value_number(1));
+    var_set("kept", value_number(2));
+    var_erase("gone");
+
+    var_set("fresh", value_number(3));
+
+    Value v;
+    TEST_ASSERT_FALSE_MESSAGE(var_exists("gone"), "an erased name came back");
+    TEST_ASSERT_TRUE(var_get("fresh", &v));
+    TEST_ASSERT_EQUAL_FLOAT(3, v.as.number);
+    TEST_ASSERT_TRUE(var_get("kept", &v));
+    TEST_ASSERT_EQUAL_FLOAT(2, v.as.number);
+
+    // And re-creating the erased name gives a fresh variable, not the old value.
+    var_set("gone", value_number(9));
+    TEST_ASSERT_TRUE(var_get("gone", &v));
+    TEST_ASSERT_EQUAL_FLOAT(9, v.as.number);
+}
+
+// `erall` clears the table wholesale, and the index has to be cleared with it
+// or every name would still appear to exist.
+void test_erasing_everything_leaves_nothing_findable(void)
+{
+    var_set("a", value_number(1));
+    var_set("b", value_number(2));
+    var_erase_all_globals(false);
+
+    TEST_ASSERT_FALSE(var_exists("a"));
+    TEST_ASSERT_FALSE(var_exists("b"));
+
+    // The table still works afterwards -- a cleared index must not be a broken
+    // one.
+    var_set("a", value_number(7));
+    Value v;
+    TEST_ASSERT_TRUE(var_get("a", &v));
+    TEST_ASSERT_EQUAL_FLOAT(7, v.as.number);
+}
+
+// The index hashes a folded name, so it has to agree with the case-insensitive
+// comparison it is short-cutting: `FOO` and `foo` are one variable, and if they
+// hashed apart they would quietly become two.
+void test_case_folding_agrees_with_the_index(void)
+{
+    var_set("MixedCase", value_number(1));
+    var_set("MIXEDCASE", value_number(2));
+
+    Value v;
+    TEST_ASSERT_TRUE(var_get("mixedcase", &v));
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2, v.as.number,
+                                    "the second `make` did not find the first variable");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, var_global_count(true),
+                                  "a differently-cased name became a second variable");
+}
+
+// The table's ORDER is what `pons`, `poall` and the workspace listings print,
+// and the index is a side table precisely so that order is untouched.
+void test_the_index_does_not_reorder_the_table(void)
+{
+    var_set("first", value_number(1));
+    var_set("second", value_number(2));
+    var_set("third", value_number(3));
+
+    // Read them back -- a lookup must not move anything.
+    Value v;
+    var_get("third", &v);
+    var_get("third", &v);
+    var_get("first", &v);
+
+    const char *name;
+    TEST_ASSERT_TRUE(var_get_global_by_index(0, true, &name, &v));
+    TEST_ASSERT_EQUAL_STRING("first", name);
+    TEST_ASSERT_TRUE(var_get_global_by_index(1, true, &name, &v));
+    TEST_ASSERT_EQUAL_STRING("second", name);
+    TEST_ASSERT_TRUE(var_get_global_by_index(2, true, &name, &v));
+    TEST_ASSERT_EQUAL_STRING("third", name);
+}
+
 //============================================================================
 // GC Mark Tests
 //============================================================================
@@ -606,6 +768,12 @@ int main(void)
     RUN_TEST(test_case_insensitive_exists);
 
     // GC mark
+    RUN_TEST(test_every_variable_is_found_however_full_the_table_is);
+    RUN_TEST(test_erasing_one_variable_leaves_the_others_findable);
+    RUN_TEST(test_a_reused_slot_answers_to_its_new_name_only);
+    RUN_TEST(test_erasing_everything_leaves_nothing_findable);
+    RUN_TEST(test_case_folding_agrees_with_the_index);
+    RUN_TEST(test_the_index_does_not_reorder_the_table);
     RUN_TEST(test_gc_mark_all_no_crash);
 
     // Declared but unbound

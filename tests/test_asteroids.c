@@ -2,8 +2,8 @@
 //  Pico Logo
 //  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
-//  Tests for the Asteroids game (logo/games/asteroids), M2: the ship, the
-//  shots, splitting and scoring.
+//  Tests for the Asteroids game (logo/games/asteroids), M4: the saucer and
+//  the sound, on top of the rocks, the ship, the shots and the lives.
 //
 //  The game is pure Logo; this exercises it the two ways test_galaxian.c does:
 //  loading the whole file proves it parses and that the init path runs on the
@@ -11,8 +11,8 @@
 //  the outline walks) is checked directly, since that is where the bugs would
 //  hide.
 //
-//  The frame budget is what M2 is really about, and no host test can answer it
-//  -- that needs logo/tests/p11m3 on a board.  What these tests can hold is
+//  The frame budget is what every milestone is really about, and no host test
+//  can answer it -- that needs logo/tests/p11m4 on a board.  What these tests can hold is
 //  everything the budget assumes: that a frame draws the world and nothing
 //  else, that the frame loop holds free storage flat, that the outlines carry
 //  the segment counts the budget was cut from, and that the split table can
@@ -34,8 +34,8 @@
 #error "ASTEROIDS_SOURCE must be defined (path to logo/games/asteroids)"
 #endif
 
-#ifndef P11M3_SOURCE
-#error "P11M3_SOURCE must be defined (path to logo/tests/p11m3)"
+#ifndef P11M4_SOURCE
+#error "P11M4_SOURCE must be defined (path to logo/tests/p11m4)"
 #endif
 
 // Segments per outline, from the design's section 6.3 table. Statements per
@@ -49,6 +49,10 @@
 // thrust flame folded into the one closed walk.
 #define SEG_SHIP   4
 #define SEG_FLAME  6
+
+// The saucer (section 9): dome, rim and hull as one closed walk, the same at
+// both sizes -- a small saucer is a scaled shape and not a simpler one.
+#define SEG_SAUCER 8
 
 // PicoCalc key codes, as the two shipped shooters use them.
 #define KEY_LEFT   "\264"
@@ -148,6 +152,16 @@ static float item_of(const char *list, int i)
     char expr[64];
     snprintf(expr, sizeof(expr), "0 + item %d :%s", i, list);
     return num(expr);
+}
+
+// Most tests want a ship that is on the field and hittable. A new ship now
+// waits for its spawn point to clear (M4), so getting there means landing it
+// rather than clearing an invulnerability countdown.
+static void land_the_ship(void)
+{
+    Result r = run_string("make \"waiting false  make \"ship.rad :ship.rad.hull  "
+                          "make \"shipcx :shipx  make \"shipcy :shipy");
+    TEST_ASSERT_TRUE(r.status == RESULT_NONE || r.status == RESULT_OK);
 }
 
 static void run(const char *input)
@@ -654,7 +668,8 @@ void test_a_frame_draws_the_world_and_nothing_else(void)
     // the same reason the timing harness zeroes it -- rocks are spawned at
     // random, so a ship that can be hit makes this test's segment count depend
     // on where they landed.
-    run("make \"safe 0  make \"ship.rad 0");
+    land_the_ship();
+    run("make \"ship.rad 0");
     // The ship too, and with no thrust key pressed it is always the plain
     // hull -- so a flame appearing on a quiet frame fails here.
     int expected = expected_segments() + SEG_SHIP;
@@ -860,7 +875,8 @@ void test_a_ship_heading_outside_zero_to_360_still_thrusts_and_draws(void)
     // `safe` is cleared because `reset.ship` respawns the ship, and a
     // respawned ship blinks for `safe.frames` (M3). What is under test here is
     // the heading, so settle it first.
-    run("make \"thrusting false  make \"frame.count 1  make \"sh 725  make \"safe 0");
+    land_the_ship();
+    run("make \"thrusting false  make \"frame.count 1  make \"sh 725");
     mock_device_clear_graphics();
     run("draw.ship");
     TEST_ASSERT_EQUAL_INT(SEG_SHIP, mock_device_line_count());
@@ -872,7 +888,8 @@ void test_a_ship_heading_outside_zero_to_360_still_thrusts_and_draws(void)
 // so a thrusting ship costs one dispatch and one placement rather than two.
 void test_the_flame_shows_only_when_thrusting_and_only_every_other_frame(void)
 {
-    run("reset.ship  make \"thrusting false  make \"frame.count 0  make \"safe 0");
+    run("reset.ship  make \"thrusting false  make \"frame.count 0");
+    land_the_ship();
     mock_device_clear_graphics();
     run("draw.ship");
     TEST_ASSERT_EQUAL_INT_MESSAGE(SEG_SHIP, mock_device_line_count(),
@@ -1031,7 +1048,7 @@ void test_the_split_table(void)
     run("init.game  clear.rocks");
     run(".setitem 1 :rsize 3  .setitem 1 :rrad rad.for 3  make \"rocks.alive 1");
     run(".setitem 1 :rx 20  .setitem 1 :ry -30  .setitem 1 :rdx 1  .setitem 1 :rdy 0");
-    run("split.rock 1");
+    run("split.rock 1 true");
 
     TEST_ASSERT_EQUAL_FLOAT(2, num(":rocks.alive"));
     TEST_ASSERT_EQUAL_FLOAT(2, item_of("rsize", 1));
@@ -1051,12 +1068,12 @@ void test_the_split_table(void)
                              "the two children did not separate");
 
     run("clear.rocks");
-    run(".setitem 1 :rsize 2  make \"rocks.alive 1  split.rock 1");
+    run(".setitem 1 :rsize 2  make \"rocks.alive 1  split.rock 1 true");
     TEST_ASSERT_EQUAL_FLOAT(2, num(":rocks.alive"));
     TEST_ASSERT_EQUAL_FLOAT(1, item_of("rsize", 1));
 
     run("clear.rocks");
-    run(".setitem 1 :rsize 1  make \"rocks.alive 1  split.rock 1");
+    run(".setitem 1 :rsize 1  make \"rocks.alive 1  split.rock 1 true");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":rocks.alive"), "a small rock split");
 }
 
@@ -1071,7 +1088,7 @@ void test_a_split_fills_the_slots_it_finds_and_no_more(void)
     run("repeat :max.rocks [.setitem repcount :rsize 3]");
     run("make \"rocks.alive :max.rocks");
     run(".setitem 1 :rdx 1  .setitem 1 :rdy 0");
-    run("split.rock 1");   // frees exactly one slot, so exactly one child fits
+    run("split.rock 1 true");   // frees exactly one slot, so exactly one child fits
 
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(12, num(":rocks.alive"),
                                     "a split overran the slot count");
@@ -1097,7 +1114,7 @@ void test_three_larges_split_all_the_way_down_into_exactly_twelve_slots(void)
             if ((int)item_of("rsize", i) != size)
                 continue;
             char cmd[48];
-            snprintf(cmd, sizeof(cmd), "split.rock %d", i);
+            snprintf(cmd, sizeof(cmd), "split.rock %d true", i);
             run(cmd);
         }
     }
@@ -1202,7 +1219,8 @@ static void ship_under_a_rock(void)
     run(".setitem 1 :rsize 3  .setitem 1 :rrad rad.for 3  make \"rocks.alive 1");
     run(".setitem 1 :rx 0  .setitem 1 :ry 0  .setitem 1 :rdx 0  .setitem 1 :rdy 0");
     // Out of the respawn grace and hittable, which is `step.ship`'s job.
-    run("make \"safe 0  step.ship");
+    land_the_ship();
+    run("step.ship");
 }
 
 void test_a_rock_on_the_ship_kills_it(void)
@@ -1241,35 +1259,67 @@ void test_one_frame_takes_only_one_life(void)
                  ".setitem %d :rdx 0  .setitem %d :rdy 0", i, i, i, i, i, i);
         run(cmd);
     }
-    run("make \"rocks.alive 12  make \"safe 0  step.ship");
+    land_the_ship();
+    run("make \"rocks.alive 12  step.ship");
     run("step.draw.all");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2, num(":lives"),
                                     "one frame took more than one life");
 }
 
-// The respawn grace is invulnerability, and it is spelled as a parked ship
-// rather than as a guard in the rock pass -- so what proves it is that the
-// collision position never leaves 9999 while it lasts.
-void test_a_ship_in_its_respawn_grace_cannot_be_hit(void)
+// A new ship waits for its spawn point to be clear, which is the arcade's rule
+// and replaces M3's invulnerability. The scan it needs is the ship test the
+// rock pass already runs: the waiting ship is parked ON the spawn point with a
+// wide box, and `ship.hit` answers "not clear yet" instead of taking a life.
+void test_a_waiting_ship_does_not_appear_until_the_space_is_clear(void)
 {
     ship_under_a_rock();
     run("respawn");
-    TEST_ASSERT_TRUE(num(":safe") > 0);
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", value_to_string(eval_string(":waiting").value),
+                                     "respawn did not put the ship in a wait");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":clear.rad"), num(":ship.rad"),
+                                    "a waiting ship is not testing the wide box");
 
-    // Every frame of the grace, with the rock sitting on the ship's centre.
-    int grace = (int)num(":safe.frames");
-    for (int i = 0; i < grace; i++)
+    // Twenty frames with a rock parked on the spawn point: no life is lost and
+    // no ship appears.
+    for (int i = 0; i < 20; i++)
     {
-        run("step.ship  step.draw.all");
+        run("step.wait  step.draw.all");
         TEST_ASSERT_EQUAL_FLOAT_MESSAGE(3, num(":lives"),
-                                        "a rock hit a ship inside its respawn grace");
+                                        "waiting for a clear space cost a life");
+        TEST_ASSERT_EQUAL_STRING_MESSAGE("true", value_to_string(eval_string(":waiting").value),
+                                         "the ship appeared with a rock on the spawn point");
     }
 
-    // And it ends: one more frame makes the ship hittable again, and the rock
-    // it has been sitting under kills it.
+    // And it is not drawn while it waits.
+    mock_device_clear_graphics();
+    run("draw.ship");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, mock_device_line_count(), "a waiting ship was drawn");
+
+    // Move the rock away and it lands -- one frame for the pass to find the
+    // field clear, one for the check that reads it.
+    run(".setitem 1 :rx 150  .setitem 1 :ry 150");
+    run("step.wait  step.draw.all");
+    run("step.wait");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("false", value_to_string(eval_string(":waiting").value),
+                                     "the ship never landed on a clear field");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":ship.rad.hull"), num(":ship.rad"),
+                                    "a landed ship is still testing the wide box");
+
+    // Landed, it is hittable again: bring the rock back and it dies.
+    run(".setitem 1 :rx 0  .setitem 1 :ry 0");
     run("step.ship  step.draw.all");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2, num(":lives"),
-                                    "the respawn grace never ended");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2, num(":lives"), "a landed ship could not be hit");
+}
+
+// The wide box is what makes the wait mean something, and it is held against
+// the shapes rather than assumed: it must be well past the ship's own box, and
+// not so wide that a busy field never clears.
+void test_the_clear_radius_is_wider_than_the_ship_it_protects(void)
+{
+    TEST_ASSERT_TRUE_MESSAGE(num(":clear.rad") > num(":ship.rad.hull") * 2,
+                             "the clear radius is barely wider than the ship's own box");
+    TEST_ASSERT_TRUE_MESSAGE(num("rad.for 3") + num(":clear.rad") < 80,
+                             "a respawn waits for more space than a busy field ever has");
 }
 
 // A death is a countdown inside the frame loop and not a `wait`: the rocks keep
@@ -1294,13 +1344,15 @@ void test_the_explosion_counts_down_and_the_ship_comes_back(void)
     }
 
     // The last frame of the countdown is the one that brings the ship back:
-    // centre of the field, stopped, facing north, and in its grace.
+    // centre of the field, stopped, facing north, and waiting for the space to
+    // clear before it appears.
     run("play.frame");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":dying"), "the explosion did not end");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":shipx"), "the ship did not come back to the centre");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":svx"), "the ship came back still moving");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":sh"), "the ship came back on its old heading");
-    TEST_ASSERT_EQUAL_FLOAT(num(":safe.frames"), num(":safe"));
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", value_to_string(eval_string(":waiting").value),
+                                     "the ship came back without waiting for a clear space");
     TEST_ASSERT_TRUE_MESSAGE(item_of("rx", 1) > 0, "the rocks stood still through the death");
 }
 
@@ -1309,6 +1361,7 @@ void test_the_explosion_counts_down_and_the_ship_comes_back(void)
 void test_the_last_life_ends_the_level(void)
 {
     run("init.game  clear.rocks  clear.shots");
+    land_the_ship();
     run("make \"lives 1  make \"over false  ship.hit");
     TEST_ASSERT_EQUAL_FLOAT(0, num(":lives"));
 
@@ -1324,7 +1377,8 @@ void test_the_last_life_ends_the_level(void)
 // explosion is affordable at all where a fragment system was not.
 void test_a_dying_ship_draws_a_ring_and_not_a_ship(void)
 {
-    run("init.game  clear.rocks  clear.shots  make \"safe 0");
+    run("init.game  clear.rocks  clear.shots");
+    land_the_ship();
     run("make \"dying 1");
     mock_device_clear_graphics();
     run("draw.ship");
@@ -1349,31 +1403,10 @@ void test_a_dying_ship_draws_a_ring_and_not_a_ship(void)
                                     "the explosion ring did not expand with the countdown");
 }
 
-// The blink is what tells a player which ship is theirs and that it is still
-// safe, and it costs one `remainder` on the frames it hides.
-void test_a_ship_in_its_respawn_grace_blinks(void)
-{
-    run("init.game  clear.rocks  clear.shots  respawn");
-    int shown = 0, hidden = 0;
-    for (int i = 0; i < 8; i++)
-    {
-        mock_device_clear_graphics();
-        run("draw.ship");
-        if (mock_device_line_count() == 0)
-            hidden++;
-        else
-            shown++;
-        run("step.ship");
-    }
-    TEST_ASSERT_EQUAL_INT_MESSAGE(4, shown, "the ship did not blink through its grace");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(4, hidden, "the ship did not blink through its grace");
-}
-
-// Hyperspace is the panic button and it is meant to cost something: no
-// velocity on the far side, and one jump in `hyper.risk` arrives inside a rock.
 void test_hyperspace_moves_the_ship_and_stops_it(void)
 {
-    run("init.game  clear.rocks  clear.shots  make \"safe 0");
+    run("init.game  clear.rocks  clear.shots");
+    land_the_ship();
     run("make \"shipx 100  make \"shipy 100  make \"svx 3  make \"svy -2");
     run("make \"dying 0  hyperspace");
 
@@ -1393,6 +1426,7 @@ void test_hyperspace_moves_the_ship_and_stops_it(void)
 void test_hyperspace_sometimes_ends_badly(void)
 {
     run("init.game  clear.rocks  clear.shots");
+    land_the_ship();
     run("(rerandom 1)");
     int deaths = 0;
     for (int i = 0; i < 200; i++)
@@ -1452,7 +1486,7 @@ void test_scoring_repaints_the_hud_wherever_the_points_come_from(void)
     run("clear.rocks  clear.shots");
     run(".setitem 1 :rsize 1  .setitem 1 :rrad rad.for 1  make \"rocks.alive 1");
     run("make \"hud.text [stale]");
-    run("split.rock 1");
+    run("split.rock 1 true");
     TEST_ASSERT_EQUAL_STRING_MESSAGE("[SCORE 10100 LEVEL 1 \x10\x10\x10\x10]",
                                      value_to_string(eval_string(":hud.text").value),
                                      "a kill left the HUD stale");
@@ -1659,6 +1693,972 @@ void test_game_over_prints_the_final_score(void)
 }
 
 //==========================================================================
+// The saucer (M4)
+//==========================================================================
+
+// Put a saucer of a wanted size on the board through the game's own spawner,
+// so its box, its countdowns and its size all come out exactly as play sets
+// them, then park it where the test wants it. `random` on the mock is a
+// constant without a seed, so the level is what picks the size: below
+// `sau.small.at` the spawner cannot produce a small one at all.
+static void saucer_of_size(int size, float x, float y)
+{
+    run("(rerandom 1)");
+    // Size comes off the game-long gap and the score now, as the arcade's does:
+    // a wide gap forces a large saucer, 30,000 points forces a small one.
+    char cmd[128];
+    snprintf(cmd, sizeof(cmd), "make \"sau.gap %s  make \"score %d",
+             size == 1 ? ":sau.gap.min" : ":sau.gap.start",
+             size == 1 ? 40000 : 0);
+    run(cmd);
+    for (int tries = 0; tries < 50 && (int)num(":sau.on") != size; tries++)
+        run("spawn.saucer");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(size, (int)num(":sau.on"),
+                                  "the spawner never produced the wanted saucer");
+    snprintf(cmd, sizeof(cmd), "make \"sau.x %g  make \"sau.y %g  make \"sau.dx 0  make \"sau.dy 0",
+             x, y);
+    run(cmd);
+}
+
+// The saucers come off the same generator as the rocks and the ship, so they
+// get the same guarantee: eight segments that arrive back where they started.
+// They are the first shapes whose prologue turns before it walks -- a saucer
+// has no vertex on its centreline -- so a broken `lt` in the prologue would
+// show up here as a walk that no longer closes.
+void test_both_saucer_outlines_close_on_themselves(void)
+{
+    assert_outline_closes("saucer.l", SEG_SAUCER);
+    assert_outline_closes("saucer.s", SEG_SAUCER);
+}
+
+// A saucer does not rotate, so `draw.saucer` always places it at heading 0 and
+// the two sizes are two outlines rather than one scaled walk.
+void test_draw_saucer_picks_the_outline_for_the_size(void)
+{
+    const int sizes[] = {2, 1};
+    for (int k = 0; k < 2; k++)
+    {
+        char cmd[64];
+        snprintf(cmd, sizeof(cmd), "make \"sau.on %d  make \"sau.x 0  make \"sau.y 0", sizes[k]);
+        run("clean  pu setx 0 sety 0 seth 0");
+        run(cmd);
+        mock_device_clear_graphics();
+        run("draw.saucer");
+        snprintf(cmd, sizeof(cmd), "saucer size %d drew %d segments", sizes[k],
+                 mock_device_line_count());
+        TEST_ASSERT_EQUAL_INT_MESSAGE(SEG_SAUCER, mock_device_line_count(), cmd);
+    }
+}
+
+// How far the saucer currently drawn reaches from its centre, along each axis.
+static void saucer_drawn_extent(float *half_w, float *half_h)
+{
+    run("clean  pu setx 0 sety 0 seth 0");
+    mock_device_clear_graphics();
+    run("draw.saucer");
+    *half_w = *half_h = 0.0f;
+    for (int i = 0; i < mock_device_line_count(); i++)
+    {
+        const MockLine *l = mock_device_get_line(i);
+        if (fabsf(l->x1) > *half_w) *half_w = fabsf(l->x1);
+        if (fabsf(l->y1) > *half_h) *half_h = fabsf(l->y1);
+    }
+}
+
+// The third time this design has had to hold a collision box against the shape
+// drawn inside it, and the first time it is a RECTANGLE: a saucer is 32 steps
+// wide and 18 tall, so one radius would either award shots that passed well
+// over it or let them through its nose. The lesson underneath is M2's and M3's
+// -- a flat allowance is proportionally worst on the smallest object -- and the
+// smallest object here is the small saucer's height.
+void test_the_saucer_boxes_are_not_far_wider_than_the_shapes_drawn_in_them(void)
+{
+    const int sizes[] = {2, 1};
+    for (int k = 0; k < 2; k++)
+    {
+        saucer_of_size(sizes[k], 0, 0);
+        float drawn_w, drawn_h;
+        saucer_drawn_extent(&drawn_w, &drawn_h);
+
+        char msg[192];
+        float box_w = num(":sau.w"), box_h = num(":sau.h");
+        snprintf(msg, sizeof(msg),
+                 "size %d has a %.0f-step half-width around a %.1f-step outline",
+                 sizes[k], box_w, drawn_w);
+        TEST_ASSERT_TRUE_MESSAGE((box_w - drawn_w) / drawn_w <= 0.30f, msg);
+        snprintf(msg, sizeof(msg),
+                 "size %d has a %.0f-step half-height around a %.1f-step outline",
+                 sizes[k], box_h, drawn_h);
+        TEST_ASSERT_TRUE_MESSAGE((box_h - drawn_h) / drawn_h <= 0.30f, msg);
+
+        // And not cut below the shape either, or shots would pass through the
+        // hull without registering.
+        TEST_ASSERT_TRUE_MESSAGE(box_w >= drawn_w, msg);
+        TEST_ASSERT_TRUE_MESSAGE(box_h >= drawn_h, msg);
+
+        // The box a SHIP is tested against is a different one -- the saucer's
+        // plus the ship's own half-width -- and it gets §8's rule, because this
+        // is the constant class that has been too generous twice: it must not
+        // kill further out than the two drawn shapes can touch, and must not be
+        // cut inside the ship's own beam.
+        const float beam = 8.95f;
+        float ship_w = box_w + num(":ship.rad");
+        float ship_h = box_h + num(":ship.rad");
+        snprintf(msg, sizeof(msg),
+                 "size %d kills a ship at %.1f x %.1f where the drawn shapes touch "
+                 "at %.1f x %.1f", sizes[k], ship_w, ship_h,
+                 drawn_w + beam, drawn_h + beam);
+        TEST_ASSERT_TRUE_MESSAGE(ship_w <= drawn_w + beam, msg);
+        TEST_ASSERT_TRUE_MESSAGE(ship_h <= drawn_h + beam, msg);
+        TEST_ASSERT_TRUE_MESSAGE(ship_h > beam, msg);
+    }
+}
+
+// The same bound as the rocks' (section 7.3), applied to a target that is not
+// round -- so it is checked PER AXIS, because that is how the box is tested.
+// The vertical one is the tight one and it is why the saucer is 1.8:1 rather
+// than the arcade's 2.5:1: a shot travels 11.4 steps a frame, and a saucer flat
+// enough to look right can be flown clean through between two samples.
+void test_a_shot_cannot_outrun_the_saucer(void)
+{
+    float travel = num(":shot.speed") / num(":fps");
+    saucer_of_size(1, 0, 0);                         // the small one, the tight case
+
+    float across = (travel + num(":sau.speed")) * 1.3f;
+    float down = (travel + num(":sau.jink")) * 1.3f;
+
+    char msg[192];
+    snprintf(msg, sizeof(msg),
+             "a shot and a small saucer close by %.1f steps a frame across a "
+             "%.0f-step box -- shots will pass through it", across, 2 * num(":sau.w"));
+    TEST_ASSERT_TRUE_MESSAGE(across <= 2 * num(":sau.w"), msg);
+
+    snprintf(msg, sizeof(msg),
+             "a shot coming down closes %.1f steps a frame against a %.0f-step box -- "
+             "make the saucer taller or slow the shot", down, 2 * num(":sau.h"));
+    TEST_ASSERT_TRUE_MESSAGE(down <= 2 * num(":sau.h"), msg);
+}
+
+// And the same bound in the other direction, which is why the saucer's shot is
+// slower than the player's rather than the same speed: the box it has to hit is
+// the SHIP, and a ship is 9 steps across the beam where a large rock's box is
+// 24. The ship's own top speed is in the sum because the ship is the thing
+// closing.
+void test_a_saucer_shot_cannot_outrun_the_ship(void)
+{
+    float travel = num(":sau.shot.speed") / num(":fps");
+    float closing = (travel + num(":speed.max")) * 1.3f;
+    float box = 2.0f * num(":sau.shot.rad");
+
+    char msg[192];
+    snprintf(msg, sizeof(msg),
+             "a saucer shot and the ship close by %.1f steps a frame against a "
+             "%.0f-step box -- lower sau.shot.speed or raise sau.shot.rad",
+             closing, box);
+    TEST_ASSERT_TRUE_MESSAGE(closing <= box, msg);
+}
+
+// A saucer arrives on a countdown, from one edge or the other, at a height that
+// is clear of the HUD band -- a saucer crossing under the score is a saucer the
+// player cannot see.
+void test_a_saucer_appears_on_a_countdown_and_enters_from_an_edge(void)
+{
+    setup_with(3);
+    land_the_ship();
+    run("make \"ship.rad 0  make \"sau.wait 3");
+
+    run("play.frame  play.frame");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":sau.on"), "a saucer arrived before its countdown");
+
+    run("play.frame");
+    TEST_ASSERT_TRUE_MESSAGE(num(":sau.on") > 0, "the countdown ran out and no saucer came");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(num(":sau.speed") + 0.01f, 160.0f, fabsf(num(":sau.x")),
+                                     "a saucer did not enter from an edge");
+    TEST_ASSERT_TRUE_MESSAGE(fabsf(num(":sau.y")) <= 130.0f,
+                             "a saucer entered under the HUD band");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.001f, num(":sau.speed"), fabsf(num(":sau.dx")),
+                                     "a saucer entered at the wrong speed");
+}
+
+// It crosses and it LEAVES -- the one object in the game that does not wrap in
+// x, because leaving is how its visit ends. Vertically it wraps like everything
+// else, so a jink cannot take it off the top of the field for good.
+void test_a_saucer_crosses_and_leaves_at_the_far_edge(void)
+{
+    setup_with(3);
+    land_the_ship();
+    run("make \"ship.rad 0");
+    saucer_of_size(2, -160, 0);
+    run("make \"sau.dx :sau.speed  make \"level 4");
+    run("make \"sau.w 0  make \"sau.h 0");     // it is crossing, not hunting
+
+    int frames = 0;
+    for (; frames < 400 && num(":sau.on") > 0; frames++)
+        run("step.saucer");
+
+    char msg[128];
+    snprintf(msg, sizeof(msg), "a saucer took %d frames to cross a 320-step field", frames);
+    TEST_ASSERT_TRUE_MESSAGE(frames > 150 && frames < 220, msg);
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":sau.gap"), num(":sau.wait"),
+                                    "leaving did not set the wait for the next one");
+
+    // And the vertical wrap, which a jink needs: pushed off the top it comes
+    // back at the bottom rather than sailing away.
+    saucer_of_size(2, 0, 158);
+    run("make \"sau.dy 5  make \"sau.w 0  make \"sau.h 0");
+    run("step.saucer");
+    TEST_ASSERT_TRUE_MESSAGE(num(":sau.y") < 0, "a saucer did not wrap over the top");
+    TEST_ASSERT_TRUE_MESSAGE(num(":sau.on") > 0, "a vertical wrap ended the saucer's visit");
+}
+
+// The arcade keeps ONE countdown for the whole game: a reload value that starts
+// wide and loses `sau.gap.step` every time a saucer spawns, floored. So saucers
+// arrive steadily more often the longer a player survives, whatever level they
+// are on -- and a new game starts gentle again.
+void test_the_gap_between_saucers_shortens_with_every_saucer(void)
+{
+    run("init.game");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":sau.gap.start"), num(":sau.gap"),
+                                    "a new game did not start on the widest gap");
+
+    run("spawn.saucer");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":sau.gap.start") - num(":sau.gap.step"),
+                                    num(":sau.gap"), "spawning did not shorten the gap");
+
+    // Down to the floor and no further, however long the game runs.
+    run("repeat 60 [spawn.saucer]");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":sau.gap.min"), num(":sau.gap"),
+                                    "the gap fell through its floor");
+
+    // A level change does not reset it -- the timer belongs to the game.
+    run("make \"level.rocks 3  setup.level");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":sau.gap.min"), num(":sau.gap"),
+                                    "a new level reset the game-long saucer gap");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":sau.gap"), num(":sau.wait"),
+                                    "a new level did not start the countdown at the gap");
+
+    // And a new game does.
+    run("init.game");
+    TEST_ASSERT_EQUAL_FLOAT(num(":sau.gap.start"), num(":sau.gap"));
+}
+
+// `BMI SetScrStatus` in the arcade's routine: while the reload value still has
+// bit 7 set -- 128 or more -- every saucer is large, which is the first three of
+// a game. Then 30,000 points makes every saucer small, and in between it is a
+// coin flip. So a player on level one meets large saucers only, and the small
+// one has to be earned rather than waited for.
+void test_the_saucer_size_follows_the_gap_and_the_score(void)
+{
+    run("init.game  (rerandom 1)");
+
+    // Early game: large only, whatever the level says.
+    run("make \"level 9  make \"score 0");
+    for (int i = 0; i < 20; i++)
+    {
+        run("make \"sau.gap :sau.gap.start  spawn.saucer");
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2, num(":sau.on"),
+                                        "a small saucer appeared while the gap was still wide");
+    }
+
+    // 30,000 points: small only, however wide the gap.
+    run("make \"score :sau.small.score");
+    for (int i = 0; i < 20; i++)
+    {
+        run("make \"sau.gap :sau.gap.min  spawn.saucer");
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":sau.on"),
+                                        "a large saucer appeared above the small-saucer score");
+    }
+
+    // In between: both, roughly evenly.
+    run("make \"score 1000");
+    int small = 0;
+    for (int i = 0; i < 60; i++)
+    {
+        run("make \"sau.gap :sau.gap.min  spawn.saucer");
+        if ((int)num(":sau.on") == 1)
+            small++;
+    }
+    char msg[96];
+    snprintf(msg, sizeof(msg), "%d small saucers in 60 spawns between the thresholds", small);
+    TEST_ASSERT_TRUE_MESSAGE(small > 10 && small < 50, msg);
+}
+
+// The other half of what makes the small saucer frightening: its aim tightens
+// as the score climbs, from a wide scatter at nothing to nearly exact past
+// `sau.aim.score`, and it never opens up again.
+void test_the_small_saucer_aim_tightens_with_the_score(void)
+{
+    run("init.game  make \"score 0");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":sau.aim.wide"), num("aim.spread"),
+                                    "a beginner's saucer is not scattering widely");
+
+    run("make \"score :sau.aim.score");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":sau.aim.tight"), num("aim.spread"),
+                                    "the saucer never becomes accurate");
+
+    run("make \"score 999999");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":sau.aim.tight"), num("aim.spread"),
+                                    "the spread went past its floor");
+
+    // Monotone in between, and always a whole number of degrees, because
+    // `random` counts.
+    float last = 999;
+    for (int score = 0; score <= 40000; score += 2500)
+    {
+        char cmd[64];
+        snprintf(cmd, sizeof(cmd), "make \"score %d", score);
+        run(cmd);
+        float spread = num("aim.spread");
+        TEST_ASSERT_TRUE_MESSAGE(spread <= last, "the aim widened as the score rose");
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(spread, (float)(int)spread,
+                                        "the spread is not a whole number of degrees");
+        last = spread;
+    }
+}
+
+// A shot on a saucer takes the saucer, the score and the shot -- the same three
+// things a shot on a rock takes, through the same `add.score`, which is why the
+// HUD repaint needed no new caller.
+void test_a_shot_kills_a_saucer_scores_it_and_is_consumed(void)
+{
+    setup_with(0);
+    land_the_ship();
+    run("make \"ship.rad 0  make \"shipcx 9999");
+    saucer_of_size(2, 40, 40);
+    run(".setitem 1 :slife 5  make \"s1x 40  make \"s1y 44");
+    run("make \"score 0");
+
+    run("step.saucer");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":sau.on"), "a shot inside the box missed");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":sau.score.l"), num(":score"),
+                                    "a large saucer paid the wrong score");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, item_of("slife", 1), "the shot was not consumed");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(9999, num(":s1x"), "the spent shot was not parked");
+
+    // The small one is worth five times as much, and it is the same path.
+    saucer_of_size(1, 40, 40);
+    run(".setitem 1 :slife 5  make \"s1x 40  make \"s1y 44  make \"score 0");
+    run("step.saucer");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":sau.score.s"), num(":score"),
+                                    "a small saucer paid the wrong score");
+}
+
+// Flying into a saucer costs a life and takes the saucer with it -- which is
+// the player's way round, and the reason the shot test runs before the ship
+// test inside `step.saucer`.
+void test_a_saucer_on_the_ship_kills_the_ship(void)
+{
+    setup_with(0);
+    land_the_ship();
+    run("make \"dying 0  make \"lives 3");
+    run("make \"shipx 0  make \"shipy 0  make \"shipcx 0  make \"shipcy 0");
+    saucer_of_size(2, 5, 0);
+
+    run("step.saucer");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2, num(":lives"), "a saucer on the ship cost no life");
+    TEST_ASSERT_TRUE_MESSAGE(num(":dying") > 0, "the ship did not explode");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":sau.on"), "the saucer survived the collision");
+
+    // And a ship inside its respawn grace is parked at 9999, so a saucer
+    // sitting exactly on it cannot take a life -- the same idiom the rocks meet.
+    run("make \"dying 0  make \"lives 3  respawn");
+    saucer_of_size(2, 0, 0);
+    run("step.saucer");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(3, num(":lives"), "a saucer killed a ship in its grace");
+}
+
+// The saucer's shot is flown by the engine like the player's, so all Logo does
+// is age it, read it back and test it against the ship -- one pair, once a
+// frame, rather than anything in the rock pass.
+void test_a_saucer_shot_kills_the_ship(void)
+{
+    setup_with(0);
+    land_the_ship();
+    run("make \"dying 0  make \"lives 3");
+    run("make \"shipx 0  make \"shipy 0  make \"shipcx 0  make \"shipcy 0");
+    run("make \"sau.shot.in 5");
+    run("ask 4 [pu setx 4 sety 0 setspeed 0]");
+
+    run("step.sau.shot");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2, num(":lives"), "a saucer shot on the ship cost no life");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(9999, num(":sau.shot.x"),
+                                    "the shot that killed the ship was not parked");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":sau.shot.in"), "the spent shot is still alive");
+
+    // Out of the box it does nothing, and a ship in its grace cannot be hit at
+    // all -- `shipcx` is 9999 there, so the first comparison turns it away.
+    run("make \"dying 0  make \"lives 3  respawn  make \"sau.shot.in 5");
+    run("ask 4 [pu setx 0 sety 0 setspeed 0]");
+    run("step.sau.shot");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(3, num(":lives"),
+                                    "a saucer shot killed a ship inside its grace");
+}
+
+// A saucer shot that flies at the ship in a REAL frame loop must kill it. The
+// static test above places the shot on the ship and calls `step.sau.shot`; this
+// one fires from across the field, advances the mock clock as `setspeed` does
+// in play, and asks whether the ship ever dies. Reported from a board: it never
+// did.
+void test_a_saucer_shot_fired_across_the_field_kills_the_ship(void)
+{
+    setup_with(0);                       // an empty board: nothing to absorb it
+    land_the_ship();
+    run("make \"shipx 0  make \"shipy 0  make \"svx 0  make \"svy 0");
+    run("make \"shipcx 0  make \"shipcy 0  make \"lives 3  make \"dying 0");
+    saucer_of_size(1, -120, 0);          // the small one aims
+    run("make \"sau.dx 0  make \"sau.dy 0  make \"score 40000");
+    run("saucer.fires");
+    TEST_ASSERT_TRUE_MESSAGE(num(":sau.shot.in") > 0, "the saucer fired nothing");
+
+    int frames = 0;
+    for (; frames < (int)num(":sau.shot.life") + 2; frames++)
+    {
+        set_mock_ticks(mock_ticks_value + (uint32_t)(1000.0f / num(":fps")));
+        run("play.frame");
+        if (num(":lives") < 3)
+            break;
+    }
+
+    char msg[192];
+    snprintf(msg, sizeof(msg),
+             "a saucer shot fired straight at the ship from 120 steps away never hit it "
+             "in %d frames -- shot at %g,%g, ship at %g,%g, box %g",
+             frames, num(":sau.shot.x"), num(":sau.shot.y"),
+             num(":shipcx"), num(":shipcy"), num(":sau.shot.rad"));
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2, num(":lives"), msg);
+}
+
+// Reported from a board: saucer shots "never kill the player -- just pass right
+// through". They do pass right through, and the reason is geometry rather than
+// timing. The ship is a triangle 24 steps long: its nose reaches 12 steps from
+// the centre and its rear corners 12.7, while its BEAM is only 9. `sau.shot.rad`
+// was 9 -- the beam -- so a shot crossing the nose or the tail was 10 to 12
+// steps out, visibly inside the drawn hull and outside the box that decides.
+//
+// This is the mirror of the mistake this design made twice in the other
+// direction (`shot.reach` at M2, `ship.rad` at M3, both too generous). A box
+// taken from the narrowest measurement of a shape reads as the game cheating
+// just as surely as one taken from the widest.
+void test_a_saucer_shot_through_the_ships_nose_kills_it(void)
+{
+    setup_with(0);
+    land_the_ship();
+    run("make \"shipx 0  make \"shipy 0  make \"sh 0  make \"svx 0  make \"svy 0");
+    run("make \"shipcx 0  make \"shipcy 0  make \"dying 0");
+
+    // Every point the drawn hull actually occupies, from the outline itself.
+    run("clean  setpc 254  pu setx 0 sety 0 seth 0");
+    mock_device_clear_graphics();
+    run("ship");
+    int segments = mock_device_line_count();
+    TEST_ASSERT_EQUAL_INT(SEG_SHIP, segments);
+
+    for (int i = 0; i < segments; i++)
+    {
+        const MockLine *l = mock_device_get_line(i);
+        char msg[160];
+        // A shot sitting exactly on a vertex of the drawn ship must kill it:
+        // the player can see it there.
+        run("make \"lives 3  make \"dying 0  make \"shipcx 0  make \"shipcy 0");
+        char cmd[128];
+        snprintf(cmd, sizeof(cmd), "make \"sau.shot.in 5  make \"sau.shot.x %g  make \"sau.shot.y %g",
+                 l->x1, l->y1);
+        run(cmd);
+        run("ask 4 [pu setx :sau.shot.x sety :sau.shot.y setspeed 0]");
+        run("step.sau.shot");
+
+        snprintf(msg, sizeof(msg),
+                 "a saucer shot on the hull at %.1f,%.1f (%.1f steps out) did not kill the ship "
+                 "-- sau.shot.rad is %g", l->x1, l->y1,
+                 sqrtf(l->x1 * l->x1 + l->y1 * l->y1), num(":sau.shot.rad"));
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2, num(":lives"), msg);
+    }
+}
+
+// And the other side of it, because this design has been burned there twice: the
+// box must not reach past the hull it stands for. A shot two steps clear of the
+// ship's longest point must miss.
+void test_a_saucer_shot_clear_of_the_ship_misses(void)
+{
+    setup_with(0);
+    land_the_ship();
+    run("make \"shipx 0  make \"shipy 0  make \"shipcx 0  make \"shipcy 0  make \"dying 0");
+    run("make \"lives 3");
+
+    const float corner = 12.73f;        // the ship's longest reach, at the rear corners
+    char cmd[160];
+    snprintf(cmd, sizeof(cmd), "make \"sau.shot.in 5  make \"sau.shot.x %g  make \"sau.shot.y 0",
+             corner + 3.0f);
+    run(cmd);
+    run("ask 4 [pu setx :sau.shot.x sety :sau.shot.y setspeed 0]");
+    run("step.sau.shot");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(3, num(":lives"),
+                                    "a saucer shot clear of the whole ship still killed it");
+}
+
+// It expires on its own count, and stops and hides its turtle when it does --
+// a turtle left with a speed keeps gliding after the game hands the screen back.
+void test_a_saucer_shot_expires_and_stops_its_turtle(void)
+{
+    setup_with(0);
+    run("make \"shipcx 9999  make \"sau.shot.in 3");
+    run("ask 4 [pu setx 100 sety 100 st setspeed 60]");
+
+    run("step.sau.shot  step.sau.shot");
+    TEST_ASSERT_TRUE_MESSAGE(num(":sau.shot.in") > 0, "the shot expired early");
+
+    run("step.sau.shot");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":sau.shot.in"), "the shot outlived its count");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num("ask 4 [speed]"), "an expired shot is still flying");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("false", value_to_string(eval_string("ask 4 [shown?]").value),
+                                     "an expired shot is still on screen");
+}
+
+// A shot in the air outlives the saucer that fired it. It is stepped from
+// `step.shots` and not from `step.saucer` for exactly this reason: the engine is
+// flying it, and nothing about its saucer leaving or being shot should make it
+// vanish in mid-flight.
+void test_a_saucer_shot_outlives_the_saucer_that_fired_it(void)
+{
+    setup_with(0);
+    land_the_ship();
+    run("make \"ship.rad 0  make \"shipcx 9999");
+    saucer_of_size(2, 40, 40);
+    run("saucer.fires");
+    TEST_ASSERT_TRUE_MESSAGE(num(":sau.shot.in") > 0, "the saucer fired nothing");
+
+    run("kill.saucer");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":sau.on"), "the saucer survived");
+    TEST_ASSERT_TRUE_MESSAGE(num(":sau.shot.in") > 0,
+                             "killing the saucer took its shot out of the air");
+
+    run("step.shots");
+    TEST_ASSERT_TRUE_MESSAGE(num(":sau.shot.in") > 0, "the orphaned shot stopped being stepped");
+}
+
+// The large saucer fires anywhere; the small one fires at where the ship IS,
+// which is what makes it the dangerous one. `arctan` gives the bearing and
+// Logo's heading is clockwise from north, so the conversion is one statement --
+// and if it were wrong the small saucer would fire at a mirror image of the
+// ship, which is exactly the kind of error a test has to catch rather than an
+// eye.
+void test_the_small_saucer_aims_at_the_ship_and_the_large_one_does_not(void)
+{
+    setup_with(0);
+    land_the_ship();
+    run("(rerandom 1)  make \"ship.rad 0  make \"shipcx 9999");
+    run("make \"shipx 100  make \"shipy 0");        // due east of a saucer at the origin
+
+    saucer_of_size(1, 0, 0);
+    for (int i = 0; i < 20; i++)
+    {
+        run("saucer.fires");
+        float h = num("ask 4 [heading]");
+        char msg[128];
+        snprintf(msg, sizeof(msg), "a small saucer fired on heading %g, not near 90", h);
+        TEST_ASSERT_TRUE_MESSAGE(fabsf(h - 90.0f) <= num("aim.spread") + 0.5f, msg);
+    }
+
+    // The large one is not aimed, so twenty shots spread out. One heading being
+    // near the ship is chance; all twenty would mean the sizes had swapped.
+    saucer_of_size(2, 0, 0);
+    int away = 0;
+    for (int i = 0; i < 20; i++)
+    {
+        run("saucer.fires");
+        if (fabsf(num("ask 4 [heading]") - 90.0f) > num("aim.spread") + 0.5f)
+            away++;
+    }
+    TEST_ASSERT_TRUE_MESSAGE(away > 10, "a large saucer fired at the ship every time");
+}
+
+// It fires at the ship's DRAWN position and not its collision one, because a
+// ship inside its respawn grace is parked at 9999 -- a saucer aiming there
+// would fire off the edge of the world instead of at the player it can see.
+void test_a_saucer_aims_at_a_ship_it_cannot_yet_hit(void)
+{
+    setup_with(0);
+    run("(rerandom 1)  respawn");                       // parks shipcx at 9999
+    run("make \"shipx 0  make \"shipy 100");            // and the ship is due north
+    saucer_of_size(1, 0, 0);
+    run("saucer.fires");
+
+    float h = num("ask 4 [heading]");
+    char msg[128];
+    snprintf(msg, sizeof(msg), "a saucer fired on heading %g at a ship due north", h);
+    TEST_ASSERT_TRUE_MESSAGE(fabsf(h) <= num("aim.spread") + 0.5f
+                             || fabsf(h - 360.0f) <= num("aim.spread") + 0.5f, msg);
+}
+
+// The frame draws the world, the ship AND the saucer, and the guard is in the
+// frame rather than in `draw.saucer` -- so a frame with no saucer pays one
+// comparison and not a call.
+void test_a_frame_with_a_saucer_up_draws_it(void)
+{
+    setup_with(6);
+    land_the_ship();
+    run("make \"ship.rad 0");
+    saucer_of_size(2, 120, 120);
+    run("make \"sau.w 0  make \"sau.h 0");   // nothing to collide with mid-test
+
+    mock_device_clear_graphics();
+    run("play.frame");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(6 * SEG_LARGE + SEG_SHIP + SEG_SAUCER,
+                                  mock_device_line_count(),
+                                  "a frame with a saucer up did not draw it");
+
+    run("make \"sau.on 0");
+    mock_device_clear_graphics();
+    run("play.frame");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(6 * SEG_LARGE + SEG_SHIP, mock_device_line_count(),
+                                  "a frame with no saucer drew one anyway");
+}
+
+// A level starts with no saucer and nothing of the last one's in the air. The
+// shot matters more than the saucer: a turtle left with a speed is moved by the
+// ENGINE, so it would still be gliding across the next level's screen.
+void test_a_level_starts_with_no_saucer_and_nothing_in_the_air(void)
+{
+    setup_with(3);
+    saucer_of_size(2, 0, 0);
+    run("saucer.fires");
+
+    run("make \"level.rocks 3  setup.level");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":sau.on"), "a saucer survived a level change");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":sau.gap"), num(":sau.wait"),
+                                    "a new level did not start the countdown at the game-long gap");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":sau.shot.in"), "a saucer shot survived a level change");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num("ask 4 [speed]"),
+                                    "a saucer shot was left gliding into the next level");
+}
+
+//==========================================================================
+// The pause, the saucer's shot on the rocks, and the saucer on the rocks
+//==========================================================================
+
+// A shot is flown by the ENGINE, not by this game: `setspeed` moves it on
+// wall-clock time whether or not `play.frame` steps anything. So a pause that
+// only stops calling the frame body leaves every shot in the air still
+// travelling, and a player who pauses to think comes back to a shot that
+// crossed the field without them. Reported from a board and logged as B17.
+//
+// Driven off the mock clock, because that is what `setspeed` reads.
+void test_a_pause_holds_the_shots_where_they_are(void)
+{
+    setup_with(0);
+    land_the_ship();
+    run("make \"shipx 0  make \"shipy 0  make \"sh 0");
+    run("fire");
+    run("make \"sau.shot.in 20");
+    run("ask 4 [pu setx -100 sety 0 seth 90 st setspeed :sau.shot.speed]");
+
+    // Let both fly for a moment so they are genuinely in motion.
+    set_mock_ticks(mock_ticks_value + 200);
+    run("ask 1 [make \"probe1 ycor]  ask 4 [make \"probe4 xcor]");
+    float player_before = num(":probe1"), saucer_before = num(":probe4");
+    TEST_ASSERT_TRUE_MESSAGE(player_before > 0, "the player's shot never left the ship");
+
+    set_mock_input("p");
+    run("play.frame");
+    TEST_ASSERT_EQUAL_STRING("true", value_to_string(eval_string(":paused").value));
+
+    // Half a second of wall clock with the game paused, and several frames.
+    run("ask 1 [make \"probe1 ycor]  ask 4 [make \"probe4 xcor]");
+    player_before = num(":probe1");
+    saucer_before = num(":probe4");
+    set_mock_ticks(mock_ticks_value + 500);
+    run("repeat 5 [play.frame]");
+    run("ask 1 [make \"probe1 ycor]  ask 4 [make \"probe4 xcor]");
+
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(player_before, num(":probe1"),
+                                    "a paused game let the player's shot keep flying");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(saucer_before, num(":probe4"),
+                                    "a paused game let the saucer's shot keep flying");
+
+    // And unpausing puts them back in the air at the speed they had.
+    set_mock_input("p");
+    run("play.frame");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":shot.speed"), num("ask 1 [speed]"),
+                                    "the player's shot did not resume");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":sau.shot.speed"), num("ask 4 [speed]"),
+                                    "the saucer's shot did not resume");
+
+    // A spent shot is not resurrected by unpausing: `thaw` resumes what was
+    // moving, and a stopped turtle stays stopped.
+    run("clear.shots  make \"paused false  toggle.pause  toggle.pause");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num("ask 1 [speed]"),
+                                    "unpausing restarted a spent shot");
+}
+
+// The arcade lets the saucer's shot break rocks, and the player gets nothing
+// for them: the board you were about to be paid for is eaten while you dodge.
+// It is folded into `shot.on` rather than tested separately, so it costs one
+// comparison a rock and no branch.
+void test_a_saucer_shot_breaks_a_rock_and_pays_nobody(void)
+{
+    setup_with(0);
+    land_the_ship();
+    run("make \"shipcx 9999  make \"score 0");
+    run(".setitem 1 :rsize 3  .setitem 1 :rrad rad.for 3  make \"rocks.alive 1");
+    run(".setitem 1 :rx 0  .setitem 1 :ry 0  .setitem 1 :rdx 0  .setitem 1 :rdy 0");
+    run("make \"sau.shot.in 10  make \"sau.shot.x 2  make \"sau.shot.y 2");
+
+    run("step.draw.all");
+    // The parent's slot is freed before the children are made, so slot 1 holds a
+    // child now -- what says the large rock died is the size and the count.
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2, item_of("rsize", 1),
+                                    "the saucer's shot missed the rock");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2, num(":rocks.alive"), "the large rock did not split");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":score"),
+                                    "the player was paid for a rock the saucer shot");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":sau.shot.in"),
+                                    "the saucer's shot survived the rock it broke");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(9999, num(":sau.shot.x"), "the spent shot was not parked");
+
+    // A player's shot on the same rock still pays.
+    run("clear.rocks  make \"score 0");
+    run(".setitem 1 :rsize 3  .setitem 1 :rrad rad.for 3  make \"rocks.alive 1");
+    run(".setitem 1 :rx 0  .setitem 1 :ry 0  .setitem 1 :rdx 0  .setitem 1 :rdy 0");
+    run(".setitem 1 :slife 5  make \"s1x 2  make \"s1y 2");
+    run("step.draw.all");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(20, num(":score"), "a player's shot stopped paying");
+}
+
+// Flying into a rock kills the saucer and breaks the rock, and neither of them
+// pays the player -- nobody aimed it.
+void test_a_saucer_that_flies_into_a_rock_dies_with_it(void)
+{
+    setup_with(0);
+    land_the_ship();
+    run("make \"shipcx 9999  make \"score 0");
+    saucer_of_size(2, 0, 0);
+    run(".setitem 1 :rsize 2  .setitem 1 :rrad rad.for 2  make \"rocks.alive 1");
+    run(".setitem 1 :rx 0  .setitem 1 :ry 0  .setitem 1 :rdx 0  .setitem 1 :rdy 0");
+
+    run("step.draw.all");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":sau.on"), "the saucer survived flying into a rock");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, item_of("rsize", 1), "the rock survived the saucer");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2, num(":rocks.alive"), "the rock did not split");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":score"),
+                                    "the player was paid for a saucer that killed itself");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(9999, num(":sau.x"), "the dead saucer was not parked");
+
+    // Shooting it still pays, which is the whole difference.
+    run("clear.rocks  make \"score 0");
+    saucer_of_size(2, 40, 40);
+    run(".setitem 1 :slife 5  make \"s1x 40  make \"s1y 44");
+    run("step.saucer");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":sau.score.l"), num(":score"),
+                                    "shooting a saucer stopped paying");
+}
+
+// A saucer that does not exist is parked at 9999, exactly as a spent shot is,
+// because every rock is tested against it. Parked at the origin instead -- which
+// is where the state block used to leave it -- a rock drifting through the
+// middle of the field would explode against a saucer that was not there.
+void test_a_saucer_that_is_not_there_hits_nothing(void)
+{
+    setup_with(0);
+    land_the_ship();
+    run("make \"shipcx 9999  make \"sau.on 0  make \"sau.w 0  make \"sau.h 0");
+    run(".setitem 1 :rsize 3  .setitem 1 :rrad rad.for 3  make \"rocks.alive 1");
+    run(".setitem 1 :rx 0  .setitem 1 :ry 0  .setitem 1 :rdx 0  .setitem 1 :rdy 0");
+
+    run("step.draw.all");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(3, item_of("rsize", 1),
+                                    "a rock at the origin hit a saucer that was not there");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num("shot.on 0 0 26"),
+                                    "an absent saucer answered a collision test");
+}
+
+//==========================================================================
+// The sound (M4)
+//==========================================================================
+
+// Read the mock's gate log from a mark, counting notes on one voice. Every
+// `sound` here names a PAIR, so a note shows up twice -- once per ear -- and
+// counting one ear counts notes.
+static int notes_on(int voice, int from)
+{
+    const MockDeviceState *st = mock_device_get_state();
+    int n = 0;
+    for (int i = from; i < st->sound.gate_count; i++)
+        if (st->sound.gates[i].voice == voice)
+            n++;
+    return n;
+}
+
+static uint32_t last_freq_on(int voice)
+{
+    const MockDeviceState *st = mock_device_get_state();
+    for (int i = st->sound.gate_count - 1; i >= 0; i--)
+        if (st->sound.gates[i].voice == voice)
+            return st->sound.gates[i].freq;
+    return 0;
+}
+
+// Four pairs, set once, and the arrangement has one rule that is not a matter
+// of taste: voices 3 and 7 are the NOISE voices and the rest are tone voices,
+// and a noise waveform on a tone voice is an error rather than a shrug. The
+// design's section 11 asked for white noise on [2 6] -- which cannot be done --
+// so the thrust rumble is a narrow pulse instead, and the noise pair is left to
+// the explosions, which must never be silenced by a held thrust key.
+void test_the_timbres_are_set_once_and_match_the_voice_kinds(void)
+{
+    run("setup.sound");
+    const MockDeviceState *st = mock_device_get_state();
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(SOUND_WAVE_TRIANGLE, st->sound.wave[0].wave, "the heartbeat");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(SOUND_WAVE_SAWTOOTH, st->sound.wave[1].wave, "fire and the saucer");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(SOUND_WAVE_PULSE, st->sound.wave[2].wave, "the thrust rumble");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(SOUND_WAVE_WHITE, st->sound.wave[3].wave, "the explosions");
+
+    for (int v = 0; v < 4; v++)
+    {
+        char msg[96];
+        snprintf(msg, sizeof(msg), "voice %d and %d are not the same timbre", v, v + 4);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(st->sound.wave[v].wave, st->sound.wave[v + 4].wave, msg);
+
+        snprintf(msg, sizeof(msg), "voice %d has a noise wave on a tone voice", v);
+        if (v != 3)
+            TEST_ASSERT_TRUE_MESSAGE(st->sound.wave[v].wave < SOUND_WAVE_WHITE, msg);
+    }
+}
+
+// The heartbeat is the point of the sound, and it is a TEMPO: two notes
+// alternating, with the gap between them set by the live rock count, so a board
+// thinning out speeds up on its own. Count the notes a hundred frames make at
+// each end of a level.
+void test_the_heartbeat_speeds_up_as_the_board_thins(void)
+{
+    run("init.game  setup.sound  make \"beat.in 1  make \"rocks.alive 12");
+    int mark = mock_sound_gate_count();
+    run("repeat 100 [heartbeat]");
+    int full = notes_on(0, mark);
+
+    run("make \"beat.in 1  make \"rocks.alive 1");
+    mark = mock_sound_gate_count();
+    run("repeat 100 [heartbeat]");
+    int nearly_clear = notes_on(0, mark);
+
+    char msg[128];
+    snprintf(msg, sizeof(msg), "%d beats in 100 frames at twelve rocks, %d at one",
+             full, nearly_clear);
+    TEST_ASSERT_TRUE_MESSAGE(full > 0, msg);
+    TEST_ASSERT_TRUE_MESSAGE(nearly_clear > full + 5, msg);
+
+    // Two notes, not one: a single repeated note reads as a metronome rather
+    // than a heartbeat.
+    run("make \"beat.in 1");
+    run("heartbeat");
+    uint32_t first = last_freq_on(0);
+    run("make \"beat.in 1  heartbeat");
+    TEST_ASSERT_TRUE_MESSAGE(last_freq_on(0) != first, "the heartbeat is one note, not two");
+}
+
+// What the rest of the game sounds like, checked where each noise is made
+// rather than through a frame -- the frame's job is only to call these.
+void test_the_game_makes_its_noises(void)
+{
+    setup_with(3);
+    land_the_ship();
+    run("setup.sound  make \"dying 0  make \"lives 3");
+
+    // Firing zaps, and a fourth shot that is not fired makes no noise either.
+    run("clear.shots");
+    int mark = mock_sound_gate_count();
+    run("fire");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, notes_on(1, mark), "firing made no noise");
+    run("clear.shots  repeat :max.shots [fire]");
+    mark = mock_sound_gate_count();
+    run("fire");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, notes_on(1, mark), "a shot that was not fired made a noise");
+
+    // A rock's death says its size: a large one is a low crump and a small one
+    // a sharp tick, so the split table is audible.
+    uint32_t pitch[4] = {0};
+    for (int s = 3; s >= 1; s--)
+    {
+        char cmd[64];
+        snprintf(cmd, sizeof(cmd), "rock.boom %d", s);
+        run(cmd);
+        pitch[s] = last_freq_on(3);
+    }
+    TEST_ASSERT_TRUE_MESSAGE(pitch[3] < pitch[2] && pitch[2] < pitch[1],
+                             "a rock's death does not rise in pitch as the rock shrinks");
+
+    // A death is one long, low, loud note on the noise pair.
+    mark = mock_sound_gate_count();
+    run("ship.hit");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, notes_on(3, mark), "the ship died silently");
+}
+
+// The rumble sounds on the frames thrust is held and on no others, which falls
+// out of where the call sits: inside `thrust`, which `poll.input` reaches only
+// on a frame where thrust was the key read.
+void test_the_thrust_rumble_sounds_only_while_it_is_held(void)
+{
+    setup_with(3);
+    land_the_ship();
+    run("setup.sound  make \"dying 0");
+
+    int mark = mock_sound_gate_count();
+    set_mock_input(KEY_THRUST);
+    run("play.frame");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, notes_on(2, mark), "a thrusting frame was silent");
+
+    mark = mock_sound_gate_count();
+    run("play.frame");                     // no key at all
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, notes_on(2, mark), "the rumble kept sounding after release");
+}
+
+// The saucer warbles while it is on screen and stops when it is not, which is
+// the player's warning that one is there. It shares the fire pair, so a frame
+// the player fires on wins the voice -- that is the whole cost of the sharing
+// and it is one frame long.
+void test_the_saucer_warbles_only_while_it_is_up(void)
+{
+    setup_with(3);
+    run("setup.sound  make \"safe 0  make \"ship.rad 0");
+    saucer_of_size(2, 0, 120);
+    run("make \"sau.w 0  make \"sau.h 0  make \"sau.dx 0  make \"sau.fire.in 999");
+
+    int mark = mock_sound_gate_count();
+    run("repeat 30 [step.saucer]");
+    int warbles = notes_on(1, mark);
+    char msg[96];
+    snprintf(msg, sizeof(msg), "%d warbles in 30 frames with a saucer up", warbles);
+    TEST_ASSERT_TRUE_MESSAGE(warbles > 5, msg);
+
+    run("leave.saucer");
+    mark = mock_sound_gate_count();
+    run("repeat 30 [step.saucer]");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, notes_on(1, mark),
+                                  "the warble went on after the saucer left");
+}
+
+// A level that ends has to silence the voices as well as stop the turtles: the
+// PSG keeps sounding on its own, so a thrust rumble or a warble left gated on
+// would follow the player back to the attract screen. `stopsound` keeps the
+// timbres, which is why `setup.sound` runs once a game and not once a level.
+void test_a_level_end_silences_every_voice(void)
+{
+    run("init.game  setup.sound  make \"level.rocks 3");
+    const MockDeviceState *st = mock_device_get_state();
+    int before = st->sound.stop_count;
+
+    set_mock_input(" q");
+    run("play.level");
+    TEST_ASSERT_TRUE_MESSAGE(st->sound.stop_count > before,
+                             "a level ended with the voices still sounding");
+
+    // And the timbres survive it, or every level after the first would play in
+    // the default square wave.
+    TEST_ASSERT_EQUAL_INT_MESSAGE(SOUND_WAVE_TRIANGLE, st->sound.wave[0].wave,
+                                  "stopsound cleared the timbres");
+}
+
+//==========================================================================
 // The hardware harnesses
 //==========================================================================
 
@@ -1676,13 +2676,14 @@ void test_game_over_prints_the_final_score(void)
 // else reproduces.
 void test_the_harness_frame_matches_the_game_frame(void)
 {
-    load_file(P11M3_SOURCE);
+    load_file(P11M4_SOURCE);
 
     // The rocks are kept clear of the origin, where an unfired shot turtle
     // sits: a hit here would split a rock with `random` velocities and the two
     // runs would diverge on a number neither is testing.
     const char *state =
-        "make \"paused false  clear.rocks  clear.shots  reset.ship "
+        "init.game  make \"paused false  clear.rocks  clear.shots  reset.ship "
+        "make \"waiting false  make \"ship.rad :ship.rad.hull "
         "make \"hud.text [SCORE 0 ROCKS 2]  make \"frame.count 0 "
         "make \"shipx 5  make \"shipy -5  make \"svx 1  make \"svy 2  make \"sh 40 "
         ".setitem 1 :rsize 3  .setitem 1 :rrad 27  .setitem 1 :rx 60  .setitem 1 :ry 20 "
@@ -1735,37 +2736,70 @@ void test_the_harness_frame_matches_the_game_frame(void)
                                     "the harness frame flew a ship that is exploding");
     TEST_ASSERT_EQUAL_INT_MESSAGE(game_death_segments, mock_device_line_count(),
                                   "the harness frame does not draw the explosion the game draws");
+
+    // And a saucer frame, because that is what M4 added: a harness that stepped
+    // the saucer but did not draw it -- or drew it unconditionally -- would time
+    // a frame the game never runs, and the saucer point is the whole reason this
+    // run exists.
+    const char *flying =
+        "make \"sau.on 2  make \"sau.x -40  make \"sau.y 30  make \"sau.dx 1.8 "
+        "make \"sau.dy 0  make \"sau.w 0  make \"sau.h 0 "
+        "make \"sau.turn.in 5  make \"sau.fire.in 5  make \"warble.in 1";
+    run(state);
+    run(flying);
+    mock_device_clear_graphics();
+    run("play.frame");
+    int game_saucer_segments = mock_device_line_count();
+    float game_saucer_x = num(":sau.x");
+    TEST_ASSERT_EQUAL_INT(SEG_LARGE + SEG_SMALL + SEG_SHIP + SEG_SAUCER, game_saucer_segments);
+
+    run(state);
+    run(flying);
+    mock_device_clear_graphics();
+    run("frame.body");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(game_saucer_segments, mock_device_line_count(),
+                                  "the harness frame does not draw the saucer the game draws");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(game_saucer_x, num(":sau.x"),
+                                    "the harness frame does not fly the saucer the game flies");
 }
 
-void test_p11m3_script_runs(void)
+void test_p11m4_script_runs(void)
 {
-    load_file(P11M3_SOURCE);
-    run("make \"p11m3.frames 3");
+    load_file(P11M4_SOURCE);
+    run("make \"p11m4.frames 3");
     mock_device_clear_output();
-    run("p11m3");
+    run("p11m4");
 
     const char *screen = mock_device_get_output();
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "the rock pass"), screen);
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "one shot.on"), screen);
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "one thrust"), screen);
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "nodes at start"), screen);
+    // M4's whole question is what a saucer costs while it is up, so the run is
+    // worthless if the report does not carry the fourth point and the delta.
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "WITH a saucer"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "the saucer costs"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "one saucer outline"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "one sound"), screen);
 
-    MockFile *report = mock_fs_get_file("p11m3.txt", false);
-    TEST_ASSERT_NOT_NULL_MESSAGE(report, "p11m3.txt was not written");
+    MockFile *report = mock_fs_get_file("p11m4.txt", false);
+    TEST_ASSERT_NOT_NULL_MESSAGE(report, "p11m4.txt was not written");
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(report->data, "budget at 14 fps"), report->data);
 }
 
-void test_the_m3_harness_measures_the_rock_counts_it_reports(void)
+void test_the_m4_harness_measures_the_rock_counts_it_reports(void)
 {
-    load_file(P11M3_SOURCE);
-    run("make \"p11m3.frames 2");
-    run("p11m3");
+    load_file(P11M4_SOURCE);
+    run("make \"p11m4.frames 2");
+    run("p11m4");
 
-    const float wanted[] = {6, 9, 12};
-    for (int k = 0; k < 3; k++)
+    // Four points now: three without a saucer and a fourth with one, at the
+    // same twelve rocks, so the two are subtractable.
+    const float wanted[] = {6, 9, 12, 12};
+    for (int k = 0; k < 4; k++)
     {
         char expr[64], msg[112];
-        snprintf(expr, sizeof(expr), "0 + item %d :p11m3.rocks", k + 1);
+        snprintf(expr, sizeof(expr), "0 + item %d :p11m4.rocks", k + 1);
         snprintf(msg, sizeof(msg), "point %d timed %d rocks, not %d",
                  k + 1, (int)num(expr), (int)wanted[k]);
         TEST_ASSERT_EQUAL_FLOAT_MESSAGE(wanted[k], num(expr), msg);
@@ -1777,9 +2811,9 @@ void test_the_m3_harness_measures_the_rock_counts_it_reports(void)
 // rock count that does not drain. It gets both without redefining anything in
 // the game -- `arm.shots` tops the life up, and zeroing every `rrad` means no
 // shot can connect, so nothing splits and nothing is consumed.
-void test_the_m3_harness_holds_three_shots_live_and_the_board_still(void)
+void test_the_m4_harness_holds_three_shots_live_and_the_board_still(void)
 {
-    load_file(P11M3_SOURCE);
+    load_file(P11M4_SOURCE);
     run("init.game  make \"level.rocks 6  setup.level");
     run("repeat :max.rocks [.setitem repcount :rrad 0]");
     run("launch.shots");
@@ -1795,7 +2829,42 @@ void test_the_m3_harness_holds_three_shots_live_and_the_board_still(void)
                                     "the board drained during the run");
 }
 
+// The three plain points have to be plain, and nothing about them says so on
+// the screen: `setup.level` leaves the appearance countdown at `sau.first`,
+// which is 140 frames against a 300-frame point, so a saucer would walk into
+// the back half of every one of them and average itself into a figure that is
+// supposed to be without one. `measure` parks the wait; this is what stops that
+// being quietly removed.
+void test_the_m4_harness_keeps_the_saucer_off_the_plain_points(void)
+{
+    load_file(P11M4_SOURCE);
+    run("make \"p11m4.frames 3");
+
+    run("measure 1 6 false");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":sau.on"),
+                                    "a saucer appeared during a no-saucer point");
+    TEST_ASSERT_TRUE_MESSAGE(num(":sau.wait") > 1000,
+                             "the appearance countdown was not parked");
+
+    // And the fourth point holds one up for every frame of it, which is what
+    // makes the two subtractable. A real saucer crosses the field in 178
+    // frames, so without `hold.saucer` a long point would time an empty screen
+    // for its tail.
+    run("make \"p11m4.frames 200");
+    run("measure 4 12 true");
+    TEST_ASSERT_TRUE_MESSAGE(num(":sau.on") > 0,
+                             "the saucer left during the saucer point");
+
+    // Its boxes are zeroed the way the rocks' are, so the run is a lower bound
+    // and can never turn into a death that times a different frame.
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":sau.w"));
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":sau.h"));
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(3, num(":lives"), "the harness lost a life");
+}
+
 //==========================================================================
+
+
 
 int main(void)
 {
@@ -1848,11 +2917,11 @@ int main(void)
     RUN_TEST(test_an_idle_shot_hits_nothing);
     RUN_TEST(test_a_rock_on_the_ship_kills_it);
     RUN_TEST(test_one_frame_takes_only_one_life);
-    RUN_TEST(test_a_ship_in_its_respawn_grace_cannot_be_hit);
+    RUN_TEST(test_a_waiting_ship_does_not_appear_until_the_space_is_clear);
+    RUN_TEST(test_the_clear_radius_is_wider_than_the_ship_it_protects);
     RUN_TEST(test_the_explosion_counts_down_and_the_ship_comes_back);
     RUN_TEST(test_the_last_life_ends_the_level);
     RUN_TEST(test_a_dying_ship_draws_a_ring_and_not_a_ship);
-    RUN_TEST(test_a_ship_in_its_respawn_grace_blinks);
     RUN_TEST(test_hyperspace_moves_the_ship_and_stops_it);
     RUN_TEST(test_hyperspace_sometimes_ends_badly);
     RUN_TEST(test_an_extra_ship_every_ten_thousand_points);
@@ -1868,9 +2937,42 @@ int main(void)
     RUN_TEST(test_game_over_prints_the_final_score);
     RUN_TEST(test_a_level_ends_on_q_and_puts_the_screen_back);
     RUN_TEST(test_a_level_ends_when_the_board_is_clear);
+    RUN_TEST(test_both_saucer_outlines_close_on_themselves);
+    RUN_TEST(test_draw_saucer_picks_the_outline_for_the_size);
+    RUN_TEST(test_the_saucer_boxes_are_not_far_wider_than_the_shapes_drawn_in_them);
+    RUN_TEST(test_a_shot_cannot_outrun_the_saucer);
+    RUN_TEST(test_a_saucer_shot_cannot_outrun_the_ship);
+    RUN_TEST(test_a_saucer_appears_on_a_countdown_and_enters_from_an_edge);
+    RUN_TEST(test_a_saucer_crosses_and_leaves_at_the_far_edge);
+    RUN_TEST(test_the_gap_between_saucers_shortens_with_every_saucer);
+    RUN_TEST(test_the_saucer_size_follows_the_gap_and_the_score);
+    RUN_TEST(test_the_small_saucer_aim_tightens_with_the_score);
+    RUN_TEST(test_a_shot_kills_a_saucer_scores_it_and_is_consumed);
+    RUN_TEST(test_a_saucer_on_the_ship_kills_the_ship);
+    RUN_TEST(test_a_saucer_shot_kills_the_ship);
+    RUN_TEST(test_a_saucer_shot_fired_across_the_field_kills_the_ship);
+    RUN_TEST(test_a_saucer_shot_through_the_ships_nose_kills_it);
+    RUN_TEST(test_a_saucer_shot_clear_of_the_ship_misses);
+    RUN_TEST(test_a_saucer_shot_expires_and_stops_its_turtle);
+    RUN_TEST(test_a_saucer_shot_outlives_the_saucer_that_fired_it);
+    RUN_TEST(test_the_small_saucer_aims_at_the_ship_and_the_large_one_does_not);
+    RUN_TEST(test_a_saucer_aims_at_a_ship_it_cannot_yet_hit);
+    RUN_TEST(test_a_frame_with_a_saucer_up_draws_it);
+    RUN_TEST(test_a_level_starts_with_no_saucer_and_nothing_in_the_air);
+    RUN_TEST(test_a_pause_holds_the_shots_where_they_are);
+    RUN_TEST(test_a_saucer_shot_breaks_a_rock_and_pays_nobody);
+    RUN_TEST(test_a_saucer_that_flies_into_a_rock_dies_with_it);
+    RUN_TEST(test_a_saucer_that_is_not_there_hits_nothing);
+    RUN_TEST(test_the_timbres_are_set_once_and_match_the_voice_kinds);
+    RUN_TEST(test_the_heartbeat_speeds_up_as_the_board_thins);
+    RUN_TEST(test_the_game_makes_its_noises);
+    RUN_TEST(test_the_thrust_rumble_sounds_only_while_it_is_held);
+    RUN_TEST(test_the_saucer_warbles_only_while_it_is_up);
+    RUN_TEST(test_a_level_end_silences_every_voice);
     RUN_TEST(test_the_harness_frame_matches_the_game_frame);
-    RUN_TEST(test_p11m3_script_runs);
-    RUN_TEST(test_the_m3_harness_measures_the_rock_counts_it_reports);
-    RUN_TEST(test_the_m3_harness_holds_three_shots_live_and_the_board_still);
+    RUN_TEST(test_p11m4_script_runs);
+    RUN_TEST(test_the_m4_harness_measures_the_rock_counts_it_reports);
+    RUN_TEST(test_the_m4_harness_holds_three_shots_live_and_the_board_still);
+    RUN_TEST(test_the_m4_harness_keeps_the_saucer_off_the_plain_points);
     return UNITY_END();
 }
