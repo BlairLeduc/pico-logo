@@ -723,8 +723,9 @@ void test_every_rock_is_drawn_with_a_one_pixel_pen(void)
 // in this interpreter collects on demand: `alloc_cell` and `mem_atom`
 // (core/memory.c) report out of space rather than collecting and retrying. So
 // what the game must respect is a *deadline* -- how long the frame loop can
-// run before it needs a recycle -- and `reclaim.every` has to sit well inside
-// it.
+// run before it needs a recycle -- and `reclaim` has to fire well inside it.
+// Since B25 that is a floor on `atoms` rather than a frame count, for the
+// reason recorded there: a frame count cannot see the space this runs out of.
 //
 // B25, third time. A DEADLINE MEASURED ON A HOST IS NOT A BOARD'S DEADLINE,
 // and no frame count could have been. The interval went 250 -> 25 -> 4, each

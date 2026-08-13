@@ -2025,28 +2025,45 @@ is not a margin: the atom region is capped at 32 KB *or* wherever the node
 pool's floor has reached, whichever is lower, so a board carrying a fuller
 workspace has less atom room than the host measuring it.
 
-**`reclaim.every` is 4 frames** (B25). It was 25, on a 26× margin against the
-measurement above — and the board ran out of storage anyway, because **that
-deadline was measured on the wrong frame.** A frame with drifting rocks and
-nothing else spends 9 cells and 45 atom bytes; a frame in a *game* — a saucer
-up, shots in the air, rocks splitting — spends about 91, and dies in **89
-frames** rather than 365. So 25 was a 3.6× margin wearing a 26× label. Measured
-per procedure, `step.draw.all` is the frame's only allocator at all:
-`step.saucer`, `step.shots`, `warble`, `draw.saucer`, `heartbeat` and the rest each
-measure zero, so what moves the deadline is how much the *rock pass* has to do
-and how often rocks split under it.
+**`reclaim` collects on `atoms`, not on a frame count** (B25). The interval was
+250, then 25, then 4, and the board ran out of space in play at every one of
+them. Each was measured honestly and each was a guess, because **the number
+that decides it was not observable from Logo.** `nodes` reports free *cells*;
+this game runs out of the *word table*, since `.setitem` interns every position
+it stores. At the moment the loop dies there are 21,000 free nodes and **20 free
+bytes of word table**.
 
-An adaptive `reclaim` — collect when free storage runs low, so the board's own
-room decides the interval — was tried and abandoned on evidence. `nodes` reports
-free **cells**, and this game does not run out of cells: at the moment the loop
-dies there are 21,000 free cells and **20 bytes** of atom room. Nothing reports
-atom bytes to Logo, so a frame count is the only signal available.
+The re-measurements were real and still not enough. `step.draw.all` is the
+frame's only allocator — `step.saucer`, `step.shots`, `warble`, `draw.saucer`,
+`heartbeat` each measure zero — at 9 cells and 45 word bytes on a quiet frame
+and about 91 on a busy one, so the deadline on the frame the game actually
+plays is 89 frames rather than 365, and 25 was a 3.6× margin wearing a 26×
+label. But a frame count cannot know the other half either: how much room a
+given board left the game after loading it, which is precisely what differs
+between the host that measures and the board that dies.
 
-`test_the_reclaim_interval_stays_inside_the_busy_frame_budget` measures the
-deadline on the expensive frame and fails if the interval creeps back towards
-it, and `test_the_frame_loop_survives_a_squeezed_workspace` plays 2,000 busy
-frames with live ballast holding the atom region down to a fifth — the board
-the host does not otherwise have. **The deeper fix is still open**: the churn is
+So `atoms` was added to the interpreter (a language addition, in its own
+change) and the frame asks:
+
+```logo
+to reclaim
+  if atoms < :atom.floor [recycle]
+end
+```
+
+`atom.floor` is 2000 — about twenty busy frames of headroom against a check
+that runs every frame. A roomy workspace collects rarely, a cramped one often,
+one too small to hold the floor collects every frame: slow and alive rather
+than fast and dead. **Free bytes are not all allocatable**, though — the
+every-4 run died with 1,900 still reported free, which is fragmentation in the
+size-binned atom free lists — so the floor is a margin and not a guarantee.
+
+`test_the_reclaim_floor_clears_what_a_busy_frame_spends` measures the spend on
+the expensive frame and requires the floor to clear it by 8×, and
+`test_the_frame_loop_survives_a_squeezed_workspace` plays 2,000 busy frames
+with live ballast holding the word table down to a **tenth** — the board the
+host does not otherwise have. The floor survives that; the every-4 interval
+died at frame 151. **The deeper fix is still open**: the churn is
 `.setitem` interning a fresh float string per rock per frame, and storing coarser
 numbers would let atoms be *reused* rather than minted, which caps the working
 set instead of racing it.
@@ -2068,13 +2085,13 @@ it is, and spends the margin on the one thing that has already crashed a board.
 **M4 should expect this number to grow again**, because the saucer and the sound
 are more workspace.
 
-**B25 took that trade the other way**, because the board crashed again. The
-interval is now 4 frames, and this paragraph is exactly why that is expensive:
-the bump does not get smaller, it lands on one frame in four rather than one in
-25 — about 1 ms a frame amortised, and a quarter of frames carrying a 4.4 ms
-hitch. That is a worse frame profile bought deliberately, for a margin measured
-on the frame the game actually plays rather than on a quiet one (§14).
-`logo/tests/p11m4` on hardware is what says whether the hitch is visible.
+**B25 ended this argument by removing the interval.** Recycling more often is
+still worse per bump, and choosing *how* often is still the trade this
+paragraph describes — but the choice is no longer made in advance by a
+constant. `reclaim` fires when the word table falls below `atom.floor` (§14),
+so the frequency is set by the board's own room rather than by a host's guess
+at it. How expensive that is on a given board is exactly what `p11m4`'s
+word-space figures now report.
 
 ### M4 re-measured the deadline, and it moved the way §14 said it would
 
@@ -2089,10 +2106,11 @@ program leaves less room for atoms.
 
 `reclaim.every` 25 read as a **19× margin** against that rather than M1's 26×,
 and the test required 8× — so the interval held without moving. **It should
-have moved.** Both numbers were taken on a quiet frame, and B25 is what that
-cost: the same 486-frame measurement on a frame with a saucer up and shots in
-the air is 89, the margin was 3.6×, and the board ran out of storage a second
-time. The interval is 4 and the test now measures the busy frame (§14).
+have moved, and then it should have stopped being an interval.** Both numbers
+were taken on a quiet frame, and B25 is what that cost: the same 486-frame
+measurement on a frame with a saucer up and shots in the air is 89, so the
+margin was 3.6×. Cutting it to 4 did not save the board either. What did was
+giving the game a way to see the space it runs out of (§14).
 
 **A recycle is 4.4 ms on the board at M4**, against 4.1 at M3: 1.3 → 2.2 → 4.1 →
 4.4 across four milestones. The growth has flattened, which fits the cause — it
