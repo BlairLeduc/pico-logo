@@ -11,6 +11,7 @@
 #include <string.h>
 #include <strings.h>
 #include <stdio.h>
+#include <stdint.h>
 #include "hot.h"
 
 // (MAX_GLOBAL_VARIABLES lives in limits.h)
@@ -28,6 +29,84 @@ typedef struct
 static Variable global_variables[MAX_GLOBAL_VARIABLES];
 static int global_count = 0;
 
+// A hash index over the *active* entries of `global_variables`, so a lookup is
+// a hash and a probe or two rather than a walk of the whole table.
+//
+// WHY THIS EXISTS. `find_global` used to be a linear scan in creation order,
+// which made a global's read cost depend on WHERE IT WAS DEFINED -- and a Logo
+// file's top-level `make`s run in file order, so a name defined late was slower
+// to read than one defined early, for the life of the program. That is a real
+// cost and not a theoretical one: P11 M4 measured an Asteroids frame loop 6 %
+// slower on a Plus 2 W after adding 35 constants ABOVE the game's state, with
+// the frame's own code untouched (docs/asteroids-design.md section 12c). A game
+// frame reads a couple of hundred globals, so the scan depth is multiplied by
+// the object count, and the effect is invisible in a diff.
+//
+// The index is a side table: `global_variables` keeps its order, so `pons`,
+// `poall`, `var_get_global_by_index` and every workspace listing print exactly
+// what they printed before.
+//
+// Entries hold slot + 1, with 0 meaning empty, so a zeroed table is an empty
+// one. Open addressing with linear probing; the table is four times the slot
+// count, so a probe chain stays short and an empty slot always exists.
+#define GLOBAL_HASH_SIZE 512
+_Static_assert((GLOBAL_HASH_SIZE & (GLOBAL_HASH_SIZE - 1)) == 0,
+               "GLOBAL_HASH_SIZE must be a power of two -- the probe masks with it");
+_Static_assert(GLOBAL_HASH_SIZE >= 2 * MAX_GLOBAL_VARIABLES,
+               "GLOBAL_HASH_SIZE must leave the index half empty, or probes get long");
+_Static_assert(MAX_GLOBAL_VARIABLES <= 254,
+               "hash entries are uint8_t holding slot + 1 -- widen them to raise the cap");
+static uint8_t global_hash[GLOBAL_HASH_SIZE];
+
+// ASCII case fold, matching what `strcasecmp` does for Logo's names in the C
+// locale -- the index has to agree with the comparison it is short-cutting, or
+// `FOO` and `foo` would hash apart and become two variables.
+static inline unsigned char name_fold(unsigned char c)
+{
+    return (c >= 'A' && c <= 'Z') ? (unsigned char)(c + 32) : c;
+}
+
+// FNV-1a over the folded name.
+static uint32_t name_hash(const char *name)
+{
+    uint32_t h = 2166136261u;
+    for (const unsigned char *p = (const unsigned char *)name; *p; p++)
+    {
+        h ^= name_fold(*p);
+        h *= 16777619u;
+    }
+    return h;
+}
+
+static void global_hash_insert(int idx)
+{
+    uint32_t h = name_hash(global_variables[idx].name);
+    for (uint32_t probe = 0; probe < GLOBAL_HASH_SIZE; probe++)
+    {
+        uint32_t slot = (h + probe) & (GLOBAL_HASH_SIZE - 1);
+        if (global_hash[slot] == 0 || global_hash[slot] == (uint8_t)(idx + 1))
+        {
+            global_hash[slot] = (uint8_t)(idx + 1);
+            return;
+        }
+    }
+}
+
+// Rebuilt rather than tombstoned when a variable is erased. Erasing is `ern`,
+// `erall` and the workspace commands -- rare, and never on a frame path -- so
+// the simple thing that cannot leave a stale chain behind is the right one.
+static void global_hash_rebuild(void)
+{
+    memset(global_hash, 0, sizeof(global_hash));
+    for (int i = 0; i < global_count; i++)
+    {
+        if (global_variables[i].active)
+        {
+            global_hash_insert(i);
+        }
+    }
+}
+
 // Top-level (global) test state
 static bool global_test_valid = false;
 static bool global_test_value = false;
@@ -43,23 +122,31 @@ void variables_init(void)
     }
     global_test_valid = false;
     global_test_value = false;
+    memset(global_hash, 0, sizeof(global_hash));
 }
 
 // Find variable in global storage, returns index or -1
-static int find_global(const char *name)
+static int LOGO_HOT(find_global)(const char *name)
 {
-    for (int i = 0; i < global_count; i++)
+    uint32_t h = name_hash(name);
+    for (uint32_t probe = 0; probe < GLOBAL_HASH_SIZE; probe++)
     {
-        if (!global_variables[i].active)
+        uint32_t slot = (h + probe) & (GLOBAL_HASH_SIZE - 1);
+        uint8_t entry = global_hash[slot];
+        if (entry == 0)
         {
-            continue;
+            return -1;   // an empty slot ends the chain: the name is not here
         }
-        const char *gname = global_variables[i].name;
-        // Pointer-equality fast path; case-insensitive fallback. See the
-        // NAMING POLICY comment in core/frame.h for the rationale.
-        if (gname == name || strcasecmp(gname, name) == 0)
+        int idx = entry - 1;
+        if (global_variables[idx].active)
         {
-            return i;
+            const char *gname = global_variables[idx].name;
+            // Pointer-equality fast path; case-insensitive fallback. See the
+            // NAMING POLICY comment in core/frame.h for the rationale.
+            if (gname == name || strcasecmp(gname, name) == 0)
+            {
+                return idx;
+            }
         }
     }
     return -1;
@@ -91,8 +178,10 @@ bool var_declare_local(const char *name)
             global_variables[i].name = name;
             global_variables[i].active = true;
             global_variables[i].has_value = false;
+            global_variables[i].buried = false;  // slot may be a burial's leftover
             if (i >= global_count)
                 global_count = i + 1;
+            global_hash_insert(i);
             return true;
         }
     }
@@ -160,8 +249,10 @@ bool LOGO_HOT(var_set)(const char *name, Value value)
             global_variables[i].value = value;
             global_variables[i].active = true;
             global_variables[i].has_value = true;
+            global_variables[i].buried = false;  // slot may be a burial's leftover
             if (i >= global_count)
                 global_count = i + 1;
+            global_hash_insert(i);
             return true;
         }
     }
@@ -227,6 +318,7 @@ void var_erase(const char *name)
     {
         global_variables[idx].active = false;
         global_variables[idx].has_value = false;
+        global_hash_rebuild();
     }
 }
 
@@ -249,6 +341,7 @@ void var_erase_all_globals(bool check_buried)
             }
         }
     }
+    global_hash_rebuild();
 }
 
 // Bury/unbury support

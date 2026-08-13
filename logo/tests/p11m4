@@ -1,0 +1,420 @@
+; P11 M4 -- what an Asteroids frame costs with the saucer and the sound in it.
+;
+;   erall                        <-- REQUIRED, see below
+;   load "asteroids   (do NOT run the game)
+;   load "p11m4
+;   p11m4
+;
+; M4 adds two kinds of cost, and the point of this run is that they are not the
+; same kind:
+;
+;   * A FLAT cost on every frame -- `step.saucer`'s countdown, `heartbeat`'s
+;     countdown, `step.sau.shot`'s first comparison.  Three procedure calls and
+;     about six statements, whether or not anything is happening.
+;   * A cost only on the frames a saucer is ON SCREEN -- its motion, its jink
+;     and fire countdowns, three shot pairs, one ship pair, the warble, and an
+;     eight-segment outline at 20 statements.  A saucer is up for perhaps a
+;     sixth of a level, so this is the peak and not the mean.
+;
+; So there is a FOURTH measurement point: twelve rocks with a saucer held on
+; screen for every frame of it.  M3 was accepted at 69.2 ms at twelve rocks
+; against a 71.4 ms budget -- 2.2 ms of headroom -- so the question this run
+; answers is whether the peak frame fits in it, and if it does not, which of the
+; three levers the design has priced (MAX.ROCKS 12 -> 11 at ~3.0 ms, the shot cap
+; at ~2.0, the large rock at 6 -> 5 segments at ~1.4) has to be spent.
+;
+; THE FIRST RUN OF THIS SCRIPT ANSWERED "NO", AND THE REASON WAS NOT THE SAUCER.
+; 73.07 ms quiet and 77.94 with a saucer, `frame = 36.83 + 3.020 n` -- and the
+; SLOPE had moved, from M3's 2.860, on a rock pass whose source M4 never touched.
+; A global is found by a linear scan of the global table in creation order
+; (`find_global`, core/variables.c), and M4 had added 35 constants to the tuning
+; block, which sat ahead of the rock state: every list the rock pass reads moved
+; 35 slots deeper, eighteen reads a rock, twelve rocks a frame.  The single
+; figures in the same run are the proof -- `shot.on` 0.38 -> 0.50 and `thrust`
+; 0.99 -> 1.36 with no code change, while `draw.boom`, which is one `arc`
+; primitive and almost no interpretation, did not move at all.
+;
+; That was fixed twice.  First by hoisting the state block above the tuning
+; block, which the SECOND run measured at 69.35 quiet and 73.24 with a saucer --
+; `frame = 35.85 + 2.792 n`, 3.72 ms off, and M3's frame was 69.21, so the whole
+; saucer and the whole PSG arrangement had cost 0.14 ms once the lookup depth was
+; paid back.  Then properly, in the interpreter: `find_global` keeps a hash index
+; now, the position effect measures zero, and the game-side hoist was reverted.
+;
+; THIS RUN carries that plus five gameplay changes, two of which are in the hot
+; loop: the saucer's shot breaks rocks and the saucer dies against them, which
+; are a fourth and fifth test inside `shot.on`.  The host puts them at about 2 %
+; of the frame body.  The question is the same one as always -- whether a
+; twelve-rock frame with a saucer up still fits in 71.4 ms.
+;
+; A SAUCER MUST BE KEPT OFF THE FIRST THREE POINTS ON PURPOSE.  `setup.level`
+; leaves `sau.wait` at the game-long gap, which starts at 146 frames, and these
+; points are 300 frames long -- so a saucer would appear a third of the way through every one of
+; them and quietly average itself into a figure that is supposed to be without
+; one.  `measure` parks the wait out of reach; `test_the_m4_harness_keeps_the_saucer
+; _off_the_plain_points` is what stops that being un-done.
+;
+; The history this replaces, and it is worth keeping because every number in it
+; was a surprise: M1 measured a rocks-only frame at 60.5 ms and fitted
+; `30.5 + 2.507 n`.  M2's first run measured 86.4 ms at twelve rocks, nineteen
+; over, with the whole miss in the collision pass and the cause in `item` -- a
+; walk into a twelve-element list costs ~115 us, and a three-pass frame did about
+; 290 of them.  Fusing the passes into one took it to 68.3, the rate went 15 -> 14
+; fps, and inlining `wrapc` took another 2.9.  M3's ship test cost 0.245 ms a rock
+; and the frame came to 69.2.
+;
+; THE WORST CASE, NOT A TYPICAL ONE.  Three shots are live on every frame of
+; every point -- the game's ceiling, and the case the budget has to be cut
+; against.  Since M2's fusion an idle shot is parked off the field rather than
+; guarded, so a quiet frame costs the same three comparisons a rock; what the
+; worst case still buys is that no shot is ever short-circuited by a hit.
+;
+; HOW THE BOARD IS HELD STILL.  Every rock's `rrad` is set to 0 for the run, so
+; no shot ever hits anything: the rock count stays exactly where `setup.level`
+; put it for all 300 frames, no rock splits, and no shot is consumed.  `ship.rad`
+; goes to 0 with it, so the ship cannot be hit either -- a death would take the
+; ship out of the drawing and put an explosion ring in, and time a frame nobody
+; is measuring.  The saucer point zeroes `sau.w`, `sau.h` and `sau.shot.rad` for
+; exactly the same reason and by exactly the same means: nothing in the game is
+; redefined, it is three lists and four constants set once.
+;
+; The ship is LANDED for the same reason.  A new ship waits for its spawn point
+; to clear before it appears (M4), and a waiting ship is not drawn -- so a run
+; that started with one would time a frame with no ship in it until the rocks
+; happened to drift clear.
+;
+; The price of that is stated rather than hidden: a zero box rejects every shot
+; on `shot.on`'s FIRST comparison, where a real box (26 steps for a large rock)
+; passes the x test for about one pair in six and runs a second comparison.  So
+; the rock-pass column below is a LOWER BOUND, low by roughly
+;
+;   36 pairs * 1/6 * one comparison  ~=  0.3 ms
+;
+; and a frame in which a shot actually connects is CHEAPER than either, because
+; the rock it kills is not drawn.  A lower bound is the right side to err on for
+; a number that is about to decide which levers get spent.
+;
+; Manual refresh, not `sync`: the number wanted is the work, not the cadence.
+; `sync` would wait out the rest of the frame and report the wait.  That also
+; means the figures here are what the frame COSTS, and the game will run at
+; `fps` or slower, never faster.
+;
+; ONE THING THIS OVER-MEASURES, and it is worth knowing which way: the board it
+; builds is all LARGE rocks, and that board cannot occur in play.  A level
+; spawns `level.rocks` larges and twelve rocks is only reachable by splitting
+; down, so a real twelve-rock board is smaller rocks with fewer segments -- 2.9
+; ms cheaper at three starting larges, 1.9 once levels advance to five.  The
+; pessimism is deliberate: it is reproducible, it compares with M0 through M3,
+; and it errs on the side that does not flatter the budget.
+;
+; Run it in graphics mode -- `setup.level` leaves the screen there.  In text
+; mode `screen_gfx_blit_dirty` returns immediately, so the present column
+; reads zero and the frame figure is a Logo body with no present in it, which
+; is the correction P9 had to make to its whole first series of numbers.
+;
+; `erall` is not optional.  MAX_PROCEDURES is a hard 128; the game defines 65
+; and this file adds 15, but a workspace still holding another program can run
+; out of procedure slots and `load` stops with `out of space` -- the procedure
+; table talking, not memory.
+;
+; The report goes to `p11m4.txt` as well as the screen, because numbers on the
+; PicoCalc's display cannot be copied anywhere.  Runs append.
+
+make "p11m4.frames 300
+
+; Four points: 6, 9 and 12 rocks with no saucer, then 12 rocks with one held on
+; screen for every frame.
+make "p11m4.body (list 0 0 0 0)    ; ms, mean
+make "p11m4.pres (list 0 0 0 0)    ; ms, mean
+make "p11m4.rock (list 0 0 0 0)    ; ms, mean -- the rock pass alone
+make "p11m4.lo (list 0 0 0 0)      ; ms, whole frame
+make "p11m4.hi (list 0 0 0 0)
+make "p11m4.rocks (list 0 0 0 0)   ; rocks actually on the board, not asked for
+
+; `play.frame` without its `sync`, with a timer around the rock pass.
+; THIS MUST STAY IN STEP WITH THE GAME: it is the same statements in the same
+; order, and it is spelled out here rather than calling `play.frame` because
+; the present has to be timed on its own and `sync` is the last thing
+; `play.frame` does.  `test_asteroids.c` pins that this draws what a real frame
+; draws and steps what a real frame steps -- including, since M4, that it steps
+; the saucer and draws it on exactly the frames the game draws it.
+;
+; The two `ticks` and the two statements around them are in the body figure,
+; and cost about 0.15 ms of it.  That is the price of knowing which half is
+; over, and it is smaller than the decision it informs.
+to frame.body
+  local "t
+  poll.input
+  make "frame.count :frame.count + 1
+  ifelse 0 < :dying [step.death] [ifelse :waiting [step.wait] [step.ship]]
+  step.shots
+  step.saucer
+  heartbeat
+  clean
+  make "t ticks
+  step.draw.all
+  make "rockpass ticks - :t
+  draw.ship
+  if 0 < :sau.on [draw.saucer]
+  draw.hud
+  reclaim
+end
+
+; Three shots, fired 120 degrees apart so they are not one dot travelling
+; together, through the game's own `fire` so the turtles are set up exactly as
+; play sets them up.
+to launch.shots
+  repeat :max.shots [
+    make "sh (repcount * 120) - 120
+    fire
+  ]
+  make "sh 0
+end
+
+; A shot expires after `shot.life` frames.  Topping the life up before each
+; frame keeps all three live for the whole run without touching the game's
+; countdown: `step.shot` still decrements, it just never reaches zero.  Outside
+; the timed body, so it is not in any figure below.
+to arm.shots
+  repeat :max.shots [.setitem repcount :slife :shot.life]
+end
+
+; The saucer point needs a saucer on screen for all 300 frames, and a real one
+; crosses the field in 178 -- so it is put back at the middle of its crossing
+; before each frame, the same way `arm.shots` tops the shots up.  Its own
+; countdowns are left alone: it still jinks, still fires, and its shot is still
+; flown by the engine and stepped by the frame, because those are part of what a
+; saucer costs.  Outside the timed body.
+to hold.saucer
+  make "sau.x 0
+end
+
+; And it is spawned rather than assembled, so the size, the box and the
+; countdowns are exactly what play would have set -- then the boxes are zeroed,
+; which is the same trick the rocks get: every pair rejects on its first
+; comparison, so the figure is a lower bound and never a death.
+to arm.saucer
+  spawn.saucer
+  make "sau.w 0
+  make "sau.h 0
+  make "sau.shot.rad 0
+end
+
+; `init.game` FIRST, then the rock count: init.game resets `level.rocks` to
+; `start.rocks`, so setting it before the call is silently thrown away and
+; every point measures a three-rock board.  That is exactly what M1's first
+; hardware run did -- all three points came back within 0.03 ms of each other,
+; and three identical numbers is what gave it away.  `p11m4.rocks` records what
+; was actually on the board so the report can never hide it again.
+;
+; `:saucer` is true for the fourth point only.  On the other three the appearance
+; countdown is parked out of reach, because `sau.first` is 140 frames and a point
+; is 300 -- a saucer would otherwise walk into two thirds of a measurement that
+; is supposed to be without one.
+to measure :k :n :saucer
+  local "b local "p local "c local "one local "t0 local "lo local "hi
+  init.game
+  make "level.rocks :n
+  setup.level
+  .setitem :k :p11m4.rocks :rocks.alive
+  repeat :max.rocks [.setitem repcount :rrad 0]
+  make "ship.rad 0
+  make "waiting false
+  make "sau.wait 999999
+  if :saucer [arm.saucer]
+  launch.shots
+  setrefresh "manual
+  make "b 0
+  make "p 0
+  make "c 0
+  make "lo 99999
+  make "hi 0
+  repeat :p11m4.frames [
+    arm.shots
+    if :saucer [hold.saucer]
+    make "t0 ticks
+    frame.body
+    make "one ticks - :t0
+    make "b :b + :one
+    make "c :c + :rockpass
+    make "t0 ticks
+    refresh
+    make "one :one + (ticks - :t0)
+    make "p :p + (ticks - :t0)
+    if :one < :lo [make "lo :one]
+    if :one > :hi [make "hi :one]
+  ]
+  .setitem :k :p11m4.body :b / :p11m4.frames
+  .setitem :k :p11m4.pres :p / :p11m4.frames
+  .setitem :k :p11m4.rock :c / :p11m4.frames
+  .setitem :k :p11m4.lo :lo
+  .setitem :k :p11m4.hi :hi
+end
+
+; Printed twice -- once to the file, once to the screen -- so it is one list of
+; lines rather than two that can drift apart.  Punctuation is spelled out in
+; words: every mark in a printed list is tokenised as a word of its own, so
+; `M1+M2` comes out as `M1 + M2` and `--` as `- -`.
+; The count printed is the one the board actually carried, read back from the
+; game after `setup.level`, not the one this script asked for.
+to line.for :k :what
+  pr (se item :k :p11m4.rocks [rocks and 3 shots] :what)
+  pr (se [  body] item :k :p11m4.body [ms   present] item :k :p11m4.pres [ms])
+  pr (se [  of that, the rock pass] item :k :p11m4.rock [ms at least])
+  pr (se [  frame] (item :k :p11m4.body) + (item :k :p11m4.pres)
+      [ms   min] item :k :p11m4.lo [ms   max] item :k :p11m4.hi [ms])
+end
+
+; What one `recycle` costs.  The game recycles every 25 frames, so whatever this
+; is lands inside a 71.4 ms budget every 1.8 seconds.  It has grown at every
+; milestone -- 1.3 ms at M1, 2.2 at M2, 4.1 at M3 -- and NOT because the frame
+; allocates more: a recycle walks the whole node pool, so it scales with the
+; workspace, and M4 is 14 more procedures than M3.  It is the first number this
+; run should be read for after the frame itself, because at M3 it was the whole
+; of the worst frame's overshoot.
+to time.recycle
+  local "t0 local "total
+  make "total 0
+  repeat 10 [
+    frame.body
+    make "t0 ticks
+    recycle
+    make "total :total + (ticks - :t0)
+  ]
+  output :total / 10
+end
+
+; Thrust is the only part of a frame that is not in the figures above, because
+; it runs only on frames where thrust was the key read and the harness presses
+; nothing.  Measured on its own so the worst case -- a player holding thrust at
+; full speed, where the clamp branch runs every time -- can be added by hand.
+; Since M4 it also gates a note, which is a primitive call inside it.
+to time.thrust
+  local "t0
+  make "t0 ticks
+  repeat 100 [thrust]
+  output (ticks - :t0) / 100
+end
+
+; What one `shot.on` costs -- the whole shot-cap lever, priced on its own,
+; because since the fusion it is three statements inside the rock loop and no
+; timer can get between them.  Cap the shots at two and a third of this comes
+; off every live rock, every frame.  Measured against the same parked-or-flying
+; shots the run itself used, so it is the common path and not a contrived one.
+to time.shot.on
+  local "t0
+  make "t0 ticks
+  repeat 100 [ignore shot.on 40 40 26]
+  output (ticks - :t0) / 100
+end
+
+; What the explosion ring costs, and it is the one M3 cost that is NOT in the
+; figures above: it replaces the ship on death frames only.  Timed at `dying` 1,
+; which is the ring's last and largest frame, so this is the worst one rather
+; than the mean of ten.  `arc` sweeps 4 degrees a segment, so a full circle is 90
+; strokes inside one primitive call with no interpreter between them -- the
+; question is whether that is a drawing statement's cost or ninety of them.
+to time.boom
+  local "t0
+  make "dying 1
+  make "t0 ticks
+  repeat 20 [draw.boom]
+  make "dying 0
+  output (ticks - :t0) / 20
+end
+
+; The saucer's outline on its own -- eight segments and 20 statements, the
+; longest walk in the game, against a large rock's six and 15.  The saucer point
+; above carries this plus the saucer's stepping; this says how much of it is the
+; drawing, which is the half that no lever except the outline itself reaches.
+to time.saucer.draw
+  local "t0 local "was
+  make "was :sau.on
+  make "sau.on 2
+  make "t0 ticks
+  repeat 20 [draw.saucer]
+  make "sau.on :was
+  output (ticks - :t0) / 20
+end
+
+; And the sound, which is new in M4 and is the one cost this design has never
+; measured in any form: `sound` is a primitive that touches the PSG, and a frame
+; gates one note about every eight frames on the heartbeat alone.  If this is
+; expensive the arrangement in section 11 is what changes, so it is worth a
+; figure rather than an assumption.
+to time.sound
+  local "t0
+  make "t0 ticks
+  repeat 20 [(sound [0 4] :beat.hz.a 90 9)]
+  output (ticks - :t0) / 20
+end
+
+to p11m4.report
+  pr [P11 M4 what an Asteroids frame costs with the saucer and the sound in it]
+  pr (se [frames per point] :p11m4.frames)
+  pr []
+  line.for 1 [no saucer]
+  line.for 2 [no saucer]
+  line.for 3 [no saucer]
+  line.for 4 [WITH a saucer on every frame]
+  pr []
+  pr (se [the saucer costs]
+      ((item 4 :p11m4.body) + (item 4 :p11m4.pres))
+      - ((item 3 :p11m4.body) + (item 3 :p11m4.pres)) [ms a frame while it is up])
+  pr []
+  pr (se [budget at] :fps [fps is] 1000 / :fps [ms])
+  pr [M1 rocks only measured 30.5 plus 2.507 n]
+  pr [M2 with the ship and shots measured 33.9 plus 2.627 n]
+  pr [M3 with the ship test measured 34.86 plus 2.860 n]
+  pr [M3 was accepted at 69.2 ms at 12 rocks, worst frame 74]
+  pr [M4 first run 36.83 plus 3.020 n, 73.1 quiet and 77.9 with a saucer]
+  pr [M4 second run 35.85 plus 2.792 n, 69.35 quiet and 73.24 with a saucer]
+  pr [M4 third run 35.36 plus 3.035 n, 71.78 quiet and 75.58 with a saucer]
+  pr [that run added the hash index and the arcade saucer rules]
+  pr []
+  pr (se [one shot.on] :son [ms, times one rock, times every frame])
+  pr (se [one thrust] :thr [ms, on frames where it is held])
+  pr (se [one explosion ring] :bm [ms, on death frames instead of the ship])
+  pr (se [one saucer outline] :sau [ms, on frames a saucer is up])
+  pr (se [one sound] :snd [ms, about one frame in eight])
+  pr (se [one recycle] :rec [ms, and the game does one every 25 frames])
+  pr []
+  pr (se [nodes at start] :n0)
+  pr (se [nodes at end  ] :n1)
+  pr (se [after recycle ] :n2)
+  pr []
+end
+
+to p11m4
+  local "n0 local "n1 local "n2 local "rec local "thr local "son local "bm
+  local "sau local "snd
+  recycle
+  make "n0 nodes
+  measure 1 6 false
+  measure 2 9 false
+  measure 3 12 false
+  measure 4 12 true
+  make "rec time.recycle
+  make "thr time.thrust
+  make "son time.shot.on
+  make "bm time.boom
+  make "sau time.saucer.draw
+  make "snd time.sound
+  make "n1 nodes
+  recycle
+  ; Read the recovered figure HERE, not inside the report: printing builds a
+  ; `sentence` per line, so a `nodes` evaluated down there reads the report's
+  ; own garbage back as if the recycle had under-recovered.  P10's script lost
+  ; its first hardware run to exactly that.
+  make "n2 nodes
+  setrefresh "auto
+  textscreen
+  stopsound
+  open "p11m4.txt
+  setwrite "p11m4.txt
+  p11m4.report
+  setwrite []
+  close "p11m4.txt
+  p11m4.report
+  pr [Also written to p11m4.txt]
+end
