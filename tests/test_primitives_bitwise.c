@@ -51,8 +51,8 @@ void test_bitand_error_not_number(void)
 {
     Result r = eval_string("bitand 5 \"hello");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
-    TEST_ASSERT_EQUAL_STRING("bitand", r.error_proc);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
+    TEST_ASSERT_EQUAL_STRING("bitand", result_get_error_proc(r));
 }
 
 void test_bitand_error_out_of_range(void)
@@ -61,7 +61,7 @@ void test_bitand_error_out_of_range(void)
     // (the float -> int32_t conversion is undefined behaviour otherwise).
     Result r = eval_string("bitand 1e10 1");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 //==========================================================================
@@ -100,8 +100,8 @@ void test_bitor_error_not_number(void)
 {
     Result r = eval_string("bitor \"abc 5");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
-    TEST_ASSERT_EQUAL_STRING("bitor", r.error_proc);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
+    TEST_ASSERT_EQUAL_STRING("bitor", result_get_error_proc(r));
 }
 
 //==========================================================================
@@ -148,8 +148,8 @@ void test_bitxor_error_not_number(void)
 {
     Result r = eval_string("bitxor 5 []");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
-    TEST_ASSERT_EQUAL_STRING("bitxor", r.error_proc);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
+    TEST_ASSERT_EQUAL_STRING("bitxor", result_get_error_proc(r));
 }
 
 //==========================================================================
@@ -189,8 +189,8 @@ void test_bitnot_error_not_number(void)
 {
     Result r = eval_string("bitnot \"hello");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
-    TEST_ASSERT_EQUAL_STRING("bitnot", r.error_proc);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
+    TEST_ASSERT_EQUAL_STRING("bitnot", result_get_error_proc(r));
 }
 
 //==========================================================================
@@ -237,8 +237,8 @@ void test_ashift_error_not_number(void)
 {
     Result r = eval_string("ashift \"hello 2");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
-    TEST_ASSERT_EQUAL_STRING("ashift", r.error_proc);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
+    TEST_ASSERT_EQUAL_STRING("ashift", result_get_error_proc(r));
 }
 
 //==========================================================================
@@ -287,8 +287,8 @@ void test_lshift_error_not_number(void)
 {
     Result r = eval_string("lshift [] 2");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
-    TEST_ASSERT_EQUAL_STRING("lshift", r.error_proc);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
+    TEST_ASSERT_EQUAL_STRING("lshift", result_get_error_proc(r));
 }
 
 //==========================================================================

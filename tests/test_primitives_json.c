@@ -231,7 +231,7 @@ void test_document_must_be_a_word(void)
 {
     Result r = run_string("print json.get [a b] [x]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_path_must_be_a_list(void)
@@ -239,7 +239,7 @@ void test_path_must_be_a_list(void)
     make_doc();
     Result r = run_string("print json.get :doc \"name");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_path_step_must_be_a_word(void)
@@ -247,7 +247,7 @@ void test_path_step_must_be_a_word(void)
     make_doc();
     Result r = run_string("print json.get :doc [[a b]]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 //==========================================================================
@@ -319,7 +319,7 @@ void test_count_rejects_non_empty_list(void)
 {
     Result r = run_string("print json.count [a b c]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 //==========================================================================
@@ -415,14 +415,14 @@ void test_object_requires_even_args(void)
 {
     Result r = run_string("print json.make (json.object \"name)");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_NOT_ENOUGH_INPUTS, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_NOT_ENOUGH_INPUTS, result_get_error_code(r));
 }
 
 void test_object_key_must_be_word(void)
 {
     Result r = run_string("print json.make (json.object 5 \"v)");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 //==========================================================================
@@ -543,7 +543,7 @@ void test_object_rejects_blob_value(void)
 
     Result r = run_string("print json.make (json.object \"k :big)");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, result_get_error_code(r));
 }
 
 int main(void)

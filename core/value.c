@@ -351,92 +351,100 @@ const char *value_to_string(Value v)
 // Result Constructors
 //==========================================================================
 
+// The error detail of the last error raised (see the Result comment in
+// value.h). Written by the constructors below and by the two decorators that
+// fill a procedure name in as an error unwinds; read through
+// `result_get_error_*`. Not cleared by `result_ok`/`result_none`, and it must
+// not be: `step_catch` copies a child result, calls `result_none()`, and only
+// then reads the child's detail.
+static struct
+{
+    int code;
+    const char *proc;
+    const char *arg;
+    const char *caller;
+} error_detail;
+
+int result_error_detail_code(void)            { return error_detail.code; }
+const char *result_error_detail_proc(void)    { return error_detail.proc; }
+const char *result_error_detail_arg(void)     { return error_detail.arg; }
+const char *result_error_detail_caller(void)  { return error_detail.caller; }
+
+// Every constructor assigns every member, so none of them zero the struct --
+// which is the whole point of the shape (value.h).
+
 Result result_ok(Value v)
 {
-    return (Result){.status = RESULT_OK, .value = v};
+    return (Result){.status = RESULT_OK, .value = v, .tag = NULL};
 }
 
 Result result_none(void)
 {
-    return (Result){.status = RESULT_NONE};
+    return (Result){.status = RESULT_NONE, .value = value_none(), .tag = NULL};
 }
 
 Result result_stop(void)
 {
-    return (Result){.status = RESULT_STOP};
+    return (Result){.status = RESULT_STOP, .value = value_none(), .tag = NULL};
 }
 
 Result result_output(Value v)
 {
-    return (Result){.status = RESULT_OUTPUT, .value = v};
+    return (Result){.status = RESULT_OUTPUT, .value = v, .tag = NULL};
 }
 
 Result result_error(int code)
 {
-    return (Result){
-        .status = RESULT_ERROR,
-        .error_code = code,
-        .error_proc = NULL,
-        .error_arg = NULL,
-        .error_caller = NULL
-    };
+    error_detail.code = code;
+    error_detail.proc = NULL;
+    error_detail.arg = NULL;
+    error_detail.caller = NULL;
+    return (Result){.status = RESULT_ERROR, .value = value_none(), .tag = NULL};
 }
 
 Result result_throw(const char *tag)
 {
-    return (Result){
-        .status = RESULT_THROW,
-        .throw_tag = tag,
-        .value = value_none()
-    };
+    return (Result){.status = RESULT_THROW, .value = value_none(), .tag = tag};
 }
 
 Result result_pause(const char *proc_name)
 {
-    return (Result){
-        .status = RESULT_PAUSE,
-        .pause_proc = proc_name
-    };
+    return (Result){.status = RESULT_PAUSE, .value = value_none(), .tag = proc_name};
 }
 
 Result result_goto(const char *label)
 {
-    return (Result){
-        .status = RESULT_GOTO,
-        .goto_label = label
-    };
+    return (Result){.status = RESULT_GOTO, .value = value_none(), .tag = label};
 }
 
 Result result_eof(void)
 {
-    return (Result){.status = RESULT_EOF};
+    return (Result){.status = RESULT_EOF, .value = value_none(), .tag = NULL};
 }
 
 Result result_error_arg(int code, const char *proc, const char *arg)
 {
-    return (Result){
-        .status = RESULT_ERROR,
-        .error_code = code,
-        .error_proc = proc,
-        .error_arg = arg,
-        .error_caller = NULL
-    };
+    error_detail.code = code;
+    error_detail.proc = proc;
+    error_detail.arg = arg;
+    error_detail.caller = NULL;
+    return (Result){.status = RESULT_ERROR, .value = value_none(), .tag = NULL};
 }
 
 Result result_error_in(Result r, const char *caller)
 {
-    if (r.status == RESULT_ERROR && r.error_caller == NULL)
+    if (r.status == RESULT_ERROR && error_detail.caller == NULL)
     {
-        r.error_caller = caller;
+        error_detail.caller = caller;
     }
     return r;
 }
 
 Result result_set_error_proc(Result r, const char *proc)
 {
-    if (r.status == RESULT_ERROR && r.error_proc == NULL)
+    if (r.status == RESULT_ERROR && error_detail.proc == NULL)
     {
-        r.error_proc = proc;
+        error_detail.proc = proc;
     }
     return r;
 }

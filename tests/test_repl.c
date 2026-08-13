@@ -526,7 +526,7 @@ void test_repl_run_throw_toplevel(void)
     
     // throw "toplevel should exit the REPL with RESULT_THROW
     TEST_ASSERT_EQUAL(RESULT_THROW, r.status);
-    TEST_ASSERT_EQUAL_STRING("toplevel", r.throw_tag);
+    TEST_ASSERT_EQUAL_STRING("toplevel", result_get_throw_tag(r));
 }
 
 void test_repl_run_error_handling(void)
@@ -793,7 +793,7 @@ void test_repl_throw_toplevel_from_pause_in_procedure(void)
     
     // throw "toplevel should exit the REPL entirely
     TEST_ASSERT_EQUAL(RESULT_THROW, r.status);
-    TEST_ASSERT_EQUAL_STRING("toplevel", r.throw_tag);
+    TEST_ASSERT_EQUAL_STRING("toplevel", result_get_throw_tag(r));
     
     // Should have printed "before" and "Pausing..."
     TEST_ASSERT_TRUE(strstr(output_buffer, "before") != NULL);

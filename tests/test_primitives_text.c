@@ -155,7 +155,7 @@ void test_setcursor_rejects_column_too_large(void)
     // Reference: columns are numbered 0..39. setcursor must reject 40.
     Result r = run_string("setcursor [40 0]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_setcursor_rejects_row_too_large(void)
@@ -163,7 +163,7 @@ void test_setcursor_rejects_row_too_large(void)
     // Reference: rows (lines) are numbered 0..31. setcursor must reject 32.
     Result r = run_string("setcursor [0 32]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 // ============================================================================
@@ -515,7 +515,7 @@ void test_setrefresh_rejects_unknown_mode(void)
 {
     Result r = run_string("setrefresh \"fast");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_refresh_presents_now(void)
@@ -573,7 +573,7 @@ void test_setrefresh_sync_rejects_bad_rate(void)
 {
     Result r = run_string("(setrefresh \"sync 0)");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_sync_presents_frame(void)

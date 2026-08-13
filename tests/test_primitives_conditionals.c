@@ -274,7 +274,7 @@ void test_if_non_boolean_predicate_error(void)
     // if with non-boolean predicate should error
     Result r = run_string("if \"notabool [print \"test]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_NOT_BOOL, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_NOT_BOOL, result_get_error_code(r));
 }
 
 void test_if_number_predicate_error(void)
@@ -282,7 +282,7 @@ void test_if_number_predicate_error(void)
     // if with number predicate should error
     Result r = run_string("if 42 [print \"test]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_NOT_BOOL, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_NOT_BOOL, result_get_error_code(r));
 }
 
 void test_if_list_predicate_error(void)
@@ -290,7 +290,7 @@ void test_if_list_predicate_error(void)
     // if with list predicate should error
     Result r = run_string("if [a b c] [print \"test]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_NOT_BOOL, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_NOT_BOOL, result_get_error_code(r));
 }
 
 void test_if_non_list_body_error(void)
@@ -298,7 +298,7 @@ void test_if_non_list_body_error(void)
     // if with non-list body should error
     Result r = run_string("if true \"notalist");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_if_non_list_else_body_error(void)
@@ -306,7 +306,7 @@ void test_if_non_list_else_body_error(void)
     // (if predicate list1 non-list) should error when else branch is taken
     Result r = run_string("(if false [print \"test] \"notalist)");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 //==========================================================================
@@ -385,21 +385,21 @@ void test_ifelse_non_boolean_predicate_error(void)
 {
     Result r = run_string("ifelse \"notabool [print \"yes] [print \"no]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_NOT_BOOL, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_NOT_BOOL, result_get_error_code(r));
 }
 
 void test_ifelse_non_list_true_body_error(void)
 {
     Result r = run_string("ifelse true \"notalist [print \"no]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_ifelse_non_list_false_body_error(void)
 {
     Result r = run_string("ifelse false [print \"yes] \"notalist");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_ifelse_in_procedure_with_output(void)
@@ -564,14 +564,14 @@ void test_if_zero_args_via_parens(void)
     // Without an explicit guard, args[0] would be UB.
     Result r = eval_string("(if)");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_NOT_ENOUGH_INPUTS, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_NOT_ENOUGH_INPUTS, result_get_error_code(r));
 }
 
 void test_if_one_arg_via_parens(void)
 {
     Result r = eval_string("(if \"true)");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_NOT_ENOUGH_INPUTS, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_NOT_ENOUGH_INPUTS, result_get_error_code(r));
 }
 
 void test_if_three_args_requires_parens(void)

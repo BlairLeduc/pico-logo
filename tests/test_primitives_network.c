@@ -340,11 +340,11 @@ void test_ntp_rejects_out_of_range_timezone(void)
     // are nonsense and must error rather than silently passing through.
     Result r = eval_string("(network.ntp 25)");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 
     Result r2 = eval_string("(network.ntp -20)");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r2.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r2.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r2));
 }
 
 // ============================================================================

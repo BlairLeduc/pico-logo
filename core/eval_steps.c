@@ -647,12 +647,12 @@ Result step_catch(Evaluator *eval, EvalOp *op)
         if (child_r.status == RESULT_THROW)
         {
             // "toplevel" always propagates — never caught
-            if (strcasecmp(child_r.throw_tag, "toplevel") == 0)
+            if (strcasecmp(result_get_throw_tag(child_r), "toplevel") == 0)
             {
                 return child_r;
             }
             // Check tag match
-            if (strcasecmp(child_r.throw_tag, st->tag) == 0)
+            if (strcasecmp(result_get_throw_tag(child_r), st->tag) == 0)
             {
                 return result_none();
             }
@@ -929,7 +929,7 @@ Result LOGO_HOT(step_proc_call)(Evaluator *eval, EvalOp *op)
         else if (child_r.status == RESULT_GOTO)
         {
             // Search for label in body
-            const char *label_name = child_r.goto_label;
+            const char *label_name = result_get_goto_label(child_r);
             bool found = false;
             Node search = st->proc->body;
             while (!mem_is_nil(search))

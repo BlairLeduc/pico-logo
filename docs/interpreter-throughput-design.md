@@ -1177,6 +1177,73 @@ it is the first honest in-frame present this project has measured (§11's
 note on text mode). For a game that dirties only its sprites, the display is
 not the problem — measured now, rather than assumed.
 
+## 12 — `Result` was 48 bytes, and every expression paid for it (2026-08-13)
+
+§11.6 closed the tiering with "the interpreter's own lever is spent", and on
+the evidence it had: the profile showed no hot spot, every slot proportional to
+its statement count. **That was true of the functions and false of the calling
+convention.** This is the piece that does not appear as a slot, because it is
+spread evenly across all of them.
+
+`Result` carried the error detail inline — `error_code`, `error_proc`,
+`error_arg`, `error_caller` in a union with the throw tag — for **48 bytes on
+the host and 28 on a board**. Every primitive and every expression node returns
+one. Worse, every constructor was a designated initialiser, so
+`return (Result){.status = RESULT_OK, .value = v}` made the compiler **zero all
+48 bytes** on the two constructors that run on every non-error path.
+
+Profiling an Asteroids frame (`sample`, self time, twelve rocks) put **12.2 %**
+of interpreter time in `memset`/`memmove` of this struct — more than garbage
+collection (7.7 %) or name resolution (6.5 %).
+
+**The fix is the shape C uses for `errno`**: the error quad moved to a
+module-level record in `value.c` that the constructors write and
+`result_get_error_*` read, leaving `Result` as `{status, value, tag}` — 24
+bytes on the host, 16 on a board. Nothing to zero, and a third of the bytes to
+copy.
+
+The tag **stays inline**, and that is not caution but a real constraint:
+`step_catch` copies a child result, calls `result_none()`, and only then reads
+the tag off the copy, so `catch` and `go` genuinely hold two results at once. An
+error is never held beside a second live error — it is raised, decorated as it
+unwinds, and consumed — which is exactly why the quad can move and the tag
+cannot.
+
+Measured on one machine, `test_bench_throughput`, two runs each:
+
+| | before | after | |
+|---|---:|---:|---:|
+| `proc.call.1` | 313–315 ns | 263–270 ns | **−15.3 %** |
+| `repeat.loop` | 797–799 ns | 751–764 ns | −5.9 % |
+| `trails.frame` | 0.605–0.639 ms | 0.560–0.565 ms | −9.0 % |
+| `galaxian.frame` | 0.182 ms | 0.167–0.169 ms | −7.9 % |
+| `invaders.frame` | 0.119 ms | 0.111–0.114 ms | −5.5 % |
+| asteroids `play.frame` | 599.8 µs | 567.8 µs | −5.3 % |
+
+A procedure call moves most because a call returns a `Result` and little else;
+that is §11.6's calibration pair improving from the side nobody had costed.
+Re-profiled after, struct copies fall **12.2 % → 2.9 %** and no new hot spot
+appears — every other group grows only as a share of a smaller total.
+
+**What this says about §11.6's conclusion.** The profile was read for hot spots
+and there were none. This cost was not a hot spot; it was a tax of a few
+percent on every slot at once, which is what a wide struct in the calling
+convention looks like in a profiler. The remaining candidates found in the same
+profile, none taken here:
+
+- **list/cell access, 14.8 %** — `item n` walks the list. A per-list iteration
+  cursor makes the sequential access these games do O(1).
+- **atom intern and lookup, 13.8 %** — `.setitem` of a number formats a float,
+  hashes the text and probes the atom table; `item` parses it back through
+  `strtod`. A *numeric atom* — four raw bytes, hashed as bytes, never formatted
+  — would take most of it and would also stop the atom churn that has now
+  crashed a board twice (Asteroids B25).
+- **variable lookup, 6.5 %** — §3.2 parked this as "dynamically scoped and
+  therefore not cacheable on the atom", but the *global slot index* is
+  cacheable: it only changes on erase, which already rebuilds the hash index.
+  That replaces an FNV hash over the name plus a `strcasecmp` with a two-byte
+  read.
+
 ## References
 
 - [Roadmap P10](roadmap.md#p10--interpreter-throughput) — the item this

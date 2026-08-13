@@ -77,7 +77,7 @@ void test_apply_unknown_procedure(void)
 {
     Result r = eval_string("apply \"nonexistent [1 2]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DONT_KNOW_HOW, result_get_error_code(r));
 }
 
 //==========================================================================

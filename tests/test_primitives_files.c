@@ -47,7 +47,7 @@ void test_open_already_open_file_error(void)
     // Second open should fail
     Result r2 = run_string("open \"alreadyopen.txt");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r2.status);
-    TEST_ASSERT_EQUAL(ERR_FILE_ALREADY_OPEN, r2.error_code);
+    TEST_ASSERT_EQUAL(ERR_FILE_ALREADY_OPEN, result_get_error_code(r2));
 }
 
 void test_close_file(void)
@@ -511,7 +511,7 @@ void test_setreadpos_extreme_value(void)
 
     Result r = run_string("setreadpos 1e30");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_readpos_no_file_selected(void)
@@ -520,7 +520,7 @@ void test_readpos_no_file_selected(void)
     run_string("setread []");
     Result r = eval_string("readpos");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_NO_FILE_SELECTED, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_NO_FILE_SELECTED, result_get_error_code(r));
 }
 
 void test_setreadpos_no_file_selected(void)
@@ -529,7 +529,7 @@ void test_setreadpos_no_file_selected(void)
     run_string("setread []");
     Result r = run_string("setreadpos 2");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_NO_FILE_SELECTED, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_NO_FILE_SELECTED, result_get_error_code(r));
 }
 
 void test_writepos_no_file_selected(void)
@@ -538,7 +538,7 @@ void test_writepos_no_file_selected(void)
     run_string("setwrite []");
     Result r = eval_string("writepos");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_NO_FILE_SELECTED, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_NO_FILE_SELECTED, result_get_error_code(r));
 }
 
 void test_setwritepos_no_file_selected(void)
@@ -547,7 +547,7 @@ void test_setwritepos_no_file_selected(void)
     run_string("setwrite []");
     Result r = run_string("setwritepos 2");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_NO_FILE_SELECTED, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_NO_FILE_SELECTED, result_get_error_code(r));
 }
 
 void test_setwritepos_invalid_input(void)

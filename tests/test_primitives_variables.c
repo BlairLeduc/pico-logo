@@ -34,7 +34,7 @@ void test_thing_unknown_raises_no_value(void)
     // a generic "doesn't like" error.
     Result r = eval_string("thing \"zzz_undefined");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_NO_VALUE, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_NO_VALUE, result_get_error_code(r));
 }
 
 void test_thing_and_colon_agree_on_unknown(void)
@@ -45,7 +45,7 @@ void test_thing_and_colon_agree_on_unknown(void)
     Result r2 = eval_string(":zzz_unbound_x");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r1.status);
     TEST_ASSERT_EQUAL(RESULT_ERROR, r2.status);
-    TEST_ASSERT_EQUAL(r2.error_code, r1.error_code);
+    TEST_ASSERT_EQUAL(result_get_error_code(r2), result_get_error_code(r1));
 }
 
 void test_dots_variable(void)
@@ -133,7 +133,7 @@ void test_local_variable_not_visible_after_scope(void)
     // Should no longer be accessible
     Result r2 = eval_string(":tempvar");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r2.status);
-    TEST_ASSERT_EQUAL(ERR_NO_VALUE, r2.error_code);
+    TEST_ASSERT_EQUAL(ERR_NO_VALUE, result_get_error_code(r2));
 }
 
 void test_make_updates_local_in_scope(void)
@@ -173,7 +173,7 @@ void test_localmake_declares_and_sets(void)
     test_pop_scope();
     Result r2 = eval_string(":temp");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r2.status);
-    TEST_ASSERT_EQUAL(ERR_NO_VALUE, r2.error_code);
+    TEST_ASSERT_EQUAL(ERR_NO_VALUE, result_get_error_code(r2));
 }
 
 void test_localmake_shadows_global(void)
@@ -211,7 +211,7 @@ void test_localmake_in_procedure(void)
 
     Result r2 = eval_string(":snack");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r2.status);
-    TEST_ASSERT_EQUAL(ERR_NO_VALUE, r2.error_code);
+    TEST_ASSERT_EQUAL(ERR_NO_VALUE, result_get_error_code(r2));
 }
 
 void test_make_creates_global_when_no_local(void)
@@ -319,7 +319,7 @@ void test_error_no_value(void)
     // x has no value
     Result r = eval_string(":undefined_var");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_NO_VALUE, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_NO_VALUE, result_get_error_code(r));
     
     const char *msg = error_format(r);
     TEST_ASSERT_EQUAL_STRING("undefined_var has no value", msg);

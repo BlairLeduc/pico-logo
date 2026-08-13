@@ -43,7 +43,7 @@ void test_catch_throw_nomatch(void)
     // Catch with non-matching throw should propagate
     Result r = run_string("catch \"othertag [throw \"mytag]");
     TEST_ASSERT_EQUAL(RESULT_THROW, r.status);
-    TEST_ASSERT_EQUAL_STRING("mytag", r.throw_tag);
+    TEST_ASSERT_EQUAL_STRING("mytag", result_get_throw_tag(r));
 }
 
 void test_throw_no_catch(void)
@@ -51,7 +51,7 @@ void test_throw_no_catch(void)
     // Throw without matching catch should return RESULT_THROW
     Result r = run_string("throw \"mytag");
     TEST_ASSERT_EQUAL(RESULT_THROW, r.status);
-    TEST_ASSERT_EQUAL_STRING("mytag", r.throw_tag);
+    TEST_ASSERT_EQUAL_STRING("mytag", result_get_throw_tag(r));
 }
 
 void test_throw_toplevel(void)
@@ -59,7 +59,7 @@ void test_throw_toplevel(void)
     // throw "toplevel should work
     Result r = run_string("throw \"toplevel");
     TEST_ASSERT_EQUAL(RESULT_THROW, r.status);
-    TEST_ASSERT_EQUAL_STRING("toplevel", r.throw_tag);
+    TEST_ASSERT_EQUAL_STRING("toplevel", result_get_throw_tag(r));
 }
 
 void test_toplevel_outputs_word(void)
@@ -76,7 +76,7 @@ void test_throw_toplevel_operation(void)
     // throw toplevel (using the operation) should work like throw "toplevel
     Result r = run_string("throw toplevel");
     TEST_ASSERT_EQUAL(RESULT_THROW, r.status);
-    TEST_ASSERT_EQUAL_STRING("toplevel", r.throw_tag);
+    TEST_ASSERT_EQUAL_STRING("toplevel", result_get_throw_tag(r));
 }
 
 void test_throw_toplevel_in_run_inside_catch(void)
@@ -88,7 +88,7 @@ void test_throw_toplevel_in_run_inside_catch(void)
 
     Result r = run_string("outer");
     TEST_ASSERT_EQUAL(RESULT_THROW, r.status);
-    TEST_ASSERT_EQUAL_STRING("toplevel", r.throw_tag);
+    TEST_ASSERT_EQUAL_STRING("toplevel", result_get_throw_tag(r));
 }
 
 void test_catch_error(void)

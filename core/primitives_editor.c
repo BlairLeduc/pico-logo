@@ -293,7 +293,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
                     else if (r.status == RESULT_THROW)
                     {
                         // Uncaught throw - check for special cases
-                        if (strcasecmp(r.throw_tag, "toplevel") == 0)
+                        if (strcasecmp(result_get_throw_tag(r), "toplevel") == 0)
                         {
                             // throw "toplevel returns to top level silently
                             break;
@@ -302,7 +302,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
                         {
                             // Other uncaught throws are errors
                             char msg[128];
-                            snprintf(msg, sizeof(msg), "No one caught %s\n", r.throw_tag);
+                            snprintf(msg, sizeof(msg), "No one caught %s\n", result_get_throw_tag(r));
                             logo_io_write(io, msg);
                             break;
                         }

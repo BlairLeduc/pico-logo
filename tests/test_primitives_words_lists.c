@@ -65,14 +65,14 @@ void test_butfirst_empty_word_error(void)
 {
     Result r = eval_string("bf \"");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_butfirst_empty_list_error(void)
 {
     Result r = eval_string("bf []");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_butlast_word(void)
@@ -87,14 +87,14 @@ void test_butlast_empty_word_error(void)
 {
     Result r = eval_string("bl \"");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_butlast_empty_list_error(void)
 {
     Result r = eval_string("bl []");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 //==========================================================================
@@ -196,35 +196,35 @@ void test_replace_index_out_of_bounds(void)
     // Index greater than length
     Result r = eval_string("replace 5 \"abc \"x");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_TOO_FEW_ITEMS, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_TOO_FEW_ITEMS, result_get_error_code(r));
 }
 
 void test_replace_empty_word_error(void)
 {
     Result r = eval_string("replace 1 \" \"x");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_TOO_FEW_ITEMS, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_TOO_FEW_ITEMS, result_get_error_code(r));
 }
 
 void test_replace_empty_list_error(void)
 {
     Result r = eval_string("replace 1 [] \"x");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_TOO_FEW_ITEMS, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_TOO_FEW_ITEMS, result_get_error_code(r));
 }
 
 void test_replace_invalid_index_zero(void)
 {
     Result r = eval_string("replace 0 \"abc \"x");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_replace_invalid_index_negative(void)
 {
     Result r = eval_string("replace -1 \"abc \"x");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 //==========================================================================
@@ -260,14 +260,14 @@ void test_dsetfirst_empty_list_error(void)
 {
     Result r = eval_string(".setfirst [] \"x");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_dsetfirst_non_list_error(void)
 {
     Result r = eval_string(".setfirst \"abc \"x");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_dsetbf_replaces_tail(void)
@@ -288,14 +288,14 @@ void test_dsetbf_requires_list_value(void)
 {
     Result r = eval_string(".setbf [a b] \"x");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_dsetbf_empty_list_error(void)
 {
     Result r = eval_string(".setbf [] [x]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 void test_dsetitem_mutates_nth(void)
@@ -315,14 +315,14 @@ void test_dsetitem_index_out_of_bounds(void)
 {
     Result r = eval_string(".setitem 5 [a b c] \"x");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_TOO_FEW_ITEMS, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_TOO_FEW_ITEMS, result_get_error_code(r));
 }
 
 void test_dsetitem_index_zero_error(void)
 {
     Result r = eval_string(".setitem 0 [a b c] \"x");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
 }
 
 //==========================================================================
@@ -647,11 +647,11 @@ void test_pick_empty_errors(void)
 {
     Result r = eval_string("pick []");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_TOO_FEW_ITEMS, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_TOO_FEW_ITEMS, result_get_error_code(r));
 
     r = eval_string("pick \"");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_TOO_FEW_ITEMS, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_TOO_FEW_ITEMS, result_get_error_code(r));
 }
 
 void test_reverse_list(void)
@@ -939,7 +939,7 @@ void test_fput_out_of_nodes_errors(void)
 
     Result r = eval_string("fput 1 :l");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, result_get_error_code(r));
 }
 
 void test_butlast_out_of_nodes_errors(void)
@@ -950,7 +950,7 @@ void test_butlast_out_of_nodes_errors(void)
 
     Result r = eval_string("butlast :l");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, result_get_error_code(r));
 }
 
 void test_list_literal_out_of_nodes_errors(void)
@@ -959,7 +959,7 @@ void test_list_literal_out_of_nodes_errors(void)
 
     Result r = eval_string("print [a b c]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, result_get_error_code(r));
 }
 
 void test_reverse_out_of_nodes_errors(void)
@@ -969,7 +969,7 @@ void test_reverse_out_of_nodes_errors(void)
 
     Result r = eval_string("reverse :l");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, result_get_error_code(r));
 }
 
 void test_remove_out_of_nodes_errors(void)
@@ -979,7 +979,7 @@ void test_remove_out_of_nodes_errors(void)
 
     Result r = eval_string("remove 9 :l");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, result_get_error_code(r));
 }
 
 void test_remdup_out_of_nodes_errors(void)
@@ -989,7 +989,7 @@ void test_remdup_out_of_nodes_errors(void)
 
     Result r = eval_string("remdup :l");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, result_get_error_code(r));
 }
 
 // Exhaust the atom table so further interning fails. Atoms needed by the
@@ -1028,7 +1028,7 @@ void test_word_of_numbers_out_of_atoms_errors(void)
 
     Result r = eval_string("word 12345 678");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, result_get_error_code(r));
 }
 
 void test_word_result_out_of_atoms_errors(void)
@@ -1041,7 +1041,7 @@ void test_word_result_out_of_atoms_errors(void)
 
     Result r = eval_string("word \"qq \"rr");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, result_get_error_code(r));
 }
 
 void test_remove_numeric_thing_out_of_atoms_no_crash(void)
@@ -1065,7 +1065,7 @@ void test_count_of_number_out_of_atoms_errors(void)
 
     Result r = eval_string("count 98765");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, r.error_code);
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, result_get_error_code(r));
 }
 
 //==========================================================================
