@@ -3,6 +3,12 @@
 ;   load "keystate
 ;   keystate
 ;
+; RUN AND PASSED on a Pico Plus 2 W, 2026-08-14: DOWN followed the finger and
+; released cleanly, and HIT appeared once per press rather than once per
+; firmware repeat.  That settles the question this file was written to ask, and
+; the three games depend on the answer -- so it stays here as the regression
+; check for any future change to the driver, not as an open investigation.
+;
 ; The key-state mechanism -- `pollkeys`, `keydown?`, `keyhit?` -- is built on
 ; the answer being "all keys".  devices/picocalc/keyboard.c sets a key's bit on
 ; KEY_STATE_PRESSED and clears it on KEY_STATE_RELEASED, so if the firmware
