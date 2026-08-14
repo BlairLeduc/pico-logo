@@ -1649,7 +1649,7 @@ to poll.input
   if :k = 180 [make "sh :sh - :turn.rate stop]
   if :k = 183 [make "sh :sh + :turn.rate stop]
   if :k = 181 [thrust stop]
-  if :k = 182 [hyperspace stop]
+  if :k = 59 [hyperspace stop]
   if :k = 32 [fire]
 end
 
@@ -1883,9 +1883,9 @@ to attract.screen
   setcursor [13 18] print "|is worth 520|
   setcursor [6 20] print "|The small saucer aims at you|
   setcursor [4 22] print "|An extra ship every 10000 points|
-  setcursor [2 23] print "|ARROWS Steer and thrust  SPACE Fire|
-  setcursor [4 24] print "|DOWN Hyperspace  P Pause  Q Quit|
-  setcursor [14 28] print "|Press Space|
+  setcursor [2 24] print "|ARROWS Steer and thrust  SPACE Fire|
+  setcursor [5 25] print "|; Hyperspace  P Pause  Q Quit|
+  setcursor [14 29] print "|Press Space|
   wait.for.space
 end
 
