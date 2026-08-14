@@ -590,8 +590,13 @@ nose, `pu`, `st`, `setspeed`. From then on the engine flies and wraps it
 — `setspeed` "obeys `wrap`, `window` and `fence` exactly as `forward` would"
 — and Logo's only per-frame duty is counting the shot's life down. `pu` is
 mandatory: a shot turtle with its pen down would draw a permanent trail
-across the canvas. The turtle wears a two-pixel dot from `putsh`, because the
-default line-drawn turtle reads as a second spaceship.
+across the canvas. The turtle wears a 2-by-2 dot from `putsh`, because the
+default line-drawn turtle reads as a second spaceship. That dot is one set bit
+on two rows, because a bit is *not* a pixel: `putsh` paints 8 columns into a
+16-pixel-wide raster, so every bit is doubled horizontally, the smallest
+possible mark is 2 by 1, and a square dot buys its second row for free. Only
+`snapsh` can capture a true single pixel, and it costs a colour-costume slot and
+a canvas round trip to set up, which a tracer does not earn.
 
 #### A shot must not outrun a rock's collision box
 

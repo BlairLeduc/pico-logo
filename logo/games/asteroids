@@ -1454,9 +1454,17 @@ to clear.rocks
 end
 
 ; The default turtle shape is the line-drawn arrow and would read as a second
-; spaceship, so slot 1 gets a two-pixel dot -- 8 columns by 16 rows, bits 8 and
-; 16 set on the two middle rows.  Turtle numbers are fixed by the design's
-; object table (section 5) and are spelled out because `ask` wants a list.
+; spaceship, so slot 1 gets a 2-by-2 dot -- ONE bit, on two middle rows.  One
+; bit is not one pixel: a `putsh` shape is 8 columns by 16 rows painted into a
+; 16-by-16 raster, so every bit is DOUBLED horizontally and the smallest mark
+; the primitive can make is 2 wide by 1 tall.  A square dot therefore costs a
+; second ROW and no second column, which is why the two bytes are equal.  A true
+; single pixel would have to come from `snapsh`, which costs a colour-costume
+; slot and a canvas round trip to set up, and a shot is a tracer.  Bit 8 is
+; column 4 of 8, so the block's top-left corner is the turtle's own pixel and it
+; sits where the collision code says the shot is.
+; Turtle numbers are fixed by the design's object table (section 5) and are
+; spelled out because `ask` wants a list.
 ;
 ; Turtle 4 is the saucer's shot and is stopped here with the player's three.
 ; That is not tidiness: a shot is a turtle the ENGINE is moving, so one left
@@ -1469,7 +1477,7 @@ to clear.shots
   make "s3x 9999
   make "sau.shot.in 0
   make "sau.shot.x 9999
-  putsh 1 [0 0 0 0 0 0 0 24 24 0 0 0 0 0 0 0]
+  putsh 1 [0 0 0 0 0 0 0 0 8 8 0 0 0 0 0 0]
   ask [1 2 3 4] [ht setspeed 0 setsh 1]
 end
 
