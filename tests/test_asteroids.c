@@ -3028,14 +3028,18 @@ void test_the_game_makes_its_noises(void)
     run("setup.sound  make \"dying 0  make \"lives 3");
 
     // Firing zaps, and a fourth shot that is not fired makes no noise either.
+    // A zap is one GATE and a queued tail, so what is counted here is the gate.
     run("clear.shots");
     int mark = mock_sound_gate_count();
     run("fire");
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, notes_on(1, mark), "firing made no noise");
     run("clear.shots  repeat :max.shots [fire]");
     mark = mock_sound_gate_count();
+    int queued = mock_device_get_state()->sound.queued_count;
     run("fire");
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, notes_on(1, mark), "a shot that was not fired made a noise");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(queued, mock_device_get_state()->sound.queued_count,
+                                  "a shot that was not fired queued a chirp");
 
     // A rock's death says its size: a large one is a low crump and a small one
     // a sharp tick, so the split table is audible.
@@ -3054,6 +3058,60 @@ void test_the_game_makes_its_noises(void)
     mark = mock_sound_gate_count();
     run("ship.hit");
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, notes_on(3, mark), "the ship died silently");
+}
+
+// A zap is a FALLING sound, and `sound` holds one frequency -- so the pitch is
+// queued rather than gated, and the shape of the call matters as much as the
+// notes. The gate has to come first: it is the only thing that flushes the
+// voice, so without it a burst of shots would stack their tails into a queue
+// played out in order and the last shot would be heard long after the trigger.
+void test_a_shot_falls_in_pitch_and_does_not_stack_up_behind_the_last_one(void)
+{
+    setup_with(3);
+    land_the_ship();
+    run("setup.sound  make \"dying 0  clear.shots");
+
+    const MockDeviceState *st = mock_device_get_state();
+    int mark = mock_sound_gate_count();
+    int qmark = st->sound.queued_count;
+    run("fire");
+
+    // The head is gated, the rest is queued -- once per ear, so the tail shows
+    // up twice and the pair is what makes the count even.
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, notes_on(1, mark), "the shot did not gate its head");
+    int tail = st->sound.queued_count - qmark;
+    TEST_ASSERT_TRUE_MESSAGE(tail >= 2 && tail % 2 == 0, "the shot queued no fall, or only one ear");
+
+    // Every segment lower than the one before it, starting from the gate, and
+    // the whole fall under the extra ship's bell (nothing else is over 1100 Hz).
+    // `play` compiles the list once per voice, so the log holds the left ear's
+    // whole tail and then the right ear's -- the first half is one chirp.
+    uint32_t prev = last_freq_on(1);
+    TEST_ASSERT_TRUE_MESSAGE(prev <= 1100, "the zap starts in the bell's register");
+    for (int i = qmark; i < qmark + tail / 2; i++)
+    {
+        char msg[96];
+        snprintf(msg, sizeof(msg), "segment %d is %u Hz after %u", i - qmark + 1,
+                 st->sound.queued[i].freq_hz, prev);
+        TEST_ASSERT_TRUE_MESSAGE(st->sound.queued[i].freq_hz < prev, msg);
+        prev = st->sound.queued[i].freq_hz;
+    }
+
+    // Three shots in three frames queue the same tail each time and no more:
+    // each gate threw the last one away rather than appending to it.
+    run("clear.shots");
+    qmark = st->sound.queued_count;
+    run("fire");
+    int one = st->sound.queued_count - qmark;
+    qmark = st->sound.queued_count;
+    run("fire  fire");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(2 * one, st->sound.queued_count - qmark,
+                                  "a shot queued more than its own tail");
+
+    // The saucer's shot is the same shape, and lower -- it must never be
+    // mistaken for the player's.
+    TEST_ASSERT_TRUE_MESSAGE(num(":sau.zap.hz") < num(":zap.hz"),
+                             "the saucer's shot is not below the player's");
 }
 
 // The rumble sounds on the frames thrust is held and on no others, which falls
@@ -3100,35 +3158,61 @@ void test_the_saucer_warbles_only_while_it_is_up(void)
                                   "the warble went on after the saucer left");
 }
 
-// The extra ship's alarm is a fixed burst played out by the frame loop, not a
+// The extra ship's bell is a fixed burst played out by the frame loop, not a
 // note made where the ship is awarded -- and it borrows the heartbeat's pair,
 // so the interesting assertion is that the beat stays out of its way rather
 // than interleaving with it for a second.
 void test_an_extra_ship_sounds_an_alarm_the_heartbeat_makes_room_for(void)
 {
     run("init.game  setup.sound  make \"rocks.alive 12  make \"beat.in 1");
+    const MockDeviceState *st = mock_device_get_state();
 
     int mark = mock_sound_gate_count();
     run("make \"score 9900  add.score 100");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(4, num(":lives"), "no extra ship to sound an alarm for");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(4, num(":lives"), "no extra ship to sound a bell for");
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, notes_on(0, mark), "`add.score` made the noise itself");
 
-    // Every note of the burst, and nothing else on the pair while it runs: the
-    // beat was due on the very next frame and `add.score` pushed it past the end.
-    run("make \"n (:extra.beeps * :extra.gap) - 1  repeat :n [heartbeat  extra.alarm]");
-    char msg[96];
-    snprintf(msg, sizeof(msg), "%d notes on the alarm's pair, expected %d",
-             notes_on(0, mark), (int)num(":extra.beeps"));
-    TEST_ASSERT_EQUAL_INT_MESSAGE((int)num(":extra.beeps"), notes_on(0, mark), msg);
+    // It borrows the pair's TIMBRE as well as its voice: a bell is a strike and
+    // a ring-out, which is the heartbeat's envelope read backwards.
+    TEST_ASSERT_EQUAL_INT_MESSAGE(SOUND_WAVE_PULSE, st->sound.wave[0].wave,
+                                  "the bell did not take the voice's timbre");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, st->sound.env[0].sustain, "a bell that does not ring out");
+    TEST_ASSERT_TRUE_MESSAGE(st->sound.env[0].decay > 200, "a bell with no ring in it");
 
-    // Two notes and not one, so it reads as an alarm rather than a tone, and
-    // both sit above everything else in the game (nothing else is over 1100 Hz).
+    // Every strike of the burst, and nothing else on the pair while it runs: the
+    // beat was due on the very next frame and `add.score` pushed it past the end.
+    run("make \"n (:extra.rings * :extra.gap) - 1  repeat :n [heartbeat  extra.alarm]");
+    char msg[96];
+    snprintf(msg, sizeof(msg), "%d notes on the bell's pair, expected %d",
+             notes_on(0, mark), (int)num(":extra.rings"));
+    TEST_ASSERT_EQUAL_INT_MESSAGE((int)num(":extra.rings"), notes_on(0, mark), msg);
+
+    // A strike rings for as long as its decay, or it is cut off instead of
+    // dying away -- the one number that makes this a bell rather than a beep.
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(st->sound.env[0].decay,
+                                     st->sound.gates[st->sound.gate_count - 1].dur,
+                                     "a strike is gated for longer or shorter than it rings");
+
+    // Two notes and not one, a fifth apart, and both sitting above everything
+    // else in the game (nothing else is over 1100 Hz).
     run("make \"extra.left 4  make \"extra.in 1  extra.alarm");
     uint32_t first = last_freq_on(0);
-    run("extra.alarm  extra.alarm");
-    TEST_ASSERT_TRUE_MESSAGE(last_freq_on(0) != first, "the alarm is one note, not two");
+    run("repeat :extra.gap [extra.alarm]");
+    TEST_ASSERT_TRUE_MESSAGE(last_freq_on(0) != first, "the bell is one note, not two");
     TEST_ASSERT_TRUE_MESSAGE(first > 1100 && last_freq_on(0) > 1100,
-                             "the alarm does not sit above the rest of the game");
+                             "the bell does not sit above the rest of the game");
+
+    // The last tick makes no noise: it hands [0 4] back, which cannot be done on
+    // the frame of the last strike because the mixer reads the WAVEFORM live and
+    // the strike is still ringing.
+    run("make \"extra.left 1  make \"extra.in 1");
+    mark = mock_sound_gate_count();
+    run("extra.alarm");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, notes_on(0, mark), "the tick that gives the voice back rang");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(SOUND_WAVE_SQUARE, st->sound.wave[0].wave,
+                                  "the bell kept the heartbeat's voice");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(25, st->sound.env[0].attack,
+                                     "the bell kept the heartbeat's envelope");
 
     // It ends by itself, and the beat comes back with no flag to clear.
     run("make \"extra.left 0  make \"beat.in 1");
@@ -3136,11 +3220,14 @@ void test_an_extra_ship_sounds_an_alarm_the_heartbeat_makes_room_for(void)
     run("repeat 30 [heartbeat  extra.alarm]");
     TEST_ASSERT_TRUE_MESSAGE(notes_on(0, mark) > 0, "the heartbeat never came back");
 
-    // A level end already silenced the voices, so an alarm still owed notes must
-    // not resume into a board it did not belong to.
-    run("make \"extra.left 5  make \"level.rocks 1  setup.level");
+    // A level end already silenced the voices, so a bell still owed strikes must
+    // not resume into a board it did not belong to -- and cutting it short skips
+    // the tick that gives the voice back, so `setup.level` gives it back instead.
+    run("bell.timbre  make \"extra.left 5  make \"level.rocks 1  setup.level");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(SOUND_WAVE_SQUARE, st->sound.wave[0].wave,
+                                  "the next wave's heartbeat rings like a bell");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":extra.left"),
-                                    "an alarm survived into the next level");
+                                    "a bell survived into the next level");
 }
 
 // A level that ends has to silence the voices as well as stop the turtles: the
@@ -3483,6 +3570,7 @@ int main(void)
     RUN_TEST(test_the_heartbeat_speeds_up_as_the_board_thins);
     RUN_TEST(test_the_heartbeat_speeds_up_as_the_wave_wears_on);
     RUN_TEST(test_the_game_makes_its_noises);
+    RUN_TEST(test_a_shot_falls_in_pitch_and_does_not_stack_up_behind_the_last_one);
     RUN_TEST(test_the_thrust_rumble_sounds_only_while_it_is_held);
     RUN_TEST(test_the_saucer_warbles_only_while_it_is_up);
     RUN_TEST(test_an_extra_ship_sounds_an_alarm_the_heartbeat_makes_room_for);

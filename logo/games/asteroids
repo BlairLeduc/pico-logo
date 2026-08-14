@@ -363,6 +363,35 @@ make "warble.a    1100     ; the saucer's two-tone warble
 make "warble.b     760
 make "warble.gap     3     ; frames between its two notes
 
+; The shots, and the one place in this game where an envelope was not enough.
+; A zap is a FALLING sound and `sound` holds one frequency, so a single gate can
+; only ever be a beep however it is shaped -- the pitch has to move.  Moving it
+; from the frame loop would cost a countdown on every frame forever, which is
+; the price the heartbeat pays and a shot is not worth; so the fall is QUEUED
+; instead, with `play`, and the PSG walks it while the frame loop gets on with
+; its work.  Cost: two primitive calls on a frame that fires, and none at all on
+; a frame that does not.
+;
+; The gate has to come FIRST and the queue second, and that is the whole trick
+; rather than a matter of order.  `sound` flushes the voice's queue, so gating
+; the head of the chirp throws away whatever the last shot still had pending --
+; without it, three shots in three frames would stack ~300 ms of tail into a
+; queue that is played out in order, and the third shot would be heard a quarter
+; of a second after the trigger.  `play` alone cannot flush.
+;
+; c6 - g5 - c5, an octave in a fourth and then a fifth, and nothing over 1100 so
+; the fall stays under the extra ship's alarm (see below).  The volume steps
+; down through the tail because the last segment ends into silence: the shared
+; release is only 7 ms, which is short enough to hold the three segments
+; together as one sound and too short to end one gracefully by itself.  The
+; saucer's shot is the same shape an octave and a fourth down, and one segment
+; shorter -- it must never be mistaken for the player's, and it shares the voice
+; with the warble that is already announcing the saucer.
+make "zap.hz      1046     ; the player's shot: c6, gated, then ...
+make "zap.tail  [t300 l32 v8 g5 v6 c5]   ; ... 784 Hz and 523, 25 ms each
+make "sau.zap.hz   392     ; the saucer's shot: g4, then ...
+make "sau.zap.tail [t300 l32 v6 d4]      ; ... 294 Hz
+
 ; The extra ship's alarm, the arcade's one piece of good news.  It borrows the
 ; heartbeat's pair rather than taking a fifth one, because the two sounds are
 ; the two that are ALWAYS available to collide: an award arrives on a scoring
@@ -373,13 +402,22 @@ make "warble.gap     3     ; frames between its two notes
 ; the two interleave.  Losing the tempo for a second at the moment the player
 ; earns a ship is a flourish, not a loss.
 ;
-; Two notes an octave and a bit apart, high enough to sit above everything else
-; in the game (nothing else here is a tone over 1100 Hz), fast enough to read as
-; an alarm rather than a tune.
-make "extra.a     1760     ; the extra ship's two-note alarm
+; It is a BELL and not a beeper, and the difference is the envelope rather than
+; the notes: a bell is a strike and a long ring-out, so the attack is a step,
+; the sustain is 0, and the decay is 245 ms -- most of the 286 ms between one
+; strike and the next -- where the heartbeat's envelope ramps in over 25 ms and
+; then holds flat at 9.  Four strikes rather than eight beeps, twice as far
+; apart, because a ring needs room to die away and eight of them would be a
+; telephone.  See `bell.timbre`.
+;
+; The two notes are 1760 and 1170 Hz, which is a fifth (3:2) -- the interval
+; every doorbell in the world uses, and the reason the pair reads as a chime
+; rather than as two alarm tones.  High deliberately: nothing else in the game
+; is a tone above 1100 Hz, so a bell cannot be mistaken for a saucer.
+make "extra.a     1760     ; the extra ship's two-note bell
 make "extra.b     1170
-make "extra.gap      2     ; frames between its notes
-make "extra.beeps    8     ; how many -- about 1.1 s at 14 fps
+make "extra.gap      4     ; frames between its strikes -- 286 ms
+make "extra.rings    6     ; how many -- 16 frames of bell, about 1.1 s
 
 ;==========================================================================
 ; Rock state -- eight parallel flat lists, `max.rocks` long
@@ -481,9 +519,10 @@ make "sau.shot.x 9999  make "sau.shot.y 0
 ; many frames until it plays.
 make "beat.in 0  make "beat.alt false
 make "warble.in 0  make "warble.alt false
-; The alarm needs a second counter the other two do not: it is a burst of a
+; The bell needs a second counter the other two do not: it is a burst of a
 ; known length rather than something that runs while a condition holds, so
-; `extra.left` says how many notes are still owed and 0 is the idle state.
+; `extra.left` says how many ticks are still owed (the strikes, plus the one
+; that gives the voice back) and 0 is the idle state.
 make "extra.in 0  make "extra.left 0  make "extra.alt false
 
 ;==========================================================================
@@ -692,7 +731,10 @@ end
 ;
 ; One voice-pair per sound, centred (left ear + right ear), timbres set once
 ; because `stopsound` preserves them -- the arrangement both shipped shooters
-; use.  The pairs and what shares one are argued in the tuning above.
+; use.  The pairs and what shares one are argued in the tuning above.  The one
+; exception to "set once" is [0 4], which the extra ship's bell borrows along
+; with the voice and hands back; `beat.timbre` is the single place the
+; heartbeat's own timbre is written, so the two cannot drift apart.
 ;
 ; NOTE the waveform rule: voices 3 and 7 are the noise voices and 0-2 / 4-6 are
 ; the tone voices, and asking for a tone wave on a noise voice or the reverse is
@@ -713,12 +755,36 @@ end
 ; number is asked for, which is why 0 and the engine's click-free default of 5
 ; sounded identical.  The sustain of 9 is the other half: a note that decays
 ; straight to zero has no steady part to hear as a pitch.
+;
+; The zap's envelope is the heartbeat's read backwards, and for the same reason:
+; a shot WANTS the step the heartbeat could not have.  A full-scale jump is the
+; one thing a small speaker reproduces perfectly, and a laser is nothing but its
+; onset.  The rest of it -- decay 14 ms to a sustain of 12, release 7 -- is cut
+; to the 3.5 ms block: four blocks of fall, then a held body so the three
+; segments of the chirp read as one falling sound, then two blocks of release,
+; which is the SEAM between segments (a queued note starts only once the one
+; before it has released to nothing).  Twenty-one milliseconds of release, as
+; the first version had, put an audible stutter in the middle of every shot.
 to setup.sound
-  setwave [0 4] "square    setenv [0 4] [25 30 9 45]    ; the heartbeat
-  setwave [1 5] "sawtooth  setenv [1 5] [0 40 0 40]    ; fire, and the saucer
+  beat.timbre                                          ; the heartbeat, and the bell borrows it
+  setwave [1 5] "sawtooth  setenv [1 5] [0 14 12 7]    ; fire, and the saucer
   (setwave [2 6] "pulse 12)
   setenv [2 6] [5 0 12 40]                             ; the thrust rumble
   setwave [3 7] "white     setenv [3 7] [0 0 15 200]   ; every explosion
+end
+
+; [0 4]'s two timbres.  The bell is a 25 % pulse rather than the heartbeat's
+; square because a pulse that narrow is thin and bright -- a struck bar rather
+; than a hollow tube -- and a decay of 245 ms into a sustain of 0 is the ring:
+; the note is gated for exactly as long as the decay, so it dies away instead of
+; being cut off.  At 1760 Hz the 1/n^2 argument that ruled a triangle out of the
+; heartbeat does not apply; there is nothing here for a small speaker to lose.
+to beat.timbre
+  setwave [0 4] "square  setenv [0 4] [25 30 9 45]
+end
+
+to bell.timbre
+  (setwave [0 4] "pulse 25)  setenv [0 4] [0 245 0 35]
 end
 
 ; The signature of the game, and the one sound that is a tempo rather than a
@@ -750,8 +816,12 @@ to heartbeat
 end
 
 ; The saucer's warble, on the same pair as the fire zap.  A fire wins the voice
-; for one frame, which is the whole cost of that sharing and is why the pair
-; shared is this one rather than the thrust rumble.
+; on the frame it happens and the warble takes it back on the next note it
+; makes -- a gate cuts off whatever is sounding and flushes what the chirp still
+; had queued -- which is the whole cost of that sharing and is why the pair
+; shared is this one rather than the thrust rumble.  A warble note is 70 ms and
+; a chirp is 94, so the two can only ever take a bite out of each other; neither
+; can silence the other for long.
 to warble
   make "warble.in :warble.in - 1
   if 0 < :warble.in [stop]
@@ -760,19 +830,29 @@ to warble
   ifelse :warble.alt [(sound [1 5] :warble.a 70 8)] [(sound [1 5] :warble.b 70 8)]
 end
 
-; The extra ship's alarm: a fixed burst rather than something that runs while a
+; The extra ship's bell: a fixed burst rather than something that runs while a
 ; condition holds, so the idle test is `extra.left` and it comes FIRST -- a quiet
 ; frame costs one comparison and no countdown, which is what the frame budget
 ; buys by not making this a third alternator.  `add.score` starts it and also
 ; pushes `beat.in` past it, so nothing has to be silenced here.
+;
+; `extra.left` is armed one HIGHER than the number of strikes, and that last
+; tick is what hands [0 4] back.  It cannot be done on the frame of the last
+; strike: an envelope is copied into the note when the note is gated, but the
+; WAVEFORM is read live by the mixer, so restoring the square there would change
+; the timbre of a bell that is still ringing.  A tick later the ring has died
+; away (245 ms into a 286 ms gap) and the swap is silent.  It also costs no new
+; state -- the counter that was already there does it, and 0 is still the one
+; idle value -- which is the whole reason it is shaped this way.
 to extra.alarm
   if 0 = :extra.left [stop]
   make "extra.in :extra.in - 1
   if 0 < :extra.in [stop]
   make "extra.in :extra.gap
   make "extra.left :extra.left - 1
+  if 0 = :extra.left [beat.timbre stop]
   make "extra.alt not :extra.alt
-  ifelse :extra.alt [(sound [0 4] :extra.a 80 11)] [(sound [0 4] :extra.b 80 11)]
+  ifelse :extra.alt [(sound [0 4] :extra.a 245 11)] [(sound [0 4] :extra.b 245 11)]
 end
 
 ; A rock's death is one noise burst whose pitch says which rock it was: a large
@@ -988,7 +1068,8 @@ to fire
   if :n = 0 [stop]
   .setitem :n :slife :shot.life
   ask :n [pu setx :shipx sety :shipy seth :sh fd 12 st setspeed :shot.speed]
-  (sound [1 5] 900 70 9)
+  (sound [1 5] :zap.hz 30 9)   ; the head of the chirp, and it flushes the last one
+  (play [1 5] :zap.tail)       ; the fall, walked by the PSG -- see the tuning
 end
 
 ; Parking the x at 9999 is what takes a dead shot out of `shot.on` without
@@ -1268,7 +1349,8 @@ to saucer.fires
   ]]]
   make "sau.shot.in :sau.shot.life
   ask 4 [pu setx :sau.x sety :sau.y seth :h fd 10 st setspeed :sau.shot.speed]
-  (sound [1 5] 500 60 8)
+  (sound [1 5] :sau.zap.hz 30 8)
+  (play [1 5] :sau.zap.tail)
 end
 
 to kill.sau.shot
@@ -1502,12 +1584,14 @@ to add.score :n
   if not (:score < :next.extra) [
     make "lives :lives + 1
     make "next.extra :next.extra + :extra.every
-    ; Arm the alarm, and hand it the heartbeat's voice for as long as it runs.
-    ; `extra.in 1` fires the first note on the next frame; the beat is pushed to
-    ; the frame after the last one, so the two never gate [0 4] in the same
-    ; frame and the tempo comes back by itself with no second flag to clear.
-    make "extra.in 1  make "extra.left :extra.beeps  make "extra.alt false
-    make "beat.in :extra.beeps * :extra.gap
+    ; Arm the bell, and hand it the heartbeat's voice AND timbre for as long as
+    ; it runs.  `extra.in 1` strikes on the next frame; `extra.left` carries one
+    ; tick past the last strike to give the voice back (see `extra.alarm`), and
+    ; the beat is pushed to the frame after THAT, so the two never gate [0 4] in
+    ; the same frame and the tempo comes back by itself with nothing to clear.
+    bell.timbre
+    make "extra.in 1  make "extra.left :extra.rings + 1  make "extra.alt false
+    make "beat.in (:extra.rings + 1) * :extra.gap
   ]
   refresh.hud
 end
@@ -1679,10 +1763,14 @@ to setup.level
   clear.saucer
   reset.ship
   make "beat.in 1
-  ; A level end already ran `stopsound`, so an alarm still owed notes here would
+  ; A level end already ran `stopsound`, so a bell still owed strikes here would
   ; resume into a board it did not belong to.  The last rock of a wave can be the
   ; one that pays for the ship, and that award is heard as the level's silence.
+  ; Cutting it short skips the tick that hands [0 4] back, so the timbre is
+  ; restored here too -- otherwise the heartbeat would spend the next wave
+  ; ringing like a bell.
   make "extra.left 0
+  beat.timbre
   make "n :level.rocks
   if :n > :max.rocks [make "n :max.rocks]
   repeat :n [spawn.rock 3]

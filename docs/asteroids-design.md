@@ -1114,17 +1114,23 @@ ordering constraint is gone with the erase pass.
 
 ## 11. Sound
 
-The P8 stereo PSG, one centred voice-pair per sound, timbres set once in
+The P8 stereo PSG, one centred voice-pair per sound, timbres set in
 `setup.sound` because `stopsound` preserves them — the Invaders/Galaxian
 arrangement:
 
 | Sound | Voices | Timbre | Trigger |
 |---|---|---|---|
 | Heartbeat | `[0 4]` | **square, 25 ms attack, sustained** (§11.2) | the two alternating low notes, whose interval shortens as the rock count falls **and as the wave wears on** — the game's signature |
-| Fire, **and the saucer's warble** | `[1 5]` | sawtooth zap | a shot launches; a two-tone beep every third frame while a saucer is up |
+| Fire, **and the saucer's warble** | `[1 5]` | sawtooth, **stepped attack and a 7 ms release** (§11.5) | a shot launches as a **falling three-segment chirp**; a two-tone beep every third frame while a saucer is up |
 | Thrust | `[2 6]` | **narrow pulse at 96 Hz**, re-triggered each held frame | held while thrust is held |
 | Explosions | `[3 7]` | white noise | rock death (pitched by size), ship death, saucer death |
-| **Extra ship** | `[0 4]` | the heartbeat's square, borrowed (§11.4) | a fixed burst of eight high notes, ~1.1 s, when `add.score` crosses the threshold |
+| **Extra ship** | `[0 4]` | **a 25 % pulse struck and rung out**, borrowed along with the voice (§11.4) | a **bell**: four strikes, ~1.1 s, when `add.score` crosses the threshold |
+
+Timbres are set once in `setup.sound` with one exception, and it is the bell:
+`[0 4]` carries two of them, so `beat.timbre` and `bell.timbre` are the two
+places they are written and the alarm hands the voice back when it is done
+(§11.4). `setup.sound` calls `beat.timbre` rather than repeating its numbers, so
+the heartbeat's timbre has exactly one definition.
 
 The heartbeat is the retrofit's payoff, the same way the dive shriek was
 Galaxian's: it is a *tempo*, not a note, so it needs a voice that keeps
@@ -1147,10 +1153,10 @@ explosion in the game — or to make it out of tone. It is a narrow pulse down a
 voice-kind rule so the next edit to this table fails a test rather than a run.
 
 **There are five sounds and four voice-pairs, so one pair is shared, and which
-one is a gameplay decision.** Fire and the warble share `[1 5]`: a fire is one
-frame of zap, the warble is a beep every third frame, and — because `poll.input`
-reads **one key a frame** — a player who is firing is not thrusting on that
-frame anyway. Sharing with the thrust pair instead would have cut the saucer's
+one is a gameplay decision.** Fire and the warble share `[1 5]`: a zap is 94 ms
+and a warble note is 70, so the two can only ever take a bite out of each other
+— neither can silence the other for long — and, because `poll.input` reads **one
+key a frame**, a player who is firing is not thrusting on that frame anyway. Sharing with the thrust pair instead would have cut the saucer's
 warning out from under a player who is running away, which is the one moment the
 warning exists for.
 
@@ -1242,10 +1248,43 @@ separable by construction.
 
 The arcade announces an extra ship with a rapid high beeping, and nothing here
 announced it at all — the ship count on the HUD just went up. `extra.alarm` is
-that beeping: two notes at 1760 and 1170 Hz, alternating every two frames for
-eight notes, about 1.1 s. High deliberately, because nothing else in the game is
-a *tone* above 1100 Hz (the warble's top note), so the alarm cannot be mistaken
-for a saucer.
+that announcement: two notes at 1760 and 1170 Hz, alternating, about 1.1 s. High
+deliberately, because nothing else in the game is a *tone* above 1100 Hz (the
+warble's top note), so it cannot be mistaken for a saucer.
+
+**It is a bell rather than a beeper, and that is an envelope rather than a
+tune.** The notes did not change when it became one; four numbers did. A bell is
+a *strike* and a *ring-out* — the heartbeat's envelope read backwards, because
+the thing the heartbeat could not afford is the thing a struck bar is made of:
+
+| | Heartbeat | Bell |
+|---|---|---|
+| Wave | square | **25 % pulse** — thin and bright, a struck bar rather than a hollow tube |
+| Attack | 25 ms, a ramp | **0 — a full-scale step**, which is what a strike *is*, and the one thing a small speaker reproduces perfectly (§11.2) |
+| Decay / sustain | 30 ms to 9, held | **245 ms to 0** — the ring |
+| Note length | 110 ms | **245 ms**, exactly the decay, so it dies away instead of being cut off |
+| Spacing | 3–16 frames | **4 frames, 286 ms** — 245 of ring and 40 of air |
+| Count | forever | **four strikes** |
+
+Two more things fell out of writing it down. The interval 1760:1170 is a **fifth
+(3:2)** — the doorbell interval, which is a good part of why the pair reads as a
+chime; §11.4 previously called it "an octave and a bit", which it never was.
+And **four strikes rather than eight beeps**: a ring needs room to die away, and
+eight of these in the same second would be a telephone. The 1/n² argument that
+ruled a triangle out of the heartbeat does not apply up here — at 1760 Hz there
+is nothing for a small speaker to lose.
+
+**Giving the voice back needs a tick of its own, and the reason is in the
+engine.** An envelope is copied into a note by `start_note` when the note is
+gated, but the *waveform* is read live by the mixer on every sample — so
+restoring the square on the frame of the last strike would change the timbre of
+a bell that is still ringing. `extra.left` is therefore armed one higher than
+the number of strikes and the last tick gates nothing, it just calls
+`beat.timbre`; 286 ms after the last strike the 245 ms ring has died away and
+the swap is silent. It costs **no new state** — the counter that was already
+there does it, and 0 is still the single idle value. `setup.level` calls
+`beat.timbre` too, because cutting a bell short at a level boundary skips that
+tick and the next wave's heartbeat would otherwise ring like a bell.
 
 **The voice is the whole decision, and it went to `[0 4]` with the heartbeat.**
 Every other pair is worse for the same reason: an award arrives on a *scoring*
@@ -1257,21 +1296,68 @@ the award in the first place. The beat is the one pair nothing else competes
 for, so the alarm gets a clean second of it.
 
 The heartbeat is not silenced by a flag. `add.score` sets
-`beat.in = extra.beeps × extra.gap`, which lands the next beat on the frame
-*after* the last alarm note, so the two never gate `[0 4]` in the same frame and
-the tempo resumes on its own with nothing to clear. Costs are one line at a site
-that runs a handful of times a game, and one comparison a frame in the loop:
-`extra.alarm` tests `extra.left` **first** and returns, so a quiet frame does not
-even pay the countdown the other two alternators do.
+`beat.in = (extra.rings + 1) × extra.gap`, which lands the next beat on the frame
+*after* the tick that gives the voice back, so the two never gate `[0 4]` in the
+same frame and the tempo resumes on its own with nothing to clear. Costs are two
+lines at a site that runs a handful of times a game, and one comparison a frame
+in the loop: `extra.alarm` tests `extra.left` **first** and returns, so a quiet
+frame does not even pay the countdown the other two alternators do.
 
 `setup.level` zeroes `extra.left` because a level end already ran `stopsound` —
-an alarm still owing notes would otherwise resume into a board it did not belong
+a bell still owing strikes would otherwise resume into a board it did not belong
 to. The corollary is that clearing a wave with the shot that pays for a ship
-means hearing the level's silence instead of the alarm, which is the same deal
+means hearing the level's silence instead of the bell, which is the same deal
 every other sound in the game gets at a level boundary.
 `test_an_extra_ship_sounds_an_alarm_the_heartbeat_makes_room_for` holds all of
-it: the burst length, the two notes, that `add.score` itself is silent, that no
-beat interleaves, and that the beat comes back.
+it: the burst length, the two notes, the borrowed timbre and its return, that
+the last tick is silent, that `add.score` itself is silent, that no beat
+interleaves, and that the beat comes back.
+
+### 11.5 The shot: what an envelope cannot do
+
+A zap is a *falling* sound, and `sound` holds one frequency. That is the whole
+of it: however the note is shaped, a single gate can only ever be a beep, and
+the shot was a beep — 900 Hz for 70 ms — because the pitch never moved. **The
+envelope was never the missing part; the second and third notes were.**
+
+Moving the pitch from the frame loop would cost a countdown on *every* frame
+forever, which is the price the heartbeat pays and a shot is not worth. So the
+fall is **queued** instead: the head is gated and the two segments under it are
+handed to `play`, and the PSG walks them while the frame loop gets on with its
+work. The cost is two primitive calls on a frame that fires and nothing at all
+on a frame that does not — the same bargain the rest of this section makes.
+
+**The gate has to come first, and that is the trick rather than the order.**
+`sound` flushes the voice's queue and `play` cannot; gating the head therefore
+throws away whatever the previous shot still had pending. Without it, three
+shots in three frames would stack ~300 ms of tail into a queue that is played
+out *in order*, and the third shot would be heard a quarter of a second after
+the trigger — a bug with no symptom on a single shot and an obvious one in a
+firefight. `test_a_shot_falls_in_pitch_and_does_not_stack_up_behind_the_last_one`
+fires three and requires the queue to grow by one tail per shot.
+
+The chirp is **c6 – g5 – c5**, an octave in a fourth and then a fifth, 30 + 25 +
+25 ms; the saucer's is the same shape seventeen semitones lower — an octave and
+a fourth, g4 down to d4 — and one segment shorter, so it can
+never be mistaken for the player's on a voice that is *already* announcing the
+saucer. Nothing in it goes over 1100 Hz, which keeps the bell's register clear.
+
+Two numbers in the envelope are set by the queue rather than by taste. The
+**release is 7 ms** — two blocks — because a queued note does not start until
+the one before it has released to nothing, so the release *is* the seam between
+segments; at the 21 ms the first version used, the seam was an audible stutter
+in the middle of every shot. And the **sustain is 12 rather than 0**, so a
+segment holds its body until it is gated off instead of decaying away inside
+itself, which is what makes three notes read as one falling sound. The volume
+steps down through the tail (9, 8, 6) because with a 7 ms release the last
+segment ends into silence too abruptly to do it any other way.
+
+**Unmeasured on the board:** `sound` is 0.2 ms (§12) and `play` compiles its
+list once per voice, so a firing frame now pays a parse it did not before. It is
+bounded — five tokens, twice — and it lands on frames that are otherwise cheap,
+but it has not been timed on hardware, and neither have any of the new
+frequencies been heard there. The heartbeat is the standing warning about that
+(§11.2).
 
 ## 12. Frame budget
 
