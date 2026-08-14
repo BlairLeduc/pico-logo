@@ -77,3 +77,11 @@ many speculative ones. Never ask the author to run or add tests first.
   insert cannot overflow.
 - LittleFS restore (`logo_lfs_restore`) is intentionally **sparse**: littlefs rebuilds
   from the superblock and erases free blocks on demand.
+- `sb_available()` guards **IRQ-context** southbridge callers against a thread-context
+  transfer already in flight — that is the only direction that can race. Everything
+  runs on core 0 (nothing calls `multicore_launch_core1`) and an IRQ handler holds the
+  core for its whole blocking I²C transfer, so no southbridge transfer can be in flight
+  while thread code runs. Thread-context callers (`keyboard_get_key`'s idle poll,
+  `sb_read_battery` via the battery primitive) therefore need no `sb_available()` check
+  and cannot collide with each other. Don't flag a thread-context `sb_*` call for
+  skipping it.
