@@ -54,6 +54,10 @@
 // both sizes -- a small saucer is a scaled shape and not a simpler one.
 #define SEG_SAUCER 8
 
+// Where the high score table lives. Absolute, so it does not follow whatever
+// directory the game was loaded from.
+#define SCORES_FILE "/games/asteroids.scores"
+
 // PicoCalc key codes, as the two shipped shooters use them.
 #define KEY_LEFT   "\264"
 #define KEY_RIGHT  "\267"
@@ -169,6 +173,21 @@ static void run(const char *input)
 {
     Result r = run_string(input);
     TEST_ASSERT_TRUE_MESSAGE(r.status == RESULT_NONE || r.status == RESULT_OK, input);
+}
+
+// A full table, 20000 down to 2000, so a test can ask where a score lands in
+// one that has no room left. The floor is well clear of the scores the other
+// tests play, because a test that ranks by accident asks for a name and waits
+// on a keyboard that has nothing in it.
+static void fill_the_table(void)
+{
+    run("clear.scores");
+    for (int i = 1; i <= 10; i++)
+    {
+        char expr[64];
+        snprintf(expr, sizeof(expr), "insert.score %d %d \"NAME%d", i, (11 - i) * 2000, i);
+        run(expr);
+    }
 }
 
 // Segments the live rocks should draw between them, straight from `rsize`.
@@ -2003,24 +2022,59 @@ void test_quitting_shows_no_game_over_card(void)
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(3, num(":lives"), "quitting cost a ship");
 }
 
-// The attract screen carries the score table and the keys, as the two shipped
-// shooters' do. It waits on space and nothing else.
+// The attract screen carries the high score table and the two keys that do
+// anything there. It waits on space and nothing else.
 void test_the_attract_screen_prints_the_scores_and_the_keys(void)
 {
+    mock_fs_create_file(SCORES_FILE, "1240 BLAIR\n520 PILOT\n");
     mock_device_clear_output();
     set_mock_input("xy ");            // two keys it must ignore, then space
     run("attract.screen");
 
     const char *screen = mock_device_get_output();
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "ASTEROIDS"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "HIGH SCORES"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "1."), screen);   // the rank's point
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "2."), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "1240"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "BLAIR"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Press Space to play"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "or H for instructions"), screen);
+}
+
+// An empty table has to say so rather than leave the heading over a blank
+// screen, which is what a first run and a broken load look like alike.
+void test_the_attract_screen_says_so_with_no_scores(void)
+{
+    mock_device_clear_output();
+    set_mock_input(" ");
+    run("attract.screen");
+
+    const char *screen = mock_device_get_output();
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "No scores yet"), screen);
+}
+
+// H is the only other key: it puts the instructions up, any key brings the
+// attract screen back, and space still starts the game from there.
+void test_h_shows_the_instructions_and_comes_back(void)
+{
+    mock_device_clear_output();
+    set_mock_input("hx ");            // H, a key to dismiss it, then space
+    run("attract.screen");
+
+    const char *screen = mock_device_get_output();
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Large rock      20"), screen);
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Small rock     100"), screen);
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Hyperspace"), screen);
-    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Press Space"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Press any key"), screen);
+    // and it came back: the prompt is redrawn after the instructions.
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(strstr(screen, "Press any key"),
+                                        "or H for instructions"), screen);
 }
 
 void test_game_over_prints_the_final_score(void)
 {
+    fill_the_table();                 // so 1240 does not rank and ask for a name
     run("init.game  make \"score 1240  make \"level 4");
     mock_device_clear_output();
     run("show.game.over");
@@ -2029,6 +2083,174 @@ void test_game_over_prints_the_final_score(void)
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "GAME OVER"), screen);
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "1240"), screen);
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "WAVE REACHED: 4"), screen);
+    TEST_ASSERT_NULL_MESSAGE(strstr(screen, "A NEW HIGH SCORE"), screen);
+}
+
+//==========================================================================
+// The high score table
+//==========================================================================
+
+// The two lists are `scores.top` long, and a list edited to a different length
+// is a silent out-of-range read rather than a visible defect -- the same reason
+// the rock lists are checked against `max.rocks`.
+void test_the_score_lists_are_as_long_as_the_table(void)
+{
+    TEST_ASSERT_EQUAL_FLOAT(10, num(":scores.top"));
+    TEST_ASSERT_EQUAL_FLOAT(num(":scores.top"), num("count :hs.score"));
+    TEST_ASSERT_EQUAL_FLOAT(num(":scores.top"), num("count :hs.name"));
+}
+
+// The first run: no file is not an error, and nothing must be created reading
+// one that is not there.
+void test_a_missing_file_leaves_the_table_empty(void)
+{
+    run("load.scores");
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":hs.count"));
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("false",
+                                     value_to_string(eval_string("file? :scores.file").value),
+                                     "reading a missing table created one");
+}
+
+void test_the_table_round_trips_through_the_file(void)
+{
+    run("clear.scores");
+    run("insert.score 1 1240 \"BLAIR");
+    run("insert.score 1 5000 \"ADA");
+    run("save.scores");
+    run("load.scores");
+
+    TEST_ASSERT_EQUAL_FLOAT(2, num(":hs.count"));
+    TEST_ASSERT_EQUAL_FLOAT(5000, num("0 + item 1 :hs.score"));
+    TEST_ASSERT_EQUAL_STRING("ADA", value_to_string(eval_string("item 1 :hs.name").value));
+    TEST_ASSERT_EQUAL_FLOAT(1240, num("0 + item 2 :hs.score"));
+    TEST_ASSERT_EQUAL_STRING("BLAIR", value_to_string(eval_string("item 2 :hs.name").value));
+}
+
+// `open` puts the write position at the END of an existing file, so a save that
+// did not erase first would append a second table and the next load would read
+// the stale one off the front.
+void test_a_save_replaces_the_file_rather_than_appending(void)
+{
+    run("clear.scores  insert.score 1 1240 \"BLAIR");
+    run("save.scores");
+    run("clear.scores  insert.score 1 999 \"ADA");
+    run("save.scores");
+    run("load.scores");
+
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":hs.count"), "the old table was still in the file");
+    TEST_ASSERT_EQUAL_FLOAT(999, num("0 + item 1 :hs.score"));
+}
+
+// A bare filesystem has no `/games` to write into, and the moment that would be
+// found out is the moment a player has just earned a place in the table. The
+// save makes the directory instead, and the second save through the same path
+// must not trip over the one the first made.
+void test_a_save_makes_the_directory_it_needs(void)
+{
+    TEST_ASSERT_EQUAL_STRING("false", value_to_string(eval_string("dir? :scores.dir").value));
+
+    run("clear.scores  insert.score 1 1000 \"ADA");
+    run("save.scores");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", value_to_string(eval_string("dir? :scores.dir").value),
+                                     "the save did not create the directory it writes into");
+    run("save.scores");
+
+    run("load.scores");
+    TEST_ASSERT_EQUAL_FLOAT(1, num(":hs.count"));
+    TEST_ASSERT_EQUAL_FLOAT(1000, num("0 + item 1 :hs.score"));
+}
+
+// Strictly greater: a score equal to one already in the table ranks below it,
+// so whoever got there first keeps the higher line. A score of 0 never ranks,
+// because an empty slot holds 0 too.
+void test_a_score_ranks_where_it_belongs(void)
+{
+    fill_the_table();                 // 20000, 18000, ... 2000
+
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num("score.rank 25000"), "the best score did not rank first");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(8, num("score.rank 6500"), "a middling score ranked wrong");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(10, num("score.rank 2001"), "the last line was not reachable");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num("score.rank 2000"), "a tie displaced the score it tied");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num("score.rank 500"), "a score below the table ranked");
+
+    run("clear.scores");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num("score.rank 0"), "a game that scored nothing ranked");
+}
+
+// An insert slides everything below it down one; the last line falls off the
+// bottom and the table never grows.
+void test_an_insert_slides_the_table_down_and_drops_the_last(void)
+{
+    fill_the_table();
+    run("insert.score 3 17000 \"ADA");
+
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(10, num(":hs.count"), "the table grew past its length");
+    TEST_ASSERT_EQUAL_FLOAT(18000, num("0 + item 2 :hs.score"));
+    TEST_ASSERT_EQUAL_FLOAT(17000, num("0 + item 3 :hs.score"));
+    TEST_ASSERT_EQUAL_STRING("ADA", value_to_string(eval_string("item 3 :hs.name").value));
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(16000, num("0 + item 4 :hs.score"), "the table did not shift down");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(4000, num("0 + item 10 :hs.score"), "the last line did not fall off");
+}
+
+// A table that is not full yet shifts through its zeroed slots, which is why
+// there is no second case for it.
+void test_an_insert_into_a_short_table_counts_up(void)
+{
+    run("clear.scores");
+    run("insert.score 1 500 \"ADA");
+    run("insert.score 1 900 \"BLAIR");
+
+    TEST_ASSERT_EQUAL_FLOAT(2, num(":hs.count"));
+    TEST_ASSERT_EQUAL_FLOAT(900, num("0 + item 1 :hs.score"));
+    TEST_ASSERT_EQUAL_FLOAT(500, num("0 + item 2 :hs.score"));
+}
+
+// Letters and digits only, uppercased. A bracket, a bar or a semicolon typed
+// into a name would come back through `readlist` as something other than a
+// name, and would take the rest of the file with it.
+void test_a_name_is_filtered_and_uppercased(void)
+{
+    set_mock_input("bl[a;i|r] 7\n");
+    TEST_ASSERT_EQUAL_STRING("BLAIR7", value_to_string(eval_string("read.name").value));
+}
+
+void test_a_name_stops_at_the_field_width(void)
+{
+    set_mock_input("abcdefghijklmno\r");
+    TEST_ASSERT_EQUAL_STRING("ABCDEFGHIJ", value_to_string(eval_string("read.name").value));
+}
+
+void test_backspace_takes_a_character_back(void)
+{
+    set_mock_input("ADZ\b\bDA\n");
+    TEST_ASSERT_EQUAL_STRING("ADA", value_to_string(eval_string("read.name").value));
+}
+
+// Backspace on an empty field does nothing rather than erroring on `butlast`
+// of the empty word, and a name nobody typed is filed under the default.
+void test_an_empty_name_becomes_the_default(void)
+{
+    set_mock_input("\b\b\n");
+    TEST_ASSERT_EQUAL_STRING("PILOT", value_to_string(eval_string("read.name").value));
+}
+
+// The whole path: a game that ranks asks for a name, files it, and the table is
+// on the file by the time the attract screen reads it back.
+void test_a_high_score_is_asked_for_and_saved(void)
+{
+    proc_define_from_text("to read.name\noutput \"ADA\nend");
+    run("init.game  make \"score 4200  make \"level 3");
+    mock_device_clear_output();
+    run("show.game.over");
+
+    const char *screen = mock_device_get_output();
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "A NEW HIGH SCORE"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Enter your name"), screen);
+
+    run("load.scores");
+    TEST_ASSERT_EQUAL_FLOAT(1, num(":hs.count"));
+    TEST_ASSERT_EQUAL_FLOAT(4200, num("0 + item 1 :hs.score"));
+    TEST_ASSERT_EQUAL_STRING("ADA", value_to_string(eval_string("item 1 :hs.name").value));
 }
 
 //==========================================================================
@@ -3534,7 +3756,22 @@ int main(void)
     RUN_TEST(test_a_game_plays_levels_until_the_ships_run_out);
     RUN_TEST(test_quitting_shows_no_game_over_card);
     RUN_TEST(test_the_attract_screen_prints_the_scores_and_the_keys);
+    RUN_TEST(test_the_attract_screen_says_so_with_no_scores);
+    RUN_TEST(test_h_shows_the_instructions_and_comes_back);
     RUN_TEST(test_game_over_prints_the_final_score);
+    RUN_TEST(test_the_score_lists_are_as_long_as_the_table);
+    RUN_TEST(test_a_missing_file_leaves_the_table_empty);
+    RUN_TEST(test_the_table_round_trips_through_the_file);
+    RUN_TEST(test_a_save_replaces_the_file_rather_than_appending);
+    RUN_TEST(test_a_save_makes_the_directory_it_needs);
+    RUN_TEST(test_a_score_ranks_where_it_belongs);
+    RUN_TEST(test_an_insert_slides_the_table_down_and_drops_the_last);
+    RUN_TEST(test_an_insert_into_a_short_table_counts_up);
+    RUN_TEST(test_a_name_is_filtered_and_uppercased);
+    RUN_TEST(test_a_name_stops_at_the_field_width);
+    RUN_TEST(test_backspace_takes_a_character_back);
+    RUN_TEST(test_an_empty_name_becomes_the_default);
+    RUN_TEST(test_a_high_score_is_asked_for_and_saved);
     RUN_TEST(test_a_level_ends_on_q_and_puts_the_screen_back);
     RUN_TEST(test_a_level_ends_when_the_board_is_clear);
     RUN_TEST(test_a_saucer_holds_the_level_open_until_it_is_gone);

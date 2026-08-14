@@ -2942,3 +2942,62 @@ that is the useful part.
   row blits for ~108 small ones, so whether it is faster at all is unmeasured,
   and it is device work rather than game work. Out of scope for this design;
   worth an experiment of its own if a second vector game ever follows.
+
+===
+
+## 19. The high score table
+
+Added after M4, on request. Ten scores and the names that earned them, in
+`/games/asteroids.scores`, shown on the attract screen — the only state in this
+game meant to outlive the power switch.
+
+**The file is the format.** One line a score, `score name`, so `readlist` is the
+whole parser: it hands back `[1240 BLAIR]` and the two fields fall out of
+`first` and `item 2`. Nothing about a table of ten needs more, and a tokenising
+read means the game never counts characters.
+
+That choice is what sets the rule for the name: **letters and digits only,
+uppercased, ten characters**, filtered as it is typed. A bracket, a bar or a
+semicolon typed into a name comes back through `readlist` as something other
+than a name, and any of the three would take the rest of the file with it. The
+filter is at the keyboard rather than at the write, because that is the only
+place the game can say *no* to a character while the player can still see why.
+
+**A save erases first.** `open` puts the write position at the *end* of an
+existing file — `devices/lfs_storage.c`, and the test mock the same way — so
+writing the table over itself without `erasefile` appends a second copy and the
+next load reads the stale one off the front. `test_a_save_replaces_the_file_
+rather_than_appending` is that mistake, held down.
+
+**In memory** it is two parallel lists `scores.top` long, for the rocks' reason
+(§5): `item` and `.setitem` are the only indexing this Logo has. An unused slot
+holds a score of 0 and an empty name, so an insert can shift through the tail of
+a table that is not full yet and needs no second case, and a game that scored
+nothing cannot rank. Ranking is strictly greater, so a score equal to one already
+there ranks *below* it: whoever got there first keeps the higher line.
+
+**Two screens, not one.** The attract screen carries the title, the table and
+`Press Space to play / or H for instructions`; H puts up what the attract screen
+used to hold — the score values, what a large rock is worth broken all the way
+down, and the keys — and any key comes back. The prompt is two lines because it
+is 41 characters and the screen is 40 columns wide.
+
+**The name is typed on the game-over card**, in a field the card places, using
+the keyboard the game is already polling rather than `readword` — which would
+echo wherever the text cursor happened to be and could not filter. The field is
+redrawn whole on every keystroke, trailing blanks and all, so backspace needs to
+know nothing about what the console does with `char 8`. Enter arrives as 13 on
+the board (the keyboard driver folds LF to CR) and as 10 through a host console,
+so both end the entry. The key ring is drained before the field opens: a player
+mashing fire as the last ship dies would otherwise type it.
+
+**The save makes its own directory.** `/games` exists on the shipped image, but
+the moment a bare filesystem would find that out is the moment a player has just
+earned a place in the table — so `save.scores` creates the directory rather than
+erroring out of the game there. That is the one piece of defence in this section
+that pays for itself, because the failure it prevents lands at the least
+forgivable point in the game.
+
+**Not defended:** a hand-edited file with an unbalanced bracket in it will error
+out of `readlist`. The path is absolute, so a copy of the game played off the SD
+card keeps its scores with the shipped one rather than starting a second table.

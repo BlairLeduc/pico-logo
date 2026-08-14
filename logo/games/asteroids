@@ -4,6 +4,9 @@
 ;   asteroids     (arrows steer and thrust, space fires, down hyperspaces,
 ;                  P pauses, Q quits to the attract screen)
 ;
+; The attract screen carries the top ten scores, kept in `/games/asteroids.scores`
+; so they outlive the power switch; H there brings up the instructions.
+;
 ; The first game in this tree that is not a sprite game.  The 1979 machine had
 ; no raster at all: an XY monitor traced a display list of line segments, which
 ; is why its rocks are hollow jagged outlines that rotate freely.  That is
@@ -1847,6 +1850,162 @@ to init.game
 end
 
 ;==========================================================================
+; The high score table
+;
+; Ten scores and the names that earned them, in a file, because they are the one
+; thing in this game meant to outlive the power switch.  Two parallel lists
+; again and for the rocks' reason: `item` and `.setitem` are the only indexing
+; this Logo has.  An unused slot holds a score of 0 and an empty name, and
+; `hs.count` says how many are real, so nothing has to scan for the end.
+;
+; ONE LINE A SCORE, `score name`, which is what makes `readlist` the whole
+; parser: it hands back [1240 BLAIR] and the two fields fall out of `first` and
+; `item 2`.  It is also why `read.name` filters what it accepts down to letters
+; and digits -- a bracket, a bar or a semicolon typed into a name comes back
+; through `readlist` as something other than a name, and any of the three would
+; take the rest of the file with it.
+;
+; A SAVE ERASES FIRST.  `open` puts the write position at the END of an existing
+; file (devices/lfs_storage.c, and the test mock the same way), so writing the
+; table over itself without `erasefile` would append a second copy and the next
+; load would read the stale one off the front.
+; The path is absolute, so the table does not follow whatever directory the game
+; was loaded from -- a copy played off the SD card keeps its scores with the
+; shipped one.  `scores.dir` is the directory half of it and has to agree with
+; it: `save.scores` creates the directory rather than erroring out of the game at
+; the moment a player has just earned a place in the table, which is what a
+; `/games` that is not there would otherwise do on a bare filesystem.
+make "scores.file "/games/asteroids.scores
+make "scores.dir  "/games
+make "scores.top    10     ; lines in the table -- and in the two lists below
+make "name.max      10     ; characters a name may run to
+make "name.default "PILOT  ; what an unnamed high score is filed as
+make "name.col      14     ; where the name is typed on the game-over card
+make "name.row      22
+
+make "hs.score (list 0 0 0 0 0 0 0 0 0 0)
+make "hs.name  (list "|| "|| "|| "|| "|| "|| "|| "|| "|| "||)
+make "hs.count 0
+
+to clear.scores
+  repeat :scores.top [.setitem repcount :hs.score 0  .setitem repcount :hs.name "||]
+  make "hs.count 0
+end
+
+; No file is the first-run case rather than an error, and the `file?` test is
+; also what keeps `open` from creating an empty one to read.
+to load.scores
+  local "line
+  clear.scores
+  if not file? :scores.file [stop]
+  open :scores.file
+  setread :scores.file
+  make "line readlist
+  until [empty? :line] [
+    if :hs.count < :scores.top [
+      make "hs.count :hs.count + 1
+      .setitem :hs.count :hs.score first :line
+      .setitem :hs.count :hs.name item 2 :line
+    ]
+    make "line readlist
+  ]
+  setread []
+  close :scores.file
+end
+
+to save.scores
+  if not dir? :scores.dir [createdir :scores.dir]
+  if file? :scores.file [erasefile :scores.file]
+  open :scores.file
+  setwrite :scores.file
+  repeat :hs.count [(print item repcount :hs.score item repcount :hs.name)]
+  setwrite []
+  close :scores.file
+end
+
+; Where a score belongs, 1 to `scores.top`, or 0 for one that does not make the
+; table.  Strictly greater, so a score equal to one already there ranks BELOW
+; it: whoever got there first keeps the higher line.  An empty slot holds 0, so
+; a game that scored nothing cannot rank either.
+to score.rank :n
+  repeat :scores.top [if (item repcount :hs.score) < :n [output repcount]]
+  output 0
+end
+
+; Everything below the new line slides down one and the last one falls off the
+; bottom.  The slots past `hs.count` hold zeros, so shifting through them costs
+; nothing and needs no second case for a table that is not full yet.
+to insert.score :r :n :who
+  local "i
+  make "i :scores.top
+  until [:i = :r] [
+    .setitem :i :hs.score item (:i - 1) :hs.score
+    .setitem :i :hs.name item (:i - 1) :hs.name
+    make "i :i - 1
+  ]
+  .setitem :r :hs.score :n
+  .setitem :r :hs.name :who
+  if :hs.count < :scores.top [make "hs.count :hs.count + 1]
+end
+
+; The name is typed with the keyboard the game is already polling rather than
+; through `readword`: the field has to stay where the card put it, the name has
+; to be filtered as it is typed (see the section note), and `readword` would
+; echo wherever the text cursor happened to be.
+;
+; Enter arrives as 13 on the board -- the keyboard driver folds LF to CR,
+; devices/picocalc/keyboard.c -- and as 10 through a host console, so both end
+; the entry.
+to done.key? :k
+  if 13 = :k [output true]
+  if 10 = :k [output true]
+  output false
+end
+
+; A-Z, a-z and 0-9, and nothing else reaches the file.
+to name.key? :k
+  if :k < 48 [output false]
+  if :k < 58 [output true]
+  if :k < 65 [output false]
+  if :k < 91 [output true]
+  if :k < 97 [output false]
+  if :k < 123 [output true]
+  output false
+end
+
+; The field is redrawn whole on every keystroke, trailing blanks and all: a
+; backspace that erased by walking the cursor back over the character would have
+; to know what the console does with `char 8`, and this knows nothing but where
+; the field is.  The `_` is the caret.
+to show.name :w
+  setcursor list :name.col :name.row
+  type :w
+  type "_
+  repeat (:name.max - count :w) [type "| |]
+end
+
+to next.name :w :k
+  if 8 = :k [ifelse empty? :w [output :w] [output bl :w]]
+  if not name.key? :k [output :w]
+  if not ((count :w) < :name.max) [output :w]
+  output word :w uppercase char :k
+end
+
+to read.name
+  local "w local "k
+  make "w "||
+  show.name :w
+  make "k wait.for.key
+  until [done.key? :k] [
+    make "w next.name :w :k
+    show.name :w
+    make "k wait.for.key
+  ]
+  if empty? :w [output :name.default]
+  output :w
+end
+
+;==========================================================================
 ; The attract screen, the game, and game over
 ;
 ; Iterative and not recursive, as the two shipped shooters are: a game that
@@ -1868,9 +2027,52 @@ to one.game
   if not :quit [show.game.over]
 end
 
-; Every line is a bar-quoted word rather than a list -- `print` puts a single
-; space between the words of a list, which would collapse the score columns.
+; The scores are read once on the way in rather than per redraw, and H is the
+; only key besides space that does anything: it shows the instructions and comes
+; back here, which is why the drawing is a procedure of its own.
 to attract.screen
+  local "k
+  load.scores
+  make "k 0
+  until [32 = :k] [
+    draw.attract
+    make "k wait.for.key
+    if 72 = :k [show.instructions]
+    if 104 = :k [show.instructions]
+  ]
+end
+
+; Every line is a bar-quoted word rather than a list -- `print` puts a single
+; space between the words of a list, which would collapse the columns.
+to draw.attract
+  textscreen ct settc [3 4]
+  setcursor [15 4] print "|ASTEROIDS|
+  setcursor [14 7] print "|HIGH SCORES|
+  ifelse 0 = :hs.count [
+    setcursor [13 10] print "|No scores yet|
+  ] [
+    repeat :hs.count [show.entry repcount (8 + repcount)]
+  ]
+  setcursor [10 28] print "|Press Space to play|
+  setcursor [9 29] print "|or H for instructions|
+end
+
+; One line of the table in three columns.  The rank and the score are printed
+; back from where they must END -- the point on column 11, the last digit on
+; column 18 -- because both are of a width that changes, and a table of scores
+; that does not line up on its right edge is not a table of scores.
+to show.entry :i :row
+  local "s
+  make "s item :i :hs.score
+  setcursor list (11 - count :i) :row
+  type word :i ".
+  setcursor list (19 - count :s) :row
+  type :s
+  setcursor list 21 :row
+  type item :i :hs.name
+end
+
+to show.instructions
   textscreen ct settc [3 4]
   setcursor [15 4] print "|ASTEROIDS|
   setcursor [2 7] print "|Break the rocks down and stay clear|
@@ -1885,19 +2087,27 @@ to attract.screen
   setcursor [4 22] print "|An extra ship every 10000 points|
   setcursor [2 24] print "|ARROWS Steer and thrust  SPACE Fire|
   setcursor [5 25] print "|; Hyperspace  P Pause  Q Quit|
-  setcursor [14 29] print "|Press Space|
-  wait.for.space
+  setcursor [13 29] print "|Press any key|
+  ignore wait.for.key
 end
 
-to wait.for.space
+; Every screen outside the game waits on a key rather than reading one a frame,
+; so this blocks until there is one.
+to wait.for.key
   local "k
   make "k 0
-  until [:k = 32] [
-    if key? [make "k ascii readchar]
-  ]
+  until [0 < :k] [if key? [make "k ascii readchar]]
+  output :k
+end
+
+; A player mashing the fire button as the last ship dies leaves keys in the
+; ring, and the name field is the next thing to read it.  Drop them.
+to flush.keys
+  until [not key?] [ignore readchar]
 end
 
 to show.game.over
+  local "r local "who
   textscreen
   ct
   setcursor [15 10]
@@ -1906,7 +2116,14 @@ to show.game.over
   (print [FINAL SCORE:] :score)
   setcursor [11 14]
   (print [WAVE REACHED:] :level)
-  wait 2000
+  make "r score.rank :score
+  if 0 = :r [wait 2000 stop]
+  setcursor [12 18] print "|A NEW HIGH SCORE|
+  setcursor [4 20] print "|Enter your name and press Enter|
+  flush.keys
+  make "who read.name
+  insert.score :r :score :who
+  save.scores
 end
 
 ; The timbres are set once here rather than per level, because `stopsound`
