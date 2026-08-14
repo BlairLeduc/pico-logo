@@ -685,21 +685,30 @@ to toggle.pause
   ifelse :paused [thaw make "paused false] [freeze make "paused true]
 end
 
+; KEY STATE, NOT A CHARACTER STREAM.  This read one `readchar` a frame, which
+; delivers at the KEYBOARD's cadence -- nothing for 300 ms after a press, then
+; ten repeats a second, queued -- so the loop took keys out slower than the
+; hardware put them in and the cannon kept sliding after the player let go.  One
+; character a frame also meant one control a frame: a player who was firing was
+; not moving.  `pollkeys` reads which keys are down instead, and the three
+; handlers are independent.
+;
+; Level for the control that holds, edge for the ones that fire: `keydown?` for
+; the arrows, `keyhit?` for pause and the trigger.  Holding P used to toggle the
+; pause ten times a second, which was the repeat cadence leaking into the game.
 to poll.input
-  if key? [
-    make "k ascii readchar
-    ; The pause key first, and it is the only one a paused game answers.
-    ; play.frame runs this outside its paused guard so P can be read at all,
-    ; and `freeze` only suspends demons and autonomous turtle motion -- the
-    ; whole of the formation, which is why a pause looked right. None of the
-    ; three handlers below is either of those: they place and start turtles
-    ; from here, so a pause has to turn them away itself.
-    if :k = 112 [toggle.pause stop]
-    if :paused [stop]
-    if :k = 180 [ask 0 [move.cannon -6]]
-    if :k = 183 [ask 0 [move.cannon 6]]
-    if :k = 32 [fire]
-  ]
+  pollkeys
+  ; The pause key first, and it is the only one a paused game answers.
+  ; play.frame runs this outside its paused guard so P can be read at all,
+  ; and `freeze` only suspends demons and autonomous turtle motion -- the
+  ; whole of the formation, which is why a pause looked right. None of the
+  ; three handlers below is either of those: they place and start turtles
+  ; from here, so a pause has to turn them away itself.
+  if keyhit? 112 [toggle.pause stop]
+  if :paused [stop]
+  if keydown? 180 [ask 0 [move.cannon -6]]
+  if keydown? 183 [ask 0 [move.cannon 6]]
+  if keyhit? 32 [fire]
 end
 
 to level.hud.x :n
@@ -781,6 +790,10 @@ to play.level
   ; budget -- the march redraw is spread over several frames to make that so.
   (setrefresh "sync 25)
   make "over false
+  ; A baseline poll, so the space that left the attract screen is not delivered
+  ; to the first frame as a hit -- `keyhit?` reports what happened since the
+  ; previous `pollkeys`, and that press is on the wrong side of the line.
+  pollkeys
   until [:over] [
     play.frame
     if :dying [handle.death]

@@ -132,6 +132,25 @@ static void assert_true(const char *expr)
     TEST_ASSERT_EQUAL_STRING_MESSAGE("true", value_to_string(r.value), expr);
 }
 
+// The game reads key STATE now, so a test holds keys down rather than queueing
+// characters. A press also registers as a hit for the next `pollkeys`, which is
+// how the driver reports one, so `press` drives `keydown?` and `keyhit?` alike;
+// a control read with `keyhit?` needs the release before it will answer again.
+#define KEY_LEFT   180
+#define KEY_RIGHT  183
+#define KEY_FIRE    32
+#define KEY_PAUSE  112
+
+static void press(int key_code)
+{
+    set_mock_key_down(key_code, true);
+}
+
+static void release(int key_code)
+{
+    set_mock_key_down(key_code, false);
+}
+
 //==========================================================================
 // The file loads and its globals are set
 //==========================================================================
@@ -583,25 +602,77 @@ void test_pause_holds_the_ship_as_well_as_the_aliens(void)
     assert_true(":paused");
 
     float x = num("ask 0 [xcor]");
-    set_mock_input("\264"); // left arrow (180)
+    press(KEY_LEFT);
     run_string("play.frame");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(x, num("ask 0 [xcor]"),
                                     "the ship steered while the game was paused");
+    release(KEY_LEFT);
 
-    set_mock_input(" "); // fire
+    press(KEY_FIRE);
     run_string("play.frame");
     assert_true("not (ask 1 [shown?])");
+    release(KEY_FIRE);
 
     // ...but P itself still has to reach the game, or the pause could never
     // be lifted, and the ship has to steer again once it is.
-    set_mock_input("p");
+    press(KEY_PAUSE);
     run_string("play.frame");
     assert_true("not :paused");
+    release(KEY_PAUSE);
 
-    set_mock_input("\264");
+    press(KEY_LEFT);
     run_string("play.frame");
     TEST_ASSERT_NOT_EQUAL_FLOAT_MESSAGE(x, num("ask 0 [xcor]"),
                                         "the ship did not steer after the pause was lifted");
+}
+
+// What the character stream could not do at all: one key a frame meant a player
+// who was firing was not moving. The two controls are independent `if`s now.
+void test_the_ship_can_move_and_fire_on_the_same_frame(void)
+{
+    start_level();
+    float x = num("ask 0 [xcor]");
+
+    press(KEY_LEFT);
+    press(KEY_FIRE);
+    run_string("play.frame");
+
+    TEST_ASSERT_TRUE_MESSAGE(num("ask 0 [xcor]") < x, "firing cost the ship its move");
+    assert_true("ask 1 [shown?]");
+}
+
+// Moving is a LEVEL, so a key that stays down keeps moving the ship. Under
+// the character stream this took one queued repeat per frame, at a cadence the
+// keyboard chose rather than the frame did.
+void test_a_held_arrow_keeps_moving_the_ship(void)
+{
+    start_level();
+    float x = num("ask 0 [xcor]");
+
+    press(KEY_LEFT);
+    run_string("repeat 3 [play.frame]");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(x - 18, num("ask 0 [xcor]"),
+                                    "a held arrow did not move the ship every frame");
+
+    release(KEY_LEFT);
+    run_string("play.frame");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(x - 18, num("ask 0 [xcor]"),
+                                    "the ship kept moving after the key came up");
+}
+
+// The space that leaves the attract screen must not reach the level's first
+// frame. `keyhit?` reports what happened since the previous `pollkeys`, and that
+// press is on the wrong side of the line -- so `play.level` takes a baseline
+// poll before its loop. Without it the game opens by firing a shot nobody asked
+// for.
+void test_the_space_that_starts_the_level_does_not_fire(void)
+{
+    press(KEY_FIRE);
+    start_level();
+    run_string("pollkeys");   // the baseline `play.level` takes before its loop
+    run_string("play.frame");
+
+    assert_true("not (ask 1 [shown?])");
 }
 
 //==========================================================================
@@ -613,6 +684,9 @@ int main(void)
     RUN_TEST(test_attract_screen_shows_instructions_and_scores);
     RUN_TEST(test_arm_demons_takes_a_table_an_earlier_program_left_behind);
     RUN_TEST(test_pause_holds_the_ship_as_well_as_the_aliens);
+    RUN_TEST(test_the_ship_can_move_and_fire_on_the_same_frame);
+    RUN_TEST(test_a_held_arrow_keeps_moving_the_ship);
+    RUN_TEST(test_the_space_that_starts_the_level_does_not_fire);
     RUN_TEST(test_pyramid_occupancy);
     RUN_TEST(test_pyramid_total_is_20);
     RUN_TEST(test_row_col_mapping);

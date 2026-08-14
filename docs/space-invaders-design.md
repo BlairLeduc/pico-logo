@@ -238,7 +238,22 @@ own — revisited 2026-07-18; demon teardown is `cleardemons`' job, see
 
 ## 6. Input
 
-Arrow keys and space arrive from `readchar` as single bytes; compare with
+**This section is superseded: the game reads key STATE, not characters.** What
+follows is the original `readchar` design, kept because §9's limitations table
+named its two costs and both are now paid off. `readchar` delivers at the
+*keyboard's* cadence — nothing for 300 ms after a press, then ten repeats a
+second, queued — so the loop took keys out slower than the hardware put them in
+and the cannon kept sliding after the player let go; and one character a frame
+meant one control a frame, so a player who was firing was not moving.
+
+`poll.input` now calls `pollkeys` once and reads `keydown? 180` / `keydown? 183`
+for the arrows and `keyhit? 32` / `keyhit? 112` for fire and pause — level for
+the control that holds, edge for the ones that fire. The key codes in the table
+below are unchanged; they are what `keydown?`/`keyhit?` take. `play.level` takes
+a baseline `pollkeys` before its loop so the space that leaves the attract screen
+is not delivered to the first frame as a hit.
+
+Arrow keys and space arrived from `readchar` as single bytes; compare with
 `ascii` (from `devices/picocalc/keyboard.h`):
 
 | Key | Code | `ascii rc` |
@@ -420,7 +435,7 @@ stack depth regardless of session length.
 | ≤3 alien bombs | one bomb type, random column drops | targeted "aimed" bombs later |
 | Mystery UFO with bonus | fixed bonus, timed appearance | score-position bonus later |
 | Lives, levels, score | fullscreen canvas HUD | one change-tracked `write` line |
-| Continuous cannon movement | key-repeat only | `readchar` gives presses, not held-key state; a held-key device query would smooth this but is out of scope |
+| Continuous cannon movement | ~~key-repeat only~~ **done** | The note here read "`readchar` gives presses, not held-key state; a held-key device query would smooth this but is out of scope". That device query is `pollkeys`/`keydown?`/`keyhit?`, built 2026-08-14, and §6 records the conversion |
 
 None of these touch the interpreter; they're all Logo-level polish.
 
