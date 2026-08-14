@@ -40,3 +40,15 @@ static inline bool add_repeating_timer_ms(int32_t delay_ms,
     }
     return true;
 }
+
+static inline bool cancel_repeating_timer(repeating_timer_t *timer)
+{
+    if (timer)
+    {
+        timer->callback = NULL;
+    }
+    return true;
+}
+
+// Busy-wait hint.  A no-op on the host.
+static inline void tight_loop_contents(void) {}

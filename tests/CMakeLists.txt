@@ -240,6 +240,23 @@ target_include_directories(test_costumes PRIVATE
 )
 add_test(NAME test_costumes COMMAND test_costumes)
 
+# Keyboard driver test — compiles devices/picocalc/keyboard.c on the host
+# against a fake southbridge FIFO in the test file.
+add_executable(test_keyboard
+    test_keyboard.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/keyboard.c
+    unity.c
+)
+target_include_directories(test_keyboard BEFORE PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/mocks
+)
+target_include_directories(test_keyboard PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/devices/picocalc
+)
+add_test(NAME test_keyboard COMMAND test_keyboard)
+
 # TLS heap allocator test — compiles devices/picocalc/tls_heap.c on the host.
 # Portable (no Pico SDK / Logo runtime dependencies).
 add_executable(test_tls_heap

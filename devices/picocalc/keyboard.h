@@ -61,7 +61,9 @@
 
 // Keyboard defaults
 #define KBD_BUFFER_SIZE     (32)
-#define KEYBOARD_POLL_MS    (100) // poll keyboard every 100 ms
+#define KEYBOARD_POLL_MS    (100) // background poll while Logo code is running
+#define KEYBOARD_IDLE_POLL_MS (20) // poll while blocked waiting for a key
+#define KEYBOARD_DRAIN_MAX   (4)  // FIFO entries drained per poll
 
 extern volatile bool user_interrupt;
 extern volatile bool pause_requested;  // F9 key triggers pause during execution
