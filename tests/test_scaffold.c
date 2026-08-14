@@ -281,6 +281,17 @@ int mock_poll_keys_count(void)
     return mock_poll_keys_calls;
 }
 
+// Every setUp variant has to call this, not just the plain one: the game tests
+// use test_scaffold_setUp_with_device_and_hardware(), and a key left down by
+// one test would still be down in the next.
+void reset_mock_key_state(void)
+{
+    memset(mock_keys_down, 0, sizeof(mock_keys_down));
+    memset(mock_keys_hit_pending, 0, sizeof(mock_keys_hit_pending));
+    memset(mock_keys_hit, 0, sizeof(mock_keys_hit));
+    mock_poll_keys_calls = 0;
+}
+
 void mock_poll_keys(void)
 {
     mock_poll_keys_calls++;
@@ -448,11 +459,7 @@ void test_scaffold_setUp(void)
     mock_battery_level = 100;     // Reset mock battery state
     mock_battery_charging = false;
 
-    // Reset mock key state
-    memset(mock_keys_down, 0, sizeof(mock_keys_down));
-    memset(mock_keys_hit_pending, 0, sizeof(mock_keys_hit_pending));
-    memset(mock_keys_hit, 0, sizeof(mock_keys_hit));
-    mock_poll_keys_calls = 0;
+    reset_mock_key_state();
     
     // Reset mock power_off state (default: not available)
     mock_power_off_available = false;
@@ -492,6 +499,8 @@ void test_scaffold_setUp_with_device(void)
     output_pos = 0;
     use_mock_device = true;
 
+    reset_mock_key_state();
+
     // Initialize the mock device with turtle, text, and screen capabilities
     mock_device_init();
     
@@ -513,6 +522,8 @@ void test_scaffold_setUp_with_device_and_hardware(void)
     output_pos = 0;
     use_mock_device = true;
     mock_ticks_value = 0;
+
+    reset_mock_key_state();
 
     // Initialize the mock device with turtle, text, and screen capabilities
     mock_device_init();

@@ -58,11 +58,18 @@
 // directory the game was loaded from.
 #define SCORES_FILE "/games/asteroids.scores"
 
-// PicoCalc key codes, as the two shipped shooters use them.
-#define KEY_LEFT   "\264"
-#define KEY_RIGHT  "\267"
-#define KEY_THRUST "\265"
-#define KEY_HYPER  "\266"
+// PicoCalc key codes, as the game names them to `keydown?`/`keyhit?`. These
+// were the characters `readchar` produced until the game moved to key state;
+// they are the codes themselves now, which is also how the stale KEY_HYPER
+// (\266 is the DOWN arrow, not the `;` the game has bound since 1effaab) came
+// to be caught.
+#define KEY_LEFT   180
+#define KEY_RIGHT  183
+#define KEY_THRUST 181
+#define KEY_HYPER   59
+#define KEY_FIRE    32
+#define KEY_PAUSE  112
+#define KEY_QUIT   113
 
 // Load a whole Logo file, defining its procedures and running its top-level
 // tuning `make`s. Procedure definitions are not handled by the bare
@@ -173,6 +180,20 @@ static void run(const char *input)
 {
     Result r = run_string(input);
     TEST_ASSERT_TRUE_MESSAGE(r.status == RESULT_NONE || r.status == RESULT_OK, input);
+}
+
+// The game reads key STATE now, so a test holds keys down rather than queueing
+// characters. A press also registers as a hit for the next `pollkeys`, which is
+// how the driver reports one, so `press` drives `keydown?` and `keyhit?` alike;
+// a control read with `keyhit?` needs the release before it will answer again.
+static void press(int key_code)
+{
+    set_mock_key_down(key_code, true);
+}
+
+static void release(int key_code)
+{
+    set_mock_key_down(key_code, false);
 }
 
 // A full table, 20000 down to 2000, so a test can ask where a score lands in
@@ -1007,27 +1028,66 @@ void test_the_arrows_turn_the_ship_both_ways(void)
     setup_with(3);
     land_the_ship();          // a ship still waiting answers no key at all (B24)
     float turn = num(":turn.rate");
-    set_mock_input(KEY_RIGHT);
+    press(KEY_RIGHT);
     run("play.frame");
     TEST_ASSERT_EQUAL_FLOAT(turn, num(":sh"));
-    set_mock_input(KEY_LEFT);
+    release(KEY_RIGHT);
+    press(KEY_LEFT);
     run("play.frame");
     TEST_ASSERT_EQUAL_FLOAT(0, num(":sh"));
 }
 
-// One key a frame means thrust is held only on frames where thrust was the key
-// read, so `thrusting` is cleared BEFORE the input guard rather than after it.
-// Cleared after, a frame with no key at all would leave the flame lit.
+// Steering is a LEVEL, so a key that stays down keeps turning the ship. Under
+// the old character stream this took one queued repeat per frame, at a cadence
+// the keyboard chose rather than the frame did.
+void test_a_held_arrow_keeps_turning_the_ship(void)
+{
+    setup_with(3);
+    land_the_ship();
+    float turn = num(":turn.rate");
+
+    press(KEY_RIGHT);
+    run("repeat 3 [play.frame]");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(turn * 3, num(":sh"),
+                                    "a held arrow did not turn the ship every frame");
+
+    release(KEY_RIGHT);
+    run("play.frame");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(turn * 3, num(":sh"),
+                                    "the ship kept turning after the key came up");
+}
+
+// What the character stream could not do at all: one control per frame meant a
+// player who was firing was not thrusting.
+void test_the_ship_can_thrust_and_fire_on_the_same_frame(void)
+{
+    setup_with(3);
+    land_the_ship();
+    run("make \"dying 0");
+
+    press(KEY_THRUST);
+    press(KEY_FIRE);
+    run("play.frame");
+
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true",
+                                     value_to_string(eval_string(":thrusting").value),
+                                     "firing cost the ship its thrust");
+    TEST_ASSERT_TRUE_MESSAGE(item_of("slife", 1) > 0, "thrusting cost the ship its shot");
+}
+
+// `thrusting` is cleared BEFORE the input guards rather than after them.
+// Cleared after, a frame where the key is not held would leave the flame lit.
 void test_a_frame_with_no_key_puts_the_flame_out(void)
 {
     setup_with(3);
     land_the_ship();          // a ship still waiting answers no key at all (B24)
-    set_mock_input(KEY_THRUST);
+    press(KEY_THRUST);
     run("play.frame");
     TEST_ASSERT_EQUAL_STRING_MESSAGE("true",
                                      value_to_string(eval_string(":thrusting").value),
                                      "the thrust key did not light the flame");
-    run("play.frame");   // nothing queued
+    release(KEY_THRUST);
+    run("play.frame");
     TEST_ASSERT_EQUAL_STRING_MESSAGE("false",
                                      value_to_string(eval_string(":thrusting").value),
                                      "the flame stayed lit with no key pressed");
@@ -1535,36 +1595,42 @@ void test_a_waiting_ship_answers_no_key_but_pause_and_quit(void)
     setup_with(3);
     run("respawn");
 
-    set_mock_input(KEY_RIGHT);
+    press(KEY_RIGHT);
     run("play.frame");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":sh"), "a waiting ship steered");
+    release(KEY_RIGHT);
 
     run("respawn");
-    set_mock_input(KEY_THRUST);
+    press(KEY_THRUST);
     run("play.frame");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":svx"), "a waiting ship thrusted");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":svy"), "a waiting ship thrusted");
+    release(KEY_THRUST);
 
     run("respawn");
-    set_mock_input(" ");
+    press(KEY_FIRE);
     run("play.frame");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, item_of("slife", 1), "a waiting ship fired");
+    release(KEY_FIRE);
 
     run("respawn");
-    set_mock_input(KEY_HYPER);
+    press(KEY_HYPER);
     run("play.frame");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":shipx"), "a waiting ship jumped");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":shipy"), "a waiting ship jumped");
+    release(KEY_HYPER);
 
     // Pause and quit still answer, as they do through a death.
     run("respawn");
-    set_mock_input("p");
+    press(KEY_PAUSE);
     run("play.frame");
     TEST_ASSERT_EQUAL_STRING_MESSAGE("true", value_to_string(eval_string(":paused").value),
                                      "a waiting ship could not be paused");
-    set_mock_input("p");
+    release(KEY_PAUSE);
+    press(KEY_PAUSE);
     run("play.frame");
-    set_mock_input("q");
+    release(KEY_PAUSE);
+    press(KEY_QUIT);
     run("play.frame");
     TEST_ASSERT_EQUAL_STRING_MESSAGE("true", value_to_string(eval_string(":quit").value),
                                      "a waiting ship could not be quit");
@@ -1848,20 +1914,34 @@ void test_the_hud_carries_the_score_the_level_and_a_heart_a_life(void)
 void test_pause_answers_p_and_nothing_else(void)
 {
     setup_with(3);
-    set_mock_input("p");
+    press(KEY_PAUSE);
     run("play.frame");
     TEST_ASSERT_EQUAL_STRING_MESSAGE("true", value_to_string(eval_string(":paused").value),
                                      "P did not pause");
+    release(KEY_PAUSE);
 
-    set_mock_input("q");
+    press(KEY_QUIT);
     run("play.frame");
     TEST_ASSERT_EQUAL_STRING_MESSAGE("false", value_to_string(eval_string(":over").value),
                                      "a paused game answered the quit key");
+    release(KEY_QUIT);
 
-    set_mock_input("p");
+    press(KEY_PAUSE);
     run("play.frame");
     TEST_ASSERT_EQUAL_STRING_MESSAGE("false", value_to_string(eval_string(":paused").value),
                                      "P did not lift the pause");
+}
+
+// Pause is an EDGE, so a finger left on the key does not toggle it ten times a
+// second. Under the character stream a held P did exactly that, because the
+// keyboard's repeats arrived as fresh keystrokes.
+void test_holding_pause_toggles_it_once(void)
+{
+    setup_with(3);
+    press(KEY_PAUSE);
+    run("repeat 5 [play.frame]");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", value_to_string(eval_string(":paused").value),
+                                     "a held pause key toggled the pause more than once");
 }
 
 // A level that ends has to hand the screen back: leaving it in `sync` mode
@@ -1871,9 +1951,7 @@ void test_a_level_ends_on_q_and_puts_the_screen_back(void)
 {
     run("init.game");
     run("make \"level.rocks 3");
-    // Space then Q: one key a frame, so the player fires and then quits with
-    // the shot still in flight.
-    set_mock_input(" q");
+    press(KEY_QUIT);
     run("play.level");
     TEST_ASSERT_EQUAL_STRING("auto", value_to_string(eval_string("refreshmode").value));
 
@@ -1956,21 +2034,24 @@ void test_a_dying_ship_answers_only_pause_and_quit(void)
     setup_with(3);
     run("make \"sh 90  make \"dying 5  make \"over false");
 
-    set_mock_input(KEY_LEFT);
+    press(KEY_LEFT);
     run("poll.input");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(90, num(":sh"), "a dying ship steered");
+    release(KEY_LEFT);
 
-    set_mock_input(" ");
+    press(KEY_FIRE);
     run("poll.input");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, item_of("slife", 1), "a dying ship fired");
+    release(KEY_FIRE);
 
-    set_mock_input("p");
+    press(KEY_PAUSE);
     run("poll.input");
     TEST_ASSERT_EQUAL_STRING_MESSAGE("true", value_to_string(eval_string(":paused").value),
                                      "a dying game could not be paused");
     run("make \"paused false");
+    release(KEY_PAUSE);
 
-    set_mock_input("q");
+    press(KEY_QUIT);
     run("poll.input");
     TEST_ASSERT_EQUAL_STRING_MESSAGE("true", value_to_string(eval_string(":quit").value),
                                      "a dying game could not be quit");
@@ -1978,15 +2059,38 @@ void test_a_dying_ship_answers_only_pause_and_quit(void)
 
 // Q means "back to the attract screen", not "the game ended": the difference is
 // the game-over card, and `quit` is what tells them apart.
+//
+// The loop is driven here rather than through `play.level` because the key has
+// to go down after the level is running -- see the baseline test below.
 void test_q_quits_the_game_and_not_just_the_level(void)
 {
     run("init.game");
     run("make \"level.rocks 3");
-    set_mock_input("q");
-    run("play.level");
+    run("setup.level  make \"over false");
+    press(KEY_QUIT);
+    run("repeat 5 [if not :over [play.frame]]");
     TEST_ASSERT_EQUAL_STRING_MESSAGE("true", value_to_string(eval_string(":quit").value),
                                      "Q ended the level without ending the game");
     TEST_ASSERT_TRUE_MESSAGE(num(":rocks.alive") > 0, "the board was cleared, not quit");
+}
+
+// The press that leaves the attract screen must not reach the level's first
+// frame. `keyhit?` reports what happened since the previous `pollkeys`, and the
+// space that started the game is on the wrong side of that line -- so
+// `play.level` takes a baseline poll before its loop, and a player who is still
+// holding the key gets no hit from it. Without the baseline the game opens by
+// firing a shot nobody asked for.
+void test_a_key_held_from_the_attract_screen_does_not_act_on_the_first_frame(void)
+{
+    run("init.game");
+    run("make \"level.rocks 3");
+    press(KEY_FIRE);
+    run("setup.level  make \"over false  pollkeys");
+    land_the_ship();
+    run("play.frame");
+
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, item_of("slife", 1),
+                                    "the press that started the level fired a shot");
 }
 
 // The state machine: levels advance while there are ships, the game ends when
@@ -3000,9 +3104,10 @@ void test_a_pause_holds_the_shots_where_they_are(void)
     float player_before = num(":probe1"), saucer_before = num(":probe4");
     TEST_ASSERT_TRUE_MESSAGE(player_before > 0, "the player's shot never left the ship");
 
-    set_mock_input("p");
+    press(KEY_PAUSE);
     run("play.frame");
     TEST_ASSERT_EQUAL_STRING("true", value_to_string(eval_string(":paused").value));
+    release(KEY_PAUSE);
 
     // Half a second of wall clock with the game paused, and several frames.
     run("ask 1 [make \"probe1 ycor]  ask 4 [make \"probe4 xcor]");
@@ -3018,8 +3123,9 @@ void test_a_pause_holds_the_shots_where_they_are(void)
                                     "a paused game let the saucer's shot keep flying");
 
     // And unpausing puts them back in the air at the speed they had.
-    set_mock_input("p");
+    press(KEY_PAUSE);
     run("play.frame");
+    release(KEY_PAUSE);
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":shot.speed"), num("ask 1 [speed]"),
                                     "the player's shot did not resume");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":sau.shot.speed"), num("ask 4 [speed]"),
@@ -3346,12 +3452,13 @@ void test_the_thrust_rumble_sounds_only_while_it_is_held(void)
     run("setup.sound  make \"dying 0");
 
     int mark = mock_sound_gate_count();
-    set_mock_input(KEY_THRUST);
+    press(KEY_THRUST);
     run("play.frame");
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, notes_on(2, mark), "a thrusting frame was silent");
 
     mark = mock_sound_gate_count();
-    run("play.frame");                     // no key at all
+    release(KEY_THRUST);
+    run("play.frame");
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, notes_on(2, mark), "the rumble kept sounding after release");
 }
 
@@ -3462,7 +3569,7 @@ void test_a_level_end_silences_every_voice(void)
     const MockDeviceState *st = mock_device_get_state();
     int before = st->sound.stop_count;
 
-    set_mock_input(" q");
+    press(KEY_QUIT);
     run("play.level");
     TEST_ASSERT_TRUE_MESSAGE(st->sound.stop_count > before,
                              "a level ended with the voices still sounding");
@@ -3720,6 +3827,8 @@ int main(void)
     RUN_TEST(test_a_ship_heading_outside_zero_to_360_still_thrusts_and_draws);
     RUN_TEST(test_the_flame_shows_only_when_thrusting_and_only_every_other_frame);
     RUN_TEST(test_the_arrows_turn_the_ship_both_ways);
+    RUN_TEST(test_a_held_arrow_keeps_turning_the_ship);
+    RUN_TEST(test_the_ship_can_thrust_and_fire_on_the_same_frame);
     RUN_TEST(test_a_frame_with_no_key_puts_the_flame_out);
     RUN_TEST(test_firing_takes_the_lowest_idle_shot);
     RUN_TEST(test_a_shot_expires_and_stops_its_turtle);
@@ -3751,8 +3860,10 @@ int main(void)
     RUN_TEST(test_a_level_advance_adds_a_rock_up_to_the_ceiling);
     RUN_TEST(test_the_hud_carries_the_score_the_level_and_a_heart_a_life);
     RUN_TEST(test_pause_answers_p_and_nothing_else);
+    RUN_TEST(test_holding_pause_toggles_it_once);
     RUN_TEST(test_a_dying_ship_answers_only_pause_and_quit);
     RUN_TEST(test_q_quits_the_game_and_not_just_the_level);
+    RUN_TEST(test_a_key_held_from_the_attract_screen_does_not_act_on_the_first_frame);
     RUN_TEST(test_a_game_plays_levels_until_the_ships_run_out);
     RUN_TEST(test_quitting_shows_no_game_over_card);
     RUN_TEST(test_the_attract_screen_prints_the_scores_and_the_keys);

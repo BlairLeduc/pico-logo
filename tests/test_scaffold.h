@@ -156,6 +156,9 @@ void set_mock_key_tap(int key_code);
 // How many times pollkeys has reached the hardware.
 int mock_poll_keys_count(void);
 
+// Release every key and drop the hit latch. Called by every setUp variant.
+void reset_mock_key_state(void);
+
 // ============================================================================
 // Mock Power Off Helpers
 // ============================================================================

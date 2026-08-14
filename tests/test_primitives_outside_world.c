@@ -339,8 +339,10 @@ void test_pollkeys_visits_the_hardware_once_per_call(void)
     set_mock_key_down(181, true);
     set_mock_key_down(32, true);
 
+    // pollkeys is a command: it outputs nothing, so a frame can call it as a
+    // statement without `ignore`.
     Result r = eval_string("pollkeys");
-    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
     TEST_ASSERT_EQUAL_INT(1, mock_poll_keys_count());
 
     eval_string("keydown? 180");

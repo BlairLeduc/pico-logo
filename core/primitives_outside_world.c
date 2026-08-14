@@ -94,7 +94,7 @@ static Result prim_pollkeys(Evaluator *eval, int argc, Value *args)
     {
         logo_io_poll_keys(io);
     }
-    return result_ok(value_none());
+    return result_none();
 }
 
 // keydown? (keydownp) - outputs true if that key code was held at the last
