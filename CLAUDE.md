@@ -33,14 +33,8 @@ Note: We only have a Pimoroni Pico Plus 2 W for hardware testing.
 - Use **single-precision** float (32-bit) for all math; the RP2350 supports it natively in hardware.
 - SRAM (~520 KB) is nearly full: large static/global buffers can crash `repl_init` with an out-of-memory panic. Keep new fixed-capacity sizes in `core/limits.h`, not scattered `#define`s.
 
-# Code Structure
-
-- Core interpreter lives in `core/`. Primitives are defined in `core/primitives_<topic>.c`.
-- Device code lives in `devices/<device>/` (e.g. `host/`, `picocalc/`). The `host` device uses stdin/stdout for the REPL and has no graphics or sound.
-
 # Unit Testing
 
-- Tests use **Unity** + **ctest**. A test file `test_foo.c` mirrors the source `core/foo.c`; cover typical and edge cases with clear, descriptive assertions.
 - Tests use the **mock device** (`tests/mock_device.*`); extend the mock as needed rather than touching real hardware.
 - Found a bug while working? Write a test that reproduces it **first**, then fix it — and record it in [Bugs](docs/bugs.md) (open it if you're not fixing it now, Fixed table if you are).
 - Never change a test just to make it pass without understanding the failure — investigate and fix the underlying cause.
