@@ -156,6 +156,9 @@ void set_mock_key_tap(int key_code);
 // How many times pollkeys has reached the hardware.
 int mock_poll_keys_count(void);
 
+// How many key codes have reached the hardware's key_down/key_hit ops.
+int mock_key_query_count(void);
+
 // Release every key and drop the hit latch. Called by every setUp variant.
 void reset_mock_key_state(void);
 

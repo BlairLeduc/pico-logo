@@ -236,6 +236,11 @@ static uint32_t mock_keys_down[MOCK_KEY_WORDS];
 static uint32_t mock_keys_hit_pending[MOCK_KEY_WORDS];
 static uint32_t mock_keys_hit[MOCK_KEY_WORDS];
 static int mock_poll_keys_calls = 0;
+// How many key codes reached the device. A test uses this to prove an
+// out-of-range code was turned away BEFORE it got here, which asserting on the
+// `false` alone cannot: the mock bounds-checks too, so it would answer `false`
+// either way.
+static int mock_key_queries = 0;
 
 static bool mock_key_bit(const uint32_t *bits, int code)
 {
@@ -281,6 +286,11 @@ int mock_poll_keys_count(void)
     return mock_poll_keys_calls;
 }
 
+int mock_key_query_count(void)
+{
+    return mock_key_queries;
+}
+
 // Every setUp variant has to call this, not just the plain one: the game tests
 // use test_scaffold_setUp_with_device_and_hardware(), and a key left down by
 // one test would still be down in the next.
@@ -290,6 +300,7 @@ void reset_mock_key_state(void)
     memset(mock_keys_hit_pending, 0, sizeof(mock_keys_hit_pending));
     memset(mock_keys_hit, 0, sizeof(mock_keys_hit));
     mock_poll_keys_calls = 0;
+    mock_key_queries = 0;
 }
 
 void mock_poll_keys(void)
@@ -304,11 +315,13 @@ void mock_poll_keys(void)
 
 bool mock_key_down(int key_code)
 {
+    mock_key_queries++;
     return mock_key_bit(mock_keys_down, key_code);
 }
 
 bool mock_key_hit(int key_code)
 {
+    mock_key_queries++;
     return mock_key_bit(mock_keys_hit, key_code);
 }
 

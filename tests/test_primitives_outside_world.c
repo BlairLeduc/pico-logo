@@ -9,6 +9,7 @@
 #include "test_scaffold.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 void setUp(void)
 {
@@ -352,6 +353,43 @@ void test_pollkeys_visits_the_hardware_once_per_call(void)
     TEST_ASSERT_EQUAL_INT(1, mock_poll_keys_count());
 }
 
+// A key code is 0..255. Anything else is turned away at the primitive, before
+// the cast: `(int)NaN` is undefined behaviour, and a code that reached the
+// PicoCalc would be truncated to a uint8_t there, so `keydown? 300` would
+// quietly answer about the comma key (300 & 0xFF) instead of about nothing.
+//
+// Asserting on the `false` alone would prove nothing -- the mock bounds-checks
+// too, so it answers `false` either way -- so this asserts the code never
+// reached the device at all.
+void test_an_out_of_range_key_code_never_reaches_the_device(void)
+{
+    set_mock_key_down(44, true);   // ',' -- what 300 truncates to
+    eval_string("pollkeys");
+    int queries = mock_key_query_count();
+
+    const char *bad[] = {"300", "-1", "256", "1e30"};
+    for (int i = 0; i < 4; i++)
+    {
+        char expr[64];
+        snprintf(expr, sizeof(expr), "keydown? %s", bad[i]);
+        Result r = eval_string(expr);
+        TEST_ASSERT_EQUAL_MESSAGE(RESULT_OK, r.status, expr);
+        TEST_ASSERT_EQUAL_STRING_MESSAGE("false", mem_word_ptr(r.value.as.node), expr);
+
+        snprintf(expr, sizeof(expr), "keyhit? %s", bad[i]);
+        r = eval_string(expr);
+        TEST_ASSERT_EQUAL_MESSAGE(RESULT_OK, r.status, expr);
+        TEST_ASSERT_EQUAL_STRING_MESSAGE("false", mem_word_ptr(r.value.as.node), expr);
+    }
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(queries, mock_key_query_count(),
+                                  "an out-of-range key code was passed to the device");
+
+    // ...and a code that IS in range still gets through.
+    Result r = eval_string("keydown? 44");
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+}
+
 void test_keydownp_rejects_a_non_number(void)
 {
     Result r = eval_string("keydown? [a b]");
@@ -678,6 +716,7 @@ int main(void)
     RUN_TEST(test_keyhitp_catches_a_tap_too_short_to_be_down);
     RUN_TEST(test_pollkeys_visits_the_hardware_once_per_call);
     RUN_TEST(test_keydownp_rejects_a_non_number);
+    RUN_TEST(test_an_out_of_range_key_code_never_reaches_the_device);
     
     RUN_TEST(test_readchar_returns_single_character);
     RUN_TEST(test_readchar_multiple_calls);

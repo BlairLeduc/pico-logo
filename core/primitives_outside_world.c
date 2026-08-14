@@ -97,6 +97,19 @@ static Result prim_pollkeys(Evaluator *eval, int argc, Value *args)
     return result_none();
 }
 
+// True when `f` names a key.  Key codes are 0..255 (devices/picocalc/keyboard.h);
+// anything else - a negative, a code past the end of the table, or the NaN or
+// infinity a float can carry - is not a key, so it is neither down nor hit.
+//
+// The test is made on the FLOAT, before any cast, and that is the whole point of
+// having it: `(int)NaN` is undefined behaviour, and a code that survived to the
+// device would be truncated there, so `keydown? 300` would quietly answer about
+// the comma key (300 & 0xFF) instead of about nothing.
+static bool is_key_code(float f)
+{
+    return f >= 0.0f && f <= 255.0f; // false for NaN and both infinities
+}
+
 // keydown? (keydownp) - outputs true if that key code was held at the last
 // pollkeys.  Level, not edge: true on every frame the key stays down.
 static Result prim_keydownp(Evaluator *eval, int argc, Value *args)
@@ -105,7 +118,7 @@ static Result prim_keydownp(Evaluator *eval, int argc, Value *args)
     REQUIRE_NUMBER(args[0], code_f);
 
     LogoIO *io = primitives_get_io();
-    if (!io)
+    if (!io || !is_key_code(code_f))
     {
         return result_ok(value_bool(false));
     }
@@ -121,7 +134,7 @@ static Result prim_keyhitp(Evaluator *eval, int argc, Value *args)
     REQUIRE_NUMBER(args[0], code_f);
 
     LogoIO *io = primitives_get_io();
-    if (!io)
+    if (!io || !is_key_code(code_f))
     {
         return result_ok(value_bool(false));
     }

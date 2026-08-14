@@ -137,6 +137,10 @@ extern "C"
         void (*poll_keys)(void);
 
         // Was this key code held at the last poll_keys?
+        //
+        // key_code is always 0..255: `keydown?`/`keyhit?` reject anything else
+        // (including the NaN a float can carry) before reaching here, so an
+        // implementation may narrow it to a uint8_t without a range check.
         bool (*key_down)(int key_code);
 
         // Was this key code pressed between the last two poll_keys calls?
