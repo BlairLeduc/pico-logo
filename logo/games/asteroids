@@ -1618,23 +1618,35 @@ end
 ;==========================================================================
 ; Input
 ;
-; One `readchar` a frame -- the keyboard ring buffers, so a held key repeats.
+; `pollkeys` reads the keyboard's STATE -- which keys are down right now --
+; where this used to take one `readchar` a frame off a buffered stream.  The
+; stream was wrong here twice over.  It arrives at the keyboard's typing
+; cadence, so a frame loop took keys out slower than the hardware put them in
+; and the ship went on turning after the player let go; and one character a
+; frame meant only one control could act per frame, so a player who was firing
+; was not thrusting.  Every `stop` below used to be load-bearing for that
+; reason, and steering, thrust and fire now stand as independent `if`s.
+;
+; LEVEL FOR THE CONTROLS THAT HOLD, EDGE FOR THE ONES THAT FIRE.  `keydown?`
+; answers for as long as the key is held, which is what steering and thrust
+; want; `keyhit?` answers once per press however long it is held, which is what
+; pause, quit, hyperspace and the trigger want.  Holding P used to toggle the
+; pause ten times a second, and holding `;` used to jump repeatedly.
+;
 ; `poll.input` runs OUTSIDE the paused guard in play.frame, or a paused game
 ; could never read the key that unpauses it; so it has to turn every other key
 ; away itself while paused, which is the defect both shipped shooters had.
 ;
-; One key a frame also means thrust is only held on frames where thrust was the
-; key read, so `thrusting` is cleared before the guard rather than after it --
-; on a frame with no key at all the flame must go out.
+; `thrusting` is cleared before the guards rather than after them: on a frame
+; where the key is not held, or the ship is dying or waiting, the flame must go
+; out.
 
 to poll.input
-  local "k
+  pollkeys
   make "thrusting false
-  if not key? [stop]
-  make "k ascii readchar
-  if :k = 112 [toggle.pause stop]
+  if keyhit? 112 [toggle.pause stop]
   if :paused [stop]
-  if :k = 113 [make "quit true  make "over true stop]
+  if keyhit? 113 [make "quit true  make "over true stop]
   ; A ship that is exploding does not steer, thrust, fire or hyperspace, and
   ; the guard is here rather than in each handler.  Pause and quit are above it
   ; deliberately: a death lasts most of a second and a player who wants out
@@ -1649,11 +1661,11 @@ to poll.input
   ; looked at.  Reported from a board as firing while the ship stayed hidden.
   if 0 < :dying [stop]
   if :waiting [stop]
-  if :k = 180 [make "sh :sh - :turn.rate stop]
-  if :k = 183 [make "sh :sh + :turn.rate stop]
-  if :k = 181 [thrust stop]
-  if :k = 59 [hyperspace stop]
-  if :k = 32 [fire]
+  if keydown? 180 [make "sh :sh - :turn.rate]
+  if keydown? 183 [make "sh :sh + :turn.rate]
+  if keydown? 181 [thrust]
+  if keyhit? 59 [hyperspace]
+  if keyhit? 32 [fire]
 end
 
 ; PAUSING HAS TO STOP THE TURTLES, and this game had missed it.  A shot is flown
@@ -1805,6 +1817,11 @@ to play.level
   setup.level
   (setrefresh "sync :fps)
   make "over false
+  ; A baseline poll, so the press that started the level is not delivered to its
+  ; first frame as a hit -- `keyhit?` reports what happened since the previous
+  ; `pollkeys`, and the space that left the attract screen is on the wrong side
+  ; of that line.
+  pollkeys
   until [:over] [
     play.frame
     if 0 = :rocks.alive [if 0 = :sau.on [make "over true]]
@@ -2100,8 +2117,10 @@ to wait.for.key
   output :k
 end
 
-; A player mashing the fire button as the last ship dies leaves keys in the
-; ring, and the name field is the next thing to read it.  Drop them.
+; The frame loop's `pollkeys` already drops the characters its keypresses
+; buffer, so the ring should be empty by the time a game ends.  This stays as
+; the guard for the paths that do not go through a frame -- and it costs one
+; `key?` when there is nothing to drop.
 to flush.keys
   until [not key?] [ignore readchar]
 end

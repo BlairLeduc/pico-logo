@@ -99,6 +99,15 @@ extern "C"
 
     // Check if pause has been requested (F9 key) and clear the flag
     // Returns true if pause was requested
+    // Refresh the key-state view and discard characters buffered for readchar
+    // (pollkeys). No-op on devices without key state.
+    void logo_io_poll_keys(LogoIO *io);
+
+    // Is this key code held / was it pressed since the previous poll_keys?
+    // (keydown?, keyhit?) Both output false on devices without key state.
+    bool logo_io_key_down(LogoIO *io, int key_code);
+    bool logo_io_key_hit(LogoIO *io, int key_code);
+
     bool logo_io_check_pause_request(LogoIO *io);
 
     // Clear the pause request flag

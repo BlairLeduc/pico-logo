@@ -4830,6 +4830,78 @@ keyp
 ```
 
 
+## pollkeys
+
+pollkeys  
+
+`command`
+
+`pollkeys` refreshes what [`keydown?`](#keydown-keydownp) and [`keyhit?`](#keyhit-keyhitp) report, and discards any characters waiting for [`readchar`](#readchar-rc).
+
+[`readchar`](#readchar-rc) hands you a stream of characters at the keyboard's typing speed: nothing for a third of a second after a key goes down, then ten repeats a second, queued up in the order they were typed. That is what you want at a prompt and the wrong thing inside a game. A frame loop reading one character a frame takes them out slower than the keyboard puts them in, so the backlog grows and the game acts on a key the player has already let go of; and reading one character at a time means two keys can never be held at once.
+
+`pollkeys` reads the keyboard's state instead of its history: which keys are down, right now. Call it once at the top of each frame. `keydown?` and `keyhit?` afterwards cost nothing, so you can ask about as many keys as your game has controls.
+
+Because a game that polls key state never reads the characters those same keypresses produce, `pollkeys` throws them away. Call `pollkeys` once before your loop starts as well, so a keypress left over from a menu is not delivered to the first frame.
+
+**Example**:
+
+```logo
+?to play
+>pollkeys                    ; ignore whatever started the game
+>until [:over] [frame]
+>end
+```
+
+
+## keydown? (keydownp)
+
+keydown? _code_  
+keydownp _code_  
+
+`operation`
+
+`keydown?` outputs `true` if the key with ASCII code _code_ was held down at the last [`pollkeys`](#pollkeys), and `false` if it was not. It answers for as many frames as the player keeps the key down, which is what a control like steering or thrust wants.
+
+The codes are the ones [`ascii`](#ascii) outputs for ordinary characters — 32 for the space bar, 112 for `p` — and for the keys that are not characters: 180 left arrow, 183 right arrow, 181 up arrow, 182 down arrow, 13 enter, 8 backspace, 177 escape. Shift, control and alt do not change the code: `keydown? 112` is true whether or not shift is down.
+
+**Example**:
+
+```logo
+?to steer
+>if keydown? 180 [left :turn.rate]
+>if keydown? 183 [right :turn.rate]
+>if keydown? 181 [thrust]
+>end
+```
+
+
+## keyhit? (keyhitp)
+
+keyhit? _code_  
+keyhitp _code_  
+
+`operation`
+
+`keyhit?` outputs `true` if the key with ASCII code _code_ was pressed between the last two [`pollkeys`](#pollkeys), and `false` if it was not.
+
+Where [`keydown?`](#keydown-keydownp) reports that a key is down, `keyhit?` reports that it went down: once per press, however long the player holds it. Use it for a control that should act once — firing a shot, pausing, choosing a menu item — and `keydown?` for one that should act continuously.
+
+`keyhit?` also catches a tap that is over so quickly the key is no longer down by the time `pollkeys` runs, which [`keydown?`](#keydown-keydownp) cannot see at all.
+
+**Example**:
+
+```logo
+?to poll.input
+>pollkeys
+>if keyhit? 112 [toggle.pause stop]   ; once per press of P
+>if :paused [stop]
+>if keydown? 181 [thrust]             ; every frame it is held
+>if keyhit? 32 [fire]                 ; one shot per press of space
+>end
+```
+
+
 ## readchar (rc)
 
 readchar  

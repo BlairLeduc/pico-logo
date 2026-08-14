@@ -218,6 +218,33 @@ void logo_io_clear_pause_request(LogoIO *io)
     io->hardware->ops->clear_pause_request();
 }
 
+void logo_io_poll_keys(LogoIO *io)
+{
+    if (!io || !io->hardware || !io->hardware->ops || !io->hardware->ops->poll_keys)
+    {
+        return;
+    }
+    io->hardware->ops->poll_keys();
+}
+
+bool logo_io_key_down(LogoIO *io, int key_code)
+{
+    if (!io || !io->hardware || !io->hardware->ops || !io->hardware->ops->key_down)
+    {
+        return false;
+    }
+    return io->hardware->ops->key_down(key_code);
+}
+
+bool logo_io_key_hit(LogoIO *io, int key_code)
+{
+    if (!io || !io->hardware || !io->hardware->ops || !io->hardware->ops->key_hit)
+    {
+        return false;
+    }
+    return io->hardware->ops->key_hit(key_code);
+}
+
 bool logo_io_check_freeze_request(LogoIO *io)
 {
     if (!io || !io->hardware || !io->hardware->ops || !io->hardware->ops->check_freeze_request)

@@ -172,6 +172,21 @@ static void picocalc_clear_freeze_request(void)
     freeze_requested = false;
 }
 
+static void picocalc_poll_keys(void)
+{
+    keyboard_poll_keys();
+}
+
+static bool picocalc_key_down(int key_code)
+{
+    return keyboard_key_down((uint8_t)key_code);
+}
+
+static bool picocalc_key_hit(int key_code)
+{
+    return keyboard_key_hit((uint8_t)key_code);
+}
+
 // ============================================================================
 // Time management operations
 // ============================================================================
@@ -2085,6 +2100,9 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .clear_pause_request = picocalc_clear_pause_request,
     .check_freeze_request = picocalc_check_freeze_request,
     .clear_freeze_request = picocalc_clear_freeze_request,
+    .poll_keys = picocalc_poll_keys,
+    .key_down = picocalc_key_down,
+    .key_hit = picocalc_key_hit,
     // Sound synthesizer (P8) -- backed by the software PSG engine (sound.c)
     .sound_gate = sound_gate,
     .sound_queue = sound_queue,

@@ -1980,10 +1980,110 @@ static void test_p10prof_profiler_runs(void)
     TEST_ASSERT_EQUAL_FLOAT(num("(:k13 - :k0)"), sum);
 }
 
+// ---------------------------------------------------------------------------
+// Input
+//
+// `poll.input` had no coverage at all before the move to key state -- every
+// steering test writes `:a.next` directly -- so these are the first tests of it.
+// ---------------------------------------------------------------------------
+
+#define KEY_UP     181
+#define KEY_LEFT   180
+#define KEY_DOWN   182
+#define KEY_RIGHT  183
+#define KEY_PAUSE  112
+#define KEY_QUIT   113
+
+static void press(int key_code) { set_mock_key_down(key_code, true); }
+static void release(int key_code) { set_mock_key_down(key_code, false); }
+
+// The four arrows record the four directions the game numbers 1..4.
+static void test_each_arrow_asks_for_its_direction(void)
+{
+    const int arrow[4] = {KEY_UP, KEY_LEFT, KEY_DOWN, KEY_RIGHT};
+    for (int d = 1; d <= 4; d++) {
+        run(".setitem 1 :a.next 0");
+        press(arrow[d - 1]);
+        run("poll.input");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(d, actor("next", 1), "an arrow asked for the wrong turn");
+        release(arrow[d - 1]);
+    }
+}
+
+// THE REASON THIS GAME WAS CONVERTED. A direction held through several
+// junctions has to be asked for again at each one. Under the character stream
+// a held key arrived as one press and then nothing for 300 ms, so once
+// `try.turn` had spent the latch the next junction saw it empty with the key
+// still down.
+static void test_a_held_arrow_asks_again_after_the_turn_is_taken(void)
+{
+    press(KEY_LEFT);
+    run("poll.input");
+    TEST_ASSERT_EQUAL_INT(2, actor("next", 1));
+
+    run(".setitem 1 :a.next 0");   // try.turn takes the turn and spends the latch
+    run("poll.input");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(2, actor("next", 1),
+                                  "a still-held arrow did not ask again at the next junction");
+}
+
+// Releasing does not cancel a turn already asked for: the latch is intent, and
+// only `try.turn` spends it. This is what lets a turn be asked for early.
+static void test_releasing_an_arrow_does_not_cancel_the_asked_for_turn(void)
+{
+    press(KEY_LEFT);
+    run("poll.input");
+    release(KEY_LEFT);
+    run("poll.input");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(2, actor("next", 1), "releasing the key cancelled the turn");
+}
+
+// A flick over before the frame samples the keyboard is a deliberate maze-game
+// move, and the old character queue caught it because the press was queued
+// rather than sampled. `keyhit?` is in `poll.input` for exactly this case --
+// `keydown?` alone would lose it.
+static void test_a_flick_shorter_than_a_frame_still_asks_for_the_turn(void)
+{
+    set_mock_key_tap(KEY_RIGHT);
+    run("poll.input");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(4, actor("next", 1), "a flick between two frames was lost");
+}
+
+// Pause is an EDGE. A finger left on the key used to toggle it ten times a
+// second, because the keyboard's repeats arrived as fresh keystrokes.
+static void test_holding_pause_toggles_it_once(void)
+{
+    press(KEY_PAUSE);
+    run("repeat 5 [poll.input]");
+    truth(":tt.paused", "true");
+
+    release(KEY_PAUSE);
+    press(KEY_PAUSE);
+    run("poll.input");
+    truth(":tt.paused", "false");
+}
+
+static void test_q_asks_to_quit_the_level(void)
+{
+    truth(":tt.quit", "false");
+    press(KEY_QUIT);
+    run("poll.input");
+    truth(":tt.quit", "true");
+    truth("level.over?", "true");
+}
+
 int main(void)
 {
     UNITY_BEGIN();
 
+    RUN_TEST(test_each_arrow_asks_for_its_direction);
+    RUN_TEST(test_a_held_arrow_asks_again_after_the_turn_is_taken);
+    RUN_TEST(test_releasing_an_arrow_does_not_cancel_the_asked_for_turn);
+    RUN_TEST(test_a_flick_shorter_than_a_frame_still_asks_for_the_turn);
+    RUN_TEST(test_holding_pause_toggles_it_once);
+    RUN_TEST(test_q_asks_to_quit_the_level);
     RUN_TEST(test_map_shape_and_encoding);
     RUN_TEST(test_the_built_map_agrees_with_the_encoding);
     RUN_TEST(test_the_kept_board_is_restored_at_every_level);

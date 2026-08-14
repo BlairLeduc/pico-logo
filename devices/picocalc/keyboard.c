@@ -42,6 +42,37 @@ static volatile uint16_t rx_tail = 0;
 static repeating_timer_t key_timer;
 static volatile bool poll_busy = false; // guards keyboard_poll re-entry
 
+// Key-state view of the keyboard, maintained alongside the character ring.
+//
+// `readchar` hands a game a buffered character STREAM at the southbridge's
+// TYPING cadence: nothing for 300 ms after a press, then one repeat per 100 ms,
+// queued.  A frame loop reading one character a frame consumes slower than that
+// produces, so the backlog grows and the ship keeps turning after the player let
+// go; and one character a frame means two keys can never be held at once.
+//
+// The FIFO already carries what a game actually wants.  Every entry names a key
+// code and a state, so a press can set a bit and a release clear it, and the game
+// asks "is this key down NOW" instead of replaying history.  No repeat cadence is
+// involved, because nothing is counted - only a level is read.
+static volatile uint32_t key_down[KEY_STATE_WORDS];        // held right now
+static volatile uint32_t key_hit_pending[KEY_STATE_WORDS]; // presses since the last visit
+static uint32_t key_hit_latched[KEY_STATE_WORDS];          // ... handed to the reader
+
+static inline void key_bit_set(volatile uint32_t *bits, uint8_t code)
+{
+    bits[code >> 5] |= 1u << (code & 31);
+}
+
+static inline void key_bit_clear(volatile uint32_t *bits, uint8_t code)
+{
+    bits[code >> 5] &= ~(1u << (code & 31));
+}
+
+static inline bool key_bit_test(const volatile uint32_t *bits, uint8_t code)
+{
+    return (bits[code >> 5] & (1u << (code & 31))) != 0;
+}
+
 //
 //  Keyboard Driver
 //
@@ -75,6 +106,29 @@ static bool keyboard_poll_once(void)
     if (key_state == KEY_STATE_IDLE)
     {
         return false; // FIFO empty
+    }
+
+    // Maintain the key-state view first: it wants the key code, before the
+    // modifier decoding below folds it into a character, and it has to see every
+    // event rather than only the ones that produce a character.  A press latches
+    // `hit` only when it finds the key up, so the firmware's 100 ms repeats of a
+    // held key do not read as a stream of fresh presses.
+    //
+    // Enter is the one code that is translated here too: the character path
+    // below turns the firmware's LF into CR, so a game asking `keydown? 13`
+    // would otherwise find a key nothing can ever press.
+    uint8_t state_code = (key_code == KEY_ENTER) ? KEY_RETURN : key_code;
+    if (key_state == KEY_STATE_PRESSED || key_state == KEY_STATE_HOLD)
+    {
+        if (!key_bit_test(key_down, state_code))
+        {
+            key_bit_set(key_hit_pending, state_code);
+        }
+        key_bit_set(key_down, state_code);
+    }
+    else if (key_state == KEY_STATE_RELEASED)
+    {
+        key_bit_clear(key_down, state_code);
     }
 
     if (key_state == KEY_STATE_PRESSED)
@@ -191,6 +245,16 @@ static bool keyboard_poll_once(void)
 // off, and the two free-running 100 ms clocks beat against each other.  Drain
 // what is actually waiting instead, bounded so a stuck FIFO cannot hold the
 // timer IRQ for long.
+static void keyboard_drain(void)
+{
+    for (int i = 0; i < KEYBOARD_DRAIN_MAX && keyboard_poll_once(); i++)
+    {
+        // keyboard_poll_once() does the work; the loop just bounds the drain.
+    }
+}
+
+// The background timer's and the idle loop's way in: drain into the character
+// ring. Games use keyboard_poll_keys() below instead.
 void keyboard_poll(void)
 {
     if (poll_busy)
@@ -199,10 +263,7 @@ void keyboard_poll(void)
     }
     poll_busy = true;
 
-    for (int i = 0; i < KEYBOARD_DRAIN_MAX && keyboard_poll_once(); i++)
-    {
-        // keyboard_poll_once() does the work; the loop just bounds the drain.
-    }
+    keyboard_drain();
 
     poll_busy = false;
 }
@@ -290,6 +351,53 @@ char keyboard_get_key()
     char ch = rx_buffer[rx_tail];
     rx_tail = (rx_tail + 1) & (KBD_BUFFER_SIZE - 1);
     return ch;
+}
+
+
+//
+// Key state API (games)
+//
+
+// Refresh the key-state view.  A game calls this once at the top of its frame;
+// the two queries below are then free, so it can ask about as many keys as it
+// likes without touching the 10 kHz bus again.
+//
+// Runs in thread context only, so `poll_busy` is false on entry and setting it
+// keeps the timer IRQ off the bitmaps while the latch is swapped - the IRQ
+// checks the same flag and returns rather than draining on top of us.
+void keyboard_poll_keys(void)
+{
+    poll_busy = true;
+
+    keyboard_drain();
+
+    // Hand the reader every press seen since its last visit - including any the
+    // background timer picked up between frames - and start a fresh set.  Doing
+    // the clear here rather than in keyboard_key_hit() means a frame can ask
+    // about the same key twice and get the same answer.
+    for (int i = 0; i < KEY_STATE_WORDS; i++)
+    {
+        key_hit_latched[i] = key_hit_pending[i];
+        key_hit_pending[i] = 0;
+    }
+
+    // Discard the characters those same events also buffered.  A game reading
+    // key state never reads them, so leaving them queued would rebuild exactly
+    // the backlog this mechanism exists to avoid, and would fire stale
+    // keystrokes at whatever menu the game returns to afterwards.
+    rx_tail = rx_head;
+
+    poll_busy = false;
+}
+
+bool keyboard_key_down(uint8_t key_code)
+{
+    return key_bit_test(key_down, key_code);
+}
+
+bool keyboard_key_hit(uint8_t key_code)
+{
+    return key_bit_test(key_hit_latched, key_code);
 }
 
 

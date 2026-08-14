@@ -581,9 +581,26 @@ constants (§18) and none of them is knowable from the host; the point of
 re-cutting them now is that iteration should start from the right order of
 magnitude rather than from a game that steers a third too slowly.
 
-One `readchar` per frame, as in Invaders — the keyboard ring buffers, so a
-held key repeats and rotation is smooth. `poll.input` runs *outside* the
-paused guard so `p` can be read while paused.
+**Key state, not a character stream.** This was one `readchar` per frame, as in
+Invaders, on the reasoning that the keyboard ring buffers so a held key repeats
+and rotation is smooth. That reasoning was wrong twice over, and the frame loop
+now calls `pollkeys` and reads `keydown?`/`keyhit?` instead. `readchar` delivers
+at the *keyboard's* cadence — nothing for 300 ms after a press, then ten repeats
+a second, queued — so a frame loop took keys out slower than the hardware put
+them in and the ship went on turning after the player let go; and one character
+a frame meant only one control could act per frame, which is why every branch of
+`poll.input` used to end in `stop`. Steering, thrust and fire are independent
+`if`s now, and a player who is firing is also thrusting.
+
+Level for the controls that hold, edge for the ones that fire: `keydown?` for
+steering and thrust, `keyhit?` for pause, quit, hyperspace and the trigger.
+Holding `p` used to toggle the pause ten times a second and holding `;` used to
+jump repeatedly, both of which were the repeat cadence leaking into the game.
+
+`play.level` takes a baseline `pollkeys` before its loop, so the press that left
+the attract screen is not delivered to the first frame as a hit — without it the
+game opens by firing a shot nobody asked for. `poll.input` still runs *outside*
+the paused guard so `p` can be read while paused.
 
 Firing takes the lowest idle shot turtle: `seth :sh`, place it at the ship's
 nose, `pu`, `st`, `setspeed`. From then on the engine flies and wraps it
@@ -1160,10 +1177,13 @@ voice-kind rule so the next edit to this table fails a test rather than a run.
 **There are five sounds and four voice-pairs, so one pair is shared, and which
 one is a gameplay decision.** Fire and the warble share `[1 5]`: a zap is 94 ms
 and a warble note is 70, so the two can only ever take a bite out of each other
-— neither can silence the other for long — and, because `poll.input` reads **one
-key a frame**, a player who is firing is not thrusting on that frame anyway. Sharing with the thrust pair instead would have cut the saucer's
-warning out from under a player who is running away, which is the one moment the
-warning exists for.
+— neither can silence the other for long. The second half of this argument no
+longer holds: it read that a player who is firing is not thrusting on that frame
+anyway, which was true only while `poll.input` took **one key a frame**, and the
+move to key state is exactly what removed that. The bite-sized-notes argument
+stands on its own, and sharing with the thrust pair instead would have cut the
+saucer's warning out from under a player who is running away, which is the one
+moment the warning exists for.
 
 Two smaller decisions worth recording. The **rock explosion is pitched by size**
 — 1500 Hz for a large, 4500 for a small — so the split table is audible without

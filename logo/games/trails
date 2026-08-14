@@ -744,19 +744,32 @@ end
 ; Input and player movement.
 ; -------------------------------------------------------------------------
 
-; Drain every queued arrow byte and keep the most recent legal desire; a turn
-; the corridor will not take yet stays buffered until it opens.
+; The player steers by INTENT, not by position: an arrow records a desired
+; direction that stays latched until the corridor will take it, which is what
+; lets a turn be asked for before the junction arrives.  `try.turn` clears the
+; latch when it takes the turn; nothing else does, so releasing the key does not
+; cancel a turn already asked for.
+;
+; This drained the character queue with `while [key?]` and kept the last byte,
+; which was the one game of the four the buffering did not actively hurt -- it
+; consumed everything every frame, so no backlog built.  What it could not do is
+; tell HELD from PRESSED: a direction held through several junctions arrives as
+; one press and then nothing for 300 ms, so the latch was set once and, once
+; `try.turn` had spent it, the next junction saw an empty latch with the key
+; still down.  `keydown?` is the fix and is the whole reason to convert this one.
+;
+; The `or` is not redundant.  `keydown?` alone would lose a flick shorter than a
+; frame -- a deliberate maze-game move, and one the old character queue did
+; catch, since the press was queued rather than sampled.  `keyhit?` catches
+; exactly that case and nothing else.
 to poll.input
-  local "k
-  while [key?] [
-    make "k (ascii readchar)
-    if :k = 181 [.setitem 1 :a.next 1]
-    if :k = 180 [.setitem 1 :a.next 2]
-    if :k = 182 [.setitem 1 :a.next 3]
-    if :k = 183 [.setitem 1 :a.next 4]
-    if :k = 112 [make "tt.paused (not :tt.paused)]
-    if :k = 113 [make "tt.quit "true]
-  ]
+  pollkeys
+  if (or (keydown? 181) (keyhit? 181)) [.setitem 1 :a.next 1]
+  if (or (keydown? 180) (keyhit? 180)) [.setitem 1 :a.next 2]
+  if (or (keydown? 182) (keyhit? 182)) [.setitem 1 :a.next 3]
+  if (or (keydown? 183) (keyhit? 183)) [.setitem 1 :a.next 4]
+  if keyhit? 112 [make "tt.paused (not :tt.paused)]
+  if keyhit? 113 [make "tt.quit "true]
 end
 
 ; A reverse is free: the actor is between two centres, so it keeps its
@@ -1650,6 +1663,10 @@ to play.level
   setup.level
   (setrefresh "sync 25)
   ready.screen
+  ; A baseline poll, so the space that left the title screen is not delivered to
+  ; the first frame as a hit -- `keyhit?` reports what happened since the
+  ; previous `pollkeys`, and that press is on the wrong side of the line.
+  pollkeys
   until [level.over?] [
     play.frame
     ifelse :tt.dying [handle.death] [if :tt.left = 0 [handle.level.clear]]

@@ -251,22 +251,37 @@ rather than scattering constants through the code.
 
 ### 6.2 Controls and cornering
 
-Arrow keys use the existing PicoCalc byte codes. Left 180 and right 183 are
-confirmed by the shipped Galaxian source; **verify up/down on hardware**
-before relying on them:
+Arrow keys use the existing PicoCalc key codes, which `keydown?`/`keyhit?` take
+directly:
 
-| Key | `ascii readchar` |
+| Key | code |
 |---|---:|
-| up | 181 (verify) |
-| down | 182 (verify) |
+| up | 181 |
+| down | 182 |
 | left | 180 |
 | right | 183 |
 | `p` (pause) | 112 |
 | space | 32 |
 
-`poll.input` drains every queued arrow byte each frame and retains the most
-recent legal desire in the turtle's `actor.nextdir`. A reverse is accepted
-immediately. A perpendicular turn stays buffered until its corridor opens.
+`poll.input` records the desired direction in the turtle's `actor.nextdir`. A
+reverse is accepted immediately. A perpendicular turn stays latched until its
+corridor opens, and only `try.turn` spends the latch — releasing the key does
+not cancel a turn already asked for, which is what lets one be asked for early.
+
+**This read the character queue until 2026-08-14** — `while [key?]` each frame,
+keeping the last byte. Of the four games it was the one buffering did not
+actively hurt, since it consumed everything every frame and no backlog built.
+What it could not do is tell *held* from *pressed*: a direction held through
+several junctions arrives as one press and then nothing for 300 ms, so the latch
+was set once and, once `try.turn` had spent it, the next junction saw an empty
+latch with the key still down. `keydown?` is the fix and is the whole reason to
+convert this one.
+
+The latch is set from `(or (keydown? c) (keyhit? c))`, and neither half is
+redundant: `keydown?` alone loses a flick shorter than a frame — a deliberate
+maze-game move, and one the character queue *did* catch, since the press was
+queued rather than sampled — and `keyhit?` alone loses the held direction the
+paragraph above is about. Each half has a test that fails without it.
 
 The turtle may start a requested turn up to four pixels before the tile
 centre and finish it up to four pixels after it. On acceptance, the

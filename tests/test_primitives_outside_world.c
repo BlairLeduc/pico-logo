@@ -9,6 +9,7 @@
 #include "test_scaffold.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 void setUp(void)
 {
@@ -260,6 +261,139 @@ void test_keyp_with_input_returns_true(void)
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     TEST_ASSERT_TRUE(value_is_word(r.value));
     TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+}
+
+//
+// Key state (games): pollkeys / keydown? / keyhit?
+//
+
+void test_keydownp_reports_a_held_key(void)
+{
+    set_mock_key_down(180, true); // left arrow
+
+    eval_string("pollkeys");
+    Result r = eval_string("keydown? 180");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+
+    r = eval_string("keydown? 183"); // right arrow, never pressed
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
+}
+
+// The whole point: a key that is down stays down across frames, and comes up
+// the moment it is released - no queue of stale presses to work through.
+void test_keydownp_follows_the_key_rather_than_a_buffer(void)
+{
+    set_mock_key_down(181, true);
+    eval_string("pollkeys");
+    Result r = eval_string("keydown? 181");
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+
+    eval_string("pollkeys");
+
+    r = eval_string("keydown? 181"); // another frame, still held
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+
+    set_mock_key_down(181, false);
+    eval_string("pollkeys");
+    r = eval_string("keydown? 181");
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
+}
+
+// keyhit? is the edge: one hit per press, however long the key is held.
+void test_keyhitp_reports_a_press_once(void)
+{
+    set_mock_key_down(32, true); // space pressed, and kept down
+
+    eval_string("pollkeys");
+    Result r = eval_string("keyhit? 32");
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+
+    eval_string("pollkeys");
+
+    r = eval_string("keyhit? 32"); // still held, not pressed again
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
+
+    // ... but it is still down, which is what keydown? is for.
+    r = eval_string("keydown? 32");
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+}
+
+// A tap that is over before the frame polls would be invisible to keydown?.
+void test_keyhitp_catches_a_tap_too_short_to_be_down(void)
+{
+    set_mock_key_tap(32);
+
+    eval_string("pollkeys");
+    Result r = eval_string("keyhit? 32");
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+
+    r = eval_string("keydown? 32");
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
+}
+
+// Both queries are pure reads, so a frame can check every control it has for
+// the price of the one pollkeys.
+void test_pollkeys_visits_the_hardware_once_per_call(void)
+{
+    set_mock_key_down(181, true);
+    set_mock_key_down(32, true);
+
+    // pollkeys is a command: it outputs nothing, so a frame can call it as a
+    // statement without `ignore`.
+    Result r = eval_string("pollkeys");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_INT(1, mock_poll_keys_count());
+
+    eval_string("keydown? 180");
+    eval_string("keydown? 181");
+    eval_string("keydown? 32");
+    eval_string("keyhit? 32");
+    TEST_ASSERT_EQUAL_INT(1, mock_poll_keys_count());
+}
+
+// A key code is 0..255. Anything else is turned away at the primitive, before
+// the cast: `(int)NaN` is undefined behaviour, and a code that reached the
+// PicoCalc would be truncated to a uint8_t there, so `keydown? 300` would
+// quietly answer about the comma key (300 & 0xFF) instead of about nothing.
+//
+// Asserting on the `false` alone would prove nothing -- the mock bounds-checks
+// too, so it answers `false` either way -- so this asserts the code never
+// reached the device at all.
+void test_an_out_of_range_key_code_never_reaches_the_device(void)
+{
+    set_mock_key_down(44, true);   // ',' -- what 300 truncates to
+    eval_string("pollkeys");
+    int queries = mock_key_query_count();
+
+    const char *bad[] = {"300", "-1", "256", "1e30"};
+    for (int i = 0; i < 4; i++)
+    {
+        char expr[64];
+        snprintf(expr, sizeof(expr), "keydown? %s", bad[i]);
+        Result r = eval_string(expr);
+        TEST_ASSERT_EQUAL_MESSAGE(RESULT_OK, r.status, expr);
+        TEST_ASSERT_EQUAL_STRING_MESSAGE("false", mem_word_ptr(r.value.as.node), expr);
+
+        snprintf(expr, sizeof(expr), "keyhit? %s", bad[i]);
+        r = eval_string(expr);
+        TEST_ASSERT_EQUAL_MESSAGE(RESULT_OK, r.status, expr);
+        TEST_ASSERT_EQUAL_STRING_MESSAGE("false", mem_word_ptr(r.value.as.node), expr);
+    }
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(queries, mock_key_query_count(),
+                                  "an out-of-range key code was passed to the device");
+
+    // ...and a code that IS in range still gets through.
+    Result r = eval_string("keydown? 44");
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+}
+
+void test_keydownp_rejects_a_non_number(void)
+{
+    Result r = eval_string("keydown? [a b]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
 void test_readchar_returns_single_character(void)
@@ -576,6 +710,13 @@ int main(void)
     // Input tests
     RUN_TEST(test_keyp_no_input_returns_false);
     RUN_TEST(test_keyp_with_input_returns_true);
+    RUN_TEST(test_keydownp_reports_a_held_key);
+    RUN_TEST(test_keydownp_follows_the_key_rather_than_a_buffer);
+    RUN_TEST(test_keyhitp_reports_a_press_once);
+    RUN_TEST(test_keyhitp_catches_a_tap_too_short_to_be_down);
+    RUN_TEST(test_pollkeys_visits_the_hardware_once_per_call);
+    RUN_TEST(test_keydownp_rejects_a_non_number);
+    RUN_TEST(test_an_out_of_range_key_code_never_reaches_the_device);
     
     RUN_TEST(test_readchar_returns_single_character);
     RUN_TEST(test_readchar_multiple_calls);

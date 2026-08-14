@@ -64,6 +64,7 @@
 #define KEYBOARD_POLL_MS    (100) // background poll while Logo code is running
 #define KEYBOARD_IDLE_POLL_MS (20) // poll while blocked waiting for a key
 #define KEYBOARD_DRAIN_MAX   (4)  // FIFO entries drained per poll
+#define KEY_STATE_WORDS      (8)  // 256 key codes, one bit each
 
 extern volatile bool user_interrupt;
 extern volatile bool pause_requested;  // F9 key triggers pause during execution
@@ -88,3 +89,11 @@ void keyboard_poll(void);
 bool keyboard_key_available(void);
 char keyboard_get_key(void);
 char keyboard_peek_key(void);  // Returns next key without consuming it, or 0 if none
+
+// Key-state view of the keyboard, for game frame loops. See the block comment
+// in keyboard.c: `keyboard_poll_keys` refreshes the down/pressed bitmaps and
+// discards the characters buffered for readchar; the two queries are then plain
+// memory reads and can be repeated freely within a frame.
+void keyboard_poll_keys(void);
+bool keyboard_key_down(uint8_t key_code); // held at the last keyboard_poll_keys
+bool keyboard_key_hit(uint8_t key_code);  // pressed since the previous one

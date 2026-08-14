@@ -125,6 +125,30 @@ extern "C"
         void (*clear_freeze_request)(void);
 
         //
+        // Key state, for game frame loops. `readchar` is a buffered character
+        // stream at the keyboard's typing cadence, which arrives too late and
+        // only one key at a time; these report which keys are down instead.
+        // All three may be NULL on devices that cannot see key releases (e.g.
+        // a host terminal); `keydown?`/`keyhit?` then always output false.
+        //
+
+        // Refresh the key state and discard any characters buffered for
+        // readchar. Called once per frame; the two queries below are then free.
+        void (*poll_keys)(void);
+
+        // Was this key code held at the last poll_keys?
+        //
+        // key_code is always 0..255: `keydown?`/`keyhit?` reject anything else
+        // (including the NaN a float can carry) before reaching here, so an
+        // implementation may narrow it to a uint8_t without a range check.
+        bool (*key_down)(int key_code);
+
+        // Was this key code pressed between the last two poll_keys calls?
+        // Catches a tap shorter than a frame; repeats of a held key do not
+        // count, so it stays one hit per press.
+        bool (*key_hit)(int key_code);
+
+        //
         // Sound synthesizer (P8). All ops may be NULL on devices without an
         // audio engine (e.g. host); the sound primitives then silently
         // succeed, exactly as `toot` did before.

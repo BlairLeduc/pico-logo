@@ -139,6 +139,30 @@ uint32_t mock_ticks_ms(void);
 void set_mock_ticks(uint32_t ms);
 
 // ============================================================================
+// Mock Key State Helpers
+// ============================================================================
+//
+// Drives the pollkeys/keydown?/keyhit? ops. The real driver derives these from
+// the southbridge's press/release events (devices/picocalc/keyboard.c); here a
+// test just says which keys are down and which were tapped.
+
+// Hold a key down (or let it up) from now until changed. Pressing a key that
+// was up also records a hit for the next pollkeys, as the driver does.
+void set_mock_key_down(int key_code, bool down);
+
+// Record a press-and-release too quick to still be down at the next pollkeys.
+void set_mock_key_tap(int key_code);
+
+// How many times pollkeys has reached the hardware.
+int mock_poll_keys_count(void);
+
+// How many key codes have reached the hardware's key_down/key_hit ops.
+int mock_key_query_count(void);
+
+// Release every key and drop the hit latch. Called by every setUp variant.
+void reset_mock_key_state(void);
+
+// ============================================================================
 // Mock Power Off Helpers
 // ============================================================================
 
