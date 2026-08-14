@@ -40,6 +40,7 @@ static volatile char rx_buffer[KBD_BUFFER_SIZE];
 static volatile uint16_t rx_head = 0;
 static volatile uint16_t rx_tail = 0;
 static repeating_timer_t key_timer;
+static volatile bool poll_busy = false; // guards keyboard_poll re-entry
 
 //
 //  Keyboard Driver
@@ -49,114 +50,161 @@ static repeating_timer_t key_timer;
 //  a repeating timer to poll the keyboard at regular intervals.
 //
 
-void keyboard_poll()
+// Push a decoded character into the ring.  Drops the key when the ring is
+// full: letting the head lap the tail would throw away the whole buffered
+// backlog rather than the one key we cannot fit.
+static void kbd_push(char ch)
+{
+    uint16_t next_head = (rx_head + 1) & (KBD_BUFFER_SIZE - 1);
+    if (next_head == rx_tail)
+    {
+        return; // ring full - drop the key
+    }
+    rx_buffer[rx_head] = ch;
+    rx_head = next_head;
+}
+
+// Read and decode one entry from the southbridge FIFO.
+// Returns false when the FIFO is empty.
+static bool keyboard_poll_once(void)
 {
     uint16_t key = sb_read_keyboard();
     uint8_t key_state = (key >> 8) & 0xFF;
     uint8_t key_code = key & 0xFF;
 
-    if (key_state != 0)
+    if (key_state == KEY_STATE_IDLE)
     {
-        if (key_state == KEY_STATE_PRESSED)
+        return false; // FIFO empty
+    }
+
+    if (key_state == KEY_STATE_PRESSED)
+    {
+        if (key_code == KEY_MOD_CTRL)
         {
-            if (key_code == KEY_MOD_CTRL)
-            {
-                key_control = true;
-            }
-            else if (key_code == KEY_MOD_SHL || key_code == KEY_MOD_SHR)
-            {
-                key_shift = true;
-            }
-            else if (key_code == KEY_MOD_ALT)
-            {
-                key_alt = true;
-            }
-            else if (key_code == KEY_BREAK)
-            {
-                user_interrupt = true; // set user interrupt flag
-                // Don't add to buffer - keyboard_get_key() will synthesize KEY_BREAK
-                // when it sees user_interrupt is set
-            }
-            else if (key_code == KEY_F9)
-            {
-                // F9 requests pause during execution (not during input)
-                if (!input_active)
-                {
-                    pause_requested = true;
-                }
-                // Don't buffer F9 - it's handled via the flag
-            }
-            else if (key_code == KEY_F4)
-            {
-                // F4 requests freeze during execution (not during input)
-                if (!input_active)
-                {
-                    freeze_requested = true;
-                }
-                // Don't buffer F4 - it's handled via the flag
-            }
-            else if (key_code == KEY_F1 || key_code == KEY_F2 || key_code == KEY_F3)
-            {
-                // During execution (input_active=false), switch screen mode immediately
-                // When input is active (editor or line input), just buffer the key
-                // and let the input handler decide what to do
-                if (!input_active)
-                {
-                    screen_handle_mode_key(key_code);
-                }
-                // Always buffer the key so input handlers can respond
-                uint16_t next_head = (rx_head + 1) & (KBD_BUFFER_SIZE - 1);
-                rx_buffer[rx_head] = key_code;
-                rx_head = next_head;
-            }
-            else if (key_code == KEY_CAPS_LOCK)
-            {
-                // do nothing, processed in the south bridge
-            }
-            else
-            {
-                // If a key is released, we return the key code
-                // This allows us to handle the key release in the main loop
-                uint8_t ch = key_code;
-                if ((ch >= 'a' && ch <= 'z') || ch == ',' || ch == '.') // Ctrl and Shift handling
-                {
-                    if (key_control)
-                    {
-                        ch &= 0x1F; // convert to control character
-                    }
-                    if (key_shift)
-                    {
-                        ch &= ~0x20;
-                    }
-                }
-                else if (ch == KEY_ENTER) // enter key is returned as LF
-                {
-                    ch = KEY_RETURN; // convert LF to CR
-                }
-
-                uint16_t next_head = (rx_head + 1) & (KBD_BUFFER_SIZE - 1);
-                rx_buffer[rx_head] = ch;
-                rx_head = next_head;
-
-                // Notify that characters are available
-                if (keyboard_key_available_callback)
-                {
-                    keyboard_key_available_callback();
-                }
-            }
+            key_control = true;
         }
-        else if (key_state == KEY_STATE_RELEASED)
+        else if (key_code == KEY_MOD_SHL || key_code == KEY_MOD_SHR)
         {
-            if (key_code == KEY_MOD_CTRL)
+            key_shift = true;
+        }
+        else if (key_code == KEY_MOD_ALT)
+        {
+            key_alt = true;
+        }
+        else if (key_code == KEY_BREAK)
+        {
+            user_interrupt = true; // set user interrupt flag
+            // Don't add to buffer - keyboard_get_key() will synthesize KEY_BREAK
+            // when it sees user_interrupt is set
+        }
+        else if (key_code == KEY_F9)
+        {
+            // F9 requests pause during execution (not during input)
+            if (!input_active)
             {
-                key_control = false;
+                pause_requested = true;
             }
-            else if (key_code == KEY_MOD_SHL || key_code == KEY_MOD_SHR)
+            // Don't buffer F9 - it's handled via the flag
+        }
+        else if (key_code == KEY_F4)
+        {
+            // F4 requests freeze during execution (not during input)
+            if (!input_active)
             {
-                key_shift = false;
+                freeze_requested = true;
+            }
+            // Don't buffer F4 - it's handled via the flag
+        }
+        else if (key_code == KEY_F1 || key_code == KEY_F2 || key_code == KEY_F3)
+        {
+            // During execution (input_active=false), switch screen mode immediately
+            // When input is active (editor or line input), just buffer the key
+            // and let the input handler decide what to do
+            if (!input_active)
+            {
+                screen_handle_mode_key(key_code);
+            }
+            // Always buffer the key so input handlers can respond
+            kbd_push(key_code);
+        }
+        else if (key_code == KEY_CAPS_LOCK)
+        {
+            // do nothing, processed in the south bridge
+        }
+        else
+        {
+            // An ordinary key: decode it against the latched modifiers and
+            // buffer it for the reader.
+            uint8_t ch = key_code;
+            if ((ch >= 'a' && ch <= 'z') || ch == ',' || ch == '.') // Ctrl and Shift handling
+            {
+                if (key_control)
+                {
+                    ch &= 0x1F; // convert to control character
+                }
+                if (key_shift)
+                {
+                    ch &= ~0x20;
+                }
+            }
+            else if (ch == KEY_ENTER) // enter key is returned as LF
+            {
+                ch = KEY_RETURN; // convert LF to CR
+            }
+
+            kbd_push(ch);
+
+            // Notify that characters are available
+            if (keyboard_key_available_callback)
+            {
+                keyboard_key_available_callback();
             }
         }
     }
+    else if (key_state == KEY_STATE_RELEASED)
+    {
+        if (key_code == KEY_MOD_CTRL)
+        {
+            key_control = false;
+        }
+        else if (key_code == KEY_MOD_SHL || key_code == KEY_MOD_SHR)
+        {
+            key_shift = false;
+        }
+    }
+    // KEY_STATE_HOLD is deliberately ignored.  The southbridge already turns a
+    // held key into repeated KEY_STATE_PRESSED events for printable ASCII,
+    // enter, tab, del, backspace and the arrows; it sends a bare HOLD only for
+    // the keys that must not auto-repeat (F-keys, ESC, BREAK, Home/End/PgUp/
+    // PgDn).  We consume the event so it cannot back the FIFO up.
+
+    return true;
+}
+
+// Drain the southbridge FIFO.
+//
+// The southbridge repeats a held key every 100 ms (KEY_HOLD_TIME is 300 ms,
+// then one repeat per 100 ms) into a 31-entry FIFO.  Taking a single entry per
+// KEYBOARD_POLL_MS tick gave the consumer exactly the producer's rate and no
+// headroom: every press/release pair, every ignored HOLD and every tick skipped
+// because the I2C bus was busy added to a backlog that could never be worked
+// off, and the two free-running 100 ms clocks beat against each other.  Drain
+// what is actually waiting instead, bounded so a stuck FIFO cannot hold the
+// timer IRQ for long.
+void keyboard_poll(void)
+{
+    if (poll_busy)
+    {
+        return; // the timer IRQ landed inside the idle-loop poll
+    }
+    poll_busy = true;
+
+    for (int i = 0; i < KEYBOARD_DRAIN_MAX && keyboard_poll_once(); i++)
+    {
+        // keyboard_poll_once() does the work; the loop just bounds the drain.
+    }
+
+    poll_busy = false;
 }
 
 static bool on_keyboard_timer(repeating_timer_t *rt)
@@ -195,8 +243,22 @@ char keyboard_get_key()
     screen_gfx_flush();
 
     // Wait for a key, running the screen saver while idle
+    uint64_t next_poll = 0;
     while (!keyboard_key_available())
     {
+        // Poll here as well as from the timer.  The timer runs at
+        // KEYBOARD_POLL_MS, which is exactly the period the southbridge repeats
+        // a held key at, so leaning on it alone put up to a full repeat period
+        // of jitter on every repeated character - the reason key repeat felt
+        // uneven.  We are blocked with nothing else to do, so poll faster here
+        // in thread context, where the ~5 ms I2C read costs us nothing.
+        uint64_t now = time_us_64();
+        if (now >= next_poll)
+        {
+            keyboard_poll();
+            next_poll = now + (uint64_t)KEYBOARD_IDLE_POLL_MS * 1000u;
+        }
+
         // Check if user pressed BREAK (interrupt flag set but buffer might be full)
         if (user_interrupt)
         {
