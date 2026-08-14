@@ -133,8 +133,8 @@ static bool keyboard_poll_once(void)
         }
         else
         {
-            // If a key is released, we return the key code
-            // This allows us to handle the key release in the main loop
+            // An ordinary key: decode it against the latched modifiers and
+            // buffer it for the reader.
             uint8_t ch = key_code;
             if ((ch >= 'a' && ch <= 'z') || ch == ',' || ch == '.') // Ctrl and Shift handling
             {

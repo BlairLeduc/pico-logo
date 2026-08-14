@@ -82,7 +82,7 @@ bool screensaver_on_key_press(void) { return false; }
 void screen_gfx_flush(void) {}
 
 static int mode_key_switches = 0;
-void screen_handle_mode_key(uint8_t key) { (void)key; mode_key_switches++; }
+bool screen_handle_mode_key(int key_code) { (void)key_code; mode_key_switches++; return true; }
 
 //
 //  Helpers
