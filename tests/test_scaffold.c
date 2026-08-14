@@ -225,6 +225,82 @@ void mock_clear_freeze_request(void)
     mock_freeze_requested = false;
 }
 
+//
+// Key state. Mirrors the driver: presses accumulate into a pending set that
+// pollkeys hands to the reader and clears, so keyhit? reports each press once
+// and can be asked more than once in a frame.
+//
+#define MOCK_KEY_WORDS (8) // 256 key codes, one bit each
+
+static uint32_t mock_keys_down[MOCK_KEY_WORDS];
+static uint32_t mock_keys_hit_pending[MOCK_KEY_WORDS];
+static uint32_t mock_keys_hit[MOCK_KEY_WORDS];
+static int mock_poll_keys_calls = 0;
+
+static bool mock_key_bit(const uint32_t *bits, int code)
+{
+    if (code < 0 || code > 255)
+    {
+        return false;
+    }
+    return (bits[code >> 5] & (1u << (code & 31))) != 0;
+}
+
+void set_mock_key_down(int key_code, bool down)
+{
+    if (key_code < 0 || key_code > 255)
+    {
+        return;
+    }
+    uint32_t bit = 1u << (key_code & 31);
+    if (down)
+    {
+        if (!mock_key_bit(mock_keys_down, key_code))
+        {
+            mock_keys_hit_pending[key_code >> 5] |= bit; // a press edge
+        }
+        mock_keys_down[key_code >> 5] |= bit;
+    }
+    else
+    {
+        mock_keys_down[key_code >> 5] &= ~bit;
+    }
+}
+
+void set_mock_key_tap(int key_code)
+{
+    if (key_code < 0 || key_code > 255)
+    {
+        return;
+    }
+    mock_keys_hit_pending[key_code >> 5] |= 1u << (key_code & 31);
+}
+
+int mock_poll_keys_count(void)
+{
+    return mock_poll_keys_calls;
+}
+
+void mock_poll_keys(void)
+{
+    mock_poll_keys_calls++;
+    for (int i = 0; i < MOCK_KEY_WORDS; i++)
+    {
+        mock_keys_hit[i] = mock_keys_hit_pending[i];
+        mock_keys_hit_pending[i] = 0;
+    }
+}
+
+bool mock_key_down(int key_code)
+{
+    return mock_key_bit(mock_keys_down, key_code);
+}
+
+bool mock_key_hit(int key_code)
+{
+    return mock_key_bit(mock_keys_hit, key_code);
+}
+
 bool mock_power_off(void)
 {
     mock_power_off_called = true;
@@ -250,6 +326,9 @@ LogoHardwareOps mock_hardware_ops = {
     .clear_pause_request = mock_clear_pause_request,
     .check_freeze_request = mock_check_freeze_request,
     .clear_freeze_request = mock_clear_freeze_request,
+    .poll_keys = mock_poll_keys,
+    .key_down = mock_key_down,
+    .key_hit = mock_key_hit,
     // Sound synthesizer (P8) - scripted via the mock sound backend
     // (toot routes through sound_gate; there is no separate toot op)
     .sound_gate = mock_sound_gate,
@@ -368,6 +447,12 @@ void test_scaffold_setUp(void)
     mock_ticks_value = 0;         // Reset mock monotonic clock
     mock_battery_level = 100;     // Reset mock battery state
     mock_battery_charging = false;
+
+    // Reset mock key state
+    memset(mock_keys_down, 0, sizeof(mock_keys_down));
+    memset(mock_keys_hit_pending, 0, sizeof(mock_keys_hit_pending));
+    memset(mock_keys_hit, 0, sizeof(mock_keys_hit));
+    mock_poll_keys_calls = 0;
     
     // Reset mock power_off state (default: not available)
     mock_power_off_available = false;

@@ -262,6 +262,100 @@ void test_keyp_with_input_returns_true(void)
     TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
 }
 
+//
+// Key state (games): pollkeys / keydown? / keyhit?
+//
+
+void test_keydownp_reports_a_held_key(void)
+{
+    set_mock_key_down(180, true); // left arrow
+
+    eval_string("pollkeys");
+    Result r = eval_string("keydown? 180");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+
+    r = eval_string("keydown? 183"); // right arrow, never pressed
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
+}
+
+// The whole point: a key that is down stays down across frames, and comes up
+// the moment it is released - no queue of stale presses to work through.
+void test_keydownp_follows_the_key_rather_than_a_buffer(void)
+{
+    set_mock_key_down(181, true);
+    eval_string("pollkeys");
+    Result r = eval_string("keydown? 181");
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+
+    eval_string("pollkeys");
+
+    r = eval_string("keydown? 181"); // another frame, still held
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+
+    set_mock_key_down(181, false);
+    eval_string("pollkeys");
+    r = eval_string("keydown? 181");
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
+}
+
+// keyhit? is the edge: one hit per press, however long the key is held.
+void test_keyhitp_reports_a_press_once(void)
+{
+    set_mock_key_down(32, true); // space pressed, and kept down
+
+    eval_string("pollkeys");
+    Result r = eval_string("keyhit? 32");
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+
+    eval_string("pollkeys");
+
+    r = eval_string("keyhit? 32"); // still held, not pressed again
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
+
+    // ... but it is still down, which is what keydown? is for.
+    r = eval_string("keydown? 32");
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+}
+
+// A tap that is over before the frame polls would be invisible to keydown?.
+void test_keyhitp_catches_a_tap_too_short_to_be_down(void)
+{
+    set_mock_key_tap(32);
+
+    eval_string("pollkeys");
+    Result r = eval_string("keyhit? 32");
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+
+    r = eval_string("keydown? 32");
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
+}
+
+// Both queries are pure reads, so a frame can check every control it has for
+// the price of the one pollkeys.
+void test_pollkeys_visits_the_hardware_once_per_call(void)
+{
+    set_mock_key_down(181, true);
+    set_mock_key_down(32, true);
+
+    Result r = eval_string("pollkeys");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_INT(1, mock_poll_keys_count());
+
+    eval_string("keydown? 180");
+    eval_string("keydown? 181");
+    eval_string("keydown? 32");
+    eval_string("keyhit? 32");
+    TEST_ASSERT_EQUAL_INT(1, mock_poll_keys_count());
+}
+
+void test_keydownp_rejects_a_non_number(void)
+{
+    Result r = eval_string("keydown? [a b]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
 void test_readchar_returns_single_character(void)
 {
     set_mock_input("abc");
@@ -576,6 +670,12 @@ int main(void)
     // Input tests
     RUN_TEST(test_keyp_no_input_returns_false);
     RUN_TEST(test_keyp_with_input_returns_true);
+    RUN_TEST(test_keydownp_reports_a_held_key);
+    RUN_TEST(test_keydownp_follows_the_key_rather_than_a_buffer);
+    RUN_TEST(test_keyhitp_reports_a_press_once);
+    RUN_TEST(test_keyhitp_catches_a_tap_too_short_to_be_down);
+    RUN_TEST(test_pollkeys_visits_the_hardware_once_per_call);
+    RUN_TEST(test_keydownp_rejects_a_non_number);
     
     RUN_TEST(test_readchar_returns_single_character);
     RUN_TEST(test_readchar_multiple_calls);

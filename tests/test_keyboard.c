@@ -105,12 +105,22 @@ void setUp(void)
     char scratch[KBD_BUFFER_SIZE];
     drain_ring(scratch, KBD_BUFFER_SIZE);
 
-    // Clear any latched modifier state.
+    // Clear latched modifier state, and release the keys the key-state tests
+    // hold down, so every test starts from a keyboard with nothing pressed.
+    static const uint8_t held[] = {
+        KEY_MOD_CTRL, KEY_MOD_SHL,
+        KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_SPACE, KEY_F5,
+    };
     fifo_reset();
-    fifo_push(KEY_STATE_RELEASED, KEY_MOD_CTRL);
-    fifo_push(KEY_STATE_RELEASED, KEY_MOD_SHL);
-    keyboard_poll();
-    keyboard_poll();
+    for (size_t i = 0; i < sizeof(held); i++)
+    {
+        fifo_push(KEY_STATE_RELEASED, held[i]);
+    }
+    while (fake_fifo_next < fake_fifo_count)
+    {
+        keyboard_poll_keys();
+    }
+    keyboard_poll_keys(); // drop the hit latch the releases left behind
 
     fifo_reset();
     mode_key_switches = 0;
@@ -268,6 +278,147 @@ static void test_shift_and_ctrl_still_decode(void)
     TEST_ASSERT_EQUAL_CHAR(0x03, keys[1]); // Ctrl-C
 }
 
+//
+//  Key state (games)
+//
+//  `readchar` is a buffered character stream at the keyboard's typing cadence,
+//  which reaches a frame loop too late and only one key at a time. These pin the
+//  down/pressed view keyboard_poll_keys() builds from the same FIFO events.
+//
+
+// The point of the whole mechanism: a key that is down reads as down, and stops
+// reading as down the moment the release arrives - no queue in between.
+static void test_a_held_key_reads_as_down_until_it_is_released(void)
+{
+    fifo_push(KEY_STATE_PRESSED, KEY_LEFT);
+    keyboard_poll_keys();
+    TEST_ASSERT_TRUE(keyboard_key_down(KEY_LEFT));
+
+    // Several frames pass with nothing new in the FIFO. The key is still down.
+    keyboard_poll_keys();
+    keyboard_poll_keys();
+    TEST_ASSERT_TRUE(keyboard_key_down(KEY_LEFT));
+
+    fifo_push(KEY_STATE_RELEASED, KEY_LEFT);
+    keyboard_poll_keys();
+    TEST_ASSERT_FALSE(keyboard_key_down(KEY_LEFT));
+}
+
+// What readchar could never do: thrust and fire on the same frame.
+static void test_two_keys_can_be_held_at_once(void)
+{
+    fifo_push(KEY_STATE_PRESSED, KEY_UP);
+    fifo_push(KEY_STATE_PRESSED, KEY_SPACE);
+    keyboard_poll_keys();
+
+    TEST_ASSERT_TRUE(keyboard_key_down(KEY_UP));
+    TEST_ASSERT_TRUE(keyboard_key_down(KEY_SPACE));
+    TEST_ASSERT_FALSE(keyboard_key_down(KEY_RIGHT));
+}
+
+// The southbridge repeats a held key as further PRESSED events every 100 ms.
+// Those must not read as fresh presses, or a held fire button becomes auto-fire.
+static void test_a_repeat_is_not_a_new_hit(void)
+{
+    fifo_push(KEY_STATE_PRESSED, KEY_SPACE);
+    keyboard_poll_keys();
+    TEST_ASSERT_TRUE(keyboard_key_hit(KEY_SPACE));
+
+    fifo_push(KEY_STATE_PRESSED, KEY_SPACE); // firmware repeat, still held
+    keyboard_poll_keys();
+    TEST_ASSERT_TRUE(keyboard_key_down(KEY_SPACE));
+    TEST_ASSERT_FALSE(keyboard_key_hit(KEY_SPACE));
+
+    // Released and pressed again is a new hit.
+    fifo_push(KEY_STATE_RELEASED, KEY_SPACE);
+    fifo_push(KEY_STATE_PRESSED, KEY_SPACE);
+    keyboard_poll_keys();
+    TEST_ASSERT_TRUE(keyboard_key_hit(KEY_SPACE));
+}
+
+// A tap that begins and ends between two polls is not down by the time anyone
+// looks, so the level alone would lose it. The hit latch is what catches it.
+static void test_a_tap_shorter_than_a_frame_still_registers(void)
+{
+    fifo_push(KEY_STATE_PRESSED, KEY_SPACE);
+    fifo_push(KEY_STATE_RELEASED, KEY_SPACE);
+
+    keyboard_poll_keys();
+
+    TEST_ASSERT_FALSE(keyboard_key_down(KEY_SPACE));
+    TEST_ASSERT_TRUE(keyboard_key_hit(KEY_SPACE));
+}
+
+// A hit is reported for one frame, however many times that frame asks - a game
+// checks several controls and must get the same answer each time.
+static void test_a_hit_is_reported_once_but_readable_twice(void)
+{
+    fifo_push(KEY_STATE_PRESSED, KEY_SPACE);
+    keyboard_poll_keys();
+
+    TEST_ASSERT_TRUE(keyboard_key_hit(KEY_SPACE));
+    TEST_ASSERT_TRUE(keyboard_key_hit(KEY_SPACE)); // same frame, same answer
+
+    keyboard_poll_keys(); // next frame
+    TEST_ASSERT_FALSE(keyboard_key_hit(KEY_SPACE));
+}
+
+// A press the background timer happened to drain between frames must survive to
+// the game's next poll: the two share the FIFO, and whichever gets there first
+// consumes the event.
+static void test_a_press_drained_by_the_background_poll_is_not_lost(void)
+{
+    fifo_push(KEY_STATE_PRESSED, KEY_SPACE);
+    fifo_push(KEY_STATE_RELEASED, KEY_SPACE);
+    keyboard_poll(); // the timer, not the game
+
+    keyboard_poll_keys();
+    TEST_ASSERT_TRUE(keyboard_key_hit(KEY_SPACE));
+}
+
+// Polling key state must leave nothing buffered for readchar. Otherwise the
+// backlog this mechanism exists to avoid rebuilds itself, and the queued keys
+// fire at whatever menu the game returns to.
+static void test_polling_key_state_discards_the_character_backlog(void)
+{
+    for (int i = 0; i < 12; i++)
+    {
+        fifo_push(KEY_STATE_PRESSED, KEY_SPACE);
+    }
+    while (fake_fifo_next < fake_fifo_count)
+    {
+        keyboard_poll_keys();
+    }
+
+    TEST_ASSERT_FALSE(keyboard_key_available());
+}
+
+// The southbridge sends a bare HOLD for the keys it refuses to auto-repeat
+// (F-keys, ESC, Home/End/PgUp/PgDn). Those still have to read as held.
+static void test_a_hold_event_counts_as_down(void)
+{
+    fifo_push(KEY_STATE_PRESSED, KEY_F5);
+    keyboard_poll_keys();
+    TEST_ASSERT_TRUE(keyboard_key_down(KEY_F5));
+    TEST_ASSERT_TRUE(keyboard_key_hit(KEY_F5)); // the press
+
+    fifo_push(KEY_STATE_HOLD, KEY_F5);
+    keyboard_poll_keys();
+    TEST_ASSERT_TRUE(keyboard_key_down(KEY_F5));
+    TEST_ASSERT_FALSE(keyboard_key_hit(KEY_F5)); // still held, not pressed again
+}
+
+// The character path folds the firmware's LF into CR, so key state has to agree
+// or `keydown? 13` names a key that can never be pressed.
+static void test_enter_reads_as_carriage_return(void)
+{
+    fifo_push(KEY_STATE_PRESSED, KEY_ENTER);
+    keyboard_poll_keys();
+
+    TEST_ASSERT_TRUE(keyboard_key_down(KEY_RETURN));
+    TEST_ASSERT_FALSE(keyboard_key_down(KEY_ENTER));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -279,5 +430,14 @@ int main(void)
     RUN_TEST(test_a_repeat_burst_arrives_whole_and_in_order);
     RUN_TEST(test_get_key_polls_instead_of_waiting_for_the_timer);
     RUN_TEST(test_shift_and_ctrl_still_decode);
+    RUN_TEST(test_a_held_key_reads_as_down_until_it_is_released);
+    RUN_TEST(test_two_keys_can_be_held_at_once);
+    RUN_TEST(test_a_repeat_is_not_a_new_hit);
+    RUN_TEST(test_a_tap_shorter_than_a_frame_still_registers);
+    RUN_TEST(test_a_hit_is_reported_once_but_readable_twice);
+    RUN_TEST(test_a_press_drained_by_the_background_poll_is_not_lost);
+    RUN_TEST(test_polling_key_state_discards_the_character_backlog);
+    RUN_TEST(test_a_hold_event_counts_as_down);
+    RUN_TEST(test_enter_reads_as_carriage_return);
     return UNITY_END();
 }

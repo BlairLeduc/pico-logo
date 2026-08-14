@@ -1,0 +1,55 @@
+; Does the southbridge report RELEASED for ordinary keys, or only for modifiers?
+;
+;   load "keystate
+;   keystate
+;
+; The key-state mechanism -- `pollkeys`, `keydown?`, `keyhit?` -- is built on
+; the answer being "all keys".  devices/picocalc/keyboard.c sets a key's bit on
+; KEY_STATE_PRESSED and clears it on KEY_STATE_RELEASED, so if the firmware
+; sends a release only for shift/ctrl/alt (which is all the driver handled
+; before this change, and therefore all the source proves), every ordinary key
+; would latch down on its first press and never come up.  That cannot be tested
+; on the host: `tests/test_keyboard.c` drives a FIFO this file's author wrote,
+; so it can only confirm the driver believes what it was told.
+;
+; This runs the real bus.  Hold each key in turn: DOWN must follow your finger,
+; not stick.  If a key shows DOWN after you have let go, releases are not being
+; reported for it and the mechanism needs a timeout fallback.
+;
+; HIT is the other half: it must show for exactly one line per press, however
+; long you hold the key -- the firmware repeats a held key ten times a second
+; and those repeats must not read as fresh presses.
+;
+; Press Q to finish.
+
+to keystate
+  cleartext
+  pr [Hold each key.  DOWN must follow your finger.]
+  pr [HIT must appear once per press, not per repeat.]
+  pr [Q to quit.]
+  pr []
+  pollkeys                   ; baseline: drop whatever started this
+  until [keydown? 113] [keystate.frame]
+  pr []
+  pr [Done.]
+end
+
+; One line per frame, at roughly a game's frame rate, so the display shows the
+; same view of the keyboard a game would get.
+to keystate.frame
+  pollkeys
+  keystate.show "|left | 180
+  keystate.show "|right| 183
+  keystate.show "|up   | 181
+  keystate.show "|space| 32
+  wait 4
+end
+
+to keystate.show :name :code
+  if not (or (keydown? :code) (keyhit? :code)) [stop]
+  type :name
+  type "| |
+  if keydown? :code [type "|DOWN |]
+  if keyhit? :code [type "HIT]
+  pr []
+end

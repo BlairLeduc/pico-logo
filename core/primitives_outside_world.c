@@ -70,6 +70,64 @@ static Result prim_keyp(Evaluator *eval, int argc, Value *args)
     return result_ok(value_bool(false));
 }
 
+//==========================================================================
+// Key state (games)
+//
+// `key?`/`readchar` are a buffered character STREAM at the keyboard's typing
+// cadence - nothing for 300 ms after a press, then one repeat per 100 ms,
+// queued.  A frame loop reading one character a frame consumes slower than the
+// hardware produces, so it acts on input the player has already finished
+// giving, and it can only ever see one key at a time.
+//
+// `pollkeys` reads the keyboard's down/up state instead.  It costs one visit to
+// the bus per frame; `keydown?` and `keyhit?` afterwards are free, so a game can
+// ask about as many keys as it has controls.
+//==========================================================================
+
+// pollkeys - refresh the key state; discards anything buffered for readchar
+static Result prim_pollkeys(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
+
+    LogoIO *io = primitives_get_io();
+    if (io)
+    {
+        logo_io_poll_keys(io);
+    }
+    return result_ok(value_none());
+}
+
+// keydown? (keydownp) - outputs true if that key code was held at the last
+// pollkeys.  Level, not edge: true on every frame the key stays down.
+static Result prim_keydownp(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_NUMBER(args[0], code_f);
+
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_ok(value_bool(false));
+    }
+    return result_ok(value_bool(logo_io_key_down(io, (int)code_f)));
+}
+
+// keyhit? (keyhitp) - outputs true if that key code was pressed between the
+// last two pollkeys.  Edge, not level: one hit per press however long it is
+// held, and a tap too short to still be down at the poll still counts.
+static Result prim_keyhitp(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_NUMBER(args[0], code_f);
+
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_ok(value_bool(false));
+    }
+    return result_ok(value_bool(logo_io_key_hit(io, (int)code_f)));
+}
+
 // readchar (rc) - outputs the first character typed at the keyboard
 // Does not echo the character.
 // Returns empty list if reading from file and at EOF.
@@ -408,6 +466,11 @@ void primitives_outside_world_init(void)
     // Input
     primitive_register("key?", 0, prim_keyp);
     primitive_register("keyp", 0, prim_keyp);
+    primitive_register("pollkeys", 0, prim_pollkeys);
+    primitive_register("keydown?", 1, prim_keydownp);
+    primitive_register("keydownp", 1, prim_keydownp);
+    primitive_register("keyhit?", 1, prim_keyhitp);
+    primitive_register("keyhitp", 1, prim_keyhitp);
     primitive_register("readchar", 0, prim_readchar);
     primitive_register("rc", 0, prim_readchar);
     primitive_register("readchars", 1, prim_readchars);
