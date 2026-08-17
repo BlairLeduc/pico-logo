@@ -201,16 +201,17 @@ static uint16_t lcd_blit_width = 0;
 // Rows are then fed with lcd_blit_row(); close with lcd_blit_end().
 void lcd_blit_begin(uint16_t x, uint16_t y, uint16_t width, uint16_t height)
 {
-    if (y >= lcd_scroll_top && y < HEIGHT - lcd_scroll_bottom)
+    if (y >= lcd_scroll_top && y < lcd_scroll_top + lcd_memory_scroll_height)
     {
         // Adjust y for vertical scroll offset and wrap within memory height
-        uint16_t y_virtual = (lcd_y_offset + y) % lcd_memory_scroll_height;
-        uint16_t y_end = lcd_scroll_top + y_virtual + height - 1;
+        uint16_t y_start = lcd_scroll_map_row(y, lcd_scroll_top,
+                                              lcd_memory_scroll_height, lcd_y_offset);
+        uint16_t y_end = y_start + height - 1;
         if (y_end >= lcd_scroll_top + lcd_memory_scroll_height)
         {
             y_end = lcd_scroll_top + lcd_memory_scroll_height - 1;
         }
-        lcd_set_window(x, lcd_scroll_top + y_virtual, x + width - 1, y_end);
+        lcd_set_window(x, y_start, x + width - 1, y_end);
     }
     else
     {
@@ -345,17 +346,19 @@ void lcd_solid_rectangle(uint8_t colour, uint16_t x, uint16_t y, uint16_t width,
 
 void lcd_define_scrolling(uint16_t top_fixed_area, uint16_t bottom_fixed_area)
 {
-    uint16_t scroll_area = HEIGHT - (top_fixed_area + bottom_fixed_area);
-    if (scroll_area == 0 || scroll_area > FRAME_HEIGHT)
+    // The three areas partition the frame memory, so they have to add up to
+    // FRAME_HEIGHT and not to the HEIGHT rows on display
+    if (top_fixed_area + bottom_fixed_area >= FRAME_HEIGHT)
     {
         // Invalid scrolling area, reset to full screen
         top_fixed_area = 0;
         bottom_fixed_area = 0;
-        scroll_area = FRAME_HEIGHT;
     }
 
+    uint16_t scroll_area = FRAME_HEIGHT - (top_fixed_area + bottom_fixed_area);
+
     lcd_scroll_top = top_fixed_area;
-    lcd_memory_scroll_height = FRAME_HEIGHT - (top_fixed_area + bottom_fixed_area);
+    lcd_memory_scroll_height = scroll_area;
     lcd_scroll_bottom = bottom_fixed_area;
 
     lcd_write_cmd(LCD_CMD_VSCRDEF);
@@ -403,8 +406,14 @@ void lcd_scroll_up(uint8_t bg_colour)
     lcd_write_cmd(LCD_CMD_VSCSAD); // Sets where in display RAM the scroll area starts
     lcd_write_data(2, UPPER8(scroll_area_start), LOWER8(scroll_area_start));
 
-    // Clear the new line at the bottom
-    lcd_solid_rectangle(bg_colour, 0, HEIGHT - GLYPH_HEIGHT, WIDTH, GLYPH_HEIGHT);
+    // Clear the new line at the bottom of the scrolling area, which is only the
+    // bottom of the screen when nothing is fixed below it
+    uint16_t area_bottom = lcd_scroll_top + lcd_memory_scroll_height;
+    if (area_bottom > HEIGHT)
+    {
+        area_bottom = HEIGHT;
+    }
+    lcd_solid_rectangle(bg_colour, 0, area_bottom - GLYPH_HEIGHT, WIDTH, GLYPH_HEIGHT);
 }
 
 // Scroll the screen down one line (making space at the top)

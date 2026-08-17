@@ -36,6 +36,13 @@
 #define EDITOR_PROMPT_COLS    8      // Width of the footer's "Search: "/"Replace:" prompt
 #define EDITOR_HIGHLIGHT_MAX  512    // Longest line the syntax highlighter is run on
 
+// The editor's scrolling region: the header row is fixed at the top, the footer
+// row at the bottom, and the thirty content rows between them scroll. The fixed
+// areas are measured against the controller's frame memory, so the bottom one
+// covers the rows below the display as well as the footer (see lcd.h)
+#define EDITOR_SCROLL_TOP     (GLYPH_HEIGHT)
+#define EDITOR_SCROLL_BOTTOM  (FRAME_HEIGHT - HEIGHT + GLYPH_HEIGHT)
+
 // Tab width for indentation (2 spaces per tab stop)
 #define TAB_WIDTH             2
 
@@ -152,7 +159,7 @@ static int editor_get_line_end(int line_index);
 static int editor_get_line_at_pos(size_t pos);
 static int editor_get_col_at_pos(size_t pos);
 static int editor_count_lines(void);
-static bool editor_ensure_cursor_visible(void);
+static int editor_ensure_cursor_visible(void);
 static void editor_update_h_scroll(void);
 static void editor_mark_line_dirty(int line_index);
 static void editor_mark_from_line_dirty(int line_index);
@@ -361,9 +368,10 @@ static void editor_update_h_scroll(void)
 
 //
 // Ensure cursor is visible in the view (vertical scrolling)
-// Returns true if vertical scrolling occurred
+// Returns the number of lines the view moved: positive down, negative up,
+// zero if it did not move
 //
-static bool editor_ensure_cursor_visible(void)
+static int editor_ensure_cursor_visible(void)
 {
     int cursor_line = editor_get_line_at_pos(editor.cursor_pos);
     int old_view_start = editor.view_start_line;
@@ -381,8 +389,7 @@ static bool editor_ensure_cursor_visible(void)
     // Also update horizontal scroll for the current line
     editor_update_h_scroll();
     
-    // Return true if vertical scroll changed (full redraw needed)
-    return editor.view_start_line != old_view_start;
+    return editor.view_start_line - old_view_start;
 }
 
 //
@@ -556,6 +563,29 @@ static void editor_draw_content(void)
                                           line_len, NULL, depth);
         }
     }
+}
+
+//
+// Move the view one line using the LCD's hardware scroll, then draw the line
+// that came into view. The panel shifts its own start line, so this costs one
+// row draw instead of the thirty a full redraw of the content area costs.
+//
+// The header and footer are outside the scrolling area, so neither is touched.
+//
+static void editor_scroll_one_line(int delta)
+{
+    int line_index;
+
+    if (delta > 0) {
+        lcd_scroll_up(PALETTE_SYNTAX_BG);
+        line_index = editor.view_start_line + EDITOR_VISIBLE_ROWS - 1;
+    } else {
+        lcd_scroll_down(PALETTE_SYNTAX_BG);
+        line_index = editor.view_start_line;
+    }
+
+    editor_draw_line(line_index - editor.view_start_line, line_index,
+                     editor_compute_depth_at_line(line_index));
 }
 
 //
@@ -1576,6 +1606,11 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
     
     // Clear screen and draw initial content
     lcd_clear_screen(PALETTE_SYNTAX_BG);
+
+    // Fix the header and footer rows and scroll the content between them, so
+    // moving the view by a line is a start-line change instead of a full repaint
+    lcd_define_scrolling(EDITOR_SCROLL_TOP, EDITOR_SCROLL_BOTTOM);
+
     editor_draw_header();
     editor_draw_footer();
     editor_draw_content();
@@ -1640,6 +1675,7 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                 // Restore foreground/background palette slots
                 lcd_set_foreground(PALETTE_FG);
                 lcd_set_background(PALETTE_BG);
+                lcd_define_scrolling(0, 0);          // Drop the editor's fixed header row
                 screen_set_mode(saved_screen_mode);  // Restore screen mode
                 screen_txt_mark_all_dirty();          // Editor drew directly to LCD; repaint text buffer
                 screen_txt_update();                   // Flush immediately so the user sees the REPL
@@ -1655,6 +1691,7 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                 // Restore foreground/background palette slots
                 lcd_set_foreground(PALETTE_FG);
                 lcd_set_background(PALETTE_BG);
+                lcd_define_scrolling(0, 0);          // Drop the editor's fixed header row
                 screen_set_mode(saved_screen_mode);  // Restore screen mode
                 screen_txt_mark_all_dirty();          // Editor drew directly to LCD; repaint text buffer
                 screen_txt_update();                   // Flush immediately so the user sees the REPL
@@ -1866,6 +1903,7 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                     // Then redraw the editor content directly to LCD
                     screen_set_mode_no_update(SCREEN_MODE_TXT);
                     lcd_clear_screen(PALETTE_SYNTAX_BG);
+                    lcd_define_scrolling(EDITOR_SCROLL_TOP, EDITOR_SCROLL_BOTTOM);  // Mode switch reset it
                     editor_draw_header();
                     editor_draw_footer();
                     editor_draw_content();
@@ -1914,10 +1952,18 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
         // Update display based on what changed
         if (editor.dirty_flags != DIRTY_NONE) {
             // Check if vertical scroll occurred
-            bool scrolled = editor_ensure_cursor_visible();
-            
-            if (scrolled) {
-                // Vertical scroll requires full redraw
+            int scroll_delta = editor_ensure_cursor_visible();
+
+            if (scroll_delta == 1 || scroll_delta == -1) {
+                // One line: shift the panel and draw only the line that appeared.
+                // Any dirty flags the operation set are still honoured below.
+                editor_scroll_one_line(scroll_delta);
+                if (h_scroll_before > 0) {
+                    // The line we left still shows its scroll arrows
+                    editor_mark_line_dirty(cursor_line_before);
+                }
+            } else if (scroll_delta != 0) {
+                // Jumped further than a line (page keys, search) - full redraw
                 editor_mark_all_dirty();
             } else if (editor.dirty_flags == DIRTY_CURSOR) {
                 // Just cursor movement - only redraw if h_scroll changed

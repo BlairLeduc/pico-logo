@@ -214,6 +214,20 @@ target_include_directories(test_screen_refresh PRIVATE
 target_link_libraries(test_screen_refresh PRIVATE m)
 add_test(NAME test_screen_refresh COMMAND test_screen_refresh)
 
+# LCD scroll mapping test — the pure arithmetic behind the panel's vertical
+# scroll, shared by the console, split mode and the editor.
+add_executable(test_lcd_scroll
+    test_lcd_scroll.c
+    unity.c
+)
+target_include_directories(test_lcd_scroll PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/mocks
+    ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/devices/picocalc
+)
+add_test(NAME test_lcd_scroll COMMAND test_lcd_scroll)
+
 # Editor incremental search test — compiles devices/picocalc/editor_search.c
 # on the host. Portable (no Pico SDK / Logo runtime dependencies).
 add_executable(test_editor_search
