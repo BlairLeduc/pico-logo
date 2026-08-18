@@ -621,7 +621,7 @@ An operator takes a motion, and the two together take a count, so `d2w` and `2dw
 - `y` — yank into the copy buffer; `yy` and `Y` a line
 - `<` `>` — outdent or indent by one tab stop; `<<` and `>>` a line
 - `x` `X` — delete the character at or before the cursor
-- `r`_c_ — replace the character under the cursor with _c_
+- `r`_c_ — replace the character under the cursor with _c_. A count replaces that many, and `r` `Enter` puts a line break where they were, splitting the line
 - `~` — swap the case of the character under the cursor and move on
 - `J` — join the next line onto this one, with a single space where the break was
 - `p` `P` — put the copy buffer after or before the cursor. Text taken a line at a time goes back a line at a time, below or above the current line

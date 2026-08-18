@@ -38,7 +38,8 @@ typedef enum
     VI_ACT_PASTE_BEFORE,  // ... before the cursor / above the line
     VI_ACT_PASTE_OVER,    // Replace [start, end) with the copy buffer (visual `p`)
     VI_ACT_INDENT,        // Shift the lines in [start, end) by `count` tab stops
-    VI_ACT_REPLACE_CHAR,  // Overwrite [start, end) with `ch`
+    VI_ACT_REPLACE_CHAR,  // Overwrite [start, end) with `ch`, or with a single
+                          // line break when `ch` is '\n' (`r` and Return)
     VI_ACT_OPEN_BELOW,    // Open a line below the cursor's and enter insert mode
     VI_ACT_OPEN_ABOVE,    // ... above
     VI_ACT_JOIN,          // Join `count` lines from the cursor's

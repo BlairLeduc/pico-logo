@@ -1071,7 +1071,10 @@ static bool prefixed_key(ViState *st, const char *buf, size_t len, size_t cursor
 
         case 'r':
         {
-            if (key < 0x20 || key > 0x7E)
+            // Return is a character like any other to `r`: it puts a line
+            // break where the characters were, which splits the line
+            bool split = (key == KEY_RETURN || key == KEY_ENTER);
+            if (!split && (key < 0x20 || key > 0x7E))
             {
                 return beep(st, out, "Nothing to replace");
             }
@@ -1084,7 +1087,7 @@ static bool prefixed_key(ViState *st, const char *buf, size_t len, size_t cursor
             out->kind = VI_ACT_REPLACE_CHAR;
             out->start = cursor;
             out->end = cursor + count;
-            out->ch = (char)key;
+            out->ch = split ? '\n' : (char)key;
             out->count = count;
             return commit(st, out, count);
         }

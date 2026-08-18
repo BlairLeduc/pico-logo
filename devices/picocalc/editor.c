@@ -1917,6 +1917,17 @@ static int editor_vi_apply(const ViAction *act, int cursor_line_before)
             break;
 
         case VI_ACT_REPLACE_CHAR:
+            if (act->ch == '\n') {
+                // A split, not an overwrite: the range goes and one line break
+                // takes its place, so the buffer changes length and every line
+                // from this one down moves
+                editor_vi_delete_range(act->start, act->end);
+                editor_vi_insert_text(act->start, "\n", 1);
+                editor.cursor_pos = act->start + 1;
+                editor.vi.modified = true;
+                editor_mark_from_line_dirty(cursor_line_before);
+                break;
+            }
             for (size_t i = act->start; i < act->end && i < editor.content_length; i++) {
                 editor.buffer[i] = act->ch;
             }

@@ -487,6 +487,14 @@ as designed.
   workspace entry points pass NULL, and `editor.c` turns `VI_ACT_WRITE` into a
   call to it (footer `written`, `modified` cleared) or, with no callback, into
   the accept it always was. The state machine still knows nothing about files.
+- **`r` takes `Enter` and splits the line** (2026-08-18, also found on a board,
+  B33). `VI_ACT_REPLACE_CHAR` was specified and built as an overwrite in place
+  -- same length, same lines -- so `r` took printable characters only and the
+  one replacement vi has that changes the buffer's length had nowhere to go.
+  Rather than a fourth action kind, `ch` of `'\n'` means the split, and
+  `editor.c` does it with the delete/insert pair that keeps the line memo
+  honest. Worth noting as a pattern: like `:w`, the state machine had the
+  general answer and `editor.c` had the one fact that made it specific.
 - **The editor's screen teardown was factored out.** Accept and cancel were two
   identical fourteen-line blocks; vi's `:w`/`ZZ` and `:q!`/`ZQ` would have made
   them four. They are now `editor_restore_screen`.
@@ -501,7 +509,9 @@ as designed.
 about 208 bytes on each. §9's estimate held.
 
 **Still owed.** The hardware check M1 and M2 gate on has begun: a board session
-on 2026-08-18 edited a file in vi mode and found the `:w` behaviour above, which
-is the first thing this mode has been told by a board rather than by a test.
+on 2026-08-18 edited a file in vi mode and found the `:w` behaviour above and
+`r` `Enter` (B33), the first two things this mode has been told by a board
+rather than by a test. Both are cases where a *test* had pinned the wrong
+answer, which is the failure mode a host test cannot see past.
 Not yet confirmed there: the mode indicator, the cursor style, the `Esc`
 contract and `d%` over nested brackets -- and M4.

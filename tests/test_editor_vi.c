@@ -276,6 +276,12 @@ static void ed_apply(Ed *e, const ViAction *act)
             break;
 
         case VI_ACT_REPLACE_CHAR:
+            if (act->ch == '\n') {
+                ed_delete(e, act->start, act->end);
+                ed_insert(e, act->start, "\n", 1);
+                e->cursor = act->start + 1;
+                break;
+            }
             for (size_t i = act->start; i < act->end && i < e->len; i++) e->buf[i] = act->ch;
             e->cursor = act->end > act->start ? act->end - 1 : act->start;
             break;
@@ -751,6 +757,32 @@ static void test_r_replaces_characters(void)
     feed("rz");   assert_text("zbcdef\n");
     at(1);
     feed("3r-");  assert_text("z---ef\n");
+}
+
+static void test_r_with_return_splits_the_line(void)
+{
+    // Vi's `r` takes Return as the character to put there, which is a split
+    ed_set("abcdef\n");
+    at(3);
+    feed("r"); feed_key(KEY_RETURN);
+    assert_text("abc\nef\n");
+    TEST_ASSERT_EQUAL_INT(4, (int)ed.cursor);   // The first character of the new line
+
+    // A count takes that many characters out and leaves one line break
+    ed_set("abcdef\n");
+    at(1);
+    feed("3r"); feed_key(KEY_ENTER);
+    assert_text("a\nef\n");
+    TEST_ASSERT_EQUAL_INT(2, (int)ed.cursor);
+
+    // And `.` repeats it, which is what recording the raw key buys: the split
+    // leaves the cursor on `c`, so the repeat takes that one
+    ed_set("abcd\n");
+    at(1);
+    feed("r"); feed_key(KEY_RETURN);
+    assert_text("a\ncd\n");
+    feed(".");
+    assert_text("a\n\nd\n");
 }
 
 static void test_r_refuses_to_run_past_the_end_of_the_line(void)
@@ -1356,6 +1388,7 @@ int main(void)
     RUN_TEST(test_x_stops_at_the_end_of_the_line);
     RUN_TEST(test_D_C_Y_S_and_s);
     RUN_TEST(test_r_replaces_characters);
+    RUN_TEST(test_r_with_return_splits_the_line);
     RUN_TEST(test_r_refuses_to_run_past_the_end_of_the_line);
     RUN_TEST(test_J_joins_lines_with_one_space);
     RUN_TEST(test_tilde_flips_case_and_moves_on);
