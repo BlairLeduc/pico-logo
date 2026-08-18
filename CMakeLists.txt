@@ -205,6 +205,7 @@ add_executable(pico-logo
     devices/picocalc/editor.c
     devices/picocalc/editor_lines.c
     devices/picocalc/editor_search.c
+    devices/picocalc/editor_vi.c
     devices/picocalc/fat32.c
     devices/picocalc/history.c
     devices/picocalc/input.c

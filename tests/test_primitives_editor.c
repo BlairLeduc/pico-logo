@@ -997,6 +997,52 @@ void test_edall_empty_workspace(void)
 }
 
 //==========================================================================
+// setvimode / vimode? Tests
+//==========================================================================
+
+void test_vimode_is_off_to_begin_with(void)
+{
+    Result r = eval_string("vimode?");
+
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
+}
+
+void test_setvimode_is_reported_back(void)
+{
+    run_string("setvimode \"true");
+    Result r = eval_string("vimode?");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+
+    run_string("setvimode \"false");
+    r = eval_string("vimode?");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
+}
+
+// The mock console's editor has no set_vi_mode entry, which is the case
+// setvimode has to survive: it takes the setting and the editor ignores it
+void test_setvimode_still_opens_the_editor(void)
+{
+    run_string("setvimode \"true");
+    mock_device_clear_editor();
+
+    run_string("edall");
+
+    TEST_ASSERT_TRUE(mock_device_was_editor_called());
+    run_string("setvimode \"false");
+}
+
+void test_setvimode_rejects_a_non_boolean(void)
+{
+    Result r = eval_string("setvimode \"maybe");
+
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(eval_string("vimode?").value.as.node));
+}
+
+//==========================================================================
 // editfile Tests
 //==========================================================================
 
@@ -1320,6 +1366,12 @@ int main(void)
     RUN_TEST(test_edit_runs_mixed_content);
     RUN_TEST(test_edit_runs_multiline_bracket_expression);
     RUN_TEST(test_edit_runs_multiline_bracket_then_more_commands);
+
+    // setvimode / vimode? tests
+    RUN_TEST(test_vimode_is_off_to_begin_with);
+    RUN_TEST(test_setvimode_is_reported_back);
+    RUN_TEST(test_setvimode_still_opens_the_editor);
+    RUN_TEST(test_setvimode_rejects_a_non_boolean);
     
     // editfile tests
     RUN_TEST(test_editfile_creates_new_file);

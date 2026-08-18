@@ -46,6 +46,12 @@ static char *editor_buffer = NULL;
 static char *editor_proc_buffer = NULL;
 static size_t editor_buffer_size = LOGO_EDITOR_BUFFER_SIZE;
 
+// Vi mode (docs/vi-mode-design.md). A session setting like the palette, kept
+// here rather than passed to `edit`, so that one flag reaches all five entry
+// points -- edit, edall, edn, edns and editfile -- without widening the
+// console's editor signature.
+static bool vi_mode_on = false;
+
 // Process-lifetime heap fallbacks, allocated once and reused across re-inits so
 // repeated init (e.g. across tests) never leaks.
 static char *editor_buffer_heap = NULL;
@@ -781,6 +787,61 @@ size_t primitives_editor_buffer_size(void)
     return editor_buffer_size;
 }
 
+//
+// setvimode true/false - select the vi key layer for the full-screen editor
+//
+// The console's editor takes the flag through an optional vtable entry, so a
+// console without one (the mock, the host REPL) accepts the setting and
+// ignores it rather than failing.
+//
+static Result prim_setvimode(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    UNUSED(argc);
+
+    const char *str = value_to_string(args[0]);
+    bool on;
+
+    if (str == NULL)
+    {
+        return result_error_arg(ERR_NOT_BOOL, NULL, NULL);
+    }
+    if (strcasecmp(str, "true") == 0)
+    {
+        on = true;
+    }
+    else if (strcasecmp(str, "false") == 0)
+    {
+        on = false;
+    }
+    else
+    {
+        return result_error_arg(ERR_NOT_BOOL, NULL, str);
+    }
+
+    vi_mode_on = on;
+
+    LogoIO *io = primitives_get_io();
+    if (io != NULL && io->console != NULL && logo_console_has_editor(io->console) &&
+        io->console->editor->set_vi_mode != NULL)
+    {
+        io->console->editor->set_vi_mode(on);
+    }
+
+    return result_none();
+}
+
+//
+// vimode? - outputs true when the editor opens in vi mode
+//
+static Result prim_vimodep(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    UNUSED(argc);
+    UNUSED(args);
+    return result_ok(value_bool(vi_mode_on));
+}
+
 void primitives_editor_init(void)
 {
     // Place the editor buffers in the aux/PSRAM region when one is available,
@@ -811,6 +872,17 @@ void primitives_editor_init(void)
         editor_buffer[0] = '\0';
     }
 
+    // A fresh interpreter starts in the editor's default key layer
+    vi_mode_on = false;
+    LogoIO *io = primitives_get_io();
+    if (io != NULL && io->console != NULL && logo_console_has_editor(io->console) &&
+        io->console->editor->set_vi_mode != NULL)
+    {
+        io->console->editor->set_vi_mode(false);
+    }
+
+    primitive_register("setvimode", 1, prim_setvimode);
+    primitive_register("vimode?", 0, prim_vimodep);
     primitive_register("edit", 1, prim_edit);  // 1 argument, (edit) for none
     primitive_register("ed", 1, prim_edit);    // Abbreviation
     primitive_register("edall", 0, prim_edall);

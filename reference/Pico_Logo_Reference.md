@@ -510,7 +510,7 @@ The Editor has an auxiliary line buffer called the copy buffer. You can use it t
 
 ## Editing actions
 
-When you are in the editor, you can use the following editing keys:
+When you are in the editor, you can use the following editing keys. They are the keys of the Editor's default mode; [`setvimode`](#setvimode) replaces them with the modal, vi-style layer described in [Vi Mode](#vi-mode).
 
 ### Cursor motion
 
@@ -571,6 +571,106 @@ Pressing `Enter` replaces every match in the buffer and leaves incremental searc
 Pressing `Esc` cancels the replacement and returns to the incremental search, where the match found so far is still selected. Pressing `Brk` leaves the Editor, cancelling your changes as usual.
 
 
+### Vi Mode
+
+[`setvimode`](#setvimode) `true` replaces the Editor's control-key layer with a modal, vi-style one, where commands are unmodified letters rather than chords. Nothing else about the Editor changes: the same buffer, the same scrolling, the same syntax colouring and the same copy buffer. `setvimode false`, which is how Logo starts, restores the keys described above.
+
+Vi mode suits this keyboard. The keyboard cannot send some modifier combinations at all — `Shift` `←` and `Shift` `→` send nothing, which is why a word move is `Ctrl` `←` — and `Ctrl` is an awkward reach, while every character vi needs (`:` `$` `%` `^` `{` `}` `<` `>` `?` `~`) has a key of its own.
+
+The bottom line shows which mode you are in.
+
+| Mode | Entered by | Cursor | Bottom line |
+|---|---|---|---|
+| Normal | opening the Editor, `Esc` | block | `-- NORMAL --` |
+| Insert | `i` `I` `a` `A` `o` `O` `s` `S` `c` `C` | underline | `-- INSERT --` |
+| Visual | `v` (characters), `V` (lines) | block, selection in reverse video | `-- VISUAL --`, `-- VISUAL LINE --` |
+| Command line | `:` `/` `?` | underline | what you have typed |
+
+#### Leaving the editor
+
+`Esc` belongs to vi: it returns to normal mode, and it no longer accepts the buffer. Leave the Editor with one of:
+
+- `:w`, `:wq`, `:x`, `ZZ` — accept, exactly as `Esc` does outside vi mode, so Logo reads each line of the buffer as if you had typed it
+- `:q!`, `ZQ` — cancel, leaving your procedures as they were
+- `:q` — accept, but only when you have changed nothing; otherwise the bottom line says `E37: no write since last change`
+- `Brk` — cancel, from any mode. It is the one key whose meaning does not depend on which mode you are in, which is what makes the mode safe to be wrong about
+
+#### Moving
+
+Every motion takes a count typed before it, so `5w` moves five words.
+
+- `h` `j` `k` `l` — left, down, up, right. The cursor keys do the same
+- `w` `b` `e` — forward a word, back a word, to the end of a word. A word is a run of letters, digits and `_`, or a run of punctuation, so `w` stops at the `[` and the `:` that a Logo program is full of
+- `W` `B` `E` — the same three, counting anything between blanks as one word
+- `0` `^` `$` — the start of the line, its first non-blank character, its end
+- `gg` `G` — the first line, the last line; `10G` goes to line 10
+- `{` `}` — to the previous or next blank line, which in Logo is the gap between two procedures
+- `f`_c_ `F`_c_ — forward or back to the next _c_ on this line; `t`_c_ and `T`_c_ stop just short of it; `;` and `,` repeat the last one forwards and backwards
+- `%` — the bracket matching the next `(`, `[` or `{` on the line, counting nesting of that kind only
+- `Ctrl` `F` `Ctrl` `B` — a page forward or back; `Ctrl` `D` and `Ctrl` `U` half a page
+- `/`_text_ `?`_text_ — search forwards or backwards, wrapping around the buffer and ignoring case, as [incremental search](#incremental-search) does; `n` and `N` repeat it in the same and in the opposite direction, and a search with nothing typed repeats the last one
+
+#### Changing
+
+An operator takes a motion, and the two together take a count, so `d2w` and `2dw` both delete two words. Doubling the operator applies it to whole lines: `dd` deletes one line and `3dd` three.
+
+- `d` — delete into the copy buffer; `dd` a line, `D` to the end of the line
+- `c` — change, which deletes and starts inserting; `cc` and `S` a line, `C` to the end of the line, `s` characters
+- `y` — yank into the copy buffer; `yy` and `Y` a line
+- `<` `>` — outdent or indent by one tab stop; `<<` and `>>` a line
+- `x` `X` — delete the character at or before the cursor
+- `r`_c_ — replace the character under the cursor with _c_
+- `~` — swap the case of the character under the cursor and move on
+- `J` — join the next line onto this one, with a single space where the break was
+- `p` `P` — put the copy buffer after or before the cursor. Text taken a line at a time goes back a line at a time, below or above the current line
+- `.` — repeat the last change, working out its own motion from where the cursor now is. A count typed before `.` replaces the one the change was made with
+
+`.` repeats a change that finished on its own. It does not repeat one that ended in insert mode, because the Editor does not record what you typed there. There is no undo: `u` and `Ctrl` `R` say `Undo is not available`.
+
+#### Inserting
+
+`i` and `a` start inserting before and after the cursor, `I` and `A` at the first non-blank character and at the end of the line, and `o` and `O` on a new line below and above, carrying the indentation of the line you were on. `Esc` returns to normal mode, stepping back off the character you last typed.
+
+While you are inserting, the Editor behaves exactly as it does outside vi mode: the cursor keys, `←Back`, `Del`, `Tab` and `Enter` all work, brackets close themselves, and the control keys of the default mode are still there.
+
+#### Selecting
+
+`v` starts selecting characters and `V` whole lines. The selection runs between the anchor and the cursor and is shown in reverse video, as [block editing](#block-editing) does; unlike block editing, it includes the character under the cursor. Move with any motion, then:
+
+- `d` or `x` — erase the selection into the copy buffer
+- `y` — copy it to the copy buffer
+- `c` or `s` — erase it and start inserting
+- `<` `>` — outdent or indent the lines it covers
+- `~` — swap the case of every character in it
+- `p` — replace it with the copy buffer
+- `J` — join the lines it covers
+- `o` — swap which end of it the cursor is on
+
+`Esc` cancels the selection.
+
+#### The command line
+
+`:` puts what you type on the bottom line. `←Back` rubs it out again, and rubbing out the `:` leaves the command line, as `Esc` does; `Enter` runs it.
+
+| Command | Does |
+|---|---|
+| `:`_n_ | go to line _n_ |
+| `:w` `:wq` `:x` | accept the buffer and leave the Editor |
+| `:q` | leave, if nothing has changed |
+| `:q!` | cancel and leave the Editor |
+| `:s/`_old_`/`_new_`/` | replace the first _old_ on this line |
+| `:s/`_old_`/`_new_`/g` | replace every _old_ on this line |
+| `:%s/`_old_`/`_new_`/` | replace the first _old_ on every line |
+| `:%s/`_old_`/`_new_`/g` | replace every _old_ in the buffer |
+
+Matching ignores the difference between upper and lower case, as incremental search does, and the replacement is used exactly as typed. Each of _old_ and _new_ may be up to 32 characters. Nothing is replaced when there is no match, or when the result would not fit in the edit buffer, and the bottom line says `No substitution made`.
+
+Anything else on the command line is refused with `E492: not an editor command`, and a substitute that is missing a delimiter with `E486: bad substitute`.
+
+#### What vi mode leaves out
+
+Named registers — the copy buffer is the one unnamed register — marks, macros, `Ctrl` `V` block selection, windows, and the `:e` and `:r` file commands: which file the Editor is working on is fixed by the command that opened it. None of them earn their space on a 40 by 30 screen.
+
 ### Viewing screens
 
 `F3` lets you see temporarily the graphics screen and its most recent contents. `F1` restores the screen back to the Editor so you can pick up where you left off.
@@ -588,6 +688,8 @@ In the Editor, you may define more than one procedure at a
 time as long as each procedure is terminated by `end`.
 
 Exiting the editor using `Brk`, Logo does not read any lines in the edit buffer. If you were defining a procedure, the definition will be the same before you started editing.
+
+In [Vi Mode](#vi-mode) `Esc` belongs to vi, and the buffer is accepted with `:w`, `:wq`, `:x` or `ZZ` and cancelled with `:q!` or `ZQ`. `Brk` still cancels, from any mode.
 
 
 ## edit (ed)
@@ -666,6 +768,42 @@ Stands for `ed`it `n`ame`s`. Starts the Logo Editor with all the names and their
 ?make "temp -17
 ?edns
 ; Opens the editor with all variables
+```
+
+
+## setvimode
+
+setvimode _flag_
+
+`command`
+
+Chooses which set of keys the Logo Editor uses. `setvimode true` selects the modal, vi-style layer described in [Vi Mode](#vi-mode); `setvimode false`, which is how Logo starts, selects the keys described in [Editing actions](#editing-actions).
+
+The setting applies to every command that opens the Editor — [`edit`](#edit-ed), [`edall`](#edall), [`edn`](#edn), [`edns`](#edns) and [`editfile`](#editfile) — and lasts until you change it or Logo restarts. Put it in your [startup](#startup) file to have it every time.
+
+**Example**:
+
+```logo
+?setvimode "true
+?edall
+; Opens the editor in vi mode, in normal mode, showing -- NORMAL --
+```
+
+
+## vimode?
+
+vimode?
+
+`operation`
+
+Outputs `true` if the Logo Editor is set to use vi mode, `false` otherwise.
+
+**Example**:
+
+```logo
+?setvimode "true
+?show vimode?
+true
 ```
 
 

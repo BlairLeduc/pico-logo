@@ -316,6 +316,11 @@ extern "C"
         // buffer_size: maximum size of the buffer
         // Returns: LOGO_EDITOR_ACCEPT if user accepted, LOGO_EDITOR_CANCEL if cancelled
         LogoEditorResult (*edit)(char *buffer, size_t buffer_size);
+
+        // Select the vi key layer for the next and subsequent edits
+        // (docs/vi-mode-design.md). Optional: NULL on a console whose editor
+        // has no such mode, where `setvimode` is a no-op.
+        void (*set_vi_mode)(bool on);
     } LogoConsoleEditor;
 
     //

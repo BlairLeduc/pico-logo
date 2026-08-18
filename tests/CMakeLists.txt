@@ -254,6 +254,26 @@ target_include_directories(test_editor_search PRIVATE
 )
 add_test(NAME test_editor_search COMMAND test_editor_search)
 
+# Editor vi key layer test — compiles devices/picocalc/editor_vi.c (and the
+# search and line-lookup modules it drives) on the host. editor.c itself has no
+# host build, which is the whole reason the key layer is a separate file.
+add_executable(test_editor_vi
+    test_editor_vi.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/editor_vi.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/editor_search.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/editor_lines.c
+    unity.c
+)
+target_include_directories(test_editor_vi BEFORE PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/mocks
+)
+target_include_directories(test_editor_vi PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/devices/picocalc
+)
+add_test(NAME test_editor_vi COMMAND test_editor_vi)
+
 # Colour costume pool test — compiles devices/picocalc/costumes.c on the
 # host. Portable (no Pico SDK / Logo runtime dependencies).
 add_executable(test_costumes

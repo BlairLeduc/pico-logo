@@ -16,5 +16,9 @@
 // Returns: LOGO_EDITOR_ACCEPT if user accepted, LOGO_EDITOR_CANCEL if cancelled
 LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size);
 
+// Select the vi key layer for the next and subsequent edits, from `setvimode`
+// (docs/vi-mode-design.md)
+void picocalc_editor_set_vi_mode(bool on);
+
 // Get the editor operations structure
 const LogoConsoleEditor *picocalc_editor_get_ops(void);

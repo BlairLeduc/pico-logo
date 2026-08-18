@@ -250,6 +250,26 @@ extern "C" {
 // at the 36.6 kHz mix rate is ~3.5 ms of audio per half.
 #define SOUND_RING_HALF 256
 
+// Vi mode (docs/vi-mode-design.md). Three fixed-capacity fields in `ViState`,
+// which is one static struct inside the editor.
+//
+// The ex command line. The longest command the mode accepts is a substitute
+// with both texts at their limit -- ":%s/" + pattern + "/" + replacement +
+// "/g" -- so this is sized from LOGO_VI_TEXT_MAX rather than guessed.
+//
+// OVERFLOW: `editor_vi_key` drops printable keys once the line is full; the
+// command line stops growing and nothing is truncated behind the user's back.
+#define LOGO_VI_TEXT_MAX     32
+#define LOGO_VI_CMDLINE_MAX  (LOGO_VI_TEXT_MAX * 2 + 8)
+
+// Keys recorded for `.` to replay. A change command is an optional operator,
+// an optional prefix (`g`, `f`, ...) and a motion -- three keys covers every
+// one of them, and eight leaves room without being worth counting.
+//
+// OVERFLOW: a command longer than this is simply not recorded, so `.` replays
+// the last one that fit rather than a half command.
+#define LOGO_VI_REPEAT_MAX   8
+
 #ifdef __cplusplus
 }
 #endif
