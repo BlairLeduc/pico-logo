@@ -549,6 +549,8 @@ extern "C"
     const char *mock_device_get_editor_input(void);
     // Check if the editor was called
     bool mock_device_was_editor_called(void);
+    // Get the buffer size the editor was last called with
+    size_t mock_device_get_editor_buffer_size(void);
     // Clear editor state
     void mock_device_clear_editor(void);
 

@@ -387,6 +387,99 @@ void tearDown(void)
 }
 
 //==========================================================================
+// Editor Buffer Sizing
+//==========================================================================
+
+// The size primitives_editor.c uses when the buffers land in the aux region
+#define EDITOR_PSRAM_BUFFER_SIZE (256 * 1024)
+
+// Stands in for PSRAM: big enough for both editor buffers and then some
+static char test_aux_region[1024 * 1024];
+
+// Setup with an aux region in place, as a board with working PSRAM has. The
+// scaffold's logo_mem_init() drops any region, so the region goes in after it
+// and the primitives are re-initialised to pick the buffers again.
+static void setUp_with_aux_region(void)
+{
+    test_scaffold_setUp_with_device();
+    logo_mem_set_aux_region(test_aux_region, sizeof(test_aux_region));
+    primitives_init();
+}
+
+void test_editor_buffer_falls_back_to_sram_without_an_aux_region(void)
+{
+    // setUp() left no aux region, as a board without PSRAM has
+    size_t size = primitives_editor_buffer_size();
+    TEST_ASSERT_TRUE(size > 0);
+    TEST_ASSERT_TRUE(size < EDITOR_PSRAM_BUFFER_SIZE);
+
+    // ...and that is the capacity the editor is told it has
+    mock_device_clear_editor();
+    run_string("(edit)");
+    TEST_ASSERT_EQUAL_UINT64(size, mock_device_get_editor_buffer_size());
+}
+
+void test_editor_buffer_is_large_when_there_is_an_aux_region(void)
+{
+    setUp_with_aux_region();
+
+    TEST_ASSERT_EQUAL_UINT64(EDITOR_PSRAM_BUFFER_SIZE, primitives_editor_buffer_size());
+
+    mock_device_clear_editor();
+    run_string("(edit)");
+    TEST_ASSERT_EQUAL_UINT64(EDITOR_PSRAM_BUFFER_SIZE, mock_device_get_editor_buffer_size());
+}
+
+void test_editor_buffer_falls_back_when_the_aux_region_is_too_small(void)
+{
+    // A region that cannot hold both buffers must not leave one of them large
+    test_scaffold_setUp_with_device();
+    logo_mem_set_aux_region(test_aux_region, 64 * 1024);
+    primitives_init();
+
+    TEST_ASSERT_TRUE(primitives_editor_buffer_size() < EDITOR_PSRAM_BUFFER_SIZE);
+}
+
+void test_edit_defines_a_procedure_far_larger_than_the_sram_buffer(void)
+{
+    setUp_with_aux_region();
+
+    // A definition several times the SRAM fallback: it only survives the
+    // definition buffer run_editor_and_process accumulates it in because that
+    // buffer is sized from the aux region too. Kept to 250 body lines, under
+    // the 255-line limit of B32 (long bodies re-run statements), by putting
+    // three counter bumps on each line instead of one.
+    #define BIG_BODY_LINES 250
+    #define BIG_BODY_BUMPS 3
+    static char big[32 * 1024];
+    size_t len = (size_t)sprintf(big, "to big\nmake \"bigcount 0\n");
+    for (int i = 0; i < BIG_BODY_LINES; i++)
+    {
+        len += (size_t)sprintf(big + len,
+                               "make \"bigcount :bigcount + 1 make \"bigcount :bigcount + 1"
+                               " make \"bigcount :bigcount + 1\n");
+    }
+    sprintf(big + len, "end\n");
+    TEST_ASSERT_TRUE(strlen(big) > 16 * 1024);  // Well past the SRAM fallback
+
+    mock_device_clear_editor();
+    mock_device_set_editor_content(big);
+    run_string("(edit)");
+
+    // The whole definition reached the interpreter
+    TEST_ASSERT_EQUAL_UINT64(EDITOR_PSRAM_BUFFER_SIZE, mock_device_get_editor_buffer_size());
+    TEST_ASSERT_NOT_NULL(proc_find("big"));
+
+    // ...and every line of it is there: the count only comes out right if
+    // nothing was dropped at the old 8KB bound
+    mock_device_clear_output();
+    run_string("big print :bigcount");
+    char expected[32];
+    sprintf(expected, "%d\n", BIG_BODY_LINES * BIG_BODY_BUMPS);
+    TEST_ASSERT_EQUAL_STRING(expected, mock_device_get_output());
+}
+
+//==========================================================================
 // Editor Primitive Tests
 //==========================================================================
 
@@ -1214,6 +1307,12 @@ int main(void)
     RUN_TEST(test_edall_excludes_buried_variables);
     RUN_TEST(test_edall_formats_property_lists);
     RUN_TEST(test_edall_formats_numeric_property_values);
+    // Buffer sizing
+    RUN_TEST(test_editor_buffer_falls_back_to_sram_without_an_aux_region);
+    RUN_TEST(test_editor_buffer_is_large_when_there_is_an_aux_region);
+    RUN_TEST(test_editor_buffer_falls_back_when_the_aux_region_is_too_small);
+    RUN_TEST(test_edit_defines_a_procedure_far_larger_than_the_sram_buffer);
+
     RUN_TEST(test_edall_empty_workspace);
     RUN_TEST(test_edit_no_args_preserves_buffer);
     RUN_TEST(test_edit_runs_regular_commands);

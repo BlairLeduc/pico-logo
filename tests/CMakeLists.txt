@@ -228,6 +228,19 @@ target_include_directories(test_lcd_scroll PRIVATE
 )
 add_test(NAME test_lcd_scroll COMMAND test_lcd_scroll)
 
+# Editor line lookup test — compiles devices/picocalc/editor_lines.c on the
+# host. Portable (no Pico SDK / Logo runtime dependencies).
+add_executable(test_editor_lines
+    test_editor_lines.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/editor_lines.c
+    unity.c
+)
+target_include_directories(test_editor_lines PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/devices/picocalc
+)
+add_test(NAME test_editor_lines COMMAND test_editor_lines)
+
 # Editor incremental search test — compiles devices/picocalc/editor_search.c
 # on the host. Portable (no Pico SDK / Logo runtime dependencies).
 add_executable(test_editor_search

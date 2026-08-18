@@ -9,6 +9,7 @@
 #include <string.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 // Screen dimensions (matches Pico Logo reference)
 #define SCREEN_WIDTH  320
@@ -29,10 +30,15 @@ static const char *mock_input_buffer = NULL;
 static size_t mock_input_pos = 0;
 
 // Editor state for testing
-static char mock_editor_input[8192];      // Content passed to editor
-static char mock_editor_content[8192];    // Content editor returns
+// Editor content, held on the heap and grown to fit: a board with PSRAM edits
+// buffers far larger than any fixed size worth putting in every test binary.
+static char *mock_editor_input = NULL;    // Content passed to editor
+static size_t mock_editor_input_cap = 0;
+static char *mock_editor_content = NULL;  // Content editor returns
+static size_t mock_editor_content_cap = 0;
 static LogoEditorResult mock_editor_result = LOGO_EDITOR_ACCEPT;
 static bool mock_editor_called = false;
+static size_t mock_editor_buffer_size = 0;   // Capacity the editor was handed
 
 //
 // Forward declarations for console operations
@@ -962,19 +968,38 @@ static const LogoStreamOps mock_output_ops = {
 // Editor operations
 //
 
+// Copy src into *dst, growing the allocation to fit
+static void mock_editor_str_set(char **dst, size_t *cap, const char *src)
+{
+    size_t len = src ? strlen(src) : 0;
+    if (len + 1 > *cap)
+    {
+        char *grown = (char *)realloc(*dst, len + 1);
+        if (!grown)
+        {
+            return;
+        }
+        *dst = grown;
+        *cap = len + 1;
+    }
+    memcpy(*dst, src ? src : "", len);
+    (*dst)[len] = '\0';
+}
+
 static LogoEditorResult mock_editor_edit(char *buffer, size_t buffer_size)
 {
     mock_editor_called = true;
-    
+    mock_editor_buffer_size = buffer_size;
+
     // Save the input content
     if (buffer)
     {
-        strncpy(mock_editor_input, buffer, sizeof(mock_editor_input) - 1);
-        mock_editor_input[sizeof(mock_editor_input) - 1] = '\0';
+        mock_editor_str_set(&mock_editor_input, &mock_editor_input_cap, buffer);
     }
-    
+
     // If accepting, replace buffer with mock content
-    if (mock_editor_result == LOGO_EDITOR_ACCEPT && mock_editor_content[0] != '\0')
+    if (mock_editor_result == LOGO_EDITOR_ACCEPT && mock_editor_content != NULL &&
+        mock_editor_content[0] != '\0')
     {
         size_t len = strlen(mock_editor_content);
         if (len < buffer_size)
@@ -1173,11 +1198,12 @@ void mock_device_reset(void)
     mock_input_buffer = NULL;
     mock_input_pos = 0;
     
-    // Clear editor state
-    mock_editor_input[0] = '\0';
-    mock_editor_content[0] = '\0';
+    // Clear editor state (the allocations are kept and reused)
+    mock_editor_str_set(&mock_editor_input, &mock_editor_input_cap, NULL);
+    mock_editor_str_set(&mock_editor_content, &mock_editor_content_cap, NULL);
     mock_editor_result = LOGO_EDITOR_ACCEPT;
     mock_editor_called = false;
+    mock_editor_buffer_size = 0;
 
     // Clear WiFi state
     mock_state.wifi.connected = false;
@@ -1633,20 +1659,12 @@ void mock_device_set_editor_result(LogoEditorResult result)
 
 void mock_device_set_editor_content(const char *content)
 {
-    if (content)
-    {
-        strncpy(mock_editor_content, content, sizeof(mock_editor_content) - 1);
-        mock_editor_content[sizeof(mock_editor_content) - 1] = '\0';
-    }
-    else
-    {
-        mock_editor_content[0] = '\0';
-    }
+    mock_editor_str_set(&mock_editor_content, &mock_editor_content_cap, content);
 }
 
 const char *mock_device_get_editor_input(void)
 {
-    return mock_editor_input;
+    return mock_editor_input ? mock_editor_input : "";
 }
 
 bool mock_device_was_editor_called(void)
@@ -1654,12 +1672,18 @@ bool mock_device_was_editor_called(void)
     return mock_editor_called;
 }
 
+size_t mock_device_get_editor_buffer_size(void)
+{
+    return mock_editor_buffer_size;
+}
+
 void mock_device_clear_editor(void)
 {
-    mock_editor_input[0] = '\0';
-    mock_editor_content[0] = '\0';
+    mock_editor_str_set(&mock_editor_input, &mock_editor_input_cap, NULL);
+    mock_editor_str_set(&mock_editor_content, &mock_editor_content_cap, NULL);
     mock_editor_result = LOGO_EDITOR_ACCEPT;
     mock_editor_called = false;
+    mock_editor_buffer_size = 0;
 }
 
 //

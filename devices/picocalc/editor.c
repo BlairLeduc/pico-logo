@@ -12,6 +12,7 @@
 //
 
 #include "editor.h"
+#include "editor_lines.h"
 #include "editor_search.h"
 #include "keyboard.h"
 #include "lcd.h"
@@ -92,7 +93,9 @@ typedef struct {
     char *buffer;           // Pointer to the edit buffer
     size_t buffer_size;     // Maximum buffer size
     size_t content_length;  // Current content length
-    
+
+    EditorLineIndex lines;  // Memo for line <-> offset lookups
+
     // Cursor position (in buffer coordinates)
     size_t cursor_pos;      // Cursor position in buffer (0-based)
     
@@ -217,20 +220,8 @@ static void editor_draw_footer(void)
 //
 static int editor_get_line_start(int line_index)
 {
-    if (line_index <= 0) return 0;
-    
-    int line = 0;
-    for (size_t i = 0; i < editor.content_length; i++) {
-        if (editor.buffer[i] == '\n') {
-            line++;
-            if (line == line_index) {
-                return (int)(i + 1);
-            }
-        }
-    }
-    
-    // Line doesn't exist, return end of buffer
-    return (int)editor.content_length;
+    return (int)editor_lines_start(&editor.lines, editor.buffer,
+                                   editor.content_length, line_index);
 }
 
 //
@@ -254,13 +245,8 @@ static int editor_get_line_end(int line_index)
 //
 static int editor_get_line_at_pos(size_t pos)
 {
-    int line = 0;
-    for (size_t i = 0; i < pos && i < editor.content_length; i++) {
-        if (editor.buffer[i] == '\n') {
-            line++;
-        }
-    }
-    return line;
+    return editor_lines_at_pos(&editor.lines, editor.buffer,
+                               editor.content_length, pos);
 }
 
 //
@@ -788,12 +774,12 @@ static void editor_insert_char(char c)
     if (editor.selecting) {
         editor_delete_selection();
     }
-    
+
     // Shift content to make room
-    for (size_t i = editor.content_length; i > editor.cursor_pos; i--) {
-        editor.buffer[i] = editor.buffer[i - 1];
-    }
-    
+    editor_lines_edit(&editor.lines, editor.cursor_pos);
+    memmove(&editor.buffer[editor.cursor_pos + 1], &editor.buffer[editor.cursor_pos],
+            editor.content_length - editor.cursor_pos);
+
     // Insert character
     editor.buffer[editor.cursor_pos] = c;
     editor.cursor_pos++;
@@ -847,12 +833,12 @@ static void editor_new_line(void)
     
     // Strip leading whitespace from content that is now on the new line
     // (the content that was after the cursor before the newline was inserted)
-    while (editor.cursor_pos < editor.content_length && 
+    while (editor.cursor_pos < editor.content_length &&
            editor.buffer[editor.cursor_pos] == ' ') {
         // Delete the space at cursor position
-        for (size_t i = editor.cursor_pos; i < editor.content_length - 1; i++) {
-            editor.buffer[i] = editor.buffer[i + 1];
-        }
+        editor_lines_edit(&editor.lines, editor.cursor_pos);
+        memmove(&editor.buffer[editor.cursor_pos], &editor.buffer[editor.cursor_pos + 1],
+                editor.content_length - editor.cursor_pos - 1);
         editor.content_length--;
         editor.buffer[editor.content_length] = '\0';
     }
@@ -880,10 +866,10 @@ static void editor_delete_char(void)
     }
     
     // Shift content
-    for (size_t i = editor.cursor_pos; i < editor.content_length - 1; i++) {
-        editor.buffer[i] = editor.buffer[i + 1];
-    }
-    
+    editor_lines_edit(&editor.lines, editor.cursor_pos);
+    memmove(&editor.buffer[editor.cursor_pos], &editor.buffer[editor.cursor_pos + 1],
+            editor.content_length - editor.cursor_pos - 1);
+
     editor.content_length--;
     editor.buffer[editor.content_length] = '\0';
 }
@@ -950,10 +936,10 @@ static void editor_delete_selection(void)
     size_t sel_len = sel_end - sel_start;
     
     // Shift content
-    for (size_t i = sel_start; i < editor.content_length - sel_len; i++) {
-        editor.buffer[i] = editor.buffer[i + sel_len];
-    }
-    
+    editor_lines_edit(&editor.lines, sel_start);
+    memmove(&editor.buffer[sel_start], &editor.buffer[sel_start + sel_len],
+            editor.content_length - sel_start - sel_len);
+
     editor.content_length -= sel_len;
     editor.buffer[editor.content_length] = '\0';
     editor.cursor_pos = sel_start;
@@ -1001,6 +987,7 @@ static void editor_paste(void)
     }
     
     // Shift content to make room
+    editor_lines_edit(&editor.lines, editor.cursor_pos);
     memmove(&editor.buffer[editor.cursor_pos + editor.copy_length],
             &editor.buffer[editor.cursor_pos],
             editor.content_length - editor.cursor_pos);
@@ -1239,6 +1226,7 @@ static void editor_decrease_indent(void)
         
         if (spaces_to_remove > 0) {
             // Shift content left to remove spaces
+            editor_lines_edit(&editor.lines, (size_t)line_start);
             memmove(&editor.buffer[line_start],
                     &editor.buffer[line_start + spaces_to_remove],
                     editor.content_length - line_start - spaces_to_remove + 1);  // +1 for null
@@ -1302,6 +1290,7 @@ static void editor_increase_indent(void)
         int line_start = editor_get_line_start(line);
         
         // Shift content right to make room for spaces
+        editor_lines_edit(&editor.lines, (size_t)line_start);
         memmove(&editor.buffer[line_start + TAB_WIDTH],
                 &editor.buffer[line_start],
                 editor.content_length - line_start + 1);  // +1 for null
@@ -1349,6 +1338,7 @@ static void editor_cut_line(void)
     editor.copy_length = line_len;
     
     // Delete the line
+    editor_lines_edit(&editor.lines, (size_t)line_start);
     memmove(&editor.buffer[line_start],
             &editor.buffer[line_start + line_len],
             editor.content_length - line_start - line_len + 1);  // +1 for null terminator
@@ -1457,6 +1447,7 @@ static void editor_replace_all(void)
     editor_search_replace_all(editor.buffer, &editor.content_length, editor.buffer_size,
                               editor.search_text, editor.search_len,
                               editor.replace_text, editor.replace_len);
+    editor_lines_reset(&editor.lines);  // Matches anywhere; the whole buffer may have moved
 
     if (editor.cursor_pos > editor.content_length) {
         editor.cursor_pos = editor.content_length;
@@ -1568,6 +1559,7 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
     editor.buffer = buffer;
     editor.buffer_size = buffer_size;
     editor.content_length = strlen(buffer);
+    editor_lines_reset(&editor.lines);
     editor.cursor_pos = 0;  // Start at beginning of content
     editor.view_start_line = 0;
     editor.h_scroll_offset = 0;

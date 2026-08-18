@@ -21,32 +21,39 @@
 #include <string.h>
 #include <strings.h>
 
-// Editor buffers (8KB each by default, as specified in reference). They are
-// only touched at human-editing speed, so primitives_editor_init() places them
-// in the aux/PSRAM region when available (relieving SRAM), falling back to a
-// one-time heap allocation otherwise. They are deliberately NOT static arrays:
-// reserving them in BSS would keep the SRAM even when PSRAM backs them.
+// Editor buffers. They are only touched at human-editing speed, so
+// primitives_editor_init() places them in the aux/PSRAM region when available
+// (relieving SRAM), falling back to a one-time heap allocation of the size
+// below otherwise. They are deliberately NOT static arrays: reserving them in
+// BSS would keep the SRAM even when PSRAM backs them.
+//
+// The fallback size every board can meet (8KB here, 24576 from the presets).
 #ifndef LOGO_EDITOR_BUFFER_SIZE
 #define LOGO_EDITOR_BUFFER_SIZE 8192
 #endif
 
-// Active buffers (valid after primitives_editor_init()).
+// Size used when the buffers land in the aux region: PSRAM has megabytes going
+// spare where SRAM has kilobytes, so a board that has it edits much larger
+// files. Which size a board gets is decided at run time, not by the build: a
+// PSRAM board whose memory fails to verify at boot gets no aux region, and must
+// still come up with an editor SRAM can hold.
+#ifndef LOGO_EDITOR_PSRAM_BUFFER_SIZE
+#define LOGO_EDITOR_PSRAM_BUFFER_SIZE (256 * 1024)
+#endif
+
+// Active buffers (valid after primitives_editor_init()) and their size.
 static char *editor_buffer = NULL;
 static char *editor_proc_buffer = NULL;
+static size_t editor_buffer_size = LOGO_EDITOR_BUFFER_SIZE;
 
 // Process-lifetime heap fallbacks, allocated once and reused across re-inits so
 // repeated init (e.g. across tests) never leaks.
 static char *editor_buffer_heap = NULL;
 static char *editor_proc_buffer_heap = NULL;
 
-// Pick a buffer: PSRAM region if available, else the cached heap fallback.
-static char *editor_pick_buffer(char **heap_cache)
+// The cached heap fallback, allocated on first use.
+static char *editor_heap_buffer(char **heap_cache)
 {
-    char *p = (char *)mem_region_alloc(LOGO_EDITOR_BUFFER_SIZE);
-    if (p != NULL)
-    {
-        return p;
-    }
     if (*heap_cache == NULL)
     {
         *heap_cache = (char *)malloc(LOGO_EDITOR_BUFFER_SIZE);
@@ -90,7 +97,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
     }
     
     // Call the editor
-    LogoEditorResult editor_result = io->console->editor->edit(buffer, LOGO_EDITOR_BUFFER_SIZE);
+    LogoEditorResult editor_result = io->console->editor->edit(buffer, editor_buffer_size);
     
     if (editor_result == LOGO_EDITOR_CANCEL)
     {
@@ -142,7 +149,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
         if (is_empty && in_procedure_def)
         {
             // Add just a newline to preserve the empty line
-            if (proc_len + 1 < LOGO_EDITOR_BUFFER_SIZE - 10)
+            if (proc_len + 1 < editor_buffer_size - 10)
             {
                 proc_buffer[proc_len] = '\n';
                 proc_len += 1;
@@ -164,7 +171,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
 
             if (in_procedure_def)
             {
-                ProcDefStatus status = repl_proc_def_append(proc_buffer, LOGO_EDITOR_BUFFER_SIZE,
+                ProcDefStatus status = repl_proc_def_append(proc_buffer, editor_buffer_size,
                                                             &proc_len, line_start);
                 if (status == PROC_DEF_OVERFLOW)
                 {
@@ -201,7 +208,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
                 if (bracket_depth > 0)
                 {
                     // Continuing a multi-line bracket expression - append this line
-                    if (expr_len + line_len + 2 < LOGO_EDITOR_BUFFER_SIZE - 10)
+                    if (expr_len + line_len + 2 < editor_buffer_size - 10)
                     {
                         // Add a space separator then the line content
                         proc_buffer[expr_len] = ' ';
@@ -249,7 +256,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
                         bracket_depth = line_balance;
                         expr_len = 0;
                         
-                        if (line_len + 1 < LOGO_EDITOR_BUFFER_SIZE - 10)
+                        if (line_len + 1 < editor_buffer_size - 10)
                         {
                             memcpy(proc_buffer, line_start, line_len);
                             expr_len = line_len;
@@ -337,7 +344,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
     // If still in procedure definition at end of buffer, auto-complete with "end"
     if (in_procedure_def && proc_len > 0)
     {
-        if (proc_len + 4 < LOGO_EDITOR_BUFFER_SIZE)
+        if (proc_len + 4 < editor_buffer_size)
         {
             memcpy(proc_buffer + proc_len, "end", 3);
             proc_len += 3;
@@ -376,7 +383,7 @@ static Result prim_edit(Evaluator *eval, int argc, Value *args)
     
     // When we have arguments, start fresh
     FormatBufferContext ctx;
-    format_buffer_init(&ctx, editor_buffer, LOGO_EDITOR_BUFFER_SIZE);
+    format_buffer_init(&ctx, editor_buffer, editor_buffer_size);
     bool first_proc = true;
     
     if (value_is_word(args[0]))
@@ -481,7 +488,7 @@ static Result prim_edit(Evaluator *eval, int argc, Value *args)
 static Result prim_edn(Evaluator *eval, int argc, Value *args)
 {
     FormatBufferContext ctx;
-    format_buffer_init(&ctx, editor_buffer, LOGO_EDITOR_BUFFER_SIZE);
+    format_buffer_init(&ctx, editor_buffer, editor_buffer_size);
     
     if (argc < 1)
     {
@@ -540,7 +547,7 @@ static Result prim_edns(Evaluator *eval, int argc, Value *args)
     UNUSED(argc); UNUSED(args);
     
     FormatBufferContext ctx;
-    format_buffer_init(&ctx, editor_buffer, LOGO_EDITOR_BUFFER_SIZE);
+    format_buffer_init(&ctx, editor_buffer, editor_buffer_size);
     
     int count = var_global_count(false);  // Exclude buried
     for (int i = 0; i < count; i++)
@@ -565,7 +572,7 @@ static Result prim_edall(Evaluator *eval, int argc, Value *args)
     UNUSED(argc); UNUSED(args);
     
     FormatBufferContext ctx;
-    format_buffer_init(&ctx, editor_buffer, LOGO_EDITOR_BUFFER_SIZE);
+    format_buffer_init(&ctx, editor_buffer, editor_buffer_size);
     
     // Format all procedures (not buried)
     int proc_cnt = proc_count(true);  // Get ALL, filter by buried in loop
@@ -686,7 +693,7 @@ static Result prim_editfile(Evaluator *eval, int argc, Value *args)
     {
         // Check file size first
         long file_size = logo_io_file_size(io, pathname);
-        if (file_size > LOGO_EDITOR_BUFFER_SIZE - 1)
+        if (file_size > (long)(editor_buffer_size - 1))
         {
             return result_error_arg(ERR_FILE_TOO_BIG, NULL, pathname);
         }
@@ -705,7 +712,7 @@ static Result prim_editfile(Evaluator *eval, int argc, Value *args)
         {
             // Check if line fits in buffer
             size_t line_len = strlen(line);
-            if (content_len + line_len + 1 >= LOGO_EDITOR_BUFFER_SIZE)
+            if (content_len + line_len + 1 >= editor_buffer_size)
             {
                 logo_io_close(io, pathname);
                 return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
@@ -718,7 +725,7 @@ static Result prim_editfile(Evaluator *eval, int argc, Value *args)
             // Add newline if line didn't end with one
             if (line_len == 0 || line[line_len - 1] != '\n')
             {
-                if (content_len + 1 >= LOGO_EDITOR_BUFFER_SIZE)
+                if (content_len + 1 >= editor_buffer_size)
                 {
                     logo_io_close(io, pathname);
                     return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
@@ -733,7 +740,7 @@ static Result prim_editfile(Evaluator *eval, int argc, Value *args)
     // If file doesn't exist, start with empty buffer (will create on save)
     
     // Call the editor
-    LogoEditorResult editor_result = io->console->editor->edit(editor_buffer, LOGO_EDITOR_BUFFER_SIZE);
+    LogoEditorResult editor_result = io->console->editor->edit(editor_buffer, editor_buffer_size);
     
     if (editor_result == LOGO_EDITOR_CANCEL)
     {
@@ -769,13 +776,40 @@ static Result prim_editfile(Evaluator *eval, int argc, Value *args)
     return result_none();
 }
 
+size_t primitives_editor_buffer_size(void)
+{
+    return editor_buffer_size;
+}
+
 void primitives_editor_init(void)
 {
     // Place the editor buffers in the aux/PSRAM region when one is available,
     // else in a one-time heap fallback. Re-selected on each init; a fresh
     // region (logo_mem_set_aux_region) resets any prior region block.
-    editor_buffer = editor_pick_buffer(&editor_buffer_heap);
-    editor_proc_buffer = editor_pick_buffer(&editor_proc_buffer_heap);
+    //
+    // Both buffers are taken as one block so the pair is all or nothing: the
+    // bounds above are a single size, and a region that only had room for the
+    // first would leave the edit buffer large and the definition buffer small.
+    char *region = (char *)mem_region_alloc(2 * LOGO_EDITOR_PSRAM_BUFFER_SIZE);
+    if (region != NULL)
+    {
+        editor_buffer = region;
+        editor_proc_buffer = region + LOGO_EDITOR_PSRAM_BUFFER_SIZE;
+        editor_buffer_size = LOGO_EDITOR_PSRAM_BUFFER_SIZE;
+    }
+    else
+    {
+        editor_buffer = editor_heap_buffer(&editor_buffer_heap);
+        editor_proc_buffer = editor_heap_buffer(&editor_proc_buffer_heap);
+        editor_buffer_size = LOGO_EDITOR_BUFFER_SIZE;
+    }
+
+    // Region memory arrives uninitialised, and (edit) with no arguments edits
+    // whatever the buffer already holds.
+    if (editor_buffer != NULL)
+    {
+        editor_buffer[0] = '\0';
+    }
 
     primitive_register("edit", 1, prim_edit);  // 1 argument, (edit) for none
     primitive_register("ed", 1, prim_edit);    // Abbreviation

@@ -22,8 +22,50 @@ edge case)
 
 | ID | Bug | Area | Severity | Found | Status |
 |---|---|---|---|---|---|
+| [B32](#b32--a-procedure-body-over-254-lines-re-runs-statements) | A procedure body over 254 lines re-runs statements | interpreter | high | 2026-08-17 | open |
 | [B19](#b19--collision-tests-ignore-the-wrapped-playfield) | Collision tests ignore the wrapped playfield (Asteroids) | games | low | 2026-08-12 | open |
 | [B6](#b6--penreverse-ignores-pen-size-always-1-px) | `penreverse` ignores pen size (always 1 px) | graphics | low | 2026-07-18 | won't fix (documented) |
+
+### B32 — A procedure body over 254 lines re-runs statements
+
+A procedure whose body is longer than 254 lines runs a few of its statements
+twice. The count is small and grows with the body: one extra at 255 lines, two
+at about 525, three at about 790 — roughly one more every ~270 lines. Nothing
+is reported; the procedure simply does slightly more than it says.
+
+The trigger is the **number of newline-separated lines**, not the number of
+statements or the size of the text: 250 lines carrying three statements each
+(750 statements, 21 KB) run exactly 750 times, while 255 lines of one statement
+run 256. The first divergence landing on 255 points at a byte-sized count or
+index somewhere in how a body is stored or stepped.
+
+Reproduce without any device or editor involvement — this is the interpreter
+itself, not `edit`:
+
+```c
+static char big[32 * 1024];
+size_t len = (size_t)sprintf(big, "to big\nmake \"n 0\n");
+for (int i = 0; i < 255; i++)
+    len += (size_t)sprintf(big + len, "make \"n :n + 1\n");
+sprintf(big + len, "end\n");
+
+proc_define_from_text(big);
+run_string("big print :n");   // prints 256
+```
+
+- **Status:** open. Found 2026-08-17 while sizing the editor buffer from PSRAM
+  (roadmap: larger editor buffer), which is what made 255-line procedures
+  reachable — the 8 KB SRAM buffer could not hold one. `edit` and `editfile`
+  are not implicated: the same body defined directly misbehaves the same way.
+  It reproduces on the host under ASan and UBSan with no diagnostic, so it is a
+  logic error rather than a memory one. Note that it is **build-sensitive**: the
+  same source failed in one host build directory and passed in another, so a
+  green test run is not evidence the bug is gone.
+- **Impact:** high — silently wrong results in exactly the long procedures a
+  256 KB editor buffer invites. `tests/test_primitives_editor.c` keeps its large
+  definition under 250 lines to steer around it.
+
+---
 
 ### B19 — Collision tests ignore the wrapped playfield
 

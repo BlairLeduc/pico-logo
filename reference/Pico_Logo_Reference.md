@@ -421,7 +421,7 @@ radio - and storage capacity, which depends on the flash and PSRAM fitted.
 **Shared by every board** (the RP2350 processor):
 
 - 32768 nodes for procedure and variable storage
-- 24576 characters of editor buffer
+- 24576 characters of editor buffer (262144 on a board with PSRAM)
 - 8192 characters in the copy buffer
 - Hardware floating-point operations
 
@@ -447,6 +447,7 @@ radio - and storage capacity, which depends on the flash and PSRAM fitted.
 - `http.get` and `http.post` over both `http://` and `https://`, so `tls?` outputs `true`
 - HTTP responses up to about 512 KB, held in PSRAM
 - Words may exceed 255 characters (for example the result of [`word`](#word) or an HTTP response body), held in PSRAM
+- 262144 characters of editor buffer, held in PSRAM, so [`editfile`](#editfile) opens much larger files. A board whose PSRAM does not come up at boot falls back to the 24576 every board has
 
 
 
