@@ -55,6 +55,8 @@ typedef enum
     VI_ACT_CANCEL,        // :q! ZQ
     VI_ACT_REDRAW,        // Only the mode changed; repaint the footer and cursor
     VI_ACT_BEEP,          // Not a command; `msg` is the footer text
+    VI_ACT_MESSAGE,       // Nothing to do but say something: `msg` is the
+                          // footer text (`Ctrl` `G`, `:=`, `:.=`)
 } ViActionKind;
 
 // What a keystroke asks the editor to do. Byte offsets, never screen rows: the
@@ -67,7 +69,9 @@ typedef struct
     bool linewise;     // The range is whole lines, newline included
     char ch;           // VI_ACT_REPLACE_CHAR, VI_ACT_SEARCH
     int count;         // Repeat count; tab stops for VI_ACT_INDENT (may be negative)
-    const char *msg;   // Footer text for VI_ACT_BEEP
+    const char *msg;   // Footer text for VI_ACT_BEEP and VI_ACT_MESSAGE. A
+                       // literal, or `ViState.msg` -- which lives as long as
+                       // the editor session the footer belongs to
 } ViAction;
 
 typedef struct
@@ -98,6 +102,10 @@ typedef struct
 
     char cmdline[LOGO_VI_CMDLINE_MAX + 1];  // Includes the leading ':', '/' or '?'
     size_t cmdline_len;
+
+    // Where a composed message is put, since `ViAction.msg` is a pointer and
+    // the caller keeps it on the footer until the next keystroke
+    char msg[LOGO_VI_MSG_MAX + 1];
 
     char pattern[LOGO_VI_TEXT_MAX + 1];
     size_t pattern_len;

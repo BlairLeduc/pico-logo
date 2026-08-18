@@ -252,6 +252,7 @@ static void ed_apply(Ed *e, const ViAction *act)
         case VI_ACT_NONE:
         case VI_ACT_REDRAW:
         case VI_ACT_BEEP:
+        case VI_ACT_MESSAGE:
             break;
 
         case VI_ACT_MOVE:
@@ -1551,6 +1552,68 @@ static void test_the_command_line_stops_growing_when_it_is_full(void)
 }
 
 //
+//  Where the cursor is
+//
+
+static void assert_message(const char *expected)
+{
+    TEST_ASSERT_EQUAL_INT(VI_ACT_MESSAGE, ed.last.kind);
+    TEST_ASSERT_EQUAL_STRING(expected, ed.last.msg);
+}
+
+static void test_ctrl_g_reports_the_line_the_cursor_is_on(void)
+{
+    ed_set("one\ntwo\nthree\nfour\n");
+    feed("2G");
+    feed_key(0x07);
+    assert_message("line 2 of 5 --40%--");
+}
+
+static void test_ctrl_g_says_when_the_buffer_has_been_changed(void)
+{
+    ed_set("one\ntwo\n");
+    ed.vi.modified = true;   // editor.c sets this; the state machine only reads it
+    feed_key(0x07);
+    assert_message("[Modified] line 1 of 3 --33%--");
+}
+
+static void test_ctrl_g_on_an_empty_buffer_counts_one_line(void)
+{
+    ed_set("");
+    feed_key(0x07);
+    assert_message("line 1 of 1 --100%--");
+}
+
+static void test_ctrl_g_leaves_the_buffer_and_the_mode_alone(void)
+{
+    ed_set("one\ntwo\n");
+    feed("v");
+    feed("3");
+    feed_key(0x07);
+    assert_message("line 1 of 3 --33%--");
+    assert_text("one\ntwo\n");
+    TEST_ASSERT_EQUAL_INT(VI_VISUAL, ed.vi.mode);
+    TEST_ASSERT_EQUAL_INT(0, ed.vi.count);   // the count went nowhere
+}
+
+static void test_ex_dot_equals_prints_the_current_line_number(void)
+{
+    ed_set("one\ntwo\nthree\n");
+    feed("G");
+    feed(":.="); feed_key(KEY_RETURN);
+    assert_message("4");
+    TEST_ASSERT_EQUAL_INT(VI_NORMAL, ed.vi.mode);
+}
+
+static void test_ex_equals_prints_the_last_line_number(void)
+{
+    ed_set("one\ntwo\nthree\n");
+    feed(":="); feed_key(KEY_RETURN);
+    assert_message("4");
+    TEST_ASSERT_EQUAL_UINT(0, ed.cursor);   // it reports, it does not move
+}
+
+//
 //  Search
 //
 
@@ -2053,6 +2116,12 @@ int main(void)
     RUN_TEST(test_a_pattern_substitute_that_would_not_fit_changes_nothing);
     RUN_TEST(test_a_malformed_ex_command_complains_and_changes_nothing);
     RUN_TEST(test_backspacing_off_the_colon_leaves_the_command_line);
+    RUN_TEST(test_ctrl_g_reports_the_line_the_cursor_is_on);
+    RUN_TEST(test_ctrl_g_says_when_the_buffer_has_been_changed);
+    RUN_TEST(test_ctrl_g_on_an_empty_buffer_counts_one_line);
+    RUN_TEST(test_ctrl_g_leaves_the_buffer_and_the_mode_alone);
+    RUN_TEST(test_ex_dot_equals_prints_the_current_line_number);
+    RUN_TEST(test_ex_equals_prints_the_last_line_number);
     RUN_TEST(test_the_command_line_stops_growing_when_it_is_full);
 
     RUN_TEST(test_slash_records_a_pattern_and_a_direction);

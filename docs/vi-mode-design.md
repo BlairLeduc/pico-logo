@@ -400,6 +400,8 @@ and the mode indicator. Those are a hardware check on the Pico Plus 2 W.
 | **M5** | Text objects, words and brackets (§15) | `di[` from inside a nested group, `vi[` selecting one, both in the randomised run | **built and checked on a board 2026-08-18**; opened by B35, and it needed no `editor.c` change at all |
 | **M6** | Patterns in `:s`, `/` and `?` (§16) | `/\<n\>` walked with `n`/`N` through the wrap, then `:%s//count/g` renaming every whole-word `n` and no `then`, and one `u` putting it back | **built and checked on a board 2026-08-18** ([`editor_pattern.c`](../devices/picocalc/editor_pattern.c)); the gate passed and its stack-measurement half found B36 instead — a hang, not the overflow §16.10 expected (§16.13) |
 
+| **M7** | `Ctrl` `G`, `:.=`, `:=` (§17) | the report on a buffer longer than a screen, before and after a change | **built and checked on a board 2026-08-18** |
+
 M1 is the whole feature as far as a user is concerned; M2 is what makes it
 pleasant, M4 is what stops it being annoying, and M5 is the one command a
 board session asked for that the mode could not say (§15). M6 is the only one
@@ -1316,3 +1318,37 @@ of the 4 KB stack and is unsound with `\1`..`\9`, since `match_here` mutates
 capture state — a conditional fast path for backref-free patterns, and the
 guard underneath it anyway for the rest. Not worth it for a matcher whose real
 patterns cost thirteen steps.
+
+## 17. Where the cursor is (M7)
+
+Three commands that answer one question: `Ctrl` `G`, `:.=` and `:=`. On a
+40 × 30 screen with no line numbers down the side and no status column, the
+buffer gives no clue where in it you are, and `:{n}` is a command whose one
+argument the mode could not tell you.
+
+`Ctrl` `G` reports `[Modified] line 12 of 40 --30%--` — vi's report, minus the
+file name. There is none to give: which procedures or which file the editor is
+over was fixed by the primitive that opened it (§5.3 rules out `:e`), and
+`editor.c` never learns a name. `[Modified]` is the flag `:q` already refuses
+on, so the report doubles as the answer to "will `:q` let me out". `:.=` and
+`:=` print the current and last line numbers on their own, as ex does.
+
+**A composed message needed a channel.** Every footer text so far has been a
+string literal — `ViAction.msg` is a `const char *` the editor holds until the
+next keystroke — and these three have to be formatted. The text goes in
+`ViState.msg` (`LOGO_VI_MSG_MAX`, 40 bytes, the width of the footer), which
+lives exactly as long as the editor session the footer belongs to, and
+`VI_ACT_MESSAGE` carries a pointer to it. It is a separate kind from
+`VI_ACT_BEEP` because a report is not a complaint, even though `editor.c`
+paints both the same way.
+
+That aliasing is the one trap: `editor.c` repaints the footer when
+`editor.vi_msg` *changes*, and every composed message points at the same
+buffer, so the pointer can stay put while the text moves under it. The
+dispatcher tests `act.kind == VI_ACT_MESSAGE` as well, rather than leaving a
+stale report on the screen the day two of them run back to back.
+
+Line numbers are counted by walking the buffer (`line_number_of`), not by
+asking `editor_lines.c`: the state machine has no memo by design (§6.1), and
+one scan per `Ctrl` `G` of a buffer this size is nothing next to the redraw
+that follows it.

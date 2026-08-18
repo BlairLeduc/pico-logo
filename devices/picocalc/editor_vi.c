@@ -15,6 +15,7 @@
 #include "keyboard.h"
 
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 //
@@ -91,6 +92,24 @@ static size_t goto_line(const char *buf, size_t len, int n)
         pos = end + 1;
     }
     return pos;
+}
+
+// The number of the line `pos` is on, counting from 1. Passing `len` gives the
+// number of the last line, which is how many lines the buffer has: one, plus
+// one for every newline before the point -- the same count editor.c's line
+// index keeps, so a buffer ending in a newline has an empty last line and `G`
+// reaches it.
+static int line_number_of(const char *buf, size_t pos)
+{
+    int n = 1;
+    for (size_t i = 0; i < pos; i++)
+    {
+        if (buf[i] == '\n')
+        {
+            n++;
+        }
+    }
+    return n;
 }
 
 // Move `delta` lines, keeping the column where the line is long enough
@@ -806,6 +825,36 @@ static bool beep(ViState *st, ViAction *out, const char *msg)
     return true;
 }
 
+// Say something that is not a complaint. The text is already in `st->msg`,
+// which outlives the keystroke; `out->msg` only points at it.
+static bool message(ViState *st, ViAction *out)
+{
+    clear_pending(st);
+    out->kind = VI_ACT_MESSAGE;
+    out->msg = st->msg;
+    return true;
+}
+
+// `Ctrl` `G` -- where the cursor is. Vi's report without the file name: there
+// is none to give, since which procedure or file the editor is over was fixed
+// by the primitive that opened it, and the footer is 40 columns wide.
+static bool report_position(ViState *st, const char *buf, size_t len, size_t cursor,
+                            ViAction *out)
+{
+    int line = line_number_of(buf, cursor);
+    int total = line_number_of(buf, len);
+    snprintf(st->msg, sizeof(st->msg), "%sline %d of %d --%d%%--",
+             st->modified ? "[Modified] " : "", line, total, line * 100 / total);
+    return message(st, out);
+}
+
+// `:=` and `:.=` -- a line number on its own, as ex prints it
+static bool report_line_number(ViState *st, int line, ViAction *out)
+{
+    snprintf(st->msg, sizeof(st->msg), "%d", line);
+    return message(st, out);
+}
+
 //
 //  Operators
 //
@@ -1088,6 +1137,17 @@ static bool run_ex(ViState *st, const char *buf, size_t len, size_t cursor, ViAc
         out->kind = VI_ACT_MOVE;
         out->start = out->end = first_non_blank(buf, len, goto_line(buf, len, line));
         return true;
+    }
+
+    // `:=` prints the number of the last line, `:.=` of the line the cursor is
+    // on. Both go before the substitute: `=` is not a substitute's delimiter.
+    if (n - i == 1 && s[i] == '=')
+    {
+        return report_line_number(st, line_number_of(buf, len), out);
+    }
+    if (n - i == 2 && s[i] == '.' && s[i + 1] == '=')
+    {
+        return report_line_number(st, line_number_of(buf, cursor), out);
     }
 
     // Substitute, over the current line or the whole buffer
@@ -1776,6 +1836,10 @@ static bool normal_key(ViState *st, const char *buf, size_t len, size_t cursor,
                 out->kind = VI_ACT_SEARCH;
                 out->ch = (st->search_forward == (key == 'n')) ? '/' : '?';
                 return commit(st, out, count);
+
+            case 0x07:  // Ctrl+G -- where the cursor is. A count means nothing
+                        // to it, and take_count above has already dropped one
+                return report_position(st, buf, len, cursor, out);
 
             case ':':
             case '/':

@@ -614,6 +614,8 @@ Every motion takes a count typed before it, so `5w` moves five words.
 - `Ctrl` `F` `Ctrl` `B` — a page forward or back; `Ctrl` `D` and `Ctrl` `U` half a page
 - `/`_pattern_ `?`_pattern_ — search forwards or backwards, wrapping around the buffer and ignoring case; `n` and `N` repeat it in the same and in the opposite direction, and a search with nothing typed repeats the last one. _pattern_ is a [pattern](#patterns), not plain text — a `.`, `[`, `*`, `^` or `$` you mean literally is written with a backslash before it
 
+`Ctrl` `G` says where the cursor is: `line 12 of 40 --30%--`, the number of the line the cursor is on, how many lines the buffer holds, and how far through it you are. `[Modified]` in front of it means you have changed the buffer since the Editor opened, so it is also how you check whether `:q` will let you leave. There is no file name in the report — which procedures or which file the Editor is over was fixed by the command that opened it. `:.=` and `:=` print the same two numbers on their own: the line the cursor is on, and the number of the last line.
+
 `%` matches a bracket. It does not select the brackets you are standing between, which is worth knowing before you use `d%`: in `when [wifi?] [pr "yes]` with the cursor on the `f`, the first bracket at or after the cursor is the `]`, so `%` goes *back* to the `[` in front of the cursor and `d%` deletes `[wif`. To take a whole group from inside it, use a [text object](#text-objects) — `di[` — or get to its bracket first with `F[` and then `d%`.
 
 #### Changing
@@ -693,6 +695,8 @@ While you are inserting, the Editor behaves exactly as it does outside vi mode: 
 | Command | Does |
 |---|---|
 | `:`_n_ | go to line _n_ |
+| `:.=` | print the number of the line the cursor is on |
+| `:=` | print the number of the last line |
 | `:w` | write the file and stay, under `editfile`; accept and leave, everywhere else |
 | `:wq` `:x` | accept the buffer and leave the Editor |
 | `:q` | leave, if nothing has changed |

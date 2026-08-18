@@ -1920,6 +1920,7 @@ static int editor_vi_apply(const ViAction *act, int cursor_line_before)
             break;
 
         case VI_ACT_BEEP:
+        case VI_ACT_MESSAGE:
             editor.vi_msg = act->msg;
             editor.dirty_flags = DIRTY_CURSOR;
             break;
@@ -2306,9 +2307,12 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size,
             }
 
             // The footer carries the mode indicator, the command line and any
-            // complaint, so it is repainted whenever one of them moves
-            if (editor.vi_msg != msg_before || editor.vi.mode != mode_before ||
-                editor.vi.mode == VI_CMDLINE) {
+            // complaint, so it is repainted whenever one of them moves. A
+            // composed message is the one case the pointer cannot answer for:
+            // it always points at the same buffer in the vi state, so the text
+            // can change while the pointer does not
+            if (editor.vi_msg != msg_before || act.kind == VI_ACT_MESSAGE ||
+                editor.vi.mode != mode_before || editor.vi.mode == VI_CMDLINE) {
                 editor_draw_footer();
             }
         }

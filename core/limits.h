@@ -250,7 +250,7 @@ extern "C" {
 // at the 36.6 kHz mix rate is ~3.5 ms of audio per half.
 #define SOUND_RING_HALF 256
 
-// Vi mode (docs/vi-mode-design.md). Three fixed-capacity fields in `ViState`,
+// Vi mode (docs/vi-mode-design.md). Four fixed-capacity fields in `ViState`,
 // which is one static struct inside the editor.
 //
 // The ex command line. The longest command the mode accepts is a substitute
@@ -261,6 +261,15 @@ extern "C" {
 // command line stops growing and nothing is truncated behind the user's back.
 #define LOGO_VI_TEXT_MAX     32
 #define LOGO_VI_CMDLINE_MAX  (LOGO_VI_TEXT_MAX * 2 + 8)
+
+// A message the vi layer has to compose rather than point at a literal -- the
+// `Ctrl` `G` report and the line numbers `:=` and `:.=` print. It is shown on
+// the footer, which is one row of a 40-column screen, so there is nothing to
+// be gained by making it longer.
+//
+// OVERFLOW: snprintf truncates, which loses the tail of a report rather than
+// anything the user typed.
+#define LOGO_VI_MSG_MAX      40
 
 // The most a single `:s` match can expand to, on the stack, before it is
 // spliced in (docs/vi-mode-design.md §16.4). A pattern match is at most one
