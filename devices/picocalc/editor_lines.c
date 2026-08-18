@@ -2,8 +2,10 @@
 //  Pico Logo
 //  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
-//  Memoised line lookup over the editor buffer
+//  Memoised line lookup and word navigation over the editor buffer
 //
+
+#include <stdbool.h>
 
 #include "editor_lines.h"
 
@@ -103,4 +105,39 @@ int editor_lines_at_pos(EditorLineIndex *ix, const char *buf, size_t len, size_t
     }
 
     return ix->line;
+}
+
+//
+//  Word navigation
+//
+
+static bool is_blank(char c)
+{
+    return c == ' ' || c == '\t' || c == '\n';
+}
+
+size_t editor_word_left(const char *buf, size_t pos)
+{
+    while (pos > 0 && is_blank(buf[pos - 1]))
+    {
+        pos--;  // Back over the gap between the words
+    }
+    while (pos > 0 && !is_blank(buf[pos - 1]))
+    {
+        pos--;  // ... then to the start of the word it leaves us in
+    }
+    return pos;
+}
+
+size_t editor_word_right(const char *buf, size_t len, size_t pos)
+{
+    while (pos < len && !is_blank(buf[pos]))
+    {
+        pos++;  // Past the rest of the word we are in
+    }
+    while (pos < len && is_blank(buf[pos]))
+    {
+        pos++;  // ... and the gap after it, landing on the next word
+    }
+    return pos;
 }

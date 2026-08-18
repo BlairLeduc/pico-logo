@@ -17,6 +17,10 @@
 //  We also provide functions to interact with other features in the system,
 //  such as reading the battery level.
 //
+//  What the keyboard MCU does before we ever see a key - its register map, its
+//  repeat cadence, and which modifier chords it silently swallows - is written
+//  up in docs/keyboard-firmware-notes.md. Read that before adding a binding.
+//
 
 #include "pico/stdlib.h"
 
@@ -204,6 +208,13 @@ static bool keyboard_poll_once(void)
             else if (ch == KEY_ENTER) // enter key is returned as LF
             {
                 ch = KEY_RETURN; // convert LF to CR
+            }
+            else if (key_control && (ch == KEY_LEFT || ch == KEY_RIGHT))
+            {
+                // Ctrl + arrow: a word move.  The southbridge sends the ctrl
+                // and the arrow as separate events, so without folding them
+                // here the reader cannot tell ctrl + left from left.
+                ch = (ch == KEY_LEFT) ? KEY_WORD_LEFT : KEY_WORD_RIGHT;
             }
 
             kbd_push(ch);

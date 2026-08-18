@@ -150,6 +150,8 @@ static void editor_copy_selection(void);
 static void editor_paste(void);
 static void editor_move_cursor_left(void);
 static void editor_move_cursor_right(void);
+static void editor_move_cursor_word_left(void);
+static void editor_move_cursor_word_right(void);
 static void editor_move_cursor_up(void);
 static void editor_move_cursor_down(void);
 static void editor_move_cursor_home(void);
@@ -1016,6 +1018,19 @@ static void editor_move_cursor_right(void)
     }
 }
 
+// Ctrl + Left/Right: move by a word. The scan itself lives in editor_lines.c,
+// where it can be tested on the host.
+static void editor_move_cursor_word_left(void)
+{
+    editor.cursor_pos = editor_word_left(editor.buffer, editor.cursor_pos);
+}
+
+static void editor_move_cursor_word_right(void)
+{
+    editor.cursor_pos = editor_word_right(editor.buffer, editor.content_length,
+                                          editor.cursor_pos);
+}
+
 static void editor_move_cursor_up(void)
 {
     int current_line = editor_get_line_at_pos(editor.cursor_pos);
@@ -1711,6 +1726,25 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                 }
                 break;
                 
+            case KEY_WORD_LEFT:
+                editor_move_cursor_word_left();
+                if (editor.selecting) {
+                    // A word move can cross a line - mark the span, as up/down do
+                    editor_mark_from_line_dirty(editor_get_line_at_pos(editor.cursor_pos));
+                } else {
+                    editor.dirty_flags = DIRTY_CURSOR;
+                }
+                break;
+
+            case KEY_WORD_RIGHT:
+                editor_move_cursor_word_right();
+                if (editor.selecting) {
+                    editor_mark_from_line_dirty(cursor_line_before);
+                } else {
+                    editor.dirty_flags = DIRTY_CURSOR;
+                }
+                break;
+
             case KEY_UP:
                 editor_move_cursor_up();
                 if (editor.selecting) {

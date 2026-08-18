@@ -507,6 +507,19 @@ What we learned:
   state (Ctrl/Shift/Alt) is tracked host-side. For a game this is what you want
   anyway: build your own held-key bitmap from press/release events rather than
   asking the register for level state.
+- **Shift is resolved in the MCU, not host-side, and it can swallow a key.**
+  The firmware's keymap gives each key a character and an *alternate*, and a
+  shifted non-letter is replaced by its alternate — which is then dropped when
+  it is zero. Shift + Up/Down have alternates (PgUp/PgDn) and Shift +
+  Left/Right do not, so the MCU emits **nothing** for those two: no host code
+  can bind them. Ctrl and Alt are different — they pass the key through
+  unchanged alongside a modifier event, so they are what you build a chord on.
+  The two tables at the top of
+  [`picocalc_keyboard/keyboard.ino`](https://github.com/clockworkpi/PicoCalc/tree/master/Code/picocalc_keyboard)
+  are the authority on which combinations exist at all; read them before
+  designing a key binding. The whole firmware — register map, event cadence,
+  keymap, and which chords are swallowed — is written up in
+  [keyboard-firmware-notes.md](keyboard-firmware-notes.md).
 - Battery, both backlights, a timed power-off, and a timed reset are all
   available through the same interface — cheap wins for a polished game
   (dim the backlight on pause, show battery in the HUD).
@@ -719,6 +732,7 @@ Everything above is implemented in this repository:
 | PSG synth: PWM + chained DMA + mixer | [devices/picocalc/sound.c](../../pico-logo/devices/picocalc/sound.c) |
 | Southbridge I²C register interface | [devices/picocalc/southbridge.c](../../pico-logo/devices/picocalc/southbridge.c) |
 | Keyboard polling, buffering, modifiers | [devices/picocalc/keyboard.c](../../pico-logo/devices/picocalc/keyboard.c) |
+| What the keyboard MCU does before we see a key | [docs/keyboard-firmware-notes.md](keyboard-firmware-notes.md) |
 | Flash-safe write recipe | [devices/picocalc/picocalc_flash.c](../../pico-logo/devices/picocalc/picocalc_flash.c) |
 | PSRAM verification and boot order | [devices/picocalc/main.c](../../pico-logo/devices/picocalc/main.c) |
 | 256-colour palette (indices → RGB565) | [devices/palette.h](../../pico-logo/devices/palette.h) |

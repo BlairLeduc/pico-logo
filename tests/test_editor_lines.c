@@ -259,6 +259,62 @@ void test_random_edits_and_lookups_agree_with_a_count(void)
     }
 }
 
+//
+// Word navigation (Ctrl + Left/Right)
+//
+
+static void test_word_right_lands_on_the_next_word(void)
+{
+    const char *buf = "to square :size";
+
+    TEST_ASSERT_EQUAL_UINT(3, editor_word_right(buf, strlen(buf), 0));
+    TEST_ASSERT_EQUAL_UINT(3, editor_word_right(buf, strlen(buf), 1));
+    TEST_ASSERT_EQUAL_UINT(10, editor_word_right(buf, strlen(buf), 3));
+    TEST_ASSERT_EQUAL_UINT(15, editor_word_right(buf, strlen(buf), 10));
+}
+
+static void test_word_left_lands_on_the_start_of_a_word(void)
+{
+    const char *buf = "to square :size";
+
+    TEST_ASSERT_EQUAL_UINT(10, editor_word_left(buf, strlen(buf)));
+    TEST_ASSERT_EQUAL_UINT(3, editor_word_left(buf, 10));
+    TEST_ASSERT_EQUAL_UINT(10, editor_word_left(buf, 12));  // mid-word
+    TEST_ASSERT_EQUAL_UINT(0, editor_word_left(buf, 3));
+}
+
+static void test_a_word_move_stops_at_the_ends_of_the_buffer(void)
+{
+    const char *buf = "  fd 100  ";
+    size_t len = strlen(buf);
+
+    TEST_ASSERT_EQUAL_UINT(0, editor_word_left(buf, 0));
+    TEST_ASSERT_EQUAL_UINT(0, editor_word_left(buf, 2));  // only blanks behind us
+    TEST_ASSERT_EQUAL_UINT(len, editor_word_right(buf, len, 5));  // only blanks ahead
+    TEST_ASSERT_EQUAL_UINT(len, editor_word_right(buf, len, len));
+}
+
+static void test_a_word_move_crosses_lines_like_the_arrows(void)
+{
+    const char *buf = "to box\n  fd 10\nend";
+    size_t len = strlen(buf);
+
+    TEST_ASSERT_EQUAL_UINT(9, editor_word_right(buf, len, 3));   // "box" -> "fd"
+    TEST_ASSERT_EQUAL_UINT(3, editor_word_left(buf, 9));         // and back again
+    TEST_ASSERT_EQUAL_UINT(15, editor_word_right(buf, len, 12)); // "10" -> "end"
+}
+
+static void test_runs_of_blanks_count_as_one_gap(void)
+{
+    const char *buf = "a    b\n\n\nc";
+    size_t len = strlen(buf);
+
+    TEST_ASSERT_EQUAL_UINT(5, editor_word_right(buf, len, 0));
+    TEST_ASSERT_EQUAL_UINT(9, editor_word_right(buf, len, 5));
+    TEST_ASSERT_EQUAL_UINT(5, editor_word_left(buf, 9));
+    TEST_ASSERT_EQUAL_UINT(0, editor_word_left(buf, 5));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -275,5 +331,10 @@ int main(void)
     RUN_TEST(test_inserting_a_newline_at_the_memo_keeps_it_valid);
     RUN_TEST(test_a_shrinking_buffer_leaves_no_stale_memo);
     RUN_TEST(test_random_edits_and_lookups_agree_with_a_count);
+    RUN_TEST(test_word_right_lands_on_the_next_word);
+    RUN_TEST(test_word_left_lands_on_the_start_of_a_word);
+    RUN_TEST(test_a_word_move_stops_at_the_ends_of_the_buffer);
+    RUN_TEST(test_a_word_move_crosses_lines_like_the_arrows);
+    RUN_TEST(test_runs_of_blanks_count_as_one_gap);
     return UNITY_END();
 }

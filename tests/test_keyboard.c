@@ -278,6 +278,34 @@ static void test_shift_and_ctrl_still_decode(void)
     TEST_ASSERT_EQUAL_CHAR(0x03, keys[1]); // Ctrl-C
 }
 
+// Ctrl + Left/Right is a word move in the editor, so the two arrows have to
+// reach the reader as codes of their own rather than as a plain arrow.  It is
+// ctrl and not shift because the keyboard MCU emits nothing at all for a
+// shifted Left/Right: it swaps a shifted key for its alternate character, and
+// the two horizontal arrows have none.
+static void test_ctrl_folds_into_the_arrow_keys(void)
+{
+    fifo_push(KEY_STATE_PRESSED, KEY_LEFT);
+    fifo_push(KEY_STATE_PRESSED, KEY_MOD_CTRL);
+    fifo_push(KEY_STATE_PRESSED, KEY_LEFT);
+    fifo_push(KEY_STATE_PRESSED, KEY_RIGHT);
+    fifo_push(KEY_STATE_RELEASED, KEY_MOD_CTRL);
+    fifo_push(KEY_STATE_PRESSED, KEY_RIGHT);
+
+    while (fake_fifo_next < fake_fifo_count)
+    {
+        keyboard_poll();
+    }
+
+    char keys[8];
+    int n = drain_ring(keys, 8);
+    TEST_ASSERT_EQUAL_INT(4, n);
+    TEST_ASSERT_EQUAL_HEX8(KEY_LEFT, (uint8_t)keys[0]);
+    TEST_ASSERT_EQUAL_HEX8(KEY_WORD_LEFT, (uint8_t)keys[1]);
+    TEST_ASSERT_EQUAL_HEX8(KEY_WORD_RIGHT, (uint8_t)keys[2]);
+    TEST_ASSERT_EQUAL_HEX8(KEY_RIGHT, (uint8_t)keys[3]);
+}
+
 //
 //  Key state (games)
 //
@@ -430,6 +458,7 @@ int main(void)
     RUN_TEST(test_a_repeat_burst_arrives_whole_and_in_order);
     RUN_TEST(test_get_key_polls_instead_of_waiting_for_the_timer);
     RUN_TEST(test_shift_and_ctrl_still_decode);
+    RUN_TEST(test_ctrl_folds_into_the_arrow_keys);
     RUN_TEST(test_a_held_key_reads_as_down_until_it_is_released);
     RUN_TEST(test_two_keys_can_be_held_at_once);
     RUN_TEST(test_a_repeat_is_not_a_new_hit);

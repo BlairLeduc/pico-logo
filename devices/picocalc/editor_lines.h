@@ -2,7 +2,7 @@
 //  Pico Logo
 //  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
-//  Memoised line lookup over the editor buffer
+//  Memoised line lookup and word navigation over the editor buffer
 //
 
 #pragma once
@@ -39,3 +39,11 @@ size_t editor_lines_start(EditorLineIndex *ix, const char *buf, size_t len, int 
 // The line (0-based) that the character at pos belongs to. A newline belongs to
 // the line it ends.
 int editor_lines_at_pos(EditorLineIndex *ix, const char *buf, size_t len, size_t pos);
+
+// Word navigation, for Ctrl + Left/Right. A word is a run of characters that
+// are not blank, and a newline is a blank, so a word move crosses lines the way
+// the arrows do. Left lands on the first character of the word at or before pos,
+// right on the first character of the word after it (or the end of the buffer).
+// Neither needs the memo: both scan outward from pos, never from the start.
+size_t editor_word_left(const char *buf, size_t pos);
+size_t editor_word_right(const char *buf, size_t len, size_t pos);
