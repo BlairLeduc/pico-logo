@@ -45,7 +45,10 @@ typedef enum
     VI_ACT_OPEN_ABOVE,    // ... above
     VI_ACT_JOIN,          // Join `count` lines from the cursor's
     VI_ACT_TOGGLE_CASE,   // Flip the case of [start, end)
-    VI_ACT_SEARCH,        // Search for `pattern`; `ch` is '/' (forward) or '?'
+    VI_ACT_SEARCH,        // Search for `pattern` from `start`; `ch` is '/'
+                          // (forward) or '?'
+    VI_ACT_SCROLL,        // Move the view, not the cursor: `ch` is 'z'
+                          // (centre), 't' (cursor to the top) or 'b'
     VI_ACT_SUBSTITUTE,    // Substitute over the lines spanned by [start, end)
     VI_ACT_UNDO,          // Reverse `count` changes
     VI_ACT_REDO,          // ... and put them back
@@ -84,6 +87,12 @@ typedef struct
                            // waiting for a text object (§15)
     size_t anchor;         // Visual mode's other end
     bool modified;         // Set by the editor; `:q` refuses when it is true
+
+    // The one mark (§18). Not vi's twenty-six: a jump sets it, and `` ` `` and
+    // `'` jump to it and leave it where the jump started, so the pair is a
+    // toggle between two places rather than a register file.
+    size_t mark;
+    bool mark_set;
 
     char last_find;        // The last f/F/t/T, for `;` and `,`
     char last_find_char;

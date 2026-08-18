@@ -20,6 +20,7 @@
 #include "editor_vi.h"
 #include "editor_lines.h"
 #include "editor_undo.h"
+#include "editor_pattern.h"
 #include "keyboard.h"
 
 #include <stdio.h>
@@ -323,9 +324,25 @@ static void ed_apply(Ed *e, const ViAction *act)
             e->cursor = act->end < e->len ? act->end : act->start;
             break;
 
-        case VI_ACT_SEARCH:
-            // The editor runs this through editor_search_find; the state
-            // machine's part is choosing the pattern and the direction
+        case VI_ACT_SEARCH: {
+            // Run it the way editor.c does. The state machine's part is
+            // choosing the pattern, the direction and where to start from --
+            // but for `*` and `#` the pattern is built rather than typed, and
+            // "the whole word and no other" is only visible once it has run
+            bool forward = (act->ch == '/');
+            size_t from = forward ? act->start + 1 : act->start;
+            if (from > e->len) from = e->len;
+            size_t match;
+            if (editor_pattern_find(e->vi.pattern, e->vi.pattern_len,
+                                    e->buf, e->len, from, forward, &match, NULL)) {
+                e->cursor = match;
+            }
+            break;
+        }
+
+        case VI_ACT_SCROLL:
+            // The view is the editor's; there is none here. What the state
+            // machine decides is the letter, and that the cursor stays put.
             break;
 
         case VI_ACT_SUBSTITUTE: {
@@ -1772,6 +1789,206 @@ static void test_substitute_reports_the_last_line_it_changed(void)
 }
 
 //
+//  M8 -- `*`, `#`, the mark, `gd` and `z`
+//
+
+static void test_star_searches_for_the_whole_word_under_the_cursor(void)
+{
+    ed_set("to n\nif n = 0 [stop]\nthen n\n");
+    at(3);                                 // the `n` on the `to` line
+    feed("*");
+    TEST_ASSERT_EQUAL_INT(VI_ACT_SEARCH, ed.last.kind);
+    TEST_ASSERT_EQUAL_CHAR('/', ed.last.ch);
+    TEST_ASSERT_EQUAL_STRING("\\<n\\>", ed.vi.pattern);
+    TEST_ASSERT_EQUAL_UINT(8, ed.cursor);  // the `n` in `if n`, not the one in `then`
+    feed("n");
+    TEST_ASSERT_EQUAL_UINT(26, ed.cursor); // the `n` after `then`, and no other
+}
+
+static void test_star_from_the_middle_of_a_word_finds_the_next_one(void)
+{
+    ed_set("square\nsquare\n");
+    at(3);                                 // inside the first `square`
+    feed("*");
+    TEST_ASSERT_EQUAL_STRING("\\<square\\>", ed.vi.pattern);
+    TEST_ASSERT_EQUAL_UINT(7, ed.cursor);  // the second one, not the one we stand in
+}
+
+static void test_hash_searches_the_other_way(void)
+{
+    ed_set("box\ntri\nbox\n");
+    at(8);                                 // the last `box`
+    feed("#");
+    TEST_ASSERT_EQUAL_CHAR('?', ed.last.ch);
+    TEST_ASSERT_EQUAL_UINT(0, ed.cursor);
+    feed("n");                             // `n` after `#` keeps going backwards
+    TEST_ASSERT_EQUAL_CHAR('?', ed.last.ch);
+}
+
+static void test_star_takes_the_next_word_along_the_line(void)
+{
+    ed_set("  [ box ]\nbox\n");
+    at(0);                                 // on a blank, as vi allows
+    feed("*");
+    TEST_ASSERT_EQUAL_STRING("\\<box\\>", ed.vi.pattern);
+    TEST_ASSERT_EQUAL_UINT(10, ed.cursor);
+}
+
+static void test_star_with_no_word_on_the_line_complains(void)
+{
+    ed_set("[ ]\nbox\n");
+    at(1);
+    feed("*");
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+}
+
+static void test_star_on_a_word_too_long_to_hold_complains(void)
+{
+    ed_set("averyveryverylongprocedurenamehere\n");
+    feed("*");
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    TEST_ASSERT_EQUAL_UINT(0, ed.cursor);
+}
+
+static void test_a_jump_leaves_the_mark_where_it_started(void)
+{
+    ed_set("one\ntwo\nthree\nfour\n");
+    at(5);                     // line 2
+    feed("G");                 // a jump
+    TEST_ASSERT_EQUAL_UINT(19, ed.cursor);
+    feed("`");
+    TEST_ASSERT_EQUAL_UINT(5, ed.cursor);
+    feed("`");                 // and back again: the pair is a toggle
+    TEST_ASSERT_EQUAL_UINT(19, ed.cursor);
+}
+
+static void test_quote_goes_to_the_first_non_blank_of_the_marked_line(void)
+{
+    ed_set("one\n  two\nthree\n");
+    at(8);                     // the `o` of `two`
+    feed("G");
+    feed("'");
+    TEST_ASSERT_EQUAL_UINT(6, ed.cursor);   // the `t`, not the byte we left
+}
+
+static void test_a_search_and_a_line_number_both_set_the_mark(void)
+{
+    ed_set("one\ntwo\nthree\nfour\n");
+    at(1);
+    feed("/three"); feed_key(KEY_RETURN);
+    TEST_ASSERT_EQUAL_UINT(8, ed.cursor);
+    feed("`");
+    TEST_ASSERT_EQUAL_UINT(1, ed.cursor);
+
+    feed(":3"); feed_key(KEY_RETURN);
+    TEST_ASSERT_EQUAL_UINT(8, ed.cursor);
+    feed("`");
+    TEST_ASSERT_EQUAL_UINT(1, ed.cursor);
+}
+
+static void test_a_mark_that_was_never_set_complains(void)
+{
+    ed_set("one\ntwo\n");
+    at(2);
+    feed("`");
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    TEST_ASSERT_EQUAL_UINT(2, ed.cursor);
+    feed("'");
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+}
+
+static void test_an_operator_works_over_the_mark(void)
+{
+    ed_set("one two three\n");
+    at(4);
+    feed("$");                 // not a jump: the mark is still unset
+    feed("gg");                // ... but this is, and it leaves the mark at 13
+    at(4);
+    feed("d`");
+    assert_text("one \n");
+}
+
+static void test_an_operators_motion_does_not_move_the_mark(void)
+{
+    ed_set("one\ntwo\nthree\nfour\n");
+    at(0);
+    feed("G");                 // the mark is line 1, the cursor line 4
+    feed("d{");                // an edit, not a jump
+    feed("`");
+    TEST_ASSERT_EQUAL_UINT(0, ed.cursor);
+}
+
+static void test_gd_goes_to_the_definition(void)
+{
+    ed_set("to house\n  box\n  tri\nend\n\nto box :size\n  fd :size\nend\n");
+    at(12);                    // the call to `box` inside `house`
+    feed("gd");
+    TEST_ASSERT_EQUAL_INT(VI_ACT_MOVE, ed.last.kind);
+    TEST_ASSERT_EQUAL_UINT(29, ed.cursor);   // the name on the `to` line
+    feed("`");                               // and `gd` is a jump, so this comes back
+    TEST_ASSERT_EQUAL_UINT(12, ed.cursor);
+}
+
+static void test_gd_ignores_a_name_that_only_starts_the_same(void)
+{
+    ed_set("to boxes\nend\n\nto box\nend\n\nbox\n");
+    at(27);                    // the bare call at the end
+    feed("gd");
+    TEST_ASSERT_EQUAL_UINT(17, ed.cursor);   // `box`, not `boxes`
+}
+
+static void test_gd_matches_the_name_however_it_is_spelled(void)
+{
+    ed_set("TO Box\nend\n\nfd :size\nbox\n");
+    at(23);
+    feed("gd");
+    TEST_ASSERT_EQUAL_UINT(3, ed.cursor);
+}
+
+static void test_gd_looks_past_the_punctuation_on_a_name(void)
+{
+    ed_set("to tri :size\nend\n\ntri :size\n");
+    at(22);                    // the `:` of `:size` in the call: the word is `size`,
+    feed("gd");                // which is a parameter and not a procedure
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+
+    at(18);                    // ... where `tri` beside it is one
+    feed("gd");
+    TEST_ASSERT_EQUAL_UINT(3, ed.cursor);
+}
+
+static void test_gd_without_a_definition_complains(void)
+{
+    ed_set("print box\n");
+    at(6);
+    feed("gd");
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    TEST_ASSERT_EQUAL_UINT(6, ed.cursor);
+}
+
+static void test_z_moves_the_view_and_not_the_cursor(void)
+{
+    ed_set("one\ntwo\nthree\n");
+    at(5);
+    feed("zz");
+    TEST_ASSERT_EQUAL_INT(VI_ACT_SCROLL, ed.last.kind);
+    TEST_ASSERT_EQUAL_CHAR('z', ed.last.ch);
+    TEST_ASSERT_EQUAL_UINT(5, ed.cursor);
+    assert_text("one\ntwo\nthree\n");
+
+    feed("zt");  TEST_ASSERT_EQUAL_CHAR('t', ed.last.ch);
+    feed("zb");  TEST_ASSERT_EQUAL_CHAR('b', ed.last.ch);
+}
+
+static void test_an_unknown_z_command_complains(void)
+{
+    ed_set("one\n");
+    feed("zx");
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    TEST_ASSERT_EQUAL_INT(VI_NORMAL, ed.vi.mode);
+}
+
+//
 //  The randomised differential run
 //
 //  Thousands of random commands against a buffer whose line memo is driven
@@ -1951,7 +2168,9 @@ static void test_undo_leaves_visual_mode(void)
 static void test_random_commands_keep_the_buffer_and_the_memo_consistent(void)
 {
     static const char *keys =
-        "hjklwbeWBE0^$GxXDCYSspPJ~ivVoOaAircdy<>.;,%nfFtT{}[]()23uu\x12";
+        "hjklwbeWBE0^$GxXDCYSspPJ~ivVoOaAircdy<>.;,%nfFtT{}[]()23uu\x12"
+        "*#`'zgt";  // M8: the mark is a stored offset, so `d`` after an edit is
+                    // exactly where a stale one would show
 
     srand(20260817);
 
@@ -2151,6 +2370,26 @@ int main(void)
     RUN_TEST(test_a_new_change_after_an_undo_drops_the_redo);
     RUN_TEST(test_undo_with_nothing_recorded_says_so);
     RUN_TEST(test_undo_leaves_visual_mode);
+
+    RUN_TEST(test_star_searches_for_the_whole_word_under_the_cursor);
+    RUN_TEST(test_star_from_the_middle_of_a_word_finds_the_next_one);
+    RUN_TEST(test_hash_searches_the_other_way);
+    RUN_TEST(test_star_takes_the_next_word_along_the_line);
+    RUN_TEST(test_star_with_no_word_on_the_line_complains);
+    RUN_TEST(test_star_on_a_word_too_long_to_hold_complains);
+    RUN_TEST(test_a_jump_leaves_the_mark_where_it_started);
+    RUN_TEST(test_quote_goes_to_the_first_non_blank_of_the_marked_line);
+    RUN_TEST(test_a_search_and_a_line_number_both_set_the_mark);
+    RUN_TEST(test_a_mark_that_was_never_set_complains);
+    RUN_TEST(test_an_operator_works_over_the_mark);
+    RUN_TEST(test_an_operators_motion_does_not_move_the_mark);
+    RUN_TEST(test_gd_goes_to_the_definition);
+    RUN_TEST(test_gd_ignores_a_name_that_only_starts_the_same);
+    RUN_TEST(test_gd_matches_the_name_however_it_is_spelled);
+    RUN_TEST(test_gd_looks_past_the_punctuation_on_a_name);
+    RUN_TEST(test_gd_without_a_definition_complains);
+    RUN_TEST(test_z_moves_the_view_and_not_the_cursor);
+    RUN_TEST(test_an_unknown_z_command_complains);
 
     RUN_TEST(test_random_commands_keep_the_buffer_and_the_memo_consistent);
 

@@ -324,6 +324,105 @@ static bool word_object(const char *buf, size_t len, size_t pos, bool big, bool 
     return true;
 }
 
+// The word the cursor stands on, or the next one along the line -- vi's rule
+// for `*`, `#` and `gd`. Word characters only: `:size` gives `size`, which is
+// what a search for the name wants, since the same name is spelled `:size` and
+// `"size` in the two lines that use it.
+static bool word_at(const char *buf, size_t len, size_t cursor,
+                    size_t *out_start, size_t *out_end)
+{
+    size_t line_end = line_end_of(buf, len, cursor);
+    size_t p = cursor;
+    while (p < line_end && char_class(buf[p]) != CLASS_WORD)
+    {
+        p++;
+    }
+    if (p >= line_end)
+    {
+        return false;
+    }
+
+    size_t s = p;
+    while (s > 0 && char_class(buf[s - 1]) == CLASS_WORD)
+    {
+        s--;  // A newline is blank, so this cannot leave the line
+    }
+    size_t e = p;
+    while (e < line_end && char_class(buf[e]) == CLASS_WORD)
+    {
+        e++;
+    }
+
+    *out_start = s;
+    *out_end = e;
+    return true;
+}
+
+// Logo is case-insensitive and so is every search in the editor, so `gd` is
+// too. editor_pattern.c keeps its own copy of this for the same reason
+// editor_vi.c has no memo: one line is cheaper than a shared header.
+static char to_lower(char c)
+{
+    return (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c;
+}
+
+static bool same_word(const char *buf, size_t s, size_t e,
+                      const char *word, size_t word_len)
+{
+    if (e - s != word_len)
+    {
+        return false;
+    }
+    for (size_t i = 0; i < word_len; i++)
+    {
+        if (to_lower(buf[s + i]) != to_lower(word[i]))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+// `gd` -- where a procedure is defined. Not a pattern search: a Logo definition
+// is `to name` at the head of a line, and matching that shape directly is both
+// exact and shorter than the pattern it would take. Case-insensitive, as the
+// language is. Returns the offset of the name on the `to` line.
+static bool find_definition(const char *buf, size_t len,
+                            const char *word, size_t word_len, size_t *out_pos)
+{
+    for (size_t line = 0; line < len; line = next_line_start(buf, len, line))
+    {
+        size_t end = line_end_of(buf, len, line);
+        size_t p = line;
+        while (p < end && (buf[p] == ' ' || buf[p] == '\t'))
+        {
+            p++;
+        }
+        if (end - p < 3 || to_lower(buf[p]) != 't' || to_lower(buf[p + 1]) != 'o' ||
+            char_class(buf[p + 2]) != CLASS_BLANK)
+        {
+            continue;
+        }
+
+        p += 2;
+        while (p < end && (buf[p] == ' ' || buf[p] == '\t'))
+        {
+            p++;
+        }
+        size_t name_end = p;
+        while (name_end < end && char_class(buf[name_end]) == CLASS_WORD)
+        {
+            name_end++;
+        }
+        if (same_word(buf, p, name_end, word, word_len))
+        {
+            *out_pos = p;
+            return true;
+        }
+    }
+    return false;
+}
+
 //
 //  Paragraphs -- a blank line either way, which in Logo is the gap between
 //  two procedure definitions
@@ -598,10 +697,11 @@ static bool find_char(const char *buf, size_t len, size_t cursor, char kind, cha
     return true;
 }
 
-// Resolve `key` as a motion. `find_ch` is the target of an f/F/t/T.
+// Resolve `key` as a motion. `find_ch` is the target of an f/F/t/T, and `mark`
+// the one mark for `` ` `` and `'`, SIZE_MAX when none has been set.
 // Returns false when the key is not a motion, or when the motion fails.
 static bool vi_motion(const char *buf, size_t len, size_t cursor,
-                      int key, char find_ch, int count, ViMotion *m)
+                      int key, char find_ch, size_t mark, int count, ViMotion *m)
 {
     m->linewise = false;
     m->inclusive = false;
@@ -738,6 +838,22 @@ static bool vi_motion(const char *buf, size_t len, size_t cursor,
             m->inclusive = (key == 'f' || key == 't');
             return true;
 
+        case '`':
+        case '\'':
+            // `'` is linewise and lands on the first non-blank, as vi has it;
+            // `` ` `` is the exact byte. Both are exclusive.
+            if (mark == SIZE_MAX)
+            {
+                return false;
+            }
+            m->pos = mark > len ? len : mark;
+            if (key == '\'')
+            {
+                m->pos = first_non_blank(buf, len, m->pos);
+                m->linewise = true;
+            }
+            return true;
+
         case '%':
             if (!match_bracket(buf, len, cursor, &m->pos))
             {
@@ -817,6 +933,19 @@ static bool commit(ViState *st, ViAction *out, int count)
     return true;
 }
 
+// The one mark. A jump records where it left from, so `` ` `` comes back --
+// and since jumping to the mark is itself a jump, the two places toggle.
+static void set_mark(ViState *st, size_t cursor)
+{
+    st->mark = cursor;
+    st->mark_set = true;
+}
+
+static size_t vi_mark(const ViState *st)
+{
+    return st->mark_set ? st->mark : SIZE_MAX;
+}
+
 static bool beep(ViState *st, ViAction *out, const char *msg)
 {
     clear_pending(st);
@@ -853,6 +982,45 @@ static bool report_line_number(ViState *st, int line, ViAction *out)
 {
     snprintf(st->msg, sizeof(st->msg), "%d", line);
     return message(st, out);
+}
+
+// `*` and `#` -- search for the word the cursor is on. The pattern is built
+// rather than typed, which is the whole point: `\<` and `\>` (§16) make it the
+// whole word, so `*` on `n` walks every `n` and stops on no `then`. Word
+// characters are never pattern metacharacters, so nothing needs escaping.
+//
+// The search runs from the start of the word, not from the cursor, so `*` from
+// the middle of one still finds the next occurrence and `#` still finds the
+// previous -- which is why VI_ACT_SEARCH carries an origin at all.
+static bool search_word(ViState *st, const char *buf, size_t len, size_t cursor,
+                        bool forward, ViAction *out)
+{
+    size_t s, e;
+    if (!word_at(buf, len, cursor, &s, &e))
+    {
+        return beep(st, out, "E348: no word under the cursor");
+    }
+    if (e - s + 4 > LOGO_VI_TEXT_MAX)
+    {
+        return beep(st, out, "E486: word too long to search for");
+    }
+
+    size_t n = 0;
+    st->pattern[n++] = '\\';
+    st->pattern[n++] = '<';
+    memcpy(st->pattern + n, buf + s, e - s);
+    n += e - s;
+    st->pattern[n++] = '\\';
+    st->pattern[n++] = '>';
+    st->pattern[n] = '\0';
+    st->pattern_len = n;
+    st->search_forward = forward;
+
+    set_mark(st, cursor);
+    out->kind = VI_ACT_SEARCH;
+    out->ch = forward ? '/' : '?';
+    out->start = out->end = s;
+    return commit(st, out, 1);
 }
 
 //
@@ -913,7 +1081,8 @@ static ViActionKind op_kind(char op)
 // Apply `op` over `key` as a motion. Returns false when the key is not a
 // motion the operator can use.
 static bool apply_operator(const char *buf, size_t len, size_t cursor,
-                           char op, int key, char find_ch, int count, ViAction *out)
+                           char op, int key, char find_ch, size_t mark, int count,
+                           ViAction *out)
 {
     ViMotion m;
 
@@ -940,12 +1109,12 @@ static bool apply_operator(const char *buf, size_t len, size_t cursor,
             m.linewise = false;
             m.inclusive = true;
         }
-        else if (!vi_motion(buf, len, cursor, key, find_ch, count, &m))
+        else if (!vi_motion(buf, len, cursor, key, find_ch, mark, count, &m))
         {
             return false;
         }
     }
-    else if (!vi_motion(buf, len, cursor, key, find_ch, count, &m))
+    else if (!vi_motion(buf, len, cursor, key, find_ch, mark, count, &m))
     {
         return false;
     }
@@ -1134,6 +1303,7 @@ static bool run_ex(ViState *st, const char *buf, size_t len, size_t cursor, ViAc
                 line = 1000000;  // Clamped either way by goto_line
             }
         }
+        set_mark(st, cursor);
         out->kind = VI_ACT_MOVE;
         out->start = out->end = first_non_blank(buf, len, goto_line(buf, len, line));
         return true;
@@ -1259,6 +1429,7 @@ static bool cmdline_key(ViState *st, const char *buf, size_t len, size_t cursor,
             {
                 return beep(st, out, "E35: no previous search");
             }
+            set_mark(st, cursor);
             out->kind = VI_ACT_SEARCH;
             out->ch = st->search_forward ? '/' : '?';
             return true;
@@ -1402,8 +1573,38 @@ static bool prefixed_key(ViState *st, const char *buf, size_t len, size_t cursor
             return commit(st, out, count);
         }
 
+        case 'z':
+            // The view moves, the cursor does not. editor.c does the row
+            // arithmetic: this file has never known where the view is (§6.1).
+            if (key != 'z' && key != 't' && key != 'b')
+            {
+                return beep(st, out, "E492: not an editor command");
+            }
+            out->kind = VI_ACT_SCROLL;
+            out->ch = (char)key;
+            return commit(st, out, 0);
+
         case 'g':
         {
+            if (key == 'd')
+            {
+                // `gd` -- go to where this procedure is defined. In an `edall`
+                // buffer the whole workspace is one file, which is what makes
+                // it worth a key here.
+                size_t ws, we, pos;
+                if (!word_at(buf, len, cursor, &ws, &we))
+                {
+                    return beep(st, out, "E348: no word under the cursor");
+                }
+                if (!find_definition(buf, len, buf + ws, we - ws, &pos))
+                {
+                    return beep(st, out, "E388: definition not found");
+                }
+                set_mark(st, cursor);
+                out->kind = VI_ACT_MOVE;
+                out->start = out->end = pos;
+                return commit(st, out, take_count(st));
+            }
             if (key != 'g')
             {
                 return beep(st, out, "E492: not an editor command");
@@ -1428,6 +1629,7 @@ static bool prefixed_key(ViState *st, const char *buf, size_t len, size_t cursor
             }
             else
             {
+                set_mark(st, cursor);  // `gg` is a jump
                 out->kind = VI_ACT_MOVE;
                 out->start = out->end = m.pos;
             }
@@ -1449,7 +1651,7 @@ static bool prefixed_key(ViState *st, const char *buf, size_t len, size_t cursor
             char op = st->pending_op;
             int count = take_count(st);
             ViMotion m;
-            if (!vi_motion(buf, len, cursor, prefix, (char)key, count, &m))
+            if (!vi_motion(buf, len, cursor, prefix, (char)key, SIZE_MAX, count, &m))
             {
                 return beep(st, out, "E486: pattern not found");
             }
@@ -1522,7 +1724,7 @@ static bool normal_key(ViState *st, const char *buf, size_t len, size_t cursor,
     stroke_push(st, key);
 
     // The keys that need their own second key
-    if (key == 'Z' || key == 'r' || key == 'g' ||
+    if (key == 'Z' || key == 'r' || key == 'g' || key == 'z' ||
         key == 'f' || key == 'F' || key == 't' || key == 'T')
     {
         if ((key == 'Z' || key == 'r') && visual)
@@ -1648,6 +1850,11 @@ static bool normal_key(ViState *st, const char *buf, size_t len, size_t cursor,
         }
     }
 
+    if ((key == '`' || key == '\'') && !st->mark_set)
+    {
+        return beep(st, out, "E20: mark not set");
+    }
+
     // A motion, on its own or completing a pending operator
     {
         int count = (st->op_count > 0 ? st->op_count : 1) * (st->count > 0 ? st->count : 1);
@@ -1672,11 +1879,19 @@ static bool normal_key(ViState *st, const char *buf, size_t len, size_t cursor,
         // `G` with no count goes to the last line
         int motion_count = (motion_key == 'G' && !counted) ? 0 : count;
 
+        // The keys that count as a jump, and so leave the mark behind them.
+        // `` ` `` is one itself, which is what makes it a toggle rather than a
+        // one-way trip. An operator's motion is not: `d}` is an edit, and the
+        // place to come back to is the one before it.
+        bool jumps = (motion_key == 'G' || motion_key == '{' || motion_key == '}' ||
+                      motion_key == '%' || motion_key == '`' || motion_key == '\'');
+
         ViMotion m;
         if (op != 0)
         {
             take_count(st);
-            if (!apply_operator(buf, len, cursor, op, motion_key, find_ch, motion_count, out))
+            if (!apply_operator(buf, len, cursor, op, motion_key, find_ch,
+                                vi_mark(st), motion_count, out))
             {
                 return beep(st, out, "E492: not an editor command");
             }
@@ -1686,9 +1901,13 @@ static bool normal_key(ViState *st, const char *buf, size_t len, size_t cursor,
             }
             return commit(st, out, count);
         }
-        if (vi_motion(buf, len, cursor, motion_key, find_ch, motion_count, &m))
+        if (vi_motion(buf, len, cursor, motion_key, find_ch, vi_mark(st), motion_count, &m))
         {
             take_count(st);
+            if (jumps)
+            {
+                set_mark(st, cursor);
+            }
             out->kind = VI_ACT_MOVE;
             out->start = out->end = m.pos;
             return commit(st, out, count);
@@ -1833,9 +2052,14 @@ static bool normal_key(ViState *st, const char *buf, size_t len, size_t cursor,
                 {
                     return beep(st, out, "E35: no previous search");
                 }
+                set_mark(st, cursor);
                 out->kind = VI_ACT_SEARCH;
                 out->ch = (st->search_forward == (key == 'n')) ? '/' : '?';
                 return commit(st, out, count);
+
+            case '*':
+            case '#':
+                return search_word(st, buf, len, cursor, key == '*', out);
 
             case 0x07:  // Ctrl+G -- where the cursor is. A count means nothing
                         // to it, and take_count above has already dropped one

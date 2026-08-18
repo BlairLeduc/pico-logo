@@ -577,7 +577,7 @@ Pressing `Esc` cancels the replacement and returns to the incremental search, wh
 
 [`setvimode`](#setvimode) `true` replaces the Editor's control-key layer with a modal, vi-style one, where commands are unmodified letters rather than chords. Nothing else about the Editor changes: the same buffer, the same scrolling, the same syntax colouring and the same copy buffer. `setvimode false`, which is how Logo starts, restores the keys described above.
 
-Vi mode suits this keyboard. The keyboard cannot send some modifier combinations at all — `Shift` `←` and `Shift` `→` send nothing, which is why a word move is `Ctrl` `←` — and `Ctrl` is an awkward reach, while every character vi needs (`:` `$` `%` `^` `{` `}` `<` `>` `?` `~`) has a key of its own.
+Vi mode suits this keyboard. The keyboard cannot send some modifier combinations at all — `Shift` `←` and `Shift` `→` send nothing, which is why a word move is `Ctrl` `←` — and `Ctrl` is an awkward reach, while every character vi needs (`:` `$` `%` `^` `{` `}` `<` `>` `?` `~` `*` `#` `` ` `` `'`) has a key of its own.
 
 The bottom line shows which mode you are in.
 
@@ -613,8 +613,16 @@ Every motion takes a count typed before it, so `5w` moves five words.
 - `%` — from a bracket to its match: the first `(` `)` `[` `]` `{` `}` at or after the cursor on this line, forwards from an opening one and backwards from a closing one, counting nesting of that kind only
 - `Ctrl` `F` `Ctrl` `B` — a page forward or back; `Ctrl` `D` and `Ctrl` `U` half a page
 - `/`_pattern_ `?`_pattern_ — search forwards or backwards, wrapping around the buffer and ignoring case; `n` and `N` repeat it in the same and in the opposite direction, and a search with nothing typed repeats the last one. _pattern_ is a [pattern](#patterns), not plain text — a `.`, `[`, `*`, `^` or `$` you mean literally is written with a backslash before it
+- `*` `#` — search forwards or backwards for the word the cursor is on, matching it whole. `*` on the `n` of `to n` stops on every `n` in the buffer and on no `then`. There is nothing to type: the word becomes the search, so `n` and `N` carry on through it afterwards. When the cursor is not on a word, the next word along the line is used
+- `` ` `` `'` — back to where the last jump started. `` ` `` returns to the exact character and `'` to the first non-blank of that line. Jumping to the mark is itself a jump, so pressing `` ` `` again returns to where you came from and the two keys toggle between two places
+- `gd` — go to the definition of the procedure the cursor is on: the `to` line that names it, wherever it is in the buffer. With [`edall`](#edall) the whole workspace is one buffer, so this reaches every procedure you have
+
+A *jump* is `G`, `gg`, `{`, `}`, `%`, `/`, `?`, `n`, `N`, `*`, `#`, `gd` and `:`_n_ — the movements that can leave the screen you were looking at. Each of them sets the mark, so `` ` `` always comes back from one. Ordinary movement (`h` `j` `k` `l`, the words, the pages) does not. The mark is a place in the text, not a line number, and the Editor does not move it when you change the text in front of it, so after an edit `` ` `` may return somewhere near where you were rather than exactly.
+
 
 `Ctrl` `G` says where the cursor is: `line 12 of 40 --30%--`, the number of the line the cursor is on, how many lines the buffer holds, and how far through it you are. `[Modified]` in front of it means you have changed the buffer since the Editor opened, so it is also how you check whether `:q` will let you leave. There is no file name in the report — which procedures or which file the Editor is over was fixed by the command that opened it. `:.=` and `:=` print the same two numbers on their own: the line the cursor is on, and the number of the last line.
+
+`zz`, `zt` and `zb` move the screen without moving the cursor: `zz` puts the line the cursor is on in the middle of the screen, `zt` at the top and `zb` at the bottom. The buffer is not changed and neither is the cursor — only how much of what is around it you can see, which on a thirty-line screen is what a `/` or a `G` most often costs you. Near the end of the buffer the screen moves as far as it can without running off the last line.
 
 `%` matches a bracket. It does not select the brackets you are standing between, which is worth knowing before you use `d%`: in `when [wifi?] [pr "yes]` with the cursor on the `f`, the first bracket at or after the cursor is the `]`, so `%` goes *back* to the `[` in front of the cursor and `d%` deletes `[wif`. To take a whole group from inside it, use a [text object](#text-objects) — `di[` — or get to its bracket first with `F[` and then `d%`.
 

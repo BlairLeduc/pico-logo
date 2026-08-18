@@ -1880,13 +1880,16 @@ static void editor_vi_indent(size_t start, size_t end, int stops)
 // exactly where Ctrl+F does -- wrapping, case-insensitive -- but leave no
 // selection behind: normal mode's block cursor is the only marker vi wants
 //
-static void editor_vi_search(char direction)
+static void editor_vi_search(char direction, size_t origin)
 {
     // The vi pattern goes straight to the pattern walker -- no copy into
     // editor.search_text, which was only ever there to feed editor_search_find
     // and would truncate a `\<name\>` pattern to a dangling backslash (§16.5).
+    // The origin is the cursor for `/`, `?`, `n` and `N`, and the start of the
+    // word for `*` and `#` -- which is what stops `*` from the middle of a word
+    // matching the word it started in
     bool forward = (direction == '/');
-    size_t from = forward ? editor.cursor_pos + 1 : editor.cursor_pos;
+    size_t from = forward ? origin + 1 : origin;
     if (from > editor.content_length) from = editor.content_length;
 
     size_t match;
@@ -2011,8 +2014,31 @@ static int editor_vi_apply(const ViAction *act, int cursor_line_before)
             break;
 
         case VI_ACT_SEARCH:
-            editor_vi_search(act->ch);
+            editor_vi_search(act->ch, act->start);
             break;
+
+        case VI_ACT_SCROLL: {
+            // The one action that moves the view and not the cursor, so it does
+            // its own row arithmetic here rather than leaving it to
+            // editor_ensure_cursor_visible, which only ever scrolls far enough
+            // to bring the cursor back on screen
+            int cursor_line = editor_get_line_at_pos(editor.cursor_pos);
+            int max_start = editor_count_lines() - EDITOR_VISIBLE_ROWS;
+            int start = cursor_line;
+            if (act->ch == 'z') {
+                start = cursor_line - (EDITOR_VISIBLE_ROWS - 1) / 2;
+            } else if (act->ch == 'b') {
+                start = cursor_line - EDITOR_VISIBLE_ROWS + 1;
+            }
+            // The view never starts past the last screenful, as the page keys
+            // have it -- so `zt` near the end of the buffer moves less than it
+            // was asked to rather than showing a screen of nothing
+            if (start > max_start) start = max_start;
+            if (start < 0) start = 0;
+            editor.view_start_line = start;
+            editor_mark_all_dirty();
+            break;
+        }
 
         case VI_ACT_SUBSTITUTE: {
             size_t landed = editor.cursor_pos;

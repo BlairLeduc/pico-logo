@@ -1,9 +1,11 @@
 # P12 — Vi mode for the Logo Editor (design)
 
-Status: **M1--M5 built 2026-08-18.** The mode is complete: normal mode, visual
+Status: **M1--M8 built 2026-08-18.** The mode is complete: normal mode, visual
 mode, `f`/`t`/`%`, the ex command line, `setvimode`, the reference chapter,
-`u` / `Ctrl` `R` over a tiered journal, and the word and bracket text objects
-(§15). §14 records where the build departed from this design.
+`u` / `Ctrl` `R` over a tiered journal, the word and bracket text objects
+(§15), patterns in `:s`, `/` and `?` (§16), `Ctrl` `G` (§17), and navigation --
+`*`, `#`, the mark, `gd` and `zz` (§18). Every milestone has been checked on a
+board. §14 records where the build departed from this design.
 
 Three scoping decisions were taken with the user on 2026-08-17:
 
@@ -401,6 +403,7 @@ and the mode indicator. Those are a hardware check on the Pico Plus 2 W.
 | **M6** | Patterns in `:s`, `/` and `?` (§16) | `/\<n\>` walked with `n`/`N` through the wrap, then `:%s//count/g` renaming every whole-word `n` and no `then`, and one `u` putting it back | **built and checked on a board 2026-08-18** ([`editor_pattern.c`](../devices/picocalc/editor_pattern.c)); the gate passed and its stack-measurement half found B36 instead — a hang, not the overflow §16.10 expected (§16.13) |
 
 | **M7** | `Ctrl` `G`, `:.=`, `:=` (§17) | the report on a buffer longer than a screen, before and after a change | **built and checked on a board 2026-08-18** |
+| **M8** | `*` `#`, `` ` `` `'`, `gd`, `zz` `zt` `zb` (§18) | `*` on a one-letter procedure name walking only whole words, `` ` `` back from a `G`, `gd` across an `edall` buffer, `zz` after a search | **built and checked on a board 2026-08-18** |
 
 M1 is the whole feature as far as a user is concerned; M2 is what makes it
 pleasant, M4 is what stops it being annoying, and M5 is the one command a
@@ -1352,3 +1355,123 @@ Line numbers are counted by walking the buffer (`line_number_of`), not by
 asking `editor_lines.c`: the state machine has no memo by design (§6.1), and
 one scan per `Ctrl` `G` of a buffer this size is nothing next to the redraw
 that follows it.
+
+## 18. Navigating (M8)
+
+Opened 2026-08-18. M1--M7 made the mode a complete way to *edit*; this is the
+first milestone about *finding* things. The buffer under `edall` is the whole
+workspace and under `editfile` it is 256 KB, and until now the only ways to
+reach a place in it were `/` with the name typed out and `:{n}` with a line
+number the mode had no way of telling you.
+
+Five commands, and none of them changes a byte.
+
+### 18.1 `*` and `#`
+
+Search for the word the cursor is on, forwards and backwards. **M6 is what made
+this cheap**: the pattern is built rather than typed --- `\<` + the word +
+`\>` --- so it costs one string and reuses the whole matcher, and `\<`/`\>`
+are what make it worth having, since a `*` on `n` that stopped on every `then`
+would be useless.
+
+It is the command that pays off most in an `edall` buffer, where every call site
+of a procedure is in the same file as its definition.
+
+Three details:
+
+- **The word characters are never metacharacters** (§16.2's set is `^ $ . *
+  [ ] \< \> \( \)`), so nothing needs escaping. A word longer than
+  `LOGO_VI_TEXT_MAX - 4` is refused rather than truncated: a truncated
+  `\<squar` would silently match the wrong thing, which is worse than a beep.
+- **The search runs from the start of the word, not from the cursor.**
+  Otherwise `#` from the middle of a word finds the word it is standing in.
+  `VI_ACT_SEARCH` therefore carries an origin --- which cost nothing, because
+  `editor_vi_key` already initialises `out->start` to the cursor and every
+  existing emitter left it there.
+- **No count.** `n` has never taken one either (§5.1 promised it and the build
+  did not), and `3*` is `*nn`.
+
+### 18.2 One mark, not twenty-six
+
+§5.3 rejected marks and was right to: `m{a-z}` is a register file, and this
+keyboard has 40 columns of footer to report it in. But *one* mark --- vi's
+`` ` `` and `'`, the place the last jump started --- is a different thing, and
+it is the half of the feature that was actually missing. `G` on a large buffer
+is a one-way trip today, and the only way back is to have read `Ctrl` `G`
+first, which is M7 papering over a missing motion.
+
+It is a `size_t` and a `bool` in `ViState`. A jump sets it; jumping to it is
+itself a jump, which is what makes the pair a **toggle** rather than a
+one-way trip in the other direction.
+
+**What counts as a jump** is `G`, `gg`, `{`, `}`, `%`, `/`, `?`, `n`, `N`, `*`,
+`#`, `gd`, `:{n}` and `` ` ``/`'` themselves --- the movements that can leave
+the screen. An operator's motion is not one: `d}` is an edit, and the place to
+come back to is where the edit was.
+
+**The mark is a byte offset and nothing adjusts it.** After an edit in front of
+it, `` ` `` lands near where you were rather than exactly. Vim maintains its
+marks through every splice; doing the same here means touching the mark from
+every mutation in `editor.c`, which is the `editor_note_change` pattern again
+for a tenth of the payoff. `vi_motion` clamps the mark to `len`, so a stale one
+is never unsafe --- only approximate --- and the randomised run feeds `` ` ``
+and `d`` ` `` among its keys precisely because a stored offset is the thing
+most likely to go wrong. Written down in the manual, since it is a difference a
+user can see.
+
+### 18.3 `gd`
+
+The definition of the word under the cursor. **Not a pattern search**: a Logo
+definition is `to name` at the head of a line, and matching that shape directly
+(`find_definition`) is exact where a pattern would need `\s\+` the dialect
+does not have, and is shorter than the pattern that would approximate it. Case
+folded, as the language is.
+
+This is the same argument §15 made for text objects and §5.2 for `%`: the
+command earns its key because of what Logo *is*. With `edall` the workspace is
+one buffer, so `gd` is the whole of "go to that procedure", and `` ` `` is the
+way back --- the two commands are one feature.
+
+### 18.4 `zz`, `zt`, `zb`
+
+The one part of M8 that had to negotiate with §6.1. The state machine knows
+nothing about screen rows, and centring the view is entirely about screen rows.
+
+It stays pure by making the *intent* the action: `VI_ACT_SCROLL` carries a
+letter --- centre, top, bottom --- and `editor.c` does the arithmetic against
+`EDITOR_VISIBLE_ROWS`. Rows travel one way, out of the machine, which is the
+same direction `EDITOR_VI_PAGE_LINES` already travels; had `H`/`M`/`L` been in
+scope they would have needed the view as an *input*, which is what keeps them
+out.
+
+It is worth the negotiation on a 30-row screen: a `/` or a `G` lands its line
+wherever `editor_ensure_cursor_visible` happens to put it, which is often the
+last row, with the block it belongs to off the top.
+
+Two build notes:
+
+- **The view never starts past the last screenful**, which is what
+  `editor_page_down` already enforces, so `zt` near the end of the buffer moves
+  less than it was asked to rather than showing a screen of nothing. Vim would
+  scroll and fill with `~`; this editor has never drawn a row that is not a
+  line.
+- **`VI_ACT_SCROLL` marks everything dirty itself.** The redraw tail keys off
+  `editor_ensure_cursor_visible`'s return, which is a delta the action has
+  already applied by the time it runs --- so it reports 0 and the scroll would
+  otherwise be invisible until the next keystroke.
+
+### 18.5 Still out
+
+`m{a-z}` and the jump list (`Ctrl` `O`/`Ctrl` `I`) --- one mark is the 90 % of
+either that fits the screen. `H` `M` `L`, for the reason in §18.4. `Ctrl` `A` /
+`Ctrl` `X` on the number under the cursor, which is a want rather than a gap.
+`:g/pat/d`, which without a list pane is only a bulk delete that `:%s` and `dd`
+already cover. And macros (`q`/`@`), still: `.` and a `:%s` that now takes
+patterns absorbed most of what they would have bought.
+
+### 18.6 Cost
+
+`editor_vi.c` 2,107 → 2,331 lines; `editor.c` gains the one `VI_ACT_SCROLL`
+case. `ViState` grows by a `size_t` and a `bool`: **91.24 → 91.25 %** of SRAM
+on `pico+2w`, **92.57 → 92.58 %** on `pico2`. 19 new tests, and six new keys
+added to the randomised run's key pool.
