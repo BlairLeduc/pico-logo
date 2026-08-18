@@ -612,7 +612,7 @@ Every motion takes a count typed before it, so `5w` moves five words.
 - `f`_c_ `F`_c_ — forward or back to the next _c_ on this line; `t`_c_ and `T`_c_ stop just short of it; `;` and `,` repeat the last one forwards and backwards
 - `%` — from a bracket to its match: the first `(` `)` `[` `]` `{` `}` at or after the cursor on this line, forwards from an opening one and backwards from a closing one, counting nesting of that kind only
 - `Ctrl` `F` `Ctrl` `B` — a page forward or back; `Ctrl` `D` and `Ctrl` `U` half a page
-- `/`_text_ `?`_text_ — search forwards or backwards, wrapping around the buffer and ignoring case, as [incremental search](#incremental-search) does; `n` and `N` repeat it in the same and in the opposite direction, and a search with nothing typed repeats the last one
+- `/`_pattern_ `?`_pattern_ — search forwards or backwards, wrapping around the buffer and ignoring case; `n` and `N` repeat it in the same and in the opposite direction, and a search with nothing typed repeats the last one. _pattern_ is a [pattern](#patterns), not plain text — a `.`, `[`, `*`, `^` or `$` you mean literally is written with a backslash before it
 
 `%` matches a bracket. It does not select the brackets you are standing between, which is worth knowing before you use `d%`: in `when [wifi?] [pr "yes]` with the cursor on the `f`, the first bracket at or after the cursor is the `]`, so `%` goes *back* to the `[` in front of the cursor and `d%` deletes `[wif`. To take a whole group from inside it, use a [text object](#text-objects) — `di[` — or get to its bracket first with `F[` and then `d%`.
 
@@ -697,14 +697,34 @@ While you are inserting, the Editor behaves exactly as it does outside vi mode: 
 | `:wq` `:x` | accept the buffer and leave the Editor |
 | `:q` | leave, if nothing has changed |
 | `:q!` | cancel and leave the Editor |
-| `:s/`_old_`/`_new_`/` | replace the first _old_ on this line |
-| `:s/`_old_`/`_new_`/g` | replace every _old_ on this line |
-| `:%s/`_old_`/`_new_`/` | replace the first _old_ on every line |
-| `:%s/`_old_`/`_new_`/g` | replace every _old_ in the buffer |
+| `:s/`_pat_`/`_new_`/` | replace the first _pat_ on this line |
+| `:s/`_pat_`/`_new_`/g` | replace every _pat_ on this line |
+| `:%s/`_pat_`/`_new_`/` | replace the first _pat_ on every line |
+| `:%s/`_pat_`/`_new_`/g` | replace every _pat_ in the buffer |
 
-Matching ignores the difference between upper and lower case, as incremental search does, and the replacement is used exactly as typed. Each of _old_ and _new_ may be up to 32 characters. Nothing is replaced when there is no match, or when the result would not fit in the edit buffer, and the bottom line says `No substitution made`.
+_pat_ is a [pattern](#patterns), matched ignoring the difference between upper and lower case. In _new_, `&` stands for the whole of what matched and `\1`..`\9` for what the pattern's groups matched; every other character is used exactly as typed. Each of _pat_ and _new_ may be up to 32 characters. Nothing is replaced when there is no match, or when the result would not fit in the edit buffer, and the bottom line says `No substitution made`. A _pat_ left empty reuses the pattern of the last `:s`, `/` or `?`, so `/`\<`n`\>`` and then `:%s//count/g` renames what the search just walked.
 
-Anything else on the command line is refused with `E492: not an editor command`, and a substitute that is missing a delimiter with `E486: bad substitute`.
+Anything else on the command line is refused with `E492: not an editor command`, and a malformed substitute — a missing delimiter, or a bad pattern — with `E486: bad substitute`.
+
+#### Patterns
+
+A `:s` pattern, and the text of a `/` or `?` search, is a small regular expression rather than a literal string. The characters below are special; any of them you mean literally is written with a backslash before it, so `:s/3\.14/pi/` matches the number and `/list\[1\]` searches for the text.
+
+| In the pattern | Matches |
+|---|---|
+| `^` `$` | the start or end of the line, when written first or last |
+| `.` | any single character |
+| `*` | zero or more of whatever comes before it |
+| `[abc]` `[^abc]` `[a-z]` | one character in the set, or not in it; a `]` first or a `-` last is that character |
+| `\<` `\>` | the start or end of a word |
+| `\(` … `\)` | a group, up to nine, for `\1`..`\9` |
+| `\1`..`\9` | the same text an earlier group matched |
+
+The set was chosen to keep matching fast on the board, so it leaves out alternation (`\|`), `\+` and `\?`, and `*` never applies to a group. Matching never crosses a line break, so `^`, `$` and `.` all work a line at a time.
+
+A *word*, for `\<` and `\>`, is a Logo name: it runs up to the first blank, `;`, or one of the delimiters `[ ] ( ) + - * / = < >`, and a leading `"` or `:` is not part of it. So `\<n\>` matches the `n` in `"n`, in `:n` and standing alone, but not the `n` inside `then`, `pen` or `total.count` — which is what lets `:%s/\<n\>/count/g` rename a variable without touching the words that merely contain its letters. No single pattern can tell a variable `n` from a procedure `n`, so the safe way to rename is to walk the matches first: `/\<n\>` then `n` to see each one, `:%s//count/g` to make the change, and `u` if it reached too far.
+
+Because matching folds case, a class such as `[A-Z]` means "a letter", not "a capital"; `:%s/\<Total\>/sum/g` finds `total` too, which is the behaviour a case-insensitive language wants from a rename.
 
 #### What vi mode leaves out
 

@@ -267,12 +267,28 @@ target_include_directories(test_editor_undo PRIVATE
 )
 add_test(NAME test_editor_undo COMMAND test_editor_undo)
 
+# Editor pattern matcher test — compiles devices/picocalc/editor_pattern.c on
+# the host. It includes <regex.h> to run a differential against POSIX, which is
+# host-only: no arm-none-eabi libc.a defines regcomp, so a device build could
+# never follow it — which is the whole reason the matcher is vi's own (§16.1).
+add_executable(test_editor_pattern
+    test_editor_pattern.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/editor_pattern.c
+    unity.c
+)
+target_include_directories(test_editor_pattern PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/devices/picocalc
+)
+add_test(NAME test_editor_pattern COMMAND test_editor_pattern)
+
 # Editor vi key layer test — compiles devices/picocalc/editor_vi.c (and the
 # search and line-lookup modules it drives) on the host. editor.c itself has no
 # host build, which is the whole reason the key layer is a separate file.
 add_executable(test_editor_vi
     test_editor_vi.c
     ${CMAKE_SOURCE_DIR}/devices/picocalc/editor_vi.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/editor_pattern.c
     ${CMAKE_SOURCE_DIR}/devices/picocalc/editor_search.c
     ${CMAKE_SOURCE_DIR}/devices/picocalc/editor_lines.c
     ${CMAKE_SOURCE_DIR}/devices/picocalc/editor_undo.c

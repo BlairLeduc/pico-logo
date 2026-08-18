@@ -11,9 +11,10 @@
 //
 
 #include "editor_vi.h"
-#include "editor_search.h"
+#include "editor_pattern.h"
 #include "keyboard.h"
 
+#include <stdint.h>
 #include <string.h>
 
 //
@@ -1005,11 +1006,28 @@ static bool parse_substitute(ViState *st, const char *s, size_t i, size_t n)
     {
         i++;
     }
-    if (i >= n || i == pat)
+    if (i >= n)
     {
-        return false;  // Unterminated, or an empty pattern
+        return false;  // Unterminated
     }
-    copy_field(st->pattern, &st->pattern_len, s + pat, i - pat);
+    if (i == pat)
+    {
+        // An empty pattern reuses the last `/` or `:s` -- both fill st->pattern,
+        // and now they share a dialect, so `:%s//count/g` after `/\<n\>` renames
+        // exactly what the search walked (§16.5). Nothing to reuse is a refusal.
+        if (st->pattern_len == 0)
+        {
+            return false;
+        }
+    }
+    else
+    {
+        if (!editor_pattern_valid(s + pat, i - pat))
+        {
+            return false;  // run_ex turns this into "E486: bad substitute"
+        }
+        copy_field(st->pattern, &st->pattern_len, s + pat, i - pat);
+    }
     i++;
 
     size_t rep = i;
@@ -1167,6 +1185,13 @@ static bool cmdline_key(ViState *st, const char *buf, size_t len, size_t cursor,
             st->search_forward = (st->cmdline[0] == '/');
             if (st->cmdline_len > 1)
             {
+                // Validation is only needed here, on the Return: vi's search is
+                // not incremental, so a half-typed pattern is never matched
+                // (§16.5).
+                if (!editor_pattern_valid(st->cmdline + 1, st->cmdline_len - 1))
+                {
+                    return beep(st, out, "E486: bad pattern");
+                }
                 copy_field(st->pattern, &st->pattern_len,
                            st->cmdline + 1, st->cmdline_len - 1);
             }
@@ -1844,28 +1869,39 @@ const char *editor_vi_status(const ViState *st)
 //  Substitute
 //
 
-// editor_search_find wraps within whatever slice it is given, so a match that
-// comes back before where the search started is one that wrapped: there is
-// none left on this line.
-static bool find_in_line(const char *buf, size_t line_start, size_t line_end,
-                         size_t from, const char *pat, size_t pat_len, size_t *out)
+// The next accepted match in line [ls, le), searching at or after `at`. Both
+// passes call this identically, which is what keeps the count and the rewrite
+// from ever disagreeing (§16.4). `prev_end` is where the last accepted match
+// ended: an empty match landing there is vi's "step one character" case and is
+// skipped rather than matched forever. Groups come back as absolute offsets.
+static bool sub_next(const char *buf, size_t ls, size_t le,
+                     const char *pat, size_t pat_len,
+                     size_t at, size_t prev_end,
+                     EditorPatternGroups g, size_t *ms, size_t *me)
 {
-    size_t match;
-    if (line_end <= line_start || from < line_start || from > line_end)
+    while (at <= le)
     {
-        return false;
+        if (!editor_pattern_search(pat, pat_len, buf + ls, le - ls, at - ls, g))
+        {
+            return false;
+        }
+        for (int k = 0; k < 10; k++)
+        {
+            g[k].start += ls;
+            g[k].end += ls;
+        }
+        size_t s = g[0].start;
+        size_t e = g[0].end;
+        if (s == e && s == prev_end)
+        {
+            at = s + 1;  // Empty match at the last one's end: step over it
+            continue;
+        }
+        *ms = s;
+        *me = e;
+        return true;
     }
-    if (!editor_search_find(buf + line_start, line_end - line_start,
-                            pat, pat_len, from - line_start, true, &match))
-    {
-        return false;
-    }
-    if (line_start + match < from)
-    {
-        return false;
-    }
-    *out = line_start + match;
-    return true;
+    return false;
 }
 
 size_t editor_vi_substitute(char *buf, size_t *len, size_t capacity,
@@ -1876,7 +1912,7 @@ size_t editor_vi_substitute(char *buf, size_t *len, size_t capacity,
 {
     size_t n = *len;
 
-    if (pat_len == 0 || pat_len > n)
+    if (pat_len == 0 || !editor_pattern_valid(pat, pat_len))
     {
         return 0;
     }
@@ -1890,22 +1926,39 @@ size_t editor_vi_substitute(char *buf, size_t *len, size_t capacity,
         return 0;
     }
 
-    // Count first: a substitute that ran out of room part way through would
-    // leave the text half rewritten, which is what editor_search_replace_all
-    // takes the same care to avoid.
+    char expand[LOGO_VI_SUB_EXPAND_MAX];
+    EditorPatternGroups g;
+
+    // Count first, accumulating the length change: patterns make every match
+    // and every replacement a different size, so the old `count * len`
+    // arithmetic no longer holds. A substitute that would not fit -- or one
+    // match that expands past the stack buffer -- refuses here, before a byte
+    // moves, which keeps the all-or-nothing property the buffer's safety rests
+    // on.
     size_t count = 0;
+    long delta = 0;  // added - removed, over every match
     for (size_t line = range_start; line < range_end; )
     {
         size_t end = line_end_of(buf, n, line);
         size_t at = line;
-        while (find_in_line(buf, line, end, at, pat, pat_len, &at))
+        size_t prev_end = SIZE_MAX;
+        size_t ms, me;
+        while (sub_next(buf, line, end, pat, pat_len, at, prev_end, g, &ms, &me))
         {
+            size_t explen = editor_pattern_expand(rep, rep_len, buf, g,
+                                                  expand, sizeof(expand));
+            if (explen == SIZE_MAX)
+            {
+                return 0;  // The replacement of one match is too long
+            }
             count++;
-            at += pat_len;
+            delta += (long)explen - (long)(me - ms);
+            prev_end = me;
             if (!global)
             {
                 break;
             }
+            at = (ms == me) ? ms + 1 : me;
         }
         if (end >= n)
         {
@@ -1914,14 +1967,7 @@ size_t editor_vi_substitute(char *buf, size_t *len, size_t capacity,
         line = end + 1;
     }
 
-    if (count == 0)
-    {
-        return 0;
-    }
-
-    // Subtract before adding: the text holds at least the matches it counted
-    size_t new_len = n - count * pat_len + count * rep_len;
-    if (new_len + 1 > capacity)
+    if (count == 0 || (long)n + delta + 1 > (long)capacity)
     {
         return 0;
     }
@@ -1932,22 +1978,31 @@ size_t editor_vi_substitute(char *buf, size_t *len, size_t capacity,
     {
         size_t end = line_end_of(buf, n, line);
         size_t at = line;
+        size_t prev_end = SIZE_MAX;
+        size_t ms, me;
         bool changed = false;
-        while (find_in_line(buf, line, end, at, pat, pat_len, &at))
+        while (sub_next(buf, line, end, pat, pat_len, at, prev_end, g, &ms, &me))
         {
+            size_t explen = editor_pattern_expand(rep, rep_len, buf, g,
+                                                  expand, sizeof(expand));
             // One record per match, before the bytes move: the whole rewritten
             // span would be far larger, and a `:%s` has to stay undoable
             if (undo != NULL)
             {
-                editor_undo_record(undo, at, buf + at, pat_len, rep, rep_len);
+                editor_undo_record(undo, ms, buf + ms, me - ms, expand, explen);
             }
-            memmove(buf + at + rep_len, buf + at + pat_len, n - at - pat_len);
-            memcpy(buf + at, rep, rep_len);
-            n = n - pat_len + rep_len;
-            end = end - pat_len + rep_len;
-            limit = limit - pat_len + rep_len;
-            at += rep_len;
+            memmove(buf + ms + explen, buf + me, n - me);
+            memcpy(buf + ms, expand, explen);
+            size_t matchlen = me - ms;
+            n = n - matchlen + explen;
+            end = end - matchlen + explen;
+            limit = limit - matchlen + explen;
             changed = true;
+            // Resume past the replacement so it is never rescanned; the tail
+            // beyond it is the original bytes the counting pass saw, shifted, so
+            // both passes walk the same matches.
+            prev_end = ms + explen;
+            at = (ms == me) ? ms + explen + 1 : ms + explen;
             if (!global)
             {
                 break;

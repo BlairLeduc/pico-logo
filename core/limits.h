@@ -262,6 +262,15 @@ extern "C" {
 #define LOGO_VI_TEXT_MAX     32
 #define LOGO_VI_CMDLINE_MAX  (LOGO_VI_TEXT_MAX * 2 + 8)
 
+// The most a single `:s` match can expand to, on the stack, before it is
+// spliced in (docs/vi-mode-design.md §16.4). A pattern match is at most one
+// line and each `&` or `\1` in the replacement copies a piece of it, so a
+// runaway is caught here in the counting pass -- before a byte moves -- rather
+// than overrunning the buffer. Not static: it lives in editor_vi_substitute's
+// frame only, which is the one place the pattern matcher puts depth on the
+// stack, so this is the lever if that frame is ever measured tight.
+#define LOGO_VI_SUB_EXPAND_MAX  256
+
 // Keys recorded for `.` to replay. A change command is an optional operator,
 // an optional prefix (`g`, `f`, ...) and a motion -- three keys covers every
 // one of them, and eight leaves room without being worth counting.

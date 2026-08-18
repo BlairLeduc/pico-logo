@@ -398,7 +398,7 @@ and the mode indicator. Those are a hardware check on the Pico Plus 2 W.
 | **M3** | Reference manual chapter (§13) | — | **built 2026-08-18** |
 | **M4** | Undo, both tiers (§8) | `u`/`Ctrl` `R` in the randomised differential run; SRAM tier verified on a `pico2` build | **built 2026-08-18**; the SRAM tier is a `malloc` that undo does without if it fails, so §9's measurement stopped gating it (§14) |
 | **M5** | Text objects, words and brackets (§15) | `di[` from inside a nested group, `vi[` selecting one, both in the randomised run | **built and checked on a board 2026-08-18**; opened by B35, and it needed no `editor.c` change at all |
-| **M6** | Patterns in `:s`, `/` and `?` (§16) | `/\<n\>` walked with `n`/`N` through the wrap, then `:%s//count/g` renaming every whole-word `n` and no `then`, and one `u` putting it back | **designed 2026-08-18**, not built |
+| **M6** | Patterns in `:s`, `/` and `?` (§16) | `/\<n\>` walked with `n`/`N` through the wrap, then `:%s//count/g` renaming every whole-word `n` and no `then`, and one `u` putting it back | **built 2026-08-18** ([`editor_pattern.c`](../devices/picocalc/editor_pattern.c)); host tests green and `pico+2w` links at 91.24 % RAM (§16.10), the board gate outstanding |
 
 M1 is the whole feature as far as a user is concerned; M2 is what makes it
 pleasant, M4 is what stops it being annoying, and M5 is the one command a
@@ -1204,3 +1204,34 @@ wrong. **The name with a `.` or `?` in it is not decoration**: it is the
 difference between vi's word boundary and Logo's (§16.2), and it is the one
 thing on this list a host test could pass while a real buffer failed. The wrap and the backward walk are there because they are the parts a
 host test asserts and a board has historically disagreed with.
+
+### 16.12 What the build changed
+
+Built 2026-08-18. Three places the code did not match the sketch, each forced
+rather than chosen:
+
+- **`editor_pattern_expand` signals overflow with `SIZE_MAX`, not `0`.** §16.6
+  wrote "`0` = would not fit", but an empty replacement (`:s/x//`, a delete)
+  legitimately expands to zero bytes, and the substitute loop has to tell "it
+  fit, and it was empty" from "it did not fit". `SIZE_MAX` is the out-of-band
+  value; `0` is a real length again.
+- **The too-long case returns a substitution count of `0`.** §16.4 named a
+  distinct `E486: substitution too long`, but `editor.c` already turns a count
+  of `0` into `No substitution made` — the same all-or-nothing refusal — and
+  wiring a second message would have meant touching the one substitute branch
+  M6 otherwise leaves alone. The refusal is kept; the wording is the existing
+  one.
+- **The two passes share `sub_next`, not a live iterator.** §16.4 asked for one
+  `next_match` walked by both, but the rewrite pass mutates the buffer and so
+  cannot literally share the counting pass's positions. What is shared is the
+  function — `editor_pattern_search` plus the empty-match "step one character"
+  skip — called with each pass's own coordinates. Because the rewrite always
+  resumes past the replacement, the tail it re-scans is the counting pass's
+  original bytes shifted, so the two see the same sequence of matches and the
+  count cannot drift from the rewrite.
+
+Cost as built: **no static SRAM** (the pattern is interpreted from `ViState`'s
+existing fields), and `pico+2w` links at **91.24 % RAM, unchanged** from M4 —
+the whole matcher lives in `editor_vi_substitute`'s stack frame. The ~1.6 KB
+deep-pattern stack figure (§16.10) is still the one number to take on a board
+rather than calculate, and it is part of the outstanding board gate (§16.11).

@@ -204,6 +204,7 @@ add_executable(pico-logo
     devices/picocalc/dirty_tiles.c
     devices/picocalc/editor.c
     devices/picocalc/editor_lines.c
+    devices/picocalc/editor_pattern.c
     devices/picocalc/editor_search.c
     devices/picocalc/editor_undo.c
     devices/picocalc/editor_vi.c

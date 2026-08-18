@@ -13,6 +13,7 @@
 
 #include "editor.h"
 #include "editor_lines.h"
+#include "editor_pattern.h"
 #include "editor_search.h"
 #include "editor_undo.h"
 #include "editor_vi.h"
@@ -1881,20 +1882,17 @@ static void editor_vi_indent(size_t start, size_t end, int stops)
 //
 static void editor_vi_search(char direction)
 {
-    size_t len = editor.vi.pattern_len;
-    if (len > EDITOR_SEARCH_MAX) len = EDITOR_SEARCH_MAX;
-    memcpy(editor.search_text, editor.vi.pattern, len);
-    editor.search_text[len] = '\0';
-    editor.search_len = len;
-
+    // The vi pattern goes straight to the pattern walker -- no copy into
+    // editor.search_text, which was only ever there to feed editor_search_find
+    // and would truncate a `\<name\>` pattern to a dangling backslash (§16.5).
     bool forward = (direction == '/');
     size_t from = forward ? editor.cursor_pos + 1 : editor.cursor_pos;
     if (from > editor.content_length) from = editor.content_length;
 
     size_t match;
-    if (editor_search_find(editor.buffer, editor.content_length,
-                           editor.search_text, editor.search_len,
-                           from, forward, &match)) {
+    if (editor_pattern_find(editor.vi.pattern, editor.vi.pattern_len,
+                            editor.buffer, editor.content_length,
+                            from, forward, &match)) {
         editor.cursor_pos = match;
     } else {
         editor.vi_msg = "E486: pattern not found";

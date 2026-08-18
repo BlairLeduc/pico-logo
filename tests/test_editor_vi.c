@@ -1449,6 +1449,72 @@ static void test_substitute_over_the_whole_buffer(void)
     assert_text("bb bb\nbb bb\n");
 }
 
+static void test_substitute_renames_a_whole_word_with_a_pattern(void)
+{
+    // The case M6 exists for: rename the variable `n` everywhere it is named --
+    // "n, :n and bare -- without touching `then` or `pen` (§16)
+    ed_set("make \"n 5\nif :n then pen\n");
+    feed(":%s/\\<n\\>/count/g");
+    feed_key(KEY_RETURN);
+    assert_text("make \"count 5\nif :count then pen\n");
+}
+
+static void test_substitute_with_a_variable_length_match(void)
+{
+    ed_set("a   b     c\n");
+    feed(":s/  */ /g");   // collapse runs of spaces
+    feed_key(KEY_RETURN);
+    assert_text("a b c\n");
+}
+
+static void test_substitute_with_an_empty_match_terminates(void)
+{
+    // :s/x*/-/g matches the empty string at every position; without the "step
+    // one character" rule it would loop, and the count and the rewrite would
+    // have to agree or the buffer is left half written (§16.4)
+    ed_set("abc\n");
+    feed(":s/x*/-/g");
+    feed_key(KEY_RETURN);
+    assert_text("-a-b-c-\n");
+}
+
+static void test_an_empty_substitute_pattern_reuses_the_last_search(void)
+{
+    // /pat then :%s//rep/ -- the payoff of one dialect (§16.5)
+    ed_set("n and n and n\n");
+    feed("/\\<n\\>"); feed_key(KEY_RETURN);
+    feed(":%s//count/g"); feed_key(KEY_RETURN);
+    assert_text("count and count and count\n");
+}
+
+static void test_an_empty_substitute_pattern_with_no_search_complains(void)
+{
+    ed_set("abc\n");
+    feed(":s//x/");
+    feed_key(KEY_RETURN);
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    assert_text("abc\n");
+}
+
+static void test_a_bad_substitute_pattern_complains(void)
+{
+    ed_set("abc\n");
+    feed(":s/a\\(b/x/");   // an unclosed group
+    feed_key(KEY_RETURN);
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    assert_text("abc\n");
+}
+
+static void test_a_pattern_substitute_that_would_not_fit_changes_nothing(void)
+{
+    // The all-or-nothing property with a growing, variable-length replacement
+    char buf[16] = "aaaa\n";
+    size_t len = strlen(buf);
+    TEST_ASSERT_EQUAL_UINT(0, editor_vi_substitute(buf, &len, sizeof(buf), 0, len,
+                                                   "a", 1, "long", 4, true, NULL, NULL));
+    TEST_ASSERT_EQUAL_STRING("aaaa\n", buf);
+}
+
 static void test_a_malformed_ex_command_complains_and_changes_nothing(void)
 {
     const char *bad[] = { ":s", ":s/a", ":w junk", ":zz", ":%q", ":%s/a" };
@@ -1521,6 +1587,14 @@ static void test_an_empty_search_repeats_the_last_pattern(void)
     feed("/");    feed_key(KEY_RETURN);
     TEST_ASSERT_EQUAL_INT(VI_ACT_SEARCH, ed.last.kind);
     TEST_ASSERT_EQUAL_STRING("two", ed.vi.pattern);
+}
+
+static void test_a_bad_search_pattern_complains(void)
+{
+    ed_set("one two\n");
+    feed("/a\\(b");   // an unclosed group -- validated on the Return (§16.5)
+    feed_key(KEY_RETURN);
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
 }
 
 //
@@ -1730,6 +1804,19 @@ static void test_a_substitute_over_the_buffer_is_one_undo(void)
     assert_text("bk 10\nbk 20\nbk 30\n");
 }
 
+static void test_a_pattern_substitute_undoes_byte_for_byte(void)
+{
+    // Variable-length matches and replacements record one splice per match; the
+    // whole :%s has to reverse exactly (§16.4)
+    ed_set("make \"n 5\n:n + :n\n");
+    feed(":%s/\\<n\\>/count/g");
+    feed_key(KEY_RETURN);
+    assert_text("make \"count 5\n:count + :count\n");
+
+    feed("u");
+    assert_text("make \"n 5\n:n + :n\n");
+}
+
 static void test_a_new_change_after_an_undo_drops_the_redo(void)
 {
     ed_set("abc\n");
@@ -1921,6 +2008,13 @@ int main(void)
     RUN_TEST(test_substitute_on_the_current_line);
     RUN_TEST(test_substitute_with_g_takes_every_match_on_the_line);
     RUN_TEST(test_substitute_over_the_whole_buffer);
+    RUN_TEST(test_substitute_renames_a_whole_word_with_a_pattern);
+    RUN_TEST(test_substitute_with_a_variable_length_match);
+    RUN_TEST(test_substitute_with_an_empty_match_terminates);
+    RUN_TEST(test_an_empty_substitute_pattern_reuses_the_last_search);
+    RUN_TEST(test_an_empty_substitute_pattern_with_no_search_complains);
+    RUN_TEST(test_a_bad_substitute_pattern_complains);
+    RUN_TEST(test_a_pattern_substitute_that_would_not_fit_changes_nothing);
     RUN_TEST(test_a_malformed_ex_command_complains_and_changes_nothing);
     RUN_TEST(test_backspacing_off_the_colon_leaves_the_command_line);
     RUN_TEST(test_the_command_line_stops_growing_when_it_is_full);
@@ -1928,6 +2022,7 @@ int main(void)
     RUN_TEST(test_slash_records_a_pattern_and_a_direction);
     RUN_TEST(test_search_without_a_pattern_complains);
     RUN_TEST(test_an_empty_search_repeats_the_last_pattern);
+    RUN_TEST(test_a_bad_search_pattern_complains);
 
     RUN_TEST(test_substitute_matches_case_insensitively);
     RUN_TEST(test_substitute_can_grow_and_shrink_the_text);
@@ -1945,6 +2040,7 @@ int main(void)
     RUN_TEST(test_a_linewise_operator_undoes_every_line_it_touched);
     RUN_TEST(test_indenting_a_block_is_one_undo);
     RUN_TEST(test_a_substitute_over_the_buffer_is_one_undo);
+    RUN_TEST(test_a_pattern_substitute_undoes_byte_for_byte);
     RUN_TEST(test_a_new_change_after_an_undo_drops_the_redo);
     RUN_TEST(test_undo_with_nothing_recorded_says_so);
     RUN_TEST(test_undo_leaves_visual_mode);
