@@ -22,5 +22,10 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size,
 // (docs/vi-mode-design.md)
 void picocalc_editor_set_vi_mode(bool on);
 
+// Lend the editor memory for vi's undo journal, or none (NULL, 0). Which tier a
+// board gets is the interpreter's decision, since it owns the aux region
+// (docs/vi-mode-design.md §8).
+void picocalc_editor_set_undo_store(void *store, size_t size);
+
 // Get the editor operations structure
 const LogoConsoleEditor *picocalc_editor_get_ops(void);

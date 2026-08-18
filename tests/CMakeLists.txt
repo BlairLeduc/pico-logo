@@ -254,6 +254,19 @@ target_include_directories(test_editor_search PRIVATE
 )
 add_test(NAME test_editor_search COMMAND test_editor_search)
 
+# Editor undo journal test — compiles devices/picocalc/editor_undo.c on the
+# host. Portable (no Pico SDK / Logo runtime dependencies).
+add_executable(test_editor_undo
+    test_editor_undo.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/editor_undo.c
+    unity.c
+)
+target_include_directories(test_editor_undo PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/devices/picocalc
+)
+add_test(NAME test_editor_undo COMMAND test_editor_undo)
+
 # Editor vi key layer test — compiles devices/picocalc/editor_vi.c (and the
 # search and line-lookup modules it drives) on the host. editor.c itself has no
 # host build, which is the whole reason the key layer is a separate file.
@@ -262,6 +275,7 @@ add_executable(test_editor_vi
     ${CMAKE_SOURCE_DIR}/devices/picocalc/editor_vi.c
     ${CMAKE_SOURCE_DIR}/devices/picocalc/editor_search.c
     ${CMAKE_SOURCE_DIR}/devices/picocalc/editor_lines.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/editor_undo.c
     unity.c
 )
 target_include_directories(test_editor_vi BEFORE PRIVATE

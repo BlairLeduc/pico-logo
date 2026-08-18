@@ -270,6 +270,25 @@ extern "C" {
 // the last one that fit rather than a half command.
 #define LOGO_VI_REPEAT_MAX   8
 
+// The undo journal (docs/vi-mode-design.md §8), tiered by where the editor
+// buffers landed -- which is a run-time decision, not a build one. A record is
+// a header plus the bytes a change removed and the bytes it put there, so a
+// journal holds far more small changes than large ones; when one will not fit,
+// the oldest *whole* steps are dropped, which is what leaves the SRAM tier with
+// the one level the design promised rather than none.
+//
+// PSRAM: taken as part of primitives_editor_init's single region block, so it
+// is all-or-nothing with the two 256 KB buffers. Negligible against 8 MB.
+//
+// SRAM: a one-time heap allocation beside the fallback edit buffers, which is
+// the same heap they come out of -- so this is a starting figure, not a budget,
+// and undo simply stays unavailable if the allocation fails.
+//
+// OVERFLOW: a single change larger than the whole journal clears it; that
+// change and everything before it cannot be undone.
+#define LOGO_VI_UNDO_PSRAM_SIZE (64 * 1024)
+#define LOGO_VI_UNDO_SRAM_SIZE  1024
+
 #ifdef __cplusplus
 }
 #endif

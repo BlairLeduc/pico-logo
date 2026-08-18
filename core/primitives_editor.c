@@ -46,6 +46,11 @@ static char *editor_buffer = NULL;
 static char *editor_proc_buffer = NULL;
 static size_t editor_buffer_size = LOGO_EDITOR_BUFFER_SIZE;
 
+// Vi's undo journal (docs/vi-mode-design.md §8), tiered the same way and for
+// the same reason: it is lent to the editor, which owns no memory of its own.
+static char *editor_undo_store = NULL;
+static size_t editor_undo_size = 0;
+
 // Vi mode (docs/vi-mode-design.md). A session setting like the palette, kept
 // here rather than passed to `edit`, so that one flag reaches all five entry
 // points -- edit, edall, edn, edns and editfile -- without widening the
@@ -56,6 +61,7 @@ static bool vi_mode_on = false;
 // repeated init (e.g. across tests) never leaks.
 static char *editor_buffer_heap = NULL;
 static char *editor_proc_buffer_heap = NULL;
+static char *editor_undo_heap = NULL;
 
 // The cached heap fallback, allocated on first use.
 static char *editor_heap_buffer(char **heap_cache)
@@ -857,6 +863,34 @@ static Result prim_vimodep(Evaluator *eval, int argc, Value *args)
     return result_ok(value_bool(vi_mode_on));
 }
 
+//
+// Hand the console's editor the settings it cannot ask for: which key layer to
+// use, and the memory vi's undo journal lives in.
+//
+// This exists because the console is registered *after* the primitives are
+// initialised (main.c calls primitives_init and then primitives_set_io), so a
+// push from primitives_editor_init alone reaches nothing at all -- which is how
+// a board came to report `Undo is not available` on a Pico Plus 2 W (B34).
+// primitives_set_io calls this when the console arrives; primitives_editor_init
+// calls it too, for a caller whose order is the other way round.
+//
+void primitives_editor_console_ready(void)
+{
+    LogoIO *io = primitives_get_io();
+    if (io == NULL || io->console == NULL || !logo_console_has_editor(io->console))
+    {
+        return;
+    }
+    if (io->console->editor->set_vi_mode != NULL)
+    {
+        io->console->editor->set_vi_mode(vi_mode_on);
+    }
+    if (io->console->editor->set_undo_store != NULL)
+    {
+        io->console->editor->set_undo_store(editor_undo_store, editor_undo_size);
+    }
+}
+
 void primitives_editor_init(void)
 {
     // Place the editor buffers in the aux/PSRAM region when one is available,
@@ -866,18 +900,30 @@ void primitives_editor_init(void)
     // Both buffers are taken as one block so the pair is all or nothing: the
     // bounds above are a single size, and a region that only had room for the
     // first would leave the edit buffer large and the definition buffer small.
-    char *region = (char *)mem_region_alloc(2 * LOGO_EDITOR_PSRAM_BUFFER_SIZE);
+    char *region = (char *)mem_region_alloc(2 * LOGO_EDITOR_PSRAM_BUFFER_SIZE +
+                                            LOGO_VI_UNDO_PSRAM_SIZE);
     if (region != NULL)
     {
         editor_buffer = region;
         editor_proc_buffer = region + LOGO_EDITOR_PSRAM_BUFFER_SIZE;
         editor_buffer_size = LOGO_EDITOR_PSRAM_BUFFER_SIZE;
+        editor_undo_store = region + 2 * LOGO_EDITOR_PSRAM_BUFFER_SIZE;
+        editor_undo_size = LOGO_VI_UNDO_PSRAM_SIZE;
     }
     else
     {
         editor_buffer = editor_heap_buffer(&editor_buffer_heap);
         editor_proc_buffer = editor_heap_buffer(&editor_proc_buffer_heap);
         editor_buffer_size = LOGO_EDITOR_BUFFER_SIZE;
+
+        // The SRAM tier comes out of the same heap the fallback buffers do, so
+        // it is asked for last and undo simply stays unavailable without it
+        if (editor_undo_heap == NULL)
+        {
+            editor_undo_heap = (char *)malloc(LOGO_VI_UNDO_SRAM_SIZE);
+        }
+        editor_undo_store = editor_undo_heap;
+        editor_undo_size = editor_undo_heap != NULL ? LOGO_VI_UNDO_SRAM_SIZE : 0;
     }
 
     // Region memory arrives uninitialised, and (edit) with no arguments edits
@@ -889,12 +935,7 @@ void primitives_editor_init(void)
 
     // A fresh interpreter starts in the editor's default key layer
     vi_mode_on = false;
-    LogoIO *io = primitives_get_io();
-    if (io != NULL && io->console != NULL && logo_console_has_editor(io->console) &&
-        io->console->editor->set_vi_mode != NULL)
-    {
-        io->console->editor->set_vi_mode(false);
-    }
+    primitives_editor_console_ready();
 
     primitive_register("setvimode", 1, prim_setvimode);
     primitive_register("vimode?", 0, prim_vimodep);

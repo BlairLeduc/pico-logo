@@ -1028,9 +1028,25 @@ static LogoEditorResult mock_editor_edit(char *buffer, size_t buffer_size,
     return mock_editor_result;
 }
 
+// What the interpreter lent the editor for vi's undo journal. The console is
+// registered after the primitives are initialised, so "was it handed over at
+// all" is a question worth being able to ask (B34).
+static size_t mock_editor_undo_size = 0;
+
+static void mock_editor_set_undo_store(void *store, size_t size)
+{
+    mock_editor_undo_size = (store != NULL) ? size : 0;
+}
+
+size_t mock_device_get_editor_undo_size(void)
+{
+    return mock_editor_undo_size;
+}
+
 // Editor operations structure
 static const LogoConsoleEditor mock_editor_ops = {
-    .edit = mock_editor_edit
+    .edit = mock_editor_edit,
+    .set_undo_store = mock_editor_set_undo_store
 };
 
 //
@@ -1701,6 +1717,7 @@ void mock_device_clear_editor(void)
     mock_editor_result = LOGO_EDITOR_ACCEPT;
     mock_editor_called = false;
     mock_editor_buffer_size = 0;
+    mock_editor_undo_size = 0;
 }
 
 void mock_device_set_editor_write(const char *content)

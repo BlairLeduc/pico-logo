@@ -330,6 +330,13 @@ extern "C"
         // (docs/vi-mode-design.md). Optional: NULL on a console whose editor
         // has no such mode, where `setvimode` is a no-op.
         void (*set_vi_mode)(bool on);
+
+        // Lend the editor memory for vi's undo journal (docs/vi-mode-design.md
+        // §8), or none (NULL, 0). Which tier a board gets is a run-time
+        // decision the interpreter makes, since it owns the aux/PSRAM region.
+        // Optional: NULL on a console whose editor has no undo, where the
+        // journal simply never exists.
+        void (*set_undo_store)(void *store, size_t size);
     } LogoConsoleEditor;
 
     //

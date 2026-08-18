@@ -422,6 +422,7 @@ radio - and storage capacity, which depends on the flash and PSRAM fitted.
 
 - 32768 nodes for procedure and variable storage
 - 24576 characters of editor buffer (262144 on a board with PSRAM)
+- 1 KB of undo journal for [vi mode](#vi-mode) (64 KB on a board with PSRAM)
 - 8192 characters in the copy buffer
 - Hardware floating-point operations
 
@@ -448,6 +449,7 @@ radio - and storage capacity, which depends on the flash and PSRAM fitted.
 - HTTP responses up to about 512 KB, held in PSRAM
 - Words may exceed 255 characters (for example the result of [`word`](#word) or an HTTP response body), held in PSRAM
 - 262144 characters of editor buffer, held in PSRAM, so [`editfile`](#editfile) opens much larger files. A board whose PSRAM does not come up at boot falls back to the 24576 every board has
+- 64 KB of undo journal for [vi mode](#vi-mode), also in PSRAM, so `u` reaches hundreds of changes back rather than the handful 1 KB holds
 
 
 
@@ -608,9 +610,11 @@ Every motion takes a count typed before it, so `5w` moves five words.
 - `gg` `G` — the first line, the last line; `10G` goes to line 10
 - `{` `}` — to the previous or next blank line, which in Logo is the gap between two procedures
 - `f`_c_ `F`_c_ — forward or back to the next _c_ on this line; `t`_c_ and `T`_c_ stop just short of it; `;` and `,` repeat the last one forwards and backwards
-- `%` — the bracket matching the next `(`, `[` or `{` on the line, counting nesting of that kind only
+- `%` — from a bracket to its match: the first `(` `)` `[` `]` `{` `}` at or after the cursor on this line, forwards from an opening one and backwards from a closing one, counting nesting of that kind only
 - `Ctrl` `F` `Ctrl` `B` — a page forward or back; `Ctrl` `D` and `Ctrl` `U` half a page
 - `/`_text_ `?`_text_ — search forwards or backwards, wrapping around the buffer and ignoring case, as [incremental search](#incremental-search) does; `n` and `N` repeat it in the same and in the opposite direction, and a search with nothing typed repeats the last one
+
+`%` matches a bracket. It does not select the brackets you are standing between, which is worth knowing before you use `d%`: in `when [wifi?] [pr "yes]` with the cursor on the `f`, the first bracket at or after the cursor is the `]`, so `%` goes *back* to the `[` in front of the cursor and `d%` deletes `[wif`. To take a whole group, get to its bracket first — `F[` then `d%`.
 
 #### Changing
 
@@ -627,7 +631,18 @@ An operator takes a motion, and the two together take a count, so `d2w` and `2dw
 - `p` `P` — put the copy buffer after or before the cursor. Text taken a line at a time goes back a line at a time, below or above the current line
 - `.` — repeat the last change, working out its own motion from where the cursor now is. A count typed before `.` replaces the one the change was made with
 
-`.` repeats a change that finished on its own. It does not repeat one that ended in insert mode, because the Editor does not record what you typed there. There is no undo: `u` and `Ctrl` `R` say `Undo is not available`.
+`.` repeats a change that finished on its own. It does not repeat one that ended in insert mode, because the Editor does not record what you typed there.
+
+#### Undoing
+
+- `u` — undo the last change; a count undoes that many, so `3u` undoes three
+- `Ctrl` `R` — redo, putting back what `u` reversed, and also counted
+
+One command is one undo, however much text it moved: `3dd`, `>>` over a selection and a `:%s` over the whole buffer each come back in a single `u`. Everything typed between entering insert mode and the `Esc` that leaves it counts as part of the command that started the insertion, so `cw` and the word you replaced it with undo together.
+
+Making a change after undoing one throws away what `Ctrl` `R` would have put back, as it does in vi.
+
+The Editor remembers as much of your editing as its undo journal holds — 64 KB on a board with PSRAM, 1 KB without (see [Supported Pico Boards](#supported-pico-boards)) — and drops the oldest changes as it fills, so what you have just done can always be undone and what you did much earlier may no longer be. A single change larger than the whole journal clears it: nothing before that change can be undone either. `u` and `Ctrl` `R` say `Already at oldest change` and `Already at newest change` when there is nothing left in that direction, and `Undo is not available` if the journal could not be allocated at all.
 
 #### Inserting
 

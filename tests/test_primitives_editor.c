@@ -1021,6 +1021,24 @@ void test_setvimode_is_reported_back(void)
     TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
 }
 
+// B34: the console is registered *after* primitives_init runs, so an editor
+// setting pushed only from primitives_editor_init reaches nothing at all. The
+// undo journal is the setting where that shows -- with no store the editor
+// says `Undo is not available`, which is what a board reported.
+void test_the_editor_is_lent_an_undo_journal(void)
+{
+    // The boot order, which the scaffold's setUp shares with the board and
+    // which a second setUp in the same process would hide: nothing is
+    // registered, then the primitives come up, then the console arrives
+    primitives_set_io(NULL);
+    mock_device_clear_editor();
+    primitives_init();
+    primitives_set_io(&mock_io);
+
+    TEST_ASSERT_TRUE_MESSAGE(mock_device_get_editor_undo_size() > 0,
+                             "the editor was never lent an undo journal");
+}
+
 // The mock console's editor has no set_vi_mode entry, which is the case
 // setvimode has to survive: it takes the setting and the editor ignores it
 void test_setvimode_still_opens_the_editor(void)
@@ -1425,6 +1443,7 @@ int main(void)
     // setvimode / vimode? tests
     RUN_TEST(test_vimode_is_off_to_begin_with);
     RUN_TEST(test_setvimode_is_reported_back);
+    RUN_TEST(test_the_editor_is_lent_an_undo_journal);
     RUN_TEST(test_setvimode_still_opens_the_editor);
     RUN_TEST(test_setvimode_rejects_a_non_boolean);
     

@@ -1,9 +1,9 @@
 # P12 — Vi mode for the Logo Editor (design)
 
-Status: **M1--M3 built 2026-08-18. M4 (undo) not built.** The mode is complete
-as far as a user is concerned: normal mode, visual mode, `f`/`t`/`%`, the ex
-command line, `setvimode`, and the reference chapter. `u` and `Ctrl` `R` report
-`Undo is not available`. §14 records where the build departed from this design.
+Status: **M1--M4 built 2026-08-18.** The mode is complete: normal mode, visual
+mode, `f`/`t`/`%`, the ex command line, `setvimode`, the reference chapter, and
+`u` / `Ctrl` `R` over a tiered journal. §14 records where the build departed
+from this design.
 
 Three scoping decisions were taken with the user on 2026-08-17:
 
@@ -387,10 +387,10 @@ and the mode indicator. Those are a hardware check on the Pico Plus 2 W.
 
 | | Scope | Gate | |
 |---|---|---|---|
-| **M1** | `editor_vi.c` state machine + normal mode (§5.1), `setvimode`, dispatcher | `test_editor_vi.c` green; hardware check of the mode indicator, cursor style and the `Esc` contract | **built 2026-08-18**; the hardware check is outstanding |
-| **M2** | Visual mode, `f F t T ; ,`, `%` (§5.2) | the same, plus `d%` over nested brackets | **built 2026-08-18** |
+| **M1** | `editor_vi.c` state machine + normal mode (§5.1), `setvimode`, dispatcher | `test_editor_vi.c` green; hardware check of the mode indicator, cursor style and the `Esc` contract | **built and checked on a board 2026-08-18** |
+| **M2** | Visual mode, `f F t T ; ,`, `%` (§5.2) | the same, plus `d%` over nested brackets | **built and checked on a board 2026-08-18** (`d%` sent the manual back for a correction, not the code — B35) |
 | **M3** | Reference manual chapter (§13) | — | **built 2026-08-18** |
-| **M4** | Undo, both tiers (§8) | `u`/`Ctrl` `R` in the randomised differential run; SRAM tier verified on a `pico2` build | **not built.** §9 requires a free-heap measurement after `primitives_editor_init` that only a board can give |
+| **M4** | Undo, both tiers (§8) | `u`/`Ctrl` `R` in the randomised differential run; SRAM tier verified on a `pico2` build | **built 2026-08-18**; the SRAM tier is a `malloc` that undo does without if it fails, so §9's measurement stopped gating it (§14) |
 
 M1 is the whole feature as far as a user is concerned; M2 is what makes it
 pleasant, and M4 is what stops it being annoying.
@@ -508,10 +508,77 @@ as designed.
 91.19 % to **91.23 %** on `pico+2w` and 92.52 % to **92.56 %** on `pico2`,
 about 208 bytes on each. §9's estimate held.
 
-**Still owed.** The hardware check M1 and M2 gate on has begun: a board session
-on 2026-08-18 edited a file in vi mode and found the `:w` behaviour above and
-`r` `Enter` (B33), the first two things this mode has been told by a board
-rather than by a test. Both are cases where a *test* had pinned the wrong
-answer, which is the failure mode a host test cannot see past.
-Not yet confirmed there: the mode indicator, the cursor style, the `Esc`
-contract and `d%` over nested brackets -- and M4.
+### 14.1 Undo (M4)
+
+- **A record carries both sides of a change, not one.** §8 said "redo is the
+  same record read the other way", which is not true of a record that holds only
+  the deleted text: putting a change back needs the text that was *inserted*,
+  and by then it is out of the buffer. Both sides are stored, and nearly every
+  change has an empty one -- a delete inserts nothing, an insert deletes
+  nothing. Only `r`, `~` and `:s` carry both, and they are short.
+- **A full journal drops its oldest steps; it does not clear itself.** §8 said
+  a change that will not fit clears the journal. That is unusable on the SRAM
+  tier, where 1 KB overflows as a matter of routine rather than as an
+  exception -- clearing would leave that tier with *no* undo, not the one level
+  it was promised. So the oldest whole steps are dropped to make room, and only
+  a single change larger than the entire journal clears it (nothing before such
+  a change can be reversed either, since the buffer is about to leave every
+  state the records describe). Whole steps: half a `>>` is worse than none of
+  it.
+- **`editor_undo.c` is a fourth carved-out module**, for the reason the other
+  three exist. The journal is a splice and a stack with a coalescing rule, which
+  is exactly the kind of arithmetic that wants a host test, and `editor.c` has
+  no host build.
+- **Every mutation in `editor.c` calls `editor_note_change`**, next to the
+  `editor_lines_edit` it already called and for the same reason: a change the
+  journal did not see leaves every record after it describing a buffer that
+  never existed. The one rewrite that is *not* recorded is the default editor's
+  `Ctrl` `R` replace-all, which vi cannot reach (`Ctrl` `R` is redo there and
+  `Ctrl` `F` is a page); it resets the journal rather than lying to it.
+- **A step is a keystroke, decided in `editor.c`.** The state machine does not
+  know when a command begins -- it finds out on the last key -- so the editor
+  calls `editor_undo_begin` before every key *except* while insert mode is
+  running. That is what makes `cw` plus the word typed after it one undo, and it
+  is the same "editor.c has the one fact that makes it specific" pattern as
+  `:w` and `r` `Enter` above.
+- **`:%s` records one record per match**, inside `editor_vi_substitute`, which
+  therefore takes the journal. §8's obvious case -- a substitute too big to
+  undo -- mostly is not one: the matches are far smaller than the span they sit
+  in, so a `%s` over a large buffer stays undoable where recording the rewritten
+  span whole would not have been.
+- **Undo is vi's only.** The journal is handed to the editor as NULL outside vi
+  mode, so the default key layer neither pays for recording nor gains a key it
+  has nowhere to bind.
+- **§9's measurement stopped gating the tier.** The SRAM journal is a `malloc`
+  taken after the fallback edit buffers, not a static array, so a board that
+  cannot spare 1 KB gets `NULL` and `u` says `Undo is not available` -- there is
+  no boot panic to measure one's way around. The static cost is `EditorUndo`
+  inside `EditorState`: **91.23 → 91.24 %** on `pico+2w`, **92.56 → 92.57 %** on
+  `pico2`. Whether 1 KB is the right SRAM figure is still a board question, but
+  it is now a tuning question rather than a blocking one.
+
+- **The store is pushed when the console arrives, not when the editor
+  initialises** (B34, found on a board the same day). `primitives_editor_init`
+  runs inside `primitives_init`, which `main.c` calls *before*
+  `primitives_set_io` — so there is no console to push to yet, and undo was
+  unavailable on every board. `primitives_editor_console_ready()` now carries
+  both the key layer and the store, from `primitives_set_io` as well as from
+  init. The `set_vi_mode(false)` reset §7 specified had the same hole from the
+  start and could not show it, since the editor's default is already false.
+
+**Checked on a board, 2026-08-18.** The hardware check M1 and M2 gate on is
+done: the mode indicator, the cursor style (block in normal, underline in
+insert), the `Esc` contract, `d%`, and `u` / `Ctrl` `R`. Four things came back
+from those sessions and every one of them is a case a *test* had pinned as
+correct, which is the failure mode a host test cannot see past:
+
+- `:w` under `editfile` should write, not leave (§14).
+- `r` `Enter` should split the line ([B33](bugs.md)).
+- Undo reached no board at all, because the console is registered after the
+  primitives are ([B34](bugs.md)) -- and the test suite could not see it, since
+  a stale console survives between tests.
+- `d%` was reported as failing and was not: vim 9.1 does the same thing on the
+  same line and column. **The manual was wrong**, describing `%` as matching the
+  next *opening* bracket when it has always taken the first of all six
+  ([B35](bugs.md)). The reading the report expected -- "the group I am inside"
+  -- is `di[`, a text object, and this mode has none.

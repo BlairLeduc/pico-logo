@@ -11,6 +11,7 @@
 #include <stddef.h>
 
 #include "core/limits.h"
+#include "editor_undo.h"
 
 // A page, in lines. The editor shows EDITOR_VISIBLE_ROWS of content, and the
 // paging motions have to agree with it; editor.c asserts that they do. It is
@@ -46,6 +47,8 @@ typedef enum
     VI_ACT_TOGGLE_CASE,   // Flip the case of [start, end)
     VI_ACT_SEARCH,        // Search for `pattern`; `ch` is '/' (forward) or '?'
     VI_ACT_SUBSTITUTE,    // Substitute over the lines spanned by [start, end)
+    VI_ACT_UNDO,          // Reverse `count` changes
+    VI_ACT_REDO,          // ... and put them back
     VI_ACT_WRITE,         // :w -- write the buffer out and stay in the editor
     VI_ACT_ACCEPT,        // :wq :x ZZ
     VI_ACT_QUIT,          // :q -- accept, but only when nothing has been changed
@@ -130,6 +133,9 @@ const char *editor_vi_status(const ViState *st);
 // action per match.
 //
 // buf/len: the buffer to rewrite; *len is updated. capacity includes the NUL.
+// undo: journal to record each substitution in, or NULL. One match is one
+//   record, which is far less than the whole rewritten span would be and is
+//   what lets a `:%s` over a large buffer still be undone.
 // out_cursor: set to the start of the last line changed.
 //
 // Returns the number of substitutions. Nothing is changed when there is no
@@ -138,4 +144,4 @@ size_t editor_vi_substitute(char *buf, size_t *len, size_t capacity,
                             size_t range_start, size_t range_end,
                             const char *pat, size_t pat_len,
                             const char *rep, size_t rep_len,
-                            bool global, size_t *out_cursor);
+                            bool global, EditorUndo *undo, size_t *out_cursor);

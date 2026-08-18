@@ -19,6 +19,7 @@
 #include "unity.h"
 #include "editor_vi.h"
 #include "editor_lines.h"
+#include "editor_undo.h"
 #include "keyboard.h"
 
 #include <stdio.h>
@@ -27,6 +28,10 @@
 
 #define ED_CAP 1024
 #define TAB_WIDTH 2
+
+// Big enough that the randomised run below never drops a step, so "undo
+// everything and you have what you started with" is an exact property
+#define UNDO_CAP (1024 * 1024)
 
 typedef struct
 {
@@ -37,6 +42,7 @@ typedef struct
     size_t yank_len;
     EditorLineIndex ix;
     ViState vi;
+    EditorUndo undo;
     ViAction last;      // The action the last key produced
     bool consumed;      // ... and whether vi took the key at all
     size_t len_at_key;  // The length the last key saw, for range assertions
@@ -46,12 +52,14 @@ typedef struct
 } Ed;
 
 static Ed ed;
+static char undo_store[UNDO_CAP];
 
 void setUp(void)
 {
     memset(&ed, 0, sizeof(ed));
     editor_vi_reset(&ed.vi);
     editor_lines_reset(&ed.ix);
+    editor_undo_init(&ed.undo, undo_store, sizeof(undo_store));
 }
 
 void tearDown(void) {}
@@ -75,6 +83,7 @@ static size_t ed_line_end(const Ed *e, size_t pos)
 static void ed_insert(Ed *e, size_t pos, const char *text, size_t n)
 {
     if (n == 0 || e->len + n >= ED_CAP) return;
+    editor_undo_record(&e->undo, pos, &e->buf[pos], 0, text, n);
     editor_lines_edit(&e->ix, pos);
     memmove(&e->buf[pos + n], &e->buf[pos], e->len - pos);
     memcpy(&e->buf[pos], text, n);
@@ -86,6 +95,7 @@ static void ed_delete(Ed *e, size_t start, size_t end)
 {
     if (end > e->len) end = e->len;
     if (start >= end) return;
+    editor_undo_record(&e->undo, start, &e->buf[start], end - start, NULL, 0);
     editor_lines_edit(&e->ix, start);
     memmove(&e->buf[start], &e->buf[end], e->len - end);
     e->len -= (end - start);
@@ -282,7 +292,11 @@ static void ed_apply(Ed *e, const ViAction *act)
                 e->cursor = act->start + 1;
                 break;
             }
-            for (size_t i = act->start; i < act->end && i < e->len; i++) e->buf[i] = act->ch;
+            for (size_t i = act->start; i < act->end && i < e->len; i++) {
+                if (e->buf[i] == act->ch) continue;
+                editor_undo_record(&e->undo, i, &e->buf[i], 1, &act->ch, 1);
+                e->buf[i] = act->ch;
+            }
             e->cursor = act->end > act->start ? act->end - 1 : act->start;
             break;
 
@@ -298,9 +312,12 @@ static void ed_apply(Ed *e, const ViAction *act)
 
         case VI_ACT_TOGGLE_CASE:
             for (size_t i = act->start; i < act->end && i < e->len; i++) {
-                char c = e->buf[i];
-                if (c >= 'a' && c <= 'z')      e->buf[i] = (char)(c - 'a' + 'A');
-                else if (c >= 'A' && c <= 'Z') e->buf[i] = (char)(c - 'A' + 'a');
+                char c = e->buf[i], flipped = c;
+                if (c >= 'a' && c <= 'z')      flipped = (char)(c - 'a' + 'A');
+                else if (c >= 'A' && c <= 'Z') flipped = (char)(c - 'A' + 'a');
+                if (flipped == c) continue;
+                editor_undo_record(&e->undo, i, &c, 1, &flipped, 1);
+                e->buf[i] = flipped;
             }
             e->cursor = act->end < e->len ? act->end : act->start;
             break;
@@ -315,10 +332,25 @@ static void ed_apply(Ed *e, const ViAction *act)
             size_t n = editor_vi_substitute(e->buf, &e->len, ED_CAP, act->start, act->end,
                                             e->vi.pattern, e->vi.pattern_len,
                                             e->vi.replacement, e->vi.replacement_len,
-                                            e->vi.sub_global, &landed);
+                                            e->vi.sub_global, &e->undo, &landed);
             if (n > 0) {
                 editor_lines_reset(&e->ix);
                 e->cursor = landed;
+            }
+            break;
+        }
+
+        case VI_ACT_UNDO:
+        case VI_ACT_REDO: {
+            int steps = act->count > 0 ? act->count : 1;
+            for (int i = 0; i < steps; i++) {
+                size_t at;
+                bool moved = (act->kind == VI_ACT_UNDO)
+                    ? editor_undo_undo(&e->undo, e->buf, &e->len, ED_CAP, &at)
+                    : editor_undo_redo(&e->undo, e->buf, &e->len, ED_CAP, &at);
+                if (!moved) break;
+                editor_lines_reset(&e->ix);
+                e->cursor = at;
             }
             break;
         }
@@ -350,11 +382,19 @@ static void ed_set(const char *text)
     ed.len = strlen(text);
     ed.cursor = 0;
     editor_lines_reset(&ed.ix);
+    editor_undo_reset(&ed.undo);
 }
 
 static void feed_key(int key)
 {
     ViAction act;
+
+    // One keystroke is one undo step, except while insert mode is running --
+    // the same boundary editor.c draws
+    if (ed.vi.mode != VI_INSERT) {
+        editor_undo_begin(&ed.undo);
+    }
+
     ed.consumed = editor_vi_key(&ed.vi, ed.buf, ed.len, ed.cursor, key, &act);
     ed.last = act;
     ed.len_at_key = ed.len;
@@ -566,6 +606,38 @@ static void test_percent_matches_its_own_bracket(void)
     feed("%");    TEST_ASSERT_EQUAL_UINT(15, ed.cursor);  // Looks along the line for the '[', matches it
     feed("%");    TEST_ASSERT_EQUAL_UINT(9, ed.cursor);
     feed("%");    TEST_ASSERT_EQUAL_UINT(15, ed.cursor);
+}
+
+// Reported from a board as a `d%` failure, and checked against vim 9.1, which
+// does exactly this. `%` is "the next bracket at or after the cursor, then its
+// match" -- it is not "the group I am standing inside". With the cursor on the
+// `f`, the next bracket is the `]`, whose match is the `[` behind the cursor,
+// so `d%` deletes backwards to it. Reaching the bracket first (`F[`) is what
+// takes the whole group; vim needs `di[` for the other reading, and this mode
+// has no text objects.
+static void test_percent_takes_the_next_bracket_not_the_enclosing_group(void)
+{
+    ed_set("when [wifi?] [pr \"connected]\n");
+    at(8);   // The `f` of `wifi?`
+    feed("%");
+    TEST_ASSERT_EQUAL_UINT(5, ed.cursor);   // The opening `[`
+
+    at(8);
+    feed("d%");
+    assert_text("when i?] [pr \"connected]\n");
+
+    // The same rule inside the second group: the first bracket at or after the
+    // space is that group's `]`, so the motion runs back to its `[`
+    ed_set("when [wifi?] [pr \"connected]\n");
+    at(16);
+    feed("d%");
+    assert_text("when [wifi?] \"connected]\n");
+
+    // From the bracket itself, which is how the whole group goes
+    ed_set("when [wifi?] [pr \"connected]\n");
+    at(8);
+    feed("F[d%");
+    assert_text("when  [pr \"connected]\n");
 }
 
 static void test_percent_counts_nesting(void)
@@ -1208,7 +1280,7 @@ static size_t substitute(char *buf, const char *pat, const char *rep, bool globa
     size_t len = strlen(buf);
     size_t cursor = 0;
     return editor_vi_substitute(buf, &len, capacity, start, end,
-                                pat, strlen(pat), rep, strlen(rep), global, &cursor);
+                                pat, strlen(pat), rep, strlen(rep), global, NULL, &cursor);
 }
 
 static void test_substitute_matches_case_insensitively(void)
@@ -1243,7 +1315,8 @@ static void test_substitute_leaves_the_text_alone_when_it_would_not_fit(void)
     size_t cursor = 0;
     // Ten bytes for each of four matches cannot fit in a capacity of 12
     TEST_ASSERT_EQUAL_UINT(0, editor_vi_substitute(buf, &len, 12, 0, len,
-                                                   "a", 1, "0123456789", 10, true, &cursor));
+                                                   "a", 1, "0123456789", 10, true, NULL,
+                                                   &cursor));
     TEST_ASSERT_EQUAL_STRING("aaaa\n", buf);
     TEST_ASSERT_EQUAL_UINT(5, len);
 }
@@ -1268,7 +1341,7 @@ static void test_substitute_reports_the_last_line_it_changed(void)
     size_t len = strlen(buf);
     size_t cursor = 0;
     TEST_ASSERT_EQUAL_UINT(2, editor_vi_substitute(buf, &len, sizeof(buf), 0, len,
-                                                   "a", 1, "z", 1, true, &cursor));
+                                                   "a", 1, "z", 1, true, NULL, &cursor));
     TEST_ASSERT_EQUAL_UINT(4, cursor);
 }
 
@@ -1299,10 +1372,147 @@ static size_t naive_line_start(const char *buf, size_t len, int line)
     return len;
 }
 
+//
+//  Undo and redo
+//
+
+static void test_u_reverses_a_change_and_ctrl_r_puts_it_back(void)
+{
+    ed_set("print [a b c]\n");
+    at(6);
+    feed("D");
+    assert_text("print \n");
+
+    feed("u");
+    assert_text("print [a b c]\n");
+    TEST_ASSERT_EQUAL_UINT(6, ed.cursor);
+
+    feed_key(0x12);   // Ctrl+R
+    assert_text("print \n");
+}
+
+static void test_u_reverses_one_command_at_a_time(void)
+{
+    ed_set("abc\n");
+    feed("xxx");
+    assert_text("\n");
+
+    feed("u");   assert_text("c\n");
+    feed("u");   assert_text("bc\n");
+    feed("u");   assert_text("abc\n");
+    feed("u");   assert_text("abc\n");   // Nothing left
+    TEST_ASSERT_EQUAL_INT(VI_ACT_UNDO, ed.last.kind);
+}
+
+static void test_u_takes_a_count(void)
+{
+    ed_set("abcde\n");
+    feed("xxxx");
+    assert_text("e\n");
+
+    feed("3u");
+    assert_text("bcde\n");
+    feed("2");
+    feed_key(0x12);   // The two deletions just reversed, put back
+    assert_text("de\n");
+}
+
+static void test_an_insert_session_is_one_undo(void)
+{
+    ed_set("fd\n");
+    at(2);
+    feed("a");            // Insert mode
+    feed(" 100");
+    feed_key(KEY_ESC);
+    assert_text("fd 100\n");
+
+    feed("u");
+    assert_text("fd\n");
+}
+
+static void test_a_change_command_and_what_was_typed_undo_together(void)
+{
+    ed_set("print hello\n");
+    at(6);
+    feed("cw");
+    feed("bye");
+    feed_key(KEY_ESC);
+    assert_text("print bye\n");
+
+    feed("u");
+    assert_text("print hello\n");
+}
+
+static void test_a_linewise_operator_undoes_every_line_it_touched(void)
+{
+    ed_set("a\nb\nc\nd\n");
+    feed("3dd");
+    assert_text("d\n");
+
+    feed("u");
+    assert_text("a\nb\nc\nd\n");
+}
+
+static void test_indenting_a_block_is_one_undo(void)
+{
+    ed_set("a\nb\nc\n");
+    feed("Vj>");
+    assert_text("  a\n  b\nc\n");
+
+    feed("u");
+    assert_text("a\nb\nc\n");
+}
+
+static void test_a_substitute_over_the_buffer_is_one_undo(void)
+{
+    ed_set("fd 10\nfd 20\nfd 30\n");
+    feed(":%s/fd/bk/");
+    feed_key(KEY_RETURN);
+    assert_text("bk 10\nbk 20\nbk 30\n");
+
+    feed("u");
+    assert_text("fd 10\nfd 20\nfd 30\n");
+
+    feed_key(0x12);
+    assert_text("bk 10\nbk 20\nbk 30\n");
+}
+
+static void test_a_new_change_after_an_undo_drops_the_redo(void)
+{
+    ed_set("abc\n");
+    feed("x");
+    feed("u");
+    assert_text("abc\n");
+
+    feed("x");
+    feed_key(0x12);   // Nothing to put back
+    assert_text("bc\n");
+}
+
+static void test_undo_with_nothing_recorded_says_so(void)
+{
+    ed_set("abc\n");
+    feed("u");
+    TEST_ASSERT_EQUAL_INT(VI_ACT_UNDO, ed.last.kind);
+    assert_text("abc\n");
+}
+
+static void test_undo_leaves_visual_mode(void)
+{
+    ed_set("abcdef\n");
+    feed("x");
+    feed("vll");
+    TEST_ASSERT_EQUAL_INT(VI_VISUAL, ed.vi.mode);
+
+    feed("u");
+    TEST_ASSERT_EQUAL_INT(VI_NORMAL, ed.vi.mode);
+    assert_text("abcdef\n");
+}
+
 static void test_random_commands_keep_the_buffer_and_the_memo_consistent(void)
 {
     static const char *keys =
-        "hjklwbeWBE0^$GxXDCYSspPJ~ivVoOaAircdy<>.;,%nfFtT{}23";
+        "hjklwbeWBE0^$GxXDCYSspPJ~ivVoOaAircdy<>.;,%nfFtT{}23uu\x12";
 
     srand(20260817);
 
@@ -1341,6 +1551,19 @@ static void test_random_commands_keep_the_buffer_and_the_memo_consistent(void)
                                            editor_lines_start(&ed.ix, ed.buf, ed.len, line),
                                            "the line memo drifted");
         }
+
+        // Whatever those four hundred commands did, undoing all of it has to
+        // give back the text the round started with -- exactly. This is what
+        // catches a change the journal was not told about, the same way the
+        // memo check above catches one editor_lines_edit did not see.
+        feed_key(KEY_ESC);
+        feed_key(KEY_ESC);
+        for (int i = 0; i < 500 && ed.undo.has_last; i++) {
+            feed_key('u');
+        }
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(
+            "to box :size\n  repeat 4 [fd :size rt 90]\n\nend\n\nprint [a b c]\n",
+            ed.buf, "undo did not give back the text the round started with");
     }
 }
 
@@ -1367,6 +1590,7 @@ int main(void)
     RUN_TEST(test_a_find_that_misses_leaves_the_cursor_alone);
     RUN_TEST(test_percent_matches_its_own_bracket);
     RUN_TEST(test_percent_counts_nesting);
+    RUN_TEST(test_percent_takes_the_next_bracket_not_the_enclosing_group);
 
     RUN_TEST(test_d_over_every_motion);
     RUN_TEST(test_c_over_a_motion_leaves_insert_mode);
@@ -1439,6 +1663,18 @@ int main(void)
     RUN_TEST(test_substitute_without_a_match_changes_nothing);
     RUN_TEST(test_substitute_replacement_containing_the_pattern_is_not_rematched);
     RUN_TEST(test_substitute_reports_the_last_line_it_changed);
+
+    RUN_TEST(test_u_reverses_a_change_and_ctrl_r_puts_it_back);
+    RUN_TEST(test_u_reverses_one_command_at_a_time);
+    RUN_TEST(test_u_takes_a_count);
+    RUN_TEST(test_an_insert_session_is_one_undo);
+    RUN_TEST(test_a_change_command_and_what_was_typed_undo_together);
+    RUN_TEST(test_a_linewise_operator_undoes_every_line_it_touched);
+    RUN_TEST(test_indenting_a_block_is_one_undo);
+    RUN_TEST(test_a_substitute_over_the_buffer_is_one_undo);
+    RUN_TEST(test_a_new_change_after_an_undo_drops_the_redo);
+    RUN_TEST(test_undo_with_nothing_recorded_says_so);
+    RUN_TEST(test_undo_leaves_visual_mode);
 
     RUN_TEST(test_random_commands_keep_the_buffer_and_the_memo_consistent);
 

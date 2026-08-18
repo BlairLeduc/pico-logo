@@ -1525,7 +1525,12 @@ static bool normal_key(ViState *st, const char *buf, size_t len, size_t cursor,
 
             case 'u':
             case 0x12:  // Ctrl+R
-                return beep(st, out, "Undo is not available");
+                // Undoing from visual mode drops the selection: what comes back
+                // is the text as it was, not a range to keep working on
+                st->mode = VI_NORMAL;
+                out->kind = (key == 'u') ? VI_ACT_UNDO : VI_ACT_REDO;
+                out->count = count;
+                return commit(st, out, count);
 
             default:
                 return beep(st, out, "E492: not an editor command");
@@ -1633,7 +1638,7 @@ size_t editor_vi_substitute(char *buf, size_t *len, size_t capacity,
                             size_t range_start, size_t range_end,
                             const char *pat, size_t pat_len,
                             const char *rep, size_t rep_len,
-                            bool global, size_t *out_cursor)
+                            bool global, EditorUndo *undo, size_t *out_cursor)
 {
     size_t n = *len;
 
@@ -1696,6 +1701,12 @@ size_t editor_vi_substitute(char *buf, size_t *len, size_t capacity,
         bool changed = false;
         while (find_in_line(buf, line, end, at, pat, pat_len, &at))
         {
+            // One record per match, before the bytes move: the whole rewritten
+            // span would be far larger, and a `:%s` has to stay undoable
+            if (undo != NULL)
+            {
+                editor_undo_record(undo, at, buf + at, pat_len, rep, rep_len);
+            }
             memmove(buf + at + rep_len, buf + at + pat_len, n - at - pat_len);
             memcpy(buf + at, rep, rep_len);
             n = n - pat_len + rep_len;
