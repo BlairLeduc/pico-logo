@@ -350,6 +350,12 @@ slack. **Measure the free heap after `primitives_editor_init` before settling
 `LOGO_VI_UNDO_SRAM_SIZE`**; 1 KB is a starting figure, not a budget. It belongs
 in `limits.h` where it can be seen beside every other capacity.
 
+M6 costs no SRAM at all — the pattern is interpreted out of `ViState`'s
+existing fields — but it is the first part of vi mode to put real depth on the
+**stack**, ~1.6 KB against `PICO_STACK_SIZE` of 4096 for a deep pattern. §16.10
+has the breakdown; like M4's figure it is to be measured on a board, not
+assumed.
+
 ## 10. Tests
 
 New `tests/test_editor_vi.c`, built exactly as `test_editor_lines` and
@@ -392,10 +398,13 @@ and the mode indicator. Those are a hardware check on the Pico Plus 2 W.
 | **M3** | Reference manual chapter (§13) | — | **built 2026-08-18** |
 | **M4** | Undo, both tiers (§8) | `u`/`Ctrl` `R` in the randomised differential run; SRAM tier verified on a `pico2` build | **built 2026-08-18**; the SRAM tier is a `malloc` that undo does without if it fails, so §9's measurement stopped gating it (§14) |
 | **M5** | Text objects, words and brackets (§15) | `di[` from inside a nested group, `vi[` selecting one, both in the randomised run | **built and checked on a board 2026-08-18**; opened by B35, and it needed no `editor.c` change at all |
+| **M6** | Patterns in `:s`, `/` and `?` (§16) | `/\<n\>` walked with `n`/`N` through the wrap, then `:%s//count/g` renaming every whole-word `n` and no `then`, and one `u` putting it back | **designed 2026-08-18**, not built |
 
 M1 is the whole feature as far as a user is concerned; M2 is what makes it
 pleasant, M4 is what stops it being annoying, and M5 is the one command a
-board session asked for that the mode could not say (§15).
+board session asked for that the mode could not say (§15). M6 is the only one
+that adds no keys: it changes what the text inside four existing commands
+means, and it is the first to break something that works today (§16.3).
 
 ## 12. Rejected alternatives
 
@@ -425,6 +434,15 @@ board session asked for that the mode could not say (§15).
 - `setvimode` and `vimode?` in the primitives section.
 - The undo limits from §8 recorded in *Supported Pico Boards*, beside the
   editor buffer sizes that are already tiered there.
+- **M6**: one pattern table in the Vi Mode section covering `:s`, `/`, `?`,
+  `n` and `N` together — one dialect wants one table — with the worked examples
+  from §16.2, and a sentence saying plainly that `.` `*` `[` `^` `$` are no
+  longer ordinary characters in a pattern and are escaped with a backslash. A
+  change in what an existing command matches has to be written down where the
+  command is (§16.3), and for `/` that is the entry a user reads most. The
+  editor's *own* Ctrl+F search is unchanged and still literal, which the
+  default-mode key table should now say, since the two are no longer the same
+  thing.
 
 ## References
 
@@ -722,3 +740,467 @@ it behaves as designed. The one thing
 that looked like it would need plumbing, visual mode, did not: §6.2's tail
 already copies `vi.anchor` out after every action, so setting the anchor in the
 state machine was the whole of it.
+
+## 16. Patterns in `:s` (M6)
+
+Opened 2026-08-18, by request, and widened the same day to cover `/` and `?`
+as well as `:s` (§16.5). `:s` matches a literal string today, which makes the
+one thing a Logo programmer most wants a substitute for — **renaming a variable
+or a procedure across a buffer** — the one thing it cannot safely do.
+`:%s/n/count/g` rewrites the `n` inside `then`, `min` and `pen`, and there is
+no way to say *the whole word `n`*. That single command, `:%s/\<n\>/count/g`,
+is the case this milestone exists for; everything else the patterns buy is a
+bonus on top of it.
+
+The other four milestones each added keys. This one adds no keys at all: `:s`,
+`/`, `?`, `n` and `N` are already bound, already parsed, already undoable.
+What changes is what the text between the delimiters *means*, and it changes
+for all of them at once — **one dialect, or the editor has two answers to
+"what does `.` match" and the user has to remember which command they are
+in.**
+
+### 16.1 Why not `<regex.h>`
+
+The obvious implementation is the one in the C library, and **it is not there.**
+Checked against the toolchain this project actually builds with
+(`~/.pico-sdk/toolchain/14_2_Rel1`, arm-none-eabi 14.2.1):
+
+- `arm-none-eabi/include/regex.h` **exists** — the Henry Spencer / BSD header
+  newlib carries. It does not even compile on its own; it needs `<sys/types.h>`
+  ahead of it or `off_t` is undeclared.
+- **No `libc.a` in the toolchain defines `regcomp`.** Every multilib was
+  scanned; the count is zero. Newlib keeps `regcomp.c` and `regexec.c` under
+  `libc/posix/`, which the ARM embedded build does not compile in.
+- A test link for `cortex-m33` fails with `undefined reference to 'regcomp'`,
+  `regexec`, `regfree`.
+
+**The trap is that the host build links it fine**, because macOS libSystem has
+it. A `:s` written against `<regex.h>` would leave the whole `ctest` suite
+green and the firmware unable to link — a failure that would not appear until
+`--preset=pico+2w`, long after the tests said yes. So: **`<regex.h>` may be
+included from `tests/`, never from `devices/`.** §16.9 turns that asymmetry
+into the strongest test in the milestone.
+
+Two reasons hold even where the library exists, which is why this is not a
+workaround being tolerated:
+
+- **`regcomp` allocates.** It compiles to a heap-allocated NFA, and `regexec`
+  can backtrack unboundedly on a hostile pattern. On a board where the SRAM
+  tier of the undo journal is a `malloc` competing with the fallback edit
+  buffers (§9), an unbounded allocator reached from a keystroke is the wrong
+  shape.
+- **POSIX is the wrong dialect.** `regexec` is leftmost-**longest**; vi is
+  leftmost-then-greedy-backtracking, and the two disagree. Matching vi is the
+  point, so the library would have to be fought as much as used.
+
+### 16.2 The set
+
+Classic vi/ed BRE, and deliberately only the part of it that earns its keys.
+The same set is read by `:s`, by `/` and `?`, and by the `n`/`N` that repeat
+them — one dialect (§16.5).
+
+| In the pattern | Means |
+|---|---|
+| `^` | start of line — only as the first character, a literal `^` anywhere else |
+| `$` | end of line — only as the last character, a literal `$` anywhere else |
+| `.` | any character except the line break |
+| `*` | zero or more of the atom before it; a literal `*` when it is first, or straight after `^` or `\(` |
+| `[abc]` `[^abc]` `[a-z]` | a character in the set, or not in it. `]` first and `-` last are literals |
+| `\<` `\>` | start / end of a word, zero width — the motivating case |
+| `\(` `\)` | a group, up to nine, for `\1`..`\9` and for the replacement |
+| `\1`..`\9` | the text an earlier group matched |
+| `\.` `\*` `\[` `\\` … | the character itself |
+
+| In the replacement | Means |
+|---|---|
+| `&` | the whole match |
+| `\1`..`\9` | the text that group matched |
+| `\&` `\\` | the character itself |
+
+An atom is one character: a literal, `.`, or a class. **`*` never applies to a
+group** — `\(ab\)*` is refused, not silently mis-parsed. That restriction is
+not shrinkage for its own sake: it is what makes the matcher's worst case
+O(line × atoms) with a recursion depth bounded by the number of atoms, and it
+removes the nested-quantifier shape that produces catastrophic backtracking
+outright. A pattern is capped at `LOGO_VI_TEXT_MAX` (32) by the ex parser
+already, so that bound is 32 frames, not an unknown.
+
+Worked examples, all of them things this editor could not say yesterday:
+
+| | |
+|---|---|
+| `:%s/\<n\>/count/g` | rename `n` everywhere it is named — `"n`, `:n` and bare — without touching `then` or `pen` |
+| `:%s/\([":]\)n\>/\1count/g` | rename only the *variable* `n`, both spellings, leaving a procedure called `n` alone |
+| `:%s/  */ /g` | collapse runs of spaces |
+| `:%s/ *$//` | strip trailing blanks from this line |
+| `:%s/\(to [a-z]*\).*/\1/` | cut a `to` line back to its name |
+| `:%s/setpos \[\(.*\) \(.*\)\]/setxy \1 \2/` | reorder a call's arguments |
+
+**`\<` and `\>` are Logo's word boundary, not vi's**, and this is the part the
+rename case turns on. A variable is written two ways — `make "n 5` defines it,
+`:n` reads it — and both have to be reachable by one pattern. That much comes
+free: `"` and `:` are `CLASS_PUNCT` to `char_class`, so a boundary already
+falls between the prefix and the name.
+
+What does *not* come free is the other end. Vi's word is `[A-Za-z0-9_]`, and
+**Logo's is much wider**: `read_variable` ([`lexer.c:355`](../core/lexer.c))
+ends a variable name at whitespace, at `;`, and at one of the eleven
+delimiters `[ ] ( ) + - * / = < >` — and nowhere else. So `.` `?` `!` `#` `%`
+are all name characters in Logo and punctuation to vi, which makes vi's
+boundary quietly wrong on the names Logo programs actually use:
+
+| Text | Vi's `\<total\>` | Logo |
+|---|---|---|
+| `:total.count` | matches `total` | one name, must not match |
+| `empty?` | matches `empty` | one name, must not match |
+| `:total+1` | matches | one name then a delimiter — correct |
+
+Renaming `total` and corrupting `total.count` is precisely the failure the
+milestone exists to prevent, so **`\<` and `\>` take their class from
+`is_delimiter` ([`lexer.c:15`](../core/lexer.c))**: a name character is
+anything that is not blank, not `;`, not one of the eleven, and not `"` or `:`
+(those two are prefixes, never part of the name, or `"n` would be one word and
+`\<n\>` could not see into it).
+
+**`w`, `b` and `e` keep vi's three classes.** The two are not the same question
+and should not share an answer: `w` is cursor ergonomics, and §14 already
+records why it splits on punctuation in a bracket language — a `dw` that took
+the `]` with the word would be wrong more often than right. `\<` names a token.
+One is about moving, the other about identifying.
+
+**What no pattern can fix**, and the reference chapter has to say so: `\<n\>`
+also matches a *bare* `n`, which in Logo is a procedure call in a different
+namespace, while the variable-only `\([":]\)n\>` misses the bare name in
+`local [n m]`. Neither is complete, because the language spells one variable
+three ways. The working answer is the pair of commands, not a cleverer pattern:
+`/\<n\>` and `n` to walk every hit and see what a rename would touch, then
+`:%s//count/g`, then `u` if it reached too far. That is the whole argument for
+§16.5 and for `:s//new/` sharing the search pattern, and it is why the
+milestone gate is four commands rather than one.
+
+(An aside found on the way, not ours to fix: `make "my-var 5` defines a
+variable named `my-var`, because `-` is literal inside a quoted word, but `:my-var`
+lexes as `:my - var`. Hyphenated variable names are already unusable in this
+Logo; patterns neither help nor hurt.)
+
+### 16.3 Escaping is a breaking change, and it stays
+
+`.` `*` `[` `^` `$` `\` are ordinary characters in a `:s` or `/` pattern today
+and become special. `:s/3.14/pi/` and `/list[1]` will stop meaning what they
+mean now. This is accepted rather than mitigated: it is what vi does, escaping
+is `\.`, and the alternative — a `nomagic` switch, or patterns only under a
+second command — is more surface than the feature. It goes in the reference
+chapter (§13) and in the roadmap entry, because a silent change in what an
+existing command matches is exactly the kind of thing a board session finds the
+hard way.
+
+**`/` is where this will actually be noticed**, more than `:s`: searching for
+`[` or for a `.` in a number is a thing one does by reflex mid-edit, and it
+will now need a backslash. That is the price of one dialect, and it is the
+right way round — a search that cannot say `\<n\>` is the weaker half of the
+pair, since finding every whole-word `n` is how you decide whether the rename
+is safe before you run it.
+
+### 16.4 What patterns cost the substitute loop
+
+This is the part with real risk in it, and it is not the matcher.
+
+`editor_vi_substitute` ([`editor_vi.c:1871`](../devices/picocalc/editor_vi.c))
+is built around a promise: **count everything first, check the capacity once,
+and only then move a byte**, so a substitute that will not fit refuses instead
+of leaving the buffer half rewritten. Three things patterns break in it.
+
+**The length arithmetic dies.** Today the second pass is safe because
+`new_len = n - count * pat_len + count * rep_len` — every match is the same
+length and so is every replacement. With patterns, each match has its own
+length and each replacement does too (`&` and `\1` expand). The counting pass
+stops counting matches and accumulates `removed` and `added` instead, and the
+check becomes `n - removed + added + 1 > capacity`. The return value stays a
+match count, because that is what `editor.c` tests for zero
+([`editor.c:2021`](../devices/picocalc/editor.c)).
+
+**An empty match can match forever.** `:s/x*/-/g` on `abc` matches the empty
+string at every position; `at += pat_len` with `pat_len` of zero never
+advances. Vi's rule is the one to copy: after an empty match, emit the
+replacement and then step one character. This is the bug that will be written
+if the two passes are written separately — and the failure mode is not a hang
+but something worse, a count and a rewrite that disagree, which is precisely
+the half-rewritten buffer the capacity check exists to prevent.
+
+So **the two passes walk with one shared function.** A `next_match` helper
+takes the line bounds and a position and yields the next match's start, end and
+groups, empty-match step included; the counting pass calls it to accumulate,
+the rewriting pass calls it to splice. They cannot drift because there is only
+one of them.
+
+**The replacement needs to exist somewhere.** Undo records the old bytes and
+the new bytes ([`editor_undo.c`](../devices/picocalc/editor_undo.c)), and the
+old bytes are still in place before the `memmove` — that is why the existing
+loop records first. The new bytes have to be materialised, so the rewriting
+pass expands into a stack buffer of `LOGO_VI_SUB_EXPAND_MAX` (256) and hands
+`editor_undo_record` a pointer into it, which is the same call shape as today.
+**An expansion that overflows it is caught in the counting pass**, before
+anything moves, and reported as `E486: substitution too long` — the
+all-or-nothing property is kept, not weakened.
+
+What does *not* change: `^` and `$` are per line, and the loop already walks
+line by line with `line` and `end` in hand, so the anchors have their bounds
+for free. Matching never crosses a line break, so `.` cannot eat one. The undo
+record is still one per match, which is what keeps a `:%s` undoable on the 1 KB
+SRAM tier.
+
+### 16.5 `/` and `?`, and a rejection that was wrong
+
+Search takes patterns too. **The reason this was first scoped out does not
+survive contact with the code**, and the mistake is worth recording because the
+rejection read plausibly: *"`/` is incremental, so it matches against a pattern
+that is half-typed and therefore usually invalid, and it feeds the highlight
+path in `editor.c`, which has no host build."* Every clause of that is about
+the wrong code path.
+
+- **Vi mode's `/` is not incremental.** `cmdline_key`
+  ([`editor_vi.c:1159`](../devices/picocalc/editor_vi.c)) collects the pattern
+  into the command line and emits `VI_ACT_SEARCH` on Return, exactly as `:s`
+  emits `VI_ACT_SUBSTITUTE`. The incremental search is the editor's *other*
+  one — `editor_search_apply` on the Ctrl+F path
+  ([`editor.c:1426`](../devices/picocalc/editor.c)) — which vi mode never
+  reaches, because vi owns the key layer. A half-typed pattern is never
+  matched, so it never has to be valid.
+- **Nothing highlights matches.** `editor.search_text` appears in the draw path
+  once, in the footer of the non-vi search prompt. There is no match-highlight
+  path to feed.
+- **`editor_vi_search` gets shorter.** Its first four lines copy the vi pattern
+  into `editor.search_text` purely so the `editor_search_find` two lines below
+  can be handed it; nothing else in vi mode reads it back. Calling the pattern
+  matcher directly deletes the copy — and with it the `EDITOR_SEARCH_MAX`
+  truncation, which is a live hazard the moment the text is a pattern rather
+  than a literal, since chopping `\<name\>` to fit leaves a dangling `\`.
+  (It cannot fire today: `EDITOR_SEARCH_MAX` and `LOGO_VI_TEXT_MAX` are both
+  32. It is the kind of coincidence that stops being true once.)
+
+So `/` costs one function, and it is a search rather than a rewrite, so none of
+§16.4's danger comes with it.
+
+**Why a search needs its own walker.** `editor_search_find` scans the buffer as
+one flat run of bytes, which a literal can afford and a pattern cannot: `^` and
+`$` need line bounds, `\<` and `\>` need to see where a line starts, and `.`
+must not swallow a break. So `editor_pattern.c` gains a line-aware find with
+`editor_search_find`'s exact contract — wrapping, case-insensitive:
+
+```c
+bool editor_pattern_find(const char *pat, size_t pat_len,
+                         const char *text, size_t text_len,
+                         size_t from, bool forward, size_t *out_pos);
+```
+
+Forward: match within the line holding `from`, starting at `from`; then each
+following line from its start; wrap at the end of the buffer and stop once
+`from` is passed again. **Backward never matches backwards** — it scans the
+line forward from its start and keeps the last match that begins before the
+limit, then walks to previous lines and wraps. Lines are short and a rescan is
+cheap, and it means one matcher direction covers both keys. That single
+decision is most of why this is a small addition.
+
+`n` and `N` are free: they re-emit `VI_ACT_SEARCH` with the pattern already in
+`st->pattern` ([`editor_vi.c:1745`](../devices/picocalc/editor_vi.c)).
+
+**Validation happens on Return**, in `cmdline_key`, beside the
+`E35: no previous search` beep already there — `E486: bad pattern` for anything
+`editor_pattern_valid` refuses. Non-incremental search is what makes that the
+only place it can be needed.
+
+**A zero-width pattern moves one character at a time.** `/x*` matches the empty
+string wherever it is tried, and a forward search starts at `cursor + 1`, so
+each `n` steps once. That is what vim does with the same pattern, and it needs
+no code.
+
+**`:s//new/` becomes worth having.** `st->pattern` is already shared by `/` and
+`:s` — both fill it through `copy_field` — and now they share a dialect too, so
+vi's rule that an empty `:s` pattern reuses the last search finally means
+something: `/\<n\>` to see what a rename would hit, then `:%s//count/g` to do
+it. It is the removal of one rejection in `parse_substitute`
+([`editor_vi.c:985`](../devices/picocalc/editor_vi.c)), which today refuses an
+empty pattern outright, guarded by `st->pattern_len > 0`. Included, because the
+whole point of one dialect is that the two commands are talking about the same
+text.
+
+### 16.6 The matcher
+
+A new file, `devices/picocalc/editor_pattern.c` — the fourth instance of the
+`editor_search.c` / `editor_lines.c` / `editor_undo.c` pattern, and for the
+same reason: it is pure, it has no idea a screen exists, and it gets a host
+test that `editor.c` never can. It is **not** called `editor_regex.c`, because
+what it implements is vi's dialect and not POSIX's, and a name that promised
+`<regex.h>` semantics would be a lie with a well-known meaning.
+
+**There is no compile step and no allocation.** The pattern is interpreted
+directly out of the `st->pattern` bytes the ex parser already stored. Nothing
+is built, so nothing is freed and nothing can fail to be built at match time.
+
+```c
+typedef struct { size_t start, end; } EditorPatternGroup;  // end == start: unset
+typedef EditorPatternGroup EditorPatternGroups[10];        // [0] is the whole match
+
+bool   editor_pattern_valid (const char *pat, size_t pat_len);
+bool   editor_pattern_search(const char *pat, size_t pat_len,
+                             const char *line, size_t line_len,
+                             size_t from, EditorPatternGroups g);
+size_t editor_pattern_expand(const char *rep, size_t rep_len,
+                             const char *line, const EditorPatternGroups g,
+                             char *out, size_t out_cap);   // 0 = would not fit
+```
+
+`editor_pattern_search` is leftmost: try to match at `from`, then `from + 1`,
+and so on. Under it sits the recursive greedy matcher — the Pike shape, where
+`*` loops over lengths and recurses once per length rather than once per
+character, so depth follows atoms and not line length.
+
+`editor_pattern_valid` runs **at parse time**, inside `parse_substitute`
+([`editor_vi.c:985`](../devices/picocalc/editor_vi.c)), so `:s/a\(b/x/` beeps
+`E486: bad substitute` on the Return that typed it, next to every other
+malformed-`:s` case the test already covers. It rejects: a dangling `\`, an
+unclosed `[`, an unclosed or unopened `\(`, more than nine groups, a `\1` with
+no group 1, and a `*` after `\(...\)`.
+
+`find_in_line` ([`editor_vi.c:1850`](../devices/picocalc/editor_vi.c)) is what
+gets replaced. Its current job — hand `editor_search_find` a slice and reject a
+match that wrapped — becomes a call to `editor_pattern_search` over the same
+slice, which does not wrap at all.
+
+### 16.7 Case
+
+Matching stays **case-insensitive**, as it is today and as `/` is. Changing it
+would be a second breaking change on top of §16.3, and it would be the wrong
+way round for this language: Logo itself is case-insensitive about names, so
+`:%s/\<Total\>/sum/g` finding `total` is the behaviour a Logo programmer
+expects from a rename.
+
+The honest consequence is that **`[A-Z]` means "a letter"**, not "a capital",
+because a class folds case like everything else. That is a genuine wart and it
+is written down rather than hidden. The alternative — case-sensitive `:s`
+beside a case-insensitive `/` — is worse: two rules for one editor, and a user
+who has to remember which command they are in.
+
+### 16.8 Deliberately not in the set
+
+- **`\r` in the replacement**, to split a line. The rewriting pass carries
+  `end` and `limit` as byte offsets it adjusts after every splice; inserting a
+  line break mid-loop invalidates the line walk it is standing in. It is not
+  hard, it is just not one line, and `:s` is not how anyone splits a line at
+  40 × 30. (`editor.c` already calls `editor_lines_reset` after a substitute,
+  so the line memo would not be the obstacle.)
+- **`\+` and `\?`.** `\+` is `xx*` written twice; `\?` genuinely has no
+  equivalent and is still not worth a case in the matcher until something asks
+  for it.
+- **Alternation `\|`.** It is the feature that would force a real engine —
+  leftmost-longest, or a backtracker with the blow-up `*`-on-atoms was
+  restricted to avoid.
+- **`[:alpha:]` and friends.** `.` and explicit ranges cover it.
+- **`&` as a normal-mode command** (vi's "repeat the last `:s`"). One
+  keystroke saved over `:s` and Return; it can come with `/` if it comes.
+- **Interactive `c` flag.** A confirm-each-match prompt is a mode, and modes
+  are the expensive thing in this design. **Its case is stronger after §16.2**
+  than it was before: since no pattern can separate a variable `n` from a
+  procedure `n` in every spelling, confirming each match is the only thing that
+  would make an over-reaching rename safe *before* it happens rather than after.
+  Still out, because `/` then `n` inspects the same matches with keys that
+  already exist and `u` undoes the whole `:%s` in one keystroke — but this is
+  the exclusion most likely to come back.
+
+### 16.9 Tests
+
+A new `tests/test_editor_pattern.c` over the one device source, built exactly
+as `test_editor_lines` is, plus a section in `test_editor_vi.c` for `:s` end to
+end.
+
+- **The matcher, table-driven**: every construct, at the start of the line, at
+  the end, on an empty line; `*` matching zero; the leading-`*`-is-literal
+  rule; `]` first and `-` last in a class; `\<`/`\>` at both ends of a line and
+  against a word touching punctuation; group capture and `\1` in the pattern.
+- **Everything `editor_pattern_valid` must refuse**, each producing the beep
+  rather than a match attempt.
+- **The empty-match cases explicitly**: `:s/x*/-/g` on a line with no `x`
+  terminates, changes each position once, and its count matches its rewrite.
+- **The all-or-nothing property**, which is what a bad length accumulation
+  breaks: a `:%s` whose result would exceed the capacity must leave the buffer
+  byte-for-byte unchanged, and so must one whose expansion exceeds
+  `LOGO_VI_SUB_EXPAND_MAX`.
+- **A literal-pattern equivalence run**: for random patterns drawn from
+  characters with no special meaning, the new substitute must produce exactly
+  what the old literal one did. This is the regression net for the four
+  milestones already on a board.
+- **A differential run against POSIX** — the payoff from §16.1. Tests are host
+  builds and macOS libSystem has a real `regcomp`, so
+  `test_editor_pattern.c` may include `<regex.h>` and compare, over thousands
+  of random pattern/line pairs, `editor_pattern_search` against
+  `regcomp(REG_BASIC | REG_ICASE)` + `regexec`. It asserts **the extent of the
+  whole match**, not the group boundaries: POSIX's subexpression rule is
+  leftmost-longest and ours is greedy-backtracking, and the two are free to
+  split `\(a*\)\(a*\)` differently. Any disagreement on extent is a bug in one
+  of them and gets read, not asserted away.
+- **`\<` and `\>` against Logo's names** (§16.2), which is the rename case and
+  so the most load-bearing test in the file: `\<n\>` matches in `"n`, in `:n`
+  and bare; it does **not** match inside `:total.count`, `empty?` or `n2`; it
+  does match `:n+1`, `[:n]` and `:n-1`, where the next character is one of the
+  eleven delimiters. The table is written from `is_delimiter`
+  ([`lexer.c:15`](../core/lexer.c)) so that a change there shows up as a
+  failure here.
+- **`\([":]\)n\>` with `\1`** rewrites both spellings of the variable and
+  leaves a bare `n` alone — the group-and-backreference idiom the reference
+  chapter recommends, pinned so it keeps working.
+- **`editor_pattern_find`, the search walker** (§16.5): a match on the cursor's
+  own line ahead of the cursor and behind it, on a following line, wrapping off
+  the end and off the start, and the no-match case. Backward search must find
+  the **last** match on a line, not the first, which is the one thing its
+  scan-forward-and-keep-the-last shape can get wrong. `^` and `$` must anchor
+  per line and `.` must never cross a break — asserted on a buffer whose lines
+  would join into a match if it did.
+- **`/` and `n` against a zero-width pattern** terminate and step one character.
+- **`:s//new/` reuses the last `/` pattern**, and still beeps when there has
+  never been one.
+- **The randomised differential run in `test_editor_vi.c`** gains nothing new —
+  it types keys, and `:s` is not typed there — but the undo round-trip it ends
+  each round with is what would catch a substitute whose records do not
+  reverse it, so a hand-written `:%s`-then-`u` case goes beside it.
+
+`<regex.h>` is host-only and that boundary is worth a comment in the test file
+itself, since the whole reason the milestone exists is that a device build
+cannot follow it.
+
+### 16.10 Cost
+
+No new `ViState` fields: `pattern`, `replacement` and `sub_global` are already
+there, and the pattern is interpreted from them in place. **No static SRAM at
+all.**
+
+Stack, inside `editor_vi_substitute` only: `EditorPatternGroups` (80 bytes),
+the expansion buffer (`LOGO_VI_SUB_EXPAND_MAX`, 256), and the matcher's
+recursion, bounded by `LOGO_VI_TEXT_MAX` atoms at roughly 40 bytes a frame —
+call it 1.6 KB against `PICO_STACK_SIZE` of 4096. That is the one number in
+this milestone worth **measuring rather than assuming**, and the measurement is
+a deep-pattern `:%s` on a board, not a calculation. If it is tight, the lever
+is `LOGO_VI_SUB_EXPAND_MAX`, which is the largest piece and the least load
+bearing.
+
+`/` adds nothing to either figure: `editor_pattern_find` walks lines with two
+offsets and calls the same matcher, and `editor_vi_search` gets *shorter* by
+the `editor.search_text` copy it no longer needs (§16.5).
+
+Flash: one new file of roughly 350 lines, against 91.24 % (`pico+2w`) and
+92.57 % (`pico2`) — to be recorded after the build, as M4's was.
+
+### 16.11 Milestone gate
+
+`/\<n\>` then `n` then `N` on a real procedure on a Pico Plus 2 W — one that
+contains `make "n`, `:n`, a `then` and at least one name with a `.` or a `?` in
+it — walking every spelling of `n` and stopping on nothing else, forwards and
+backwards and across the wrap; then `:%s//count/g` to rename them through the
+pattern the search left behind, and one `u` that puts all of it back.
+
+That is the milestone's whole argument in four commands — the case it was
+opened for, the search half that makes the rename checkable before it is run,
+the shared pattern that ties them together, and the property most likely to be
+wrong. **The name with a `.` or `?` in it is not decoration**: it is the
+difference between vi's word boundary and Logo's (§16.2), and it is the one
+thing on this list a host test could pass while a real buffer failed. The wrap and the backward walk are there because they are the parts a
+host test asserts and a board has historically disagreed with.
