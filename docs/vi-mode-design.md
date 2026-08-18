@@ -1,9 +1,9 @@
 # P12 — Vi mode for the Logo Editor (design)
 
-Status: **M1--M4 built 2026-08-18.** The mode is complete: normal mode, visual
-mode, `f`/`t`/`%`, the ex command line, `setvimode`, the reference chapter, and
-`u` / `Ctrl` `R` over a tiered journal. §14 records where the build departed
-from this design.
+Status: **M1--M5 built 2026-08-18.** The mode is complete: normal mode, visual
+mode, `f`/`t`/`%`, the ex command line, `setvimode`, the reference chapter,
+`u` / `Ctrl` `R` over a tiered journal, and the word and bracket text objects
+(§15). §14 records where the build departed from this design.
 
 Three scoping decisions were taken with the user on 2026-08-17:
 
@@ -391,9 +391,11 @@ and the mode indicator. Those are a hardware check on the Pico Plus 2 W.
 | **M2** | Visual mode, `f F t T ; ,`, `%` (§5.2) | the same, plus `d%` over nested brackets | **built and checked on a board 2026-08-18** (`d%` sent the manual back for a correction, not the code — B35) |
 | **M3** | Reference manual chapter (§13) | — | **built 2026-08-18** |
 | **M4** | Undo, both tiers (§8) | `u`/`Ctrl` `R` in the randomised differential run; SRAM tier verified on a `pico2` build | **built 2026-08-18**; the SRAM tier is a `malloc` that undo does without if it fails, so §9's measurement stopped gating it (§14) |
+| **M5** | Text objects, words and brackets (§15) | `di[` from inside a nested group, `vi[` selecting one, both in the randomised run | **built and checked on a board 2026-08-18**; opened by B35, and it needed no `editor.c` change at all |
 
 M1 is the whole feature as far as a user is concerned; M2 is what makes it
-pleasant, and M4 is what stops it being annoying.
+pleasant, M4 is what stops it being annoying, and M5 is the one command a
+board session asked for that the mode could not say (§15).
 
 ## 12. Rejected alternatives
 
@@ -582,3 +584,141 @@ correct, which is the failure mode a host test cannot see past:
   next *opening* bracket when it has always taken the first of all six
   ([B35](bugs.md)). The reading the report expected -- "the group I am inside"
   -- is `di[`, a text object, and this mode has none.
+
+## 15. Text objects (M5)
+
+Opened 2026-08-18, out of [B35](bugs.md). The `d%` report there was not a bug —
+the editor and vim 9.1 agree byte for byte — but the reading the reporter
+expected, *"the group I am inside"*, is a thing `%` structurally cannot say.
+`%` is "the first bracket at or after the cursor on this line, then its match",
+so from inside a group it runs backwards and takes half of it. The command that
+means what was wanted is `di[`, and this mode had no text objects.
+
+**This is worth more in Logo than in a typical vi**, for the same reason `%`
+was (§5.2): the language is brackets all the way down, and *the group I am
+standing in* is the unit a Logo program is actually edited in — a `repeat`
+body, a `to`-line's parameter list, an `if` branch. `ci[` retypes a list;
+`yi[` copies a body onto the clipboard to paste into the next procedure.
+
+### 15.1 The set
+
+| Object | Takes |
+|---|---|
+| `iw` `aw` | the word under the cursor — `i` the word alone, `a` the word with the blanks after it (or before it, when there are none after) |
+| `iW` `aW` | the same, counting anything between blanks as one word |
+| `i[` `a[` | the text between the enclosing `[` and `]` — `i` between them, `a` including them. `]` is a synonym |
+| `i(` `a(` | the same for `(` `)`; `)` is a synonym |
+| `i{` `a{` | the same for `{` `}`; `}` is a synonym |
+
+An object is not a motion: it is only ever the second half of an operator
+(`di[`, `ci[`, `yi[`, `>i[`) or a selection in visual mode (`vi[`). `i` and `a`
+keep their insert-entry meaning everywhere else, which is the whole reason the
+prefix is only recognised with an operator pending or in visual mode.
+
+**Counts.** `2i[` goes out one more level of nesting, `3i[` two — the count is
+how many enclosing pairs to climb. On words the count is how many chunks (`iw`)
+or words-with-blanks (`aw`) to take, so `d3aw` is three words. Both fall out of
+a loop; neither needed a special case.
+
+**Charwise, always.** Vim promotes `dib` to linewise when the inner text
+happens to span whole lines. That rule exists to make `dib` on a C block leave
+the braces on their own lines, and Logo's groups are not laid out that way
+often enough to pay for it.
+
+**A word object stays on its line; a bracket object does not.** `diw` at the
+end of a line must not take the break with it — that would join two lines,
+which is `J`'s job and never what `diw` was asked for — and vi's own `iw` only
+crosses a line because it treats the break as blank space. A group, on the
+other hand, spans lines as a matter of routine in Logo: a `repeat` body is
+usually written over several, and `di[` that stopped at the first break would
+be useless on exactly the case it exists for.
+
+### 15.2 Deliberately not in the set
+
+- **`i"` / `a"`.** The one everybody misses, and it would be **wrong here**: in
+  Logo `"` prefixes a word (`pr "connected`) and never closes, so the "pair" it
+  would find is two unrelated words' quotes and `ci"` would eat the text
+  between them. A language whose quote character is not a delimiter does not
+  get a quote object. (`|...|` does pair, but nothing in the corpus uses it
+  often enough to be worth a key.)
+- **`ip` / `ap`.** A Logo paragraph is a procedure, and `dap` is a real
+  command — but `{` and `}` already move by one and `d}` from the `to` line
+  does the job, so the object buys a keystroke, not a capability.
+- **`ib` / `iB`** as aliases for `i(` / `i{`. Two more keys to remember for
+  characters this keyboard has on their own buttons (§3).
+- **`it` / `at`.** No tags in Logo.
+
+### 15.3 How it lands
+
+Nothing new in `editor.c`, and **no new action kind**. An object is a byte
+range, and every operator already takes one: `apply_operator` exists to turn a
+cursor and a motion into `out->start` / `out->end`, and an object produces the
+same pair more directly (it is absolute, not relative to the cursor, so it
+skips `operator_range`'s inclusive/linewise adjustment entirely).
+
+The dispatcher grows one branch beside the `Z r g f F t T` prefixes in
+`normal_key`, taken **only** when an operator is pending or the mode is visual:
+
+```c
+if ((key == 'i' || key == 'a') && (st->pending_op != 0 || visual))
+{
+    st->pending_prefix = (char)key;
+    ...
+}
+```
+
+and `prefixed_key` gains the two cases. The object finders are two functions:
+
+- `word_object` — `iw` is the run of one character class under the cursor
+  (blanks are a class, so `diw` on a gap deletes the gap, as vi has it); `aw`
+  adds the blanks after it, or before it when the object already ends the line.
+- `enclosing_pair` — scan back for an unmatched opener of the wanted kind,
+  then forward for its match, counting nesting of that kind only, exactly as
+  `match_bracket` does. It is *not* `match_bracket`: that one scans forward
+  along the line for a bracket to start from, which is the behaviour B35 is
+  about. This one starts from the cursor and goes outwards, and it crosses
+  lines, because a Logo group routinely does.
+
+**Visual mode needs no new plumbing either**, which was the one thing that
+looked like it would. `editor.c` already copies `editor.vi.anchor` into
+`editor.select_anchor` after every action it applies (§6.2's tail), so an
+object in visual mode sets `st->anchor` to the object's start and returns a
+`VI_ACT_MOVE` to its last character, and the selection follows. The state
+machine stays the only thing that knows what was selected.
+
+`.` is free: it replays keystrokes, not ranges, so `di[` repeats at the new
+cursor and finds that cursor's group. Undo is free for the same reason it was
+for every other operator — the change is one range, applied by the code that
+already records it.
+
+A failed object — no enclosing pair, or a `di;` — is `beep` with
+`E492: not an editor command`, which is what a failed `%` and a failed `f`
+already produce.
+
+**Empty is not a failure.** `di[` on `[]` yields an empty range and does
+nothing; `ci[` on `[]` puts the cursor between the brackets and starts
+inserting, which is the useful half of that case and needs no special code.
+
+### 15.4 Tests and cost
+
+`test_editor_vi.c` gains a section: each object on a typical Logo line, `a`
+versus `i`, counts, nesting, the cursor sitting *on* either bracket, a group
+spanning lines, the failure, the empty pair, and the visual forms asserting
+both `anchor` and cursor. The randomised differential run gains `[ ] ( )` in
+its key alphabet, so it types `di[` and `daw` of its own accord and the line
+memo and the undo journal keep being checked against them.
+
+Cost: no new `ViState` fields — `pending_prefix` gains two values — so the SRAM
+figure of §14 is unchanged.
+
+### 15.5 What the build changed
+
+**Nothing.** Built 2026-08-18 as described: two finders and one branch in
+`prefixed_key`, 19 tests, the whole suite green, and `editor.c` untouched — the
+first milestone of this design that needed no departure entry, and the first
+whose board session sent nothing back. (The other four each did: `:w`, `r`
+`Enter`, undo reaching no board, and `%`.) Checked on hardware the same day and
+it behaves as designed. The one thing
+that looked like it would need plumbing, visual mode, did not: §6.2's tail
+already copies `vi.anchor` out after every action, so setting the anchor in the
+state machine was the whole of it.

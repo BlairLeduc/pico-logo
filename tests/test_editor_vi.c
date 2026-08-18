@@ -1069,6 +1069,259 @@ static void test_visual_p_replaces_the_selection(void)
 }
 
 //
+//  Text objects (docs/vi-mode-design.md §15)
+//
+
+static void test_bracket_object_takes_the_group_the_cursor_is_in(void)
+{
+    ed_set("repeat 4 [fd 10 rt 90]\n");
+    at(12);
+    feed("di[");
+    assert_text("repeat 4 []\n");
+}
+
+static void test_a_bracket_object_takes_the_brackets_too(void)
+{
+    ed_set("repeat 4 [fd 10 rt 90]\n");
+    at(12);
+    feed("da[");
+    assert_text("repeat 4 \n");
+}
+
+static void test_a_bracket_object_from_either_bracket(void)
+{
+    ed_set("repeat 4 [fd 10 rt 90]\n");
+    at(9);                       // On the `[`
+    feed("di[");
+    assert_text("repeat 4 []\n");
+
+    ed_set("repeat 4 [fd 10 rt 90]\n");
+    at(21);                      // On the `]`
+    feed("di[");
+    assert_text("repeat 4 []\n");
+}
+
+static void test_a_count_climbs_out_of_the_nesting(void)
+{
+    ed_set("if [a [b c] d] e\n");
+    at(8);
+    feed("di[");
+    assert_text("if [a [] d] e\n");
+
+    ed_set("if [a [b c] d] e\n");
+    at(8);
+    feed("d2i[");
+    assert_text("if [] e\n");
+}
+
+static void test_a_bracket_object_crosses_lines(void)
+{
+    ed_set("to box\n  repeat 4 [fd 1\n  rt 90]\nend\n");
+    at(27);
+    feed("di[");
+    assert_text("to box\n  repeat 4 []\nend\n");
+}
+
+static void test_a_bracket_object_with_nothing_around_the_cursor_beeps(void)
+{
+    ed_set("print hello\n");
+    at(3);
+    feed("di[");
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    assert_text("print hello\n");
+
+    ed_set("[a] [b]\n");
+    at(3);                       // Between two groups, inside neither
+    feed("di[");
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    assert_text("[a] [b]\n");
+
+    ed_set("if [a] b\n");
+    at(4);
+    feed("d2i[");                // There is no second level to climb to
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    assert_text("if [a] b\n");
+}
+
+static void test_an_empty_pair_is_not_a_failure(void)
+{
+    ed_set("x []\n");
+    at(2);
+    feed("di[");
+    assert_text("x []\n");       // Nothing between them to delete
+    TEST_ASSERT_EQUAL_INT(VI_ACT_DELETE, ed.last.kind);
+
+    feed("ci[");
+    TEST_ASSERT_EQUAL_INT(VI_INSERT, ed.vi.mode);
+    TEST_ASSERT_EQUAL_UINT(3, ed.cursor);   // Between the brackets, typing
+}
+
+static void test_parens_and_braces_and_their_closing_synonyms(void)
+{
+    ed_set("(a [b] {c})\n");
+    at(8);
+    feed("di{");
+    assert_text("(a [b] {})\n");
+
+    ed_set("(a [b] {c})\n");
+    at(4);
+    feed("da)");                 // `)` names the same object as `(`
+    assert_text("\n");
+}
+
+static void test_a_word_object_takes_the_word_under_the_cursor(void)
+{
+    ed_set("print [a b c]\n");
+    at(2);
+    feed("diw");
+    assert_text(" [a b c]\n");
+
+    ed_set("print [a b c]\n");
+    at(9);
+    feed("diw");
+    assert_text("print [a  c]\n");
+}
+
+static void test_a_word_object_with_a_takes_the_blanks_after_it(void)
+{
+    ed_set("print [a b c]\n");
+    at(9);
+    feed("daw");
+    assert_text("print [a c]\n");
+
+    // With no blanks after it, `aw` takes the ones before it instead
+    ed_set("print [a b c]\n");
+    at(11);
+    feed("daw");
+    assert_text("print [a b]\n");
+}
+
+static void test_word_objects_take_a_count(void)
+{
+    ed_set("one two three\n");
+    feed("d3iw");                // word, gap, word
+    assert_text(" three\n");
+
+    ed_set("one two three\n");
+    feed("d2aw");                // two words, each with its blanks
+    assert_text("three\n");
+}
+
+static void test_a_big_word_object_stops_only_at_blanks(void)
+{
+    ed_set("fd :size\n");
+    at(4);
+    feed("diw");
+    assert_text("fd :\n");
+
+    ed_set("fd :size\n");
+    at(4);
+    feed("diW");
+    assert_text("fd \n");
+}
+
+static void test_a_word_object_on_a_gap_is_the_gap(void)
+{
+    ed_set("a   b\n");
+    at(2);
+    feed("diw");
+    assert_text("ab\n");
+
+    ed_set("a   b\n");
+    at(2);
+    feed("daw");                 // The gap and the word it leads to
+    assert_text("a\n");
+}
+
+static void test_a_word_object_stays_on_its_line(void)
+{
+    ed_set("ab\n\ncd\n");
+    at(2);                       // On the line break
+    feed("diw");
+    assert_text("\n\ncd\n");
+
+    ed_set("ab\n\ncd\n");
+    at(3);                       // An empty line has nothing to take
+    feed("diw");
+    assert_text("ab\n\ncd\n");
+}
+
+static void test_every_operator_takes_an_object(void)
+{
+    ed_set("repeat 4 [fd 10]\n");
+    at(12);
+    feed("yi[");
+    TEST_ASSERT_EQUAL_STRING("fd 10", ed.yank);
+    assert_text("repeat 4 [fd 10]\n");
+
+    ed_set("repeat 4 [fd 10]\n");
+    at(12);
+    feed("ci[");
+    TEST_ASSERT_EQUAL_INT(VI_INSERT, ed.vi.mode);
+    feed("bk");
+    feed_key(KEY_ESC);
+    assert_text("repeat 4 [bk]\n");
+
+    ed_set("to box\n  repeat 4 [fd 1\n  rt 90]\nend\n");
+    at(27);
+    feed(">i[");                 // Indents every line the object covers
+    assert_text("to box\n    repeat 4 [fd 1\n    rt 90]\nend\n");
+}
+
+static void test_visual_mode_selects_a_text_object(void)
+{
+    ed_set("repeat 4 [fd 10]\n");
+    at(12);
+    feed("vi[");
+    TEST_ASSERT_EQUAL_UINT(10, ed.vi.anchor);
+    TEST_ASSERT_EQUAL_UINT(14, ed.cursor);   // The selection is inclusive
+    feed("d");
+    assert_text("repeat 4 []\n");
+
+    ed_set("print [a b c]\n");
+    at(9);
+    feed("vaw");
+    TEST_ASSERT_EQUAL_UINT(9, ed.vi.anchor);
+    feed("d");
+    assert_text("print [a c]\n");
+}
+
+static void test_i_and_a_still_start_inserting_on_their_own(void)
+{
+    ed_set("abc\n");
+    at(1);
+    feed("i");
+    TEST_ASSERT_EQUAL_INT(VI_INSERT, ed.vi.mode);
+    TEST_ASSERT_EQUAL_UINT(1, ed.cursor);
+    feed_key(KEY_ESC);
+
+    feed("a");
+    TEST_ASSERT_EQUAL_INT(VI_INSERT, ed.vi.mode);
+    TEST_ASSERT_EQUAL_UINT(1, ed.cursor);
+}
+
+static void test_dot_repeats_an_object_at_the_new_cursor(void)
+{
+    ed_set("[a] [b]\n");
+    at(1);
+    feed("di[");
+    assert_text("[] [b]\n");
+    at(4);
+    feed(".");
+    assert_text("[] []\n");
+}
+
+static void test_an_object_is_one_undo(void)
+{
+    ed_set("repeat 4 [fd 10 rt 90]\n");
+    at(12);
+    feed("da[");
+    assert_text("repeat 4 \n");
+    feed("u");
+    assert_text("repeat 4 [fd 10 rt 90]\n");
+}
+
+//
 //  `.`
 //
 
@@ -1512,7 +1765,7 @@ static void test_undo_leaves_visual_mode(void)
 static void test_random_commands_keep_the_buffer_and_the_memo_consistent(void)
 {
     static const char *keys =
-        "hjklwbeWBE0^$GxXDCYSspPJ~ivVoOaAircdy<>.;,%nfFtT{}23uu\x12";
+        "hjklwbeWBE0^$GxXDCYSspPJ~ivVoOaAircdy<>.;,%nfFtT{}[]()23uu\x12";
 
     srand(20260817);
 
@@ -1635,6 +1888,26 @@ int main(void)
     RUN_TEST(test_visual_y_and_c_and_indent);
     RUN_TEST(test_visual_selection_never_swallows_the_newline);
     RUN_TEST(test_visual_p_replaces_the_selection);
+
+    RUN_TEST(test_bracket_object_takes_the_group_the_cursor_is_in);
+    RUN_TEST(test_a_bracket_object_takes_the_brackets_too);
+    RUN_TEST(test_a_bracket_object_from_either_bracket);
+    RUN_TEST(test_a_count_climbs_out_of_the_nesting);
+    RUN_TEST(test_a_bracket_object_crosses_lines);
+    RUN_TEST(test_a_bracket_object_with_nothing_around_the_cursor_beeps);
+    RUN_TEST(test_an_empty_pair_is_not_a_failure);
+    RUN_TEST(test_parens_and_braces_and_their_closing_synonyms);
+    RUN_TEST(test_a_word_object_takes_the_word_under_the_cursor);
+    RUN_TEST(test_a_word_object_with_a_takes_the_blanks_after_it);
+    RUN_TEST(test_word_objects_take_a_count);
+    RUN_TEST(test_a_big_word_object_stops_only_at_blanks);
+    RUN_TEST(test_a_word_object_on_a_gap_is_the_gap);
+    RUN_TEST(test_a_word_object_stays_on_its_line);
+    RUN_TEST(test_every_operator_takes_an_object);
+    RUN_TEST(test_visual_mode_selects_a_text_object);
+    RUN_TEST(test_i_and_a_still_start_inserting_on_their_own);
+    RUN_TEST(test_dot_repeats_an_object_at_the_new_cursor);
+    RUN_TEST(test_an_object_is_one_undo);
 
     RUN_TEST(test_dot_repeats_the_last_change_at_the_new_cursor);
     RUN_TEST(test_dot_recomputes_its_own_motion);

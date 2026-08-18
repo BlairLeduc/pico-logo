@@ -614,7 +614,7 @@ Every motion takes a count typed before it, so `5w` moves five words.
 - `Ctrl` `F` `Ctrl` `B` — a page forward or back; `Ctrl` `D` and `Ctrl` `U` half a page
 - `/`_text_ `?`_text_ — search forwards or backwards, wrapping around the buffer and ignoring case, as [incremental search](#incremental-search) does; `n` and `N` repeat it in the same and in the opposite direction, and a search with nothing typed repeats the last one
 
-`%` matches a bracket. It does not select the brackets you are standing between, which is worth knowing before you use `d%`: in `when [wifi?] [pr "yes]` with the cursor on the `f`, the first bracket at or after the cursor is the `]`, so `%` goes *back* to the `[` in front of the cursor and `d%` deletes `[wif`. To take a whole group, get to its bracket first — `F[` then `d%`.
+`%` matches a bracket. It does not select the brackets you are standing between, which is worth knowing before you use `d%`: in `when [wifi?] [pr "yes]` with the cursor on the `f`, the first bracket at or after the cursor is the `]`, so `%` goes *back* to the `[` in front of the cursor and `d%` deletes `[wif`. To take a whole group from inside it, use a [text object](#text-objects) — `di[` — or get to its bracket first with `F[` and then `d%`.
 
 #### Changing
 
@@ -632,6 +632,26 @@ An operator takes a motion, and the two together take a count, so `d2w` and `2dw
 - `.` — repeat the last change, working out its own motion from where the cursor now is. A count typed before `.` replaces the one the change was made with
 
 `.` repeats a change that finished on its own. It does not repeat one that ended in insert mode, because the Editor does not record what you typed there.
+
+#### Text objects
+
+An operator can take a *text object* instead of a motion: not "from here to there", but "the thing the cursor is in". Type the operator, then `i` for the inside of the object or `a` for the whole of it, then the object.
+
+| Object | Is |
+|---|---|
+| `iw` `aw` | the word the cursor is on — `iw` the word alone, `aw` the word with the blanks after it, or the blanks before it when there are none after |
+| `iW` `aW` | the same, counting anything between blanks as one word |
+| `i[` `a[` | the text inside the `[ ]` the cursor is in — `i[` between the brackets, `a[` including them. `]` means the same thing |
+| `i(` `a(` | the same for `( )`, and `)` means the same as `(` |
+| `i{` `a{` | the same for `{ }`, and `}` means the same as `{` |
+
+`di[` is the command `%` cannot express: with the cursor anywhere inside `repeat 4 [fd 10 rt 90]` — on either bracket, or on any character between them — it deletes `fd 10 rt 90` and leaves `repeat 4 []`. `ci[` empties the group and starts inserting, `yi[` copies it, and `>i[` indents every line it covers. The group may run over several lines, as a `repeat` body often does.
+
+A count goes out a level of nesting at a time, so in `if [a [b c] d] e` with the cursor on the `b`, `di[` takes `b c` and `d2i[` takes `a [b c] d`. On words a count takes that many, so `d3aw` deletes three. A group with nothing in it is not an error: `ci[` on `[]` simply puts you between the brackets.
+
+`i` and `a` mean this only when an operator is waiting for something to work on, or in visual mode, where `vi[` selects the group and `vaw` a word. Everywhere else they start inserting, as before.
+
+There is no `i"`: in Logo a `"` starts a word rather than closing one, so a quote object would take the text between two unrelated words.
 
 #### Undoing
 
@@ -662,6 +682,7 @@ While you are inserting, the Editor behaves exactly as it does outside vi mode: 
 - `p` — replace it with the copy buffer
 - `J` — join the lines it covers
 - `o` — swap which end of it the cursor is on
+- `i` or `a` followed by an object — select a [text object](#text-objects), so `vi[` selects the group the cursor is in
 
 `Esc` cancels the selection.
 

@@ -217,6 +217,93 @@ static size_t word_end(const char *buf, size_t len, size_t pos, bool big)
     return p;
 }
 
+// The end of the run of one character class starting at `pos`, within a line
+static size_t chunk_end(const char *buf, size_t line_end, size_t pos, bool big)
+{
+    if (pos >= line_end)
+    {
+        return pos;
+    }
+    int cls = class_at(buf, pos, big);
+    while (pos < line_end && class_at(buf, pos, big) == cls)
+    {
+        pos++;
+    }
+    return pos;
+}
+
+// `iw` / `aw`: the run of one class the cursor is in -- blanks are a class, so
+// `diw` on a gap deletes the gap. `aw` adds the blanks after the word, or the
+// ones before it when there are none after. An object stays on its line: a
+// Logo line is short and one that swallowed the break would join two.
+static bool word_object(const char *buf, size_t len, size_t pos, bool big, bool around,
+                        int count, size_t *out_start, size_t *out_end)
+{
+    size_t ls = line_start_of(buf, pos);
+    size_t le = line_end_of(buf, len, pos);
+
+    if (ls == le)
+    {
+        *out_start = *out_end = ls;  // An empty line has nothing to take
+        return true;
+    }
+    if (pos >= le)
+    {
+        pos = le - 1;  // The cursor sits on the line break; use the last character
+    }
+
+    int cls = class_at(buf, pos, big);
+    size_t s = pos, e = pos;
+    while (s > ls && class_at(buf, s - 1, big) == cls)
+    {
+        s--;
+    }
+    e = chunk_end(buf, le, e, big);
+
+    if (around)
+    {
+        if (cls == CLASS_BLANK)
+        {
+            e = chunk_end(buf, le, e, big);  // Started on a gap: take the word after it
+        }
+        for (int i = 1; i < count; i++)
+        {
+            if (e < le && char_class(buf[e]) == CLASS_BLANK)
+            {
+                e = chunk_end(buf, le, e, big);
+            }
+            e = chunk_end(buf, le, e, big);
+        }
+        size_t after = e;
+        while (after < le && char_class(buf[after]) == CLASS_BLANK)
+        {
+            after++;
+        }
+        if (after > e)
+        {
+            e = after;
+        }
+        else
+        {
+            while (s > ls && char_class(buf[s - 1]) == CLASS_BLANK)
+            {
+                s--;
+            }
+        }
+    }
+    else
+    {
+        for (int i = 1; i < count; i++)
+        {
+            e = chunk_end(buf, le, e, big);
+        }
+    }
+
+    *out_start = s;
+    *out_end = e;
+    return true;
+}
+
 //
 //  Paragraphs -- a blank line either way, which in Logo is the gap between
 //  two procedure definitions
@@ -330,6 +417,108 @@ static bool match_bracket(const char *buf, size_t len, size_t pos, size_t *out)
             pos--;
         }
     }
+}
+
+// The `open`/`close` pair the cursor is inside, `depth` levels out: back to an
+// unmatched opener, then forward to its match, counting that kind's nesting
+// only. It crosses lines, because a Logo group routinely does, and the cursor
+// on either bracket counts as being inside that pair.
+//
+// Not match_bracket: that one scans along the line for a bracket to start
+// from, which is what makes `%` run backwards from inside a group (B35). This
+// one starts where the cursor is and works outwards.
+static bool enclosing_pair(const char *buf, size_t len, size_t pos, char open, char close,
+                           int depth, size_t *out_open, size_t *out_close)
+{
+    if (pos >= len)
+    {
+        return false;
+    }
+
+    for (int level = 0; level < depth; level++)
+    {
+        size_t p = pos;
+
+        if (level > 0 || buf[p] != open)
+        {
+            int nest = 0;
+            for (;;)
+            {
+                if (p == 0)
+                {
+                    return false;
+                }
+                p--;
+                if (buf[p] == close)
+                {
+                    nest++;
+                }
+                else if (buf[p] == open)
+                {
+                    if (nest == 0)
+                    {
+                        break;
+                    }
+                    nest--;
+                }
+            }
+        }
+
+        size_t q = p;
+        int nest = 0;
+        for (;;)
+        {
+            if (buf[q] == open)
+            {
+                nest++;
+            }
+            else if (buf[q] == close && --nest == 0)
+            {
+                break;
+            }
+            if (++q >= len)
+            {
+                return false;
+            }
+        }
+
+        *out_open = p;
+        *out_close = q;
+        pos = p;  // The next level out starts from this opener and looks past it
+    }
+    return true;
+}
+
+// Resolve an object key after `i` or `a` into the byte range it names. Objects
+// are absolute ranges rather than motions, so they skip operator_range: there
+// is no cursor to pair them with and nothing to make inclusive.
+static bool text_object(const char *buf, size_t len, size_t cursor, int key, bool around,
+                        int count, size_t *out_start, size_t *out_end)
+{
+    if (key == 'w' || key == 'W')
+    {
+        return word_object(buf, len, cursor, key == 'W', around, count, out_start, out_end);
+    }
+
+    int idx = bracket_index(bracket_open, (char)key);
+    if (idx < 0)
+    {
+        idx = bracket_index(bracket_close, (char)key);  // `]` is a synonym for `[`
+    }
+    if (idx < 0)
+    {
+        return false;
+    }
+
+    size_t open, close;
+    if (!enclosing_pair(buf, len, cursor, bracket_open[idx], bracket_close[idx],
+                        count, &open, &close))
+    {
+        return false;
+    }
+    *out_start = around ? open : open + 1;
+    *out_end = around ? close + 1 : close;
+    return true;
 }
 
 //
@@ -1092,6 +1281,42 @@ static bool prefixed_key(ViState *st, const char *buf, size_t len, size_t cursor
             return commit(st, out, count);
         }
 
+        case 'i':
+        case 'a':
+        {
+            bool visual = (st->mode == VI_VISUAL || st->mode == VI_VISUAL_LINE);
+            char op = st->pending_op;
+            int count = take_count(st);
+            size_t start, end;
+
+            if (!text_object(buf, len, cursor, key, prefix == 'a', count, &start, &end))
+            {
+                return beep(st, out, "E492: not an editor command");
+            }
+
+            if (visual)
+            {
+                // The selection is the anchor and the cursor, and editor.c
+                // copies the anchor back out after every action (§6.2), so an
+                // object in visual mode is a move with the anchor moved too
+                st->anchor = start;
+                out->kind = VI_ACT_MOVE;
+                out->start = out->end = (end > start) ? end - 1 : start;
+                return commit(st, out, count);
+            }
+
+            out->kind = op_kind(op);
+            out->start = start;
+            out->end = end;
+            out->linewise = false;
+            out->count = (op == '>') ? 1 : (op == '<') ? -1 : count;
+            if (op == 'c')
+            {
+                st->mode = VI_INSERT;
+            }
+            return commit(st, out, count);
+        }
+
         case 'g':
         {
             if (key != 'g')
@@ -1219,6 +1444,15 @@ static bool normal_key(ViState *st, const char *buf, size_t len, size_t cursor,
         {
             return beep(st, out, "E492: not an editor command");
         }
+        st->pending_prefix = (char)key;
+        out->kind = VI_ACT_NONE;
+        return true;
+    }
+
+    // `i` and `a` are text-object prefixes only where they cannot be insert
+    // entry: with an operator waiting for a range, or in visual mode (§15)
+    if ((key == 'i' || key == 'a') && (st->pending_op != 0 || visual))
+    {
         st->pending_prefix = (char)key;
         out->kind = VI_ACT_NONE;
         return true;

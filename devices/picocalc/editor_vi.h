@@ -76,7 +76,8 @@ typedef struct
     int count;             // Digits typed so far, 0 = none
     int op_count;          // Count typed before the pending operator
     char pending_op;       // 0, 'd', 'c', 'y', '<', '>'
-    char pending_prefix;   // 0, 'g', 'Z', 'f', 'F', 't', 'T', 'r'
+    char pending_prefix;   // 0, 'g', 'Z', 'f', 'F', 't', 'T', 'r', or 'i'/'a'
+                           // waiting for a text object (§15)
     size_t anchor;         // Visual mode's other end
     bool modified;         // Set by the editor; `:q` refuses when it is true
 
