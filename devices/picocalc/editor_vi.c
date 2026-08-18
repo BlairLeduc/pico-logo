@@ -910,7 +910,13 @@ static bool run_ex(ViState *st, const char *buf, size_t len, size_t cursor, ViAc
     size_t cmd_len = n - i;
     const char *cmd = s + i;
 
-    if ((cmd_len == 1 && (cmd[0] == 'w' || cmd[0] == 'x')) ||
+    // `:w` writes and stays; every other write form also leaves
+    if (cmd_len == 1 && cmd[0] == 'w')
+    {
+        out->kind = VI_ACT_WRITE;
+        return true;
+    }
+    if ((cmd_len == 1 && cmd[0] == 'x') ||
         (cmd_len == 2 && cmd[0] == 'w' && cmd[1] == 'q') ||
         (cmd_len == 2 && cmd[0] == 'x' && cmd[1] == '!') ||
         (cmd_len == 3 && cmd[0] == 'w' && cmd[1] == 'q' && cmd[2] == '!'))

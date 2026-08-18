@@ -103,7 +103,10 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
     }
     
     // Call the editor
-    LogoEditorResult editor_result = io->console->editor->edit(buffer, editor_buffer_size);
+    // No write-back: this buffer is the workspace, so vi's `:w` accepts it the
+    // same way `ZZ` does, and the definitions below are run
+    LogoEditorResult editor_result =
+        io->console->editor->edit(buffer, editor_buffer_size, NULL, NULL);
     
     if (editor_result == LOGO_EDITOR_CANCEL)
     {
@@ -663,6 +666,31 @@ static Result prim_edall(Evaluator *eval, int argc, Value *args)
     return run_editor_and_process(eval, editor_buffer);
 }
 
+// Write the editor's buffer to `ctx`'s pathname, replacing whatever is there.
+// It is both what `editfile` does when the editor is accepted and what vi's
+// `:w` calls without leaving the editor.
+static bool editfile_save(const char *buffer, void *ctx)
+{
+    const char *pathname = (const char *)ctx;
+    LogoIO *io = primitives_get_io();
+    
+    // Delete the old file first: `open` keeps what is already there
+    if (logo_io_file_exists(io, pathname))
+    {
+        logo_io_file_delete(io, pathname);
+    }
+    
+    LogoStream *stream = logo_io_open(io, pathname);
+    if (!stream)
+    {
+        return false;
+    }
+    
+    logo_stream_write(stream, buffer);
+    logo_io_close(io, pathname);
+    return true;
+}
+
 // editfile pathname - edit a file's contents (not run as Logo code)
 static Result prim_editfile(Evaluator *eval, int argc, Value *args)
 {
@@ -745,12 +773,14 @@ static Result prim_editfile(Evaluator *eval, int argc, Value *args)
     }
     // If file doesn't exist, start with empty buffer (will create on save)
     
-    // Call the editor
-    LogoEditorResult editor_result = io->console->editor->edit(editor_buffer, editor_buffer_size);
+    // Call the editor, giving vi's `:w` the same write it does on the way out
+    LogoEditorResult editor_result =
+        io->console->editor->edit(editor_buffer, editor_buffer_size,
+                                  editfile_save, (void *)pathname);
     
     if (editor_result == LOGO_EDITOR_CANCEL)
     {
-        // User cancelled - file remains unchanged
+        // User cancelled - file remains unchanged (any `:w` already written stands)
         return result_none();
     }
     
@@ -759,25 +789,10 @@ static Result prim_editfile(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
     }
     
-    // Save the buffer to the file
-    // First, delete the old file if it exists
-    if (logo_io_file_exists(io, pathname))
-    {
-        logo_io_file_delete(io, pathname);
-    }
-    
-    // Open for writing (creates new file)
-    LogoStream *stream = logo_io_open(io, pathname);
-    if (!stream)
+    if (!editfile_save(editor_buffer, (void *)pathname))
     {
         return result_error(ERR_DISK_TROUBLE);
     }
-    
-    // Write buffer contents to file
-    logo_stream_write(stream, editor_buffer);
-    
-    // Close the file
-    logo_io_close(io, pathname);
     
     return result_none();
 }

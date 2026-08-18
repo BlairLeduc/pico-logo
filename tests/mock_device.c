@@ -39,6 +39,9 @@ static size_t mock_editor_content_cap = 0;
 static LogoEditorResult mock_editor_result = LOGO_EDITOR_ACCEPT;
 static bool mock_editor_called = false;
 static size_t mock_editor_buffer_size = 0;   // Capacity the editor was handed
+static char *mock_editor_write = NULL;    // Content written through the save callback
+static size_t mock_editor_write_cap = 0;  // (vi's `:w`), NULL for no such write
+static bool mock_editor_had_save = false; // Whether the caller supplied one
 
 //
 // Forward declarations for console operations
@@ -986,15 +989,25 @@ static void mock_editor_str_set(char **dst, size_t *cap, const char *src)
     (*dst)[len] = '\0';
 }
 
-static LogoEditorResult mock_editor_edit(char *buffer, size_t buffer_size)
+static LogoEditorResult mock_editor_edit(char *buffer, size_t buffer_size,
+                                         LogoEditorSave save, void *save_ctx)
 {
     mock_editor_called = true;
     mock_editor_buffer_size = buffer_size;
+    mock_editor_had_save = (save != NULL);
 
     // Save the input content
     if (buffer)
     {
         mock_editor_str_set(&mock_editor_input, &mock_editor_input_cap, buffer);
+    }
+
+    // A `:w` part-way through the session, before whatever the editor returns
+    if (mock_editor_write != NULL && save != NULL && buffer &&
+        strlen(mock_editor_write) < buffer_size)
+    {
+        strcpy(buffer, mock_editor_write);
+        save(buffer, save_ctx);
     }
 
     // If accepting, replace buffer with mock content
@@ -1681,9 +1694,23 @@ void mock_device_clear_editor(void)
 {
     mock_editor_str_set(&mock_editor_input, &mock_editor_input_cap, NULL);
     mock_editor_str_set(&mock_editor_content, &mock_editor_content_cap, NULL);
+    free(mock_editor_write);
+    mock_editor_write = NULL;
+    mock_editor_write_cap = 0;
+    mock_editor_had_save = false;
     mock_editor_result = LOGO_EDITOR_ACCEPT;
     mock_editor_called = false;
     mock_editor_buffer_size = 0;
+}
+
+void mock_device_set_editor_write(const char *content)
+{
+    mock_editor_str_set(&mock_editor_write, &mock_editor_write_cap, content);
+}
+
+bool mock_device_editor_had_save(void)
+{
+    return mock_editor_had_save;
 }
 
 //

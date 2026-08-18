@@ -8,8 +8,9 @@ command line, `setvimode`, and the reference chapter. `u` and `Ctrl` `R` report
 Three scoping decisions were taken with the user on 2026-08-17:
 
 - **`Esc` belongs to vi.** In vi mode it returns to normal mode; it no longer
-  accepts the buffer. Leaving the editor becomes `:w`, `:wq`, `:x`, `ZZ`
-  (accept) and `:q!`, `ZQ` (cancel). `Brk` — which is Shift + `Esc` — keeps
+  accepts the buffer. Leaving the editor becomes `:wq`, `:x`, `ZZ`
+  (accept) and `:q!`, `ZQ` (cancel); `:w` accepts too, except under `editfile`,
+  where it writes the file and stays (§14). `Brk` — which is Shift + `Esc` — keeps
   its unconditional cancel, in both modes, as the way out that never depends
   on which mode you are in.
 - **Ship without undo**, then tier it: **one level** where the editor buffers
@@ -80,9 +81,11 @@ times a minute.
 Resolved per the decision above: in vi mode `Esc` is vi's. Insert and visual
 modes return to normal on `Esc`; in normal mode with a pending count or
 operator it clears the pending state; in normal mode with nothing pending it
-does nothing. Exiting is explicit — `:w`, `:wq`, `:x`, `ZZ` accept;
+does nothing. Exiting is explicit — `:wq`, `:x`, `ZZ` accept;
 `:q!`, `ZQ` cancel; `:q` accepts only when the buffer is unmodified and
-otherwise reports `E37: no write since last change` on the footer.
+otherwise reports `E37: no write since last change` on the footer. `:w` accepts
+as well, except under `editfile`, where there is a file to write and it writes
+it without leaving (§14).
 
 Shift + `Esc` (`Brk`) still cancels immediately from any mode. It is the one
 key whose meaning does not depend on the mode, which is what makes the mode
@@ -473,6 +476,17 @@ as designed.
   `VI_ACT_QUIT` for `:q`, so that the "have you changed anything" question is
   answered in `editor.c`, which knows, rather than in the state machine, which
   does not.
+- **`:w` writes where there is something to write to** (2026-08-18, a third
+  action kind, `VI_ACT_WRITE`). **Found on a board**, editing a file: the design
+  above made `:w` a synonym for `:wq`,
+  which is right for `edit`/`edall`/`edn`/`edns` -- the buffer is the workspace,
+  and the only way to "save" it is to leave and let the REPL read it back -- and
+  wrong for `editfile`, where a file is sitting there and vi users type `:w` to
+  save as they go. So the caller now hands `edit()` an optional
+  `LogoEditorSave` write-back: `editfile` passes one that rewrites the file, the
+  workspace entry points pass NULL, and `editor.c` turns `VI_ACT_WRITE` into a
+  call to it (footer `written`, `modified` cleared) or, with no callback, into
+  the accept it always was. The state machine still knows nothing about files.
 - **The editor's screen teardown was factored out.** Accept and cancel were two
   identical fourteen-line blocks; vi's `:w`/`ZZ` and `:q!`/`ZQ` would have made
   them four. They are now `editor_restore_screen`.
@@ -486,6 +500,8 @@ as designed.
 91.19 % to **91.23 %** on `pico+2w` and 92.52 % to **92.56 %** on `pico2`,
 about 208 bytes on each. §9's estimate held.
 
-**Still owed.** The hardware check M1 and M2 gate on -- the mode indicator, the
-cursor style, the `Esc` contract and `d%` over nested brackets on a real board
--- and M4.
+**Still owed.** The hardware check M1 and M2 gate on has begun: a board session
+on 2026-08-18 edited a file in vi mode and found the `:w` behaviour above, which
+is the first thing this mode has been told by a board rather than by a test.
+Not yet confirmed there: the mode indicator, the cursor style, the `Esc`
+contract and `d%` over nested brackets -- and M4.

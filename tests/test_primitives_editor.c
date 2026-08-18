@@ -1142,6 +1142,61 @@ void test_editfile_cancel_does_not_create_file(void)
     TEST_ASSERT_NULL(mock_fs_get_file("nocreate.txt", false));
 }
 
+// Vi's `:w` writes the file and stays in the editor: the write must land even
+// when the session that follows it is cancelled
+void test_editfile_write_lands_before_a_cancel(void)
+{
+    setUp_with_storage();
+    
+    mock_fs_create_file("colon_w.txt", "Original content\n");
+    
+    mock_device_clear_editor();
+    mock_device_set_editor_write("Written by :w\n");
+    mock_device_set_editor_result(LOGO_EDITOR_CANCEL);
+    
+    Result r = run_string("editfile \"colon_w.txt");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    const char *content = mock_fs_get_content("colon_w.txt");
+    TEST_ASSERT_NOT_NULL(content);
+    TEST_ASSERT_EQUAL_STRING("Written by :w\n", content);
+}
+
+void test_editfile_write_creates_a_new_file(void)
+{
+    setUp_with_storage();
+    
+    mock_device_clear_editor();
+    mock_device_set_editor_write("Fresh\n");
+    mock_device_set_editor_result(LOGO_EDITOR_CANCEL);
+    
+    TEST_ASSERT_NULL(mock_fs_get_file("fresh.txt", false));
+    
+    Result r = run_string("editfile \"fresh.txt");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    const char *content = mock_fs_get_content("fresh.txt");
+    TEST_ASSERT_NOT_NULL(content);
+    TEST_ASSERT_EQUAL_STRING("Fresh\n", content);
+}
+
+// Editing the workspace has nowhere to write to, so it hands the editor no
+// write-back -- which is what makes `:w` there accept the buffer and exit
+void test_edit_gives_the_editor_no_write_back(void)
+{
+    setUp_with_storage();
+    
+    mock_device_clear_editor();
+    mock_device_set_editor_result(LOGO_EDITOR_CANCEL);
+    run_string("edit");
+    TEST_ASSERT_FALSE(mock_device_editor_had_save());
+    
+    mock_device_clear_editor();
+    mock_device_set_editor_result(LOGO_EDITOR_CANCEL);
+    run_string("editfile \"has_save.txt");
+    TEST_ASSERT_TRUE(mock_device_editor_had_save());
+}
+
 void test_editfile_requires_word_argument(void)
 {
     setUp_with_storage();
@@ -1379,6 +1434,9 @@ int main(void)
     RUN_TEST(test_editfile_modifies_existing_file);
     RUN_TEST(test_editfile_cancel_preserves_file);
     RUN_TEST(test_editfile_cancel_does_not_create_file);
+    RUN_TEST(test_editfile_write_lands_before_a_cancel);
+    RUN_TEST(test_editfile_write_creates_a_new_file);
+    RUN_TEST(test_edit_gives_the_editor_no_write_back);
     RUN_TEST(test_editfile_requires_word_argument);
     RUN_TEST(test_editfile_multiline_content);
     RUN_TEST(test_editfile_does_not_run_content);

@@ -135,6 +135,8 @@ typedef struct {
     bool vi_mode;              // True when the vi key layer is in charge
     ViState vi;                // Its state machine
     const char *vi_msg;        // Footer text for one keystroke, NULL for the mode
+    LogoEditorSave save;       // Write-back for `:w`, NULL when there is nowhere
+    void *save_ctx;            // to write to yet (editing the workspace)
 
     // Graphics preview state
     bool in_graphics_preview;  // True when viewing graphics screen (F3)
@@ -1970,6 +1972,21 @@ static int editor_vi_apply(const ViAction *act, int cursor_line_before)
             break;
         }
 
+        case VI_ACT_WRITE:
+            // With nowhere to write to, `:w` means what it always meant: hand
+            // the buffer back to the caller, which is how the workspace is saved
+            if (editor.save == NULL) {
+                return EDITOR_VI_ACCEPT;
+            }
+            if (editor.save(editor.buffer, editor.save_ctx)) {
+                editor.vi.modified = false;
+                editor.vi_msg = "written";
+            } else {
+                editor.vi_msg = "E212: can't open file for writing";
+            }
+            editor.dirty_flags = DIRTY_CURSOR;
+            break;
+
         case VI_ACT_ACCEPT:
             return EDITOR_VI_ACCEPT;
 
@@ -2021,7 +2038,8 @@ void picocalc_editor_set_vi_mode(bool on)
     editor_vi_requested = on;
 }
 
-LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
+LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size,
+                                      LogoEditorSave save, void *save_ctx)
 {
     // Save cursor position and screen mode to restore on exit
     uint8_t saved_cursor_col, saved_cursor_row;
@@ -2057,6 +2075,8 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
     editor.dirty_flags = DIRTY_NONE;
     editor.vi_mode = editor_vi_requested;
     editor.vi_msg = NULL;
+    editor.save = save;
+    editor.save_ctx = save_ctx;
     editor_vi_reset(&editor.vi);
 
     // Normal mode is a block cursor, which is also what the editor already uses

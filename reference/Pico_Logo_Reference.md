@@ -590,10 +590,12 @@ The bottom line shows which mode you are in.
 
 `Esc` belongs to vi: it returns to normal mode, and it no longer accepts the buffer. Leave the Editor with one of:
 
-- `:w`, `:wq`, `:x`, `ZZ` — accept, exactly as `Esc` does outside vi mode, so Logo reads each line of the buffer as if you had typed it
+- `:wq`, `:x`, `ZZ` — accept, exactly as `Esc` does outside vi mode, so Logo reads each line of the buffer as if you had typed it
 - `:q!`, `ZQ` — cancel, leaving your procedures as they were
 - `:q` — accept, but only when you have changed nothing; otherwise the bottom line says `E37: no write since last change`
 - `Brk` — cancel, from any mode. It is the one key whose meaning does not depend on which mode you are in, which is what makes the mode safe to be wrong about
+
+`:w` depends on what you are editing. Under [`editfile`](#editfile) it writes the file and leaves you in the Editor, so you can save as you go, and the bottom line says `written`; a `Brk` after it cancels only what you have typed since. Everywhere else — [`edit`](#edit-ed), [`edall`](#edall), [`edn`](#edn), [`edns`](#edns) — the buffer has no file to be written to, so `:w` accepts it and leaves, as `:wq` does.
 
 #### Moving
 
@@ -655,7 +657,8 @@ While you are inserting, the Editor behaves exactly as it does outside vi mode: 
 | Command | Does |
 |---|---|
 | `:`_n_ | go to line _n_ |
-| `:w` `:wq` `:x` | accept the buffer and leave the Editor |
+| `:w` | write the file and stay, under `editfile`; accept and leave, everywhere else |
+| `:wq` `:x` | accept the buffer and leave the Editor |
 | `:q` | leave, if nothing has changed |
 | `:q!` | cancel and leave the Editor |
 | `:s/`_old_`/`_new_`/` | replace the first _old_ on this line |
@@ -5994,6 +5997,8 @@ You can use `editfile` on any file, whether it exists or not. If it does not exi
 The edit buffer is limited based on [`Supported Pico Boards`](#supported-pico-boards). If the file you try to edit contains more than this, Logo displays an error message and does not let you edit the file.
 
 If you exit the editor with `Brk`, the file remains unchanged.
+
+In [Vi Mode](#vi-mode), `:w` writes the file without leaving the editor, so you can save as you go. Anything already written that way stays written, even if you then leave with `Brk`.
 
 When exiting the editor, the contents of the buffer are not run.
 

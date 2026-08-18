@@ -41,6 +41,7 @@ typedef struct
     bool consumed;      // ... and whether vi took the key at all
     size_t len_at_key;  // The length the last key saw, for range assertions
     int exits;          // VI_ACT_ACCEPT / _QUIT / _CANCEL seen
+    int writes;         // VI_ACT_WRITE seen (`:w`, which does not exit)
     ViActionKind exit_kind;
 } Ed;
 
@@ -315,6 +316,12 @@ static void ed_apply(Ed *e, const ViAction *act)
             }
             break;
         }
+
+        case VI_ACT_WRITE:
+            // The editor writes the buffer out and carries on; the state
+            // machine's part is only saying so
+            e->writes++;
+            break;
 
         case VI_ACT_ACCEPT:
         case VI_ACT_QUIT:
@@ -1013,9 +1020,11 @@ static void test_a_motion_is_not_a_change_to_repeat(void)
 
 static void test_write_and_quit_commands(void)
 {
+    // `:w` writes without leaving; the editor decides what a write means
     ed_set("abc\n");
     feed(":w");  feed_key(KEY_RETURN);
-    TEST_ASSERT_EQUAL_INT(VI_ACT_ACCEPT, ed.exit_kind);
+    TEST_ASSERT_EQUAL_INT(1, ed.writes);
+    TEST_ASSERT_EQUAL_INT(0, ed.exits);
 
     setUp();  ed_set("abc\n");
     feed(":wq"); feed_key(KEY_RETURN);
