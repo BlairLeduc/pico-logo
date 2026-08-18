@@ -1610,6 +1610,42 @@ static size_t substitute(char *buf, const char *pat, const char *rep, bool globa
                                 pat, strlen(pat), rep, strlen(rep), global, NULL, &cursor);
 }
 
+// B36: a pattern that outruns the matcher's step budget is abandoned, and it
+// says so distinctly -- SIZE_MAX, not a count of zero -- so `:s` can tell the
+// user their pattern is too dear rather than that nothing matched. Without the
+// budget this test does not fail, it hangs.
+static void test_substitute_refuses_a_pathological_pattern(void)
+{
+    char buf[512];
+    memset(buf, 'a', 255);
+    buf[255] = '\n';
+    memset(buf + 256, 'a', 200);
+    buf[456] = '\n';
+    buf[457] = '\0';
+
+    char before[512];
+    strcpy(before, buf);
+
+    size_t len = strlen(buf);
+    size_t cursor = 0;
+    const char *pat = ".*.*.*.*.*.*.*.*.*.*.*.*.*.*.*x";
+    TEST_ASSERT_EQUAL_UINT(SIZE_MAX,
+                           editor_vi_substitute(buf, &len, sizeof(buf), 0, len,
+                                                pat, strlen(pat), "y", 1, true,
+                                                NULL, &cursor));
+    TEST_ASSERT_EQUAL_STRING(before, buf);   // Refused before a byte moved
+    TEST_ASSERT_EQUAL_UINT(strlen(before), len);
+}
+
+// The refusal must stay distinguishable from the ordinary no-match, which is
+// still a plain zero -- the two take different branches in editor.c
+static void test_substitute_with_no_match_is_still_zero_not_a_refusal(void)
+{
+    char buf[64] = "abc\n";
+    TEST_ASSERT_EQUAL_UINT(0, substitute(buf, "zz", "y", true, 0, 4, sizeof(buf)));
+    TEST_ASSERT_EQUAL_STRING("abc\n", buf);
+}
+
 static void test_substitute_matches_case_insensitively(void)
 {
     char buf[64] = "Foo foo FOO\n";
@@ -2024,6 +2060,8 @@ int main(void)
     RUN_TEST(test_an_empty_search_repeats_the_last_pattern);
     RUN_TEST(test_a_bad_search_pattern_complains);
 
+    RUN_TEST(test_substitute_refuses_a_pathological_pattern);
+    RUN_TEST(test_substitute_with_no_match_is_still_zero_not_a_refusal);
     RUN_TEST(test_substitute_matches_case_insensitively);
     RUN_TEST(test_substitute_can_grow_and_shrink_the_text);
     RUN_TEST(test_substitute_deleting_the_pattern);

@@ -722,6 +722,8 @@ A `:s` pattern, and the text of a `/` or `?` search, is a small regular expressi
 
 The set was chosen to keep matching fast on the board, so it leaves out alternation (`\|`), `\+` and `\?`, and `*` never applies to a group. Matching never crosses a line break, so `^`, `$` and `.` all work a line at a time.
 
+A pattern with several `*`s in a row can still be enormously expensive to match — `.*.*.*x` has to try every way of splitting the line before it can conclude there is no `x` — so matching gives up rather than making you wait, and answers `E486: pattern too complex`. That is a different answer from `E486: pattern not found`: it means the pattern was never decided, not that nothing matched. Writing what you mean more directly (`[^ ]*x` rather than `.*.*x`) is both faster and clearer.
+
 A *word*, for `\<` and `\>`, is a Logo name: it runs up to the first blank, `;`, or one of the delimiters `[ ] ( ) + - * / = < >`, and a leading `"` or `:` is not part of it. So `\<n\>` matches the `n` in `"n`, in `:n` and standing alone, but not the `n` inside `then`, `pen` or `total.count` — which is what lets `:%s/\<n\>/count/g` rename a variable without touching the words that merely contain its letters. No single pattern can tell a variable `n` from a procedure `n`, so the safe way to rename is to walk the matches first: `/\<n\>` then `n` to see each one, `:%s//count/g` to make the change, and `u` if it reached too far.
 
 Because matching folds case, a class such as `[A-Z]` means "a letter", not "a capital"; `:%s/\<Total\>/sum/g` finds `total` too, which is the behaviour a case-insensitive language wants from a rename.

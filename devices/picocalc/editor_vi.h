@@ -140,7 +140,12 @@ const char *editor_vi_status(const ViState *st);
 // out_cursor: set to the start of the last line changed.
 //
 // Returns the number of substitutions. Nothing is changed when there is no
-// match, or when the result would not fit in capacity.
+// match, or when the result would not fit in capacity. Returns SIZE_MAX --
+// again the out-of-band value, as editor_pattern_expand uses it -- when the
+// pattern exhausted the matcher's step budget (B36) and the substitute was
+// abandoned before a byte moved; the caller reports that, and it is not a
+// count of zero, because "your pattern is too dear to run" is a different
+// thing to say than "nothing matched".
 size_t editor_vi_substitute(char *buf, size_t *len, size_t capacity,
                             size_t range_start, size_t range_end,
                             const char *pat, size_t pat_len,

@@ -398,7 +398,7 @@ and the mode indicator. Those are a hardware check on the Pico Plus 2 W.
 | **M3** | Reference manual chapter (§13) | — | **built 2026-08-18** |
 | **M4** | Undo, both tiers (§8) | `u`/`Ctrl` `R` in the randomised differential run; SRAM tier verified on a `pico2` build | **built 2026-08-18**; the SRAM tier is a `malloc` that undo does without if it fails, so §9's measurement stopped gating it (§14) |
 | **M5** | Text objects, words and brackets (§15) | `di[` from inside a nested group, `vi[` selecting one, both in the randomised run | **built and checked on a board 2026-08-18**; opened by B35, and it needed no `editor.c` change at all |
-| **M6** | Patterns in `:s`, `/` and `?` (§16) | `/\<n\>` walked with `n`/`N` through the wrap, then `:%s//count/g` renaming every whole-word `n` and no `then`, and one `u` putting it back | **built 2026-08-18** ([`editor_pattern.c`](../devices/picocalc/editor_pattern.c)); host tests green and `pico+2w` links at 91.24 % RAM (§16.10), the board gate outstanding |
+| **M6** | Patterns in `:s`, `/` and `?` (§16) | `/\<n\>` walked with `n`/`N` through the wrap, then `:%s//count/g` renaming every whole-word `n` and no `then`, and one `u` putting it back | **built and checked on a board 2026-08-18** ([`editor_pattern.c`](../devices/picocalc/editor_pattern.c)); the gate passed and its stack-measurement half found B36 instead — a hang, not the overflow §16.10 expected (§16.13) |
 
 M1 is the whole feature as far as a user is concerned; M2 is what makes it
 pleasant, M4 is what stops it being annoying, and M5 is the one command a
@@ -819,11 +819,20 @@ them — one dialect (§16.5).
 
 An atom is one character: a literal, `.`, or a class. **`*` never applies to a
 group** — `\(ab\)*` is refused, not silently mis-parsed. That restriction is
-not shrinkage for its own sake: it is what makes the matcher's worst case
-O(line × atoms) with a recursion depth bounded by the number of atoms, and it
-removes the nested-quantifier shape that produces catastrophic backtracking
-outright. A pattern is capped at `LOGO_VI_TEXT_MAX` (32) by the ex parser
-already, so that bound is 32 frames, not an unknown.
+what bounds the **recursion depth** by the number of atoms; a pattern is capped
+at `LOGO_VI_TEXT_MAX` (32) by the ex parser already, so that bound is 32 frames,
+not an unknown.
+
+It does **not** bound the running time, and this section used to claim it did —
+"removes the nested-quantifier shape that produces catastrophic backtracking
+outright", worst case O(line × atoms). That was wrong, and a board found it
+(B36): catastrophic backtracking needs only **sequential** quantifiers, not
+nested ones, so `.*.*.*x` backtracks combinatorially with no group in sight —
+O(line^stars), 189 million steps for three stars on a 256-char line. Refusing
+`*` on a group was necessary and nowhere near sufficient. The real bound is the
+guard this design talked itself out of: `LOGO_VI_PATTERN_STEPS_MAX` steps per
+search call, past which the match is abandoned and reported as
+`E486: pattern too complex` (§16.13).
 
 Worked examples, all of them things this editor could not say yesterday:
 
@@ -1044,11 +1053,17 @@ typedef EditorPatternGroup EditorPatternGroups[10];        // [0] is the whole m
 bool   editor_pattern_valid (const char *pat, size_t pat_len);
 bool   editor_pattern_search(const char *pat, size_t pat_len,
                              const char *line, size_t line_len,
-                             size_t from, EditorPatternGroups g);
+                             size_t from, EditorPatternGroups g,
+                             bool *too_complex);           // B36, §16.13
 size_t editor_pattern_expand(const char *rep, size_t rep_len,
                              const char *line, const EditorPatternGroups g,
-                             char *out, size_t out_cap);   // 0 = would not fit
+                             char *out, size_t out_cap);   // SIZE_MAX = no fit
 ```
+
+(Both departures from the sketch this section first carried are recorded in
+§16.12 and §16.13: `editor_pattern_expand` needed an out-of-band overflow value
+because an empty replacement is a legitimate length of zero, and
+`editor_pattern_search` needed to distinguish a refusal from a miss.)
 
 `editor_pattern_search` is leftmost: try to match at `from`, then `from + 1`,
 and so on. Under it sits the recursive greedy matcher — the Pike shape, where
@@ -1182,6 +1197,13 @@ a deep-pattern `:%s` on a board, not a calculation. If it is tight, the lever
 is `LOGO_VI_SUB_EXPAND_MAX`, which is the largest piece and the least load
 bearing.
 
+**What the board run actually found was that this was the wrong thing to
+worry about** (B36, §16.13). The deep-pattern `:%s` written to take this
+measurement never returned: the stack was fine — depth really is bounded by the
+atom count — and the *time* was unbounded. The figure above is still uncollected
+and now matters much less, because the step budget caps how much work a match
+can do before it gives up, and the frames it can do it in were never in doubt.
+
 `/` adds nothing to either figure: `editor_pattern_find` walks lines with two
 offsets and calls the same matcher, and `editor_vi_search` gets *shorter* by
 the `editor.search_text` copy it no longer needs (§16.5).
@@ -1235,3 +1257,62 @@ existing fields), and `pico+2w` links at **91.24 % RAM, unchanged** from M4 —
 the whole matcher lives in `editor_vi_substitute`'s stack frame. The ~1.6 KB
 deep-pattern stack figure (§16.10) is still the one number to take on a board
 rather than calculate, and it is part of the outstanding board gate (§16.11).
+
+### 16.13 The board gate found a hang, and the design's reasoning was the bug
+
+Run 2026-08-18. The gate's functional half (§16.11) passed on a Pico Plus 2 W:
+`/\<n\>` walked every spelling of `n` with `n`/`N`, forwards, backwards and
+across the wrap, stopping on nothing else; `:%s//count/g` renamed them and one
+`u` put it back. Logo's word boundary held against the `.` and `?` names that a
+host test could pass while a real buffer failed.
+
+The half meant to measure §16.10's stack figure did not. The pattern written to
+be deep — `:%s/.*.*.*.*.*.*.*.*.*.*.*.*.*.*.*x/y/` — **left the board
+non-responsive**, and the first reading of that was wrong too: it looked like
+the stack overflow §16.10 had been braced for. It was not a fault at all. The
+device was still matching, and would have been for effectively ever.
+
+**The defect was in this document's reasoning, not only in the code.** §16.2
+and §16.6 both argued that refusing `*` on a group "removes catastrophic
+backtracking by construction rather than by a guard". Catastrophic backtracking
+does not require a nested quantifier — only sequential ones. Measured on the
+host, `.*` repeated N times against a line that cannot match costs
+O(line^N):
+
+| stars | 256-char line |
+|---|---|
+| 1 | 33,410 steps |
+| 2 | 2,895,619 |
+| 3 | 188,939,204 |
+
+The gate's fifteen extrapolate to about forty days on a 4 GHz desktop. An
+RP2350 at 150 MHz was never coming back, and nothing in the key loop could
+interrupt it.
+
+So the guard goes in after all: `LOGO_VI_PATTERN_STEPS_MAX` (200,000) match
+steps per `editor_pattern_search` call, charged per `match_here` entry, past
+which the search is **abandoned rather than finished**. The number is measured
+rather than picked — real patterns cost tens to hundreds of steps (`\<n\>` on a
+69-character line is 13) and the worst legitimate case is a single star failing
+on a full-width line at 33,410, so 200,000 is roughly six times the honest
+worst case.
+
+A refusal is deliberately **not** a miss. `editor_pattern_search` and
+`editor_pattern_find` take a `too_complex` out-parameter,
+`editor_vi_substitute` returns `SIZE_MAX` (the out-of-band value it already
+used for an over-long expansion), and `editor.c` says `E486: pattern too
+complex` where it would otherwise say `pattern not found` or `No substitution
+made`. Telling a user their pattern was too dear to run is different news from
+telling them nothing matched, and after a visible pause the difference is the
+whole message. `editor_pattern_find` stops at the first line that trips the
+budget rather than paying it again on every line below, and `:s` refuses in the
+counting pass, before a byte moves, so the all-or-nothing property is untouched.
+
+The honest cost: a legitimate but very expensive match can now be refused. That
+is a real semantic change and the reason the budget has six times' headroom
+over anything measured. Memoising failures over (atom, offset) would have made
+the original O(line × atoms) claim true instead of guarded, but it costs ~1 KB
+of the 4 KB stack and is unsound with `\1`..`\9`, since `match_here` mutates
+capture state — a conditional fast path for backref-free patterns, and the
+guard underneath it anyway for the rest. Not worth it for a matcher whose real
+patterns cost thirteen steps.

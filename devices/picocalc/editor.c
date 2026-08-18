@@ -1890,10 +1890,15 @@ static void editor_vi_search(char direction)
     if (from > editor.content_length) from = editor.content_length;
 
     size_t match;
+    bool too_complex = false;
     if (editor_pattern_find(editor.vi.pattern, editor.vi.pattern_len,
                             editor.buffer, editor.content_length,
-                            from, forward, &match)) {
+                            from, forward, &match, &too_complex)) {
         editor.cursor_pos = match;
+    } else if (too_complex) {
+        // The search gave up rather than wedging the board (B36) -- said
+        // separately, because it is not the same news as an honest miss
+        editor.vi_msg = "E486: pattern too complex";
     } else {
         editor.vi_msg = "E486: pattern not found";
     }
@@ -2016,7 +2021,12 @@ static int editor_vi_apply(const ViAction *act, int cursor_line_before)
                                                 editor.vi.replacement,
                                                 editor.vi.replacement_len,
                                                 editor.vi.sub_global, &editor.undo, &landed);
-            if (count == 0) {
+            if (count == SIZE_MAX) {
+                // The pattern outran the matcher's step budget and the
+                // substitute was abandoned before a byte moved (B36)
+                editor.vi_msg = "E486: pattern too complex";
+                editor.dirty_flags = DIRTY_CURSOR;
+            } else if (count == 0) {
                 // No match, or a result that would not fit -- editor_vi_substitute
                 // refuses the second rather than rewriting half the buffer
                 editor.vi_msg = "No substitution made";

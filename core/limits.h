@@ -271,6 +271,16 @@ extern "C" {
 // stack, so this is the lever if that frame is ever measured tight.
 #define LOGO_VI_SUB_EXPAND_MAX  256
 
+// The most match steps one `editor_pattern_search` call may spend before it
+// gives up (B36). Sequential stars backtrack combinatorially -- `.*.*.*x` on a
+// 256-char line costs 189 million steps, and each added `.*` multiplies by the
+// line length again -- so the matcher has to bound its own work or a `:s` can
+// wedge the board with no key able to interrupt it. Measured, not guessed: real
+// patterns cost tens to hundreds of steps (`\<n\>` on a 69-char line is 13),
+// and the worst legitimate case is a single star failing on a full-width line,
+// 33,410. This leaves ~6x headroom over that and refuses everything past it.
+#define LOGO_VI_PATTERN_STEPS_MAX  200000
+
 // Keys recorded for `.` to replay. A change command is an optional operator,
 // an optional prefix (`g`, `f`, ...) and a motion -- three keys covers every
 // one of them, and eight leaves room without being worth counting.

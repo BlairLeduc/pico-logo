@@ -32,7 +32,7 @@ void tearDown(void) {}
 static long match(const char *pat, const char *line, size_t *out_len)
 {
     EditorPatternGroups g;
-    if (!editor_pattern_search(pat, strlen(pat), line, strlen(line), 0, g))
+    if (!editor_pattern_search(pat, strlen(pat), line, strlen(line), 0, g, NULL))
     {
         return -1;
     }
@@ -55,7 +55,7 @@ static bool matches(const char *pat, const char *line)
 static bool sub_once(const char *pat, const char *rep, const char *line, char *out)
 {
     EditorPatternGroups g;
-    if (!editor_pattern_search(pat, strlen(pat), line, strlen(line), 0, g))
+    if (!editor_pattern_search(pat, strlen(pat), line, strlen(line), 0, g, NULL))
     {
         return false;
     }
@@ -211,7 +211,7 @@ void test_nested_groups_capture_independently(void)
     EditorPatternGroups g;
     const char *line = "hello";
     TEST_ASSERT_TRUE(editor_pattern_search("\\(h\\(el\\)\\)", strlen("\\(h\\(el\\)\\)"),
-                                           line, strlen(line), 0, g));
+                                           line, strlen(line), 0, g, NULL));
     TEST_ASSERT_EQUAL_UINT(0, g[1].start);  // (hel)
     TEST_ASSERT_EQUAL_UINT(3, g[1].end);
     TEST_ASSERT_EQUAL_UINT(1, g[2].start);  // (el)
@@ -249,7 +249,7 @@ void test_an_expansion_that_would_not_fit_reports_size_max(void)
 {
     EditorPatternGroups g;
     const char *line = "abcdef";
-    TEST_ASSERT_TRUE(editor_pattern_search(".", 1, line, strlen(line), 0, g));
+    TEST_ASSERT_TRUE(editor_pattern_search(".", 1, line, strlen(line), 0, g, NULL));
     char out[4];
     // "&&&&&" expands the one-char match five times -> 5 bytes, out_cap is 4
     size_t m = editor_pattern_expand("&&&&&", 5, line, g, out, sizeof(out));
@@ -270,7 +270,7 @@ void test_a_star_pattern_matches_empty_at_the_start(void)
 void test_an_empty_pattern_never_matches(void)
 {
     EditorPatternGroups g;
-    TEST_ASSERT_FALSE(editor_pattern_search("", 0, "abc", 3, 0, g));
+    TEST_ASSERT_FALSE(editor_pattern_search("", 0, "abc", 3, 0, g, NULL));
 }
 
 //
@@ -378,7 +378,7 @@ void test_a_star_after_a_group_is_refused(void)
 static long find(const char *pat, const char *text, size_t from, bool forward)
 {
     size_t pos;
-    if (!editor_pattern_find(pat, strlen(pat), text, strlen(text), from, forward, &pos))
+    if (!editor_pattern_find(pat, strlen(pat), text, strlen(text), from, forward, &pos, NULL))
     {
         return -1;
     }
@@ -438,6 +438,80 @@ void test_a_zero_width_pattern_steps_one_character(void)
     // /x* from cursor+1 lands on the next character each time, as vim does
     TEST_ASSERT_EQUAL_INT(1, find("x*", "abc", 1, true));
     TEST_ASSERT_EQUAL_INT(2, find("x*", "abc", 2, true));
+}
+
+//
+//  B36: the matcher must bound its own work.
+//
+//  Sequential stars backtrack combinatorially -- no nested quantifier needed,
+//  which is the assumption M6 shipped on and got wrong. `.*.*.*x` on a 256-char
+//  line is 189 million match steps and every further `.*` multiplies by the line
+//  length again, so on a board this is a wedge no keystroke can interrupt. These
+//  tests are the reproduction: without the budget they do not fail, they hang.
+//
+
+void test_a_pathological_pattern_is_refused_not_run(void)
+{
+    static char line[257];
+    memset(line, 'a', 256);
+
+    EditorPatternGroups g;
+    bool too_complex = false;
+    // Fifteen `.*` and a trailing `x` the line never contains -- the pattern
+    // from the M6 board gate that wedged the device.
+    const char *pat = ".*.*.*.*.*.*.*.*.*.*.*.*.*.*.*x";
+    TEST_ASSERT_TRUE(editor_pattern_valid(pat, strlen(pat)));
+    TEST_ASSERT_FALSE(editor_pattern_search(pat, strlen(pat), line, 256, 0, g,
+                                            &too_complex));
+    TEST_ASSERT_TRUE(too_complex);
+}
+
+void test_a_refusal_is_distinct_from_an_honest_miss(void)
+{
+    EditorPatternGroups g;
+    bool too_complex = true;  // Poisoned: a plain miss must clear it
+    TEST_ASSERT_FALSE(editor_pattern_search("zz", 2, "abc", 3, 0, g, &too_complex));
+    TEST_ASSERT_FALSE(too_complex);
+}
+
+void test_the_budget_does_not_refuse_a_real_pattern(void)
+{
+    // The worst legitimate case measured: one star failing on a full-width
+    // line, 33,410 steps against a budget of 200,000. If this ever starts
+    // failing the budget has been cut too far, not the pattern gone wrong.
+    static char line[257];
+    memset(line, 'a', 256);
+
+    EditorPatternGroups g;
+    bool too_complex = false;
+    TEST_ASSERT_FALSE(editor_pattern_search(".*x", 3, line, 256, 0, g, &too_complex));
+    TEST_ASSERT_FALSE(too_complex);
+
+    // And the rename pattern the milestone exists for, on a real line
+    const char *code = "    if :n > 3 [print sentence :n :n.total]";
+    TEST_ASSERT_TRUE(editor_pattern_search("\\<n\\>", strlen("\\<n\\>"),
+                                           code, strlen(code), 0, g, &too_complex));
+    TEST_ASSERT_FALSE(too_complex);
+}
+
+void test_a_pathological_pattern_is_refused_by_the_buffer_walker(void)
+{
+    // editor_pattern_find pays the budget per line, so it has to stop at the
+    // first refusal rather than pay it again on every line below.
+    static char text[1024];
+    for (int i = 0; i < 4; i++)
+    {
+        memset(text + i * 256, 'a', 255);
+        text[i * 256 + 255] = '\n';
+    }
+    text[1023] = '\0';
+
+    size_t pos = 0;
+    bool too_complex = false;
+    const char *pat = ".*.*.*.*.*.*.*.*.*.*.*.*.*.*.*x";
+    TEST_ASSERT_FALSE(editor_pattern_find(pat, strlen(pat), text, strlen(text),
+                                          0, true, &pos, &too_complex));
+    TEST_ASSERT_TRUE(too_complex);
 }
 
 //
@@ -621,6 +695,10 @@ int main(void)
     RUN_TEST(test_dot_never_crosses_a_line_break);
     RUN_TEST(test_a_zero_width_pattern_steps_one_character);
 
+    RUN_TEST(test_a_pathological_pattern_is_refused_not_run);
+    RUN_TEST(test_a_refusal_is_distinct_from_an_honest_miss);
+    RUN_TEST(test_the_budget_does_not_refuse_a_real_pattern);
+    RUN_TEST(test_a_pathological_pattern_is_refused_by_the_buffer_walker);
     RUN_TEST(test_literal_patterns_match_like_a_substring_search);
     RUN_TEST(test_differential_against_posix_bre);
 

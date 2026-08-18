@@ -5,12 +5,20 @@
 //  Vi's regular-expression dialect (docs/vi-mode-design.md §16). See the header
 //  for the set. The matcher is the recursive greedy shape: `*` loops over
 //  lengths and recurses once per length, so the stack depth follows the number
-//  of atoms in the pattern (capped at LOGO_VI_TEXT_MAX) and not the line length,
-//  and because `*` is refused on a group there is no nested quantifier to
-//  produce catastrophic backtracking.
+//  of atoms in the pattern (capped at LOGO_VI_TEXT_MAX) and not the line length.
+//
+//  Stack depth was never the problem; TIME was. The design claimed that refusing
+//  `*` on a group removed catastrophic backtracking by construction. That was
+//  wrong (B36): backtracking does not need a nested quantifier, only sequential
+//  ones, and `.*.*.*x` costs O(line^stars) -- 189 million steps on a 256-char
+//  line, which on a board is a wedge no keystroke can interrupt. So the bound is
+//  a guard after all: LOGO_VI_PATTERN_STEPS_MAX steps per search call, and past
+//  it the match is abandoned rather than finished.
 //
 
 #include "editor_pattern.h"
+
+#include "core/limits.h"
 
 #include <stdint.h>
 #include <string.h>
@@ -184,6 +192,11 @@ typedef struct
     // writes are the most recent, which is what the greedy matcher relies on.
     size_t gs[10];
     size_t ge[10];
+    // Work left before the matcher gives up, and whether it did (B36). One
+    // budget covers the whole editor_pattern_search call, every start position
+    // included, so the bound is on the call and not on one attempt.
+    unsigned long budget;
+    bool exhausted;
 } PatCtx;
 
 static bool class_match(const char *pat, size_t cs, size_t ce, bool neg, char c)
@@ -380,6 +393,16 @@ static bool match_star(PatCtx *c, const Atom *a, size_t cont, size_t tp)
 
 static bool match_here(PatCtx *c, size_t pp, size_t tp)
 {
+    // The one guard that keeps a `:s` from wedging the board (B36). Sequential
+    // stars cost O(line^stars), so this is charged per entry -- the unit the
+    // blowup is actually counted in -- and once it trips every frame above
+    // unwinds as a failure rather than trying the next branch.
+    if (c->exhausted || c->budget-- == 0)
+    {
+        c->exhausted = true;
+        return false;
+    }
+
     if (pp == c->pat_len)
     {
         c->ge[0] = tp;  // The whole match ends here
@@ -448,8 +471,13 @@ static bool match_here(PatCtx *c, size_t pp, size_t tp)
 
 bool editor_pattern_search(const char *pat, size_t pat_len,
                            const char *line, size_t line_len,
-                           size_t from, EditorPatternGroups g)
+                           size_t from, EditorPatternGroups g,
+                           bool *too_complex)
 {
+    if (too_complex != NULL)
+    {
+        *too_complex = false;
+    }
     if (pat_len == 0 || from > line_len)
     {
         return false;
@@ -460,6 +488,8 @@ bool editor_pattern_search(const char *pat, size_t pat_len,
     c.pat_len = pat_len;
     c.line = line;
     c.line_len = line_len;
+    c.budget = LOGO_VI_PATTERN_STEPS_MAX;
+    c.exhausted = false;
 
     for (size_t pos = from; pos <= line_len; pos++)
     {
@@ -477,6 +507,14 @@ bool editor_pattern_search(const char *pat, size_t pat_len,
                 g[k].end = c.ge[k];
             }
             return true;
+        }
+        if (c.exhausted)
+        {
+            if (too_complex != NULL)
+            {
+                *too_complex = true;
+            }
+            return false;  // Not a miss -- an abandoned search (B36)
         }
     }
     return false;
@@ -564,10 +602,11 @@ static size_t line_end_of(const char *text, size_t len, size_t ls)
 // The first match on line [ls, le) whose start is >= `min` (relative to ls),
 // as an absolute offset in `out`.
 static bool first_on_line(const char *text, size_t ls, size_t le, size_t min,
-                          const char *pat, size_t pat_len, size_t *out)
+                          const char *pat, size_t pat_len, size_t *out,
+                          bool *too_complex)
 {
     EditorPatternGroups g;
-    if (editor_pattern_search(pat, pat_len, text + ls, le - ls, min, g))
+    if (editor_pattern_search(pat, pat_len, text + ls, le - ls, min, g, too_complex))
     {
         *out = ls + g[0].start;
         return true;
@@ -577,12 +616,13 @@ static bool first_on_line(const char *text, size_t ls, size_t le, size_t min,
 
 // The last match on line [ls, le) whose start is < `cap` (relative to ls).
 static bool last_on_line(const char *text, size_t ls, size_t le, size_t cap,
-                         const char *pat, size_t pat_len, size_t *out)
+                         const char *pat, size_t pat_len, size_t *out,
+                         bool *too_complex)
 {
     EditorPatternGroups g;
     bool any = false;
     size_t at = 0;
-    while (editor_pattern_search(pat, pat_len, text + ls, le - ls, at, g))
+    while (editor_pattern_search(pat, pat_len, text + ls, le - ls, at, g, too_complex))
     {
         size_t s = g[0].start;
         if (s >= cap)
@@ -600,8 +640,16 @@ static bool last_on_line(const char *text, size_t ls, size_t le, size_t cap,
 
 bool editor_pattern_find(const char *pat, size_t pat_len,
                          const char *text, size_t text_len,
-                         size_t from, bool forward, size_t *out_pos)
+                         size_t from, bool forward, size_t *out_pos,
+                         bool *too_complex)
 {
+    // One flag for the whole walk, whether or not the caller wants it back: the
+    // budget is per line, so without this a pathological pattern would be paid
+    // for on every line of the buffer instead of once (B36).
+    bool tc_local;
+    bool *tc = (too_complex != NULL) ? too_complex : &tc_local;
+    *tc = false;
+
     if (pat_len == 0)
     {
         return false;
@@ -617,19 +665,21 @@ bool editor_pattern_find(const char *pat, size_t pat_len,
     {
         // The line holding `from`, from `from` on
         size_t le = line_end_of(text, text_len, start_ls);
-        if (first_on_line(text, start_ls, le, from - start_ls, pat, pat_len, out_pos))
+        if (first_on_line(text, start_ls, le, from - start_ls, pat, pat_len, out_pos, tc))
         {
             return true;
         }
+        if (*tc) return false;
         // Following lines to the end of the buffer
         size_t ls = (le < text_len) ? le + 1 : text_len;
         while (ls < text_len)
         {
             le = line_end_of(text, text_len, ls);
-            if (first_on_line(text, ls, le, 0, pat, pat_len, out_pos))
+            if (first_on_line(text, ls, le, 0, pat, pat_len, out_pos, tc))
             {
                 return true;
             }
+            if (*tc) return false;
             ls = (le < text_len) ? le + 1 : text_len;
         }
         // Wrap: from the top, up to and including the starting line's head
@@ -639,17 +689,18 @@ bool editor_pattern_find(const char *pat, size_t pat_len,
             le = line_end_of(text, text_len, ls);
             if (ls == start_ls)
             {
-                if (first_on_line(text, ls, le, 0, pat, pat_len, out_pos) &&
+                if (first_on_line(text, ls, le, 0, pat, pat_len, out_pos, tc) &&
                     *out_pos < from)
                 {
                     return true;
                 }
                 break;
             }
-            if (first_on_line(text, ls, le, 0, pat, pat_len, out_pos))
+            if (first_on_line(text, ls, le, 0, pat, pat_len, out_pos, tc))
             {
                 return true;
             }
+            if (*tc) return false;
             ls = le + 1;
         }
         return false;
@@ -667,11 +718,12 @@ bool editor_pattern_find(const char *pat, size_t pat_len,
             size_t le = line_end_of(text, text_len, ls);
             size_t cap = (ls == start_ls) ? (from - ls) : (le - ls);
             size_t m;
-            if (last_on_line(text, ls, le, cap, pat, pat_len, &m))
+            if (last_on_line(text, ls, le, cap, pat, pat_len, &m, tc))
             {
                 best = m;
                 found = true;
             }
+            if (*tc) return false;
             if (ls == start_ls)
             {
                 break;
@@ -694,11 +746,12 @@ bool editor_pattern_find(const char *pat, size_t pat_len,
         {
             size_t le = line_end_of(text, text_len, ls);
             size_t m;
-            if (last_on_line(text, ls, le, le - ls + 1, pat, pat_len, &m))
+            if (last_on_line(text, ls, le, le - ls + 1, pat, pat_len, &m, tc))
             {
                 best = m;
                 found = true;
             }
+            if (*tc) return false;
             ls = (le < text_len) ? le + 1 : text_len;
         }
         if (found)

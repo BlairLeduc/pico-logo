@@ -41,9 +41,16 @@ bool editor_pattern_valid(const char *pat, size_t pat_len);
 // line break -- `line`/`line_len` is one line, so `^`, `$` and `.` have their
 // bounds for free. On a match, fills `g` (offsets relative to `line`) and
 // returns true. `g[0]` is the whole match; unset groups are left {0,0}.
+//
+// The call spends at most LOGO_VI_PATTERN_STEPS_MAX match steps. Past that it
+// abandons the search and returns false with `*too_complex` set (B36) -- the
+// two are distinct: false alone is an honest miss, false with the flag is a
+// refusal, and the caller is expected to stop rather than try the next line.
+// `too_complex` may be NULL when the caller cannot act on the difference.
 bool editor_pattern_search(const char *pat, size_t pat_len,
                            const char *line, size_t line_len,
-                           size_t from, EditorPatternGroups g);
+                           size_t from, EditorPatternGroups g,
+                           bool *too_complex);
 
 // Expand a replacement, resolving `&` (the whole match) and `\1`..`\9` from
 // `g`, with `\&` and `\\` as the literal characters. `line` is the buffer the
@@ -61,6 +68,10 @@ size_t editor_pattern_expand(const char *rep, size_t rep_len,
 // and keeps the last match beginning before `from`, then walks to earlier lines
 // and wraps (§16.5), so one matcher direction serves `/`, `?`, `n` and `N`.
 // Sets *out_pos to the match start and returns true when one is found.
+// `too_complex` carries editor_pattern_search's refusal (B36) out to the
+// caller: the walk stops at the first line that trips the budget rather than
+// paying it again on every line that follows. May be NULL.
 bool editor_pattern_find(const char *pat, size_t pat_len,
                          const char *text, size_t text_len,
-                         size_t from, bool forward, size_t *out_pos);
+                         size_t from, bool forward, size_t *out_pos,
+                         bool *too_complex);

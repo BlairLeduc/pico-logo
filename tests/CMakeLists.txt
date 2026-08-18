@@ -278,6 +278,7 @@ add_executable(test_editor_pattern
 )
 target_include_directories(test_editor_pattern PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/devices/picocalc
 )
 add_test(NAME test_editor_pattern COMMAND test_editor_pattern)

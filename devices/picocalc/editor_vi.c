@@ -1877,11 +1877,13 @@ const char *editor_vi_status(const ViState *st)
 static bool sub_next(const char *buf, size_t ls, size_t le,
                      const char *pat, size_t pat_len,
                      size_t at, size_t prev_end,
-                     EditorPatternGroups g, size_t *ms, size_t *me)
+                     EditorPatternGroups g, size_t *ms, size_t *me,
+                     bool *too_complex)
 {
     while (at <= le)
     {
-        if (!editor_pattern_search(pat, pat_len, buf + ls, le - ls, at - ls, g))
+        if (!editor_pattern_search(pat, pat_len, buf + ls, le - ls, at - ls, g,
+                                   too_complex))
         {
             return false;
         }
@@ -1928,6 +1930,7 @@ size_t editor_vi_substitute(char *buf, size_t *len, size_t capacity,
 
     char expand[LOGO_VI_SUB_EXPAND_MAX];
     EditorPatternGroups g;
+    bool too_complex = false;
 
     // Count first, accumulating the length change: patterns make every match
     // and every replacement a different size, so the old `count * len`
@@ -1943,7 +1946,8 @@ size_t editor_vi_substitute(char *buf, size_t *len, size_t capacity,
         size_t at = line;
         size_t prev_end = SIZE_MAX;
         size_t ms, me;
-        while (sub_next(buf, line, end, pat, pat_len, at, prev_end, g, &ms, &me))
+        while (sub_next(buf, line, end, pat, pat_len, at, prev_end, g, &ms, &me,
+                        &too_complex))
         {
             size_t explen = editor_pattern_expand(rep, rep_len, buf, g,
                                                   expand, sizeof(expand));
@@ -1959,6 +1963,10 @@ size_t editor_vi_substitute(char *buf, size_t *len, size_t capacity,
                 break;
             }
             at = (ms == me) ? ms + 1 : me;
+        }
+        if (too_complex)
+        {
+            return SIZE_MAX;  // Abandoned, not finished (B36) -- nothing moved
         }
         if (end >= n)
         {
@@ -1981,7 +1989,13 @@ size_t editor_vi_substitute(char *buf, size_t *len, size_t capacity,
         size_t prev_end = SIZE_MAX;
         size_t ms, me;
         bool changed = false;
-        while (sub_next(buf, line, end, pat, pat_len, at, prev_end, g, &ms, &me))
+        // The counting pass cleared the budget on these same lines, so this one
+        // does too; the flag is passed for the case where a longer replacement
+        // makes a line dearer to rescan. If it ever trips here the loop simply
+        // ends -- every splice already made is complete and journalled, so the
+        // buffer stays consistent, which is the property that matters.
+        while (sub_next(buf, line, end, pat, pat_len, at, prev_end, g, &ms, &me,
+                        &too_complex))
         {
             size_t explen = editor_pattern_expand(rep, rep_len, buf, g,
                                                   expand, sizeof(expand));
