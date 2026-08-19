@@ -1542,6 +1542,17 @@ static Result prim_equalp(Evaluator *eval, int argc, Value *args)
     return result_ok(value_word(result));
 }
 
+// notequal? object1 object2
+// Outputs true if objects are not equal.
+static Result prim_notequalp(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+    
+    bool equal = values_equal(args[0], args[1]);
+    Node result = (equal) ? mem_false_node : mem_true_node;
+    return result_ok(value_word(result));
+}
+
 // list? object
 // Outputs true if object is a list.
 static Result prim_listp(Evaluator *eval, int argc, Value *args)
@@ -1746,6 +1757,8 @@ void primitives_words_lists_init(void)
     primitive_register("empty?", 1, prim_emptyp);
     primitive_register("equalp", 2, prim_equalp);
     primitive_register("equal?", 2, prim_equalp);
+    primitive_register("notequalp", 2, prim_notequalp);
+    primitive_register("notequal?", 2, prim_notequalp);
     primitive_register("listp", 1, prim_listp);
     primitive_register("list?", 1, prim_listp);
     primitive_register("memberp", 2, prim_memberp);

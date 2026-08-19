@@ -373,6 +373,8 @@ Anonymous procedures are written as named lambda expressions - a list whose firs
 
 Word and name comparisons are case-insensitive throughout, including [`equal?`](#equal-equalp): `equal? "Hello "hello` outputs `true`, and a list containing `"Hello` is `member?` of a list containing `"hello`. Variable and procedure names are likewise case-insensitive - `make "Total 1` and `:total` refer to the same variable. Use [`before?`](#before-beforep), which compares ASCII values, when exact-case comparison is needed.
 
+There are no `<=` and `>=` operators. Use [`lessequal?`](#lessequal-lessequalp) and [`greaterequal?`](#greaterequal-greaterequalp) instead; [`less?`](#less-lessp), [`greater?`](#greater-greaterp) and [`notequal?`](#notequal-notequalp) are likewise available as named spellings of `<`, `>` and "not `=`".
+
 All numbers are single-precision (32-bit) IEEE floating point, matching the RP2350's hardware FPU; there is no bignum or double-precision arithmetic, so results very slightly differ in their last digit from Logos that compute in double precision. Numbers printed in exponential form use `n` rather than a signed exponent for negative powers of ten - `1n5` means 1 &times; 10<sup>-5</sup>, while `1e7` means 1 &times; 10<sup>7</sup> - following Apple Logo's convention rather than the `1e-5` form other Logos use (a bare minus sign inside a word is easily confused with the subtraction operator).
 
 Pico Logo has no array data type and no `array`/`setitem` primitives for O(1) indexed access; lists are the only ordered collection. [`.setfirst`](#setfirst), [`.setbf`](#setbf) and [`.setitem`](#setitem) do mutate a list in place, as in UCB Logo, but there is no fixed-size random-access structure to mutate into.
@@ -3038,7 +3040,7 @@ equalp _object1_ _object2_
 
 `equal?` outputs `true` if _object1_ and _object2_ are equal numbers, identical words, or identical lists; otherwise `equal?` outputs `false`. This operation is equivalent to the equal sign (`=`).
 
-Words are compared without regard to case, just as Logo treats names: `equal? "Hello "hello` outputs `true`. Lists are compared element by element under the same rule. (To compare words by their exact character codes, use [`before?`](#before-beforep), which compares ASCII values.)
+Words are compared without regard to case, just as Logo treats names: `equal? "Hello "hello` outputs `true`. Lists are compared element by element under the same rule. (To compare words by their exact character codes, use [`before?`](#before-beforep), which compares ASCII values.) For the opposite test, use [`notequal?`](#notequal-notequalp).
 
 **Examples**:
 
@@ -3100,6 +3102,31 @@ false
 ?pr member? ". 3.14159
 true
 ```
+
+## notequal? (notequalp)
+
+notequal? _object1_ _object2_  
+notequalp _object1_ _object2_  
+
+`operation`
+
+`notequal?` outputs `true` if _object1_ and _object2_ are not equal; otherwise it outputs `false`. It is the opposite of [`equal?`](#equal-equalp) in every case, and follows the same rules: numbers are compared by value, words without regard to case, and lists element by element.
+
+**Examples**:
+
+```logo
+?pr notequal? "hello "world
+true
+?pr notequal? "Hello "hello
+false
+?pr notequal? [a b c] [a b d]
+true
+?pr notequal? 10 10
+false
+?if notequal? :flavour "ketchup [pr [Not the right chips]]
+Not the right chips
+```
+
 
 ## number? (numberp)
 
@@ -3430,6 +3457,54 @@ $   1234.56
 ```
 
 
+## greater? (greaterp)
+
+greater? _number1_ _number2_  
+greaterp _number1_ _number2_  
+
+`operation`
+
+`greater?` outputs `true` if _number1_ is greater than _number2_; otherwise it outputs `false`. This operation is equivalent to the greater-than sign (`>`). An error occurs if either input is not a number. Words that spell a number are accepted, as they are everywhere else in Logo; words that do not are refused, as are lists.
+
+**Examples**:
+
+```logo
+?pr greater? 5 4
+true
+?pr greater? 4 4
+false
+?pr greater? -2 -1.5
+false
+?pr greater? "Apple 4
+greater? doesn't like Apple as input
+```
+
+
+## greaterequal? (greaterequalp)
+
+greaterequal? _number1_ _number2_  
+greaterequalp _number1_ _number2_  
+
+`operation`
+
+`greaterequal?` outputs `true` if _number1_ is greater than or equal to _number2_; otherwise it outputs `false`. Pico Logo has no `>=` operator, so this is the way to write that test. An error occurs if either input is not a number. Words that spell a number are accepted, as they are everywhere else in Logo; words that do not are refused, as are lists.
+
+**Examples**:
+
+```logo
+?pr greaterequal? 5 4
+true
+?pr greaterequal? 4 4
+true
+?pr greaterequal? 3 4
+false
+?pr greaterequal? "Apple 4
+greaterequal? doesn't like Apple as input
+?if greaterequal? :temperature 0 [pr [The rink is melting]]
+The rink is melting
+```
+
+
 ## int
 
 int _number_  
@@ -3463,6 +3538,57 @@ intquotient _integer1_ _integer2_
 ; How many full four-person curling teams from 18 players?
 ?pr intquotient 18 4
 4
+```
+
+
+## less? (lessp)
+
+less? _number1_ _number2_  
+lessp _number1_ _number2_  
+
+`operation`
+
+`less?` outputs `true` if _number1_ is less than _number2_; otherwise it outputs `false`. This operation is equivalent to the less-than sign (`<`). An error occurs if either input is not a number: a word spells a number only if it is written the way Logo writes one, so `less? "3 4` is fine but `less? "three 4` is an error.
+
+**Examples**:
+
+```logo
+?pr less? 3 4
+true
+?pr less? 4 4
+false
+?pr less? -1.5 -2
+false
+?pr less? "Apple 4
+less? doesn't like Apple as input
+```
+
+
+## lessequal? (lessequalp)
+
+lessequal? _number1_ _number2_  
+lessequalp _number1_ _number2_  
+
+`operation`
+
+`lessequal?` outputs `true` if _number1_ is less than or equal to _number2_; otherwise it outputs `false`. Pico Logo has no `<=` operator, so this is the way to write that test. An error occurs if either input is not a number. Words that spell a number are accepted, as they are everywhere else in Logo; words that do not are refused, as are lists.
+
+**Examples**:
+
+```logo
+?pr lessequal? 3 4
+true
+?pr lessequal? 4 4
+true
+?pr lessequal? 5 4
+false
+?pr lessequal? "Apple 4
+lessequal? doesn't like Apple as input
+?make "call 1
+?do.while [pr :call  make "call :call + 1] [lessequal? :call 3]
+1
+2
+3
 ```
 
 
@@ -4152,7 +4278,7 @@ do.while _list_ _predicatelist_
 ```logo
 ; Count ferry boarding calls
 ?make "call 1
-?do.while [pr se [Call:] :call  make "call :call + 1] [:call <= 3]
+?do.while [pr se [Call:] :call  make "call :call + 1] [lessequal? :call 3]
 Call: 1
 Call: 2
 Call: 3

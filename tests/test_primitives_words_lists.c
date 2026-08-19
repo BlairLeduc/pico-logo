@@ -1156,6 +1156,21 @@ void test_equalp_lists(void)
     TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
 }
 
+void test_notequalp(void)
+{
+    TEST_ASSERT_EQUAL_STRING("true", value_to_string(eval_string("notequal? \"hello \"world").value));
+    TEST_ASSERT_EQUAL_STRING("false", value_to_string(eval_string("notequal? \"hello \"hello").value));
+    TEST_ASSERT_EQUAL_STRING("false", value_to_string(eval_string("notequalp 42 42").value));
+    TEST_ASSERT_EQUAL_STRING("true", value_to_string(eval_string("notequal? [a b] [a c]").value));
+}
+
+void test_notequalp_words_case_insensitive(void)
+{
+    // Mirrors equal?: word comparison ignores case.
+    TEST_ASSERT_EQUAL_STRING("false", value_to_string(eval_string("notequal? \"Hello \"hello").value));
+    TEST_ASSERT_EQUAL_STRING("false", value_to_string(eval_string("notequal? [Alpha Beta] [alpha beta]").value));
+}
+
 //==========================================================================
 // Type Predicate Tests
 //==========================================================================
@@ -1528,6 +1543,8 @@ int main(void)
     RUN_TEST(test_equalp_words_false);
     RUN_TEST(test_equalp_numbers);
     RUN_TEST(test_equalp_lists);
+    RUN_TEST(test_notequalp);
+    RUN_TEST(test_notequalp_words_case_insensitive);
     RUN_TEST(test_equalp_words_case_insensitive);
     RUN_TEST(test_equals_operator_case_insensitive);
     RUN_TEST(test_equalp_list_elements_case_insensitive);

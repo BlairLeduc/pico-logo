@@ -3,7 +3,8 @@
 //  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Arithmetic primitives: sum, difference, product, quotient, random,
-//                         arctan, cos, sin, int, intquotient, remainder, round, sqrt, form
+//                         arctan, cos, sin, int, intquotient, remainder, round, sqrt, form,
+//                         less?, greater?, lessequal?, greaterequal?
 //
 
 #include "primitives.h"
@@ -184,6 +185,55 @@ static Result prim_sin(Evaluator *eval, int argc, Value *args)
     REQUIRE_NUMBER(args[0], n);
     
     return result_ok(value_number(sinf(n * DEG_TO_RAD)));
+}
+
+// Shared body for the numeric comparison predicates. Each of lt/eq/gt says
+// whether that ordering of the two inputs outputs true.
+//
+// Each ordering is tested outright rather than inferred from the other two:
+// a NaN -- which `pwr -1 0.5` produces -- is neither less than, greater than
+// nor equal to anything, so "not less and not greater" must not be read as
+// equal. All three comparisons are false for it, matching what `<`, `>` and
+// `=` already answer.
+static Result compare_numbers(Value *args, bool lt, bool eq, bool gt)
+{
+    REQUIRE_NUMBER(args[0], a);
+    REQUIRE_NUMBER(args[1], b);
+
+    bool result = (lt && a < b) || (eq && a == b) || (gt && a > b);
+    return result_ok(value_bool(result));
+}
+
+// less? - outputs true if number1 is less than number2
+static Result prim_lessp(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+
+    return compare_numbers(args, true, false, false);
+}
+
+// greater? - outputs true if number1 is greater than number2
+static Result prim_greaterp(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+
+    return compare_numbers(args, false, false, true);
+}
+
+// lessequal? - outputs true if number1 is less than or equal to number2
+static Result prim_lessequalp(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+
+    return compare_numbers(args, true, true, false);
+}
+
+// greaterequal? - outputs true if number1 is greater than or equal to number2
+static Result prim_greaterequalp(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+
+    return compare_numbers(args, false, true, true);
 }
 
 // int - returns integer part of number (truncates toward zero)
@@ -404,6 +454,14 @@ void primitives_arithmetic_init(void)
     primitive_register("cos", 1, prim_cos);
     primitive_register("sin", 1, prim_sin);
     primitive_register("tan", 1, prim_tan);
+    primitive_register("lessp", 2, prim_lessp);
+    primitive_register("less?", 2, prim_lessp);
+    primitive_register("greaterp", 2, prim_greaterp);
+    primitive_register("greater?", 2, prim_greaterp);
+    primitive_register("lessequalp", 2, prim_lessequalp);
+    primitive_register("lessequal?", 2, prim_lessequalp);
+    primitive_register("greaterequalp", 2, prim_greaterequalp);
+    primitive_register("greaterequal?", 2, prim_greaterequalp);
     primitive_register("int", 1, prim_int);
     primitive_register("intquotient", 2, prim_intquotient);
     primitive_register("remainder", 2, prim_remainder);
