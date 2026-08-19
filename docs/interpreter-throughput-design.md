@@ -278,7 +278,7 @@ materially (the atom region's high-water mark recorded alongside it).
   It prints `BENCH` lines for the record and asserts only **relative**
   ratios — each scenario against an in-process calibration loop that slows
   down with the machine, plus the 128:1 workspace-scan ratio — so the guard
-  does not flap on a loaded box. `logo/tests/p10m0` takes the same
+  does not flap on a loaded box. `tests/logo/p10m0` takes the same
   scenarios on a Pico 2 (the p9m0 pattern; frame bodies stay with
   `p9m0.trails`/`p9m0.checkrun`). Baseline in §6.1. **Nothing below lands
   without a before-and-after from this.**
@@ -711,7 +711,7 @@ guess.
 
 **The question is not which procedure is slowest. It is whether a hot spot
 exists at all**, and the profile is built to answer that rather than to
-rank slots. `logo/tests/p10prof` splits `play.frame` into its thirteen
+rank slots. `tests/logo/p10prof` splits `play.frame` into its thirteen
 parts on a board — thirteen `ticks` marks, tallied after `sync` so the
 arithmetic falls outside every slot, accumulated over 200 frames because
 `ticks` is whole milliseconds against slots well under one. Sampling a
@@ -759,7 +759,7 @@ runs came to be taken on a Plus 2 W and what it costs.
 **One constraint the first board run surfaced: `erall` before loading.**
 `MAX_PROCEDURES` is a hard 128 and Turtle Trails alone defines **99** of
 them — 104 when this was written, until P9's instrumentation moved out to
-`logo/tests/p9trails` on 2026-08-04 and took six with it — so anything loaded
+`tests/logo/p9trails` on 2026-08-04 and took six with it — so anything loaded
 beside the game has about twenty-five slots to live in.
 A workspace still holding another program makes `load` stop with `out of
 space` — the procedure table talking, not memory, of which there is plenty

@@ -12,7 +12,7 @@
 //  hide.
 //
 //  The frame budget is what every milestone is really about, and no host test
-//  can answer it -- that needs logo/tests/p11m4 on a board.  What these tests can hold is
+//  can answer it -- that needs tests/logo/p11m4 on a board.  What these tests can hold is
 //  everything the budget assumes: that a frame draws the world and nothing
 //  else, that the frame loop holds free storage flat, that the outlines carry
 //  the segment counts the budget was cut from, and that the split table can
@@ -35,7 +35,7 @@
 #endif
 
 #ifndef P11M4_SOURCE
-#error "P11M4_SOURCE must be defined (path to logo/tests/p11m4)"
+#error "P11M4_SOURCE must be defined (path to tests/logo/p11m4)"
 #endif
 
 // Segments per outline, from the design's section 6.3 table. Statements per

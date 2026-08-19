@@ -2,7 +2,7 @@
 //  Pico Logo
 //  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
-//  Tests for the Asteroids M0 timing harness (logo/tests/p11rocks).
+//  Tests for the Asteroids M0 timing harness (tests/logo/p11rocks).
 //
 //  M0 is the measurement that decided how an Asteroids frame gets erased, and
 //  it has run: clear-and-redraw beat erase-in-place at every rock count the
@@ -33,7 +33,7 @@
 #include <string.h>
 
 #ifndef P11ROCKS_SOURCE
-#error "P11ROCKS_SOURCE must be defined (path to logo/tests/p11rocks)"
+#error "P11ROCKS_SOURCE must be defined (path to tests/logo/p11rocks)"
 #endif
 
 // Load a whole Logo file, defining its procedures and running its top-level

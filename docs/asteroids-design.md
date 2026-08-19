@@ -65,7 +65,7 @@ game info at the top of the display. All three are taken as given below.
 | Game | `logo/games/asteroids` — one Logo file, no extension (flash fs files are extensionless), no `-` or `/` in the name so `load "asteroids` parses |
 | Tests | `tests/test_asteroids.c` (Unity + mock device, 97 tests), mirroring `tests/test_galaxian.c`; the M0 harness has its own binary, `tests/test_p11rocks.c` |
 | Design | this document |
-| Measurement | `logo/tests/p11m4` times a real frame at 6, 9 and 12 rocks and then at 12 rocks **with a saucer held on screen**, with the rock pass read apart from the rest — it writes its numbers to a file, because numbers on a display cannot be copied off it. `logo/tests/p11rocks` is M0's standalone erase-strategy harness and survives because nothing else reproduces that question; `p11m1` and `p11m2` are **gone** and `p11m3` was renamed, because a harness that does not run the frame the game runs measures a game nobody plays |
+| Measurement | `tests/logo/p11m4` times a real frame at 6, 9 and 12 rocks and then at 12 rocks **with a saucer held on screen**, with the rock pass read apart from the rest — it writes its numbers to a file, because numbers on a display cannot be copied off it. `tests/logo/p11rocks` is M0's standalone erase-strategy harness and survives because nothing else reproduces that question; `p11m1` and `p11m2` are **gone** and `p11m3` was renamed, because a harness that does not run the frame the game runs measures a game nobody plays |
 | Outline generator | [`scripts/gen_rocks.py`](../scripts/gen_rocks.py), host-side, output pasted in (§6.3) |
 
 Play: `load "asteroids` then `asteroids`.
@@ -222,7 +222,7 @@ complex on a non-black background. **Not** in v1.
 ### 3.3 M0's answer: clear and redraw
 
 **Measured on a Pimoroni Pico Plus 2 W, 2026-08-11, 60 frames a point, two
-runs reproducing every figure within 1 %** (`logo/tests/p11rocks`; the scene
+runs reproducing every figure within 1 %** (`tests/logo/p11rocks`; the scene
 is 4 large, 4 medium and 4 small at twelve, an equal mix at every count).
 Milliseconds:
 
@@ -1418,10 +1418,10 @@ That is where the levers are, and it is not where §12 originally looked.
 ### The measured frame (M1, 2026-08-11)
 
 **A real `play.frame` on a Plus 2 W**, 300 frames a point, measured by
-`logo/tests/p11m1` — **which no longer exists.** M2's fusion (§15) removed the
+`tests/logo/p11m1` — **which no longer exists.** M2's fusion (§15) removed the
 procedures it called by name, so these numbers are archival: they are the last
 record of a rocks-only frame and cannot be reproduced against the game as it
-stands. `logo/tests/p11m3` measures the frame the game actually runs.
+stands. `tests/logo/p11m3` measures the frame the game actually runs.
 
 | rocks | body | present | **frame** | min | max |
 |---:|---:|---:|---:|---:|---:|
@@ -1491,7 +1491,7 @@ a third such number would have traded real gameplay for arithmetic nobody had
 checked.
 
 So M2 was built whole, and its harness measured it (that harness is now
-`logo/tests/p11m3`: M3 added a branch to the frame, and a harness that does not
+`tests/logo/p11m3`: M3 added a branch to the frame, and a harness that does not
 follow the frame measures a game nobody plays).
 
 ### The measured M2 frame, and it is not 6 ms over
@@ -1693,7 +1693,7 @@ still the number no game-side lever reaches.
 
 ## 12b. M3 measured: the frame fits, the worst frame does not
 
-**300 frames a point on a Plus 2 W** (`logo/tests/p11m3`), the same worst case —
+**300 frames a point on a Plus 2 W** (`tests/logo/p11m3`), the same worst case —
 twelve rocks with three shots live on every frame:
 
 | rocks | body | present | **frame** | min | max | rock pass |
@@ -1795,7 +1795,7 @@ recovered nothing because there was nothing to recover. The present held at
 
 ## 12c. M4 measured: the saucer was not the problem
 
-**300 frames a point on a Plus 2 W, 2026-08-12** (`logo/tests/p11m4`), twelve
+**300 frames a point on a Plus 2 W, 2026-08-12** (`tests/logo/p11m4`), twelve
 rocks with three shots live on every frame, and a fourth point with a saucer
 held on screen for all 300:
 
@@ -2451,7 +2451,7 @@ only consequence is that the beat reads a rock count one frame old.
 ## 16. Milestones
 
 **M0 — measure, before any game code. DONE, 2026-08-11**
-(`logo/tests/p11rocks`, `tests/test_asteroids.c`). Two runs on a Plus 2 W,
+(`tests/logo/p11rocks`, `tests/test_asteroids.c`). Two runs on a Plus 2 W,
 every figure reproducing within 1 %. It rewrote §3, §10, §12, §13 and §15:
 clear-and-redraw wins at every rock count the game plays at, the design's
 assumed 35 µs drawing statement is 60, the dispatch nobody costed is 370 µs a
@@ -2478,11 +2478,11 @@ the levers priced in §12.
 The build:
 `logo/games/asteroids` (12 slots, three outlines, wrap, spin,
 clear-and-redraw, `sync` at 15 fps, nothing to shoot with),
-`tests/test_asteroids.c` (23 tests), and `logo/tests/p11m1`, which timed a
+`tests/test_asteroids.c` (23 tests), and `tests/logo/p11m1`, which timed a
 real frame at 6, 9 and 12 rocks with the body and the present read apart —
 the split P9 M5 wished it had. **That harness was removed at M2** and is
 described here in the past tense for that reason; M2's harness replaced it
-(and is now `logo/tests/p11m3`).
+(and is now `tests/logo/p11m3`).
 
 Two things M1 settled on the host before the board saw it. It **disproved this
 document's memory rule** — an Asteroids frame does allocate, ~36 atoms a
@@ -2509,10 +2509,10 @@ inlining `wrapc` took another **2.9 ms**, double its estimate. **Accepted at
 six-segment larges all survive.
 
 The build: `logo/games/asteroids` (36 procedures), `tests/test_asteroids.c`
-(49 tests) and `logo/tests/p11m2` — renamed `p11m3` when M3 changed the frame —
+(49 tests) and `tests/logo/p11m2` — renamed `p11m3` when M3 changed the frame —
 which reads the rock pass apart from the rest
 of the body and times one `shot.on` on its own — between them those price every
-remaining lever. `logo/tests/p11m1` is **gone**: the fusion removed `step.all`,
+remaining lever. `tests/logo/p11m1` is **gone**: the fusion removed `step.all`,
 `draw.all` and `place`, which it called by name, so it could no longer run
 against this game at all. Its numbers live in §12's table. `p11rocks` survives
 because it defines its own drawing and measures a question nothing else
@@ -2559,7 +2559,7 @@ in proportion on the smallest object, exactly as `shot.reach` was at M2.
 **M3 is done.**
 
 The build: `logo/games/asteroids` (48 procedures), `tests/test_asteroids.c`
-(71 tests) and `logo/tests/p11m3`, which replaces `p11m2` — the frame gained a
+(71 tests) and `tests/logo/p11m3`, which replaces `p11m2` — the frame gained a
 branch, and a harness that kept calling `step.ship` unconditionally would time a
 ship the game is not flying. It also prices the explosion ring on its own, since
 that is the one M3 cost that is not in any per-rock figure.
@@ -2612,7 +2612,7 @@ the harness's pessimistic board, and 68–69 on a reachable one. None of the thr
 priced gameplay levers was spent.
 
 The build: `logo/games/asteroids` (65 procedures), `tests/test_asteroids.c`
-(97 tests) and `logo/tests/p11m4`, which replaces `p11m3` — the frame gained
+(97 tests) and `tests/logo/p11m4`, which replaces `p11m3` — the frame gained
 `step.saucer`, `heartbeat` and a guarded `draw.saucer`, and a harness that did
 not follow it would measure a game nobody plays. It adds a **fourth measurement
 point**: twelve rocks with a saucer held on screen for every frame, because M4's
@@ -2665,7 +2665,7 @@ bounds — they survive it, but only just: 160/13 = 12.3 against a 20-step box,
 and the saucer's vertical bound goes to 17.6 against 18.
 
 **M5 — hardware pass.** 300 frames timed on a Plus 2 W in the shape of
-`logo/tests/p10games`, alongside Invaders' 11.55 ms and Galaxian's 11.22 ms,
+`tests/logo/p10games`, alongside Invaders' 11.55 ms and Galaxian's 11.22 ms,
 with the body/present split M5 of P9 wished it had. Then tune: rotation rate,
 thrust impulse, speed clamp, shot speed, saucer accuracy.
 

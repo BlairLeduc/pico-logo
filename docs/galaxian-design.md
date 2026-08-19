@@ -354,7 +354,7 @@ their designed rate unnoticed (P9 M0). Measured on the host by
 0.63 and Space Invaders' 0.15.
 
 **And on hardware, for the first time in the game's life** — 300 frames on a
-Pimoroni Pico Plus 2 W (`logo/tests/p10games`, manual refresh, graphics mode,
+Pimoroni Pico Plus 2 W (`tests/logo/p10games`, manual refresh, graphics mode,
 2026-08-06):
 
 | | Galaxian | Space Invaders | budget |

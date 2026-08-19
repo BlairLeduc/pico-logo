@@ -25,7 +25,7 @@
 #endif
 
 #ifndef P10GAMES_SOURCE
-#error "P10GAMES_SOURCE must be defined (path to logo/tests/p10games)"
+#error "P10GAMES_SOURCE must be defined (path to tests/logo/p10games)"
 #endif
 
 // Load a whole Logo file, defining its procedures and running its top-level

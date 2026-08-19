@@ -1715,7 +1715,7 @@ end
 ; rather than fast and dead.
 ;
 ; The cost when it fires is unchanged and still the thing to watch: a recycle is
-; 4.3 ms on a Plus 2 W against a 71.4 ms budget.  `logo/tests/p11m4` now reports
+; 4.3 ms on a Plus 2 W against a 71.4 ms budget.  `tests/logo/p11m4` now reports
 ; the word space beside it, which is what says whether this floor is right on a
 ; given board.
 ;

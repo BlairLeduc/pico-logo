@@ -760,7 +760,7 @@ end
 
 ; One frame, in a fixed order. This is a procedure rather than the body of the
 ; loop below so that a test or a hardware script can call exactly what the game
-; runs and time it (tests/test_invaders.c, logo/tests/p10games): a frame whose
+; runs and time it (tests/test_invaders.c, tests/logo/p10games): a frame whose
 ; body is inline in its loop cannot be measured, which is how two other games
 ; reached hardware at a third of their designed rate unnoticed -- `sync` does
 ; not wait when a frame overruns, it just presents late.

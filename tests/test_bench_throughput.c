@@ -322,7 +322,7 @@ void test_bench_invaders_play_frame(void)
 }
 
 // P10 M5: the cost of an expression, by shape. The board profiler
-// (logo/tests/p10prof) times the same shapes there; the pair is what turns
+// (tests/logo/p10prof) times the same shapes there; the pair is what turns
 // "this statement is slow" into "slow relative to what", and it is how the
 // grouping paren was separated from the infix operator and the operands.
 // Printed for the record, like the other BENCH lines; the guard is on the
@@ -362,7 +362,7 @@ void test_bench_expr_shapes(void)
 }
 
 //==========================================================================
-// The hardware script: logo/tests/p10m0 must run end to end on the mock,
+// The hardware script: tests/logo/p10m0 must run end to end on the mock,
 // so a script that fails half way through cannot waste a hardware session
 // (the p9m0 convention).
 //==========================================================================

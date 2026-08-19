@@ -100,7 +100,7 @@ target_compile_definitions(test_xkcd2601 PRIVATE
 add_logo_test(test_galaxian)
 target_compile_definitions(test_galaxian PRIVATE
     GALAXIAN_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/galaxian"
-    P10GAMES_SOURCE="${CMAKE_SOURCE_DIR}/logo/tests/p10games")
+    P10GAMES_SOURCE="${CMAKE_SOURCE_DIR}/tests/logo/p10games")
 
 # Space Invaders game test — the same treatment as Galaxian: the file loads and
 # its init path runs on the mock device, the pure helpers are checked directly,
@@ -108,23 +108,23 @@ target_compile_definitions(test_galaxian PRIVATE
 add_logo_test(test_invaders)
 target_compile_definitions(test_invaders PRIVATE
     INVADERS_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/invaders"
-    P10GAMES_SOURCE="${CMAKE_SOURCE_DIR}/logo/tests/p10games")
+    P10GAMES_SOURCE="${CMAKE_SOURCE_DIR}/tests/logo/p10games")
 
 # Asteroids (P11), M4: rocks, ship, shots, lives, the saucer and the sound. The
 # game is pure Logo -- the file loads and its init path runs on the mock, and
 # wrap, slot allocation, the split table and the outline walks are checked
-# directly. The frame budget itself needs a board (logo/tests/p11m4).
+# directly. The frame budget itself needs a board (tests/logo/p11m4).
 add_logo_test(test_asteroids)
 target_compile_definitions(test_asteroids PRIVATE
     ASTEROIDS_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/asteroids"
-    P11M4_SOURCE="${CMAKE_SOURCE_DIR}/logo/tests/p11m4")
+    P11M4_SOURCE="${CMAKE_SOURCE_DIR}/tests/logo/p11m4")
 
 # The P11 M0 timing harness, which decided how an Asteroids frame gets erased.
 # A separate binary from test_asteroids because both Logo files define `place`
 # and `draw.rock`, and the harness has to keep the shape it was measured in.
 add_logo_test(test_p11rocks)
 target_compile_definitions(test_p11rocks PRIVATE
-    P11ROCKS_SOURCE="${CMAKE_SOURCE_DIR}/logo/tests/p11rocks")
+    P11ROCKS_SOURCE="${CMAKE_SOURCE_DIR}/tests/logo/p11rocks")
 
 # P10 M0 interpreter throughput benchmark -- repeatable baseline plus a
 # regression guard on relative numbers (interpreter-throughput-design.md §6).
@@ -134,7 +134,7 @@ target_compile_definitions(test_bench_throughput PRIVATE
     TRAILS_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/trails"
     GALAXIAN_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/galaxian"
     INVADERS_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/invaders"
-    P10M0_SOURCE="${CMAKE_SOURCE_DIR}/logo/tests/p10m0"
+    P10M0_SOURCE="${CMAKE_SOURCE_DIR}/tests/logo/p10m0"
     # Every BENCH line is written here as well as to the terminal, so the
     # numbers can be pasted into a design doc instead of read off a screen.
     BENCH_REPORT="${CMAKE_BINARY_DIR}/bench-throughput.txt")
@@ -145,8 +145,8 @@ target_compile_definitions(test_bench_throughput PRIVATE
 add_logo_test(test_trails)
 target_compile_definitions(test_trails PRIVATE
     TRAILS_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/trails"
-    P9TRAILS_SOURCE="${CMAKE_SOURCE_DIR}/logo/tests/p9trails"
-    P10PROF_SOURCE="${CMAKE_SOURCE_DIR}/logo/tests/p10prof")
+    P9TRAILS_SOURCE="${CMAKE_SOURCE_DIR}/tests/logo/p9trails"
+    P10PROF_SOURCE="${CMAKE_SOURCE_DIR}/tests/logo/p10prof")
 
 # Game HUD test — both games use the fullscreen graphics canvas and draw their
 # score/lives/level text into the lower part of it.

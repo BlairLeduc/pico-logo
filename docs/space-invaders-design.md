@@ -331,7 +331,7 @@ game that misses its budget degrades quietly — which is how Turtle Trails and
 Checkpoint Run reached hardware at ~9 and ~4 fps against a designed 25 without
 anyone noticing (P9 M0). This frame is now on the record in
 `tests/test_bench_throughput.c` — **0.15 ms on the host**, the lightest of the
-four games, against Turtle Trails' 0.63 — and `logo/tests/p10games` takes the
+four games, against Turtle Trails' 0.63 — and `tests/logo/p10games` takes the
 same measurement on a board.
 
 Taken on a Pimoroni Pico Plus 2 W, 300 frames, manual refresh, 2026-08-06:

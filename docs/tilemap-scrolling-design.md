@@ -121,9 +121,9 @@ Three throwaway scripts, all running on today's firmware:
 
 | Script | Gives |
 |---|---|
-| `logo/tests/p9m0` → `p9m0` | items 1 and 4 |
+| `tests/logo/p9m0` → `p9m0` | items 1 and 4 |
 | `logo/games/checkrun` → `p9m0.checkrun` | items 2 and 3, Checkpoint Run |
-| `logo/tests/p9trails` → `p9m0.trails` | items 2 and 3, Turtle Trails |
+| `tests/logo/p9trails` → `p9m0.trails` | items 2 and 3, Turtle Trails |
 
 **[Moved 2026-08-04.** The Turtle Trails half started out inside
 `logo/games/trails` and now sits beside it, loaded on top as `p10prof` always
@@ -693,7 +693,7 @@ REPL runs the storage half. Six departures from §5–§7 are worth recording:
 
 ### 13.2 M1+M2 on hardware (2026-08-02, Pico Plus 2 W)
 
-`logo/tests/p9m2`, all four checks **pass**.
+`tests/logo/p9m2`, all four checks **pass**.
 
 - **Tier and capacity (1): PASS.** The large tier is real — slot 255 accepted
   and 256 refused, a 512×512 map accepted and 513×512 refused — so §4's
