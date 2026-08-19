@@ -2166,6 +2166,30 @@ static int editor_vi_apply(const ViAction *act, int cursor_line_before)
             return EDITOR_VI_CANCEL;
     }
 
+    // `.` repeating a change that ended in insert mode carries the text that
+    // was typed then. The action above has made room for it -- deleted the
+    // word, opened the line -- and typing it here is what makes the repeat the
+    // whole change rather than half of it (vi-mode-design.md §20). Then step
+    // back off the last character, as Esc does.
+    if (act->insert != NULL) {
+        if (editor_vi_insert_text(editor.cursor_pos, act->insert, act->insert_len)) {
+            editor.cursor_pos += act->insert_len;
+            size_t line_start =
+                (size_t)editor_get_line_start(editor_get_line_at_pos(editor.cursor_pos));
+            if (editor.cursor_pos > line_start) {
+                editor.cursor_pos--;
+            }
+            // Only bytes that actually went in are a change. A repeat of `i`
+            // closed without typing anything is a cursor move, and the keys it
+            // repeats did not set this either; a full buffer took nothing.
+            // Whatever the change was, the action above has already said so.
+            if (act->insert_len > 0) {
+                editor.vi.modified = true;
+            }
+        }
+        editor_mark_from_line_dirty(cursor_line_before);
+    }
+
     if (editor.cursor_pos > editor.content_length) {
         editor.cursor_pos = editor.content_length;
     }
@@ -2356,6 +2380,14 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size,
                 if (exit_how != EDITOR_VI_CONTINUE) {
                     editor_restore_screen(saved_screen_mode, saved_cursor_col, saved_cursor_row);
                     return exit_how == EDITOR_VI_ACCEPT ? LOGO_EDITOR_ACCEPT : LOGO_EDITOR_CANCEL;
+                }
+                // Insert mode has just begun. Where the cursor landed is the
+                // editor's decision -- past `o`'s auto-indent, at what `cw`
+                // deleted -- so the state machine is told, and the `Esc` can
+                // then see what was typed (vi-mode-design.md §20)
+                if (mode_before != VI_INSERT && editor.vi.mode == VI_INSERT) {
+                    editor_vi_insert_began(&editor.vi, editor.cursor_pos,
+                                           editor.content_length);
                 }
                 key = 0;
             } else if (editor.vi.mode == VI_INSERT &&

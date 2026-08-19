@@ -298,6 +298,16 @@ extern "C" {
 // the last one that fit rather than a half command.
 #define LOGO_VI_REPEAT_MAX   8
 
+// The text of an insert session recorded for `.` to type again -- everything
+// between the `i`/`a`/`o`/`c` and the `Esc` that closed it. Two 40-column
+// lines, which is more than the one-line insert this exists for (a comment
+// marker, a retyped word) and enough for the small multi-line one.
+//
+// OVERFLOW: a longer session is not recorded and the change it belongs to is
+// dropped from the record, so `.` says it has nothing to repeat rather than
+// putting back a truncated version of what was typed.
+#define LOGO_VI_INSERT_MAX   80
+
 // The undo journal (docs/vi-mode-design.md §8), tiered by where the editor
 // buffers landed -- which is a run-time decision, not a build one. A record is
 // a header plus the bytes a change removed and the bytes it put there, so a

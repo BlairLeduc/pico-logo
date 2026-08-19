@@ -75,6 +75,16 @@ typedef struct
     const char *msg;   // Footer text for VI_ACT_BEEP and VI_ACT_MESSAGE. A
                        // literal, or `ViState.msg` -- which lives as long as
                        // the editor session the footer belongs to
+
+    // Set only by `.` repeating a change that ended in insert mode (§20): the
+    // text that was typed then, for the editor to type again once it has
+    // carried the action out. Non-NULL says so even when the text is empty (a
+    // `cw` closed without typing anything is still a change worth repeating),
+    // and the editor stays in normal mode -- the state machine has already put
+    // it back there. Points into `ViState.repeat_insert`, which lives as long
+    // as the editor session.
+    const char *insert;
+    size_t insert_len;
 } ViAction;
 
 typedef struct
@@ -116,6 +126,27 @@ typedef struct
     int repeat_len;
     int repeat_count;      // The count, kept apart so `3.` can replace it
     bool replaying;
+    bool from_visual;      // The key came from visual mode, where each key
+                           // commits and clears its own stroke -- so all that
+                           // is left of `vld` is the `d`, and a change made
+                           // that way is not recordable at all (B43)
+
+    // A change that ends in insert mode -- `i`, `a`, `o`, `c`, `s` -- is only
+    // half a change until `Esc` closes it, so it is recorded there rather than
+    // when its keys are done (§20). The keys wait in `stroke` meanwhile, and
+    // what was typed is the span between where the editor put the cursor when
+    // insert began and where it is at the `Esc`: the editor handles those keys
+    // itself and the state machine never sees them, but it does see the
+    // buffer. A session that moved somewhere else instead -- an arrow, a
+    // backspace past the origin -- has no such span and drops the record.
+    size_t insert_origin;  // Where the editor put the cursor when insert began
+    size_t insert_len0;    // ... and how long the buffer was then
+    bool insert_recording;
+    int pending_count;     // The count the opening command ran with
+
+    char repeat_insert[LOGO_VI_INSERT_MAX];  // The text the last change typed
+    int repeat_insert_len;
+    bool repeat_insert_set;  // ... and whether it ends in an insert at all
 
     char cmdline[LOGO_VI_CMDLINE_MAX + 1];  // Includes the leading ':', '/' or '?'
     size_t cmdline_len;
@@ -144,6 +175,13 @@ void editor_vi_reset(ViState *st);
 // its unconditional cancel from every mode.
 bool editor_vi_key(ViState *st, const char *buf, size_t len, size_t cursor,
                    int key, ViAction *out);
+
+// Insert mode has begun: `cursor` is where the editor put the cursor and `len`
+// how long the buffer is now, which is the pair `Esc` subtracts from to find
+// what was typed (§20). Called after the action that opened insert mode has
+// been carried out, because for `o` and `c` it is the editor, not the state
+// machine, that decides where the cursor lands.
+void editor_vi_insert_began(ViState *st, size_t cursor, size_t len);
 
 // The footer text for the current mode: "-- NORMAL --" and friends, or the
 // command line while one is being typed.

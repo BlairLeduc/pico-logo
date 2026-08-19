@@ -643,7 +643,11 @@ An operator takes a motion, and the two together take a count, so `d2w` and `2dw
 - `p` `P` — put the copy buffer after or before the cursor. Text taken a line at a time goes back a line at a time, below or above the current line
 - `.` — repeat the last change. What it replays is the keys you typed, not the text they touched, so the motion or [text object](#text-objects) is worked out again from where the cursor now is: after `dw`, `.` deletes whichever word you have since moved to, and after `di[` it empties whichever group you are now inside. A count typed before `.` is used in place of the one the change was made with, so `3.` after `dw` deletes three words
 
-`.` repeats the changes that finish on their own — `x`, `r`, `~`, `J`, `p`, `dd`, `>>`, `di[` and the like. It does not repeat one that leaves you in insert mode — `c`, `s`, `C`, `S`, `i`, `a`, `o`, `O` — because the Editor does not record what you type there; after one of those, `.` still repeats the last change before it. With nothing to repeat at all the bottom line says `Nothing to repeat`.
+`.` repeats the changes that finish on their own — `x`, `r`, `~`, `J`, `p`, `dd`, `>>`, `di[` and the like — and the ones that end in typing, `c`, `s`, `C`, `S`, `i`, `a`, `o` and `O`, text and all. `i` `;` `Space` `Esc` comments a line; `j` `0` `.` comments the next one. The repeat types what you typed and leaves you in normal mode, where the original `Esc` left you.
+
+What is repeated is the text the insert put in, so a backspace while you were typing simply leaves less of it. But an insert that went somewhere else — an arrow key part way through, a backspace back past where the insert began — is **not** recorded, and neither is a very long one: `.` then says `Nothing to repeat` rather than putting back a piece of what you did. With nothing recorded at all it says the same.
+
+A count before `.` belongs to the command, not to the text: `3.` after `cw` `f` `d` `Esc` changes three words and types `fd` once. A change made from visual mode is not recorded at all — after one, `.` still repeats the last change made outside it.
 
 #### Text objects
 
