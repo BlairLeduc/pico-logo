@@ -127,6 +127,10 @@ extern "C"
     //==========================================================================
 
     // Attempts to convert value to number, returns true on success
+    // Does this string spell a number in Logo's grammar? The one definition
+    // of a numeral, shared by the lexer and by value_to_number.
+    bool is_number_string(const char *str, size_t len);
+
     bool value_to_number(Value v, float *out);
 
     // Get the node from a word or list value

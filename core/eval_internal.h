@@ -76,8 +76,6 @@ extern "C"
     // Apply a binary infix operator to two values
     Result apply_binary_op(TokenType op_type, Value left, Value right);
 
-    // Check if a string looks like a number
-    bool is_number_string(const char *str, size_t len);
 
     //==========================================================================
     // Name resolution (P10 M2)

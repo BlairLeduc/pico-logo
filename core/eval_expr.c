@@ -145,51 +145,6 @@ Result apply_binary_op(TokenType op_type, Value left, Value right)
     }
 }
 
-// Try to parse a number from a string
-bool is_number_string(const char *str, size_t len)
-{
-    if (len == 0)
-        return false;
-    size_t i = 0;
-
-    if (str[i] == '-' || str[i] == '+')
-        i++;
-    if (i >= len)
-        return false;
-
-    bool has_digit = false;
-    while (i < len && isdigit((unsigned char)str[i]))
-    {
-        has_digit = true;
-        i++;
-    }
-    if (i < len && str[i] == '.')
-    {
-        i++;
-        while (i < len && isdigit((unsigned char)str[i]))
-        {
-            has_digit = true;
-            i++;
-        }
-    }
-    if (i < len && (str[i] == 'e' || str[i] == 'E' || str[i] == 'n' || str[i] == 'N'))
-    {
-        bool is_n_notation = (str[i] == 'n' || str[i] == 'N');
-        i++;
-        // Only allow signs after e/E, not after n/N
-        if (!is_n_notation && i < len && (str[i] == '-' || str[i] == '+'))
-            i++;
-        // Require at least one digit after the exponent marker, matching
-        // the lexer's is_valid_number and token_source's is_number_word —
-        // otherwise a bare `1e` silently evaluates as 1 (B10).
-        if (i >= len || !isdigit((unsigned char)str[i]))
-            return false;
-        while (i < len && isdigit((unsigned char)str[i]))
-            i++;
-    }
-    return has_digit && i == len;
-}
-
 static float parse_number(const char *str, size_t len)
 {
     // Create null-terminated copy for strtof

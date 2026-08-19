@@ -143,6 +143,57 @@ bool values_equal(Value a, Value b)
 // Value Conversions
 //==========================================================================
 
+// Does this string spell a number in Logo's grammar?
+//
+// This is the interpreter's one definition of what a numeral looks like:
+// the lexer classifies word tokens with it, and `value_to_number` gates on
+// it before handing anything to `strtof`. `strtof` alone is too generous --
+// it also accepts C's `nan`, `inf` and `0x` hex-float literals, none of
+// which are Logo numerals (B41).
+bool is_number_string(const char *str, size_t len)
+{
+    if (len == 0)
+        return false;
+    size_t i = 0;
+
+    if (str[i] == '-' || str[i] == '+')
+        i++;
+    if (i >= len)
+        return false;
+
+    bool has_digit = false;
+    while (i < len && isdigit((unsigned char)str[i]))
+    {
+        has_digit = true;
+        i++;
+    }
+    if (i < len && str[i] == '.')
+    {
+        i++;
+        while (i < len && isdigit((unsigned char)str[i]))
+        {
+            has_digit = true;
+            i++;
+        }
+    }
+    if (i < len && (str[i] == 'e' || str[i] == 'E' || str[i] == 'n' || str[i] == 'N'))
+    {
+        bool is_n_notation = (str[i] == 'n' || str[i] == 'N');
+        i++;
+        // Only allow signs after e/E, not after n/N
+        if (!is_n_notation && i < len && (str[i] == '-' || str[i] == '+'))
+            i++;
+        // Require at least one digit after the exponent marker, matching
+        // the lexer's is_valid_number and token_source's is_number_word —
+        // otherwise a bare `1e` silently evaluates as 1 (B10).
+        if (i >= len || !isdigit((unsigned char)str[i]))
+            return false;
+        while (i < len && isdigit((unsigned char)str[i]))
+            i++;
+    }
+    return has_digit && i == len;
+}
+
 bool value_to_number(Value v, float *out)
 {
     if (v.type == VALUE_NUMBER)
@@ -155,6 +206,10 @@ bool value_to_number(Value v, float *out)
         // Try to parse word as number
         const char *str = mem_word_ptr(v.as.node);
         if (str == NULL)
+            return false;
+
+        // Reject anything that is not a Logo numeral before strtof sees it.
+        if (!is_number_string(str, strlen(str)))
             return false;
 
         // Check for n/N notation (e.g., 1n5 = 1 * 10^-5 = 0.00001)

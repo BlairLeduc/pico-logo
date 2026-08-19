@@ -901,6 +901,94 @@ void test_minus_text_vs_list_with_variable(void)
     TEST_ASSERT_EQUAL_FLOAT(3.0f, b.value.as.number);
 }
 
+//==========================================================================
+// Numeric Comparison Predicate Tests
+//==========================================================================
+
+void test_lessp(void)
+{
+    TEST_ASSERT_EQUAL_STRING("true", value_to_string(eval_string("less? 3 4").value));
+    TEST_ASSERT_EQUAL_STRING("false", value_to_string(eval_string("less? 4 4").value));
+    TEST_ASSERT_EQUAL_STRING("false", value_to_string(eval_string("lessp 5 4").value));
+}
+
+void test_greaterp(void)
+{
+    TEST_ASSERT_EQUAL_STRING("true", value_to_string(eval_string("greater? 5 4").value));
+    TEST_ASSERT_EQUAL_STRING("false", value_to_string(eval_string("greater? 4 4").value));
+    TEST_ASSERT_EQUAL_STRING("false", value_to_string(eval_string("greaterp 3 4").value));
+}
+
+void test_lessequalp(void)
+{
+    TEST_ASSERT_EQUAL_STRING("true", value_to_string(eval_string("lessequal? 3 4").value));
+    TEST_ASSERT_EQUAL_STRING("true", value_to_string(eval_string("lessequal? 4 4").value));
+    TEST_ASSERT_EQUAL_STRING("false", value_to_string(eval_string("lessequalp 5 4").value));
+}
+
+void test_greaterequalp(void)
+{
+    TEST_ASSERT_EQUAL_STRING("true", value_to_string(eval_string("greaterequal? 5 4").value));
+    TEST_ASSERT_EQUAL_STRING("true", value_to_string(eval_string("greaterequal? 4 4").value));
+    TEST_ASSERT_EQUAL_STRING("false", value_to_string(eval_string("greaterequalp 3 4").value));
+}
+
+void test_comparison_predicates_accept_numeric_words(void)
+{
+    // A quoted numeral is still a number, just as it is for `<` and `>`.
+    TEST_ASSERT_EQUAL_STRING("true", value_to_string(eval_string("less? \"3 \"4").value));
+    TEST_ASSERT_EQUAL_STRING("true", value_to_string(eval_string("greaterequal? -1.5 -2").value));
+}
+
+void test_comparison_predicates_reject_non_numbers(void)
+{
+    Result r = eval_string("less? \"apple 4");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+
+    r = eval_string("greaterequal? 4 [a b]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+
+    // The error names the input as it was typed, case intact.
+    r = eval_string("less? \"Apple 4");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
+    TEST_ASSERT_EQUAL_STRING("Apple", result_get_error_arg(r));
+
+    // strtof accepts these; Logo's numeral grammar does not (B41).
+    r = eval_string("less? \"0x10 4");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+
+    r = eval_string("less? 4 \"nan");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+
+    r = eval_string("less? \"true \"false");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_comparison_predicates_order_nan_like_the_operators(void)
+{
+    // `pwr -1 0.5` is a real NaN. It is neither less than, greater than nor
+    // equal to 4, so every comparison must be false -- "not less and not
+    // greater" is not a licence to answer `true` for <= and >=.
+    TEST_ASSERT_EQUAL_STRING("false", value_to_string(eval_string("less? 4 pwr -1 0.5").value));
+    TEST_ASSERT_EQUAL_STRING("false", value_to_string(eval_string("greater? 4 pwr -1 0.5").value));
+    TEST_ASSERT_EQUAL_STRING("false", value_to_string(eval_string("lessequal? 4 pwr -1 0.5").value));
+    TEST_ASSERT_EQUAL_STRING("false", value_to_string(eval_string("greaterequal? 4 pwr -1 0.5").value));
+}
+
+void test_number_words_reject_c_literals_everywhere(void)
+{
+    // value_to_number gates every numeric primitive, not just the predicates.
+    TEST_ASSERT_EQUAL(RESULT_ERROR, eval_string("sum \"0x10 1").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, eval_string("sum \"nan 1").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, eval_string("sum \"inf 1").status);
+
+    // Genuine numerals still convert, including Logo's n-notation.
+    TEST_ASSERT_EQUAL_FLOAT(5.0f, eval_string("sum \"3 \"2").value.as.number);
+    TEST_ASSERT_EQUAL_FLOAT(0.5f, eval_string("sum \"0.25 .25").value.as.number);
+    TEST_ASSERT_EQUAL_STRING("true", value_to_string(eval_string("less? 1n5 1").value));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -1004,6 +1092,15 @@ int main(void)
     RUN_TEST(test_minus_text_vs_list_negative_literal);
     RUN_TEST(test_minus_text_vs_list_unary_after_operator);
     RUN_TEST(test_minus_text_vs_list_with_variable);
+
+    RUN_TEST(test_lessp);
+    RUN_TEST(test_greaterp);
+    RUN_TEST(test_lessequalp);
+    RUN_TEST(test_greaterequalp);
+    RUN_TEST(test_comparison_predicates_accept_numeric_words);
+    RUN_TEST(test_comparison_predicates_reject_non_numbers);
+    RUN_TEST(test_comparison_predicates_order_nan_like_the_operators);
+    RUN_TEST(test_number_words_reject_c_literals_everywhere);
 
     return UNITY_END();
 }
