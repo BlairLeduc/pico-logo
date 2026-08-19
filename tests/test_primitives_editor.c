@@ -230,9 +230,13 @@ static const char *mock_fs_get_content(const char *name)
     return file ? file->data : NULL;
 }
 
+// Set by the one test that needs a delete to fail while the file stays put
+static bool mock_fs_delete_fails = false;
+
 // Reset the mock file system
 static void mock_fs_reset(void)
 {
+    mock_fs_delete_fails = false;
     for (int i = 0; i < MOCK_MAX_FILES; i++)
     {
         mock_files[i].exists = false;
@@ -287,6 +291,8 @@ static bool mock_storage_dir_exists(const char *pathname)
 
 static bool mock_storage_file_delete(const char *pathname)
 {
+    if (mock_fs_delete_fails)
+        return false;
     MockFile *file = mock_fs_get_file(pathname, false);
     if (!file)
         return false;
@@ -390,8 +396,14 @@ void tearDown(void)
 // Editor Buffer Sizing
 //==========================================================================
 
-// The size primitives_editor.c uses when the buffers land in the aux region
+// The size primitives_editor.c uses when the buffers land in the aux region.
+// The build can override it (CMake defines LOGO_EDITOR_PSRAM_BUFFER_SIZE
+// PUBLIC on logo_core), so track that rather than a literal of our own.
+#ifdef LOGO_EDITOR_PSRAM_BUFFER_SIZE
+#define EDITOR_PSRAM_BUFFER_SIZE LOGO_EDITOR_PSRAM_BUFFER_SIZE
+#else
 #define EDITOR_PSRAM_BUFFER_SIZE (256 * 1024)
+#endif
 
 // Stands in for PSRAM: big enough for both editor buffers and then some
 static char test_aux_region[1024 * 1024];
@@ -1198,6 +1210,30 @@ void test_editfile_write_creates_a_new_file(void)
     TEST_ASSERT_EQUAL_STRING("Fresh\n", content);
 }
 
+// The save deletes the old file because `open` does not truncate. If the
+// delete fails the write lands on top of what is already there, so shorter
+// content keeps the tail of the longer original -- and the save must say so
+// rather than reporting a success it did not have (B37).
+void test_editfile_fails_the_save_when_the_delete_fails(void)
+{
+    setUp_with_storage();
+    
+    mock_fs_create_file("stuck.txt", "A much longer original content\n");
+    
+    mock_device_clear_editor();
+    mock_device_set_editor_result(LOGO_EDITOR_ACCEPT);
+    mock_device_set_editor_content("Short\n");
+    mock_fs_delete_fails = true;
+    
+    Result r = run_string("editfile \"stuck.txt");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DISK_TROUBLE, result_get_error_code(r));
+    
+    // and the original is intact rather than half-overwritten
+    TEST_ASSERT_EQUAL_STRING("A much longer original content\n",
+                             mock_fs_get_content("stuck.txt"));
+}
+
 // Editing the workspace has nowhere to write to, so it hands the editor no
 // write-back -- which is what makes `:w` there accept the buffer and exit
 void test_edit_gives_the_editor_no_write_back(void)
@@ -1455,6 +1491,7 @@ int main(void)
     RUN_TEST(test_editfile_cancel_does_not_create_file);
     RUN_TEST(test_editfile_write_lands_before_a_cancel);
     RUN_TEST(test_editfile_write_creates_a_new_file);
+    RUN_TEST(test_editfile_fails_the_save_when_the_delete_fails);
     RUN_TEST(test_edit_gives_the_editor_no_write_back);
     RUN_TEST(test_editfile_requires_word_argument);
     RUN_TEST(test_editfile_multiline_content);

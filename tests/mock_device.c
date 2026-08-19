@@ -1227,12 +1227,10 @@ void mock_device_reset(void)
     mock_input_buffer = NULL;
     mock_input_pos = 0;
     
-    // Clear editor state (the allocations are kept and reused)
-    mock_editor_str_set(&mock_editor_input, &mock_editor_input_cap, NULL);
-    mock_editor_str_set(&mock_editor_content, &mock_editor_content_cap, NULL);
-    mock_editor_result = LOGO_EDITOR_ACCEPT;
-    mock_editor_called = false;
-    mock_editor_buffer_size = 0;
+    // Clear editor state (the input and content allocations are kept and
+    // reused). One call, so a new field cannot be reset in one place and
+    // leak between tests through the other.
+    mock_device_clear_editor();
 
     // Clear WiFi state
     mock_state.wifi.connected = false;

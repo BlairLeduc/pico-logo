@@ -680,10 +680,12 @@ static bool editfile_save(const char *buffer, void *ctx)
     const char *pathname = (const char *)ctx;
     LogoIO *io = primitives_get_io();
     
-    // Delete the old file first: `open` keeps what is already there
-    if (logo_io_file_exists(io, pathname))
+    // Delete the old file first: `open` keeps what is already there, so a
+    // delete that failed would leave the tail of the longer old content
+    // behind whatever we write (B37)
+    if (logo_io_file_exists(io, pathname) && !logo_io_file_delete(io, pathname))
     {
-        logo_io_file_delete(io, pathname);
+        return false;
     }
     
     LogoStream *stream = logo_io_open(io, pathname);
