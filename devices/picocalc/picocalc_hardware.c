@@ -1983,17 +1983,36 @@ static void *picocalc_network_tcp_listen(uint16_t port)
     ls->conn->from_listener = true;
 
     cyw43_arch_lwip_begin();
-    struct altcp_pcb *pcb = altcp_tcp_new_ip_type(IPADDR_TYPE_V4);
-    if (!pcb)
+    // Bind through the raw PCB so SOF_REUSEADDR can be set before the bind
+    // (altcp exposes no accessor for it). A connection that did send its
+    // response is closed gracefully, so its local port lingers in
+    // FIN_WAIT/TIME_WAIT for two minutes; without the option, tcp_bind sees it
+    // and returns ERR_USE, which is why `http.unlisten` followed by
+    // `http.listen 80` failed once the server had actually served a request.
+    // The option is inherited by the listening PCB and by every connection
+    // accepted from it, so the lingering PCB carries it too -- lwIP needs it on
+    // both sides to skip a port match.
+    struct tcp_pcb *tpcb = tcp_new_ip_type(IPADDR_TYPE_V4);
+    if (!tpcb)
     {
         cyw43_arch_lwip_end();
         free(ls->conn);
         free(ls);
         return NULL;
     }
-    if (altcp_bind(pcb, IP_ANY_TYPE, port) != ERR_OK)
+    ip_set_option(tpcb, SOF_REUSEADDR);
+    if (tcp_bind(tpcb, IP_ANY_TYPE, port) != ERR_OK)
     {
-        altcp_abort(pcb);
+        tcp_abort(tpcb);
+        cyw43_arch_lwip_end();
+        free(ls->conn);
+        free(ls);
+        return NULL;
+    }
+    struct altcp_pcb *pcb = altcp_tcp_wrap(tpcb);
+    if (!pcb)
+    {
+        tcp_abort(tpcb);
         cyw43_arch_lwip_end();
         free(ls->conn);
         free(ls);

@@ -245,6 +245,18 @@ void *(*network_tcp_accept)(void *listener, char *remote_ip, size_t ip_size);
   local port frees immediately with no TIME_WAIT that would make a
   re-`http.listen` on the same port fail; a connection that did send its
   response still closes gracefully.
+  That graceful close is the other half of the same hazard, fixed
+  2026-08-19: a connection that *did* answer holds the port in
+  FIN_WAIT/TIME_WAIT for two minutes, so `http.unlisten` followed by
+  `http.listen 80` failed with `ERR_USE` once the server had served
+  anything. `listen` now sets `SOF_REUSEADDR` (lwIP `SO_REUSE`) on the
+  listening PCB, which makes `tcp_bind` skip the TIME_WAIT list; the option
+  is inherited by the listening PCB and by every accepted connection, which
+  is what the active-list check needs, since it only ignores a port match
+  when both PCBs carry it. The option has to be set before the bind, and
+  altcp has no accessor for it, so `listen` creates the raw `tcp_pcb`
+  itself and hands it to `altcp_tcp_wrap`. A second listener on the same
+  address and port still fails, as it should.
 - **mock:** scripted — `mock_httpd_queue_connection(request_bytes)`
   queues an incoming connection whose reads return the scripted bytes
   (with a dribble mode that returns them a few bytes per call);

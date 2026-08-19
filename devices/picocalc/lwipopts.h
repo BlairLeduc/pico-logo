@@ -77,6 +77,10 @@
 #define TCP_SND_QUEUELEN                ((4 * TCP_SND_BUF) / TCP_MSS)
 #define TCP_WND                         (2 * TCP_MSS)
 #define TCP_LISTEN_BACKLOG              1
+// Allow SOF_REUSEADDR, which the HTTP server sets on its listening PCB so a
+// re-`http.listen` on the same port succeeds while a gracefully closed
+// connection still holds that port in FIN_WAIT/TIME_WAIT.
+#define SO_REUSE                        1
 
 // UDP configuration
 #define UDP_TTL                         255
