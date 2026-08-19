@@ -1,12 +1,18 @@
 // Tests for the pure-Logo Snake Temple game (logo/games/temple), a port of
 // RAX's 2022 BASIC 10Liner for the Oric Atmos.
 //
-// The tile map is the game's only source of truth: walls, floor, flasks and
-// the chest are map cells, and movement, pickups and the picture all read
-// those same cells. These tests therefore check the carved labyrinth as a
-// graph -- with a real flood fill in C, not by trusting the game's own
-// helpers -- and then check that every rule that reads or writes a cell
-// leaves the map in a state the next rule can believe.
+// The tile map is the game's only source of truth: walls, floor, flasks, the
+// chest and the snakes are all map cells, and movement, pickups, bites and
+// the picture read those same cells. These tests therefore check the carved
+// labyrinth as a graph -- with a real flood fill in C, not by trusting the
+// game's own helpers -- and then check that every rule that reads or writes a
+// cell leaves the map in a state the next rule can believe.
+//
+// The temple is dark, and darkness is the one thing the map cannot show: an
+// unrevealed cell and a revealed one hold the same slot, and differ only in
+// what reached the canvas. Those tests therefore assert on pixels, against a
+// bank staged with flat colours (the mock does not rasterise the pen, so the
+// game's own art is indistinguishable on it).
 //
 // They also execute every rule procedure at least once. The parse hazards
 // listed at the top of logo/games/temple are runtime errors that reading does
@@ -39,18 +45,19 @@
 #define CHAMBERS_Y 17
 
 // Bank slots, as laid out at the top of logo/games/temple. Everything a
-// walker may stand on is above S_BOCCO.
+// walker may stand on is above S_BOCCO -- a snake included, because paying
+// its toll is a move the player is allowed to make.
 #define S_NOTHING 0
 #define S_WALL    1
 #define S_HEART   2
-#define S_SNAKE   3
-#define S_BOCCO   4
-#define S_FLOOR   5
-#define S_FLASK   6
-#define S_CHEST   7
+#define S_BOCCO   3
+#define S_FLOOR   4
+#define S_FLASK   5
+#define S_CHEST   6
+#define S_SNAKE   7
 
-#define SNAKES 6
-#define FLASKS 8
+#define SNAKES 20
+#define FLASKS 10
 #define MAX_HEALTH 10
 
 // The longest line `load` can read whole; a longer one would be truncated in
@@ -184,24 +191,60 @@ static bool walkable(int slot) { return slot > S_BOCCO; }
 static const int DC[5] = {0, 0, -1, 0, 1};
 static const int DR[5] = {0, -1, 0, 1, 0};
 
-// Snakes are held in three parallel lists, one entry each, mutated in place.
-static int snake(const char *field, int i)
+static void put_bocco(int col, int row)
 {
-    return (int)numf("item %d :st.s.%s", i, field);
+    runf("make \"st.col %d  make \"st.row %d", col, row);
 }
 
-static void put_snake(int i, int col, int row, int dir)
+// ---------------------------------------------------------------------------
+// Seeing what reached the screen
+// ---------------------------------------------------------------------------
+
+// A slot's staged colour. Flat and distinguishable, so one pixel identifies
+// which tile was stamped in a cell.
+#define TILE_COLOUR(slot) ((uint8_t)(100 + (slot)))
+
+// Painted over the whole canvas before a reveal test. It is not any tile's
+// colour and not the background, so a cell still showing it was never
+// stamped at all -- which is exactly what "unrevealed" means here.
+#define UNLIT 200
+
+// The turtle boots at Logo (0,0), the middle of the canvas, and `snaptile`
+// captures the 8x8 square around it.
+#define CAPTURE_X (MOCK_SCREEN_WIDTH_PX / 2 - 4)
+#define CAPTURE_Y (MOCK_SCREEN_HEIGHT_PX / 2 - 4)
+
+// Replace the game's pen-drawn art with flat colours. The mock does not
+// rasterise the pen, so every tile setup.tiles captures is indistinguishable
+// on it; staging the bank is what makes a pixel assertion mean something.
+static void stage_bank(void)
 {
-    runf(".setitem %d :st.s.col %d", i, col);
-    runf(".setitem %d :st.s.row %d", i, row);
-    runf(".setitem %d :st.s.dir %d", i, dir);
+    run("ask 7 [pu setpos [0 0]]");
+    for (int slot = S_WALL; slot <= S_SNAKE; slot++) {
+        mock_device_paint_canvas(CAPTURE_X, CAPTURE_Y, 8, 8, TILE_COLOUR(slot));
+        runf("ask 7 [snaptile %d]", slot);
+    }
 }
 
-// Park every snake in the far corner chamber so a movement or pickup test is
-// not interrupted by a bite it did not ask for.
-static void park_snakes(void)
+static void darken(void)
 {
-    for (int i = 1; i <= SNAKES; i++) put_snake(i, 2 * CHAMBERS_X, 2 * CHAMBERS_Y, 1);
+    mock_device_paint_canvas(0, 0, MOCK_SCREEN_WIDTH_PX, MOCK_SCREEN_HEIGHT_PX, UNLIT);
+}
+
+// The centre pixel of a cell. Staged tiles are flat, so one pixel is enough.
+static uint8_t cell_pixel(int col, int row)
+{
+    return mock_device_get_canvas_point((col - 1) * 8 + 4, (row - 1) * 8 + 4);
+}
+
+static bool lit(int col, int row) { return cell_pixel(col, row) != UNLIT; }
+
+// A revealed cell shows the tile its map slot names.
+static void assert_shows_its_slot(int col, int row)
+{
+    char msg[64];
+    snprintf(msg, sizeof(msg), "cell (%d,%d) does not show its own tile", col, row);
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(TILE_COLOUR(slot_at(col, row)), cell_pixel(col, row), msg);
 }
 
 void setUp(void)
@@ -236,28 +279,27 @@ void test_the_map_covers_the_screen_exactly(void)
 
 void test_direction_deltas_and_opposites(void)
 {
-    const int dc[5] = {0, 0, -1, 0, 1};
-    const int dr[5] = {0, -1, 0, 1, 0};
     const int op[5] = {0, 3, 4, 1, 2};
     for (int d = 1; d <= 4; d++) {
-        TEST_ASSERT_EQUAL_INT_MESSAGE(dc[d], (int)numf("dir.dc %d", d), "dir.dc");
-        TEST_ASSERT_EQUAL_INT_MESSAGE(dr[d], (int)numf("dir.dr %d", d), "dir.dr");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(DC[d], (int)numf("dir.dc %d", d), "dir.dc");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(DR[d], (int)numf("dir.dr %d", d), "dir.dr");
         TEST_ASSERT_EQUAL_INT_MESSAGE(op[d], (int)numf("opposite %d", d), "opposite");
     }
 }
 
 // The slot order is load-bearing: `walkable?` is one comparison, so anything
-// that can be stood on must sort above the two actor slots.
-void test_only_floor_flask_and_chest_are_walkable(void)
+// that can be stood on must sort above Bocco's own slot. A snake is walkable
+// -- the player is allowed to pay the toll and walk through it.
+void test_a_snake_is_walkable_and_stone_is_not(void)
 {
     truth("walkable? 0", "false");
     truth("walkable? :sl.wall", "false");
     truth("walkable? :sl.heart", "false");
-    truth("walkable? :sl.snake", "false");
     truth("walkable? :sl.bocco", "false");
     truth("walkable? :sl.floor", "true");
     truth("walkable? :sl.flask", "true");
     truth("walkable? :sl.chest", "true");
+    truth("walkable? :sl.snake", "true");
 }
 
 // ---------------------------------------------------------------------------
@@ -265,9 +307,9 @@ void test_only_floor_flask_and_chest_are_walkable(void)
 // ---------------------------------------------------------------------------
 
 // Movement does no bounds testing at all -- it is the solid ring of wall that
-// keeps a walker on the map. If the ring were ever breached, a step could
-// index outside the map, so this is the invariant the whole movement code
-// rests on.
+// keeps a walker on the map, and it is also what keeps the 3x3 block the
+// reveal stamps inside the map. If the ring were ever breached, a step could
+// index outside it.
 void test_the_labyrinth_is_ringed_by_solid_wall(void)
 {
     for (int r = 1; r <= MAZE_ROWS; r++) {
@@ -278,8 +320,6 @@ void test_the_labyrinth_is_ringed_by_solid_wall(void)
         TEST_ASSERT_EQUAL_INT_MESSAGE(S_WALL, slot_at(c, 1), "north wall");
         TEST_ASSERT_EQUAL_INT_MESSAGE(S_WALL, slot_at(c, MAZE_ROWS), "south wall");
     }
-    // Column 40 is outside the labyrinth and is wall for its whole height,
-    // so the HUD rows cannot be walked into from the east either.
     for (int r = 1; r <= MAP_ROWS; r++)
         TEST_ASSERT_EQUAL_INT_MESSAGE(S_WALL, slot_at(MAP_COLS, r), "east margin");
 }
@@ -350,10 +390,10 @@ void test_no_wall_junction_is_ever_opened(void)
             TEST_ASSERT_EQUAL_INT_MESSAGE(S_WALL, slot_at(c, r), "an opened wall junction");
 }
 
-// Loops are the point of open.loops: a perfect maze has one route between any
-// two chambers, which makes a snake in the corridor ahead an unavoidable
-// dead end. With loops there are more open cells than a spanning tree has.
-void test_opened_loops_add_routes_to_the_spanning_tree(void)
+// Loops give Bocco somewhere to go instead of paying a snake's toll, so
+// there must be more open cells than a spanning tree has -- but only a few
+// more, or a temple full of snakes would cost nothing to cross.
+void test_a_few_loops_are_opened_and_no_more(void)
 {
     int m[MAP_ROWS + 1][MAP_COLS + 1];
     read_map(m);
@@ -364,8 +404,9 @@ void test_opened_loops_add_routes_to_the_spanning_tree(void)
         for (int c = 2; c < MAZE_COLS; c++)
             if (((c % 2) + (r % 2)) == 1 && walkable(m[r][c])) gaps++;
 
-    TEST_ASSERT_GREATER_THAN_MESSAGE(CHAMBERS_X * CHAMBERS_Y - 1, gaps,
-                                     "open.loops opened no new routes");
+    const int tree = CHAMBERS_X * CHAMBERS_Y - 1;
+    TEST_ASSERT_GREATER_THAN_MESSAGE(tree, gaps, "open.loops opened no new routes");
+    TEST_ASSERT_LESS_THAN_MESSAGE(tree + 16, gaps, "the labyrinth is dissolving into rooms");
 }
 
 // The carve is reproducible: the same seed must give the same labyrinth, or
@@ -386,19 +427,32 @@ void test_the_same_seed_carves_the_same_labyrinth(void)
 }
 
 // ---------------------------------------------------------------------------
-// 3. Placement
+// 3. Stocking the temple
 // ---------------------------------------------------------------------------
 
-static void find_slot(int want, int *col, int *row, int *count)
+static int count_slot(int want)
 {
     int m[MAP_ROWS + 1][MAP_COLS + 1];
     read_map(m);
-    *count = 0;
+    int n = 0;
+    for (int r = 1; r <= MAZE_ROWS; r++)
+        for (int c = 1; c <= MAZE_COLS; c++)
+            if (m[r][c] == want) n++;
+    return n;
+}
+
+// Everything placed goes in a chamber -- never in the gap between two -- so
+// nothing is hidden inside a wall join.
+static void assert_all_in_chambers(int want, int away, const char *what)
+{
+    int m[MAP_ROWS + 1][MAP_COLS + 1];
+    read_map(m);
     for (int r = 1; r <= MAZE_ROWS; r++)
         for (int c = 1; c <= MAZE_COLS; c++)
             if (m[r][c] == want) {
-                if (*count == 0) { *col = c; *row = r; }
-                (*count)++;
+                TEST_ASSERT_EQUAL_INT_MESSAGE(0, c % 2, what);
+                TEST_ASSERT_EQUAL_INT_MESSAGE(0, r % 2, what);
+                TEST_ASSERT_GREATER_THAN_MESSAGE(away, c + r, what);
             }
 }
 
@@ -406,74 +460,144 @@ static void find_slot(int want, int *col, int *row, int *count)
 // there is the game.
 void test_one_chest_is_placed_far_from_bocco(void)
 {
-    int c = 0, r = 0, n = 0;
-    find_slot(S_CHEST, &c, &r, &n);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, n, "there is not exactly one chest");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, c % 2, "the chest is not in a chamber");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, r % 2, "the chest is not in a chamber");
-    TEST_ASSERT_GREATER_THAN_MESSAGE(21, (c + r) / 2, "the chest is too close to the start");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, count_slot(S_CHEST), "there is not exactly one chest");
+    assert_all_in_chambers(S_CHEST, 42, "the chest is misplaced");
 }
 
 void test_flasks_are_placed_in_chambers_away_from_the_start(void)
 {
-    int m[MAP_ROWS + 1][MAP_COLS + 1];
-    read_map(m);
-    int n = 0;
-    for (int r = 1; r <= MAZE_ROWS; r++)
-        for (int c = 1; c <= MAZE_COLS; c++)
-            if (m[r][c] == S_FLASK) {
-                n++;
-                TEST_ASSERT_EQUAL_INT_MESSAGE(0, c % 2, "a flask is not in a chamber");
-                TEST_ASSERT_EQUAL_INT_MESSAGE(0, r % 2, "a flask is not in a chamber");
-                TEST_ASSERT_GREATER_THAN_MESSAGE(4, c + r, "a flask is on Bocco's own cell");
-            }
-    TEST_ASSERT_EQUAL_INT_MESSAGE(FLASKS, n, "wrong number of flasks");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(FLASKS, count_slot(S_FLASK), "wrong number of flasks");
+    assert_all_in_chambers(S_FLASK, 4, "a flask is misplaced");
 }
 
-// Snakes start in chambers Bocco can reach but not next to him -- a bite in
-// the first second would be the original's rules applied unfairly.
-void test_snakes_start_in_free_chambers_at_a_distance(void)
+// Snakes are coiled in chambers Bocco can reach but not next to him -- a
+// bite in the first second would be the original's rules applied unfairly.
+void test_snakes_are_coiled_in_chambers_at_a_distance(void)
 {
-    TEST_ASSERT_EQUAL_INT(SNAKES, (int)num("count :st.s.col"));
-    TEST_ASSERT_EQUAL_INT(SNAKES, (int)num("count :st.s.row"));
-    TEST_ASSERT_EQUAL_INT(SNAKES, (int)num("count :st.s.dir"));
-
-    for (int i = 1; i <= SNAKES; i++) {
-        int c = snake("col", i), r = snake("row", i), d = snake("dir", i);
-        TEST_ASSERT_EQUAL_INT_MESSAGE(0, c % 2, "a snake is not in a chamber");
-        TEST_ASSERT_EQUAL_INT_MESSAGE(0, r % 2, "a snake is not in a chamber");
-        TEST_ASSERT_GREATER_THAN_MESSAGE(14, c + r, "a snake starts on top of Bocco");
-        TEST_ASSERT_TRUE_MESSAGE(walkable(slot_at(c, r)), "a snake starts inside a wall");
-        TEST_ASSERT_TRUE_MESSAGE(d >= 1 && d <= 4, "a snake has no direction");
-    }
+    TEST_ASSERT_EQUAL_INT_MESSAGE(SNAKES, count_slot(S_SNAKE), "wrong number of snakes");
+    assert_all_in_chambers(S_SNAKE, 14, "a snake is misplaced");
 }
 
-// A snake must never share its opening cell with the chest or a flask: it
-// would sit on the prize and bite anyone who came for it.
-void test_snakes_do_not_start_on_an_item(void)
+// Nothing may be stocked on top of anything else: `free.chamber` only ever
+// offers bare floor, so the counts above must all survive together.
+void test_nothing_is_stocked_on_top_of_anything_else(void)
 {
-    for (int i = 1; i <= SNAKES; i++)
-        TEST_ASSERT_EQUAL_INT_MESSAGE(S_FLOOR, slot_at(snake("col", i), snake("row", i)),
-                                      "a snake started on an item");
+    TEST_ASSERT_EQUAL_INT(1, count_slot(S_CHEST));
+    TEST_ASSERT_EQUAL_INT(FLASKS, count_slot(S_FLASK));
+    TEST_ASSERT_EQUAL_INT(SNAKES, count_slot(S_SNAKE));
 }
 
 // ---------------------------------------------------------------------------
-// 4. Drawing an actor leaves the world alone
+// 4. The dark
 // ---------------------------------------------------------------------------
 
-// The invariant the whole design rests on: the map holds the world and
-// nothing else, so a cell lends its slot to an actor for one stamp and gets
-// it straight back. If it did not, a flask Bocco was standing on would be
-// erased by drawing him, and `tile` would answer with a snake.
-void test_drawing_an_actor_restores_the_cell(void)
+// Nothing is drawn until Bocco is beside it. This is the whole premise, and
+// it cannot be seen in the map -- an unrevealed cell and a revealed one hold
+// the same slot -- so it is asserted on the canvas.
+void test_the_temple_starts_dark(void)
+{
+    stage_bank();
+    run("setup.temple");
+    darken();
+    run("reveal");
+
+    // Only the 3x3 around Bocco's corner is lit.
+    for (int r = 1; r <= 3; r++)
+        for (int c = 1; c <= 3; c++)
+            TEST_ASSERT_TRUE_MESSAGE(lit(c, r), "the block around Bocco is not lit");
+
+    TEST_ASSERT_FALSE_MESSAGE(lit(4, 2), "the cell beyond the block is lit");
+    TEST_ASSERT_FALSE_MESSAGE(lit(2, 4), "the cell beyond the block is lit");
+    TEST_ASSERT_FALSE_MESSAGE(lit(20, 20), "the far side of the temple is lit");
+    TEST_ASSERT_FALSE_MESSAGE(lit(MAZE_COLS - 1, MAZE_ROWS - 1), "the far corner is lit");
+}
+
+// A revealed cell shows what the map says is there -- wall, floor, a flask,
+// a snake -- so the picture and the rules cannot disagree about the temple.
+void test_a_revealed_cell_shows_its_own_tile(void)
+{
+    stage_bank();
+    run("setup.temple");
+    darken();
+    put_bocco(10, 10);
+    run("reveal");
+
+    for (int r = 9; r <= 11; r++)
+        for (int c = 9; c <= 11; c++)
+            assert_shows_its_slot(c, r);
+}
+
+// Walking is what uncovers the temple: a step lights the block around where
+// Bocco lands, and nothing further.
+void test_a_step_reveals_the_block_around_bocco(void)
+{
+    stage_bank();
+    run("setup.temple");
+    // A known corridor east from the start.
+    for (int c = 2; c <= 6; c++) runf("settile %d 2 %d", c, S_FLOOR);
+    darken();
+    put_bocco(2, 2);
+    run("make \"st.want 4");
+    run("step.bocco");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(3, (int)num(":st.col"), "the step did not happen");
+    for (int r = 1; r <= 3; r++)
+        for (int c = 2; c <= 4; c++)
+            TEST_ASSERT_TRUE_MESSAGE(lit(c, r), "the block around the landing is not lit");
+    TEST_ASSERT_FALSE_MESSAGE(lit(5, 2), "the step lit further than the block");
+}
+
+// Ground already walked stays visible, so the picture accumulates into the
+// map Bocco has explored rather than a torch moving through the dark.
+void test_revealed_ground_stays_revealed(void)
+{
+    stage_bank();
+    run("setup.temple");
+    for (int c = 2; c <= 8; c++) runf("settile %d 2 %d", c, S_FLOOR);
+    darken();
+    put_bocco(2, 2);
+    // As a game starts: the corner is revealed before the first step.
+    run("reveal");
+    run("make \"st.want 4");
+    run("step.bocco  step.bocco  step.bocco");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(5, (int)num(":st.col"), "three steps did not happen");
+    // The first block is four cells behind him and still lit.
+    TEST_ASSERT_TRUE_MESSAGE(lit(1, 1), "the ground first revealed went dark again");
+    TEST_ASSERT_TRUE_MESSAGE(lit(2, 2), "the ground first revealed went dark again");
+    TEST_ASSERT_TRUE_MESSAGE(lit(6, 2), "the newest block is not lit");
+    TEST_ASSERT_FALSE_MESSAGE(lit(7, 2), "the walk lit further than the block");
+}
+
+// A blocked step reveals nothing new: Bocco did not move, so there is nothing
+// beside him he has not already seen.
+void test_a_blocked_step_reveals_nothing(void)
+{
+    stage_bank();
+    run("setup.temple");
+    darken();
+    put_bocco(2, 2);
+    run("make \"st.want 1");  // north, into the border wall
+    run("step.bocco");
+
+    TEST_ASSERT_FALSE_MESSAGE(lit(2, 2), "a blocked step drew something");
+}
+
+// ---------------------------------------------------------------------------
+// 5. Bocco in the map, and out of it
+// ---------------------------------------------------------------------------
+
+// Bocco is the one thing not in the map, so his cell lends him its slot for
+// a single stamp and takes it straight back. If it did not, a flask he was
+// standing on would be gone from the map and `tile` would answer with him.
+void test_drawing_bocco_leaves_the_world_alone(void)
 {
     int before[MAP_ROWS + 1][MAP_COLS + 1];
     int after[MAP_ROWS + 1][MAP_COLS + 1];
     read_map(before);
 
-    run("draw.actors");
-    run("erase.actors");
-    run("draw.actors");
+    run("draw.bocco");
+    run("draw.bocco");
     read_map(after);
 
     for (int r = 1; r <= MAP_ROWS; r++)
@@ -481,26 +605,36 @@ void test_drawing_an_actor_restores_the_cell(void)
             TEST_ASSERT_EQUAL_INT_MESSAGE(before[r][c], after[r][c], "drawing changed the world");
 }
 
-// Specifically over an item: standing on a flask and being drawn must leave
-// the flask in the map, or the pickup would be lost.
 void test_drawing_bocco_over_a_flask_keeps_the_flask(void)
 {
     runf("settile 4 2 %d", S_FLASK);
-    run("make \"st.col 4  make \"st.row 2");
-    run("draw.actor :st.col :st.row :sl.bocco");
+    put_bocco(4, 2);
+    run("draw.bocco");
     TEST_ASSERT_EQUAL_INT(S_FLASK, slot_at(4, 2));
 }
 
+// He is drawn on top of the cell he stands on, so he is never lost under the
+// tile the reveal has just stamped there.
+void test_bocco_is_drawn_over_the_revealed_cell(void)
+{
+    stage_bank();
+    run("setup.temple");
+    darken();
+    put_bocco(10, 10);
+    run("reveal  draw.bocco");
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(TILE_COLOUR(S_BOCCO), cell_pixel(10, 10),
+                                    "Bocco is under the tile he is standing on");
+}
+
 // ---------------------------------------------------------------------------
-// 5. Bocco's movement
+// 6. Movement
 // ---------------------------------------------------------------------------
 
 void test_bocco_walks_into_open_floor(void)
 {
-    park_snakes();
-    // Carve a known corridor east of the start chamber.
     runf("settile 3 2 %d  settile 4 2 %d", S_FLOOR, S_FLOOR);
-    run("make \"st.col 2  make \"st.row 2  make \"st.want 4");
+    put_bocco(2, 2);
+    run("make \"st.want 4");
     run("step.bocco");
     TEST_ASSERT_EQUAL_INT(3, (int)num(":st.col"));
     TEST_ASSERT_EQUAL_INT(2, (int)num(":st.row"));
@@ -512,7 +646,8 @@ void test_bocco_walks_into_open_floor(void)
 // grinding against the stone until another arrow arrives.
 void test_a_wall_stops_bocco_and_clears_the_intent(void)
 {
-    run("make \"st.col 2  make \"st.row 2  make \"st.want 1");
+    put_bocco(2, 2);
+    run("make \"st.want 1");
     run("step.bocco");
     TEST_ASSERT_EQUAL_INT(2, (int)num(":st.col"));
     TEST_ASSERT_EQUAL_INT(2, (int)num(":st.row"));
@@ -521,22 +656,24 @@ void test_a_wall_stops_bocco_and_clears_the_intent(void)
 
 void test_no_intent_means_no_step(void)
 {
-    run("make \"st.col 2  make \"st.row 2  make \"st.want 0");
+    put_bocco(2, 2);
+    run("make \"st.want 0");
     run("step.bocco");
     TEST_ASSERT_EQUAL_INT(2, (int)num(":st.col"));
     TEST_ASSERT_EQUAL_INT(2, (int)num(":st.row"));
 }
 
 // ---------------------------------------------------------------------------
-// 6. The published rules: flasks and the chest
+// 7. The published rules
 // ---------------------------------------------------------------------------
 
 // "Each flask you find restores 2 health points."
 void test_a_flask_restores_two_health_and_is_consumed(void)
 {
     runf("settile 4 2 %d", S_FLASK);
-    run("make \"st.col 4  make \"st.row 2  make \"st.health 5");
-    run("take.item");
+    put_bocco(4, 2);
+    run("make \"st.health 5");
+    run("enter.cell");
     TEST_ASSERT_EQUAL_INT(7, (int)num(":st.health"));
     TEST_ASSERT_EQUAL_INT_MESSAGE(S_FLOOR, slot_at(4, 2), "the flask was not consumed");
 }
@@ -546,47 +683,24 @@ void test_a_flask_restores_two_health_and_is_consumed(void)
 void test_a_flask_cannot_push_health_over_the_maximum(void)
 {
     runf("settile 4 2 %d", S_FLASK);
-    run("make \"st.col 4  make \"st.row 2  make \"st.health 9");
-    run("take.item");
+    put_bocco(4, 2);
+    run("make \"st.health 9");
+    run("enter.cell");
     TEST_ASSERT_EQUAL_INT(MAX_HEALTH, (int)num(":st.health"));
 }
 
-// "Among the labyrinth of tunnels is a treasure chest that you must find."
-void test_reaching_the_chest_wins(void)
-{
-    runf("settile 4 2 %d", S_CHEST);
-    run("make \"st.col 4  make \"st.row 2  make \"st.won \"false");
-    run("take.item");
-    truth(":st.won", "true");
-    truth("game.over?", "true");
-}
-
-void test_plain_floor_changes_nothing(void)
-{
-    runf("settile 4 2 %d", S_FLOOR);
-    run("make \"st.col 4  make \"st.row 2  make \"st.health 5  make \"st.won \"false");
-    run("take.item");
-    TEST_ASSERT_EQUAL_INT(5, (int)num(":st.health"));
-    truth(":st.won", "false");
-}
-
-// ---------------------------------------------------------------------------
-// 7. The published rules: snakebite
-// ---------------------------------------------------------------------------
-
-// "A snake inflicts damage on 1 to 4 health points." Run the bite many times
-// over a fresh mercy window each time and check the damage never leaves that
-// range -- and that both ends of it actually occur, so a bite that always
-// cost the same would fail too.
-void test_a_bite_costs_between_one_and_four_health(void)
+// "A snake inflicts damage on 1 to 4 health points." Walk onto one many
+// times and check the cost never leaves that range -- and that both ends of
+// it occur, so a bite that always cost the same would fail too.
+void test_a_snake_costs_between_one_and_four_health(void)
 {
     bool seen[5] = {false, false, false, false, false};
-    run("make \"st.col 10  make \"st.row 10");
-    put_snake(1, 10, 10, 1);
+    put_bocco(10, 10);
 
     for (int trial = 0; trial < 200; trial++) {
-        run("make \"st.health 100  make \"st.mercy 0");
-        run("check.bite");
+        runf("settile 10 10 %d", S_SNAKE);
+        run("make \"st.health 100");
+        run("enter.cell");
         int loss = 100 - (int)num(":st.health");
         TEST_ASSERT_TRUE_MESSAGE(loss >= 1 && loss <= 4, "a bite cost outside 1..4");
         seen[loss] = true;
@@ -595,42 +709,53 @@ void test_a_bite_costs_between_one_and_four_health(void)
         TEST_ASSERT_TRUE_MESSAGE(seen[d], "a damage value in 1..4 never came up");
 }
 
-void test_no_bite_when_no_snake_shares_the_cell(void)
+// The snakes do not move, and a bite does not drive one off: it stays coiled
+// where it lies, so the toll is paid again by anyone who comes back this way.
+void test_a_snake_stays_coiled_after_biting(void)
 {
-    park_snakes();
-    run("make \"st.col 10  make \"st.row 10  make \"st.health 8  make \"st.mercy 0");
-    truth("bitten?", "false");
-    run("check.bite");
-    TEST_ASSERT_EQUAL_INT(8, (int)num(":st.health"));
-}
+    runf("settile 10 10 %d", S_SNAKE);
+    put_bocco(10, 10);
+    run("make \"st.health 100");
+    run("enter.cell");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(S_SNAKE, slot_at(10, 10), "the snake left after biting");
 
-// Mercy is what stops a snake sharing a corridor from draining ten points in
-// ten frames: the first bite costs, the next ones do not until it runs out.
-void test_mercy_blocks_a_second_bite_until_it_expires(void)
-{
-    run("make \"st.col 10  make \"st.row 10  make \"st.health 100  make \"st.mercy 0");
-    put_snake(1, 10, 10, 1);
-
-    run("check.bite");
     int after_first = (int)num(":st.health");
-    TEST_ASSERT_EQUAL_INT_MESSAGE((int)num(":st.mercy.frames"), (int)num(":st.mercy"),
-                                  "a bite did not grant mercy");
-
-    run("check.bite");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(after_first, (int)num(":st.health"), "mercy did not hold");
-
-    run("make \"st.mercy 0");
-    run("check.bite");
-    TEST_ASSERT_LESS_THAN_MESSAGE(after_first, (int)num(":st.health"), "mercy never expired");
+    run("enter.cell");
+    TEST_ASSERT_LESS_THAN_MESSAGE(after_first, (int)num(":st.health"),
+                                  "coming back this way cost nothing");
 }
 
-// A bite lands whichever snake is standing on Bocco, not only the first.
-void test_any_snake_can_bite(void)
+// Walking through a snake is a move the player is allowed to make -- the
+// toll is the point, not a wall.
+void test_bocco_can_walk_through_a_snake(void)
 {
-    park_snakes();
-    run("make \"st.col 10  make \"st.row 10");
-    put_snake(SNAKES, 10, 10, 1);
-    truth("bitten?", "true");
+    runf("settile 3 2 %d", S_SNAKE);
+    put_bocco(2, 2);
+    run("make \"st.health 10  make \"st.want 4");
+    run("step.bocco");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(3, (int)num(":st.col"), "a snake blocked the corridor");
+    TEST_ASSERT_LESS_THAN_MESSAGE(10, (int)num(":st.health"), "walking onto a snake cost nothing");
+}
+
+// "Among the labyrinth of tunnels is a treasure chest that you must find."
+void test_reaching_the_chest_wins(void)
+{
+    runf("settile 4 2 %d", S_CHEST);
+    put_bocco(4, 2);
+    run("make \"st.won \"false");
+    run("enter.cell");
+    truth(":st.won", "true");
+    truth("game.over?", "true");
+}
+
+void test_plain_floor_changes_nothing(void)
+{
+    runf("settile 4 2 %d", S_FLOOR);
+    put_bocco(4, 2);
+    run("make \"st.health 5  make \"st.won \"false");
+    run("enter.cell");
+    TEST_ASSERT_EQUAL_INT(5, (int)num(":st.health"));
+    truth(":st.won", "false");
 }
 
 // Running out of health ends the game; so does giving up.
@@ -645,56 +770,7 @@ void test_the_game_ends_on_death_and_on_quitting(void)
 }
 
 // ---------------------------------------------------------------------------
-// 8. Snake movement
-// ---------------------------------------------------------------------------
-
-// A snake must never walk into stone. Step every snake through a long run of
-// frames over the real labyrinth and check each landing.
-void test_snakes_never_leave_the_corridors(void)
-{
-    for (int frame = 0; frame < 400; frame++) {
-        run("step.snakes");
-        for (int i = 1; i <= SNAKES; i++) {
-            int c = snake("col", i), r = snake("row", i);
-            TEST_ASSERT_TRUE_MESSAGE(walkable(slot_at(c, r)), "a snake walked into stone");
-            TEST_ASSERT_TRUE_MESSAGE(c >= 1 && c <= MAZE_COLS, "a snake left the map");
-            TEST_ASSERT_TRUE_MESSAGE(r >= 1 && r <= MAZE_ROWS, "a snake left the map");
-        }
-    }
-}
-
-// A snake in a corridor works its way along it. Without the "reverse is the
-// last resort" rule it would shuffle on the spot and never patrol.
-void test_a_snake_makes_ground_along_a_corridor(void)
-{
-    // A clear east-west corridor across row 2, sealed on both sides: row 1 is
-    // already the border wall, and row 3 has to be closed or the carve's own
-    // openings let the snake leave the corridor and wander back.
-    for (int c = 2; c <= 20; c++) {
-        runf("settile %d 2 %d", c, S_FLOOR);
-        runf("settile %d 3 %d", c, S_WALL);
-    }
-    park_snakes();
-    put_snake(1, 2, 2, 4);
-
-    for (int i = 0; i < 12; i++) run("step.snakes");
-    TEST_ASSERT_GREATER_THAN_MESSAGE(6, snake("col", 1), "a snake made no ground down a corridor");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(2, snake("row", 1), "a snake left the corridor");
-}
-
-// A dead end must not trap a snake: reverse is allowed when it is all there
-// is, or a snake would sit in the pocket for the rest of the game.
-void test_a_snake_turns_around_in_a_dead_end(void)
-{
-    // Chamber (2,2) at map (4,4), reachable only from the west.
-    runf("settile 3 4 %d  settile 4 4 %d", S_FLOOR, S_FLOOR);
-    runf("settile 5 4 %d  settile 4 3 %d  settile 4 5 %d", S_WALL, S_WALL, S_WALL);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(2, (int)numf("snake.dir 4 4 4"),
-                                  "a snake in a dead end did not turn around");
-}
-
-// ---------------------------------------------------------------------------
-// 9. Input
+// 8. Input
 // ---------------------------------------------------------------------------
 
 // The four arrows, as the PicoCalc keyboard sends them.
@@ -748,7 +824,7 @@ void test_q_gives_up(void)
 }
 
 // ---------------------------------------------------------------------------
-// 10. The heads-up display
+// 9. The heads-up display
 // ---------------------------------------------------------------------------
 
 // One heart per health point, the rest cleared to background -- and the row
@@ -785,7 +861,7 @@ void test_the_hud_is_not_redrawn_when_health_is_unchanged(void)
 }
 
 // ---------------------------------------------------------------------------
-// 11. The frame
+// 10. The frame
 // ---------------------------------------------------------------------------
 
 // The whole frame has to run: the parse hazards at the top of the game file
@@ -796,33 +872,19 @@ void test_the_frame_runs_and_reclaims(void)
     run("make \"st.want 4");
     for (int f = 0; f < 300; f++) run("play.frame");
     TEST_ASSERT_EQUAL_INT_MESSAGE(300, (int)num(":st.frame"), "the frame counter stalled");
-    // Bocco is somewhere legal and the world is still intact underneath him.
     TEST_ASSERT_TRUE_MESSAGE(walkable(slot_at((int)num(":st.col"), (int)num(":st.row"))),
                              "Bocco ended a frame inside stone");
 }
 
-// A paused frame advances nothing at all -- not the counter, not the actors.
+// A paused frame advances nothing at all.
 void test_a_paused_frame_advances_nothing(void)
 {
-    run("make \"st.paused \"true  make \"st.frame 17  make \"st.col 2  make \"st.row 2");
+    run("make \"st.paused \"true  make \"st.frame 17");
+    put_bocco(2, 2);
     run("play.frame");
     TEST_ASSERT_EQUAL_INT(17, (int)num(":st.frame"));
     TEST_ASSERT_EQUAL_INT(2, (int)num(":st.col"));
     TEST_ASSERT_EQUAL_INT(2, (int)num(":st.row"));
-}
-
-// Mercy counts down on frames, so the blink and the immunity end together.
-void test_mercy_counts_down_each_frame(void)
-{
-    run("make \"st.paused \"false  make \"st.mercy 3  make \"st.want 0");
-    park_snakes();
-    run("play.frame");
-    TEST_ASSERT_EQUAL_INT(2, (int)num(":st.mercy"));
-    run("play.frame");
-    run("play.frame");
-    TEST_ASSERT_EQUAL_INT(0, (int)num(":st.mercy"));
-    run("play.frame");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, (int)num(":st.mercy"), "mercy went negative");
 }
 
 // A fresh game puts everything back, so a second game is not the first one's
@@ -830,12 +892,11 @@ void test_mercy_counts_down_each_frame(void)
 void test_a_new_game_resets_the_state(void)
 {
     run("make \"st.health 1  make \"st.won \"true  make \"st.quit \"true");
-    run("make \"st.frame 900  make \"st.want 3  make \"st.mercy 9");
+    run("make \"st.frame 900  make \"st.want 3");
     run("setup.temple");
     TEST_ASSERT_EQUAL_INT(MAX_HEALTH, (int)num(":st.health"));
     TEST_ASSERT_EQUAL_INT(0, (int)num(":st.frame"));
     TEST_ASSERT_EQUAL_INT(0, (int)num(":st.want"));
-    TEST_ASSERT_EQUAL_INT(0, (int)num(":st.mercy"));
     TEST_ASSERT_EQUAL_INT(2, (int)num(":st.col"));
     TEST_ASSERT_EQUAL_INT(2, (int)num(":st.row"));
     truth(":st.won", "false");
@@ -843,7 +904,7 @@ void test_a_new_game_resets_the_state(void)
 }
 
 // ---------------------------------------------------------------------------
-// 12. Screens
+// 11. Screens
 // ---------------------------------------------------------------------------
 
 // The laid-out screens are all `setcursor` plus vertical-bar quoted words,
@@ -888,7 +949,7 @@ void test_a_whole_game_runs_from_the_title_screen(void)
 }
 
 // ---------------------------------------------------------------------------
-// 13. Workspace budget
+// 12. Workspace budget
 // ---------------------------------------------------------------------------
 
 // The workspace has to leave room for a profiler or another program to load
@@ -908,23 +969,30 @@ int main(void)
 
     RUN_TEST(test_the_map_covers_the_screen_exactly);
     RUN_TEST(test_direction_deltas_and_opposites);
-    RUN_TEST(test_only_floor_flask_and_chest_are_walkable);
+    RUN_TEST(test_a_snake_is_walkable_and_stone_is_not);
 
     RUN_TEST(test_the_labyrinth_is_ringed_by_solid_wall);
     RUN_TEST(test_the_hud_rows_are_not_walkable);
     RUN_TEST(test_every_chamber_is_carved);
     RUN_TEST(test_the_labyrinth_is_one_connected_network);
     RUN_TEST(test_no_wall_junction_is_ever_opened);
-    RUN_TEST(test_opened_loops_add_routes_to_the_spanning_tree);
+    RUN_TEST(test_a_few_loops_are_opened_and_no_more);
     RUN_TEST(test_the_same_seed_carves_the_same_labyrinth);
 
     RUN_TEST(test_one_chest_is_placed_far_from_bocco);
     RUN_TEST(test_flasks_are_placed_in_chambers_away_from_the_start);
-    RUN_TEST(test_snakes_start_in_free_chambers_at_a_distance);
-    RUN_TEST(test_snakes_do_not_start_on_an_item);
+    RUN_TEST(test_snakes_are_coiled_in_chambers_at_a_distance);
+    RUN_TEST(test_nothing_is_stocked_on_top_of_anything_else);
 
-    RUN_TEST(test_drawing_an_actor_restores_the_cell);
+    RUN_TEST(test_the_temple_starts_dark);
+    RUN_TEST(test_a_revealed_cell_shows_its_own_tile);
+    RUN_TEST(test_a_step_reveals_the_block_around_bocco);
+    RUN_TEST(test_revealed_ground_stays_revealed);
+    RUN_TEST(test_a_blocked_step_reveals_nothing);
+
+    RUN_TEST(test_drawing_bocco_leaves_the_world_alone);
     RUN_TEST(test_drawing_bocco_over_a_flask_keeps_the_flask);
+    RUN_TEST(test_bocco_is_drawn_over_the_revealed_cell);
 
     RUN_TEST(test_bocco_walks_into_open_floor);
     RUN_TEST(test_a_wall_stops_bocco_and_clears_the_intent);
@@ -932,18 +1000,12 @@ int main(void)
 
     RUN_TEST(test_a_flask_restores_two_health_and_is_consumed);
     RUN_TEST(test_a_flask_cannot_push_health_over_the_maximum);
+    RUN_TEST(test_a_snake_costs_between_one_and_four_health);
+    RUN_TEST(test_a_snake_stays_coiled_after_biting);
+    RUN_TEST(test_bocco_can_walk_through_a_snake);
     RUN_TEST(test_reaching_the_chest_wins);
     RUN_TEST(test_plain_floor_changes_nothing);
-
-    RUN_TEST(test_a_bite_costs_between_one_and_four_health);
-    RUN_TEST(test_no_bite_when_no_snake_shares_the_cell);
-    RUN_TEST(test_mercy_blocks_a_second_bite_until_it_expires);
-    RUN_TEST(test_any_snake_can_bite);
     RUN_TEST(test_the_game_ends_on_death_and_on_quitting);
-
-    RUN_TEST(test_snakes_never_leave_the_corridors);
-    RUN_TEST(test_a_snake_makes_ground_along_a_corridor);
-    RUN_TEST(test_a_snake_turns_around_in_a_dead_end);
 
     RUN_TEST(test_arrows_set_the_direction);
     RUN_TEST(test_the_last_arrow_in_the_queue_wins);
@@ -955,7 +1017,6 @@ int main(void)
 
     RUN_TEST(test_the_frame_runs_and_reclaims);
     RUN_TEST(test_a_paused_frame_advances_nothing);
-    RUN_TEST(test_mercy_counts_down_each_frame);
     RUN_TEST(test_a_new_game_resets_the_state);
 
     RUN_TEST(test_the_title_screen_draws);

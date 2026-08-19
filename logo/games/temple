@@ -15,18 +15,28 @@
 ;   Each flask you find restores 2 health points.
 ;   Use the arrow keys to control Bocco.
 ;
-; The original's BASIC listing was not available when this was written, so
-; everything the published rules do not fix -- starting health, how many
-; snakes and flasks, how the labyrinth is generated, the tick rates -- is
-; chosen here and recorded in section 3 of the design document.  Bocco is
-; RAX's character and the title is RAX's; this port carries both by
-; permission-pending attribution, not by claim.
+; Two things the description does not say, and the game turns on both:
 ;
-; The tile map is the only source of truth: walls, floor, flasks and the chest
-; all live in map cells, and movement, pickups and painting read those same
-; cells.  Actors are not in the map -- they are drawn into a cell and the cell
-; is put straight back (see draw.actor), so a lookup never sees a snake where
-; a floor tile is.
+;   * The temple is dark.  Nothing is drawn until Bocco is beside it: each
+;     step reveals the 3x3 block around him, and what has been revealed stays
+;     revealed, so the picture on the screen is the map he has walked.
+;   * The snakes do not move.  They are coiled in the tunnels where they lie,
+;     which makes each one a toll on the route past it rather than a chase:
+;     the reveal shows a snake one step before Bocco reaches it, and he can
+;     pay the 1 to 4 health or go round if the labyrinth offers a way round.
+;
+; The original's BASIC listing was not available when this was written, so
+; everything the rules above do not fix -- starting health, how many snakes
+; and flasks, how the labyrinth is generated, the tick rate -- is chosen here
+; and recorded in section 3 of the design document.  Bocco is RAX's character
+; and the title is RAX's; this port carries both by permission-pending
+; attribution, not by claim.
+;
+; The tile map is the only source of truth.  Walls, floor, flasks, the chest
+; and the snakes all live in map cells, and movement, pickups, bites and the
+; picture read those same cells.  Only Bocco is not in the map: he is drawn
+; into a cell and the cell is put straight back (see draw.bocco), so a lookup
+; never sees him standing where a flask is.
 ;
 ; Four interpreter rules govern this file, as they do logo/games/trails:
 ;   * there is no >= or <=; write  not (a < b)
@@ -39,17 +49,19 @@
 ; -------------------------------------------------------------------------
 ; Tile bank slots.  A map cell holds one of these: the picture and the rule
 ; at once.  The order is load-bearing -- everything a walker may stand on is
-; above :sl.bocco, so `walkable?` is one comparison.  Slot 0 is "nothing
-; here" and paints as background; it is the HUD's empty heart.
+; above :sl.bocco, so `walkable?` is one comparison, and a snake is walkable
+; because paying its toll is a move a player is allowed to make.  Slot 0 is
+; "nothing here": it paints as background, and it is both the unlit temple
+; and the HUD's empty heart.
 ; -------------------------------------------------------------------------
 
 make "sl.wall 1
 make "sl.heart 2
-make "sl.snake 3
-make "sl.bocco 4
-make "sl.floor 5
-make "sl.flask 6
-make "sl.chest 7
+make "sl.bocco 3
+make "sl.floor 4
+make "sl.flask 5
+make "sl.chest 6
+make "sl.snake 7
 
 ; Palette slots from the stock palette, so this game defines no colours of
 ; its own and `restorepalette` is never needed.  Stone for the masonry, amber
@@ -75,7 +87,7 @@ make "c.text 254
 ; walls between them occupy the odd ones.  Every cell outside that -- column
 ; 1, column 39, row 1, row 35 -- stays wall, which is what lets movement skip
 ; bounds tests entirely: a walker cannot reach the edge of the map, so no
-; step can leave it.
+; step can leave it, and the 3x3 the reveal stamps is always inside the map.
 ;
 ; Rows 36..40 are below the labyrinth's south wall and hold the HUD.
 ; -------------------------------------------------------------------------
@@ -83,14 +95,12 @@ make "c.text 254
 make "st.cols 19
 make "st.rows 17
 
-make "st.snakes 6
-make "st.flasks 8
+make "st.snakes 20
+make "st.flasks 10
 make "st.max.health 10
 
-; Frames between steps at 25 fps, and the frames of mercy a hit buys.
+; Frames between Bocco's steps at 25 fps.
 make "st.bocco.tick 4
-make "st.snake.tick 6
-make "st.mercy.frames 25
 
 ; -------------------------------------------------------------------------
 ; Game state.
@@ -100,18 +110,11 @@ make "st.col 2
 make "st.row 2
 make "st.want 0
 make "st.health 10
-make "st.mercy 0
 make "st.frame 0
 make "st.hud -1
 make "st.won "false
 make "st.quit "false
 make "st.paused "false
-
-; One entry per snake, mutated in place with `.setitem` so a frame allocates
-; nothing.  setup.state gives them their length.
-make "st.s.col []
-make "st.s.row []
-make "st.s.dir []
 
 ; -------------------------------------------------------------------------
 ; Directions: 1 up, 2 left, 3 down, 4 right.  Row 1 is the top, so up is
@@ -144,7 +147,7 @@ end
 
 ; -------------------------------------------------------------------------
 ; Map questions.  Anything above :sl.bocco can be stood on: floor, a flask,
-; the chest.  Wall, background and the two actor slots cannot.
+; the chest, a snake.  Wall, background and Bocco's own slot cannot.
 ; -------------------------------------------------------------------------
 
 to walkable? :slot
@@ -302,9 +305,10 @@ to build.maze
   ]
 end
 
-; A perfect maze has exactly one route between any two chambers, which makes
-; a snake in the corridor ahead a dead end rather than a hazard.  Knocking a
-; few walls out gives the labyrinth loops to dodge around.
+; A perfect maze has exactly one route between any two chambers, so every
+; snake between Bocco and the chest is a toll he has no choice but to pay.
+; A handful of reopened walls gives him somewhere to go instead -- but only a
+; handful, or a temple full of snakes would cost nothing to cross.
 to open.loops :n
   repeat :n [
     ifelse ((random 2) = 0) [
@@ -316,11 +320,15 @@ to open.loops :n
 end
 
 ; -------------------------------------------------------------------------
-; Placing the chest, the flasks and the snakes.  All three go in chambers --
-; never in the gap between two -- so nothing is ever hidden inside a wall
-; join.  A chamber's map coordinates are both even, and Bocco starts at
-; (2,2), so `(:c + :r) > 4` is "not the chamber Bocco is standing in" and
-; `((:c + :r) / 2) > 21` is "at least twenty chambers away from him".
+; Stocking the temple.  The chest, the flasks and the snakes all go in
+; chambers -- never in the gap between two -- so nothing is hidden inside a
+; wall join, and `free.chamber` only ever offers a cell that is still bare
+; floor, so no two of them can land on each other.
+;
+; Both chamber coordinates are even and Bocco starts at (2,2), so the sum of
+; a chamber's coordinates is twice its distance from his corner: 42 is "at
+; least twenty chambers away", 14 is "not within three", and 4 is "not the
+; chamber he is standing in".
 ; -------------------------------------------------------------------------
 
 to random.chamber.col
@@ -331,12 +339,8 @@ to random.chamber.row
   output 2 * (1 + (random :st.rows))
 end
 
-; A free chamber whose map coordinates sum to more than :away, as a [col row]
-; pair.  Both coordinates are even and Bocco starts at (2,2), so the sum is
-; twice the chamber distance from his corner: 42 is "at least twenty chambers
-; away", 14 is "not within three", and 4 is "not the chamber he is standing
-; in".  This runs fifteen times at the start of a game, so the pair it conses
-; is not worth the two procedures avoiding it would cost.
+; A free chamber, as a [col row] pair.  This runs thirty-one times at the
+; start of a game, so the pair it conses is not worth avoiding.
 to free.chamber :away
   local "c local "r
   forever [
@@ -348,82 +352,47 @@ to free.chamber :away
   ]
 end
 
-to place.chest
+to scatter :slot :count :away
   local "p
-  make "p (free.chamber 42)
-  settile (first :p) (last :p) :sl.chest
-end
-
-to place.flasks
-  local "p
-  repeat :st.flasks [
-    make "p (free.chamber 4)
-    settile (first :p) (last :p) :sl.flask
+  repeat :count [
+    make "p (free.chamber :away)
+    settile (first :p) (last :p) :slot
   ]
-end
-
-to place.snakes
-  local "i
-  make "st.s.col []
-  make "st.s.row []
-  make "st.s.dir []
-  repeat :st.snakes [
-    make "st.s.col (lput 0 :st.s.col)
-    make "st.s.row (lput 0 :st.s.row)
-    make "st.s.dir (lput 1 :st.s.dir)
-  ]
-  repeat :st.snakes [
-    make "i repcount
-    place.snake :i
-  ]
-end
-
-to place.snake :i
-  local "p
-  make "p (free.chamber 14)
-  .setitem :i :st.s.col (first :p)
-  .setitem :i :st.s.row (last :p)
-  .setitem :i :st.s.dir (1 + (random 4))
 end
 
 ; -------------------------------------------------------------------------
-; Drawing actors.  The map holds the world and nothing else, so an actor is
-; drawn by lending its cell the actor's slot for exactly one `stamptile` and
-; handing the cell straight back.  Erasing is the same repaint without the
-; loan -- whatever the actor covered is still in the map, so it comes back
-; by itself.
+; The dark, and Bocco in it.
+;
+; Nothing is painted at the start of a game: the screen is cleared and the
+; map stays where it is, unseen.  Each step stamps the 3x3 block of cells
+; around Bocco, and because stamping is idempotent there is no record of
+; what has already been revealed to keep -- a cell revealed three steps ago
+; is simply stamped again with the same tile.  The picture accumulates, so
+; what is on the screen is the map Bocco has walked.
+;
+; The block is always inside the map: Bocco can only stand on chambers and
+; the gaps between them, columns 2..38 and rows 2..34, and the labyrinth's
+; ring of wall is what keeps him there.
 ; -------------------------------------------------------------------------
 
-to draw.actor :c :r :slot
+to reveal
+  local "r
+  repeat 3 [
+    make "r :st.row + repcount - 2
+    repeat 3 [stamptile (:st.col + repcount - 2) :r]
+  ]
+end
+
+; Bocco is not in the map, so his cell lends him its slot for exactly one
+; `stamptile` and takes it straight back.  A `tile` lookup therefore never
+; answers with Bocco where a flask is, and stepping off him restores
+; whatever he was standing on.
+to draw.bocco
   local "w
-  make "w (tile :c :r)
-  settile :c :r :slot
-  stamptile :c :r
-  settile :c :r :w
-end
-
-to erase.actors
-  local "i
+  make "w (tile :st.col :st.row)
+  settile :st.col :st.row :sl.bocco
   stamptile :st.col :st.row
-  repeat :st.snakes [
-    make "i repcount
-    stamptile (item :i :st.s.col) (item :i :st.s.row)
-  ]
-end
-
-; Snakes first, so Bocco is never hidden under one at the moment he is hit.
-; A hit makes him blink: while mercy is running he is skipped for three
-; frames in every six, which is slow enough to read at 25 fps.
-to draw.actors
-  local "i
-  repeat :st.snakes [
-    make "i repcount
-    draw.actor (item :i :st.s.col) (item :i :st.s.row) :sl.snake
-  ]
-  if :st.mercy > 0 [
-    if ((remainder :st.mercy 6) < 3) [stop]
-  ]
-  draw.actor :st.col :st.row :sl.bocco
+  settile :st.col :st.row :w
 end
 
 ; -------------------------------------------------------------------------
@@ -480,7 +449,9 @@ to poll.input
 end
 
 ; -------------------------------------------------------------------------
-; Movement.
+; Movement.  A step erases Bocco by repainting the cell he is leaving from
+; the map, moves him, settles what is in the new cell, reveals the block
+; around it and draws him again.  Nothing else is drawn on any frame.
 ; -------------------------------------------------------------------------
 
 to step.bocco
@@ -489,12 +460,18 @@ to step.bocco
     make "st.want 0
     stop
   ]
+  stamptile :st.col :st.row
   make "st.col :st.col + (dir.dc :st.want)
   make "st.row :st.row + (dir.dr :st.want)
-  take.item
+  enter.cell
+  reveal
+  draw.bocco
 end
 
-to take.item
+; What Bocco finds where he lands.  A flask is drunk and the cell becomes
+; floor; the chest ends the game; a snake bites and stays coiled where it is,
+; so the toll is paid again by anyone who comes back this way.
+to enter.cell
   local "s
   make "s (tile :st.col :st.row)
   if :s = :sl.flask [
@@ -504,68 +481,12 @@ to take.item
     toot 90 880
     stop
   ]
+  if :s = :sl.snake [
+    make "st.health :st.health - (1 + (random 4))
+    toot 120 160
+    stop
+  ]
   if :s = :sl.chest [make "st.won "true]
-end
-
-; A snake keeps going while it can and turns at a junction one time in four.
-; Reverse is the last resort, so a snake works its way down a corridor
-; instead of shuffling on the spot.
-to snake.dir :c :r :d
-  local "o local "n
-  if (open? :c :r :d) [
-    if ((random 4) > 0) [output :d]
-  ]
-  make "o (random 4)
-  repeat 4 [
-    make "n (1 + (remainder (:o + repcount) 4))
-    if not (:n = (opposite :d)) [
-      if (open? :c :r :n) [output :n]
-    ]
-  ]
-  if (open? :c :r (opposite :d)) [output (opposite :d)]
-  output 0
-end
-
-to step.snakes
-  local "i local "c local "r local "d
-  repeat :st.snakes [
-    make "i repcount
-    make "c (item :i :st.s.col)
-    make "r (item :i :st.s.row)
-    make "d (snake.dir :c :r (item :i :st.s.dir))
-    if :d > 0 [
-      .setitem :i :st.s.dir :d
-      .setitem :i :st.s.col (:c + (dir.dc :d))
-      .setitem :i :st.s.row (:r + (dir.dr :d))
-    ]
-  ]
-end
-
-; -------------------------------------------------------------------------
-; Snakebite.  Checked after Bocco moves and again after the snakes move, so
-; a head-on swap is caught by the first of the two: Bocco steps onto the cell
-; the snake has not left yet.  A bite costs 1 to 4 health, as the original
-; says, and buys a second of mercy so a snake sharing a corridor cannot
-; drain ten points in ten frames.
-; -------------------------------------------------------------------------
-
-to bitten?
-  local "i
-  repeat :st.snakes [
-    make "i repcount
-    if ((item :i :st.s.col) = :st.col) [
-      if ((item :i :st.s.row) = :st.row) [output "true]
-    ]
-  ]
-  output "false
-end
-
-to check.bite
-  if :st.mercy > 0 [stop]
-  if not (bitten?) [stop]
-  make "st.health :st.health - (1 + (random 4))
-  make "st.mercy :st.mercy.frames
-  toot 120 160
 end
 
 ; -------------------------------------------------------------------------
@@ -576,17 +497,7 @@ to play.frame
   poll.input
   if :st.paused [sync stop]
   make "st.frame :st.frame + 1
-  if :st.mercy > 0 [make "st.mercy :st.mercy - 1]
-  erase.actors
-  if ((remainder :st.frame :st.bocco.tick) = 0) [
-    step.bocco
-    check.bite
-  ]
-  if ((remainder :st.frame :st.snake.tick) = 0) [
-    step.snakes
-    check.bite
-  ]
-  draw.actors
+  if ((remainder :st.frame :st.bocco.tick) = 0) [step.bocco]
   update.hud
   reclaim
   sync
@@ -623,12 +534,13 @@ to title.screen
   setcursor [2 11] print "|labyrinth of tunnels is a treasure|
   setcursor [2 12] print "|chest that you must find.  The temple|
   setcursor [2 13] print "|is full of snakes, so be careful!|
-  setcursor [2 16] print "|A snake inflicts damage on 1 to 4|
-  setcursor [2 17] print "|health points.|
-  setcursor [2 19] print "|Each flask you find restores 2 health|
-  setcursor [2 20] print "|points.|
-  setcursor [2 23] print "|ARROWS Move   P Pause   Q Give up|
-  setcursor [14 26] print "|Press Space|
+  setcursor [2 16] print "|The temple is dark.  You see only what|
+  setcursor [2 17] print "|you are standing beside.|
+  setcursor [2 19] print "|A snake inflicts damage on 1 to 4|
+  setcursor [2 20] print "|health points.  Each flask you find|
+  setcursor [2 21] print "|restores 2 health points.|
+  setcursor [2 24] print "|ARROWS Move   P Pause   Q Give up|
+  setcursor [14 27] print "|Press Space|
   wait.for.space
 end
 
@@ -671,7 +583,6 @@ to setup.state
   make "st.row 2
   make "st.want 0
   make "st.health :st.max.health
-  make "st.mercy 0
   make "st.frame 0
   make "st.hud -1
   make "st.won "false
@@ -682,20 +593,20 @@ end
 to setup.temple
   setup.state
   build.maze
-  open.loops 20
-  place.chest
-  place.flasks
-  place.snakes
+  open.loops 8
+  scatter :sl.chest 1 42
+  scatter :sl.flask :st.flasks 4
+  scatter :sl.snake :st.snakes 14
 end
 
 to one.game
   setup.temple
   fullscreen
   clean
-  stampmap
   draw.hud.label
   update.hud
-  draw.actors
+  reveal
+  draw.bocco
   refresh
   (setrefresh "sync 25)
   until [game.over?] [play.frame]
