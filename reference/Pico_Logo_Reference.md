@@ -577,8 +577,6 @@ Pressing `Esc` cancels the replacement and returns to the incremental search, wh
 
 [`setvimode`](#setvimode) `true` replaces the Editor's control-key layer with a modal, vi-style one, where commands are unmodified letters rather than chords. Nothing else about the Editor changes: the same buffer, the same scrolling, the same syntax colouring and the same copy buffer. `setvimode false`, which is how Logo starts, restores the keys described above.
 
-Vi mode suits this keyboard. The keyboard cannot send some modifier combinations at all — `Shift` `←` and `Shift` `→` send nothing, which is why a word move is `Ctrl` `←` — and `Ctrl` is an awkward reach, while every character vi needs (`:` `$` `%` `^` `{` `}` `<` `>` `?` `~` `*` `#` `` ` `` `'`) has a key of its own.
-
 The bottom line shows which mode you are in.
 
 | Mode | Entered by | Cursor | Bottom line |
@@ -590,14 +588,14 @@ The bottom line shows which mode you are in.
 
 #### Leaving the editor
 
-`Esc` belongs to vi: it returns to normal mode, and it no longer accepts the buffer. Leave the Editor with one of:
+`Esc` is now used in vi-mode to return to normal mode, and it no longer is used to accept the edits made to the buffer. Leave the Editor with one of:
 
 - `:wq`, `:x`, `ZZ` — accept, exactly as `Esc` does outside vi mode, so Logo reads each line of the buffer as if you had typed it
 - `:q!`, `ZQ` — cancel, leaving your procedures as they were
 - `:q` — accept, but only when you have changed nothing; otherwise the bottom line says `E37: no write since last change`
 - `Brk` — cancel, from any mode. It is the one key whose meaning does not depend on which mode you are in, which is what makes the mode safe to be wrong about
 
-`:w` depends on what you are editing. Under [`editfile`](#editfile) it writes the file and leaves you in the Editor, so you can save as you go, and the bottom line says `written`; a `Brk` after it cancels only what you have typed since. Everywhere else — [`edit`](#edit-ed), [`edall`](#edall), [`edn`](#edn), [`edns`](#edns) — the buffer has no file to be written to, so `:w` accepts it and leaves, as `:wq` does.
+Under [`editfile`](#editfile) it writes the file and leaves you in the Editor, so you can save as you go, and the bottom line says `written`; a `Brk` after it cancels only what you have typed since. Everywhere else — [`edit`](#edit-ed), [`edall`](#edall), [`edn`](#edn), [`edns`](#edns) — the buffer has no file to be written to, so `:w` accepts it and leaves, as `:wq` does.
 
 #### Moving
 
@@ -613,11 +611,11 @@ Every motion takes a count typed before it, so `5w` moves five words.
 - `%` — from a bracket to its match: the first `(` `)` `[` `]` `{` `}` at or after the cursor on this line, forwards from an opening one and backwards from a closing one, counting nesting of that kind only
 - `Ctrl` `F` `Ctrl` `B` — a page forward or back; `Ctrl` `D` and `Ctrl` `U` half a page
 - `/`_pattern_ `?`_pattern_ — search forwards or backwards, wrapping around the buffer and ignoring case; `n` and `N` repeat it in the same and in the opposite direction, and a search with nothing typed repeats the last one. _pattern_ is a [pattern](#patterns), not plain text — a `.`, `[`, `*`, `^` or `$` you mean literally is written with a backslash before it
-- `*` `#` — search forwards or backwards for the word the cursor is on, matching it whole. `*` on the `n` of `to n` stops on every `n` in the buffer and on no `then`. There is nothing to type: the word becomes the search, so `n` and `N` carry on through it afterwards. When the cursor is not on a word, the next word along the line is used
+- `*` `#` — search forwards or backwards for the word the cursor is on, matching it whole. `*` on the `box` of `to box` stops on every call of `box` in the buffer and on none of `boxes` or `bigbox`. There is nothing to type: the word becomes the search, so `n` and `N` carry on through it afterwards. When the cursor is not on a word, the next word along the line is used
 - `` ` `` `'` — back to where the last jump started. `` ` `` returns to the exact character and `'` to the first non-blank of that line. Jumping to the mark is itself a jump, so pressing `` ` `` again returns to where you came from and the two keys toggle between two places
 - `gd` — go to the definition of the procedure the cursor is on: the `to` line that names it, wherever it is in the buffer. With [`edall`](#edall) the whole workspace is one buffer, so this reaches every procedure you have
 
-A *jump* is `G`, `gg`, `{`, `}`, `%`, `/`, `?`, `n`, `N`, `*`, `#`, `gd` and `:`_n_ — the movements that can leave the screen you were looking at. Each of them sets the mark, so `` ` `` always comes back from one. Ordinary movement (`h` `j` `k` `l`, the words, the pages) does not. The mark is a place in the text, not a line number, and the Editor does not move it when you change the text in front of it, so after an edit `` ` `` may return somewhere near where you were rather than exactly.
+A *jump* is `G`, `gg`, `{`, `}`, `%`, `/`, `?`, `n`, `N`, `*`, `#`, `gd` and `:`_n_ — the movements that can leave the view of the buffer you were looking at. Each of them sets the mark, so `` ` `` always comes back to the previous spot. Ordinary movement (`h` `j` `k` `l`, the words, the pages) does not. The mark is a place in the text, not a line number, and the Editor does not move it when you change the text in front of it, so after an edit `` ` `` may return somewhere near where you were rather than exactly.
 
 
 `Ctrl` `G` says where the cursor is: `line 12 of 40 --30%--`, the number of the line the cursor is on, how many lines the buffer holds, and how far through it you are. `[Modified]` in front of it means you have changed the buffer since the Editor opened, so it is also how you check whether `:q` will let you leave. There is no file name in the report — which procedures or which file the Editor is over was fixed by the command that opened it. `:.=` and `:=` print the same two numbers on their own: the line the cursor is on, and the number of the last line.
@@ -639,9 +637,9 @@ An operator takes a motion, and the two together take a count, so `d2w` and `2dw
 - `~` — swap the case of the character under the cursor and move on
 - `J` — join the next line onto this one, with a single space where the break was
 - `p` `P` — put the copy buffer after or before the cursor. Text taken a line at a time goes back a line at a time, below or above the current line
-- `.` — repeat the last change, working out its own motion from where the cursor now is. A count typed before `.` replaces the one the change was made with
+- `.` — repeat the last change. What it replays is the keys you typed, not the text they touched, so the motion or [text object](#text-objects) is worked out again from where the cursor now is: after `dw`, `.` deletes whichever word you have since moved to, and after `di[` it empties whichever group you are now inside. A count typed before `.` is used in place of the one the change was made with, so `3.` after `dw` deletes three words
 
-`.` repeats a change that finished on its own. It does not repeat one that ended in insert mode, because the Editor does not record what you typed there.
+`.` repeats the changes that finish on their own — `x`, `r`, `~`, `J`, `p`, `dd`, `>>`, `di[` and the like. It does not repeat one that leaves you in insert mode — `c`, `s`, `C`, `S`, `i`, `a`, `o`, `O` — because the Editor does not record what you type there; after one of those, `.` still repeats the last change before it. With nothing to repeat at all the bottom line says `Nothing to repeat`.
 
 #### Text objects
 
@@ -738,11 +736,11 @@ A pattern with several `*`s in a row can still be enormously expensive to match 
 
 A *word*, for `\<` and `\>`, is a Logo name: it runs up to the first blank, `;`, or one of the delimiters `[ ] ( ) + - * / = < >`, and a leading `"` or `:` is not part of it. So `\<n\>` matches the `n` in `"n`, in `:n` and standing alone, but not the `n` inside `then`, `pen` or `total.count` — which is what lets `:%s/\<n\>/count/g` rename a variable without touching the words that merely contain its letters. No single pattern can tell a variable `n` from a procedure `n`, so the safe way to rename is to walk the matches first: `/\<n\>` then `n` to see each one, `:%s//count/g` to make the change, and `u` if it reached too far.
 
-Because matching folds case, a class such as `[A-Z]` means "a letter", not "a capital"; `:%s/\<Total\>/sum/g` finds `total` too, which is the behaviour a case-insensitive language wants from a rename.
+Because matching folds case, a class such as `[A-Z]` means "a letter", not "a capital"; `:%s/\<Total\>/sum/g` finds `total` too.
 
 #### What vi mode leaves out
 
-Named registers — the copy buffer is the one unnamed register — marks, macros, `Ctrl` `V` block selection, windows, and the `:e` and `:r` file commands: which file the Editor is working on is fixed by the command that opened it. None of them earn their space on a 40 by 30 screen.
+Named registers — the copy buffer is the one unnamed register — marks, macros, `Ctrl` `V` block selection, windows, and the `:e` and `:r` file commands: which file the Editor is working on is fixed by the command that opened it.
 
 ### Viewing screens
 
