@@ -911,10 +911,10 @@ static bool is_change(ViActionKind kind)
         case VI_ACT_TOGGLE_CASE:
             return true;
         default:
-            // VI_ACT_CHANGE and the two opens are changes too, but they end in
-            // insert mode and nothing records the text that follows, so `.`
-            // would replay half of them. It repeats the last change that
-            // finished on its own instead (docs/vi-mode-design.md §5.1).
+            // VI_ACT_CHANGE and the two opens are changes too, but they are
+            // only half of one until the `Esc` that closes the insert session
+            // they open, so `record_insert` records those there instead
+            // (docs/vi-mode-design.md §20).
             return false;
     }
 }
@@ -923,14 +923,62 @@ static bool is_change(ViActionKind kind)
 // whatever was pending either way.
 static bool commit(ViState *st, ViAction *out, int count)
 {
-    if (is_change(out->kind) && !st->replaying && st->stroke_len > 0)
+    if (st->mode == VI_INSERT && !st->replaying && !st->from_visual)
+    {
+        // A change that ends in insert mode waits for its `Esc`. Its keys stay
+        // in `stroke` -- nothing else uses them while insert mode runs, since
+        // the editor handles those keys itself -- and its count with them.
+        int keys = st->stroke_len;
+        clear_pending(st);
+        st->stroke_len = keys;
+        st->pending_count = count;
+        return true;
+    }
+    if (is_change(out->kind) && !st->replaying && !st->from_visual && st->stroke_len > 0)
     {
         memcpy(st->repeat_keys, st->stroke, (size_t)st->stroke_len);
         st->repeat_len = st->stroke_len;
         st->repeat_count = count;
+        st->repeat_insert_set = false;
     }
     clear_pending(st);
     return true;
+}
+
+// `Esc` closes an insert session: record the whole change for `.` (§20). What
+// was typed is the span between where the editor put the cursor when insert
+// began and where it is now, so a backspace inside the session simply leaves
+// less text and nothing has to watch keys the state machine never sees. A
+// session that moved somewhere else -- an arrow, a backspace past the origin,
+// anything that deleted text that was already there -- has no such span, and
+// so does a session too long to record. Either drops the record rather than
+// leaving `.` to put back a change the user did not make.
+static void record_insert(ViState *st, const char *buf, size_t len, size_t cursor)
+{
+    if (!st->insert_recording)
+    {
+        return;
+    }
+    st->insert_recording = false;
+
+    size_t typed = (cursor >= st->insert_origin) ? cursor - st->insert_origin : 0;
+    if (cursor < st->insert_origin || len < st->insert_len0 ||
+        len - st->insert_len0 != typed || typed > LOGO_VI_INSERT_MAX ||
+        st->stroke_len == 0)
+    {
+        st->repeat_len = 0;
+        st->repeat_insert_set = false;
+        st->stroke_len = 0;
+        return;
+    }
+
+    memcpy(st->repeat_insert, buf + st->insert_origin, typed);
+    st->repeat_insert_len = (int)typed;
+    st->repeat_insert_set = true;
+    memcpy(st->repeat_keys, st->stroke, (size_t)st->stroke_len);
+    st->repeat_len = st->stroke_len;
+    st->repeat_count = st->pending_count;
+    st->stroke_len = 0;
 }
 
 // The one mark. A jump records where it left from, so `` ` `` comes back --
@@ -1602,6 +1650,20 @@ static bool replay(ViState *st, const char *buf, size_t len, size_t cursor, ViAc
     }
 
     st->replaying = false;
+
+    if (st->mode == VI_INSERT)
+    {
+        // The recorded change ends in an insert session. Close it here and
+        // hand the text back with the action: the editor types it once it has
+        // carried the action out, so the repeat puts back the whole change
+        // rather than leaving the user in insert mode (§20).
+        st->mode = VI_NORMAL;
+        if (st->repeat_insert_set)
+        {
+            out->insert = st->repeat_insert;
+            out->insert_len = (size_t)st->repeat_insert_len;
+        }
+    }
     return consumed;
 }
 
@@ -2232,6 +2294,14 @@ bool editor_vi_key(ViState *st, const char *buf, size_t len, size_t cursor,
     out->ch = 0;
     out->count = 0;
     out->msg = NULL;
+    out->insert = NULL;
+    out->insert_len = 0;
+
+    // A visual command builds up over several keys, and each of them completes
+    // and clears its own stroke on the way -- so nothing is left of `vld` but
+    // the `d`, which replays as an operator waiting for a motion that never
+    // comes. `commit` records no change made from visual mode (B43).
+    st->from_visual = (st->mode == VI_VISUAL || st->mode == VI_VISUAL_LINE);
 
     if (st->mode == VI_VISUAL || st->mode == VI_VISUAL_LINE)
     {
@@ -2250,6 +2320,7 @@ bool editor_vi_key(ViState *st, const char *buf, size_t len, size_t cursor,
                 // Vi steps back off the character just typed
                 size_t start = line_start_of(buf, cursor);
                 st->mode = VI_NORMAL;
+                record_insert(st, buf, len, cursor);
                 out->kind = VI_ACT_MOVE;
                 out->start = out->end = (cursor > start) ? cursor - 1 : start;
                 return true;
@@ -2269,6 +2340,16 @@ bool editor_vi_key(ViState *st, const char *buf, size_t len, size_t cursor,
             }
             return normal_key(st, buf, len, cursor, key, out);
     }
+}
+
+void editor_vi_insert_began(ViState *st, size_t cursor, size_t len)
+{
+    st->insert_origin = cursor;
+    st->insert_len0 = len;
+    // The keys of the command that opened the session, still in `stroke`. A
+    // session opened without them -- there is no such path today, but a stroke
+    // buffer that overflowed would look like one -- is simply not recorded.
+    st->insert_recording = st->stroke_len > 0;
 }
 
 const char *editor_vi_status(const ViState *st)

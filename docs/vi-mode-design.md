@@ -496,7 +496,8 @@ as designed.
   its own motion (which is what §10's test asks for). It does not repeat `cw`
   or `o`, because nothing records the text typed after them. That record is
   M4's journal; until it exists, repeating half a change would be worse than
-  refusing.
+  refusing. **Superseded by M10 (§20)**, which records the text without a
+  journal: what was typed is the span the session left in the buffer.
 - **`G` and `:{n}` count the empty line a trailing newline leaves.** Vi does
   not; this editor does -- `editor_count_lines` counts it, the editor draws it,
   and the cursor keys go there. Agreeing with the editor beats agreeing with
@@ -1545,3 +1546,116 @@ old `all_digits` helper gave 15 back. No change in `editor.c`: a range is
 resolved to the byte range the actions already carry. `ViState` grows by two
 `size_t` and a `bool`, which stays inside the rounding: **91.25 %** of SRAM on
 `pico+2w`, **92.58 %** on `pico2`, both unmoved. 13 new tests.
+
+
+## 20. Repeating an insert (M10)
+
+`.` has repeated the changes that finish on their own since M3. It has never
+repeated the ones that end in insert mode -- `i a I A o O`, `c s C S` -- and
+M3's note above says why: nothing recorded the text typed after them, and
+putting back half a change is worse than refusing. **The reason is gone**, and
+not because M4's journal arrived. It was never needed.
+
+### 20.1 The text is a span, not a key log
+
+Vim records the keystrokes of an insert session. This editor cannot: in insert
+mode `editor_vi_key` returns false and `editor.c` does its own handling, so the
+state machine never sees a character, a backspace or a Return. Recording them
+would mean a second entry point called on every keystroke the editor already
+handles, and a replay that has to re-interpret backspaces.
+
+It does not have to see the keys, because it sees the buffer. What was typed is
+
+```
+buf[insert_origin, cursor)
+```
+
+-- the span between where the cursor was when insert began and where it is at
+the `Esc`. A backspace inside the session simply leaves less text; so does
+retyping a word three times. Nothing has to be interpreted, and the record is
+the same bytes the editor will type back.
+
+The one thing the state machine cannot supply is `insert_origin`. For `i` it
+would be the cursor it was handed, but for `o` it is past the auto-indent
+`editor_vi_open_line` wrote and for `cw` it is where the deleted range started
+-- editor decisions, taken after the action is applied. So the editor says:
+`editor_vi_insert_began(st, cursor, len)`, one call in the main loop on the
+transition into insert mode, and the third thing `editor.c` tells the vi layer
+after `modified` and the key itself.
+
+### 20.2 When the span is not the session
+
+A session that only typed forwards satisfies
+
+```
+cursor >= origin  and  len - len0 == cursor - origin
+```
+
+Anything else -- an arrow key mid-insert, a backspace past the origin, a Del
+that ate text that was already there -- moved somewhere the span does not
+describe, and so does a session longer than `LOGO_VI_INSERT_MAX`. Those **drop
+the record entirely**: `.` then says `Nothing to repeat` rather than repeating
+the change before it.
+
+That is the decision worth naming, because vim does the other thing -- it
+splits the insert at the arrow and `.` repeats only the tail. On a keyboard
+where the arrows are the easy keys and `Esc` is a reach, a `.` that quietly
+puts back a piece of what you typed is the worse surprise. Refusing is
+legible; a partial repeat is not.
+
+### 20.3 Where the record is made
+
+`commit` records a change when its keys are done. A change that ends in insert
+mode is not done then, so `commit` leaves its keys in `stroke` -- nothing else
+uses that buffer while insert mode runs -- and `record_insert`, called from the
+`Esc`, promotes the pair together or drops both. There is no window in which
+half a change is repeatable.
+
+`replay` gains a tail rather than a mode: it feeds the recorded keys as before,
+and if they left it in insert mode it puts the mode back and hands the text out
+with the action, in two new `ViAction` fields. The editor types it after
+carrying the action out -- the delete has made room for it, the open has made
+the line -- and steps back off the last character the way `Esc` does. So a
+repeat is one action, one undo step, and never leaves the user in insert mode
+somewhere they did not ask to be.
+
+### 20.4 The count goes to the command
+
+`3.` after `cwfoo` is `3cw` and one `foo`, which is what vim does. It is not
+three `foo`s: `i` takes no count in this editor, so its repeat has none to
+take, and the count `replay` already carries is the command's.
+
+### 20.5 Nothing from visual mode is recorded (B43)
+
+Probing what the new recording did with visual mode found a defect that has
+been there since M3. A visual command builds over several keys and *each one
+completes a command of its own* -- `v` is a mode change, `l` is a motion -- so
+each commits and clears the stroke buffer on its way through, and all that
+survives of `vld` is the `d`. `commit` recorded that lone `d`, and `.` replayed
+it in normal mode, where a bare `d` is an operator waiting for a motion: the
+repeat did nothing and left `pending_op` set, so the next key typed was eaten
+as its motion.
+
+Recording the whole `vld` is not available as a fix: `replay` feeds every key
+the same starting cursor, so a replayed `v`/`l` would select an empty range.
+So `commit` records nothing made from visual mode -- `editor_vi_key` sets
+`from_visual` before it dispatches -- and the last properly recorded change
+stands. M10 made fixing it necessary rather than merely worthwhile: a visual
+`c` records typed text too, and the replay would have inserted it without the
+delete that makes room for it.
+
+### 20.6 The board
+
+Accepted on a Pico Plus 2 W, 2026-08-19. Worth its own line because the two
+places `editor.c` changed -- the `editor_vi_insert_began` call and the block
+that types the recorded text -- are the half of this that no host test reaches,
+`editor.c` having no host build.
+
+### 20.7 Cost
+
+`editor_vi.c` 2,461 → 2,542 lines; `editor.c` 2,725 → 2,750, which is the two
+places named above and nothing else. `ViState` grows by `LOGO_VI_INSERT_MAX`
+plus two `size_t`, two `int` and three `bool` -- **104 bytes of SRAM, measured
+`data+bss` before and after, the same on `pico+2w` and `pico2`**. 11 new tests;
+9 of them fail with the code they cover stubbed out, which is the check that
+they test the feature and not the harness.

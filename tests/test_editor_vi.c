@@ -387,6 +387,19 @@ static void ed_apply(Ed *e, const ViAction *act)
             break;
     }
 
+    // `.` repeating a change that ended in insert mode carries the text that
+    // was typed then: the action has made room for it, and the editor types it
+    // and steps back off the last character the way Esc does (§20)
+    if (act->insert != NULL) {
+        size_t before = e->len;
+        ed_insert(e, e->cursor, act->insert, act->insert_len);
+        if (e->len != before || act->insert_len == 0) {
+            e->cursor += act->insert_len;
+            size_t ls = ed_line_start(e, e->cursor);
+            if (e->cursor > ls) e->cursor--;
+        }
+    }
+
     if (e->cursor > e->len) e->cursor = e->len;
 }
 
@@ -413,12 +426,20 @@ static void feed_key(int key)
         editor_undo_begin(&ed.undo);
     }
 
+    ViMode mode_before = ed.vi.mode;
+
     ed.consumed = editor_vi_key(&ed.vi, ed.buf, ed.len, ed.cursor, key, &act);
     ed.last = act;
     ed.len_at_key = ed.len;
 
     if (ed.consumed) {
         ed_apply(&ed, &act);
+        // Where insert mode starts is the editor's decision, not the state
+        // machine's, so the editor is what tells it -- which is what lets the
+        // Esc see what was typed (§20)
+        if (mode_before != VI_INSERT && ed.vi.mode == VI_INSERT) {
+            editor_vi_insert_began(&ed.vi, ed.cursor, ed.len);
+        }
         return;
     }
 
@@ -1390,6 +1411,159 @@ static void test_a_motion_is_not_a_change_to_repeat(void)
     feed("w");             // A motion; must not become what `.` repeats
     feed(".");
     assert_text("a b cc\n");
+}
+
+//
+//  `.` over an insert session (§20)
+//
+
+static void test_a_visual_change_is_not_what_dot_repeats(void)
+{
+    // A visual command's keys each commit and clear their own stroke, so all
+    // that is left of `vld` is the `d` -- which replays as an operator waiting
+    // for a motion, doing nothing and eating the next key. Nothing made from
+    // visual mode is recorded, and the change before it stands (B43).
+    ed_set("aa bb cc\n");
+    feed("x");
+    assert_text("a bb cc\n");
+    feed("vld");
+    assert_text("bb cc\n");
+    feed(".");
+    assert_text("b cc\n");
+    TEST_ASSERT_EQUAL_INT(0, ed.vi.pending_op);
+}
+
+static void test_a_visual_change_that_types_is_not_repeated_either(void)
+{
+    ed_set("aa bb\ncc dd\n");
+    feed("x");
+    feed("vlc");
+    feed("Z");
+    feed_key(KEY_ESC);
+    assert_text("Zbb\ncc dd\n");
+    feed(".");             // The `x`, not the visual change and its text
+    assert_text("bb\ncc dd\n");
+    TEST_ASSERT_EQUAL_INT(0, ed.vi.pending_op);
+}
+
+static void test_dot_repeats_an_insert(void)
+{
+    // The reason this exists: comment a line, move down, comment the next
+    ed_set("fd 10\nrt 90\n");
+    at(0);
+    feed("i; ");
+    feed_key(KEY_ESC);
+    assert_text("; fd 10\nrt 90\n");
+    feed("j0.");
+    assert_text("; fd 10\n; rt 90\n");
+}
+
+static void test_dot_repeats_a_change(void)
+{
+    ed_set("aa bb cc\n");
+    feed("cw");
+    feed("xy");
+    feed_key(KEY_ESC);
+    assert_text("xy bb cc\n");
+    feed("w.");
+    assert_text("xy xy cc\n");
+}
+
+static void test_dot_repeats_an_opened_line(void)
+{
+    ed_set("to box\nend\n");
+    at(0);
+    feed("o");
+    feed("fd 10");
+    feed_key(KEY_ESC);
+    assert_text("to box\nfd 10\nend\n");
+    feed(".");
+    assert_text("to box\nfd 10\nfd 10\nend\n");
+}
+
+static void test_a_backspace_inside_an_insert_leaves_less_to_repeat(void)
+{
+    // Nothing watches the keys -- the text is the span the session left behind
+    ed_set("ab\ncd\n");
+    at(0);
+    feed("iXY");
+    feed_key(KEY_BACKSPACE);
+    feed_key(KEY_ESC);
+    assert_text("Xab\ncd\n");
+    feed("j0.");
+    assert_text("Xab\nXcd\n");
+}
+
+static void test_an_insert_that_moved_away_is_not_repeated(void)
+{
+    // Backspacing past where insert began leaves no span to record, and the
+    // record goes rather than `.` putting back a change that was never made
+    ed_set("abc\n");
+    at(2);
+    feed("x");
+    assert_text("ab\n");
+    at(1);
+    feed("i");
+    feed_key(KEY_BACKSPACE);
+    feed_key(KEY_ESC);
+    assert_text("b\n");
+    feed(".");
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    assert_text("b\n");
+}
+
+static void test_an_insert_too_long_to_record_is_not_repeated(void)
+{
+    char typed[LOGO_VI_INSERT_MAX + 2];
+    memset(typed, 'x', sizeof(typed) - 1);
+    typed[sizeof(typed) - 1] = '\0';
+
+    ed_set("ab\n");
+    at(0);
+    feed("i");
+    feed(typed);
+    feed_key(KEY_ESC);
+    feed(".");
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+}
+
+static void test_a_later_change_replaces_the_insert_record(void)
+{
+    ed_set("ab\ncd\n");
+    at(0);
+    feed("iX");
+    feed_key(KEY_ESC);
+    assert_text("Xab\ncd\n");
+    feed("x");             // A change of its own; no text comes with it
+    assert_text("ab\ncd\n");
+    feed("j0.");
+    assert_text("ab\nd\n");
+}
+
+static void test_a_count_on_a_repeated_change_goes_to_the_command(void)
+{
+    // ... and not to the text, which is typed once. `3i` takes no count here
+    // either, so its repeat has none to take.
+    ed_set("aa bb cc dd\n");
+    feed("cw");
+    feed("X");
+    feed_key(KEY_ESC);
+    assert_text("X bb cc dd\n");
+    feed("w");
+    feed("2.");
+    assert_text("X X dd\n");
+}
+
+static void test_a_repeated_insert_is_one_undo(void)
+{
+    ed_set("fd 10\nrt 90\n");
+    at(0);
+    feed("i; ");
+    feed_key(KEY_ESC);
+    feed("j0.");
+    assert_text("; fd 10\n; rt 90\n");
+    feed("u");
+    assert_text("; fd 10\nrt 90\n");
 }
 
 //
@@ -2473,6 +2647,17 @@ int main(void)
     RUN_TEST(test_dot_recomputes_its_own_motion);
     RUN_TEST(test_dot_takes_a_new_count);
     RUN_TEST(test_dot_with_nothing_recorded_complains);
+    RUN_TEST(test_a_visual_change_is_not_what_dot_repeats);
+    RUN_TEST(test_a_visual_change_that_types_is_not_repeated_either);
+    RUN_TEST(test_dot_repeats_an_insert);
+    RUN_TEST(test_dot_repeats_a_change);
+    RUN_TEST(test_dot_repeats_an_opened_line);
+    RUN_TEST(test_a_backspace_inside_an_insert_leaves_less_to_repeat);
+    RUN_TEST(test_an_insert_that_moved_away_is_not_repeated);
+    RUN_TEST(test_an_insert_too_long_to_record_is_not_repeated);
+    RUN_TEST(test_a_later_change_replaces_the_insert_record);
+    RUN_TEST(test_a_count_on_a_repeated_change_goes_to_the_command);
+    RUN_TEST(test_a_repeated_insert_is_one_undo);
     RUN_TEST(test_a_motion_is_not_a_change_to_repeat);
 
     RUN_TEST(test_write_and_quit_commands);
