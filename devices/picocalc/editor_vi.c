@@ -2212,6 +2212,19 @@ void editor_vi_reset(ViState *st)
 bool editor_vi_key(ViState *st, const char *buf, size_t len, size_t cursor,
                    int key, ViAction *out)
 {
+    if (cursor > len)
+    {
+        cursor = len;
+    }
+
+    // An edit under a live selection -- `X` in visual mode, an undo -- shortens
+    // the buffer without touching the anchor, and a stale one would put an
+    // operator's range past the end (B39)
+    if (st->anchor > len)
+    {
+        st->anchor = len;
+    }
+
     out->kind = VI_ACT_NONE;
     out->start = cursor;
     out->end = cursor;
@@ -2219,11 +2232,6 @@ bool editor_vi_key(ViState *st, const char *buf, size_t len, size_t cursor,
     out->ch = 0;
     out->count = 0;
     out->msg = NULL;
-
-    if (cursor > len)
-    {
-        cursor = len;
-    }
 
     if (st->mode == VI_VISUAL || st->mode == VI_VISUAL_LINE)
     {

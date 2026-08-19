@@ -425,13 +425,16 @@ static void feed_key(int key)
     // What the editor's own key handling does with what vi hands back. Only
     // insert mode ever does, and only for the keys that put text in a buffer.
     if (ed.vi.mode == VI_INSERT) {
+        // A full buffer takes nothing and the cursor stays put, the way
+        // editor_insert_char leaves it
+        size_t before = ed.len;
         if (key >= 0x20 && key <= 0x7E) {
             char c = (char)key;
             ed_insert(&ed, ed.cursor, &c, 1);
-            ed.cursor++;
+            if (ed.len != before) ed.cursor++;
         } else if (key == KEY_RETURN || key == KEY_ENTER) {
             ed_insert(&ed, ed.cursor, "\n", 1);
-            ed.cursor++;
+            if (ed.len != before) ed.cursor++;
         } else if (key == KEY_BACKSPACE && ed.cursor > 0) {
             ed_delete(&ed, ed.cursor - 1, ed.cursor);
             ed.cursor--;
@@ -2269,6 +2272,24 @@ static void test_undo_with_nothing_recorded_says_so(void)
     assert_text("abc\n");
 }
 
+static void test_an_edit_under_the_selection_does_not_leave_the_anchor_past_the_end(void)
+{
+    // `X` in visual mode is not a visual operator, so it deletes a character
+    // and leaves the selection running. The anchor is a stored offset: when the
+    // delete is before it and the buffer gets shorter, it has to come back
+    // inside, or the next operator's range points past the end (B39)
+    ed_set("ab\ncd\n");
+    feed("Gv");             // Anchor on the empty last line, at the end of the buffer
+    TEST_ASSERT_EQUAL_UINT(6u, ed.vi.anchor);
+
+    feed("klX");            // ... and now the buffer is a byte shorter
+    TEST_ASSERT_EQUAL_UINT(5u, (unsigned)ed.len);
+
+    feed(">");
+    TEST_ASSERT_EQUAL_INT(VI_ACT_INDENT, ed.last.kind);
+    TEST_ASSERT_TRUE_MESSAGE(ed.last.end <= ed.len_at_key, "range past the end");
+}
+
 static void test_undo_leaves_visual_mode(void)
 {
     ed_set("abcdef\n");
@@ -2281,6 +2302,24 @@ static void test_undo_leaves_visual_mode(void)
     assert_text("abcdef\n");
 }
 
+// The fuzz below has to walk the same sequence everywhere, and libc's rand()
+// does not: the same seed gives one order on glibc and another on macOS, so a
+// failure CI found would not reproduce on the host. This xorshift is ours.
+static unsigned long long fuzz_state;
+
+static void fuzz_seed(unsigned long long seed)
+{
+    fuzz_state = seed;
+}
+
+static unsigned fuzz_rand(void)
+{
+    fuzz_state ^= fuzz_state << 13;
+    fuzz_state ^= fuzz_state >> 7;
+    fuzz_state ^= fuzz_state << 17;
+    return (unsigned)(fuzz_state >> 33);
+}
+
 static void test_random_commands_keep_the_buffer_and_the_memo_consistent(void)
 {
     static const char *keys =
@@ -2288,20 +2327,20 @@ static void test_random_commands_keep_the_buffer_and_the_memo_consistent(void)
         "*#`'zgt";  // M8: the mark is a stored offset, so `d`` after an edit is
                     // exactly where a stale one would show
 
-    srand(20260817);
+    fuzz_seed(20260817);
 
     for (int round = 0; round < 60; round++) {
         setUp();
         ed_set("to box :size\n  repeat 4 [fd :size rt 90]\n\nend\n\nprint [a b c]\n");
 
         for (int step = 0; step < 400; step++) {
-            int key = keys[rand() % (int)strlen(keys)];
+            int key = keys[fuzz_rand() % (unsigned)strlen(keys)];
 
             // Never leave the editor, and never sit in a mode the fuzz cannot
             // get out of: Esc every so often, and Return to close a command line
-            if (ed.vi.mode == VI_CMDLINE && (rand() % 4) == 0) {
+            if (ed.vi.mode == VI_CMDLINE && (fuzz_rand() % 4) == 0) {
                 feed_key(KEY_RETURN);
-            } else if ((rand() % 8) == 0) {
+            } else if ((fuzz_rand() % 8) == 0) {
                 feed_key(KEY_ESC);
             } else if (key == 'Z' || key == ':' || key == '/' || key == '?') {
                 feed_key('l');
@@ -2498,6 +2537,7 @@ int main(void)
     RUN_TEST(test_a_pattern_substitute_undoes_byte_for_byte);
     RUN_TEST(test_a_new_change_after_an_undo_drops_the_redo);
     RUN_TEST(test_undo_with_nothing_recorded_says_so);
+    RUN_TEST(test_an_edit_under_the_selection_does_not_leave_the_anchor_past_the_end);
     RUN_TEST(test_undo_leaves_visual_mode);
 
     RUN_TEST(test_star_searches_for_the_whole_word_under_the_cursor);
