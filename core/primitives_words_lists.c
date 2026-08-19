@@ -977,13 +977,23 @@ static int sort_compare_char(const void *a, const void *b)
     return (int)*(const unsigned char *)a - (int)*(const unsigned char *)b;
 }
 
+// The tiebreak that makes the sort stable. Positions are unique, so an equal
+// pair can only be an entry compared with itself, which qsort is allowed to do
+// and for which a comparator must answer 0.
+static int sort_compare_position(const SortEntry *x, const SortEntry *y)
+{
+    if (x->position < y->position) return -1;
+    if (x->position > y->position) return 1;
+    return 0;
+}
+
 static int sort_compare_numeric(const void *a, const void *b)
 {
     const SortEntry *x = (const SortEntry *)a;
     const SortEntry *y = (const SortEntry *)b;
     if (x->number < y->number) return -1;
     if (x->number > y->number) return 1;
-    return (x->position < y->position) ? -1 : 1;
+    return sort_compare_position(x, y);
 }
 
 static int sort_compare_alpha(const void *a, const void *b)
@@ -993,7 +1003,7 @@ static int sort_compare_alpha(const void *a, const void *b)
     // Case-sensitive, so sort and before? agree on the order.
     int cmp = strcmp(mem_word_ptr(x->word), mem_word_ptr(y->word));
     if (cmp != 0) return cmp;
-    return (x->position < y->position) ? -1 : 1;
+    return sort_compare_position(x, y);
 }
 
 static Result prim_sort(Evaluator *eval, int argc, Value *args)
