@@ -1,0 +1,89 @@
+to ipaddress? :s
+  ; Returns if :s is an IP address
+  ; such as 192.168.1.245
+  localmake "addr? true
+  localmake "dots 0
+  foreach :s [[i]
+    make "addr? and :addr? ipchar :i
+    if equal? :i ". [
+      make "dots :dots + 1
+    ]
+  ]
+  op and :addr? equal? :dots 3
+end
+
+to ipchar :c
+  ; Is this a valid character in an IP
+  ; address
+  op member? :c [1 2 3 4 5 6 7 8 9 0 .]
+end
+
+to min :list
+  ; Returns the minimum value in a list
+  localmake "min first :list
+  foreach :list [[t]
+    if less? :t :min [make "min :t]
+  ]
+  op :min
+end
+
+to avg :list
+  ; Returns the average value of the
+  ; numeric values in a list
+  localmake "sum reduce [[a b] :a + :b] :list
+  op :sum / count :list
+end
+
+to max :list
+  ; Returns the maximum value in a list
+  localmake "max first :list
+  foreach :list [[t]
+    if greater? :t :max [make "max :t]
+  ]
+  op :max
+end
+
+to median :list
+  ; Returns the median value in a list,
+  ; handles the even length case
+  localmake "sorted sort :list
+  localmake "n count :list
+  ifelse (remainder :n 2) = 1 [
+    op item ((:n + 1) / 2) :sorted
+  ] [
+    op (item (:n / 2) :sorted
+    + item ((:n / 2) + 1) :sorted) / 2
+  ]
+end
+
+to ping :s
+  localmake "addr :s
+  localmake "total 5
+  if not ipaddress? :s [
+    make "addr network.resolve :s
+  ]
+  (pr "PING :s (word "( :addr ")))
+  localmake "times []
+  localmake "rcvd 0
+  localmake "time -1
+  repeat :total [
+    make "time network.ping :addr
+    ifelse greater? :time -1 [
+      make "rcvd :rcvd + 1
+      make "times lput :time :times
+      (pr last :times "ms)
+    ] [
+      pr "|lost packet|
+    ]
+    wait 1000
+  ]
+  (pr "--- :s "ping "statistics "---)
+  (pr :rcvd "out "of :total "packets "received)
+  if greater? :rcvd 0 [
+    (pr "minimum: min :times "ms)
+    (pr "average: avg :times "ms)
+    (pr "maximum: max :times "ms)
+    (pr "|median: | median :times "ms)
+  ]
+end
+
