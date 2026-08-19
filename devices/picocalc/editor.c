@@ -2179,8 +2179,14 @@ static int editor_vi_apply(const ViAction *act, int cursor_line_before)
             if (editor.cursor_pos > line_start) {
                 editor.cursor_pos--;
             }
+            // Only bytes that actually went in are a change. A repeat of `i`
+            // closed without typing anything is a cursor move, and the keys it
+            // repeats did not set this either; a full buffer took nothing.
+            // Whatever the change was, the action above has already said so.
+            if (act->insert_len > 0) {
+                editor.vi.modified = true;
+            }
         }
-        editor.vi.modified = true;
         editor_mark_from_line_dirty(cursor_line_before);
     }
 
