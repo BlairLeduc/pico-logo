@@ -106,6 +106,10 @@ describes today, `Esc` included.
 | Visual | `v` (charwise), `V` (linewise) | block, selection in reverse video | `-- VISUAL --` / `-- VISUAL LINE --` |
 | Command line | `:` `/` `?` | underline, in the footer | the typed line |
 
+Normal mode adds a ruler: the cursor's line number, right-justified in the same
+footer row, repainted whenever the cursor changes line. Only normal mode has the
+room — the other three modes' footers can run the width of the row.
+
 Two of these are already built. The cursor style is already switched between
 block and underline by `lcd_set_cursor_style`, and block already means "a
 selection is active" — so normal/insert maps onto it with no new drawing code.

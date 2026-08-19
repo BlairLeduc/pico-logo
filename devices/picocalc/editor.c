@@ -23,6 +23,7 @@
 #include "devices/font.h"
 #include "core/syntax_highlight.h"
 
+#include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
 
@@ -244,9 +245,25 @@ static void editor_draw_footer(void)
         // The mode indicator, or whatever the last keystroke had to say about
         // itself. Vi has no "ESC - ACCEPT" to offer: Esc is vi's, and leaving
         // is :w / ZZ or :q! / ZQ
-        editor_draw_reverse_row(EDITOR_FOOTER_ROW,
-                                editor.vi_msg ? editor.vi_msg : editor_vi_status(&editor.vi),
-                                false);
+        const char *text = editor.vi_msg ? editor.vi_msg
+                                         : editor_vi_status(&editor.vi);
+        editor_draw_reverse_row(EDITOR_FOOTER_ROW, text, false);
+
+        // Normal mode also gets a ruler: the cursor's line number, right
+        // justified. The other modes leave the room to the command line, the
+        // insert indicator and the selection
+        if (editor.vi.mode == VI_NORMAL) {
+            char ruler[12];
+            snprintf(ruler, sizeof(ruler), "%d",
+                     editor_get_line_at_pos(editor.cursor_pos) + 1);
+            int len = (int)strlen(ruler);
+            int col = EDITOR_MAX_COLS - len;
+            if (col > (int)strlen(text)) {  // Never write over the indicator
+                for (int i = 0; i < len; i++) {
+                    lcd_putc(col + i, EDITOR_FOOTER_ROW, ruler[i] | 0x80);
+                }
+            }
+        }
     } else if (editor.searching) {
         char footer[EDITOR_PROMPT_COLS + EDITOR_SEARCH_MAX + 1];
         strcpy(footer, editor.replacing ? "Replace:" : "Search: ");
@@ -2682,6 +2699,13 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size,
             editor_update_dirty();
         }
         
+        // The ruler follows the cursor, so a keystroke that changed the line
+        // has to repaint the footer even when the mode indicator did not move
+        if (editor.vi_mode && editor.vi.mode == VI_NORMAL &&
+            editor_get_line_at_pos(editor.cursor_pos) != cursor_line_before) {
+            editor_draw_footer();
+        }
+
         if (needs_cursor_update) {
             editor_position_cursor();
         }

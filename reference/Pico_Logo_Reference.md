@@ -586,6 +586,8 @@ The bottom line shows which mode you are in.
 | Visual | `v` (characters), `V` (lines) | block, selection in reverse video | `-- VISUAL --`, `-- VISUAL LINE --` |
 | Command line | `:` `/` `?` | underline | what you have typed |
 
+In normal mode the bottom line also carries a ruler: the line the cursor is on, right-justified at the end of the line.
+
 #### Leaving the editor
 
 `Esc` is now used in vi-mode to return to normal mode, and it no longer is used to accept the edits made to the buffer. Leave the Editor with one of:
