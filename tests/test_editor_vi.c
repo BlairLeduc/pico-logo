@@ -1631,6 +1631,122 @@ static void test_ex_equals_prints_the_last_line_number(void)
 }
 
 //
+//  Ex ranges
+//
+
+static void test_a_line_number_range_bounds_the_substitute(void)
+{
+    ed_set("one\none\none\none\n");
+    feed(":2,3s/one/two/"); feed_key(KEY_RETURN);
+    assert_text("one\ntwo\ntwo\none\n");
+}
+
+static void test_a_range_is_measured_from_the_cursor_when_it_is_relative(void)
+{
+    ed_set("one\none\none\none\none\n");
+    feed("3G");
+    feed(":.,+1s/one/two/"); feed_key(KEY_RETURN);
+    assert_text("one\none\ntwo\ntwo\none\n");
+}
+
+static void test_an_offset_on_its_own_counts_from_the_cursors_line(void)
+{
+    ed_set("one\none\none\none\n");
+    feed("4G");
+    feed(":-2,-1s/one/two/"); feed_key(KEY_RETURN);
+    assert_text("one\ntwo\ntwo\none\n");
+}
+
+static void test_dollar_addresses_the_last_line(void)
+{
+    ed_set("one\none\none");
+    feed(":$s/one/two/"); feed_key(KEY_RETURN);
+    assert_text("one\none\ntwo");
+}
+
+static void test_a_range_on_its_own_moves_to_its_last_line(void)
+{
+    ed_set("one\ntwo\n  three\nfour\n");
+    feed(":2,3"); feed_key(KEY_RETURN);
+    TEST_ASSERT_EQUAL_INT(VI_ACT_MOVE, ed.last.kind);
+    TEST_ASSERT_EQUAL_UINT(10, ed.cursor);   // The first non-blank of line 3
+
+    feed(":+1"); feed_key(KEY_RETURN);
+    TEST_ASSERT_EQUAL_UINT(16, ed.cursor);   // Line 4
+    feed(":-1"); feed_key(KEY_RETURN);
+    TEST_ASSERT_EQUAL_UINT(10, ed.cursor);
+}
+
+static void test_an_address_past_the_buffer_is_clamped(void)
+{
+    ed_set("one\none\none");
+    feed(":1,99s/one/two/"); feed_key(KEY_RETURN);
+    assert_text("two\ntwo\ntwo");
+
+    feed(":-9"); feed_key(KEY_RETURN);
+    TEST_ASSERT_EQUAL_UINT(0, ed.cursor);
+}
+
+static void test_a_backwards_range_complains(void)
+{
+    ed_set("one\none\none\n");
+    feed(":3,1s/one/two/"); feed_key(KEY_RETURN);
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    assert_text("one\none\none\n");
+}
+
+static void test_a_range_gives_the_number_of_its_last_line(void)
+{
+    ed_set("one\ntwo\nthree\nfour\n");
+    feed(":2,3="); feed_key(KEY_RETURN);
+    assert_message("3");
+    TEST_ASSERT_EQUAL_UINT(0, ed.cursor);
+}
+
+static void test_a_range_on_a_command_that_takes_none_complains(void)
+{
+    ed_set("one\ntwo\n");
+    feed(":1,2w"); feed_key(KEY_RETURN);
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    TEST_ASSERT_EQUAL_INT(0, ed.writes);
+}
+
+static void test_a_colon_in_visual_mode_types_the_selection_range(void)
+{
+    ed_set("one\none\none\n");
+    feed("Vj:");
+    TEST_ASSERT_EQUAL_STRING(":'<,'>", ed.vi.cmdline);
+    feed("s/one/two/"); feed_key(KEY_RETURN);
+    assert_text("two\ntwo\none\n");
+}
+
+static void test_a_charwise_selection_ranges_over_the_lines_it_touches(void)
+{
+    ed_set("one\none\none\n");
+    feed("lvj:");
+    feed("s/one/two/"); feed_key(KEY_RETURN);
+    assert_text("two\ntwo\none\n");
+}
+
+static void test_the_selection_range_outlives_the_selection(void)
+{
+    ed_set("one\none\none\n");
+    feed("jVj");
+    feed_key(KEY_ESC);
+    TEST_ASSERT_EQUAL_INT(VI_NORMAL, ed.vi.mode);
+    feed(":'<,'>s/one/two/"); feed_key(KEY_RETURN);
+    assert_text("one\ntwo\ntwo\n");
+}
+
+static void test_the_selection_range_without_a_selection_complains(void)
+{
+    ed_set("one\none\n");
+    feed(":'<,'>s/one/two/"); feed_key(KEY_RETURN);
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    assert_text("one\none\n");
+}
+
+//
 //  Search
 //
 
@@ -2341,6 +2457,19 @@ int main(void)
     RUN_TEST(test_ctrl_g_leaves_the_buffer_and_the_mode_alone);
     RUN_TEST(test_ex_dot_equals_prints_the_current_line_number);
     RUN_TEST(test_ex_equals_prints_the_last_line_number);
+    RUN_TEST(test_a_line_number_range_bounds_the_substitute);
+    RUN_TEST(test_a_range_is_measured_from_the_cursor_when_it_is_relative);
+    RUN_TEST(test_an_offset_on_its_own_counts_from_the_cursors_line);
+    RUN_TEST(test_dollar_addresses_the_last_line);
+    RUN_TEST(test_a_range_on_its_own_moves_to_its_last_line);
+    RUN_TEST(test_an_address_past_the_buffer_is_clamped);
+    RUN_TEST(test_a_backwards_range_complains);
+    RUN_TEST(test_a_range_gives_the_number_of_its_last_line);
+    RUN_TEST(test_a_range_on_a_command_that_takes_none_complains);
+    RUN_TEST(test_a_colon_in_visual_mode_types_the_selection_range);
+    RUN_TEST(test_a_charwise_selection_ranges_over_the_lines_it_touches);
+    RUN_TEST(test_the_selection_range_outlives_the_selection);
+    RUN_TEST(test_the_selection_range_without_a_selection_complains);
     RUN_TEST(test_the_command_line_stops_growing_when_it_is_full);
 
     RUN_TEST(test_slash_records_a_pattern_and_a_direction);

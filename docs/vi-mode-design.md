@@ -408,6 +408,7 @@ and the mode indicator. Those are a hardware check on the Pico Plus 2 W.
 
 | **M7** | `Ctrl` `G`, `:.=`, `:=` (§17) | the report on a buffer longer than a screen, before and after a change | **built and checked on a board 2026-08-18** |
 | **M8** | `*` `#`, `` ` `` `'`, `gd`, `zz` `zt` `zb` (§18) | `*` on a one-letter procedure name walking only whole words, `` ` `` back from a `G`, `gd` across an `edall` buffer, `zz` after a search | **built and checked on a board 2026-08-18** |
+| **M9** | Ex ranges (§19) | `:2,7s`, `:.,+4s` and a `V` selection followed by `:` running over exactly the lines it covered | **built and checked on a board 2026-08-18** |
 
 M1 is the whole feature as far as a user is concerned; M2 is what makes it
 pleasant, M4 is what stops it being annoying, and M5 is the one command a
@@ -1479,3 +1480,68 @@ patterns absorbed most of what they would have bought.
 case. `ViState` grows by a `size_t` and a `bool`: **91.24 → 91.25 %** of SRAM
 on `pico+2w`, **92.57 → 92.58 %** on `pico2`. 19 new tests, and six new keys
 added to the randomised run's key pool.
+
+## 19. Ex ranges (M9)
+
+`:s` could say "this line" or "the whole buffer" and nothing in between, which
+is the wrong pair for the edit that wants it: renaming inside one procedure of
+an `edall` buffer. The rest of ex's address grammar is small enough to be
+worth having, so a range is now one address or two, in front of any command
+that takes one.
+
+### 19.1 The set
+
+| Address | Is |
+|---|---|
+| *n* | line *n* |
+| `.` | the line the cursor is on |
+| `$` | the last line |
+| `'<` `'>` | the first and last line of the last selection |
+| `+`*n* `-`*n* | an offset — on its own from the cursor's line, or after any of the above; bare `+`/`-` is one line |
+
+`%` stays what it was, and is now just `1,$`. Out-of-range addresses are pulled
+back into the buffer rather than refused, which is what `:{n}` already did
+through `goto_line`; a backwards range is `E493: backwards range` rather than
+vi's "OK to swap (y/n)?", because the 40-column footer has no room to ask a
+question and no way to take the answer.
+
+Three commands take one: `:s`, `:=`, and the empty command — a range on its own
+goes to its last line, which is exactly what `:{n}` is, so the old special case
+for a line number disappeared into the general path along with `:.=`. Every
+other command refuses one with `E481: no range allowed`. `:d`, `:y`, `:>` and
+`:m` are deliberately still out: `dd`, `yy` and `>>` take counts and work over a
+selection already, so a range would be a second spelling of a key that is one
+keystroke away.
+
+### 19.2 `'<` and `'>` are the selection, remembered
+
+The one mark (§18.2) is a place in a line; these two are lines, and they are
+not the mark — a selection and a jump are different things to want back. They
+are a byte pair in `ViState`, taken again on every key visual mode sees, so the
+key that *ends* visual mode leaves behind the selection it was given rather
+than whatever the anchor decays to afterwards. That one snapshot covers both
+the `:` typed inside visual mode and a `:'<,'>` typed long after the selection
+was cancelled. The bytes are clamped against the buffer length when an address
+resolves them, since the buffer may have been rewritten in between.
+
+### 19.3 `:` in visual mode types the range for you
+
+A `:` over a selection is nearly always about the lines it covers, so
+`enter_cmdline` fills the command line with `:'<,'>` when it is entered from
+either visual mode. Backspace rubs it out a character at a time and then leaves
+the command line, as it always has, so nothing is forced. Vim does the same,
+which is the strongest argument for it: the muscle memory already exists.
+
+The selection highlight drops as the command line opens, because the editor
+paints it from `ViState.mode` and the mode is now `VI_CMDLINE`. Vim keeps it
+lit. Keeping it would mean a second piece of state saying "visual, but the keys
+belong to the footer", and the range is now on the command line where you can
+read it — the answer to "which lines?" is legible either way.
+
+### 19.4 Cost
+
+`editor_vi.c` 2,331 → 2,453 lines, of which the address parser is 90 and the
+old `all_digits` helper gave 15 back. No change in `editor.c`: a range is
+resolved to the byte range the actions already carry. `ViState` grows by two
+`size_t` and a `bool`, which stays inside the rounding: **91.25 %** of SRAM on
+`pico+2w`, **92.58 %** on `pico2`, both unmoved. 13 new tests.

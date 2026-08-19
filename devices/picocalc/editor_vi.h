@@ -94,6 +94,14 @@ typedef struct
     size_t mark;
     bool mark_set;
 
+    // The last visual selection, which is what the `'<` and `'>` ex addresses
+    // name (§19). Byte offsets, taken again on every key visual mode sees, so
+    // the pair still describes the selection the key that ended visual mode
+    // was handed.
+    size_t vis_start;
+    size_t vis_end;
+    bool vis_set;
+
     char last_find;        // The last f/F/t/T, for `;` and `,`
     char last_find_char;
 

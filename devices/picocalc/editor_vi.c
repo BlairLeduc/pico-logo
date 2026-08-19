@@ -1172,22 +1172,6 @@ static size_t skip_spaces(const char *s, size_t i, size_t n)
     return i;
 }
 
-static bool all_digits(const char *s, size_t from, size_t to)
-{
-    if (from >= to)
-    {
-        return false;
-    }
-    for (size_t i = from; i < to; i++)
-    {
-        if (s[i] < '0' || s[i] > '9')
-        {
-            return false;
-        }
-    }
-    return true;
-}
-
 static void copy_field(char *dst, size_t *dst_len, const char *src, size_t n)
 {
     if (n > LOGO_VI_TEXT_MAX)
@@ -1274,6 +1258,99 @@ static bool parse_substitute(ViState *st, const char *s, size_t i, size_t n)
     return true;
 }
 
+//
+//  Ex addresses (§19)
+//
+
+// One address: a line number, `.`, `$`, `'<` or `'>`, followed by any number of
+// `+n` / `-n` offsets -- a bare `+` or `-` counts as one line, and one on its
+// own is measured from the cursor's line. `*i` is advanced past what was read,
+// spaces and all.
+//
+// Returns false when there is no address here, which is not an error: a command
+// may simply have no range. `*err` is set when there was one and it was
+// malformed, and then the caller complains rather than reading on.
+static bool parse_address(const ViState *st, const char *buf, size_t len,
+                          size_t cursor, const char *s, size_t *i, size_t n,
+                          int *out_line, const char **err)
+{
+    size_t k = skip_spaces(s, *i, n);
+    int line;
+
+    if (k < n && s[k] >= '0' && s[k] <= '9')
+    {
+        line = 0;
+        while (k < n && s[k] >= '0' && s[k] <= '9')
+        {
+            if (line < 1000000)
+            {
+                line = line * 10 + (s[k] - '0');   // Clamped below either way
+            }
+            k++;
+        }
+    }
+    else if (k < n && s[k] == '.')
+    {
+        line = line_number_of(buf, cursor);
+        k++;
+    }
+    else if (k < n && s[k] == '$')
+    {
+        line = line_number_of(buf, len);
+        k++;
+    }
+    else if (k + 1 < n && s[k] == '\'' && (s[k + 1] == '<' || s[k + 1] == '>'))
+    {
+        if (!st->vis_set)
+        {
+            *err = "E20: no selection";
+            return false;
+        }
+        // The selection is held as byte offsets and the buffer may have been
+        // rewritten since, so clamp before counting the lines to it
+        size_t at = (s[k + 1] == '<') ? st->vis_start : st->vis_end;
+        line = line_number_of(buf, at < len ? at : len);
+        k += 2;
+    }
+    else if (k < n && s[k] == '\'')
+    {
+        // The one mark (§18.2) is a place in a line, not a line, and `'` on its
+        // own is already the motion that jumps to it
+        *err = "E16: invalid range";
+        return false;
+    }
+    else if (k < n && (s[k] == '+' || s[k] == '-'))
+    {
+        line = line_number_of(buf, cursor);   // What the offset is measured from
+    }
+    else
+    {
+        return false;
+    }
+
+    while (k < n && (s[k] == '+' || s[k] == '-'))
+    {
+        int sign = (s[k] == '+') ? 1 : -1;
+        int delta = 0;
+        bool digits = false;
+        k++;
+        while (k < n && s[k] >= '0' && s[k] <= '9')
+        {
+            if (delta < 1000000)
+            {
+                delta = delta * 10 + (s[k] - '0');
+            }
+            k++;
+            digits = true;
+        }
+        line += sign * (digits ? delta : 1);
+    }
+
+    *i = skip_spaces(s, k, n);
+    *out_line = line;
+    return true;
+}
+
 static bool run_ex(ViState *st, const char *buf, size_t len, size_t cursor, ViAction *out)
 {
     const char *s = st->cmdline + 1;  // Past the ':'
@@ -1292,56 +1369,84 @@ static bool run_ex(ViState *st, const char *buf, size_t len, size_t cursor, ViAc
         return true;
     }
 
-    if (all_digits(s, i, n))
+    // The range, if one was typed: `%`, one address, or two
+    int last = line_number_of(buf, len);
+    int lo = 0, hi = 0;
+    bool have_range = false;
+    const char *err = NULL;
+
+    if (s[i] == '%')
     {
-        int line = 0;
-        for (size_t k = i; k < n; k++)
+        lo = 1;
+        hi = last;
+        have_range = true;
+        i = skip_spaces(s, i + 1, n);
+    }
+    else if (parse_address(st, buf, len, cursor, s, &i, n, &lo, &err))
+    {
+        hi = lo;
+        have_range = true;
+        if (i < n && s[i] == ',')
         {
-            line = line * 10 + (s[k] - '0');
-            if (line > 1000000)
+            i = skip_spaces(s, i + 1, n);
+            if (!parse_address(st, buf, len, cursor, s, &i, n, &hi, &err))
             {
-                line = 1000000;  // Clamped either way by goto_line
+                // `:1,s/a/b/` -- an omitted address is the cursor's line, as ex
+                // has it, so only a malformed one is a complaint
+                hi = line_number_of(buf, cursor);
             }
         }
+    }
+    if (err != NULL)
+    {
+        return beep(st, out, err);
+    }
+
+    if (lo < 1) lo = 1;
+    if (hi < 1) hi = 1;
+    if (lo > last) lo = last;
+    if (hi > last) hi = last;
+    if (lo > hi)
+    {
+        // Vi offers to swap the two; on a 40-column footer, saying so is better
+        // than asking a question the command line has no room to answer
+        return beep(st, out, "E493: backwards range");
+    }
+
+    // A range on its own moves to its last line -- which is what `:{n}` is
+    if (i >= n)
+    {
         set_mark(st, cursor);
         out->kind = VI_ACT_MOVE;
-        out->start = out->end = first_non_blank(buf, len, goto_line(buf, len, line));
+        out->start = out->end = first_non_blank(buf, len, goto_line(buf, len, hi));
         return true;
     }
 
     // `:=` prints the number of the last line, `:.=` of the line the cursor is
-    // on. Both go before the substitute: `=` is not a substitute's delimiter.
+    // on, `:'<,'>=` of the last line selected. It goes before the substitute:
+    // `=` is not a substitute's delimiter.
     if (n - i == 1 && s[i] == '=')
     {
-        return report_line_number(st, line_number_of(buf, len), out);
-    }
-    if (n - i == 2 && s[i] == '.' && s[i + 1] == '=')
-    {
-        return report_line_number(st, line_number_of(buf, cursor), out);
+        return report_line_number(st, have_range ? hi : last, out);
     }
 
-    // Substitute, over the current line or the whole buffer
-    size_t sub = i;
-    bool whole_buffer = false;
-    if (s[sub] == '%')
+    // Substitute, over the range or -- with none -- the current line
+    if (s[i] == 's')
     {
-        whole_buffer = true;
-        sub++;
-    }
-    if (sub < n && s[sub] == 's')
-    {
-        if (!parse_substitute(st, s, sub, n))
+        if (!parse_substitute(st, s, i, n))
         {
             return beep(st, out, "E486: bad substitute");
         }
         out->kind = VI_ACT_SUBSTITUTE;
-        out->start = whole_buffer ? 0 : line_start_of(buf, cursor);
-        out->end = whole_buffer ? len : next_line_start(buf, len, cursor);
+        out->start = have_range ? goto_line(buf, len, lo) : line_start_of(buf, cursor);
+        out->end = next_line_start(buf, len,
+                                   have_range ? goto_line(buf, len, hi) : cursor);
         return true;
     }
-    if (whole_buffer)
+
+    if (have_range)
     {
-        return beep(st, out, "E492: not an editor command");
+        return beep(st, out, "E481: no range allowed");
     }
 
     size_t cmd_len = n - i;
@@ -1447,11 +1552,19 @@ static bool cmdline_key(ViState *st, const char *buf, size_t len, size_t cursor,
 
 static bool enter_cmdline(ViState *st, int key, ViAction *out)
 {
+    bool visual = (st->mode == VI_VISUAL || st->mode == VI_VISUAL_LINE);
     clear_pending(st);
     st->mode = VI_CMDLINE;
     st->cmdline[0] = (char)key;
-    st->cmdline[1] = '\0';
     st->cmdline_len = 1;
+    if (key == ':' && visual)
+    {
+        // A `:` typed over a selection is all but always about the lines it
+        // covers, so vi types the range in for you. Backspace rubs it out again
+        memcpy(st->cmdline + 1, "'<,'>", 5);
+        st->cmdline_len = 6;
+    }
+    st->cmdline[st->cmdline_len] = '\0';
     out->kind = VI_ACT_REDRAW;
     return true;
 }
@@ -2110,6 +2223,15 @@ bool editor_vi_key(ViState *st, const char *buf, size_t len, size_t cursor,
     if (cursor > len)
     {
         cursor = len;
+    }
+
+    if (st->mode == VI_VISUAL || st->mode == VI_VISUAL_LINE)
+    {
+        // `'<` and `'>` name the selection as it stood when the key arrived, so
+        // the key that ends visual mode leaves the right pair behind (§19)
+        st->vis_start = st->anchor < cursor ? st->anchor : cursor;
+        st->vis_end = st->anchor < cursor ? cursor : st->anchor;
+        st->vis_set = true;
     }
 
     switch (st->mode)

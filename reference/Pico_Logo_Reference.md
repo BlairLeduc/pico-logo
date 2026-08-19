@@ -714,6 +714,35 @@ While you are inserting, the Editor behaves exactly as it does outside vi mode: 
 | `:%s/`_pat_`/`_new_`/` | replace the first _pat_ on every line |
 | `:%s/`_pat_`/`_new_`/g` | replace every _pat_ in the buffer |
 
+#### Ranges
+
+A `:s` or a `:=` can be given the lines to work on, written in front of it. A range is one line, or two separated by a comma, and each of them is written as:
+
+| Address | Means |
+|---|---|
+| _n_ | line _n_ |
+| `.` | the line the cursor is on |
+| `$` | the last line |
+| `'<` `'>` | the first and last line of the last selection |
+| `+`_n_ `-`_n_ | _n_ lines after or before — on its own, counted from the cursor's line, or written after any of the above |
+
+`%` is `1,$`, the whole buffer, which is what `:%s` has always been. A `+` or `-` with no number means one line. A line before the first or after the last is pulled back to the buffer, so `:1,999s/`_pat_`/`_new_`/` covers everything and `:-9` from line 3 goes to line 1.
+
+| | |
+|---|---|
+| `:2,7s/fd/bk/` | over lines 2 to 7 |
+| `:.,+4s/fd/bk/g` | over this line and the four below it |
+| `:-1,$s/fd/bk/` | from the line above the cursor to the end |
+| `:'<,'>s/fd/bk/g` | over the lines the last selection covered |
+| `:2,7` | go to line 7 |
+| `:'>=` | print the number of the last line selected |
+
+A range with nothing after it goes to its last line, which is what `:`_n_ is. `:s` with no range still works on the line the cursor is on, and `:=` with none still prints the number of the last line.
+
+Typing `:` while text is selected fills in `'<,'>` for you, since a command given over a selection is nearly always about the lines it covers — `←Back` rubs it out if it is not. The selection is remembered after it is cancelled, so `:'<,'>` still names it later.
+
+A range on `:w`, `:q` or any other command is refused with `E481: no range allowed`, a range that runs backwards with `E493: backwards range`, and `'<` or `'>` before anything has been selected with `E20: no selection`.
+
 _pat_ is a [pattern](#patterns), matched ignoring the difference between upper and lower case. In _new_, `&` stands for the whole of what matched and `\1`..`\9` for what the pattern's groups matched; every other character is used exactly as typed. Each of _pat_ and _new_ may be up to 32 characters. Nothing is replaced when there is no match, or when the result would not fit in the edit buffer, and the bottom line says `No substitution made`. A _pat_ left empty reuses the pattern of the last `:s`, `/` or `?`, so `/`\<`n`\>`` and then `:%s//count/g` renames what the search just walked.
 
 Anything else on the command line is refused with `E492: not an editor command`, and a malformed substitute — a missing delimiter, or a bad pattern — with `E486: bad substitute`.
@@ -742,7 +771,7 @@ Because matching folds case, a class such as `[A-Z]` means "a letter", not "a ca
 
 #### What vi mode leaves out
 
-Named registers — the copy buffer is the one unnamed register — marks, macros, `Ctrl` `V` block selection, windows, and the `:e` and `:r` file commands: which file the Editor is working on is fixed by the command that opened it.
+Named registers — the copy buffer is the one unnamed register — named marks, since the only ones are the place the last jump started from and the `'<` `'>` of the last selection, macros, `Ctrl` `V` block selection, windows, and the `:e` and `:r` file commands: which file the Editor is working on is fixed by the command that opened it.
 
 ### Viewing screens
 
