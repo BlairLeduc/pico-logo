@@ -760,6 +760,20 @@ static void editor_position_cursor(void)
         return;
     }
 
+    if (editor.vi_mode && editor.vi.mode == VI_CMDLINE) {
+        // The command line is typed in the footer, so the cursor goes there.
+        // editor_draw_footer draws the command from column 0, leading ':', '/'
+        // or '?' included, and the line is append-only: the insert point is one
+        // column past what has been typed.
+        int screen_col = (int)editor.vi.cmdline_len;
+        if (screen_col >= EDITOR_MAX_COLS) screen_col = EDITOR_MAX_COLS - 1;
+        screen_txt_set_cursor(screen_col, EDITOR_FOOTER_ROW);
+
+        // Reverse video footer, as the replacement prompt above
+        lcd_set_cursor_char(TXT_PACK(PALETTE_SYNTAX_BG, TXT_WHITE, ' '));
+        return;
+    }
+
     int cursor_line = editor_get_line_at_pos(editor.cursor_pos);
     int cursor_col = editor_get_col_at_pos(editor.cursor_pos);
     
