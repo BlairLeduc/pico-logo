@@ -250,6 +250,73 @@ extern "C" {
 // at the 36.6 kHz mix rate is ~3.5 ms of audio per half.
 #define SOUND_RING_HALF 256
 
+// Vi mode (docs/vi-mode-design.md). Four fixed-capacity fields in `ViState`,
+// which is one static struct inside the editor.
+//
+// The ex command line. The longest command the mode accepts is a substitute
+// with both texts at their limit -- ":%s/" + pattern + "/" + replacement +
+// "/g" -- so this is sized from LOGO_VI_TEXT_MAX rather than guessed.
+//
+// OVERFLOW: `editor_vi_key` drops printable keys once the line is full; the
+// command line stops growing and nothing is truncated behind the user's back.
+#define LOGO_VI_TEXT_MAX     32
+#define LOGO_VI_CMDLINE_MAX  (LOGO_VI_TEXT_MAX * 2 + 8)
+
+// A message the vi layer has to compose rather than point at a literal -- the
+// `Ctrl` `G` report and the line numbers `:=` and `:.=` print. It is shown on
+// the footer, which is one row of a 40-column screen, so there is nothing to
+// be gained by making it longer.
+//
+// OVERFLOW: snprintf truncates, which loses the tail of a report rather than
+// anything the user typed.
+#define LOGO_VI_MSG_MAX      40
+
+// The most a single `:s` match can expand to, on the stack, before it is
+// spliced in (docs/vi-mode-design.md §16.4). A pattern match is at most one
+// line and each `&` or `\1` in the replacement copies a piece of it, so a
+// runaway is caught here in the counting pass -- before a byte moves -- rather
+// than overrunning the buffer. Not static: it lives in editor_vi_substitute's
+// frame only, which is the one place the pattern matcher puts depth on the
+// stack, so this is the lever if that frame is ever measured tight.
+#define LOGO_VI_SUB_EXPAND_MAX  256
+
+// The most match steps one `editor_pattern_search` call may spend before it
+// gives up (B36). Sequential stars backtrack combinatorially -- `.*.*.*x` on a
+// 256-char line costs 189 million steps, and each added `.*` multiplies by the
+// line length again -- so the matcher has to bound its own work or a `:s` can
+// wedge the board with no key able to interrupt it. Measured, not guessed: real
+// patterns cost tens to hundreds of steps (`\<n\>` on a 69-char line is 13),
+// and the worst legitimate case is a single star failing on a full-width line,
+// 33,410. This leaves ~6x headroom over that and refuses everything past it.
+#define LOGO_VI_PATTERN_STEPS_MAX  200000
+
+// Keys recorded for `.` to replay. A change command is an optional operator,
+// an optional prefix (`g`, `f`, ...) and a motion -- three keys covers every
+// one of them, and eight leaves room without being worth counting.
+//
+// OVERFLOW: a command longer than this is simply not recorded, so `.` replays
+// the last one that fit rather than a half command.
+#define LOGO_VI_REPEAT_MAX   8
+
+// The undo journal (docs/vi-mode-design.md §8), tiered by where the editor
+// buffers landed -- which is a run-time decision, not a build one. A record is
+// a header plus the bytes a change removed and the bytes it put there, so a
+// journal holds far more small changes than large ones; when one will not fit,
+// the oldest *whole* steps are dropped, which is what leaves the SRAM tier with
+// the one level the design promised rather than none.
+//
+// PSRAM: taken as part of primitives_editor_init's single region block, so it
+// is all-or-nothing with the two 256 KB buffers. Negligible against 8 MB.
+//
+// SRAM: a one-time heap allocation beside the fallback edit buffers, which is
+// the same heap they come out of -- so this is a starting figure, not a budget,
+// and undo simply stays unavailable if the allocation fails.
+//
+// OVERFLOW: a single change larger than the whole journal clears it; that
+// change and everything before it cannot be undone.
+#define LOGO_VI_UNDO_PSRAM_SIZE (64 * 1024)
+#define LOGO_VI_UNDO_SRAM_SIZE  1024
+
 #ifdef __cplusplus
 }
 #endif

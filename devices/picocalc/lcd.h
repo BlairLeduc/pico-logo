@@ -132,6 +132,29 @@ void lcd_blit_end(void);
 void lcd_putc_attr(uint8_t column, uint8_t row, uint16_t packed);
 
 // Scrolling functions
+//
+// The fixed areas and the scrolling area partition the controller's FRAME_HEIGHT
+// rows of frame memory, not the HEIGHT rows on display, so the scrolling area
+// runs from `top` to `top + memory_height` in frame memory and a bottom fixed
+// area starts there. Only the part of it below HEIGHT is on screen: fixing the
+// bottom row of the display takes a bottom fixed area of FRAME_HEIGHT - HEIGHT
+// plus that row, not a row's worth.
+//
+// The row of frame memory a screen row maps to. Rows in the fixed areas map to
+// themselves; rows in the scrolling area rotate within it. The offset is
+// measured from the top of the scrolling area, so y moves into that space and
+// back out again — with a top fixed area, y and y - top are not interchangeable.
+static inline uint16_t lcd_scroll_map_row(uint16_t y, uint16_t top,
+                                          uint16_t memory_height, uint16_t offset)
+{
+    if (memory_height == 0 || y < top || y >= top + memory_height)
+    {
+        return y; // Fixed area, or no scrolling area: no remapping
+    }
+
+    return top + (uint16_t)((y - top + offset) % memory_height);
+}
+
 void lcd_define_scrolling(uint16_t top_fixed_area, uint16_t bottom_fixed_area);
 void lcd_scroll_reset();
 void lcd_scroll_clear(uint8_t bg_colour);

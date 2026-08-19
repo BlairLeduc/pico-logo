@@ -36,6 +36,16 @@
 #define KEY_LEFT            (0xB4)
 #define KEY_RIGHT           (0xB7)
 
+// Ctrl + Left/Right, a word move.  The southbridge has no code of its own for
+// these: it reports the ctrl press and the arrow press as separate FIFO
+// entries, so the driver folds the latched ctrl into the arrow and hands the
+// reader one key.  Shift cannot be used here - the keyboard MCU substitutes a
+// shifted key's alternate character and the arrows have none, so it emits
+// nothing at all for Shift + Left/Right (it does send PgUp/PgDn for Shift +
+// Up/Down, which is where their alternates go).
+#define KEY_WORD_LEFT       (0xB8)
+#define KEY_WORD_RIGHT      (0xB9)
+
 #define KEY_BREAK           (0xD0)
 #define KEY_INSERT          (0xD1)
 #define KEY_HOME            (0xD2)

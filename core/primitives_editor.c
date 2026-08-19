@@ -21,32 +21,51 @@
 #include <string.h>
 #include <strings.h>
 
-// Editor buffers (8KB each by default, as specified in reference). They are
-// only touched at human-editing speed, so primitives_editor_init() places them
-// in the aux/PSRAM region when available (relieving SRAM), falling back to a
-// one-time heap allocation otherwise. They are deliberately NOT static arrays:
-// reserving them in BSS would keep the SRAM even when PSRAM backs them.
+// Editor buffers. They are only touched at human-editing speed, so
+// primitives_editor_init() places them in the aux/PSRAM region when available
+// (relieving SRAM), falling back to a one-time heap allocation of the size
+// below otherwise. They are deliberately NOT static arrays: reserving them in
+// BSS would keep the SRAM even when PSRAM backs them.
+//
+// The fallback size every board can meet (8KB here, 24576 from the presets).
 #ifndef LOGO_EDITOR_BUFFER_SIZE
 #define LOGO_EDITOR_BUFFER_SIZE 8192
 #endif
 
-// Active buffers (valid after primitives_editor_init()).
+// Size used when the buffers land in the aux region: PSRAM has megabytes going
+// spare where SRAM has kilobytes, so a board that has it edits much larger
+// files. Which size a board gets is decided at run time, not by the build: a
+// PSRAM board whose memory fails to verify at boot gets no aux region, and must
+// still come up with an editor SRAM can hold.
+#ifndef LOGO_EDITOR_PSRAM_BUFFER_SIZE
+#define LOGO_EDITOR_PSRAM_BUFFER_SIZE (256 * 1024)
+#endif
+
+// Active buffers (valid after primitives_editor_init()) and their size.
 static char *editor_buffer = NULL;
 static char *editor_proc_buffer = NULL;
+static size_t editor_buffer_size = LOGO_EDITOR_BUFFER_SIZE;
+
+// Vi's undo journal (docs/vi-mode-design.md §8), tiered the same way and for
+// the same reason: it is lent to the editor, which owns no memory of its own.
+static char *editor_undo_store = NULL;
+static size_t editor_undo_size = 0;
+
+// Vi mode (docs/vi-mode-design.md). A session setting like the palette, kept
+// here rather than passed to `edit`, so that one flag reaches all five entry
+// points -- edit, edall, edn, edns and editfile -- without widening the
+// console's editor signature.
+static bool vi_mode_on = false;
 
 // Process-lifetime heap fallbacks, allocated once and reused across re-inits so
 // repeated init (e.g. across tests) never leaks.
 static char *editor_buffer_heap = NULL;
 static char *editor_proc_buffer_heap = NULL;
+static char *editor_undo_heap = NULL;
 
-// Pick a buffer: PSRAM region if available, else the cached heap fallback.
-static char *editor_pick_buffer(char **heap_cache)
+// The cached heap fallback, allocated on first use.
+static char *editor_heap_buffer(char **heap_cache)
 {
-    char *p = (char *)mem_region_alloc(LOGO_EDITOR_BUFFER_SIZE);
-    if (p != NULL)
-    {
-        return p;
-    }
     if (*heap_cache == NULL)
     {
         *heap_cache = (char *)malloc(LOGO_EDITOR_BUFFER_SIZE);
@@ -90,7 +109,10 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
     }
     
     // Call the editor
-    LogoEditorResult editor_result = io->console->editor->edit(buffer, LOGO_EDITOR_BUFFER_SIZE);
+    // No write-back: this buffer is the workspace, so vi's `:w` accepts it the
+    // same way `ZZ` does, and the definitions below are run
+    LogoEditorResult editor_result =
+        io->console->editor->edit(buffer, editor_buffer_size, NULL, NULL);
     
     if (editor_result == LOGO_EDITOR_CANCEL)
     {
@@ -142,7 +164,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
         if (is_empty && in_procedure_def)
         {
             // Add just a newline to preserve the empty line
-            if (proc_len + 1 < LOGO_EDITOR_BUFFER_SIZE - 10)
+            if (proc_len + 1 < editor_buffer_size - 10)
             {
                 proc_buffer[proc_len] = '\n';
                 proc_len += 1;
@@ -164,7 +186,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
 
             if (in_procedure_def)
             {
-                ProcDefStatus status = repl_proc_def_append(proc_buffer, LOGO_EDITOR_BUFFER_SIZE,
+                ProcDefStatus status = repl_proc_def_append(proc_buffer, editor_buffer_size,
                                                             &proc_len, line_start);
                 if (status == PROC_DEF_OVERFLOW)
                 {
@@ -201,7 +223,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
                 if (bracket_depth > 0)
                 {
                     // Continuing a multi-line bracket expression - append this line
-                    if (expr_len + line_len + 2 < LOGO_EDITOR_BUFFER_SIZE - 10)
+                    if (expr_len + line_len + 2 < editor_buffer_size - 10)
                     {
                         // Add a space separator then the line content
                         proc_buffer[expr_len] = ' ';
@@ -249,7 +271,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
                         bracket_depth = line_balance;
                         expr_len = 0;
                         
-                        if (line_len + 1 < LOGO_EDITOR_BUFFER_SIZE - 10)
+                        if (line_len + 1 < editor_buffer_size - 10)
                         {
                             memcpy(proc_buffer, line_start, line_len);
                             expr_len = line_len;
@@ -337,7 +359,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
     // If still in procedure definition at end of buffer, auto-complete with "end"
     if (in_procedure_def && proc_len > 0)
     {
-        if (proc_len + 4 < LOGO_EDITOR_BUFFER_SIZE)
+        if (proc_len + 4 < editor_buffer_size)
         {
             memcpy(proc_buffer + proc_len, "end", 3);
             proc_len += 3;
@@ -376,7 +398,7 @@ static Result prim_edit(Evaluator *eval, int argc, Value *args)
     
     // When we have arguments, start fresh
     FormatBufferContext ctx;
-    format_buffer_init(&ctx, editor_buffer, LOGO_EDITOR_BUFFER_SIZE);
+    format_buffer_init(&ctx, editor_buffer, editor_buffer_size);
     bool first_proc = true;
     
     if (value_is_word(args[0]))
@@ -481,7 +503,7 @@ static Result prim_edit(Evaluator *eval, int argc, Value *args)
 static Result prim_edn(Evaluator *eval, int argc, Value *args)
 {
     FormatBufferContext ctx;
-    format_buffer_init(&ctx, editor_buffer, LOGO_EDITOR_BUFFER_SIZE);
+    format_buffer_init(&ctx, editor_buffer, editor_buffer_size);
     
     if (argc < 1)
     {
@@ -540,7 +562,7 @@ static Result prim_edns(Evaluator *eval, int argc, Value *args)
     UNUSED(argc); UNUSED(args);
     
     FormatBufferContext ctx;
-    format_buffer_init(&ctx, editor_buffer, LOGO_EDITOR_BUFFER_SIZE);
+    format_buffer_init(&ctx, editor_buffer, editor_buffer_size);
     
     int count = var_global_count(false);  // Exclude buried
     for (int i = 0; i < count; i++)
@@ -565,7 +587,7 @@ static Result prim_edall(Evaluator *eval, int argc, Value *args)
     UNUSED(argc); UNUSED(args);
     
     FormatBufferContext ctx;
-    format_buffer_init(&ctx, editor_buffer, LOGO_EDITOR_BUFFER_SIZE);
+    format_buffer_init(&ctx, editor_buffer, editor_buffer_size);
     
     // Format all procedures (not buried)
     int proc_cnt = proc_count(true);  // Get ALL, filter by buried in loop
@@ -650,6 +672,33 @@ static Result prim_edall(Evaluator *eval, int argc, Value *args)
     return run_editor_and_process(eval, editor_buffer);
 }
 
+// Write the editor's buffer to `ctx`'s pathname, replacing whatever is there.
+// It is both what `editfile` does when the editor is accepted and what vi's
+// `:w` calls without leaving the editor.
+static bool editfile_save(const char *buffer, void *ctx)
+{
+    const char *pathname = (const char *)ctx;
+    LogoIO *io = primitives_get_io();
+    
+    // Delete the old file first: `open` keeps what is already there, so a
+    // delete that failed would leave the tail of the longer old content
+    // behind whatever we write (B37)
+    if (logo_io_file_exists(io, pathname) && !logo_io_file_delete(io, pathname))
+    {
+        return false;
+    }
+    
+    LogoStream *stream = logo_io_open(io, pathname);
+    if (!stream)
+    {
+        return false;
+    }
+    
+    logo_stream_write(stream, buffer);
+    logo_io_close(io, pathname);
+    return true;
+}
+
 // editfile pathname - edit a file's contents (not run as Logo code)
 static Result prim_editfile(Evaluator *eval, int argc, Value *args)
 {
@@ -686,7 +735,7 @@ static Result prim_editfile(Evaluator *eval, int argc, Value *args)
     {
         // Check file size first
         long file_size = logo_io_file_size(io, pathname);
-        if (file_size > LOGO_EDITOR_BUFFER_SIZE - 1)
+        if (file_size > (long)(editor_buffer_size - 1))
         {
             return result_error_arg(ERR_FILE_TOO_BIG, NULL, pathname);
         }
@@ -705,7 +754,7 @@ static Result prim_editfile(Evaluator *eval, int argc, Value *args)
         {
             // Check if line fits in buffer
             size_t line_len = strlen(line);
-            if (content_len + line_len + 1 >= LOGO_EDITOR_BUFFER_SIZE)
+            if (content_len + line_len + 1 >= editor_buffer_size)
             {
                 logo_io_close(io, pathname);
                 return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
@@ -718,7 +767,7 @@ static Result prim_editfile(Evaluator *eval, int argc, Value *args)
             // Add newline if line didn't end with one
             if (line_len == 0 || line[line_len - 1] != '\n')
             {
-                if (content_len + 1 >= LOGO_EDITOR_BUFFER_SIZE)
+                if (content_len + 1 >= editor_buffer_size)
                 {
                     logo_io_close(io, pathname);
                     return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
@@ -732,12 +781,14 @@ static Result prim_editfile(Evaluator *eval, int argc, Value *args)
     }
     // If file doesn't exist, start with empty buffer (will create on save)
     
-    // Call the editor
-    LogoEditorResult editor_result = io->console->editor->edit(editor_buffer, LOGO_EDITOR_BUFFER_SIZE);
+    // Call the editor, giving vi's `:w` the same write it does on the way out
+    LogoEditorResult editor_result =
+        io->console->editor->edit(editor_buffer, editor_buffer_size,
+                                  editfile_save, (void *)pathname);
     
     if (editor_result == LOGO_EDITOR_CANCEL)
     {
-        // User cancelled - file remains unchanged
+        // User cancelled - file remains unchanged (any `:w` already written stands)
         return result_none();
     }
     
@@ -746,27 +797,100 @@ static Result prim_editfile(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
     }
     
-    // Save the buffer to the file
-    // First, delete the old file if it exists
-    if (logo_io_file_exists(io, pathname))
-    {
-        logo_io_file_delete(io, pathname);
-    }
-    
-    // Open for writing (creates new file)
-    LogoStream *stream = logo_io_open(io, pathname);
-    if (!stream)
+    if (!editfile_save(editor_buffer, (void *)pathname))
     {
         return result_error(ERR_DISK_TROUBLE);
     }
     
-    // Write buffer contents to file
-    logo_stream_write(stream, editor_buffer);
-    
-    // Close the file
-    logo_io_close(io, pathname);
-    
     return result_none();
+}
+
+size_t primitives_editor_buffer_size(void)
+{
+    return editor_buffer_size;
+}
+
+//
+// setvimode true/false - select the vi key layer for the full-screen editor
+//
+// The console's editor takes the flag through an optional vtable entry, so a
+// console without one (the mock, the host REPL) accepts the setting and
+// ignores it rather than failing.
+//
+static Result prim_setvimode(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    UNUSED(argc);
+
+    const char *str = value_to_string(args[0]);
+    bool on;
+
+    if (str == NULL)
+    {
+        return result_error_arg(ERR_NOT_BOOL, NULL, NULL);
+    }
+    if (strcasecmp(str, "true") == 0)
+    {
+        on = true;
+    }
+    else if (strcasecmp(str, "false") == 0)
+    {
+        on = false;
+    }
+    else
+    {
+        return result_error_arg(ERR_NOT_BOOL, NULL, str);
+    }
+
+    vi_mode_on = on;
+
+    LogoIO *io = primitives_get_io();
+    if (io != NULL && io->console != NULL && logo_console_has_editor(io->console) &&
+        io->console->editor->set_vi_mode != NULL)
+    {
+        io->console->editor->set_vi_mode(on);
+    }
+
+    return result_none();
+}
+
+//
+// vimode? - outputs true when the editor opens in vi mode
+//
+static Result prim_vimodep(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    UNUSED(argc);
+    UNUSED(args);
+    return result_ok(value_bool(vi_mode_on));
+}
+
+//
+// Hand the console's editor the settings it cannot ask for: which key layer to
+// use, and the memory vi's undo journal lives in.
+//
+// This exists because the console is registered *after* the primitives are
+// initialised (main.c calls primitives_init and then primitives_set_io), so a
+// push from primitives_editor_init alone reaches nothing at all -- which is how
+// a board came to report `Undo is not available` on a Pico Plus 2 W (B34).
+// primitives_set_io calls this when the console arrives; primitives_editor_init
+// calls it too, for a caller whose order is the other way round.
+//
+void primitives_editor_console_ready(void)
+{
+    LogoIO *io = primitives_get_io();
+    if (io == NULL || io->console == NULL || !logo_console_has_editor(io->console))
+    {
+        return;
+    }
+    if (io->console->editor->set_vi_mode != NULL)
+    {
+        io->console->editor->set_vi_mode(vi_mode_on);
+    }
+    if (io->console->editor->set_undo_store != NULL)
+    {
+        io->console->editor->set_undo_store(editor_undo_store, editor_undo_size);
+    }
 }
 
 void primitives_editor_init(void)
@@ -774,9 +898,49 @@ void primitives_editor_init(void)
     // Place the editor buffers in the aux/PSRAM region when one is available,
     // else in a one-time heap fallback. Re-selected on each init; a fresh
     // region (logo_mem_set_aux_region) resets any prior region block.
-    editor_buffer = editor_pick_buffer(&editor_buffer_heap);
-    editor_proc_buffer = editor_pick_buffer(&editor_proc_buffer_heap);
+    //
+    // Both buffers are taken as one block so the pair is all or nothing: the
+    // bounds above are a single size, and a region that only had room for the
+    // first would leave the edit buffer large and the definition buffer small.
+    char *region = (char *)mem_region_alloc(2 * LOGO_EDITOR_PSRAM_BUFFER_SIZE +
+                                            LOGO_VI_UNDO_PSRAM_SIZE);
+    if (region != NULL)
+    {
+        editor_buffer = region;
+        editor_proc_buffer = region + LOGO_EDITOR_PSRAM_BUFFER_SIZE;
+        editor_buffer_size = LOGO_EDITOR_PSRAM_BUFFER_SIZE;
+        editor_undo_store = region + 2 * LOGO_EDITOR_PSRAM_BUFFER_SIZE;
+        editor_undo_size = LOGO_VI_UNDO_PSRAM_SIZE;
+    }
+    else
+    {
+        editor_buffer = editor_heap_buffer(&editor_buffer_heap);
+        editor_proc_buffer = editor_heap_buffer(&editor_proc_buffer_heap);
+        editor_buffer_size = LOGO_EDITOR_BUFFER_SIZE;
 
+        // The SRAM tier comes out of the same heap the fallback buffers do, so
+        // it is asked for last and undo simply stays unavailable without it
+        if (editor_undo_heap == NULL)
+        {
+            editor_undo_heap = (char *)malloc(LOGO_VI_UNDO_SRAM_SIZE);
+        }
+        editor_undo_store = editor_undo_heap;
+        editor_undo_size = editor_undo_heap != NULL ? LOGO_VI_UNDO_SRAM_SIZE : 0;
+    }
+
+    // Region memory arrives uninitialised, and (edit) with no arguments edits
+    // whatever the buffer already holds.
+    if (editor_buffer != NULL)
+    {
+        editor_buffer[0] = '\0';
+    }
+
+    // A fresh interpreter starts in the editor's default key layer
+    vi_mode_on = false;
+    primitives_editor_console_ready();
+
+    primitive_register("setvimode", 1, prim_setvimode);
+    primitive_register("vimode?", 0, prim_vimodep);
     primitive_register("edit", 1, prim_edit);  // 1 argument, (edit) for none
     primitive_register("ed", 1, prim_edit);    // Abbreviation
     primitive_register("edall", 0, prim_edall);

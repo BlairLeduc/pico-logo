@@ -12,13 +12,18 @@
 //
 
 #include "editor.h"
+#include "editor_lines.h"
+#include "editor_pattern.h"
 #include "editor_search.h"
+#include "editor_undo.h"
+#include "editor_vi.h"
 #include "keyboard.h"
 #include "lcd.h"
 #include "screen.h"
 #include "devices/font.h"
 #include "core/syntax_highlight.h"
 
+#include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
 
@@ -36,8 +41,20 @@
 #define EDITOR_PROMPT_COLS    8      // Width of the footer's "Search: "/"Replace:" prompt
 #define EDITOR_HIGHLIGHT_MAX  512    // Longest line the syntax highlighter is run on
 
+// The editor's scrolling region: the header row is fixed at the top, the footer
+// row at the bottom, and the thirty content rows between them scroll. The fixed
+// areas are measured against the controller's frame memory, so the bottom one
+// covers the rows below the display as well as the footer (see lcd.h)
+#define EDITOR_SCROLL_TOP     (GLYPH_HEIGHT)
+#define EDITOR_SCROLL_BOTTOM  (FRAME_HEIGHT - HEIGHT + GLYPH_HEIGHT)
+
 // Tab width for indentation (2 spaces per tab stop)
 #define TAB_WIDTH             2
+
+// The vi layer computes its paging motions in lines and has no idea where the
+// view is, so the two have to agree on how big a page is
+_Static_assert(EDITOR_VI_PAGE_LINES == EDITOR_VISIBLE_ROWS,
+               "vi paging must match the editor's visible rows");
 
 // Syntax highlighting palette slots — use the text palette (slots 0-15)
 #define PALETTE_SYNTAX_DEFAULT      3   // White
@@ -85,7 +102,9 @@ typedef struct {
     char *buffer;           // Pointer to the edit buffer
     size_t buffer_size;     // Maximum buffer size
     size_t content_length;  // Current content length
-    
+
+    EditorLineIndex lines;  // Memo for line <-> offset lookups
+
     // Cursor position (in buffer coordinates)
     size_t cursor_pos;      // Cursor position in buffer (0-based)
     
@@ -114,6 +133,15 @@ typedef struct {
     size_t replace_len;                       // Length of replace_text
     size_t replace_cursor;                    // Insert point within replace_text
 
+    // Vi mode state (docs/vi-mode-design.md). Only the key layer differs: every
+    // buffer, view and redraw field above is shared with the default mode.
+    bool vi_mode;              // True when the vi key layer is in charge
+    ViState vi;                // Its state machine
+    EditorUndo undo;           // The change journal `u` and Ctrl+R walk
+    const char *vi_msg;        // Footer text for one keystroke, NULL for the mode
+    LogoEditorSave save;       // Write-back for `:w`, NULL when there is nowhere
+    void *save_ctx;            // to write to yet (editing the workspace)
+
     // Graphics preview state
     bool in_graphics_preview;  // True when viewing graphics screen (F3)
     
@@ -140,6 +168,8 @@ static void editor_copy_selection(void);
 static void editor_paste(void);
 static void editor_move_cursor_left(void);
 static void editor_move_cursor_right(void);
+static void editor_move_cursor_word_left(void);
+static void editor_move_cursor_word_right(void);
 static void editor_move_cursor_up(void);
 static void editor_move_cursor_down(void);
 static void editor_move_cursor_home(void);
@@ -152,7 +182,7 @@ static int editor_get_line_end(int line_index);
 static int editor_get_line_at_pos(size_t pos);
 static int editor_get_col_at_pos(size_t pos);
 static int editor_count_lines(void);
-static bool editor_ensure_cursor_visible(void);
+static int editor_ensure_cursor_visible(void);
 static void editor_update_h_scroll(void);
 static void editor_mark_line_dirty(int line_index);
 static void editor_mark_from_line_dirty(int line_index);
@@ -160,6 +190,23 @@ static void editor_mark_all_dirty(void);
 static void editor_update_dirty(void);
 static void editor_decrease_indent(void);
 static void editor_increase_indent(void);
+
+//
+// Tell the undo journal about a change before it is made: `del_len` bytes at
+// pos (still in the buffer, which is why this comes first) give way to the
+// `ins_len` bytes at `inserted`. Either side may be empty.
+//
+// Every mutation in this file calls it, for the same reason every one of them
+// calls editor_lines_edit: a change the journal did not see leaves every record
+// after it describing a buffer that never existed. It costs nothing outside vi
+// mode, where there is no journal to record into.
+//
+static void editor_note_change(size_t pos, size_t del_len,
+                               const char *inserted, size_t ins_len)
+{
+    editor_undo_record(&editor.undo, pos, &editor.buffer[pos], del_len,
+                       inserted, ins_len);
+}
 
 //
 // Draw a string in reverse video at the specified row, centred or left justified
@@ -194,7 +241,30 @@ static void editor_draw_header(void)
 //
 static void editor_draw_footer(void)
 {
-    if (editor.searching) {
+    if (editor.vi_mode) {
+        // The mode indicator, or whatever the last keystroke had to say about
+        // itself. Vi has no "ESC - ACCEPT" to offer: Esc is vi's, and leaving
+        // is :w / ZZ or :q! / ZQ
+        const char *text = editor.vi_msg ? editor.vi_msg
+                                         : editor_vi_status(&editor.vi);
+        editor_draw_reverse_row(EDITOR_FOOTER_ROW, text, false);
+
+        // Normal mode also gets a ruler: the cursor's line number, right
+        // justified. The other modes leave the room to the command line, the
+        // insert indicator and the selection
+        if (editor.vi.mode == VI_NORMAL) {
+            char ruler[12];
+            snprintf(ruler, sizeof(ruler), "%d",
+                     editor_get_line_at_pos(editor.cursor_pos) + 1);
+            int len = (int)strlen(ruler);
+            int col = EDITOR_MAX_COLS - len;
+            if (col > (int)strlen(text)) {  // Never write over the indicator
+                for (int i = 0; i < len; i++) {
+                    lcd_putc(col + i, EDITOR_FOOTER_ROW, ruler[i] | 0x80);
+                }
+            }
+        }
+    } else if (editor.searching) {
         char footer[EDITOR_PROMPT_COLS + EDITOR_SEARCH_MAX + 1];
         strcpy(footer, editor.replacing ? "Replace:" : "Search: ");
         strcat(footer, editor.replacing ? editor.replace_text : editor.search_text);
@@ -210,20 +280,8 @@ static void editor_draw_footer(void)
 //
 static int editor_get_line_start(int line_index)
 {
-    if (line_index <= 0) return 0;
-    
-    int line = 0;
-    for (size_t i = 0; i < editor.content_length; i++) {
-        if (editor.buffer[i] == '\n') {
-            line++;
-            if (line == line_index) {
-                return (int)(i + 1);
-            }
-        }
-    }
-    
-    // Line doesn't exist, return end of buffer
-    return (int)editor.content_length;
+    return (int)editor_lines_start(&editor.lines, editor.buffer,
+                                   editor.content_length, line_index);
 }
 
 //
@@ -247,13 +305,8 @@ static int editor_get_line_end(int line_index)
 //
 static int editor_get_line_at_pos(size_t pos)
 {
-    int line = 0;
-    for (size_t i = 0; i < pos && i < editor.content_length; i++) {
-        if (editor.buffer[i] == '\n') {
-            line++;
-        }
-    }
-    return line;
+    return editor_lines_at_pos(&editor.lines, editor.buffer,
+                               editor.content_length, pos);
 }
 
 //
@@ -361,9 +414,10 @@ static void editor_update_h_scroll(void)
 
 //
 // Ensure cursor is visible in the view (vertical scrolling)
-// Returns true if vertical scrolling occurred
+// Returns the number of lines the view moved: positive down, negative up,
+// zero if it did not move
 //
-static bool editor_ensure_cursor_visible(void)
+static int editor_ensure_cursor_visible(void)
 {
     int cursor_line = editor_get_line_at_pos(editor.cursor_pos);
     int old_view_start = editor.view_start_line;
@@ -381,8 +435,7 @@ static bool editor_ensure_cursor_visible(void)
     // Also update horizontal scroll for the current line
     editor_update_h_scroll();
     
-    // Return true if vertical scroll changed (full redraw needed)
-    return editor.view_start_line != old_view_start;
+    return editor.view_start_line - old_view_start;
 }
 
 //
@@ -559,6 +612,29 @@ static void editor_draw_content(void)
 }
 
 //
+// Move the view one line using the LCD's hardware scroll, then draw the line
+// that came into view. The panel shifts its own start line, so this costs one
+// row draw instead of the thirty a full redraw of the content area costs.
+//
+// The header and footer are outside the scrolling area, so neither is touched.
+//
+static void editor_scroll_one_line(int delta)
+{
+    int line_index;
+
+    if (delta > 0) {
+        lcd_scroll_up(PALETTE_SYNTAX_BG);
+        line_index = editor.view_start_line + EDITOR_VISIBLE_ROWS - 1;
+    } else {
+        lcd_scroll_down(PALETTE_SYNTAX_BG);
+        line_index = editor.view_start_line;
+    }
+
+    editor_draw_line(line_index - editor.view_start_line, line_index,
+                     editor_compute_depth_at_line(line_index));
+}
+
+//
 // Mark a single line as needing redraw
 //
 static void editor_mark_line_dirty(int line_index)
@@ -701,6 +777,20 @@ static void editor_position_cursor(void)
         return;
     }
 
+    if (editor.vi_mode && editor.vi.mode == VI_CMDLINE) {
+        // The command line is typed in the footer, so the cursor goes there.
+        // editor_draw_footer draws the command from column 0, leading ':', '/'
+        // or '?' included, and the line is append-only: the insert point is one
+        // column past what has been typed.
+        int screen_col = (int)editor.vi.cmdline_len;
+        if (screen_col >= EDITOR_MAX_COLS) screen_col = EDITOR_MAX_COLS - 1;
+        screen_txt_set_cursor(screen_col, EDITOR_FOOTER_ROW);
+
+        // Reverse video footer, as the replacement prompt above
+        lcd_set_cursor_char(TXT_PACK(PALETTE_SYNTAX_BG, TXT_WHITE, ' '));
+        return;
+    }
+
     int cursor_line = editor_get_line_at_pos(editor.cursor_pos);
     int cursor_col = editor_get_col_at_pos(editor.cursor_pos);
     
@@ -758,12 +848,13 @@ static void editor_insert_char(char c)
     if (editor.selecting) {
         editor_delete_selection();
     }
-    
+
     // Shift content to make room
-    for (size_t i = editor.content_length; i > editor.cursor_pos; i--) {
-        editor.buffer[i] = editor.buffer[i - 1];
-    }
-    
+    editor_note_change(editor.cursor_pos, 0, &c, 1);
+    editor_lines_edit(&editor.lines, editor.cursor_pos);
+    memmove(&editor.buffer[editor.cursor_pos + 1], &editor.buffer[editor.cursor_pos],
+            editor.content_length - editor.cursor_pos);
+
     // Insert character
     editor.buffer[editor.cursor_pos] = c;
     editor.cursor_pos++;
@@ -817,12 +908,13 @@ static void editor_new_line(void)
     
     // Strip leading whitespace from content that is now on the new line
     // (the content that was after the cursor before the newline was inserted)
-    while (editor.cursor_pos < editor.content_length && 
+    while (editor.cursor_pos < editor.content_length &&
            editor.buffer[editor.cursor_pos] == ' ') {
         // Delete the space at cursor position
-        for (size_t i = editor.cursor_pos; i < editor.content_length - 1; i++) {
-            editor.buffer[i] = editor.buffer[i + 1];
-        }
+        editor_note_change(editor.cursor_pos, 1, NULL, 0);
+        editor_lines_edit(&editor.lines, editor.cursor_pos);
+        memmove(&editor.buffer[editor.cursor_pos], &editor.buffer[editor.cursor_pos + 1],
+                editor.content_length - editor.cursor_pos - 1);
         editor.content_length--;
         editor.buffer[editor.content_length] = '\0';
     }
@@ -850,10 +942,11 @@ static void editor_delete_char(void)
     }
     
     // Shift content
-    for (size_t i = editor.cursor_pos; i < editor.content_length - 1; i++) {
-        editor.buffer[i] = editor.buffer[i + 1];
-    }
-    
+    editor_note_change(editor.cursor_pos, 1, NULL, 0);
+    editor_lines_edit(&editor.lines, editor.cursor_pos);
+    memmove(&editor.buffer[editor.cursor_pos], &editor.buffer[editor.cursor_pos + 1],
+            editor.content_length - editor.cursor_pos - 1);
+
     editor.content_length--;
     editor.buffer[editor.content_length] = '\0';
 }
@@ -920,10 +1013,11 @@ static void editor_delete_selection(void)
     size_t sel_len = sel_end - sel_start;
     
     // Shift content
-    for (size_t i = sel_start; i < editor.content_length - sel_len; i++) {
-        editor.buffer[i] = editor.buffer[i + sel_len];
-    }
-    
+    editor_note_change(sel_start, sel_len, NULL, 0);
+    editor_lines_edit(&editor.lines, sel_start);
+    memmove(&editor.buffer[sel_start], &editor.buffer[sel_start + sel_len],
+            editor.content_length - sel_start - sel_len);
+
     editor.content_length -= sel_len;
     editor.buffer[editor.content_length] = '\0';
     editor.cursor_pos = sel_start;
@@ -971,6 +1065,8 @@ static void editor_paste(void)
     }
     
     // Shift content to make room
+    editor_note_change(editor.cursor_pos, 0, editor.copy_buffer, editor.copy_length);
+    editor_lines_edit(&editor.lines, editor.cursor_pos);
     memmove(&editor.buffer[editor.cursor_pos + editor.copy_length],
             &editor.buffer[editor.cursor_pos],
             editor.content_length - editor.cursor_pos);
@@ -997,6 +1093,19 @@ static void editor_move_cursor_right(void)
     if (editor.cursor_pos < editor.content_length) {
         editor.cursor_pos++;
     }
+}
+
+// Ctrl + Left/Right: move by a word. The scan itself lives in editor_lines.c,
+// where it can be tested on the host.
+static void editor_move_cursor_word_left(void)
+{
+    editor.cursor_pos = editor_word_left(editor.buffer, editor.cursor_pos);
+}
+
+static void editor_move_cursor_word_right(void)
+{
+    editor.cursor_pos = editor_word_right(editor.buffer, editor.content_length,
+                                          editor.cursor_pos);
 }
 
 static void editor_move_cursor_up(void)
@@ -1209,6 +1318,8 @@ static void editor_decrease_indent(void)
         
         if (spaces_to_remove > 0) {
             // Shift content left to remove spaces
+            editor_note_change((size_t)line_start, (size_t)spaces_to_remove, NULL, 0);
+            editor_lines_edit(&editor.lines, (size_t)line_start);
             memmove(&editor.buffer[line_start],
                     &editor.buffer[line_start + spaces_to_remove],
                     editor.content_length - line_start - spaces_to_remove + 1);  // +1 for null
@@ -1267,11 +1378,16 @@ static void editor_increase_indent(void)
         return;  // Not enough space
     }
     
+    char tab_spaces[TAB_WIDTH];
+    memset(tab_spaces, ' ', sizeof(tab_spaces));
+
     // Process each line from last to first (to preserve line numbers)
     for (int line = last_line; line >= first_line; line--) {
         int line_start = editor_get_line_start(line);
         
         // Shift content right to make room for spaces
+        editor_note_change((size_t)line_start, 0, tab_spaces, TAB_WIDTH);
+        editor_lines_edit(&editor.lines, (size_t)line_start);
         memmove(&editor.buffer[line_start + TAB_WIDTH],
                 &editor.buffer[line_start],
                 editor.content_length - line_start + 1);  // +1 for null
@@ -1319,6 +1435,8 @@ static void editor_cut_line(void)
     editor.copy_length = line_len;
     
     // Delete the line
+    editor_note_change((size_t)line_start, line_len, NULL, 0);
+    editor_lines_edit(&editor.lines, (size_t)line_start);
     memmove(&editor.buffer[line_start],
             &editor.buffer[line_start + line_len],
             editor.content_length - line_start - line_len + 1);  // +1 for null terminator
@@ -1427,6 +1545,11 @@ static void editor_replace_all(void)
     editor_search_replace_all(editor.buffer, &editor.content_length, editor.buffer_size,
                               editor.search_text, editor.search_len,
                               editor.replace_text, editor.replace_len);
+    editor_lines_reset(&editor.lines);  // Matches anywhere; the whole buffer may have moved
+    // The one rewrite the journal is not told about, since it is the search's
+    // own bulk replace. Vi reaches this text through `:%s`, which is recorded;
+    // forgetting the journal is what keeps the two from ever meeting.
+    editor_undo_reset(&editor.undo);
 
     if (editor.cursor_pos > editor.content_length) {
         editor.cursor_pos = editor.content_length;
@@ -1522,7 +1645,571 @@ static bool editor_handle_replace_key(char key)
 //
 // Main editor function
 //
-LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
+//
+// Put the screen back the way the editor found it. Both exits do the same
+// thing, and vi mode's :w / ZZ and :q! / ZQ do it from a third place.
+//
+static void editor_restore_screen(uint8_t saved_screen_mode,
+                                  uint8_t saved_cursor_col, uint8_t saved_cursor_row)
+{
+    lcd_erase_cursor();
+    screen_txt_enable_cursor(false);
+    lcd_set_cursor_style(LCD_CURSOR_UNDERLINE);  // May still be block if exiting mid-selection
+    input_active = false;  // Re-enable keyboard mode switching
+    // Restore foreground/background palette slots
+    lcd_set_foreground(PALETTE_FG);
+    lcd_set_background(PALETTE_BG);
+    lcd_define_scrolling(0, 0);          // Drop the editor's fixed header row
+    screen_set_mode(saved_screen_mode);  // Restore screen mode
+    screen_txt_mark_all_dirty();         // Editor drew directly to LCD; repaint text buffer
+    screen_txt_update();                 // Flush immediately so the user sees the REPL
+    screen_txt_set_cursor(saved_cursor_col, saved_cursor_row);
+}
+
+//
+//  Vi mode (docs/vi-mode-design.md)
+//
+//  editor_vi.c decides what a keystroke means and says so as a byte range plus
+//  an action; everything below turns that into an edit. Nothing here parses a
+//  key, and nothing in editor_vi.c touches the screen.
+//
+
+// Whether the mode is on is set from Logo by `setvimode` before the editor
+// opens, so all five entry points -- edit, edall, edn, edns, editfile -- get it
+static bool editor_vi_requested = false;
+
+// Where the undo journal lives. The interpreter owns it, because which tier a
+// board gets is its decision to make: a slice of the aux/PSRAM region where
+// there is one, a small heap block otherwise, and nothing at all if neither
+// could be had -- in which case `u` says so (docs/vi-mode-design.md §8).
+static char *editor_undo_store = NULL;
+static size_t editor_undo_capacity = 0;
+
+// What editor_vi_apply asks the main loop to do next
+#define EDITOR_VI_CONTINUE 0
+#define EDITOR_VI_ACCEPT   1
+#define EDITOR_VI_CANCEL   2
+
+//
+// Insert text at pos. Returns false when it would not fit, having changed
+// nothing. `text` must not point into the buffer: it moves.
+//
+static bool editor_vi_insert_text(size_t pos, const char *text, size_t len)
+{
+    if (len == 0) {
+        return true;
+    }
+    if (editor.content_length + len >= editor.buffer_size) {
+        return false;
+    }
+    editor_note_change(pos, 0, text, len);
+    editor_lines_edit(&editor.lines, pos);
+    memmove(&editor.buffer[pos + len], &editor.buffer[pos], editor.content_length - pos);
+    memcpy(&editor.buffer[pos], text, len);
+    editor.content_length += len;
+    editor.buffer[editor.content_length] = '\0';
+    return true;
+}
+
+static void editor_vi_delete_range(size_t start, size_t end)
+{
+    if (end > editor.content_length) end = editor.content_length;
+    if (start >= end) return;
+
+    editor_note_change(start, end - start, NULL, 0);
+    editor_lines_edit(&editor.lines, start);
+    memmove(&editor.buffer[start], &editor.buffer[end], editor.content_length - end);
+    editor.content_length -= (end - start);
+    editor.buffer[editor.content_length] = '\0';
+}
+
+//
+// Take a range into the copy buffer, which is the unnamed register vi mode has
+// instead of the sixteen it does not. Linewise text is marked by a trailing
+// newline, the same way the editor's own Ctrl+C on a whole line marks it.
+//
+static void editor_vi_yank_range(size_t start, size_t end, bool linewise)
+{
+    if (end > editor.content_length) end = editor.content_length;
+    if (start > end) start = end;
+
+    size_t len = end - start;
+    if (len > LOGO_COPY_BUFFER_SIZE - 2) {
+        len = LOGO_COPY_BUFFER_SIZE - 2;
+    }
+    memcpy(editor.copy_buffer, &editor.buffer[start], len);
+
+    if (linewise) {
+        // `dd` on the last line has to take the newline *before* it, since
+        // there is none after; the copy buffer wants it the other way round
+        if (len > 0 && editor.copy_buffer[0] == '\n' && editor.copy_buffer[len - 1] != '\n') {
+            memmove(editor.copy_buffer, editor.copy_buffer + 1, --len);
+        }
+        if (len == 0 || editor.copy_buffer[len - 1] != '\n') {
+            editor.copy_buffer[len++] = '\n';
+        }
+    }
+
+    editor.copy_buffer[len] = '\0';
+    editor.copy_length = len;
+}
+
+static void editor_vi_paste(int count, bool after)
+{
+    if (editor.copy_length == 0) return;
+
+    bool linewise = editor.copy_buffer[editor.copy_length - 1] == '\n';
+    int line = editor_get_line_at_pos(editor.cursor_pos);
+    size_t at;
+
+    if (linewise) {
+        if (after) {
+            at = (size_t)editor_get_line_end(line);
+            if (at < editor.content_length) {
+                at++;  // Past the newline, onto the next line
+            } else {
+                // The last line has no newline of its own to paste after
+                if (!editor_vi_insert_text(at, "\n", 1)) return;
+                at = editor.content_length;
+            }
+        } else {
+            at = (size_t)editor_get_line_start(line);
+        }
+    } else {
+        at = editor.cursor_pos;
+        if (after && at < (size_t)editor_get_line_end(line)) {
+            at++;
+        }
+    }
+
+    size_t inserted = 0;
+    for (int i = 0; i < count; i++) {
+        if (!editor_vi_insert_text(at + inserted, editor.copy_buffer, editor.copy_length)) {
+            break;
+        }
+        inserted += editor.copy_length;
+    }
+    if (inserted == 0) return;
+
+    if (linewise) {
+        // Vi leaves the cursor on the first non-blank of the first line pasted
+        editor.cursor_pos = (size_t)editor_get_line_start(editor_get_line_at_pos(at));
+        int end = editor_get_line_end(editor_get_line_at_pos(at));
+        while (editor.cursor_pos < (size_t)end &&
+               (editor.buffer[editor.cursor_pos] == ' ' ||
+                editor.buffer[editor.cursor_pos] == '\t')) {
+            editor.cursor_pos++;
+        }
+    } else {
+        editor.cursor_pos = at + inserted - 1;
+    }
+}
+
+//
+// Join `count` lines onto the cursor's, putting a single space where each line
+// break was and swallowing the indentation that followed it
+//
+static void editor_vi_join(int count)
+{
+    for (int i = 1; i < count; i++) {
+        int line = editor_get_line_at_pos(editor.cursor_pos);
+        size_t line_start = (size_t)editor_get_line_start(line);
+        size_t end = (size_t)editor_get_line_end(line);
+        if (end >= editor.content_length) {
+            break;  // Nothing left to join
+        }
+
+        size_t next = end + 1;
+        while (next < editor.content_length &&
+               (editor.buffer[next] == ' ' || editor.buffer[next] == '\t')) {
+            next++;
+        }
+        editor_vi_delete_range(end, next);
+        editor.cursor_pos = end;
+
+        // No space onto an empty line, and none where the line already ends in one
+        if (end > line_start && editor.buffer[end - 1] != ' ' &&
+            end < editor.content_length && editor.buffer[end] != '\n') {
+            editor_vi_insert_text(end, " ", 1);
+        }
+    }
+}
+
+static void editor_vi_toggle_case(size_t start, size_t end)
+{
+    if (end > editor.content_length) end = editor.content_length;
+    for (size_t i = start; i < end; i++) {
+        char c = editor.buffer[i];
+        char flipped = c;
+        if (c >= 'a' && c <= 'z')      flipped = (char)(c - 'a' + 'A');
+        else if (c >= 'A' && c <= 'Z') flipped = (char)(c - 'A' + 'a');
+        if (flipped == c) continue;
+        editor_note_change(i, 1, &flipped, 1);
+        editor.buffer[i] = flipped;
+    }
+}
+
+//
+// Open a line above or below the cursor's, carrying its indentation, and leave
+// the cursor on it ready to be typed into
+//
+static void editor_vi_open_line(bool below)
+{
+    int line = editor_get_line_at_pos(editor.cursor_pos);
+    size_t line_start = (size_t)editor_get_line_start(line);
+
+    char text[EDITOR_MAX_COLS + 1];
+    size_t indent = 0;
+    while (line_start + indent < editor.content_length && indent < sizeof(text) - 1 &&
+           (editor.buffer[line_start + indent] == ' ' ||
+            editor.buffer[line_start + indent] == '\t')) {
+        indent++;
+    }
+
+    if (below) {
+        size_t at = (size_t)editor_get_line_end(line);
+        text[0] = '\n';
+        memcpy(text + 1, &editor.buffer[line_start], indent);
+        if (!editor_vi_insert_text(at, text, indent + 1)) return;
+        editor.cursor_pos = at + 1 + indent;
+    } else {
+        memcpy(text, &editor.buffer[line_start], indent);
+        text[indent] = '\n';
+        if (!editor_vi_insert_text(line_start, text, indent + 1)) return;
+        editor.cursor_pos = line_start + indent;
+    }
+}
+
+//
+// Shift the lines the range covers by `stops` tab stops, driving the same
+// indent pair Ctrl+, and Ctrl+. use by handing them a selection
+//
+static void editor_vi_indent(size_t start, size_t end, int stops)
+{
+    editor.selecting = true;
+    editor.select_anchor = start;
+    editor.cursor_pos = end > start ? end - 1 : start;
+
+    for (int i = 0; i < (stops < 0 ? -stops : stops); i++) {
+        if (stops > 0) editor_increase_indent();
+        else           editor_decrease_indent();
+    }
+
+    editor.selecting = false;
+    int line = editor_get_line_at_pos(editor.select_anchor);
+    editor.cursor_pos = (size_t)editor_get_line_start(line);
+    int line_end = editor_get_line_end(line);
+    while (editor.cursor_pos < (size_t)line_end &&
+           (editor.buffer[editor.cursor_pos] == ' ' ||
+            editor.buffer[editor.cursor_pos] == '\t')) {
+        editor.cursor_pos++;
+    }
+}
+
+//
+// Run the vi pattern through the editor's own search, so `/` and `n` land
+// exactly where Ctrl+F does -- wrapping, case-insensitive -- but leave no
+// selection behind: normal mode's block cursor is the only marker vi wants
+//
+static void editor_vi_search(char direction, size_t origin)
+{
+    // The vi pattern goes straight to the pattern walker -- no copy into
+    // editor.search_text, which was only ever there to feed editor_search_find
+    // and would truncate a `\<name\>` pattern to a dangling backslash (§16.5).
+    // The origin is the cursor for `/`, `?`, `n` and `N`, and the start of the
+    // word for `*` and `#` -- which is what stops `*` from the middle of a word
+    // matching the word it started in
+    bool forward = (direction == '/');
+    size_t from = forward ? origin + 1 : origin;
+    if (from > editor.content_length) from = editor.content_length;
+
+    size_t match;
+    bool too_complex = false;
+    if (editor_pattern_find(editor.vi.pattern, editor.vi.pattern_len,
+                            editor.buffer, editor.content_length,
+                            from, forward, &match, &too_complex)) {
+        editor.cursor_pos = match;
+    } else if (too_complex) {
+        // The search gave up rather than wedging the board (B36) -- said
+        // separately, because it is not the same news as an honest miss
+        editor.vi_msg = "E486: pattern too complex";
+    } else {
+        editor.vi_msg = "E486: pattern not found";
+    }
+    editor_mark_all_dirty();  // The match can be anywhere in the buffer
+}
+
+//
+// Carry out one action. Returns EDITOR_VI_ACCEPT / _CANCEL when the action is
+// one that leaves the editor.
+//
+static int editor_vi_apply(const ViAction *act, int cursor_line_before)
+{
+    switch (act->kind) {
+        case VI_ACT_NONE:
+            break;
+
+        case VI_ACT_REDRAW:
+            editor.dirty_flags = DIRTY_CURSOR;
+            break;
+
+        case VI_ACT_BEEP:
+        case VI_ACT_MESSAGE:
+            editor.vi_msg = act->msg;
+            editor.dirty_flags = DIRTY_CURSOR;
+            break;
+
+        case VI_ACT_MOVE:
+            editor.cursor_pos = act->start;
+            editor.dirty_flags = DIRTY_CURSOR;
+            break;
+
+        case VI_ACT_YANK:
+            editor_vi_yank_range(act->start, act->end, act->linewise);
+            editor.cursor_pos = act->start;
+            editor.dirty_flags = DIRTY_CURSOR;
+            break;
+
+        case VI_ACT_DELETE:
+        case VI_ACT_CHANGE:
+            editor_vi_yank_range(act->start, act->end, act->linewise);
+            editor_vi_delete_range(act->start, act->end);
+            editor.cursor_pos = act->start;
+            editor.vi.modified = true;
+            editor_mark_from_line_dirty(editor_get_line_at_pos(act->start));
+            break;
+
+        case VI_ACT_PASTE_AFTER:
+        case VI_ACT_PASTE_BEFORE:
+            editor_vi_paste(act->count > 0 ? act->count : 1,
+                            act->kind == VI_ACT_PASTE_AFTER);
+            editor.vi.modified = true;
+            editor_mark_from_line_dirty(cursor_line_before);
+            break;
+
+        case VI_ACT_PASTE_OVER:
+            editor_vi_delete_range(act->start, act->end);
+            editor.cursor_pos = act->start;
+            editor_vi_paste(1, false);
+            editor.vi.modified = true;
+            editor_mark_from_line_dirty(editor_get_line_at_pos(act->start));
+            break;
+
+        case VI_ACT_INDENT:
+            editor_vi_indent(act->start, act->end, act->count);
+            editor.vi.modified = true;
+            editor_mark_all_dirty();
+            break;
+
+        case VI_ACT_REPLACE_CHAR:
+            if (act->ch == '\n') {
+                // A split, not an overwrite: the range goes and one line break
+                // takes its place, so the buffer changes length and every line
+                // from this one down moves
+                editor_vi_delete_range(act->start, act->end);
+                editor_vi_insert_text(act->start, "\n", 1);
+                editor.cursor_pos = act->start + 1;
+                editor.vi.modified = true;
+                editor_mark_from_line_dirty(cursor_line_before);
+                break;
+            }
+            for (size_t i = act->start; i < act->end && i < editor.content_length; i++) {
+                if (editor.buffer[i] == act->ch) continue;
+                editor_note_change(i, 1, &act->ch, 1);
+                editor.buffer[i] = act->ch;
+            }
+            editor.cursor_pos = act->end > act->start ? act->end - 1 : act->start;
+            editor.vi.modified = true;
+            editor_mark_line_dirty(cursor_line_before);
+            break;
+
+        case VI_ACT_OPEN_BELOW:
+        case VI_ACT_OPEN_ABOVE:
+            editor_vi_open_line(act->kind == VI_ACT_OPEN_BELOW);
+            editor.vi.modified = true;
+            editor_mark_from_line_dirty(cursor_line_before);
+            break;
+
+        case VI_ACT_JOIN:
+            editor.cursor_pos = act->start;
+            editor_vi_join(act->count);
+            editor.vi.modified = true;
+            editor_mark_from_line_dirty(cursor_line_before);
+            break;
+
+        case VI_ACT_TOGGLE_CASE:
+            editor_vi_toggle_case(act->start, act->end);
+            editor.cursor_pos = act->end < editor.content_length ? act->end : act->start;
+            editor.vi.modified = true;
+            editor_mark_from_line_dirty(editor_get_line_at_pos(act->start));
+            break;
+
+        case VI_ACT_SEARCH:
+            editor_vi_search(act->ch, act->start);
+            break;
+
+        case VI_ACT_SCROLL: {
+            // The one action that moves the view and not the cursor, so it does
+            // its own row arithmetic here rather than leaving it to
+            // editor_ensure_cursor_visible, which only ever scrolls far enough
+            // to bring the cursor back on screen
+            int cursor_line = editor_get_line_at_pos(editor.cursor_pos);
+            int max_start = editor_count_lines() - EDITOR_VISIBLE_ROWS;
+            int start = cursor_line;
+            if (act->ch == 'z') {
+                start = cursor_line - (EDITOR_VISIBLE_ROWS - 1) / 2;
+            } else if (act->ch == 'b') {
+                start = cursor_line - EDITOR_VISIBLE_ROWS + 1;
+            }
+            // The view never starts past the last screenful, as the page keys
+            // have it -- so `zt` near the end of the buffer moves less than it
+            // was asked to rather than showing a screen of nothing
+            if (start > max_start) start = max_start;
+            if (start < 0) start = 0;
+            editor.view_start_line = start;
+            editor_mark_all_dirty();
+            break;
+        }
+
+        case VI_ACT_SUBSTITUTE: {
+            size_t landed = editor.cursor_pos;
+            size_t count = editor_vi_substitute(editor.buffer, &editor.content_length,
+                                                editor.buffer_size, act->start, act->end,
+                                                editor.vi.pattern, editor.vi.pattern_len,
+                                                editor.vi.replacement,
+                                                editor.vi.replacement_len,
+                                                editor.vi.sub_global, &editor.undo, &landed);
+            if (count == SIZE_MAX) {
+                // The pattern outran the matcher's step budget and the
+                // substitute was abandoned before a byte moved (B36)
+                editor.vi_msg = "E486: pattern too complex";
+                editor.dirty_flags = DIRTY_CURSOR;
+            } else if (count == 0) {
+                // No match, or a result that would not fit -- editor_vi_substitute
+                // refuses the second rather than rewriting half the buffer
+                editor.vi_msg = "No substitution made";
+                editor.dirty_flags = DIRTY_CURSOR;
+            } else {
+                editor_lines_reset(&editor.lines);
+                editor.cursor_pos = landed;
+                editor.vi.modified = true;
+                editor_mark_all_dirty();
+            }
+            break;
+        }
+
+        case VI_ACT_UNDO:
+        case VI_ACT_REDO: {
+            bool forward = (act->kind == VI_ACT_REDO);
+            int steps = act->count > 0 ? act->count : 1;
+            size_t at = editor.cursor_pos;
+            bool any = false;
+
+            for (int i = 0; i < steps; i++) {
+                size_t pos;
+                bool moved = forward
+                    ? editor_undo_redo(&editor.undo, editor.buffer, &editor.content_length,
+                                       editor.buffer_size, &pos)
+                    : editor_undo_undo(&editor.undo, editor.buffer, &editor.content_length,
+                                       editor.buffer_size, &pos);
+                if (!moved) {
+                    break;
+                }
+                any = true;
+                at = pos;
+            }
+
+            if (!any) {
+                editor.vi_msg = editor.undo.store == NULL
+                    ? "Undo is not available"
+                    : (forward ? "Already at newest change" : "Already at oldest change");
+                editor.dirty_flags = DIRTY_CURSOR;
+                break;
+            }
+
+            // A step can have moved text anywhere in the buffer, and several of
+            // them certainly have
+            editor_lines_reset(&editor.lines);
+            editor.cursor_pos = at;
+            editor.vi.modified = true;
+            editor_mark_all_dirty();
+            break;
+        }
+
+        case VI_ACT_WRITE:
+            // With nowhere to write to, `:w` means what it always meant: hand
+            // the buffer back to the caller, which is how the workspace is saved
+            if (editor.save == NULL) {
+                return EDITOR_VI_ACCEPT;
+            }
+            if (editor.save(editor.buffer, editor.save_ctx)) {
+                editor.vi.modified = false;
+                editor.vi_msg = "written";
+            } else {
+                editor.vi_msg = "E212: can't open file for writing";
+            }
+            editor.dirty_flags = DIRTY_CURSOR;
+            break;
+
+        case VI_ACT_ACCEPT:
+            return EDITOR_VI_ACCEPT;
+
+        case VI_ACT_QUIT:
+            if (editor.vi.modified) {
+                editor.vi_msg = "E37: no write since last change";
+                editor.dirty_flags = DIRTY_CURSOR;
+                break;
+            }
+            return EDITOR_VI_ACCEPT;
+
+        case VI_ACT_CANCEL:
+            return EDITOR_VI_CANCEL;
+    }
+
+    if (editor.cursor_pos > editor.content_length) {
+        editor.cursor_pos = editor.content_length;
+    }
+
+    // Visual mode is the editor's own selection anchor, verbatim: the block
+    // cursor covers the character the anchor stops short of
+    bool visual = (editor.vi.mode == VI_VISUAL || editor.vi.mode == VI_VISUAL_LINE);
+    if (visual || editor.selecting) {
+        editor.select_anchor = editor.vi.anchor;
+        if (editor.selecting != visual) {
+            editor_mark_all_dirty();
+        } else if (visual) {
+            int line = editor_get_line_at_pos(editor.cursor_pos);
+            editor_mark_from_line_dirty(line < cursor_line_before ? line : cursor_line_before);
+        }
+        editor.selecting = visual;
+    }
+
+    lcd_set_cursor_style((editor.vi.mode == VI_INSERT || editor.vi.mode == VI_CMDLINE)
+                         ? LCD_CURSOR_UNDERLINE : LCD_CURSOR_BLOCK);
+    return EDITOR_VI_CONTINUE;
+}
+
+// Insert mode hands every key but Esc back to the editor's own handling, so
+// this is where a change made by typing gets noticed -- `:q` has to know
+static bool editor_vi_key_modifies(int key)
+{
+    return (key >= 0x20 && key <= 0x7E) || key == KEY_BACKSPACE || key == KEY_DEL ||
+           key == KEY_ENTER || key == KEY_RETURN || key == KEY_TAB;
+}
+
+void picocalc_editor_set_vi_mode(bool on)
+{
+    editor_vi_requested = on;
+}
+
+void picocalc_editor_set_undo_store(void *store, size_t size)
+{
+    editor_undo_store = (char *)store;
+    editor_undo_capacity = size;
+}
+
+LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size,
+                                      LogoEditorSave save, void *save_ctx)
 {
     // Save cursor position and screen mode to restore on exit
     uint8_t saved_cursor_col, saved_cursor_row;
@@ -1538,6 +2225,7 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
     editor.buffer = buffer;
     editor.buffer_size = buffer_size;
     editor.content_length = strlen(buffer);
+    editor_lines_reset(&editor.lines);
     editor.cursor_pos = 0;  // Start at beginning of content
     editor.view_start_line = 0;
     editor.h_scroll_offset = 0;
@@ -1555,9 +2243,19 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
     editor.replace_cursor = 0;
     editor.in_graphics_preview = false;
     editor.dirty_flags = DIRTY_NONE;
-    
-    // Start with underline cursor (normal editing mode)
-    lcd_set_cursor_style(LCD_CURSOR_UNDERLINE);
+    editor.vi_mode = editor_vi_requested;
+    editor.vi_msg = NULL;
+    editor.save = save;
+    editor.save_ctx = save_ctx;
+    editor_vi_reset(&editor.vi);
+    // No journal outside vi mode: nothing there can reach it, and recording
+    // into it would only cost the default editor time
+    editor_undo_init(&editor.undo, editor.vi_mode ? editor_undo_store : NULL,
+                     editor_undo_capacity);
+
+    // Normal mode is a block cursor, which is also what the editor already uses
+    // to mean "a selection is active" -- so visual mode needs no new drawing
+    lcd_set_cursor_style(editor.vi_mode ? LCD_CURSOR_BLOCK : LCD_CURSOR_UNDERLINE);
     
     // Use syntax palette colours for the editor
     // (defaults set at LCD init; user can override with setpalette or theme files)
@@ -1576,6 +2274,11 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
     
     // Clear screen and draw initial content
     lcd_clear_screen(PALETTE_SYNTAX_BG);
+
+    // Fix the header and footer rows and scroll the content between them, so
+    // moving the view by a line is a start-line change instead of a full repaint
+    lcd_define_scrolling(EDITOR_SCROLL_TOP, EDITOR_SCROLL_BOTTOM);
+
     editor_draw_header();
     editor_draw_footer();
     editor_draw_content();
@@ -1629,36 +2332,61 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
             key = 0;
         }
 
+        // The vi key layer. It either consumes the key -- and says what it
+        // meant as a byte range the switch below never sees -- or hands it
+        // back, which is how insert mode gets the arrows, backspace and every
+        // printable character from the default handling unchanged, and how Brk
+        // keeps its cancel from every mode.
+        if (key != 0 && editor.vi_mode) {
+            // One keystroke is one undo step, except while insert mode is
+            // running: everything typed between `i` and `Esc` belongs to the
+            // command that opened it, which is what vi undoes in one go
+            if (editor.vi.mode != VI_INSERT) {
+                editor_undo_begin(&editor.undo);
+            }
+
+            const char *msg_before = editor.vi_msg;
+            ViMode mode_before = editor.vi.mode;
+            ViAction act;
+
+            editor.vi_msg = NULL;
+            if (editor_vi_key(&editor.vi, editor.buffer, editor.content_length,
+                              editor.cursor_pos, (unsigned char)key, &act)) {
+                int exit_how = editor_vi_apply(&act, cursor_line_before);
+                if (exit_how != EDITOR_VI_CONTINUE) {
+                    editor_restore_screen(saved_screen_mode, saved_cursor_col, saved_cursor_row);
+                    return exit_how == EDITOR_VI_ACCEPT ? LOGO_EDITOR_ACCEPT : LOGO_EDITOR_CANCEL;
+                }
+                key = 0;
+            } else if (editor.vi.mode == VI_INSERT &&
+                       editor_vi_key_modifies((unsigned char)key)) {
+                editor.vi.modified = true;
+            }
+
+            // The footer carries the mode indicator, the command line and any
+            // complaint, so it is repainted whenever one of them moves. A
+            // composed message is the one case the pointer cannot answer for:
+            // it always points at the same buffer in the vi state, so the text
+            // can change while the pointer does not
+            if (editor.vi_msg != msg_before || act.kind == VI_ACT_MESSAGE ||
+                editor.vi.mode != mode_before || editor.vi.mode == VI_CMDLINE) {
+                editor_draw_footer();
+            }
+        }
+
         // Handle special keys
         switch (key) {
             case KEY_ESC:
-                // Accept changes
-                lcd_erase_cursor();
-                screen_txt_enable_cursor(false);
-                lcd_set_cursor_style(LCD_CURSOR_UNDERLINE);  // May still be block if exiting mid-selection
-                input_active = false;  // Re-enable keyboard mode switching
-                // Restore foreground/background palette slots
-                lcd_set_foreground(PALETTE_FG);
-                lcd_set_background(PALETTE_BG);
-                screen_set_mode(saved_screen_mode);  // Restore screen mode
-                screen_txt_mark_all_dirty();          // Editor drew directly to LCD; repaint text buffer
-                screen_txt_update();                   // Flush immediately so the user sees the REPL
-                screen_txt_set_cursor(saved_cursor_col, saved_cursor_row);
+                // Accept changes. In vi mode Esc never reaches here: it belongs
+                // to the mode, and :w / ZZ accept instead
+                editor_restore_screen(saved_screen_mode, saved_cursor_col, saved_cursor_row);
                 return LOGO_EDITOR_ACCEPT;
-                
+
             case KEY_BREAK:
-                // Cancel changes - restore original buffer
-                lcd_erase_cursor();
-                screen_txt_enable_cursor(false);
-                lcd_set_cursor_style(LCD_CURSOR_UNDERLINE);  // May still be block if exiting mid-selection
-                input_active = false;  // Re-enable keyboard mode switching
-                // Restore foreground/background palette slots
-                lcd_set_foreground(PALETTE_FG);
-                lcd_set_background(PALETTE_BG);
-                screen_set_mode(saved_screen_mode);  // Restore screen mode
-                screen_txt_mark_all_dirty();          // Editor drew directly to LCD; repaint text buffer
-                screen_txt_update();                   // Flush immediately so the user sees the REPL
-                screen_txt_set_cursor(saved_cursor_col, saved_cursor_row);
+                // Cancel changes - restore original buffer. Brk cancels from
+                // every vi mode too, which is what makes the mode safe to be
+                // wrong about
+                editor_restore_screen(saved_screen_mode, saved_cursor_col, saved_cursor_row);
                 return LOGO_EDITOR_CANCEL;
             
             case KEY_LEFT:
@@ -1682,6 +2410,25 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                 }
                 break;
                 
+            case KEY_WORD_LEFT:
+                editor_move_cursor_word_left();
+                if (editor.selecting) {
+                    // A word move can cross a line - mark the span, as up/down do
+                    editor_mark_from_line_dirty(editor_get_line_at_pos(editor.cursor_pos));
+                } else {
+                    editor.dirty_flags = DIRTY_CURSOR;
+                }
+                break;
+
+            case KEY_WORD_RIGHT:
+                editor_move_cursor_word_right();
+                if (editor.selecting) {
+                    editor_mark_from_line_dirty(cursor_line_before);
+                } else {
+                    editor.dirty_flags = DIRTY_CURSOR;
+                }
+                break;
+
             case KEY_UP:
                 editor_move_cursor_up();
                 if (editor.selecting) {
@@ -1866,6 +2613,7 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
                     // Then redraw the editor content directly to LCD
                     screen_set_mode_no_update(SCREEN_MODE_TXT);
                     lcd_clear_screen(PALETTE_SYNTAX_BG);
+                    lcd_define_scrolling(EDITOR_SCROLL_TOP, EDITOR_SCROLL_BOTTOM);  // Mode switch reset it
                     editor_draw_header();
                     editor_draw_footer();
                     editor_draw_content();
@@ -1914,10 +2662,18 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
         // Update display based on what changed
         if (editor.dirty_flags != DIRTY_NONE) {
             // Check if vertical scroll occurred
-            bool scrolled = editor_ensure_cursor_visible();
-            
-            if (scrolled) {
-                // Vertical scroll requires full redraw
+            int scroll_delta = editor_ensure_cursor_visible();
+
+            if (scroll_delta == 1 || scroll_delta == -1) {
+                // One line: shift the panel and draw only the line that appeared.
+                // Any dirty flags the operation set are still honoured below.
+                editor_scroll_one_line(scroll_delta);
+                if (h_scroll_before > 0) {
+                    // The line we left still shows its scroll arrows
+                    editor_mark_line_dirty(cursor_line_before);
+                }
+            } else if (scroll_delta != 0) {
+                // Jumped further than a line (page keys, search) - full redraw
                 editor_mark_all_dirty();
             } else if (editor.dirty_flags == DIRTY_CURSOR) {
                 // Just cursor movement - only redraw if h_scroll changed
@@ -1943,6 +2699,13 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
             editor_update_dirty();
         }
         
+        // The ruler follows the cursor, so a keystroke that changed the line
+        // has to repaint the footer even when the mode indicator did not move
+        if (editor.vi_mode && editor.vi.mode == VI_NORMAL &&
+            editor_get_line_at_pos(editor.cursor_pos) != cursor_line_before) {
+            editor_draw_footer();
+        }
+
         if (needs_cursor_update) {
             editor_position_cursor();
         }
@@ -1951,7 +2714,9 @@ LogoEditorResult picocalc_editor_edit(char *buffer, size_t buffer_size)
 
 // Editor operations structure
 static const LogoConsoleEditor picocalc_editor_ops = {
-    .edit = picocalc_editor_edit
+    .edit = picocalc_editor_edit,
+    .set_vi_mode = picocalc_editor_set_vi_mode,
+    .set_undo_store = picocalc_editor_set_undo_store
 };
 
 const LogoConsoleEditor *picocalc_editor_get_ops(void)

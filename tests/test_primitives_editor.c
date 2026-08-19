@@ -230,9 +230,13 @@ static const char *mock_fs_get_content(const char *name)
     return file ? file->data : NULL;
 }
 
+// Set by the one test that needs a delete to fail while the file stays put
+static bool mock_fs_delete_fails = false;
+
 // Reset the mock file system
 static void mock_fs_reset(void)
 {
+    mock_fs_delete_fails = false;
     for (int i = 0; i < MOCK_MAX_FILES; i++)
     {
         mock_files[i].exists = false;
@@ -287,6 +291,8 @@ static bool mock_storage_dir_exists(const char *pathname)
 
 static bool mock_storage_file_delete(const char *pathname)
 {
+    if (mock_fs_delete_fails)
+        return false;
     MockFile *file = mock_fs_get_file(pathname, false);
     if (!file)
         return false;
@@ -384,6 +390,105 @@ void tearDown(void)
         mock_fs_reset();
     }
     test_scaffold_tearDown();
+}
+
+//==========================================================================
+// Editor Buffer Sizing
+//==========================================================================
+
+// The size primitives_editor.c uses when the buffers land in the aux region.
+// The build can override it (CMake defines LOGO_EDITOR_PSRAM_BUFFER_SIZE
+// PUBLIC on logo_core), so track that rather than a literal of our own.
+#ifdef LOGO_EDITOR_PSRAM_BUFFER_SIZE
+#define EDITOR_PSRAM_BUFFER_SIZE LOGO_EDITOR_PSRAM_BUFFER_SIZE
+#else
+#define EDITOR_PSRAM_BUFFER_SIZE (256 * 1024)
+#endif
+
+// Stands in for PSRAM: big enough for both editor buffers and then some
+static char test_aux_region[1024 * 1024];
+
+// Setup with an aux region in place, as a board with working PSRAM has. The
+// scaffold's logo_mem_init() drops any region, so the region goes in after it
+// and the primitives are re-initialised to pick the buffers again.
+static void setUp_with_aux_region(void)
+{
+    test_scaffold_setUp_with_device();
+    logo_mem_set_aux_region(test_aux_region, sizeof(test_aux_region));
+    primitives_init();
+}
+
+void test_editor_buffer_falls_back_to_sram_without_an_aux_region(void)
+{
+    // setUp() left no aux region, as a board without PSRAM has
+    size_t size = primitives_editor_buffer_size();
+    TEST_ASSERT_TRUE(size > 0);
+    TEST_ASSERT_TRUE(size < EDITOR_PSRAM_BUFFER_SIZE);
+
+    // ...and that is the capacity the editor is told it has
+    mock_device_clear_editor();
+    run_string("(edit)");
+    TEST_ASSERT_EQUAL_UINT64(size, mock_device_get_editor_buffer_size());
+}
+
+void test_editor_buffer_is_large_when_there_is_an_aux_region(void)
+{
+    setUp_with_aux_region();
+
+    TEST_ASSERT_EQUAL_UINT64(EDITOR_PSRAM_BUFFER_SIZE, primitives_editor_buffer_size());
+
+    mock_device_clear_editor();
+    run_string("(edit)");
+    TEST_ASSERT_EQUAL_UINT64(EDITOR_PSRAM_BUFFER_SIZE, mock_device_get_editor_buffer_size());
+}
+
+void test_editor_buffer_falls_back_when_the_aux_region_is_too_small(void)
+{
+    // A region that cannot hold both buffers must not leave one of them large
+    test_scaffold_setUp_with_device();
+    logo_mem_set_aux_region(test_aux_region, 64 * 1024);
+    primitives_init();
+
+    TEST_ASSERT_TRUE(primitives_editor_buffer_size() < EDITOR_PSRAM_BUFFER_SIZE);
+}
+
+void test_edit_defines_a_procedure_far_larger_than_the_sram_buffer(void)
+{
+    setUp_with_aux_region();
+
+    // A definition several times the SRAM fallback: it only survives the
+    // definition buffer run_editor_and_process accumulates it in because that
+    // buffer is sized from the aux region too. Kept to 250 body lines, under
+    // the 255-line limit of B32 (long bodies re-run statements), by putting
+    // three counter bumps on each line instead of one.
+    #define BIG_BODY_LINES 250
+    #define BIG_BODY_BUMPS 3
+    static char big[32 * 1024];
+    size_t len = (size_t)sprintf(big, "to big\nmake \"bigcount 0\n");
+    for (int i = 0; i < BIG_BODY_LINES; i++)
+    {
+        len += (size_t)sprintf(big + len,
+                               "make \"bigcount :bigcount + 1 make \"bigcount :bigcount + 1"
+                               " make \"bigcount :bigcount + 1\n");
+    }
+    sprintf(big + len, "end\n");
+    TEST_ASSERT_TRUE(strlen(big) > 16 * 1024);  // Well past the SRAM fallback
+
+    mock_device_clear_editor();
+    mock_device_set_editor_content(big);
+    run_string("(edit)");
+
+    // The whole definition reached the interpreter
+    TEST_ASSERT_EQUAL_UINT64(EDITOR_PSRAM_BUFFER_SIZE, mock_device_get_editor_buffer_size());
+    TEST_ASSERT_NOT_NULL(proc_find("big"));
+
+    // ...and every line of it is there: the count only comes out right if
+    // nothing was dropped at the old 8KB bound
+    mock_device_clear_output();
+    run_string("big print :bigcount");
+    char expected[32];
+    sprintf(expected, "%d\n", BIG_BODY_LINES * BIG_BODY_BUMPS);
+    TEST_ASSERT_EQUAL_STRING(expected, mock_device_get_output());
 }
 
 //==========================================================================
@@ -904,6 +1009,70 @@ void test_edall_empty_workspace(void)
 }
 
 //==========================================================================
+// setvimode / vimode? Tests
+//==========================================================================
+
+void test_vimode_is_off_to_begin_with(void)
+{
+    Result r = eval_string("vimode?");
+
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
+}
+
+void test_setvimode_is_reported_back(void)
+{
+    run_string("setvimode \"true");
+    Result r = eval_string("vimode?");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
+
+    run_string("setvimode \"false");
+    r = eval_string("vimode?");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
+}
+
+// B34: the console is registered *after* primitives_init runs, so an editor
+// setting pushed only from primitives_editor_init reaches nothing at all. The
+// undo journal is the setting where that shows -- with no store the editor
+// says `Undo is not available`, which is what a board reported.
+void test_the_editor_is_lent_an_undo_journal(void)
+{
+    // The boot order, which the scaffold's setUp shares with the board and
+    // which a second setUp in the same process would hide: nothing is
+    // registered, then the primitives come up, then the console arrives
+    primitives_set_io(NULL);
+    mock_device_clear_editor();
+    primitives_init();
+    primitives_set_io(&mock_io);
+
+    TEST_ASSERT_TRUE_MESSAGE(mock_device_get_editor_undo_size() > 0,
+                             "the editor was never lent an undo journal");
+}
+
+// The mock console's editor has no set_vi_mode entry, which is the case
+// setvimode has to survive: it takes the setting and the editor ignores it
+void test_setvimode_still_opens_the_editor(void)
+{
+    run_string("setvimode \"true");
+    mock_device_clear_editor();
+
+    run_string("edall");
+
+    TEST_ASSERT_TRUE(mock_device_was_editor_called());
+    run_string("setvimode \"false");
+}
+
+void test_setvimode_rejects_a_non_boolean(void)
+{
+    Result r = eval_string("setvimode \"maybe");
+
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(eval_string("vimode?").value.as.node));
+}
+
+//==========================================================================
 // editfile Tests
 //==========================================================================
 
@@ -1001,6 +1170,85 @@ void test_editfile_cancel_does_not_create_file(void)
     
     // File should still not exist
     TEST_ASSERT_NULL(mock_fs_get_file("nocreate.txt", false));
+}
+
+// Vi's `:w` writes the file and stays in the editor: the write must land even
+// when the session that follows it is cancelled
+void test_editfile_write_lands_before_a_cancel(void)
+{
+    setUp_with_storage();
+    
+    mock_fs_create_file("colon_w.txt", "Original content\n");
+    
+    mock_device_clear_editor();
+    mock_device_set_editor_write("Written by :w\n");
+    mock_device_set_editor_result(LOGO_EDITOR_CANCEL);
+    
+    Result r = run_string("editfile \"colon_w.txt");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    const char *content = mock_fs_get_content("colon_w.txt");
+    TEST_ASSERT_NOT_NULL(content);
+    TEST_ASSERT_EQUAL_STRING("Written by :w\n", content);
+}
+
+void test_editfile_write_creates_a_new_file(void)
+{
+    setUp_with_storage();
+    
+    mock_device_clear_editor();
+    mock_device_set_editor_write("Fresh\n");
+    mock_device_set_editor_result(LOGO_EDITOR_CANCEL);
+    
+    TEST_ASSERT_NULL(mock_fs_get_file("fresh.txt", false));
+    
+    Result r = run_string("editfile \"fresh.txt");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    
+    const char *content = mock_fs_get_content("fresh.txt");
+    TEST_ASSERT_NOT_NULL(content);
+    TEST_ASSERT_EQUAL_STRING("Fresh\n", content);
+}
+
+// The save deletes the old file because `open` does not truncate. If the
+// delete fails the write lands on top of what is already there, so shorter
+// content keeps the tail of the longer original -- and the save must say so
+// rather than reporting a success it did not have (B37).
+void test_editfile_fails_the_save_when_the_delete_fails(void)
+{
+    setUp_with_storage();
+    
+    mock_fs_create_file("stuck.txt", "A much longer original content\n");
+    
+    mock_device_clear_editor();
+    mock_device_set_editor_result(LOGO_EDITOR_ACCEPT);
+    mock_device_set_editor_content("Short\n");
+    mock_fs_delete_fails = true;
+    
+    Result r = run_string("editfile \"stuck.txt");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DISK_TROUBLE, result_get_error_code(r));
+    
+    // and the original is intact rather than half-overwritten
+    TEST_ASSERT_EQUAL_STRING("A much longer original content\n",
+                             mock_fs_get_content("stuck.txt"));
+}
+
+// Editing the workspace has nowhere to write to, so it hands the editor no
+// write-back -- which is what makes `:w` there accept the buffer and exit
+void test_edit_gives_the_editor_no_write_back(void)
+{
+    setUp_with_storage();
+    
+    mock_device_clear_editor();
+    mock_device_set_editor_result(LOGO_EDITOR_CANCEL);
+    run_string("edit");
+    TEST_ASSERT_FALSE(mock_device_editor_had_save());
+    
+    mock_device_clear_editor();
+    mock_device_set_editor_result(LOGO_EDITOR_CANCEL);
+    run_string("editfile \"has_save.txt");
+    TEST_ASSERT_TRUE(mock_device_editor_had_save());
 }
 
 void test_editfile_requires_word_argument(void)
@@ -1214,6 +1462,12 @@ int main(void)
     RUN_TEST(test_edall_excludes_buried_variables);
     RUN_TEST(test_edall_formats_property_lists);
     RUN_TEST(test_edall_formats_numeric_property_values);
+    // Buffer sizing
+    RUN_TEST(test_editor_buffer_falls_back_to_sram_without_an_aux_region);
+    RUN_TEST(test_editor_buffer_is_large_when_there_is_an_aux_region);
+    RUN_TEST(test_editor_buffer_falls_back_when_the_aux_region_is_too_small);
+    RUN_TEST(test_edit_defines_a_procedure_far_larger_than_the_sram_buffer);
+
     RUN_TEST(test_edall_empty_workspace);
     RUN_TEST(test_edit_no_args_preserves_buffer);
     RUN_TEST(test_edit_runs_regular_commands);
@@ -1221,6 +1475,13 @@ int main(void)
     RUN_TEST(test_edit_runs_mixed_content);
     RUN_TEST(test_edit_runs_multiline_bracket_expression);
     RUN_TEST(test_edit_runs_multiline_bracket_then_more_commands);
+
+    // setvimode / vimode? tests
+    RUN_TEST(test_vimode_is_off_to_begin_with);
+    RUN_TEST(test_setvimode_is_reported_back);
+    RUN_TEST(test_the_editor_is_lent_an_undo_journal);
+    RUN_TEST(test_setvimode_still_opens_the_editor);
+    RUN_TEST(test_setvimode_rejects_a_non_boolean);
     
     // editfile tests
     RUN_TEST(test_editfile_creates_new_file);
@@ -1228,6 +1489,10 @@ int main(void)
     RUN_TEST(test_editfile_modifies_existing_file);
     RUN_TEST(test_editfile_cancel_preserves_file);
     RUN_TEST(test_editfile_cancel_does_not_create_file);
+    RUN_TEST(test_editfile_write_lands_before_a_cancel);
+    RUN_TEST(test_editfile_write_creates_a_new_file);
+    RUN_TEST(test_editfile_fails_the_save_when_the_delete_fails);
+    RUN_TEST(test_edit_gives_the_editor_no_write_back);
     RUN_TEST(test_editfile_requires_word_argument);
     RUN_TEST(test_editfile_multiline_content);
     RUN_TEST(test_editfile_does_not_run_content);

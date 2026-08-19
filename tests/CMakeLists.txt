@@ -214,6 +214,33 @@ target_include_directories(test_screen_refresh PRIVATE
 target_link_libraries(test_screen_refresh PRIVATE m)
 add_test(NAME test_screen_refresh COMMAND test_screen_refresh)
 
+# LCD scroll mapping test — the pure arithmetic behind the panel's vertical
+# scroll, shared by the console, split mode and the editor.
+add_executable(test_lcd_scroll
+    test_lcd_scroll.c
+    unity.c
+)
+target_include_directories(test_lcd_scroll PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/mocks
+    ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/devices/picocalc
+)
+add_test(NAME test_lcd_scroll COMMAND test_lcd_scroll)
+
+# Editor line lookup test — compiles devices/picocalc/editor_lines.c on the
+# host. Portable (no Pico SDK / Logo runtime dependencies).
+add_executable(test_editor_lines
+    test_editor_lines.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/editor_lines.c
+    unity.c
+)
+target_include_directories(test_editor_lines PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/devices/picocalc
+)
+add_test(NAME test_editor_lines COMMAND test_editor_lines)
+
 # Editor incremental search test — compiles devices/picocalc/editor_search.c
 # on the host. Portable (no Pico SDK / Logo runtime dependencies).
 add_executable(test_editor_search
@@ -226,6 +253,57 @@ target_include_directories(test_editor_search PRIVATE
     ${CMAKE_SOURCE_DIR}/devices/picocalc
 )
 add_test(NAME test_editor_search COMMAND test_editor_search)
+
+# Editor undo journal test — compiles devices/picocalc/editor_undo.c on the
+# host. Portable (no Pico SDK / Logo runtime dependencies).
+add_executable(test_editor_undo
+    test_editor_undo.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/editor_undo.c
+    unity.c
+)
+target_include_directories(test_editor_undo PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/devices/picocalc
+)
+add_test(NAME test_editor_undo COMMAND test_editor_undo)
+
+# Editor pattern matcher test — compiles devices/picocalc/editor_pattern.c on
+# the host. It includes <regex.h> to run a differential against POSIX, which is
+# host-only: no arm-none-eabi libc.a defines regcomp, so a device build could
+# never follow it — which is the whole reason the matcher is vi's own (§16.1).
+add_executable(test_editor_pattern
+    test_editor_pattern.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/editor_pattern.c
+    unity.c
+)
+target_include_directories(test_editor_pattern PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/devices/picocalc
+)
+add_test(NAME test_editor_pattern COMMAND test_editor_pattern)
+
+# Editor vi key layer test — compiles devices/picocalc/editor_vi.c (and the
+# search and line-lookup modules it drives) on the host. editor.c itself has no
+# host build, which is the whole reason the key layer is a separate file.
+add_executable(test_editor_vi
+    test_editor_vi.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/editor_vi.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/editor_pattern.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/editor_search.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/editor_lines.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/editor_undo.c
+    unity.c
+)
+target_include_directories(test_editor_vi BEFORE PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/mocks
+)
+target_include_directories(test_editor_vi PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/devices/picocalc
+)
+add_test(NAME test_editor_vi COMMAND test_editor_vi)
 
 # Colour costume pool test — compiles devices/picocalc/costumes.c on the
 # host. Portable (no Pico SDK / Logo runtime dependencies).

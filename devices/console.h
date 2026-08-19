@@ -305,6 +305,11 @@ extern "C"
         LOGO_EDITOR_ERROR       // Editor error (buffer too small, etc.)
     } LogoEditorResult;
 
+    // Write the buffer out without leaving the editor, for vi's `:w`. Only
+    // an edit with somewhere to write to -- `editfile` -- supplies one.
+    // Returns true when the write succeeded.
+    typedef bool (*LogoEditorSave)(const char *buffer, void *ctx);
+
     //
     // Editor operations (optional)
     // These are available on devices with full-screen text editing capability.
@@ -314,8 +319,24 @@ extern "C"
         // Edit text in a full-screen editor
         // buffer: the text to edit (in/out), must be pre-filled with initial content
         // buffer_size: maximum size of the buffer
+        // save/save_ctx: write-back for vi's `:w`, which then stays in the
+        //   editor. NULL when the caller has nowhere to write the buffer yet
+        //   (editing the workspace), where `:w` accepts and exits instead.
         // Returns: LOGO_EDITOR_ACCEPT if user accepted, LOGO_EDITOR_CANCEL if cancelled
-        LogoEditorResult (*edit)(char *buffer, size_t buffer_size);
+        LogoEditorResult (*edit)(char *buffer, size_t buffer_size,
+                                 LogoEditorSave save, void *save_ctx);
+
+        // Select the vi key layer for the next and subsequent edits
+        // (docs/vi-mode-design.md). Optional: NULL on a console whose editor
+        // has no such mode, where `setvimode` is a no-op.
+        void (*set_vi_mode)(bool on);
+
+        // Lend the editor memory for vi's undo journal (docs/vi-mode-design.md
+        // §8), or none (NULL, 0). Which tier a board gets is a run-time
+        // decision the interpreter makes, since it owns the aux/PSRAM region.
+        // Optional: NULL on a console whose editor has no undo, where the
+        // journal simply never exists.
+        void (*set_undo_store)(void *store, size_t size);
     } LogoConsoleEditor;
 
     //

@@ -56,6 +56,10 @@ static LogoIO *shared_io = NULL;
 void primitives_set_io(LogoIO *io)
 {
     shared_io = io;
+
+    // The console arrives after primitives_init has run, so this is the first
+    // moment the editor can be told anything (B34)
+    primitives_editor_console_ready();
 }
 
 LogoIO *primitives_get_io(void)

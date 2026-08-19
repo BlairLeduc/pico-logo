@@ -154,6 +154,14 @@ extern "C"
     void primitives_debug_init(void);
     void primitives_exceptions_init(void);
     void primitives_editor_init(void);
+    // Push the editor settings the console cannot ask for (key layer, undo
+    // journal) once a console is registered — see primitives_set_io.
+    void primitives_editor_console_ready(void);
+
+    // Capacity of the editor buffers, chosen at init: large when they landed in
+    // the aux/PSRAM region, the SRAM fallback size otherwise.
+    size_t primitives_editor_buffer_size(void);
+
     void primitives_files_init(void);
     void primitives_files_directory_init(void);
     void primitives_files_load_save_init(void);

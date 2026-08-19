@@ -549,6 +549,15 @@ extern "C"
     const char *mock_device_get_editor_input(void);
     // Check if the editor was called
     bool mock_device_was_editor_called(void);
+    // Get the buffer size the editor was last called with
+    size_t mock_device_get_editor_buffer_size(void);
+    // Set content the editor writes through its save callback part-way through
+    // the session, the way vi's `:w` does. NULL (the default) writes nothing.
+    void mock_device_set_editor_write(const char *content);
+    // Whether the caller gave the editor a save callback at all
+    bool mock_device_editor_had_save(void);
+    // The size of the undo journal the interpreter lent the editor, 0 for none
+    size_t mock_device_get_editor_undo_size(void);
     // Clear editor state
     void mock_device_clear_editor(void);
 

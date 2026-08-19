@@ -9,6 +9,7 @@
 #include <string.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 // Screen dimensions (matches Pico Logo reference)
 #define SCREEN_WIDTH  320
@@ -29,10 +30,18 @@ static const char *mock_input_buffer = NULL;
 static size_t mock_input_pos = 0;
 
 // Editor state for testing
-static char mock_editor_input[8192];      // Content passed to editor
-static char mock_editor_content[8192];    // Content editor returns
+// Editor content, held on the heap and grown to fit: a board with PSRAM edits
+// buffers far larger than any fixed size worth putting in every test binary.
+static char *mock_editor_input = NULL;    // Content passed to editor
+static size_t mock_editor_input_cap = 0;
+static char *mock_editor_content = NULL;  // Content editor returns
+static size_t mock_editor_content_cap = 0;
 static LogoEditorResult mock_editor_result = LOGO_EDITOR_ACCEPT;
 static bool mock_editor_called = false;
+static size_t mock_editor_buffer_size = 0;   // Capacity the editor was handed
+static char *mock_editor_write = NULL;    // Content written through the save callback
+static size_t mock_editor_write_cap = 0;  // (vi's `:w`), NULL for no such write
+static bool mock_editor_had_save = false; // Whether the caller supplied one
 
 //
 // Forward declarations for console operations
@@ -962,19 +971,48 @@ static const LogoStreamOps mock_output_ops = {
 // Editor operations
 //
 
-static LogoEditorResult mock_editor_edit(char *buffer, size_t buffer_size)
+// Copy src into *dst, growing the allocation to fit
+static void mock_editor_str_set(char **dst, size_t *cap, const char *src)
+{
+    size_t len = src ? strlen(src) : 0;
+    if (len + 1 > *cap)
+    {
+        char *grown = (char *)realloc(*dst, len + 1);
+        if (!grown)
+        {
+            return;
+        }
+        *dst = grown;
+        *cap = len + 1;
+    }
+    memcpy(*dst, src ? src : "", len);
+    (*dst)[len] = '\0';
+}
+
+static LogoEditorResult mock_editor_edit(char *buffer, size_t buffer_size,
+                                         LogoEditorSave save, void *save_ctx)
 {
     mock_editor_called = true;
-    
+    mock_editor_buffer_size = buffer_size;
+    mock_editor_had_save = (save != NULL);
+
     // Save the input content
     if (buffer)
     {
-        strncpy(mock_editor_input, buffer, sizeof(mock_editor_input) - 1);
-        mock_editor_input[sizeof(mock_editor_input) - 1] = '\0';
+        mock_editor_str_set(&mock_editor_input, &mock_editor_input_cap, buffer);
     }
-    
+
+    // A `:w` part-way through the session, before whatever the editor returns
+    if (mock_editor_write != NULL && save != NULL && buffer &&
+        strlen(mock_editor_write) < buffer_size)
+    {
+        strcpy(buffer, mock_editor_write);
+        save(buffer, save_ctx);
+    }
+
     // If accepting, replace buffer with mock content
-    if (mock_editor_result == LOGO_EDITOR_ACCEPT && mock_editor_content[0] != '\0')
+    if (mock_editor_result == LOGO_EDITOR_ACCEPT && mock_editor_content != NULL &&
+        mock_editor_content[0] != '\0')
     {
         size_t len = strlen(mock_editor_content);
         if (len < buffer_size)
@@ -990,9 +1028,25 @@ static LogoEditorResult mock_editor_edit(char *buffer, size_t buffer_size)
     return mock_editor_result;
 }
 
+// What the interpreter lent the editor for vi's undo journal. The console is
+// registered after the primitives are initialised, so "was it handed over at
+// all" is a question worth being able to ask (B34).
+static size_t mock_editor_undo_size = 0;
+
+static void mock_editor_set_undo_store(void *store, size_t size)
+{
+    mock_editor_undo_size = (store != NULL) ? size : 0;
+}
+
+size_t mock_device_get_editor_undo_size(void)
+{
+    return mock_editor_undo_size;
+}
+
 // Editor operations structure
 static const LogoConsoleEditor mock_editor_ops = {
-    .edit = mock_editor_edit
+    .edit = mock_editor_edit,
+    .set_undo_store = mock_editor_set_undo_store
 };
 
 //
@@ -1173,11 +1227,10 @@ void mock_device_reset(void)
     mock_input_buffer = NULL;
     mock_input_pos = 0;
     
-    // Clear editor state
-    mock_editor_input[0] = '\0';
-    mock_editor_content[0] = '\0';
-    mock_editor_result = LOGO_EDITOR_ACCEPT;
-    mock_editor_called = false;
+    // Clear editor state (the input and content allocations are kept and
+    // reused). One call, so a new field cannot be reset in one place and
+    // leak between tests through the other.
+    mock_device_clear_editor();
 
     // Clear WiFi state
     mock_state.wifi.connected = false;
@@ -1633,20 +1686,12 @@ void mock_device_set_editor_result(LogoEditorResult result)
 
 void mock_device_set_editor_content(const char *content)
 {
-    if (content)
-    {
-        strncpy(mock_editor_content, content, sizeof(mock_editor_content) - 1);
-        mock_editor_content[sizeof(mock_editor_content) - 1] = '\0';
-    }
-    else
-    {
-        mock_editor_content[0] = '\0';
-    }
+    mock_editor_str_set(&mock_editor_content, &mock_editor_content_cap, content);
 }
 
 const char *mock_device_get_editor_input(void)
 {
-    return mock_editor_input;
+    return mock_editor_input ? mock_editor_input : "";
 }
 
 bool mock_device_was_editor_called(void)
@@ -1654,12 +1699,33 @@ bool mock_device_was_editor_called(void)
     return mock_editor_called;
 }
 
+size_t mock_device_get_editor_buffer_size(void)
+{
+    return mock_editor_buffer_size;
+}
+
 void mock_device_clear_editor(void)
 {
-    mock_editor_input[0] = '\0';
-    mock_editor_content[0] = '\0';
+    mock_editor_str_set(&mock_editor_input, &mock_editor_input_cap, NULL);
+    mock_editor_str_set(&mock_editor_content, &mock_editor_content_cap, NULL);
+    free(mock_editor_write);
+    mock_editor_write = NULL;
+    mock_editor_write_cap = 0;
+    mock_editor_had_save = false;
     mock_editor_result = LOGO_EDITOR_ACCEPT;
     mock_editor_called = false;
+    mock_editor_buffer_size = 0;
+    mock_editor_undo_size = 0;
+}
+
+void mock_device_set_editor_write(const char *content)
+{
+    mock_editor_str_set(&mock_editor_write, &mock_editor_write_cap, content);
+}
+
+bool mock_device_editor_had_save(void)
+{
+    return mock_editor_had_save;
 }
 
 //

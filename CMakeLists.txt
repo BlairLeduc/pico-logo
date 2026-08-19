@@ -164,6 +164,13 @@ if(DEFINED LOGO_EDITOR_BUFFER_SIZE)
     target_compile_definitions(logo_core PUBLIC LOGO_EDITOR_BUFFER_SIZE=${LOGO_EDITOR_BUFFER_SIZE})
 endif()
 
+# Editor buffer size used when the buffers land in the aux/PSRAM region.
+# Only reached on a board whose PSRAM verifies at boot; the size above is the
+# SRAM fallback every board can meet.
+if(DEFINED LOGO_EDITOR_PSRAM_BUFFER_SIZE)
+    target_compile_definitions(logo_core PUBLIC LOGO_EDITOR_PSRAM_BUFFER_SIZE=${LOGO_EDITOR_PSRAM_BUFFER_SIZE})
+endif()
+
 # Allow LOGO_OP_STACK_DEPTH to be set via CMake cache variable
 # Controls max depth of the evaluator operation stack (default 256)
 if(DEFINED LOGO_OP_STACK_DEPTH)
@@ -196,7 +203,11 @@ add_executable(pico-logo
     devices/picocalc/costumes.c
     devices/picocalc/dirty_tiles.c
     devices/picocalc/editor.c
+    devices/picocalc/editor_lines.c
+    devices/picocalc/editor_pattern.c
     devices/picocalc/editor_search.c
+    devices/picocalc/editor_undo.c
+    devices/picocalc/editor_vi.c
     devices/picocalc/fat32.c
     devices/picocalc/history.c
     devices/picocalc/input.c
