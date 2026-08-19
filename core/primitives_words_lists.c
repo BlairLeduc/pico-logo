@@ -959,6 +959,146 @@ static Result prim_shuffle(Evaluator *eval, int argc, Value *args)
     return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
 }
 
+// sort object
+// Outputs object with its elements (characters for a word) in ascending order.
+// A list's elements must all be words: when they are all numbers the order is
+// numeric, otherwise it is the lexicographic order before? uses.
+typedef struct
+{
+    Node word;
+    float number;     // only read when every element is a number
+    size_t position;  // original position, so equal elements keep their order
+} SortEntry;
+
+// Characters carry no numeric/lexicographic choice: the digits ascend in ASCII
+// order too, so one byte comparison serves both.
+static int sort_compare_char(const void *a, const void *b)
+{
+    return (int)*(const unsigned char *)a - (int)*(const unsigned char *)b;
+}
+
+static int sort_compare_numeric(const void *a, const void *b)
+{
+    const SortEntry *x = (const SortEntry *)a;
+    const SortEntry *y = (const SortEntry *)b;
+    if (x->number < y->number) return -1;
+    if (x->number > y->number) return 1;
+    return (x->position < y->position) ? -1 : 1;
+}
+
+static int sort_compare_alpha(const void *a, const void *b)
+{
+    const SortEntry *x = (const SortEntry *)a;
+    const SortEntry *y = (const SortEntry *)b;
+    // Case-sensitive, so sort and before? agree on the order.
+    int cmp = strcmp(mem_word_ptr(x->word), mem_word_ptr(y->word));
+    if (cmp != 0) return cmp;
+    return (x->position < y->position) ? -1 : 1;
+}
+
+static Result prim_sort(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+
+    Value obj = args[0];
+    if (!normalize_to_word(&obj))
+    {
+        return result_error(ERR_OUT_OF_SPACE);
+    }
+
+    if (value_is_word(obj))
+    {
+        const char *str = mem_word_ptr(obj.as.node);
+        size_t len = mem_word_len(obj.as.node);
+
+        // Blob words (PSRAM-backed) can exceed the 255-byte atom limit, so
+        // fall back to the heap for long inputs and build the result with
+        // mem_word, which blobs long outputs.
+        char stack_buf[256];
+        char *buf = stack_buf;
+        if (len > sizeof(stack_buf))
+        {
+            buf = malloc(len);
+            if (!buf)
+            {
+                return result_error(ERR_OUT_OF_SPACE);
+            }
+        }
+        memcpy(buf, str, len);
+        qsort(buf, len, 1, sort_compare_char);
+        Node sorted = mem_word(buf, len);
+        if (buf != stack_buf)
+        {
+            free(buf);
+        }
+        if (mem_is_nil(sorted))
+        {
+            return result_error(ERR_OUT_OF_SPACE);
+        }
+        return result_ok(value_word(sorted));
+    }
+
+    if (!value_is_list(obj))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
+    }
+
+    size_t count = 0;
+    for (Node n = mem_first_cell(obj.as.node); !mem_is_nil(n); n = mem_next_cell(n))
+    {
+        count++;
+    }
+    if (count == 0)
+    {
+        return result_ok(value_list(NODE_NIL));
+    }
+
+    // Collect elements into a temporary array (the shuffle precedent for
+    // bounded scratch space), sort, rebuild.
+    SortEntry *entries = malloc(count * sizeof(SortEntry));
+    if (!entries)
+    {
+        return result_error(ERR_OUT_OF_SPACE);
+    }
+
+    size_t idx = 0;
+    bool all_numbers = true;
+    for (Node n = mem_first_cell(obj.as.node); !mem_is_nil(n); n = mem_next_cell(n))
+    {
+        Node item = mem_car(n);
+        if (!mem_is_word(item))
+        {
+            // A sublist has no place in either ordering.
+            free(entries);
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(obj));
+        }
+        entries[idx].word = item;
+        entries[idx].position = idx;
+        if (!value_to_number(value_word(item), &entries[idx].number))
+        {
+            entries[idx].number = 0.0f;
+            all_numbers = false;
+        }
+        idx++;
+    }
+
+    qsort(entries, count, sizeof(SortEntry),
+          all_numbers ? sort_compare_numeric : sort_compare_alpha);
+
+    Node result = NODE_NIL;
+    Node tail = NODE_NIL;
+    for (size_t i = 0; i < count; i++)
+    {
+        if (!mem_list_append(&result, &tail, entries[i].word))
+        {
+            free(entries);
+            return result_error(ERR_OUT_OF_SPACE);
+        }
+    }
+    free(entries);
+    return result_ok(value_list(result));
+}
+
 // remove thing object
 // Outputs a copy of object with every member equal to thing removed. A word's
 // members are its characters, so thing only matches when it is that single
@@ -1731,6 +1871,7 @@ void primitives_words_lists_init(void)
     primitive_register("pick", 1, prim_pick);
     primitive_register("reverse", 1, prim_reverse);
     primitive_register("shuffle", 1, prim_shuffle);
+    primitive_register("sort", 1, prim_sort);
     primitive_register("remove", 2, prim_remove);
     primitive_register("remdup", 1, prim_remdup);
     

@@ -2811,6 +2811,26 @@ shuffle _object_
 ```
 
 
+## sort
+
+sort _object_
+
+`operation`
+
+`sort` outputs _object_ with its elements in ascending order: the elements of a list, or the characters of a word. Every element of a list must be a word - an element that is itself a list is an error. When every word is a number the elements are ordered numerically, otherwise they are ordered lexicographically - the order [`before?`](#before-beforep) uses, comparing ASCII values, so uppercase sorts before lowercase. Elements that compare equal keep their original relative order. The characters of a word are always ordered by ASCII value, which for digits is the numeric order anyway.
+
+**Examples**:
+
+```logo
+?show sort [30 4 100 2]
+[2 4 30 100]
+?show sort [pear Apple banana]
+[Apple banana pear]
+?pr sort "stressed
+deerssst
+```
+
+
 ## fput
 
 fput _object_ _list_

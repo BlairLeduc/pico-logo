@@ -733,6 +733,114 @@ void test_shuffle_empty(void)
 }
 
 //==========================================================================
+// sort
+//==========================================================================
+
+void test_sort_numeric(void)
+{
+    reset_output();
+    run_string("show sort [30 4 100 2]");
+    TEST_ASSERT_EQUAL_STRING("[2 4 30 100]\n", output_buffer);
+}
+
+void test_sort_numeric_handles_negatives_and_fractions(void)
+{
+    reset_output();
+    run_string("show sort [1.5 -2 0 -2.5 10]");
+    TEST_ASSERT_EQUAL_STRING("[-2.5 -2 0 1.5 10]\n", output_buffer);
+}
+
+void test_sort_alphabetic_when_any_word_is_not_a_number(void)
+{
+    reset_output();
+    run_string("show sort [pear apple banana]");
+    TEST_ASSERT_EQUAL_STRING("[apple banana pear]\n", output_buffer);
+
+    // One non-numeric word is enough to switch the whole list to the
+    // lexicographic ordering: "10" then sorts before "9".
+    reset_output();
+    run_string("show sort [9 10 a]");
+    TEST_ASSERT_EQUAL_STRING("[10 9 a]\n", output_buffer);
+}
+
+void test_sort_alphabetic_is_case_sensitive_like_beforep(void)
+{
+    // before? compares ASCII values, so uppercase sorts before lowercase.
+    reset_output();
+    run_string("show sort [pear Apple banana]");
+    TEST_ASSERT_EQUAL_STRING("[Apple banana pear]\n", output_buffer);
+}
+
+void test_sort_keeps_equal_elements_in_order(void)
+{
+    // 1 and 1.0 compare equal numerically; the input order decides.
+    reset_output();
+    run_string("show sort [2 1.0 1 0]");
+    TEST_ASSERT_EQUAL_STRING("[0 1.0 1 2]\n", output_buffer);
+}
+
+void test_sort_does_not_modify_its_input(void)
+{
+    reset_output();
+    run_string("make \"l [c a b]");
+    run_string("show sort :l");
+    run_string("show :l");
+    TEST_ASSERT_EQUAL_STRING("[a b c]\n[c a b]\n", output_buffer);
+}
+
+void test_sort_empty(void)
+{
+    Result r = eval_string("sort []");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
+    TEST_ASSERT_TRUE(mem_is_nil(r.value.as.node));
+}
+
+void test_sort_single_element(void)
+{
+    reset_output();
+    run_string("show sort [a]");
+    TEST_ASSERT_EQUAL_STRING("[a]\n", output_buffer);
+}
+
+void test_sort_rejects_sublist(void)
+{
+    Result r = eval_string("sort [a [b c] d]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
+}
+
+void test_sort_word(void)
+{
+    Result r = eval_string("sort \"stressed");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("deerssst", mem_word_ptr(r.value.as.node));
+}
+
+void test_sort_word_is_case_sensitive(void)
+{
+    // Byte order, like the list case: uppercase before lowercase.
+    Result r = eval_string("sort \"bAcB");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("ABbc", mem_word_ptr(r.value.as.node));
+}
+
+void test_sort_number(void)
+{
+    // Numbers are words: the digits sort as characters.
+    Result r = eval_string("sort 3142");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("1234", mem_word_ptr(r.value.as.node));
+}
+
+void test_sort_empty_word(void)
+{
+    Result r = eval_string("sort \"");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(0, mem_word_len(r.value.as.node));
+}
+
+//==========================================================================
 // remove / remdup
 //==========================================================================
 
@@ -858,6 +966,21 @@ void test_reverse_long_blob_word(void)
     for (size_t i = 0; i < sizeof(content); i++)
     {
         TEST_ASSERT_EQUAL(content[sizeof(content) - 1 - i], rev[i]);
+    }
+}
+
+void test_sort_long_blob_word(void)
+{
+    char content[300];
+    bind_long_blob_word("b", content, sizeof(content));
+
+    Result r = eval_string("sort :b");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(sizeof(content), mem_word_len(r.value.as.node));
+    const char *sorted = mem_word_ptr(r.value.as.node);
+    for (size_t i = 1; i < sizeof(content); i++)
+    {
+        TEST_ASSERT_TRUE(sorted[i - 1] <= sorted[i]);
     }
 }
 
@@ -1567,8 +1690,22 @@ int main(void)
     RUN_TEST(test_shuffle_list_is_permutation);
     RUN_TEST(test_shuffle_word_is_permutation);
     RUN_TEST(test_shuffle_empty);
+    RUN_TEST(test_sort_numeric);
+    RUN_TEST(test_sort_numeric_handles_negatives_and_fractions);
+    RUN_TEST(test_sort_alphabetic_when_any_word_is_not_a_number);
+    RUN_TEST(test_sort_alphabetic_is_case_sensitive_like_beforep);
+    RUN_TEST(test_sort_keeps_equal_elements_in_order);
+    RUN_TEST(test_sort_does_not_modify_its_input);
+    RUN_TEST(test_sort_empty);
+    RUN_TEST(test_sort_single_element);
+    RUN_TEST(test_sort_rejects_sublist);
+    RUN_TEST(test_sort_word);
+    RUN_TEST(test_sort_word_is_case_sensitive);
+    RUN_TEST(test_sort_number);
+    RUN_TEST(test_sort_empty_word);
     RUN_TEST(test_reverse_long_blob_word);
     RUN_TEST(test_shuffle_long_blob_word);
+    RUN_TEST(test_sort_long_blob_word);
     RUN_TEST(test_word_long_blob_on_psram);
     RUN_TEST(test_remove_list);
     RUN_TEST(test_remove_list_no_match_copies);
