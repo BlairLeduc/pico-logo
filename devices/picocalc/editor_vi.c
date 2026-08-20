@@ -1519,9 +1519,15 @@ static bool run_ex(ViState *st, const char *buf, size_t len, size_t cursor, ViAc
         out->kind = VI_ACT_CANCEL;
         return true;
     }
+    // `:q` never writes: it throws the buffer away, and so refuses while there
+    // is anything to throw away
     if (cmd_len == 1 && cmd[0] == 'q')
     {
-        out->kind = VI_ACT_QUIT;
+        if (st->modified)
+        {
+            return beep(st, out, "E37: no write since last change");
+        }
+        out->kind = VI_ACT_CANCEL;
         return true;
     }
 

@@ -11,7 +11,7 @@ Three scoping decisions were taken with the user on 2026-08-17:
 
 - **`Esc` belongs to vi.** In vi mode it returns to normal mode; it no longer
   accepts the buffer. Leaving the editor becomes `:wq`, `:x`, `ZZ`
-  (accept) and `:q!`, `ZQ` (cancel); `:w` accepts too, except under `editfile`,
+  (accept) and `:q!`, `ZQ`, `:q` (cancel); `:w` accepts too, except under `editfile`,
   where it writes the file and stays (§14). `Brk` — which is Shift + `Esc` — keeps
   its unconditional cancel, in both modes, as the way out that never depends
   on which mode you are in.
@@ -84,8 +84,9 @@ Resolved per the decision above: in vi mode `Esc` is vi's. Insert and visual
 modes return to normal on `Esc`; in normal mode with a pending count or
 operator it clears the pending state; in normal mode with nothing pending it
 does nothing. Exiting is explicit — `:wq`, `:x`, `ZZ` accept;
-`:q!`, `ZQ` cancel; `:q` accepts only when the buffer is unmodified and
-otherwise reports `E37: no write since last change` on the footer. `:w` accepts
+`:q!`, `ZQ` cancel; `:q` cancels too, but only when the buffer is unmodified,
+and otherwise reports `E37: no write since last change` on the footer (§21).
+`:w` accepts
 as well, except under `editfile`, where there is a file to write and it writes
 it without leaving (§14).
 
@@ -519,7 +520,10 @@ as designed.
   a delete and a paste that must not overwrite the copy buffer in between, and
   `VI_ACT_QUIT` for `:q`, so that the "have you changed anything" question is
   answered in `editor.c`, which knows, rather than in the state machine, which
-  does not.
+  does not. (`VI_ACT_QUIT` was removed in §21: the state machine does know —
+  `st->modified` is the flag the `Ctrl` `G` ruler already reads — and `:q`
+  cancels rather than accepting, so there was nothing left for `editor.c` to
+  decide.)
 - **`:w` writes where there is something to write to** (2026-08-18, a third
   action kind, `VI_ACT_WRITE`). **Found on a board**, editing a file: the design
   above made `:w` a synonym for `:wq`,
@@ -1672,3 +1676,32 @@ plus two `size_t`, two `int` and three `bool` -- **104 bytes of SRAM, measured
 `data+bss` before and after, the same on `pico+2w` and `pico2`**. 11 new tests;
 9 of them fail with the code they cover stubbed out, which is the check that
 they test the feature and not the harness.
+
+## 21. `:q` does not accept the buffer (B46)
+
+**Reported from a board**: `edall`, then `:q`, and the workspace was read back
+line by line — every procedure redefined, every `make` re-run — from a buffer
+the user had asked to leave without saving. §3 wrote `:q` as "accept, but only
+when the buffer is unmodified", reasoning that accepting a buffer nobody had
+changed puts the workspace back exactly as it was, so the difference did not
+matter. **It does matter.** Accepting is not a no-op even when the text is
+identical: the REPL executes what it reads, so it re-runs every `make` and
+`pprop` line in the buffer, and — the point of the report — `:q` is the key a
+vi user presses precisely *because* they want nothing to happen. The reference
+already said what the primitives do on accept; nothing said `:q` was exempt,
+and it wasn't.
+
+`:q` now cancels. Modified, it still refuses with
+`E37: no write since last change` — the change is which way an unmodified
+buffer leaves, not whether a modified one may.
+
+**`VI_ACT_QUIT` went with it.** §14's note gave the action kind a reason: the
+state machine could not answer "have you changed anything", so it asked
+`editor.c`. That was never true — `modified` lives in `ViState`, set by
+`editor.c` as the buffer changes and read by `editor_vi.c` for the
+`[Modified]` in the `Ctrl` `G` ruler — so `:q` is decided where it is parsed,
+in `ex_command`, as a `VI_ACT_CANCEL` or the same beep every other refusal
+uses. One action kind and one `editor.c` branch removed, and, because
+`editor.c` has no host build and `editor_vi.c` does, the behaviour became
+testable: `test_write_and_quit_commands` now pins both halves, and fails on the
+old code.

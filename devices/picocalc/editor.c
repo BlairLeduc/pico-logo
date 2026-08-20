@@ -2154,14 +2154,6 @@ static int editor_vi_apply(const ViAction *act, int cursor_line_before)
         case VI_ACT_ACCEPT:
             return EDITOR_VI_ACCEPT;
 
-        case VI_ACT_QUIT:
-            if (editor.vi.modified) {
-                editor.vi_msg = "E37: no write since last change";
-                editor.dirty_flags = DIRTY_CURSOR;
-                break;
-            }
-            return EDITOR_VI_ACCEPT;
-
         case VI_ACT_CANCEL:
             return EDITOR_VI_CANCEL;
     }

@@ -621,7 +621,7 @@ In normal mode the bottom line also carries a ruler: the line the cursor is on, 
 
 - `:wq`, `:x`, `ZZ` — accept, exactly as `Esc` does outside vi mode, so Logo reads each line of the buffer as if you had typed it
 - `:q!`, `ZQ` — cancel, leaving your procedures as they were
-- `:q` — accept, but only when you have changed nothing; otherwise the bottom line says `E37: no write since last change`
+- `:q` — cancel, but only when you have changed nothing; otherwise the bottom line says `E37: no write since last change`. `:q` never writes: nothing in the buffer is read back
 - `Brk` — cancel, from any mode. It is the one key whose meaning does not depend on which mode you are in, which is what makes the mode safe to be wrong about
 
 Under [`editfile`](#editfile) it writes the file and leaves you in the Editor, so you can save as you go, and the bottom line says `written`; a `Brk` after it cancels only what you have typed since. Everywhere else — [`edit`](#edit-ed), [`edall`](#edall), [`edn`](#edn), [`edns`](#edns) — the buffer has no file to be written to, so `:w` accepts it and leaves, as `:wq` does.
@@ -738,7 +738,7 @@ While you are inserting, the Editor behaves exactly as it does outside vi mode: 
 | `:=` | print the number of the last line |
 | `:w` | write the file and stay, under `editfile`; accept and leave, everywhere else |
 | `:wq` `:x` | accept the buffer and leave the Editor |
-| `:q` | leave, if nothing has changed |
+| `:q` | leave without accepting the buffer, if nothing has changed |
 | `:q!` | cancel and leave the Editor |
 | `:s/`_pat_`/`_new_`/` | replace the first _pat_ on this line |
 | `:s/`_pat_`/`_new_`/g` | replace every _pat_ on this line |
@@ -822,7 +822,7 @@ time as long as each procedure is terminated by `end`.
 
 Exiting the editor using `Brk`, Logo does not read any lines in the edit buffer. If you were defining a procedure, the definition will be the same before you started editing.
 
-In [Vi Mode](#vi-mode) `Esc` belongs to vi, and the buffer is accepted with `:w`, `:wq`, `:x` or `ZZ` and cancelled with `:q!` or `ZQ`. `Brk` still cancels, from any mode.
+In [Vi Mode](#vi-mode) `Esc` belongs to vi, and the buffer is accepted with `:w`, `:wq`, `:x` or `ZZ` and cancelled with `:q!` or `ZQ` — or with `:q`, when you have changed nothing. `Brk` still cancels, from any mode.
 
 
 ## edit (ed)
