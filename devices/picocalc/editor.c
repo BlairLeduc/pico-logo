@@ -2044,6 +2044,24 @@ static int editor_vi_apply(const ViAction *act, int cursor_line_before)
             editor_mark_from_line_dirty(editor_get_line_at_pos(act->start));
             break;
 
+        case VI_ACT_INCREMENT: {
+            size_t landed = editor.cursor_pos;
+            ViIncrement done = editor_vi_increment(editor.buffer, &editor.content_length,
+                                                   editor.buffer_size, act->start,
+                                                   act->count, &editor.undo, &landed);
+            if (done != VI_INC_OK) {
+                editor.vi_msg = (done == VI_INC_NO_ROOM) ? "Not enough room"
+                                                         : "No number under the cursor";
+                editor.dirty_flags = DIRTY_CURSOR;
+                break;
+            }
+            editor_lines_reset(&editor.lines);
+            editor.cursor_pos = landed;
+            editor.vi.modified = true;
+            editor_mark_from_line_dirty(cursor_line_before);
+            break;
+        }
+
         case VI_ACT_SEARCH:
             editor_vi_search(act->ch, act->start);
             break;
@@ -2095,6 +2113,58 @@ static int editor_vi_apply(const ViAction *act, int cursor_line_before)
                 editor.vi.modified = true;
                 editor_mark_all_dirty();
             }
+            break;
+        }
+
+        case VI_ACT_MOVE_LINES: {
+            size_t landed = editor.cursor_pos;
+            if (!editor_vi_move_lines(editor.buffer, &editor.content_length,
+                                      editor.buffer_size, act->start, act->end,
+                                      act->dest, act->ch == 't', &editor.undo,
+                                      &landed)) {
+                editor.vi_msg = "Not enough room";
+                editor.dirty_flags = DIRTY_CURSOR;
+                break;
+            }
+            editor_lines_reset(&editor.lines);
+            editor.cursor_pos = landed;
+            editor.vi.modified = true;
+            editor_mark_all_dirty();
+            break;
+        }
+
+        case VI_ACT_GLOBAL: {
+            size_t landed = editor.cursor_pos;
+            size_t count = editor_vi_global(editor.buffer, &editor.content_length,
+                                            editor.buffer_size, act->start, act->end,
+                                            editor.vi.pattern, editor.vi.pattern_len,
+                                            act->invert, act->ch,
+                                            act->sub_pattern, act->sub_pattern_len,
+                                            editor.vi.replacement,
+                                            editor.vi.replacement_len,
+                                            editor.vi.sub_global, &editor.undo, &landed);
+            if (count == SIZE_MAX) {
+                editor.vi_msg = "E486: pattern too complex";
+                editor.dirty_flags = DIRTY_CURSOR;
+                break;
+            }
+            if (count == 0) {
+                editor.vi_msg = "No lines matched";
+                editor.dirty_flags = DIRTY_CURSOR;
+                break;
+            }
+            // One line of typing can take hundreds of lines away, and on a
+            // board with no PSRAM a pass that large is more than the undo
+            // journal holds -- so it says what it did rather than returning
+            // silently (vi-mode-design.md §23.4)
+            snprintf(editor.vi.msg, sizeof(editor.vi.msg),
+                     act->ch == 'd' ? "%u fewer lines" : "%u lines changed",
+                     (unsigned)count);
+            editor.vi_msg = editor.vi.msg;
+            editor_lines_reset(&editor.lines);
+            editor.cursor_pos = landed;
+            editor.vi.modified = true;
+            editor_mark_all_dirty();
             break;
         }
 

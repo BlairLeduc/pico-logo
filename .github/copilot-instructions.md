@@ -67,6 +67,14 @@ many speculative ones. Never ask the author to run or add tests first.
   `token_source.c`'s node iterator above all — therefore only ever sees interned atoms,
   whose length is capped at 255 by the 1-byte prefix. Don't flag blob-length overflow
   on those paths.
+- `%u` with an explicit `(unsigned)` cast is the project's convention for printing a
+  `size_t` in device code, not a truncation bug. `devices/` builds only for the RP2350,
+  where `size_t` is 32-bit, and the Pico SDK's printf does not guarantee `%z`. Don't
+  suggest `%zu` under `devices/`. In particular `devices/picocalc/editor.c` has **no
+  host build** at all, so "on host builds size_t is 64-bit" never applies to it.
+- `editor_vi_increment` caps a digit run at 18 characters before parsing it, so the
+  parsed value is under 1e18 and adding an `int` delta cannot overflow the `long long`
+  (LLONG_MAX is ~9.2e18). The `snprintf` return is checked besides. Not signed overflow.
 - Pure style or formatting that already matches the surrounding code.
 - Pre-existing issues outside the diff.
 - The wide pen stamps a disc centred on an integer pixel, so drawn diameter is always

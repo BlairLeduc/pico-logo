@@ -636,6 +636,7 @@ Every motion takes a count typed before it, so `5w` moves five words.
 - `0` `^` `$` — the start of the line, its first non-blank character, its end
 - `gg` `G` — the first line, the last line; `10G` goes to line 10
 - `{` `}` — to the previous or next blank line, which in Logo is the gap between two procedures
+- `]]` `[[` — to the next or previous procedure definition: the next `to` line down, or the `to` line of the procedure you are in. Unlike `{` and `}` these do not need blank lines between the definitions, which is what an [`edall`](#edall) buffer looks like. `]]` past the last definition goes to the end of the buffer and `[[` before the first to the start, so `d]]` in the last procedure deletes the rest of the file
 - `f`_c_ `F`_c_ — forward or back to the next _c_ on this line; `t`_c_ and `T`_c_ stop just short of it; `;` and `,` repeat the last one forwards and backwards
 - `%` — from a bracket to its match: the first `(` `)` `[` `]` `{` `}` at or after the cursor on this line, forwards from an opening one and backwards from a closing one, counting nesting of that kind only
 - `Ctrl` `F` `Ctrl` `B` — a page forward or back; `Ctrl` `D` and `Ctrl` `U` half a page
@@ -644,7 +645,7 @@ Every motion takes a count typed before it, so `5w` moves five words.
 - `` ` `` `'` — back to where the last jump started. `` ` `` returns to the exact character and `'` to the first non-blank of that line. Jumping to the mark is itself a jump, so pressing `` ` `` again returns to where you came from and the two keys toggle between two places
 - `gd` — go to the definition of the procedure the cursor is on: the `to` line that names it, wherever it is in the buffer. With [`edall`](#edall) the whole workspace is one buffer, so this reaches every procedure you have
 
-A *jump* is `G`, `gg`, `{`, `}`, `%`, `/`, `?`, `n`, `N`, `*`, `#`, `gd` and `:`_n_ — the movements that can leave the view of the buffer you were looking at. Each of them sets the mark, so `` ` `` always comes back to the previous spot. Ordinary movement (`h` `j` `k` `l`, the words, the pages) does not. The mark is a place in the text, not a line number, and the Editor does not move it when you change the text in front of it, so after an edit `` ` `` may return somewhere near where you were rather than exactly.
+A *jump* is `G`, `gg`, `{`, `}`, `]]`, `[[`, `%`, `/`, `?`, `n`, `N`, `*`, `#`, `gd` and `:`_n_ — the movements that can leave the view of the buffer you were looking at. Each of them sets the mark, so `` ` `` always comes back to the previous spot. Ordinary movement (`h` `j` `k` `l`, the words, the pages) does not. The mark is a place in the text, not a line number, and the Editor does not move it when you change the text in front of it, so after an edit `` ` `` may return somewhere near where you were rather than exactly.
 
 
 `Ctrl` `G` says where the cursor is: `line 12 of 40 --30%--`, the number of the line the cursor is on, how many lines the buffer holds, and how far through it you are. `[Modified]` in front of it means you have changed the buffer since the Editor opened, so it is also how you check whether `:q` will let you leave. There is no file name in the report — which procedures or which file the Editor is over was fixed by the command that opened it. `:.=` and `:=` print the same two numbers on their own: the line the cursor is on, and the number of the last line.
@@ -665,6 +666,7 @@ An operator takes a motion, and the two together take a count, so `d2w` and `2dw
 - `r`_c_ — replace the character under the cursor with _c_. A count replaces that many, and `r` `Enter` puts a line break where they were, splitting the line
 - `~` — swap the case of the character under the cursor and move on
 - `J` — join the next line onto this one, with a single space where the break was
+- `Ctrl` `A` `Ctrl` `X` — add one to the number the cursor is on, or take one away. If the cursor is not on a number, the first one to its right on the same line is used, and if there is none the Editor says `No number under the cursor`. A count is how much, so `10` `Ctrl` `X` on `fd 100` leaves `fd 90`, and `.` repeats it on the next number you move to. A `-` written against the digits is part of the number, so `fd -100` counts down to `fd -101`; a `.` is not, so `10.5` is two numbers and which one changes depends on which side of the point the cursor is
 - `p` `P` — put the copy buffer after or before the cursor. Text taken a line at a time goes back a line at a time, below or above the current line
 - `.` — repeat the last change. What it replays is the keys you typed, not the text they touched, so the motion or [text object](#text-objects) is worked out again from where the cursor now is: after `dw`, `.` deletes whichever word you have since moved to, and after `di[` it empties whichever group you are now inside. A count typed before `.` is used in place of the one the change was made with, so `3.` after `dw` deletes three words
 
@@ -685,10 +687,13 @@ An operator can take a *text object* instead of a motion: not "from here to ther
 | `i[` `a[` | the text inside the `[ ]` the cursor is in — `i[` between the brackets, `a[` including them. `]` means the same thing |
 | `i(` `a(` | the same for `( )`, and `)` means the same as `(` |
 | `i{` `a{` | the same for `{ }`, and `}` means the same as `{` |
+| `ip` `ap` | the procedure the cursor is in — `ip` its body, `ap` the whole definition with its `to` and `end` lines. Both work a line at a time |
 
 `di[` is the command `%` cannot express: with the cursor anywhere inside `repeat 4 [fd 10 rt 90]` — on either bracket, or on any character between them — it deletes `fd 10 rt 90` and leaves `repeat 4 []`. `ci[` empties the group and starts inserting, `yi[` copies it, and `>i[` indents every line it covers. The group may run over several lines, as a `repeat` body often does.
 
 A count goes out a level of nesting at a time, so in `if [a [b c] d] e` with the cursor on the `b`, `di[` takes `b c` and `d2i[` takes `a [b c] d`. On words a count takes that many, so `d3aw` deletes three. A group with nothing in it is not an error: `ci[` on `[]` simply puts you between the brackets.
+
+`dap` deletes a whole procedure, `yap` copies one, `cip` empties its body and leaves you a clean line to type the new one into, and `vap` selects it. A procedure runs from a `to` line to the `end` line that closes it; a count means nothing to it, since procedures do not nest. When the cursor is not inside one — between two definitions, or in a definition still being typed that has no `end` yet, or one with a second `to` before its `end` — the Editor says `Not inside a procedure` and changes nothing.
 
 `i` and `a` mean this only when an operator is waiting for something to work on, or in visual mode, where `vi[` selects the group and `vaw` a word. Everywhere else they start inserting, as before.
 
@@ -723,7 +728,7 @@ While you are inserting, the Editor behaves exactly as it does outside vi mode: 
 - `p` — replace it with the copy buffer
 - `J` — join the lines it covers
 - `o` — swap which end of it the cursor is on
-- `i` or `a` followed by an object — select a [text object](#text-objects), so `vi[` selects the group the cursor is in
+- `i` or `a` followed by an object — select a [text object](#text-objects), so `vi[` selects the group the cursor is in and `vap` the whole procedure, a line at a time
 
 `Esc` cancels the selection.
 
@@ -740,14 +745,19 @@ While you are inserting, the Editor behaves exactly as it does outside vi mode: 
 | `:wq` `:x` | accept the buffer and leave the Editor |
 | `:q` | leave without accepting the buffer, if nothing has changed |
 | `:q!` | cancel and leave the Editor |
+| `:m`_addr_ | move the lines to after line _addr_ |
+| `:t`_addr_, `:co`_addr_ | copy them there |
 | `:s/`_pat_`/`_new_`/` | replace the first _pat_ on this line |
 | `:s/`_pat_`/`_new_`/g` | replace every _pat_ on this line |
 | `:%s/`_pat_`/`_new_`/` | replace the first _pat_ on every line |
 | `:%s/`_pat_`/`_new_`/g` | replace every _pat_ in the buffer |
+| `:g/`_pat_`/d` | delete every line that matches _pat_ |
+| `:v/`_pat_`/d`, `:g!/`_pat_`/d` | delete every line that does not |
+| `:g/`_pat_`/s/`_pat_`/`_new_`/` | substitute on the lines that match |
 
 #### Ranges
 
-A `:s` or a `:=` can be given the lines to work on, written in front of it. A range is one line, or two separated by a comma, and each of them is written as:
+A `:s`, a `:=`, a `:m`, a `:t` or a `:g` can be given the lines to work on, written in front of it. A range is one line, or two separated by a comma, and each of them is written as:
 
 | Address | Means |
 |---|---|
@@ -758,6 +768,14 @@ A `:s` or a `:=` can be given the lines to work on, written in front of it. A ra
 | `+`_n_ `-`_n_ | _n_ lines after or before — on its own, counted from the cursor's line, or written after any of the above |
 
 `%` is `1,$`, the whole buffer, which is what `:%s` has always been. A `+` or `-` with no number means one line. A line before the first or after the last is pulled back to the buffer, so `:1,999s/`_pat_`/`_new_`/` covers everything and `:-9` from line 3 goes to line 1.
+
+#### Moving and copying lines
+
+`:m` moves the lines of its range to after a line you name, and `:t` (or `:co`) copies them there — which is how a procedure is moved to the top of an `edall` buffer, or duplicated to be edited into a variant, without carrying it through the copy buffer. Written on their own they work on the line the cursor is on, so `:m0` takes this line to the top.
+
+The destination is a single address, written the same way as the addresses above, with one addition: `0` means "above the first line", and `$` the end of the buffer. So with a procedure selected in [visual mode](#selecting), `:` and then `'<,'>m0` puts it at the top of the buffer and `'<,'>m$` at the bottom. The cursor ends on the last line moved, which after a `:t` is the copy.
+
+Neither is limited by the size of the copy buffer, and neither disturbs what is in it, so a `p` after a move still pastes what you last copied. A `:m` that would put the lines inside — or immediately either side of — the range they came from changes nothing, and says `E134: cannot move into itself` rather than doing nothing quietly. A `:t` into its own range is allowed, and is how a block is doubled.
 
 | | |
 |---|---|
@@ -777,6 +795,26 @@ A range on `:w`, `:q` or any other command is refused with `E481: no range allow
 _pat_ is a [pattern](#patterns), matched ignoring the difference between upper and lower case. In _new_, `&` stands for the whole of what matched and `\1`..`\9` for what the pattern's groups matched; every other character is used exactly as typed. Each of _pat_ and _new_ may be up to 32 characters. Nothing is replaced when there is no match, or when the result would not fit in the edit buffer, and the bottom line says `No substitution made`. A _pat_ left empty reuses the pattern of the last `:s`, `/` or `?`, so `/`\<`n`\>`` and then `:%s//count/g` renames what the search just walked.
 
 Anything else on the command line is refused with `E492: not an editor command`, and a malformed substitute — a missing delimiter, or a bad pattern — with `E486: bad substitute`.
+
+#### The global commands
+
+`:g` runs a command on every line that matches a pattern and `:v` on every line that does not, which is the job a substitute structurally cannot do: `:s` conditions on the text it is replacing and never on the line that text is on. `:g!` is another way of writing `:v`.
+
+| | |
+|---|---|
+| `:g/^;/d` | throw away every comment line |
+| `:g/^ *$/d` | and every blank one |
+| `:v/^to /d` | keep only the title lines — an index of what is in the buffer |
+| `:g/^fd/s/10/20/` | change one thing on the lines that say another |
+| `:g/x/s//y/g` | ... where what found the lines is also what is replaced |
+
+The command after the pattern is `d`, which deletes the line, or `s`, which is the substitute written exactly as it is written on its own — including a _pat_ left empty, which here means the pattern that found the line, so `:g/x/s//y/g` says the common case without typing the pattern twice. Nothing else is accepted, and anything else is refused with `E492: not an editor command`: `d` and `s` are the two commands whose result does not depend on which end of the buffer the work starts from.
+
+Unlike every other command on the command line, a `:g` with no range in front of it works on the whole buffer rather than on the line the cursor is on — a `:g` over a single line would be a `:s` with extra steps. A range still bounds it, so `:1,20g/^;/d` and `:'<,'>g/^;/d` cover only those lines. The cursor is left on the topmost line the pass changed.
+
+However many lines it touches, the whole pass is one change and one `u` puts all of it back, so the bottom line says what happened — `12 fewer lines`, or `9 lines changed` — rather than leaving you to count. It may also be a change larger than the whole undo journal, which is 1 KB on a board without PSRAM (see [Supported Pico Boards](#supported-pico-boards)), and a single change larger than the journal clears it: on those boards a large `:g/^;/d` can be an edit that cannot be undone, and that leaves nothing done before it undoable either. Write the buffer out first if it matters.
+
+What a `:g` deletes does not go through the copy buffer and does not disturb what is in it, so a `p` afterwards still pastes what you last copied. A `:g` that picks out no lines says `No lines matched` and changes nothing. Its pattern is the search's, and so are its complaints: `E486: bad pattern` for a malformed one, `E35: no previous search` for an empty one with nothing to reuse, and `E486: pattern too complex` for one too dear to run.
 
 #### Patterns
 

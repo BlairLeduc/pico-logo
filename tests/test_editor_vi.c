@@ -49,6 +49,8 @@ typedef struct
     size_t len_at_key;  // The length the last key saw, for range assertions
     int exits;          // VI_ACT_ACCEPT / _CANCEL seen
     int writes;         // VI_ACT_WRITE seen (`:w`, which does not exit)
+    size_t globals;     // What the last VI_ACT_GLOBAL reported
+    ViIncrement increment;  // ... and the last VI_ACT_INCREMENT
     ViActionKind exit_kind;
 } Ed;
 
@@ -324,6 +326,17 @@ static void ed_apply(Ed *e, const ViAction *act)
             e->cursor = act->end < e->len ? act->end : act->start;
             break;
 
+        case VI_ACT_INCREMENT: {
+            size_t landed = e->cursor;
+            e->increment = editor_vi_increment(e->buf, &e->len, ED_CAP, act->start,
+                                               act->count, &e->undo, &landed);
+            if (e->increment == VI_INC_OK) {
+                editor_lines_reset(&e->ix);
+                e->cursor = landed;
+            }
+            break;
+        }
+
         case VI_ACT_SEARCH: {
             // Run it the way editor.c does. The state machine's part is
             // choosing the pattern, the direction and where to start from --
@@ -355,6 +368,32 @@ static void ed_apply(Ed *e, const ViAction *act)
                 editor_lines_reset(&e->ix);
                 e->cursor = landed;
             }
+            break;
+        }
+
+        case VI_ACT_MOVE_LINES: {
+            size_t landed = e->cursor;
+            if (editor_vi_move_lines(e->buf, &e->len, ED_CAP, act->start, act->end,
+                                     act->dest, act->ch == 't', &e->undo, &landed)) {
+                editor_lines_reset(&e->ix);
+                e->cursor = landed;
+            }
+            break;
+        }
+
+        case VI_ACT_GLOBAL: {
+            size_t landed = e->cursor;
+            size_t n = editor_vi_global(e->buf, &e->len, ED_CAP, act->start, act->end,
+                                        e->vi.pattern, e->vi.pattern_len,
+                                        act->invert, act->ch,
+                                        act->sub_pattern, act->sub_pattern_len,
+                                        e->vi.replacement, e->vi.replacement_len,
+                                        e->vi.sub_global, &e->undo, &landed);
+            if (n > 0 && n != SIZE_MAX) {
+                editor_lines_reset(&e->ix);
+                e->cursor = landed;
+            }
+            e->globals = n;
             break;
         }
 
@@ -1933,6 +1972,406 @@ static void test_the_selection_range_without_a_selection_complains(void)
 }
 
 //
+//  Moving and copying lines (§22)
+//
+
+static void test_move_puts_a_line_above_the_first(void)
+{
+    ed_set("one\ntwo\nthree\n");
+    feed(":2m0"); feed_key(KEY_RETURN);
+    assert_text("two\none\nthree\n");
+    TEST_ASSERT_EQUAL_UINT(0, ed.cursor);
+}
+
+static void test_move_puts_a_range_at_the_end(void)
+{
+    ed_set("one\ntwo\nthree\n");
+    feed(":1,2m$"); feed_key(KEY_RETURN);
+    assert_text("three\none\ntwo\n");
+    TEST_ASSERT_EQUAL_UINT(10, ed.cursor);   // The last line moved, not the first
+}
+
+static void test_move_without_a_range_takes_the_cursors_line(void)
+{
+    ed_set("one\ntwo\nthree\n");
+    feed("3G");
+    feed(":m0"); feed_key(KEY_RETURN);
+    assert_text("three\none\ntwo\n");
+}
+
+static void test_a_move_destination_may_be_relative(void)
+{
+    ed_set("a\nb\nc\nd\n");
+    feed(":m+2"); feed_key(KEY_RETURN);
+    assert_text("b\nc\na\nd\n");
+    TEST_ASSERT_EQUAL_UINT(4, ed.cursor);
+}
+
+static void test_a_visual_selection_moves_as_a_block(void)
+{
+    ed_set("one\ntwo\nthree\n");
+    feed("jVj:");
+    TEST_ASSERT_EQUAL_STRING(":'<,'>", ed.vi.cmdline);
+    feed("m0"); feed_key(KEY_RETURN);
+    assert_text("two\nthree\none\n");
+}
+
+static void test_a_move_into_its_own_range_complains(void)
+{
+    ed_set("one\ntwo\nthree\nfour\n");
+    feed(":1,3m2"); feed_key(KEY_RETURN);
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    TEST_ASSERT_EQUAL_STRING("E134: cannot move into itself", ed.last.msg);
+    assert_text("one\ntwo\nthree\nfour\n");
+}
+
+static void test_a_move_that_would_change_nothing_complains(void)
+{
+    ed_set("one\ntwo\nthree\n");
+    feed(":2m1"); feed_key(KEY_RETURN);
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    TEST_ASSERT_EQUAL_STRING("E134: cannot move into itself", ed.last.msg);
+    assert_text("one\ntwo\nthree\n");
+}
+
+static void test_a_move_without_a_destination_complains(void)
+{
+    ed_set("one\ntwo\n");
+    feed(":2m"); feed_key(KEY_RETURN);
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    TEST_ASSERT_EQUAL_STRING("E14: invalid address", ed.last.msg);
+    assert_text("one\ntwo\n");
+
+    feed(":2m0x"); feed_key(KEY_RETURN);   // ... and so does one with a tail
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    TEST_ASSERT_EQUAL_STRING("E14: invalid address", ed.last.msg);
+    assert_text("one\ntwo\n");
+}
+
+static void test_a_move_of_the_empty_last_line_complains(void)
+{
+    ed_set("one\ntwo\n");
+    feed("G");                             // The empty line past the last newline
+    feed(":m0"); feed_key(KEY_RETURN);
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    TEST_ASSERT_EQUAL_STRING("E16: invalid range", ed.last.msg);
+    assert_text("one\ntwo\n");
+}
+
+static void test_copy_leaves_the_original_where_it_was(void)
+{
+    ed_set("one\ntwo\n");
+    feed(":1t$"); feed_key(KEY_RETURN);
+    assert_text("one\ntwo\none\n");
+    TEST_ASSERT_EQUAL_UINT(8, ed.cursor);   // The copy, which is what gets edited
+}
+
+static void test_co_is_a_synonym_for_t(void)
+{
+    ed_set("one\ntwo\n");
+    feed(":1co$"); feed_key(KEY_RETURN);
+    assert_text("one\ntwo\none\n");
+}
+
+static void test_a_copy_may_land_inside_its_own_range(void)
+{
+    ed_set("one\ntwo\n");
+    feed(":1,2t1"); feed_key(KEY_RETURN);
+    assert_text("one\none\ntwo\ntwo\n");
+}
+
+static void test_the_last_line_moves_without_a_trailing_newline(void)
+{
+    ed_set("one\ntwo\nthree");
+    feed(":3m0"); feed_key(KEY_RETURN);
+    assert_text("three\none\ntwo");   // The buffer is left the shape it was found in
+    TEST_ASSERT_EQUAL_UINT(0, ed.cursor);
+}
+
+static void test_a_move_to_the_end_of_a_buffer_without_a_trailing_newline(void)
+{
+    ed_set("one\ntwo\nthree");
+    feed(":1m$"); feed_key(KEY_RETURN);
+    assert_text("two\nthree\none");
+    TEST_ASSERT_EQUAL_UINT(10, ed.cursor);
+}
+
+static void test_a_copy_to_the_end_of_a_buffer_without_a_trailing_newline(void)
+{
+    ed_set("one\ntwo");
+    feed(":1t$"); feed_key(KEY_RETURN);
+    assert_text("one\ntwo\none");
+}
+
+static void test_one_undo_puts_a_move_back(void)
+{
+    ed_set("one\ntwo\nthree\n");
+    feed(":1,2m$"); feed_key(KEY_RETURN);
+    assert_text("three\none\ntwo\n");
+    feed("u");
+    assert_text("one\ntwo\nthree\n");
+}
+
+static void test_one_undo_puts_back_a_move_that_borrowed_a_newline(void)
+{
+    ed_set("one\ntwo\nthree");
+    feed(":1m$"); feed_key(KEY_RETURN);
+    assert_text("two\nthree\none");
+    feed("u");
+    assert_text("one\ntwo\nthree");   // Including the newline it was lent (§22.4)
+}
+
+static void test_one_undo_puts_a_copy_back(void)
+{
+    ed_set("one\ntwo");
+    feed(":1t$"); feed_key(KEY_RETURN);
+    assert_text("one\ntwo\none");
+    feed("u");
+    assert_text("one\ntwo");
+}
+
+static void test_a_move_leaves_the_copy_buffer_alone(void)
+{
+    ed_set("one\ntwo\nthree\n");
+    feed("yy");                            // "one\n" into the register
+    feed(":3m0"); feed_key(KEY_RETURN);
+    assert_text("three\none\ntwo\n");
+    feed("p");
+    assert_text("three\none\none\ntwo\n");
+}
+
+static void test_a_copy_that_would_not_fit_changes_nothing(void)
+{
+    char big[601];
+    for (int i = 0; i < 60; i++) memcpy(big + i * 10, "xxxxxxxxx\n", 10);
+    big[600] = '\0';
+
+    ed_set(big);
+    feed(":%t$"); feed_key(KEY_RETURN);
+    TEST_ASSERT_EQUAL_UINT(600, ed.len);   // ED_CAP has no room for twice it
+    assert_text(big);
+
+    // The same refusal on a buffer that would have to be lent a newline first:
+    // it is weighed before anything moves, so not even that is left behind
+    big[599] = '\0';
+    ed_set(big);
+    feed(":%t$"); feed_key(KEY_RETURN);
+    TEST_ASSERT_EQUAL_UINT(599, ed.len);
+    assert_text(big);
+}
+
+//
+//  The global commands (§23)
+//
+
+static void test_global_delete_takes_every_comment_line(void)
+{
+    // The case the command exists for: an edall buffer after a session of
+    // commenting things out
+    ed_set("; a note\nfd 10\n; another\nrt 90\n; and one more\n");
+    feed(":g/^;/d"); feed_key(KEY_RETURN);
+    assert_text("fd 10\nrt 90\n");
+    TEST_ASSERT_EQUAL_UINT(3, ed.globals);
+}
+
+static void test_global_delete_takes_every_blank_line(void)
+{
+    ed_set("fd 10\n\nrt 90\n   \nfd 5\n");
+    feed(":g/^ *$/d"); feed_key(KEY_RETURN);
+    assert_text("fd 10\nrt 90\nfd 5\n");
+}
+
+static void test_global_deletes_lines_that_touch(void)
+{
+    // What the backwards walk is for: a run of matching lines, where a forward
+    // pass would have to remember where the next one went (§23.3)
+    ed_set("keep\nx\nx\nx\nkeep\n");
+    feed(":g/x/d"); feed_key(KEY_RETURN);
+    assert_text("keep\nkeep\n");
+}
+
+static void test_inverted_global_keeps_only_the_lines_that_match(void)
+{
+    // `:v/^to /d` is the only way this editor can say what is in a buffer
+    ed_set("to box\nfd 10\nend\nto tri\nfd 5\nend\n");
+    feed(":v/^to /d"); feed_key(KEY_RETURN);
+    assert_text("to box\nto tri\n");
+}
+
+static void test_g_bang_is_v(void)
+{
+    ed_set("to box\nfd 10\nend\n");
+    feed(":g!/^to /d"); feed_key(KEY_RETURN);
+    assert_text("to box\n");
+}
+
+static void test_global_substitute_rewrites_only_the_lines_that_matched(void)
+{
+    // The point of the pair: the test is on the line, the rewrite on something
+    // else entirely -- which is what `:%s` structurally cannot say
+    ed_set("fd 1\nbk 1\nfd 1\n");
+    feed(":g/^fd/s/1/9/"); feed_key(KEY_RETURN);
+    assert_text("fd 9\nbk 1\nfd 9\n");
+    TEST_ASSERT_EQUAL_UINT(2, ed.globals);
+}
+
+static void test_a_nested_substitute_with_no_pattern_reuses_the_one_that_found_the_line(void)
+{
+    ed_set("x a x\nb\nx\n");
+    feed(":g/x/s//y/g"); feed_key(KEY_RETURN);
+    assert_text("y a y\nb\ny\n");
+}
+
+static void test_a_nested_substitute_may_lengthen_the_lines_it_walks(void)
+{
+    // Every line the walk still has to visit is above the one being rewritten,
+    // so growing this one moves nothing the walk is holding
+    ed_set("a\nb\na\n");
+    feed(":g/a/s/a/aaa/"); feed_key(KEY_RETURN);
+    assert_text("aaa\nb\naaa\n");
+}
+
+static void test_a_global_without_a_range_covers_the_whole_buffer(void)
+{
+    // Ex's wart, and the useful one: every other command in this parser
+    // defaults to the cursor's line, and a `:g` over one line is a `:s` with
+    // extra steps (§23.2)
+    ed_set("x\nkeep\nx\n");
+    feed("G");
+    feed(":g/x/d"); feed_key(KEY_RETURN);
+    assert_text("keep\n");
+}
+
+static void test_a_range_bounds_a_global(void)
+{
+    ed_set("x\nx\nx\nx\n");
+    feed(":2,3g/x/d"); feed_key(KEY_RETURN);
+    assert_text("x\nx\n");
+}
+
+static void test_a_visual_selection_bounds_a_global(void)
+{
+    ed_set("x\nx\nx\nx\n");
+    feed("jVj:");
+    TEST_ASSERT_EQUAL_STRING(":'<,'>", ed.vi.cmdline);
+    feed("g/x/d"); feed_key(KEY_RETURN);
+    assert_text("x\nx\n");
+}
+
+static void test_a_global_that_matches_nothing_changes_nothing(void)
+{
+    ed_set("one\ntwo\n");
+    feed(":g/zz/d"); feed_key(KEY_RETURN);
+    TEST_ASSERT_EQUAL_INT(VI_ACT_GLOBAL, ed.last.kind);
+    TEST_ASSERT_EQUAL_UINT(0, ed.globals);
+    assert_text("one\ntwo\n");
+}
+
+static void test_a_global_delete_may_empty_the_buffer(void)
+{
+    ed_set("x\nx\n");
+    feed(":g/x/d"); feed_key(KEY_RETURN);
+    assert_text("");
+    TEST_ASSERT_EQUAL_UINT(0, ed.cursor);
+}
+
+static void test_a_global_delete_of_a_last_line_without_a_newline(void)
+{
+    ed_set("keep\nx");
+    feed(":g/x/d"); feed_key(KEY_RETURN);
+    assert_text("keep\n");
+}
+
+static void test_a_global_leaves_the_cursor_on_the_topmost_line_it_changed(void)
+{
+    ed_set("a\nx\nb\nx\n");
+    feed(":g/x/d"); feed_key(KEY_RETURN);
+    assert_text("a\nb\n");
+    TEST_ASSERT_EQUAL_UINT(2, ed.cursor);   // Where the first deleted line was
+}
+
+static void test_a_global_leaves_the_copy_buffer_alone(void)
+{
+    // Nothing it deletes goes through the register, which is 1 KB and the
+    // user's besides -- the workaround this command replaces did (§23.1)
+    ed_set("one\nx\ntwo\n");
+    feed("yy");                            // "one\n" into the register
+    feed(":g/x/d"); feed_key(KEY_RETURN);
+    assert_text("one\ntwo\n");
+    feed("p");                             // Still there, below the line it left the cursor on
+    assert_text("one\ntwo\none\n");
+}
+
+static void test_one_undo_puts_a_whole_global_back(void)
+{
+    // Every line the pass touched belongs to the step the Return opened, which
+    // is what makes the command safe to try (§23.4)
+    ed_set("; a\nfd 10\n; b\nrt 90\n; c\n");
+    feed(":g/^;/d"); feed_key(KEY_RETURN);
+    assert_text("fd 10\nrt 90\n");
+    feed("u");
+    assert_text("; a\nfd 10\n; b\nrt 90\n; c\n");
+}
+
+static void test_one_undo_puts_a_whole_global_substitute_back(void)
+{
+    ed_set("fd 1\nbk 1\nfd 1\n");
+    feed(":g/^fd/s/1/9/"); feed_key(KEY_RETURN);
+    assert_text("fd 9\nbk 1\nfd 9\n");
+    feed("u");
+    assert_text("fd 1\nbk 1\nfd 1\n");
+}
+
+static void test_a_global_with_an_empty_pattern_reuses_the_last_search(void)
+{
+    ed_set("n and n\nb\nn\n");
+    feed("/\\<n\\>"); feed_key(KEY_RETURN);
+    feed(":g//d");    feed_key(KEY_RETURN);
+    assert_text("b\n");
+}
+
+static void test_a_malformed_global_complains_and_changes_nothing(void)
+{
+    const char *bad[] = { ":g", ":g/a", ":g/a/", ":g/a/x", ":g/a/dd", ":g/a/s/b",
+                          ":gg", ":g/a\\(b/d", ":v", ":g//d" };
+
+    for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
+        setUp();
+        ed_set("a b\n");
+        feed(bad[i]);
+        feed_key(KEY_RETURN);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(VI_ACT_BEEP, ed.last.kind, bad[i]);
+        assert_text("a b\n");
+        TEST_ASSERT_EQUAL_INT(VI_NORMAL, ed.vi.mode);
+    }
+}
+
+// B36 again: the budget is spent per line, so a pass over a buffer of them
+// would pay it on every one. It stops at the first, and says so distinctly.
+static void test_a_global_refuses_a_pathological_pattern(void)
+{
+    char buf[512];
+    memset(buf, 'a', 255);
+    buf[255] = '\n';
+    memset(buf + 256, 'a', 200);
+    buf[456] = '\n';
+    buf[457] = '\0';
+
+    char before[512];
+    strcpy(before, buf);
+
+    size_t len = strlen(buf);
+    size_t cursor = 0;
+    const char *pat = ".*.*.*.*.*.*.*.*.*.*.*.*.*.*.*x";
+    TEST_ASSERT_EQUAL_UINT(SIZE_MAX,
+                           editor_vi_global(buf, &len, sizeof(buf), 0, len,
+                                            pat, strlen(pat), false, 'd',
+                                            NULL, 0, NULL, 0, false, NULL, &cursor));
+    TEST_ASSERT_EQUAL_STRING(before, buf);
+    TEST_ASSERT_EQUAL_UINT(strlen(before), len);
+}
+
+//
 //  Search
 //
 
@@ -2291,6 +2730,372 @@ static void test_an_unknown_z_command_complains(void)
 }
 
 //
+//  Procedures (M13)
+//
+//  An `edall` buffer with no blank lines between the definitions -- which is
+//  what `edall` writes and what the blank-line motions cannot walk.
+//
+
+#define PROCS \
+    "to box :n\n" \
+    "  fd :n\n" \
+    "  rt 90\n" \
+    "end\n" \
+    "to tri :n\n" \
+    "  fd :n\n" \
+    "end\n" \
+    "to total :n\n" \
+    "  op :n\n" \
+    "end\n"
+
+static void test_bracket_bracket_steps_definition_to_definition(void)
+{
+    ed_set(PROCS);
+    feed("]]");  TEST_ASSERT_EQUAL_UINT(30u, ed.cursor);   // `to tri`
+    feed("]]");  TEST_ASSERT_EQUAL_UINT(52u, ed.cursor);   // `to total`
+    feed("[[");  TEST_ASSERT_EQUAL_UINT(30u, ed.cursor);
+    feed("[[");  TEST_ASSERT_EQUAL_UINT(0u, ed.cursor);
+}
+
+static void test_bracket_bracket_takes_a_count(void)
+{
+    ed_set(PROCS);
+    feed("2]]"); TEST_ASSERT_EQUAL_UINT(52u, ed.cursor);
+    feed("2[["); TEST_ASSERT_EQUAL_UINT(0u, ed.cursor);
+}
+
+static void test_bracket_bracket_clamps_at_the_ends(void)
+{
+    ed_set(PROCS);
+    feed("9]]"); TEST_ASSERT_EQUAL_UINT(ed.len, ed.cursor);
+    feed("9[["); TEST_ASSERT_EQUAL_UINT(0u, ed.cursor);
+}
+
+static void test_bracket_back_from_inside_a_procedure_goes_to_its_head(void)
+{
+    ed_set(PROCS);
+    at(40);      // Inside `to tri`
+    feed("[[");  TEST_ASSERT_EQUAL_UINT(30u, ed.cursor);
+    feed("[[");  TEST_ASSERT_EQUAL_UINT(0u, ed.cursor);
+}
+
+static void test_a_line_that_only_starts_with_to_is_not_a_definition(void)
+{
+    // `to total` is a definition and the `total` in its body is not, which is
+    // the whole of what line_starts_definition has to get right
+    ed_set("to a\n  total 1\nend\nto b\nend\n");
+    feed("]]");
+    TEST_ASSERT_EQUAL_UINT(19u, ed.cursor);
+}
+
+static void test_an_indented_to_is_still_a_definition(void)
+{
+    ed_set("to a\nend\n  to b\nend\n");
+    feed("]]");
+    TEST_ASSERT_EQUAL_UINT(9u, ed.cursor);
+}
+
+static void test_d_bracket_bracket_deletes_a_whole_procedure(void)
+{
+    ed_set(PROCS);
+    feed("]]");
+    feed("d]]");
+    assert_text("to box :n\n  fd :n\n  rt 90\nend\nto total :n\n  op :n\nend\n");
+}
+
+static void test_d_bracket_bracket_in_the_last_procedure_takes_the_rest(void)
+{
+    ed_set(PROCS);
+    feed("2]]");
+    feed("d]]");
+    assert_text("to box :n\n  fd :n\n  rt 90\nend\nto tri :n\n  fd :n\nend\n");
+}
+
+static void test_bracket_bracket_is_a_jump(void)
+{
+    ed_set(PROCS);
+    at(5);
+    feed("]]");  TEST_ASSERT_EQUAL_UINT(30u, ed.cursor);
+    feed("`");   TEST_ASSERT_EQUAL_UINT(5u, ed.cursor);
+}
+
+static void test_a_single_bracket_is_not_a_command(void)
+{
+    ed_set(PROCS);
+    feed("]x");
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    TEST_ASSERT_EQUAL_INT(VI_NORMAL, ed.vi.mode);
+}
+
+static void test_dap_takes_the_whole_definition(void)
+{
+    ed_set(PROCS);
+    at(40);      // Inside `to tri`
+    feed("dap");
+    assert_text("to box :n\n  fd :n\n  rt 90\nend\nto total :n\n  op :n\nend\n");
+}
+
+static void test_dap_from_the_to_line_and_from_the_end_line(void)
+{
+    ed_set(PROCS);
+    feed("dap");
+    assert_text("to tri :n\n  fd :n\nend\nto total :n\n  op :n\nend\n");
+
+    ed_set(PROCS);
+    at(50);      // The `end` of `to tri`
+    feed("dap");
+    assert_text("to box :n\n  fd :n\n  rt 90\nend\nto total :n\n  op :n\nend\n");
+}
+
+static void test_dip_takes_the_body_and_leaves_the_markers(void)
+{
+    ed_set(PROCS);
+    at(40);
+    feed("dip");
+    assert_text("to box :n\n  fd :n\n  rt 90\nend\nto tri :n\nend\nto total :n\n  op :n\nend\n");
+}
+
+static void test_yap_is_linewise(void)
+{
+    ed_set(PROCS);
+    at(40);
+    feed("yap");
+    TEST_ASSERT_TRUE(ed.last.linewise);
+    TEST_ASSERT_EQUAL_STRING("to tri :n\n  fd :n\nend\n", ed.yank);
+}
+
+static void test_cip_empties_the_body_and_leaves_a_line_to_type_into(void)
+{
+    ed_set(PROCS);
+    at(40);
+    feed("cip");
+    TEST_ASSERT_EQUAL_INT(VI_INSERT, ed.vi.mode);
+    feed("  bk :n");
+    feed_key(KEY_ESC);
+    assert_text("to box :n\n  fd :n\n  rt 90\nend\nto tri :n\n  bk :n\nend\nto total :n\n  op :n\nend\n");
+}
+
+static void test_dap_on_the_last_procedure_leaves_no_blank_line(void)
+{
+    ed_set("to a\n  fd 1\nend\nto b\n  fd 2\nend");
+    at(20);
+    feed("dap");
+    assert_text("to a\n  fd 1\nend");
+}
+
+static void test_a_procedure_object_outside_one_says_so(void)
+{
+    ed_set("print 1\nto a\nend\n");
+    feed("dap");
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    TEST_ASSERT_EQUAL_STRING("Not inside a procedure", ed.last.msg);
+    assert_text("print 1\nto a\nend\n");
+}
+
+static void test_a_procedure_object_below_the_end_is_not_inside_one(void)
+{
+    ed_set("to a\nend\n\nto b\nend\n");
+    at(9);       // The blank line between them
+    feed("dap");
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    assert_text("to a\nend\n\nto b\nend\n");
+}
+
+static void test_an_unclosed_definition_is_not_a_procedure(void)
+{
+    // A second `to` before the `end` -- the definition being typed has not
+    // been closed, and bounding it at the next `to` would eat what is under it
+    ed_set("to a\n  fd 1\nto b\n  fd 2\nend\n");
+    at(7);
+    feed("dap");
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    assert_text("to a\n  fd 1\nto b\n  fd 2\nend\n");
+}
+
+static void test_a_definition_with_no_end_is_not_a_procedure(void)
+{
+    ed_set("to a\n  fd 1\n");
+    at(7);
+    feed("dap");
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    assert_text("to a\n  fd 1\n");
+}
+
+static void test_vap_selects_the_definition_linewise(void)
+{
+    ed_set(PROCS);
+    at(40);
+    feed("vap");
+    TEST_ASSERT_EQUAL_INT(VI_VISUAL_LINE, ed.vi.mode);
+    feed("d");
+    assert_text("to box :n\n  fd :n\n  rt 90\nend\nto total :n\n  op :n\nend\n");
+}
+
+static void test_a_procedure_object_is_one_undo(void)
+{
+    ed_set(PROCS);
+    at(40);
+    feed("dap");
+    feed("u");
+    assert_text(PROCS);
+}
+
+//
+//  Ctrl+A and Ctrl+X (M13)
+//
+
+#define CTRL_A 0x01
+#define CTRL_X 0x18
+
+static void test_ctrl_a_adds_one_to_the_number_under_the_cursor(void)
+{
+    ed_set("fd 100\n");
+    at(3);
+    feed_key(CTRL_A);
+    assert_text("fd 101\n");
+    TEST_ASSERT_EQUAL_UINT(5u, ed.cursor);   // On the last digit
+}
+
+static void test_ctrl_a_finds_the_number_to_the_right(void)
+{
+    ed_set("fd 100\n");
+    at(0);
+    feed_key(CTRL_A);
+    assert_text("fd 101\n");
+}
+
+static void test_ctrl_a_from_inside_the_run_takes_the_whole_number(void)
+{
+    ed_set("fd 199\n");
+    at(4);
+    feed_key(CTRL_A);
+    assert_text("fd 200\n");
+}
+
+static void test_ctrl_x_subtracts(void)
+{
+    ed_set("rt 90\n");
+    at(3);
+    feed_key(CTRL_X);
+    assert_text("rt 89\n");
+}
+
+static void test_the_count_multiplies(void)
+{
+    ed_set("fd 100\n");
+    at(3);
+    feed("10");
+    feed_key(CTRL_X);
+    assert_text("fd 90\n");
+}
+
+static void test_a_minus_against_the_digits_is_part_of_the_number(void)
+{
+    ed_set("fd -100\n");
+    at(4);
+    feed_key(CTRL_A);
+    assert_text("fd -99\n");
+
+    ed_set("rt -90\n");
+    at(4);
+    feed_key(CTRL_X);
+    assert_text("rt -91\n");
+}
+
+static void test_a_number_can_cross_zero(void)
+{
+    ed_set("fd 1\n");
+    at(3);
+    feed("3");
+    feed_key(CTRL_X);
+    assert_text("fd -2\n");
+}
+
+static void test_a_decimal_is_two_numbers(void)
+{
+    ed_set("fd 10.5\n");
+    at(3);
+    feed_key(CTRL_A);
+    assert_text("fd 11.5\n");
+
+    ed_set("fd 10.5\n");
+    at(6);
+    feed_key(CTRL_A);
+    assert_text("fd 10.6\n");
+}
+
+static void test_leading_zeros_are_not_preserved(void)
+{
+    ed_set("wait 007\n");
+    at(5);
+    feed_key(CTRL_A);
+    assert_text("wait 8\n");
+}
+
+static void test_no_number_on_the_line_changes_nothing(void)
+{
+    ed_set("fd 100\nprint hi\n");
+    at(7);
+    feed_key(CTRL_A);
+    TEST_ASSERT_EQUAL_INT(VI_ACT_INCREMENT, ed.last.kind);
+    TEST_ASSERT_EQUAL_INT(VI_INC_NO_NUMBER, ed.increment);
+    assert_text("fd 100\nprint hi\n");
+}
+
+static void test_a_number_before_the_cursor_is_not_the_one(void)
+{
+    ed_set("fd 100\n");
+    at(6);       // Past the digits, at the end of the line
+    feed_key(CTRL_A);
+    TEST_ASSERT_EQUAL_INT(VI_INC_NO_NUMBER, ed.increment);
+    assert_text("fd 100\n");
+}
+
+static void test_dot_repeats_an_increment(void)
+{
+    ed_set("fd 100\nrt 90\n");
+    at(3);
+    feed_key(CTRL_A);
+    at(10);
+    feed(".");
+    assert_text("fd 101\nrt 91\n");
+}
+
+static void test_a_new_count_on_a_repeated_increment(void)
+{
+    ed_set("fd 100\nrt 90\n");
+    at(3);
+    feed_key(CTRL_A);
+    at(10);
+    feed("5.");
+    assert_text("fd 101\nrt 95\n");
+}
+
+static void test_an_increment_is_one_undo(void)
+{
+    ed_set("fd 9\n");
+    at(3);
+    feed_key(CTRL_A);
+    assert_text("fd 10\n");
+    feed("u");
+    assert_text("fd 9\n");
+}
+
+static void test_an_increment_that_would_not_fit_changes_nothing(void)
+{
+    char big[ED_CAP];
+    memset(big, 'x', ED_CAP - 3);
+    big[ED_CAP - 3] = '9';
+    big[ED_CAP - 2] = '\n';
+    big[ED_CAP - 1] = '\0';
+    ed_set(big);
+    at(ED_CAP - 3);
+    feed_key(CTRL_A);
+    TEST_ASSERT_EQUAL_INT(VI_INC_NO_ROOM, ed.increment);
+    assert_text(big);
+}
+
+//
 //  The randomised differential run
 //
 //  Thousands of random commands against a buffer whose line memo is driven
@@ -2507,7 +3312,7 @@ static void test_random_commands_keep_the_buffer_and_the_memo_consistent(void)
 {
     static const char *keys =
         "hjklwbeWBE0^$GxXDCYSspPJ~ivVoOaAircdy<>.;,%nfFtT{}[]()23uu\x12"
-        "*#`'zgt";  // M8: the mark is a stored offset, so `d`` after an edit is
+        "*#`'zgt\x01\x18";  // M8: the mark is a stored offset, so `d`` after an edit is
                     // exactly where a stale one would show
 
     fuzz_seed(20260817);
@@ -2703,7 +3508,49 @@ int main(void)
     RUN_TEST(test_a_charwise_selection_ranges_over_the_lines_it_touches);
     RUN_TEST(test_the_selection_range_outlives_the_selection);
     RUN_TEST(test_the_selection_range_without_a_selection_complains);
+    RUN_TEST(test_move_puts_a_line_above_the_first);
+    RUN_TEST(test_move_puts_a_range_at_the_end);
+    RUN_TEST(test_move_without_a_range_takes_the_cursors_line);
+    RUN_TEST(test_a_move_destination_may_be_relative);
+    RUN_TEST(test_a_visual_selection_moves_as_a_block);
+    RUN_TEST(test_a_move_into_its_own_range_complains);
+    RUN_TEST(test_a_move_that_would_change_nothing_complains);
+    RUN_TEST(test_a_move_without_a_destination_complains);
+    RUN_TEST(test_a_move_of_the_empty_last_line_complains);
+    RUN_TEST(test_copy_leaves_the_original_where_it_was);
+    RUN_TEST(test_co_is_a_synonym_for_t);
+    RUN_TEST(test_a_copy_may_land_inside_its_own_range);
+    RUN_TEST(test_the_last_line_moves_without_a_trailing_newline);
+    RUN_TEST(test_a_move_to_the_end_of_a_buffer_without_a_trailing_newline);
+    RUN_TEST(test_a_copy_to_the_end_of_a_buffer_without_a_trailing_newline);
+    RUN_TEST(test_one_undo_puts_a_move_back);
+    RUN_TEST(test_one_undo_puts_back_a_move_that_borrowed_a_newline);
+    RUN_TEST(test_one_undo_puts_a_copy_back);
+    RUN_TEST(test_a_move_leaves_the_copy_buffer_alone);
+    RUN_TEST(test_a_copy_that_would_not_fit_changes_nothing);
     RUN_TEST(test_the_command_line_stops_growing_when_it_is_full);
+
+    RUN_TEST(test_global_delete_takes_every_comment_line);
+    RUN_TEST(test_global_delete_takes_every_blank_line);
+    RUN_TEST(test_global_deletes_lines_that_touch);
+    RUN_TEST(test_inverted_global_keeps_only_the_lines_that_match);
+    RUN_TEST(test_g_bang_is_v);
+    RUN_TEST(test_global_substitute_rewrites_only_the_lines_that_matched);
+    RUN_TEST(test_a_nested_substitute_with_no_pattern_reuses_the_one_that_found_the_line);
+    RUN_TEST(test_a_nested_substitute_may_lengthen_the_lines_it_walks);
+    RUN_TEST(test_a_global_without_a_range_covers_the_whole_buffer);
+    RUN_TEST(test_a_range_bounds_a_global);
+    RUN_TEST(test_a_visual_selection_bounds_a_global);
+    RUN_TEST(test_a_global_that_matches_nothing_changes_nothing);
+    RUN_TEST(test_a_global_delete_may_empty_the_buffer);
+    RUN_TEST(test_a_global_delete_of_a_last_line_without_a_newline);
+    RUN_TEST(test_a_global_leaves_the_cursor_on_the_topmost_line_it_changed);
+    RUN_TEST(test_a_global_leaves_the_copy_buffer_alone);
+    RUN_TEST(test_one_undo_puts_a_whole_global_back);
+    RUN_TEST(test_one_undo_puts_a_whole_global_substitute_back);
+    RUN_TEST(test_a_global_with_an_empty_pattern_reuses_the_last_search);
+    RUN_TEST(test_a_malformed_global_complains_and_changes_nothing);
+    RUN_TEST(test_a_global_refuses_a_pathological_pattern);
 
     RUN_TEST(test_slash_records_a_pattern_and_a_direction);
     RUN_TEST(test_search_without_a_pattern_complains);
@@ -2753,6 +3600,45 @@ int main(void)
     RUN_TEST(test_gd_without_a_definition_complains);
     RUN_TEST(test_z_moves_the_view_and_not_the_cursor);
     RUN_TEST(test_an_unknown_z_command_complains);
+
+    RUN_TEST(test_bracket_bracket_steps_definition_to_definition);
+    RUN_TEST(test_bracket_bracket_takes_a_count);
+    RUN_TEST(test_bracket_bracket_clamps_at_the_ends);
+    RUN_TEST(test_bracket_back_from_inside_a_procedure_goes_to_its_head);
+    RUN_TEST(test_a_line_that_only_starts_with_to_is_not_a_definition);
+    RUN_TEST(test_an_indented_to_is_still_a_definition);
+    RUN_TEST(test_d_bracket_bracket_deletes_a_whole_procedure);
+    RUN_TEST(test_d_bracket_bracket_in_the_last_procedure_takes_the_rest);
+    RUN_TEST(test_bracket_bracket_is_a_jump);
+    RUN_TEST(test_a_single_bracket_is_not_a_command);
+    RUN_TEST(test_dap_takes_the_whole_definition);
+    RUN_TEST(test_dap_from_the_to_line_and_from_the_end_line);
+    RUN_TEST(test_dip_takes_the_body_and_leaves_the_markers);
+    RUN_TEST(test_yap_is_linewise);
+    RUN_TEST(test_cip_empties_the_body_and_leaves_a_line_to_type_into);
+    RUN_TEST(test_dap_on_the_last_procedure_leaves_no_blank_line);
+    RUN_TEST(test_a_procedure_object_outside_one_says_so);
+    RUN_TEST(test_a_procedure_object_below_the_end_is_not_inside_one);
+    RUN_TEST(test_an_unclosed_definition_is_not_a_procedure);
+    RUN_TEST(test_a_definition_with_no_end_is_not_a_procedure);
+    RUN_TEST(test_vap_selects_the_definition_linewise);
+    RUN_TEST(test_a_procedure_object_is_one_undo);
+
+    RUN_TEST(test_ctrl_a_adds_one_to_the_number_under_the_cursor);
+    RUN_TEST(test_ctrl_a_finds_the_number_to_the_right);
+    RUN_TEST(test_ctrl_a_from_inside_the_run_takes_the_whole_number);
+    RUN_TEST(test_ctrl_x_subtracts);
+    RUN_TEST(test_the_count_multiplies);
+    RUN_TEST(test_a_minus_against_the_digits_is_part_of_the_number);
+    RUN_TEST(test_a_number_can_cross_zero);
+    RUN_TEST(test_a_decimal_is_two_numbers);
+    RUN_TEST(test_leading_zeros_are_not_preserved);
+    RUN_TEST(test_no_number_on_the_line_changes_nothing);
+    RUN_TEST(test_a_number_before_the_cursor_is_not_the_one);
+    RUN_TEST(test_dot_repeats_an_increment);
+    RUN_TEST(test_a_new_count_on_a_repeated_increment);
+    RUN_TEST(test_an_increment_is_one_undo);
+    RUN_TEST(test_an_increment_that_would_not_fit_changes_nothing);
 
     RUN_TEST(test_random_commands_keep_the_buffer_and_the_memo_consistent);
 

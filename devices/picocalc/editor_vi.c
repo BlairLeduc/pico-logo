@@ -383,6 +383,49 @@ static bool same_word(const char *buf, size_t s, size_t e,
     return true;
 }
 
+// The first non-blank word on `line` is `word`, case-insensitively, and only a
+// blank or the line's end follows it -- so an indented `to` counts and a line
+// beginning `total` does not. Logo has two markers and this is the whole test
+// for both of them, which is what makes `gd`, `]]` and `ip` one predicate
+// rather than three (docs/vi-mode-design.md §24.3). `*out_after` is left just
+// past the word.
+static bool line_starts_word(const char *buf, size_t len, size_t line,
+                             const char *word, size_t word_len, size_t *out_after)
+{
+    size_t end = line_end_of(buf, len, line);
+    size_t p = line;
+    while (p < end && (buf[p] == ' ' || buf[p] == '\t'))
+    {
+        p++;
+    }
+    if (end - p < word_len)
+    {
+        return false;
+    }
+    for (size_t i = 0; i < word_len; i++)
+    {
+        if (to_lower(buf[p + i]) != word[i])
+        {
+            return false;
+        }
+    }
+    size_t after = p + word_len;
+    if (after < end && char_class(buf[after]) != CLASS_BLANK)
+    {
+        return false;
+    }
+    if (out_after != NULL)
+    {
+        *out_after = after;
+    }
+    return true;
+}
+
+static bool line_starts_definition(const char *buf, size_t len, size_t line)
+{
+    return line_starts_word(buf, len, line, "to", 2, NULL);
+}
+
 // `gd` -- where a procedure is defined. Not a pattern search: a Logo definition
 // is `to name` at the head of a line, and matching that shape directly is both
 // exact and shorter than the pattern it would take. Case-insensitive, as the
@@ -392,19 +435,13 @@ static bool find_definition(const char *buf, size_t len,
 {
     for (size_t line = 0; line < len; line = next_line_start(buf, len, line))
     {
-        size_t end = line_end_of(buf, len, line);
-        size_t p = line;
-        while (p < end && (buf[p] == ' ' || buf[p] == '\t'))
-        {
-            p++;
-        }
-        if (end - p < 3 || to_lower(buf[p]) != 't' || to_lower(buf[p + 1]) != 'o' ||
-            char_class(buf[p + 2]) != CLASS_BLANK)
+        size_t p;
+        if (!line_starts_word(buf, len, line, "to", 2, &p))
         {
             continue;
         }
 
-        p += 2;
+        size_t end = line_end_of(buf, len, line);
         while (p < end && (buf[p] == ' ' || buf[p] == '\t'))
         {
             p++;
@@ -414,13 +451,97 @@ static bool find_definition(const char *buf, size_t len,
         {
             name_end++;
         }
-        if (same_word(buf, p, name_end, word, word_len))
+        if (name_end > p && same_word(buf, p, name_end, word, word_len))
         {
             *out_pos = p;
             return true;
         }
     }
     return false;
+}
+
+//
+//  Procedures -- what a Logo buffer is actually made of, and what `edall` puts
+//  many of in one place (§24)
+//
+
+// `]]` -- the next definition after the cursor's line, or the end of the
+// buffer. Clamping rather than beeping is what makes `d]]` in the last
+// procedure delete the rest of the file, which is the operation you want there.
+static size_t def_fwd(const char *buf, size_t len, size_t pos)
+{
+    for (size_t line = next_line_start(buf, len, pos); line < len;
+         line = next_line_start(buf, len, line))
+    {
+        if (line_starts_definition(buf, len, line))
+        {
+            return line;
+        }
+    }
+    return len;
+}
+
+// `[[` -- back to the definition this line belongs to, or to the one before it
+// when the cursor is already at the head of a definition.
+static size_t def_back(const char *buf, size_t len, size_t pos)
+{
+    size_t line = line_start_of(buf, pos);
+    if (pos > line && line_starts_definition(buf, len, line))
+    {
+        return line;
+    }
+    while (line > 0)
+    {
+        line = line_start_of(buf, line - 1);
+        if (line_starts_definition(buf, len, line))
+        {
+            return line;
+        }
+    }
+    return 0;
+}
+
+// `ip` and `ap` -- the body of the definition the cursor is in, or the whole of
+// it. Both markers are needed, and a second `to` met before the `end` refuses
+// the object: a definition that has not been closed yet is not one, and
+// bounding it at the next `to` instead would have `dap` on a half-typed
+// procedure eat the blank lines and comments under it (§24.3). Linewise, so
+// `dap` takes whole lines and `cip` empties the body.
+static bool procedure_object(const char *buf, size_t len, size_t cursor, bool around,
+                             size_t *out_start, size_t *out_end)
+{
+    size_t here = line_start_of(buf, cursor);
+
+    size_t head = here;
+    while (!line_starts_definition(buf, len, head))
+    {
+        if (head == 0)
+        {
+            return false;
+        }
+        head = line_start_of(buf, head - 1);
+    }
+
+    // Forward from the cursor's own line, not from the head: a cursor sitting
+    // below an `end` is not inside anything, and starting here is what finds
+    // the next `to` before an `end` and says so
+    size_t tail = (here == head) ? next_line_start(buf, len, head) : here;
+    while (tail < len && !line_starts_word(buf, len, tail, "end", 3, NULL))
+    {
+        if (line_starts_definition(buf, len, tail))
+        {
+            return false;
+        }
+        tail = next_line_start(buf, len, tail);
+    }
+    if (tail >= len)
+    {
+        return false;
+    }
+
+    *out_start = around ? head : next_line_start(buf, len, head);
+    *out_end = around ? next_line_start(buf, len, tail) : tail;
+    return true;
 }
 
 //
@@ -610,13 +731,25 @@ static bool enclosing_pair(const char *buf, size_t len, size_t pos, char open, c
 
 // Resolve an object key after `i` or `a` into the byte range it names. Objects
 // are absolute ranges rather than motions, so they skip operator_range: there
-// is no cursor to pair them with and nothing to make inclusive.
+// is no cursor to pair them with and nothing to make inclusive. `*out_linewise`
+// says whether the range is whole lines -- only `ip` and `ap` are, and every
+// object that came before them was charwise (§24.3).
 static bool text_object(const char *buf, size_t len, size_t cursor, int key, bool around,
-                        int count, size_t *out_start, size_t *out_end)
+                        int count, size_t *out_start, size_t *out_end, bool *out_linewise)
 {
+    *out_linewise = false;
+
     if (key == 'w' || key == 'W')
     {
         return word_object(buf, len, cursor, key == 'W', around, count, out_start, out_end);
+    }
+
+    if (key == 'p')
+    {
+        // A count means nothing to a procedure -- they do not nest -- and is
+        // ignored rather than refused
+        *out_linewise = true;
+        return procedure_object(buf, len, cursor, around, out_start, out_end);
     }
 
     int idx = bracket_index(bracket_open, (char)key);
@@ -909,6 +1042,7 @@ static bool is_change(ViActionKind kind)
         case VI_ACT_REPLACE_CHAR:
         case VI_ACT_JOIN:
         case VI_ACT_TOGGLE_CASE:
+        case VI_ACT_INCREMENT:
             return true;
         default:
             // VI_ACT_CHANGE and the two opens are changes too, but they are
@@ -1233,7 +1367,14 @@ static void copy_field(char *dst, size_t *dst_len, const char *src, size_t n)
 
 // Parse `s/pat/rep/flags`, starting at the `s`. The delimiter is whatever
 // follows it, as long as it is not a letter or a digit.
-static bool parse_substitute(ViState *st, const char *s, size_t i, size_t n)
+//
+// The pattern goes into `st->pattern`, which is also the last one searched for
+// -- except when `out_pat` is given, and then it is handed back as a slice of
+// `s` and `st->pattern` is left alone. That is what a `:g` needs: the pattern
+// that finds the lines is already in there, and a nested `s` with one of its
+// own must not write over it while the pass is still using it (§23.5).
+static bool parse_substitute(ViState *st, const char *s, size_t i, size_t n,
+                             const char **out_pat, size_t *out_pat_len)
 {
     if (i >= n || s[i] != 's')
     {
@@ -1269,6 +1410,12 @@ static bool parse_substitute(ViState *st, const char *s, size_t i, size_t n)
         {
             return false;
         }
+        if (out_pat != NULL)
+        {
+            // Under a `:g`, that is the pattern which found the line
+            *out_pat = st->pattern;
+            *out_pat_len = st->pattern_len;
+        }
     }
     else
     {
@@ -1276,7 +1423,15 @@ static bool parse_substitute(ViState *st, const char *s, size_t i, size_t n)
         {
             return false;  // run_ex turns this into "E486: bad substitute"
         }
-        copy_field(st->pattern, &st->pattern_len, s + pat, i - pat);
+        if (out_pat != NULL)
+        {
+            *out_pat = s + pat;
+            *out_pat_len = i - pat;
+        }
+        else
+        {
+            copy_field(st->pattern, &st->pattern_len, s + pat, i - pat);
+        }
     }
     i++;
 
@@ -1481,7 +1636,7 @@ static bool run_ex(ViState *st, const char *buf, size_t len, size_t cursor, ViAc
     // Substitute, over the range or -- with none -- the current line
     if (s[i] == 's')
     {
-        if (!parse_substitute(st, s, i, n))
+        if (!parse_substitute(st, s, i, n, NULL, NULL))
         {
             return beep(st, out, "E486: bad substitute");
         }
@@ -1489,6 +1644,128 @@ static bool run_ex(ViState *st, const char *buf, size_t len, size_t cursor, ViAc
         out->start = have_range ? goto_line(buf, len, lo) : line_start_of(buf, cursor);
         out->end = next_line_start(buf, len,
                                    have_range ? goto_line(buf, len, hi) : cursor);
+        return true;
+    }
+
+    // `:g` and `:v` run a command on the lines a pattern picks out, which is
+    // the job `:s` structurally cannot do: it conditions on the text it is
+    // replacing and never on the line (§23). The range defaults to the whole
+    // buffer rather than to the cursor's line, unlike every other command in
+    // this parser -- that is ex's rule, and it is the useful one, since a `:g`
+    // over a single line is a `:s` with extra steps.
+    if (s[i] == 'g' || s[i] == 'v')
+    {
+        bool invert = (s[i] == 'v');
+        i++;
+        if (!invert && i < n && s[i] == '!')
+        {
+            invert = true;   // `:g!` is how ex spells `:v`
+            i++;
+        }
+        if (i >= n || char_class(s[i]) != CLASS_PUNCT)
+        {
+            return beep(st, out, "E486: bad pattern");
+        }
+        char delim = s[i++];
+        size_t pat = i;
+        while (i < n && s[i] != delim)
+        {
+            i++;
+        }
+        if (i >= n)
+        {
+            return beep(st, out, "E486: bad pattern");   // Unterminated
+        }
+        if (i == pat)
+        {
+            // An empty pattern is the last one searched for, exactly as `:s`
+            // has it -- and leaving it there is what lets a nested `s` with no
+            // pattern of its own mean "the pattern that found the line"
+            if (st->pattern_len == 0)
+            {
+                return beep(st, out, "E35: no previous search");
+            }
+        }
+        else
+        {
+            if (!editor_pattern_valid(s + pat, i - pat))
+            {
+                return beep(st, out, "E486: bad pattern");
+            }
+            copy_field(st->pattern, &st->pattern_len, s + pat, i - pat);
+        }
+        i = skip_spaces(s, i + 1, n);
+
+        // `d` and `s`, and nothing else: they are the two commands whose result
+        // does not depend on the direction the walk runs in, and the walk runs
+        // backwards so that it needs no mark set (§23.2, §23.3)
+        out->sub_pattern = NULL;
+        out->sub_pattern_len = 0;
+        if (i < n && s[i] == 'd' && skip_spaces(s, i + 1, n) >= n)
+        {
+            out->ch = 'd';
+        }
+        else if (i < n && s[i] == 's')
+        {
+            if (!parse_substitute(st, s, i, n,
+                                  &out->sub_pattern, &out->sub_pattern_len))
+            {
+                return beep(st, out, "E486: bad substitute");
+            }
+            out->ch = 's';
+        }
+        else
+        {
+            return beep(st, out, "E492: not an editor command");
+        }
+
+        out->kind = VI_ACT_GLOBAL;
+        out->invert = invert;
+        out->linewise = true;
+        out->start = have_range ? goto_line(buf, len, lo) : 0;
+        out->end = have_range
+            ? next_line_start(buf, len, goto_line(buf, len, hi))
+            : len;
+        return true;
+    }
+
+    // `:m` and `:t` (`:co`) take a destination address after the command rather
+    // than a range in front of it, and are the only commands that do (§22)
+    if (s[i] == 'm' || s[i] == 't' ||
+        (s[i] == 'c' && i + 1 < n && s[i + 1] == 'o'))
+    {
+        bool copy = (s[i] != 'm');
+        i = skip_spaces(s, i + ((s[i] == 'c') ? 2 : 1), n);
+
+        int dest = 0;
+        if (!parse_address(st, buf, len, cursor, s, &i, n, &dest, &err) || i < n)
+        {
+            return beep(st, out, err != NULL ? err : "E14: invalid address");
+        }
+        // The one place a line 0 means something: text goes *after* the
+        // destination, so "above the first line" has no other spelling
+        if (dest < 0) dest = 0;
+        if (dest > last) dest = last;
+
+        out->start = have_range ? goto_line(buf, len, lo) : line_start_of(buf, cursor);
+        out->end = next_line_start(buf, len,
+                                   have_range ? goto_line(buf, len, hi) : cursor);
+        out->dest = (dest == 0) ? 0 : next_line_start(buf, len,
+                                                      goto_line(buf, len, dest));
+        if (out->end <= out->start)
+        {
+            // The empty line past the buffer's last newline, which `G` lands on
+            // and which has no text to take anywhere
+            return beep(st, out, "E16: invalid range");
+        }
+        if (!copy && out->dest >= out->start && out->dest <= out->end)
+        {
+            // Inside its own range, or either side of it, where the move would
+            // change nothing and the footer is the only thing that can say so
+            return beep(st, out, "E134: cannot move into itself");
+        }
+        out->kind = VI_ACT_MOVE_LINES;
+        out->ch = copy ? 't' : 'm';
         return true;
     }
 
@@ -1725,10 +2002,13 @@ static bool prefixed_key(ViState *st, const char *buf, size_t len, size_t cursor
             char op = st->pending_op;
             int count = take_count(st);
             size_t start, end;
+            bool linewise;
 
-            if (!text_object(buf, len, cursor, key, prefix == 'a', count, &start, &end))
+            if (!text_object(buf, len, cursor, key, prefix == 'a', count,
+                             &start, &end, &linewise))
             {
-                return beep(st, out, "E492: not an editor command");
+                return beep(st, out, key == 'p' ? "Not inside a procedure"
+                                                : "E492: not an editor command");
             }
 
             if (visual)
@@ -1737,6 +2017,10 @@ static bool prefixed_key(ViState *st, const char *buf, size_t len, size_t cursor
                 // copies the anchor back out after every action (§6.2), so an
                 // object in visual mode is a move with the anchor moved too
                 st->anchor = start;
+                if (linewise)
+                {
+                    st->mode = VI_VISUAL_LINE;
+                }
                 out->kind = VI_ACT_MOVE;
                 out->start = out->end = (end > start) ? end - 1 : start;
                 return commit(st, out, count);
@@ -1745,8 +2029,24 @@ static bool prefixed_key(ViState *st, const char *buf, size_t len, size_t cursor
             out->kind = op_kind(op);
             out->start = start;
             out->end = end;
-            out->linewise = false;
+            out->linewise = linewise;
             out->count = (op == '>') ? 1 : (op == '<') ? -1 : count;
+            if (linewise && end > start)
+            {
+                // The two linewise adjustments the visual path makes, and for
+                // the same reasons: `cip` leaves the emptied line to type into
+                // the way `cc` does, and a `dap` that reaches the end of the
+                // buffer takes the newline before it rather than leaving a
+                // blank line behind
+                if (op == 'c')
+                {
+                    out->end = line_end_of(buf, len, end - 1);
+                }
+                else if (op == 'd' && end >= len && start > 0 && buf[start - 1] == '\n')
+                {
+                    out->start--;
+                }
+            }
             if (op == 'c')
             {
                 st->mode = VI_INSERT;
@@ -1764,6 +2064,42 @@ static bool prefixed_key(ViState *st, const char *buf, size_t len, size_t cursor
             out->kind = VI_ACT_SCROLL;
             out->ch = (char)key;
             return commit(st, out, 0);
+
+        case ']':
+        case '[':
+        {
+            // `]]` and `[[` step definition to definition. They are motions, so
+            // `d]]` and `y]]` come free, and jumps, so `` ` `` comes back (§24.2)
+            if (key != prefix)
+            {
+                return beep(st, out, "E492: not an editor command");
+            }
+            char op = st->pending_op;
+            int count = take_count(st);
+            ViMotion m = { .pos = cursor, .linewise = false, .inclusive = false };
+            for (int i = 0; i < count; i++)
+            {
+                m.pos = (prefix == ']') ? def_fwd(buf, len, m.pos)
+                                        : def_back(buf, len, m.pos);
+            }
+            if (op != 0)
+            {
+                operator_range(buf, len, cursor, op, &m, out);
+                out->kind = op_kind(op);
+                out->count = (op == '>') ? 1 : (op == '<') ? -1 : count;
+                if (op == 'c')
+                {
+                    st->mode = VI_INSERT;
+                }
+            }
+            else
+            {
+                set_mark(st, cursor);
+                out->kind = VI_ACT_MOVE;
+                out->start = out->end = m.pos;
+            }
+            return commit(st, out, count);
+        }
 
         case 'g':
         {
@@ -1906,7 +2242,8 @@ static bool normal_key(ViState *st, const char *buf, size_t len, size_t cursor,
 
     // The keys that need their own second key
     if (key == 'Z' || key == 'r' || key == 'g' || key == 'z' ||
-        key == 'f' || key == 'F' || key == 't' || key == 'T')
+        key == 'f' || key == 'F' || key == 't' || key == 'T' ||
+        key == ']' || key == '[')
     {
         if ((key == 'Z' || key == 'r') && visual)
         {
@@ -2242,6 +2579,14 @@ static bool normal_key(ViState *st, const char *buf, size_t len, size_t cursor,
             case '#':
                 return search_word(st, buf, len, cursor, key == '*', out);
 
+            case 0x01:  // Ctrl+A -- add to the number under the cursor, and
+            case 0x18:  // Ctrl+X take away from it. Ctrl+X is cut outside vi
+                        // mode; vi mode owns its keys (§5.1, §24.4).
+                out->kind = VI_ACT_INCREMENT;
+                out->start = out->end = cursor;
+                out->count = (key == 0x01) ? count : -count;
+                return commit(st, out, count);
+
             case 0x07:  // Ctrl+G -- where the cursor is. A count means nothing
                         // to it, and take_count above has already dropped one
                 return report_position(st, buf, len, cursor, out);
@@ -2411,6 +2756,142 @@ static bool sub_next(const char *buf, size_t ls, size_t le,
     return false;
 }
 
+//
+//  Moving and copying lines (§22)
+//
+
+static void reverse_bytes(char *p, size_t len)
+{
+    for (size_t i = 0, j = len; i + 1 < j; i++)
+    {
+        j--;
+        char t = p[i];
+        p[i] = p[j];
+        p[j] = t;
+    }
+}
+
+// Rotate the k bytes at the front of [p, p + n) to the back of it, in order.
+// Three reversals, so a move needs nothing to hold the text it is moving and
+// no bound on how much of it there is (§22.3).
+static void rotate_left(char *p, size_t n, size_t k)
+{
+    if (k == 0 || k >= n)
+    {
+        return;
+    }
+    reverse_bytes(p, k);
+    reverse_bytes(p + k, n - k);
+    reverse_bytes(p, n);
+}
+
+bool editor_vi_move_lines(char *buf, size_t *len, size_t capacity,
+                          size_t start, size_t end, size_t dest, bool copy,
+                          EditorUndo *undo, size_t *out_cursor)
+{
+    size_t n = *len;
+
+    if (end > n) end = n;
+    if (dest > n) dest = n;
+    if (start >= end)
+    {
+        return false;
+    }
+
+    // A line is text and the newline that ends it, and the last line of a
+    // buffer that does not end in one has neither a newline to carry away nor
+    // one to attach to. Lend it one for the length of the operation and take
+    // one back at the end, so everything between is uniform (§22.4).
+    bool borrowed = (buf[n - 1] != '\n' && (end == n || dest == n));
+
+    // Everything that has to fit, weighed before a byte moves: the newline the
+    // buffer may be lent, and a second span when the lines are being copied
+    size_t span = (end - start) + ((borrowed && end == n) ? 1 : 0);
+    if (n + (borrowed ? 1 : 0) + (copy ? span : 0) >= capacity)
+    {
+        return false;
+    }
+
+    if (borrowed)
+    {
+        editor_undo_record(undo, n, NULL, 0, "\n", 1);
+        buf[n] = '\n';
+        n++;
+        buf[n] = '\0';
+        if (end == n - 1) end = n;
+        if (dest == n - 1) dest = n;
+    }
+
+    size_t landing;
+
+    if (copy)
+    {
+        // Recorded before the bytes move, while the span is still one piece --
+        // which is what a copy of the buffer into itself needs, since opening
+        // the hole below may split it
+        editor_undo_record(undo, dest, NULL, 0, buf + start, span);
+
+        memmove(buf + dest + span, buf + dest, n - dest);
+        if (start >= dest)
+        {
+            memmove(buf + dest, buf + start + span, span);   // The source moved with the tail
+        }
+        else if (end <= dest)
+        {
+            memmove(buf + dest, buf + start, span);
+        }
+        else
+        {
+            // The hole opened inside the source: its head stayed put and its
+            // tail went up with everything else
+            size_t head = dest - start;
+            memmove(buf + dest, buf + start, head);
+            memmove(buf + dest + head, buf + dest + span, span - head);
+        }
+        n += span;
+        landing = dest;
+    }
+    else
+    {
+        // The delete and the insert it becomes, both taken from the span while
+        // it is still where it was: the journal wants the bytes, not a buffer
+        // to keep them in (§22.3)
+        landing = (dest > start) ? dest - span : dest;
+        editor_undo_record(undo, start, buf + start, span, NULL, 0);
+        editor_undo_record(undo, landing, NULL, 0, buf + start, span);
+
+        if (dest > end)
+        {
+            rotate_left(buf + start, dest - start, span);
+        }
+        else
+        {
+            rotate_left(buf + dest, end - dest, start - dest);
+        }
+    }
+
+    buf[n] = '\0';
+
+    // Vi leaves the cursor on the last line of what it moved, which after a
+    // copy is the copy rather than the original
+    size_t landed = first_non_blank(buf, n, line_start_of(buf, landing + span - 1));
+
+    if (borrowed && buf[n - 1] == '\n')
+    {
+        // Give the newline back. Whichever one is at the end now, the buffer
+        // is left the shape it was found in, and this record is still inside
+        // the caller's undo step.
+        editor_undo_record(undo, n - 1, buf + n - 1, 1, NULL, 0);
+        n--;
+        buf[n] = '\0';
+    }
+
+    if (landed > n) landed = n;
+    *len = n;
+    *out_cursor = landed;
+    return true;
+}
+
 size_t editor_vi_substitute(char *buf, size_t *len, size_t capacity,
                             size_t range_start, size_t range_end,
                             const char *pat, size_t pat_len,
@@ -2545,4 +3026,196 @@ size_t editor_vi_substitute(char *buf, size_t *len, size_t capacity,
         *out_cursor = last_changed;
     }
     return count;
+}
+
+//
+//  The global commands (§23)
+//
+
+size_t editor_vi_global(char *buf, size_t *len, size_t capacity,
+                        size_t range_start, size_t range_end,
+                        const char *pat, size_t pat_len, bool invert, char cmd,
+                        const char *sub_pat, size_t sub_pat_len,
+                        const char *rep, size_t rep_len, bool sub_global,
+                        EditorUndo *undo, size_t *out_cursor)
+{
+    size_t n = *len;
+
+    if (pat_len == 0 || !editor_pattern_valid(pat, pat_len))
+    {
+        return 0;
+    }
+    if (range_end > n)
+    {
+        range_end = n;
+    }
+    range_start = line_start_of(buf, range_start > n ? n : range_start);
+    if (range_start >= range_end)
+    {
+        return 0;
+    }
+
+    EditorPatternGroups g;
+    size_t count = 0;
+    size_t landed = range_start;
+    bool refused = false;
+
+    // Backwards, from the last line of the range: what a line does happens
+    // below the lines still to be visited, so nothing this walk still has to
+    // find ever moves and there is nothing to carry from one line to the next
+    // (§23.3). `range_end` is the start of the line after the last one in the
+    // range, or the end of the buffer.
+    for (size_t line = line_start_of(buf, range_end - 1); ; )
+    {
+        size_t end = line_end_of(buf, n, line);
+        bool too_complex = false;
+        bool hit = editor_pattern_search(pat, pat_len, buf + line, end - line, 0,
+                                         g, &too_complex);
+        if (too_complex)
+        {
+            // The next line would pay the same budget again (B36). Everything
+            // already done is complete and journalled, so the walk simply ends;
+            // only a pass that had done nothing yet is a refusal to report.
+            refused = true;
+            break;
+        }
+
+        if (hit != invert)
+        {
+            if (cmd == 'd')
+            {
+                size_t to = (end < n) ? end + 1 : n;   // The line and its break
+                editor_undo_record(undo, line, buf + line, to - line, NULL, 0);
+                memmove(buf + line, buf + to, n - to);
+                n -= to - line;
+                buf[n] = '\0';
+                count++;
+                landed = line;
+            }
+            else
+            {
+                // One line is a range of one line, so the substitute is the
+                // same loop it always was rather than a second one (§23.5)
+                size_t did = editor_vi_substitute(buf, &n, capacity, line,
+                                                  (end < n) ? end + 1 : n,
+                                                  sub_pat, sub_pat_len,
+                                                  rep, rep_len, sub_global,
+                                                  undo, NULL);
+                if (did == SIZE_MAX)
+                {
+                    refused = true;
+                    break;
+                }
+                if (did > 0)
+                {
+                    count++;
+                    landed = line;
+                }
+            }
+        }
+
+        if (line <= range_start)
+        {
+            break;
+        }
+        line = line_start_of(buf, line - 1);
+    }
+
+    *len = n;
+    if (out_cursor != NULL)
+    {
+        // The walk ends at the top, so this is the first line the pass changed
+        *out_cursor = first_non_blank(buf, n, landed > n ? n : landed);
+    }
+    return (refused && count == 0) ? SIZE_MAX : count;
+}
+
+//
+//  `Ctrl` `A` and `Ctrl` `X` (§24.4)
+//
+
+static bool is_digit(char c)
+{
+    return c >= '0' && c <= '9';
+}
+
+// Long enough for any run this will touch: the scan refuses more digits than a
+// long long can hold, and the result is rendered back through the same width
+#define VI_INC_DIGITS_MAX 18
+
+ViIncrement editor_vi_increment(char *buf, size_t *len, size_t capacity,
+                                size_t cursor, int delta,
+                                EditorUndo *undo, size_t *out_cursor)
+{
+    size_t n = *len;
+    if (cursor > n)
+    {
+        cursor = n;
+    }
+    size_t line = line_start_of(buf, cursor);
+    size_t line_end = line_end_of(buf, n, cursor);
+
+    // The number under the cursor, or the first one to its right on this line
+    size_t first = cursor;
+    while (first < line_end && !is_digit(buf[first]))
+    {
+        first++;
+    }
+    if (first >= line_end)
+    {
+        return VI_INC_NO_NUMBER;
+    }
+    while (first > line && is_digit(buf[first - 1]))
+    {
+        first--;   // The cursor was standing in the middle of the run
+    }
+    size_t last = first;
+    while (last < line_end && is_digit(buf[last]))
+    {
+        last++;
+    }
+    if (last - first > VI_INC_DIGITS_MAX)
+    {
+        return VI_INC_NO_NUMBER;
+    }
+
+    long long value = 0;
+    for (size_t i = first; i < last; i++)
+    {
+        value = value * 10 + (buf[i] - '0');
+    }
+
+    // A `-` against the digits is part of the number, so `fd -100` counts down.
+    // A `.` is not: `10.5` is two numbers, which is vim's rule and keeps
+    // single-precision rounding out of a literal the user typed.
+    size_t start = first;
+    if (start > line && buf[start - 1] == '-')
+    {
+        start--;
+        value = -value;
+    }
+
+    char text[VI_INC_DIGITS_MAX + 3];
+    int m = snprintf(text, sizeof(text), "%lld", value + delta);
+    if (m < 0 || (size_t)m >= sizeof(text))
+    {
+        return VI_INC_NO_NUMBER;
+    }
+
+    size_t old = last - start;
+    if (n - old + (size_t)m >= capacity)
+    {
+        return VI_INC_NO_ROOM;
+    }
+
+    editor_undo_record(undo, start, buf + start, old, text, (size_t)m);
+
+    memmove(buf + start + m, buf + last, n - last);
+    memcpy(buf + start, text, (size_t)m);
+    n = n - old + (size_t)m;
+    buf[n] = '\0';
+
+    *len = n;
+    *out_cursor = start + (size_t)m - 1;   // Vi leaves it on the last digit
+    return VI_INC_OK;
 }
