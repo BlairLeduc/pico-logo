@@ -498,8 +498,7 @@ void test_a_file_much_larger_than_the_definition_buffer_still_edits(void)
     // definition by LOGO_EDITOR_PROC_BUFFER_SIZE. This is what that split
     // rests on -- a file several times the definition buffer must still be
     // processed whole, because no single procedure in it is anywhere near it.
-    #define MANY_PROCS 48
-    #define MANY_BUMPS 3
+    enum { MANY_PROCS = 48, MANY_BUMPS = 3 };
     static char many[16 * 1024];
     size_t len = 0;
     for (int i = 0; i < MANY_PROCS; i++)
@@ -559,6 +558,60 @@ void test_one_procedure_over_the_definition_buffer_is_refused_not_truncated(void
 
     TEST_ASSERT_NOT_NULL(strstr(mock_device_get_output(), "Procedure too long"));
     TEST_ASSERT_NULL(proc_find("huge"));
+}
+
+void test_a_multiline_expression_over_the_definition_buffer_is_refused(void)
+{
+    // The definition buffer does double duty: run_editor_and_process also
+    // accumulates a multi-line bracket expression in it. Its bounds must
+    // therefore be the definition buffer's, not the edit buffer's -- with the
+    // two sized apart, checking the edit buffer's size lets an expression run
+    // 8x past the end of the buffer being written to.
+    static char expr[16 * 1024];
+    size_t len = (size_t)sprintf(expr, "make \"biglist [\n");
+    while (len < LOGO_EDITOR_PROC_BUFFER_SIZE + 1024)
+    {
+        len += (size_t)sprintf(expr + len, "1 2 3 4 5 6 7 8 9 10\n");
+    }
+    sprintf(expr + len, "]\n");
+    TEST_ASSERT_TRUE(strlen(expr) > LOGO_EDITOR_PROC_BUFFER_SIZE);
+    TEST_ASSERT_TRUE(strlen(expr) < primitives_editor_buffer_size());
+
+    mock_device_clear_editor();
+    mock_device_clear_output();
+    mock_device_set_editor_content(expr);
+    run_string("(edit)");
+
+    TEST_ASSERT_NOT_NULL(strstr(mock_device_get_output(), "Expression too long"));
+}
+
+void test_an_unterminated_definition_at_the_buffer_end_stays_in_bounds(void)
+{
+    // The implicit `end` appended when the file runs out mid-definition writes
+    // four more bytes into the definition buffer, and its bound was the edit
+    // buffer's too. Walk the lengths that land near the limit so one of them
+    // puts proc_len within those four bytes of the end.
+    for (int pad = 0; pad < 24; pad++)
+    {
+        test_scaffold_setUp_with_device();
+
+        static char nearly[16 * 1024];
+        size_t len = (size_t)sprintf(nearly, "to edgy\n");
+        while (len < LOGO_EDITOR_PROC_BUFFER_SIZE - 64)
+        {
+            len += (size_t)sprintf(nearly + len, "make \"e :e + 1\n");
+        }
+        // Push the tail towards the bound a byte at a time, and no `end`
+        for (int i = 0; i < pad; i++)
+        {
+            len += (size_t)sprintf(nearly + len, "x");
+        }
+        nearly[len] = '\0';
+
+        mock_device_clear_editor();
+        mock_device_set_editor_content(nearly);
+        run_string("(edit)");  // must not write past the definition buffer
+    }
 }
 
 //==========================================================================
@@ -1539,6 +1592,8 @@ int main(void)
     RUN_TEST(test_edit_defines_a_procedure_far_larger_than_the_sram_buffer);
     RUN_TEST(test_a_file_much_larger_than_the_definition_buffer_still_edits);
     RUN_TEST(test_one_procedure_over_the_definition_buffer_is_refused_not_truncated);
+    RUN_TEST(test_a_multiline_expression_over_the_definition_buffer_is_refused);
+    RUN_TEST(test_an_unterminated_definition_at_the_buffer_end_stays_in_bounds);
 
     RUN_TEST(test_edall_empty_workspace);
     RUN_TEST(test_edit_no_args_preserves_buffer);

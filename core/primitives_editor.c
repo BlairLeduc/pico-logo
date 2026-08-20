@@ -140,7 +140,14 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
     size_t proc_len = 0;
     bool in_procedure_def = false;
     
-    // Bracket-balance tracking for multi-line expressions (e.g. make "x [\n...\n])
+    // Bracket-balance tracking for multi-line expressions (e.g. make "x [\n...\n]).
+    // These accumulate into proc_buffer too -- the two uses alternate and never
+    // overlap -- so every bound below is editor_proc_buffer_size, NOT
+    // editor_buffer_size. The two are the same size only in the region tier;
+    // in the SRAM tier the edit buffer is many times larger, and checking it
+    // here would let an expression run past the end of the buffer being
+    // written to. The REPL bounds its own multi-line expressions at
+    // REPL_MAX_PROC_BUFFER for the same reason, which is the same 4 KB.
     int bracket_depth = 0;
     size_t expr_len = 0;
     
@@ -230,7 +237,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
                 if (bracket_depth > 0)
                 {
                     // Continuing a multi-line bracket expression - append this line
-                    if (expr_len + line_len + 2 < editor_buffer_size - 10)
+                    if (expr_len + line_len + 2 < editor_proc_buffer_size - 10)
                     {
                         // Add a space separator then the line content
                         proc_buffer[expr_len] = ' ';
@@ -278,7 +285,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
                         bracket_depth = line_balance;
                         expr_len = 0;
                         
-                        if (line_len + 1 < editor_buffer_size - 10)
+                        if (line_len + 1 < editor_proc_buffer_size - 10)
                         {
                             memcpy(proc_buffer, line_start, line_len);
                             expr_len = line_len;
@@ -366,7 +373,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
     // If still in procedure definition at end of buffer, auto-complete with "end"
     if (in_procedure_def && proc_len > 0)
     {
-        if (proc_len + 4 < editor_buffer_size)
+        if (proc_len + 4 < editor_proc_buffer_size)
         {
             memcpy(proc_buffer + proc_len, "end", 3);
             proc_len += 3;
