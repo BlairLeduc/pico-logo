@@ -11,7 +11,8 @@ Three scoping decisions were taken with the user on 2026-08-17:
 
 - **`Esc` belongs to vi.** In vi mode it returns to normal mode; it no longer
   accepts the buffer. Leaving the editor becomes `:wq`, `:x`, `ZZ`
-  (accept) and `:q!`, `ZQ`, `:q` (cancel); `:w` accepts too, except under `editfile`,
+  (accept) and `:q!`, `ZQ` (cancel), with `:q` cancelling when the buffer is
+  unmodified and refusing when it is not (§21); `:w` accepts too, except under `editfile`,
   where it writes the file and stays (§14). `Brk` — which is Shift + `Esc` — keeps
   its unconditional cancel, in both modes, as the way out that never depends
   on which mode you are in.
