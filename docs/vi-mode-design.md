@@ -426,6 +426,7 @@ and the mode indicator. Those are a hardware check on the Pico Plus 2 W.
 | **M9** | Ex ranges (§19) | `:2,7s`, `:.,+4s` and a `V` selection followed by `:` running over exactly the lines it covered | **built and checked on a board 2026-08-18** |
 | **M10** | `.` repeats an insert (§20) | `cwfoo` then `.` on the next word, and `3.` after it | **built and checked on a board 2026-08-19**; probing it found B43 (§20.5) |
 | **M11** | `:m` and `:t` (§22) | a procedure moved from the foot of an `edall` buffer to the top with `:'<,'>m0` and one `u` putting it back, and a `:t` of a block longer than the 1 KB copy buffer | built 2026-08-20, **not yet checked on a board** |
+| **M12** | `:g` and `:v` (§23) | `:g/^;/d` and one `u` over an `edall` buffer, `:v/^to /d`, `:g/x/s//y/g`, and what the 1 KB journal does with a big one on a `pico2` | **designed 2026-08-20, not built** |
 
 M1 is the whole feature as far as a user is concerned; M2 is what makes it
 pleasant, M4 is what stops it being annoying, and M5 is the one command a
@@ -1834,9 +1835,153 @@ where "nothing changed" is what a missing feature looks like too.
 
 - **`:d`, `:y`, `:>` over a range.** §19.1's argument still stands for these.
 - **`:g/pat/cmd`.** "Delete every line mentioning this" is the one thing `:%s`
-  cannot say, and it is a real gap — but it is a two-pass mark-then-act loop
-  with a bound on the mark set, and it wants its own section rather than a
-  ride on this one.
-- **`:w {name}`.** Save-as under `editfile`. The write destination is fixed at
-  the primitive that opened the editor (§5.3), `save` says it from the prompt,
-  and adding it here would put a second file path in `editor.c`.
+  cannot say, and it is a real gap — it wants its own section rather than a
+  ride on this one, and it has one now: **§23**, where the mark set this bullet
+  originally priced turns out not to be needed at all.
+- **`:w {name}`.** Save-as under `editfile`, decided against in §23.7.
+
+## 23. The second tier (M12, designed and not built)
+
+§22.6 named two more commands and took neither. This section is what was
+decided about them, written down so the reasoning is not re-derived from
+scratch the next time one of them is asked for. **Neither is built.** `:g` and
+`:v` are M12 and have a gate; `:w {name}` is a decision rather than a
+milestone.
+
+### 23.1 `:g` and `:v` — the case
+
+`:%s` conditions on the text it is replacing and nothing else. Every editing
+job that conditions on *the line* is outside it:
+
+```
+:g/^;/d          throw away every comment line
+:g/^ *$/d        and every blank one
+:v/^to /d        keep only the `to` lines -- an index of the buffer
+:g/^to /s//TO /  touch one thing on the lines that match another
+```
+
+The first two are what an `edall` buffer wants after a session of commenting
+things out, and the third is the only way this editor can answer "what is in
+this file" for a `editfile` buffer of 256 KB, where `Ctrl` `G` says where you
+are and nothing says what is around you.
+
+`:v` is `:g` with the test inverted, and `:g!` is a synonym for it.
+
+### 23.2 The set
+
+The command after the pattern is **`d` or `s`**, and nothing else:
+
+| Form | Does |
+|---|---|
+| `[range]g/`*pat*`/d` | delete every line in the range that matches |
+| `[range]g/`*pat*`/s/`*a*`/`*b*`/[g]` | substitute on every line that matches |
+| `[range]v/`*pat*`/…` , `[range]g!/`*pat*`/…` | the same, on the lines that do not |
+
+`:s` with an empty pattern already means "the last one searched for" (§16.5),
+so `:g/x/s//y/g` says the common case — find the lines, rewrite the thing that
+found them — without typing the pattern twice.
+
+The range defaults to the **whole buffer**, not to the cursor's line as every
+other command in this parser does. That is ex's rule and it is the useful one:
+a `:g` over one line is a `:s` with extra steps. It is a wart, and it is the
+kind that surprises nobody who has used ex and everybody who has not, so the
+reference manual has to say it out loud.
+
+### 23.3 One backwards pass, and no mark set at all
+
+The obvious implementation is ex's: mark every matching line, then run the
+command over the marks, because a command that deletes or resizes lines
+invalidates the walk that found them. §22.6 assumed that and priced it as "a
+two-pass mark-then-act loop with a bound on the mark set" — a bound that would
+have had to exist, since a 256 KB `editfile` buffer holds thousands of lines
+and `ViState` is SRAM that M10 measured in units of 104 bytes.
+
+**Reversing the walk deletes the whole problem.** Go from the last line to the
+first: every edit a line makes happens *below* the lines still to be visited,
+so no offset above it ever moves, and there is nothing to remember between one
+line and the next. No mark array, no bound, no second pass, and no limit on
+how many lines a `:g` may touch. `editor_pattern_search` already matches
+within a single line and never crosses a break, so the test is one call per
+line over the slice the walk is standing on.
+
+The one thing the reversal costs is **order**: ex runs its command top-down,
+and for `d` and `s` the result is identical, while for `m`, `t` and `p` it is
+not — `:g/^to /m0` reverses the procedures rather than gathering them. That is
+the argument for the set in §23.2 being two commands rather than five: the set
+is exactly the commands whose result does not depend on the direction of the
+walk, and admitting a third kind would bring the mark set back with it.
+
+### 23.4 Undo is one step, and a big `:g` can exhaust the journal
+
+Every line the pass touches is a record, and all of them belong to the one
+step `editor_undo_begin` opened for the `Return` — so `u` reverses a whole
+`:g/^;/d`, which is the behaviour the command needs to be safe to try.
+
+But §8's journal is 64 KB on PSRAM and **1 KB without it**, and a change
+larger than the whole journal clears it: on a `pico2`, `:g/^;/d` over a long
+buffer is an edit that cannot be undone *and takes the earlier history with
+it*. That is a worse hazard than any other command in this mode, because it is
+one line of typing, it can delete hundreds of lines, and the buffer it deletes
+them from may be a file with no other copy.
+
+So the footer says what happened — `12 fewer lines` — rather than returning
+silently, and the reference manual chapter says the journal limit next to the
+command rather than only in the undo section. Refusing the command when the
+journal cannot hold it was considered and rejected: it would refuse the
+`pico2` exactly the edit it most wants, and the mode already tells the truth
+about undo elsewhere (`Undo is not available`).
+
+### 23.5 Where it goes, and what it costs
+
+`editor_vi_global()` in `editor_vi.c`, beside `editor_vi_substitute` and
+`editor_vi_move_lines`, for the reason both of those are there: it rewrites
+the buffer, and this file is the one with a host build. It calls
+`editor_vi_substitute` per line for the `s` form rather than growing a second
+substitute loop — the range for that call is the one line the walk is on.
+
+One new action kind (`VI_ACT_GLOBAL`), the pattern and the nested command
+parsed into `ViState` fields `:s` already has, and one `editor.c` case that
+mirrors the substitute's. **Estimate: ~90 lines in `editor_vi.c`, ~15 in
+`editor.c`, and no new `ViState` bytes** if the `:g` pattern reuses
+`st->pattern` — which it can, because the nested `s` has its own and an empty
+one there means "the pattern that found the line", which is what §23.2 wants
+anyway.
+
+### 23.6 The M12 gate
+
+On a board, on an `edall` buffer longer than a screen: `:g/^;/d` and one `u`
+putting every line back; `:v/^to /d` leaving the index; `:g/x/s//y/g` rewriting
+only the lines that matched; and the same `:g/^;/d` run on a `pico2` build, to
+see what the 1 KB journal does with it and to check that the footer says so.
+
+### 23.7 `:w {name}` — the decision is no
+
+Save-as under `editfile`. What it would take: the write destination is
+`editor.save` and `editor.save_ctx`, fixed by the primitive that opened the
+editor, so a name means a second path in `editor.c`, a filename buffer in
+`ViState`, and an answer to "does a later bare `:w` write the new name or the
+old one" — vim says the old one, and vim can afford a `:saveas` to say the
+other thing.
+
+Against that: `save "name` from the prompt already does it, `:wq` is one
+command away from the prompt, and under `edall` the buffer is the workspace
+rather than a file, so `:w {name}` would mean something different depending on
+which primitive opened the editor. It stays out until `editfile` grows a "new
+file" path of its own, which nothing has asked for.
+
+### 23.8 The rest, and why each is out
+
+- **`:noh`.** There is nothing to clear: a search leaves no highlight, only a
+  cursor. `editor.c` highlights syntax, not matches.
+- **`:r` and `:e`.** §5.3 fixed the editor's file relationship at the primitive
+  that opened it, and that is still the right shape.
+- **`:j`.** `J` takes a count and works over a selection.
+- **`:set`.** The two options worth having are already decided rather than
+  configurable: case folding is fixed by §16.7 because Logo itself is
+  case-insensitive about names, and line numbers would cost four of forty
+  columns on every row of a screen that is already narrow.
+- **`:!`.** Running a Logo line from inside the editor is architecturally
+  impossible here, not merely unwanted: `editor.c` is the device layer and has
+  no interpreter handle, and what it would evaluate against is a workspace
+  that does not contain the buffer's procedures until the buffer is accepted —
+  which is what `:wq` is.
