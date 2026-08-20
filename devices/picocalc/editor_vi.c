@@ -1233,7 +1233,14 @@ static void copy_field(char *dst, size_t *dst_len, const char *src, size_t n)
 
 // Parse `s/pat/rep/flags`, starting at the `s`. The delimiter is whatever
 // follows it, as long as it is not a letter or a digit.
-static bool parse_substitute(ViState *st, const char *s, size_t i, size_t n)
+//
+// The pattern goes into `st->pattern`, which is also the last one searched for
+// -- except when `out_pat` is given, and then it is handed back as a slice of
+// `s` and `st->pattern` is left alone. That is what a `:g` needs: the pattern
+// that finds the lines is already in there, and a nested `s` with one of its
+// own must not write over it while the pass is still using it (§23.5).
+static bool parse_substitute(ViState *st, const char *s, size_t i, size_t n,
+                             const char **out_pat, size_t *out_pat_len)
 {
     if (i >= n || s[i] != 's')
     {
@@ -1269,6 +1276,12 @@ static bool parse_substitute(ViState *st, const char *s, size_t i, size_t n)
         {
             return false;
         }
+        if (out_pat != NULL)
+        {
+            // Under a `:g`, that is the pattern which found the line
+            *out_pat = st->pattern;
+            *out_pat_len = st->pattern_len;
+        }
     }
     else
     {
@@ -1276,7 +1289,15 @@ static bool parse_substitute(ViState *st, const char *s, size_t i, size_t n)
         {
             return false;  // run_ex turns this into "E486: bad substitute"
         }
-        copy_field(st->pattern, &st->pattern_len, s + pat, i - pat);
+        if (out_pat != NULL)
+        {
+            *out_pat = s + pat;
+            *out_pat_len = i - pat;
+        }
+        else
+        {
+            copy_field(st->pattern, &st->pattern_len, s + pat, i - pat);
+        }
     }
     i++;
 
@@ -1481,7 +1502,7 @@ static bool run_ex(ViState *st, const char *buf, size_t len, size_t cursor, ViAc
     // Substitute, over the range or -- with none -- the current line
     if (s[i] == 's')
     {
-        if (!parse_substitute(st, s, i, n))
+        if (!parse_substitute(st, s, i, n, NULL, NULL))
         {
             return beep(st, out, "E486: bad substitute");
         }
@@ -1489,6 +1510,88 @@ static bool run_ex(ViState *st, const char *buf, size_t len, size_t cursor, ViAc
         out->start = have_range ? goto_line(buf, len, lo) : line_start_of(buf, cursor);
         out->end = next_line_start(buf, len,
                                    have_range ? goto_line(buf, len, hi) : cursor);
+        return true;
+    }
+
+    // `:g` and `:v` run a command on the lines a pattern picks out, which is
+    // the job `:s` structurally cannot do: it conditions on the text it is
+    // replacing and never on the line (§23). The range defaults to the whole
+    // buffer rather than to the cursor's line, unlike every other command in
+    // this parser -- that is ex's rule, and it is the useful one, since a `:g`
+    // over a single line is a `:s` with extra steps.
+    if (s[i] == 'g' || s[i] == 'v')
+    {
+        bool invert = (s[i] == 'v');
+        i++;
+        if (!invert && i < n && s[i] == '!')
+        {
+            invert = true;   // `:g!` is how ex spells `:v`
+            i++;
+        }
+        if (i >= n || char_class(s[i]) != CLASS_PUNCT)
+        {
+            return beep(st, out, "E486: bad pattern");
+        }
+        char delim = s[i++];
+        size_t pat = i;
+        while (i < n && s[i] != delim)
+        {
+            i++;
+        }
+        if (i >= n)
+        {
+            return beep(st, out, "E486: bad pattern");   // Unterminated
+        }
+        if (i == pat)
+        {
+            // An empty pattern is the last one searched for, exactly as `:s`
+            // has it -- and leaving it there is what lets a nested `s` with no
+            // pattern of its own mean "the pattern that found the line"
+            if (st->pattern_len == 0)
+            {
+                return beep(st, out, "E35: no previous search");
+            }
+        }
+        else
+        {
+            if (!editor_pattern_valid(s + pat, i - pat))
+            {
+                return beep(st, out, "E486: bad pattern");
+            }
+            copy_field(st->pattern, &st->pattern_len, s + pat, i - pat);
+        }
+        i = skip_spaces(s, i + 1, n);
+
+        // `d` and `s`, and nothing else: they are the two commands whose result
+        // does not depend on the direction the walk runs in, and the walk runs
+        // backwards so that it needs no mark set (§23.2, §23.3)
+        out->sub_pattern = NULL;
+        out->sub_pattern_len = 0;
+        if (i < n && s[i] == 'd' && skip_spaces(s, i + 1, n) >= n)
+        {
+            out->ch = 'd';
+        }
+        else if (i < n && s[i] == 's')
+        {
+            if (!parse_substitute(st, s, i, n,
+                                  &out->sub_pattern, &out->sub_pattern_len))
+            {
+                return beep(st, out, "E486: bad substitute");
+            }
+            out->ch = 's';
+        }
+        else
+        {
+            return beep(st, out, "E492: not an editor command");
+        }
+
+        out->kind = VI_ACT_GLOBAL;
+        out->invert = invert;
+        out->linewise = true;
+        out->start = have_range ? goto_line(buf, len, lo) : 0;
+        out->end = have_range
+            ? next_line_start(buf, len, goto_line(buf, len, hi))
+            : len;
         return true;
     }
 
@@ -2721,4 +2824,106 @@ size_t editor_vi_substitute(char *buf, size_t *len, size_t capacity,
         *out_cursor = last_changed;
     }
     return count;
+}
+
+//
+//  The global commands (§23)
+//
+
+size_t editor_vi_global(char *buf, size_t *len, size_t capacity,
+                        size_t range_start, size_t range_end,
+                        const char *pat, size_t pat_len, bool invert, char cmd,
+                        const char *sub_pat, size_t sub_pat_len,
+                        const char *rep, size_t rep_len, bool sub_global,
+                        EditorUndo *undo, size_t *out_cursor)
+{
+    size_t n = *len;
+
+    if (pat_len == 0 || !editor_pattern_valid(pat, pat_len))
+    {
+        return 0;
+    }
+    if (range_end > n)
+    {
+        range_end = n;
+    }
+    range_start = line_start_of(buf, range_start > n ? n : range_start);
+    if (range_start >= range_end)
+    {
+        return 0;
+    }
+
+    EditorPatternGroups g;
+    size_t count = 0;
+    size_t landed = range_start;
+    bool refused = false;
+
+    // Backwards, from the last line of the range: what a line does happens
+    // below the lines still to be visited, so nothing this walk still has to
+    // find ever moves and there is nothing to carry from one line to the next
+    // (§23.3). `range_end` is the start of the line after the last one in the
+    // range, or the end of the buffer.
+    for (size_t line = line_start_of(buf, range_end - 1); ; )
+    {
+        size_t end = line_end_of(buf, n, line);
+        bool too_complex = false;
+        bool hit = editor_pattern_search(pat, pat_len, buf + line, end - line, 0,
+                                         g, &too_complex);
+        if (too_complex)
+        {
+            // The next line would pay the same budget again (B36). Everything
+            // already done is complete and journalled, so the walk simply ends;
+            // only a pass that had done nothing yet is a refusal to report.
+            refused = true;
+            break;
+        }
+
+        if (hit != invert)
+        {
+            if (cmd == 'd')
+            {
+                size_t to = (end < n) ? end + 1 : n;   // The line and its break
+                editor_undo_record(undo, line, buf + line, to - line, NULL, 0);
+                memmove(buf + line, buf + to, n - to);
+                n -= to - line;
+                buf[n] = '\0';
+                count++;
+                landed = line;
+            }
+            else
+            {
+                // One line is a range of one line, so the substitute is the
+                // same loop it always was rather than a second one (§23.5)
+                size_t did = editor_vi_substitute(buf, &n, capacity, line,
+                                                  (end < n) ? end + 1 : n,
+                                                  sub_pat, sub_pat_len,
+                                                  rep, rep_len, sub_global,
+                                                  undo, NULL);
+                if (did == SIZE_MAX)
+                {
+                    refused = true;
+                    break;
+                }
+                if (did > 0)
+                {
+                    count++;
+                    landed = line;
+                }
+            }
+        }
+
+        if (line <= range_start)
+        {
+            break;
+        }
+        line = line_start_of(buf, line - 1);
+    }
+
+    *len = n;
+    if (out_cursor != NULL)
+    {
+        // The walk ends at the top, so this is the first line the pass changed
+        *out_cursor = first_non_blank(buf, n, landed > n ? n : landed);
+    }
+    return (refused && count == 0) ? SIZE_MAX : count;
 }

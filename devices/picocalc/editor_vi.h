@@ -52,6 +52,9 @@ typedef enum
     VI_ACT_SUBSTITUTE,    // Substitute over the lines spanned by [start, end)
     VI_ACT_MOVE_LINES,    // Move ('m') or copy ('t', in `ch`) the lines in
                           // [start, end) to `dest`
+    VI_ACT_GLOBAL,        // Run `ch` -- 'd' or 's' -- on every line in
+                          // [start, end) that matches the pattern, or on every
+                          // line that does not when `invert` (`:g`, `:v`)
     VI_ACT_UNDO,          // Reverse `count` changes
     VI_ACT_REDO,          // ... and put them back
     VI_ACT_WRITE,         // :w -- write the buffer out and stay in the editor
@@ -73,6 +76,7 @@ typedef struct
     bool linewise;     // The range is whole lines, newline included
     size_t dest;       // Where VI_ACT_MOVE_LINES puts them: a line start, or
                        // the end of the buffer
+    bool invert;       // VI_ACT_GLOBAL acts on the lines that do *not* match
     char ch;           // VI_ACT_REPLACE_CHAR, VI_ACT_SEARCH, VI_ACT_MOVE_LINES
     int count;         // Repeat count; tab stops for VI_ACT_INDENT (may be negative)
     const char *msg;   // Footer text for VI_ACT_BEEP and VI_ACT_MESSAGE. A
@@ -88,6 +92,17 @@ typedef struct
     // as the editor session.
     const char *insert;
     size_t insert_len;
+
+    // Set only by VI_ACT_GLOBAL, and only when its command is `s`: the pattern
+    // that substitute replaces (§23.5). The `:g` pattern itself is
+    // `ViState.pattern` and the replacement `ViState.replacement`, exactly as a
+    // plain `:s` leaves them -- but a nested `s` has a second pattern, and
+    // rather than a second buffer for it this points either at the command line
+    // it was typed on, which lasts until the next `:` and so outlives the
+    // action, or at `ViState.pattern` when it was left empty, which is what
+    // "the pattern that found the line" means.
+    const char *sub_pattern;
+    size_t sub_pattern_len;
 } ViAction;
 
 typedef struct
@@ -239,3 +254,34 @@ size_t editor_vi_substitute(char *buf, size_t *len, size_t capacity,
                             const char *pat, size_t pat_len,
                             const char *rep, size_t rep_len,
                             bool global, EditorUndo *undo, size_t *out_cursor);
+
+// Run one command on every line in [range_start, range_end) that matches `pat`
+// -- or on every line that does not, when `invert` (`:v` and `:g!`). `cmd` is
+// 'd', which deletes the line, or 's', which substitutes `sub_pat` with `rep`
+// on it exactly as editor_vi_substitute does over a range of one line.
+//
+// The walk runs backwards, from the last line of the range to the first, and
+// that is what lets it hold nothing at all: every edit a line makes happens
+// *below* the lines still to be visited, so no offset above it ever moves and
+// there is nothing to remember between one line and the next -- no mark set, no
+// bound on it, and no limit on how many lines a `:g` may touch (§23.3). It also
+// fixes the set of commands at these two: `d` and `s` are the ones whose result
+// does not depend on the direction of the walk.
+//
+// buf/len: the buffer to rewrite; *len is updated. capacity includes the NUL.
+// undo: journal to record into, or NULL. Every record belongs to the step the
+//   caller opened, so one `u` reverses the whole pass -- which on a board with
+//   no PSRAM can be more than the 1 KB journal holds, and then the pass cannot
+//   be undone and takes the earlier history with it (§23.4).
+// out_cursor: set to the first non-blank of the topmost line the pass changed.
+//
+// Returns the number of lines the command changed. SIZE_MAX when the pattern
+// outran the matcher's step budget (B36) before any line was touched; a pattern
+// that trips the budget part way through ends the walk instead, and what it did
+// up to there stands, complete and journalled.
+size_t editor_vi_global(char *buf, size_t *len, size_t capacity,
+                        size_t range_start, size_t range_end,
+                        const char *pat, size_t pat_len, bool invert, char cmd,
+                        const char *sub_pat, size_t sub_pat_len,
+                        const char *rep, size_t rep_len, bool sub_global,
+                        EditorUndo *undo, size_t *out_cursor);

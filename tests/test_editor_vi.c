@@ -49,6 +49,7 @@ typedef struct
     size_t len_at_key;  // The length the last key saw, for range assertions
     int exits;          // VI_ACT_ACCEPT / _CANCEL seen
     int writes;         // VI_ACT_WRITE seen (`:w`, which does not exit)
+    size_t globals;     // What the last VI_ACT_GLOBAL reported
     ViActionKind exit_kind;
 } Ed;
 
@@ -365,6 +366,22 @@ static void ed_apply(Ed *e, const ViAction *act)
                 editor_lines_reset(&e->ix);
                 e->cursor = landed;
             }
+            break;
+        }
+
+        case VI_ACT_GLOBAL: {
+            size_t landed = e->cursor;
+            size_t n = editor_vi_global(e->buf, &e->len, ED_CAP, act->start, act->end,
+                                        e->vi.pattern, e->vi.pattern_len,
+                                        act->invert, act->ch,
+                                        act->sub_pattern, act->sub_pattern_len,
+                                        e->vi.replacement, e->vi.replacement_len,
+                                        e->vi.sub_global, &e->undo, &landed);
+            if (n > 0 && n != SIZE_MAX) {
+                editor_lines_reset(&e->ix);
+                e->cursor = landed;
+            }
+            e->globals = n;
             break;
         }
 
@@ -2132,6 +2149,217 @@ static void test_a_copy_that_would_not_fit_changes_nothing(void)
 }
 
 //
+//  The global commands (§23)
+//
+
+static void test_global_delete_takes_every_comment_line(void)
+{
+    // The case the command exists for: an edall buffer after a session of
+    // commenting things out
+    ed_set("; a note\nfd 10\n; another\nrt 90\n; and one more\n");
+    feed(":g/^;/d"); feed_key(KEY_RETURN);
+    assert_text("fd 10\nrt 90\n");
+    TEST_ASSERT_EQUAL_UINT(3, ed.globals);
+}
+
+static void test_global_delete_takes_every_blank_line(void)
+{
+    ed_set("fd 10\n\nrt 90\n   \nfd 5\n");
+    feed(":g/^ *$/d"); feed_key(KEY_RETURN);
+    assert_text("fd 10\nrt 90\nfd 5\n");
+}
+
+static void test_global_deletes_lines_that_touch(void)
+{
+    // What the backwards walk is for: a run of matching lines, where a forward
+    // pass would have to remember where the next one went (§23.3)
+    ed_set("keep\nx\nx\nx\nkeep\n");
+    feed(":g/x/d"); feed_key(KEY_RETURN);
+    assert_text("keep\nkeep\n");
+}
+
+static void test_inverted_global_keeps_only_the_lines_that_match(void)
+{
+    // `:v/^to /d` is the only way this editor can say what is in a buffer
+    ed_set("to box\nfd 10\nend\nto tri\nfd 5\nend\n");
+    feed(":v/^to /d"); feed_key(KEY_RETURN);
+    assert_text("to box\nto tri\n");
+}
+
+static void test_g_bang_is_v(void)
+{
+    ed_set("to box\nfd 10\nend\n");
+    feed(":g!/^to /d"); feed_key(KEY_RETURN);
+    assert_text("to box\n");
+}
+
+static void test_global_substitute_rewrites_only_the_lines_that_matched(void)
+{
+    // The point of the pair: the test is on the line, the rewrite on something
+    // else entirely -- which is what `:%s` structurally cannot say
+    ed_set("fd 1\nbk 1\nfd 1\n");
+    feed(":g/^fd/s/1/9/"); feed_key(KEY_RETURN);
+    assert_text("fd 9\nbk 1\nfd 9\n");
+    TEST_ASSERT_EQUAL_UINT(2, ed.globals);
+}
+
+static void test_a_nested_substitute_with_no_pattern_reuses_the_one_that_found_the_line(void)
+{
+    ed_set("x a x\nb\nx\n");
+    feed(":g/x/s//y/g"); feed_key(KEY_RETURN);
+    assert_text("y a y\nb\ny\n");
+}
+
+static void test_a_nested_substitute_may_lengthen_the_lines_it_walks(void)
+{
+    // Every line the walk still has to visit is above the one being rewritten,
+    // so growing this one moves nothing the walk is holding
+    ed_set("a\nb\na\n");
+    feed(":g/a/s/a/aaa/"); feed_key(KEY_RETURN);
+    assert_text("aaa\nb\naaa\n");
+}
+
+static void test_a_global_without_a_range_covers_the_whole_buffer(void)
+{
+    // Ex's wart, and the useful one: every other command in this parser
+    // defaults to the cursor's line, and a `:g` over one line is a `:s` with
+    // extra steps (§23.2)
+    ed_set("x\nkeep\nx\n");
+    feed("G");
+    feed(":g/x/d"); feed_key(KEY_RETURN);
+    assert_text("keep\n");
+}
+
+static void test_a_range_bounds_a_global(void)
+{
+    ed_set("x\nx\nx\nx\n");
+    feed(":2,3g/x/d"); feed_key(KEY_RETURN);
+    assert_text("x\nx\n");
+}
+
+static void test_a_visual_selection_bounds_a_global(void)
+{
+    ed_set("x\nx\nx\nx\n");
+    feed("jVj:");
+    TEST_ASSERT_EQUAL_STRING(":'<,'>", ed.vi.cmdline);
+    feed("g/x/d"); feed_key(KEY_RETURN);
+    assert_text("x\nx\n");
+}
+
+static void test_a_global_that_matches_nothing_changes_nothing(void)
+{
+    ed_set("one\ntwo\n");
+    feed(":g/zz/d"); feed_key(KEY_RETURN);
+    TEST_ASSERT_EQUAL_INT(VI_ACT_GLOBAL, ed.last.kind);
+    TEST_ASSERT_EQUAL_UINT(0, ed.globals);
+    assert_text("one\ntwo\n");
+}
+
+static void test_a_global_delete_may_empty_the_buffer(void)
+{
+    ed_set("x\nx\n");
+    feed(":g/x/d"); feed_key(KEY_RETURN);
+    assert_text("");
+    TEST_ASSERT_EQUAL_UINT(0, ed.cursor);
+}
+
+static void test_a_global_delete_of_a_last_line_without_a_newline(void)
+{
+    ed_set("keep\nx");
+    feed(":g/x/d"); feed_key(KEY_RETURN);
+    assert_text("keep\n");
+}
+
+static void test_a_global_leaves_the_cursor_on_the_topmost_line_it_changed(void)
+{
+    ed_set("a\nx\nb\nx\n");
+    feed(":g/x/d"); feed_key(KEY_RETURN);
+    assert_text("a\nb\n");
+    TEST_ASSERT_EQUAL_UINT(2, ed.cursor);   // Where the first deleted line was
+}
+
+static void test_a_global_leaves_the_copy_buffer_alone(void)
+{
+    // Nothing it deletes goes through the register, which is 1 KB and the
+    // user's besides -- the workaround this command replaces did (§23.1)
+    ed_set("one\nx\ntwo\n");
+    feed("yy");                            // "one\n" into the register
+    feed(":g/x/d"); feed_key(KEY_RETURN);
+    assert_text("one\ntwo\n");
+    feed("p");                             // Still there, below the line it left the cursor on
+    assert_text("one\ntwo\none\n");
+}
+
+static void test_one_undo_puts_a_whole_global_back(void)
+{
+    // Every line the pass touched belongs to the step the Return opened, which
+    // is what makes the command safe to try (§23.4)
+    ed_set("; a\nfd 10\n; b\nrt 90\n; c\n");
+    feed(":g/^;/d"); feed_key(KEY_RETURN);
+    assert_text("fd 10\nrt 90\n");
+    feed("u");
+    assert_text("; a\nfd 10\n; b\nrt 90\n; c\n");
+}
+
+static void test_one_undo_puts_a_whole_global_substitute_back(void)
+{
+    ed_set("fd 1\nbk 1\nfd 1\n");
+    feed(":g/^fd/s/1/9/"); feed_key(KEY_RETURN);
+    assert_text("fd 9\nbk 1\nfd 9\n");
+    feed("u");
+    assert_text("fd 1\nbk 1\nfd 1\n");
+}
+
+static void test_a_global_with_an_empty_pattern_reuses_the_last_search(void)
+{
+    ed_set("n and n\nb\nn\n");
+    feed("/\\<n\\>"); feed_key(KEY_RETURN);
+    feed(":g//d");    feed_key(KEY_RETURN);
+    assert_text("b\n");
+}
+
+static void test_a_malformed_global_complains_and_changes_nothing(void)
+{
+    const char *bad[] = { ":g", ":g/a", ":g/a/", ":g/a/x", ":g/a/dd", ":g/a/s/b",
+                          ":gg", ":g/a\\(b/d", ":v", ":g//d" };
+
+    for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
+        setUp();
+        ed_set("a b\n");
+        feed(bad[i]);
+        feed_key(KEY_RETURN);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(VI_ACT_BEEP, ed.last.kind, bad[i]);
+        assert_text("a b\n");
+        TEST_ASSERT_EQUAL_INT(VI_NORMAL, ed.vi.mode);
+    }
+}
+
+// B36 again: the budget is spent per line, so a pass over a buffer of them
+// would pay it on every one. It stops at the first, and says so distinctly.
+static void test_a_global_refuses_a_pathological_pattern(void)
+{
+    char buf[512];
+    memset(buf, 'a', 255);
+    buf[255] = '\n';
+    memset(buf + 256, 'a', 200);
+    buf[456] = '\n';
+    buf[457] = '\0';
+
+    char before[512];
+    strcpy(before, buf);
+
+    size_t len = strlen(buf);
+    size_t cursor = 0;
+    const char *pat = ".*.*.*.*.*.*.*.*.*.*.*.*.*.*.*x";
+    TEST_ASSERT_EQUAL_UINT(SIZE_MAX,
+                           editor_vi_global(buf, &len, sizeof(buf), 0, len,
+                                            pat, strlen(pat), false, 'd',
+                                            NULL, 0, NULL, 0, false, NULL, &cursor));
+    TEST_ASSERT_EQUAL_STRING(before, buf);
+    TEST_ASSERT_EQUAL_UINT(strlen(before), len);
+}
+
+//
 //  Search
 //
 
@@ -2923,6 +3151,28 @@ int main(void)
     RUN_TEST(test_a_move_leaves_the_copy_buffer_alone);
     RUN_TEST(test_a_copy_that_would_not_fit_changes_nothing);
     RUN_TEST(test_the_command_line_stops_growing_when_it_is_full);
+
+    RUN_TEST(test_global_delete_takes_every_comment_line);
+    RUN_TEST(test_global_delete_takes_every_blank_line);
+    RUN_TEST(test_global_deletes_lines_that_touch);
+    RUN_TEST(test_inverted_global_keeps_only_the_lines_that_match);
+    RUN_TEST(test_g_bang_is_v);
+    RUN_TEST(test_global_substitute_rewrites_only_the_lines_that_matched);
+    RUN_TEST(test_a_nested_substitute_with_no_pattern_reuses_the_one_that_found_the_line);
+    RUN_TEST(test_a_nested_substitute_may_lengthen_the_lines_it_walks);
+    RUN_TEST(test_a_global_without_a_range_covers_the_whole_buffer);
+    RUN_TEST(test_a_range_bounds_a_global);
+    RUN_TEST(test_a_visual_selection_bounds_a_global);
+    RUN_TEST(test_a_global_that_matches_nothing_changes_nothing);
+    RUN_TEST(test_a_global_delete_may_empty_the_buffer);
+    RUN_TEST(test_a_global_delete_of_a_last_line_without_a_newline);
+    RUN_TEST(test_a_global_leaves_the_cursor_on_the_topmost_line_it_changed);
+    RUN_TEST(test_a_global_leaves_the_copy_buffer_alone);
+    RUN_TEST(test_one_undo_puts_a_whole_global_back);
+    RUN_TEST(test_one_undo_puts_a_whole_global_substitute_back);
+    RUN_TEST(test_a_global_with_an_empty_pattern_reuses_the_last_search);
+    RUN_TEST(test_a_malformed_global_complains_and_changes_nothing);
+    RUN_TEST(test_a_global_refuses_a_pathological_pattern);
 
     RUN_TEST(test_slash_records_a_pattern_and_a_direction);
     RUN_TEST(test_search_without_a_pattern_complains);

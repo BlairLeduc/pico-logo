@@ -2115,6 +2115,41 @@ static int editor_vi_apply(const ViAction *act, int cursor_line_before)
             break;
         }
 
+        case VI_ACT_GLOBAL: {
+            size_t landed = editor.cursor_pos;
+            size_t count = editor_vi_global(editor.buffer, &editor.content_length,
+                                            editor.buffer_size, act->start, act->end,
+                                            editor.vi.pattern, editor.vi.pattern_len,
+                                            act->invert, act->ch,
+                                            act->sub_pattern, act->sub_pattern_len,
+                                            editor.vi.replacement,
+                                            editor.vi.replacement_len,
+                                            editor.vi.sub_global, &editor.undo, &landed);
+            if (count == SIZE_MAX) {
+                editor.vi_msg = "E486: pattern too complex";
+                editor.dirty_flags = DIRTY_CURSOR;
+                break;
+            }
+            if (count == 0) {
+                editor.vi_msg = "No lines matched";
+                editor.dirty_flags = DIRTY_CURSOR;
+                break;
+            }
+            // One line of typing can take hundreds of lines away, and on a
+            // board with no PSRAM a pass that large is more than the undo
+            // journal holds -- so it says what it did rather than returning
+            // silently (vi-mode-design.md §23.4)
+            snprintf(editor.vi.msg, sizeof(editor.vi.msg),
+                     act->ch == 'd' ? "%u fewer lines" : "%u lines changed",
+                     (unsigned)count);
+            editor.vi_msg = editor.vi.msg;
+            editor_lines_reset(&editor.lines);
+            editor.cursor_pos = landed;
+            editor.vi.modified = true;
+            editor_mark_all_dirty();
+            break;
+        }
+
         case VI_ACT_UNDO:
         case VI_ACT_REDO: {
             bool forward = (act->kind == VI_ACT_REDO);

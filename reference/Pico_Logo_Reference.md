@@ -746,10 +746,13 @@ While you are inserting, the Editor behaves exactly as it does outside vi mode: 
 | `:s/`_pat_`/`_new_`/g` | replace every _pat_ on this line |
 | `:%s/`_pat_`/`_new_`/` | replace the first _pat_ on every line |
 | `:%s/`_pat_`/`_new_`/g` | replace every _pat_ in the buffer |
+| `:g/`_pat_`/d` | delete every line that matches _pat_ |
+| `:v/`_pat_`/d`, `:g!/`_pat_`/d` | delete every line that does not |
+| `:g/`_pat_`/s/`_pat_`/`_new_`/` | substitute on the lines that match |
 
 #### Ranges
 
-A `:s`, a `:=`, a `:m` or a `:t` can be given the lines to work on, written in front of it. A range is one line, or two separated by a comma, and each of them is written as:
+A `:s`, a `:=`, a `:m`, a `:t` or a `:g` can be given the lines to work on, written in front of it. A range is one line, or two separated by a comma, and each of them is written as:
 
 | Address | Means |
 |---|---|
@@ -787,6 +790,26 @@ A range on `:w`, `:q` or any other command is refused with `E481: no range allow
 _pat_ is a [pattern](#patterns), matched ignoring the difference between upper and lower case. In _new_, `&` stands for the whole of what matched and `\1`..`\9` for what the pattern's groups matched; every other character is used exactly as typed. Each of _pat_ and _new_ may be up to 32 characters. Nothing is replaced when there is no match, or when the result would not fit in the edit buffer, and the bottom line says `No substitution made`. A _pat_ left empty reuses the pattern of the last `:s`, `/` or `?`, so `/`\<`n`\>`` and then `:%s//count/g` renames what the search just walked.
 
 Anything else on the command line is refused with `E492: not an editor command`, and a malformed substitute — a missing delimiter, or a bad pattern — with `E486: bad substitute`.
+
+#### The global commands
+
+`:g` runs a command on every line that matches a pattern and `:v` on every line that does not, which is the job a substitute structurally cannot do: `:s` conditions on the text it is replacing and never on the line that text is on. `:g!` is another way of writing `:v`.
+
+| | |
+|---|---|
+| `:g/^;/d` | throw away every comment line |
+| `:g/^ *$/d` | and every blank one |
+| `:v/^to /d` | keep only the title lines — an index of what is in the buffer |
+| `:g/^fd/s/10/20/` | change one thing on the lines that say another |
+| `:g/x/s//y/g` | ... where what found the lines is also what is replaced |
+
+The command after the pattern is `d`, which deletes the line, or `s`, which is the substitute written exactly as it is written on its own — including a _pat_ left empty, which here means the pattern that found the line, so `:g/x/s//y/g` says the common case without typing the pattern twice. Nothing else is accepted, and anything else is refused with `E492: not an editor command`: `d` and `s` are the two commands whose result does not depend on which end of the buffer the work starts from.
+
+Unlike every other command on the command line, a `:g` with no range in front of it works on the whole buffer rather than on the line the cursor is on — a `:g` over a single line would be a `:s` with extra steps. A range still bounds it, so `:1,20g/^;/d` and `:'<,'>g/^;/d` cover only those lines. The cursor is left on the topmost line the pass changed.
+
+However many lines it touches, the whole pass is one change and one `u` puts all of it back, so the bottom line says what happened — `12 fewer lines`, or `9 lines changed` — rather than leaving you to count. It may also be a change larger than the whole undo journal, which is 1 KB on a board without PSRAM (see [Supported Pico Boards](#supported-pico-boards)), and a single change larger than the journal clears it: on those boards a large `:g/^;/d` can be an edit that cannot be undone, and that leaves nothing done before it undoable either. Write the buffer out first if it matters.
+
+What a `:g` deletes does not go through the copy buffer and does not disturb what is in it, so a `p` afterwards still pastes what you last copied. A `:g` that picks out no lines says `No lines matched` and changes nothing. Its pattern is the search's, and so are its complaints: `E486: bad pattern` for a malformed one, `E35: no previous search` for an empty one with nothing to reuse, and `E486: pattern too complex` for one too dear to run.
 
 #### Patterns
 

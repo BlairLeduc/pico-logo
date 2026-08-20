@@ -426,7 +426,7 @@ and the mode indicator. Those are a hardware check on the Pico Plus 2 W.
 | **M9** | Ex ranges (§19) | `:2,7s`, `:.,+4s` and a `V` selection followed by `:` running over exactly the lines it covered | **built and checked on a board 2026-08-18** |
 | **M10** | `.` repeats an insert (§20) | `cwfoo` then `.` on the next word, and `3.` after it | **built and checked on a board 2026-08-19**; probing it found B43 (§20.5) |
 | **M11** | `:m` and `:t` (§22) | a procedure moved from the foot of an `edall` buffer to the top with `:'<,'>m0` and one `u` putting it back, and a `:t` of a block longer than the 1 KB copy buffer | built 2026-08-20, **not yet checked on a board** |
-| **M12** | `:g` and `:v` (§23) | `:g/^;/d` and one `u` over an `edall` buffer, `:v/^to /d`, `:g/x/s//y/g`, and what the 1 KB journal does with a big one on a `pico2` | **designed 2026-08-20, not built** |
+| **M12** | `:g` and `:v` (§23) | `:g/^;/d` and one `u` over an `edall` buffer, `:v/^to /d`, `:g/x/s//y/g`, and what the 1 KB journal does with a big one on a `pico2` | **built and checked on a board 2026-08-20**, both halves (§23.6) |
 
 M1 is the whole feature as far as a user is concerned; M2 is what makes it
 pleasant, M4 is what stops it being annoying, and M5 is the one command a
@@ -1840,13 +1840,13 @@ where "nothing changed" is what a missing feature looks like too.
   originally priced turns out not to be needed at all.
 - **`:w {name}`.** Save-as under `editfile`, decided against in §23.7.
 
-## 23. The second tier (M12, designed and not built)
+## 23. The second tier (M12)
 
 §22.6 named two more commands and took neither. This section is what was
 decided about them, written down so the reasoning is not re-derived from
-scratch the next time one of them is asked for. **Neither is built.** `:g` and
-`:v` are M12 and have a gate; `:w {name}` is a decision rather than a
-milestone.
+scratch the next time one of them is asked for. `:g` and `:v` are **M12, built
+and accepted on hardware** — §23.9 is what the build changed and §23.6 what the
+board said. `:w {name}` is a decision rather than a milestone, and stays no.
 
 ### 23.1 `:g` and `:v` — the case
 
@@ -1954,6 +1954,16 @@ putting every line back; `:v/^to /d` leaving the index; `:g/x/s//y/g` rewriting
 only the lines that matched; and the same `:g/^;/d` run on a `pico2` build, to
 see what the 1 KB journal does with it and to check that the footer says so.
 
+**Passed 2026-08-20, both halves**, the second on a `pico2` build.
+
+The journal half is a pair of runs rather than one, because what matters is the
+boundary: a record is a 20-byte header plus the bytes it deleted, so 1 KB holds
+about thirty deleted comment lines. Twenty of them undo whole; forty exceed the
+journal, and `u` answers `Already at oldest change` — the step did not fit, the
+journal cleared itself, and the history before it went with it. That is the
+behaviour §23.4 chose over refusing the command, and seeing it happen is why
+the footer says `40 fewer lines` first.
+
 ### 23.7 `:w {name}` — the decision is no
 
 Save-as under `editfile`. What it would take: the write destination is
@@ -1985,3 +1995,45 @@ file" path of its own, which nothing has asked for.
   no interpreter handle, and what it would evaluate against is a workspace
   that does not contain the buffer's procedures until the buffer is accepted —
   which is what `:wq` is.
+
+### 23.9 What the build changed
+
+The backwards walk held: `editor_vi_global` keeps a count and one offset, and
+that is the whole of its state. So did the estimate of **no new `ViState`
+bytes** — `data+bss` is identical to the byte on `pico2` and `pico+2w`, and the
+1,296 bytes the command costs are all flash. Three things the design did not
+say:
+
+**The two patterns collide, and the second one does not need a home.** §23.5
+had the `:g` pattern reuse `st->pattern` and the nested command "parsed into
+`ViState` fields `:s` already has" — but the field a nested `s` would parse its
+own pattern into *is* `st->pattern`, which the walk is still using to find the
+next line. Nothing has to be copied to fix it: the pattern was typed on the
+command line, `st->cmdline` still holds it, and that buffer is not touched
+again until the next `:`. So `parse_substitute` grew an out-parameter that
+hands the pattern back as a slice instead of copying it, `ViAction` carries the
+slice to the editor, and `st->pattern` stays the `:g` pattern — which also
+makes a `:g` set the last search, as vi does. An empty pattern in either place
+still means the same text, and now provably so, since only one of them is ever
+written.
+
+**A pass cannot refuse a pathological pattern the way a substitute can.**
+`editor_vi_substitute` counts before it acts, so B36's step budget is spent
+before a byte moves and the refusal is all-or-nothing. A `:g` has no such
+pass: by the time the budget trips, lines below may already be gone, and they
+cannot be un-decided. So the budget ends the walk instead, what it did up to
+there stands complete and journalled, and only a pass that had done *nothing*
+yet answers `E486: pattern too complex`. The alternative — a whole matching
+pre-pass over the range — would cost the budget twice on every line to buy an
+answer for a pattern nobody should be running over a buffer.
+
+**The footer needed a composed message, and `editor.c` had never composed
+one.** Every other `vi_msg` is a literal. `12 fewer lines` and `9 lines
+changed` are `snprintf` into `ViState.msg`, the buffer §17 already keeps for
+`Ctrl` `G`'s report, which the footer holds until the next keystroke.
+
+Cost: 211 lines in `editor_vi.c` and 35 in `editor.c`, comments and all —
+against an estimate of ~90 and ~15, which counted the walk and not the ex
+parsing the two commands, the `!`, the delimiter and the two empty-pattern
+cases needed. 21 tests, 19 of which fail with the walk stubbed out; the two
+that still pass are the parser's, which is the right split.
