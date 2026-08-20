@@ -483,6 +483,16 @@ if(BUILD_FOR_HOST)
         target_compile_definitions(logo_core PUBLIC MAX_OP_STACK_DEPTH=${LOGO_OP_STACK_DEPTH})
     endif()
 
+    # The memory-tier sizes, wired here too so a board's arena and editor
+    # budget can be modelled on the host. Without these the cache variable is
+    # accepted and silently ignored, and every arena size measures the same.
+    if(DEFINED LOGO_MEMORY_SIZE)
+        target_compile_definitions(logo_core PUBLIC LOGO_MEMORY_SIZE=${LOGO_MEMORY_SIZE})
+    endif()
+    if(DEFINED LOGO_EDITOR_BUFFER_SIZE)
+        target_compile_definitions(logo_core PUBLIC LOGO_EDITOR_BUFFER_SIZE=${LOGO_EDITOR_BUFFER_SIZE})
+    endif()
+
     # mklfsimg: build a LittleFS backup image from a host directory tree. Only
     # needs the shared backup code + littlefs, all bundled in logo_devices.
     add_executable(mklfsimg
@@ -643,6 +653,16 @@ if(BUILD_TESTING)
     # Allow LOGO_OP_STACK_DEPTH to be set via CMake cache variable
     if(DEFINED LOGO_OP_STACK_DEPTH)
         target_compile_definitions(logo_core PUBLIC MAX_OP_STACK_DEPTH=${LOGO_OP_STACK_DEPTH})
+    endif()
+
+    # The memory-tier sizes, wired here too so a board's arena and editor
+    # budget can be modelled on the host. Without these the cache variable is
+    # accepted and silently ignored, and every arena size measures the same.
+    if(DEFINED LOGO_MEMORY_SIZE)
+        target_compile_definitions(logo_core PUBLIC LOGO_MEMORY_SIZE=${LOGO_MEMORY_SIZE})
+    endif()
+    if(DEFINED LOGO_EDITOR_BUFFER_SIZE)
+        target_compile_definitions(logo_core PUBLIC LOGO_EDITOR_BUFFER_SIZE=${LOGO_EDITOR_BUFFER_SIZE})
     endif()
 
     # Include the tests subdirectory

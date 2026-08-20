@@ -327,6 +327,29 @@ extern "C" {
 #define LOGO_VI_UNDO_PSRAM_SIZE (64 * 1024)
 #define LOGO_VI_UNDO_SRAM_SIZE  1024
 
+// Editor procedure-definition buffer (SRAM tier).
+//
+// The editor's second buffer does NOT hold the file: run_editor_and_process
+// accumulates ONE procedure in it, resetting at every `to`, and hands it to
+// proc_define_from_text at `end`. Sizing it to match the edit buffer -- which
+// is what taking the pair as one block did -- reserved a file's worth of SRAM
+// to hold a procedure's worth, and on a board with no PSRAM that is half the
+// editor's heap cost spent on nothing.
+//
+// 4 KB is the same bound REPL_MAX_PROC_BUFFER puts on a definition *typed* at
+// the prompt, for the identical job, so the two halves of the interpreter now
+// agree on how long one procedure may be. It is measured, not guessed: the
+// longest procedure anywhere in this tree is 2,850 bytes (`p10prof`), and the
+// longest in a shipped game is 1,601 (`step.saucer` in a 101 KB asteroids).
+//
+// Overflow is already handled and says so -- "Procedure too long" -- and skips
+// that definition rather than truncating it.
+//
+// PSRAM boards do not use this: they take both buffers at
+// LOGO_EDITOR_PSRAM_BUFFER_SIZE out of a region with megabytes going spare,
+// where there is nothing to be won by bounding it tighter.
+#define LOGO_EDITOR_PROC_BUFFER_SIZE 4096
+
 #ifdef __cplusplus
 }
 #endif

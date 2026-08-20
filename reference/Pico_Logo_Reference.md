@@ -416,26 +416,41 @@ the board).
 ===
 # Supported Pico Boards
 
-Pico Logo runs on three RP2350-based boards. The interpreter and its limits are
-identical on every board; what differs is networking - which needs a wireless
-radio - and storage capacity, which depends on the flash and PSRAM fitted.
+Pico Logo runs on three RP2350-based boards. The language is the same on every
+one of them; what differs is networking - which needs a wireless radio - storage
+capacity, which depends on the flash and PSRAM fitted, and how the fixed 520 KB
+of RAM is divided between the workspace and the editor.
 
 **Shared by every board** (the RP2350 processor):
 
-- 32768 nodes for procedure and variable storage
-- 24576 characters of editor buffer (262144 on a board with PSRAM)
+- A 32 KB word table, holding the characters of every distinct word - see
+  [`atoms`](#atoms). This is a fixed ceiling on every board, PSRAM included
+- 4096 characters in any one procedure definition, whether you type it at the
+  prompt or write it in the Editor. This bounds a *single* `to`...`end`, not the
+  file it sits in - a board with PSRAM raises it to the size of its editor
+  buffer, and a longer definition is refused with `Procedure too long`
 - 1 KB of undo journal for [vi mode](#vi-mode) (64 KB on a board with PSRAM)
 - 8192 characters in the copy buffer
 - Hardware floating-point operations
 
+The node count and the editor buffer are listed per board below. They come out
+of the same RAM, so a board without PSRAM spends less on one to afford the
+other: nodes are what your procedures, variables and running programs are built
+from, and the editor buffer is the largest file [`edit`](#edit-ed) and
+[`editfile`](#editfile) can open. A board with PSRAM has to make no such choice.
+
 **Raspberry Pi Pico 2** - 4 MB flash, no radio.
 
+- 24576 nodes for procedure and variable storage
+- 32768 characters of editor buffer
 - 192 levels of recursion (self tail-recursive calls don't count - see [Tail Call Optimization](#tail-call-optimization))
 - 2 MB internal filesystem
 - No networking
 
 **Raspberry Pi Pico 2 W** - 4 MB flash, WiFi, no PSRAM.
 
+- 28672 nodes for procedure and variable storage
+- 32768 characters of editor buffer
 - 128 levels of recursion (self tail-recursive calls don't count - see [Tail Call Optimization](#tail-call-optimization))
 - 2 MB internal filesystem
 - WiFi (`wifi.connect`, `wifi.scan`, …) with `network.resolve`, `network.ntp` and `network.ping`
@@ -444,13 +459,15 @@ radio - and storage capacity, which depends on the flash and PSRAM fitted.
 
 **Pimoroni Pico Plus 2 W** - 16 MB flash, 8 MB PSRAM, WiFi.
 
+- 32768 nodes for procedure and variable storage - the most of the three, since
+  PSRAM takes the editor buffer and it need not be paid for out of the workspace
 - 128 levels of recursion (self tail-recursive calls don't count - see [Tail Call Optimization](#tail-call-optimization))
 - 8 MB internal filesystem
 - WiFi (`wifi.connect`, `wifi.scan`, …) with `network.resolve`, `network.ntp` and `network.ping`
 - `http.get` and `http.post` over both `http://` and `https://`, so `tls?` outputs `true`
 - HTTP responses up to about 512 KB, held in PSRAM
 - Words may exceed 255 characters (for example the result of [`word`](#word) or an HTTP response body), held in PSRAM
-- 262144 characters of editor buffer, held in PSRAM, so [`editfile`](#editfile) opens much larger files. A board whose PSRAM does not come up at boot falls back to the 24576 every board has
+- 262144 characters of editor buffer, held in PSRAM, so [`editfile`](#editfile) opens much larger files. A board whose PSRAM does not come up at boot falls back to 16384, which is smaller than the boards that have no PSRAM to lose - it keeps its full workspace instead, since that is not the copy of the file it is editing
 - 64 KB of undo journal for [vi mode](#vi-mode), also in PSRAM, so `u` reaches hundreds of changes back rather than the handful 1 KB holds
 
 
@@ -509,6 +526,14 @@ Each key that you type makes the Editor take some action. Most typewriter charac
 When you press `Enter`, the cursor (and any text that comes after it) moves to the next line, ready for you to continue typing.
 
 You can have more characters on a line of text than fit across the screen. When you get to the end of the line on the screen, just continue typing without pressing `Enter`. The screen will scroll horizontally to show the rest of the line.
+
+A file may hold as many procedures as fit in the edit buffer, but any *one* of
+them is separately limited to a
+[`fixed number of characters`](#supported-pico-boards) - the same limit that
+applies to a definition typed at the top-level prompt. A procedure longer than
+that is reported as `Procedure too long` and is not defined; the rest of the
+file is processed as usual. Splitting the work across several procedures is both
+the remedy and, on a machine this size, the better shape.
 
 The Editor has an auxiliary line buffer called the copy buffer. You can use it to move text in a procedure or to repeat them in different places. The copy buffer can hold a [`limited number of characters`](#supported-pico-boards). While this is true for the copy buffer, the length of a line is limited only by the [`length of the edit buffer`](#supported-pico-boards).
 
