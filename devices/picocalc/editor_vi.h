@@ -50,6 +50,8 @@ typedef enum
     VI_ACT_SCROLL,        // Move the view, not the cursor: `ch` is 'z'
                           // (centre), 't' (cursor to the top) or 'b'
     VI_ACT_SUBSTITUTE,    // Substitute over the lines spanned by [start, end)
+    VI_ACT_MOVE_LINES,    // Move ('m') or copy ('t', in `ch`) the lines in
+                          // [start, end) to `dest`
     VI_ACT_UNDO,          // Reverse `count` changes
     VI_ACT_REDO,          // ... and put them back
     VI_ACT_WRITE,         // :w -- write the buffer out and stay in the editor
@@ -69,7 +71,9 @@ typedef struct
     size_t start;      // Half-open byte range, start <= end. VI_ACT_MOVE puts
     size_t end;        // the target in both.
     bool linewise;     // The range is whole lines, newline included
-    char ch;           // VI_ACT_REPLACE_CHAR, VI_ACT_SEARCH
+    size_t dest;       // Where VI_ACT_MOVE_LINES puts them: a line start, or
+                       // the end of the buffer
+    char ch;           // VI_ACT_REPLACE_CHAR, VI_ACT_SEARCH, VI_ACT_MOVE_LINES
     int count;         // Repeat count; tab stops for VI_ACT_INDENT (may be negative)
     const char *msg;   // Footer text for VI_ACT_BEEP and VI_ACT_MESSAGE. A
                        // literal, or `ViState.msg` -- which lives as long as
@@ -208,6 +212,28 @@ const char *editor_vi_status(const ViState *st);
 // abandoned before a byte moved; the caller reports that, and it is not a
 // count of zero, because "your pattern is too dear to run" is a different
 // thing to say than "nothing matched".
+// Move the lines in [start, end) to `dest`, or copy them there when `copy`.
+// Both are byte offsets into buf, the range linewise and `dest` a line start or
+// the end of the buffer; the caller has already refused a move into its own
+// range (docs/vi-mode-design.md §22.1).
+//
+// Here rather than in editor.c for the reason the substitute above is: it is a
+// splice with an off-by-one at each end, and this file has a host build. The
+// text is rotated in place rather than taken through the copy buffer, which is
+// 1 KB and is the user's register besides -- so the journal is told what moved
+// *before* a byte does, while the span is still contiguous to point at (§22.3).
+//
+// buf/len: the buffer to rewrite; *len is updated. capacity includes the NUL.
+// undo: journal to record into, or NULL. Every record it makes belongs to the
+//   step the caller opened, so one `u` reverses the whole move.
+// out_cursor: set to the first non-blank of the last line moved or copied.
+//
+// Returns false having changed nothing when the copy would not fit, or when
+// the range is empty.
+bool editor_vi_move_lines(char *buf, size_t *len, size_t capacity,
+                          size_t start, size_t end, size_t dest, bool copy,
+                          EditorUndo *undo, size_t *out_cursor);
+
 size_t editor_vi_substitute(char *buf, size_t *len, size_t capacity,
                             size_t range_start, size_t range_end,
                             const char *pat, size_t pat_len,

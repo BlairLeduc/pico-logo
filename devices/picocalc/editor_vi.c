@@ -1492,6 +1492,46 @@ static bool run_ex(ViState *st, const char *buf, size_t len, size_t cursor, ViAc
         return true;
     }
 
+    // `:m` and `:t` (`:co`) take a destination address after the command rather
+    // than a range in front of it, and are the only commands that do (§22)
+    if (s[i] == 'm' || s[i] == 't' ||
+        (s[i] == 'c' && i + 1 < n && s[i + 1] == 'o'))
+    {
+        bool copy = (s[i] != 'm');
+        i = skip_spaces(s, i + ((s[i] == 'c') ? 2 : 1), n);
+
+        int dest = 0;
+        if (!parse_address(st, buf, len, cursor, s, &i, n, &dest, &err) || i < n)
+        {
+            return beep(st, out, err != NULL ? err : "E14: invalid address");
+        }
+        // The one place a line 0 means something: text goes *after* the
+        // destination, so "above the first line" has no other spelling
+        if (dest < 0) dest = 0;
+        if (dest > last) dest = last;
+
+        out->start = have_range ? goto_line(buf, len, lo) : line_start_of(buf, cursor);
+        out->end = next_line_start(buf, len,
+                                   have_range ? goto_line(buf, len, hi) : cursor);
+        out->dest = (dest == 0) ? 0 : next_line_start(buf, len,
+                                                      goto_line(buf, len, dest));
+        if (out->end <= out->start)
+        {
+            // The empty line past the buffer's last newline, which `G` lands on
+            // and which has no text to take anywhere
+            return beep(st, out, "E16: invalid range");
+        }
+        if (!copy && out->dest >= out->start && out->dest <= out->end)
+        {
+            // Inside its own range, or either side of it, where the move would
+            // change nothing and the footer is the only thing that can say so
+            return beep(st, out, "E134: cannot move into itself");
+        }
+        out->kind = VI_ACT_MOVE_LINES;
+        out->ch = copy ? 't' : 'm';
+        return true;
+    }
+
     if (have_range)
     {
         return beep(st, out, "E481: no range allowed");
@@ -2409,6 +2449,142 @@ static bool sub_next(const char *buf, size_t ls, size_t le,
         return true;
     }
     return false;
+}
+
+//
+//  Moving and copying lines (§22)
+//
+
+static void reverse_bytes(char *p, size_t len)
+{
+    for (size_t i = 0, j = len; i + 1 < j; i++)
+    {
+        j--;
+        char t = p[i];
+        p[i] = p[j];
+        p[j] = t;
+    }
+}
+
+// Rotate the k bytes at the front of [p, p + n) to the back of it, in order.
+// Three reversals, so a move needs nothing to hold the text it is moving and
+// no bound on how much of it there is (§22.3).
+static void rotate_left(char *p, size_t n, size_t k)
+{
+    if (k == 0 || k >= n)
+    {
+        return;
+    }
+    reverse_bytes(p, k);
+    reverse_bytes(p + k, n - k);
+    reverse_bytes(p, n);
+}
+
+bool editor_vi_move_lines(char *buf, size_t *len, size_t capacity,
+                          size_t start, size_t end, size_t dest, bool copy,
+                          EditorUndo *undo, size_t *out_cursor)
+{
+    size_t n = *len;
+
+    if (end > n) end = n;
+    if (dest > n) dest = n;
+    if (start >= end)
+    {
+        return false;
+    }
+
+    // A line is text and the newline that ends it, and the last line of a
+    // buffer that does not end in one has neither a newline to carry away nor
+    // one to attach to. Lend it one for the length of the operation and take
+    // one back at the end, so everything between is uniform (§22.4).
+    bool borrowed = (buf[n - 1] != '\n' && (end == n || dest == n));
+
+    // Everything that has to fit, weighed before a byte moves: the newline the
+    // buffer may be lent, and a second span when the lines are being copied
+    size_t span = (end - start) + ((borrowed && end == n) ? 1 : 0);
+    if (n + (borrowed ? 1 : 0) + (copy ? span : 0) >= capacity)
+    {
+        return false;
+    }
+
+    if (borrowed)
+    {
+        editor_undo_record(undo, n, NULL, 0, "\n", 1);
+        buf[n] = '\n';
+        n++;
+        buf[n] = '\0';
+        if (end == n - 1) end = n;
+        if (dest == n - 1) dest = n;
+    }
+
+    size_t landing;
+
+    if (copy)
+    {
+        // Recorded before the bytes move, while the span is still one piece --
+        // which is what a copy of the buffer into itself needs, since opening
+        // the hole below may split it
+        editor_undo_record(undo, dest, NULL, 0, buf + start, span);
+
+        memmove(buf + dest + span, buf + dest, n - dest);
+        if (start >= dest)
+        {
+            memmove(buf + dest, buf + start + span, span);   // The source moved with the tail
+        }
+        else if (end <= dest)
+        {
+            memmove(buf + dest, buf + start, span);
+        }
+        else
+        {
+            // The hole opened inside the source: its head stayed put and its
+            // tail went up with everything else
+            size_t head = dest - start;
+            memmove(buf + dest, buf + start, head);
+            memmove(buf + dest + head, buf + dest + span, span - head);
+        }
+        n += span;
+        landing = dest;
+    }
+    else
+    {
+        // The delete and the insert it becomes, both taken from the span while
+        // it is still where it was: the journal wants the bytes, not a buffer
+        // to keep them in (§22.3)
+        landing = (dest > start) ? dest - span : dest;
+        editor_undo_record(undo, start, buf + start, span, NULL, 0);
+        editor_undo_record(undo, landing, NULL, 0, buf + start, span);
+
+        if (dest > end)
+        {
+            rotate_left(buf + start, dest - start, span);
+        }
+        else
+        {
+            rotate_left(buf + dest, end - dest, start - dest);
+        }
+    }
+
+    buf[n] = '\0';
+
+    // Vi leaves the cursor on the last line of what it moved, which after a
+    // copy is the copy rather than the original
+    size_t landed = first_non_blank(buf, n, line_start_of(buf, landing + span - 1));
+
+    if (borrowed && buf[n - 1] == '\n')
+    {
+        // Give the newline back. Whichever one is at the end now, the buffer
+        // is left the shape it was found in, and this record is still inside
+        // the caller's undo step.
+        editor_undo_record(undo, n - 1, buf + n - 1, 1, NULL, 0);
+        n--;
+        buf[n] = '\0';
+    }
+
+    if (landed > n) landed = n;
+    *len = n;
+    *out_cursor = landed;
+    return true;
 }
 
 size_t editor_vi_substitute(char *buf, size_t *len, size_t capacity,

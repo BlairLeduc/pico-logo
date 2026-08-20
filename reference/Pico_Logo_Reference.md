@@ -740,6 +740,8 @@ While you are inserting, the Editor behaves exactly as it does outside vi mode: 
 | `:wq` `:x` | accept the buffer and leave the Editor |
 | `:q` | leave without accepting the buffer, if nothing has changed |
 | `:q!` | cancel and leave the Editor |
+| `:m`_addr_ | move the lines to after line _addr_ |
+| `:t`_addr_, `:co`_addr_ | copy them there |
 | `:s/`_pat_`/`_new_`/` | replace the first _pat_ on this line |
 | `:s/`_pat_`/`_new_`/g` | replace every _pat_ on this line |
 | `:%s/`_pat_`/`_new_`/` | replace the first _pat_ on every line |
@@ -747,7 +749,7 @@ While you are inserting, the Editor behaves exactly as it does outside vi mode: 
 
 #### Ranges
 
-A `:s` or a `:=` can be given the lines to work on, written in front of it. A range is one line, or two separated by a comma, and each of them is written as:
+A `:s`, a `:=`, a `:m` or a `:t` can be given the lines to work on, written in front of it. A range is one line, or two separated by a comma, and each of them is written as:
 
 | Address | Means |
 |---|---|
@@ -758,6 +760,14 @@ A `:s` or a `:=` can be given the lines to work on, written in front of it. A ra
 | `+`_n_ `-`_n_ | _n_ lines after or before — on its own, counted from the cursor's line, or written after any of the above |
 
 `%` is `1,$`, the whole buffer, which is what `:%s` has always been. A `+` or `-` with no number means one line. A line before the first or after the last is pulled back to the buffer, so `:1,999s/`_pat_`/`_new_`/` covers everything and `:-9` from line 3 goes to line 1.
+
+#### Moving and copying lines
+
+`:m` moves the lines of its range to after a line you name, and `:t` (or `:co`) copies them there — which is how a procedure is moved to the top of an `edall` buffer, or duplicated to be edited into a variant, without carrying it through the copy buffer. Written on their own they work on the line the cursor is on, so `:m0` takes this line to the top.
+
+The destination is a single address, written the same way as the addresses above, with one addition: `0` means "above the first line", and `$` the end of the buffer. So with a procedure selected in [visual mode](#selecting), `:` and then `'<,'>m0` puts it at the top of the buffer and `'<,'>m$` at the bottom. The cursor ends on the last line moved, which after a `:t` is the copy.
+
+Neither is limited by the size of the copy buffer, and neither disturbs what is in it, so a `p` after a move still pastes what you last copied. A `:m` that would put the lines inside — or immediately either side of — the range they came from changes nothing, and says `E134: cannot move into itself` rather than doing nothing quietly. A `:t` into its own range is allowed, and is how a block is doubled.
 
 | | |
 |---|---|

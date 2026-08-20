@@ -2098,6 +2098,23 @@ static int editor_vi_apply(const ViAction *act, int cursor_line_before)
             break;
         }
 
+        case VI_ACT_MOVE_LINES: {
+            size_t landed = editor.cursor_pos;
+            if (!editor_vi_move_lines(editor.buffer, &editor.content_length,
+                                      editor.buffer_size, act->start, act->end,
+                                      act->dest, act->ch == 't', &editor.undo,
+                                      &landed)) {
+                editor.vi_msg = "Not enough room";
+                editor.dirty_flags = DIRTY_CURSOR;
+                break;
+            }
+            editor_lines_reset(&editor.lines);
+            editor.cursor_pos = landed;
+            editor.vi.modified = true;
+            editor_mark_all_dirty();
+            break;
+        }
+
         case VI_ACT_UNDO:
         case VI_ACT_REDO: {
             bool forward = (act->kind == VI_ACT_REDO);

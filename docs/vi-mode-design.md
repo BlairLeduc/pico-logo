@@ -424,6 +424,8 @@ and the mode indicator. Those are a hardware check on the Pico Plus 2 W.
 | **M7** | `Ctrl` `G`, `:.=`, `:=` (§17) | the report on a buffer longer than a screen, before and after a change | **built and checked on a board 2026-08-18** |
 | **M8** | `*` `#`, `` ` `` `'`, `gd`, `zz` `zt` `zb` (§18) | `*` on a one-letter procedure name walking only whole words, `` ` `` back from a `G`, `gd` across an `edall` buffer, `zz` after a search | **built and checked on a board 2026-08-18** |
 | **M9** | Ex ranges (§19) | `:2,7s`, `:.,+4s` and a `V` selection followed by `:` running over exactly the lines it covered | **built and checked on a board 2026-08-18** |
+| **M10** | `.` repeats an insert (§20) | `cwfoo` then `.` on the next word, and `3.` after it | **built and checked on a board 2026-08-19**; probing it found B43 (§20.5) |
+| **M11** | `:m` and `:t` (§22) | a procedure moved from the foot of an `edall` buffer to the top with `:'<,'>m0` and one `u` putting it back, and a `:t` of a block longer than the 1 KB copy buffer | built 2026-08-20, **not yet checked on a board** |
 
 M1 is the whole feature as far as a user is concerned; M2 is what makes it
 pleasant, M4 is what stops it being annoying, and M5 is the one command a
@@ -1706,3 +1708,135 @@ uses. One action kind and one `editor.c` branch removed, and, because
 `editor.c` has no host build and `editor_vi.c` does, the behaviour became
 testable: `test_write_and_quit_commands` now pins both halves, and fails on the
 old code.
+
+## 22. Moving lines (M11)
+
+§19.1 put `:d`, `:y`, `:>` and `:m` out of the range set together, on the
+grounds that "`dd`, `yy` and `>>` take counts and work over a selection
+already, so a range would be a second spelling of a key that is one keystroke
+away". That is right for three of them and wrong for the fourth. Those three
+act **where the cursor is**; `:m` names a **destination**, and no key in the
+mode does. There is no `dd` for "put these lines over there".
+
+What it costs to do without is the measure of it. Moving a procedure inside an
+`edall` buffer today is `V`, select it, `d`, then get somewhere off-screen with
+a `/` search or a `G`, then `p` — four steps, one of which is a navigation the
+user has to get right before the text comes back. And the `d` goes through the
+copy buffer, which is `LOGO_COPY_BUFFER_SIZE` — **1 KB, and it truncates
+silently past it**: `editor_vi_yank_range` clamps the length and drops the
+rest, as `editor_copy_selection` does for the editor's own `Ctrl` `C`. So on a
+long procedure the workaround is not merely slower, it loses text. `:'<,'>m$`
+is one command that cannot.
+
+`:t` (`:co`) is the same code with the delete left out, and is how a procedure
+is duplicated to be edited into a variant — which is most of how a Logo program
+gets written on a device with no second window.
+
+### 22.1 The set
+
+| Command | Does |
+|---|---|
+| `[range]m{addr}` | move the range to after line *addr* |
+| `[range]t{addr}`, `[range]co{addr}` | copy it there |
+
+The range is the addresses of §19.1 and defaults to the line the cursor is on,
+so `:m0` moves this line to the top. The destination is one address, and is
+**where `0` becomes a line number that means something**: everywhere else in
+the parser an address below 1 clamps to 1, but a destination of 0 is "above
+line 1" and is the only way to say it. `$` is the destination for "the end",
+and on a buffer ending in a newline it is the empty last line, which lands the
+text in the same place either way.
+
+The cursor goes to the first non-blank of the **last** line moved or copied, as
+vi's does: after a `:t` that is the copy rather than the original, which is the
+one you are about to edit.
+
+A `:m` whose destination is inside its own range is `E134: cannot move into
+itself`. So is one just before or just after it (`:2m1`) — vi lets that pass as
+a no-op, and here it beeps, because on a 40 × 30 screen the footer is the only
+thing that can say a command did nothing. A `:t` inside its own range is legal
+and is how a block is doubled. The empty line past the buffer's last newline —
+the one `G` lands on — has no text to take anywhere, and says `E16: invalid
+range` rather than reporting a move that moved nothing.
+
+### 22.2 The rewrite goes in `editor_vi.c`, beside the substitute
+
+`editor_vi_substitute` is in the state machine rather than in `editor.c` for a
+reason the header states: it is a splice with a capacity check and an
+off-by-one at every step, `editor.c` has no host build, and describing it as a
+byte range would need one action per match. Every word of that is true of a
+move, so `editor_vi_move_lines` sits next to it with the same shape — buffer
+in, journal in, cursor out — and `editor.c` gains one `case` that calls it and
+marks the screen dirty. The whole of the tricky part is then under host test,
+including the two cases below.
+
+### 22.3 No scratch buffer, and one undo step
+
+The copy buffer is not used, and this is the point rather than an
+optimisation: it is 1 KB, which is the limit being fixed, and it is the user's
+register, which a move has no business overwriting.
+
+**The move is a rotation.** Moving `[start, end)` to a destination outside it
+is exactly rotating the bytes between the two, which is three reversals in
+place: no allocation, no bound on the size of the block but the buffer itself,
+and a cost of two passes over the span between source and destination — tens of
+KB of byte writes in the worst case an editor of this size can produce, which is
+nothing beside the SPI wire it is about to redraw over.
+
+**The journal is told before anything moves.** A move is recorded as two
+records — a delete of the span at its old offset, and an insert of the same
+bytes at the offset the delete leaves them at — and both are written *before*
+the rotate, while the span is still contiguous and can be pointed at. That is
+the whole trick that keeps a move off the copy buffer: `editor_undo_record`
+needs the bytes, not a buffer to hold them, and they are still in the buffer at
+the moment it is called. `:t` records one insert, and its bytes are contiguous
+at record time even when the destination is inside the range.
+
+Both records land in the one step `editor_undo_begin` opened for the keystroke,
+so `u` puts a move back whole however far it went, and the journal cost is
+twice the moved text rather than everything between the two places.
+
+### 22.4 The buffer that does not end in a newline
+
+A line is text and the newline that ends it, and the last line of a buffer that
+does not end in one has no newline to carry. Every case in a move touches that:
+moving the last line elsewhere leaves the line before it unterminated, and
+moving anything *to* the end has nowhere to attach it.
+
+Rather than four special cases, the operation **lends the buffer a newline**
+when it touches the tail, does the uniform thing, and takes one back
+afterwards. Both are journal records inside the same step, so this costs no
+extra `u`, and the buffer is left the shape it was found in — which matters,
+because whether the text ends in a newline is the caller's business, not the
+editor's.
+
+### 22.5 Tests and cost
+
+The state machine's half is the parse — `:m` with no address, an address inside
+the range, `0`, `$`, `'<,'>` — and the rewrite's half is the buffer, driven
+through the same `ed_apply` harness the substitute uses, so a test types
+`:2,3m0` and reads the text back. The cases that earn their keep are the two
+in §22.4, a `:t` whose destination is inside its own range, a move that will
+not fit, and `u` after each. The capacity check earned its own case: weighing
+the copy *after* lending the buffer a newline left the newline behind on a
+refusal, which is a buffer changed by a command that said it changed nothing.
+
+**Cost**: `editor_vi.c` 2,548 → 2,724 lines, `editor.c` 2,749 → 2,766.
+`ViAction` gains a `size_t dest`, which is a stack local per keystroke and not
+SRAM: **RAM is unchanged to the byte** — 478,532 B on `pico+2w` and 451,712 B
+on `pico2`, measured before and after — and flash grows about 1.8 KB on both.
+20 new tests; 19 of them fail with the feature stubbed out, split between the
+parse and the rewrite, which is the check that they test the feature and not
+the harness. The one that passes either way is the copy that does not fit,
+where "nothing changed" is what a missing feature looks like too.
+
+### 22.6 Deliberately not with it
+
+- **`:d`, `:y`, `:>` over a range.** §19.1's argument still stands for these.
+- **`:g/pat/cmd`.** "Delete every line mentioning this" is the one thing `:%s`
+  cannot say, and it is a real gap — but it is a two-pass mark-then-act loop
+  with a bound on the mark set, and it wants its own section rather than a
+  ride on this one.
+- **`:w {name}`.** Save-as under `editfile`. The write destination is fixed at
+  the primitive that opened the editor (§5.3), `save` says it from the prompt,
+  and adding it here would put a second file path in `editor.c`.

@@ -358,6 +358,16 @@ static void ed_apply(Ed *e, const ViAction *act)
             break;
         }
 
+        case VI_ACT_MOVE_LINES: {
+            size_t landed = e->cursor;
+            if (editor_vi_move_lines(e->buf, &e->len, ED_CAP, act->start, act->end,
+                                     act->dest, act->ch == 't', &e->undo, &landed)) {
+                editor_lines_reset(&e->ix);
+                e->cursor = landed;
+            }
+            break;
+        }
+
         case VI_ACT_UNDO:
         case VI_ACT_REDO: {
             int steps = act->count > 0 ? act->count : 1;
@@ -1933,6 +1943,195 @@ static void test_the_selection_range_without_a_selection_complains(void)
 }
 
 //
+//  Moving and copying lines (§22)
+//
+
+static void test_move_puts_a_line_above_the_first(void)
+{
+    ed_set("one\ntwo\nthree\n");
+    feed(":2m0"); feed_key(KEY_RETURN);
+    assert_text("two\none\nthree\n");
+    TEST_ASSERT_EQUAL_UINT(0, ed.cursor);
+}
+
+static void test_move_puts_a_range_at_the_end(void)
+{
+    ed_set("one\ntwo\nthree\n");
+    feed(":1,2m$"); feed_key(KEY_RETURN);
+    assert_text("three\none\ntwo\n");
+    TEST_ASSERT_EQUAL_UINT(10, ed.cursor);   // The last line moved, not the first
+}
+
+static void test_move_without_a_range_takes_the_cursors_line(void)
+{
+    ed_set("one\ntwo\nthree\n");
+    feed("3G");
+    feed(":m0"); feed_key(KEY_RETURN);
+    assert_text("three\none\ntwo\n");
+}
+
+static void test_a_move_destination_may_be_relative(void)
+{
+    ed_set("a\nb\nc\nd\n");
+    feed(":m+2"); feed_key(KEY_RETURN);
+    assert_text("b\nc\na\nd\n");
+    TEST_ASSERT_EQUAL_UINT(4, ed.cursor);
+}
+
+static void test_a_visual_selection_moves_as_a_block(void)
+{
+    ed_set("one\ntwo\nthree\n");
+    feed("jVj:");
+    TEST_ASSERT_EQUAL_STRING(":'<,'>", ed.vi.cmdline);
+    feed("m0"); feed_key(KEY_RETURN);
+    assert_text("two\nthree\none\n");
+}
+
+static void test_a_move_into_its_own_range_complains(void)
+{
+    ed_set("one\ntwo\nthree\nfour\n");
+    feed(":1,3m2"); feed_key(KEY_RETURN);
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    TEST_ASSERT_EQUAL_STRING("E134: cannot move into itself", ed.last.msg);
+    assert_text("one\ntwo\nthree\nfour\n");
+}
+
+static void test_a_move_that_would_change_nothing_complains(void)
+{
+    ed_set("one\ntwo\nthree\n");
+    feed(":2m1"); feed_key(KEY_RETURN);
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    TEST_ASSERT_EQUAL_STRING("E134: cannot move into itself", ed.last.msg);
+    assert_text("one\ntwo\nthree\n");
+}
+
+static void test_a_move_without_a_destination_complains(void)
+{
+    ed_set("one\ntwo\n");
+    feed(":2m"); feed_key(KEY_RETURN);
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    TEST_ASSERT_EQUAL_STRING("E14: invalid address", ed.last.msg);
+    assert_text("one\ntwo\n");
+
+    feed(":2m0x"); feed_key(KEY_RETURN);   // ... and so does one with a tail
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    TEST_ASSERT_EQUAL_STRING("E14: invalid address", ed.last.msg);
+    assert_text("one\ntwo\n");
+}
+
+static void test_a_move_of_the_empty_last_line_complains(void)
+{
+    ed_set("one\ntwo\n");
+    feed("G");                             // The empty line past the last newline
+    feed(":m0"); feed_key(KEY_RETURN);
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    TEST_ASSERT_EQUAL_STRING("E16: invalid range", ed.last.msg);
+    assert_text("one\ntwo\n");
+}
+
+static void test_copy_leaves_the_original_where_it_was(void)
+{
+    ed_set("one\ntwo\n");
+    feed(":1t$"); feed_key(KEY_RETURN);
+    assert_text("one\ntwo\none\n");
+    TEST_ASSERT_EQUAL_UINT(8, ed.cursor);   // The copy, which is what gets edited
+}
+
+static void test_co_is_a_synonym_for_t(void)
+{
+    ed_set("one\ntwo\n");
+    feed(":1co$"); feed_key(KEY_RETURN);
+    assert_text("one\ntwo\none\n");
+}
+
+static void test_a_copy_may_land_inside_its_own_range(void)
+{
+    ed_set("one\ntwo\n");
+    feed(":1,2t1"); feed_key(KEY_RETURN);
+    assert_text("one\none\ntwo\ntwo\n");
+}
+
+static void test_the_last_line_moves_without_a_trailing_newline(void)
+{
+    ed_set("one\ntwo\nthree");
+    feed(":3m0"); feed_key(KEY_RETURN);
+    assert_text("three\none\ntwo");   // The buffer is left the shape it was found in
+    TEST_ASSERT_EQUAL_UINT(0, ed.cursor);
+}
+
+static void test_a_move_to_the_end_of_a_buffer_without_a_trailing_newline(void)
+{
+    ed_set("one\ntwo\nthree");
+    feed(":1m$"); feed_key(KEY_RETURN);
+    assert_text("two\nthree\none");
+    TEST_ASSERT_EQUAL_UINT(10, ed.cursor);
+}
+
+static void test_a_copy_to_the_end_of_a_buffer_without_a_trailing_newline(void)
+{
+    ed_set("one\ntwo");
+    feed(":1t$"); feed_key(KEY_RETURN);
+    assert_text("one\ntwo\none");
+}
+
+static void test_one_undo_puts_a_move_back(void)
+{
+    ed_set("one\ntwo\nthree\n");
+    feed(":1,2m$"); feed_key(KEY_RETURN);
+    assert_text("three\none\ntwo\n");
+    feed("u");
+    assert_text("one\ntwo\nthree\n");
+}
+
+static void test_one_undo_puts_back_a_move_that_borrowed_a_newline(void)
+{
+    ed_set("one\ntwo\nthree");
+    feed(":1m$"); feed_key(KEY_RETURN);
+    assert_text("two\nthree\none");
+    feed("u");
+    assert_text("one\ntwo\nthree");   // Including the newline it was lent (§22.4)
+}
+
+static void test_one_undo_puts_a_copy_back(void)
+{
+    ed_set("one\ntwo");
+    feed(":1t$"); feed_key(KEY_RETURN);
+    assert_text("one\ntwo\none");
+    feed("u");
+    assert_text("one\ntwo");
+}
+
+static void test_a_move_leaves_the_copy_buffer_alone(void)
+{
+    ed_set("one\ntwo\nthree\n");
+    feed("yy");                            // "one\n" into the register
+    feed(":3m0"); feed_key(KEY_RETURN);
+    assert_text("three\none\ntwo\n");
+    feed("p");
+    assert_text("three\none\none\ntwo\n");
+}
+
+static void test_a_copy_that_would_not_fit_changes_nothing(void)
+{
+    char big[601];
+    for (int i = 0; i < 60; i++) memcpy(big + i * 10, "xxxxxxxxx\n", 10);
+    big[600] = '\0';
+
+    ed_set(big);
+    feed(":%t$"); feed_key(KEY_RETURN);
+    TEST_ASSERT_EQUAL_UINT(600, ed.len);   // ED_CAP has no room for twice it
+    assert_text(big);
+
+    // The same refusal on a buffer that would have to be lent a newline first:
+    // it is weighed before anything moves, so not even that is left behind
+    big[599] = '\0';
+    ed_set(big);
+    feed(":%t$"); feed_key(KEY_RETURN);
+    TEST_ASSERT_EQUAL_UINT(599, ed.len);
+    assert_text(big);
+}
+
+//
 //  Search
 //
 
@@ -2703,6 +2902,26 @@ int main(void)
     RUN_TEST(test_a_charwise_selection_ranges_over_the_lines_it_touches);
     RUN_TEST(test_the_selection_range_outlives_the_selection);
     RUN_TEST(test_the_selection_range_without_a_selection_complains);
+    RUN_TEST(test_move_puts_a_line_above_the_first);
+    RUN_TEST(test_move_puts_a_range_at_the_end);
+    RUN_TEST(test_move_without_a_range_takes_the_cursors_line);
+    RUN_TEST(test_a_move_destination_may_be_relative);
+    RUN_TEST(test_a_visual_selection_moves_as_a_block);
+    RUN_TEST(test_a_move_into_its_own_range_complains);
+    RUN_TEST(test_a_move_that_would_change_nothing_complains);
+    RUN_TEST(test_a_move_without_a_destination_complains);
+    RUN_TEST(test_a_move_of_the_empty_last_line_complains);
+    RUN_TEST(test_copy_leaves_the_original_where_it_was);
+    RUN_TEST(test_co_is_a_synonym_for_t);
+    RUN_TEST(test_a_copy_may_land_inside_its_own_range);
+    RUN_TEST(test_the_last_line_moves_without_a_trailing_newline);
+    RUN_TEST(test_a_move_to_the_end_of_a_buffer_without_a_trailing_newline);
+    RUN_TEST(test_a_copy_to_the_end_of_a_buffer_without_a_trailing_newline);
+    RUN_TEST(test_one_undo_puts_a_move_back);
+    RUN_TEST(test_one_undo_puts_back_a_move_that_borrowed_a_newline);
+    RUN_TEST(test_one_undo_puts_a_copy_back);
+    RUN_TEST(test_a_move_leaves_the_copy_buffer_alone);
+    RUN_TEST(test_a_copy_that_would_not_fit_changes_nothing);
     RUN_TEST(test_the_command_line_stops_growing_when_it_is_full);
 
     RUN_TEST(test_slash_records_a_pattern_and_a_direction);
