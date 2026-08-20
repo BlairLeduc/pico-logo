@@ -54,7 +54,6 @@ typedef enum
     VI_ACT_REDO,          // ... and put them back
     VI_ACT_WRITE,         // :w -- write the buffer out and stay in the editor
     VI_ACT_ACCEPT,        // :wq :x ZZ
-    VI_ACT_QUIT,          // :q -- accept, but only when nothing has been changed
     VI_ACT_CANCEL,        // :q! ZQ
     VI_ACT_REDRAW,        // Only the mode changed; repaint the footer and cursor
     VI_ACT_BEEP,          // Not a command; `msg` is the footer text

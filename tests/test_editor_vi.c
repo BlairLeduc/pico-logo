@@ -47,7 +47,7 @@ typedef struct
     ViAction last;      // The action the last key produced
     bool consumed;      // ... and whether vi took the key at all
     size_t len_at_key;  // The length the last key saw, for range assertions
-    int exits;          // VI_ACT_ACCEPT / _QUIT / _CANCEL seen
+    int exits;          // VI_ACT_ACCEPT / _CANCEL seen
     int writes;         // VI_ACT_WRITE seen (`:w`, which does not exit)
     ViActionKind exit_kind;
 } Ed;
@@ -380,7 +380,6 @@ static void ed_apply(Ed *e, const ViAction *act)
             break;
 
         case VI_ACT_ACCEPT:
-        case VI_ACT_QUIT:
         case VI_ACT_CANCEL:
             e->exits++;
             e->exit_kind = act->kind;
@@ -1590,9 +1589,19 @@ static void test_write_and_quit_commands(void)
     feed(":q!"); feed_key(KEY_RETURN);
     TEST_ASSERT_EQUAL_INT(VI_ACT_CANCEL, ed.exit_kind);
 
+    // `:q` leaves without writing: the buffer is discarded, not handed back
     setUp();  ed_set("abc\n");
     feed(":q");  feed_key(KEY_RETURN);
-    TEST_ASSERT_EQUAL_INT(VI_ACT_QUIT, ed.exit_kind);   // The editor checks `modified`
+    TEST_ASSERT_EQUAL_INT(1, ed.exits);
+    TEST_ASSERT_EQUAL_INT(VI_ACT_CANCEL, ed.exit_kind);
+
+    // ... and refuses while there is a change it would throw away
+    setUp();  ed_set("abc\n");
+    ed.vi.modified = true;              // the editor sets this as you type
+    feed(":q");  feed_key(KEY_RETURN);
+    TEST_ASSERT_EQUAL_INT(0, ed.exits);
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    TEST_ASSERT_EQUAL_STRING("E37: no write since last change", ed.last.msg);
 }
 
 static void test_ZZ_and_ZQ(void)
