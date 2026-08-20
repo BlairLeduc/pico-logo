@@ -425,9 +425,9 @@ and the mode indicator. Those are a hardware check on the Pico Plus 2 W.
 | **M8** | `*` `#`, `` ` `` `'`, `gd`, `zz` `zt` `zb` (§18) | `*` on a one-letter procedure name walking only whole words, `` ` `` back from a `G`, `gd` across an `edall` buffer, `zz` after a search | **built and checked on a board 2026-08-18** |
 | **M9** | Ex ranges (§19) | `:2,7s`, `:.,+4s` and a `V` selection followed by `:` running over exactly the lines it covered | **built and checked on a board 2026-08-18** |
 | **M10** | `.` repeats an insert (§20) | `cwfoo` then `.` on the next word, and `3.` after it | **built and checked on a board 2026-08-19**; probing it found B43 (§20.5) |
-| **M11** | `:m` and `:t` (§22) | a procedure moved from the foot of an `edall` buffer to the top with `:'<,'>m0` and one `u` putting it back, and a `:t` of a block longer than the 1 KB copy buffer | built 2026-08-20, **not yet checked on a board** |
+| **M11** | `:m` and `:t` (§22) | a procedure moved from the foot of an `edall` buffer to the top with `:'<,'>m0` and one `u` putting it back, a `:t` that leaves the register alone, and the undo journal on both tiers (§22.7) | **built and checked on a board 2026-08-20** |
 | **M12** | `:g` and `:v` (§23) | `:g/^;/d` and one `u` over an `edall` buffer, `:v/^to /d`, `:g/x/s//y/g`, and what the 1 KB journal does with a big one on a `pico2` | **built and checked on a board 2026-08-20**, both halves (§23.6) |
-| **M13** | `]]` `[[`, `ip` `ap`, `Ctrl` `A` / `Ctrl` `X` (§24) | `]]` across an `edall` buffer with no blank lines in it, `dap` and one `u`, `cip`, and `Ctrl` `A` on a `fd 100` followed by `.` (§24.6) | designed 2026-08-20, not yet built |
+| **M13** | `]]` `[[`, `ip` `ap`, `Ctrl` `A` / `Ctrl` `X` (§24) | `]]` across an `edall` buffer with no blank lines in it, `dap` and one `u`, `cip`, and `Ctrl` `A` on a `fd 100` followed by `.` (§24.6) | **built and checked on a board 2026-08-20** |
 
 M1 is the whole feature as far as a user is concerned; M2 is what makes it
 pleasant, M4 is what stops it being annoying, and M5 is the one command a
@@ -1724,11 +1724,20 @@ What it costs to do without is the measure of it. Moving a procedure inside an
 `edall` buffer today is `V`, select it, `d`, then get somewhere off-screen with
 a `/` search or a `G`, then `p` — four steps, one of which is a navigation the
 user has to get right before the text comes back. And the `d` goes through the
-copy buffer, which is `LOGO_COPY_BUFFER_SIZE` — **1 KB, and it truncates
-silently past it**: `editor_vi_yank_range` clamps the length and drops the
-rest, as `editor_copy_selection` does for the editor's own `Ctrl` `C`. So on a
-long procedure the workaround is not merely slower, it loses text. `:'<,'>m$`
-is one command that cannot.
+copy buffer, which is `LOGO_COPY_BUFFER_SIZE` — **8 KB on every board, and it
+truncates silently past it**: `editor_vi_yank_range` clamps the length and
+drops the rest, as `editor_copy_selection` does for the editor's own `Ctrl`
+`C`. So on a long procedure the workaround is not merely slower, it loses text.
+`:'<,'>m$` is one command that cannot.
+
+(The figure was written here as 1 KB and that was wrong. 1024 is the `#ifndef`
+default in `editor.c`; all three board presets set `LOGO_COPY_BUFFER_SIZE` to
+8192, which is what the firmware is built with and what
+[Supported Pico Boards](../reference/Pico_Logo_Reference.md) has always said.
+The argument is unchanged — 8 KB truncates silently too, and the four-step
+workaround is still four steps — but the number mattered enough to the case to
+be worth getting right, and it changes what the gate below can practically
+stage.)
 
 `:t` (`:co`) is the same code with the delete left out, and is how a procedure
 is duplicated to be edited into a variant — which is most of how a Logo program
@@ -1775,7 +1784,7 @@ including the two cases below.
 ### 22.3 No scratch buffer, and one undo step
 
 The copy buffer is not used, and this is the point rather than an
-optimisation: it is 1 KB, which is the limit being fixed, and it is the user's
+optimisation: it is 8 KB, which is the limit being fixed, and it is the user's
 register, which a move has no business overwriting.
 
 **The move is a rotation.** Moving `[start, end)` to a destination outside it
@@ -1840,6 +1849,53 @@ where "nothing changed" is what a missing feature looks like too.
   ride on this one, and it has one now: **§23**, where the mark set this bullet
   originally priced turns out not to be needed at all.
 - **`:w {name}`.** Save-as under `editfile`, decided against in §23.7.
+
+### 22.7 The M11 gate
+
+Written after the fact — M11 shipped without one, which is why it sat built and
+unchecked while M12 and M13 were gated and passed. The host tests cover the
+parse and the rotation; what only a board reaches is the `case` in `editor.c`,
+the real copy buffer, and the journal at the size a board actually gives it.
+
+On an `edall` buffer longer than a screen:
+
+- **`V` over a procedure, then `:` and `m$`.** One command for the whole
+  `editor.c` half: the `'<,'>` types itself (§19.3), the destination parses,
+  and `editor_lines_reset` and `editor_mark_all_dirty` repaint a region that
+  spans more than the screen while the view scrolls after the cursor.
+- **`yy`, then `:t.`, then `p`.** What comes back must be what `yy` took. §22.3
+  makes "the move never touches the register" a promise, and only a board runs
+  the real `editor_vi_yank_range`.
+- **Where a `:t` leaves the cursor** — the first non-blank of the *copy*, not
+  the original.
+- **`:2m1` and a `:m` on the empty line past the last newline** — `E134: cannot
+  move into itself` and `E16: invalid range`, on the footer, which on 40 × 30
+  is the only thing that can say a command did nothing.
+- **`:$m0` and `:1m$` on a buffer whose last line has no newline**, with a `u`
+  after each: §22.4's borrowed newline, and whether a real `edall` or
+  `editfile` buffer reaches that path at all.
+- **A big move and one `u`, on both journal tiers.**
+
+**Passed 2026-08-20**, every item.
+
+The last one is the item this section exists for, because §22 never priced the
+journal against a move and should have. A move is recorded as two records
+(§22.3) — a delete of the span and an insert of the same bytes — so it costs
+**twice the moved text**, and the moved text is a whole procedure rather than
+the match a `:s` records or the line a `:g` does. Against 64 KB on PSRAM that
+is nothing. Against the 1 KB SRAM
+tier it means a move of a procedure over roughly 500 bytes cannot fit in the
+journal, and `editor_undo_record` then does what §23.4 describes: clears the
+records, sets `abandoned`, and leaves `u` answering `Already at oldest change`
+with the earlier history gone too.
+
+That is the same behaviour `:g` has, and it is the right one — refusing a move
+because it cannot be undone would be worse. But `:g` says `12 fewer lines`
+before it and a `:m` returns silently, so the one command whose whole purpose
+is moving text too big for the register is also the one most likely to be too
+big for the journal, with nothing on the footer to say so. Not changed here:
+it is a footer message and an argument about which commands should report their
+size, which belongs with the rest of that argument rather than in a gate note.
 
 ## 23. The second tier (M12)
 
