@@ -22,10 +22,35 @@ edge case)
 
 | ID | Bug | Area | Severity | Found | Status |
 |---|---|---|---|---|---|
+| [B47](#b47--a-vi-count-typed-past-ten-digits-overflows-an-int) | A vi count typed past ten digits overflows an `int` | editor | low | 2026-08-20 | open |
 | [B45](#b45--a-failed-malloc-panics-the-board-instead-of-raising-an-error) | A failed `malloc` panics the board instead of raising an error | memory | high | 2026-08-20 | open |
 | [B32](#b32--a-procedure-body-over-254-lines-re-runs-statements) | A procedure body over 254 lines re-runs statements | interpreter | high | 2026-08-17 | open |
 | [B19](#b19--collision-tests-ignore-the-wrapped-playfield) | Collision tests ignore the wrapped playfield (Asteroids) | games | low | 2026-08-12 | open |
 | [B6](#b6--penreverse-ignores-pen-size-always-1-px) | `penreverse` ignores pen size (always 1 px) | graphics | low | 2026-07-18 | won't fix (documented) |
+
+### B47 — A vi count typed past ten digits overflows an `int`
+
+In vi mode a count is accumulated with no bound:
+
+```c
+st->count = st->count * 10 + (key - '0');
+```
+
+Ten digits reach `INT_MAX` and the eleventh is signed overflow, which is
+undefined behaviour rather than a wrapped count. It is reachable by holding a
+digit key in normal mode — the keyboard repeats — and it affects every counted
+command, not one of them.
+
+Nothing observable has been seen from it: the count is multiplied by
+`take_count` and then used to walk motions that clamp at the buffer's ends, so
+in practice a wrapped value moves the cursor to one end or the other. The
+severity is low for that reason and the fix is one comparison at the two places
+a digit is taken, capping the count at something no buffer can outrun.
+
+Found while checking an automated review's claim that `editor_vi_increment`
+could overflow a `long long` (it cannot — an 18-digit cap bounds the parsed
+value well under `LLONG_MAX`). The count parser above it has no such cap, which
+is the real instance of what that review was reaching for.
 
 ### B45 — A failed `malloc` panics the board instead of raising an error
 

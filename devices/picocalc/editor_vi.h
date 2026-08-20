@@ -218,7 +218,9 @@ const char *editor_vi_status(const ViState *st);
 // action per match.
 //
 // buf/len: the buffer to rewrite; *len is updated. capacity includes the NUL.
-// undo: journal to record each substitution in, or NULL. One match is one
+// undo: journal to record each substitution in, never NULL -- a session with no
+//   undo has an `EditorUndo` whose *store* is NULL, which `editor_undo_record`
+//   checks, so there is no null journal to pass. One match is one
 //   record, which is far less than the whole rewritten span would be and is
 //   what lets a `:%s` over a large buffer still be undone.
 // out_cursor: set to the start of the last line changed.
@@ -238,11 +240,11 @@ const char *editor_vi_status(const ViState *st);
 // Here rather than in editor.c for the reason the substitute above is: it is a
 // splice with an off-by-one at each end, and this file has a host build. The
 // text is rotated in place rather than taken through the copy buffer, which is
-// 1 KB and is the user's register besides -- so the journal is told what moved
+// 8 KB and is the user's register besides -- so the journal is told what moved
 // *before* a byte does, while the span is still contiguous to point at (§22.3).
 //
 // buf/len: the buffer to rewrite; *len is updated. capacity includes the NUL.
-// undo: journal to record into, or NULL. Every record it makes belongs to the
+// undo: journal to record into, never NULL. Every record it makes belongs to the
 //   step the caller opened, so one `u` reverses the whole move.
 // out_cursor: set to the first non-blank of the last line moved or copied.
 //
@@ -272,7 +274,7 @@ size_t editor_vi_substitute(char *buf, size_t *len, size_t capacity,
 // does not depend on the direction of the walk.
 //
 // buf/len: the buffer to rewrite; *len is updated. capacity includes the NUL.
-// undo: journal to record into, or NULL. Every record belongs to the step the
+// undo: journal to record into, never NULL. Every record belongs to the step the
 //   caller opened, so one `u` reverses the whole pass -- which on a board with
 //   no PSRAM can be more than the 1 KB journal holds, and then the pass cannot
 //   be undone and takes the earlier history with it (§23.4).
@@ -306,7 +308,7 @@ typedef enum
 // file has a host build.
 //
 // buf/len: the buffer to rewrite; *len is updated. capacity includes the NUL.
-// undo: journal to record the splice in, or NULL. One record, inside the step
+// undo: journal to record the splice in, never NULL. One record, inside the step
 //   the caller opened, so one `u` puts the old number back.
 // out_cursor: set to the last digit of the number as it now reads.
 ViIncrement editor_vi_increment(char *buf, size_t *len, size_t capacity,
