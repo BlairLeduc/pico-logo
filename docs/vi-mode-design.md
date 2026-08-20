@@ -427,6 +427,7 @@ and the mode indicator. Those are a hardware check on the Pico Plus 2 W.
 | **M10** | `.` repeats an insert (§20) | `cwfoo` then `.` on the next word, and `3.` after it | **built and checked on a board 2026-08-19**; probing it found B43 (§20.5) |
 | **M11** | `:m` and `:t` (§22) | a procedure moved from the foot of an `edall` buffer to the top with `:'<,'>m0` and one `u` putting it back, and a `:t` of a block longer than the 1 KB copy buffer | built 2026-08-20, **not yet checked on a board** |
 | **M12** | `:g` and `:v` (§23) | `:g/^;/d` and one `u` over an `edall` buffer, `:v/^to /d`, `:g/x/s//y/g`, and what the 1 KB journal does with a big one on a `pico2` | **built and checked on a board 2026-08-20**, both halves (§23.6) |
+| **M13** | `]]` `[[`, `ip` `ap`, `Ctrl` `A` / `Ctrl` `X` (§24) | `]]` across an `edall` buffer with no blank lines in it, `dap` and one `u`, `cip`, and `Ctrl` `A` on a `fd 100` followed by `.` (§24.6) | designed 2026-08-20, not yet built |
 
 M1 is the whole feature as far as a user is concerned; M2 is what makes it
 pleasant, M4 is what stops it being annoying, and M5 is the one command a
@@ -2037,3 +2038,215 @@ against an estimate of ~90 and ~15, which counted the walk and not the ex
 parsing the two commands, the `!`, the delimiter and the two empty-pattern
 cases needed. 21 tests, 19 of which fail with the walk stubbed out; the two
 that still pass are the parser's, which is the right split.
+
+## 24. Procedures are the unit (M13)
+
+Every milestone since M8 has been about *finding* rather than editing, and each
+one found things by text: a word (`*`), a pattern (`/`), a name you already
+know (`gd`), a line number (`:42`). None of them knows what a Logo file is made
+of. Under `edall` the whole workspace is one buffer, and the thing a user moves
+between, deletes, duplicates and rewrites is not a line or a paragraph — it is
+a **procedure**. This milestone gives the mode the two commands that say so,
+plus one unrelated key that the same session kept wanting.
+
+### 24.1 The case for each
+
+**`]]` and `[[`.** There is no way to step from one procedure to the next.
+`gd` needs the name, so it cannot answer "what comes after this one"; `{` and
+`}` key on *blank lines* ([`para_fwd`](../devices/picocalc/editor_vi.c)), which
+works only if the buffer happens to have blank lines between definitions, and
+nothing puts them there — `edall` does not, and a buffer that has been edited
+for an hour stops having them. `/^to ` works and is five keystrokes plus a
+`Return` on a keyboard where `/` is a reach, and it leaves a search pattern
+behind that `n` then walks instead of whatever you were looking for.
+
+**A procedure text object.** `text_object` has words and the bracket pairs,
+and no paragraph object at all — so "delete this whole procedure", which is
+the most common structural edit there is, has no spelling. `d}` approximates
+it and inherits the blank-line dependency above. `dap` does not.
+
+**`Ctrl` `A` and `Ctrl` `X`.** Not classic vi, and the only thing in this
+document that vim brought rather than ex. It earns its place on the same
+grounds §3 used to choose unmodified letters: the hardware. Logo is numeric
+literals — `fd 100`, `rt 90`, `setpencolor 3`, `wait 60` — and tuning one
+today is `cw` and retype it on a thumb keyboard, which is six keys to change
+`90` to `91`. It is one key, it takes a count, and `.` repeats it.
+
+### 24.2 The set
+
+| Key | Does |
+|---|---|
+| `]]` | forward to the next definition; a count skips that many |
+| `[[` | back to the previous one |
+| `ip` | the **body** of the procedure the cursor is in, `to` and `end` excluded |
+| `ap` | the **whole** definition, `to` and `end` lines included |
+| `Ctrl` `A` | add `count` to the number at or after the cursor on this line |
+| `Ctrl` `X` | subtract it |
+
+`]]` and `[[` are motions, so `d]]`, `y]]` and `v]]` come free through
+`apply_operator` and the visual path, and `d]]` from the head of a procedure is
+the second way to delete one. They are **jumps**, so they set the mark and
+`` ` `` comes back — which is what makes `]]]]]]` safe to lean on.
+
+### 24.3 What counts as a definition, and what bounds it
+
+One marker, `to`, on the same test [`find_definition`](../devices/picocalc/editor_vi.c)
+already applies: the first non-blank word on the line, case-insensitively,
+followed by a blank — so an indented `to` counts and a line beginning `total`
+does not. That predicate comes out of `find_definition` as
+`line_starts_definition()` and both features call it, which is the whole reason
+this milestone is cheap. `end` is the same test for the word `end`.
+
+`]]` past the last definition lands at the **end of the buffer** rather than
+beeping, and `[[` before the first at the start, exactly as `{` and `}` clamp
+today. That is not a concession: it is what makes `d]]` in the last procedure
+delete the rest of the file, which is the operation you want there.
+
+`ip` and `ap` need both markers. Searching back from the cursor for a `to` and
+forward for an `end`, the object is refused when either is missing, and refused
+when a **second `to` is met before the `end`** — a definition that has not been
+closed yet is not one, and the alternative (bounding at the next `to`) would
+have `dap` on a half-typed procedure eat the blank lines and comments under it.
+The footer says `Not inside a procedure`, plain English rather than a borrowed
+`E` number, as `Nothing to replace` does.
+
+Both are **linewise**, so `dap` takes whole lines and `cip` empties the body
+and opens one clean line to type into, the way `cc` does. That is one wrinkle
+in existing code: the text-object path in `prefixed_key` sets
+`out->linewise = false` unconditionally, because every object it had until now
+was charwise. A count means nothing to either — procedures do not nest — and is
+ignored rather than refused.
+
+### 24.4 Which number `Ctrl` `A` changes
+
+Vim's rule, because a vi user has it in their fingers already: the number
+**under** the cursor, or the first one to its **right on the same line**, and
+nothing off the line. A `-` immediately before the digits is part of the
+number, so `fd -100` decrements to `-101` and `rt -90` increments to `-89`.
+
+Two things it deliberately does not do:
+
+- **Decimals are two numbers.** `10.5` with the cursor at or before the `1` is
+  `11.5` after `Ctrl` `A`; with the cursor on the `5` it is `10.6`. That is
+  vim's behaviour, it falls out of "a run of digits" needing no special case,
+  and the alternative — parse the float, add, re-render — puts single-precision
+  rounding between the user and a literal they typed. `setpos [0 0]` should
+  never become `setpos [1 9.99999]`.
+- **Leading zeros are not preserved.** `007` becomes `8`, not `008`. Logo has
+  no octal, and the width-preserving rule is a vim option because even there it
+  surprises people.
+
+The count multiplies: `10` `Ctrl` `X` on `100` gives `90`. With no number at or
+after the cursor the footer says `No number under the cursor` and the buffer is
+untouched.
+
+### 24.5 Where the code goes
+
+The two motions and the object are pure — offsets in, offsets out — and go
+where every other motion and object is, in `vi_motion` and `text_object`, with
+`]` and `[` joining the `pending_prefix` set that already holds `g` and `z`.
+No new action kind, no `editor.c` change, and no new `ViState` bytes: M5 needed
+no `editor.c` change either, and for the same reason.
+
+`Ctrl` `A` rewrites the buffer, so it follows §22.2 and §23.5 rather than
+inventing a fourth pattern: **`editor_vi_increment()` beside
+`editor_vi_substitute`, `editor_vi_move_lines` and `editor_vi_global`** —
+buffer in, journal in, cursor out — and `editor.c` gains one `case` that calls
+it. Finding the digits, the sign, the `snprintf` and the splice are then all
+under host test, which is the point of that file existing. The splice can
+change the line's length by a byte, so it takes the capacity check the other
+three take, and it is one `editor_undo_record` inside the keystroke's step, so
+one `u` puts the old number back.
+
+`VI_ACT_INCREMENT` joins `is_change()` so that `.` repeats it, and `count`
+carries the delta, negative for `Ctrl` `X`. `Ctrl` `X` is cut in the non-vi
+editor; vi mode owns its keys and always has (§5.1 says the same of `Ctrl` `F`).
+
+**Estimate: ~120 lines in `editor_vi.c`, ~12 in `editor.c`**, of which the
+increment is more than half. RAM unchanged.
+
+### 24.6 The M13 gate
+
+On a board, on an `edall` buffer of several procedures with no blank lines
+between them: `]]` walking it end to end and `[[` back, `` ` `` returning from
+one; `dap` removing a procedure whole and `u` putting it back; `cip` rewriting
+a body; `]]` in the last procedure followed by `d]]`; and `Ctrl` `A` on the
+`100` of a `fd 100`, then `.` on the next one, then `10` `Ctrl` `X`.
+
+### 24.7 Deliberately not with it
+
+- **`][` and `[]`** (forward to the *end* of a section, back to the start of
+  the previous one). Real vim, and here they would be "go to the next `end`" —
+  which `]]` followed by `k` says, and which nobody wants to type.
+- **`H` `M` `L`.** The obvious remaining motions, and they are the reason §6.1
+  exists: they move the cursor *from* view state, and this file has never known
+  where the view is. `zz`/`zt`/`zb` got away with it by pushing the row
+  arithmetic out to `editor.c` (`VI_ACT_SCROLL`); `H`/`M`/`L` would have to
+  pull the view's top line *in*, changing `editor_vi_key`'s signature for three
+  keys that `Ctrl` `D` and `Ctrl` `U` already cover.
+- **`R`, overtype mode.** The one classic normal-mode command with no
+  substitute here — `r` does one character and `cw` retypes the word. It costs
+  a fifth `ViMode` and a branch in the insert path, which is more than the
+  other three items in this section put together, and it waits until a board
+  session asks for it the way §15 was asked for.
+- **`gu`, `gU`, `g~`.** §16.7 and §23.8 have already said why case does not
+  matter to Logo names; `~` exists and that is enough.
+- **`gv`, `&`, `gJ`, `|`.** Real vi, all marginal at 40 × 30.
+- **Macros (`q` and `@`).** Still out, and M12 is why. "Repeat this edit on
+  every line matching X" is now `:g`; "repeat it here" is `.`. What macros
+  would add is the sliver left over — a multi-key edit repeated at places
+  picked by eye — which is not worth a recorder, a register and a replay depth
+  limit.
+
+### 24.8 What the build changed
+
+The cheapness held. `line_starts_definition()` came out of `find_definition`
+exactly as §24.3 said it would, `RAM` is identical to the byte on `pico+2w`
+(478,532 of 512 KB, 91.27 %) and the milestone is 2,616 bytes of flash. Five
+things the design did not say:
+
+**One predicate wanted a parameter.** §24.3 said `end` is "the same test for
+the word `end`", which makes the thing worth naming `line_starts_word(buf, len,
+line, word, word_len, *out_after)` — the first non-blank word on the line,
+case-insensitively, with only a blank or the line's end after it.
+`line_starts_definition()` is that with `"to"`, and `find_definition` is that
+plus the name it then reads out of `*out_after`. Extracting it changed `gd` in
+one way worth recording: the old inline test required a third character on the
+line, so a bare `to` was never a definition and a bare `to` line now is. `]]`
+landing on a definition still being typed is right, and `gd` cannot match it
+anyway, since there is no name there to compare.
+
+**`ip` and `ap` search forward from the cursor's line, not from the `to`.**
+§24.3 said "searching back from the cursor for a `to` and forward for an
+`end`", and starting the forward scan at the head would let a cursor sitting
+*below* an `end` — on the blank line between two procedures — take the
+procedure above it, which is not the one the cursor is in. Starting at the
+cursor's own line makes the refusal fall out of the rule already there: the
+next thing found going down is the next `to`, so it is refused for the reason a
+half-typed definition is.
+
+**Linewise objects needed the two adjustments the visual path already makes.**
+§24.3 saw the `out->linewise = false`; what it did not say is that a linewise
+range is not enough on its own. `cip` empties the body "the way `cc` does" only
+if the range stops short of the last newline, and `dap` on the last procedure
+of a buffer leaves a blank line behind unless it takes the newline *before* the
+range instead. Both are three lines each, and both are the same three lines the
+visual-mode operator path has — the object path just had no need of them until
+there was a linewise object.
+
+**`vap` switches to linewise visual.** Not in the design, one line, and without
+it `vap` leaves the cursor on a newline and the selection charwise, which is
+not what "select the whole procedure" looks like on screen.
+
+**`editor_vi_increment` returns three states, not a bool.** "No number under
+the cursor" and a buffer with no room for one more digit are different things
+to put on the footer, and only the function knows which happened — the state
+machine cannot tell without doing the write. So `ViIncrement` is
+`VI_INC_OK` / `_NO_NUMBER` / `_NO_ROOM`, the caller picks the message, and
+`VI_ACT_INCREMENT` carries only the cursor and the delta. Runs longer than 18
+digits are `_NO_NUMBER` rather than wrapping a `long long`.
+
+Cost: 308 lines in `editor_vi.c` (16 of them rewritten) and 18 in `editor.c`,
+comments and all, against an estimate of ~120 and ~12 — the difference is the
+comments and the predicate extraction, not the features. 38 tests. **The §24.6
+gate passed on a board the same day**, every item of it.

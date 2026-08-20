@@ -636,6 +636,7 @@ Every motion takes a count typed before it, so `5w` moves five words.
 - `0` `^` `$` — the start of the line, its first non-blank character, its end
 - `gg` `G` — the first line, the last line; `10G` goes to line 10
 - `{` `}` — to the previous or next blank line, which in Logo is the gap between two procedures
+- `]]` `[[` — to the next or previous procedure definition: the next `to` line down, or the `to` line of the procedure you are in. Unlike `{` and `}` these do not need blank lines between the definitions, which is what an [`edall`](#edall) buffer looks like. `]]` past the last definition goes to the end of the buffer and `[[` before the first to the start, so `d]]` in the last procedure deletes the rest of the file
 - `f`_c_ `F`_c_ — forward or back to the next _c_ on this line; `t`_c_ and `T`_c_ stop just short of it; `;` and `,` repeat the last one forwards and backwards
 - `%` — from a bracket to its match: the first `(` `)` `[` `]` `{` `}` at or after the cursor on this line, forwards from an opening one and backwards from a closing one, counting nesting of that kind only
 - `Ctrl` `F` `Ctrl` `B` — a page forward or back; `Ctrl` `D` and `Ctrl` `U` half a page
@@ -644,7 +645,7 @@ Every motion takes a count typed before it, so `5w` moves five words.
 - `` ` `` `'` — back to where the last jump started. `` ` `` returns to the exact character and `'` to the first non-blank of that line. Jumping to the mark is itself a jump, so pressing `` ` `` again returns to where you came from and the two keys toggle between two places
 - `gd` — go to the definition of the procedure the cursor is on: the `to` line that names it, wherever it is in the buffer. With [`edall`](#edall) the whole workspace is one buffer, so this reaches every procedure you have
 
-A *jump* is `G`, `gg`, `{`, `}`, `%`, `/`, `?`, `n`, `N`, `*`, `#`, `gd` and `:`_n_ — the movements that can leave the view of the buffer you were looking at. Each of them sets the mark, so `` ` `` always comes back to the previous spot. Ordinary movement (`h` `j` `k` `l`, the words, the pages) does not. The mark is a place in the text, not a line number, and the Editor does not move it when you change the text in front of it, so after an edit `` ` `` may return somewhere near where you were rather than exactly.
+A *jump* is `G`, `gg`, `{`, `}`, `]]`, `[[`, `%`, `/`, `?`, `n`, `N`, `*`, `#`, `gd` and `:`_n_ — the movements that can leave the view of the buffer you were looking at. Each of them sets the mark, so `` ` `` always comes back to the previous spot. Ordinary movement (`h` `j` `k` `l`, the words, the pages) does not. The mark is a place in the text, not a line number, and the Editor does not move it when you change the text in front of it, so after an edit `` ` `` may return somewhere near where you were rather than exactly.
 
 
 `Ctrl` `G` says where the cursor is: `line 12 of 40 --30%--`, the number of the line the cursor is on, how many lines the buffer holds, and how far through it you are. `[Modified]` in front of it means you have changed the buffer since the Editor opened, so it is also how you check whether `:q` will let you leave. There is no file name in the report — which procedures or which file the Editor is over was fixed by the command that opened it. `:.=` and `:=` print the same two numbers on their own: the line the cursor is on, and the number of the last line.
@@ -665,6 +666,7 @@ An operator takes a motion, and the two together take a count, so `d2w` and `2dw
 - `r`_c_ — replace the character under the cursor with _c_. A count replaces that many, and `r` `Enter` puts a line break where they were, splitting the line
 - `~` — swap the case of the character under the cursor and move on
 - `J` — join the next line onto this one, with a single space where the break was
+- `Ctrl` `A` `Ctrl` `X` — add one to the number the cursor is on, or take one away. If the cursor is not on a number, the first one to its right on the same line is used, and if there is none the Editor says `No number under the cursor`. A count is how much, so `10` `Ctrl` `X` on `fd 100` leaves `fd 90`, and `.` repeats it on the next number you move to. A `-` written against the digits is part of the number, so `fd -100` counts down to `fd -101`; a `.` is not, so `10.5` is two numbers and which one changes depends on which side of the point the cursor is
 - `p` `P` — put the copy buffer after or before the cursor. Text taken a line at a time goes back a line at a time, below or above the current line
 - `.` — repeat the last change. What it replays is the keys you typed, not the text they touched, so the motion or [text object](#text-objects) is worked out again from where the cursor now is: after `dw`, `.` deletes whichever word you have since moved to, and after `di[` it empties whichever group you are now inside. A count typed before `.` is used in place of the one the change was made with, so `3.` after `dw` deletes three words
 
@@ -685,10 +687,13 @@ An operator can take a *text object* instead of a motion: not "from here to ther
 | `i[` `a[` | the text inside the `[ ]` the cursor is in — `i[` between the brackets, `a[` including them. `]` means the same thing |
 | `i(` `a(` | the same for `( )`, and `)` means the same as `(` |
 | `i{` `a{` | the same for `{ }`, and `}` means the same as `{` |
+| `ip` `ap` | the procedure the cursor is in — `ip` its body, `ap` the whole definition with its `to` and `end` lines. Both work a line at a time |
 
 `di[` is the command `%` cannot express: with the cursor anywhere inside `repeat 4 [fd 10 rt 90]` — on either bracket, or on any character between them — it deletes `fd 10 rt 90` and leaves `repeat 4 []`. `ci[` empties the group and starts inserting, `yi[` copies it, and `>i[` indents every line it covers. The group may run over several lines, as a `repeat` body often does.
 
 A count goes out a level of nesting at a time, so in `if [a [b c] d] e` with the cursor on the `b`, `di[` takes `b c` and `d2i[` takes `a [b c] d`. On words a count takes that many, so `d3aw` deletes three. A group with nothing in it is not an error: `ci[` on `[]` simply puts you between the brackets.
+
+`dap` deletes a whole procedure, `yap` copies one, `cip` empties its body and leaves you a clean line to type the new one into, and `vap` selects it. A procedure runs from a `to` line to the `end` line that closes it; a count means nothing to it, since procedures do not nest. When the cursor is not inside one — between two definitions, or in a definition still being typed that has no `end` yet, or one with a second `to` before its `end` — the Editor says `Not inside a procedure` and changes nothing.
 
 `i` and `a` mean this only when an operator is waiting for something to work on, or in visual mode, where `vi[` selects the group and `vaw` a word. Everywhere else they start inserting, as before.
 
@@ -723,7 +728,7 @@ While you are inserting, the Editor behaves exactly as it does outside vi mode: 
 - `p` — replace it with the copy buffer
 - `J` — join the lines it covers
 - `o` — swap which end of it the cursor is on
-- `i` or `a` followed by an object — select a [text object](#text-objects), so `vi[` selects the group the cursor is in
+- `i` or `a` followed by an object — select a [text object](#text-objects), so `vi[` selects the group the cursor is in and `vap` the whole procedure, a line at a time
 
 `Esc` cancels the selection.
 

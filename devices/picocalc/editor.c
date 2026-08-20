@@ -2044,6 +2044,24 @@ static int editor_vi_apply(const ViAction *act, int cursor_line_before)
             editor_mark_from_line_dirty(editor_get_line_at_pos(act->start));
             break;
 
+        case VI_ACT_INCREMENT: {
+            size_t landed = editor.cursor_pos;
+            ViIncrement done = editor_vi_increment(editor.buffer, &editor.content_length,
+                                                   editor.buffer_size, act->start,
+                                                   act->count, &editor.undo, &landed);
+            if (done != VI_INC_OK) {
+                editor.vi_msg = (done == VI_INC_NO_ROOM) ? "Not enough room"
+                                                         : "No number under the cursor";
+                editor.dirty_flags = DIRTY_CURSOR;
+                break;
+            }
+            editor_lines_reset(&editor.lines);
+            editor.cursor_pos = landed;
+            editor.vi.modified = true;
+            editor_mark_from_line_dirty(cursor_line_before);
+            break;
+        }
+
         case VI_ACT_SEARCH:
             editor_vi_search(act->ch, act->start);
             break;

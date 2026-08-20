@@ -45,6 +45,8 @@ typedef enum
     VI_ACT_OPEN_ABOVE,    // ... above
     VI_ACT_JOIN,          // Join `count` lines from the cursor's
     VI_ACT_TOGGLE_CASE,   // Flip the case of [start, end)
+    VI_ACT_INCREMENT,     // Add `count` -- negative for `Ctrl` `X` -- to the
+                          // number at or after `start` on its line
     VI_ACT_SEARCH,        // Search for `pattern` from `start`; `ch` is '/'
                           // (forward) or '?'
     VI_ACT_SCROLL,        // Move the view, not the cursor: `ch` is 'z'
@@ -111,8 +113,9 @@ typedef struct
     int count;             // Digits typed so far, 0 = none
     int op_count;          // Count typed before the pending operator
     char pending_op;       // 0, 'd', 'c', 'y', '<', '>'
-    char pending_prefix;   // 0, 'g', 'Z', 'f', 'F', 't', 'T', 'r', or 'i'/'a'
-                           // waiting for a text object (§15)
+    char pending_prefix;   // 0, 'g', 'z', 'Z', 'f', 'F', 't', 'T', 'r',
+                           // ']', '[', or 'i'/'a' waiting for a text
+                           // object (§15)
     size_t anchor;         // Visual mode's other end
     bool modified;         // Set by the editor; `:q` refuses when it is true
 
@@ -285,3 +288,27 @@ size_t editor_vi_global(char *buf, size_t *len, size_t capacity,
                         const char *sub_pat, size_t sub_pat_len,
                         const char *rep, size_t rep_len, bool sub_global,
                         EditorUndo *undo, size_t *out_cursor);
+
+typedef enum
+{
+    VI_INC_OK,
+    VI_INC_NO_NUMBER,  // Nothing at or after the cursor on its line is a number
+    VI_INC_NO_ROOM,    // The new number is longer and the buffer is full
+} ViIncrement;
+
+// `Ctrl` `A` and `Ctrl` `X` (§24.4): add `delta` to the number under the cursor,
+// or to the first one to its right on the same line, and leave the cursor on
+// the last digit of the result. A `-` against the digits is part of the number,
+// so `fd -100` counts down to `-101`; a `.` is not, so `10.5` is two numbers.
+//
+// Here rather than in editor.c for the reason the three rewrites above are: it
+// is a scan, a re-render and a splice that changes the line's length, and this
+// file has a host build.
+//
+// buf/len: the buffer to rewrite; *len is updated. capacity includes the NUL.
+// undo: journal to record the splice in, or NULL. One record, inside the step
+//   the caller opened, so one `u` puts the old number back.
+// out_cursor: set to the last digit of the number as it now reads.
+ViIncrement editor_vi_increment(char *buf, size_t *len, size_t capacity,
+                                size_t cursor, int delta,
+                                EditorUndo *undo, size_t *out_cursor);

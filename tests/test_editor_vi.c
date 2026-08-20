@@ -50,6 +50,7 @@ typedef struct
     int exits;          // VI_ACT_ACCEPT / _CANCEL seen
     int writes;         // VI_ACT_WRITE seen (`:w`, which does not exit)
     size_t globals;     // What the last VI_ACT_GLOBAL reported
+    ViIncrement increment;  // ... and the last VI_ACT_INCREMENT
     ViActionKind exit_kind;
 } Ed;
 
@@ -324,6 +325,17 @@ static void ed_apply(Ed *e, const ViAction *act)
             }
             e->cursor = act->end < e->len ? act->end : act->start;
             break;
+
+        case VI_ACT_INCREMENT: {
+            size_t landed = e->cursor;
+            e->increment = editor_vi_increment(e->buf, &e->len, ED_CAP, act->start,
+                                               act->count, &e->undo, &landed);
+            if (e->increment == VI_INC_OK) {
+                editor_lines_reset(&e->ix);
+                e->cursor = landed;
+            }
+            break;
+        }
 
         case VI_ACT_SEARCH: {
             // Run it the way editor.c does. The state machine's part is
@@ -2718,6 +2730,372 @@ static void test_an_unknown_z_command_complains(void)
 }
 
 //
+//  Procedures (M13)
+//
+//  An `edall` buffer with no blank lines between the definitions -- which is
+//  what `edall` writes and what the blank-line motions cannot walk.
+//
+
+#define PROCS \
+    "to box :n\n" \
+    "  fd :n\n" \
+    "  rt 90\n" \
+    "end\n" \
+    "to tri :n\n" \
+    "  fd :n\n" \
+    "end\n" \
+    "to total :n\n" \
+    "  op :n\n" \
+    "end\n"
+
+static void test_bracket_bracket_steps_definition_to_definition(void)
+{
+    ed_set(PROCS);
+    feed("]]");  TEST_ASSERT_EQUAL_UINT(30u, ed.cursor);   // `to tri`
+    feed("]]");  TEST_ASSERT_EQUAL_UINT(52u, ed.cursor);   // `to total`
+    feed("[[");  TEST_ASSERT_EQUAL_UINT(30u, ed.cursor);
+    feed("[[");  TEST_ASSERT_EQUAL_UINT(0u, ed.cursor);
+}
+
+static void test_bracket_bracket_takes_a_count(void)
+{
+    ed_set(PROCS);
+    feed("2]]"); TEST_ASSERT_EQUAL_UINT(52u, ed.cursor);
+    feed("2[["); TEST_ASSERT_EQUAL_UINT(0u, ed.cursor);
+}
+
+static void test_bracket_bracket_clamps_at_the_ends(void)
+{
+    ed_set(PROCS);
+    feed("9]]"); TEST_ASSERT_EQUAL_UINT(ed.len, ed.cursor);
+    feed("9[["); TEST_ASSERT_EQUAL_UINT(0u, ed.cursor);
+}
+
+static void test_bracket_back_from_inside_a_procedure_goes_to_its_head(void)
+{
+    ed_set(PROCS);
+    at(40);      // Inside `to tri`
+    feed("[[");  TEST_ASSERT_EQUAL_UINT(30u, ed.cursor);
+    feed("[[");  TEST_ASSERT_EQUAL_UINT(0u, ed.cursor);
+}
+
+static void test_a_line_that_only_starts_with_to_is_not_a_definition(void)
+{
+    // `to total` is a definition and the `total` in its body is not, which is
+    // the whole of what line_starts_definition has to get right
+    ed_set("to a\n  total 1\nend\nto b\nend\n");
+    feed("]]");
+    TEST_ASSERT_EQUAL_UINT(19u, ed.cursor);
+}
+
+static void test_an_indented_to_is_still_a_definition(void)
+{
+    ed_set("to a\nend\n  to b\nend\n");
+    feed("]]");
+    TEST_ASSERT_EQUAL_UINT(9u, ed.cursor);
+}
+
+static void test_d_bracket_bracket_deletes_a_whole_procedure(void)
+{
+    ed_set(PROCS);
+    feed("]]");
+    feed("d]]");
+    assert_text("to box :n\n  fd :n\n  rt 90\nend\nto total :n\n  op :n\nend\n");
+}
+
+static void test_d_bracket_bracket_in_the_last_procedure_takes_the_rest(void)
+{
+    ed_set(PROCS);
+    feed("2]]");
+    feed("d]]");
+    assert_text("to box :n\n  fd :n\n  rt 90\nend\nto tri :n\n  fd :n\nend\n");
+}
+
+static void test_bracket_bracket_is_a_jump(void)
+{
+    ed_set(PROCS);
+    at(5);
+    feed("]]");  TEST_ASSERT_EQUAL_UINT(30u, ed.cursor);
+    feed("`");   TEST_ASSERT_EQUAL_UINT(5u, ed.cursor);
+}
+
+static void test_a_single_bracket_is_not_a_command(void)
+{
+    ed_set(PROCS);
+    feed("]x");
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    TEST_ASSERT_EQUAL_INT(VI_NORMAL, ed.vi.mode);
+}
+
+static void test_dap_takes_the_whole_definition(void)
+{
+    ed_set(PROCS);
+    at(40);      // Inside `to tri`
+    feed("dap");
+    assert_text("to box :n\n  fd :n\n  rt 90\nend\nto total :n\n  op :n\nend\n");
+}
+
+static void test_dap_from_the_to_line_and_from_the_end_line(void)
+{
+    ed_set(PROCS);
+    feed("dap");
+    assert_text("to tri :n\n  fd :n\nend\nto total :n\n  op :n\nend\n");
+
+    ed_set(PROCS);
+    at(50);      // The `end` of `to tri`
+    feed("dap");
+    assert_text("to box :n\n  fd :n\n  rt 90\nend\nto total :n\n  op :n\nend\n");
+}
+
+static void test_dip_takes_the_body_and_leaves_the_markers(void)
+{
+    ed_set(PROCS);
+    at(40);
+    feed("dip");
+    assert_text("to box :n\n  fd :n\n  rt 90\nend\nto tri :n\nend\nto total :n\n  op :n\nend\n");
+}
+
+static void test_yap_is_linewise(void)
+{
+    ed_set(PROCS);
+    at(40);
+    feed("yap");
+    TEST_ASSERT_TRUE(ed.last.linewise);
+    TEST_ASSERT_EQUAL_STRING("to tri :n\n  fd :n\nend\n", ed.yank);
+}
+
+static void test_cip_empties_the_body_and_leaves_a_line_to_type_into(void)
+{
+    ed_set(PROCS);
+    at(40);
+    feed("cip");
+    TEST_ASSERT_EQUAL_INT(VI_INSERT, ed.vi.mode);
+    feed("  bk :n");
+    feed_key(KEY_ESC);
+    assert_text("to box :n\n  fd :n\n  rt 90\nend\nto tri :n\n  bk :n\nend\nto total :n\n  op :n\nend\n");
+}
+
+static void test_dap_on_the_last_procedure_leaves_no_blank_line(void)
+{
+    ed_set("to a\n  fd 1\nend\nto b\n  fd 2\nend");
+    at(20);
+    feed("dap");
+    assert_text("to a\n  fd 1\nend");
+}
+
+static void test_a_procedure_object_outside_one_says_so(void)
+{
+    ed_set("print 1\nto a\nend\n");
+    feed("dap");
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    TEST_ASSERT_EQUAL_STRING("Not inside a procedure", ed.last.msg);
+    assert_text("print 1\nto a\nend\n");
+}
+
+static void test_a_procedure_object_below_the_end_is_not_inside_one(void)
+{
+    ed_set("to a\nend\n\nto b\nend\n");
+    at(9);       // The blank line between them
+    feed("dap");
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    assert_text("to a\nend\n\nto b\nend\n");
+}
+
+static void test_an_unclosed_definition_is_not_a_procedure(void)
+{
+    // A second `to` before the `end` -- the definition being typed has not
+    // been closed, and bounding it at the next `to` would eat what is under it
+    ed_set("to a\n  fd 1\nto b\n  fd 2\nend\n");
+    at(7);
+    feed("dap");
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    assert_text("to a\n  fd 1\nto b\n  fd 2\nend\n");
+}
+
+static void test_a_definition_with_no_end_is_not_a_procedure(void)
+{
+    ed_set("to a\n  fd 1\n");
+    at(7);
+    feed("dap");
+    TEST_ASSERT_EQUAL_INT(VI_ACT_BEEP, ed.last.kind);
+    assert_text("to a\n  fd 1\n");
+}
+
+static void test_vap_selects_the_definition_linewise(void)
+{
+    ed_set(PROCS);
+    at(40);
+    feed("vap");
+    TEST_ASSERT_EQUAL_INT(VI_VISUAL_LINE, ed.vi.mode);
+    feed("d");
+    assert_text("to box :n\n  fd :n\n  rt 90\nend\nto total :n\n  op :n\nend\n");
+}
+
+static void test_a_procedure_object_is_one_undo(void)
+{
+    ed_set(PROCS);
+    at(40);
+    feed("dap");
+    feed("u");
+    assert_text(PROCS);
+}
+
+//
+//  Ctrl+A and Ctrl+X (M13)
+//
+
+#define CTRL_A 0x01
+#define CTRL_X 0x18
+
+static void test_ctrl_a_adds_one_to_the_number_under_the_cursor(void)
+{
+    ed_set("fd 100\n");
+    at(3);
+    feed_key(CTRL_A);
+    assert_text("fd 101\n");
+    TEST_ASSERT_EQUAL_UINT(5u, ed.cursor);   // On the last digit
+}
+
+static void test_ctrl_a_finds_the_number_to_the_right(void)
+{
+    ed_set("fd 100\n");
+    at(0);
+    feed_key(CTRL_A);
+    assert_text("fd 101\n");
+}
+
+static void test_ctrl_a_from_inside_the_run_takes_the_whole_number(void)
+{
+    ed_set("fd 199\n");
+    at(4);
+    feed_key(CTRL_A);
+    assert_text("fd 200\n");
+}
+
+static void test_ctrl_x_subtracts(void)
+{
+    ed_set("rt 90\n");
+    at(3);
+    feed_key(CTRL_X);
+    assert_text("rt 89\n");
+}
+
+static void test_the_count_multiplies(void)
+{
+    ed_set("fd 100\n");
+    at(3);
+    feed("10");
+    feed_key(CTRL_X);
+    assert_text("fd 90\n");
+}
+
+static void test_a_minus_against_the_digits_is_part_of_the_number(void)
+{
+    ed_set("fd -100\n");
+    at(4);
+    feed_key(CTRL_A);
+    assert_text("fd -99\n");
+
+    ed_set("rt -90\n");
+    at(4);
+    feed_key(CTRL_X);
+    assert_text("rt -91\n");
+}
+
+static void test_a_number_can_cross_zero(void)
+{
+    ed_set("fd 1\n");
+    at(3);
+    feed("3");
+    feed_key(CTRL_X);
+    assert_text("fd -2\n");
+}
+
+static void test_a_decimal_is_two_numbers(void)
+{
+    ed_set("fd 10.5\n");
+    at(3);
+    feed_key(CTRL_A);
+    assert_text("fd 11.5\n");
+
+    ed_set("fd 10.5\n");
+    at(6);
+    feed_key(CTRL_A);
+    assert_text("fd 10.6\n");
+}
+
+static void test_leading_zeros_are_not_preserved(void)
+{
+    ed_set("wait 007\n");
+    at(5);
+    feed_key(CTRL_A);
+    assert_text("wait 8\n");
+}
+
+static void test_no_number_on_the_line_changes_nothing(void)
+{
+    ed_set("fd 100\nprint hi\n");
+    at(7);
+    feed_key(CTRL_A);
+    TEST_ASSERT_EQUAL_INT(VI_ACT_INCREMENT, ed.last.kind);
+    TEST_ASSERT_EQUAL_INT(VI_INC_NO_NUMBER, ed.increment);
+    assert_text("fd 100\nprint hi\n");
+}
+
+static void test_a_number_before_the_cursor_is_not_the_one(void)
+{
+    ed_set("fd 100\n");
+    at(6);       // Past the digits, at the end of the line
+    feed_key(CTRL_A);
+    TEST_ASSERT_EQUAL_INT(VI_INC_NO_NUMBER, ed.increment);
+    assert_text("fd 100\n");
+}
+
+static void test_dot_repeats_an_increment(void)
+{
+    ed_set("fd 100\nrt 90\n");
+    at(3);
+    feed_key(CTRL_A);
+    at(10);
+    feed(".");
+    assert_text("fd 101\nrt 91\n");
+}
+
+static void test_a_new_count_on_a_repeated_increment(void)
+{
+    ed_set("fd 100\nrt 90\n");
+    at(3);
+    feed_key(CTRL_A);
+    at(10);
+    feed("5.");
+    assert_text("fd 101\nrt 95\n");
+}
+
+static void test_an_increment_is_one_undo(void)
+{
+    ed_set("fd 9\n");
+    at(3);
+    feed_key(CTRL_A);
+    assert_text("fd 10\n");
+    feed("u");
+    assert_text("fd 9\n");
+}
+
+static void test_an_increment_that_would_not_fit_changes_nothing(void)
+{
+    char big[ED_CAP];
+    memset(big, 'x', ED_CAP - 3);
+    big[ED_CAP - 3] = '9';
+    big[ED_CAP - 2] = '\n';
+    big[ED_CAP - 1] = '\0';
+    ed_set(big);
+    at(ED_CAP - 3);
+    feed_key(CTRL_A);
+    TEST_ASSERT_EQUAL_INT(VI_INC_NO_ROOM, ed.increment);
+    assert_text(big);
+}
+
+//
 //  The randomised differential run
 //
 //  Thousands of random commands against a buffer whose line memo is driven
@@ -2934,7 +3312,7 @@ static void test_random_commands_keep_the_buffer_and_the_memo_consistent(void)
 {
     static const char *keys =
         "hjklwbeWBE0^$GxXDCYSspPJ~ivVoOaAircdy<>.;,%nfFtT{}[]()23uu\x12"
-        "*#`'zgt";  // M8: the mark is a stored offset, so `d`` after an edit is
+        "*#`'zgt\x01\x18";  // M8: the mark is a stored offset, so `d`` after an edit is
                     // exactly where a stale one would show
 
     fuzz_seed(20260817);
@@ -3222,6 +3600,45 @@ int main(void)
     RUN_TEST(test_gd_without_a_definition_complains);
     RUN_TEST(test_z_moves_the_view_and_not_the_cursor);
     RUN_TEST(test_an_unknown_z_command_complains);
+
+    RUN_TEST(test_bracket_bracket_steps_definition_to_definition);
+    RUN_TEST(test_bracket_bracket_takes_a_count);
+    RUN_TEST(test_bracket_bracket_clamps_at_the_ends);
+    RUN_TEST(test_bracket_back_from_inside_a_procedure_goes_to_its_head);
+    RUN_TEST(test_a_line_that_only_starts_with_to_is_not_a_definition);
+    RUN_TEST(test_an_indented_to_is_still_a_definition);
+    RUN_TEST(test_d_bracket_bracket_deletes_a_whole_procedure);
+    RUN_TEST(test_d_bracket_bracket_in_the_last_procedure_takes_the_rest);
+    RUN_TEST(test_bracket_bracket_is_a_jump);
+    RUN_TEST(test_a_single_bracket_is_not_a_command);
+    RUN_TEST(test_dap_takes_the_whole_definition);
+    RUN_TEST(test_dap_from_the_to_line_and_from_the_end_line);
+    RUN_TEST(test_dip_takes_the_body_and_leaves_the_markers);
+    RUN_TEST(test_yap_is_linewise);
+    RUN_TEST(test_cip_empties_the_body_and_leaves_a_line_to_type_into);
+    RUN_TEST(test_dap_on_the_last_procedure_leaves_no_blank_line);
+    RUN_TEST(test_a_procedure_object_outside_one_says_so);
+    RUN_TEST(test_a_procedure_object_below_the_end_is_not_inside_one);
+    RUN_TEST(test_an_unclosed_definition_is_not_a_procedure);
+    RUN_TEST(test_a_definition_with_no_end_is_not_a_procedure);
+    RUN_TEST(test_vap_selects_the_definition_linewise);
+    RUN_TEST(test_a_procedure_object_is_one_undo);
+
+    RUN_TEST(test_ctrl_a_adds_one_to_the_number_under_the_cursor);
+    RUN_TEST(test_ctrl_a_finds_the_number_to_the_right);
+    RUN_TEST(test_ctrl_a_from_inside_the_run_takes_the_whole_number);
+    RUN_TEST(test_ctrl_x_subtracts);
+    RUN_TEST(test_the_count_multiplies);
+    RUN_TEST(test_a_minus_against_the_digits_is_part_of_the_number);
+    RUN_TEST(test_a_number_can_cross_zero);
+    RUN_TEST(test_a_decimal_is_two_numbers);
+    RUN_TEST(test_leading_zeros_are_not_preserved);
+    RUN_TEST(test_no_number_on_the_line_changes_nothing);
+    RUN_TEST(test_a_number_before_the_cursor_is_not_the_one);
+    RUN_TEST(test_dot_repeats_an_increment);
+    RUN_TEST(test_a_new_count_on_a_repeated_increment);
+    RUN_TEST(test_an_increment_is_one_undo);
+    RUN_TEST(test_an_increment_that_would_not_fit_changes_nothing);
 
     RUN_TEST(test_random_commands_keep_the_buffer_and_the_memo_consistent);
 
