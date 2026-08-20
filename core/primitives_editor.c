@@ -21,13 +21,18 @@
 #include <string.h>
 #include <strings.h>
 
-// Editor buffers. They are only touched at human-editing speed, so
-// primitives_editor_init() places them in the aux/PSRAM region when available
+// The edit buffer: it holds the whole file being edited, so it is what bounds
+// how large a program this board can open. Only touched at human-editing speed,
+// so primitives_editor_init() places it in the aux/PSRAM region when available
 // (relieving SRAM), falling back to a one-time heap allocation of the size
-// below otherwise. They are deliberately NOT static arrays: reserving them in
-// BSS would keep the SRAM even when PSRAM backs them.
+// below otherwise. Deliberately NOT a static array: reserving it in BSS would
+// keep the SRAM even when PSRAM backs it.
 //
-// The fallback size every board can meet (8KB here, 24576 from the presets).
+// The companion definition buffer is sized by LOGO_EDITOR_PROC_BUFFER_SIZE and
+// is much smaller in the SRAM tier -- it holds one procedure, not the file.
+//
+// The fallback size every board can meet (8KB here, larger from the presets,
+// which set it against the heap that board actually has).
 #ifndef LOGO_EDITOR_BUFFER_SIZE
 #define LOGO_EDITOR_BUFFER_SIZE 8192
 #endif
@@ -45,6 +50,7 @@
 static char *editor_buffer = NULL;
 static char *editor_proc_buffer = NULL;
 static size_t editor_buffer_size = LOGO_EDITOR_BUFFER_SIZE;
+static size_t editor_proc_buffer_size = LOGO_EDITOR_PROC_BUFFER_SIZE;
 
 // Vi's undo journal (docs/vi-mode-design.md §8), tiered the same way and for
 // the same reason: it is lent to the editor, which owns no memory of its own.
@@ -63,12 +69,13 @@ static char *editor_buffer_heap = NULL;
 static char *editor_proc_buffer_heap = NULL;
 static char *editor_undo_heap = NULL;
 
-// The cached heap fallback, allocated on first use.
-static char *editor_heap_buffer(char **heap_cache)
+// The cached heap fallback, allocated on first use. The size is a parameter
+// because the two buffers no longer share one: see LOGO_EDITOR_PROC_BUFFER_SIZE.
+static char *editor_heap_buffer(char **heap_cache, size_t size)
 {
     if (*heap_cache == NULL)
     {
-        *heap_cache = (char *)malloc(LOGO_EDITOR_BUFFER_SIZE);
+        *heap_cache = (char *)malloc(size);
     }
     return *heap_cache;
 }
@@ -133,7 +140,14 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
     size_t proc_len = 0;
     bool in_procedure_def = false;
     
-    // Bracket-balance tracking for multi-line expressions (e.g. make "x [\n...\n])
+    // Bracket-balance tracking for multi-line expressions (e.g. make "x [\n...\n]).
+    // These accumulate into proc_buffer too -- the two uses alternate and never
+    // overlap -- so every bound below is editor_proc_buffer_size, NOT
+    // editor_buffer_size. The two are the same size only in the region tier;
+    // in the SRAM tier the edit buffer is many times larger, and checking it
+    // here would let an expression run past the end of the buffer being
+    // written to. The REPL bounds its own multi-line expressions at
+    // REPL_MAX_PROC_BUFFER for the same reason, which is the same 4 KB.
     int bracket_depth = 0;
     size_t expr_len = 0;
     
@@ -164,7 +178,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
         if (is_empty && in_procedure_def)
         {
             // Add just a newline to preserve the empty line
-            if (proc_len + 1 < editor_buffer_size - 10)
+            if (proc_len + 1 < editor_proc_buffer_size - 10)
             {
                 proc_buffer[proc_len] = '\n';
                 proc_len += 1;
@@ -186,7 +200,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
 
             if (in_procedure_def)
             {
-                ProcDefStatus status = repl_proc_def_append(proc_buffer, editor_buffer_size,
+                ProcDefStatus status = repl_proc_def_append(proc_buffer, editor_proc_buffer_size,
                                                             &proc_len, line_start);
                 if (status == PROC_DEF_OVERFLOW)
                 {
@@ -223,7 +237,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
                 if (bracket_depth > 0)
                 {
                     // Continuing a multi-line bracket expression - append this line
-                    if (expr_len + line_len + 2 < editor_buffer_size - 10)
+                    if (expr_len + line_len + 2 < editor_proc_buffer_size - 10)
                     {
                         // Add a space separator then the line content
                         proc_buffer[expr_len] = ' ';
@@ -271,7 +285,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
                         bracket_depth = line_balance;
                         expr_len = 0;
                         
-                        if (line_len + 1 < editor_buffer_size - 10)
+                        if (line_len + 1 < editor_proc_buffer_size - 10)
                         {
                             memcpy(proc_buffer, line_start, line_len);
                             expr_len = line_len;
@@ -359,7 +373,7 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
     // If still in procedure definition at end of buffer, auto-complete with "end"
     if (in_procedure_def && proc_len > 0)
     {
-        if (proc_len + 4 < editor_buffer_size)
+        if (proc_len + 4 < editor_proc_buffer_size)
         {
             memcpy(proc_buffer + proc_len, "end", 3);
             proc_len += 3;
@@ -899,9 +913,12 @@ void primitives_editor_init(void)
     // else in a one-time heap fallback. Re-selected on each init; a fresh
     // region (logo_mem_set_aux_region) resets any prior region block.
     //
-    // Both buffers are taken as one block so the pair is all or nothing: the
-    // bounds above are a single size, and a region that only had room for the
-    // first would leave the edit buffer large and the definition buffer small.
+    // In the region tier both buffers are taken as one block so the pair is all
+    // or nothing -- a region with room for only the first would leave the edit
+    // buffer large and the definition buffer small. The SRAM tier below sizes
+    // them apart instead (LOGO_EDITOR_PROC_BUFFER_SIZE): there the definition
+    // buffer is bounded by the longest single procedure, not by the file, and
+    // matching it to the edit buffer spent half the editor's heap on nothing.
     char *region = (char *)mem_region_alloc(2 * LOGO_EDITOR_PSRAM_BUFFER_SIZE +
                                             LOGO_VI_UNDO_PSRAM_SIZE);
     if (region != NULL)
@@ -909,14 +926,17 @@ void primitives_editor_init(void)
         editor_buffer = region;
         editor_proc_buffer = region + LOGO_EDITOR_PSRAM_BUFFER_SIZE;
         editor_buffer_size = LOGO_EDITOR_PSRAM_BUFFER_SIZE;
+        editor_proc_buffer_size = LOGO_EDITOR_PSRAM_BUFFER_SIZE;
         editor_undo_store = region + 2 * LOGO_EDITOR_PSRAM_BUFFER_SIZE;
         editor_undo_size = LOGO_VI_UNDO_PSRAM_SIZE;
     }
     else
     {
-        editor_buffer = editor_heap_buffer(&editor_buffer_heap);
-        editor_proc_buffer = editor_heap_buffer(&editor_proc_buffer_heap);
+        editor_buffer = editor_heap_buffer(&editor_buffer_heap, LOGO_EDITOR_BUFFER_SIZE);
+        editor_proc_buffer = editor_heap_buffer(&editor_proc_buffer_heap,
+                                                LOGO_EDITOR_PROC_BUFFER_SIZE);
         editor_buffer_size = LOGO_EDITOR_BUFFER_SIZE;
+        editor_proc_buffer_size = LOGO_EDITOR_PROC_BUFFER_SIZE;
 
         // The SRAM tier comes out of the same heap the fallback buffers do, so
         // it is asked for last and undo simply stays unavailable without it

@@ -350,11 +350,24 @@ lives on the stack. Against `pico+2w` at **91.19 %** SRAM, M1–M3 are free.
 
 M4's SRAM tier is the only real cost. The boards link at **91.19 %**
 (`pico+2w`) and **92.52 %** (`pico2`) of 520 KB, and what is left is the same
-heap the 2 x 24576 fallback editor buffers are taken from when there is no aux
-region — so the journal is competing with the edit buffer itself, not with
-slack. **Measure the free heap after `primitives_editor_init` before settling
+heap the fallback editor buffers are taken from when there is no aux region — so
+the journal is competing with the edit buffer itself, not with slack. **Measure
+the free heap after `primitives_editor_init` before settling
 `LOGO_VI_UNDO_SRAM_SIZE`**; 1 KB is a starting figure, not a budget. It belongs
 in `limits.h` where it can be seen beside every other capacity.
+
+**Measured 2026-08-20, and the warning above was well placed** — that heap was
+already oversubscribed and nobody had checked: the fallback was *two* buffers of
+`LOGO_EDITOR_BUFFER_SIZE` (24576 apiece from the presets), and two of those plus
+this journal plus `repl_init`'s pair came to 58,368 bytes against a 56,644-byte
+heap on `pico2w`, which panicked at boot ([B44](bugs.md)). The second buffer was
+holding one procedure rather than the file, so it is now
+`LOGO_EDITOR_PROC_BUFFER_SIZE` (4096) and the pair is no longer symmetric; the
+presets were rebalanced against each board's heap at the same time. The journal
+survived at its 1 KB starting figure — it was never what did not fit. Free heap
+after `primitives_editor_init` is now 28,544 (`pico2`), 27,460 (`pico2w`) and
+18,108 (`pico+2w` with its PSRAM down), so a larger SRAM journal is affordable
+today if `u` on a board without PSRAM is ever worth more than that headroom.
 
 M6 costs no SRAM at all — the pattern is interpreted out of `ViState`'s
 existing fields — but it is the first part of vi mode to put real depth on the

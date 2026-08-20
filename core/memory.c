@@ -79,6 +79,21 @@ _Static_assert(MAX_LIST_INDEX < CELL_EMPTY_LIST,
 _Static_assert(LOGO_ATOM_LIMIT <= LOGO_MEMORY_SIZE,
     "Atom table cannot exceed the total memory pool");
 
+// The two allocators only contend once the node pool has grown down as far as
+// LOGO_ATOM_LIMIT: below that boundary the atom table's capacity is set by the
+// 15-bit word reference (32 KB) and NOT by LOGO_MEMORY_SIZE, which is why
+// tuning the arena down trades node cells one for one and costs atom bytes
+// nothing. Measured across four arena sizes loading the largest program in the
+// tree: free atoms was identical (17,628) at 128, 112, 96 and 80 KB while free
+// nodes fell by exactly the arena difference / 4.
+//
+// This floor keeps a preset from cutting the arena so far that the node pool
+// starts eating the atom table's ceiling instead. It is a guard rail rather
+// than a proof: how much node room a given workload needs is a measurement, not
+// a constant (see docs/roadmap.md, 2026-08-20).
+_Static_assert(LOGO_MEMORY_SIZE >= 2 * LOGO_ATOM_LIMIT,
+    "arena must leave a node pool at least as large as the atom ceiling");
+
 // Align value up to 4-byte boundary
 #define ALIGN4(x) (((x) + 3) & ~3)
 
