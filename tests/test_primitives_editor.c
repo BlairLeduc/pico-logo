@@ -458,18 +458,14 @@ void test_edit_defines_a_procedure_far_larger_than_the_sram_buffer(void)
 
     // A definition several times the SRAM fallback: it only survives the
     // definition buffer run_editor_and_process accumulates it in because that
-    // buffer is sized from the aux region too. Kept to 250 body lines, under
-    // the 255-line limit of B32 (long bodies re-run statements), by putting
-    // three counter bumps on each line instead of one.
-    #define BIG_BODY_LINES 250
-    #define BIG_BODY_BUMPS 3
+    // buffer is sized from the aux region too. Also well past 255 body lines,
+    // which used to re-run statements (B32).
+    #define BIG_BODY_LINES 750
     static char big[32 * 1024];
     size_t len = (size_t)sprintf(big, "to big\nmake \"bigcount 0\n");
     for (int i = 0; i < BIG_BODY_LINES; i++)
     {
-        len += (size_t)sprintf(big + len,
-                               "make \"bigcount :bigcount + 1 make \"bigcount :bigcount + 1"
-                               " make \"bigcount :bigcount + 1\n");
+        len += (size_t)sprintf(big + len, "make \"bigcount :bigcount + 1\n");
     }
     sprintf(big + len, "end\n");
     TEST_ASSERT_TRUE(strlen(big) > 16 * 1024);  // Well past the SRAM fallback
@@ -487,7 +483,7 @@ void test_edit_defines_a_procedure_far_larger_than_the_sram_buffer(void)
     mock_device_clear_output();
     run_string("big print :bigcount");
     char expected[32];
-    sprintf(expected, "%d\n", BIG_BODY_LINES * BIG_BODY_BUMPS);
+    sprintf(expected, "%d\n", BIG_BODY_LINES);
     TEST_ASSERT_EQUAL_STRING(expected, mock_device_get_output());
 }
 

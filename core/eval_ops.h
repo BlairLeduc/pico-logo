@@ -127,7 +127,7 @@ extern "C"
     {
         struct UserProcedure *proc;  // The procedure being executed
         Node current_line;           // Current body line cursor
-        uint8_t phase;               // 0 = push first line, 1+ = handle line result
+        uint8_t phase;               // 0 = push first line, 1 = handle line result
         uint8_t tco_mode;            // TCO_MODE_NONE/BARE/OUTPUT
     } ProcCallState;
 

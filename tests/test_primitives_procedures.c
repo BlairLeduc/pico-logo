@@ -2374,6 +2374,48 @@ void test_binding_cache_repeated_call_is_the_same_procedure(void)
     TEST_ASSERT_EQUAL_STRING("3\n", output_buffer);
 }
 
+//==========================================================================
+// B32: a body longer than 255 lines re-runs statements
+//==========================================================================
+
+// The line cursor's `phase` flag used to be a uint8_t counter bumped once per
+// pushed line. On the 256th line it wrapped back to 0, which reads as "first
+// entry", so that line was pushed a second time instead of advancing.
+static void b32_run_body_of_length(int lines, float expected)
+{
+    static char text[48 * 1024];
+    size_t len = (size_t)snprintf(text, sizeof(text), "to big\nmake \"n 0\n");
+    for (int i = 0; i < lines; i++)
+        len += (size_t)snprintf(text + len, sizeof(text) - len, "make \"n :n + 1\n");
+    snprintf(text + len, sizeof(text) - len, "end\n");
+
+    Result d = proc_define_from_text(text);
+    TEST_ASSERT_EQUAL(RESULT_OK, d.status);
+
+    TEST_ASSERT_EQUAL(RESULT_NONE, run_string("big").status);
+
+    Result r = eval_string(":n");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_FLOAT(expected, r.value.as.number);
+
+    proc_erase("big");
+}
+
+void test_b32_body_of_254_lines_runs_each_line_once(void)
+{
+    b32_run_body_of_length(254, 254.0f);
+}
+
+void test_b32_body_of_255_lines_runs_each_line_once(void)
+{
+    b32_run_body_of_length(255, 255.0f);
+}
+
+void test_b32_body_of_600_lines_runs_each_line_once(void)
+{
+    b32_run_body_of_length(600, 600.0f);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -2507,6 +2549,11 @@ int main(void)
     RUN_TEST(test_b9_multiline_literal_counts_as_data);
     RUN_TEST(test_b9_multiline_literal_iterates_as_data);
     RUN_TEST(test_b9_layout_survives_and_propagates_harmlessly);
+
+    // B32: long bodies re-running statements
+    RUN_TEST(test_b32_body_of_254_lines_runs_each_line_once);
+    RUN_TEST(test_b32_body_of_255_lines_runs_each_line_once);
+    RUN_TEST(test_b32_body_of_600_lines_runs_each_line_once);
 
     return UNITY_END();
 }
