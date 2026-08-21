@@ -547,6 +547,27 @@ static void test_a_motion_takes_a_count(void)
     feed("12l"); TEST_ASSERT_EQUAL_UINT(8, ed.cursor);  // Clamped to the line
 }
 
+static void test_a_count_typed_past_its_digits_is_capped(void)
+{
+    // B47: the count is accumulated digit by digit, so a held-down digit key
+    // must stop growing it rather than run an `int` past its end.
+    ed_set("abcdefgh");
+    feed("99999999999999999999");  // Twenty digits
+    TEST_ASSERT_EQUAL_INT(LOGO_VI_COUNT_MAX, ed.vi.count);
+    feed("0");                     // A `0` extending a capped count is still a digit
+    TEST_ASSERT_EQUAL_INT(LOGO_VI_COUNT_MAX, ed.vi.count);
+    feed("l");                     // And it is still just a motion that clamps
+    TEST_ASSERT_EQUAL_UINT(8, ed.cursor);
+}
+
+static void test_two_capped_counts_multiply_without_overflowing(void)
+{
+    // B47: `2d3w` is `d6w`, so the operator's count and the motion's multiply
+    ed_set("a b c\n");
+    feed("999999d999999w");
+    assert_text("\n");
+}
+
 static void test_h_and_l_stop_at_the_ends_of_the_line(void)
 {
     ed_set("ab\ncd\n");
@@ -3374,6 +3395,8 @@ int main(void)
 
     RUN_TEST(test_hjkl_move_by_one);
     RUN_TEST(test_a_motion_takes_a_count);
+    RUN_TEST(test_a_count_typed_past_its_digits_is_capped);
+    RUN_TEST(test_two_capped_counts_multiply_without_overflowing);
     RUN_TEST(test_h_and_l_stop_at_the_ends_of_the_line);
     RUN_TEST(test_j_and_k_keep_the_column_where_the_line_is_long_enough);
     RUN_TEST(test_j_and_k_stop_at_the_ends_of_the_buffer);

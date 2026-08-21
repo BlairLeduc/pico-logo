@@ -290,6 +290,19 @@ extern "C" {
 // 33,410. This leaves ~6x headroom over that and refuses everything past it.
 #define LOGO_VI_PATTERN_STEPS_MAX  200000
 
+// The largest count a normal-mode command may be given (B47). Counts are
+// accumulated a digit at a time and a held-down digit key repeats, so without a
+// bound the eleventh digit runs an `int` past its end -- undefined behaviour
+// rather than a wrapped count. Six digits is more than the biggest edit buffer
+// has bytes (LOGO_EDITOR_PSRAM_BUFFER_SIZE, 256 KB), so no count this cap
+// refuses could reach anywhere a count it allows cannot. `2d3w` multiplies the
+// operator's count by the motion's, and two capped counts do not multiply into
+// an `int`, so that product is taken wide and clamped back to this.
+//
+// OVERFLOW: further digits are consumed and ignored, so the count stops
+// growing while the command being typed stays the one the user is typing.
+#define LOGO_VI_COUNT_MAX    999999
+
 // Keys recorded for `.` to replay. A change command is an optional operator,
 // an optional prefix (`g`, `f`, ...) and a motion -- three keys covers every
 // one of them, and eight leaves room without being worth counting.

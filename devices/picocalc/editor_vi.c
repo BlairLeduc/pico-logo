@@ -1013,10 +1013,19 @@ static void clear_pending(ViState *st)
     st->stroke_len = 0;
 }
 
-// The count a command runs with. `2d3w` is `d6w`, as vi has it.
+// `2d3w` is `d6w`, as vi has it. Both counts are capped at LOGO_VI_COUNT_MAX
+// but their product is not, so it is taken wide and clamped back (B47).
+static int count_product(int op_count, int count)
+{
+    long long n = (long long)(op_count > 0 ? op_count : 1) *
+                  (count > 0 ? count : 1);
+    return n > LOGO_VI_COUNT_MAX ? LOGO_VI_COUNT_MAX : (int)n;
+}
+
+// The count a command runs with.
 static int take_count(ViState *st)
 {
-    int n = (st->op_count > 0 ? st->op_count : 1) * (st->count > 0 ? st->count : 1);
+    int n = count_product(st->op_count, st->count);
     st->count = 0;
     st->op_count = 0;
     return n;
@@ -2224,16 +2233,23 @@ static bool normal_key(ViState *st, const char *buf, size_t len, size_t cursor,
         return prefixed_key(st, buf, len, cursor, key, out);
     }
 
-    // A count. `0` is a motion until there is one to extend.
+    // A count. `0` is a motion until there is one to extend. A held digit key
+    // repeats, so digits past the cap are consumed and dropped (B47).
     if (key >= '1' && key <= '9')
     {
-        st->count = st->count * 10 + (key - '0');
+        if (st->count <= LOGO_VI_COUNT_MAX / 10)
+        {
+            st->count = st->count * 10 + (key - '0');
+        }
         out->kind = VI_ACT_NONE;
         return true;
     }
     if (key == '0' && st->count > 0)
     {
-        st->count *= 10;
+        if (st->count <= LOGO_VI_COUNT_MAX / 10)
+        {
+            st->count *= 10;
+        }
         out->kind = VI_ACT_NONE;
         return true;
     }
@@ -2375,7 +2391,7 @@ static bool normal_key(ViState *st, const char *buf, size_t len, size_t cursor,
 
     // A motion, on its own or completing a pending operator
     {
-        int count = (st->op_count > 0 ? st->op_count : 1) * (st->count > 0 ? st->count : 1);
+        int count = count_product(st->op_count, st->count);
         bool counted = (st->count > 0 || st->op_count > 0);
         char op = st->pending_op;
         char find_ch = st->last_find_char;
