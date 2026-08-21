@@ -80,6 +80,14 @@ static char *editor_heap_buffer(char **heap_cache, size_t size)
     return *heap_cache;
 }
 
+// Both buffers come from the heap when there is no region, and a board whose
+// heap cannot meet them gets NULL back rather than a panic (B45). The editor
+// is then simply unavailable, so every entry point asks before writing.
+static bool editor_buffers_ready(void)
+{
+    return editor_buffer != NULL && editor_proc_buffer != NULL;
+}
+
 // Procedure-definition accumulation is shared with the REPL; see
 // repl_line_starts_with_to / repl_proc_def_append in core/repl.h.
 
@@ -113,6 +121,11 @@ static Result run_editor_and_process(Evaluator *eval, char *buffer)
         // No editor support - print message and return
         logo_io_write(io, "Editor not available on this device\n");
         return result_none();
+    }
+    
+    if (!editor_buffers_ready())
+    {
+        return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
     }
     
     // Call the editor
@@ -738,6 +751,11 @@ static Result prim_editfile(Evaluator *eval, int argc, Value *args)
     if (logo_io_is_open(io, pathname))
     {
         return result_error_arg(ERR_FILE_ALREADY_OPEN, NULL, pathname);
+    }
+    
+    if (!editor_buffers_ready())
+    {
+        return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
     }
     
     // Initialize buffer

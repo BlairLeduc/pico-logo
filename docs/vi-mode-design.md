@@ -128,7 +128,10 @@ more prompts in the same 40-column row, with the same field editing that
 ## 5. The command set
 
 Pinned here so the tests can be written against it. Every motion takes a
-count; every operator takes a count and a motion.
+count; every operator takes a count and a motion. A count is capped at
+`LOGO_VI_COUNT_MAX` (six digits, more than the largest edit buffer has bytes)
+and digits past that are consumed and dropped, so a held-down digit key cannot
+run the count past the end of an `int` (B47).
 
 ### 5.1 M1 — normal mode
 

@@ -31,6 +31,13 @@ bool format_buffer_output(void *ctx, const char *str)
 {
     FormatBufferContext *buf_ctx = (FormatBufferContext *)ctx;
     size_t len = strlen(str);
+    // An allocation that failed leaves a NULL buffer (or a zeroed capacity)
+    // behind, and `buffer_size - 1` wraps on a size_t, so the bounds check
+    // below would let the write through and memcpy would run off it (B45).
+    if (buf_ctx->buffer == NULL || buf_ctx->buffer_size == 0)
+    {
+        return false;
+    }
     if (buf_ctx->pos + len >= buf_ctx->buffer_size - 1)
     {
         return false;

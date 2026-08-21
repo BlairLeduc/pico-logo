@@ -1059,7 +1059,9 @@ Result LOGO_HOT(step_proc_call)(Evaluator *eval, EvalOp *op)
 
         bool is_last_line = mem_is_nil(mem_cdr(st->current_line));
 
-        st->phase++;
+        // A flag, not a count: anything non-zero means "a line is running".
+        // Incrementing it wrapped at 256 lines and re-ran that line (B32).
+        st->phase = 1;
         EvalOp *line_op = op_stack_push(eval->op_stack);
         if (!line_op)
         {

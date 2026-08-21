@@ -73,6 +73,32 @@ void test_format_buffer_output_fails_on_overflow(void)
     TEST_ASSERT_FALSE(format_buffer_output(&ctx, " world"));  // Would exceed buffer
 }
 
+// B45: an allocation that fails leaves a NULL buffer behind, and the editor
+// hands that NULL on together with the size it *wanted*. The bounds check
+// passed (nothing had been written yet) and memcpy ran off the NULL pointer.
+void test_format_buffer_output_refuses_a_null_buffer(void)
+{
+    FormatBufferContext ctx;
+    
+    format_buffer_init(&ctx, NULL, 32768);
+    
+    TEST_ASSERT_FALSE(format_buffer_output(&ctx, "hello"));
+    TEST_ASSERT_EQUAL(0, format_buffer_pos(&ctx));
+}
+
+// The other shape of the same failure: the caller zeroes the capacity instead
+// (http/httpd do), and `buffer_size - 1` wrapped, so every write was accepted.
+void test_format_buffer_output_refuses_a_zero_capacity_buffer(void)
+{
+    char buffer[1];
+    FormatBufferContext ctx;
+    
+    format_buffer_init(&ctx, buffer, 0);
+    
+    TEST_ASSERT_FALSE(format_buffer_output(&ctx, "hello"));
+    TEST_ASSERT_EQUAL(0, format_buffer_pos(&ctx));
+}
+
 void test_format_buffer_pos_returns_position(void)
 {
     char buffer[128];
@@ -828,6 +854,8 @@ int main(void)
     RUN_TEST(test_format_buffer_output_appends_string);
     RUN_TEST(test_format_buffer_output_appends_multiple);
     RUN_TEST(test_format_buffer_output_fails_on_overflow);
+    RUN_TEST(test_format_buffer_output_refuses_a_null_buffer);
+    RUN_TEST(test_format_buffer_output_refuses_a_zero_capacity_buffer);
     RUN_TEST(test_format_buffer_pos_returns_position);
     
     // format_body_element tests

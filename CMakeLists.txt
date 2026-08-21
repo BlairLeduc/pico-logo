@@ -263,6 +263,15 @@ target_link_libraries(pico-logo
         hardware_spi
 )
 
+# A failed allocation must return NULL, not bring the board down. The SDK's
+# __wrap_malloc/__wrap_calloc/__wrap_realloc panic("Out of memory") by default,
+# which makes every NULL check behind an allocation dead code -- including the
+# ones main() handles by printing a message (B45). pico_malloc's malloc.c is an
+# INTERFACE source, compiled into this target, so a PRIVATE definition reaches
+# it. The other half of the panic (an allocation crossing __StackLimit) is
+# unreachable anyway: _sbrk refuses to hand out memory past that limit.
+target_compile_definitions(pico-logo PRIVATE PICO_MALLOC_PANIC=0)
+
 # PSRAM boards: the SDK's hardware_psram brings up the QMI CS1 window during
 # runtime init (CS pin from the board header) and re-arms it after every flash
 # operation. PICO_AUTO_DETECT_PSRAM_SIZE sizes the region from the chip id,
