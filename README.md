@@ -200,6 +200,7 @@ the bootloader so the next UF2 is a drag away.
 | `invaders` | Space Invaders, on the sprite and sound stack. |
 | `galaxian` | Diving attackers, with an attract screen and score table. |
 | `trails` | An original maze chase themed on the Logo turtle, drawing its whole maze from its own tile map. |
+| `temple` | The Snake Temple, after RAX's Oric BASIC 10-liner: a dark labyrinth crawl drawn entirely on the text screen -- no turtle, no sprites, no tiles, just `setcursor` and `type`. |
 | `ttt` | Tic-tac-toe, for a quieter afternoon. |
 
 **Demos** (`/demos`) — `graphics` is a tour of sprites, tile maps, collision
