@@ -182,7 +182,8 @@ monotonic millisecond counter for timing a frame.
 
 ### The hardware
 
-`battery` reports charge, `goodbye` powers down, and `.bootsel` reboots into
+`hw.battery` reports charge, `hw.temperature` reads the RP2350's own
+temperature sensor, `goodbye` powers down, and `.bootsel` reboots into
 the bootloader so the next UF2 is a drag away.
 
 

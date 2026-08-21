@@ -524,6 +524,43 @@ What we learned:
   available through the same interface — cheap wins for a polished game
   (dim the backlight on pause, show battery in the HUD).
 
+### 8.1 The one sensor that is not the southbridge
+
+The temperature reading is the exception to §8: it comes from inside the RP2350,
+not over the I²C bus, so it costs no bus time and cannot be blocked by a wedged
+southbridge. It backs `hw.temperature`.
+
+**The channel differs between the two parts, and the SDK already hides it.** The
+sensor is ADC input **4** on the RP2350A (Pico 2, Pico 2 W, QFN-60) and input
+**8** on the RP2350B (Pico Plus 2 W, QFN-80), because the larger package adds
+four more user inputs below it. `ADC_TEMPERATURE_CHANNEL_NUM` is
+`NUM_ADC_CHANNELS - 1`, and `NUM_ADC_CHANNELS` comes from `PICO_RP2350A` in the
+board header — so **no board conditional belongs in this tree**, and none is
+there. Verified in the disassembly rather than assumed: the AINSEL field write
+inside `picocalc_get_temperature` is `0x4000` in a `pico2` build and `0x8000` in
+a `pico+2w` one.
+
+Two things the sensor's own accuracy decides, both in
+[picocalc_hardware.c](../devices/picocalc/picocalc_hardware.c):
+
+- **Average the burst.** A conversion is 12 bits over 3.3 V, which is ~0.24 °C
+  per LSB and noisy at that. The read averages 16 conversions; each is ~2 µs, so
+  the whole thing costs ~32 µs — nothing beside a 4.6 ms southbridge read.
+- **Round the answer.** The formula is the datasheet's (§12.4.6,
+  `27 - (V - 0.706) / 0.001721`, the same on both parts) and it is *uncalibrated*
+  — several degrees of part-to-part offset. It also reads the die, which sits
+  above the room by however hard the chip is working. Six significant digits of
+  that would be false precision, so `hw.temperature` rounds to a tenth.
+
+The ADC block is initialised lazily on the first read and the sensor bias left
+on afterwards. Nothing else in this tree uses the ADC, and `adc_init()` touches
+no GPIO function, so the audio PWM on 26/27 is unaffected.
+
+`tests/logo/hwtemp` is the hardware check, and it does not merely assert that a
+number came back: a wrong channel returns a floating GPIO, which reads as a
+plausible number. It loads the processor for thirty seconds and requires the
+reading to **rise**, which only a sensor wired to the die does.
+
 ---
 
 ## 9. Performance: everything we learned by measuring

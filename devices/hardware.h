@@ -95,6 +95,12 @@ extern "C"
         // Get battery level as a percentage (0-100) 
         void (*get_battery_level)(int *level, bool *charging);
 
+        // Read the on-chip temperature sensor, in degrees Celsius. This is the
+        // die temperature, which sits above ambient by however much the chip is
+        // working. May be NULL on devices with no sensor (e.g. the host); the
+        // `hw.temperature` primitive then errors.
+        float (*get_temperature)(void);
+
         // Power management functions
         bool (*power_off)(void);
 

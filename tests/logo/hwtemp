@@ -1,0 +1,75 @@
+; Is `hw.temperature` live, and does it read the same on an RP2350A as on an
+; RP2350B?
+;
+;   load "hwtemp
+;   hwtemp
+;
+; The channel the sensor sits on differs between the parts -- input 4 on the
+; RP2350A (Pico 2, Pico 2 W), input 8 on the RP2350B (Pico Plus 2 W) -- and
+; nothing in this tree chooses between them: the SDK's
+; ADC_TEMPERATURE_CHANNEL_NUM is NUM_ADC_CHANNELS - 1, sized from the board
+; header.  If that ever picks the wrong input the primitive does not fail, it
+; reads whatever is on the other channel -- a floating GPIO, which is a
+; plausible-looking number.  So this script does not ask "is it a number", it
+; asks "does it MOVE the way a die temperature moves", which only the right
+; channel does.
+;
+; Two checks.  IDLE is one reading, taken at rest: on a board that has been off
+; for a while it should be a little above the room, and a reading below 0 or
+; above 80 means the wrong channel.  LOADED is the same reading after thirty
+; seconds of flat-out interpretation, and it must be HIGHER -- the sensor reads
+; the die, so working the processor is what proves it is wired to the die.  A
+; floating input does not care what the CPU is doing.
+;
+; Run it on a Pico 2 or Pico 2 W and again on a Pico Plus 2 W; the two parts
+; must both pass, and their idle readings should be in the same neighbourhood.
+;
+; RUN AND PASSED on both parts, 2026-08-21: a Pico 2 W (RP2350A, ADC input 4)
+; and a Pico Plus 2 W (RP2350B, input 8).  That settles the question this file
+; was written to ask -- the SDK's ADC_TEMPERATURE_CHANNEL_NUM picks the right
+; input on both packages with no board conditional in this tree -- so it stays
+; here as the regression check for any future change to the read, not as an
+; open investigation.
+;
+; The numbers go to the file `hwtempout` as well as the screen -- a reading on
+; a display cannot be copied anywhere.
+
+to hwtemp.busy :ms
+  local "t0
+  make "t0 ticks
+  until [(ticks - :t0) > :ms] [repeat 200 [make "x 1 + 1]]
+end
+
+to hwtemp.body
+  pr (se [idle] :idle [C])
+  pr (se [loaded] :loaded [C])
+  pr (se [rise] (:loaded - :idle) [C])
+  pr []
+  ifelse and (:idle > 0) (:idle < 80) [pr [PASS idle is plausible]] [pr [FAIL idle out of range, so probably the wrong ADC channel]]
+  ifelse :loaded > :idle [pr [PASS load raised it]] [pr [FAIL load did not raise it, so probably not reading the die]]
+end
+
+; Screen first, then the file, and say which of the two happened: a board with
+; no writable filesystem must still give up its numbers.
+to hwtemp.report
+  local "ok
+  hwtemp.body
+  make "ok "false
+  catch "error [erasefile "hwtempout]
+  catch "error [open "hwtempout setwrite "hwtempout hwtemp.body setwrite [] close "hwtempout make "ok "true]
+  setwrite []
+  pr []
+  ifelse :ok [pr [Also written to the file  hwtempout]] [pr [No disk, so screen only.]]
+end
+
+to hwtemp
+  local "idle local "loaded local "x
+  cleartext
+  pr [Reading the sensor at rest...]
+  make "idle hw.temperature
+  pr (se [idle] :idle [C. Now loading the processor for 30 seconds.])
+  hwtemp.busy 30000
+  make "loaded hw.temperature
+  pr []
+  hwtemp.report
+end

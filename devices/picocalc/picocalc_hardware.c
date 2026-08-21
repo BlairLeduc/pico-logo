@@ -21,6 +21,7 @@
 #include <pico/stdlib.h>
 #include <pico/rand.h>
 #include <pico/bootrom.h>
+#include <hardware/adc.h>
 
 #ifdef LOGO_HAS_WIFI
 #include <pico/cyw43_arch.h>
@@ -121,6 +122,39 @@ static void picocalc_get_battery_level(int *level, bool *charging)
     int raw_level = sb_read_battery();
     *level = raw_level & 0x7F;    // Mask out the charging bit
     *charging = (raw_level & 0x80) != 0; // Check if charging
+}
+
+// On-chip temperature sensor. The SDK hides the only part-to-part difference
+// that matters here: the sensor is ADC input 4 on the RP2350A (Pico 2, Pico 2 W)
+// and input 8 on the RP2350B (Pico Plus 2 W), and ADC_TEMPERATURE_CHANNEL_NUM is
+// NUM_ADC_CHANNELS - 1, which the board header sizes from PICO_RP2350A. The
+// conversion is the datasheet's (§12.4.6), the same on both parts.
+//
+// A single 12-bit conversion is ~0.24 C per LSB and noisy at that, so average a
+// short burst; each conversion is ~2 us, so the whole read costs ~32 us.
+#define TEMP_SAMPLES 16
+
+static float picocalc_get_temperature(void)
+{
+    static bool adc_ready = false;
+    if (!adc_ready)
+    {
+        adc_init();
+        adc_set_temp_sensor_enabled(true);
+        adc_ready = true;
+    }
+
+    adc_select_input(ADC_TEMPERATURE_CHANNEL_NUM);
+
+    uint32_t sum = 0;
+    for (int i = 0; i < TEMP_SAMPLES; i++)
+    {
+        sum += adc_read();
+    }
+
+    // 12-bit conversion against the 3.3 V reference
+    float voltage = ((float)sum / TEMP_SAMPLES) * (3.3f / 4096.0f);
+    return 27.0f - (voltage - 0.706f) / 0.001721f;
 }
 
 static bool picocalc_power_off(void)
@@ -2111,6 +2145,7 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .ticks_ms = picocalc_ticks_ms,
     .random = picocalc_random,
     .get_battery_level = picocalc_get_battery_level,
+    .get_temperature = picocalc_get_temperature,
     .power_off = picocalc_power_off,
     .reboot_bootloader = picocalc_reboot_bootloader,
     .check_user_interrupt = picocalc_check_user_interrupt,

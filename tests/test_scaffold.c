@@ -24,6 +24,9 @@ size_t mock_input_pos = 0;
 int mock_battery_level = 100;
 bool mock_battery_charging = false;
 
+// Mock on-chip temperature (degrees Celsius) for testing
+float mock_temperature_celsius = 25.0f;
+
 // User interrupt flag for testing
 bool mock_user_interrupt = false;
 
@@ -195,6 +198,11 @@ void mock_get_battery_level(int *level, bool *charging)
     *charging = mock_battery_charging;
 }
 
+float mock_get_temperature(void)
+{
+    return mock_temperature_celsius;
+}
+
 bool mock_check_user_interrupt(void)
 {
     return mock_user_interrupt;
@@ -342,6 +350,7 @@ LogoHardwareOps mock_hardware_ops = {
     .ticks_ms = mock_ticks_ms,
     .random = mock_random,
     .get_battery_level = mock_get_battery_level,
+    .get_temperature = mock_get_temperature,
     .power_off = NULL,  // Default: not available, use set_mock_power_off() to enable
     .reboot_bootloader = NULL,  // Default: not available, use set_mock_bootsel() to enable
     .check_user_interrupt = mock_check_user_interrupt,
@@ -401,6 +410,12 @@ void set_mock_battery(int level, bool charging)
 {
     mock_battery_level = level;
     mock_battery_charging = charging;
+}
+
+void set_mock_temperature(bool available, float celsius)
+{
+    mock_temperature_celsius = celsius;
+    mock_hardware_ops.get_temperature = available ? mock_get_temperature : NULL;
 }
 
 void set_mock_ticks(uint32_t ms)
@@ -471,6 +486,7 @@ void test_scaffold_setUp(void)
     mock_ticks_value = 0;         // Reset mock monotonic clock
     mock_battery_level = 100;     // Reset mock battery state
     mock_battery_charging = false;
+    mock_temperature_celsius = 25.0f; // Reset mock on-chip temperature
 
     reset_mock_key_state();
     

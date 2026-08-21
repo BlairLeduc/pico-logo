@@ -8138,21 +8138,40 @@ json.make _value_
 ===
 # Device Specific
 
-## battery
+## hw.battery
 
-battery
+hw.battery
 
 `operation`
 
-The `battery` operation returns a list where the first value is the percent remaining in the battery and the second value is `true` if the battery is currently charging.
+The `hw.battery` operation returns a list where the first value is the percent remaining in the battery and the second value is `true` if the battery is currently charging.
 
 **Example**:
 
 ```logo
-?show battery
+?show hw.battery
 [78 false]
-?pr se [Battery:] item 1 battery
+?pr se [Battery:] item 1 hw.battery
 Battery: 78
+```
+
+
+## hw.temperature
+
+hw.temperature
+
+`operation`
+
+`hw.temperature` outputs the temperature of the processor in degrees Celsius, rounded to a tenth of a degree. The sensor is inside the RP2350 itself, so it reports the temperature of the chip - which sits above the temperature of the room by however hard the processor is working - and it is not calibrated, so treat it as a trend rather than a thermometer. If the device has no temperature sensor, an error is displayed.
+
+**Example**:
+
+```logo
+?show hw.temperature
+26.9
+?pr se [Chip:] hw.temperature
+Chip: 26.9
+?if hw.temperature > 60 [pr [The processor is running hot]]
 ```
 
 

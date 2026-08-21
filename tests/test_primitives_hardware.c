@@ -2,7 +2,7 @@
 //  Pico Logo
 //  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
-//  Tests for hardware primitives (battery)
+//  Tests for hardware primitives (hw.battery, hw.temperature)
 //
 
 #include "test_scaffold.h"
@@ -18,20 +18,20 @@ void tearDown(void)
 }
 
 //==========================================================================
-// Battery Primitive Tests
+// hw.battery Primitive Tests
 //==========================================================================
 
 void test_battery_returns_list(void)
 {
     // Battery should return a list [level charging_status]
-    Result r = eval_string("battery");
+    Result r = eval_string("hw.battery");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
 }
 
 void test_battery_returns_two_element_list(void)
 {
-    Result r = eval_string("battery");
+    Result r = eval_string("hw.battery");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
     
@@ -47,7 +47,7 @@ void test_battery_level_full(void)
 {
     set_mock_battery(100, false);
     
-    Result r = eval_string("first battery");
+    Result r = eval_string("first hw.battery");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
     TEST_ASSERT_EQUAL_STRING("100", mem_word_ptr(r.value.as.node));
@@ -57,7 +57,7 @@ void test_battery_level_partial(void)
 {
     set_mock_battery(42, false);
     
-    Result r = eval_string("first battery");
+    Result r = eval_string("first hw.battery");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
     TEST_ASSERT_EQUAL_STRING("42", mem_word_ptr(r.value.as.node));
@@ -67,7 +67,7 @@ void test_battery_level_empty(void)
 {
     set_mock_battery(0, false);
     
-    Result r = eval_string("first battery");
+    Result r = eval_string("first hw.battery");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
     TEST_ASSERT_EQUAL_STRING("0", mem_word_ptr(r.value.as.node));
@@ -77,7 +77,7 @@ void test_battery_level_unavailable(void)
 {
     set_mock_battery(-1, false);
     
-    Result r = eval_string("first battery");
+    Result r = eval_string("first hw.battery");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
     TEST_ASSERT_EQUAL_STRING("-1", mem_word_ptr(r.value.as.node));
@@ -87,7 +87,7 @@ void test_battery_not_charging(void)
 {
     set_mock_battery(50, false);
     
-    Result r = eval_string("last battery");
+    Result r = eval_string("last hw.battery");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
     TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(r.value.as.node));
@@ -97,7 +97,7 @@ void test_battery_charging(void)
 {
     set_mock_battery(75, true);
     
-    Result r = eval_string("last battery");
+    Result r = eval_string("last hw.battery");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
     TEST_ASSERT_EQUAL_STRING("true", mem_word_ptr(r.value.as.node));
@@ -105,11 +105,11 @@ void test_battery_charging(void)
 
 void test_battery_in_procedure(void)
 {
-    // Test using battery within a procedure
+    // Test using hw.battery within a procedure
     set_mock_battery(88, true);
     
     const char *params[] = {};
-    define_proc("getlevel", params, 0, "output first battery");
+    define_proc("getlevel", params, 0, "output first hw.battery");
     
     Result r = eval_string("getlevel");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
@@ -122,7 +122,7 @@ void test_battery_charging_in_procedure(void)
     set_mock_battery(60, true);
     
     const char *params[] = {};
-    define_proc("ischarging", params, 0, "output last battery");
+    define_proc("ischarging", params, 0, "output last hw.battery");
     
     Result r = eval_string("ischarging");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
@@ -134,7 +134,7 @@ void test_battery_print_output(void)
 {
     set_mock_battery(50, false);
     
-    run_string("print battery");
+    run_string("print hw.battery");
     
     TEST_ASSERT_EQUAL_STRING("50 false\n", output_buffer);
 }
@@ -143,9 +143,73 @@ void test_battery_show_output(void)
 {
     set_mock_battery(75, true);
     
-    run_string("show battery");
+    run_string("show hw.battery");
     
     TEST_ASSERT_EQUAL_STRING("[75 true]\n", output_buffer);
+}
+
+//==========================================================================
+// hw.temperature Primitive Tests
+//==========================================================================
+
+void test_temperature_returns_number(void)
+{
+    set_mock_temperature(true, 26.5f);
+
+    Result r = eval_string("hw.temperature");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_NUMBER, r.value.type);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 26.5f, r.value.as.number);
+}
+
+void test_temperature_rounds_to_tenths(void)
+{
+    // The sensor is uncalibrated and a conversion is ~0.24 C per LSB, so the
+    // primitive rounds rather than printing ADC noise as significant digits.
+    set_mock_temperature(true, 26.98342f);
+
+    run_string("print hw.temperature");
+
+    TEST_ASSERT_EQUAL_STRING("27\n", output_buffer);
+}
+
+void test_temperature_rounds_to_nearest_tenth(void)
+{
+    set_mock_temperature(true, 26.94f);
+
+    run_string("print hw.temperature");
+
+    TEST_ASSERT_EQUAL_STRING("26.9\n", output_buffer);
+}
+
+void test_temperature_negative(void)
+{
+    set_mock_temperature(true, -5.25f);
+
+    run_string("print hw.temperature");
+
+    TEST_ASSERT_EQUAL_STRING("-5.3\n", output_buffer);
+}
+
+void test_temperature_is_a_number_not_a_word(void)
+{
+    // The output must be usable in arithmetic directly.
+    set_mock_temperature(true, 20.0f);
+
+    Result r = eval_string("hw.temperature * 2");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 40.0f, r.value.as.number);
+}
+
+void test_temperature_not_available(void)
+{
+    // A board with no sensor nulls the op; the primitive must error rather
+    // than invent a reading.
+    set_mock_temperature(false, 0.0f);
+
+    Result r = eval_string("hw.temperature");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_UNSUPPORTED_ON_DEVICE, result_get_error_code(r));
 }
 
 //==========================================================================
@@ -358,7 +422,7 @@ void test_toot_stereo_word_rightfreq_error(void)
 
 void test_battery_out_of_nodes_errors(void)
 {
-    // battery builds a two-element list; on node-pool exhaustion it must
+    // hw.battery builds a two-element list; on node-pool exhaustion it must
     // surface ERR_OUT_OF_SPACE rather than return a truncated list.
     set_mock_battery(50, false);
 
@@ -373,7 +437,7 @@ void test_battery_out_of_nodes_errors(void)
         chain = c;
     }
 
-    Result r = eval_string("battery");
+    Result r = eval_string("hw.battery");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
     TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, result_get_error_code(r));
 }
@@ -434,6 +498,14 @@ int main(void)
     RUN_TEST(test_battery_print_output);
     RUN_TEST(test_battery_show_output);
     
+    // hw.temperature tests
+    RUN_TEST(test_temperature_returns_number);
+    RUN_TEST(test_temperature_rounds_to_tenths);
+    RUN_TEST(test_temperature_rounds_to_nearest_tenth);
+    RUN_TEST(test_temperature_negative);
+    RUN_TEST(test_temperature_is_a_number_not_a_word);
+    RUN_TEST(test_temperature_not_available);
+
     // Poweroff tests
     RUN_TEST(test_poweroff_not_available);
     RUN_TEST(test_poweroff_available_but_fails);
