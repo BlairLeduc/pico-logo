@@ -1,0 +1,123 @@
+; Do `hw.setlight` and `hw.light?` reach the LED on every board, and does the
+; LED sharing the wireless module with WiFi break either of them?
+;
+;   load "hwlight
+;   hwlight "myssid "mypassword     ; a W board
+;   hwlight " "                     ; a Pico 2 -- skips the ordering checks
+;
+; The LED is on a different pin on every board and nothing in this tree picks
+; between them: the SDK's pico_status_led does, from the board header.  On a
+; Pico 2 it is GPIO 25 and a plain gpio_put reaches it.  On a Pico 2 W or a
+; Pico Plus 2 W there is no such pin -- the LED is WL_GPIO 0 on the CYW43
+; module -- so lighting it means bringing the wireless driver up, which is the
+; one thing no host test can reach and the reason this file exists.
+;
+; Four checks.  AGREE is `hw.light?` reporting back what `hw.setlight` was just
+; given; it reads the pin rather than a remembered value, so on a W board it is
+; also a round trip through the module.  BLINK is the eye: ten slow blinks and
+; a human says whether the light actually moved -- no software can answer that,
+; and a pin that is driven but not wired looks exactly like a pass from in
+; here.  LED-FIRST is the ordering that would fail if pico_status_led were left
+; to build its own async_context: it lights the LED before any WiFi primitive
+; has run, then joins a network, and both must work.  WIFI-FIRST is the same
+; pair the other way round.
+;
+; Run it on a Pico 2 (no radio, GPIO path) and on both W boards (cyw43 path).
+; The two W boards run the same code, but they are the two RP2350 packages and
+; this file is cheap to run twice.
+;
+; RUN AND PASSED on both W boards, 2026-08-21: a Pico 2 W and a Pico Plus 2 W,
+; all four checks.  That settles what this file was written to ask -- the LED
+; on the far side of the cyw43 driver is reachable, and neither ordering of
+; LED and WiFi breaks the other -- so it stays here as the regression check for
+; any future change to the init path, not as an open investigation.
+;
+; NOT YET RUN: a `pico2` build, which is the GPIO 25 path and the only one that
+; goes through status_led_init() rather than the with-context form.  It is the
+; trivial half and the disassembly shows it resolving to pin 25, but nothing
+; has watched that LED light.
+;
+; The LED is on the Pico itself and not on the PicoCalc front panel, so look
+; through the case -- on a PicoCalc it shows at the back.
+;
+; The results go to the file `hwlightout` as well as the screen -- a reading on
+; a display cannot be copied anywhere.
+
+to hwlight.agree :want
+  hw.setlight :want
+  ifelse (hw.light? = :want) [op "true] [op "false]
+end
+
+to hwlight.blink :n
+  repeat :n [hw.setlight "true wait 250 hw.setlight "false wait 250]
+end
+
+to hwlight.body
+  pr (se [agree on] :onok)
+  pr (se [agree off] :offok)
+  pr (se [saw it blink] :sawit)
+  pr (se [led first, then wifi] :ledfirst)
+  pr (se [wifi first, then led] :wififirst)
+  pr []
+  ifelse and :onok :offok [pr [PASS hw.light? agrees with hw.setlight]] [pr [FAIL hw.light? does not read back what was set]]
+  ifelse :sawit [pr [PASS the light moved]] [pr [FAIL the light did not move, so the pin is wrong or not wired]]
+  ifelse :ledfirst [pr [PASS led before wifi left wifi working]] [pr [FAIL led before wifi broke wifi -- two cyw43 inits?]]
+  ifelse :wififirst [pr [PASS wifi before led left the led working]] [pr [FAIL wifi before led broke the led]]
+end
+
+; Screen first, then the file, and say which of the two happened: a board with
+; no writable filesystem must still give up its numbers.
+to hwlight.report
+  local "ok
+  hwlight.body
+  make "ok "false
+  catch "error [erasefile "hwlightout]
+  catch "error [open "hwlightout setwrite "hwlightout hwlight.body setwrite [] close "hwlightout make "ok "true]
+  setwrite []
+  pr []
+  ifelse :ok [pr [Also written to the file  hwlightout]] [pr [No disk, so screen only.]]
+end
+
+; The ordering pair needs a network.  An empty ssid means a board with no radio
+; and both are reported as passed, so a Pico 2 run is not read as a failure --
+; the screen above still says the checks were skipped.
+to hwlight.order :ssid :pw
+  make "ledfirst "true
+  make "wififirst "true
+  if empty? :ssid [pr [No ssid given, so the WiFi ordering checks are skipped.] stop]
+
+  pr [Lighting the LED before any WiFi primitive has run...]
+  hw.setlight "true
+  wait 500
+  wifi.connect :ssid :pw
+  make "ledfirst wifi?
+  hw.setlight "false
+
+  pr [Now the other way round: disconnect, reconnect, then the LED...]
+  wifi.disconnect
+  wait 500
+  wifi.connect :ssid :pw
+  hw.setlight "true
+  make "wififirst hw.light?
+  hw.setlight "false
+end
+
+to hwlight :ssid :pw
+  local "onok local "offok local "sawit local "ledfirst local "wififirst local "ans
+  cleartext
+  pr [Look at the LED on the Pico, through the case.]
+  pr []
+  make "onok hwlight.agree "true
+  make "offok hwlight.agree "false
+  hw.setlight "false
+  pr [Blinking ten times, slowly...]
+  hwlight.blink 10
+  pr [Did the light blink? Type  y  and Enter if it did.]
+  make "ans rl
+  make "sawit "false
+  if not empty? :ans [if (lowercase first :ans) = "y [make "sawit "true]]
+  pr []
+  hwlight.order :ssid :pw
+  pr []
+  hwlight.report
+end

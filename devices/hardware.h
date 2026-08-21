@@ -101,6 +101,15 @@ extern "C"
         // `hw.temperature` primitive then errors.
         float (*get_temperature)(void);
 
+        // On-board status LED. `get_status_led` reports whether it is lit,
+        // `set_status_led` lights or clears it; both answer false if the LED
+        // could not be reached (on a W board that means the wireless module it
+        // lives on would not come up). May be NULL on devices with no LED
+        // (e.g. the host); the `hw.light?` and `hw.setlight` primitives then
+        // error.
+        bool (*get_status_led)(bool *on);
+        bool (*set_status_led)(bool on);
+
         // Power management functions
         bool (*power_off)(void);
 

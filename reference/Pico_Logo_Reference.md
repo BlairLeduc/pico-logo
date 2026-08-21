@@ -8175,6 +8175,46 @@ Chip: 26.9
 ```
 
 
+## hw.light?
+
+hw.light? _boolean_
+
+`operation`
+
+`hw.light?` outputs `true` if the small LED on the processor board is lit and `false` if it is not. It reads the LED itself rather than remembering what [`hw.setlight`](#hw.setlight) was last given. If the device has no such LED, an error is displayed.
+
+**Example**:
+
+```logo
+?hw.setlight "true
+?show hw.light?
+true
+?if hw.light? [pr [The light is on]]
+The light is on
+```
+
+
+## hw.setlight
+
+hw.setlight _boolean_
+
+`command`
+
+`hw.setlight` lights the small LED on the processor board when _boolean_ is `true` and turns it off when _boolean_ is `false`. It is the LED on the Pico itself, not on the PicoCalc, so it is visible only through the case - useful as a heartbeat for a program with nothing to say. On boards with a radio the LED is part of the wireless module, so the first `hw.setlight` powers the radio up and takes about a second; later ones are immediate. If the device has no such LED, an error is displayed.
+
+**Example**:
+
+```logo
+; Blink the light ten times
+?repeat 10 [hw.setlight "true wait 30 hw.setlight "false wait 30]
+; A heartbeat while a long computation runs
+?to heartbeat
+>hw.setlight not hw.light?
+>end
+?when [ticks > :next] [heartbeat make "next ticks + 500]
+```
+
+
 ## goodbye
 
 goodbye

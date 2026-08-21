@@ -22,6 +22,7 @@
 #include <pico/rand.h>
 #include <pico/bootrom.h>
 #include <hardware/adc.h>
+#include <pico/status_led.h>
 
 #ifdef LOGO_HAS_WIFI
 #include <pico/cyw43_arch.h>
@@ -155,6 +156,55 @@ static float picocalc_get_temperature(void)
     // 12-bit conversion against the 3.3 V reference
     float voltage = ((float)sum / TEMP_SAMPLES) * (3.3f / 4096.0f);
     return 27.0f - (voltage - 0.706f) / 0.001721f;
+}
+
+// On-board status LED. Which pin that is differs by board and the SDK's
+// pico_status_led hides it: GPIO 25 on a Pico 2, and WL_GPIO 0 on the wireless
+// module of a Pico 2 W or a Pico Plus 2 W. The second of those is why this is
+// not a gpio_put -- on a W board the LED is on the far side of the cyw43
+// driver, so lighting it powers the radio -- and it is why the driver is
+// brought up through ensure_wifi_initialized rather than by pico_status_led
+// itself: status_led_init() would build a second async_context and init the
+// driver a second time, which the WiFi ops would then trip over.
+#ifdef LOGO_HAS_WIFI
+static bool ensure_wifi_initialized(void);
+#endif
+
+static bool ensure_status_led_initialized(void)
+{
+    static bool led_ready = false;
+    if (!led_ready)
+    {
+#ifdef LOGO_HAS_WIFI
+        if (!ensure_wifi_initialized())
+        {
+            return false;
+        }
+        led_ready = status_led_init_with_context(cyw43_arch_async_context());
+#else
+        led_ready = status_led_init();
+#endif
+    }
+    return led_ready;
+}
+
+static bool picocalc_get_status_led(bool *on)
+{
+    if (!ensure_status_led_initialized())
+    {
+        return false;
+    }
+    *on = status_led_get_state();
+    return true;
+}
+
+static bool picocalc_set_status_led(bool on)
+{
+    if (!ensure_status_led_initialized())
+    {
+        return false;
+    }
+    return status_led_set_state(on);
 }
 
 static bool picocalc_power_off(void)
@@ -2146,6 +2196,8 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .random = picocalc_random,
     .get_battery_level = picocalc_get_battery_level,
     .get_temperature = picocalc_get_temperature,
+    .get_status_led = picocalc_get_status_led,
+    .set_status_led = picocalc_set_status_led,
     .power_off = picocalc_power_off,
     .reboot_bootloader = picocalc_reboot_bootloader,
     .check_user_interrupt = picocalc_check_user_interrupt,

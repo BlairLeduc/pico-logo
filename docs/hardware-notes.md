@@ -561,6 +561,51 @@ number came back: a wrong channel returns a floating GPIO, which reads as a
 plausible number. It loads the processor for thirty seconds and requires the
 reading to **rise**, which only a sensor wired to the die does.
 
+### 8.2 The status LED, and why it is not a `gpio_put`
+
+The small LED on the processor board — visible through the case, not on the
+PicoCalc front panel — backs `hw.light?` and `hw.setlight`. It is the second
+thing in §8.1's category: not the southbridge, and not the same on every board.
+
+**Its pin is different on each board, and the SDK's `pico_status_led` hides it.**
+On a Pico 2 it is `PICO_DEFAULT_LED_PIN`, GPIO 25, and a `gpio_put` reaches it.
+On a Pico 2 W and a Pico Plus 2 W there is **no such pin at all** — the LED is
+`CYW43_WL_GPIO_LED_PIN`, WL_GPIO 0 on the wireless module, and reaching it means
+a `cyw43_gpio_set` through the driver. This used to be the special case every
+project wrote by hand; SDK 2.1 added `pico_status_led` and it is the whole
+reason there is no board conditional in this tree. Verified in the disassembly,
+as in §8.1: `picocalc_set_status_led` in a `pico2` build is `movs r3, #25`
+followed by the single-cycle-IO write, and in a `pico2w` build it is
+`bl cyw43_gpio_set` with WL_GPIO 0.
+
+**The consequence that matters is that the LED and WiFi share a chip.** Two
+things follow, both in
+[picocalc_hardware.c](../devices/picocalc/picocalc_hardware.c):
+
+- **Lighting the LED on a W board powers the radio.** There is no way around it
+  — the LED is on the far side of the driver. So the first `hw.setlight` costs
+  the cyw43 firmware upload, about a second, and leaves the module powered;
+  later calls are immediate. On a Pico 2 the first call is a `gpio_init`.
+- **The driver is brought up through `ensure_wifi_initialized`, not by
+  `pico_status_led`.** `status_led_init()` with no context builds its *own*
+  `async_context` and calls `cyw43_driver_init` itself, which a later
+  `cyw43_arch_init` from any WiFi primitive would then trip over. Passing
+  `status_led_init_with_context(cyw43_arch_async_context())` after the existing
+  lazy WiFi init keeps one context, one driver, and one `wifi_initialized` flag
+  for both features. `tests/logo/hwlight` runs the two orderings — LED then
+  WiFi, WiFi then LED — because that is the failure this arrangement exists to
+  prevent and no host test can see it.
+
+The cost of the abstraction is **72 bytes of SRAM on the W boards**:
+`status_led_owned_context` is the context `pico_status_led` would have built for
+itself, dead in this build but in the same translation unit as the path that is
+used, so the linker keeps it. A Pico 2 pays 4 bytes for the init flag. Both are
+worth not writing the board conditional.
+
+The other half of the check is the eye. A driven pin that is not wired to
+anything looks exactly like a pass from inside Logo, so `hwlight` blinks ten
+times and asks a human whether the light moved.
+
 ---
 
 ## 9. Performance: everything we learned by measuring

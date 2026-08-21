@@ -253,6 +253,7 @@ target_link_libraries(pico-logo
         pico_printf
         pico_float
         pico_rand
+        pico_status_led
         hardware_adc
         hardware_clocks
         hardware_dma

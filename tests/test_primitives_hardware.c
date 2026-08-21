@@ -2,7 +2,8 @@
 //  Pico Logo
 //  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
-//  Tests for hardware primitives (hw.battery, hw.temperature)
+//  Tests for hardware primitives (hw.battery, hw.temperature, hw.light?,
+//  hw.setlight)
 //
 
 #include "test_scaffold.h"
@@ -210,6 +211,120 @@ void test_temperature_not_available(void)
     Result r = eval_string("hw.temperature");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
     TEST_ASSERT_EQUAL(ERR_UNSUPPORTED_ON_DEVICE, result_get_error_code(r));
+}
+
+//==========================================================================
+// hw.light? / hw.setlight Primitive Tests
+//==========================================================================
+
+void test_light_starts_off(void)
+{
+    Result r = eval_string("hw.light?");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_WORD, r.value.type);
+    TEST_ASSERT_EQUAL_STRING("false", value_to_string(r.value));
+}
+
+void test_setlight_true_lights_it(void)
+{
+    run_string("hw.setlight \"true print hw.light?");
+
+    TEST_ASSERT_EQUAL_STRING("true\n", output_buffer);
+}
+
+void test_setlight_false_clears_it(void)
+{
+    set_mock_status_led(true, true);
+
+    run_string("hw.setlight \"false print hw.light?");
+
+    TEST_ASSERT_EQUAL_STRING("false\n", output_buffer);
+}
+
+void test_setlight_is_case_insensitive(void)
+{
+    run_string("hw.setlight \"TRUE print hw.light?");
+
+    TEST_ASSERT_EQUAL_STRING("true\n", output_buffer);
+}
+
+void test_light_reads_the_hardware_not_a_remembered_value(void)
+{
+    // Something other than hw.setlight drove the LED; hw.light? must still
+    // answer for what the pin is doing.
+    set_mock_status_led(true, true);
+
+    Result r = eval_string("hw.light?");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL_STRING("true", value_to_string(r.value));
+}
+
+void test_setlight_outputs_nothing(void)
+{
+    // It is a command, so using it as an operation must be refused.
+    Result r = eval_string("print hw.setlight \"true");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_setlight_rejects_a_non_boolean(void)
+{
+    Result r = eval_string("hw.setlight \"on");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NOT_BOOL, result_get_error_code(r));
+}
+
+void test_setlight_rejects_a_list(void)
+{
+    Result r = eval_string("hw.setlight [true]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NOT_BOOL, result_get_error_code(r));
+}
+
+void test_light_not_available(void)
+{
+    // A board with no LED nulls the ops; both primitives must error rather
+    // than answer false, which would read as "the LED is off".
+    set_mock_status_led(false, false);
+
+    Result r = eval_string("hw.light?");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_UNSUPPORTED_ON_DEVICE, result_get_error_code(r));
+}
+
+void test_setlight_not_available(void)
+{
+    set_mock_status_led(false, false);
+
+    Result r = eval_string("hw.setlight \"true");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_UNSUPPORTED_ON_DEVICE, result_get_error_code(r));
+}
+
+void test_setlight_when_the_led_cannot_be_reached(void)
+{
+    // On a W board the LED is on the wireless module; if that will not come
+    // up the op is present but every access fails.
+    set_mock_status_led_unreachable();
+
+    Result r = eval_string("hw.setlight \"true");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_UNSUPPORTED_ON_DEVICE, result_get_error_code(r));
+}
+
+void test_light_when_the_led_cannot_be_reached(void)
+{
+    set_mock_status_led_unreachable();
+
+    Result r = eval_string("hw.light?");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_UNSUPPORTED_ON_DEVICE, result_get_error_code(r));
+}
+
+void test_light_is_usable_as_a_condition(void)
+{
+    run_string("hw.setlight \"true if hw.light? [pr [lit]]");
+
+    TEST_ASSERT_EQUAL_STRING("lit\n", output_buffer);
 }
 
 //==========================================================================
@@ -505,6 +620,21 @@ int main(void)
     RUN_TEST(test_temperature_negative);
     RUN_TEST(test_temperature_is_a_number_not_a_word);
     RUN_TEST(test_temperature_not_available);
+
+    // hw.light? / hw.setlight tests
+    RUN_TEST(test_light_starts_off);
+    RUN_TEST(test_setlight_true_lights_it);
+    RUN_TEST(test_setlight_false_clears_it);
+    RUN_TEST(test_setlight_is_case_insensitive);
+    RUN_TEST(test_light_reads_the_hardware_not_a_remembered_value);
+    RUN_TEST(test_setlight_outputs_nothing);
+    RUN_TEST(test_setlight_rejects_a_non_boolean);
+    RUN_TEST(test_setlight_rejects_a_list);
+    RUN_TEST(test_light_not_available);
+    RUN_TEST(test_setlight_not_available);
+    RUN_TEST(test_setlight_when_the_led_cannot_be_reached);
+    RUN_TEST(test_light_when_the_led_cannot_be_reached);
+    RUN_TEST(test_light_is_usable_as_a_condition);
 
     // Poweroff tests
     RUN_TEST(test_poweroff_not_available);
