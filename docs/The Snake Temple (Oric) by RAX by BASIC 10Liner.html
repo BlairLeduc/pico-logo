@@ -1,0 +1,193 @@
+<!DOCTYPE HTML>
+<html lang="en">
+<body>
+  <h1 itemprop="name" class="game_title">The Snake Temple (Oric) by RAX</h1>
+  <p>A downloadable game</p>
+  <p></p>
+  <p>10 Line BASIC&nbsp;</p>
+  <p>=============</p>
+  <p>Category : PUR-80&nbsp;</p>
+  <p>TITLE&nbsp; &nbsp; : The Snake Temple</p>
+  <p>PLATFORM : Oric Atmos</p>
+  <p>LANGUAGE : BASIC 1.1b</p>
+  <p>AUTHOR&nbsp; &nbsp;: RAX</p>
+  <p><br></p>
+  <p>Code:</p>
+  <pre>
+---------1---------2---------3---------4---------5---------6---------7--------
+0D$=&quot;$$$b$$$b$$$b,bGb#%###3###+7+7Ea?#1&gt;aS1$a#Ab#Vbb##/#AP/5V&quot;:A=#B507:INK6&#x27;&#x27;&#x27;
+1FORI=1TOLEN(D$):K=ASC(MID$(D$,I,1))-35:POKEA+I,K:NEXT:DEFFNR(X)=INT(RND(1)*X)
+2DIMD(999):O=37:B=161:FORI=0TO36:D(I)=B:D(I+888)=B+1:T=INT(I*.65)*O:D(T)=B&#x27;&#x27;&#x27;&#x27;
+3D(T+36)=B:NEXT:PAPER0:H=8:FORY=2TO23STEP2:FORX=2TO34STEP2:D(X+Y*O)=B:R=FNR(5)
+4D=(R=0)-(R=1)+O*(R=2)-O*(R=3):D(X+Y*O+D)=B:NEXTX,Y:FORI=0TO924:T=D(I):?&quot;.&quot;;&#x27;&#x27;
+5IFT=BANDD(I+O)=0THENT=162ELSEIFT=0THENT=FNR(3)+35ELSE:D(I)=T:NEXT:Y=FNR(22)+2
+6D(O+1+FNR(35)+FNR(20)*O)=38:X=FNR(35)+2:CLS:REPEAT:GETK$:Q=X:W=Y:K=ASC(K$)&#x27;&#x27;&#x27;
+7Y=Y+(K=11)-(K=10):X=X+(K=8)-(K=9):IFD(X+Y*O)&gt;99THENX=Q:Y=WELSE:B=X+Y*O:Z=D(B)
+8H=H-2*(Z=36)+(FNR(3)+2)*(Z=O):FORG=-1TO1:FORL=-1TO1:PLOT2+X+L,Y+G,D(B+L+G*O)&#x27;
+9NEXTL,G:D(B)=35:PLOTX+2,Y,39:?@2,25;&quot;HP:&quot;H:UNTILZ=38ORH&lt;1:ZAP:IFH&gt;0THEN?&quot;WIN&quot;</pre>
+  <p>RUN</p>
+  <p><br></p>
+  <p>STORY:</p>
+  <p>You are a young hero named Bocco who has set out in search of treasure in the Temple of the Snakes.</p>
+  <p>Among the labyrinth of tunnels is a treasure chest that you must find. The temple is full of snakes</p>
+  <p>so be careful!. A snake inflicts damage on 1 to 4 health points. Each flask you find restores 2 health
+    points.</p>
+  <p>Use the arrow keys to control Bocco. Have fun :)</p>
+  <p><br></p>
+  <p>CODE EXPLANATION:</p>
+  <p>----------------------------------------</p>
+  <p>
+    0D$=&quot;$$$b$$$b$$$b,bGb#%###3###+7+7Ea?#1&gt;aS1$a#Ab#Vbb##/#AP/5V&quot;:A=#B507:INK6&#x27;&#x27;&#x27;
+  </p>
+  <p>&nbsp; &nbsp; D$=&quot;$$$b$$$b$$$b,bGb#%###3###+7+7Ea?#1&gt;aS1$a#Ab#Vbb##/#AP/5V&quot; - characters
+    data</p>
+  <p>&nbsp; &nbsp; A=#B507 - the start address of characters to be modified</p>
+  <p>&nbsp; &nbsp; INK6&nbsp; &nbsp; - set chars color cyan</p>
+  <p>----------------------------------------</p>
+  <p>1FORI=1TOLEN(D$):K=ASC(MID$(D$,I,1))-35:POKEA+I,K:NEXT:DEFFNR(X)=INT(RND(1)*X)</p>
+  <p>&nbsp; &nbsp; FORI=1TOLEN(D$)&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;- change characters&nbsp;
+  </p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; K=ASC(MID$(D$,I,1))-35&nbsp; - gat data from D$</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; POKEA+I,K&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;- change
+    line of character</p>
+  <p>&nbsp; &nbsp; NEXT</p>
+  <p>&nbsp; &nbsp; DEFFNR(X)=INT(RND(1)*X)&nbsp; &nbsp; &nbsp;- define custon function R to generate random
+    number</p>
+  <p>----------------------------------------</p>
+  <p>2DIMD(999):O=37:B=161:FORI=0TO36:D(I)=B:D(I+888)=B+1:T=INT(I*.65)*O:D(T)=B&#x27;&#x27;&#x27;&#x27;</p>
+  <p>&nbsp; &nbsp; DIMD(999)&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;- maze
+    array</p>
+  <p>&nbsp; &nbsp; O=37&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; -
+    maze width</p>
+  <p>&nbsp; &nbsp; B=161&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;-
+    brick character (33) with set bit 7 for invers colors&nbsp;</p>
+  <p>&nbsp; &nbsp; FORI=0TO36&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; - create maze
+    borders</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; D(I)=B&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; - set
+    top border</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; D(I+888)=B+1&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; - set bottom border
+  </p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; T=INT(I*.65)*O&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; - calc left vertical
+    border</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; D(T)=B&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; - set
+    left border</p>
+  <p>----------------------------------------</p>
+  <p>3D(T+36)=B:NEXT:PAPER0:H=8:FORY=2TO23STEP2:FORX=2TO34STEP2:D(X+Y*O)=B:R=FNR(5)</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; D(T+36)=B&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;- set right
+    border</p>
+  <p>&nbsp; &nbsp; NEXT</p>
+  <p>&nbsp; &nbsp; PAPER0&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; - set
+    background color to black</p>
+  <p>&nbsp; &nbsp; H=8</p>
+  <p>&nbsp; &nbsp; FORY=2TO23STEP2&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;- generate maze</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; FORX=2TO34STEP2</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; D(X+Y*O)=B&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; - set brick</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; R=FNR(5)&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; - get
+    random number bettwen 0-4</p>
+  <p>----------------------------------------</p>
+  <p>4D=(R=0)-(R=1)+O*(R=2)-O*(R=3):D(X+Y*O+D)=B:NEXTX,Y:FORI=0TO924:T=D(I):?&quot;.&quot;;&#x27;&#x27;</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; D=(R=0)-(R=1)+O*(R=2)-O*(R=3)&nbsp; &nbsp;- get direction to
+    set next random brick</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; D(X+Y*O+D)=B&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; - set random brick</p>
+  <p>&nbsp; &nbsp; NEXTX,Y</p>
+  <p>&nbsp; &nbsp; FORI=0TO924&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; &nbsp;- replaces the standard brick in the maze with another one for a more fancy
+    look :), and set flask and snakes&nbsp;</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; T=D(I)&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; - get currnet char in position&nbsp;</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; ?&quot;.&quot;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; - print &quot;.&quot; into the screen to see
+    some processing is performed</p>
+  <p>----------------------------------------</p>
+  <p>5IFT=BANDD(I+O)=0THENT=162ELSEIFT=0THENT=FNR(3)+35ELSE:D(I)=T:NEXT:Y=FNR(22)+2</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; IF T=B AND D(I+O)=0 THEN&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; - if
+    there is a brick in the current position and there is an empty space under it, then</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; T=162&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;- set new brick in T</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; ELSE</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; IF T=0 THEN&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; &nbsp;- if is only empty block then</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; T=FNR(3)+35&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; &nbsp;- set in T random char bettwen (35-37) (ground, flask, snake)</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; ELSE</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; :&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;- nothing</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; D(I)=T&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; - set the modified value in the maze&nbsp;</p>
+  <p>&nbsp; &nbsp; NEXT</p>
+  <p>&nbsp; &nbsp; Y=FNR(22)+2&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; &nbsp;- get random Y position for player</p>
+  <p>----------------------------------------</p>
+  <p>6D(O+1+FNR(35)+FNR(20)*O)=38:X=FNR(35)+2:CLS:REPEAT:GETK$:Q=X:W=Y:K=ASC(K$)&#x27;&#x27;&#x27;</p>
+  <p>&nbsp; &nbsp; D(O+1+FNR(35)+FNR(20)*O)=38&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;- set chest
+    into a maze (char 38)</p>
+  <p>&nbsp; &nbsp; X=FNR(35)+2&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; &nbsp;- get random X position for player</p>
+  <p>&nbsp; &nbsp; CLS&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;- clear screen</p>
+  <p>&nbsp; &nbsp; REPEAT&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; - game loop</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; GET K$&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; - get key into k$</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; Q=X&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;- old X position</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; W=Y&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;- old Y position</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; K=ASC(K$)&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;- get ascii number for pressed key</p>
+  <p>----------------------------------------</p>
+  <p>7Y=Y+(K=11)-(K=10):X=X+(K=8)-(K=9):IFD(X+Y*O)&gt;99THENX=Q:Y=WELSE:B=X+Y*O:Z=D(B)</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; Y=Y+(K=11)-(K=10)&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp;- calc new Y position</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; X=X+(K=8)-(K=9)&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp;- calc new X position</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; IFD(X+Y*O)&gt;99 THEN&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; - if there is a brick in the new position then</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; X=Q&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;- return the old position into X</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; Y=W&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;- return the old position into Y</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; ELSE</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; :&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;- nothing</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; B=X+Y*O&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;- calc new player position into maze array</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; Z=D(B)&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; - takes the chars that is in the current player position</p>
+  <p>----------------------------------------</p>
+  <p>8H=H-2*(Z=36)+(FNR(4)+1)*(Z=O):FORG=-1TO1:FORL=-1TO1:PLOT2+X+L,Y+G,D(B+L+G*O)&#x27;</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; H=H-2*(Z=36)+(FNR(4)+1)*(Z=O)&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;-
+    calc player health whit char in playr position&nbsp;</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; ( if it is a flack then add 2 or
+    if a snake then reduced health by 1 to 4&nbsp; )</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; FORG=-1TO1&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; - print player area loop 3х3</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; FORL=-1TO1</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; PLOT2+X+L,Y+G,D(B+L+G*O)&nbsp; &nbsp; &nbsp;
+    &nbsp; - print current maze char&nbsp;</p>
+  <p>----------------------------------------</p>
+  <p>
+    9NEXTL,G:D(B)=35:PLOTX+2,Y,39:?@2,25;&quot;HP:&quot;H:UNTILZ=38ORH&lt;1:ZAP:IFH&gt;0THEN?&quot;WIN&quot;
+  </p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; NEXTL,G</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; D(B)=35&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;- set ground charate into maze (removes snakes and flasks when
+    the player passes them )</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; PLOTX+2,Y,39&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; - print player</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; ?@2,25;&quot;HP:&quot;H&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;- print player health on the screen</p>
+  <p>&nbsp; &nbsp; UNTIL Z=38 OR H&lt;1&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp;- do game loop while Z=38 (take chest) or H&lt;1 (the player has no health)</p>
+  <p>&nbsp; &nbsp; ZAP&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;- little sound effect</p>
+  <p>&nbsp; &nbsp; IF H&gt;0 THEN&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;- if the player is healthy then&nbsp;</p>
+  <p>&nbsp; &nbsp; &nbsp; &nbsp; ?&quot;WIN&quot;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+    &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; - print &quot;WIN&quot;</p>
+  <p><br></p>
+</body>
+
+</html>

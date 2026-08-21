@@ -148,6 +148,14 @@ target_compile_definitions(test_trails PRIVATE
     P9TRAILS_SOURCE="${CMAKE_SOURCE_DIR}/tests/logo/p9trails"
     P10PROF_SOURCE="${CMAKE_SOURCE_DIR}/tests/logo/p10prof")
 
+# The Snake Temple -- the one game that is pure text screen. Its test loads the
+# program (proving it parses and that no procedure name collides with a
+# primitive), checks the generated maze as data, calls the rules that a random
+# bite makes untestable through the loop, and drives the loop with held keys.
+add_logo_test(test_temple)
+target_compile_definitions(test_temple PRIVATE
+    TEMPLE_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/temple")
+
 # Game HUD test — both games use the fullscreen graphics canvas and draw their
 # score/lives/level text into the lower part of it.
 add_logo_test(test_game_huds)

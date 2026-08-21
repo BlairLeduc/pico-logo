@@ -1,0 +1,781 @@
+; The Snake Temple
+;
+; A port of "The Snake Temple" by RAX,
+; written for the Oric Atmos in BASIC
+; 1.1b as a BASIC 10-liner (category
+; PUR-80). The original is in docs/, ten
+; lines of 80 characters with a
+; redefined character set poked straight
+; into video RAM.
+;
+; This port keeps the game and throws
+; away the golfing.  The rules are the
+; original's -- the same labyrinth
+; generator, the same one-third-snakes
+; floor, the same eight hit points, the
+; same 3x3 lantern -- written out at the
+; length they take to say.
+;
+; It is also the one game here that uses
+; NO graphics at all: no turtle, no
+; sprites, no tiles, no canvas.
+; Everything the player sees is a
+; character put on the text screen with
+; `setcursor` and `type`.  That makes it
+; the shortest path from "I have a grid
+; of data" to "I have a game", and a
+; useful thing to read before reaching
+; for the turtle.
+;
+; Every line of this file is kept inside
+; 40 columns, which is the width of the
+; PicoCalc screen, so the program can be
+; read and edited on the machine it runs
+; on without the editor scrolling
+; sideways.
+;
+; Load and play:
+;   load "temple
+;   temple
+;
+; Bocco is looking for the treasure
+; chest hidden in the Temple of the
+; Snakes.  The tunnels are dark, so he
+; sees only the eight cells around him.
+; A snake bite costs 1 to 4 hit points;
+; a flask restores 2.  Find the chest
+; before the snakes find you.
+
+
+;=====================================
+; The shape of the world
+;=====================================
+
+; The PicoCalc text screen is 40
+; characters across and 32 lines down.
+; The maze takes the top-left 39x27 of
+; it; the rest is the status line and
+; room for the last word.
+;
+; The maze is made by bricking up every
+; other cell, so its width and height
+; both want to be odd -- an even one
+; would leave a doubled wall down the
+; far edge.
+make "cols     39
+make "rows     27
+make "hud.row  28
+make "end.row  30
+make "tick.col  1   ; the building dots
+make "tick.row 14
+
+; What lives in a cell.  A cell holds
+; the character that will be typed for
+; it, so drawing a cell is `type` of the
+; cell itself -- there is no second
+; lookup from "what is here" to "what
+; does it look like".
+make "wall   "#
+make "floor  ".
+make "snake  "S
+make "flask  "!
+make "chest  "$
+make "hero   "@
+
+; Text-screen colours are the numbers
+; 0-15 (Appendix E of the reference).
+; 0-3 are the greys from black to white
+; and 4 is the background; 5-15 are the
+; editor's syntax colours, which is
+; where a text-mode game finds its
+; palette.  They are called inks here,
+; after the Oric's own INK -- and
+; because the short name keeps the lines
+; that use them inside 40 columns.
+make "bg.ink      4   ; background
+make "wall.ink    2   ; dressed stone
+make "floor.ink   1   ; tunnel dust
+make "snake.ink  10   ; green
+make "flask.ink  11   ; sky blue
+make "chest.ink  14   ; gold
+make "hero.ink    3   ; white
+make "hud.ink     8   ; yellow
+make "text.ink    2   ; body text
+make "dim.ink     1   ; small print
+make "plain.ink   3   ; Logo's default
+
+; Tuning.
+make "start.hp    8   ; starting hp
+make "flask.heal  2   ; a flask heals
+make "bite.max    4   ; worst bite
+make "snake.pct  33   ; per cent snakes
+make "flask.pct  33   ; per cent flasks
+
+; The codes `readchar` hands back.  The
+; arrows have no printable character, so
+; they arrive as codes of their own; the
+; `keydown?` entry in the reference
+; lists them all.
+make "key.left  180
+make "key.right 183
+make "key.up    181
+make "key.down  182
+make "key.space  32
+make "key.q     113   ; q
+make "key.q.uc   81   ; Q
+
+
+;=====================================
+; The maze, and why it is a list of
+; lists
+;
+; Pico Logo has no array type, so a list
+; of :rows rows -- each one a list of
+; :cols single-character words -- is the
+; grid. `item` and `.setitem` count from
+; 1, so maze coordinates do too: x runs
+; 1..:cols and y runs 1..:rows, and the
+; screen column and line are each one
+; less.
+;
+; Reaching a cell walks the outer list
+; to the row and then the row to the
+; cell, which is not free.  It does not
+; need to be: generation touches every
+; cell once, and after that a move only
+; ever reads the ten cells around Bocco.
+; `.setitem` writes into the row in
+; place, so nothing is copied.
+;=====================================
+
+to row :y
+  ; Line :y of the maze.  Mutating the
+  ; list this hands back mutates the
+  ; maze.
+  op item :y :maze
+end
+
+to cell :x :y
+  op item :x (row :y)
+end
+
+to setcell :x :y :what
+  .setitem :x (row :y) :what
+end
+
+to wall? :x :y
+  op equal? (cell :x :y) :wall
+end
+
+
+;=====================================
+; Building the temple
+;=====================================
+
+to build.maze
+  open.room
+  raise.pillars
+  stock.the.floor
+end
+
+to open.room
+  ; An empty room: floor everywhere,
+  ; ringed by a wall, so that no move
+  ; ever has to ask whether it has
+  ; fallen off the edge.
+  make "maze []
+  repeat :rows [
+    make "maze fput floor.row :maze
+  ]
+
+  for [x 1 [:cols]] [
+    setcell :x 1     :wall
+    setcell :x :rows :wall
+  ]
+  for [y 1 [:rows]] [
+    setcell 1     :y :wall
+    setcell :cols :y :wall
+  ]
+end
+
+to floor.row
+  ; A fresh list of :cols floor cells.
+  ; Fresh matters: every row must be its
+  ; own list, because `setcell` mutates
+  ; rows in place.  Sharing one list
+  ; would make every line of the maze
+  ; change together.
+  local "r
+  make "r []
+  repeat :cols [make "r fput :floor :r]
+  op :r
+end
+
+to raise.pillars
+  ; The original's labyrinth: put a
+  ; pillar on every other cell, then
+  ; brick up one of its four neighbours
+  ; at random.  One roll in five leaves
+  ; the pillar standing alone, which is
+  ; what keeps the tunnels open enough
+  ; to walk down.
+  ;
+  ; This is not a perfect maze -- it has
+  ; loops and dead ends in no particular
+  ; proportion, and no promise that the
+  ; chest can be reached.  That is the
+  ; point: it costs one pass over the
+  ; grid and it looks like a ruin.
+  for [y 3 [:rows - 2] 2] [
+    tick
+    for [x 3 [:cols - 2] 2] [
+      setcell :x :y :wall
+      spur :x :y random 5
+    ]
+  ]
+end
+
+to spur :x :y :dir
+  ; Directions 0-3 are the four
+  ; neighbours. Direction 4 leaves both
+  ; offsets at zero and so bricks up the
+  ; pillar itself again -- which is what
+  ; the original does, and why a fifth
+  ; of the pillars stay bare.
+  local [dx dy]
+  make "dx 0
+  make "dy 0
+  if equal? :dir 0 [make "dx -1]
+  if equal? :dir 1 [make "dx 1]
+  if equal? :dir 2 [make "dy -1]
+  if equal? :dir 3 [make "dy 1]
+  setcell (:x + :dx) (:y + :dy) :wall
+end
+
+to stock.the.floor
+  ; A third of the open floor is snakes
+  ; and a third is flasks, as in the
+  ; original. That sounds like a lot of
+  ; snakes, and it is -- but a bite
+  ; averages 2.5 and a flask gives 2, so
+  ; the two thirds nearly cancel and
+  ; Bocco loses about one hit point
+  ; every six steps.  That slow drain is
+  ; the clock the game runs on.
+  for [y 2 [:rows - 1]] [
+    tick
+    for [x 2 [:cols - 1]] [
+      if not wall? :x :y [
+        setcell :x :y roll.floor
+      ]
+    ]
+  ]
+end
+
+to roll.floor
+  ; One of snake, flask or bare floor,
+  ; in the original's proportions.  One
+  ; roll of a hundred split into three
+  ; bands, rather than a roll per
+  ; outcome, so the per cents above are
+  ; the per cents you get.
+  local "roll
+  make "roll random 100
+  if :roll < :snake.pct [op :snake]
+  if :roll < (:snake.pct + :flask.pct) [
+    op :flask
+  ]
+  op :floor
+end
+
+to hide.the.chest
+  ; Somewhere on the open floor -- never
+  ; inside a pillar, where it could
+  ; never be reached.
+  local "spot
+  make "spot open.cell
+  make "chest.x first :spot
+  make "chest.y last :spot
+  setcell :chest.x :chest.y :chest
+end
+
+to place.hero
+  ; Bocco starts on open floor too, and
+  ; not on the chest, which would be a
+  ; short game.  Whatever was in the
+  ; cell is trodden out of it.
+  ;
+  ; The `stop` is written here rather
+  ; than in a helper on purpose: `stop`
+  ; ends the procedure it appears in, so
+  ; a helper that called it would end
+  ; only itself and leave this `forever`
+  ; spinning.
+  local "spot
+  forever [
+    make "spot open.cell
+    if not equal? :spot chest.spot [
+      make "hero.x first :spot
+      make "hero.y last :spot
+      setcell :hero.x :hero.y :floor
+      stop
+    ]
+  ]
+end
+
+to chest.spot
+  op list :chest.x :chest.y
+end
+
+to open.cell
+  ; A random cell that is not wall,
+  ; found by throwing darts.  The
+  ; labyrinth is more open than not, so
+  ; this lands on the first or second
+  ; throw.  It always lands eventually:
+  ; a pillar sits on odd x and odd y and
+  ; its spur changes exactly one of
+  ; them, so every cell with both
+  ; coordinates even is floor for
+  ; certain.
+  local [x y]
+  forever [
+    make "x (2 + random (:cols - 2))
+    make "y (2 + random (:rows - 2))
+    if not wall? :x :y [op list :x :y]
+  ]
+end
+
+
+;=====================================
+; Drawing
+;
+; Nothing is ever erased.  A step lights
+; the 3x3 around Bocco and leaves it
+; lit, so the patches behind him join up
+; into a map of where he has been --
+; which is what makes the game playable
+; in the dark at all.
+;=====================================
+
+to draw.cell :x :y
+  local "what
+  make "what cell :x :y
+  paint ink.of :what
+  at :x :y
+  type :what
+end
+
+to at :x :y
+  ; Maze coordinates count from 1;
+  ; screen columns and lines count from
+  ; 0.
+  setcursor list (:x - 1) (:y - 1)
+end
+
+to ink.of :what
+  if equal? :what :wall [op :wall.ink]
+  if equal? :what :snake [op :snake.ink]
+  if equal? :what :flask [op :flask.ink]
+  if equal? :what :chest [op :chest.ink]
+  op :floor.ink
+end
+
+to paint :ink
+  settextcolor list :ink :bg.ink
+end
+
+to light.around :x :y
+  ; The lantern: the cell Bocco stands
+  ; on and the eight around it.  The
+  ; border ring guarantees all nine are
+  ; inside the maze, because Bocco only
+  ; ever stands on floor and floor is
+  ; never on the border.
+  for [dy -1 1] [
+    for [dx -1 1] [
+      draw.cell (:x + :dx) (:y + :dy)
+    ]
+  ]
+end
+
+to draw.hero
+  paint :hero.ink
+  at :hero.x :hero.y
+  type :hero
+end
+
+to draw.hud
+  ; The trailing blanks matter: hit
+  ; points go from two digits to one,
+  ; and without them the old tens digit
+  ; would sit there for the rest of the
+  ; game.
+  paint :hud.ink
+  setcursor list 0 :hud.row
+  (type "|HP: | :hp "|    |)
+end
+
+
+;=====================================
+; Playing
+;=====================================
+
+to temple
+  setup.sound
+  title.screen
+  drain.keys
+  new.game
+  crawl
+  final.word
+end
+
+to setup.sound
+  ; Two voice pairs -- one per ear --
+  ; given a timbre once, since the
+  ; timbre lasts. Voices 3 and 7 are the
+  ; noise voices, which is what a hiss
+  ; is.
+  ;
+  ; `sound` rather than `toot`, and that
+  ; is not a style choice: `toot` waits
+  ; for the previous note to finish
+  ; before it starts the next, so
+  ; walking through a nest of snakes
+  ; would stall a tenth of a second per
+  ; bite while the hiss played out.
+  ; `sound` starts the note and returns.
+  setwave [3 7] "white
+  setenv  [3 7] [0 40 0 40]  ; the hiss
+  setwave [0 4] "triangle
+  setenv  [0 4] [0 30 0 50]  ; the pitch
+end
+
+to new.game
+  make "hp :start.hp
+  make "won false
+  make "quit false
+  make "steps 0
+
+  say.building
+  build.maze
+  hide.the.chest
+  place.hero
+
+  cleartext
+  light.around :hero.x :hero.y
+  draw.hero
+  draw.hud
+end
+
+to crawl
+  ; The game is turn based, so it waits
+  ; on the player and not on the clock:
+  ; `readchar` blocks until a key is
+  ; typed and one character is one move.
+  ; There is no `wait` in this loop at
+  ; all -- the keyboard sets the pace.
+  ;
+  ; This is the case the `pollkeys`
+  ; family is NOT for.  Key STATE is
+  ; what a real-time loop wants, and
+  ; reading it here meant a 150 ms tap
+  ; spanned two or three passes of the
+  ; loop and Bocco walked two or three
+  ; squares for one press.  The
+  ; character stream already has the
+  ; cadence a turn-based game wants: one
+  ; character per press, and, if a key
+  ; is held down, the keyboard's own
+  ; repeat -- a third of a second, then
+  ; ten squares a second.
+  ;
+  ; The reference warns that `readchar`
+  ; inside a game loop builds a backlog.
+  ; That is a warning about a loop with
+  ; other work to do, which takes
+  ; characters out slower than a held
+  ; key puts them in.  This loop does
+  ; nothing but wait, and drains far
+  ; faster than ten a second.
+  until [game.over?] [
+    take.a.step ascii readchar
+    tidy.up
+  ]
+end
+
+to drain.keys
+  ; Throw away anything typed before
+  ; now, so the key that started the
+  ; game is not delivered as the first
+  ; move.
+  until [not key?] [ignore readchar]
+end
+
+to game.over?
+  op or :quit (or :won (:hp < 1))
+end
+
+to take.a.step :key
+  ; Turn one key into an offset, then
+  ; decide whether Bocco may have the
+  ; square it points at.  Anything that
+  ; is not an arrow -- including the
+  ; space that started the game --
+  ; leaves the offset at zero and costs
+  ; nothing but the turn.
+  local [dx dy nx ny]
+  make "dx 0
+  make "dy 0
+  if equal? :key :key.left [make "dx -1]
+  if equal? :key :key.right [make "dx 1]
+  if equal? :key :key.up [make "dy -1]
+  if equal? :key :key.down [make "dy 1]
+
+  if quit? :key [
+    make "quit true
+    stop
+  ]
+  if and (:dx = 0) (:dy = 0) [stop]
+
+  make "nx (:hero.x + :dx)
+  make "ny (:hero.y + :dy)
+  if wall? :nx :ny [stop]
+  enter :nx :ny
+end
+
+to quit? :key
+  ; Q in either case gives up.
+  if equal? :key :key.q [op true]
+  if equal? :key :key.q.uc [op true]
+  op false
+end
+
+to enter :x :y
+  meet cell :x :y
+
+  ; Whatever was in the square is
+  ; trodden out of it: a snake that has
+  ; struck is gone, and so is an emptied
+  ; flask. Bocco's own square needs no
+  ; clearing, since he only ever stands
+  ; on floor.
+  setcell :x :y :floor
+  make "hero.x :x
+  make "hero.y :y
+
+  light.around :x :y
+  draw.hero
+  draw.hud
+end
+
+to meet :it
+  if equal? :it :snake [bitten stop]
+  if equal? :it :flask [drink stop]
+  if equal? :it :chest [make "won true]
+end
+
+to bitten
+  local "bite
+  make "bite (1 + random :bite.max)
+  make "hp (:hp - :bite)
+  (sound [3 7] 3000 90 12)
+end
+
+to drink
+  make "hp (:hp + :flask.heal)
+  (sound [0 4] 1047 70 10)
+end
+
+to tidy.up
+  ; A step builds a couple of dozen list
+  ; cells -- a `list` for each
+  ; `setcursor` and each `settextcolor`,
+  ; and a word for the hit-point line --
+  ; and drops them all.  A long crawl
+  ; would run the free list down, so
+  ; hand them back every so often.
+  ; Between moves is the moment to do
+  ; it: the loop is about to block on
+  ; the keyboard anyway, so a pause
+  ; nobody can see costs nothing.
+  make "steps (:steps + 1)
+  if equal? 0 remainder :steps 100 [
+    recycle
+  ]
+end
+
+
+;=====================================
+; The screens either side of the game
+;
+; The screen is 40 columns wide, so the
+; text on it has to fit 40 columns -- a
+; line one character too long does not
+; wrap, it runs off the edge.  Holding
+; the SOURCE to 40 columns is what makes
+; that easy to see: a string that will
+; not fit the screen will not fit the
+; line you write it on.
+;=====================================
+
+to story
+  op [
+    [Bocco has come to the Temple of]
+    [the Snakes for the treasure chest]
+    [hidden there. The tunnels are]
+    [dark, and he can see only the]
+    [ground he is standing on.]
+  ]
+end
+
+to key.rows
+  ; The character first, so `legend` can
+  ; ask `ink.of` what colour to paint
+  ; it.
+  op [
+    [$ the chest - find it and win]
+    [S a snake - bites 1 to 4]
+    [! a flask - heals 2]
+    [@ Bocco - starts with 8 hp]
+  ]
+end
+
+to title.screen
+  textscreen
+  cleartext
+
+  paint :hero.ink
+  setcursor [12 3]
+  print "|THE SNAKE TEMPLE|
+  paint :dim.ink
+  setcursor [8 5]
+  print "|after RAX -- Oric Atmos|
+
+  paint :text.ink
+  print.lines story 2 8
+
+  legend 14
+
+  paint :text.ink
+  setcursor [2 20]
+  print "|ARROWS  walk       Q  give up|
+
+  paint :hud.ink
+  setcursor [10 23]
+  print "|Press SPACE to begin|
+
+  wait.for.space
+end
+
+to say.building
+  ; The maze is a list of lists and the
+  ; machine is small, so filling 39x27
+  ; cells takes a moment you can watch
+  ; go by.  Clearing the title screen at
+  ; once is the important half of this:
+  ; without it the player sees the title
+  ; sitting there and thinks the SPACE
+  ; was missed.
+  cleartext
+  paint :hud.ink
+  setcursor [9 12]
+  print "|Building the temple...|
+  paint :dim.ink
+  setcursor list :tick.col :tick.row
+end
+
+to tick
+  ; A dot a row, the way the Oric
+  ; original printed one a cell -- proof
+  ; that something is happening.  `type`
+  ; leaves the cursor just after the
+  ; dot, so the next one lands beside it
+  ; and the row of dots grows on its
+  ; own.
+  ;
+  ; There is one dot per row of the two
+  ; loops that walk the whole grid, so
+  ; the row of them has to fit the
+  ; screen; the test holds that.
+  type "|.|
+end
+
+to print.lines :lines :col :line
+  for [i 1 [count :lines]] [
+    setcursor list :col (:line + :i - 1)
+    print item :i :lines
+  ]
+end
+
+to legend :line
+  ; One row per thing you can walk into:
+  ; the character in its own ink, then
+  ; what it means in the body colour.
+  local [r y]
+  for [i 1 [count key.rows]] [
+    make "r item :i key.rows
+    make "y (:line + :i - 1)
+    paint ink.of first :r
+    setcursor list 6 :y
+    type first :r
+    paint :text.ink
+    setcursor list 9 :y
+    type butfirst :r
+  ]
+end
+
+to wait.for.space
+  ; Every other key is ignored, which
+  ; also disposes of anything typed
+  ; before the screen went up.
+  local "k
+  forever [
+    make "k ascii readchar
+    if equal? :k :key.space [stop]
+  ]
+end
+
+to final.word
+  paint :hud.ink
+  setcursor list 0 :end.row
+
+  if :won  [won.the.chest  finish stop]
+  if :quit [walked.away    finish stop]
+  lost.to.the.snakes
+  finish
+end
+
+to finish
+  ; Leave the screen as Logo expects to
+  ; find it: default colours, cursor on
+  ; the last line, so the prompt comes
+  ; back somewhere sensible.
+  paint :plain.ink
+  setcursor list 0 31
+end
+
+to won.the.chest
+  type "|Bocco escapes with the chest!|
+  fanfare [523 659 784]
+end
+
+to lost.to.the.snakes
+  type "|The snakes have Bocco.|
+  fanfare [262 196 131]
+end
+
+to walked.away
+  type "|Bocco flees, empty-handed.|
+  fanfare [392 262]
+end
+
+to fanfare :notes
+  ; `sound` starts a note and returns,
+  ; so a tune has to space its own
+  ; notes.
+  foreach :notes [[note]
+    (sound [0 4] :note 240 12)
+    wait 200
+  ]
+end
