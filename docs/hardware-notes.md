@@ -524,6 +524,88 @@ What we learned:
   available through the same interface — cheap wins for a polished game
   (dim the backlight on pause, show battery in the HUD).
 
+### 8.1 The one sensor that is not the southbridge
+
+The temperature reading is the exception to §8: it comes from inside the RP2350,
+not over the I²C bus, so it costs no bus time and cannot be blocked by a wedged
+southbridge. It backs `hw.temperature`.
+
+**The channel differs between the two parts, and the SDK already hides it.** The
+sensor is ADC input **4** on the RP2350A (Pico 2, Pico 2 W, QFN-60) and input
+**8** on the RP2350B (Pico Plus 2 W, QFN-80), because the larger package adds
+four more user inputs below it. `ADC_TEMPERATURE_CHANNEL_NUM` is
+`NUM_ADC_CHANNELS - 1`, and `NUM_ADC_CHANNELS` comes from `PICO_RP2350A` in the
+board header — so **no board conditional belongs in this tree**, and none is
+there. Verified in the disassembly rather than assumed: the AINSEL field write
+inside `picocalc_get_temperature` is `0x4000` in a `pico2` build and `0x8000` in
+a `pico+2w` one.
+
+Two things the sensor's own accuracy decides, both in
+[picocalc_hardware.c](../devices/picocalc/picocalc_hardware.c):
+
+- **Average the burst.** A conversion is 12 bits over 3.3 V, which is ~0.24 °C
+  per LSB and noisy at that. The read averages 16 conversions; each is ~2 µs, so
+  the whole thing costs ~32 µs — nothing beside a 4.6 ms southbridge read.
+- **Round the answer.** The formula is the datasheet's (§12.4.6,
+  `27 - (V - 0.706) / 0.001721`, the same on both parts) and it is *uncalibrated*
+  — several degrees of part-to-part offset. It also reads the die, which sits
+  above the room by however hard the chip is working. Six significant digits of
+  that would be false precision, so `hw.temperature` rounds to a tenth.
+
+The ADC block is initialised lazily on the first read and the sensor bias left
+on afterwards. Nothing else in this tree uses the ADC, and `adc_init()` touches
+no GPIO function, so the audio PWM on 26/27 is unaffected.
+
+`tests/logo/hwtemp` is the hardware check, and it does not merely assert that a
+number came back: a wrong channel returns a floating GPIO, which reads as a
+plausible number. It loads the processor for thirty seconds and requires the
+reading to **rise**, which only a sensor wired to the die does.
+
+### 8.2 The status LED, and why it is not a `gpio_put`
+
+The small LED on the processor board — visible through the case, not on the
+PicoCalc front panel — backs `hw.light?` and `hw.setlight`. It is the second
+thing in §8.1's category: not the southbridge, and not the same on every board.
+
+**Its pin is different on each board, and the SDK's `pico_status_led` hides it.**
+On a Pico 2 it is `PICO_DEFAULT_LED_PIN`, GPIO 25, and a `gpio_put` reaches it.
+On a Pico 2 W and a Pico Plus 2 W there is **no such pin at all** — the LED is
+`CYW43_WL_GPIO_LED_PIN`, WL_GPIO 0 on the wireless module, and reaching it means
+a `cyw43_gpio_set` through the driver. This used to be the special case every
+project wrote by hand; SDK 2.1 added `pico_status_led` and it is the whole
+reason there is no board conditional in this tree. Verified in the disassembly,
+as in §8.1: `picocalc_set_status_led` in a `pico2` build is `movs r3, #25`
+followed by the single-cycle-IO write, and in a `pico2w` build it is
+`bl cyw43_gpio_set` with WL_GPIO 0.
+
+**The consequence that matters is that the LED and WiFi share a chip.** Two
+things follow, both in
+[picocalc_hardware.c](../devices/picocalc/picocalc_hardware.c):
+
+- **Lighting the LED on a W board powers the radio.** There is no way around it
+  — the LED is on the far side of the driver. So the first `hw.setlight` costs
+  the cyw43 firmware upload, about a second, and leaves the module powered;
+  later calls are immediate. On a Pico 2 the first call is a `gpio_init`.
+- **The driver is brought up through `ensure_wifi_initialized`, not by
+  `pico_status_led`.** `status_led_init()` with no context builds its *own*
+  `async_context` and calls `cyw43_driver_init` itself, which a later
+  `cyw43_arch_init` from any WiFi primitive would then trip over. Passing
+  `status_led_init_with_context(cyw43_arch_async_context())` after the existing
+  lazy WiFi init keeps one context, one driver, and one `wifi_initialized` flag
+  for both features. `tests/logo/hwlight` runs the two orderings — LED then
+  WiFi, WiFi then LED — because that is the failure this arrangement exists to
+  prevent and no host test can see it.
+
+The cost of the abstraction is **72 bytes of SRAM on the W boards**:
+`status_led_owned_context` is the context `pico_status_led` would have built for
+itself, dead in this build but in the same translation unit as the path that is
+used, so the linker keeps it. A Pico 2 pays 4 bytes for the init flag. Both are
+worth not writing the board conditional.
+
+The other half of the check is the eye. A driven pin that is not wired to
+anything looks exactly like a pass from inside Logo, so `hwlight` blinks ten
+times and asks a human whether the light moved.
+
 ---
 
 ## 9. Performance: everything we learned by measuring

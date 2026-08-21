@@ -18,8 +18,14 @@ many speculative ones. Never ask the author to run or add tests first.
 - SRAM (~520 KB) is nearly full; oversized static/global buffers crash `repl_init` with
   an OOM panic. Flag large new static/global arrays, and stack buffers on recursive or
   evaluation paths.
-- Capacities live in `core/limits.h`. Flag new bare `#define` size limits in `.c` files,
-  and fixed arrays indexed without bounds checks.
+- Capacities live in `core/limits.h`. Flag a new `#define` in a `.c` file only when it
+  **sizes a buffer, array, or table** — that is what the SRAM rule is about.
+- File-local scalar constants (sample counts, retry counts, timeouts, ports, protocol
+  numbers, bit masks) are `#define` throughout this tree and allocate nothing. Do not
+  ask for `enum` or `static const` instead: there are no `enum` constant blocks and no
+  `static const` scalars anywhere under `devices/`, and `static const` is used only for
+  lookup arrays.
+- Flag fixed arrays indexed without bounds checks.
 
 ### 3. Error handling conventions
 - Primitives return `Result`; never `exit()`, `abort()`, or print errors directly. Flag

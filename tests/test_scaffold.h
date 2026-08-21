@@ -128,6 +128,26 @@ void define_proc(const char *name, const char **params, int param_count, const c
 void set_mock_battery(int level, bool charging);
 
 // ============================================================================
+// Mock Temperature Helper
+// ============================================================================
+
+// Configure the mock on-chip temperature sensor. `available` false nulls the
+// hardware op, standing in for a board with no sensor.
+void set_mock_temperature(bool available, float celsius);
+
+// ============================================================================
+// Mock Status LED Helper
+// ============================================================================
+
+// Configure the mock on-board LED. `available` false nulls the hardware ops,
+// standing in for a board with no LED.
+void set_mock_status_led(bool available, bool on);
+
+// Keep the ops in place but make every access fail, standing in for an LED on
+// a wireless module that would not come up.
+void set_mock_status_led_unreachable(void);
+
+// ============================================================================
 // Mock Clock Helper
 // ============================================================================
 

@@ -2,7 +2,7 @@
 //  Pico Logo
 //  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
-//  Hardware primitives: batterylevel
+//  Hardware primitives: hw.battery, hw.temperature, hw.light?, hw.setlight
 //
 
 #include "primitives.h"
@@ -13,9 +13,11 @@
 #include "eval.h"
 #include "devices/io.h"
 
+#include <math.h>
 #include <stdio.h>
+#include <strings.h>
 
-// batteryLevel
+// hw.battery
 static Result prim_battery_level(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval); UNUSED(argc); UNUSED(args);
@@ -49,6 +51,77 @@ static Result prim_battery_level(Evaluator *eval, int argc, Value *args)
     }
 
     return result_ok(value_list(list));
+}
+
+// hw.temperature
+// The on-chip sensor reads the die, not the room, and is uncalibrated, so
+// tenths are the most the number can honestly carry -- round there rather
+// than print six significant digits of ADC noise.
+static Result prim_temperature(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
+
+    LogoIO *io = primitives_get_io();
+    if (io && io->hardware && io->hardware->ops && io->hardware->ops->get_temperature)
+    {
+        float celsius = io->hardware->ops->get_temperature();
+        return result_ok(value_number(roundf(celsius * 10.0f) / 10.0f));
+    }
+
+    return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
+}
+
+// hw.light?
+// Reads the LED rather than remembering what was last written, so it still
+// answers after anything else has driven it.
+static Result prim_lightp(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
+
+    bool on = false;
+    LogoIO *io = primitives_get_io();
+    if (io && io->hardware && io->hardware->ops && io->hardware->ops->get_status_led &&
+        io->hardware->ops->get_status_led(&on))
+    {
+        return result_ok(value_bool(on));
+    }
+
+    return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
+}
+
+// hw.setlight
+static Result prim_setlight(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+
+    const char *str = value_to_string(args[0]);
+    bool on;
+
+    if (str == NULL)
+    {
+        return result_error_arg(ERR_NOT_BOOL, NULL, NULL);
+    }
+    if (strcasecmp(str, "true") == 0)
+    {
+        on = true;
+    }
+    else if (strcasecmp(str, "false") == 0)
+    {
+        on = false;
+    }
+    else
+    {
+        return result_error_arg(ERR_NOT_BOOL, NULL, str);
+    }
+
+    LogoIO *io = primitives_get_io();
+    if (io && io->hardware && io->hardware->ops && io->hardware->ops->set_status_led &&
+        io->hardware->ops->set_status_led(on))
+    {
+        return result_none();
+    }
+
+    return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
 }
 
 static Result prim_goodbye(Evaluator *eval, int argc, Value *args)
@@ -218,7 +291,10 @@ static Result prim_toot(Evaluator *eval, int argc, Value *args)
 
 void primitives_hardware_init(void)
 {
-    primitive_register("battery", 0, prim_battery_level);
+    primitive_register("hw.battery", 0, prim_battery_level);
+    primitive_register("hw.temperature", 0, prim_temperature);
+    primitive_register("hw.light?", 0, prim_lightp);
+    primitive_register("hw.setlight", 1, prim_setlight);
     primitive_register("goodbye", 0, prim_goodbye);
     primitive_register(".bootsel", 0, prim_bootsel);
     primitive_register("toot", 2, prim_toot);

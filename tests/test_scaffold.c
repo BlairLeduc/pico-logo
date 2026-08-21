@@ -24,6 +24,15 @@ size_t mock_input_pos = 0;
 int mock_battery_level = 100;
 bool mock_battery_charging = false;
 
+// Mock on-chip temperature (degrees Celsius) for testing
+float mock_temperature_celsius = 25.0f;
+
+// Mock on-board status LED for testing. `mock_status_led_reachable` false
+// stands in for a board whose LED could not be reached (on a W board, the
+// wireless module it lives on failing to come up).
+bool mock_status_led_on = false;
+bool mock_status_led_reachable = true;
+
 // User interrupt flag for testing
 bool mock_user_interrupt = false;
 
@@ -195,6 +204,31 @@ void mock_get_battery_level(int *level, bool *charging)
     *charging = mock_battery_charging;
 }
 
+float mock_get_temperature(void)
+{
+    return mock_temperature_celsius;
+}
+
+bool mock_get_status_led(bool *on)
+{
+    if (!mock_status_led_reachable)
+    {
+        return false;
+    }
+    *on = mock_status_led_on;
+    return true;
+}
+
+bool mock_set_status_led(bool on)
+{
+    if (!mock_status_led_reachable)
+    {
+        return false;
+    }
+    mock_status_led_on = on;
+    return true;
+}
+
 bool mock_check_user_interrupt(void)
 {
     return mock_user_interrupt;
@@ -342,6 +376,9 @@ LogoHardwareOps mock_hardware_ops = {
     .ticks_ms = mock_ticks_ms,
     .random = mock_random,
     .get_battery_level = mock_get_battery_level,
+    .get_temperature = mock_get_temperature,
+    .get_status_led = mock_get_status_led,
+    .set_status_led = mock_set_status_led,
     .power_off = NULL,  // Default: not available, use set_mock_power_off() to enable
     .reboot_bootloader = NULL,  // Default: not available, use set_mock_bootsel() to enable
     .check_user_interrupt = mock_check_user_interrupt,
@@ -401,6 +438,25 @@ void set_mock_battery(int level, bool charging)
 {
     mock_battery_level = level;
     mock_battery_charging = charging;
+}
+
+void set_mock_temperature(bool available, float celsius)
+{
+    mock_temperature_celsius = celsius;
+    mock_hardware_ops.get_temperature = available ? mock_get_temperature : NULL;
+}
+
+void set_mock_status_led(bool available, bool on)
+{
+    mock_status_led_on = on;
+    mock_status_led_reachable = true;
+    mock_hardware_ops.get_status_led = available ? mock_get_status_led : NULL;
+    mock_hardware_ops.set_status_led = available ? mock_set_status_led : NULL;
+}
+
+void set_mock_status_led_unreachable(void)
+{
+    mock_status_led_reachable = false;
 }
 
 void set_mock_ticks(uint32_t ms)
@@ -471,6 +527,9 @@ void test_scaffold_setUp(void)
     mock_ticks_value = 0;         // Reset mock monotonic clock
     mock_battery_level = 100;     // Reset mock battery state
     mock_battery_charging = false;
+    mock_temperature_celsius = 25.0f; // Reset mock on-chip temperature
+    mock_status_led_on = false;       // Reset mock status LED
+    mock_status_led_reachable = true;
 
     reset_mock_key_state();
     
