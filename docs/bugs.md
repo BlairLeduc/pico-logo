@@ -22,8 +22,56 @@ edge case)
 
 | ID | Bug | Area | Severity | Found | Status |
 |---|---|---|---|---|---|
+| [B48](#b48--setpos-has-no-variadic-form-though-the-reference-documents-one) | `(setpos x y)` is documented but not implemented | graphics | medium | 2026-08-21 | open |
 | [B19](#b19--collision-tests-ignore-the-wrapped-playfield) | Collision tests ignore the wrapped playfield (Asteroids) | games | low | 2026-08-12 | open |
 | [B6](#b6--penreverse-ignores-pen-size-always-1-px) | `penreverse` ignores pen size (always 1 px) | graphics | low | 2026-07-18 | won't fix (documented) |
+
+### B48 — `setpos` has no variadic form, though the reference documents one
+
+[`reference/Pico_Logo_Reference.md`](../reference/Pico_Logo_Reference.md#L1201)
+gives `setpos` two spellings:
+
+```
+setpos [xcor ycor]
+(setpos xcor ycor)
+```
+
+The second does not exist. `prim_setpos` is `REQUIRE_ARGC(1)` and is registered
+with arity 1 ([`core/primitives_turtle.c:1991`](../core/primitives_turtle.c#L1991)),
+so `(setpos 10 20)` answers *"setpos doesn't like 10 as input"*. Every other
+variadic form in the reference — `(setpos …)`'s neighbours included — works, so
+this is one primitive's registration and not a missing mechanism.
+
+Found on 2026-08-21 while costing the draw pass for
+[`battlezone-design.md`](battlezone-design.md) §5, which is the context that
+makes it more than cosmetic. Drawing a projected wireframe means moving the pen
+to a *computed* point, and the three available spellings are:
+
+- `(setpos x y)` — documented, absent.
+- `setpos list :x :y` — works, and **allocates two cons cells a call**
+  (measured: 1,000 calls take `nodes` from 32,728 to 30,708, all of it returned
+  by `recycle`). A frame drawing 70 edges mints 140 cells, so at 15 fps a
+  vector game needs a `recycle` every ~15 seconds — and P11 §12b measured that
+  a recycle frame is the worst frame in Asteroids at *five* cells a frame.
+  Driving 100,000 of these on the host without a reclaim reaches *"Out of
+  space"*.
+- `setx :x sety :y` — two statements, and geometrically wrong: each moves on one
+  axis only, so with the pen down it draws an L rather than a line. Asteroids
+  only ever uses the pair with the pen **up**, which is why no shipped game has
+  hit this.
+
+So a program that draws lines between computed points has no allocation-free
+way to do it, and the workaround's cost is a periodic visible hitch rather than
+a slower frame.
+
+- **Severity:** medium. There is a workaround, it is documented behaviour that
+  is missing rather than wrong behaviour that is present, and no shipped game
+  is affected.
+- **Fix:** register `setpos` variadic and accept either one list or two numbers,
+  the way the other dual-form primitives do. `value_extract_xy` already handles
+  the list case; the two-number case is the `argc == 2` branch beside it.
+- **Blocks:** `battlezone-design.md` M0, which cannot honestly measure a draw
+  pass written around an allocation the shipped game would not make.
 
 ### B19 — Collision tests ignore the wrapped playfield
 
