@@ -75,8 +75,8 @@ make "tick.row 14
 ; cell itself -- there is no second
 ; lookup from "what is here" to "what
 ; does it look like".
-make "wall   "#
-make "floor  ".
+make "wall   char 32
+make "floor  char 127
 make "snake  "S
 make "flask  "!
 make "chest  "$
@@ -363,7 +363,11 @@ to draw.cell :x :y
   make "what cell :x :y
   paint ink.of :what
   at :x :y
-  type :what
+  ifelse equal? :what :wall [
+    type standout :what
+  ] [
+    type :what
+  ]
 end
 
 to at :x :y
