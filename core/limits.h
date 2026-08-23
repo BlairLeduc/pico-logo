@@ -363,6 +363,19 @@ extern "C" {
 // where there is nothing to be won by bounding it tighter.
 #define LOGO_EDITOR_PROC_BUFFER_SIZE 4096
 
+// The bounds `hw.setfrequency` will accept, in MHz.
+//
+// The RP2350's rated maximum is 150 MHz and the minimum below is the stock
+// clock, so EVERY value above 150 here is an overclock outside the datasheet.
+// The ceiling is 300 because that is what has been reported working on this
+// silicon, not because anything guarantees it: the failure modes are a hang at
+// the moment of the switch (the PLL or the flash timing), a corrupted display
+// (the LCD's SPI divisor, see devices/hardware.h), and heat, which is why
+// `hw.temperature` is worth reading either side of a long run.
+#define LOGO_CPU_MHZ_MIN     150
+#define LOGO_CPU_MHZ_MAX     300
+
 #ifdef __cplusplus
 }
+
 #endif

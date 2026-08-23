@@ -134,6 +134,7 @@ void set_mock_battery(int level, bool charging);
 // Configure the mock on-chip temperature sensor. `available` false nulls the
 // hardware op, standing in for a board with no sensor.
 void set_mock_temperature(bool available, float celsius);
+void set_mock_cpu_khz(bool available, uint32_t khz);
 
 // ============================================================================
 // Mock Status LED Helper

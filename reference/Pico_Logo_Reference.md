@@ -8175,6 +8175,59 @@ Chip: 26.9
 ```
 
 
+## hw.frequency
+
+hw.frequency
+
+`operation`
+
+`hw.frequency` outputs the speed the processor is running at, in MHz. It reads the hardware rather than remembering what was last set, so it still answers correctly after anything else has retuned the clock. On a device whose clock cannot be read, an error is displayed.
+
+The stock speed is 150 MHz on every board Pico Logo runs on.
+
+**Example**:
+
+```logo
+?show hw.frequency
+150
+?pr se [Running at] se hw.frequency [MHz]
+Running at 150 MHz
+```
+
+
+## hw.setfrequency
+
+hw.setfrequency _megahertz_
+
+`command`
+
+`hw.setfrequency` sets the speed of the processor, in MHz, between 150 and 300. On a device whose clock cannot be set, an error is displayed.
+
+> **Above 150 MHz you are overclocking.** 150 is the speed the RP2350 is specified for and tested at; everything above it is outside the manufacturer's ratings, and whether a particular chip will run there is a property of that chip rather than of the design. A frequency that is too high does not usually give you a wrong answer - it stops the machine, and you get it back by unplugging it and plugging it in again. Nothing is damaged by trying, but a program that is part-way through writing a file may lose what it had not written yet, so write your results out before you speed the machine up rather than after.
+>
+> The processor also gets hotter the faster it runs. [`hw.temperature`](#hw.temperature) is worth reading before and after anything long.
+
+Not every number between 150 and 300 can actually be made: the clock is built by multiplying a crystal, and only some speeds come out exactly. `hw.setfrequency` refuses a speed it cannot make exactly rather than quietly giving you a near one, so a program is never measuring against a clock it does not know about. 200, 250 and 300 are all reachable.
+
+Sound is silenced by the change, because notes already queued were built for the old speed and would play at the wrong pitch.
+
+**Example**:
+
+```logo
+; How much faster does the work go?
+?make "t ticks
+?repeat 20000 [make "x 1]
+?pr ticks - :t
+1080
+?hw.setfrequency 300
+?make "t ticks
+?repeat 20000 [make "x 1]
+?pr ticks - :t
+540
+?hw.setfrequency 150
+```
+
+
 ## hw.light?
 
 hw.light? _boolean_

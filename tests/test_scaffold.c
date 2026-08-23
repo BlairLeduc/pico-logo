@@ -26,6 +26,11 @@ bool mock_battery_charging = false;
 
 // Mock on-chip temperature (degrees Celsius) for testing
 float mock_temperature_celsius = 25.0f;
+uint32_t mock_cpu_khz = 150000u;
+// A PLL that can only make whole multiples of 25 MHz, which is roughly what the
+// RP2350's can do from a 12 MHz crystal and is enough to give the refusal path
+// something real to refuse.
+static const uint32_t mock_cpu_step_khz = 25000u;
 
 // Mock on-board status LED for testing. `mock_status_led_reachable` false
 // stands in for a board whose LED could not be reached (on a W board, the
@@ -209,6 +214,21 @@ float mock_get_temperature(void)
     return mock_temperature_celsius;
 }
 
+uint32_t mock_get_cpu_khz(void)
+{
+    return mock_cpu_khz;
+}
+
+bool mock_set_cpu_khz(uint32_t khz)
+{
+    if (khz % mock_cpu_step_khz != 0)
+    {
+        return false;   // the PLL cannot make it exactly; nothing changes
+    }
+    mock_cpu_khz = khz;
+    return true;
+}
+
 bool mock_get_status_led(bool *on)
 {
     if (!mock_status_led_reachable)
@@ -377,6 +397,8 @@ LogoHardwareOps mock_hardware_ops = {
     .random = mock_random,
     .get_battery_level = mock_get_battery_level,
     .get_temperature = mock_get_temperature,
+    .get_cpu_khz = mock_get_cpu_khz,
+    .set_cpu_khz = mock_set_cpu_khz,
     .get_status_led = mock_get_status_led,
     .set_status_led = mock_set_status_led,
     .power_off = NULL,  // Default: not available, use set_mock_power_off() to enable
@@ -444,6 +466,13 @@ void set_mock_temperature(bool available, float celsius)
 {
     mock_temperature_celsius = celsius;
     mock_hardware_ops.get_temperature = available ? mock_get_temperature : NULL;
+}
+
+void set_mock_cpu_khz(bool available, uint32_t khz)
+{
+    mock_cpu_khz = khz;
+    mock_hardware_ops.get_cpu_khz = available ? mock_get_cpu_khz : NULL;
+    mock_hardware_ops.set_cpu_khz = available ? mock_set_cpu_khz : NULL;
 }
 
 void set_mock_status_led(bool available, bool on)
@@ -528,6 +557,7 @@ void test_scaffold_setUp(void)
     mock_battery_level = 100;     // Reset mock battery state
     mock_battery_charging = false;
     mock_temperature_celsius = 25.0f; // Reset mock on-chip temperature
+    mock_cpu_khz = 150000u;           // Reset mock system clock to stock
     mock_status_led_on = false;       // Reset mock status LED
     mock_status_led_reachable = true;
 

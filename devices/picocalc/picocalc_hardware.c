@@ -22,6 +22,10 @@
 #include <pico/rand.h>
 #include <pico/bootrom.h>
 #include <hardware/adc.h>
+#include <hardware/clocks.h>
+#include <hardware/spi.h>
+#include <hardware/vreg.h>
+#include "lcd.h"
 #include <pico/status_led.h>
 
 #ifdef LOGO_HAS_WIFI
@@ -186,6 +190,83 @@ static bool ensure_status_led_initialized(void)
 #endif
     }
     return led_ready;
+}
+
+// The system clock.
+//
+// EVERYTHING ABOVE 150 MHz IS OUTSIDE THE RP2350'S DATASHEET. The bounds a
+// program may ask for are the core's (LOGO_CPU_MHZ_MIN..MAX); this function's
+// job is to make the change survivable, and there are three parts to that.
+//
+//   * VOLTAGE. The stock core rail is 1.10 V, which is what 150 MHz is rated
+//     against. Anything faster is raised to 1.20 V BEFORE the PLL moves and
+//     lowered again AFTER it comes back down, so the rail is never the lower of
+//     the two while the clock is the higher.
+//   * THE LCD. `clk_peri` follows `clk_sys` on this board, and `spi_init` fixed
+//     the divisor once at startup against a 150 MHz peri clock -- LCD_BAUDRATE
+//     is 75 MHz, which is clk_peri/2, the floor divisor. Double clk_sys and the
+//     panel would be driven at 150 MHz, well past its rating, and the display
+//     corrupts. `spi_set_baudrate` puts it back to 75 MHz at the new clock.
+//   * THE SOUND ENGINE. The PWM slice takes its carrier straight from clk_sys,
+//     so the mix rate and the sequencer's block period both move with it. See
+//     sound_reclock().
+//
+// What this CANNOT do anything about is flash: `set_sys_clock_khz` leaves the
+// QMI timing alone, so XIP runs at the new clock too. If the flash cannot keep
+// up, the failure is a hang at the moment of the switch -- which is why this is
+// worth trying from a script that has already written its results to a file.
+static uint32_t picocalc_get_cpu_khz(void)
+{
+    return clock_get_hz(clk_sys) / 1000u;
+}
+
+static bool picocalc_set_cpu_khz(uint32_t khz)
+{
+    const uint32_t stock_khz = 150000u;
+    const uint32_t current = clock_get_hz(clk_sys) / 1000u;
+
+    if (khz == current)
+    {
+        return true;
+    }
+
+    // Up: raise the rail first. `set_sys_clock_khz` needs a settled voltage,
+    // and the SDK's own overclock examples allow a millisecond for it.
+    const bool going_up = khz > current;
+    if (going_up && khz > stock_khz)
+    {
+        vreg_set_voltage(VREG_VOLTAGE_1_20);
+        sleep_ms(1);
+    }
+
+    // `false` means "do not reconfigure the peripherals for me": the two that
+    // matter are put back by hand below, and the SDK's helper would also retune
+    // the UART, which nothing here uses.
+    if (!set_sys_clock_khz(khz, false))
+    {
+        // Nothing moved. Undo the rail if it was raised for a change that did
+        // not happen.
+        if (going_up && khz > stock_khz)
+        {
+            vreg_set_voltage(VREG_VOLTAGE_1_10);
+        }
+        return false;
+    }
+
+    // clk_peri followed clk_sys, so the panel is being driven at the wrong rate
+    // until this line runs. It is the first thing to fix, before anything tries
+    // to present.
+    spi_set_baudrate(LCD_SPI, LCD_BAUDRATE);
+
+    sound_reclock();
+
+    // Down: drop the rail only once the clock is already slow.
+    if (!going_up && khz <= stock_khz)
+    {
+        vreg_set_voltage(VREG_VOLTAGE_1_10);
+    }
+
+    return true;
 }
 
 static bool picocalc_get_status_led(bool *on)
@@ -2198,6 +2279,8 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .get_temperature = picocalc_get_temperature,
     .get_status_led = picocalc_get_status_led,
     .set_status_led = picocalc_set_status_led,
+    .get_cpu_khz = picocalc_get_cpu_khz,
+    .set_cpu_khz = picocalc_set_cpu_khz,
     .power_off = picocalc_power_off,
     .reboot_bootloader = picocalc_reboot_bootloader,
     .check_user_interrupt = picocalc_check_user_interrupt,

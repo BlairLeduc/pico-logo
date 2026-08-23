@@ -110,6 +110,24 @@ extern "C"
         bool (*get_status_led)(bool *on);
         bool (*set_status_led)(bool on);
 
+        // The system clock, in kHz. `get_cpu_khz` reports the current one.
+        //
+        // `set_cpu_khz` retunes it and returns false if the PLL cannot make
+        // that frequency exactly, in which case nothing changed. The RP2350's
+        // rated maximum is 150 MHz; the bounds a program may ask for are the
+        // core's (LOGO_CPU_MHZ_MIN..MAX in core/limits.h), and everything above
+        // 150 is an overclock the board is not guaranteed to survive.
+        //
+        // A DEVICE IMPLEMENTING THIS OWES ITS PERIPHERALS A RE-DERIVE. On this
+        // board clk_peri follows clk_sys, so the LCD's SPI divisor and the
+        // sound engine's mix rate are both wrong the instant clk_sys moves and
+        // must be put back before this returns. See picocalc_hardware.c.
+        //
+        // Both may be NULL on devices that cannot retune (the `hw.frequency`
+        // and `hw.setfrequency` primitives then error).
+        uint32_t (*get_cpu_khz)(void);
+        bool (*set_cpu_khz)(uint32_t khz);
+
         // Power management functions
         bool (*power_off)(void);
 

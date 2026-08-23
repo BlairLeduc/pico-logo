@@ -426,6 +426,31 @@ end
 
 make "p13m0.frames 200
 
+; THE CLOCK.  Set this to a frequency in MHz and the whole run is taken at it;
+; leave it 0 and the board is left wherever it already was.  150 is stock and
+; anything above it is an overclock outside the RP2350's datasheet -- see
+; `hw.setfrequency` in the reference before using it.
+;
+; WHY THIS IS WORTH A SWEEP RATHER THAN A NUMBER.  The frame splits into two
+; halves that respond to the clock completely differently: the present is the
+; SPI wire to the panel and will not move at all, while the body is nothing but
+; interpretation and should scale almost exactly.  At three obstacles the split
+; is about 19.8 ms that cannot improve and 35 ms that should, so a 2x clock is
+; worth about a third of the frame and not half of it.  A sweep says whether
+; that is what actually happens; a single reading cannot.
+;
+; The report carries the frequency it actually ran at, read back from the
+; hardware rather than from this variable, because `hw.setfrequency` refuses a
+; frequency the PLL cannot make exactly and a run that quietly stayed at 150
+; would otherwise look like an overclock that bought nothing.
+make "p13m0.mhz 0
+
+; Die temperature either side of the run.  The chip gets hotter the faster it
+; runs and this is the only thing in the harness that says by how much.
+make "p13m0.temp0 0
+make "p13m0.temp1 0
+make "p13m0.mhz.ran 0
+
 ; Q1.  A long edge against a short one, both pen down, both `(setpos x y)`.
 ; 200 steps is about what a near box's edge spans; 17 is P11 M0's `fd`, so the
 ; short figure is the one that compares directly with its 60 us.
@@ -595,9 +620,41 @@ to line.for :slot
       [ms   min] item :slot :p13m0.lo [ms   max] item :slot :p13m0.hi [ms])
 end
 
+; Both of these degrade rather than fail: a board with no sensor, or one that
+; cannot retune, still runs the harness and reports 0 for what it could not
+; read.  A timing script that dies on its last line has wasted the session.
+to read.temp
+  local "t
+  make "t 0
+  catch "error [make "t hw.temperature]
+  output :t
+end
+
+to read.mhz
+  local "f
+  make "f 0
+  catch "error [make "f hw.frequency]
+  output :f
+end
+
+; Asked for, not assumed.  If the frequency is refused -- out of range, or one
+; the PLL cannot make exactly -- the run continues at whatever the board was
+; already doing, and the report says which.
+to set.mhz :mhz
+  if 0 = :mhz [stop]
+  catch "error [hw.setfrequency :mhz]
+end
+
 to p13m0.report
   pr [P13 M0 what a Battlezone frame costs, before any game code exists]
   pr (se [frames per point] :p13m0.frames [in splitscreen, present with refresh])
+  ifelse 0 = :p13m0.mhz.ran [
+    pr [the clock could not be read, so these are at whatever it was]
+  ] [
+    pr (se [processor at] :p13m0.mhz.ran [MHz, stock is 150])
+    if 150 < :p13m0.mhz.ran [pr [that is an overclock, outside the datasheet]]
+  ]
+  pr (se [die temperature] :p13m0.temp0 [C before,] :p13m0.temp1 [C after])
   pr []
   pr [Q3 does the 180x ratio hold]
   pr (se [  arithmetic statement] :arith [us, P11 M0 measured 42 to 44.5])
@@ -649,6 +706,10 @@ to p13m0
   recycle
   make "n0 nodes  make "w0 atoms
 
+  set.mhz :p13m0.mhz
+  make "p13m0.mhz.ran read.mhz
+  make "p13m0.temp0 read.temp
+
   splitscreen
   window
   setrefresh "manual
@@ -675,6 +736,7 @@ to p13m0
   measure 3
   measure 4
 
+  make "p13m0.temp1 read.temp
   make "n1 nodes  make "w1 atoms
   recycle
   ; Read the recovered figure HERE, not inside the report: printing builds a

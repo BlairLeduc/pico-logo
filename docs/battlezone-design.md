@@ -592,6 +592,8 @@ lever could be priced. Most of the rest is §3.1's unit: 48.5–53.5 µs against
 
 ### 12.1 The two levers that close it, both measured
 
+There is a third, larger than both and untried: **overclocking** (§12.3).
+
 **Cull the horizon: −10.3 ms (Pico 2 W), −10.8 (Plus 2 W)** (§8.4). Two
 statements to find the first and last visible index, seven points instead of
 thirty-two. This was always the plan.
@@ -620,6 +622,61 @@ question for M4 rather than a plan.
 **The present is ~37 % of the closed frame and no game-side lever reaches it.**
 Same finding as P11 §3.3, and it generalises: on this display a vector game pays
 a fixed tax a sprite game does not.
+
+### 12.3 Overclocking, and why it is the biggest lever on this list — unmeasured
+
+`hw.setfrequency` (2026-08-23) takes the RP2350 from its rated 150 MHz to as
+much as 300. M0 has not run at one yet; this section is the prediction it will
+be checked against.
+
+**The frame divides into a half that should scale with the clock and a half
+that cannot.** The present is the SPI wire to the panel — 19.3–19.8 ms,
+identical on all three boards, and `hardware-notes` §2.2 says it is
+memory-paced against a wire-paced transfer. Nothing about the CPU clock reaches
+it. Everything else is interpretation and should scale almost exactly.
+
+At three obstacles, taking the present as fixed and the body as proportional:
+
+| | closed, 150 MHz | 200 MHz | 300 MHz |
+|---|---:|---:|---:|
+| Pico 2 W | 51.6 ms | **43.7** | **35.7** |
+| Plus 2 W | 54.1 | 45.4 | 36.7 |
+| Pico 2 | 55.1 | 46.2 | 37.3 |
+
+**A doubled clock is worth about a third of the frame, not half** — which is
+the present's share showing through, and it is the number to hold this against.
+35.7 ms is 28 fps, and it would make §12.1's two levers optional rather than
+required: the *unculled* frame at 300 MHz is 42.8–45.0 ms, already inside
+budget.
+
+It also settles §6's fullscreen question outright. Fullscreen costs ~6.5 ms of
+present and ~0.5 of HUD; at 300 MHz that is 41.9–43.8 ms against 66.7, with
+room the split-screen frame at 150 MHz does not have.
+
+**The run has its own control built in, and it is the present column.** Two
+things could make an overclocked reading a lie, and both would show there:
+
+- **The LCD.** `clk_peri` follows `clk_sys`, and `spi_init` fixed the divisor
+  once at startup against a 150 MHz peri clock — LCD_BAUDRATE is 75 MHz, which
+  is clk_peri/2, the *floor* divisor. Doubling clk_sys would drive the panel at
+  150 MHz. `picocalc_set_cpu_khz` puts the baudrate back, and if it did not the
+  present figure would move (or the display would corrupt outright).
+- **The clock `ticks` counts.** The RP2350's timer is fed from clk_ref via the
+  ticks block, which `set_sys_clock_khz` does not touch — so a millisecond
+  should still be a millisecond. If it were not, every figure in the run would
+  shrink together, including the present.
+
+So: **if the present column reads 19.3–19.8 ms at 300 MHz, the SPI divisor was
+restored and `ticks` is still honest.** If it reads ~10, the timer moved and
+nothing else in the report means anything. That is worth checking before
+reading any other line.
+
+**What this does not make safe.** Everything above 150 MHz is outside the
+datasheet, `set_sys_clock_khz` leaves the flash's QMI timing alone, and the
+interpreter executes from flash — so the plausible failure is a hang at the
+moment of the switch. `p13m0` writes its report to a file at the end, which is
+the wrong end for this: **run the sweep from stock upward and keep the earlier
+files**, rather than trusting one run at 300 to produce anything.
 
 ### 12.2 The harness reproduces
 

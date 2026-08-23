@@ -349,6 +349,24 @@ static void __not_in_flash_func(dma_irq_handler)(void)
 // Init
 //==========================================================================
 
+// The PWM slice takes its carrier straight from clk_sys with no divider, so
+// both of these move with the system clock. Derived in one place because
+// `hw.setfrequency` has to redo it after an overclock.
+static void sound_derive_rate(void)
+{
+    g_mix_rate = clock_get_hz(clk_sys) / PWM_WRAP / OVERSAMPLE;
+    g_block_us = (uint32_t)((uint64_t)BLOCK_FRAMES * 1000000u / g_mix_rate);
+}
+
+// Called after clk_sys changes. Everything already in the ring was generated at
+// the old rate and would play at the new one, so the voices are silenced rather
+// than left to slide; the DMA keeps running and fills with silence from here.
+void sound_reclock(void)
+{
+    sound_stop(0xFFFFFFFFu);
+    sound_derive_rate();
+}
+
 void sound_init(void)
 {
     if (g_ready)
@@ -369,8 +387,7 @@ void sound_init(void)
         g_v[i].stage = ENV_IDLE;
     }
 
-    g_mix_rate = clock_get_hz(clk_sys) / PWM_WRAP / OVERSAMPLE;
-    g_block_us = (uint32_t)((uint64_t)BLOCK_FRAMES * 1000000u / g_mix_rate);
+    sound_derive_rate();
 
     // Pre-fill both halves with silence (mid level).
     for (int h = 0; h < 2; h++)

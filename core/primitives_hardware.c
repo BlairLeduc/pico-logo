@@ -2,10 +2,12 @@
 //  Pico Logo
 //  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
-//  Hardware primitives: hw.battery, hw.temperature, hw.light?, hw.setlight
+//  Hardware primitives: hw.battery, hw.temperature, hw.light?, hw.setlight,
+//                       hw.frequency, hw.setfrequency
 //
 
 #include "primitives.h"
+#include "core/limits.h"
 #include "procedures.h"
 #include "memory.h"
 #include "format.h"
@@ -66,6 +68,57 @@ static Result prim_temperature(Evaluator *eval, int argc, Value *args)
     {
         float celsius = io->hardware->ops->get_temperature();
         return result_ok(value_number(roundf(celsius * 10.0f) / 10.0f));
+    }
+
+    return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
+}
+
+// hw.frequency
+// The system clock in MHz, read from the hardware rather than remembered, so it
+// still answers after anything else has retuned it.
+static Result prim_frequency(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
+
+    LogoIO *io = primitives_get_io();
+    if (io && io->hardware && io->hardware->ops && io->hardware->ops->get_cpu_khz)
+    {
+        return result_ok(value_number((float)io->hardware->ops->get_cpu_khz() / 1000.0f));
+    }
+
+    return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
+}
+
+// hw.setfrequency
+//
+// THE RP2350 IS RATED TO 150 MHz AND THIS ACCEPTS 300. Everything above the
+// rating is an overclock, which is why the range is a pair of named limits
+// rather than a magic number, and why `hw.temperature` is worth reading after a
+// long run at one. The device layer is what makes the change survivable -- the
+// core rail, the LCD's SPI divisor and the sound engine's mix rate all have to
+// be dealt with, see devices/picocalc/picocalc_hardware.c.
+//
+// The frequency is refused rather than rounded if the PLL cannot make it
+// exactly. Rounding would leave a program believing a number the hardware never
+// took, and every figure it went on to measure would be against the wrong clock.
+static Result prim_setfrequency(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+    REQUIRE_NUMBER(args[0], mhz);
+
+    if (mhz < (float)LOGO_CPU_MHZ_MIN || mhz > (float)LOGO_CPU_MHZ_MAX)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
+
+    LogoIO *io = primitives_get_io();
+    if (io && io->hardware && io->hardware->ops && io->hardware->ops->set_cpu_khz)
+    {
+        if (!io->hardware->ops->set_cpu_khz((uint32_t)(mhz * 1000.0f)))
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+        }
+        return result_none();
     }
 
     return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
@@ -295,6 +348,8 @@ void primitives_hardware_init(void)
     primitive_register("hw.temperature", 0, prim_temperature);
     primitive_register("hw.light?", 0, prim_lightp);
     primitive_register("hw.setlight", 1, prim_setlight);
+    primitive_register("hw.frequency", 0, prim_frequency);
+    primitive_register("hw.setfrequency", 1, prim_setfrequency);
     primitive_register("goodbye", 0, prim_goodbye);
     primitive_register(".bootsel", 0, prim_bootsel);
     primitive_register("toot", 2, prim_toot);

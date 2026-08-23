@@ -2,7 +2,8 @@
 //  Pico Logo
 //  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
-//  Tests for hardware primitives (hw.battery, hw.temperature, hw.light?,
+//  Tests for hardware primitives (hw.battery, hw.temperature, hw.frequency,
+//  hw.setfrequency, hw.light?,
 //  hw.setlight)
 //
 
@@ -147,6 +148,102 @@ void test_battery_show_output(void)
     run_string("show hw.battery");
     
     TEST_ASSERT_EQUAL_STRING("[75 true]\n", output_buffer);
+}
+
+//==========================================================================
+// hw.frequency / hw.setfrequency Primitive Tests
+//==========================================================================
+
+void test_frequency_returns_megahertz(void)
+{
+    set_mock_cpu_khz(true, 150000u);
+
+    Result r = eval_string("hw.frequency");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_NUMBER, r.value.type);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 150.0f, r.value.as.number);
+}
+
+void test_setfrequency_changes_what_frequency_reports(void)
+{
+    set_mock_cpu_khz(true, 150000u);
+
+    Result r = run_string("hw.setfrequency 300");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 300.0f, eval_string("hw.frequency").value.as.number);
+}
+
+void test_frequency_is_a_number_not_a_word(void)
+{
+    set_mock_cpu_khz(true, 150000u);
+
+    Result r = eval_string("hw.frequency * 2");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 300.0f, r.value.as.number);
+}
+
+// The stock clock and the overclock ceiling are both accepted; anything outside
+// is refused. The bounds are named constants, so the test states the numbers it
+// expects rather than reading them back from the header -- a change to either
+// limit should have to touch this file and be noticed.
+void test_setfrequency_accepts_both_ends_of_the_range(void)
+{
+    set_mock_cpu_khz(true, 150000u);
+    TEST_ASSERT_EQUAL(RESULT_NONE, run_string("hw.setfrequency 150").status);
+    TEST_ASSERT_EQUAL(RESULT_NONE, run_string("hw.setfrequency 300").status);
+}
+
+void test_setfrequency_refuses_below_the_floor(void)
+{
+    set_mock_cpu_khz(true, 150000u);
+
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("hw.setfrequency 149").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("hw.setfrequency 0").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("hw.setfrequency 0 - 300").status);
+
+    // And none of them moved the clock.
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 150.0f, eval_string("hw.frequency").value.as.number);
+}
+
+void test_setfrequency_refuses_above_the_ceiling(void)
+{
+    set_mock_cpu_khz(true, 150000u);
+
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("hw.setfrequency 301").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("hw.setfrequency 1000").status);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 150.0f, eval_string("hw.frequency").value.as.number);
+}
+
+// The important one. A frequency the PLL cannot make exactly is REFUSED, not
+// rounded -- a program that rounded would go on measuring against a clock it
+// did not know it had. The mock's PLL makes multiples of 25 MHz.
+void test_setfrequency_refuses_a_frequency_the_clock_cannot_make(void)
+{
+    set_mock_cpu_khz(true, 150000u);
+
+    Result r = run_string("hw.setfrequency 213");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 150.0f,
+        eval_string("hw.frequency").value.as.number,
+        "a refused frequency must leave the clock where it was");
+}
+
+void test_setfrequency_refuses_a_non_number(void)
+{
+    set_mock_cpu_khz(true, 150000u);
+
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("hw.setfrequency \"fast").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("hw.setfrequency [300]").status);
+}
+
+// A board that cannot retune errors rather than silently doing nothing, the
+// same way `hw.temperature` does on a board with no sensor.
+void test_frequency_errors_when_the_device_cannot_report_it(void)
+{
+    set_mock_cpu_khz(false, 150000u);
+
+    TEST_ASSERT_EQUAL(RESULT_ERROR, eval_string("hw.frequency").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("hw.setfrequency 300").status);
 }
 
 //==========================================================================
@@ -670,6 +767,17 @@ int main(void)
     RUN_TEST(test_toot_stereo_negative_rightfreq_error);
     RUN_TEST(test_battery_out_of_nodes_errors);
     RUN_TEST(test_toot_in_procedure);
+
+    // hw.frequency / hw.setfrequency
+    RUN_TEST(test_frequency_returns_megahertz);
+    RUN_TEST(test_setfrequency_changes_what_frequency_reports);
+    RUN_TEST(test_frequency_is_a_number_not_a_word);
+    RUN_TEST(test_setfrequency_accepts_both_ends_of_the_range);
+    RUN_TEST(test_setfrequency_refuses_below_the_floor);
+    RUN_TEST(test_setfrequency_refuses_above_the_ceiling);
+    RUN_TEST(test_setfrequency_refuses_a_frequency_the_clock_cannot_make);
+    RUN_TEST(test_setfrequency_refuses_a_non_number);
+    RUN_TEST(test_frequency_errors_when_the_device_cannot_report_it);
     
     return UNITY_END();
 }
