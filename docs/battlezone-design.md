@@ -1,34 +1,44 @@
 # Battlezone in Pico Logo (design)
 
-Status: **M0 MEASURED on a Plus 2 W, 2026-08-23. The gate is passed and the
-game is built at L0.** `frame = 40.09 + 8.043 n` for the typical frame and
-`51.87 + 7.635 n` for the worst, so the design's scene — three obstacles and one
-enemy — is **64.2 ms against a 66.7 ms budget at 15 fps**, with the worst frame
-at 74.8 and over it. Two levers close that and both were already in this
-document or are free: **culling the horizon** (§8.4, measured at 10.8 ms) and
-**moving the hot path off `local` and onto globals** (§13 L0.5, measured at
-1.31× on the projection, 3.9 ms). With both: **49.5 ms typical, 60.1 worst**,
-and 18 fps is in reach.
+Status: **M0 MEASURED on two boards, 2026-08-23. The gate passes and the game
+is built at L0.**
 
-M0 rewrote §3, §8.4, §10, §12 and §13, and §16.2 has the whole result. The
-headline corrections:
+| | Pico 2 W | Plus 2 W |
+|---|---:|---:|
+| `frame = c + m·n`, typical | `44.18 + 7.167 n` | `44.39 + 8.043 n` *(inferred, §16.2)* |
+| at three obstacles and one enemy | **65.7 ms** | **68.5 ms** |
+| worst frame at three | 70.6 | 74.8 |
+| **with §12.1's two levers** | **51.6 ms** | **53.8 ms** |
 
-- **A long line is not nearly free.** §10 inferred from `screen_gfx_line` that a
-  200-step edge would cost about what a 17-step one does. It costs **twice** —
-  130 µs against 66 — and that was this document's largest unmeasured number.
-- **The 180× ratio holds, but §3's unit did not.** The board's arithmetic
-  statement is **53.5 µs**, not the 43 this document budgeted, because the
-  budget's figure was P11 M0's and the *host* side of the calibration measured a
-  different construct (§3.1). Like for like the ratio is 167×.
-- **A box projects in 3.145 ms against 2.16 predicted; the enemy in 5.18 against
-  6.0.** The column trick (§8.2) beat its estimate; the box did not.
-- **The split-screen present saves 8.05 ms**, better than §6's 6.6.
-- **The harness's own body column came back 0.00 ms** and had to be recovered
-  from the min/max columns, for a reason worth §16.1's paragraph: `measure`'s
-  accumulator was called `b`, and `cam.setup` writes a global `b`.
+Against a 66.7 ms budget at 15 fps. The two levers are **culling the horizon**
+(−10.3 to −10.8 ms), which this document always specified and the harness
+deliberately did not do so the lever could be priced, and **moving the hot path
+off `local` onto globals** (−3.8 to −3.9), which is free. Neither is an
+interpreter change. **No new primitive is needed and none is being built.**
 
-Every board figure below is now a reading. Where an estimate survives it is
-marked as one.
+M0 rewrote §3, §8.4, §9, §10, §12 and §13. The corrections, in the order they
+matter:
+
+- **A long line is not nearly free, and how unfree it is depends on the board.**
+  §10 inferred that a 200-step edge would cost about what a 17-step one does.
+  It costs **twice on a Plus 2 W (130 µs) and nearly four times on a Pico 2 W
+  (248 µs)** — a per-step cost of 0.35 µs against 0.98, while the short line is
+  identical on both. This is the largest board difference in the run, it runs
+  *opposite* to every other one, and it is unexplained (§19.7). It has a design
+  consequence: §9's near plane is now cut for edge length, not just for the
+  projection singularity.
+- **The Pico 2 W is 5–11 % faster than the Plus 2 W at interpreting**, which is
+  the reverse of what §3 expected. Both carry P10 M5's flash tiering; the
+  expectation was about the `pico2` preset, which does not, and which still has
+  not been measured.
+- **The 180× ratio holds; §3's unit did not.** The board's arithmetic statement
+  is 48.5–53.5 µs, not 43, because this document's *host* figure measured a
+  global at top level while every board harness measures a `local` inside a
+  procedure (§3.1). Like for like the ratio is 167×.
+- **A box projects in 2.97–3.145 ms against 2.16 predicted; the enemy in
+  4.97–5.18 against 6.0.** The column trick (§8.2) beat its estimate.
+- **The split-screen present is 19.2–19.8 ms**, against §6's predicted 19.7 —
+  the closest prediction in the document.
 
 [Asteroids](asteroids-design.md) was the first game in this tree that was not a
 sprite game. Battlezone is the first that is not a **2D** game, and the thing
@@ -49,7 +59,7 @@ needed.**
 | Game | `logo/games/battlezone` — one Logo file, no extension, no `-` or `/` in the name so `load "battlezone` parses |
 | Tests | `tests/test_battlezone.c` (Unity + mock device), mirroring `tests/test_asteroids.c` |
 | Design | this document |
-| Measurement | `tests/logo/p13m0`, and its Plus 2 W run is kept verbatim in [`measurements/p13m0-plus2w-2026-08-23.txt`](measurements/p13m0-plus2w-2026-08-23.txt). **Run on one board of three; a Pico 2 W has not seen it (§16.2).** Times a real frame at 1, 2, 4 and 8 visible objects, with the projection pass read apart from the drawing pass and the present read apart from both. It writes its numbers **to a file**, because numbers on a display cannot be copied off it. `tests/test_p13m0.c` (23 tests) proves it is worth carrying to a board: the projection against hand-computed coordinates, the culling in both directions, and that the script reaches its last line with the report in the file |
+| Measurement | `tests/logo/p13m0`, with both board runs kept verbatim: [`measurements/p13m0-pico2w-2026-08-23.txt`](measurements/p13m0-pico2w-2026-08-23.txt) (the good one) and [`measurements/p13m0-plus2w-2026-08-23.txt`](measurements/p13m0-plus2w-2026-08-23.txt) (whose `body` column is void, §16.1). **The `pico2` preset has not run it (§16.2.2).** Times a real frame at 1, 2, 4 and 8 visible objects, with the projection pass read apart from the drawing pass and the present read apart from both. It writes its numbers **to a file**, because numbers on a display cannot be copied off it. `tests/test_p13m0.c` (23 tests) proves it is worth carrying to a board: the projection against hand-computed coordinates, the culling in both directions, and that the script reaches its last line with the report in the file |
 | Model generator | `scripts/gen_models.py`, host-side, output pasted in (§8.3) |
 
 Play: `load "battlezone` then `battlezone`.
@@ -92,14 +102,22 @@ P11 M0 priced four units on a Plus 2 W
 ([asteroids-design.md §3.4](asteroids-design.md#L267)); the right-hand column is
 what M0 read on the same board on 2026-08-23:
 
-| Unit | P11 M0 | **P13 M0** |
-|---|---:|---:|
-| arithmetic statement (`make "x :x + 1`, `x` a `local`) | 42–44.5 µs | **53.5 µs** |
-| bare `repeat` iteration | 4.5–7 µs | **5 µs** |
-| drawing statement, 17 steps, pen down | 59.5–60.3 µs | **66 µs** |
-| drawing statement, 200 steps, pen down | not measured | **130 µs** |
-| present, full screen | 26.3 ms | **27.25 ms** |
-| present, 240 rows (`splitscreen`) | not measured | **19.2 ms** |
+| Unit | P11 M0 (Plus 2 W) | **P13 M0, Pico 2 W** | **P13 M0, Plus 2 W** |
+|---|---:|---:|---:|
+| arithmetic statement (`make "x :x + 1`, `x` a `local`) | 42–44.5 µs | **48.5 µs** | **53.5 µs** |
+| bare `repeat` iteration | 4.5–7 µs | **4.5 µs** | **5 µs** |
+| drawing statement, 17 steps, pen down | 59.5–60.3 µs | **68 µs** | **66 µs** |
+| drawing statement, 200 steps, pen down | not measured | **248 µs** | **130 µs** |
+| present, full screen | 26.3 ms | **26.0 ms** | **27.25 ms** |
+| present, 240 rows (`splitscreen`) | not measured | **19.8 ms** | **19.2 ms** |
+
+**The Pico 2 W interprets 5–11 % faster than the Plus 2 W**, and that is the
+reverse of what this section expected. §3 warned that the `pico2` preset does
+not carry P10 M5's flash tiering and that a Pico 2 would therefore be slower;
+`pico2w` *does* carry it, so the warning never applied to this board, and the
+board that has PSRAM turns out to be the slower one at everything except
+plotting pixels. **The `pico2` preset remains unmeasured** and is the one this
+design still cannot speak for.
 
 **The 180× was derived from a host loop that did not match the board loop.**
 This document's host figure — 0.24 µs — came from `repeat 200000 [make "x :x + 1]`
@@ -411,6 +429,19 @@ vanishes rather than filling the view. The arcade prevents it with collision,
 this game prevents it the same way, and the near plane sits just outside the
 tank's own collision radius so the two can never disagree.
 
+**M0 gives the near plane a second job, and it is the binding one.** An edge
+costs 0.35 µs a step on a Plus 2 W and **0.98 on a Pico 2 W** (§10), so a
+frame's drawing cost is proportional to how much screen its edges cover — and
+what governs that is the near plane, because projected size goes as `k·h/z`. At
+`near` = 8 a 40-step box projects 1,300 steps tall, four screens, and a dozen of
+its edges at 0.98 µs a step is most of a frame.
+
+So `near` is cut for **edge length**, not for the singularity: at `near` = 60 a
+box tops out at 173 steps, which is one screen and about 170 µs an edge on the
+slower board. The collision radius then follows the near plane rather than the
+other way round, which is the same relationship the arcade had — you cannot get
+close enough to an obstacle for it to fill the view.
+
 Lateral clipping needs nothing: `window` lets the turtle leave the screen and
 `screen_gfx_line` skips out-of-bounds pixels per pixel
 ([screen.c:759](../devices/picocalc/screen.c#L759)), so a line from `x = -209`
@@ -447,11 +478,23 @@ the document.** The inference was that `screen_gfx_line` marks its dirty region
 only a bounds test and a byte store — so a 200-pixel edge should cost barely
 more than the 17-pixel `fd` P11 measured at 60 µs.
 
-**M0 says 130 µs against 66.** The dirty marking is indeed once per line; the
-per-pixel loop is what costs, at about **0.35 µs a step** over the 183 extra
-steps. The macro does a bounds test, two comparisons against the accumulated
-box and a byte store per pixel, out of flash, and that is not free at 150 MHz
-however cheap it looks in C.
+**M0 says 130 µs on a Plus 2 W and 248 on a Pico 2 W, against 66 and 68 for the
+short one.** The dirty marking is indeed once per line; the per-pixel loop is
+what costs, at **0.35 µs a step on the Plus 2 W and 0.98 on the Pico 2 W** over
+the 183 extra steps. The macro does a bounds test, two comparisons against the
+accumulated box and a byte store per pixel, out of flash, and that is not free
+at 150 MHz however cheap it looks in C.
+
+**The 2.8× between the boards is the largest difference in the run and it runs
+the wrong way.** The Pico 2 W is faster at everything else and slower at this;
+the *short* line is identical on both, so it is specifically the per-pixel cost
+and not the call. The series does not contradict it — a box at z = 300 has
+35-step edges, where the boards agree — which is why the series' drawing slope
+follows interpretation (3.74 ms an object on the Pico 2 W against 4.14 on the
+Plus 2 W) while Q1 goes the other way. Unexplained; §19.7.
+
+**The design consequence is §9's**, and it is the useful part: cost is
+proportional to on-screen edge length, so the near plane is what bounds it.
 
 So the estimate of 55 edges at 60 µs — 3.3 ms — was **half** of what a
 wireframe's drawing costs, and this section's "should" was doing more work than
@@ -487,64 +530,76 @@ alarm when an enemy is in front of you. The arrangement follows
 *tempo* as much as a pitch, and that is what makes a hunting supertank
 frightening. Budgeted inside the 3.0 ms line below.
 
-## 12. Frame budget — measured
+## 12. Frame budget — measured on two boards
 
 At **15 fps — a 66.7 ms budget**. M0 measured 200 frames at each of 1, 2, 4 and
-8 visible objects plus the enemy, in `splitscreen`, presenting with `refresh`:
+8 visible objects plus the enemy, in `splitscreen`, presenting with `refresh`.
 
-| Objects | Typical frame | Worst frame |
-|---:|---:|---:|
-| 1 | 49 ms | 57 ms |
-| 2 | 56 | 69 |
-| 4 | 71 | 84 |
-| 8 | 105 | 112 |
+**Pico 2 W** (mean frame; the `body` column is valid on this run):
 
-**`frame = 40.09 + 8.043 n` typical and `51.87 + 7.635 n` worst**, both fitting
-all four points. At this design's scene — three obstacles and one enemy —
-that is **64.2 ms typical and 74.8 worst**.
+| Objects | Mean frame | Best | Worst |
+|---:|---:|---:|---:|
+| 1 | 51.41 ms | 47 | 56 |
+| 2 | 58.45 | 54 | 63 |
+| 4 | 72.85 | 68 | 76 |
+| 8 | 101.53 | 100 | 111 |
 
-Read apart, an object costs **7.80 ms**: 3.67 to project and 4.14 to draw. The
-flat term splits as 19.8 present, 13.8 horizon, 5.5 enemy projection and 2.5
-enemy drawing.
+**`frame = 44.18 + 7.167 n` mean and `46.96 + 7.878 n` worst.** At three
+obstacles and one enemy: **65.7 ms mean, 70.6 worst.**
 
-| | Predicted | **Measured** |
+**Plus 2 W**: its `body` column was destroyed by the harness defect in §16.1, so
+only `min` and `max` are readable. `min` fits `40.09 + 8.043 n` → 64.2 at three.
+The Pico 2 W shows the mean sitting **4.4 ms above the min** at the first three
+points, so the Plus 2 W's mean is **≈ 68.5 ms at three** — and this is an
+inference across boards, not a reading. §16.2 asks for a re-run.
+
+Read apart on the Pico 2 W, an object costs **7.26 ms**: 3.52 to project and
+3.74 to draw. The flat term splits as 19.8 present, 13.2 horizon, 5.3 enemy
+projection and 2.4 enemy drawing.
+
+| | Predicted | **Pico 2 W** |
 |---|---:|---:|
 | present, 240 rows | 19.7 | **19.8** |
-| horizon, 32 points scanned whole | 3.9 *(assumed culled)* | **13.8** |
-| project 3 obstacles | 6.5 | **11.0** |
-| draw 3 obstacles | *(in "edges")* | **12.4** |
-| project the enemy | 6.0 | **5.5** |
-| draw the enemy, 13 edges | *(in "edges")* | **2.5** |
-| everything else in the flat term | 11.7 | **−1.0** |
-| **total at three obstacles** | **51.7** | **64.2** |
+| horizon, 32 points scanned whole | 3.9 *(assumed culled)* | **13.2** |
+| project 3 obstacles | 6.5 | **10.6** |
+| draw 3 obstacles | *(in "edges")* | **11.2** |
+| project the enemy | 6.0 | **5.3** |
+| draw the enemy, 13 edges | *(in "edges")* | **2.4** |
+| everything else in the flat term | 11.7 | **3.2** |
+| **total at three obstacles** | **51.7** | **65.7** |
 
-**12.5 ms over, and 10.8 of it is the horizon** — which this document always
-said would be culled and which the harness deliberately did not cull, so that
-the lever could be priced. The rest is §3.1's unit: 53.5 µs against 43 is 1.24×,
-and the projection lines carry it almost exactly.
+**14 ms over, and 10.3 of it is the horizon** — which this document always said
+would be culled and which the harness deliberately did not cull so the lever
+could be priced. Most of the rest is §3.1's unit: 48.5 µs against 43.
 
 ### 12.1 The two levers that close it, both measured
 
-**Cull the horizon: −10.8 ms** (§8.4). Two statements to find the first and
-last visible index, seven points instead of thirty-two. This was always the
-plan.
+**Cull the horizon: −10.3 ms (Pico 2 W), −10.8 (Plus 2 W)** (§8.4). Two
+statements to find the first and last visible index, seven points instead of
+thirty-two. This was always the plan.
 
-**Move the hot path off `local`: −3.9 ms** (§13 L0.5). `project.box` holds seven
-locals and `project.enemy` sixteen, and on the host a `local` read costs 0.32 µs
-against a global's 0.213. Rewritten with globals, the projection measures
-**1.31× faster** for an identical result. It is free, it needs no interpreter
-change, and it is the one lever this document did not think of.
+**Move the hot path off `local`: −3.8 to −3.9 ms** (§13 L0.5). `project.box`
+holds seven locals and `project.enemy` sixteen, and on the host a `local` read
+costs 0.32 µs against a global's 0.213. Rewritten with globals, the projection
+measures **1.31× faster** for an identical result. Free, no interpreter change,
+and the one lever this document did not think of.
 
-**With both: 49.5 ms typical and 60.1 worst**, against 66.7. That is 17 ms of
-headroom on the typical frame and 6.6 on the worst — more than Asteroids
-shipped with, and enough that **18 fps (55.6 ms) is worth trying at M4** for the
-typical frame, though not for the worst.
+| | Pico 2 W | Plus 2 W |
+|---|---:|---:|
+| mean frame at three, as measured | 65.7 | 68.5 *(inferred)* |
+| with both levers | **51.6** | **53.8** |
+| worst frame with both levers | **56.5** | **60.1** |
+
+Against 66.7. That is 13–15 ms of headroom on the mean and 6–10 on the worst —
+more than Asteroids shipped with. **18 fps (55.6 ms) fits the mean on both
+boards and neither worst frame**, so 15 fps is the rate and 18 is a question for
+M4 rather than a plan.
 
 §14's two gameplay levers stay unspent and are re-priced at the measured slope:
-**obstacles 3 → 2 is −8.04 ms**, and the horizon table 32 → 20 points is −5.2
-before the cull and −1.7 after it.
+**obstacles 3 → 2 is −7.2 ms**, and the horizon table 32 → 20 points is −4.9
+before the cull and −1.6 after it.
 
-**The present is 30 % of the closed frame and no game-side lever reaches it.**
+**The present is ~38 % of the closed frame and no game-side lever reaches it.**
 Same finding as P11 §3.3, and it generalises: on this display a vector game pays
 a fixed tax a sprite game does not.
 
@@ -824,37 +879,61 @@ with the timers in. The difference is reported as the instrumentation charge
 rather than estimated, and `test_the_timed_and_untimed_frames_draw_the_same_thing`
 is what stops the two drifting apart.
 
-### 16.2 M0's result (Plus 2 W, 2026-08-23)
+### 16.2 M0's result (two boards, 2026-08-23)
 
-The five questions, answered:
+The five questions, answered. Predictions are this document's as of
+2026-08-21:
 
-| | Predicted | **Read** | |
-|---|---:|---:|---|
-| Q1 long line, 200 steps | ~60 µs | **130 µs** | §10 was wrong; length costs ~0.35 µs a step |
-| Q1 short line, 17 steps | 60 µs | **66 µs** | P11's figure holds |
-| Q2 present, `splitscreen` | 19.7 ms | **19.2 ms** | inside half a millisecond |
-| Q2 present, `fullscreen` | 26.3 ms | **27.25 ms** | saving is 8.05, better than 6.6 |
-| Q3 arithmetic statement | 43 µs | **53.5 µs** | §3.1; the ratio holds, the unit did not |
-| Q3 bare `repeat` iteration | 5 µs | **5 µs** | exact |
-| Q4 one box projected | 2.16 ms | **3.145 ms** | 1.46× over, and §3.1 accounts for it |
-| Q5 the enemy projected | 6.0 ms | **5.18 ms** | the column trick beat its estimate |
-| one box drawn, 12 edges | ~1.2 ms | **3.82 ms** | Q1 plus forty `item` reads |
-| horizon, 32 points scanned | 10.1 ms | **13.845 ms** | and the cull is now mandatory |
+| | Predicted | **Pico 2 W** | **Plus 2 W** | |
+|---|---:|---:|---:|---|
+| Q1 long line, 200 steps | ~60 µs | **248 µs** | **130 µs** | §10 wrong, and board-dependent |
+| Q1 short line, 17 steps | 60 µs | **68 µs** | **66 µs** | P11's figure holds on both |
+| Q2 present, `splitscreen` | 19.7 ms | **19.8** | **19.2** | the closest prediction here |
+| Q2 present, `fullscreen` | 26.3 ms | **26.0** | **27.25** | |
+| Q3 arithmetic statement | 43 µs | **48.5** | **53.5** | §3.1; ratio holds, unit did not |
+| Q3 bare `repeat` iteration | 5 µs | **4.5** | **5** | exact |
+| Q4 one box projected | 2.16 ms | **2.97** | **3.145** | §3.1's unit accounts for it |
+| Q5 the enemy projected | 6.0 ms | **4.965** | **5.18** | the column trick beat its estimate |
+| one box drawn, 12 edges | ~1.2 ms | **3.365** | **3.82** | Q1 plus forty `item` reads |
+| horizon, 32 points scanned | 10.1 ms | **13.18** | **13.845** | the cull is now mandatory |
 
 **The gate.** §16 set it at: under 66.7 ms build at L0; 66.7–71.4 spend §14's
-gameplay levers; over 71.4 stop and take L4. The typical frame at three
-obstacles is **64.2 ms** and the worst is **74.8**. Taking the gate on the
-typical frame — which is what "under 66.7" meant, and what P11 M3 and M4 both
-took theirs on — **the answer is L0**, and §12.1's two levers bring the worst
-frame to 60.1 as well. **No §14 lever is spent and no interpreter change is
-made.**
+gameplay levers; over 71.4 stop and take L4. The uncultured frame at three
+obstacles is **65.7 ms on a Pico 2 W and ≈68.5 on a Plus 2 W** — it straddles
+the first threshold.
 
-**What M0 did not measure, and should have.** It ran on a Plus 2 W only. §3
-says plainly that the `pico2` preset does not carry P10 M5's flash tiering and
-that a Pico 2 will be slower by an unmeasured amount, and §16 Q3 exists to catch
-exactly that. `p13m0` is unchanged and runs on any of the three boards; **M1
-should not start until a Pico 2 W has run it**, because a 1.2× board difference
-would put the closed frame at 59 ms and a 1.5× one would put it over.
+**That straddle is not the decision, and reading it as one would be a mistake
+this document set up.** The harness scans all 32 horizon points because §8.4
+priced the cull as a lever; the *designed* frame culls, and culled it is 51.6
+and 53.8 ms. **The answer is L0 on both boards, with room.** No §14 lever is
+spent and no interpreter change is made.
+
+### 16.2.1 A correction this design owes its own §12
+
+The first version of §12, written from the Plus 2 W run alone, reported **64.2
+ms** for the typical frame. That was the **`min` column — the best frame of 200,
+not the typical one** — chosen because the harness defect (§16.1) had destroyed
+the `body` column and `min` was what remained.
+
+The Pico 2 W run, with the defect fixed, shows the mean sitting **4.4 ms above
+the min** at the first three points. So the Plus 2 W's typical frame was never
+64.2; it is about 68.5, and the number this document published for two days was
+optimistic by the width of the gate it was being compared against.
+
+The lesson is not "recover carefully from a broken column". It is that **a
+recovered number should carry the arithmetic that recovered it**, and §12's
+first version did not say it was reading a minimum. It does now, and the Plus
+2 W wants re-running so the figure is a reading rather than a cross-board
+inference.
+
+### 16.2.2 What is still unmeasured
+
+- **The `pico2` preset.** §3 warned that it does not carry P10 M5's flash
+  tiering and that a Pico 2 would be slower. `pico2w` *does* carry it, so the
+  warning never applied to either board M0 ran on, and the one board it does
+  apply to has still not run. A Pico 2 is the offline board and a plausible
+  target for this game, since Battlezone needs no radio.
+- **A Plus 2 W re-run** on the fixed harness (§16.2.1).
 
 **M1 — the world and the camera.** Plain, obstacles, tread controls, horizon,
 the gunsight. No enemy, no shells, no radar. This is the milestone that proves
@@ -925,4 +1004,12 @@ shape. The ones that are specific to this game:
    minutes. **This is the one open question that is not about Battlezone**, and
    it should be answered before M1 spends L0.5 on the strength of a host
    measurement.
-6. **Does a Pico 2 W run this frame?** (§16.2.) M0 measured one board of three.
+6. **Does a Pico 2 run this frame?** (§16.2.2.) M0 measured the two boards that
+   carry P10 M5's flash tiering. The `pico2` preset does not, and it is the
+   board this game has the best claim on, needing no radio.
+7. **Why does a 200-step line cost 248 µs on a Pico 2 W and 130 on a Plus 2 W,
+   when the 17-step line is identical on both and the Pico 2 W is faster at
+   everything else?** (§10.) 2.8× on the per-pixel path, running opposite to
+   every other difference in the run. Same `screen_gfx_line`, same clock, same
+   SRAM canvas. It is the largest unexplained number M0 produced, and §9's near
+   plane is now cut around it rather than for it.
