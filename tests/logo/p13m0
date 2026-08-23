@@ -665,6 +665,8 @@ to p13m0.report
     if 150 < :p13m0.mhz.ran [pr [that is an overclock, outside the datasheet]]
   ]
   pr (se [die temperature] :p13m0.temp0 [C before,] :p13m0.temp1 [C after])
+  pr [the present is the SPI wire, so it should barely move with the clock]
+  pr [if it did, read design 12.3 before believing anything else here]
   pr []
   pr [Q3 does the 180x ratio hold]
   pr (se [  arithmetic statement] :arith [us, P11 M0 measured 42 to 44.5])

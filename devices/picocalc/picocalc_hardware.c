@@ -207,11 +207,21 @@ static bool ensure_status_led_initialized(void)
 //     against. Anything faster is raised to 1.20 V BEFORE the PLL moves and
 //     lowered again AFTER it comes back down, so the rail is never the lower of
 //     the two while the clock is the higher.
-//   * THE LCD. `clk_peri` follows `clk_sys` on this board, and `spi_init` fixed
-//     the divisor once at startup against a 150 MHz peri clock -- LCD_BAUDRATE
-//     is 75 MHz, which is clk_peri/2, the floor divisor. Double clk_sys and the
-//     panel would be driven at 150 MHz, well past its rating, and the display
-//     corrupts. `spi_set_baudrate` puts it back to 75 MHz at the new clock.
+//   * THE LCD, and this one bit twice. `spi_init` fixed the divisor once at
+//     startup against a 150 MHz clk_peri -- LCD_BAUDRATE is 75 MHz, clk_peri/2 --
+//     so the divisor has to be re-applied at the new clock. But `clk_peri` does
+//     NOT follow `clk_sys` by default: `set_sys_clock_pll` parks it on the USB
+//     PLL at 48 MHz whenever the system PLL moves, so `spi_set_baudrate(75 MHz)`
+//     could only deliver 24 and the present went from 19.6 ms to 58, flat across
+//     every overclock because 48 MHz does not care what clk_sys is doing.
+//     `PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK=1` (CMakeLists.txt) keeps
+//     clk_peri attached; `spi_set_baudrate` then finds a real divisor.
+//
+//     NOTE THAT THE DIVIDERS ARE COARSE. The SPI divides clk_peri by an even
+//     prescale times a post-divider, so only clocks that reach 75 MHz exactly
+//     keep the display at full speed: 150 gives 75 (/2) and 300 gives 75 (/4),
+//     but 200 gives 50 and 250 gives 62.5. An overclock to 200 makes the
+//     interpreter 1.33x faster and the display 1.5x SLOWER.
 //   * THE SOUND ENGINE. The PWM slice takes its carrier straight from clk_sys,
 //     so the mix rate and the sequencer's block period both move with it. See
 //     sound_reclock().
@@ -264,9 +274,10 @@ static int picocalc_set_cpu_khz(uint32_t khz)
         sleep_ms(1);
     }
 
-    // `false` means "do not reconfigure the peripherals for me": the two that
-    // matter are put back by hand below, and the SDK's helper would also retune
-    // the UART, which nothing here uses.
+    // `false` is the SDK's `required` flag: return false if the PLL cannot make
+    // this frequency, rather than panicking. It has nothing to do with
+    // peripherals -- those are this function's problem, and the comment that
+    // used to be here claiming otherwise is why clk_peri went unchecked.
     if (!set_sys_clock_khz(khz, false))
     {
         // Nothing moved. Undo the rail if it was raised for a change that did
@@ -278,9 +289,9 @@ static int picocalc_set_cpu_khz(uint32_t khz)
         return CPU_KHZ_UNREACHABLE;
     }
 
-    // clk_peri followed clk_sys, so the panel is being driven at the wrong rate
-    // until this line runs. It is the first thing to fix, before anything tries
-    // to present.
+    // clk_peri moved with clk_sys (see the build define), so the panel is being
+    // driven at the wrong rate until this line runs. First thing to fix, before
+    // anything tries to present.
     spi_set_baudrate(LCD_SPI, LCD_BAUDRATE);
 
     sound_reclock();

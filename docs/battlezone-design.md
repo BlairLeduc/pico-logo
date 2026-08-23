@@ -623,75 +623,79 @@ question for M4 rather than a plan.
 Same finding as P11 §3.3, and it generalises: on this display a vector game pays
 a fixed tax a sprite game does not.
 
-### 12.3 Overclocking, and why it is the biggest lever on this list — unmeasured
+### 12.3 Overclocking — swept, and the control caught a bug
 
 `hw.setfrequency` (2026-08-23) takes the RP2350 from its rated 150 MHz to as
-much as 300. M0 has not run at one yet; this section is the prediction it will
-be checked against.
+much as 300. A four-point sweep ran the same day on a Plus 2 W
+([`measurements/p13m0-sweep-plus2w-2026-08-23.md`](measurements/p13m0-sweep-plus2w-2026-08-23.md)).
 
-**The frame divides into a half that should scale with the clock and a half
-that cannot.** The present is the SPI wire to the panel — 19.3–19.8 ms,
-identical on all three boards, and `hardware-notes` §2.2 says it is
-memory-paced against a wire-paced transfer. Nothing about the CPU clock reaches
-it. Everything else is interpretation and should scale almost exactly.
+**The interpreter is purely clock-bound, and that half of the prediction is
+confirmed exactly.** The arithmetic statement reads 52.5, 39.5, 31.5 and
+25.5 µs at 150, 200, 250 and 300 — speedups of 1.000, 1.329, 1.667 and 2.059
+against clock ratios of 1.000, 1.333, 1.667 and 2.000. Inside 3 % at every
+point, which incidentally proves `ticks` stayed honest across the sweep.
 
-At three obstacles, taking the present as fixed and the body as proportional:
+**The present half was wrong, and the present column is what said so.** This
+section predicted 19.3–19.8 ms at every clock, on the grounds that the present
+is the SPI wire and nothing about the CPU clock reaches it. The board read
+**58.95, 59.45 and 57.4 ms** at 200, 250 and 300 — three times the figure, and
+*flat*, which is the shape that gives the cause away.
 
-| | closed, 150 MHz | 200 MHz | 300 MHz |
-|---|---:|---:|---:|
-| Pico 2 W | 51.6 ms | **43.7** | **35.7** |
-| Plus 2 W | 54.1 | 45.4 | 36.7 |
-| Pico 2 | 55.1 | 46.2 | 37.3 |
+**`clk_peri` does not follow `clk_sys`.** This document, and the code, assumed
+it did. `set_sys_clock_pll` parks clk_peri on the **USB PLL at 48 MHz** whenever
+the system PLL moves (SDK `clocks.c`, `PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK`,
+default 0). So `spi_set_baudrate(LCD_SPI, 75000000)` was dividing 48 MHz, not
+300, and could only deliver 24 — the wire went from 16.4 ms to 51.2, and stayed
+there at every clock because 48 MHz does not care what clk_sys is doing.
+Predicted from that model: 58.4 ms. Measured: 57.4–59.45. Fixed by setting the
+define; the sweep wants re-running.
 
-**A doubled clock is worth about a third of the frame, not half** — which is
-the present's share showing through, and it is the number to hold this against.
-35.7 ms is 28 fps, and it would make §12.1's two levers optional rather than
-required: the *unculled* frame at 300 MHz is 42.8–45.0 ms, already inside
-budget.
+### 12.3.1 The dividers are coarse, and 200 MHz is a trap
 
-It also settles §6's fullscreen question outright. Fullscreen costs ~6.5 ms of
-present and ~0.5 of HUD; at 300 MHz that is 41.9–43.8 ms against 66.7, with
-room the split-screen frame at 150 MHz does not have.
+With clk_peri attached, the SPI still divides it by an even prescale times a
+post-divider, so **only clocks that reach 75 MHz exactly keep the display at
+full speed**:
 
-**The run has its own control built in, and it is the present column.** Two
-things could make an overclocked reading a lie, and both would show there:
+| clock | LCD SPI | present | body @ 3 | frame @ 3 | **closed** |
+|---:|---:|---:|---:|---:|---:|
+| 150 MHz | 75.0 MHz | 19.6 ms | 45.9 ms | 65.5 ms | **51.1 ms** |
+| 200 | **50.0** | 27.0 | 34.4 | 61.4 | **50.8** |
+| 250 | 62.5 | 21.6 | 27.3 | 48.9 | **40.4** |
+| 300 | 75.0 | 18.0 | 22.6 | 40.6 | **33.6** |
 
-- **The LCD.** `clk_peri` follows `clk_sys`, and `spi_init` fixed the divisor
-  once at startup against a 150 MHz peri clock — LCD_BAUDRATE is 75 MHz, which
-  is clk_peri/2, the *floor* divisor. Doubling clk_sys would drive the panel at
-  150 MHz. `picocalc_set_cpu_khz` puts the baudrate back, and if it did not the
-  present figure would move (or the display would corrupt outright).
-- **The clock `ticks` counts.** The RP2350's timer is fed from clk_ref via the
-  ticks block, which `set_sys_clock_khz` does not touch — so a millisecond
-  should still be a millisecond. If it were not, every figure in the run would
-  shrink together, including the present.
+The body column is measured; the present column is modelled from the SPI rate
+the divider will actually produce, and the sweep's re-run is what will confirm
+it.
 
-So: **if the present column reads 19.3–19.8 ms at 300 MHz, the SPI divisor was
-restored and `ticks` is still honest.** If it reads ~10, the timer moved and
-nothing else in the report means anything. That is worth checking before
-reading any other line.
+**An overclock to 200 MHz makes the interpreter 1.33× faster and the display
+1.5× slower, and is worth 0.3 ms.** 250 is worth 10.7. **300 is worth 17.5 and
+is the only overclock that leaves the display where it started.**
 
-**One peripheral was missed and a board found it.** At 250 MHz a Pico 2 W
-filled the console with `[CYW43] error: hdr mismatch`. The cyw43 driver talks to
-the wireless chip over a PIO SPI clocked at clk_sys/2, so the bus went from
-37 MHz to 62 and the chip started answering with garbage headers. It is the same
-mistake as the LCD divisor, in a peripheral this section did not think to check
-— and worse, because the SDK only applies that divider **when the bus is brought
-up**, so a running radio cannot be retuned underneath. `hw.setfrequency` now
-scales the divider for the next bring-up and **refuses outright while the radio
-is up**; an out-of-spec bus does not stop, it corrupts, and tearing the driver
-down would leave every lwIP pointer the HTTP server holds dangling.
+At 300 the closed frame is **33.6 ms — 29 fps** — and the *unclosed* frame is
+40.6, which fits a 15 fps budget without either of §12.1's levers. It also
+settles §6's fullscreen question outright: fullscreen at 300 MHz is ~40 ms
+against 66.7.
 
-**So the sweep has an order to it**: set the clock before anything raises the
-radio — and on a W board the status LED is *on* the wireless chip, so
-`hw.setlight` counts.
+**The die barely warms.** 24.1 → 24.8 °C at 200, 24.8 → 25.7 at 250, 25.7 →
+26.6 at 300, over 200-frame runs. Thermals are not a constraint at any of these
+clocks, which was the other thing worth knowing.
 
-**What this does not make safe.** Everything above 150 MHz is outside the
-datasheet, `set_sys_clock_khz` leaves the flash's QMI timing alone, and the
-interpreter executes from flash — so the plausible failure is a hang at the
-moment of the switch. `p13m0` writes its report to a file at the end, which is
-the wrong end for this: **run the sweep from stock upward and keep the earlier
-files**, rather than trusting one run at 300 to produce anything.
+### 12.3.2 What the sweep cost, and what it bought
+
+Two peripherals were missed before a board found them: the cyw43 bus (§16.4)
+and clk_peri (above). Both are the same mistake — assuming something derived
+from the system clock would follow it — and in the second case the assumption
+was *backwards*, which no amount of reading the design would have caught.
+
+**The control worked, and it is the reason this section is not still wrong.**
+§12.3 said, before the run: *"if the present column reads 19.3–19.8 ms at
+300 MHz, the SPI divisor was restored and `ticks` is still honest. If it reads
+~10, the timer moved."* It read 58, which is neither, and the flatness across
+three clocks named the cause within minutes. A sweep that had reported only a
+frame total would have shown an overclock that bought nothing and left no way
+to tell why.
+
+**What this does not make safe.**
 
 ### 12.2 The harness reproduces
 

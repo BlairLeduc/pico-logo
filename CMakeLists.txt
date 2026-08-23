@@ -248,6 +248,16 @@ pico_set_program_name(pico-logo "pico-logo")
 pico_set_program_version(pico-logo "0.1")
 
 # Modify the below lines to enable/disable output over UART/USB
+# `hw.setfrequency` needs clk_peri to follow clk_sys, and by default it does not:
+# `set_sys_clock_pll` parks clk_peri on the USB PLL at 48 MHz whenever the system
+# PLL moves (SDK clocks.c). Measured on a board 2026-08-23 -- an overclock took
+# the LCD's SPI from 75 MHz to 24 and the present from 19.6 ms to 58, flat across
+# 200/250/300 because 48 MHz does not care what clk_sys is doing.
+#
+# Nothing else here rides clk_peri: both stdio backends are off below, so the
+# LCD's SPI is its only consumer.
+target_compile_definitions(pico-logo PRIVATE PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK=1)
+
 pico_enable_stdio_uart(pico-logo 0)
 pico_enable_stdio_usb(pico-logo 0)
 
