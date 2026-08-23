@@ -30,6 +30,11 @@
 
 #ifdef LOGO_HAS_WIFI
 #include <pico/cyw43_arch.h>
+// For CYW43_PIO_CLOCK_DIV_INT/_FRAC8 and cyw43_set_pio_clkdiv_int_frac8, which
+// `picocalc_set_cpu_khz` scales with the system clock. The setter exists only
+// when CYW43_PIO_CLOCK_DIV_DYNAMIC is on, which CMakeLists.txt does for every
+// WiFi build.
+#include <pico/cyw43_driver.h>
 #include <lwip/ip4_addr.h>
 #include <lwip/icmp.h>
 #include <lwip/raw.h>
@@ -210,6 +215,16 @@ static bool ensure_status_led_initialized(void)
 //   * THE SOUND ENGINE. The PWM slice takes its carrier straight from clk_sys,
 //     so the mix rate and the sequencer's block period both move with it. See
 //     sound_reclock().
+//   * THE WIRELESS CHIP, on a W board, and this one cannot be fixed after the
+//     fact. The cyw43 driver talks to the CYW43439 over a PIO SPI whose divider
+//     is 2 against clk_sys -- so at 250 MHz the bus runs at 62 MHz instead of
+//     37 and the chip answers with garbage headers ("hdr mismatch"). The
+//     divider CAN be scaled, but the SDK only applies it when the bus is
+//     brought up (cyw43_bus_pio_spi.c), so a RUNNING radio cannot follow the
+//     clock. This scales the divider for the next bring-up and REFUSES the
+//     change while the radio is already up: an out-of-spec bus does not stop,
+//     it corrupts, and tearing the driver down here would leave every lwIP
+//     pointer the HTTP server holds dangling.
 //
 // What this CANNOT do anything about is flash: `set_sys_clock_khz` leaves the
 // QMI timing alone, so XIP runs at the new clock too. If the flash cannot keep
@@ -220,15 +235,25 @@ static uint32_t picocalc_get_cpu_khz(void)
     return clock_get_hz(clk_sys) / 1000u;
 }
 
-static bool picocalc_set_cpu_khz(uint32_t khz)
+static int picocalc_set_cpu_khz(uint32_t khz)
 {
     const uint32_t stock_khz = 150000u;
     const uint32_t current = clock_get_hz(clk_sys) / 1000u;
 
     if (khz == current)
     {
-        return true;
+        return CPU_KHZ_OK;
     }
+
+#ifdef LOGO_HAS_WIFI
+    // The radio comes up lazily, and not only for networking: the status LED
+    // lives on the wireless chip, so `hw.setlight` brings it up too. Whatever
+    // raised it, its bus cannot follow the clock.
+    if (wifi_initialized)
+    {
+        return CPU_KHZ_BUSY;
+    }
+#endif
 
     // Up: raise the rail first. `set_sys_clock_khz` needs a settled voltage,
     // and the SDK's own overclock examples allow a millisecond for it.
@@ -250,7 +275,7 @@ static bool picocalc_set_cpu_khz(uint32_t khz)
         {
             vreg_set_voltage(VREG_VOLTAGE_1_10);
         }
-        return false;
+        return CPU_KHZ_UNREACHABLE;
     }
 
     // clk_peri followed clk_sys, so the panel is being driven at the wrong rate
@@ -260,13 +285,29 @@ static bool picocalc_set_cpu_khz(uint32_t khz)
 
     sound_reclock();
 
+#ifdef LOGO_HAS_WIFI
+    // Hold the wireless bus at the rate it runs at when clk_sys is 150 MHz, by
+    // scaling its divider with the clock. Applied when the radio is next
+    // brought up, which is the only time the SDK reads it -- which is why the
+    // radio has to be down for us to have got here at all.
+    //
+    // 8.8 fixed point. The default divider is 2, so the widest case is
+    // 2 * 256 * 300000 / 150000 = 1024, comfortably inside the field.
+    {
+        const uint32_t base_q8 = (uint32_t)CYW43_PIO_CLOCK_DIV_INT * 256u +
+                                 (uint32_t)CYW43_PIO_CLOCK_DIV_FRAC8;
+        const uint32_t div_q8 = (base_q8 * khz) / stock_khz;
+        cyw43_set_pio_clkdiv_int_frac8(div_q8 / 256u, (uint8_t)(div_q8 % 256u));
+    }
+#endif
+
     // Down: drop the rail only once the clock is already slow.
     if (!going_up && khz <= stock_khz)
     {
         vreg_set_voltage(VREG_VOLTAGE_1_10);
     }
 
-    return true;
+    return CPU_KHZ_OK;
 }
 
 static bool picocalc_get_status_led(bool *on)

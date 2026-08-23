@@ -671,6 +671,21 @@ restored and `ticks` is still honest.** If it reads ~10, the timer moved and
 nothing else in the report means anything. That is worth checking before
 reading any other line.
 
+**One peripheral was missed and a board found it.** At 250 MHz a Pico 2 W
+filled the console with `[CYW43] error: hdr mismatch`. The cyw43 driver talks to
+the wireless chip over a PIO SPI clocked at clk_sys/2, so the bus went from
+37 MHz to 62 and the chip started answering with garbage headers. It is the same
+mistake as the LCD divisor, in a peripheral this section did not think to check
+— and worse, because the SDK only applies that divider **when the bus is brought
+up**, so a running radio cannot be retuned underneath. `hw.setfrequency` now
+scales the divider for the next bring-up and **refuses outright while the radio
+is up**; an out-of-spec bus does not stop, it corrupts, and tearing the driver
+down would leave every lwIP pointer the HTTP server holds dangling.
+
+**So the sweep has an order to it**: set the clock before anything raises the
+radio — and on a W board the status LED is *on* the wireless chip, so
+`hw.setlight` counts.
+
 **What this does not make safe.** Everything above 150 MHz is outside the
 datasheet, `set_sys_clock_khz` leaves the flash's QMI timing alone, and the
 interpreter executes from flash — so the plausible failure is a hang at the

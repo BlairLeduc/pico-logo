@@ -183,6 +183,14 @@ option(LOGO_HAS_WIFI "Enable WiFi support for Pico W boards" OFF)
 if(LOGO_HAS_WIFI)
     message(STATUS "WiFi support enabled")
     target_compile_definitions(logo_core PUBLIC LOGO_HAS_WIFI=1)
+
+    # `hw.setfrequency` needs the cyw43 bus divider to be a runtime value.
+    # The driver talks to the wireless chip over a PIO SPI clocked at
+    # clk_sys/2, so an overclock takes it out of spec and the chip answers
+    # with garbage headers ("hdr mismatch") -- observed at 250 MHz. The
+    # divider is scaled with the clock in picocalc_set_cpu_khz; without this
+    # flag the SDK compiles it as a constant and there is nothing to scale.
+    add_compile_definitions(CYW43_PIO_CLOCK_DIV_DYNAMIC=1)
 endif()
 
 # TLS/HTTPS support. Separate from WiFi because mbedTLS's handshake heap (tens of

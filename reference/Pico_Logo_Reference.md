@@ -8209,6 +8209,8 @@ hw.setfrequency _megahertz_
 
 Not every number between 150 and 300 can actually be made: the clock is built by multiplying a crystal, and only some speeds come out exactly. `hw.setfrequency` refuses a speed it cannot make exactly rather than quietly giving you a near one, so a program is never measuring against a clock it does not know about. 200, 250 and 300 are all reachable.
 
+**Change the speed before you use the radio, not after.** On a board with wireless, the processor talks to the wireless chip over a connection whose speed is derived from the processor's own - and that connection can only be re-tuned while it is switched off. So `hw.setfrequency` refuses, with `Device wireless is already in use`, once the radio has been brought up. Note that the small LED on the processor board is *on the wireless chip*, so [`hw.setlight`](#hw.setlight) and [`hw.light?`](#hw.light) bring the radio up as surely as [`wifi.start`](#wifi.start) does. If you meet that error, restart the machine and set the speed first.
+
 Sound is silenced by the change, because notes already queued were built for the old speed and would play at the wrong pitch.
 
 **Example**:

@@ -439,10 +439,20 @@ make "p13m0.frames 200
 ; worth about a third of the frame and not half of it.  A sweep says whether
 ; that is what actually happens; a single reading cannot.
 ;
+; SET IT BEFORE THE RADIO IS UP, AND ON A W BOARD THAT INCLUDES THE LED.  The
+; processor talks to the wireless chip over a PIO bus clocked from the system
+; clock, and that divider can only be changed while the bus is down -- so
+; `hw.setfrequency` refuses once the radio has been brought up, and the small
+; LED lives on the same chip, so `hw.setlight` raises it as surely as
+; `wifi.start` does.  An overclock attempted afterwards was the first thing this
+; feature got wrong on a board: at 250 MHz the bus ran at 62 MHz instead of 37
+; and the chip answered with "hdr mismatch" until the divider was scaled.
+;
 ; The report carries the frequency it actually ran at, read back from the
-; hardware rather than from this variable, because `hw.setfrequency` refuses a
-; frequency the PLL cannot make exactly and a run that quietly stayed at 150
-; would otherwise look like an overclock that bought nothing.
+; hardware rather than from this variable, because `hw.setfrequency` refuses
+; both a frequency the PLL cannot make exactly and any frequency at all while
+; the radio is up -- and a run that quietly stayed at 150 would otherwise look
+; like an overclock that bought nothing.
 make "p13m0.mhz 0
 
 ; Die temperature either side of the run.  The chip gets hotter the faster it

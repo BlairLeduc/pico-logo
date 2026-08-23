@@ -31,6 +31,7 @@ uint32_t mock_cpu_khz = 150000u;
 // RP2350's can do from a 12 MHz crystal and is enough to give the refusal path
 // something real to refuse.
 static const uint32_t mock_cpu_step_khz = 25000u;
+static bool mock_cpu_busy = false;
 
 // Mock on-board status LED for testing. `mock_status_led_reachable` false
 // stands in for a board whose LED could not be reached (on a W board, the
@@ -219,14 +220,18 @@ uint32_t mock_get_cpu_khz(void)
     return mock_cpu_khz;
 }
 
-bool mock_set_cpu_khz(uint32_t khz)
+int mock_set_cpu_khz(uint32_t khz)
 {
+    if (mock_cpu_busy)
+    {
+        return CPU_KHZ_BUSY;    // a clk_sys-derived bus is live
+    }
     if (khz % mock_cpu_step_khz != 0)
     {
-        return false;   // the PLL cannot make it exactly; nothing changes
+        return CPU_KHZ_UNREACHABLE;  // the PLL cannot make it exactly
     }
     mock_cpu_khz = khz;
-    return true;
+    return CPU_KHZ_OK;
 }
 
 bool mock_get_status_led(bool *on)
@@ -468,9 +473,15 @@ void set_mock_temperature(bool available, float celsius)
     mock_hardware_ops.get_temperature = available ? mock_get_temperature : NULL;
 }
 
+void set_mock_cpu_busy(bool busy)
+{
+    mock_cpu_busy = busy;
+}
+
 void set_mock_cpu_khz(bool available, uint32_t khz)
 {
     mock_cpu_khz = khz;
+    mock_cpu_busy = false;
     mock_hardware_ops.get_cpu_khz = available ? mock_get_cpu_khz : NULL;
     mock_hardware_ops.set_cpu_khz = available ? mock_set_cpu_khz : NULL;
 }
@@ -558,6 +569,7 @@ void test_scaffold_setUp(void)
     mock_battery_charging = false;
     mock_temperature_celsius = 25.0f; // Reset mock on-chip temperature
     mock_cpu_khz = 150000u;           // Reset mock system clock to stock
+    mock_cpu_busy = false;
     mock_status_led_on = false;       // Reset mock status LED
     mock_status_led_reachable = true;
 
