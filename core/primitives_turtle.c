@@ -268,16 +268,38 @@ static Result prim_home(Evaluator *eval, int argc, Value *args)
 }
 
 // setpos [x y] - Move turtle to position
+// setpos [xcor ycor]     -> move to the point named by a two-element list
+// (setpos xcor ycor)     -> the same point, as two separate inputs
+//
+// The two-input form is what a program that computes its coordinates needs:
+// the list form conses its argument, so drawing a figure whose vertices are
+// calculated rather than literal allocated a cell pair per line (B48,
+// docs/bugs.md). `setx` then `sety` is not the workaround it looks like --
+// each moves on one axis only, so with the pen down it draws an L.
 static Result prim_setpos(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
-    REQUIRE_ARGC(1);
 
     float x, y;
-    Result error;
-    if (!value_extract_xy(args[0], &x, &y, &error))
+    if (argc == 2)
     {
-        return error;
+        REQUIRE_NUMBER(args[0], ax);
+        REQUIRE_NUMBER(args[1], ay);
+        x = ax;
+        y = ay;
+    }
+    else if (argc == 1)
+    {
+        Result error;
+        if (!value_extract_xy(args[0], &x, &y, &error))
+        {
+            return error;
+        }
+    }
+    else
+    {
+        return result_error_arg(argc < 1 ? ERR_NOT_ENOUGH_INPUTS : ERR_TOO_MANY_INPUTS,
+                                "setpos", NULL);
     }
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();

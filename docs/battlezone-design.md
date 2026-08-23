@@ -1,6 +1,7 @@
 # Battlezone in Pico Logo (design)
 
-Status: **v1, drafted 2026-08-21. The M0 gate has not been run.** Every board
+Status: **v1, drafted 2026-08-21. The M0 gate has not been run; B48, which
+blocked it, was fixed on 2026-08-23.** Every board
 figure below is an *estimate*: a host measurement scaled by a ratio calibrated
 against P11's board numbers (§3). Nothing here has touched hardware, and this
 document expects to be rewritten by M0 the way
@@ -13,10 +14,11 @@ Two findings from the feasibility pass are load-bearing and are stated up front:
   disciplined scene fits in 51.2 ms against a 66.7 ms budget (§12) — but the
   frame is linear in *visible vertices*, and the object cap is this design's
   `max.rocks`.
-- **There is no way to draw a line to a computed point in one statement.**
-  `(setpos x y)` is documented in the reference and is not implemented; the
-  working alternative allocates two cons cells per line. Logged as **B48**
-  (§5). M0 cannot run honestly until it is fixed.
+- **There was no way to draw a line to a computed point in one statement.**
+  `(setpos x y)` was documented in the reference and not implemented; the
+  working alternative allocated two cons cells per line. Logged as **B48** and
+  **fixed on 2026-08-23** (§5), which unblocks M0 and is the reason §10 can
+  cost an edge at one statement.
 
 [Asteroids](asteroids-design.md) was the first game in this tree that was not a
 sprite game. Battlezone is the first that is not a **2D** game, and the thing
@@ -193,25 +195,24 @@ before M0 says which one is needed**, because that is the mistake P11 §12 made
 twice: it priced three levers, spent none of them, and then found the real cost
 somewhere none of them reached.
 
-## 5. B48 — there is no single-statement line to a computed point
+## 5. B48 — the single-statement line to a computed point (fixed)
 
-This is the one thing that blocks M0, and it was found by trying to write the
+This was the one thing that blocked M0, and it was found by trying to write the
 draw pass.
 
 A projected wireframe is a sequence of arbitrary screen points. Drawing it
-wants one statement per point, with the pen down. Pico Logo has three
-candidates and all three fail:
+wants one statement per point, with the pen down. Pico Logo had three
+candidates and all three failed:
 
 - **`(setpos x y)`** — documented at
   [Pico_Logo_Reference.md:1201](../reference/Pico_Logo_Reference.md#L1201) as a
-  variadic form, and **not implemented**. `prim_setpos` is `REQUIRE_ARGC(1)`
-  and is registered with arity 1
-  ([primitives_turtle.c:1991](../core/primitives_turtle.c#L1991)), so
-  `(setpos 10 20)` answers *"setpos doesn't like 10 as input"*. Behaviour that
-  contradicts the reference is a bug, so this is **B48**, not a roadmap item.
+  variadic form, and **not implemented**. `prim_setpos` was `REQUIRE_ARGC(1)`
+  registered with arity 1, so `(setpos 10 20)` answered *"setpos doesn't like
+  10 as input"*. Behaviour that contradicts the reference is a bug, so this was
+  **B48** rather than a roadmap item.
 - **`setpos list :x :y`** — works, and allocates. Measured: **two cons cells a
   call**. A frame drawing 70 edges mints 140 cells; at 15 fps that is 2,100 a
-  second against a 32,752-cell pool, so the game needs a `recycle` every
+  second against a 32,752-cell pool, so the game would need a `recycle` every
   fifteen seconds, and a recycle is a visible hitch. (P11 §12b found a recycle
   frame is the worst frame in Asteroids, and that is Asteroids spending five
   cells a frame, not 140.) Driving 100,000 of these on the host without a
@@ -221,10 +222,18 @@ candidates and all three fail:
   Asteroids never noticed because it only ever uses the pair with the pen
   **up**.
 
-So B48 is not a nicety. It is the difference between an allocation-free frame
-and a periodic hitch, and it is a five-line fix in a primitive that is already
-documented to do it. **M0 depends on it and nothing else in this design does** —
-the rest of the game is unaffected by which spelling wins.
+**Fixed 2026-08-23** ([bugs.md](bugs.md)): `prim_setpos` gained an `argc == 2`
+branch beside its existing one, in the shape `prim_arctan` already uses for its
+two-input form. Six tests in `test_primitives_turtle.c`, three of which fail on
+the old code — the form is accepted, a pen-down `(setpos 100 50)` draws **one**
+line from (0,0) to (100,50) rather than two segments, and its cost does not
+grow with the iteration count while `setpos list :x :y` measurably does.
+
+**`setpos` was the only primitive affected.** `towards`, `dot`, `dot?`,
+`setcursor` and `settextcolor` also take an xy list and the reference documents
+no variadic form for any of them, so they are consistent with their
+documentation and were left alone. Giving them one would be a feature; this
+design does not need it.
 
 ## 6. The viewport is 240 rows, and that is worth 6.6 ms
 
@@ -363,7 +372,7 @@ costs a second traversal. A wireframe horizon line spans the full width by
 itself, which settles it before the argument starts.
 
 An edge is `(setpos x y)` with the pen down — **one statement, one straight
-line, nothing allocated** — once B48 is fixed. A closed quad is one pen-up
+line, nothing allocated** — which is what B48's fix bought. A closed quad is one pen-up
 `setpos` and four pen-down ones. Per box: 12 edges in about 16 statements.
 
 Line **length** is nearly free, which is the piece of luck this design has and
@@ -570,7 +579,7 @@ coordinates the game keeps, and nothing else — smaller than Asteroids' 36 atom
 a frame at twelve rocks, because there are fewer objects.
 
 `reclaim` on a countdown, as every game in this tree now has, and B48's fix is
-what keeps the cons pool out of it entirely.
+what keeps the cons pool out of it entirely (§5).
 
 Everything else is fixed-size flat global lists set up once at load: the
 obstacle field, the model tables, the horizon profile.
@@ -581,8 +590,10 @@ obstacle field, the model tables, the horizon profile.
 and a Plus 2 W, because §3's ratio was calibrated on one board and the
 `pico2` preset does not carry P10 M5's flash tiering.
 
-It answers five questions, in this order, and **B48 must be fixed first** or
-the fourth and fifth are measuring the wrong program:
+It answers five questions, in this order. **B48 is fixed, so the draw pass it
+measures is the one the shipped game would run** — which was the precondition,
+since a harness written around an allocation the game would not make measures a
+game nobody plays:
 
 1. **What does a long line cost?** A 200-pixel pen-down `(setpos x y)`, 1,000
    times, against P11's 60 µs for a 17-pixel `fd`. §10's largest unmeasured

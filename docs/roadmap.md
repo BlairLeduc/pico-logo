@@ -36,7 +36,7 @@ Companion documents (everything in `docs/`):
   *vector* game in the tree (design drafted, gated on its own M0 measurement).
 - [`battlezone-design.md`](battlezone-design.md) — P13 Battlezone, the first
   *3D* game in the tree (design drafted 2026-08-21, gated on its own M0
-  measurement; blocked on B48).
+  measurement; B48, which blocked it, fixed 2026-08-23).
 - [`code-review-2026-07-02.md`](code-review-2026-07-02.md) — the review that
   produced PR #86; a few small refinements from it are tracked below, its
   defects in [`bugs.md`](bugs.md).
@@ -1012,7 +1012,7 @@ share `st->pattern`.
 
 Status: **v1 design drafted 2026-08-21
 ([`battlezone-design.md`](battlezone-design.md)). The M0 gate has not been run,
-and B48 blocks it.** Asked for as "a clone of Battlezone, similar in
+and B48, which blocked it, was fixed on 2026-08-23.** Asked for as "a clone of Battlezone, similar in
 style/implementation to Asteroids but 3D models", with the explicit instruction
 that interpreter-side maths stay on the table as a lever.
 
@@ -1038,10 +1038,11 @@ fps** (design §12), with the caution that P11 M2 opened 6 ms short by its own
 estimate and measured 19.7 over.
 
 **Two findings came out of the feasibility pass.** The first is **B48**: the
-reference documents `(setpos x y)` and the primitive is registered with arity 1,
-so there is *no allocation-free way to draw a line to a computed point* — the
+reference documented `(setpos x y)` and the primitive was registered with arity 1,
+so there was *no allocation-free way to draw a line to a computed point* — the
 working spelling `setpos list :x :y` mints two cons cells a call, which is 140 a
-frame for a wireframe and a `recycle` hitch every fifteen seconds. It blocks M0.
+frame for a wireframe and a `recycle` hitch every fifteen seconds. It blocked M0
+and is **fixed** (2026-08-23).
 The second is that **line length is nearly free**: `screen_gfx_line` marks its
 dirty region once from an accumulated bounding box rather than per pixel, so a
 200-px edge should cost about what P11 measured for a 17-px `fd`. "Should" is
@@ -1208,3 +1209,4 @@ lever was spent on the whole milestone. **The worst frame is still the open numb
 | 2026-08-21 | Hardware | **`hw.light?` and `hw.setlight` — the little LED on the processor board.** Requested by the user, and the recollection in the request was right: the pin used to be hand-written special-case code and SDK 2.1's `pico_status_led` now hides it, so this tree has no board conditional for a LED that is GPIO 25 on a Pico 2 and WL_GPIO 0 on the wireless module of either W board. See the Platform table row for the disassembly check, for why lighting the LED on a W board powers the radio, and for the async-context trap that decided how the driver is brought up. 13 tests, 80/80 green; the hardware gate (`tests/logo/hwlight`) is open |
 | 2026-08-21 | Hardware | `hw.light?` and `hw.setlight` hardware-accepted on both W boards — a Pico 2 W and a Pico Plus 2 W — via `tests/logo/hwlight`: the light visibly blinks, `hw.light?` reads it back, and neither ordering of LED and WiFi breaks the other, which was the double-init the shared `async_context` exists to prevent. The `pico2` GPIO path is still unrun |
 | 2026-08-21 | P13 | Battlezone design drafted ([`battlezone-design.md`](battlezone-design.md)), gate not run. Calibrated a **180×** host→Plus-2-W ratio against P11 M0's unit costs and validated it against Asteroids' measured 3.035 ms a rock (12 %). Naive 3D frame **46.8 ms** scaled; closed to a **51.2 ms** budget against 66.7 at 15 fps by ground-column projection, whole-object near culling and `splitscreen`'s 240-row present. Found **B48** — `(setpos x y)` is documented and unimplemented, so a wireframe has no allocation-free line to a computed point — which blocks M0. Priced four interpreter tiers without spending any: `min`/`max` promoted to cheap wins on their own merits, **arrays measured out** as not the demonstrated need the roadmap is waiting for (~0.7 ms), a `project` operation rejected on its own interface, and an L4 `drawmodel` family (~14.5 ms, tilemap-shaped) gated on M0's number |
+| 2026-08-23 | P13 | **B48 fixed**, which unblocks the Battlezone M0 gate. `prim_setpos` gains an `argc == 2` branch beside its list branch, in the shape `prim_arctan` already uses for its two-input form, plus explicit not-enough/too-many errors — so `(setpos x y)` now works as the reference has always documented it, and a program that computes its coordinates can draw an edge in one statement with nothing allocated. Six tests in `test_primitives_turtle.c`, three failing on the old code: the form is accepted; a pen-down `(setpos 100 50)` draws **one** line from (0,0) to (100,50) rather than the two segments `setx`/`sety` would; and its cost does not grow with the iteration count while `setpos list :x :y` measurably does (written as "does it scale?" rather than "is it zero?", since `run_string` parses its line into a list and that is a fixed charge either spelling pays). **`setpos` was the only primitive affected** — `towards`, `dot`, `dot?`, `setcursor` and `settextcolor` also take an xy list but the reference documents no variadic form for any of them, so they match their documentation and were left alone; adding those forms would be a feature, not this fix. No reference change needed: the manual was already right and the code was wrong. 81/81 ctest green, all three firmware presets link (RAM 86.16 / 86.38 / 91.29 %) |

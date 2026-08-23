@@ -140,6 +140,105 @@ void test_setpos_requires_list(void)
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
+// The reference has documented `(setpos xcor ycor)` alongside the list form
+// all along, and the primitive was registered with arity 1, so the variadic
+// spelling answered "setpos doesn't like 50 as input" (B48, docs/bugs.md).
+void test_setpos_accepts_two_numbers(void)
+{
+    Result r = run_string("(setpos 50 75)");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    ASSERT_POSITION(50, 75);
+}
+
+// The geometric half of B48, and the reason the list form is not a workaround
+// for a program that draws: `setx` then `sety` with the pen down draws an L in
+// two segments, because each moves on one axis only. One statement, one
+// straight line.
+void test_setpos_two_number_form_draws_one_straight_line(void)
+{
+    run_string("pendown");
+    Result r = run_string("(setpos 100 50)");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    TEST_ASSERT_EQUAL(1, mock_device_line_count());
+    const MockLine *line = mock_device_get_line(0);
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 0.0f, line->x1);
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 0.0f, line->y1);
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 100.0f, line->x2);
+    TEST_ASSERT_FLOAT_WITHIN(TOLERANCE, 50.0f, line->y2);
+}
+
+// The memory half of B48, and the reason it was worth fixing rather than
+// documenting around. `setpos list :x :y` conses its argument, so a wireframe
+// drawing 70 edges a frame mints 140 cells and needs a periodic `recycle` --
+// which is a visible hitch.
+//
+// The test is written as "does the cost grow with the iteration count?"
+// rather than "is the cost zero", because `run_string` parses its line into a
+// list and that parse is a fixed charge either spelling pays. Only a
+// per-iteration allocation scales.
+static float nodes_consumed_by(const char *logo)
+{
+    Result before = run_string("nodes");
+    TEST_ASSERT_EQUAL(RESULT_OK, before.status);
+    float free_before = 0.0f;
+    TEST_ASSERT_TRUE(value_to_number(before.value, &free_before));
+
+    run_string(logo);
+
+    Result after = run_string("nodes");
+    TEST_ASSERT_EQUAL(RESULT_OK, after.status);
+    float free_after = 0.0f;
+    TEST_ASSERT_TRUE(value_to_number(after.value, &free_after));
+
+    return free_before - free_after;
+}
+
+void test_setpos_two_number_form_does_not_allocate_per_call(void)
+{
+    run_string("make \"x 10");
+    run_string("make \"y 20");
+
+    float few = nodes_consumed_by("repeat 10 [(setpos :x :y)]");
+    float many = nodes_consumed_by("repeat 200 [(setpos :x :y)]");
+
+    // Not equality: the first run also pays to intern the numerals it parses,
+    // so it costs a little more than the second. A per-call cons would put
+    // `many` some 380 cells above `few` rather than below it.
+    TEST_ASSERT_TRUE_MESSAGE(many <= few,
+        "the two-input form's cost must not grow with the iteration count");
+}
+
+// The contrast that makes the test above mean something: the list form is
+// linear in the number of calls, which is the defect B48 describes.
+void test_setpos_list_form_allocates_per_call(void)
+{
+    run_string("make \"x 10");
+    run_string("make \"y 20");
+
+    float few = nodes_consumed_by("repeat 10 [setpos list :x :y]");
+    float many = nodes_consumed_by("repeat 200 [setpos list :x :y]");
+
+    TEST_ASSERT_TRUE_MESSAGE(many > few + 100.0f,
+        "building the argument list should cons once per call");
+}
+
+void test_setpos_rejects_too_many_inputs(void)
+{
+    Result r = run_string("(setpos 1 2 3)");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+// A list is still a list in the variadic form's presence, and a lone number
+// is still an error -- the two-number branch must not make `setpos 50` mean
+// "x = 50, y = whatever".
+void test_setpos_list_form_survives_the_variadic_form(void)
+{
+    Result r = run_string("(setpos [50 75])");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    ASSERT_POSITION(50, 75);
+}
+
 //==========================================================================
 // Rotation Tests
 //==========================================================================
@@ -2306,6 +2405,12 @@ int main(void)
     RUN_TEST(test_sety_changes_only_y);
     RUN_TEST(test_forward_requires_input);
     RUN_TEST(test_setpos_requires_list);
+    RUN_TEST(test_setpos_accepts_two_numbers);
+    RUN_TEST(test_setpos_two_number_form_draws_one_straight_line);
+    RUN_TEST(test_setpos_two_number_form_does_not_allocate_per_call);
+    RUN_TEST(test_setpos_list_form_allocates_per_call);
+    RUN_TEST(test_setpos_rejects_too_many_inputs);
+    RUN_TEST(test_setpos_list_form_survives_the_variadic_form);
     
     // Rotation tests
     RUN_TEST(test_right_turns_clockwise);
