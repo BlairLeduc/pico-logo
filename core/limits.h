@@ -363,17 +363,25 @@ extern "C" {
 // where there is nothing to be won by bounding it tighter.
 #define LOGO_EDITOR_PROC_BUFFER_SIZE 4096
 
-// The bounds `hw.setfrequency` will accept, in MHz.
+// The two clocks `hw.setcpu` selects, in kHz.
 //
-// The RP2350's rated maximum is 150 MHz and the minimum below is the stock
-// clock, so EVERY value above 150 here is an overclock outside the datasheet.
-// The ceiling is 300 because that is what has been reported working on this
-// silicon, not because anything guarantees it: the failure modes are a hang at
-// the moment of the switch (the PLL or the flash timing), a corrupted display
-// (the LCD's SPI divisor, see devices/hardware.h), and heat, which is why
-// `hw.temperature` is worth reading either side of a long run.
-#define LOGO_CPU_MHZ_MIN     150
-#define LOGO_CPU_MHZ_MAX     300
+// `fast` is an overclock outside the RP2350's datasheet -- 150 MHz is its rated
+// maximum -- and 300 is here because that is what has been reported working on
+// this silicon, not because anything guarantees it. The failure modes are a
+// hang at the moment of the switch (the PLL or the flash timing), a corrupted
+// display (the LCD's SPI divisor, see devices/hardware.h), and heat, which is
+// why `hw.temperature` is worth reading either side of a long run.
+//
+// THERE IS NO THIRD CLOCK, and that is measured rather than a simplification.
+// The LCD's SPI prescaler divides clk_peri by an even number, so only clocks
+// that reach the panel's 75 MHz EXACTLY keep the display at full speed: 150
+// gives 75 (/2)
+// and 300 gives 75 (/4), while 200 gives 50 and 250 gives 62.5. An overclock to
+// 200 makes the interpreter 1.33x faster and the display 1.5x slower and is
+// worth 0.3 ms a frame; 300 is worth 17.5 and leaves the display where it
+// started. See battlezone-design.md section 12.3.1a for the measurements.
+#define LOGO_CPU_KHZ_NORMAL  150000u
+#define LOGO_CPU_KHZ_FAST    300000u
 
 #ifdef __cplusplus
 }

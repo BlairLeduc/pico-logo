@@ -351,7 +351,7 @@ static void __not_in_flash_func(dma_irq_handler)(void)
 
 // The PWM slice takes its carrier straight from clk_sys with no divider, so
 // both of these move with the system clock. Derived in one place because
-// `hw.setfrequency` has to redo it after an overclock.
+// `hw.setcpu` has to redo it after an overclock.
 static void sound_derive_rate(void)
 {
     g_mix_rate = clock_get_hz(clk_sys) / PWM_WRAP / OVERSAMPLE;

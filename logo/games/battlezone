@@ -1,0 +1,1252 @@
+; Battlezone -- M1: the world and the
+; camera. See docs/battlezone-design.md.
+;
+;   load "battlezone
+;   battlezone
+;
+; Arrows drive the treads, P pauses, Q
+; quits.
+;
+; M1 is the plain, the obstacles, the
+; tread controls, the horizon and the
+; gunsight. No enemy, no shells, no
+; radar -- those are M2. This is the
+; milestone that proves the PROJECTION
+; is right, because a wrong one is
+; obvious the moment you drive past a
+; cube and it does not go where a cube
+; goes, and it is invisible in a
+; screenful of plausible milliseconds.
+;
+; The 1980 machine drew vectors on an XY
+; monitor from a Math Box that did the
+; 3D in hardware. Here the Math Box is
+; the Logo interpreter, which is why
+; this file is written the way it is
+; rather than the way the rest of the
+; tree is. What M0 measured (design
+; section 12) is that a frame is 44.18 +
+; 7.167 n ms on a Pico 2 W and an object
+; is 7.2-8.1 ms of it, so every line
+; here is cut against a 66.7 ms budget
+; at 15 fps with about a dozen
+; milliseconds spare.
+;
+; FOUR THINGS M1 INHERITS SETTLED RATHER
+; THAN ASSUMED (design section 16.3.1),
+; each of them a decision M0 paid for:
+;
+; * THE HORIZON IS CULLED FROM THE FIRST
+;   LINE. M0 scanned all 32 points on
+;   purpose, to price the lever:
+;   13.2-13.8 ms, 21 % of a frame, spent
+;   on a backdrop. `horizon` never looks
+;   at a point it cannot draw -- it
+;   works out the first visible INDEX
+;   and walks ten.
+;
+; * THE HOT PATH IS ON GLOBALS, NOT
+;   `local` (design section 13, L0.5). A
+;   `local` read costs 1.5x a global's,
+;   because P11 M4 hashed `find_global`
+;   and nothing did the same for the
+;   frame walk, and rewriting the
+;   projection with globals measured
+;   1.31x faster for a bit-identical
+;   result -- 3.9 ms a frame. The price
+;   is that every hot-path temporary is
+;   a global in a language with one flat
+;   namespace and no shadowing, which is
+;   exactly what cost M0 its whole body
+;   column. The mitigation is a PREFIX:
+;   `p.` belongs to the projection,
+;   `ob.` to the field scan, `mt.` to
+;   the horizon and the moon, `tk.` to
+;   the tank. The prefix test in
+;   test_battlezone.c reads those names
+;   back out of this file, so a
+;   temporary called `b` fails there
+;   rather than silently writing over
+;   the camera constant of that name on
+;   a board.
+;
+; * `near` IS CUT FOR EDGE LENGTH, NOT
+;   FOR THE SINGULARITY (design section
+;   9). An edge costs 0.35 us a step on
+;   a Plus 2 W and 0.98 on a Pico 2 W,
+;   so drawing cost is proportional to
+;   how much screen the edges cover, and
+;   what governs that is the near plane:
+;   projected size goes as k*h/z, so
+;   `near` 8 would put a 40-step cube
+;   1,300 steps tall -- four screens --
+;   and a dozen of its edges would be
+;   most of a frame. At `near` 60 a cube
+;   tops out at 173 steps, which is one
+;   screen. THE COLLISION RADIUS THEN
+;   FOLLOWS THE NEAR PLANE rather than
+;   the other way round, so the two can
+;   never disagree and you can never get
+;   close enough to an obstacle for it
+;   to fill the view.
+;
+; * `max.obstacles` IS A CONSTANT, NOT
+;   AN ASSUMPTION. Overclocking (design
+;   section 12.3) turns the frame into
+;   25.32 + 3.223 n and holds twelve
+;   objects at 15 fps where stock holds
+;   five, so "three obstacles at 24 fps
+;   or twelve at 15" is a real choice --
+;   and it is M4's, not this file's.
+;
+; `window`, AND IT IS LOAD-BEARING
+; RATHER THAN TIDINESS. The default is
+; `wrap`, which folds a point past the
+; edge onto the far side: a horizon
+; point at x = -170.8 comes out at
+; +149.2 and the segment into it is
+; stroked across the whole screen. It
+; looks exactly like a projection fault.
+; M0's harness was written from the
+; design document that says so and still
+; missed it. A wireframe that wrapped
+; would smear, so this game sets
+; `window` at startup and never changes
+; it. Lateral clipping needs nothing
+; else: `screen_gfx_line` skips
+; out-of-bounds pixels one at a time, so
+; a line from x = -209 to x = 40 draws
+; its visible half and costs the rest
+; only in loop iterations.
+;
+; `splitscreen`, AND IT IS WORTH 8.05
+; ms. `screen_gfx_blit_dirty` stops at
+; row 240 in split mode, so a
+; clear-and-redraw frame presents 240
+; rows instead of 320: M0 read 19.2 ms
+; against 27.25 full-screen. The bottom
+; eight text lines are exactly where the
+; cabinet puts its readouts. The
+; consequence for the geometry is that
+; pixel row is `-y + 160`, so the
+; presented band is turtle y in [-79,
+; 160] and the optical centre of the
+; viewport is y = +40 and not 0 -- which
+; is why `hz` below is 40 and every
+; screen constant is cut against it.
+;
+; FOUR RULES CARRIED OVER FROM
+; ASTEROIDS, all of them learned the
+; hard way:
+;
+; * A call's last argument absorbs
+;   trailing infix, so `item :i :ox -
+;   :px` asks for item :i of (:ox -
+;   :px). Comparisons here put the
+;   constant on the LEFT. Ordinary
+;   precedence IS respected -- `a * b -
+;   c * d` groups the products -- so the
+;   parentheses that are here are the
+;   ones that change the answer.
+; * The outermost parens of `make "v
+;   (...)` are redundant AND cost 15-20
+;   % of the statement. They are not
+;   written here.
+; * A `;` inside a bracketed list
+;   silently swallows the rest of a
+;   procedure.
+; * The per-frame scratch lists are
+;   literals set at TOP LEVEL, never
+;   inside a procedure: a literal inside
+;   a body belongs to the stored
+;   procedure and `.setitem` would
+;   scribble on the source for good.
+;
+; A frame ALLOCATES (design section 15)
+; -- `.setitem` of a number interns it
+; -- so the contract is a flat working
+; set rather than a zero, and `reclaim`
+; asks the workspace how much room is
+; left rather than counting frames.
+;
+; EVERY LINE HERE FITS 40 COLUMNS, which
+; is the width of the PicoCalc's editor.
+; That is not free: the wrapped delta in
+; `draw.field` is three statements where
+; one would fit on a wider screen, and
+; the horizon's first index is two. It
+; costs about 2 ms a frame and it buys a
+; file that can be read on the machine
+; it runs on.
+
+;======================================
+; Tuning
+;
+; `k` 260 puts the half-width 160 at
+; atan(160/260) = 31.6 degrees, so the
+; horizontal field of view is 63
+; degrees, close to the cabinet's.
+
+make "fps 15
+make "k 260
+make "eye 12
+make "hz 40
+
+; Nearer than `near` and the object is
+; culled WHOLE; further than `far` and
+; it is not drawn at all.
+make "near 60
+make "far 700
+
+; The plain wraps at `world` in both
+; axes.
+;
+; `far` IS LESS THAN `half.world`, and
+; that is an invariant rather than a
+; taste: an obstacle further than half
+; the world in either axis is the same
+; obstacle seen the other way round, so
+; a cull distance beyond that would draw
+; one obstacle twice. The far-plane test
+; pins it, because the two are tuned
+; separately and would drift apart.
+make "world 1600
+make "half.world 800
+
+; `coll.r` must exceed `near` +
+; half*sqrt2 -- see `blocked?`.
+make "coll.r 90
+
+; How many objects a frame will DRAW,
+; and how many are in the table (design
+; section 14).
+make "max.obstacles 3
+make "ob.count 8
+
+; Obstacle half-width, cube height,
+; pyramid height, and the two heights
+; above the eye -- hoisted so that the
+; per-column statements fit on one line.
+make "half 20
+make "boxh 40
+make "pyrh 56
+make "boxe :boxh - :eye
+make "pyre :pyrh - :eye
+
+; Degrees a frame per unit of tread
+; difference, and turtle steps a frame
+; per unit of tread sum.
+make "turn.rate 3
+make "tread.step 4
+
+make "atom.floor 2000
+
+; Green as the cabinet's vectors were,
+; red as its overlay band was.
+make "world.colour 249
+make "moon.colour 254
+make "sight.colour 248
+
+;======================================
+; The world
+;
+; Eight obstacles on a plain that wraps.
+; Positions are kept in [0, world) and
+; every delta is wrapped, because B19 is
+; the precedent here: Asteroids got the
+; picture right and the COMPARISON wrong
+; and shipped that way for a milestone.
+; The wrap-arithmetic test is written
+; against that and not against the
+; drawing.
+;
+; None is within 200 steps of the start
+; point, so the first frame is a drive
+; and not a bump.
+;
+; Kind 1 is a cube, kind 2 is a pyramid.
+; The arcade field is both.
+make "ox [260 620 1180 140]
+make "ox se :ox [900 1460 700 1220]
+make "oz [1180 300 980 540]
+make "oz se :oz [1420 660 1050 1500]
+make "okind [1 2 1 1]
+make "okind se :okind [2 1 2 1]
+
+; The camera. (px, pz, ph), the eye 12
+; steps above the plain, no pitch and no
+; roll -- a tank stays flat, which
+; removes an entire axis from every
+; transform and is not a simplification
+; of the original.
+;
+; Heading 0 looks down +z and increases
+; clockwise, which is Logo's own
+; compass, so sin/cos fall out of it
+; with no sign fixes: forward is (px +
+; s*sn, pz + s*cs) and the camera
+; transform is
+;
+;   xc = dx*cs - dz*sn
+;   zc = dz*cs + dx*sn
+make "px 800
+make "pz 800
+make "ph 0
+
+; cos and sin of the heading, hoisted
+; ONCE A FRAME -- the file's most
+; important hoist, and the difference
+; between two trig calls a frame and two
+; per vertex. `a` and `b` are the
+; obstacle half-offsets already rotated,
+; hoisted once a frame for every box in
+; the world.
+make "cs 1
+make "sn 0
+make "a 0
+make "b 0
+
+; The wrap offsets, hoisted after the
+; tank moves: a delta is `modulo (ox +
+; ob.u) world` less half the world, and
+; hoisting the camera out of it is what
+; keeps the scan to three statements an
+; axis.
+make "ob.u 0
+make "ob.v 0
+
+; Four ground columns: screen x, and the
+; two screen heights that share the
+; divide. Mutated in place -- a list
+; built per object per frame would mint
+; twelve cells a frame and put `recycle`
+; inside the loop.
+make "cx [0 0 0 0]
+make "cy1 [0 0 0 0]
+make "cy2 [0 0 0 0]
+
+; The pyramid's apex, which a cube does
+; not have and which costs one extra
+; divide.
+make "apx 0
+make "apy 0
+
+make "left.tread 0
+make "right.tread 0
+make "bumped false
+make "paused false
+make "quit false
+make "frame.count 0
+make "ob.n 0
+
+; What a frame cost. `body.ms` is the
+; Logo work; `frame.ms` is the whole
+; period, `sync` included. See
+; `play.frame` for why both are needed
+; and neither alone will do.
+make "body.ms 0
+make "frame.ms 0
+;
+; The readout's accumulators: how many
+; frames since the last one, and the sum
+; and peak of each figure over them. The
+; clock is read once through a `catch`,
+; because a board with no settable clock
+; has no `hw.cpu` at all and a number
+; nobody can attribute to a clock is
+; worth nothing -- `normal` is 150 MHz
+; and `fast` is 300, and the frame is
+; 1.6x cheaper at the second.
+make "hud.n 0
+make "hud.bs 0
+make "hud.bm 0
+make "hud.fs 0
+make "hud.fm 0
+make "hud.a 0
+make "cpu.at "unknown
+
+to cam.setup
+  make "cs cos :ph
+  make "sn sin :ph
+  make "a :half * :cs
+  make "b :half * :sn
+end
+
+; Hoisted separately from `cam.setup`,
+; because the heading is settled before
+; the tank moves and the position is
+; settled after it.
+to cam.offsets
+  make "ob.u :half.world - :px
+  make "ob.v :half.world - :pz
+end
+
+;======================================
+; Projection
+;
+; Design section 8.1: an obstacle is
+; axis-aligned and stands on the plain,
+; so its eight vertices are four ground
+; COLUMNS lifted to two heights. With
+; `a` and `b` hoisted once a frame for
+; every obstacle in the world, the four
+; corners are eight ADDS and no
+; multiplies, and the top and bottom of
+; a column share one divide. That is the
+; trick the whole budget rests on: eight
+; vertices for the cost of four
+; transforms.
+;
+; UNROLLED on purpose. A `repeat` over
+; the four would need `repcount` and an
+; `item` walk per corner to find its
+; offsets, and this is the loop the
+; frame is linear in. It is also what a
+; person would write.
+;
+; `p.dx` and `p.dz` are INPUTS AND ARE
+; GLOBALS, not parameters. A parameter
+; is a local, a local read costs 1.5x a
+; global's (section 13 L0.5), and the
+; whole point of this milestone's naming
+; discipline is that the hot path never
+; touches the frame walk.
+;
+; Outputs `true` if the object is
+; drawable and `false` if ANY column is
+; inside the near plane -- any, not all:
+; one corner behind you swings the
+; projection through infinity and throws
+; a line across the whole screen
+; (section 9). It is wrong in exactly
+; one visible way, that an obstacle you
+; are pressed against vanishes rather
+; than filling the view, and `blocked?`
+; is what makes that unreachable.
+to project.box
+  make "p.xc :p.dx * :cs - :p.dz * :sn
+  make "p.zc :p.dz * :cs + :p.dx * :sn
+  make "p.z1 :p.zc + :a + :b
+  make "p.z2 :p.zc - :a + :b
+  make "p.z3 :p.zc - :a - :b
+  make "p.z4 :p.zc + :a - :b
+  if :near > :p.z1 [output "false]
+  if :near > :p.z2 [output "false]
+  if :near > :p.z3 [output "false]
+  if :near > :p.z4 [output "false]
+  make "p.xa :p.xc + :a
+  make "p.xb :p.xc - :a
+  make "p.iz :k / :p.z1
+  .setitem 1 :cx (:p.xa - :b) * :p.iz
+  .setitem 1 :cy1 :hz - :eye * :p.iz
+  .setitem 1 :cy2 :hz + :boxe * :p.iz
+  make "p.iz :k / :p.z2
+  .setitem 2 :cx (:p.xa + :b) * :p.iz
+  .setitem 2 :cy1 :hz - :eye * :p.iz
+  .setitem 2 :cy2 :hz + :boxe * :p.iz
+  make "p.iz :k / :p.z3
+  .setitem 3 :cx (:p.xb + :b) * :p.iz
+  .setitem 3 :cy1 :hz - :eye * :p.iz
+  .setitem 3 :cy2 :hz + :boxe * :p.iz
+  make "p.iz :k / :p.z4
+  .setitem 4 :cx (:p.xb - :b) * :p.iz
+  .setitem 4 :cy1 :hz - :eye * :p.iz
+  .setitem 4 :cy2 :hz + :boxe * :p.iz
+  output "true
+end
+
+; A pyramid is the same four ground
+; columns with the top ring collapsed to
+; a point, and the apex is the object's
+; OWN CENTRE COLUMN lifted -- so it
+; costs one extra divide and nothing
+; else (section 8.1).
+;
+; The column half repeats `project.box`,
+; and the repetition is deliberate:
+; folding the two together would mean
+; either four extra `item` reads to
+; recover the shared reciprocals or a
+; branch inside the loop the whole
+; budget is linear in. The
+; projections-agree test is what keeps
+; the copy honest.
+to project.pyr
+  make "p.xc :p.dx * :cs - :p.dz * :sn
+  make "p.zc :p.dz * :cs + :p.dx * :sn
+  make "p.z1 :p.zc + :a + :b
+  make "p.z2 :p.zc - :a + :b
+  make "p.z3 :p.zc - :a - :b
+  make "p.z4 :p.zc + :a - :b
+  if :near > :p.z1 [output "false]
+  if :near > :p.z2 [output "false]
+  if :near > :p.z3 [output "false]
+  if :near > :p.z4 [output "false]
+  make "p.xa :p.xc + :a
+  make "p.xb :p.xc - :a
+  make "p.iz :k / :p.z1
+  .setitem 1 :cx (:p.xa - :b) * :p.iz
+  .setitem 1 :cy1 :hz - :eye * :p.iz
+  make "p.iz :k / :p.z2
+  .setitem 2 :cx (:p.xa + :b) * :p.iz
+  .setitem 2 :cy1 :hz - :eye * :p.iz
+  make "p.iz :k / :p.z3
+  .setitem 3 :cx (:p.xb + :b) * :p.iz
+  .setitem 3 :cy1 :hz - :eye * :p.iz
+  make "p.iz :k / :p.z4
+  .setitem 4 :cx (:p.xb - :b) * :p.iz
+  .setitem 4 :cy1 :hz - :eye * :p.iz
+  make "p.iz :k / :p.zc
+  make "apx :p.xc * :p.iz
+  make "apy :hz + :pyre * :p.iz
+  output "true
+end
+
+;======================================
+; Drawing
+;
+; `clean` and redraw, for the reason P11
+; section 3.3 measured: a scattered
+; vector scene dirties most tile ROWS
+; either way, because the dirty tracker
+; keeps one inclusive span per row, so
+; an erase pass buys almost nothing and
+; costs a second traversal. A horizon
+; line spans the full width by itself,
+; which settles it before the argument
+; starts.
+;
+; An edge is `(setpos x y)` with the pen
+; down -- ONE statement, one straight
+; line, NOTHING ALLOCATED. That spelling
+; is B48's fix (2026-08-23); before it
+; the choices were `setpos list :x :y`,
+; which mints two cons cells a call and
+; so 140 a frame, or `setx`/`sety`,
+; which draws an L.
+;
+; Twelve edges in TWENTY statements, and
+; the four the design first missed are
+; the pen-ups the verticals need: a
+; vertical does not start where the last
+; one ended. The twelve-edge test pins
+; the count.
+;
+; ONE CONSEQUENCE WORTH KNOWING BEFORE A
+; FIELD IS LAID OUT: an edge's cost is
+; proportional to its length ON SCREEN,
+; so a near object costs more to draw
+; than a far one and the frame gets MORE
+; expensive as the player closes on
+; something. That is the opposite of
+; what a culling budget usually does.
+to draw.box
+  pu (setpos item 1 :cx item 1 :cy1)
+  pd (setpos item 2 :cx item 2 :cy1)
+  (setpos item 3 :cx item 3 :cy1)
+  (setpos item 4 :cx item 4 :cy1)
+  (setpos item 1 :cx item 1 :cy1)
+  pu (setpos item 1 :cx item 1 :cy2)
+  pd (setpos item 2 :cx item 2 :cy2)
+  (setpos item 3 :cx item 3 :cy2)
+  (setpos item 4 :cx item 4 :cy2)
+  (setpos item 1 :cx item 1 :cy2)
+  pu (setpos item 1 :cx item 1 :cy1)
+  pd (setpos item 1 :cx item 1 :cy2)
+  pu (setpos item 2 :cx item 2 :cy1)
+  pd (setpos item 2 :cx item 2 :cy2)
+  pu (setpos item 3 :cx item 3 :cy1)
+  pd (setpos item 3 :cx item 3 :cy2)
+  pu (setpos item 4 :cx item 4 :cy1)
+  pd (setpos item 4 :cx item 4 :cy2)
+  pu
+end
+
+; Eight edges in eleven statements: the
+; base quad, then corners 1 and 2 to the
+; apex in one chain and corners 3 and 4
+; in a second. A pyramid is the cheaper
+; obstacle at both ends -- one extra
+; divide to project and two thirds of a
+; cube's edges to draw -- which is why
+; the field carries three of them.
+to draw.pyr
+  pu (setpos item 1 :cx item 1 :cy1)
+  pd (setpos item 2 :cx item 2 :cy1)
+  (setpos item 3 :cx item 3 :cy1)
+  (setpos item 4 :cx item 4 :cy1)
+  (setpos item 1 :cx item 1 :cy1)
+  (setpos :apx :apy)
+  (setpos item 2 :cx item 2 :cy1)
+  pu (setpos item 3 :cx item 3 :cy1)
+  pd (setpos :apx :apy)
+  (setpos item 4 :cx item 4 :cy1)
+  pu
+end
+
+;======================================
+; The obstacle field
+;
+; The scan is the price of the wrap and
+; it is paid for every obstacle in the
+; table, drawn or not. With the camera
+; hoisted into `ob.u` and `ob.v` it is
+; three statements an axis: translate,
+; fold, recentre.
+;
+; The reject is a DIAMOND and not a
+; disc: `abs dx + abs dz` is one
+; statement where a squared distance is
+; three, and it is stricter than the
+; disc, so an obstacle at 45 degrees
+; pops in at 0.7 of `far`. Objects
+; popping in at the far cull distance is
+; design section 14's accepted cut
+; rather than a defect.
+;
+; `max.obstacles` caps the objects a
+; frame DRAWS, and it is spent on the
+; far side of the near cull rather than
+; the near side of it. The far cull is a
+; distance test, so an obstacle BEHIND
+; you survives it and only `project.box`
+; rejects it -- and spending the budget
+; before that rejection lets the
+; obstacles behind you crowd out the one
+; in front. That is not an edge case
+; here: about three of the eight survive
+; the far cull on a typical frame and
+; the cap is three, so it binds nearly
+; every frame and roughly half of what
+; it would be spent on is behind the
+; camera. What it looks like from the
+; driving seat is a cube dead ahead that
+; simply never appears.
+;
+; The rejected projection is still paid
+; for, and that is fine: it early-outs
+; after six statements and the table is
+; only eight entries long, so the
+; unbounded half of the work is bounded
+; by `ob.count` anyway. What the cap
+; protects is the drawing, which is
+; where the milliseconds are.
+;
+; A cap of zero therefore draws nothing,
+; which is how M4 turns the density down
+; without editing this procedure. `stop`
+; inside `repeat` leaves the enclosing
+; procedure, which is what ends the
+; scan.
+to draw.field
+  make "ob.n 0
+  repeat :ob.count [
+    make "ob.d :ob.u + item repcount :ox
+    make "ob.d modulo :ob.d :world
+    make "p.dx :ob.d - :half.world
+    make "ob.d :ob.v + item repcount :oz
+    make "ob.d modulo :ob.d :world
+    make "p.dz :ob.d - :half.world
+    make "ob.d (abs :p.dx) + (abs :p.dz)
+    if :far > :ob.d [
+      if :ob.n = :max.obstacles [stop]
+      make "ob.k item repcount :okind
+      ifelse 1 = :ob.k [
+        if project.box [
+          draw.box
+          make "ob.n :ob.n + 1
+        ]
+      ] [
+        if project.pyr [
+          draw.pyr
+          make "ob.n :ob.n + 1
+        ]
+      ]
+    ]
+  ]
+end
+
+;======================================
+; The horizon
+;
+; The mountain range, the volcano and
+; the moon are at INFINITY: screen x is
+; (azimuth - heading) * scale and screen
+; y comes straight from a stored table.
+; No divide, no rotation, and no
+; dependence on where you are -- they
+; scroll with your heading and never
+; with your position, which is the only
+; way to tell that you are turning on an
+; empty plain.
+;
+; THE CULL IS THE DESIGN AND NOT AN
+; OPTIMISATION. M0 scanned all 32 points
+; to price it and read 13.2-13.8 ms --
+; 21 % of a frame, the largest line item
+; after the present -- because four
+; statements a point at 48.5-53.5 us is
+; what four statements a point costs. So
+; this never touches a point it cannot
+; draw: it works out the first visible
+; INDEX and walks ten from there.
+;
+; Forty points and not thirty-two.
+; Section 8.4's arithmetic is that a
+; 320-step viewport at 5.06 steps a
+; degree holds 63 degrees, so a 32-point
+; table shows about five peaks and a
+; 40-point one about seven -- and seven
+; is already coarse for a mountain
+; range. The cull is what makes the
+; density affordable: scanned whole,
+; forty points would be 17 ms and
+; absurd.
+;
+; THE INDEX IS WALKED IN SCREEN ORDER,
+; WHICH IS WHY THERE IS NO SEAM. M0's
+; harness scanned the table in index
+; order and drew in screen order, and at
+; heading 0 that steps from +171 to -171
+; in one segment and strokes a line
+; clear across the view. Here the
+; running azimuth is never wrapped at
+; all -- only the table INDEX is, with
+; `modulo` -- so consecutive points are
+; always adjacent on screen and the
+; polyline is one unbroken run.
+;
+; The +360 in `mn.off` is not
+; decoration: `int` truncates toward
+; zero rather than flooring, so a
+; heading under 36 degrees would give an
+; index one too high and leave a gap at
+; the left edge. Shifted, the argument
+; is always positive and `int` is a
+; floor.
+;
+; The table is a silhouette you can read
+; off the numbers. Indices 14 to 19
+; (azimuth 117 to 162 degrees) are the
+; volcano: a broad rise to 46, a crater
+; notch at 40, a second lip at 52, and
+; back down. Everything else is range.
+make "mtn [6 11 5 14 8 18 9]
+make "mtn se :mtn [4 12 7 16 6 10 22]
+make "mtn se :mtn [34 46 40 52 30 15 8]
+make "mtn se :mtn [13 5 17 9 20 7 11]
+make "mtn se :mtn [15 6 19 8 13 5 21]
+make "mtn se :mtn [10 16 7 12 4]
+
+; Points in the table, degrees between
+; them, and turtle steps per degree.
+make "mn.n 40
+make "mn.step 9
+make "mn.sc 5.06
+
+; Degrees of margin either side of
+; straight ahead, and the shift that
+; makes `int` a floor.
+make "mn.arc 36
+make "mn.off 360 - :mn.arc
+make "mn.dx :mn.step * :mn.sc
+
+; Points AFTER the first; ten cover the
+; view. This is the one number here cut
+; by hand rather than derived. The first
+; point lands somewhere in (-(arc +
+; step) * sc, -arc * sc], so reaching
+; +176 from the worst start takes
+; ceil((176 + (arc + step) * sc) /
+; mn.dx) more -- at 36 and 9 that is
+; nine. What actually holds it is the
+; horizon-coverage test: change
+; `mn.step` or `mn.arc` and the test
+; re-cuts this number by failing.
+make "mn.seen 9
+
+to horizon
+  make "mt.i :ph + :mn.off
+  make "mt.i int :mt.i / :mn.step
+  make "mt.x :mt.i * :mn.step - :ph
+  make "mt.x (:mt.x - 360) * :mn.sc
+  make "mt.k (modulo :mt.i :mn.n) + 1
+  pu
+  (setpos :mt.x :hz + item :mt.k :mtn)
+  pd
+  repeat :mn.seen [
+    make "mt.i :mt.i + 1
+    make "mt.x :mt.x + :mn.dx
+    make "mt.k (modulo :mt.i :mn.n) + 1
+    (setpos :mt.x :hz + item :mt.k :mtn)
+  ]
+  pu
+end
+
+; The moon is a crescent: two arcs of
+; the same radius whose centres are ten
+; steps apart, which is the shape you
+; get by taking one disc out of another.
+; `arc` is centred on the turtle and
+; does not move it, so each arc is a
+; `setpos`, a `seth` and one C-side call
+; -- the headings and sweeps are the
+; intersection geometry for r 16 and d
+; 10, worked out once here rather than
+; per frame.
+;
+; It is skipped when it is off the side,
+; which is most of the time, and that
+; test is three statements -- the same
+; wrap the horizon deliberately avoids,
+; but here once a frame rather than once
+; a point. `arc` segments at one chord
+; per 4 degrees whatever the radius, so
+; a crescent is 90 short device-side
+; lines however small it is drawn: a
+; fixed charge, paid on roughly one
+; frame in five, and one of the numbers
+; the play test should read off the HUD
+; rather than take from this comment.
+make "moon.az 300
+make "moon.y 130
+make "moon.r 16
+make "moon.d 10
+
+to moon
+  make "mt.m :moon.az - :ph + 180
+  make "mt.m (modulo :mt.m 360) - 180
+  make "mt.m :mt.m * :mn.sc
+  if 200 > abs :mt.m [draw.moon]
+end
+
+to draw.moon
+  make "mt.m2 :mt.m + :moon.d
+  setpc :moon.colour
+  pu (setpos :mt.m :moon.y)
+  seth 162
+  pd arc 216 :moon.r
+  pu (setpos :mt.m2 :moon.y)
+  seth 199
+  pd arc 143 :moon.r
+  pu
+  setpc :world.colour
+end
+
+;======================================
+; The gunsight
+;
+; A fixed overlay with NO ARITHMETIC IN
+; IT AT ALL, exactly as P11 section 6.1
+; writes an outline: six edges in twelve
+; statements, all of them literals, in
+; the cabinet's red rather than the
+; world's green. Drawn last so that it
+; sits over anything the plain put in
+; the middle of the view.
+to gunsight
+  setpc :sight.colour
+  pu (setpos -110 40) pd (setpos -40 40)
+  pu (setpos 40 40) pd (setpos 110 40)
+  pu (setpos 0 80) pd (setpos 0 55)
+  pu (setpos 0 25) pd (setpos 0 0)
+  pu (setpos -40 55) pd (setpos -40 25)
+  pu (setpos 40 55) pd (setpos 40 25)
+  pu
+end
+
+;======================================
+; The tank
+;
+; Motion is PER TREAD. `left.tread` and
+; `right.tread` are each -1, 0 or +1,
+; the pair drives forward speed (l + r)
+; and turn rate (l - r), and that is the
+; cabinet's dual-stick control. THE SIGN
+; IS THE PHYSICAL ONE AND IT READS
+; BACKWARDS: a tank whose RIGHT tread
+; runs forward pivots to the LEFT, so a
+; clockwise turn -- an increasing Logo
+; heading -- needs l > r. Design section
+; 7 said (r - l) until M1 drove it.
+;
+; The arrows are an interface onto the
+; treads rather than a replacement for
+; them: up and down set a forward
+; intent, left and right a turn intent,
+; and the treads are the clamped sum and
+; difference. All nine combinations of
+; the two intents map onto the nine
+; useful tread pairs, so holding up and
+; right gives a genuine one-tread arc
+; and not a scripted curve. Whether a
+; second key pair driving the treads
+; directly feels better is an M4
+; question.
+;
+; `min` and `max` would make `clamp1`
+; one statement instead of three. They
+; are in the roadmap's cheap wins on
+; their own merits (design section 13,
+; L1) and are not here yet.
+to clamp1 :v
+  if :v > 1 [output 1]
+  if -1 > :v [output -1]
+  output :v
+end
+
+to treads
+  make "tk.f 0
+  if keydown? 181 [make "tk.f 1]
+  if keydown? 182 [make "tk.f -1]
+  make "tk.t 0
+  if keydown? 183 [make "tk.t 1]
+  if keydown? 180 [make "tk.t -1]
+  make "left.tread clamp1 :tk.f + :tk.t
+  make "right.tread clamp1 :tk.f - :tk.t
+end
+
+; The collision radius follows the near
+; plane (section 9) rather than the
+; other way round: the near cull drops
+; an object when ANY of its columns
+; comes inside `near`, and the nearest
+; column of an axis-aligned cube sits at
+; most half*sqrt2 = 28.3 steps in front
+; of its centre, so a centre-distance
+; guard of near + 28.3 fires before the
+; cull ever can. `coll.r` 90 is that
+; number rounded up. The
+; collision-radius test is what stops
+; the two drifting apart.
+;
+; A square test rather than a round one,
+; because it is one comparison an axis
+; and an obstacle IS square.
+;
+; It has to run against the CANDIDATE
+; position and the drawing scan against
+; the committed one, which is why they
+; are two scans and not one.
+to blocked?
+  make "tk.u :half.world - :tk.x
+  make "tk.v :half.world - :tk.z
+  repeat :ob.count [
+    make "ob.d :tk.u + item repcount :ox
+    make "ob.d modulo :ob.d :world
+    make "ob.x :ob.d - :half.world
+    make "ob.d :tk.v + item repcount :oz
+    make "ob.d modulo :ob.d :world
+    make "ob.z :ob.d - :half.world
+    if :coll.r > abs :ob.x [
+      if :coll.r > abs :ob.z [
+        output "true
+      ]
+    ]
+  ]
+  output "false
+end
+
+to move.tank
+  make "tk.x :px + :tk.s * :sn
+  make "tk.x modulo :tk.x :world
+  make "tk.z :pz + :tk.s * :cs
+  make "tk.z modulo :tk.z :world
+  ifelse blocked? [make "bumped true] [
+    make "px :tk.x
+    make "pz :tk.z
+  ]
+end
+
+; Turn, then hoist the camera constants,
+; then move -- in that order, so the
+; step is taken along the heading the
+; frame will be drawn from and
+; `cam.setup`'s sin/cos pair serves
+; both. Two trig calls a frame, and the
+; alternative is four.
+;
+; A blocked move is refused outright and
+; the turn is kept, which is the
+; arcade's behaviour: you can always
+; turn away from what you have run into.
+;
+; The wrap offsets are hoisted last,
+; after the position is final, because
+; `draw.field` reads them once an
+; obstacle.
+to step.tank
+  treads
+  make "tk.r :left.tread - :right.tread
+  make "ph :ph + :tk.r * :turn.rate
+  make "ph modulo :ph 360
+  cam.setup
+  make "tk.s :left.tread + :right.tread
+  make "tk.s :tk.s * :tread.step
+  make "bumped false
+  if not 0 = :tk.s [move.tank]
+  cam.offsets
+end
+
+;======================================
+; Input
+;
+; `pollkeys` reads the keyboard's STATE
+; -- which keys are down right now --
+; and is called once at the top of the
+; frame, after which `keydown?` and
+; `keyhit?` cost nothing. LEVEL FOR THE
+; CONTROLS THAT HOLD, EDGE FOR THE ONES
+; THAT FIRE: the treads are read with
+; `keydown?` in `treads`, pause and quit
+; with `keyhit?` here, or holding P
+; would toggle the pause fifteen times a
+; second.
+;
+; This runs OUTSIDE the paused guard, or
+; a paused game could never read the key
+; that unpauses it, so it turns the
+; other keys away itself while paused --
+; the defect both shipped shooters had.
+to poll.input
+  pollkeys
+  if keyhit? 112 [
+    make "paused not :paused
+    stop
+  ]
+  if :paused [stop]
+  if keyhit? 113 [make "quit true]
+end
+
+;======================================
+; The HUD
+;
+; M1's readout is a development one and
+; M3 replaces it with the score: what
+; the first hardware play test has to
+; answer is whether driving FEELS like
+; Battlezone at this frame rate, and
+; that question needs the frame time on
+; the screen beside the driving.
+;
+; TWO NUMBERS, AND THE FIRST VERSION OF
+; THIS SHOWED ONLY THE WRONG ONE. `sync`
+; does not just wait -- it PRESENTS and
+; then waits -- so a figure measured up
+; to `sync` leaves out the present, and
+; the present is 19.8 ms of a 66.7 ms
+; budget on every board M0 measured. A
+; board read "low to mid 20s" against a
+; predicted 46.5 and the prediction was
+; fine: 46.5 less the 19.8 nobody was
+; counting is 26.7, and the readout was
+; answering a different question from
+; the one it was being compared against.
+; So:
+;
+; * BODY is the Logo work -- everything
+;   from the top of the frame to just
+;   before `sync`. That is what the
+;   game's own levers move.
+;
+; * FRAME is the whole period, top of
+;   one frame to the top of the next,
+;   `sync` included. It is what says
+;   whether the rate is being made: at
+;   15 fps it reads 66 or 67 while there
+;   is headroom and climbs above it when
+;   there is not.
+;
+; The present itself is FRAME less BODY
+; less the wait, and Logo cannot
+; separate those two -- `sync` is one
+; primitive. M0 measured it at 19.8 ms
+; and flat, so it is a constant to
+; subtract rather than a number to
+; watch.
+;
+; AVERAGED OVER A SECOND, because a
+; figure that changes fifteen times a
+; second cannot be read off a screen by
+; somebody driving. Each frame adds to a
+; sum and a peak; every `hud.every`
+; frames the averages are printed and
+; the accumulators reset. The peak is
+; the half that matters for the budget
+; -- it is where a `recycle` spike shows
+; -- and the average is the half you can
+; read.
+;
+; It is all inside the measured body, so
+; the readout pays for itself in its own
+; numbers, and it lags one frame because
+; it tallies the figures the previous
+; frame left behind. At 15 fps neither
+; is perceptible.
+;
+; Rows 24 to 26: with B49 fixed the
+; split screen shows text lines 24 to
+; 31, so this sits directly under the
+; viewport.
+
+make "hud.every 15
+
+to hud.tally
+  if 2 > :frame.count [stop]
+  make "hud.n :hud.n + 1
+  make "hud.bs :hud.bs + :body.ms
+  make "hud.fs :hud.fs + :frame.ms
+  if :body.ms > :hud.bm [
+    make "hud.bm :body.ms
+  ]
+  if :frame.ms > :hud.fm [
+    make "hud.fm :frame.ms
+  ]
+  if :hud.n = :hud.every [draw.hud]
+end
+
+to draw.hud
+  setcursor [0 24]
+  print (se [POS] int :px int :pz)
+  setcursor [14 24]
+  print (se [HDG] int :ph)
+  setcursor [26 24]
+  print (se [CPU] :cpu.at)
+  make "hud.a int :hud.bs / :hud.n
+  setcursor [0 25]
+  print (se [BODY] :hud.a)
+  setcursor [14 25]
+  print (se [MAX] :hud.bm)
+  make "hud.a int :hud.fs / :hud.n
+  setcursor [0 26]
+  print (se [FRAME] :hud.a)
+  setcursor [14 26]
+  print (se [MAX] :hud.fm)
+  make "hud.n 0
+  make "hud.bs 0
+  make "hud.fs 0
+  make "hud.bm 0
+  make "hud.fm 0
+end
+
+;======================================
+; The frame
+;
+; NOTHING IN THIS INTERPRETER COLLECTS
+; ON DEMAND: `alloc_cell` and `mem_atom`
+; report out of space rather than
+; collecting and retrying, which is the
+; right call for a frame loop -- no
+; unpredictable pause -- but it makes
+; this the game's entire safety margin.
+; Asteroids learned that counting frames
+; is always a guess and was wrong three
+; times before it asked the workspace
+; instead, so this asks from the start.
+; A recycle is about 4.3 ms when it
+; fires.
+to reclaim
+  if atoms < :atom.floor [recycle]
+end
+
+; One frame, in a fixed order, as a
+; procedure rather than the body of the
+; loop below so that a test or a timing
+; script can call exactly what the game
+; runs.
+;
+; The order is: read the world, then
+; clear, then draw far to near --
+; horizon, moon, obstacles, gunsight --
+; so the sight sits over everything.
+; `clean` takes the graphics half only,
+; so the readout in the text area
+; survives it and never needs erasing.
+;
+; THE TWO TIMERS BRACKET DIFFERENT
+; THINGS ON PURPOSE. `body.ms` stops
+; before `sync` and is the Logo work;
+; `frame.ms` stops after it and is the
+; whole period. `sync` PRESENTS and then
+; waits, so the first excludes the
+; present and the second includes it
+; along with whatever slack is left --
+; which is why a readout showing only
+; the first cannot be compared against
+; 66.7 ms, and why the first version of
+; this file was wrong to try.
+;
+; `t0` is taken before `poll.input` and
+; outside the paused guard, so the
+; period is the real one and a paused
+; frame still measures itself.
+;
+; `hud.tally` and `reclaim` are both
+; inside the body: the readout because
+; it should pay for itself in its own
+; numbers, and the recycle because a 4.3
+; ms spike is exactly what a play test
+; wants to see rather than have smoothed
+; away.
+to play.frame
+  make "tk.t0 ticks
+  poll.input
+  if not :paused [
+    make "frame.count :frame.count + 1
+    step.tank
+    clean
+    setpc :world.colour
+    horizon
+    moon
+    draw.field
+    gunsight
+    hud.tally
+    reclaim
+    make "body.ms ticks - :tk.t0
+  ]
+  sync
+  make "frame.ms ticks - :tk.t0
+end
+
+;======================================
+; The game
+;
+; `cs` restores automatic refresh, so it
+; comes BEFORE the `setrefresh "sync`
+; and not after -- Asteroids logged that
+; one the hard way. `window` comes after
+; `cs` for the same reason: `cs` puts
+; the boundary mode back to `wrap`.
+to battlezone
+  cs
+  splitscreen
+  ct
+  window
+  ht
+  make "px 800
+  make "pz 800
+  make "ph 0
+  cam.setup
+  cam.offsets
+  make "paused false
+  make "quit false
+  make "frame.count 0
+  make "hud.n 0
+  make "hud.bs 0
+  make "hud.fs 0
+  make "hud.bm 0
+  make "hud.fm 0
+  make "cpu.at "unknown
+  catch "error [make "cpu.at hw.cpu]
+  (setrefresh "sync :fps)
+  ; A baseline poll, so the keypress
+  ; that started the game is not
+  ; delivered to the first frame as a
+  ; hit.
+  pollkeys
+  until [:quit] [play.frame]
+  setrefresh "auto
+  textscreen
+  ct
+  print [Battlezone M1]
+end

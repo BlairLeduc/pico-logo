@@ -184,7 +184,7 @@ if(LOGO_HAS_WIFI)
     message(STATUS "WiFi support enabled")
     target_compile_definitions(logo_core PUBLIC LOGO_HAS_WIFI=1)
 
-    # `hw.setfrequency` needs the cyw43 bus divider to be a runtime value.
+    # `hw.setcpu` needs the cyw43 bus divider to be a runtime value.
     # The driver talks to the wireless chip over a PIO SPI clocked at
     # clk_sys/2, so an overclock takes it out of spec and the chip answers
     # with garbage headers ("hdr mismatch") -- observed at 250 MHz. The
@@ -248,7 +248,7 @@ pico_set_program_name(pico-logo "pico-logo")
 pico_set_program_version(pico-logo "0.1")
 
 # Modify the below lines to enable/disable output over UART/USB
-# `hw.setfrequency` needs clk_peri to follow clk_sys, and by default it does not:
+# `hw.setcpu` needs clk_peri to follow clk_sys, and by default it does not:
 # `set_sys_clock_pll` parks clk_peri on the USB PLL at 48 MHz whenever the system
 # PLL moves (SDK clocks.c). Measured on a board 2026-08-23 -- an overclock took
 # the LCD's SPI from 75 MHz to 24 and the present from 19.6 ms to 58, flat across

@@ -43,6 +43,11 @@ extern size_t mock_input_pos;
 extern int mock_battery_level;
 extern bool mock_battery_charging;
 
+// The clock the mock reports, in kHz. A test that only compared the words
+// `hw.cpu` outputs would pass with the two names wired to each other, so the
+// frequency itself has to be readable.
+extern uint32_t mock_cpu_khz;
+
 // User interrupt flag for testing
 extern bool mock_user_interrupt;
 

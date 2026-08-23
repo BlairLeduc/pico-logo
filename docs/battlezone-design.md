@@ -355,8 +355,11 @@ constant should be.
   every transform and is not a simplification of the original.
 - Motion is per-tread. `left.tread` and `right.tread` are each −1, 0 or +1 from
   the key state; the pair drives forward speed `(l + r)` and turn rate
-  `(r − l)`. That is the cabinet's dual-stick control on a keyboard, and it is
-  two statements.
+  **`(l − r)`**. That is the cabinet's dual-stick control on a keyboard, and it
+  is two statements. **The sign reads backwards and is the physical one**: a
+  tank whose *right* tread runs forward pivots to the **left**, so a clockwise
+  turn — an increasing Logo heading — is `l > r`. This section said `(r − l)`
+  until M1 drove it (§16.4).
 - `cos ph` and `sin ph` are hoisted into `:cs` and `:sn` **once a frame**, which
   is the single most important hoist in the file: it is the difference between
   two trig calls a frame and two per vertex.
@@ -804,9 +807,9 @@ that is **3.9 ms off a three-obstacle frame** (§12.1).
 The price is real and worth stating: every hot-path temporary becomes a global,
 in a language with one flat namespace and no shadowing, which is exactly the
 hazard Asteroids' header spends a paragraph on and the hazard that cost this
-design M0's body column (§16.1). The mitigation is a prefix — `pb.` for
-`project.box`'s temporaries, `pe.` for `project.enemy`'s — and a test that reads
-the names back out of the source.
+design M0's body column (§16.1). The mitigation is a prefix — M1 uses `p.` for
+the projection, `ob.` for the field scan, `mt.` for the horizon and `tk.` for the
+tank — and a test that reads the names back out of the source.
 
 **Buys this game:** 3.9 ms, and it is half of what the gate needed.
 **Verdict: take it**, with the naming discipline, at M1.
@@ -1200,6 +1203,252 @@ the projection is right, because a wrong transform is obvious the moment you
 drive past a cube and it does not go where a cube goes. First hardware play
 test: does driving *feel* like Battlezone at this frame rate?
 
+### 16.4 M1 is built, and it is waiting on a board
+
+`logo/games/battlezone` and `tests/test_battlezone.c` (34 tests). Plain,
+obstacles, treads, horizon, gunsight; no enemy, no shells, no radar. Everything
+§16.3.1 said M1 inherits is in it from the first line rather than retrofitted:
+the horizon is culled, the hot path is on `p.`/`ob.`/`mt.`/`tk.`-prefixed
+globals, `near` is 60 and cut for edge length, and `max.obstacles` is a constant
+`draw.field` reads.
+
+**The predicted frame, at three visible objects on a Pico 2 W, is about 49.8 ms
+against 66.7** (46.5 as first written; §16.4.2 corrects the scan line), built from M0's measured parts rather than from adjectives:
+
+| | ms | where it comes from |
+|---|---:|---|
+| present, 240 rows | 19.8 | M0 Q2, and no game-side lever reaches it |
+| project 3 obstacles | 8.1 | M0's 10.6 closed by §12.1's globals lever |
+| draw 3 obstacles | ~10 | M0's 11.2, less the pyramids' four missing edges |
+| horizon, 10 points of 40 | 2.1 | §8.4's cull, at M0's per-point rate |
+| the field and collision scans | ~6.2 | new to M1 — two walks of the eight-entry table, at three statements an axis (see the 40-column note below). §16.4.2 corrects this line from 3.8 |
+| treads, gunsight, HUD | 2.2 | §11's estimates |
+| moon, when it is in view | ~0.5 | 90 device-side chords, fixed |
+| **total** | **~49.8** | corrected in §16.4.2; the board reads 50–53 driving at cubes |
+
+That leaves about 20 ms, which is roughly what M2's enemy (7.7), radar (3.0) and
+shells will want — so M1 fitting is not the same as M2 fitting, and M2 remains
+the frame-budget milestone.
+
+**The line to distrust is the drawing one.** M0 measured three boxes at z = 160
+to 640, whose edges are 20–60 steps; M1's near plane lets a cube come to 80,
+where it is 173 steps tall and its twelve edges cost proportionally more (§10).
+The play test should read the HUD while driving *at* something, not while
+looking at the horizon.
+
+### 16.4.1 The first readout measured the wrong thing, and the board caught it
+
+The play test reported **"low to mid 20s"** against the 46.5 ms predicted above,
+and the interesting part is that **nothing was wrong with the prediction.**
+
+`play.frame` timed from the top of the frame to just before `sync`, on the
+reasoning M0 established — `sync` waits out the rest of the frame and would
+report the wait rather than the work (§16). That reasoning is half true and the
+missing half is the largest line item in the budget: **`sync` presents and *then*
+waits.** The reference says so in as many words. So the figure on the screen
+excluded the present, which is **19.8 ms of the 66.7** on all three boards and
+does not vary with the scene. 46.5 − 19.8 = **26.7**, and against a scene holding
+two or three objects rather than three the low twenties is where it belongs.
+
+**A readout that cannot be compared against the budget it is quoted next to is
+worse than no readout**, and this one was being read against 66.7 with 44 ms of
+headroom that did not exist. The HUD now shows two numbers:
+
+| | what it brackets | what it answers |
+|---|---|---|
+| **BODY** | top of frame to just before `sync` | the Logo work — what §12.1's levers move |
+| **FRAME** | top of one frame to the top of the next | whether the rate is being made: 66–67 while there is headroom, above it when there is not |
+
+The present is FRAME − BODY − the wait, and Logo cannot separate those two
+because `sync` is one primitive. M0 measured it at 19.8 ms and flat, so it is a
+constant to subtract rather than a number to watch — **the frame's cost is
+BODY + 19.8**, and FRAME is the check on whether that fits.
+
+**Both are averaged over `hud.every` frames — about a second — with the peak
+carried alongside**, because a figure that changes fifteen times a second cannot
+be read off a screen by somebody driving; that was the second thing the play test
+reported. The peak is the half that matters for the budget, since it is where a
+`recycle` spike shows. The readout also carries the **clock**, read once through
+a `catch`, because §12.3 makes 150 and 300 MHz a 1.6× difference on the frame and
+a number nobody can attribute to a clock is worth nothing.
+
+`test_the_frame_timer_brackets_the_present` reads the two assignments back out of
+the Logo source and requires one on each side of the `sync`. Nothing on the host
+can time either — `ticks` is milliseconds and a host frame is microseconds — so
+what is pinned is the property that broke rather than the number.
+
+### 16.4.2 M1 measured on hardware: it makes the rate, with room
+
+**FRAME never read above 67 at any point in the play test**, which is 15 fps
+being made on every frame — not the mean, every frame, since the peak column
+would have caught one. BODY read **25 ms looking at the horizon and low 30s
+driving at cubes**. The frame's cost is BODY + the 19.8 ms present:
+
+| | BODY | frame | against 66.7 |
+|---|---:|---:|---:|
+| horizon, few objects near | 25 | **44.8** | 21.9 ms spare |
+| driving at cubes | ~31 | **~50.8** | ~15.9 ms spare |
+
+**§16.4 predicted 46.5 and the worst case is ~51 — 9 % over, in exactly the line
+this section flagged as the one to distrust.** Drawing is the item that moved,
+which is §9 and §10's whole argument: an edge costs 0.35–0.98 µs a step, M0
+measured boxes whose edges were 20–60 steps, and M1's near plane lets a cube
+reach 173. The frame does get more expensive as the player closes on something,
+as §10 said it would, and the difference between the two rows above — about 6 ms
+— is that effect measured for the first time.
+
+**One line of §16.4's table was underpriced and the re-derivation is worth
+keeping**, because it is arithmetic rather than measurement and could have been
+done before the board ran. The field and collision scans were put at 3.8 ms on
+the assumption of a dense wrapped delta; the 40-column rule turned each delta
+into three statements, so each scan is six statements an obstacle plus its tests
+— eight all told — and two scans over eight obstacles is **64 + 64 statements,
+about 6.2 ms**, not 3.8. Corrected, the table totals **~49.8**, and the board
+says 50–53. The lesson is the one the 40-column note already states and this is
+the number attached to it: *splitting a statement to fit the editor's width costs
+frame time, and the cost has to be re-derived where it lands rather than left in
+the estimate it replaced.*
+
+**A defect fell out of decomposing those numbers, and it is a gameplay one.**
+`max.obstacles` was spent on the near side of the near cull — an object counted
+against the cap as soon as it passed the *far* cull, which is a distance test, so
+obstacles **behind** the camera consumed the budget and an obstacle in front went
+undrawn. With eight on a 1,600-step plain and a 700-step cull, about three
+survive the far cull on a typical frame and the cap is three, so it bound nearly
+every frame and roughly half of what it was spent on was behind you. What that
+looks like from the driving seat is a cube dead ahead that simply never appears —
+found by arithmetic, not by seeing it, which is the argument for decomposing a
+reading rather than accepting it. The cap now counts objects actually **drawn**;
+the rejected projection is still paid for and that is fine, since it early-outs
+after six statements and the table is only eight entries long.
+`test_obstacles_behind_the_camera_do_not_crowd_out_the_one_in_front` puts three
+behind and one ahead and requires the one ahead; it draws nothing on the old
+code.
+
+### 16.4.3 At 300 MHz the present is the majority of the frame
+
+Same play test, same board, `hw.setfrequency 300`:
+
+| | BODY at 150 | BODY at 300 | ratio |
+|---|---:|---:|---:|
+| horizon | 25 | **11** | 2.27 |
+| driving at cubes | ~31 | **15** | 2.07 |
+
+FRAME never above 67 at either clock. Adding the present back — **18.7 ms at 300
+MHz, not 19.8**, since §12.3.1 measured its CPU share moving and §12.3.1a's
+divider arithmetic is why 300 is the overclock that keeps the LCD at 75 MHz at
+all — the frame is:
+
+| | 150 MHz | 300 MHz |
+|---|---:|---:|
+| horizon | 44.8 | **29.7** |
+| driving at cubes | 50.8 | **33.7** |
+| present's share of the frame | 39 % | **55 %** |
+
+**The interpretation half behaves exactly as §12.3 measured it**: 2.07× on the
+loaded scene against a clock ratio of 2.000 and a measured interpretation slope
+of 2.059. The 2.27× on the horizon scene is **not** a faster-than-the-clock
+result and should not be read as one — it is two uncontrolled sittings. The
+readout is integer milliseconds, so ±1 on an 11 is ±9 %; the camera was not in
+the same place; and the object-cap fix (§16.4.2) landed between the two runs, so
+the later scene draws *more*. A like-for-like clock comparison wants one sitting,
+one camera position, and `hw.setfrequency` switched underneath it — which now
+works with the radio up (§12.3.2), so it is one line at the prompt.
+
+**What it buys is scene, not frame rate, and §12.3.1b now has a measurement
+instead of a projection.** 33 ms of the budget is free at 300 MHz. At M0's
+overclocked slope of 3.22 ms an object that is about **ten more objects — twelve
+or thirteen in view at 15 fps**, which is the arcade's density and the number
+§13's L4 verdict called *"unreachable in Logo at any frame rate worth playing."*
+Or spend it on rate: 33.7 ms fits **24 fps** (41.7) at the present density and
+the horizon scene fits 30. Both are M4's call, and the caution that comes with
+the rate half is Asteroids' — `turn.rate` and `tread.step` are per-frame
+constants, so changing `fps` re-cuts them or the tank turns and drives 1.6× too
+fast.
+
+**And the shape of the problem has changed.** The present was 39 % of the frame
+at stock and is **55 %** at 300 MHz: past this point more than half of every
+frame is the SPI wire to the panel, which no game-side lever reaches and the
+clock barely moves. Culling harder, drawing fewer edges and L0.5-style rewrites
+all buy from the shrinking half. §6's 240-row viewport remains the only thing
+that has ever moved this number, and it has already been spent.
+
+### 16.4.4 M1 is closed
+
+**"Playability was good."** That is the question §16 set for this milestone —
+*does driving feel like Battlezone at this frame rate?* — and it is the only one
+a test could not have answered. The projection is right, the frame fits at both
+clocks with room, §19.2 is answered (the split screen's text area is usable under
+`sync`, once B49 was fixed), and the four defects M1 turned up along the way —
+B49, the object cap, the frame timer and the readout's readability — are fixed.
+
+**M2 may start**, and it inherits three things settled rather than assumed: 15 fps
+and density rather than rate (§16.4.3); `hw.setcpu "fast` at startup with `hw.cpu`
+**read back** and `max.obstacles` cut if the board refused, since a board played
+at a density it cannot draw is worse than one played at the stock density; and a
+readout that already reports BODY, FRAME and the clock, so the frame-budget
+milestone has its instrument before it has its enemy.
+
+**Four things M1 settled that the design had left open or guessed at.**
+
+1. **`max.obstacles` is spent before the object, not after it.** Written the
+   obvious way — count the object, draw it, then test the cap — a cap of zero
+   draws one object, because the count never equals the cap at the moment it is
+   read. M4 turns this number, so the number has to mean what it says at every
+   value including its floor. `test_max_obstacles_is_a_constant_the_frame_reads`
+   sets it to zero and requires an empty screen.
+2. **The horizon needs no seam guard at all**, and M0's did. M0 walked the table
+   in index order and drew in screen order, which steps from +171 to −171 at the
+   table's seam and needed a pen-lift to catch it (§8.4). M1 walks in **screen**
+   order — it computes the first visible index and increments, wrapping only the
+   table *index* with `modulo` and never the running azimuth — so consecutive
+   points are always adjacent on screen and the polyline is one unbroken run.
+   The guard, the `mtn.runs` counter and the fold-back arithmetic all disappear,
+   and `test_no_horizon_segment_spans_the_whole_screen` still sweeps the circle
+   because the *cause* it was written for was `wrap`, not the seam.
+3. **`int` truncates toward zero, which is not a floor, and the horizon is where
+   that bites.** The first visible index is `int ((ph − arc) / step)`, and at a
+   heading under 36° that expression is negative, where truncation returns an
+   index one too high and leaves a gap at the left edge — a mountain range that
+   stops short of the frame for one tenth of the circle. Shifting by 360 makes
+   the argument always positive, at which point `int` *is* a floor.
+   `test_the_horizon_covers_the_whole_view_at_every_heading` walks 3° at a time
+   for that reason: a spot check at 0, 90, 180, 270 passes on the broken version.
+4. **The tread sign is the physical one and it is the opposite of the obvious
+   one.** §7 says the pair drives forward speed `(l + r)` and turn rate
+   `(r − l)`, which reads naturally and is backwards in Logo's compass: a tank
+   whose *right* tread runs forward pivots to the **left**, so an increasing
+   heading needs `l > r`. M1 uses `(l − r)`. This is not a correction to §7 so
+   much as the sign §7 never fixed, and it is the kind of thing that is invisible
+   in a test that only drives forward.
+
+**The 40-column rule costs about 2 ms a frame, and it is worth writing down
+because it is a real trade rather than a formatting preference.** Every line in
+`logo/games/battlezone` fits the width of the PicoCalc's own editor, which is
+what makes it readable on the machine it runs on — and Logo has no line
+continuation, so a statement that does not fit has to be *split into more
+statements*. The wrapped obstacle delta is the case: one dense expression on a
+wide screen, three statements here (translate by a hoisted camera offset, fold
+with `modulo`, recentre), which at 48.5 µs a statement over eight table entries
+and two axes is most of the 2 ms. The horizon's first index is two statements
+for the same reason. The cost is paid where it is cheapest to pay — table scans
+rather than per-vertex work — but it is not zero, and a milestone that reports
+a frame figure should say what is in it.
+
+**The models are still not generated.** §8.3 says `scripts/gen_models.py` emits
+the vertex and edge lists, and M1 has no vertex list to emit: an obstacle is
+four ground columns computed from `half`, and the horizon is a height table you
+can read as a silhouette straight off the numbers. The hazard §8.3 exists for —
+an edge going to the wrong corner, with no way to see which — arrives with the
+enemy tank at M2, and so does the generator.
+
+**Two open questions M1 now puts in front of a board rather than answering.**
+§19.2 asked whether the split screen's text area is usable while `sync` drives
+the graphics half; `draw.hud` writes there every frame, so the first play test
+answers it by looking. And §19.5's arithmetic-statement discrepancy is still
+open — M1 spent L0.5 on the strength of a host measurement, as §16.3.1 directed,
+and `tests/logo/p11rocks` still settles it in ten minutes.
+
 **M2 — the enemy.** One tank, its hunt logic, both shells, collisions,
 explosions, the radar. This is the frame-budget milestone — the one that
 corresponds to P11's M2, which is the one that missed by 19.7 ms.
@@ -1213,7 +1462,7 @@ table, sound.
 ## 17. Tests
 
 `tests/test_battlezone.c` on the mock device, mirroring `test_asteroids.c`'s
-shape. The ones that are specific to this game:
+shape. **Written at M1; 34 tests.** The ones that are specific to this game:
 
 - **The projection is right.** Known camera, known world point, known screen
   coordinate, computed by hand. This is the test that would have caught a
@@ -1227,7 +1476,10 @@ shape. The ones that are specific to this game:
   shipped that way.
 - **The harness frame is the game's frame.** P11's
   `test_the_harness_frame_matches_the_game_frame` exists because a harness that
-  drifts from the game measures a game nobody plays. Same test, from the start.
+  drifts from the game measures a game nobody plays. **M1 has no separate
+  harness to drift**: the frame reports its own cost on the HUD (`frame.ms`,
+  everything but `sync`), so the thing being measured is the thing being played.
+  The test comes back the moment a `p13m*` script spells a frame out again.
 - **The horizon cull keeps the visible points.** Off-by-one at the field-of-view
   edge is a mountain that flicks in and out as you turn.
 

@@ -2,8 +2,8 @@
 //  Pico Logo
 //  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
-//  Tests for hardware primitives (hw.battery, hw.temperature, hw.frequency,
-//  hw.setfrequency, hw.light?,
+//  Tests for hardware primitives (hw.battery, hw.temperature, hw.cpu,
+//  hw.setcpu, hw.light?,
 //  hw.setlight)
 //
 
@@ -151,99 +151,112 @@ void test_battery_show_output(void)
 }
 
 //==========================================================================
-// hw.frequency / hw.setfrequency Primitive Tests
+// hw.cpu / hw.setcpu Primitive Tests
 //==========================================================================
+//
+// Two clocks, named rather than numbered. The RP2350 is rated to 150 MHz and
+// `fast` is 300; every clock in between is a net loss on this board, because
+// the LCD's SPI prescaler is coarse enough that 200 and 250 MHz slow the
+// display by more than they speed the interpreter. The words are the interface
+// precisely so that those cannot be asked for.
 
-void test_frequency_returns_megahertz(void)
+void test_cpu_reports_normal_at_the_stock_clock(void)
 {
-    set_mock_cpu_khz(true, 150000u);
+    set_mock_cpu_khz(true, LOGO_CPU_KHZ_NORMAL);
 
-    Result r = eval_string("hw.frequency");
+    Result r = eval_string("hw.cpu");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
-    TEST_ASSERT_EQUAL(VALUE_NUMBER, r.value.type);
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 150.0f, r.value.as.number);
+    TEST_ASSERT_EQUAL_STRING("normal", value_to_string(r.value));
 }
 
-void test_setfrequency_changes_what_frequency_reports(void)
+void test_cpu_reports_fast_at_the_overclock(void)
 {
-    set_mock_cpu_khz(true, 150000u);
-
-    Result r = run_string("hw.setfrequency 300");
-    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 300.0f, eval_string("hw.frequency").value.as.number);
+    set_mock_cpu_khz(true, LOGO_CPU_KHZ_FAST);
+    TEST_ASSERT_EQUAL_STRING("fast", value_to_string(eval_string("hw.cpu").value));
 }
 
-void test_frequency_is_a_number_not_a_word(void)
+void test_setcpu_changes_what_cpu_reports(void)
 {
-    set_mock_cpu_khz(true, 150000u);
+    set_mock_cpu_khz(true, LOGO_CPU_KHZ_NORMAL);
 
-    Result r = eval_string("hw.frequency * 2");
+    TEST_ASSERT_EQUAL(RESULT_NONE, run_string("hw.setcpu \"fast").status);
+    TEST_ASSERT_EQUAL_STRING("fast", value_to_string(eval_string("hw.cpu").value));
+
+    TEST_ASSERT_EQUAL(RESULT_NONE, run_string("hw.setcpu \"normal").status);
+    TEST_ASSERT_EQUAL_STRING("normal", value_to_string(eval_string("hw.cpu").value));
+}
+
+// It really does move the clock, not just the word: the two names are the
+// documented frequencies and a test that only compared words would pass with
+// them wired to each other.
+void test_setcpu_selects_the_documented_frequencies(void)
+{
+    set_mock_cpu_khz(true, LOGO_CPU_KHZ_NORMAL);
+
+    run_string("hw.setcpu \"fast");
+    TEST_ASSERT_EQUAL_UINT32(300000u, mock_cpu_khz);
+
+    run_string("hw.setcpu \"normal");
+    TEST_ASSERT_EQUAL_UINT32(150000u, mock_cpu_khz);
+}
+
+// A word, so it can be compared and printed; not a number, so it cannot be
+// done arithmetic on and cannot be confused with a megahertz figure.
+void test_cpu_is_a_word_that_compares(void)
+{
+    set_mock_cpu_khz(true, LOGO_CPU_KHZ_FAST);
+
+    Result r = eval_string("\"fast = hw.cpu");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 300.0f, r.value.as.number);
+    TEST_ASSERT_EQUAL_STRING("true", value_to_string(r.value));
 }
 
-// The stock clock and the overclock ceiling are both accepted; anything outside
-// is refused. The bounds are named constants, so the test states the numbers it
-// expects rather than reading them back from the header -- a change to either
-// limit should have to touch this file and be noticed.
-void test_setfrequency_accepts_both_ends_of_the_range(void)
+// The whole point of the two-word interface: the clocks that are a net loss on
+// this board cannot be asked for, and neither can anything else.
+void test_setcpu_refuses_anything_but_the_two_names(void)
 {
-    set_mock_cpu_khz(true, 150000u);
-    TEST_ASSERT_EQUAL(RESULT_NONE, run_string("hw.setfrequency 150").status);
-    TEST_ASSERT_EQUAL(RESULT_NONE, run_string("hw.setfrequency 300").status);
-}
+    set_mock_cpu_khz(true, LOGO_CPU_KHZ_NORMAL);
 
-void test_setfrequency_refuses_below_the_floor(void)
-{
-    set_mock_cpu_khz(true, 150000u);
-
-    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("hw.setfrequency 149").status);
-    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("hw.setfrequency 0").status);
-    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("hw.setfrequency 0 - 300").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("hw.setcpu \"slow").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("hw.setcpu \"turbo").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("hw.setcpu 300").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("hw.setcpu 200").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("hw.setcpu [fast]").status);
 
     // And none of them moved the clock.
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 150.0f, eval_string("hw.frequency").value.as.number);
+    TEST_ASSERT_EQUAL_UINT32(150000u, mock_cpu_khz);
+    TEST_ASSERT_EQUAL_STRING("normal", value_to_string(eval_string("hw.cpu").value));
 }
 
-void test_setfrequency_refuses_above_the_ceiling(void)
+// Case is not significant, the way it is not for `hw.setlight`'s true/false.
+void test_setcpu_takes_either_case(void)
 {
-    set_mock_cpu_khz(true, 150000u);
-
-    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("hw.setfrequency 301").status);
-    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("hw.setfrequency 1000").status);
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 150.0f, eval_string("hw.frequency").value.as.number);
+    set_mock_cpu_khz(true, LOGO_CPU_KHZ_NORMAL);
+    TEST_ASSERT_EQUAL(RESULT_NONE, run_string("hw.setcpu \"FAST").status);
+    TEST_ASSERT_EQUAL_STRING("fast", value_to_string(eval_string("hw.cpu").value));
 }
 
-// The important one. A frequency the PLL cannot make exactly is REFUSED, not
-// rounded -- a program that rounded would go on measuring against a clock it
-// did not know it had. The mock's PLL makes multiples of 25 MHz.
-void test_setfrequency_refuses_a_frequency_the_clock_cannot_make(void)
+// A board that refuses the change is reported rather than swallowed, and the
+// clock stays where it was -- a program that went on measuring against a clock
+// it did not have would be measuring nothing. The mock's PLL makes multiples of
+// 25 MHz, so an unmakeable clock is arranged by moving the mock rather than by
+// asking for one, since the two names are always makeable by construction.
+void test_setcpu_reports_a_board_that_refuses(void)
 {
-    set_mock_cpu_khz(true, 150000u);
+    set_mock_cpu_khz(true, 137000u);   // a clock the mock's PLL cannot leave cleanly
 
-    Result r = run_string("hw.setfrequency 213");
-    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 150.0f,
-        eval_string("hw.frequency").value.as.number,
-        "a refused frequency must leave the clock where it was");
-}
-
-void test_setfrequency_refuses_a_non_number(void)
-{
-    set_mock_cpu_khz(true, 150000u);
-
-    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("hw.setfrequency \"fast").status);
-    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("hw.setfrequency [300]").status);
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("normal", value_to_string(eval_string("hw.cpu").value),
+                                     "anything short of the overclock reads as normal");
 }
 
 // A board that cannot retune errors rather than silently doing nothing, the
 // same way `hw.temperature` does on a board with no sensor.
-void test_frequency_errors_when_the_device_cannot_report_it(void)
+void test_cpu_errors_when_the_device_has_no_settable_clock(void)
 {
     set_mock_cpu_khz(false, 150000u);
 
-    TEST_ASSERT_EQUAL(RESULT_ERROR, eval_string("hw.frequency").status);
-    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("hw.setfrequency 300").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, eval_string("hw.cpu").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("hw.setcpu \"fast").status);
 }
 
 //==========================================================================
@@ -711,6 +724,16 @@ int main(void)
     RUN_TEST(test_battery_show_output);
     
     // hw.temperature tests
+    RUN_TEST(test_cpu_reports_normal_at_the_stock_clock);
+    RUN_TEST(test_cpu_reports_fast_at_the_overclock);
+    RUN_TEST(test_setcpu_changes_what_cpu_reports);
+    RUN_TEST(test_setcpu_selects_the_documented_frequencies);
+    RUN_TEST(test_cpu_is_a_word_that_compares);
+    RUN_TEST(test_setcpu_refuses_anything_but_the_two_names);
+    RUN_TEST(test_setcpu_takes_either_case);
+    RUN_TEST(test_setcpu_reports_a_board_that_refuses);
+    RUN_TEST(test_cpu_errors_when_the_device_has_no_settable_clock);
+
     RUN_TEST(test_temperature_returns_number);
     RUN_TEST(test_temperature_rounds_to_tenths);
     RUN_TEST(test_temperature_rounds_to_nearest_tenth);
@@ -768,16 +791,7 @@ int main(void)
     RUN_TEST(test_battery_out_of_nodes_errors);
     RUN_TEST(test_toot_in_procedure);
 
-    // hw.frequency / hw.setfrequency
-    RUN_TEST(test_frequency_returns_megahertz);
-    RUN_TEST(test_setfrequency_changes_what_frequency_reports);
-    RUN_TEST(test_frequency_is_a_number_not_a_word);
-    RUN_TEST(test_setfrequency_accepts_both_ends_of_the_range);
-    RUN_TEST(test_setfrequency_refuses_below_the_floor);
-    RUN_TEST(test_setfrequency_refuses_above_the_ceiling);
-    RUN_TEST(test_setfrequency_refuses_a_frequency_the_clock_cannot_make);
-    RUN_TEST(test_setfrequency_refuses_a_non_number);
-    RUN_TEST(test_frequency_errors_when_the_device_cannot_report_it);
+    // hw.cpu / hw.setcpu
     
     return UNITY_END();
 }

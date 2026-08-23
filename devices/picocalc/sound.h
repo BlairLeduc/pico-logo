@@ -32,6 +32,6 @@ void sound_wave(int voice, int wave, int duty);
 // carrier straight from clk_sys with no divider, so the mix rate and the block
 // period the sequencer paces itself by are both wrong the instant the system
 // clock moves -- notes would come out at the wrong pitch and the wrong length.
-// `hw.setfrequency` calls this after retuning. Silences every voice first,
+// `hw.setcpu` calls this after retuning. Silences every voice first,
 // because the ring is already full of samples generated at the old rate.
 void sound_reclock(void);

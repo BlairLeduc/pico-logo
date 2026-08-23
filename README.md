@@ -197,6 +197,7 @@ the bootloader so the next UF2 is a drag away.
 | Game | What it is |
 |---|---|
 | `asteroids` | The 1979 vector arcade game, drawn as vectors: `fd`/`rt` with the pen down *is* a display list. Rocks, splitting, a shooting saucer, hyperspace, the heartbeat that speeds up as the board thins, and a top-ten score table that survives the power switch. |
+| `battlezone` | The 1980 vector tank game, in 3D: a wireframe plain that wraps, cubes and pyramids projected from four ground columns each, a mountain range and a crescent moon at infinity, and two treads on the arrow keys. In progress -- the world and the camera are there, the enemy is not. |
 | `invaders` | Space Invaders, on the sprite and sound stack. |
 | `galaxian` | Diving attackers, with an attract screen and score table. |
 | `trails` | An original maze chase themed on the Logo turtle, drawing its whole maze from its own tile map. |

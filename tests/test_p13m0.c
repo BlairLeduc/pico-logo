@@ -136,6 +136,14 @@ static float num(const char *expr)
     return n;
 }
 
+// The clock reads back as a word now, not a number.
+static const char *word(const char *expr)
+{
+    Result r = eval_string(expr);
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_OK, r.status, expr);
+    return value_to_string(r.value);
+}
+
 static void run(const char *input)
 {
     Result r = run_string(input);
@@ -621,46 +629,39 @@ void test_cam_setup_writes_exactly_four_names(void)
     run("make \"ph 0  cam.setup");
 }
 
-// The harness may be pointed at a clock frequency, and it must report the one
-// the hardware actually took rather than the one it was asked for --
-// `hw.setfrequency` refuses a frequency the PLL cannot make exactly, and a run
-// that quietly stayed at 150 would otherwise read as an overclock that bought
-// nothing. The mock's PLL makes multiples of 25 MHz.
+// The harness may be pointed at a clock, and it must report the one the
+// hardware actually took rather than the one it was asked for -- a board that
+// refused the change would otherwise read as an overclock that bought nothing.
 void test_the_harness_reports_the_clock_it_actually_ran_at(void)
 {
     run("make \"p13m0.frames 2");
 
-    run("make \"p13m0.mhz 300");
+    run("make \"p13m0.cpu \"fast");
     run("p13m0");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(300.0f, num(":p13m0.mhz.ran"),
-        "asked for 300 and the mock can make it");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("fast", word(":p13m0.cpu.ran"),
+        "asked for fast and the mock can make it");
 
-    // 213 is not a multiple of 25, so the mock refuses it and the clock stays
-    // where the previous run left it.
-    run("make \"p13m0.mhz 213");
+    run("make \"p13m0.cpu \"normal");
     run("p13m0");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(300.0f, num(":p13m0.mhz.ran"),
-        "a refused frequency must be reported as the one still in force");
-
-    run("make \"p13m0.mhz 150");
-    run("p13m0");
-    TEST_ASSERT_EQUAL_FLOAT(150.0f, num(":p13m0.mhz.ran"));
-    run("make \"p13m0.mhz 0");
+    TEST_ASSERT_EQUAL_STRING("normal", word(":p13m0.cpu.ran"));
+    run("make \"p13m0.cpu \"same");
 }
 
-// Zero means "leave the board wherever it was", which is what every run before
-// this feature existed did.
-void test_a_zero_frequency_leaves_the_clock_alone(void)
+// `same` means "leave the board wherever it was", which is what every run
+// before this feature existed did.
+void test_the_same_clock_leaves_the_board_alone(void)
 {
     run("make \"p13m0.frames 2");
-    run("make \"p13m0.mhz 250");
+    run("make \"p13m0.cpu \"fast");
     run("p13m0");
 
-    run("make \"p13m0.mhz 0");
+    run("make \"p13m0.cpu \"same");
     run("p13m0");
-    TEST_ASSERT_EQUAL_FLOAT(250.0f, num(":p13m0.mhz.ran"));
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("fast", word(":p13m0.cpu.ran"),
+        "`same` retuned the board instead of leaving it");
 
-    run("hw.setfrequency 150");
+    run("hw.setcpu \"normal");
+    run("make \"p13m0.cpu \"same");
 }
 
 // The temperature is read either side of the run and reported. A board with no
@@ -679,7 +680,7 @@ void test_the_harness_survives_a_board_with_no_sensor_or_clock(void)
 {
     set_mock_temperature(false, 0.0f);
     set_mock_cpu_khz(false, 150000u);
-    run("make \"p13m0.frames 2  make \"p13m0.mhz 300");
+    run("make \"p13m0.frames 2  make \"p13m0.cpu \"fast");
 
     mock_device_clear_output();
     run("p13m0");
@@ -687,12 +688,12 @@ void test_the_harness_survives_a_board_with_no_sensor_or_clock(void)
     // It still reached its last line.
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(mock_device_get_output(), "the gate"),
                                  mock_device_get_output());
-    TEST_ASSERT_EQUAL_FLOAT(0.0f, num(":p13m0.mhz.ran"));
+    TEST_ASSERT_EQUAL_STRING("unknown", word(":p13m0.cpu.ran"));
     TEST_ASSERT_EQUAL_FLOAT(0.0f, num(":p13m0.temp0"));
 
     set_mock_temperature(true, 25.0f);
     set_mock_cpu_khz(true, 150000u);
-    run("make \"p13m0.mhz 0");
+    run("make \"p13m0.cpu \"same");
 }
 
 //==========================================================================
@@ -760,7 +761,7 @@ int main(void)
     RUN_TEST(test_the_frame_does_not_write_the_measure_accumulators);
     RUN_TEST(test_cam_setup_writes_exactly_four_names);
     RUN_TEST(test_the_harness_reports_the_clock_it_actually_ran_at);
-    RUN_TEST(test_a_zero_frequency_leaves_the_clock_alone);
+    RUN_TEST(test_the_same_clock_leaves_the_board_alone);
     RUN_TEST(test_the_harness_reads_the_temperature_either_side);
     RUN_TEST(test_the_harness_survives_a_board_with_no_sensor_or_clock);
     RUN_TEST(test_p13m0_script_runs);

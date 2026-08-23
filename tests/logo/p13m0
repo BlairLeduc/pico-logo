@@ -426,37 +426,37 @@ end
 
 make "p13m0.frames 200
 
-; THE CLOCK.  Set this to a frequency in MHz and the whole run is taken at it;
-; leave it 0 and the board is left wherever it already was.  150 is stock and
-; anything above it is an overclock outside the RP2350's datasheet -- see
-; `hw.setfrequency` in the reference before using it.
+; THE CLOCK.  Set this to "normal or "fast and the whole run is taken at it;
+; leave it "same and the board is left wherever it already was.  "normal is the
+; stock 150 MHz and "fast is 300, which is an overclock outside the RP2350's
+; datasheet -- see `hw.setcpu` in the reference before using it.
 ;
-; WHY THIS IS WORTH A SWEEP RATHER THAN A NUMBER.  The frame splits into two
-; halves that respond to the clock completely differently: the present is the
-; SPI wire to the panel and will not move at all, while the body is nothing but
-; interpretation and should scale almost exactly.  At three obstacles the split
-; is about 19.8 ms that cannot improve and 35 ms that should, so a 2x clock is
-; worth about a third of the frame and not half of it.  A sweep says whether
-; that is what actually happens; a single reading cannot.
+; TWO CLOCKS AND NOT A SWEEP, and the sweep is what established that.  The frame
+; splits into two halves that respond to the clock completely differently: the
+; present is the SPI wire to the panel and barely moves, while the body is
+; nothing but interpretation and scales almost exactly.  The sweep at 150, 200,
+; 250 and 300 also found that the LCD's SPI prescaler is coarse enough that only
+; clocks reaching 75 MHz exactly keep the display at full speed, so 200 and 250
+; slow the panel by more than they speed the interpreter and are a net loss.
+; `hw.setcpu` now offers only the two that are worth having.
 ;
 ; ON A W BOARD THIS ALSO RETUNES THE WIRELESS BUS, and the first version of the
 ; feature did not.  The processor reaches the wireless chip over a PIO bus
 ; clocked from the system clock, so at 250 MHz it ran at 62 MHz instead of 37 and
 ; the chip answered with "hdr mismatch" -- reported from a board within an hour.
-; `hw.setfrequency` now takes that bus down, changes the clock and rebuilds it at
-; the new rate, so the radio may be up and stays up.
+; `hw.setcpu` takes that bus down, changes the clock and rebuilds it at the new
+; rate, so the radio may be up and stays up.
 ;
-; The report carries the frequency it actually ran at, read back from the
-; hardware rather than from this variable, because `hw.setfrequency` refuses a
-; frequency the PLL cannot make exactly -- and a run that quietly stayed at 150
-; would otherwise look like an overclock that bought nothing.
-make "p13m0.mhz 0
+; The report carries the clock it actually ran at, read back from the hardware
+; rather than from this variable, because a board that refused the change would
+; otherwise look like an overclock that bought nothing.
+make "p13m0.cpu "same
 
 ; Die temperature either side of the run.  The chip gets hotter the faster it
 ; runs and this is the only thing in the harness that says by how much.
 make "p13m0.temp0 0
 make "p13m0.temp1 0
-make "p13m0.mhz.ran 0
+make "p13m0.cpu.ran "unknown
 
 ; Q1.  A long edge against a short one, both pen down, both `(setpos x y)`.
 ; 200 steps is about what a near box's edge spans; 17 is P11 M0's `fd`, so the
@@ -637,29 +637,28 @@ to read.temp
   output :t
 end
 
-to read.mhz
+to read.cpu
   local "f
-  make "f 0
-  catch "error [make "f hw.frequency]
+  make "f "unknown
+  catch "error [make "f hw.cpu]
   output :f
 end
 
-; Asked for, not assumed.  If the frequency is refused -- out of range, or one
-; the PLL cannot make exactly -- the run continues at whatever the board was
-; already doing, and the report says which.
-to set.mhz :mhz
-  if 0 = :mhz [stop]
-  catch "error [hw.setfrequency :mhz]
+; Asked for, not assumed.  If the board refuses the change the run continues at
+; whatever it was already doing, and the report says which.
+to set.cpu :which
+  if "same = :which [stop]
+  catch "error [hw.setcpu :which]
 end
 
 to p13m0.report
   pr [P13 M0 what a Battlezone frame costs, before any game code exists]
   pr (se [frames per point] :p13m0.frames [in splitscreen, present with refresh])
-  ifelse 0 = :p13m0.mhz.ran [
+  ifelse "unknown = :p13m0.cpu.ran [
     pr [the clock could not be read, so these are at whatever it was]
   ] [
-    pr (se [processor at] :p13m0.mhz.ran [MHz, stock is 150])
-    if 150 < :p13m0.mhz.ran [pr [that is an overclock, outside the datasheet]]
+    pr (se [processor] :p13m0.cpu.ran [-- normal is 150 MHz, fast is 300])
+    if "fast = :p13m0.cpu.ran [pr [that is an overclock, outside the datasheet]]
   ]
   pr (se [die temperature] :p13m0.temp0 [C before,] :p13m0.temp1 [C after])
   pr [the present is the SPI wire, so it should barely move with the clock]
@@ -715,8 +714,8 @@ to p13m0
   recycle
   make "n0 nodes  make "w0 atoms
 
-  set.mhz :p13m0.mhz
-  make "p13m0.mhz.ran read.mhz
+  set.cpu :p13m0.cpu
+  make "p13m0.cpu.ran read.cpu
   make "p13m0.temp0 read.temp
 
   splitscreen

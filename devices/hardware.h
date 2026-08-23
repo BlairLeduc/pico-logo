@@ -128,8 +128,8 @@ extern "C"
         // `set_cpu_khz` answers false if the clock cannot make that frequency
         // exactly, in which case nothing changed.
         //
-        // Both may be NULL on devices that cannot retune (the `hw.frequency`
-        // and `hw.setfrequency` primitives then error).
+        // Both may be NULL on devices that cannot retune (the `hw.cpu`
+        // and `hw.setcpu` primitives then error).
         uint32_t (*get_cpu_khz)(void);
         bool (*set_cpu_khz)(uint32_t khz);
 
