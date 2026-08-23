@@ -203,10 +203,13 @@ static const char *cell(int x, int y)
     return str(expr);
 }
 
+// The wall is a space and the floor a DEL, neither of which can be written as
+// a quoted word in Logo source -- `" ` is the empty word -- so a cell is always
+// set by its character code.
 static void set_cell(int x, int y, const char *what)
 {
     char expr[64];
-    snprintf(expr, sizeof expr, "setcell %d %d \"%s", x, y, what);
+    snprintf(expr, sizeof expr, "setcell %d %d char %d", x, y, (unsigned char)*what);
     run(expr);
 }
 
@@ -217,7 +220,7 @@ static void stand_at(int x, int y)
     char expr[96];
     snprintf(expr, sizeof expr, "make \"hero.x %d  make \"hero.y %d", x, y);
     run(expr);
-    set_cell(x, y, ".");
+    set_cell(x, y, "\x7F");
 }
 
 
@@ -234,8 +237,8 @@ void test_the_file_loads_and_sets_its_constants(void)
     assert_num(":start.hp", 8);
     assert_num(":bite.max", 4);
     assert_num(":flask.heal", 2);
-    assert_str(":wall", "#");
-    assert_str(":floor", ".");
+    assert_str(":wall", " ");
+    assert_str(":floor", "\x7f");
     assert_str(":snake", "S");
     assert_str(":flask", "!");
     assert_str(":chest", "$");
@@ -265,13 +268,13 @@ void test_the_maze_is_ringed_by_wall(void)
     run("build.maze");
     for (int x = 1; x <= 39; x++)
     {
-        TEST_ASSERT_EQUAL_STRING_MESSAGE("#", cell(x, 1), "top border");
-        TEST_ASSERT_EQUAL_STRING_MESSAGE("#", cell(x, 27), "bottom border");
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(" ", cell(x, 1), "top border");
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(" ", cell(x, 27), "bottom border");
     }
     for (int y = 1; y <= 27; y++)
     {
-        TEST_ASSERT_EQUAL_STRING_MESSAGE("#", cell(1, y), "left border");
-        TEST_ASSERT_EQUAL_STRING_MESSAGE("#", cell(39, y), "right border");
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(" ", cell(1, y), "left border");
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(" ", cell(39, y), "right border");
     }
 }
 
@@ -298,7 +301,7 @@ void test_pillars_stand_on_every_other_cell(void)
     run("build.maze");
     for (int y = 3; y <= 25; y += 2)
         for (int x = 3; x <= 37; x += 2)
-            TEST_ASSERT_EQUAL_STRING_MESSAGE("#", cell(x, y), "pillar missing");
+            TEST_ASSERT_EQUAL_STRING_MESSAGE(" ", cell(x, y), "pillar missing");
 }
 
 // Nothing but floor, snake, flask or wall ever reaches the interior, which is
@@ -312,13 +315,13 @@ void test_the_open_floor_holds_only_snakes_flasks_and_dust(void)
         for (int x = 2; x <= 38; x++)
         {
             const char *c = cell(x, y);
-            if (!strcmp(c, "#"))
+            if (!strcmp(c, " "))
                 continue;
             else if (!strcmp(c, "S"))
                 snakes++;
             else if (!strcmp(c, "!"))
                 flasks++;
-            else if (!strcmp(c, "."))
+            else if (!strcmp(c, "\x7F"))
                 dust++;
             else
                 TEST_FAIL_MESSAGE("unexpected character on the floor");
@@ -354,7 +357,7 @@ void test_bocco_starts_on_cleared_floor_away_from_the_chest(void)
     {
         seed(i + 1);
         run("build.maze  hide.the.chest  place.hero");
-        assert_str("cell :hero.x :hero.y", ".");
+        assert_str("cell :hero.x :hero.y", "\x7F");
         assert_false("and (equal? :hero.x :chest.x) (equal? :hero.y :chest.y)");
         // Standing on floor means the lantern's 3x3 is always inside the maze.
         TEST_ASSERT_GREATER_OR_EQUAL(2, (int)num(":hero.x"));
@@ -420,7 +423,7 @@ void test_entering_a_square_empties_it(void)
 
     assert_num(":hero.x", 11);
     assert_num(":hero.y", 10);
-    assert_str("cell 11 10", ".");
+    assert_str("cell 11 10", "\x7F");
     TEST_ASSERT_LESS_THAN_MESSAGE(20, (int)num(":hp"), "the snake did not bite");
 
     // Back over it, and this time it costs nothing.
@@ -439,7 +442,7 @@ void test_an_arrow_moves_one_square(void)
 {
     run("build.maze  make \"hp 8  make \"won false  make \"quit false");
     stand_at(10, 10);
-    set_cell(11, 10, ".");
+    set_cell(11, 10, "\x7F");
 
     step_with(KEY_RIGHT);
     assert_num(":hero.x", 11);
@@ -456,7 +459,7 @@ void test_one_key_is_one_step(void)
     run("new.game");
     stand_at(10, 10);
     for (int x = 11; x <= 13; x++)
-        set_cell(x, 10, ".");
+        set_cell(x, 10, "\x7F");
 
     set_mock_input(K_RIGHT K_RIGHT K_RIGHT "q");
     run("crawl");
@@ -485,7 +488,7 @@ void test_a_wall_refuses_the_step(void)
 {
     run("build.maze  make \"hp 8  make \"won false  make \"quit false");
     stand_at(10, 10);
-    set_cell(11, 10, "#");
+    set_cell(11, 10, " ");
 
     step_with(KEY_RIGHT);
     assert_num(":hero.x", 10);
@@ -559,8 +562,8 @@ void test_a_long_crawl_gives_its_list_cells_back(void)
     // Walk into a wall for ever: the drawing and the allocation happen either
     // way, so this measures the loop without the maze deciding when it ends.
     stand_at(10, 10);
-    set_cell(11, 10, ".");
-    set_cell(9, 10, ".");
+    set_cell(11, 10, "\x7F");
+    set_cell(9, 10, "\x7F");
 
     run("recycle");
     float before = num("nodes");
@@ -571,8 +574,8 @@ void test_a_long_crawl_gives_its_list_cells_back(void)
         run("tidy.up");
         // Keep the two squares walkable so the walk never stalls on a snake
         // it has already eaten -- the point here is the allocation, not the maze.
-        set_cell(11, 10, ".");
-        set_cell(9, 10, ".");
+        set_cell(11, 10, "\x7F");
+        set_cell(9, 10, "\x7F");
     }
 
     run("recycle");
@@ -594,7 +597,7 @@ void test_the_lantern_draws_nine_squares(void)
     run("build.maze");
     for (int y = 9; y <= 11; y++)
         for (int x = 9; x <= 11; x++)
-            set_cell(x, y, ".");
+            set_cell(x, y, "\x7F");
 
     mock_device_clear_output();
     run("light.around 10 10");
@@ -602,7 +605,7 @@ void test_the_lantern_draws_nine_squares(void)
     const char *screen = mock_device_get_output();
     int dots = 0;
     for (const char *p = screen; *p; p++)
-        if (*p == '.')
+        if (*p == '\x7F')
             dots++;
     TEST_ASSERT_EQUAL_INT_MESSAGE(9, dots, screen);
 
