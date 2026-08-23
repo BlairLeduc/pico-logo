@@ -79,17 +79,6 @@ extern "C"
     // LogoStorage interface
     // Platform-specific implementation should be provided to logo_io_init()
     //
-    // Answers from `set_cpu_khz`.
-    //
-    // The third exists because a clk_sys change is not always possible rather
-    // than not always wise: the PIO bus to the wireless chip takes its rate
-    // from clk_sys and its divisor is only applied when the bus is brought up,
-    // so a running radio cannot be retuned underneath. Refusing is the only
-    // safe answer -- an out-of-spec bus does not stop, it corrupts.
-    #define CPU_KHZ_OK          0   // done
-    #define CPU_KHZ_UNREACHABLE 1   // the clock cannot make that frequency exactly
-    #define CPU_KHZ_BUSY        2   // a clk_sys-derived bus is live and cannot follow
-
     typedef struct LogoHardwareOps
     {
         // Sleep for specified milliseconds
@@ -133,16 +122,16 @@ extern "C"
         // board clk_peri follows clk_sys, so the LCD's SPI divisor and the
         // sound engine's mix rate are both wrong the instant clk_sys moves and
         // must be put back before this returns. So is the PIO bus to the
-        // wireless chip, which cannot be retuned while it is running. See
+        // wireless chip, which has to be rebuilt around the change. See
         // picocalc_hardware.c.
         //
-        // `set_cpu_khz` answers with one of CPU_KHZ_*: nothing has changed
-        // unless it answers CPU_KHZ_OK.
+        // `set_cpu_khz` answers false if the clock cannot make that frequency
+        // exactly, in which case nothing changed.
         //
         // Both may be NULL on devices that cannot retune (the `hw.frequency`
         // and `hw.setfrequency` primitives then error).
         uint32_t (*get_cpu_khz)(void);
-        int (*set_cpu_khz)(uint32_t khz);
+        bool (*set_cpu_khz)(uint32_t khz);
 
         // Power management functions
         bool (*power_off)(void);

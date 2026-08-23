@@ -98,13 +98,6 @@ static Result prim_frequency(Evaluator *eval, int argc, Value *args)
 // core rail, the LCD's SPI divisor and the sound engine's mix rate all have to
 // be dealt with, see devices/picocalc/picocalc_hardware.c.
 //
-// There are two ways this refuses, and they are different problems. The clock
-// may not be able to make the frequency exactly, or a bus that derives its rate
-// from the clock may be running and unable to follow -- on a W board the
-// wireless chip, whose PIO divider the SDK only applies when the radio comes
-// up. The second is why an overclock has to come before `wifi.start` (or
-// before anything that lights the LED, which is on the same chip).
-//
 // The frequency is refused rather than rounded if the PLL cannot make it
 // exactly. Rounding would leave a program believing a number the hardware never
 // took, and every figure it went on to measure would be against the wrong clock.
@@ -121,18 +114,11 @@ static Result prim_setfrequency(Evaluator *eval, int argc, Value *args)
     LogoIO *io = primitives_get_io();
     if (io && io->hardware && io->hardware->ops && io->hardware->ops->set_cpu_khz)
     {
-        switch (io->hardware->ops->set_cpu_khz((uint32_t)(mhz * 1000.0f)))
+        if (!io->hardware->ops->set_cpu_khz((uint32_t)(mhz * 1000.0f)))
         {
-        case CPU_KHZ_OK:
-            return result_none();
-        case CPU_KHZ_BUSY:
-            // A bus that takes its rate from the system clock is running and
-            // cannot follow it. On a W board that is the wireless chip, which
-            // the status LED also lives on.
-            return result_error_arg(ERR_DEVICE_IN_USE, NULL, "wireless");
-        default:
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
         }
+        return result_none();
     }
 
     return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);

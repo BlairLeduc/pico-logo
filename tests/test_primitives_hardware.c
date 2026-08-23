@@ -228,29 +228,6 @@ void test_setfrequency_refuses_a_frequency_the_clock_cannot_make(void)
         "a refused frequency must leave the clock where it was");
 }
 
-// The other refusal, and it is a different problem from an unreachable
-// frequency. On a W board the wireless chip's bus takes its rate from clk_sys
-// and its divider is only applied when the radio is brought up, so a running
-// radio cannot follow the clock -- and an out-of-spec bus does not stop, it
-// corrupts (observed as "hdr mismatch" at 250 MHz). The two get different
-// errors because they need different answers from the person reading them:
-// one means pick another number, the other means do this before you start the
-// radio.
-void test_setfrequency_refuses_while_a_derived_bus_is_live(void)
-{
-    set_mock_cpu_khz(true, 150000u);
-    set_mock_cpu_busy(true);
-
-    Result r = run_string("hw.setfrequency 300");
-    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 150.0f,
-        eval_string("hw.frequency").value.as.number,
-        "a refused frequency must leave the clock where it was");
-
-    set_mock_cpu_busy(false);
-    TEST_ASSERT_EQUAL(RESULT_NONE, run_string("hw.setfrequency 300").status);
-}
-
 void test_setfrequency_refuses_a_non_number(void)
 {
     set_mock_cpu_khz(true, 150000u);
@@ -799,7 +776,6 @@ int main(void)
     RUN_TEST(test_setfrequency_refuses_below_the_floor);
     RUN_TEST(test_setfrequency_refuses_above_the_ceiling);
     RUN_TEST(test_setfrequency_refuses_a_frequency_the_clock_cannot_make);
-    RUN_TEST(test_setfrequency_refuses_while_a_derived_bus_is_live);
     RUN_TEST(test_setfrequency_refuses_a_non_number);
     RUN_TEST(test_frequency_errors_when_the_device_cannot_report_it);
     

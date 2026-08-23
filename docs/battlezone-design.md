@@ -680,10 +680,40 @@ against 66.7.
 26.6 at 300, over 200-frame runs. Thermals are not a constraint at any of these
 clocks, which was the other thing worth knowing.
 
-### 12.3.2 What the sweep cost, and what it bought
+### 12.3.2 The wireless bus, and picking the right seam
 
-Two peripherals were missed before a board found them: the cyw43 bus (§16.4)
-and clk_peri (above). Both are the same mistake — assuming something derived
+The cyw43 bus was the *first* peripheral a board found, an hour before clk_peri.
+At 250 MHz a Pico 2 W filled the console with `[CYW43] error: hdr mismatch`: the
+driver talks to the chip over a PIO SPI clocked at clk_sys/2, so the bus went
+from 37 MHz to 62 and it started answering with garbage headers. Same mistake as
+the LCD divisor, in a peripheral this design did not think to check.
+
+**The first fix refused the change while the radio was up**, on the grounds that
+the SDK applies that divider only when the bus is brought up, and that tearing
+down `cyw43_arch` to force a re-init would take lwIP with it — leaving every PCB
+the HTTP server holds dangling. The reasoning was sound and **the seam was
+wrong.**
+
+`cyw43_spi_init` and `cyw43_spi_deinit` are the **bus half of the driver on its
+own**. Deinit unclaims the PIO state machine and the two DMA channels and nulls
+`bus_data`; init claims them back and applies the current divider. Neither
+touches the chip, the firmware, the driver's state or lwIP. So the change now
+takes the bus down, moves the clock, and rebuilds the bus at the new rate —
+under the driver's own lock, with the bus down across the switch so nothing can
+transact at a rate that is briefly wrong. **The association survives, a server
+keeps listening, and the radio may be up.** A frame in flight during the change
+may need retransmitting; that is the whole cost.
+
+The general lesson is the one worth keeping: *the first seam that makes a
+problem go away is not always the one that solves it.* Refusing was correct and
+cheap and would have shipped a permanent restriction — "overclock before you
+touch WiFi, and remember the status LED is on the wireless chip" — to avoid a
+twelve-line function.
+
+### 12.3.3 What the sweep cost, and what it bought
+
+Two peripherals were missed before a board found them: the cyw43 bus (§12.3.2)
+and clk_peri (§12.3). Both are the same mistake — assuming something derived
 from the system clock would follow it — and in the second case the assumption
 was *backwards*, which no amount of reading the design would have caught.
 
