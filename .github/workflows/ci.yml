@@ -14,7 +14,7 @@ jobs:
     name: Host tests + e2e
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Ninja
         run: |
@@ -45,10 +45,10 @@ jobs:
       matrix:
         preset: [pico2, pico2w, "pico+2w"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Check out Pico SDK
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: raspberrypi/pico-sdk
           ref: "2.3.0"
@@ -73,7 +73,7 @@ jobs:
     name: Reference link check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Check internal anchors
         run: python3 scripts/check_reference_anchors.py
