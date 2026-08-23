@@ -1,7 +1,9 @@
 # Battlezone in Pico Logo (design)
 
-Status: **v1, drafted 2026-08-21. The M0 gate has not been run; B48, which
-blocked it, was fixed on 2026-08-23.** Every board
+Status: **v1, drafted 2026-08-21. B48, which blocked M0, was fixed on
+2026-08-23 and M0's harness is written and host-tested the same day. The gate
+has not been run on a board.** Building the harness already rewrote §8.4, §9
+and §10 — see §16.1. Every board
 figure below is an *estimate*: a host measurement scaled by a ratio calibrated
 against P11's board numbers (§3). Nothing here has touched hardware, and this
 document expects to be rewritten by M0 the way
@@ -39,7 +41,7 @@ measurement rather than taken now.
 | Game | `logo/games/battlezone` — one Logo file, no extension, no `-` or `/` in the name so `load "battlezone` parses |
 | Tests | `tests/test_battlezone.c` (Unity + mock device), mirroring `tests/test_asteroids.c` |
 | Design | this document |
-| Measurement | `tests/logo/p13m0` — times a real frame at 1, 2, 4 and 8 visible objects, with the projection pass read apart from the drawing pass and the present read apart from both. It writes its numbers **to a file**, because numbers on a display cannot be copied off it |
+| Measurement | `tests/logo/p13m0` — **written, host-tested, not yet run on a board.** Times a real frame at 1, 2, 4 and 8 visible objects, with the projection pass read apart from the drawing pass and the present read apart from both. It writes its numbers **to a file**, because numbers on a display cannot be copied off it. `tests/test_p13m0.c` (21 tests) proves it is worth carrying to a board: the projection against hand-computed coordinates, the culling in both directions, and that the script reaches its last line with the report in the file |
 | Model generator | `scripts/gen_models.py`, host-side, output pasted in (§8.3) |
 
 Play: `load "battlezone` then `battlezone`.
@@ -339,12 +341,27 @@ table. No divide, no rotation — and 32 points still cost **10.1 ms**, because
 four statements a point at 43 µs is what four statements a point costs.
 
 Culling to the field of view is the fix: compute the first and last visible
-index (two statements) and loop over the ~12 that can be on screen. **3.9 ms.**
+index (two statements) and loop over the ones that can be on screen.
+
+**How many is "the ones"? Seven, not the twelve this section first wrote** —
+found while building M0's harness, and it is arithmetic rather than a
+measurement, so it is settled now and not at the gate. Thirty-two points over
+360° at 5.06 steps a degree sit 57 steps apart, and a 320-step viewport holds
+about seven of them, which `test_the_horizon_cull_keeps_about_seven_of_thirty_two_points`
+now pins.
+
+Seven is **too coarse to be a mountain range**: one peak every 9° of a 63°
+view. So the table wants to be denser, not the cull cheaper — and the two move
+together. At 96 points the full scan is ~30 ms and the culled version ~21
+points at **4.4 ms**, which is close enough to this section's original 3.9 that
+§12's line survives; it was right for the wrong reason. **The cull is worth
+more than this section claimed, not less**, because it is what makes a denser
+table affordable at all.
 
 The alternative worth naming and not taking yet: put the range on a **P9
 tilemap layer** and scroll it, which would make it very nearly free. Whether a
 tilemap composes underneath turtle graphics is not established anywhere in this
-tree, and finding out is a bigger question than 3.9 ms justifies. Left in §19.
+tree, and finding out is a bigger question than 4.4 ms justifies. Left in §19.
 
 ## 9. Near culling replaces clipping
 
@@ -364,6 +381,14 @@ to `x = 40` draws its visible half and costs the rest only in loop iterations.
 **`wrap` would be a disaster here** — a wireframe that wrapped would smear
 across the screen — so the game sets `window` at startup and never changes it.
 
+That is easier to write than to remember. M0's harness was built from this
+document and did not set it, and the default folded a horizon point at
+x = −170.8 round to +149.2 and stroked a 263-step segment across the whole
+view. It looked like a projection fault. `window` is now a top-level statement
+in the harness with this paragraph's reason attached, and
+`test_no_horizon_segment_spans_the_whole_screen` sweeps the camera through 360°
+in 5° steps so no boundary mode can quietly come back.
+
 ## 10. Drawing
 
 `clean` and redraw, for the reason P11 §3.3 measured: a scattered vector scene
@@ -373,7 +398,10 @@ itself, which settles it before the argument starts.
 
 An edge is `(setpos x y)` with the pen down — **one statement, one straight
 line, nothing allocated** — which is what B48's fix bought. A closed quad is one pen-up
-`setpos` and four pen-down ones. Per box: 12 edges in about 16 statements.
+`setpos` and four pen-down ones. Per box: **12 edges in 20 statements** — this
+section first guessed sixteen, and the four it missed are the pen-ups the
+vertical edges need, since a vertical does not start where the last one ended.
+`test_a_box_draws_twelve_edges` pins the count.
 
 Line **length** is nearly free, which is the piece of luck this design has and
 Asteroids did not need. `screen_gfx_line` marks its dirty region **once, from
@@ -420,7 +448,7 @@ anything per-frame is tuned against it.
 |---|---:|
 | present, 240 rows (`splitscreen`) | 19.7 |
 | `clean` | 0.3 |
-| horizon, culled to ~12 of 32 points | 3.9 |
+| horizon, culled (§8.4: ~21 of a 96-point table) | 4.4 |
 | cull 8 obstacles | 3.3 |
 | project 3 visible boxes/pyramids | 6.5 |
 | project 1 enemy, 8 vertices in column form | 6.0 |
@@ -428,9 +456,9 @@ anything per-frame is tuned against it.
 | radar | 3.0 |
 | gunsight and HUD | 1.5 |
 | input, tread physics, shells, collisions, sound | 3.0 |
-| **total** | **51.2** |
+| **total** | **51.7** |
 
-**15.5 ms of headroom, and it should all be regarded as spoken for.** P11 M2
+**15.0 ms of headroom, and it should all be regarded as spoken for.** P11 M2
 opened 6 ms short by its own estimate and measured **19.7 ms** over, with the
 whole miss in a cost nothing had priced. This budget has two numbers that could
 do the same thing: the drawing statement at long lengths (§10) and the
@@ -622,6 +650,28 @@ does not quietly change the dirty region between passes.
 build the game at L0. If it is between 66.7 and 71.4, take the two gameplay
 levers in §14 and re-measure. If it is over 71.4, **stop and choose from §13**,
 and the choice is L4.
+
+### 16.1 What building the harness already found
+
+Three things, none of which needed a board, and all of which are the argument
+for writing the harness before the game rather than beside it:
+
+- **The horizon cull keeps seven points, not twelve** (§8.4). Arithmetic, not a
+  measurement — and it turns the table's density into a design decision instead
+  of an accident.
+- **`window` is not optional and is easy to forget** (§9). The harness was
+  written from this document, did not set it, and drew a line across the screen.
+- **A box is 20 statements, not 16** (§10). The four pen-ups the verticals need.
+
+And one thing about the harness's own honesty. The phase timers that split
+projection from drawing are four statements an object — up to 36 a frame, about
+1.5 ms at an arithmetic statement's 43 µs — which is a tenth of what the split
+is trying to resolve. P11 M4 stated its own 0.15 ms and moved on; at ten times
+that, stating it is not enough. So the series runs **two frames**: `frame.raw`,
+which is what the frame costs, and `frame.body`, which is the same statements
+with the timers in. The difference is reported as the instrumentation charge
+rather than estimated, and `test_the_timed_and_untimed_frames_draw_the_same_thing`
+is what stops the two drifting apart.
 
 **M1 — the world and the camera.** Plain, obstacles, tread controls, horizon,
 the gunsight. No enemy, no shells, no radar. This is the milestone that proves

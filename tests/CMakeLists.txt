@@ -126,6 +126,10 @@ add_logo_test(test_p11rocks)
 target_compile_definitions(test_p11rocks PRIVATE
     P11ROCKS_SOURCE="${CMAKE_SOURCE_DIR}/tests/logo/p11rocks")
 
+add_logo_test(test_p13m0)
+target_compile_definitions(test_p13m0 PRIVATE
+    P13M0_SOURCE="${CMAKE_SOURCE_DIR}/tests/logo/p13m0")
+
 # P10 M0 interpreter throughput benchmark -- repeatable baseline plus a
 # regression guard on relative numbers (interpreter-throughput-design.md §6).
 add_logo_test(test_bench_throughput)

@@ -1,0 +1,680 @@
+; P13 M0 -- what a Battlezone frame costs, before any game code exists.
+;
+;   erall                        <-- REQUIRED, see below
+;   load "p13m0
+;   p13m0
+;
+; This is the gate in docs/battlezone-design.md section 16.  The design's whole
+; budget is host measurements scaled by 180x (section 3), and 180 was calibrated
+; against P11 M0's board figures rather than measured on a board directly.  Every
+; number below therefore has a prediction attached to it, and the run is worth
+; taking only because some of them will be wrong.
+;
+; FIVE QUESTIONS, in the order the design asks them:
+;
+;   Q1  What does a LONG line cost?  Section 10 assumes a 200-pixel edge costs
+;       about what P11 measured for a 17-pixel `fd` -- 60 us -- because
+;       `screen_gfx_line` marks its dirty region once from an accumulated
+;       bounding box rather than per pixel.  That is inference from the source,
+;       not a reading, and it is the largest unmeasured number in the design:
+;       55 edges at 60 us is 3.3 ms and at 150 us it is 8.3.
+;   Q2  What does the SPLIT-MODE present cost?  Section 6 reads `limit` in
+;       `screen_gfx_blit_dirty` and predicts 240 rows for 19.7 ms against P11's
+;       measured 26.3 full-screen.  What is not certain is whether the 80 rows
+;       `clean` marks and the present never sends cost anything.
+;   Q3  Does the 180x ratio hold on THIS board?  If it does not, every estimate
+;       in the design moves together and section 12 is re-derived rather than
+;       re-argued.  The two calibration loops are P11 M0's, unchanged, so the
+;       numbers are directly comparable with 42-44.5 us and 4.5-7 us.
+;   Q4  What does one box cost to project?  Section 8.1's ground-column trick,
+;       predicted at 2.16 ms.
+;   Q5  What does the column-form enemy cost?  Section 8.2's 6.0 ms is the
+;       estimate the design is least confident in, because unlike the box figure
+;       nothing has ever measured one.
+;
+; Then a FRAME SERIES at 1, 2, 4 and 8 visible objects, with the projection pass
+; read apart from the drawing pass and the present read apart from both -- which
+; is the split P9 M5 wished it had and P11 M1 built.
+;
+; FOUR THINGS THIS DELIBERATELY DOES NOT DO, each taken from P11 M0's list
+; because each was learned the hard way there:
+;
+;   * It presents with `refresh`, not `sync`.  The number wanted is the work,
+;     not the cadence; `sync` would wait out the rest of the frame and report
+;     the wait.
+;   * It clears with `clean`, not `cs`.  `cs` restores automatic refresh and
+;     would silently end the measurement.
+;   * It runs in `splitscreen` ON PURPOSE and says so in the report.  In text
+;     mode `screen_gfx_blit_dirty` returns immediately, so the present column
+;     reads zero and the frame figure is a Logo body with no present in it --
+;     the correction P9 had to make to its entire first series of numbers.
+;     Q2 measures `fullscreen` as its control and puts them side by side.
+;   * It holds the scene still.  The camera does not move between frames, so
+;     the dirty region is the same one every time and the present figure is not
+;     quietly averaging two different scenes.
+;
+; ONE THING IT OVER-MEASURES, and it is worth knowing which way: every object in
+; the series is a full 12-edge box drawn whole.  A real frame culls some of them
+; laterally -- `window` skips out-of-bounds pixels per pixel, so an object half
+; off the screen costs its loop iterations and not its stores.  So the drawing
+; column is an upper bound, and the pessimism is deliberate.
+;
+; `erall` is not optional.  MAX_PROCEDURES is a hard 128 and a workspace still
+; holding another program can run out of procedure slots, at which point `load`
+; stops with `out of space` -- the procedure table talking, not memory.
+;
+; The report goes to `p13m0.txt` as well as the screen, because numbers on the
+; PicoCalc's display cannot be copied anywhere.  Runs append.
+
+;==========================================================================
+; The camera and the viewport
+;
+; `hz` is 40 and not 0, and that is section 6's consequence rather than a taste:
+; split mode presents pixel rows 0-239, pixel row is `-y + 160`, so the visible
+; band is turtle y in [-79, 160] and its optical centre is +40.  Every screen
+; constant here is cut against that.
+;
+; `k` 260 puts the half-width 160 at atan(160/260) = 31.6 degrees, so the
+; horizontal field of view is 63 degrees -- close to the cabinet's.
+
+make "k        260     ; focal length in turtle steps
+make "eye       12     ; camera height above the plain
+make "near       8     ; nearer than this and the object is culled whole
+make "far      900     ; further than this and it is not worth drawing
+make "hz        40     ; the horizon line, and the viewport's optical centre
+make "half      20     ; obstacle half-width
+make "boxh      40     ; obstacle height
+make "ehalf     14     ; enemy hull half-width
+make "ebodyh    16     ; enemy hull height
+
+; WINDOW, and it is load-bearing rather than tidiness. The default is `wrap`,
+; which folds a point past the edge back onto the far side: a horizon point at
+; x = -170.8 comes out at +149.2 and the segment into it is stroked across the
+; whole screen. Design section 9 says so and this file did not do it -- caught
+; by `test_no_horizon_segment_spans_the_whole_screen`, not by any timing.
+;
+; `window` also gives the projection what it needs: a vertex off the side of
+; the screen stays where it belongs and `screen_gfx_line` skips its pixels.
+window
+
+make "px         0
+make "pz         0
+make "ph         0
+make "cs         1     ; cos :ph, hoisted once a frame
+make "sn         0     ; sin :ph
+make "a          0     ; :half * :cs, hoisted once a frame for every box
+make "b          0     ; :half * :sn
+
+; Eight obstacles.  The series draws the first :shown of them, and they are
+; placed so that all eight are in front of a camera at the origin facing 0 --
+; a culled object costs four comparisons and no divides, and a series that
+; measured culling would not be measuring drawing.
+make "ox [-60 70 -30 110]
+make "ox se :ox [-140 40 -95 150]
+make "oz [160 210 300 330]
+make "oz se :oz [420 480 560 640]
+
+; Four ground columns: screen x, and the two screen heights that share the
+; divide.  Mutated in place -- a list built per box per frame would allocate.
+make "colx [0 0 0 0]
+make "colb [0 0 0 0]
+make "colt [0 0 0 0]
+
+to cam.setup
+  make "cs cos :ph
+  make "sn sin :ph
+  make "a :half * :cs
+  make "b :half * :sn
+end
+
+;==========================================================================
+; Projection
+;
+; Section 8.1: an obstacle is axis-aligned and stands on the plain, so its eight
+; vertices are four ground columns lifted to two heights.  With `a` and `b`
+; hoisted for every box in the world, the four corners are eight ADDS and no
+; multiplies, and the top and bottom of a column share one divide.
+;
+; The four corners come out in order around the box, so the quads chain.
+;
+; UNROLLED on purpose.  A `repeat` over the four would need `repcount` and an
+; `item` walk per corner to find its offsets, and this is the loop the whole
+; budget is linear in.  It is also what the game would write.
+;
+; Outputs `true` if the box is drawable and `false` if any column is inside the
+; near plane -- ANY, not all: one corner behind you swings the projection
+; through infinity and throws a line across the whole screen (section 9).
+to project.box :dx :dz
+  local "xc local "zc local "z1 local "z2 local "z3 local "z4 local "iz
+  make "xc (:dx * :cs) - (:dz * :sn)
+  make "zc (:dz * :cs) + (:dx * :sn)
+  make "z1 (:zc + :a) + :b
+  make "z2 (:zc - :a) + :b
+  make "z3 (:zc - :a) - :b
+  make "z4 (:zc + :a) - :b
+  if :near > :z1 [output "false]
+  if :near > :z2 [output "false]
+  if :near > :z3 [output "false]
+  if :near > :z4 [output "false]
+  make "iz :k / :z1
+  .setitem 1 :colx ((:xc + :a) - :b) * :iz
+  .setitem 1 :colb :hz - (:eye * :iz)
+  .setitem 1 :colt :hz + ((:boxh - :eye) * :iz)
+  make "iz :k / :z2
+  .setitem 2 :colx ((:xc + :a) + :b) * :iz
+  .setitem 2 :colb :hz - (:eye * :iz)
+  .setitem 2 :colt :hz + ((:boxh - :eye) * :iz)
+  make "iz :k / :z3
+  .setitem 3 :colx ((:xc - :a) + :b) * :iz
+  .setitem 3 :colb :hz - (:eye * :iz)
+  .setitem 3 :colt :hz + ((:boxh - :eye) * :iz)
+  make "iz :k / :z4
+  .setitem 4 :colx ((:xc - :a) - :b) * :iz
+  .setitem 4 :colb :hz - (:eye * :iz)
+  .setitem 4 :colt :hz + ((:boxh - :eye) * :iz)
+  output "true
+end
+
+;==========================================================================
+; Drawing
+;
+; Twelve edges: the bottom quad, the top quad, and the four verticals that join
+; them.  Every one is `(setpos x y)` with the pen down -- ONE statement, one
+; straight line, nothing allocated.  That spelling is B48's fix (2026-08-23);
+; before it the choices were `setpos list :x :y`, which conses two cells a call,
+; or `setx`/`sety`, which draws an L.
+;
+; Twenty statements for twelve edges.  The design's section 10 guessed sixteen,
+; and the difference is the four pen-ups the verticals need.
+to draw.box
+  pu (setpos item 1 :colx item 1 :colb)
+  pd (setpos item 2 :colx item 2 :colb)
+  (setpos item 3 :colx item 3 :colb)
+  (setpos item 4 :colx item 4 :colb)
+  (setpos item 1 :colx item 1 :colb)
+  pu (setpos item 1 :colx item 1 :colt)
+  pd (setpos item 2 :colx item 2 :colt)
+  (setpos item 3 :colx item 3 :colt)
+  (setpos item 4 :colx item 4 :colt)
+  (setpos item 1 :colx item 1 :colt)
+  pu (setpos item 1 :colx item 1 :colb)
+  pd (setpos item 1 :colx item 1 :colt)
+  pu (setpos item 2 :colx item 2 :colb)
+  pd (setpos item 2 :colx item 2 :colt)
+  pu (setpos item 3 :colx item 3 :colb)
+  pd (setpos item 3 :colx item 3 :colt)
+  pu (setpos item 4 :colx item 4 :colb)
+  pd (setpos item 4 :colx item 4 :colt)
+  pu
+end
+
+;==========================================================================
+; The enemy
+;
+; Section 8.2, and it is the estimate the design is least sure of.  The hull is
+; a box that happens to be rotated, so the column trick still applies -- with
+; the enemy's own rotation folded into the camera's, once a frame, rather than
+; once a corner.
+;
+; p and q are the enemy's half-offsets in world space; P and Q are those two
+; offsets already camera-transformed.  The transform is linear, so the transform
+; of a corner is the centre's transform plus the offset's, and the four corners
+; are then plus-and-minus sums exactly as the box's are.  Six statements buy what
+; would otherwise be four multiplies a corner.
+;
+; The gun is two general vertices, because a barrel has no ground column.
+
+make "ex 0   make "ez 300   make "eh 200
+make "gunx [0 0]       ; the gun line, projected
+make "guny [0 0]
+
+to project.enemy
+  local "dx local "dz local "ec local "es local "p local "q
+  local "pxc local "pzc local "qxc local "qzc
+  local "xc local "zc local "z1 local "z2 local "z3 local "z4 local "iz
+  make "dx :ex - :px
+  make "dz :ez - :pz
+  make "xc (:dx * :cs) - (:dz * :sn)
+  make "zc (:dz * :cs) + (:dx * :sn)
+  make "ec cos :eh
+  make "es sin :eh
+  make "p :ehalf * :ec
+  make "q :ehalf * :es
+  make "pxc (:p * :cs) - (:q * :sn)
+  make "pzc (:q * :cs) + (:p * :sn)
+  make "qxc (0 - (:q * :cs)) - (:p * :sn)
+  make "qzc (:p * :cs) - (:q * :sn)
+  make "z1 (:zc + :pzc) + :qzc
+  make "z2 (:zc + :pzc) - :qzc
+  make "z3 (:zc - :pzc) - :qzc
+  make "z4 (:zc - :pzc) + :qzc
+  if :near > :z1 [output "false]
+  if :near > :z2 [output "false]
+  if :near > :z3 [output "false]
+  if :near > :z4 [output "false]
+  make "iz :k / :z1
+  .setitem 1 :colx ((:xc + :pxc) + :qxc) * :iz
+  .setitem 1 :colb :hz - (:eye * :iz)
+  .setitem 1 :colt :hz + ((:ebodyh - :eye) * :iz)
+  make "iz :k / :z2
+  .setitem 2 :colx ((:xc + :pxc) - :qxc) * :iz
+  .setitem 2 :colb :hz - (:eye * :iz)
+  .setitem 2 :colt :hz + ((:ebodyh - :eye) * :iz)
+  make "iz :k / :z3
+  .setitem 3 :colx ((:xc - :pxc) - :qxc) * :iz
+  .setitem 3 :colb :hz - (:eye * :iz)
+  .setitem 3 :colt :hz + ((:ebodyh - :eye) * :iz)
+  make "iz :k / :z4
+  .setitem 4 :colx ((:xc - :pxc) + :qxc) * :iz
+  .setitem 4 :colb :hz - (:eye * :iz)
+  .setitem 4 :colt :hz + ((:ebodyh - :eye) * :iz)
+  ; The gun: two general vertices, from the turret roof out along the facing.
+  make "iz :k / :zc
+  .setitem 1 :gunx :xc * :iz
+  .setitem 1 :guny :hz + ((:ebodyh - :eye) * :iz)
+  make "iz :k / ((:zc + :pzc) + :pzc)
+  .setitem 2 :gunx ((:xc + :pxc) + :pxc) * :iz
+  .setitem 2 :guny :hz + ((:ebodyh - :eye) * :iz)
+  output "true
+end
+
+to draw.enemy
+  draw.box
+  pu (setpos item 1 :gunx item 1 :guny)
+  pd (setpos item 2 :gunx item 2 :guny)
+  pu
+end
+
+;==========================================================================
+; The horizon
+;
+; Thirty-two azimuth points, no depth: screen x is (azimuth - heading) scaled,
+; and screen y comes straight from the table.  Linear rather than `k * tan`,
+; which is what the cabinet's own backdrop amounts to and saves a tangent a
+; point.
+;
+; `mtn.seen` is why this is worth measuring rather than assuming.  The design's
+; section 8.4 says "culled to ~12 of 32", and 32 points over 360 degrees at
+; 5.06 px a degree are 71 px apart, so a 63-degree field holds about FIVE. If
+; that is what the board reports, the design's horizon figure is wrong in the
+; cheap direction and the table wants more points, not fewer.
+
+; Built in four pieces because a list literal has to fit on one line -- the
+; test harness loads this file a line at a time, as `load` does.
+make "mtn [4 9 2 14 7 3 11 5]
+make "mtn se :mtn [8 2 16 6 4 10 3 7]
+make "mtn se :mtn [12 5 2 9 14 4 8 3]
+make "mtn se :mtn [11 6 2 13 5 9 4 7]
+make "mtn.step  11.25    ; degrees between points
+make "mtn.scale  5.06    ; turtle steps per degree
+make "mtn.seen      0    ; how many were actually drawn
+make "mtn.runs      0    ; how many separate polylines they formed
+
+; One full scan with a cull test on each point.  The cull is what the design
+; proposes to spend, so the run has to price the scan it would replace.
+;
+; THE RANGE IS SCANNED IN INDEX ORDER AND DRAWN IN SCREEN ORDER, and those are
+; not the same thing.  At heading 0 the visible points are indices 1-4 (azimuth
+; 0 to 33.75) and 30-32 (326.25 to 348.75, which wrap to -33.75 to -11.25), so
+; walking the table start to finish steps from +171 to -171 in one segment and
+; strokes a line clear across the screen.  It looks exactly like a rendering
+; fault and nothing about the timing would have shown it.
+;
+; The guard is one comparison a drawn point: a point to the LEFT of the last one
+; means the table wrapped, so lift the pen and start a second polyline.  A frame
+; has at most two runs, because the visible arc is contiguous in screen space
+; and only the table's seam splits it.
+to horizon
+  local "h local "lastx
+  make "mtn.seen 0
+  make "mtn.runs 0
+  ; 9999 so the FIRST drawn point always takes the pen-up branch. Seeded low,
+  ; it joined whatever the pen was last touching.
+  make "lastx 9999
+  repeat 32 [
+    make "h ((repcount - 1) * :mtn.step) - :ph
+    if :h > 180 [make "h :h - 360]
+    if -180 > :h [make "h :h + 360]
+    make "h :h * :mtn.scale
+    if 176 > abs :h [
+      make "mtn.seen :mtn.seen + 1
+      ifelse :h > :lastx [
+        (setpos :h :hz + item repcount :mtn)
+      ] [
+        pu (setpos :h :hz + item repcount :mtn) pd
+        make "mtn.runs :mtn.runs + 1
+      ]
+      make "lastx :h
+    ]
+  ]
+  pu
+end
+
+;==========================================================================
+; The frame
+;
+; The projection pass and the drawing pass are separated because they answer
+; different questions and have different levers: projection is cut by the object
+; cap, drawing by the edge count, and section 13's L4 primitive would collapse
+; both at once.  A frame that reported one number could not say which.
+;
+; `shown` is how many of the eight obstacles this point carries.
+
+make "shown 1
+make "proj.ms 0
+make "draw.ms 0
+
+; TWO FRAMES, and the pair is the point.
+;
+; `frame.body` carries the phase timers that split projection from drawing, and
+; those timers are not free: four statements an object, up to 36 a frame, which
+; at an arithmetic statement's 43 us is about 1.5 ms of the figure they are
+; inside.  P11 M4 stated its own 0.15 ms and moved on; at ten times that it is
+; worth measuring instead of stating.
+;
+; `frame.raw` is the same statements in the same order with the timers taken
+; out, so it is what the frame actually costs.  The series reports both, and
+; the difference IS the instrumentation -- measured, not estimated.
+;
+; THEY MUST STAY IN STEP.  `test_p13m0.c` pins that both draw the same number of
+; lines from the same state, because a split that describes a frame nobody runs
+; is worse than no split at all.
+
+to frame.body
+  local "t local "i
+  cam.setup
+  clean
+  make "t ticks
+  horizon
+  make "draw.ms ticks - :t
+  make "proj.ms 0
+  repeat :shown [
+    make "t ticks
+    make "i project.box ((item repcount :ox) - :px) ((item repcount :oz) - :pz)
+    make "proj.ms :proj.ms + (ticks - :t)
+    if :i [
+      make "t ticks
+      draw.box
+      make "draw.ms :draw.ms + (ticks - :t)
+    ]
+  ]
+  make "t ticks
+  make "i project.enemy
+  make "proj.ms :proj.ms + (ticks - :t)
+  if :i [
+    make "t ticks
+    draw.enemy
+    make "draw.ms :draw.ms + (ticks - :t)
+  ]
+end
+
+to frame.raw
+  local "i
+  cam.setup
+  clean
+  horizon
+  repeat :shown [
+    make "i project.box ((item repcount :ox) - :px) ((item repcount :oz) - :pz)
+    if :i [draw.box]
+  ]
+  make "i project.enemy
+  if :i [draw.enemy]
+end
+
+;==========================================================================
+; The five questions
+
+make "p13m0.frames 200
+
+; Q1.  A long edge against a short one, both pen down, both `(setpos x y)`.
+; 200 steps is about what a near box's edge spans; 17 is P11 M0's `fd`, so the
+; short figure is the one that compares directly with its 60 us.
+to time.long.line
+  local "t0
+  pu (setpos -100 0) pd
+  make "t0 ticks
+  repeat 500 [(setpos 100 0) (setpos -100 0)]
+  pu
+  output (ticks - :t0) / 1000
+end
+
+to time.short.line
+  local "t0
+  pu (setpos -8 0) pd
+  make "t0 ticks
+  repeat 500 [(setpos 9 0) (setpos -8 0)]
+  pu
+  output (ticks - :t0) / 1000
+end
+
+; Q3.  P11 M0's two calibration loops, unchanged, so the numbers compare
+; directly with 42-44.5 us and 4.5-7 us.
+to time.arith
+  local "t0 local "x
+  make "x 0
+  make "t0 ticks
+  repeat 2000 [make "x :x + 1]
+  output ((ticks - :t0) * 1000) / 2000
+end
+
+to time.bare
+  local "t0
+  make "t0 ticks
+  repeat 2000 []
+  output ((ticks - :t0) * 1000) / 2000
+end
+
+; Q4 and Q5, on their own and with no drawing in them.
+to time.box.proj
+  local "t0
+  make "t0 ticks
+  repeat 200 [ignore project.box 0 300]
+  output (ticks - :t0) / 200
+end
+
+to time.enemy.proj
+  local "t0
+  make "t0 ticks
+  repeat 200 [ignore project.enemy]
+  output (ticks - :t0) / 200
+end
+
+to time.box.draw
+  local "t0
+  ignore project.box 0 300
+  make "t0 ticks
+  repeat 200 [draw.box]
+  output (ticks - :t0) / 200
+end
+
+to time.horizon
+  local "t0
+  make "t0 ticks
+  repeat 200 [horizon]
+  output (ticks - :t0) / 200
+end
+
+; Q2.  The present, measured in both screen modes over the same scene, because
+; the saving section 6 predicts is the DIFFERENCE and a single figure cannot
+; show it.  `clean` marks the whole canvas in manual mode either way; what
+; changes is how many rows the present is willing to send.
+to time.present
+  local "t0 local "total
+  make "total 0
+  repeat 20 [
+    clean
+    horizon
+    make "shown 4
+    frame.body
+    make "t0 ticks
+    refresh
+    make "total :total + (ticks - :t0)
+  ]
+  output :total / 20
+end
+
+;==========================================================================
+; The series
+
+make "p13m0.n    (list 1 2 4 8)
+make "p13m0.body (list 0 0 0 0)   ; frame.raw -- what the frame costs
+make "p13m0.inst (list 0 0 0 0)   ; frame.body -- the same frame with the timers in
+make "p13m0.proj (list 0 0 0 0)
+make "p13m0.draw (list 0 0 0 0)
+make "p13m0.pres (list 0 0 0 0)
+make "p13m0.lo   (list 0 0 0 0)
+make "p13m0.hi   (list 0 0 0 0)
+make "p13m0.seen (list 0 0 0 0)
+
+to measure :slot
+  local "b local "p local "d local "r local "one local "t0 local "lo local "hi
+  local "ins
+  make "shown item :slot :p13m0.n
+  make "px 0  make "pz 0  make "ph 0
+  setrefresh "manual
+  make "b 0  make "p 0  make "d 0  make "r 0  make "ins 0
+  make "lo 99999  make "hi 0
+  repeat :p13m0.frames [
+    ; The untimed frame is the one the body, min and max columns report.
+    make "t0 ticks
+    frame.raw
+    make "one ticks - :t0
+    make "b :b + :one
+    make "t0 ticks
+    refresh
+    make "r :r + (ticks - :t0)
+    make "one :one + (ticks - :t0)
+    if :one < :lo [make "lo :one]
+    if :one > :hi [make "hi :one]
+    ; The instrumented frame runs beside it, outside the figures above, purely
+    ; to split projection from drawing.  Its own cost is reported rather than
+    ; hidden: `inst` minus `body` is what the phase timers charge.
+    make "t0 ticks
+    frame.body
+    make "ins :ins + (ticks - :t0)
+    make "p :p + :proj.ms
+    make "d :d + :draw.ms
+  ]
+  .setitem :slot :p13m0.body :b / :p13m0.frames
+  .setitem :slot :p13m0.inst :ins / :p13m0.frames
+  .setitem :slot :p13m0.proj :p / :p13m0.frames
+  .setitem :slot :p13m0.draw :d / :p13m0.frames
+  .setitem :slot :p13m0.pres :r / :p13m0.frames
+  .setitem :slot :p13m0.lo :lo
+  .setitem :slot :p13m0.hi :hi
+  .setitem :slot :p13m0.seen :mtn.seen
+end
+
+; Printed twice -- once to the file, once to the screen -- so it is one list of
+; lines rather than two that can drift apart.  Punctuation is spelled out in
+; words: every mark in a printed list is tokenised as a word of its own, so
+; `M1+M2` comes out as `M1 + M2` and `--` as `- -`.
+to line.for :slot
+  pr (se item :slot :p13m0.n [objects plus the enemy])
+  pr (se [  body] item :slot :p13m0.body [ms   present] item :slot :p13m0.pres [ms])
+  pr (se [  of the body, projection] item :slot :p13m0.proj
+      [ms and drawing] item :slot :p13m0.draw [ms])
+  pr (se [  the phase timers cost] (item :slot :p13m0.inst) - (item :slot :p13m0.body)
+      [ms and are not in the body figure])
+  pr (se [  frame] (item :slot :p13m0.body) + (item :slot :p13m0.pres)
+      [ms   min] item :slot :p13m0.lo [ms   max] item :slot :p13m0.hi [ms])
+end
+
+to p13m0.report
+  pr [P13 M0 what a Battlezone frame costs, before any game code exists]
+  pr (se [frames per point] :p13m0.frames [in splitscreen, present with refresh])
+  pr []
+  pr [Q3 does the 180x ratio hold]
+  pr (se [  arithmetic statement] :arith [us, P11 M0 measured 42 to 44.5])
+  pr (se [  bare repeat iteration] :bare [us, P11 M0 measured 4.5 to 7])
+  pr []
+  pr [Q1 what a long line costs]
+  pr (se [  200 step edge] :lng [ms each])
+  pr (se [  17 step edge] :shrt [ms each, P11 M0 measured 0.060 for fd 17])
+  pr [  if these are close, section 10 is right and length is nearly free]
+  pr []
+  pr [Q2 what the present costs]
+  pr (se [  splitscreen] :pres.split [ms, section 6 predicts 19.7])
+  pr (se [  fullscreen ] :pres.full [ms, P11 M0 measured 26.3])
+  pr (se [  the split saving is] :pres.full - :pres.split [ms])
+  pr []
+  pr [Q4 and Q5 what the objects cost to project]
+  pr (se [  one box] :boxp [ms, the design predicts 2.16])
+  pr (se [  the enemy] :enp [ms, the design predicts 6.0])
+  pr (se [  one box drawn, 12 edges in 20 statements] :boxd [ms])
+  pr (se [  the horizon, 32 points scanned] :hzn [ms, the design predicts 3.9 culled])
+  pr (se [  of 32 points,] item 4 :p13m0.seen [were on screen])
+  pr [  the design assumed about 12 of them, which is the number to check]
+  pr []
+  pr [the series]
+  line.for 1
+  line.for 2
+  line.for 3
+  line.for 4
+  pr []
+  pr [what the design predicts, from docs/battlezone-design.md section 12]
+  pr [  51.2 ms total at 3 obstacles and 1 enemy, against 66.7 at 15 fps]
+  pr [  present 19.7, horizon 3.9, cull 3.3, boxes 6.5, enemy 6.0, edges 4.0]
+  pr []
+  pr [the gate, from section 16]
+  pr [  under 66.7 ms  build the game at L0]
+  pr [  66.7 to 71.4   spend the two gameplay levers in section 14]
+  pr [  over 71.4      stop and take L4, the drawmodel family]
+  pr []
+  pr (se [nodes at start] :n0 [at end] :n1 [after recycle] :n2)
+  pr (se [word bytes free] :w0 [at start,] :w1 [at end,] :w2 [after recycle])
+  pr []
+end
+
+to p13m0
+  local "n0 local "n1 local "n2 local "w0 local "w1 local "w2
+  local "arith local "bare local "lng local "shrt
+  local "pres.split local "pres.full local "boxp local "enp
+  local "boxd local "hzn
+  recycle
+  make "n0 nodes  make "w0 atoms
+
+  splitscreen
+  window
+  setrefresh "manual
+  clean
+
+  make "arith time.arith
+  make "bare time.bare
+  make "lng time.long.line
+  make "shrt time.short.line
+  make "boxp time.box.proj
+  make "enp time.enemy.proj
+  make "boxd time.box.draw
+  make "hzn time.horizon
+
+  make "pres.split time.present
+  fullscreen
+  clean
+  make "pres.full time.present
+  splitscreen
+  clean
+
+  measure 1
+  measure 2
+  measure 3
+  measure 4
+
+  make "n1 nodes  make "w1 atoms
+  recycle
+  ; Read the recovered figure HERE, not inside the report: printing builds a
+  ; `sentence` per line, so a `nodes` evaluated down there reads the report's
+  ; own garbage back as if the recycle had under-recovered.  P10's script lost
+  ; its first hardware run to exactly that.
+  make "n2 nodes  make "w2 atoms
+
+  setrefresh "auto
+  textscreen
+  open "p13m0.txt
+  setwrite "p13m0.txt
+  p13m0.report
+  setwrite []
+  close "p13m0.txt
+  p13m0.report
+  pr [Also written to p13m0.txt]
+end
