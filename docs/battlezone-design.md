@@ -623,62 +623,86 @@ question for M4 rather than a plan.
 Same finding as P11 §3.3, and it generalises: on this display a vector game pays
 a fixed tax a sprite game does not.
 
-### 12.3 Overclocking — swept, and the control caught a bug
+### 12.3 Overclocking — measured, and it is the largest lever in the document
 
 `hw.setfrequency` (2026-08-23) takes the RP2350 from its rated 150 MHz to as
-much as 300. A four-point sweep ran the same day on a Plus 2 W
-([`measurements/p13m0-sweep-plus2w-2026-08-23.md`](measurements/p13m0-sweep-plus2w-2026-08-23.md)).
+much as 300. Two boards' worth of runs are in
+[`measurements/`](measurements/); the confirming pair is
+`p13m0-clkperi-fixed-plus2w-2026-08-23.md`.
 
-**The interpreter is purely clock-bound, and that half of the prediction is
-confirmed exactly.** The arithmetic statement reads 52.5, 39.5, 31.5 and
-25.5 µs at 150, 200, 250 and 300 — speedups of 1.000, 1.329, 1.667 and 2.059
-against clock ratios of 1.000, 1.333, 1.667 and 2.000. Inside 3 % at every
-point, which incidentally proves `ticks` stayed honest across the sweep.
+    150 MHz:  frame = 45.64 + 7.485 n     n=3: 68.1 mean, 71.1 worst
+    300 MHz:  frame = 31.40 + 3.635 n     n=3: 42.3 mean, 44.3 worst
 
-**The present half was wrong, and the present column is what said so.** This
-section predicted 19.3–19.8 ms at every clock, on the grounds that the present
-is the SPI wire and nothing about the CPU clock reaches it. The board read
-**58.95, 59.45 and 57.4 ms** at 200, 250 and 300 — three times the figure, and
-*flat*, which is the shape that gives the cause away.
+**1.610× on the frame, and the parts separate exactly as this section predicted
+before any of it ran.** The slope is **2.059×** — pure interpretation, against a
+clock ratio of 2.000. The flat term minus the present is **2.05×**. And the
+present itself moves **19.62 → 18.70 ms**, which is the CPU share of it and
+nothing else: the wire does not care what the CPU is doing.
 
-**`clk_peri` does not follow `clk_sys`.** This document, and the code, assumed
-it did. `set_sys_clock_pll` parks clk_peri on the **USB PLL at 48 MHz** whenever
-the system PLL moves (SDK `clocks.c`, `PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK`,
+**Closed** (horizon culled, hot path on globals): **35.0 ms mean and 37.0
+worst**, against 53.1 / 56.0 at stock.
+
+**The die barely warms**: 24.3 → 26.9 °C over a 200-frame run at 300 MHz, and
+25.7 → 26.6 in the earlier sweep. Thermals are not a constraint.
+
+### 12.3.1 It got there the hard way: clk_peri
+
+The first sweep read the present at **58.95, 59.45 and 57.4 ms** at 200, 250 and
+300 — three times the figure, and *flat*, which is the shape that gives the
+cause away.
+
+**`clk_peri` does not follow `clk_sys`.** This document, and the code, assumed it
+did. `set_sys_clock_pll` parks clk_peri on the **USB PLL at 48 MHz** whenever the
+system PLL moves (SDK `clocks.c`, `PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK`,
 default 0). So `spi_set_baudrate(LCD_SPI, 75000000)` was dividing 48 MHz, not
-300, and could only deliver 24 — the wire went from 16.4 ms to 51.2, and stayed
-there at every clock because 48 MHz does not care what clk_sys is doing.
-Predicted from that model: 58.4 ms. Measured: 57.4–59.45. Fixed by setting the
-define; the sweep wants re-running.
+300, and could only deliver 24 — the wire went from 16.4 ms to 51.2 and stayed
+there at every clock, because 48 MHz does not care what clk_sys is doing.
+Predicted from that model: 58.4 ms. Measured: 57.4–59.45.
 
-### 12.3.1 The dividers are coarse, and 200 MHz is a trap
+Fixed by setting the define. The re-run put the present at **18.70 ms against a
+predicted 18.0, and the whole frame within 4.2 %** — so the model that diagnosed
+the bug also priced the fix.
 
-With clk_peri attached, the SPI still divides it by an even prescale times a
-post-divider, so **only clocks that reach 75 MHz exactly keep the display at
-full speed**:
+**The control is what caught it**, and it is the reason this section is not
+still wrong. Before the run it said: *"if the present column reads 19.3–19.8 ms
+at 300 MHz, the SPI divisor was restored and `ticks` is still honest. If it
+reads ~10, the timer moved."* It read 58, which is neither, and the flatness
+across three clocks named the cause within minutes. A sweep reporting only a
+frame total would have shown an overclock that bought nothing and left no way to
+tell why.
 
-| clock | LCD SPI | present | body @ 3 | frame @ 3 | **closed** |
-|---:|---:|---:|---:|---:|---:|
-| 150 MHz | 75.0 MHz | 19.6 ms | 45.9 ms | 65.5 ms | **51.1 ms** |
-| 200 | **50.0** | 27.0 | 34.4 | 61.4 | **50.8** |
-| 250 | 62.5 | 21.6 | 27.3 | 48.9 | **40.4** |
-| 300 | 75.0 | 18.0 | 22.6 | 40.6 | **33.6** |
+### 12.3.1a The dividers are coarse, and 200 MHz is a trap
 
-The body column is measured; the present column is modelled from the SPI rate
-the divider will actually produce, and the sweep's re-run is what will confirm
-it.
+The SPI divides clk_peri by an even prescale times a post-divider, so **only
+clocks that reach 75 MHz exactly keep the display at full speed**: 150 gives 75
+(÷2) and 300 gives 75 (÷4), but 200 gives **50** and 250 gives 62.5.
 
 **An overclock to 200 MHz makes the interpreter 1.33× faster and the display
-1.5× slower, and is worth 0.3 ms.** 250 is worth 10.7. **300 is worth 17.5 and
+1.5× slower, and is worth 0.3 ms.** 250 is worth about 10. **300 is worth 26 and
 is the only overclock that leaves the display where it started.**
 
-At 300 the closed frame is **33.6 ms — 29 fps** — and the *unclosed* frame is
-40.6, which fits a 15 fps budget without either of §12.1's levers. It also
-settles §6's fullscreen question outright: fullscreen at 300 MHz is ~40 ms
-against 66.7.
+### 12.3.1b What it buys is scene, not frame rate
 
-**The die barely warms.** 24.1 → 24.8 °C at 200, 24.8 → 25.7 at 250, 25.7 →
-26.6 at 300, over 200-frame runs. Thermals are not a constraint at any of these
-clocks, which was the other thing worth knowing.
+The interesting consequence is not that Battlezone could run faster. It is what
+the frame will hold. Closed, at 300 MHz, `frame = 25.32 + 3.223 n`:
+
+| | at 150 MHz | at 300 MHz |
+|---|---:|---:|
+| objects at 15 fps | 5 | **12** |
+| objects at 18 fps | 3 | 9 |
+| objects at 20 fps | 2 | 7 |
+| objects at 24 fps | — | 5 |
+
+**Twelve obstacles at 15 fps is the arcade's density**, and §13's L4 verdict said
+of exactly that number: *"at a measured 7.80 ms an object, twelve obstacles is
+94 ms of objects alone and is unreachable in Logo at any frame rate worth
+playing."* At 300 MHz an object is 3.22 ms and twelve is 38.7. **The clock is
+the enabling condition L4 was being held for**, and L4 is now the answer to a
+question that has already been answered another way.
+
+This is a decision for M4 rather than now, and it is a real one: three obstacles
+at 24 fps, or twelve at 15. The cabinet ran fast *and* dense, and this machine
+will not do both.
 
 ### 12.3.2 The wireless bus, and picking the right seam
 
@@ -894,16 +918,23 @@ part in C. There is a version of this where Battlezone is a thin Logo shell
 around a 3D engine, and that game is worth less than a slower one written in
 Logo.
 
-**Verdict: not needed, and not being built.** M0 closed the gate at L0 (§16.2),
-so this game does not spend it. It stays here as the answer to a different
-question — *what would a richer Battlezone cost?* — and M0 sharpens that answer
-rather than retiring it: at a measured 7.80 ms an object, twelve obstacles is
-94 ms of objects alone and is unreachable in Logo at any frame rate worth
-playing. **If this tree ever wants a 3D game denser than three obstacles, L4 is
-not an optimisation, it is the enabling condition.** Worth opening as a roadmap
-item on its own merits — a vector-3D primitive family for *any* game, which is
-how the tilemap family was justified — and worth doing on a day when someone
-wants that game.
+**Verdict: not needed, not being built, and now largely answered by something
+else.** M0 closed the gate at L0 (§16.2), so this game does not spend it. This
+section then argued it was the *enabling condition* for a denser one — *"at a
+measured 7.80 ms an object, twelve obstacles is 94 ms of objects alone and is
+unreachable in Logo at any frame rate worth playing."*
+
+**§12.3.1b retires that argument.** At 300 MHz an object costs 3.22 ms closed,
+and twelve is 38.7 — the arcade's density at 15 fps, with no new primitive. The
+clock got there first, for a build flag and a twelve-line function against L4's
+250 lines of C, a slot table in `core/limits.h` and the objection that it puts
+the interesting part of a Logo game in C.
+
+What is left for L4 is the case beyond a dozen objects, or a machine that cannot
+be overclocked. Still worth opening as a roadmap item on its own merits — a
+vector-3D primitive family for *any* game, the way the tilemap family was
+justified — but it is no longer this design's insurance policy, and nothing here
+is waiting on it.
 
 ### The one that is not on this list
 
