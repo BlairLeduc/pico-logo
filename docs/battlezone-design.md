@@ -728,6 +728,9 @@ transact at a rate that is briefly wrong. **The association survives, a server
 keeps listening, and the radio may be up.** A frame in flight during the change
 may need retransmitting; that is the whole cost.
 
+**Validated on hardware, 2026-08-23.** An overclock with the radio already up
+produces no `hdr mismatch` and leaves the radio working.
+
 The general lesson is the one worth keeping: *the first seam that makes a
 problem go away is not always the one that solves it.* Refusing was correct and
 cheap and would have shipped a permanent restriction — "overclock before you
@@ -1177,8 +1180,15 @@ Closed, it is **55.1 ms** and it passes with 11.6 ms to spare.
 
 ### 16.3.1 M0 is closed
 
-All three boards measured, all three inside the budget with §12.1's levers, and
-nothing in §16's five questions unanswered. M1 may start.
+All three boards measured, all three inside the budget with §12.1's levers,
+nothing in §16's five questions unanswered, and the clock swept and confirmed on
+two of them (§12.3). **M1 may start.**
+
+What M1 inherits, settled rather than assumed: the horizon is culled and the hot
+path is on prefixed globals from the first line rather than retrofitted (§12.1);
+`near` is cut for edge length (§9); and the rate-versus-density choice §12.3.1b
+opens is M4's, not M1's — M1 should be written so that `max.obstacles` is a
+constant and not an assumption.
 
 One loose thread that is **not** a gate: §19.7's per-pixel anomaly, which the
 tiering experiment sharpened rather than settled — see there for the one-minute
