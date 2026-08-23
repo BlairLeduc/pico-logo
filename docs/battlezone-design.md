@@ -1,16 +1,15 @@
 # Battlezone in Pico Logo (design)
 
 Status: **M0 MEASURED on all three boards, 2026-08-23. The gate passes at L0 on
-the two tiered boards. The third failed it, the cause was a build flag rather
-than the game, and the flag is now set (§16.3).**
+every one of them, and M0 is closed.**
 
-| | Pico 2 W | Plus 2 W |
-|---|---:|---:|
-| `frame = c + m·n`, mean | `44.18 + 7.167 n` | `45.62 + 7.736 n` |
-| at three obstacles and one enemy | **65.7 ms** | **68.8 ms** |
-| worst frame at three | 70.6 | 73.7 |
-| **with §12.1's two levers** | **51.6 ms** | **54.1 ms** |
-| worst frame with both levers | 56.5 | 58.9 |
+| | Pico 2 W | Plus 2 W | Pico 2 |
+|---|---:|---:|---:|
+| `frame = c + m·n`, mean | `44.18 + 7.167 n` | `45.62 + 7.736 n` | `46.62 + 7.998 n` |
+| at three obstacles and one enemy | **65.7 ms** | **68.8 ms** | **70.6 ms** |
+| worst frame at three | 70.6 | 73.7 | 73.5 |
+| **with §12.1's two levers** | **51.6 ms** | **54.1 ms** | **55.1 ms** |
+| worst frame with both levers | 56.5 | 58.9 | 58.0 |
 
 Against a 66.7 ms budget at 15 fps. The two levers are **culling the horizon**
 (−10.3 to −10.8 ms), which this document always specified and the harness
@@ -21,13 +20,12 @@ interpreter change. **No new primitive is needed and none is being built.**
 All three boards ran the fixed harness and every figure below is a reading. The
 two Plus 2 W runs reproduce to **within 1 %** on every number the budget uses.
 
-**The Pico 2 measured 116.4 ms at three obstacles — 85.3 even with both levers —
-and it is not this game's fault.** `LOGO_HOT_IN_RAM` was off for the `pico2`
-preset, so P10 M5's flash tiering was not in that firmware: every interpreting
-figure came in **2.1–2.4× its Pico 2 W counterpart** while the run's two
-controls, the bare `repeat` iteration and the present, were **identical on both
-boards** (4.5 µs and 19.8 ms). §16.3 has the whole result; the flag is now on
-and the board wants re-running.
+**The Pico 2 first measured 116.4 ms at three obstacles — 85.3 even with both
+levers — and it was not this game's fault.** `LOGO_HOT_IN_RAM` was off for the
+`pico2` preset, so P10 M5's flash tiering was not in that firmware. Turning it
+on took the same board, on the same day, from **116.4 to 70.6 ms — 1.65×** —
+with both of the run's controls unmoved. §16.3 is the whole experiment, and it
+is the strongest evidence for P10 M5's diagnosis in the tree.
 
 M0 rewrote §3, §8.4, §9, §10, §12 and §13. The corrections, in the order they
 matter:
@@ -49,10 +47,12 @@ matter:
   is 48.5–53.5 µs, not 43, because this document's *host* figure measured a
   global at top level while every board harness measures a `local` inside a
   procedure (§3.1). Like for like the ratio is 167×.
-- **A box projects in 2.97–3.145 ms against 2.16 predicted; the enemy in
-  4.97–5.18 against 6.0.** The column trick (§8.2) beat its estimate.
-- **The split-screen present is 19.2–19.8 ms**, against §6's predicted 19.7 —
-  the closest prediction in the document.
+- **A box projects in 2.97–3.195 ms against 2.16 predicted; the enemy in
+  4.97–5.4 against 6.0.** The column trick (§8.2) beat its estimate on every
+  board.
+- **The split-screen present is 19.2–19.8 ms on all three boards**, against
+  §6's predicted 19.7 — the closest prediction in the document, and the run's
+  most useful control.
 
 [Asteroids](asteroids-design.md) was the first game in this tree that was not a
 sprite game. Battlezone is the first that is not a **2D** game, and the thing
@@ -73,7 +73,7 @@ needed.**
 | Game | `logo/games/battlezone` — one Logo file, no extension, no `-` or `/` in the name so `load "battlezone` parses |
 | Tests | `tests/test_battlezone.c` (Unity + mock device), mirroring `tests/test_asteroids.c` |
 | Design | this document |
-| Measurement | `tests/logo/p13m0`, with all four board runs kept verbatim under [`measurements/`](measurements/): `p13m0-pico2w-…`, `p13m0-plus2w-…b`, `p13m0-pico2-…` (the untiered run that failed the gate, §16.3), and `p13m0-plus2w-…` — the first Plus 2 W run, kept because §16.1 is about it and its `body` column is void. **A tiered `pico2` has not run it (§16.3.1).** Times a real frame at 1, 2, 4 and 8 visible objects, with the projection pass read apart from the drawing pass and the present read apart from both. It writes its numbers **to a file**, because numbers on a display cannot be copied off it. `tests/test_p13m0.c` (23 tests) proves it is worth carrying to a board: the projection against hand-computed coordinates, the culling in both directions, and that the script reaches its last line with the report in the file |
+| Measurement | `tests/logo/p13m0`, with all five board runs kept verbatim under [`measurements/`](measurements/): `pico2w`, `plus2w…b`, `pico2` and `pico2-tiered` (the two halves of §16.3's controlled experiment), and the first `plus2w` run, kept because §16.1 is about it and its `body` column is void. **M0 is closed (§16.3.1).** Times a real frame at 1, 2, 4 and 8 visible objects, with the projection pass read apart from the drawing pass and the present read apart from both. It writes its numbers **to a file**, because numbers on a display cannot be copied off it. `tests/test_p13m0.c` (23 tests) proves it is worth carrying to a board: the projection against hand-computed coordinates, the culling in both directions, and that the script reaches its last line with the report in the file |
 | Model generator | `scripts/gen_models.py`, host-side, output pasted in (§8.3) |
 
 Play: `load "battlezone` then `battlezone`.
@@ -554,24 +554,26 @@ frightening. Budgeted inside the 3.0 ms line below.
 At **15 fps — a 66.7 ms budget**. M0 measured 200 frames at each of 1, 2, 4 and
 8 visible objects plus the enemy, in `splitscreen`, presenting with `refresh`.
 
-| Objects | Pico 2 W mean | best | worst | Plus 2 W mean | best | worst |
-|---:|---:|---:|---:|---:|---:|---:|
-| 1 | 51.41 ms | 47 | 56 | 53.31 ms | 49 | 57 |
-| 2 | 58.45 | 54 | 63 | 61.14 | 56 | 66 |
-| 4 | 72.85 | 68 | 76 | 76.60 | 71 | 82 |
-| 8 | 101.53 | 100 | 111 | 107.50 | 105 | 114 |
+| Objects | Pico 2 W | Plus 2 W | Pico 2 |
+|---:|---:|---:|---:|
+| 1 | 51.41 ms | 53.31 ms | 54.61 ms |
+| 2 | 58.45 | 61.14 | 62.63 |
+| 4 | 72.85 | 76.60 | 78.62 |
+| 8 | 101.53 | 107.50 | 110.60 |
 
-| | Pico 2 W | Plus 2 W |
-|---|---|---|
-| mean | `44.18 + 7.167 n` | `45.62 + 7.736 n` |
-| worst | `46.96 + 7.878 n` | `49.39 + 8.096 n` |
-| **at three obstacles and one enemy** | **65.7 / 70.6 ms** | **68.8 / 73.7 ms** |
-| an object costs | 7.26 ms | 7.88 ms |
-| — of which projection | 3.52 | 3.69 |
-| — of which drawing | 3.74 | 4.19 |
+| | Pico 2 W | Plus 2 W | Pico 2 |
+|---|---|---|---|
+| mean | `44.18 + 7.167 n` | `45.62 + 7.736 n` | `46.62 + 7.998 n` |
+| worst | `46.96 + 7.878 n` | `49.39 + 8.096 n` | `48.48 + 8.339 n` |
+| **at three obstacles and one enemy** | **65.7 / 70.6 ms** | **68.8 / 73.7 ms** | **70.6 / 73.5 ms** |
+| an object costs | 7.26 ms | 7.88 ms | 8.11 ms |
+| — of which projection | 3.52 | 3.69 | 3.77 |
+| — of which drawing | 3.74 | 4.19 | 4.33 |
 
-The Plus 2 W is **1.048×** the Pico 2 W on the closed frame, which is the same
-5 % it is slower at interpreting (§3.1).
+**The three boards span 7 %** — 65.7, 68.8 and 70.6 ms — with the Pico 2 W
+fastest and the Pico 2 slowest, and the same 7 % separates their arithmetic
+statements (48.5, 53.5, 54 µs). Whatever the game is cut for, it is cut for all
+three at once.
 
 | | Predicted | **Pico 2 W** | **Plus 2 W** |
 |---|---:|---:|---:|
@@ -600,16 +602,16 @@ costs 0.32 µs against a global's 0.213. Rewritten with globals, the projection
 measures **1.31× faster** for an identical result. Free, no interpreter change,
 and the one lever this document did not think of.
 
-| | Pico 2 W | Plus 2 W |
-|---|---:|---:|
-| mean frame at three, as measured | 65.7 | 68.8 |
-| with both levers | **51.6** | **54.1** |
-| worst frame with both levers | **56.5** | **58.9** |
+| | Pico 2 W | Plus 2 W | Pico 2 |
+|---|---:|---:|---:|
+| mean frame at three, as measured | 65.7 | 68.8 | 70.6 |
+| with both levers | **51.6** | **54.1** | **55.1** |
+| worst frame with both levers | **56.5** | **58.9** | **58.0** |
 
-Against 66.7. That is 13–15 ms of headroom on the mean and 8–10 on the worst —
-more than Asteroids shipped with. **18 fps (55.6 ms) fits the Pico 2 W's mean
-and neither board's worst frame**, so 15 fps is the rate and 18 is a question
-for M4 rather than a plan.
+Against 66.7. That is **11.6–15.1 ms of headroom on the mean and 7.8–10.2 on the
+worst, on every board** — more than Asteroids shipped with. **18 fps (55.6 ms)
+fits the Pico 2 W's mean and nothing else**, so 15 fps is the rate and 18 is a
+question for M4 rather than a plan.
 
 §14's two gameplay levers stay unspent and are re-priced at the measured slope:
 **obstacles 3 → 2 is −7.2 to −7.9 ms**, and the horizon table 32 → 20 points is
@@ -1006,24 +1008,44 @@ paths P10 M5 moved into SRAM.
 > stack left at 768 from the single-board era, not the board) but because no one
 > here has one to boot.
 
-Someone booted one. **The flag is now on for `pico2`**, and the build links at
-**88.89 % RAM against 86.16 % without it** — +14.3 KB, which matches P10 M5's
-13.6 and sits comfortably under the Plus 2 W's 91.29 %.
+Someone booted one. The flag was turned on and the **same board re-ran the same
+harness on the same day**:
 
-**This is the cleanest confirmation of P10 M5's diagnosis anyone has taken**, and
-it is not a Battlezone result: it is one board of three running every Logo
-program in this tree at less than half speed, found because a 3D game was the
-first thing demanding enough to notice. The roadmap carries it.
+| | untiered | tiered | |
+|---|---:|---:|---:|
+| arithmetic statement | 113 µs | **54 µs** | 2.09× |
+| one box projected | 6.65 ms | **3.195 ms** | 2.08× |
+| the enemy projected | 10.805 ms | **5.4 ms** | 2.00× |
+| horizon, 32 points | 29.63 ms | **14.635 ms** | 2.02× |
+| one box drawn | 7.115 ms | **3.92 ms** | 1.82× |
+| **frame at three obstacles** | **116.4 ms** | **70.6 ms** | **1.65×** |
+| *bare `repeat` iteration* | *4.5 µs* | *4.5 µs* | *1.00×* |
+| *present, `splitscreen`* | *19.75 ms* | *19.45 ms* | *1.02×* |
 
-**The board wants re-running before this section can say the gate passes on it.**
-Predicted, from the Pico 2 W's figures: a tiered `pico2` should land within a few
-per cent of 65.7 ms unculled and 51.6 closed, because the two boards differ only
-in the radio. If it does not, §12's budget is a two-board budget and this section
-says so.
+**One board, one harness, one day, one variable, and the two controls do not
+move.** P10 M5 measured this effect once, on one game, on one board, and had to
+argue that a 1.72× was the tiering rather than anything else in the frame; this
+is the same claim with a control group. It is the strongest evidence for that
+diagnosis in the tree, and it was found by a game that was not looking for it.
 
-### 16.3.1 What is still unmeasured
+RAM goes **86.16 % → 88.89 %**, +14.3 KB, matching P10 M5's 13.6 and under the
+Plus 2 W's 91.29 %. The op stack stays at 768 — 108 KB of single-board-era
+value against the other presets' 256 — untouched, and it is where headroom
+would come from if this board ever needs some.
 
-A tiered `pico2` (above). Nothing else.
+**The prediction was 65.7 ms "within a few per cent"; the reading is 70.6, 7 %
+high.** So the Pico 2 is the slowest of the three tiered boards rather than the
+twin of the Pico 2 W, and the radio is not the only difference between them.
+Closed, it is **55.1 ms** and it passes with 11.6 ms to spare.
+
+### 16.3.1 M0 is closed
+
+All three boards measured, all three inside the budget with §12.1's levers, and
+nothing in §16's five questions unanswered. M1 may start.
+
+One loose thread that is **not** a gate: §19.7's per-pixel anomaly, which the
+tiering experiment sharpened rather than settled — see there for the one-minute
+experiment that would close it.
 
 **M1 — the world and the camera.** Plain, obstacles, tread controls, horizon,
 the gunsight. No enemy, no shells, no radar. This is the milestone that proves
@@ -1097,23 +1119,34 @@ shape. The ones that are specific to this game:
 6. **Does a *tiered* Pico 2 run this frame?** (§16.3.) The untiered one does
    not, by a factor of two, and the flag is now on. The prediction is that it
    lands within a few per cent of the Pico 2 W; the run is one `p13m0` away.
-7. **The per-step cost of a line differs 3.6× between boards and correlates
-   with nothing.** Three readings, and the third *halved* the question rather
-   than answering it:
+7. **The per-step cost of a line differs 3.3× between two boards of the same
+   silicon.** Four builds, and the tiering experiment turned this from a puzzle
+   into a well-posed question:
 
    | | fixed part | per step |
    |---|---:|---:|
-   | Pico 2 (untiered) | 162 µs | **0.273 µs** |
+   | Pico 2, untiered | 162 µs | 0.273 µs |
+   | Pico 2, tiered | **63 µs** | **0.295 µs** |
    | Pico 2 W | 68 µs | **0.984 µs** |
-   | Plus 2 W | 67 µs | **0.350 µs** |
+   | Plus 2 W | 67 µs | 0.350 µs |
 
-   **The fixed part is now explained**: it tracks interpretation exactly — the
-   Pico 2's 162 against 68 is the same 2.4× as its arithmetic statement, and the
-   two tiered boards match each other to 1 µs. That half is closed.
+   **The fixed part is explained, and the middle two rows are the proof.**
+   Moving the interpreter into SRAM cut it 2.57× and left the per-step cost
+   within 8 % — so the fixed half is interpretation and the per-step half is
+   `screen_gfx_line`, which lives in `devices/`, is flash-resident on every
+   build, and the tiering never touched. A controlled experiment, by accident.
 
-   **The per-step part is not.** `screen_gfx_line` lives in `devices/` and is
-   flash-resident on all three, so the same loop over the same SRAM canvas at
-   the same clock costs 0.273, 0.984 and 0.350 µs a pixel. It does not follow
-   the tiering (the untiered board is *fastest*), the radio, PSRAM or the
-   package. The Pico 2 W is the outlier and nothing in the run says why. §9's
-   near plane is cut around it rather than for it.
+   **What is left is narrow and strange.** A Pico 2 and a Pico 2 W are the same
+   silicon on the same board differing in the radio, and their per-step costs
+   are **0.295 and 0.984 µs** — the same loop over the same SRAM canvas at the
+   same clock, 3.3× apart, with the Plus 2 W at 0.350 siding with the Pico 2.
+
+   **The one-minute experiment:** run `p13m0` on a Pico 2 W with the radio never
+   started, and compare Q1 alone. If cyw43 housekeeping is stealing time it will
+   show most in the longest single statement in the harness — a 200-step edge is
+   ~250 µs against a 17-step edge's 68 — which is exactly the shape of the
+   anomaly. If the number does not move, the Pico 2 W is doing something to the
+   pixel loop that three other builds are not.
+
+   §9's near plane is cut around this rather than for it, so the game is safe
+   either way.
