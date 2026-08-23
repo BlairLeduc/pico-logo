@@ -34,6 +34,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 #ifndef P13M0_SOURCE
 #error "P13M0_SOURCE must be defined (path to tests/logo/p11rocks)"
@@ -515,6 +516,110 @@ void test_the_frame_grows_by_twelve_edges_an_object(void)
     run("make \"shown 1");
 }
 
+// Logo is dynamically scoped, so a procedure's `make` finds the innermost
+// binding of that name anywhere up the call chain -- including a caller's
+// `local`. `cam.setup` declares no locals and writes four globals (`cs`, `sn`,
+// `a`, `b`), so any caller holding one of those names as a local has it
+// overwritten once a frame.
+//
+// THIS IS NOT HYPOTHETICAL. The first board run of this harness reported
+// 0.00 ms in every body column, because `measure`'s accumulator was called `b`
+// and `cam.setup` wrote `:half * :sn` into it with the camera at heading 0.
+// The run's most important column was gone and nothing about it looked wrong.
+//
+// `local` protects a name from the world; it does not protect the world from a
+// name. So `measure` prefixes its accumulators `m.` and this test walks them.
+void test_the_frame_does_not_write_the_measure_accumulators(void)
+{
+    // The names are READ OUT OF THE HARNESS, not listed here. A hardcoded list
+    // pins the names that happen to be in the file; reading them back pins the
+    // property, so renaming an accumulator to `b` fails this test instead of
+    // silently reintroducing the defect.
+    char names[32][64];
+    int count = 0;
+
+    FILE *f = fopen(P13M0_SOURCE, "rb");
+    TEST_ASSERT_NOT_NULL(f);
+    char line[512];
+    bool in_measure = false;
+    while (fgets(line, sizeof(line), f))
+    {
+        if (strncmp(line, "to measure", 10) == 0)
+        {
+            in_measure = true;
+            continue;
+        }
+        if (!in_measure)
+            continue;
+        const char *p = strstr(line, "local \"");
+        if (p == NULL)
+            break;  // the `local` block is contiguous and comes first
+        while (p != NULL && count < 32)
+        {
+            p += 7;
+            int n = 0;
+            while (p[n] != '\0' && !isspace((unsigned char)p[n]) && n < 63)
+                n++;
+            memcpy(names[count], p, (size_t)n);
+            names[count][n] = '\0';
+            count++;
+            p = strstr(p, "local \"");
+        }
+    }
+    fclose(f);
+    TEST_ASSERT_TRUE_MESSAGE(count >= 8, "no locals found in `measure`");
+
+    run("make \"shown 2");
+    for (int i = 0; i < count; i++)
+    {
+        char def[512];
+        snprintf(def, sizeof(def),
+                 "to probe\n"
+                 "  local \"%s\n"
+                 "  make \"%s 12345\n"
+                 "  frame.raw\n"
+                 "  frame.body\n"
+                 "  output :%s\n"
+                 "end",
+                 names[i], names[i], names[i]);
+        Result d = proc_define_from_text(def);
+        TEST_ASSERT_MESSAGE(d.status != RESULT_ERROR, def);
+
+        char msg[160];
+        snprintf(msg, sizeof(msg),
+                 "a frame overwrote `measure`'s local `%s` -- rename it", names[i]);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(12345.0f, num("probe"), msg);
+    }
+    run("make \"shown 1");
+}
+
+// The other half of the same hazard, stated positively: `cam.setup` is the one
+// procedure in this file that declares no locals, so it is the whole leak
+// surface. If it ever gains a fifth global, this test says so and the
+// accumulator list above has to be checked against it.
+void test_cam_setup_writes_exactly_four_names(void)
+{
+    static const char *written[] = { "cs", "sn", "a", "b" };
+
+    for (size_t i = 0; i < sizeof(written) / sizeof(written[0]); i++)
+    {
+        char expr[128];
+        snprintf(expr, sizeof(expr), "make \"%s 12345", written[i]);
+        run(expr);
+    }
+    run("make \"ph 30  cam.setup");
+
+    for (size_t i = 0; i < sizeof(written) / sizeof(written[0]); i++)
+    {
+        char expr[64];
+        snprintf(expr, sizeof(expr), ":%s", written[i]);
+        char msg[128];
+        snprintf(msg, sizeof(msg), "cam.setup did not write `%s`", written[i]);
+        TEST_ASSERT_TRUE_MESSAGE(fabsf(num(expr) - 12345.0f) > 0.5f, msg);
+    }
+    run("make \"ph 0  cam.setup");
+}
+
 //==========================================================================
 // The script
 //==========================================================================
@@ -577,6 +682,8 @@ int main(void)
     RUN_TEST(test_the_horizon_scrolls_with_the_heading);
     RUN_TEST(test_the_timed_and_untimed_frames_draw_the_same_thing);
     RUN_TEST(test_the_frame_grows_by_twelve_edges_an_object);
+    RUN_TEST(test_the_frame_does_not_write_the_measure_accumulators);
+    RUN_TEST(test_cam_setup_writes_exactly_four_names);
     RUN_TEST(test_p13m0_script_runs);
     RUN_TEST(test_the_script_puts_the_screen_back);
     return UNITY_END();

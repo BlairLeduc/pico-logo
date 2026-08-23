@@ -526,42 +526,57 @@ make "p13m0.lo   (list 0 0 0 0)
 make "p13m0.hi   (list 0 0 0 0)
 make "p13m0.seen (list 0 0 0 0)
 
+; ACCUMULATOR NAMES ARE PREFIXED, and the prefix is load-bearing.
+;
+; This procedure's body accumulator was called `b` on the first board run, and
+; `cam.setup` -- which every frame calls -- does `make "b :half * :sn`. Logo is
+; dynamically scoped, so `cam.setup`'s `make` found the CALLER's local and wrote
+; the accumulator instead of the global, once a frame, with `sn` at 0. Every
+; body figure came back 0.00 ms and the run's most important column was gone.
+;
+; It is not a shadow in the sense the Asteroids design warns about (one flat
+; global namespace, two meanings, one variable). It is worse: the two names are
+; in different scopes and the callee still reaches the caller's. `local` protects
+; a name from the world; it does not protect the world from a name.
+;
+; So every accumulator here is `m.something`, and
+; `test_the_frame_does_not_write_the_measure_accumulators` walks the list.
 to measure :slot
-  local "b local "p local "d local "r local "one local "t0 local "lo local "hi
-  local "ins
+  local "m.b local "m.p local "m.d local "m.r local "m.one local "m.t0
+  local "m.lo local "m.hi local "m.ins
   make "shown item :slot :p13m0.n
   make "px 0  make "pz 0  make "ph 0
   setrefresh "manual
-  make "b 0  make "p 0  make "d 0  make "r 0  make "ins 0
-  make "lo 99999  make "hi 0
+  make "m.b 0  make "m.p 0  make "m.d 0  make "m.r 0  make "m.ins 0
+  make "m.lo 99999  make "m.hi 0
   repeat :p13m0.frames [
     ; The untimed frame is the one the body, min and max columns report.
-    make "t0 ticks
+    make "m.t0 ticks
     frame.raw
-    make "one ticks - :t0
-    make "b :b + :one
-    make "t0 ticks
+    make "m.one ticks - :m.t0
+    make "m.b :m.b + :m.one
+    make "m.t0 ticks
     refresh
-    make "r :r + (ticks - :t0)
-    make "one :one + (ticks - :t0)
-    if :one < :lo [make "lo :one]
-    if :one > :hi [make "hi :one]
+    make "m.r :m.r + (ticks - :m.t0)
+    make "m.one :m.one + (ticks - :m.t0)
+    if :m.one < :m.lo [make "m.lo :m.one]
+    if :m.one > :m.hi [make "m.hi :m.one]
     ; The instrumented frame runs beside it, outside the figures above, purely
     ; to split projection from drawing.  Its own cost is reported rather than
     ; hidden: `inst` minus `body` is what the phase timers charge.
-    make "t0 ticks
+    make "m.t0 ticks
     frame.body
-    make "ins :ins + (ticks - :t0)
-    make "p :p + :proj.ms
-    make "d :d + :draw.ms
+    make "m.ins :m.ins + (ticks - :m.t0)
+    make "m.p :m.p + :proj.ms
+    make "m.d :m.d + :draw.ms
   ]
-  .setitem :slot :p13m0.body :b / :p13m0.frames
-  .setitem :slot :p13m0.inst :ins / :p13m0.frames
-  .setitem :slot :p13m0.proj :p / :p13m0.frames
-  .setitem :slot :p13m0.draw :d / :p13m0.frames
-  .setitem :slot :p13m0.pres :r / :p13m0.frames
-  .setitem :slot :p13m0.lo :lo
-  .setitem :slot :p13m0.hi :hi
+  .setitem :slot :p13m0.body :m.b / :p13m0.frames
+  .setitem :slot :p13m0.inst :m.ins / :p13m0.frames
+  .setitem :slot :p13m0.proj :m.p / :p13m0.frames
+  .setitem :slot :p13m0.draw :m.d / :p13m0.frames
+  .setitem :slot :p13m0.pres :m.r / :p13m0.frames
+  .setitem :slot :p13m0.lo :m.lo
+  .setitem :slot :p13m0.hi :m.hi
   .setitem :slot :p13m0.seen :mtn.seen
 end
 

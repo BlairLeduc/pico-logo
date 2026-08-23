@@ -1,26 +1,34 @@
 # Battlezone in Pico Logo (design)
 
-Status: **v1, drafted 2026-08-21. B48, which blocked M0, was fixed on
-2026-08-23 and M0's harness is written and host-tested the same day. The gate
-has not been run on a board.** Building the harness already rewrote §8.4, §9
-and §10 — see §16.1. Every board
-figure below is an *estimate*: a host measurement scaled by a ratio calibrated
-against P11's board numbers (§3). Nothing here has touched hardware, and this
-document expects to be rewritten by M0 the way
-[asteroids-design.md](asteroids-design.md) was rewritten five times.
+Status: **M0 MEASURED on a Plus 2 W, 2026-08-23. The gate is passed and the
+game is built at L0.** `frame = 40.09 + 8.043 n` for the typical frame and
+`51.87 + 7.635 n` for the worst, so the design's scene — three obstacles and one
+enemy — is **64.2 ms against a 66.7 ms budget at 15 fps**, with the worst frame
+at 74.8 and over it. Two levers close that and both were already in this
+document or are free: **culling the horizon** (§8.4, measured at 10.8 ms) and
+**moving the hot path off `local` and onto globals** (§13 L0.5, measured at
+1.31× on the projection, 3.9 ms). With both: **49.5 ms typical, 60.1 worst**,
+and 18 fps is in reach.
 
-Two findings from the feasibility pass are load-bearing and are stated up front:
+M0 rewrote §3, §8.4, §10, §12 and §13, and §16.2 has the whole result. The
+headline corrections:
 
-- **The projection pipeline in pure Logo costs 46.8 ms a frame** for a naive
-  scene of nine boxes and one enemy (§4.2). That is not a rejection — a
-  disciplined scene fits in 51.2 ms against a 66.7 ms budget (§12) — but the
-  frame is linear in *visible vertices*, and the object cap is this design's
-  `max.rocks`.
-- **There was no way to draw a line to a computed point in one statement.**
-  `(setpos x y)` was documented in the reference and not implemented; the
-  working alternative allocated two cons cells per line. Logged as **B48** and
-  **fixed on 2026-08-23** (§5), which unblocks M0 and is the reason §10 can
-  cost an edge at one statement.
+- **A long line is not nearly free.** §10 inferred from `screen_gfx_line` that a
+  200-step edge would cost about what a 17-step one does. It costs **twice** —
+  130 µs against 66 — and that was this document's largest unmeasured number.
+- **The 180× ratio holds, but §3's unit did not.** The board's arithmetic
+  statement is **53.5 µs**, not the 43 this document budgeted, because the
+  budget's figure was P11 M0's and the *host* side of the calibration measured a
+  different construct (§3.1). Like for like the ratio is 167×.
+- **A box projects in 3.145 ms against 2.16 predicted; the enemy in 5.18 against
+  6.0.** The column trick (§8.2) beat its estimate; the box did not.
+- **The split-screen present saves 8.05 ms**, better than §6's 6.6.
+- **The harness's own body column came back 0.00 ms** and had to be recovered
+  from the min/max columns, for a reason worth §16.1's paragraph: `measure`'s
+  accumulator was called `b`, and `cam.setup` writes a global `b`.
+
+Every board figure below is now a reading. Where an estimate survives it is
+marked as one.
 
 [Asteroids](asteroids-design.md) was the first game in this tree that was not a
 sprite game. Battlezone is the first that is not a **2D** game, and the thing
@@ -29,8 +37,8 @@ problem in the same place: an XY monitor traced a display list, and Pico Logo's
 turtle *is* a display list. What the arcade machine had that we do not is a
 Math Box — an AMD 2901 bit-slice coprocessor sitting beside the 6502 for the
 sole purpose of doing the matrix arithmetic the 6502 could not. §13 is this
-design's version of that question, and the answer is deliberately deferred to a
-measurement rather than taken now.
+design's version of that question, and M0 answered it: **no Math Box is
+needed.**
 
 ---
 
@@ -41,7 +49,7 @@ measurement rather than taken now.
 | Game | `logo/games/battlezone` — one Logo file, no extension, no `-` or `/` in the name so `load "battlezone` parses |
 | Tests | `tests/test_battlezone.c` (Unity + mock device), mirroring `tests/test_asteroids.c` |
 | Design | this document |
-| Measurement | `tests/logo/p13m0` — **written, host-tested, not yet run on a board.** Times a real frame at 1, 2, 4 and 8 visible objects, with the projection pass read apart from the drawing pass and the present read apart from both. It writes its numbers **to a file**, because numbers on a display cannot be copied off it. `tests/test_p13m0.c` (21 tests) proves it is worth carrying to a board: the projection against hand-computed coordinates, the culling in both directions, and that the script reaches its last line with the report in the file |
+| Measurement | `tests/logo/p13m0`, and its Plus 2 W run is kept verbatim in [`measurements/p13m0-plus2w-2026-08-23.txt`](measurements/p13m0-plus2w-2026-08-23.txt). **Run on one board of three; a Pico 2 W has not seen it (§16.2).** Times a real frame at 1, 2, 4 and 8 visible objects, with the projection pass read apart from the drawing pass and the present read apart from both. It writes its numbers **to a file**, because numbers on a display cannot be copied off it. `tests/test_p13m0.c` (23 tests) proves it is worth carrying to a board: the projection against hand-computed coordinates, the culling in both directions, and that the script reaches its last line with the report in the file |
 | Model generator | `scripts/gen_models.py`, host-side, output pasted in (§8.3) |
 
 Play: `load "battlezone` then `battlezone`.
@@ -73,37 +81,57 @@ The arcade rules, kept:
 
 Reduced or removed in §14, but the list above is the game.
 
-## 3. The calibration this design is built on
+## 3. The calibration, and what M0 did to it
 
-Every board figure below is `host × 180`, plus a per-statement drawing cost
-taken directly from P11's board measurement. That ratio was not assumed; it
-was measured and then checked against a known board result.
+Before M0 every board figure here was `host × 180`, calibrated against P11 M0's
+board numbers. **The ratio survived; the unit it was applied to did not.**
+
+### 3.1 What the ratio was, and the mistake inside it
 
 P11 M0 priced four units on a Plus 2 W
-([asteroids-design.md §3.4](asteroids-design.md#L267)):
+([asteroids-design.md §3.4](asteroids-design.md#L267)); the right-hand column is
+what M0 read on the same board on 2026-08-23:
 
-| Unit | Board |
-|---|---:|
-| arithmetic statement (`make "x :x + 1`) | 42–44.5 µs |
-| drawing statement (`fd 17`, pen down) | 59.5–60.3 µs |
-| bare `repeat` iteration | 4.5–7 µs |
-| present, full screen | 26.3 ms (1.26 ms per 16-px tile row) |
+| Unit | P11 M0 | **P13 M0** |
+|---|---:|---:|
+| arithmetic statement (`make "x :x + 1`, `x` a `local`) | 42–44.5 µs | **53.5 µs** |
+| bare `repeat` iteration | 4.5–7 µs | **5 µs** |
+| drawing statement, 17 steps, pen down | 59.5–60.3 µs | **66 µs** |
+| drawing statement, 200 steps, pen down | not measured | **130 µs** |
+| present, full screen | 26.3 ms | **27.25 ms** |
+| present, 240 rows (`splitscreen`) | not measured | **19.2 ms** |
 
-Running the same two loops on this host gives 0.24 µs and 0.04 µs, so the
-ratios are **179×** for an arithmetic statement and 125× for a bare loop
-iteration. Take 180×.
+**The 180× was derived from a host loop that did not match the board loop.**
+This document's host figure — 0.24 µs — came from `repeat 200000 [make "x :x + 1]`
+typed at top level, where `x` is a **global**. The board harness, like P11's,
+puts the same loop inside a procedure where `x` is a **`local`**. Measured
+like for like on the host, a local costs **0.32 µs**, so the ratio is
+`53.5 / 0.32 = 167×` — inside 8 % of the 180 this document used, and the
+estimates built on it stand.
 
-**The check.** Asteroids' `step.draw.all` was re-run on the host with its
-collision calls stubbed: 11.1 µs a rock. Scaled, 2.00 ms; plus roughly twelve
-turtle statements an outline at ~55 µs, 0.66 ms; total **2.66 ms** against the
-board's measured **3.035 ms a rock**. Within 12 %, on a number this design did
-not fit to. The model is good enough to size a game with and not good enough
-to settle a 2 ms question — which is what M0 is for.
+What does not stand is §12's 43 µs unit. **The game's hot loops use locals, so
+the unit is 53.5 µs**, 1.24× more, and that is most of why the projection
+figures came in above their predictions.
 
-**What the ratio is not.** It is this host against a Plus 2 W with P10 M5's
-`__not_in_flash_func` tiering enabled. The `pico2` preset does not enable that
-tiering (P10 §11.3), so a Pico 2 will be slower and by an unmeasured amount.
-M0 runs on both boards or its numbers only describe one.
+### 3.2 One number M0 could not explain
+
+P11 M0 measured 42–44.5 µs for this statement on this board on 2026-08-11.
+`calib.arith` in `tests/logo/p11rocks` and `time.arith` in `tests/logo/p13m0`
+are the same four lines with the same `local`. Twelve days later it is 53.5.
+
+**1.24× on the interpreter's most-used unit is not a rounding difference, and
+this design cannot say which way it goes.** Either something between those dates
+made a local arithmetic statement slower — which would be a regression touching
+every game in the tree, not just this one — or the two harnesses differ in a way
+neither file makes visible. `p11rocks` is still in the tree and still runs, and
+re-running it on the same board is a ten-minute experiment that settles it. It
+is logged as an open question (§19.5) rather than assumed away in either
+direction.
+
+Suggestive but not conclusive: on the host, a `local` costs 0.32 µs against a
+global's 0.213 — **1.5×** — and P11 M4 gave `find_global` a hash index while the
+local path kept its frame walk. If the same gap exists on the board it is a
+lever (§13 L0.5) whether or not it is also the answer here.
 
 ## 4. The central decision: where the projection pipeline runs
 
@@ -142,7 +170,7 @@ columns. `window` clips the `x = -209` corner off-screen without distorting the
 line. **Nothing in §4.1 needs a new primitive.** The question is only what it
 costs.
 
-### 4.2 Measured in Logo, on the host, scaled
+### 4.2 Measured in Logo, on the host, scaled — and what the board said
 
 A full frame kernel — 32-point horizon, twelve obstacles culled, every
 survivor projected, one ten-vertex enemy tank — was written in the idiom this
@@ -161,7 +189,11 @@ Broken into parts, and the parts reconcile with the whole to 3 %:
 | **sum of parts** | | **45.3 ms** |
 | **whole frame, measured** | 260 µs | **46.8 ms** |
 
-Add a 26.3 ms full-screen present and the naive frame is 73 ms before a single
+**The board's per-box figure came in at 3.145 ms against this table's 2.16, and
+the enemy at 5.18 against 10.8** — the estimate that was too low and the one
+that was too high, and §3.1's 53.5 µs unit accounts for the first.
+
+Add a 27.25 ms full-screen present and the naive frame is 73 ms before a single
 line is drawn, before input, physics, collisions, radar, HUD or sound. **The
 naive frame does not fit.** Three structural decisions close it, and none of
 them is a compromise on what the game is.
@@ -184,18 +216,20 @@ into an obstacle anyway, and the arcade's own tank stops you.
 **A 240-row viewport** (§6). Split mode presents 240 rows, not 320, and the
 saving is 6.6 ms for nothing.
 
-### 4.4 The decision
+### 4.4 The decision, and M0's answer to it
 
-**Build L0 — the whole game in Logo, no new primitives — and gate at M0.**
+The decision taken on 2026-08-21 was to **build L0 — the whole game in Logo, no
+new primitives — and gate at M0**, with §13's four tiers of interpreter help
+priced but unspent. The reason for not spending them early is P11 §12's, which
+made the mistake twice: it priced three levers, spent none, and then found the
+real cost somewhere none of them reached.
 
-§13 prices four tiers of interpreter help, from a `sincos` operation to a
-`drawmodel` primitive that would put the entire pipeline in C and take the
-per-object cost from 2.16 ms to about 0.05. They are real levers and this
-design does not rule any of them out; the user asked that they stay on the
-table and they are on it. What this design refuses to do is **spend them
-before M0 says which one is needed**, because that is the mistake P11 §12 made
-twice: it priced three levers, spent none of them, and then found the real cost
-somewhere none of them reached.
+**M0 ran on 2026-08-23 and L0 holds** (§16.2). The typical frame is 64.2 ms
+against 66.7, and the two levers that close the worst frame are the horizon cull
+this document already specified and a change of variable scope that costs
+nothing. **No new primitive is needed and none is being built.** §13 keeps the
+tiers because the game may still grow into them, and L4 remains the answer if a
+richer scene is ever wanted — but it is not this game's answer.
 
 ## 5. B48 — the single-statement line to a computed point (fixed)
 
@@ -237,7 +271,7 @@ no variadic form for any of them, so they are consistent with their
 documentation and were left alone. Giving them one would be a feature; this
 design does not need it.
 
-## 6. The viewport is 240 rows, and that is worth 6.6 ms
+## 6. The viewport is 240 rows, and that is worth 8.05 ms
 
 `clean` in manual or `sync` mode calls `dirty_tiles_mark_all()`, so a
 clear-and-redraw frame presents everything the mode makes visible. In split
@@ -253,7 +287,9 @@ if (y0 >= limit)
 — [screen.c:996](../devices/picocalc/screen.c#L996)
 
 `SCREEN_SPLIT_GFX_HEIGHT` is 240. So `splitscreen` costs 15 tile rows instead
-of 20: **19.7 ms instead of 26.3**. And the bottom eight text lines are exactly
+of 20: predicted **19.7 ms instead of 26.3**, and M0 read **19.2 against
+27.25 — an 8.05 ms saving, better than the 6.6 predicted**, with the prediction
+for the split half itself inside half a millisecond. And the bottom eight text lines are exactly
 where the cabinet puts the score and the "ACTIVATE" prompts, so this is free
 authenticity rather than a sacrifice.
 
@@ -267,10 +303,10 @@ constant in this design is cut against that:
 - viewport 320 wide × 240 tall, half-width 160, half-height 120
 - `k = 260` gives a 63° horizontal field of view, close to the cabinet's
 
-**This wants checking at M0 and not before.** The present-side saving is
-certain from the source; what is not certain is whether `clean` in split mode
-leaves the text area alone in practice, or whether the 80 rows of dirty state
-it marks and never sends cost anything measurable on the next present.
+**Checked at M0 and clean.** The 80 rows `clean` marks and the present never
+sends cost nothing measurable: the split present is flat at 19.2–19.8 ms across
+every point of the series, from one object to eight, exactly as a mode-level
+constant should be.
 
 ## 7. The world and the camera
 
@@ -333,35 +369,36 @@ and edge lists, and the output is pasted into the game file. Hand-typing a
 vertex table is how you get a tank with one edge going to the wrong corner and
 no way to see which.
 
-### 8.4 The horizon is at infinity and is still not cheap
+### 8.4 The horizon is at infinity and is the most expensive thing in the frame
 
 The mountain range, the volcano and the moon have no depth: screen x is
 `(azimuth − ph) × scale`, wrapped, and screen y comes straight from a stored
-table. No divide, no rotation — and 32 points still cost **10.1 ms**, because
-four statements a point at 43 µs is what four statements a point costs.
+table. No divide, no rotation — and **M0 measured a 32-point scan at 13.845 ms**,
+against this section's estimated 10.1, because four statements a point at
+§3.1's 53.5 µs is what four statements a point costs.
 
-Culling to the field of view is the fix: compute the first and last visible
-index (two statements) and loop over the ones that can be on screen.
+**That is 21 % of a frame spent on a backdrop, and it is the single largest
+line item after the present.** The cull stops being an optimisation and becomes
+part of the design.
 
-**How many is "the ones"? Seven, not the twelve this section first wrote** —
-found while building M0's harness, and it is arithmetic rather than a
-measurement, so it is settled now and not at the gate. Thirty-two points over
-360° at 5.06 steps a degree sit 57 steps apart, and a 320-step viewport holds
-about seven of them, which `test_the_horizon_cull_keeps_about_seven_of_thirty_two_points`
-now pins.
+**How many points survive it? Seven, not the twelve this section first wrote** —
+found while building M0's harness, and arithmetic rather than measurement.
+Thirty-two points over 360° at 5.06 steps a degree sit 57 steps apart, and a
+320-step viewport holds about seven, which
+`test_the_horizon_cull_keeps_about_seven_of_thirty_two_points` pins.
+
+At M0's measured **0.433 ms a point**, culling to seven is **3.0 ms and saves
+10.8**. That is the largest single lever this design has, it costs two
+statements to find the first and last visible index, and it is what makes the
+budget in §12 work.
 
 Seven is **too coarse to be a mountain range**: one peak every 9° of a 63°
-view. So the table wants to be denser, not the cull cheaper — and the two move
-together. At 96 points the full scan is ~30 ms and the culled version ~21
-points at **4.4 ms**, which is close enough to this section's original 3.9 that
-§12's line survives; it was right for the wrong reason. **The cull is worth
-more than this section claimed, not less**, because it is what makes a denser
-table affordable at all.
-
-The alternative worth naming and not taking yet: put the range on a **P9
-tilemap layer** and scroll it, which would make it very nearly free. Whether a
-tilemap composes underneath turtle graphics is not established anywhere in this
-tree, and finding out is a bigger question than 4.4 ms justifies. Left in §19.
+view. So the table wants to be denser, and the cull is what makes density
+affordable — a 96-point table culled to ~21 is 9.1 ms and does not fit, while
+the same table scanned whole is 41 ms and is absurd. **The honest reading is
+that the table's density is bounded by this line item at about 40 points**, and
+a range that needs more detail than that wants §19.1's tilemap rather than more
+Logo statements.
 
 ## 9. Near culling replaces clipping
 
@@ -403,17 +440,29 @@ section first guessed sixteen, and the four it missed are the pen-ups the
 vertical edges need, since a vertical does not start where the last one ended.
 `test_a_box_draws_twelve_edges` pins the count.
 
-Line **length** is nearly free, which is the piece of luck this design has and
-Asteroids did not need. `screen_gfx_line` marks its dirty region **once, from
-the accumulated bounding box** rather than per pixel
-([screen.c:748](../devices/picocalc/screen.c#L748)), and the inner loop is a
-bounds test and a byte store. So a 200-pixel box edge should cost barely more
-than the 17-pixel `fd` P11 measured at 60 µs.
+**Line length is not nearly free, and this was the largest unmeasured number in
+the document.** The inference was that `screen_gfx_line` marks its dirty region
+**once, from the accumulated bounding box** rather than per pixel
+([screen.c:748](../devices/picocalc/screen.c#L748)), and that the inner loop is
+only a bounds test and a byte store — so a 200-pixel edge should cost barely
+more than the 17-pixel `fd` P11 measured at 60 µs.
 
-**"Should" is doing work in that sentence.** It is inference from the source,
-not a reading, and it is the single largest unmeasured number in this document:
-55 edges at 60 µs is 3.3 ms, and at 150 µs it is 8.3. **M0's first job is to
-draw a 200-pixel line 1,000 times and settle it.**
+**M0 says 130 µs against 66.** The dirty marking is indeed once per line; the
+per-pixel loop is what costs, at about **0.35 µs a step** over the 183 extra
+steps. The macro does a bounds test, two comparisons against the accumulated
+box and a byte store per pixel, out of flash, and that is not free at 150 MHz
+however cheap it looks in C.
+
+So the estimate of 55 edges at 60 µs — 3.3 ms — was **half** of what a
+wireframe's drawing costs, and this section's "should" was doing more work than
+it admitted. The measured drawing pass is §12's biggest correction after the
+horizon.
+
+**One consequence for the game rather than the budget:** an edge's cost is
+proportional to its length on screen, so a near object costs more to draw than a
+far one, and the frame gets more expensive as the player closes on something.
+That is the opposite of what a culling budget usually does and it is worth
+knowing before a level is laid out.
 
 ## 11. The rest of the frame
 
@@ -438,41 +487,106 @@ alarm when an enemy is in front of you. The arrangement follows
 *tempo* as much as a pitch, and that is what makes a hunting supertank
 frightening. Budgeted inside the 3.0 ms line below.
 
-## 12. Frame budget
+## 12. Frame budget — measured
 
-At **15 fps — a 66.7 ms budget**. The rate is not a preference and §12's
-successor sections in P11 are the precedent for changing it once, early, before
-anything per-frame is tuned against it.
+At **15 fps — a 66.7 ms budget**. M0 measured 200 frames at each of 1, 2, 4 and
+8 visible objects plus the enemy, in `splitscreen`, presenting with `refresh`:
 
-| | ms |
-|---|---:|
-| present, 240 rows (`splitscreen`) | 19.7 |
-| `clean` | 0.3 |
-| horizon, culled (§8.4: ~21 of a 96-point table) | 4.4 |
-| cull 8 obstacles | 3.3 |
-| project 3 visible boxes/pyramids | 6.5 |
-| project 1 enemy, 8 vertices in column form | 6.0 |
-| ~55 edges drawn | 4.0 |
-| radar | 3.0 |
-| gunsight and HUD | 1.5 |
-| input, tread physics, shells, collisions, sound | 3.0 |
-| **total** | **51.7** |
+| Objects | Typical frame | Worst frame |
+|---:|---:|---:|
+| 1 | 49 ms | 57 ms |
+| 2 | 56 | 69 |
+| 4 | 71 | 84 |
+| 8 | 105 | 112 |
 
-**15.0 ms of headroom, and it should all be regarded as spoken for.** P11 M2
-opened 6 ms short by its own estimate and measured **19.7 ms** over, with the
-whole miss in a cost nothing had priced. This budget has two numbers that could
-do the same thing: the drawing statement at long lengths (§10) and the
-column-form tank (§8.2).
+**`frame = 40.09 + 8.043 n` typical and `51.87 + 7.635 n` worst**, both fitting
+all four points. At this design's scene — three obstacles and one enemy —
+that is **64.2 ms typical and 74.8 worst**.
 
-**The present is 38 % of the frame and no game-side lever reaches it.** That is
-the same finding P11 §3.3 made and it generalises: on this display a vector
-game pays a fixed tax that a sprite game does not.
+Read apart, an object costs **7.80 ms**: 3.67 to project and 4.14 to draw. The
+flat term splits as 19.8 present, 13.8 horizon, 5.5 enemy projection and 2.5
+enemy drawing.
+
+| | Predicted | **Measured** |
+|---|---:|---:|
+| present, 240 rows | 19.7 | **19.8** |
+| horizon, 32 points scanned whole | 3.9 *(assumed culled)* | **13.8** |
+| project 3 obstacles | 6.5 | **11.0** |
+| draw 3 obstacles | *(in "edges")* | **12.4** |
+| project the enemy | 6.0 | **5.5** |
+| draw the enemy, 13 edges | *(in "edges")* | **2.5** |
+| everything else in the flat term | 11.7 | **−1.0** |
+| **total at three obstacles** | **51.7** | **64.2** |
+
+**12.5 ms over, and 10.8 of it is the horizon** — which this document always
+said would be culled and which the harness deliberately did not cull, so that
+the lever could be priced. The rest is §3.1's unit: 53.5 µs against 43 is 1.24×,
+and the projection lines carry it almost exactly.
+
+### 12.1 The two levers that close it, both measured
+
+**Cull the horizon: −10.8 ms** (§8.4). Two statements to find the first and
+last visible index, seven points instead of thirty-two. This was always the
+plan.
+
+**Move the hot path off `local`: −3.9 ms** (§13 L0.5). `project.box` holds seven
+locals and `project.enemy` sixteen, and on the host a `local` read costs 0.32 µs
+against a global's 0.213. Rewritten with globals, the projection measures
+**1.31× faster** for an identical result. It is free, it needs no interpreter
+change, and it is the one lever this document did not think of.
+
+**With both: 49.5 ms typical and 60.1 worst**, against 66.7. That is 17 ms of
+headroom on the typical frame and 6.6 on the worst — more than Asteroids
+shipped with, and enough that **18 fps (55.6 ms) is worth trying at M4** for the
+typical frame, though not for the worst.
+
+§14's two gameplay levers stay unspent and are re-priced at the measured slope:
+**obstacles 3 → 2 is −8.04 ms**, and the horizon table 32 → 20 points is −5.2
+before the cull and −1.7 after it.
+
+**The present is 30 % of the closed frame and no game-side lever reaches it.**
+Same finding as P11 §3.3, and it generalises: on this display a vector game pays
+a fixed tax a sprite game does not.
 
 ## 13. Interpreter levers, priced
 
 None of these is ruled out. Each is stated with what it buys *this* game, what
 it costs to build, and — the test that matters — whether it is worth having
 without this game.
+
+**M0's verdict: none of them is needed.** L0.5 below is not an interpreter
+change at all, and with it and the horizon cull the game fits. The tiers stay
+because the game may grow into them and because two of them are worth having on
+their own merits, but nothing here is on this game's critical path.
+
+### L0.5 — globals instead of locals in the hot path
+
+Not an interpreter change. A change to how the game is written, found by M0 and
+worth more than any of the tiers below.
+
+P11 M4 gave `find_global` a hash index, and nothing did the same for the local
+path, which still walks the frame. On the host a `local` read costs **0.32 µs
+against a global's 0.213 — 1.5×** — and §3.1 shows that same gap is most likely
+what separates M0's 53.5 µs arithmetic statement from P11 M0's 42–44.5.
+
+Rewriting `project.box`'s seven locals as globals measures **1.31× on the whole
+projection**, host, for a bit-identical result. On the measured board figures
+that is **3.9 ms off a three-obstacle frame** (§12.1).
+
+The price is real and worth stating: every hot-path temporary becomes a global,
+in a language with one flat namespace and no shadowing, which is exactly the
+hazard Asteroids' header spends a paragraph on and the hazard that cost this
+design M0's body column (§16.1). The mitigation is a prefix — `pb.` for
+`project.box`'s temporaries, `pe.` for `project.enemy`'s — and a test that reads
+the names back out of the source.
+
+**Buys this game:** 3.9 ms, and it is half of what the gate needed.
+**Verdict: take it**, with the naming discipline, at M1.
+
+**And it generalises.** Every game in this tree uses `local` in its frame loop.
+If the board confirms the host's 1.5×, that is a tree-wide finding and belongs
+in the roadmap as an interpreter question — memoising a local's slot on the atom
+the way M2 did for procedure names — rather than as a Battlezone note. §19.5.
 
 ### L1 — small maths: `sincos`, `min`, `max`
 
@@ -498,16 +612,24 @@ twelve-list is ~25 µs and `item 128` of a 128-list is ~110 µs. (P11 M2's
 often-quoted "~115 µs for a twelve-element walk" is a pre-P10-M5 figure and no
 longer holds; the interpreter got much faster underneath it.)
 
-Battlezone's frame does roughly 44 `item` calls on lists of 8 to 32, so the
-walks cost **~1.1 ms** — and arrays would remove perhaps 0.7 of that.
+Battlezone's frame does roughly 44 `item` calls on lists of 8 to 32 in the
+*projection*, and M0 showed the *drawing* pass does far more: `draw.box` reads
+two `item`s per `setpos`, forty a box, and at ~18 µs each that is **0.72 ms of
+the measured 3.82 ms box** — 19 %.
+
+But arrays do not fix that, and this is the useful part of the finding: the cost
+is the **fixed** ~16 µs of an `item` call, not the walk, because these lists are
+four elements long. O(1) indexing removes the part that is already almost
+nothing. What removes the rest is not reading the list at all — which is L4.
 
 **That is an honest and disappointing answer, and it is the one to record.**
 Arrays are a good language feature; at this scene size they are not this game's
 lever. They become one only if the model tables grow past ~64 entries, which is
 what happens if L4 is *not* taken and the game grows anyway.
 
-**Buys this game:** ~0.7 ms. **Verdict:** Battlezone is not the demonstrated
-need the roadmap is waiting for. Say so there.
+**Buys this game:** under 0.5 ms, and M0 makes that firmer rather than
+softer. **Verdict:** Battlezone is not the demonstrated need the roadmap is
+waiting for, and now there is a board measurement saying why.
 
 ### L3 — a projection operation
 
@@ -571,11 +693,16 @@ part in C. There is a version of this where Battlezone is a thin Logo shell
 around a 3D engine, and that game is worth less than a slower one written in
 Logo.
 
-**Verdict: gated, not decided.** Build the game at L0. If M0 says §12 holds,
-ship it and open L4 as a roadmap item on its own merits — a vector-3D primitive
-family for *any* game, which is how the tilemap family was justified. If M0
-says §12 misses by more than the two gameplay levers in §14 can cover, L4 is
-the lever to spend, and it is the only one on this list large enough to matter.
+**Verdict: not needed, and not being built.** M0 closed the gate at L0 (§16.2),
+so this game does not spend it. It stays here as the answer to a different
+question — *what would a richer Battlezone cost?* — and M0 sharpens that answer
+rather than retiring it: at a measured 7.80 ms an object, twelve obstacles is
+94 ms of objects alone and is unreachable in Logo at any frame rate worth
+playing. **If this tree ever wants a 3D game denser than three obstacles, L4 is
+not an optimisation, it is the enabling condition.** Worth opening as a roadmap
+item on its own merits — a vector-3D primitive family for *any* game, which is
+how the tilemap family was justified — and worth doing on a day when someone
+wants that game.
 
 ### The one that is not on this list
 
@@ -663,6 +790,30 @@ for writing the harness before the game rather than beside it:
   written from this document, did not set it, and drew a line across the screen.
 - **A box is 20 statements, not 16** (§10). The four pen-ups the verticals need.
 
+- **`local` does not protect the world from a name** — the defect that cost M0's
+  body column, and it is worth more than a bullet. `measure`'s body accumulator
+  was called `b`; `cam.setup` declares no locals and does `make "b :half * :sn`;
+  Logo is dynamically scoped, so the callee's `make` found the caller's `local`
+  and wrote the accumulator once a frame, with `sn` at 0 and the camera at
+  heading 0. **Every body figure on the first board run came back 0.00 ms**, and
+  nothing about the report looked wrong — the present, the split and the min/max
+  columns were all correct, which is what made it survive review.
+
+  It is not the hazard Asteroids' header warns about (one flat namespace, two
+  meanings, one variable). It is the reverse: the names are in *different*
+  scopes and the callee still reaches the caller's. Every accumulator in
+  `measure` is now prefixed `m.`, and
+  `test_the_frame_does_not_write_the_measure_accumulators` **reads the names
+  back out of the Logo source** and probes each one, so renaming a temporary to
+  `b` fails the test rather than quietly reintroducing the defect. A hardcoded
+  list would have pinned the names; reading them pins the property.
+
+  **The run was still usable.** `min` and `max` are computed from the same
+  per-frame total the body column failed to accumulate, so §12's series is
+  recovered from those two columns, and the projection/drawing split — measured
+  inside `frame.body`, whose accumulator was never touched — reconciles with
+  them to within 2 ms at every point. That is luck, and the fix is in.
+
 And one thing about the harness's own honesty. The phase timers that split
 projection from drawing are four statements an object — up to 36 a frame, about
 1.5 ms at an arithmetic statement's 43 µs — which is a tenth of what the split
@@ -672,6 +823,38 @@ which is what the frame costs, and `frame.body`, which is the same statements
 with the timers in. The difference is reported as the instrumentation charge
 rather than estimated, and `test_the_timed_and_untimed_frames_draw_the_same_thing`
 is what stops the two drifting apart.
+
+### 16.2 M0's result (Plus 2 W, 2026-08-23)
+
+The five questions, answered:
+
+| | Predicted | **Read** | |
+|---|---:|---:|---|
+| Q1 long line, 200 steps | ~60 µs | **130 µs** | §10 was wrong; length costs ~0.35 µs a step |
+| Q1 short line, 17 steps | 60 µs | **66 µs** | P11's figure holds |
+| Q2 present, `splitscreen` | 19.7 ms | **19.2 ms** | inside half a millisecond |
+| Q2 present, `fullscreen` | 26.3 ms | **27.25 ms** | saving is 8.05, better than 6.6 |
+| Q3 arithmetic statement | 43 µs | **53.5 µs** | §3.1; the ratio holds, the unit did not |
+| Q3 bare `repeat` iteration | 5 µs | **5 µs** | exact |
+| Q4 one box projected | 2.16 ms | **3.145 ms** | 1.46× over, and §3.1 accounts for it |
+| Q5 the enemy projected | 6.0 ms | **5.18 ms** | the column trick beat its estimate |
+| one box drawn, 12 edges | ~1.2 ms | **3.82 ms** | Q1 plus forty `item` reads |
+| horizon, 32 points scanned | 10.1 ms | **13.845 ms** | and the cull is now mandatory |
+
+**The gate.** §16 set it at: under 66.7 ms build at L0; 66.7–71.4 spend §14's
+gameplay levers; over 71.4 stop and take L4. The typical frame at three
+obstacles is **64.2 ms** and the worst is **74.8**. Taking the gate on the
+typical frame — which is what "under 66.7" meant, and what P11 M3 and M4 both
+took theirs on — **the answer is L0**, and §12.1's two levers bring the worst
+frame to 60.1 as well. **No §14 lever is spent and no interpreter change is
+made.**
+
+**What M0 did not measure, and should have.** It ran on a Plus 2 W only. §3
+says plainly that the `pico2` preset does not carry P10 M5's flash tiering and
+that a Pico 2 will be slower by an unmeasured amount, and §16 Q3 exists to catch
+exactly that. `p13m0` is unchanged and runs on any of the three boards; **M1
+should not start until a Pico 2 W has run it**, because a 1.2× board difference
+would put the closed frame at 59 ms and a 1.5× one would put it over.
 
 **M1 — the world and the camera.** Plain, obstacles, tread controls, horizon,
 the gunsight. No enemy, no shells, no radar. This is the milestone that proves
@@ -735,3 +918,11 @@ shape. The ones that are specific to this game:
    inventing one.
 4. **`min`/`max` (§13 L1)** — worth opening as a cheap win regardless of this
    game?
+5. **Why is a local arithmetic statement 53.5 µs when P11 M0 measured 42–44.5
+   on the same board twelve days earlier?** (§3.2.) Either the interpreter
+   regressed — which would touch every game in the tree — or the two harnesses
+   differ invisibly. `tests/logo/p11rocks` still runs and settles it in ten
+   minutes. **This is the one open question that is not about Battlezone**, and
+   it should be answered before M1 spends L0.5 on the strength of a host
+   measurement.
+6. **Does a Pico 2 W run this frame?** (§16.2.) M0 measured one board of three.
