@@ -1,22 +1,78 @@
-; Battlezone -- M1: the world and the
-; camera. See docs/battlezone-design.md.
+; Battlezone -- M2: the enemy. See
+; docs/battlezone-design.md.
 ;
 ;   load "battlezone
 ;   battlezone
 ;
-; Arrows drive the treads, P pauses, Q
+; 1/Q drive the left tread, 0/P the
+; right, ] fires, space pauses, ESC
 ; quits.
 ;
-; M1 is the plain, the obstacles, the
+; M1 was the plain, the obstacles, the
 ; tread controls, the horizon and the
-; gunsight. No enemy, no shells, no
-; radar -- those are M2. This is the
-; milestone that proves the PROJECTION
-; is right, because a wrong one is
-; obvious the moment you drive past a
-; cube and it does not go where a cube
-; goes, and it is invisible in a
-; screenful of plausible milliseconds.
+; gunsight -- the milestone that proved
+; the PROJECTION is right. M2 adds the
+; enemy tank, its hunt logic, both
+; shells, the collisions, the explosions
+; and the radar, and it is the FRAME
+; BUDGET milestone: P11's M2 is the one
+; that missed by 19.7 ms, and this is
+; the point at which this game finds out
+; whether it has the same problem.
+;
+; WHAT M2 SPENDS, AND WHERE IT GOT THE
+; ROOM. M1 measured 50.8 ms a frame at
+; 150 MHz and 33.7 at 300 (design
+; section 16.4.3), so there are about 16
+; ms spare at stock and 33 at the
+; overclock. M2's line items, at M0's
+; rates: the enemy is 5.3 ms to project
+; and 2.4 to draw, the radar about 1,
+; the two shells about 2 between them,
+; and the collisions about 6. That is
+; roughly 17 ms -- which fits at 300 MHz
+; with room and does NOT fit at 150.
+;
+; So THE GAME ASKS FOR THE CLOCK AND
+; READS IT BACK. `battlezone` calls
+; `hw.setcpu "fast` and then `hw.cpu`,
+; and if the board did not take it the
+; object cap drops from three to two
+; (design section 14's held-in-reserve
+; lever, worth 7.3 ms at stock). A board
+; played at a density it cannot draw is
+; worse than one played at the stock
+; density, and the readout says which
+; happened.
+;
+; ONE WRAPPED SCAN A FRAME, AND EVERY
+; COLLISION READS ITS TABLE. M1 wrapped
+; the obstacle field twice -- once in
+; `draw.field` and once in `blocked?` --
+; and M2 would have made it five times
+; over, since the enemy and both shells
+; each need the same eight tests. So the
+; wrap is hoisted: `ob.scan` folds all
+; eight obstacles into camera-relative
+; (obx, obz) once, after the tank's move
+; settles, and after that a collision is
+; two comparisons rather than a modulo
+; pair. It is 3.1 ms that buys back
+; about 8, and -- the reason it is
+; written this way rather than for the
+; milliseconds -- B19 cannot happen,
+; because there is exactly one place in
+; this file where the plain wraps.
+;
+; The one consequence to know: the table
+; belongs to the camera it was built
+; against, so the player's own
+; `blocked?` -- which runs BEFORE the
+; move commits and therefore before the
+; rescan -- tests the step DELTA against
+; last frame's table. That is what
+; `tk.dx`/`tk.dz` are, and it is exactly
+; right rather than an approximation.
 ;
 ; The 1980 machine drew vectors on an XY
 ; monitor from a Math Box that did the
@@ -220,7 +276,22 @@ make "coll.r 90
 ; How many objects a frame will DRAW,
 ; and how many are in the table (design
 ; section 14).
+;
+; TWO CAPS AND A CLOCK. `max.obstacles`
+; is what a frame reads; which of the
+; two it is set to is decided once, in
+; `battlezone`, by asking for the fast
+; clock and then READING IT BACK. Three
+; objects fit at 300 MHz with the enemy
+; and the radar in the frame; at 150
+; they do not, and section 14's
+; held-in-reserve lever -- three
+; obstacles to two -- is worth 7.3 ms,
+; which is the difference. M4 turns
+; these two numbers; nothing else does.
 make "max.obstacles 3
+make "fast.obstacles 3
+make "slow.obstacles 2
 make "ob.count 8
 
 ; Obstacle half-width, cube height,
@@ -236,10 +307,191 @@ make "pyre :pyrh - :eye
 ; Degrees a frame per unit of tread
 ; difference, and turtle steps a frame
 ; per unit of tread sum.
-make "turn.rate 3
+;
+; BOTH ARE PER FRAME, so both are really
+; per second times `fps` and neither can
+; be read on its own: at 15 fps a pivot
+; is two units of difference, so 2 gives
+; 60 degrees a second and a one-tread
+; arc turns at 30. It was 3 -- 90 a
+; second on the pivot -- and a board
+; said that is too fast to aim with.
+; CHANGE `fps` AND THESE TWO HAVE TO
+; MOVE THE OTHER WAY or the tank drives
+; and spins faster for no reason a
+; player can see.
+make "turn.rate 2
 make "tread.step 4
 
 make "atom.floor 2000
+
+;--------------------------------------
+; The enemy
+;
+; Design section 8.2. The hull is a box
+; that happens to be rotated, so section
+; 8.1's column trick still applies --
+; with the enemy's own rotation folded
+; into the camera's ONCE, rather than
+; once a corner -- and the gun is two
+; general vertices, because a barrel has
+; no ground column. Thirteen edges, and
+; that is the shape M0 PRICED: 5.3 ms to
+; project and 2.4 to draw on a Pico 2 W.
+;
+; Section 8.2 also lists a turret box.
+; It is not here and it is not an
+; oversight: a turret is four more
+; columns and twelve more edges, which
+; is another 3 ms at stock, and M0
+; measured the hull-and-gun form. The
+; shape that ships is the shape that was
+; measured, exactly as B48 was fixed
+; before M0 measured a draw pass. Adding
+; it is M4's call with a price attached.
+;
+; Smaller than an obstacle in both axes,
+; so a tank reads as a tank next to a
+; cube rather than as a second cube.
+make "ehalf 14
+make "ebodyh 16
+make "ebode :ebodyh - :eye
+
+; Steps and degrees a frame, the
+; stand-off it tries to hold, and how
+; near straight-on it wants to be before
+; it fires.
+;
+; THE STAND-OFF AND THE HIT BOX ARE ONE
+; NUMBER, NOT TWO, and the first board
+; play test is what said so: it read as
+; a tank that comes straight at you with
+; perfect aim. It was. `tk.hit` is a 30
+; box, the enemy fires along its own
+; heading within `e.aim` of you, so a
+; shot thrown sideways by d * tan e.aim
+; CANNOT MISS while d * tan 7 < 30 --
+; that is everything inside 244 steps,
+; and the stand-off was 240. The tank
+; drove into the one place from which it
+; could not miss and stopped there.
+;
+; So the stand-off is the number that
+; moved: 400, which is 283 even on the
+; diagonal where `e.d`'s Manhattan
+; distance is furthest from the real
+; one, and 283 * tan 10 is 50 against a
+; 30 box. `e.wob` below is the other
+; half of the same fix.
+make "e.step 6
+make "e.turn 4
+make "e.range 400
+make "e.aim 7
+make "e.naim 0 - :e.aim
+
+; The aim error, in degrees either way,
+; and the span `random` needs to produce
+; it.
+;
+; THE STAND-OFF ALONE WOULD NOT HAVE
+; FIXED IT. `hunt` turns in `e.turn`
+; steps and stops the moment it is
+; inside `e.aim`, so the error it fires
+; with is whatever that last 4-degree
+; step left -- and against a player who
+; is holding still it is the SAME error
+; every shot. The tank does not miss
+; sometimes and hit sometimes; it hits
+; every time or misses every time, for
+; the whole approach. That is not an
+; aim, it is a coin flipped once.
+;
+; A per-shot error is what the cabinet's
+; tank had and it costs two `sin`/`cos`
+; calls A SHOT rather than a frame,
+; which at the measured 20 ms body is
+; not a number worth thinking about.
+make "e.wob 10
+make "e.wob2 21
+
+; Frames between hunt decisions (design
+; section 19.3: at 15 fps a decision
+; every third frame is invisible and
+; costs a third as much) and frames
+; between its shots.
+make "e.think 3
+make "e.reload 24
+
+; Where a new one appears, and the two
+; collision half-widths: what a shell
+; has to come within to kill it, and
+; what it has to come within to be
+; stopped by an obstacle.
+make "e.spawn 620
+make "e.hit 34
+make "e.coll 60
+
+;--------------------------------------
+; The shells
+;
+; One each, as the cabinet has. A shell
+; moves `sh.step` a frame, so its
+; collision guards have to be at least
+; half a step wider than the thing they
+; test against or it tunnels straight
+; through at speed: 20 + 16 for an
+; obstacle, 14 + 16 for the enemy tank,
+; and the same again for the shell that
+; is coming the other way.
+make "sh.step 32
+make "sh.frames 22
+make "sh.guard 36
+make "tk.hit 30
+
+;--------------------------------------
+; The explosion
+;
+; Screen-space fragments from the hit
+; point, as Asteroids' `draw.boom` is,
+; and for the same reason: drifting the
+; wreck in three dimensions would want a
+; projection a fragment. Five short
+; strokes on a radius that grows with
+; the death frame reads as a tank coming
+; apart and costs fifteen statements on
+; ten frames out of every enemy's life.
+make "boom.frames 10
+make "boom.drift 7
+
+;--------------------------------------
+; The radar
+;
+; Design section 11: an `arc`, a swept
+; wedge and a blip. It sits above the
+; mountains and clear of the moon --
+; which is why `moon.y` came down to 100
+; when this arrived.
+;
+; THE BLIP NEEDS NO TRIGONOMETRY AT ALL,
+; and that is the whole reason the radar
+; is cheap. A radar is a top-down view
+; in the CAMERA's frame, and the camera
+; frame coordinates of the enemy are
+; exactly the (xc, zc) its projection
+; already computes. Scale them and add
+; the centre: three statements, no
+; bearing, no arctangent, no distance.
+make "rd.x 0
+make "rd.y 140
+make "rd.r 19
+; The face of the radar is the far
+; plane: rd.r / far, so an enemy you
+; could draw is an enemy you can see on
+; the glass.
+make "rd.sc 0.027
+make "rd.spin 24
+make "rd.fov 32
+make "rd.sw 0
 
 ; Green as the cabinet's vectors were,
 ; red as its overlay band was.
@@ -339,6 +591,69 @@ make "quit false
 make "frame.count 0
 make "ob.n 0
 
+; The obstacle field, folded once a
+; frame into camera-relative offsets.
+; Mutated in place; see `ob.scan`.
+make "obx [0 0 0 0 0 0 0 0]
+make "obz [0 0 0 0 0 0 0 0]
+
+; The enemy. World position and heading,
+; its rotation constants, its offsets
+; from the camera in world axes and in
+; the camera's frame, and the three
+; intents `hunt` leaves behind for the
+; two frames in which it does not run.
+make "e.x 800
+make "e.z 1400
+make "e.h 180
+make "e.alive true
+make "e.cool 0
+make "e.boom 0
+make "e.ec -1
+make "e.es 0
+make "e.dx 0
+make "e.dz 0
+make "e.xc 0
+make "e.zc 0
+make "e.t 0
+make "e.f 0
+make "e.fire false
+
+; The player's shell and the enemy's.
+; World position, the velocity fixed at
+; the moment of firing -- a shell flies
+; the heading it was fired along, not
+; the one you are pointing now -- and
+; the offsets from the camera.
+make "sh.on false
+make "sh.x 0
+make "sh.z 0
+make "sh.vx 0
+make "sh.vz 0
+make "sh.dx 0
+make "sh.dz 0
+make "sh.life 0
+make "es.on false
+make "es.x 0
+make "es.z 0
+make "es.vx 0
+make "es.vz 0
+make "es.dx 0
+make "es.dz 0
+make "es.life 0
+
+; The explosion, in screen space, and
+; the pause a hit costs the player.
+make "bm.x 0
+make "bm.y 0
+make "bm.n 0
+make "tk.boom 0
+
+; What the readout tallies besides the
+; milliseconds.
+make "kills 0
+make "hits 0
+
 ; What a frame cost. `body.ms` is the
 ; Logo work; `frame.ms` is the whole
 ; period, `sync` included. See
@@ -364,6 +679,7 @@ make "hud.fs 0
 make "hud.fm 0
 make "hud.a 0
 make "cpu.at "unknown
+make "cpu.was "unknown
 
 to cam.setup
   make "cs cos :ph
@@ -379,6 +695,47 @@ end
 to cam.offsets
   make "ob.u :half.world - :px
   make "ob.v :half.world - :pz
+end
+
+; THE ONLY PLACE IN THIS FILE WHERE THE
+; PLAIN WRAPS. Every obstacle in the
+; table is folded once into an offset
+; from the camera in world axes, and
+; after that the field scan, the tank's
+; collisions, the enemy's and both
+; shells' are two comparisons apiece
+; against a number that is already
+; small.
+;
+; Eight statements an obstacle -- 3.9 ms
+; at stock, and the 40-column rule owns
+; two of them, since `.setitem` of
+; `:ob.d - :half.world` is 46 characters
+; on one line. It replaces the six
+; `draw.field` did per obstacle and the
+; six `blocked?` did per CALLER, and by
+; M2 there are four callers. With one it
+; would not have been worth it.
+;
+; It runs AFTER the tank's move commits,
+; so the table belongs to the camera the
+; frame will be drawn from. The one
+; caller that cannot wait for it is the
+; tank's own `blocked?`, which has to
+; run before the move it is deciding --
+; and that is why `blocked?` takes an
+; offset rather than a position.
+to ob.scan
+  repeat :ob.count [
+    make "ob.d :ob.u + item repcount :ox
+    make "ob.d modulo :ob.d :world
+    make "ob.d :ob.d - :half.world
+    .setitem repcount :obx :ob.d
+    make "ob.d :ob.v + item repcount :oz
+    make "ob.d modulo :ob.d :world
+    make "ob.d :ob.d - :half.world
+    .setitem repcount :obz :ob.d
+  ]
 end
 
 ;======================================
@@ -587,12 +944,12 @@ end
 ;======================================
 ; The obstacle field
 ;
-; The scan is the price of the wrap and
-; it is paid for every obstacle in the
-; table, drawn or not. With the camera
-; hoisted into `ob.u` and `ob.v` it is
-; three statements an axis: translate,
-; fold, recentre.
+; The wrap is `ob.scan`'s, done once for
+; the whole frame, so this reads a
+; camera-relative offset straight out of
+; the table -- two statements an
+; obstacle rather than six. That is M2's
+; change here and the only one.
 ;
 ; The reject is a DIAMOND and not a
 ; disc: `abs dx + abs dz` is one
@@ -641,12 +998,8 @@ end
 to draw.field
   make "ob.n 0
   repeat :ob.count [
-    make "ob.d :ob.u + item repcount :ox
-    make "ob.d modulo :ob.d :world
-    make "p.dx :ob.d - :half.world
-    make "ob.d :ob.v + item repcount :oz
-    make "ob.d modulo :ob.d :world
-    make "p.dz :ob.d - :half.world
+    make "p.dx item repcount :obx
+    make "p.dz item repcount :obz
     make "ob.d (abs :p.dx) + (abs :p.dz)
     if :far > :ob.d [
       if :ob.n = :max.obstacles [stop]
@@ -671,7 +1024,7 @@ end
 ;
 ; The mountain range, the volcano and
 ; the moon are at INFINITY: screen x is
-; (azimuth - heading) * scale and screen
+; k * tan(azimuth - heading) and screen
 ; y comes straight from a stored table.
 ; No divide, no rotation, and no
 ; dependence on where you are -- they
@@ -679,6 +1032,46 @@ end
 ; with your position, which is the only
 ; way to tell that you are turning on an
 ; empty plain.
+;
+; IT IS A TANGENT AND NOT A SCALE, AND
+; THAT IS WORTH A TANGENT A POINT. In a
+; pure pivot DISTANCE DOES NOT MATTER: a
+; rotation changes every bearing by the
+; same amount, so a peak at infinity and
+; a cube in front of you, at the same
+; place on screen, have to move by the
+; same number of pixels. Distance
+; cancels out of k * xc/zc entirely.
+;
+; This used to map the azimuth linearly
+; -- (azimuth - heading) * 5.06, section
+; 8.4's saving -- and a straight line
+; against a tangent is not the same
+; curve twice. The mountains scrolled at
+; a CONSTANT rate while the world
+; accelerated toward the edges: 11.4 %
+; too fast at the centre of the view,
+; right at about 20 degrees off it, and
+; 13.9 % too SLOW near the edge. Over a
+; second of turning a cube and a peak
+; that started together finished 32
+; steps apart, and the drift reversed
+; sign across the screen. It was found
+; by watching it turn, which is the only
+; way it shows -- every still frame is
+; plausible.
+;
+; The cost is one statement and one
+; `tan` a point, about 0.6 ms, and it
+; buys the horizon back into the same
+; projection as everything else. The
+; increment trick goes with it: the
+; spacing is no longer uniform, so each
+; point takes the tangent of its own
+; running angle. That angle is never
+; wrapped and never leaves -45..+45
+; degrees, so the tangent is bounded by
+; 1 and the singularity is unreachable.
 ;
 ; THE CULL IS THE DESIGN AND NOT AN
 ; OPTIMISATION. M0 scanned all 32 points
@@ -692,9 +1085,8 @@ end
 ; INDEX and walks ten from there.
 ;
 ; Forty points and not thirty-two.
-; Section 8.4's arithmetic is that a
-; 320-step viewport at 5.06 steps a
-; degree holds 63 degrees, so a 32-point
+; Section 8.4's arithmetic is that the
+; view is 63 degrees wide, so a 32-point
 ; table shows about five peaks and a
 ; 40-point one about seven -- and seven
 ; is already coarse for a mountain
@@ -738,45 +1130,92 @@ make "mtn se :mtn [13 5 17 9 20 7 11]
 make "mtn se :mtn [15 6 19 8 13 5 21]
 make "mtn se :mtn [10 16 7 12 4]
 
-; Points in the table, degrees between
-; them, and turtle steps per degree.
+; Points in the table and degrees
+; between them.
 make "mn.n 40
 make "mn.step 9
-make "mn.sc 5.06
 
 ; Degrees of margin either side of
 ; straight ahead, and the shift that
 ; makes `int` a floor.
 make "mn.arc 36
 make "mn.off 360 - :mn.arc
-make "mn.dx :mn.step * :mn.sc
 
-; Points AFTER the first; ten cover the
-; view. This is the one number here cut
-; by hand rather than derived. The first
-; point lands somewhere in (-(arc +
-; step) * sc, -arc * sc], so reaching
-; +176 from the worst start takes
-; ceil((176 + (arc + step) * sc) /
-; mn.dx) more -- at 36 and 9 that is
-; nine. What actually holds it is the
+; Points AFTER the first, and this one
+; is derived rather than cut by hand.
+; The first point lands somewhere in
+; [-(arc + step), -arc] degrees, so
+; nine more 9-degree steps carry it to
+; [+36, +45] -- and since the view ends
+; at 31.6 degrees, BOTH ends are off
+; screen at every heading with room to
+; spare. What actually holds it is the
 ; horizon-coverage test: change
 ; `mn.step` or `mn.arc` and the test
 ; re-cuts this number by failing.
 make "mn.seen 9
 
+; THE GROUND, AND IT IS ONE LINE.
+;
+; The plain is at `eye` below the camera
+; and screen y is `hz - eye/z * k`, so
+; as z goes to infinity the ground rises
+; to exactly `hz` and stops. That is the
+; true horizon: the line where the plain
+; meets the sky, at the same y whatever
+; the heading and wherever you are.
+;
+; It is here because without it the
+; mountain range reads as a squiggle
+; hanging in space rather than as a
+; ridge standing on something -- a
+; wireframe silhouette is a LINE and not
+; a filled shape, so nothing anchors its
+; lower edge -- and because it is the
+; only thing below the peaks that tells
+; the driver where the ground is.
+; Design section 14 cuts ground texture
+; on the grounds that the cabinet has
+; none, which is true and is exactly why
+; the cabinet's own horizon has to do
+; this job alone.
+;
+; SEPARATE FROM `horizon` ON PURPOSE.
+; This segment spans the whole screen
+; deliberately, and a horizon segment
+; that spans the whole screen is the
+; signature of the `wrap` defect M0 hit
+; -- so the test that forbids one still
+; watches `horizon` alone and this is
+; not an exception carved into it.
+;
+; A full-width edge is the most
+; expensive single line the game draws:
+; about 0.38 ms of pixel loop on a Pico
+; 2 W at section 10's measured 0.98 us a
+; step, 0.18 on a Plus 2 W, plus three
+; statements. It buys the whole scene a
+; floor.
+to ground
+  pu (setpos -160 :hz)
+  pd (setpos 160 :hz)
+  pu
+end
+
 to horizon
   make "mt.i :ph + :mn.off
   make "mt.i int :mt.i / :mn.step
-  make "mt.x :mt.i * :mn.step - :ph
-  make "mt.x (:mt.x - 360) * :mn.sc
+  make "mt.a :mt.i * :mn.step - :ph
+  make "mt.a :mt.a - 360
+  make "mt.x :k * tan :mt.a
   make "mt.k (modulo :mt.i :mn.n) + 1
   pu
   (setpos :mt.x :hz + item :mt.k :mtn)
   pd
   repeat :mn.seen [
     make "mt.i :mt.i + 1
-    make "mt.x :mt.x + :mn.dx
+    make "mt.a :mt.a + :mn.step
+    make "mt.x :k * tan :mt.a
     make "mt.k (modulo :mt.i :mn.n) + 1
     (setpos :mt.x :hz + item :mt.k :mtn)
   ]
@@ -809,15 +1248,28 @@ end
 ; the play test should read off the HUD
 ; rather than take from this comment.
 make "moon.az 300
-make "moon.y 130
+make "moon.y 100
 make "moon.r 16
 make "moon.d 10
+
+; The bearing beyond which it cannot be
+; on screen, and the cull HAS to be in
+; degrees rather than in steps now: the
+; moon can be anywhere in the circle,
+; and `tan` of a bearing near 90 degrees
+; is not a number you want to hand to
+; `setpos`. At 38 degrees the crescent's
+; right edge is already off the right of
+; the view, so nothing is lost.
+make "moon.arc 38
 
 to moon
   make "mt.m :moon.az - :ph + 180
   make "mt.m (modulo :mt.m 360) - 180
-  make "mt.m :mt.m * :mn.sc
-  if 200 > abs :mt.m [draw.moon]
+  if :moon.arc > abs :mt.m [
+    make "mt.m :k * tan :mt.m
+    draw.moon
+  ]
 end
 
 to draw.moon
@@ -838,20 +1290,76 @@ end
 ;
 ; A fixed overlay with NO ARITHMETIC IN
 ; IT AT ALL, exactly as P11 section 6.1
-; writes an outline: six edges in twelve
-; statements, all of them literals, in
-; the cabinet's red rather than the
-; world's green. Drawn last so that it
-; sits over anything the plain put in
-; the middle of the view.
+; writes an outline: eight edges in
+; sixteen statements, every one of them
+; a literal, in the cabinet's red rather
+; than the world's green. Drawn after
+; the whole plain so that it sits over
+; anything the world put in the middle
+; of the view.
+;
+; TWO BRACKETS FACING EACH OTHER, with a
+; stalk running outward from each. The
+; top bar sits 30 above the aiming point
+; with its ends turning DOWN toward it;
+; the bottom bar 30 below with its ends
+; turning UP; and the two stalks leave
+; along the centreline, outward, in the
+; one direction nothing else occupies.
+;
+; EVERY NUMBER IS MIRRORED ABOUT y = 40,
+; and that is the thing to preserve if
+; this is redrawn: bars at +/-30, teeth
+; reaching back in to +/-15, stalks from
+; +/-30 out to +/-60, and +/-30 of width
+; either side of the centreline. A sight
+; that is not symmetric about its aiming
+; point tells you the gun is somewhere
+; it is not.
+;
+; NOTHING IN IT SHARES A ROW WITH THE
+; HORIZON, AND THE GROUND LINE IS WHY.
+; This sight used to be two long arms at
+; y = 40 with the verticals hanging off
+; them -- and 40 is `hz`, so the arms
+; lay exactly along the ground line
+; section 8.3a added. Two things drawn
+; on the same row of pixels in two
+; colours are one thing as far as the
+; eye is concerned: the sight read as
+; part of the horizon and the horizon
+; read as part of the sight, and neither
+; could be seen for what it was.
+;
+; The bars are horizontal again, and
+; that was never the problem. What
+; matters is not the direction of a
+; stroke but that no stroke lies on `hz`
+; or crosses it, which is what the test
+; checks and why it has no opinion about
+; the shape.
+;
+; THE GAP IS THE POINT OF THE SHAPE. The
+; aiming point is (0, 40) -- a shell
+; flies at eye height, so it appears at
+; y = `hz`, dead centre when it is aimed
+; -- which is on the horizon and is
+; exactly where the target is. So the
+; middle thirty rows are left empty: the
+; target sits in clear air, inside a
+; frame that says where the gun is
+; pointing without ever covering what it
+; is pointing at.
 to gunsight
   setpc :sight.colour
-  pu (setpos -110 40) pd (setpos -40 40)
-  pu (setpos 40 40) pd (setpos 110 40)
-  pu (setpos 0 80) pd (setpos 0 55)
-  pu (setpos 0 25) pd (setpos 0 0)
-  pu (setpos -40 55) pd (setpos -40 25)
-  pu (setpos 40 55) pd (setpos 40 25)
+  pu (setpos 0 70) pd (setpos 0 100)
+  pu (setpos 0 10) pd (setpos 0 -20)
+  pu (setpos -30 70) pd (setpos 30 70)
+  pu (setpos -30 10) pd (setpos 30 10)
+  pu (setpos -30 70) pd (setpos -30 55)
+  pu (setpos 30 70) pd (setpos 30 55)
+  pu (setpos -30 10) pd (setpos -30 25)
+  pu (setpos 30 10) pd (setpos 30 25)
   pu
 end
 
@@ -870,40 +1378,46 @@ end
 ; heading -- needs l > r. Design section
 ; 7 said (r - l) until M1 drove it.
 ;
-; The arrows are an interface onto the
-; treads rather than a replacement for
-; them: up and down set a forward
-; intent, left and right a turn intent,
-; and the treads are the clamped sum and
-; difference. All nine combinations of
-; the two intents map onto the nine
-; useful tread pairs, so holding up and
-; right gives a genuine one-tread arc
-; and not a scripted curve. Whether a
-; second key pair driving the treads
-; directly feels better is an M4
-; question.
+; ONE KEY PER TREAD PER DIRECTION, which
+; is the cabinet's two sticks as closely
+; as a keyboard can hold them: 1 runs
+; the LEFT tread forward and Q runs it
+; back, 0 runs the RIGHT tread forward
+; and P runs it back. The keys are where
+; the sticks are -- 1 and Q on the left
+; of the keyboard, 0 and P on the right
+; -- so each hand drives its own side
+; and the player never converts an
+; intention into a direction. Driving
+; straight is both forward keys, a pivot
+; is one of each, and a one-tread arc is
+; one key: nine tread pairs, four keys,
+; no mapping in between.
 ;
-; `min` and `max` would make `clamp1`
-; one statement instead of three. They
-; are in the roadmap's cheap wins on
-; their own merits (design section 13,
-; L1) and are not here yet.
-to clamp1 :v
-  if :v > 1 [output 1]
-  if -1 > :v [output -1]
-  output :v
-end
-
+; The arrows drove it until now through
+; a forward intent and a turn intent
+; summed into the pair, which is a
+; steering wheel wearing a tank's
+; controls. Design section 7 always said
+; the motion is per tread; this is the
+; input finally saying the same thing,
+; and it is what retires the M4 question
+; of whether a direct key pair feels
+; better.
+;
+; Both keys of one tread at once is the
+; back one, the same way down beat up
+; before: the second `if` simply runs
+; last. Nothing has to clamp, because no
+; tread is ever the sum of two keys --
+; `clamp1` went with the arrows.
 to treads
-  make "tk.f 0
-  if keydown? 181 [make "tk.f 1]
-  if keydown? 182 [make "tk.f -1]
-  make "tk.t 0
-  if keydown? 183 [make "tk.t 1]
-  if keydown? 180 [make "tk.t -1]
-  make "left.tread clamp1 :tk.f + :tk.t
-  make "right.tread clamp1 :tk.f - :tk.t
+  make "left.tread 0
+  if keydown? 49 [make "left.tread 1]
+  if keydown? 113 [make "left.tread -1]
+  make "right.tread 0
+  if keydown? 48 [make "right.tread 1]
+  if keydown? 112 [make "right.tread -1]
 end
 
 ; The collision radius follows the near
@@ -924,22 +1438,46 @@ end
 ; because it is one comparison an axis
 ; and an obstacle IS square.
 ;
-; It has to run against the CANDIDATE
-; position and the drawing scan against
-; the committed one, which is why they
-; are two scans and not one.
+; FOUR CALLERS BY M2 AND ONE PREDICATE.
+; The tank's move, the enemy's move, and
+; each shell's flight all ask the same
+; question of the same eight obstacles,
+; so this takes the two things that
+; differ -- an offset from the camera in
+; `tk.dx`/`tk.dz` and a half-width in
+; `tk.guard` -- through globals and
+; leaves the scan alone. B19 is the
+; precedent for having ONE of these: the
+; bug there was one collision test out
+; of several getting the wrap wrong, and
+; a single predicate over a single
+; wrapped table cannot have that.
+;
+; It reads `ob.scan`'s table, so it
+; tests an OFFSET and not a position,
+; and the offset is from the camera the
+; table was built against. For the
+; enemy and the shells that camera is
+; this frame's, because they step after
+; the rescan. For the TANK it is last
+; frame's, because a move has to be
+; refused before it is committed and the
+; rescan follows the commit -- so the
+; tank passes the step delta itself,
+; which is exactly right rather than an
+; approximation of it.
+;
+; The z read is inside the x test, so an
+; obstacle that is nowhere near costs
+; two statements rather than three.
 to blocked?
-  make "tk.u :half.world - :tk.x
-  make "tk.v :half.world - :tk.z
   repeat :ob.count [
-    make "ob.d :tk.u + item repcount :ox
-    make "ob.d modulo :ob.d :world
-    make "ob.x :ob.d - :half.world
-    make "ob.d :tk.v + item repcount :oz
-    make "ob.d modulo :ob.d :world
-    make "ob.z :ob.d - :half.world
-    if :coll.r > abs :ob.x [
-      if :coll.r > abs :ob.z [
+    make "ob.x item repcount :obx
+    make "ob.x :ob.x - :tk.dx
+    if :tk.guard > abs :ob.x [
+      make "ob.z item repcount :obz
+      make "ob.z :ob.z - :tk.dz
+      if :tk.guard > abs :ob.z [
         output "true
       ]
     ]
@@ -948,13 +1486,14 @@ to blocked?
 end
 
 to move.tank
-  make "tk.x :px + :tk.s * :sn
-  make "tk.x modulo :tk.x :world
-  make "tk.z :pz + :tk.s * :cs
-  make "tk.z modulo :tk.z :world
+  make "tk.dx :tk.s * :sn
+  make "tk.dz :tk.s * :cs
+  make "tk.guard :coll.r
   ifelse blocked? [make "bumped true] [
-    make "px :tk.x
-    make "pz :tk.z
+    make "tk.x :px + :tk.dx
+    make "px modulo :tk.x :world
+    make "tk.z :pz + :tk.dz
+    make "pz modulo :tk.z :world
   ]
 end
 
@@ -976,6 +1515,13 @@ end
 ; `draw.field` reads them once an
 ; obstacle.
 to step.tank
+  if :tk.boom > 0 [
+    make "tk.boom :tk.boom - 1
+    make "left.tread 0
+    make "right.tread 0
+    make "bumped false
+    stop
+  ]
   treads
   make "tk.r :left.tread - :right.tread
   make "ph :ph + :tk.r * :turn.rate
@@ -986,6 +1532,604 @@ to step.tank
   make "bumped false
   if not 0 = :tk.s [move.tank]
   cam.offsets
+  ob.scan
+end
+
+
+;======================================
+; The enemy
+;
+; Design section 8.2. THE HULL IS A BOX
+; THAT HAPPENS TO BE ROTATED, so section
+; 8.1's four-columns trick still applies
+; -- with the enemy's own rotation
+; folded into the camera's ONCE a frame
+; rather than once a corner.
+;
+; The transform is linear, so the
+; transform of a corner is the centre's
+; transform plus the offset's, and the
+; four corners are then plus-and-minus
+; sums exactly as an obstacle's are.
+;
+; AND THE SECOND OFFSET IS FREE. The
+; enemy's forward half-offset is
+; ehalf*(sin eh, cos eh); its right one
+; is that turned 90 degrees, and turning
+; 90 degrees COMMUTES with the camera's
+; rotation. So the camera-frame right
+; offset is (p.pz, -p.px) read straight
+; off the forward one, and two
+; multiplies and two adds a frame go
+; away. M0's harness spent them; it was
+; measuring cost and not direction.
+;
+; M0's harness also had the gun pointing
+; at 90 - eh rather than eh, because it
+; built its half-offset from (cos, sin)
+; instead of (sin, cos). With a fixed
+; heading and nothing aiming down the
+; barrel that is invisible, which is
+; exactly why it survived a measurement
+; run. It is not invisible here: `hunt`
+; aims the gun and `enemy.fires` shoots
+; along it.
+;
+; THE GUN TIP CAN BE BEHIND THE NEAR
+; PLANE WHILE THE HULL IS NOT, and it is
+; still safe to divide by. The tip is
+; the centre plus two forward offsets,
+; so it reaches at most 2*ehalf = 28
+; steps past the centre; every corner is
+; at least `near` away and no corner is
+; more than ehalf*sqrt2 = 19.8 in front
+; of the centre, so the centre is beyond
+; 79.8 and the tip beyond 51.8. Near,
+; never zero, and never negative.
+make "gunx [0 0]
+make "guny [0 0]
+
+to project.enemy
+  make "p.fx :ehalf * :e.es
+  make "p.fz :ehalf * :e.ec
+  make "p.px :p.fx * :cs - :p.fz * :sn
+  make "p.pz :p.fz * :cs + :p.fx * :sn
+  make "p.za :e.zc + :p.pz
+  make "p.zb :e.zc - :p.pz
+  make "p.z1 :p.za - :p.px
+  make "p.z2 :p.za + :p.px
+  make "p.z3 :p.zb + :p.px
+  make "p.z4 :p.zb - :p.px
+  if :near > :p.z1 [output "false]
+  if :near > :p.z2 [output "false]
+  if :near > :p.z3 [output "false]
+  if :near > :p.z4 [output "false]
+  make "p.xa :e.xc + :p.px
+  make "p.xb :e.xc - :p.px
+  make "p.iz :k / :p.z1
+  .setitem 1 :cx (:p.xa + :p.pz) * :p.iz
+  .setitem 1 :cy1 :hz - :eye * :p.iz
+  .setitem 1 :cy2 :hz + :ebode * :p.iz
+  make "p.iz :k / :p.z2
+  .setitem 2 :cx (:p.xa - :p.pz) * :p.iz
+  .setitem 2 :cy1 :hz - :eye * :p.iz
+  .setitem 2 :cy2 :hz + :ebode * :p.iz
+  make "p.iz :k / :p.z3
+  .setitem 3 :cx (:p.xb - :p.pz) * :p.iz
+  .setitem 3 :cy1 :hz - :eye * :p.iz
+  .setitem 3 :cy2 :hz + :ebode * :p.iz
+  make "p.iz :k / :p.z4
+  .setitem 4 :cx (:p.xb + :p.pz) * :p.iz
+  .setitem 4 :cy1 :hz - :eye * :p.iz
+  .setitem 4 :cy2 :hz + :ebode * :p.iz
+  make "p.iz :k / :e.zc
+  .setitem 1 :gunx :e.xc * :p.iz
+  .setitem 1 :guny :hz + :ebode * :p.iz
+  make "p.g :e.zc + :p.pz + :p.pz
+  make "p.iz :k / :p.g
+  make "p.g :e.xc + :p.px + :p.px
+  .setitem 2 :gunx :p.g * :p.iz
+  .setitem 2 :guny :hz + :ebode * :p.iz
+  output "true
+end
+
+; Thirteen edges: the hull's twelve and
+; the gun's one. `draw.box` reads the
+; same three column lists the obstacles
+; do, which is why the enemy is drawn in
+; its own phase rather than inside the
+; field scan.
+to draw.enemy
+  draw.box
+  pu (setpos item 1 :gunx item 1 :guny)
+  pd (setpos item 2 :gunx item 2 :guny)
+  pu
+end
+
+; The enemy's offset from the camera in
+; WORLD axes, wrapped -- the same fold
+; `ob.scan` does, once, for one object.
+; Everything else about the enemy is
+; derived from these two numbers: the
+; hunt reads them, the collisions read
+; them, and the camera-frame pair the
+; projection and the radar want is two
+; more statements on top.
+to enemy.offsets
+  make "e.d :ob.u + :e.x
+  make "e.d modulo :e.d :world
+  make "e.dx :e.d - :half.world
+  make "e.d :ob.v + :e.z
+  make "e.d modulo :e.d :world
+  make "e.dz :e.d - :half.world
+end
+
+; The same offset in the CAMERA's frame,
+; which is what the projection needs and
+; -- because a radar is a top-down view
+; in exactly that frame -- what the blip
+; needs too. Taken after the enemy's
+; move rather than with the world-axis
+; pair, so both readers see where it
+; ended up and not where it started.
+to enemy.camera
+  make "e.xc :e.dx * :cs - :e.dz * :sn
+  make "e.zc :e.dz * :cs + :e.dx * :sn
+end
+
+; Design section 19.3: at 15 fps a
+; decision every third frame is
+; invisible and costs a third as much,
+; so this runs on one frame in
+; `e.think` and leaves three INTENTS
+; behind -- turn, drive and fire -- that
+; the other two frames act on. That is
+; the difference between a hunt that
+; costs 0.6 ms a frame and one that
+; costs 0.2.
+;
+; The bearing is one `arctan` rather
+; than a cross product: the two-input
+; form takes the signs of both inputs,
+; so it is defined all the way round and
+; through zero, which the one-input form
+; is not. Player minus enemy is minus
+; the offset, hence the +180.
+;
+; The range test is the field scan's
+; DIAMOND and not a disc, for the same
+; reason it is there: one statement
+; against three, and an enemy that
+; closes to 0.7 of the stand-off on the
+; diagonal is an enemy that presses a
+; little harder from the corners.
+to hunt
+  make "e.b (arctan :e.dz :e.dx) + 180
+  make "e.b :e.b - :e.h + 180
+  make "e.b (modulo :e.b 360) - 180
+  make "e.t 0
+  if :e.b > :e.aim [make "e.t 1]
+  if :e.naim > :e.b [make "e.t -1]
+  make "e.d (abs :e.dx) + (abs :e.dz)
+  make "e.f 1
+  if :e.range > :e.d [make "e.f 0]
+  make "e.fire false
+  if 1 > :e.cool [
+    if :e.aim > abs :e.b [
+      if :far > :e.d [make "e.fire true]
+    ]
+  ]
+end
+
+; A blocked enemy is refused its step
+; and keeps its turn, exactly as the
+; player is, so it grinds around a cube
+; rather than through it. It does not
+; try to go round -- an enemy stuck
+; behind an obstacle is the cabinet's
+; behaviour and it is what makes hiding
+; behind one work.
+to move.enemy
+  make "e.vx :e.step * :e.es
+  make "e.vz :e.step * :e.ec
+  make "tk.dx :e.dx + :e.vx
+  make "tk.dz :e.dz + :e.vz
+  make "tk.guard :e.coll
+  if blocked? [stop]
+  make "e.d :e.x + :e.vx
+  make "e.x modulo :e.d :world
+  make "e.d :e.z + :e.vz
+  make "e.z modulo :e.d :world
+  make "e.dx :tk.dx
+  make "e.dz :tk.dz
+end
+
+to enemy.fires
+  make "e.fire false
+  if :es.on [stop]
+  make "e.cool :e.reload
+  make "es.on true
+  make "es.x :e.x
+  make "es.z :e.z
+  make "e.d :e.h + (random :e.wob2)
+  make "e.d :e.d - :e.wob
+  make "es.vx :sh.step * sin :e.d
+  make "es.vz :sh.step * cos :e.d
+  make "es.dx :e.dx
+  make "es.dz :e.dz
+  make "es.life :sh.frames
+end
+
+; A new one appears at `e.spawn` on a
+; random bearing, already facing you --
+; the cabinet gives you that courtesy
+; too, and then starts closing.
+;
+; AND NOT INSIDE A CUBE. `blocked?`
+; keeps the tank and the enemy out of an
+; obstacle by refusing the move that
+; would take them in, which means
+; neither can ever be inside one -- with
+; exactly one exception, a spawn, which
+; arrives somewhere rather than driving
+; there. An enemy that starts inside the
+; guard radius can never leave it, in
+; any direction, because every candidate
+; step is still inside: it sits in the
+; middle of a cube shooting at you for
+; the rest of its life. So a spawn is
+; TESTED, and re-rolled up to four
+; times. Four is not a guarantee and
+; does not need to be -- eight obstacles
+; on a 1,600-step plain make one bad
+; bearing unlikely and four in a row
+; negligible, and the fallback is the
+; behaviour this replaced.
+to spawn.enemy
+  repeat 4 [
+    place.enemy
+    make "tk.dx :e.dx
+    make "tk.dz :e.dz
+    make "tk.guard :e.coll
+    if not blocked? [stop]
+  ]
+end
+
+to place.enemy
+  make "e.b random 360
+  make "e.d :e.spawn * sin :e.b
+  make "e.d :px + :e.d
+  make "e.x modulo :e.d :world
+  make "e.d :e.spawn * cos :e.b
+  make "e.d :pz + :e.d
+  make "e.z modulo :e.d :world
+  make "e.h :e.b + 180
+  make "e.h modulo :e.h 360
+  make "e.ec cos :e.h
+  make "e.es sin :e.h
+  make "e.alive true
+  make "e.cool :e.reload
+  make "e.t 0
+  make "e.f 1
+  make "e.fire false
+  enemy.offsets
+  enemy.camera
+end
+
+; The turn is taken before the move, and
+; the camera-frame pair after it, so the
+; projection and the radar both read the
+; place the enemy actually ended up.
+to step.enemy
+  if :e.boom > 0 [
+    make "e.boom :e.boom - 1
+    if 1 > :e.boom [spawn.enemy]
+    stop
+  ]
+  enemy.offsets
+  make "e.d modulo :frame.count :e.think
+  if 0 = :e.d [hunt]
+  make "e.h :e.h + :e.t * :e.turn
+  make "e.h modulo :e.h 360
+  make "e.ec cos :e.h
+  make "e.es sin :e.h
+  if :e.cool > 0 [
+    make "e.cool :e.cool - 1
+  ]
+  if not 0 = :e.f [move.enemy]
+  enemy.camera
+  if :e.fire [enemy.fires]
+end
+
+;======================================
+; The shells
+;
+; One each, as the cabinet has, and the
+; two are written out twice rather than
+; folded into one procedure over a
+; two-element list. That is the same
+; call `project.box` and `project.pyr`
+; make: an `item` walk to find which
+; shell this is would cost more
+; statements than the duplication saves,
+; in the loop the frame is linear in,
+; and the two differ in what they hit
+; anyway.
+;
+; A shell keeps its VELOCITY from the
+; moment it was fired rather than its
+; heading -- it flies where the gun was
+; pointing, not where the gun is now --
+; and it keeps a world position, because
+; it outlives several of the camera's
+; own steps and the plain wraps
+; underneath it.
+;
+; THE ENEMY'S SHELL HITS THE PLAYER WITH
+; TWO COMPARISONS AND NO ARITHMETIC AT
+; ALL, because the player is at the
+; origin of the camera-relative frame
+; every offset in this file is already
+; in. That is the cheapest collision in
+; the game and it is the one that
+; matters most.
+;
+; The guards are half a step wider than
+; the things they test against, or a
+; 32-step shell walks straight through a
+; 20-step cube between two frames. That
+; is the whole reason `sh.guard` is 36
+; and not 20.
+
+to fire
+  if :sh.on [stop]
+  if :tk.boom > 0 [stop]
+  make "sh.on true
+  make "sh.x :px
+  make "sh.z :pz
+  make "sh.vx :sh.step * :sn
+  make "sh.vz :sh.step * :cs
+  make "sh.dx 0
+  make "sh.dz 0
+  make "sh.life :sh.frames
+end
+
+to step.shell
+  if not :sh.on [stop]
+  make "sh.life :sh.life - 1
+  if 1 > :sh.life [
+    make "sh.on false
+    stop
+  ]
+  make "sh.d :sh.x + :sh.vx
+  make "sh.x modulo :sh.d :world
+  make "sh.d :sh.z + :sh.vz
+  make "sh.z modulo :sh.d :world
+  make "sh.d :ob.u + :sh.x
+  make "sh.d modulo :sh.d :world
+  make "sh.dx :sh.d - :half.world
+  make "sh.d :ob.v + :sh.z
+  make "sh.d modulo :sh.d :world
+  make "sh.dz :sh.d - :half.world
+  if :e.alive [
+    make "sh.d :sh.dx - :e.dx
+    if :e.hit > abs :sh.d [
+      make "sh.d :sh.dz - :e.dz
+      if :e.hit > abs :sh.d [
+        kill.enemy
+        stop
+      ]
+    ]
+  ]
+  make "tk.dx :sh.dx
+  make "tk.dz :sh.dz
+  make "tk.guard :sh.guard
+  if blocked? [make "sh.on false]
+end
+
+to step.eshell
+  if not :es.on [stop]
+  make "es.life :es.life - 1
+  if 1 > :es.life [
+    make "es.on false
+    stop
+  ]
+  make "es.d :es.x + :es.vx
+  make "es.x modulo :es.d :world
+  make "es.d :es.z + :es.vz
+  make "es.z modulo :es.d :world
+  make "es.d :ob.u + :es.x
+  make "es.d modulo :es.d :world
+  make "es.dx :es.d - :half.world
+  make "es.d :ob.v + :es.z
+  make "es.d modulo :es.d :world
+  make "es.dz :es.d - :half.world
+  if :tk.hit > abs :es.dx [
+    if :tk.hit > abs :es.dz [
+      hit.player
+      stop
+    ]
+  ]
+  make "tk.dx :es.dx
+  make "tk.dz :es.dz
+  make "tk.guard :sh.guard
+  if blocked? [make "es.on false]
+end
+
+; A shell is a four-pixel dash and not a
+; projected object: it has no size worth
+; transforming and one edge is the
+; smallest thing this engine can draw.
+; The player's flies at EYE HEIGHT, so
+; its screen y is `hz` with no
+; arithmetic at all -- which is also why
+; a shot you aimed goes through the
+; middle of the gunsight.
+to draw.shell
+  make "p.zc :sh.dz * :cs + :sh.dx * :sn
+  if :near > :p.zc [stop]
+  make "p.xc :sh.dx * :cs - :sh.dz * :sn
+  make "p.iz :k / :p.zc
+  make "p.sx :p.xc * :p.iz
+  make "p.s2 :p.sx + 4
+  pu (setpos :p.sx :hz)
+  pd (setpos :p.s2 :hz)
+  pu
+end
+
+to draw.eshell
+  make "p.zc :es.dz * :cs + :es.dx * :sn
+  if :near > :p.zc [stop]
+  make "p.xc :es.dx * :cs - :es.dz * :sn
+  make "p.iz :k / :p.zc
+  make "p.sx :p.xc * :p.iz
+  make "p.sy :hz + :ebode * :p.iz
+  make "p.s2 :p.sx + 4
+  pu (setpos :p.sx :p.sy)
+  pd (setpos :p.s2 :p.sy)
+  pu
+end
+
+;======================================
+; The explosion
+;
+; Asteroids' `draw.boom` in screen
+; space: five short strokes on a radius
+; that grows with the death frame. The
+; alternative is drifting the wreck in
+; three dimensions, which wants a
+; projection per fragment for ten frames
+; and buys a difference nobody watching
+; an explosion can see.
+;
+; `boom.frag` takes its bearing as a
+; PARAMETER, which the rest of this file
+; does not do. A local read costs 1.5x a
+; global's and that is worth 3.9 ms in
+; the frame walk (design section 13,
+; L0.5); this runs on ten frames of an
+; enemy's whole life, so the five copies
+; the global form would need cost more
+; to read than the locals cost to run.
+;
+; The projection is done ONCE, at the
+; moment of the kill, and the fragments
+; then live in screen space. A tank that
+; blew up 300 steps away does not get
+; closer while it burns.
+to kill.enemy
+  make "sh.on false
+  make "es.on false
+  make "e.alive false
+  make "e.boom :boom.frames
+  make "kills :kills + 1
+  make "bm.n 0
+  if :near > :e.zc [stop]
+  make "p.iz :k / :e.zc
+  make "bm.x :e.xc * :p.iz
+  make "bm.y :hz + :ebode * :p.iz
+  make "bm.n :boom.frames
+end
+
+; Being hit costs the player the pause
+; and nothing else yet: lives, the score
+; and the cracked screen are M3. The
+; explosion is at the centre of the view
+; because that is where the shell was
+; when it arrived.
+to hit.player
+  make "es.on false
+  make "hits :hits + 1
+  make "tk.boom :boom.frames
+  make "bm.x 0
+  make "bm.y :hz
+  make "bm.n :boom.frames
+end
+
+to boom.frag :d
+  pu (setpos :bm.x :bm.y)
+  seth :d
+  fd :bm.t
+  pd fd 8
+  pu
+end
+
+to draw.boom
+  if 1 > :bm.n [stop]
+  make "bm.n :bm.n - 1
+  make "bm.t :boom.frames - :bm.n
+  make "bm.t :bm.t * :boom.drift
+  setpc :moon.colour
+  boom.frag 20
+  boom.frag 85
+  boom.frag 150
+  boom.frag 215
+  boom.frag 290
+  setpc :world.colour
+end
+
+;======================================
+; The radar
+;
+; Design section 11: a circle, the field
+; of view as a fixed wedge, a sweep line
+; that turns, and a blip.
+;
+; THE BLIP NEEDS NO TRIGONOMETRY AND NO
+; BEARING. A radar is a top-down view in
+; the CAMERA's frame, and the enemy's
+; camera-frame coordinates are exactly
+; the (e.xc, e.zc) `step.enemy` already
+; computed for the projection. Scale
+; them, add the centre, and that is the
+; blip -- three statements, against the
+; arctangent and the distance the
+; obvious spelling wants.
+;
+; The wedge is fixed rather than swept
+; with the heading, because on a radar
+; that is drawn in the camera's frame
+; "ahead" is always up. The sweep line
+; turns because the cabinet's did; it
+; is decoration and it costs four
+; statements.
+;
+; Drawn last, over everything, in the
+; overlay's red -- it is a piece of
+; glass in front of the periscope and
+; not a thing on the plain.
+to blip
+  make "rd.bx :e.xc * :rd.sc
+  make "rd.by :e.zc * :rd.sc
+  make "rd.d (abs :rd.bx) + (abs :rd.by)
+  if :rd.r > :rd.d [
+    make "rd.bx :rd.x + :rd.bx
+    make "rd.by :rd.y + :rd.by
+    pu (setpos :rd.bx :rd.by)
+    seth 0
+    bk 2
+    pd fd 4
+    pu
+  ]
+end
+
+to radar
+  setpc :sight.colour
+  make "rd.sw :rd.sw + :rd.spin
+  make "rd.sw modulo :rd.sw 360
+  pu (setpos :rd.x :rd.y)
+  pd arc 360 :rd.r
+  seth :rd.sw
+  fd :rd.r
+  pu (setpos :rd.x :rd.y)
+  seth :rd.fov
+  pd fd :rd.r
+  pu (setpos :rd.x :rd.y)
+  seth 0 - :rd.fov
+  pd fd :rd.r
+  pu
+  if :e.alive [blip]
+  setpc :world.colour
 end
 
 ;======================================
@@ -999,7 +2143,7 @@ end
 ; CONTROLS THAT HOLD, EDGE FOR THE ONES
 ; THAT FIRE: the treads are read with
 ; `keydown?` in `treads`, pause and quit
-; with `keyhit?` here, or holding P
+; with `keyhit?` here, or holding space
 ; would toggle the pause fifteen times a
 ; second.
 ;
@@ -1010,12 +2154,13 @@ end
 ; the defect both shipped shooters had.
 to poll.input
   pollkeys
-  if keyhit? 112 [
+  if keyhit? 32 [
     make "paused not :paused
     stop
   ]
   if :paused [stop]
-  if keyhit? 113 [make "quit true]
+  if keyhit? 177 [make "quit true]
+  if keyhit? 93 [fire]
 end
 
 ;======================================
@@ -1084,10 +2229,13 @@ end
 ; frame left behind. At 15 fps neither
 ; is perceptible.
 ;
-; Rows 24 to 26: with B49 fixed the
+; Rows 24 to 27: with B49 fixed the
 ; split screen shows text lines 24 to
 ; 31, so this sits directly under the
-; viewport.
+; viewport. M2's row is the tallies --
+; kills and hits are what a play test
+; reads to know whether the enemy is
+; playing the game or standing still.
 
 make "hud.every 15
 
@@ -1122,6 +2270,10 @@ to draw.hud
   print (se [FRAME] :hud.a)
   setcursor [14 26]
   print (se [MAX] :hud.fm)
+  setcursor [0 27]
+  print (se [KILLS] :kills)
+  setcursor [14 27]
+  print (se [HITS] :hits)
   make "hud.n 0
   make "hud.bs 0
   make "hud.fs 0
@@ -1157,11 +2309,26 @@ end
 ;
 ; The order is: read the world, then
 ; clear, then draw far to near --
-; horizon, moon, obstacles, gunsight --
-; so the sight sits over everything.
+; ground, horizon, moon, obstacles,
+; enemy, shells, explosion -- and then
+; the two pieces of glass, the gunsight
+; and the radar, over everything.
 ; `clean` takes the graphics half only,
 ; so the readout in the text area
 ; survives it and never needs erasing.
+;
+; EVERY MOVE HAPPENS BEFORE ANY DRAW,
+; and that is not tidiness. The tank
+; moves first because `ob.scan` follows
+; its move and everything after that
+; reads the table; the enemy moves
+; second because both shells test
+; themselves against where it ended up;
+; and the shells move last because the
+; frame that kills the enemy must not
+; also draw it. A shell stepped after
+; the drawing would hit a tank the
+; player had already seen explode.
 ;
 ; THE TWO TIMERS BRACKET DIFFERENT
 ; THINGS ON PURPOSE. `body.ms` stops
@@ -1194,12 +2361,23 @@ to play.frame
   if not :paused [
     make "frame.count :frame.count + 1
     step.tank
+    step.enemy
+    step.shell
+    step.eshell
     clean
     setpc :world.colour
+    ground
     horizon
     moon
     draw.field
+    if :e.alive [
+      if project.enemy [draw.enemy]
+    ]
+    if :sh.on [draw.shell]
+    if :es.on [draw.eshell]
+    draw.boom
     gunsight
+    radar
     hud.tally
     reclaim
     make "body.ms ticks - :tk.t0
@@ -1217,17 +2395,93 @@ end
 ; one the hard way. `window` comes after
 ; `cs` for the same reason: `cs` puts
 ; the boundary mode back to `wrap`.
+;
+; ASK FOR THE CLOCK, THEN READ IT BACK,
+; AND CUT THE DENSITY IF THE BOARD SAID
+; NO. M2's line items are about 17 ms
+; and there are 16 spare at 150 MHz and
+; 33 at 300 (design section 16.4.3), so
+; the overclock is the enabling
+; condition for this milestone and not a
+; luxury. `hw.cpu` reads the HARDWARE
+; rather than remembering what was
+; asked, so a board that refused cannot
+; report an overclock that bought
+; nothing -- and a board with no
+; settable clock at all has no `hw.cpu`
+; either, which is what the `catch` is
+; for. Either way the answer lands on
+; the readout beside the milliseconds it
+; explains.
+;
+; The cut is design section 14's
+; held-in-reserve lever, three obstacles
+; to two, and it is 7.3 ms at stock. A
+; board played at a density it cannot
+; draw is worse than one played at the
+; stock density.
+to clock
+  make "cpu.was "unknown
+  catch "error [make "cpu.was hw.cpu]
+  make "cpu.at :cpu.was
+  catch "error [hw.setcpu "fast]
+  catch "error [make "cpu.at hw.cpu]
+  make "max.obstacles :fast.obstacles
+  if not "fast = :cpu.at [
+    make "max.obstacles :slow.obstacles
+  ]
+end
+
+; AND GIVE IT BACK ON THE WAY OUT. A
+; game that leaves the board overclocked
+; has changed the machine and not just
+; played on it: everything after it runs
+; at a clock nobody asked for. On a
+; board with PSRAM that used to be worse
+; than impolite -- the QMI's timing for
+; the external RAM is computed once, at
+; boot, against the clock running then,
+; and nothing retuned it, so the editor
+; came back corrupted (B50, fixed in the
+; device layer). The clock is given back
+; here anyway: a game should leave the
+; machine as it found it.
+;
+; It restores WHAT IT FOUND rather than
+; `normal`, so a session that was
+; already fast when the game started
+; stays fast when it ends. `cpu.was` is
+; `unknown` on a board with no settable
+; clock, and there is nothing to put
+; back there.
+to restore.clock
+  if "unknown = :cpu.was [stop]
+  if :cpu.was = :cpu.at [stop]
+  catch "error [hw.setcpu :cpu.was]
+end
+
 to battlezone
   cs
   splitscreen
   ct
   window
   ht
+  clock
   make "px 800
   make "pz 800
   make "ph 0
   cam.setup
   cam.offsets
+  ob.scan
+  make "sh.on false
+  make "es.on false
+  make "bm.n 0
+  make "tk.boom 0
+  make "e.boom 0
+  make "kills 0
+  make "hits 0
+  make "rd.sw 0
+  spawn.enemy
   make "paused false
   make "quit false
   make "frame.count 0
@@ -1236,8 +2490,6 @@ to battlezone
   make "hud.fs 0
   make "hud.bm 0
   make "hud.fm 0
-  make "cpu.at "unknown
-  catch "error [make "cpu.at hw.cpu]
   (setrefresh "sync :fps)
   ; A baseline poll, so the keypress
   ; that started the game is not
@@ -1246,7 +2498,8 @@ to battlezone
   pollkeys
   until [:quit] [play.frame]
   setrefresh "auto
+  restore.clock
   textscreen
   ct
-  print [Battlezone M1]
+  print [Battlezone M2]
 end

@@ -25,6 +25,11 @@
 #include <hardware/clocks.h>
 #include <hardware/spi.h>
 #include <hardware/vreg.h>
+#ifdef PICO_PSRAM_CS_PIN
+#include <hardware/psram.h>
+#include <hardware/structs/qmi.h>
+#include <hardware/regs/qmi.h>
+#endif
 #include "lcd.h"
 #include <pico/status_led.h>
 
@@ -258,10 +263,85 @@ static bool ensure_status_led_initialized(void)
 //     the clock switch so nothing can transact at a rate that is briefly
 //     wrong.
 //
-// What this CANNOT do anything about is flash: `set_sys_clock_khz` leaves the
-// QMI timing alone, so XIP runs at the new clock too. If the flash cannot keep
-// up, the failure is a hang at the moment of the switch -- which is why this is
-// worth trying from a script that has already written its results to a file.
+//   * THE PSRAM, on a board that has any. `set_sys_clock_khz` leaves QMI timing
+//     alone, and the SDK computed the PSRAM window's divider, rx delay and
+//     deselect from clk_sys ONCE, before main. At 300 MHz all three are wrong in
+//     the unsafe direction at the same time and the part returns occasional bad
+//     data rather than failing -- B50, found as scattered corruption in the
+//     editor, whose buffers are what this project puts in PSRAM. See
+//     picocalc_retune_psram.
+//
+// What this can do LESS about is flash. The same is true of QMI M0 -- XIP runs
+// at the new clock too -- but the bootrom's divider there is conservative enough
+// that 300 MHz has run whole play tests on every board, and if flash could not
+// keep up the failure would be a hang at the moment of the switch rather than
+// quiet corruption. That is still worth trying from a script that has already
+// written its results to a file.
+#ifdef PICO_PSRAM_CS_PIN
+// B50. The QMI's timing for the PSRAM window is computed from `clk_sys` ONCE,
+// by the SDK's `psram_configure_params` during `runtime_init_setup_psram`,
+// before `main`. Move clk_sys afterwards and every field is wrong -- and at 300
+// MHz three of them are wrong in the unsafe direction at the same time: the
+// divider drives a 133 MHz part at 150, the rx delay samples a full cycle
+// early, and the minimum deselect halves in wall-clock to about 10 ns against
+// tCPH's 18. None of those faults; each returns occasional bad data, which is
+// how this was found -- scattered corruption in the editor, whose buffers are
+// the things this project puts in PSRAM (`primitives_editor_init`).
+//
+// Only the four timing values depend on the clock. The format, command and
+// quad-enable configuration `psram_initialize_internal` also writes do not, and
+// they are already in place -- so this is ONE REGISTER WRITE and deliberately
+// not `psram_reinitialize()`, which re-issues QUAD_ENABLE and calls
+// `flash_start_xip()`. An XIP teardown is not the way to change a timing field.
+//
+// The arithmetic is `psram_configure_params`'s, reproduced because it keeps its
+// results in statics the SDK does not expose. `psram_set_params` is still
+// called so the SDK's own copy agrees with the hardware, in case anything later
+// goes through `psram_reinitialize`.
+//
+// It writes M1 only, so flash XIP is untouched and this need not run from RAM.
+static void picocalc_retune_psram(void)
+{
+    if (!psram_is_available())
+    {
+        return;
+    }
+
+    const uint32_t clock_hz = clock_get_hz(clk_sys);
+    const uint32_t max_freq = PICO_DEFAULT_PSRAM_MAX_FREQ;
+
+    uint32_t divisor = (clock_hz + max_freq - 1u) / max_freq;
+    if (divisor == 1u && clock_hz > 100000000u)
+    {
+        divisor = 2u;
+    }
+    uint32_t rxdelay = divisor;
+    if (clock_hz / divisor > 100000000u)
+    {
+        rxdelay += 1u;
+    }
+
+    const uint32_t period_fs = (uint32_t)(1000000000000000ull / clock_hz);
+    const uint32_t max_select =
+        (uint32_t)(((uint64_t)PICO_DEFAULT_PSRAM_MAX_SELECT * 1000000ull) /
+                   (64ull * (uint64_t)period_fs));
+    const uint32_t min_deselect =
+        (uint32_t)((PICO_DEFAULT_PSRAM_MIN_DESELECT * 1000000u + (period_fs - 1u)) /
+                   period_fs) -
+        (divisor + 1u) / 2u;
+
+    qmi_hw->m[1].timing =
+        1u << QMI_M1_TIMING_COOLDOWN_LSB |
+        QMI_M1_TIMING_PAGEBREAK_VALUE_1024 << QMI_M1_TIMING_PAGEBREAK_LSB |
+        max_select << QMI_M1_TIMING_MAX_SELECT_LSB |
+        min_deselect << QMI_M1_TIMING_MIN_DESELECT_LSB |
+        rxdelay << QMI_M1_TIMING_RXDELAY_LSB |
+        divisor << QMI_M1_TIMING_CLKDIV_LSB;
+
+    (void)psram_set_params(divisor, rxdelay, max_select, min_deselect);
+}
+#endif
+
 static uint32_t picocalc_get_cpu_khz(void)
 {
     return clock_get_hz(clk_sys) / 1000u;
@@ -321,6 +401,15 @@ static bool picocalc_set_cpu_khz(uint32_t khz)
         }
         return false;
     }
+
+#ifdef PICO_PSRAM_CS_PIN
+    // FIRST, before anything else and before any of the code below can touch a
+    // buffer that lives out there. Going UP is the dangerous direction -- the
+    // old divider drives the part above its rating -- so the window between the
+    // PLL moving and this write is the whole of the exposure, and it is a few
+    // instructions long. See picocalc_retune_psram (B50).
+    picocalc_retune_psram();
+#endif
 
     // clk_peri moved with clk_sys (see the build define), so the panel is being
     // driven at the wrong rate until this line runs. First thing to fix, before

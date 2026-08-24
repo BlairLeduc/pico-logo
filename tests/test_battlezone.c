@@ -43,6 +43,7 @@
 #include "test_scaffold.h"
 #include "mock_device.h"
 #include "core/repl.h"
+#include "core/limits.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,19 +59,33 @@
 #define EDGES_CUBE 12
 #define EDGES_PYR   8
 
-// The gunsight is a fixed overlay with no arithmetic in it at all.
-#define EDGES_SIGHT 6
+// The gunsight is a fixed overlay with no arithmetic in it at all.  Eight edges
+// since M2 moved it off the horizon: a bracket above the aiming point and one
+// below it.  It was six.
+#define EDGES_SIGHT 8
 
 // The horizon walks `mtn.seen` + 1 points, so it strokes `mtn.seen` segments.
 #define SEGS_HORIZON 9
 
-// PicoCalc key codes, as the game names them to `keydown?`/`keyhit?`.
-#define KEY_LEFT   180
-#define KEY_UP     181
-#define KEY_DOWN   182
-#define KEY_RIGHT  183
-#define KEY_PAUSE  112
-#define KEY_QUIT   113
+// The enemy is the hull's twelve edges and the gun's one.  Design section 8.2
+// lists a turret box as well; it is not in the shape M0 priced and it is not
+// here, so thirteen is the number that has a measurement behind it.
+#define EDGES_ENEMY 13
+
+// The explosion is five short strokes on a growing radius.
+#define FRAGS_BOOM 5
+
+// PicoCalc key codes, as the game names them to `keydown?`/`keyhit?`.  One key
+// per tread per direction, laid out like the cabinet's two sticks: 1 and Q on
+// the left of the keyboard drive the left tread, 0 and P on the right drive the
+// right one.
+#define KEY_LFWD    49 // '1'
+#define KEY_LBACK  113 // 'q'
+#define KEY_RFWD    48 // '0'
+#define KEY_RBACK  112 // 'p'
+#define KEY_FIRE    93 // ']'
+#define KEY_PAUSE   32 // space
+#define KEY_QUIT   177 // escape
 
 // Load a whole Logo file, defining its procedures and running its top-level
 // tuning `make`s.  Procedure definitions are not handled by the bare evaluator,
@@ -184,6 +199,32 @@ static bool truth(const char *expr)
 static void press(int key_code) { set_mock_key_down(key_code, true); }
 static void release(int key_code) { set_mock_key_down(key_code, false); }
 
+// Driving straight and pivoting right are two keys each.  Most tests below want
+// the tank moving rather than the keys that move it, and say so through these.
+static void press_forward(void)
+{
+    press(KEY_LFWD);
+    press(KEY_RFWD);
+}
+
+static void release_forward(void)
+{
+    release(KEY_LFWD);
+    release(KEY_RFWD);
+}
+
+static void press_pivot_right(void)
+{
+    press(KEY_LFWD);
+    press(KEY_RBACK);
+}
+
+static void release_pivot_right(void)
+{
+    release(KEY_LFWD);
+    release(KEY_RBACK);
+}
+
 // Put the camera somewhere and point it somewhere, then hoist the per-frame
 // constants the projection and the field scan read. `step.tank` hoists these in
 // two places -- the heading's before the move and the position's after it --
@@ -194,6 +235,27 @@ static void camera_at(float px, float pz, float ph)
     snprintf(expr, sizeof(expr),
              "make \"px %g  make \"pz %g  make \"ph %g  cam.setup  cam.offsets",
              px, pz, ph);
+    run(expr);
+    // M2 hoists the wrapped obstacle field into (obx, obz) once a frame, and
+    // the field scan and every collision read it rather than wrapping again.
+    // `step.tank` rescans after the move commits; a test that places the camera
+    // by hand has to do the same or it reads the previous placement's table.
+    run("ob.scan");
+}
+
+// Put the enemy somewhere and point it somewhere, then hoist the two offsets
+// every reader of it wants: the world-axis pair the hunt and the collisions
+// use, and the camera-frame pair the projection and the radar use.  `step.enemy`
+// takes them at two different moments -- the world pair before its move and the
+// camera pair after it -- which is why they are two procedures.
+static void enemy_at(float ex, float ez, float eh)
+{
+    char expr[200];
+    snprintf(expr, sizeof(expr),
+             "make \"e.x %g  make \"e.z %g  make \"e.h %g "
+             "make \"e.ec cos %g  make \"e.es sin %g "
+             "make \"e.alive true  enemy.offsets  enemy.camera",
+             ex, ez, eh, eh, eh);
     run(expr);
 }
 
@@ -422,12 +484,14 @@ void test_the_far_plane_is_inside_the_wrap(void)
 void test_driving_across_the_seam_keeps_the_camera_on_the_plain(void)
 {
     const float world = num(":world");
-    char expr[96];
-    snprintf(expr, sizeof(expr), "make \"px 0  make \"pz %g  make \"ph 0", world - 6.0f);
-    run(expr);
-    press(KEY_UP);
+    // Through `camera_at`, because M2's `blocked?` reads a table that belongs
+    // to the camera it was hoisted against: teleport the camera with a bare
+    // `make` and the tank's first move is decided against the last placement's
+    // obstacles.  The game only ever teleports in `battlezone`, which rescans.
+    camera_at(0.0f, world - 6.0f, 0.0f);
+    press_forward();
     run("pollkeys  step.tank  step.tank  step.tank");
-    release(KEY_UP);
+    release_forward();
 
     const float pz = num(":pz");
     const float travelled = 3.0f * 2.0f * num(":tread.step");
@@ -472,6 +536,38 @@ void test_the_gunsight_is_a_fixed_overlay(void)
     run("gunsight");
     TEST_ASSERT_EQUAL_INT(n, mock_device_line_count());
     TEST_ASSERT_EQUAL_FLOAT(x1, mock_device_get_line(0)->x1);
+}
+
+// The defect this exists for, found by looking at the screen: the sight used to
+// be two long arms at y = 40 with the verticals hanging off them, and 40 is
+// `hz` -- so the arms lay exactly along the ground line section 8.3a added.
+// Two things drawn on the same row of pixels in two colours are one thing as
+// far as the eye is concerned, and neither the sight nor the horizon could be
+// read for what it was.
+//
+// THE INVARIANT IS NOT "NO HORIZONTALS".  That was one way to fix it and it is
+// not the requirement: a horizontal bar at y = 65 is perfectly legible against
+// a horizon at y = 40.  What has to hold is that no stroke lies ON `hz`, and
+// that the aiming point stays in clear air -- so this checks those two things
+// and leaves the shape free to change.
+void test_no_part_of_the_gunsight_lies_along_the_horizon(void)
+{
+    const float hz = num(":hz");
+    mock_device_clear_graphics();
+    run("gunsight");
+    TEST_ASSERT_EQUAL_INT(EDGES_SIGHT, mock_device_line_count());
+
+    for (int i = 0; i < mock_device_line_count(); i++)
+    {
+        const MockLine *l = mock_device_get_line(i);
+        const float lo = l->y1 < l->y2 ? l->y1 : l->y2;
+        const float hi = l->y1 < l->y2 ? l->y2 : l->y1;
+
+        // Not lying along the horizon, and not crossing it either: a stroke
+        // through `hz` is a stroke through the target and through the shell.
+        TEST_ASSERT_FALSE_MESSAGE(lo <= hz && hz <= hi,
+                                  "a gunsight segment sits on the horizon");
+    }
 }
 
 // A drawn obstacle is worth nothing if it is drawn in the wrong colour, and the
@@ -572,6 +668,50 @@ void test_an_obstacle_beyond_the_far_plane_is_not_drawn(void)
 // holds 63 degrees, so a 40-point table at 9 degrees a point shows about seven
 // peaks -- and the walk has to reach past both edges of the screen or a
 // mountain range stops short of the frame.
+// The plain is `eye` below the camera and screen y is `hz - eye/z * k`, so as z
+// goes to infinity the ground rises to exactly `hz` and stops.  One flat line
+// across the view at that y is the true horizon -- the line where the plain
+// meets the sky -- and it is the whole of what this game draws below the peaks.
+//
+// It exists because a wireframe silhouette is a line and not a filled shape, so
+// nothing anchors the mountain range's lower edge and the range reads as a
+// squiggle hanging in space.  Found by playing it, which is what M1's hardware
+// pass was for.
+//
+// It is a separate procedure from `horizon` for a reason the test below makes
+// plain: this segment spans the whole screen deliberately, and a *horizon*
+// segment that spans the whole screen is the signature of the `wrap` defect.
+// Keeping them apart keeps `test_no_horizon_segment_spans_the_whole_screen`
+// watching what it was written to watch instead of carrying an exception.
+void test_the_ground_is_one_flat_line_at_the_horizon(void)
+{
+    const float hz = num(":hz");
+
+    mock_device_clear_graphics();
+    run("ground");
+    TEST_ASSERT_EQUAL_INT(1, mock_device_line_count());
+
+    const MockLine *l = mock_device_get_line(0);
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(hz, l->y1, "the ground is not at the horizon");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(hz, l->y2, "the ground is not level");
+    TEST_ASSERT_TRUE_MESSAGE(fabsf(l->x2 - l->x1) >= 320.0f,
+                             "the ground does not cross the whole view");
+
+    // Every mountain point sits above it, or the range is drawn through the
+    // ground rather than standing on it.
+    for (int i = 1; i <= (int)num(":mn.n"); i++)
+        TEST_ASSERT_TRUE_MESSAGE(item_of("mtn", i) > 0.0f, "a mountain point is below the ground");
+
+    // And it is at infinity like the rest of the backdrop: it does not move
+    // with the heading or with the position.
+    camera_at(1234, 77, 217);
+    mock_device_clear_graphics();
+    run("ground");
+    const MockLine *m = mock_device_get_line(0);
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(l->x1, m->x1, "the ground moved with the camera");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(hz, m->y1, "the ground moved with the camera");
+}
+
 void test_the_horizon_cull_walks_only_the_visible_points(void)
 {
     TEST_ASSERT_EQUAL_FLOAT(40, num(":mn.n"));
@@ -649,6 +789,114 @@ void test_no_horizon_segment_spans_the_whole_screen(void)
 // The backdrop is at infinity: it scrolls with your heading and never with your
 // position.  That is the only way to tell you are turning on an empty plain,
 // and a horizon that tracked the camera would be a wall instead.
+// The horizon is drawn as one polyline: `pu` to v0, then a pen-down `setpos` to
+// each of the rest.  So line j runs v[j] -> v[j+1], and this reads a vertex back
+// out of the mock by that.
+static float horizon_vertex(int j)
+{
+    const int n = mock_device_line_count();
+    TEST_ASSERT_TRUE_MESSAGE(j >= 0 && j <= n, "no such horizon vertex");
+    return j < n ? mock_device_get_line(j)->x1 : mock_device_get_line(n - 1)->x2;
+}
+
+// THE INVARIANT THE MOUNTAINS USED TO BREAK, and it is the one that makes a 3D
+// scene cohere: IN A PURE PIVOT, DISTANCE DOES NOT MATTER.  A rotation changes
+// every bearing by the same amount, so a mountain at infinity and a cube in
+// front of you, at the same screen position, must move by the same number of
+// pixels.  Distance cancels out of `k * xc/zc` entirely.
+//
+// The horizon used to map azimuth to screen x LINEARLY -- `(azimuth - ph) *
+// 5.06` -- where everything else is `k * tan`.  Linear against a tangent means
+// the mountains scrolled at a CONSTANT rate while the world accelerated toward
+// the edges: +11.4 % at the centre of the view, 0 at about 20 degrees off it,
+// and -13.9 % near the edge.  Over a second of turning a cube and a peak that
+// started together ended 32 steps apart, and the drift reversed sign across the
+// screen.  Reported from watching it turn, which is the only way it shows.
+//
+// Design section 8.4 chose the linear form deliberately, to save a tangent a
+// point.  This is what that cost.
+void test_a_pivot_moves_the_horizon_and_the_world_together(void)
+{
+    const float k = num(":k"), step = num(":mn.step"), arc = num(":mn.arc");
+
+    // At heading 0 the walk starts at bearing -mn.arc, so vertex 4 is the table
+    // point sitting dead ahead.  One frame of turn later it is the same point,
+    // because the first index has not moved on.
+    camera_at(800, 800, 0);
+    mock_device_clear_graphics();
+    run("horizon");
+    const float peak_before = horizon_vertex(4);
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 0.0f, peak_before,
+                                     "the walk does not start at -mn.arc");
+
+    // An object at the same bearing: the enemy's gun root is its centre, which
+    // is a plain projected point.
+    enemy_at(800, 1100, 180);
+    TEST_ASSERT_TRUE(truth("project.enemy"));
+    const float obj_before = item_of("gunx", 1);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, obj_before);
+
+    const float turn = num(":turn.rate");
+    camera_at(800, 800, turn);
+    mock_device_clear_graphics();
+    run("horizon");
+    const float peak_after = horizon_vertex(4);
+    enemy_at(800, 1100, 180);
+    TEST_ASSERT_TRUE(truth("project.enemy"));
+    const float obj_after = item_of("gunx", 1);
+
+    const float peak_moved = peak_after - peak_before;
+    const float obj_moved = obj_after - obj_before;
+
+    // Both are k*tan of the same bearing, so they are the same number.
+    const float expect = -k * tanf(turn * (float)M_PI / 180.0f);
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.05f, expect, obj_moved, "the object projection moved");
+    char msg[128];
+    snprintf(msg, sizeof(msg),
+             "a pivot moved the horizon %.2f steps and the world %.2f", peak_moved, obj_moved);
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.05f, obj_moved, peak_moved, msg);
+
+    // And it holds out at the edge of the view, where the old linear map erred
+    // the other way.  Vertex j sits at bearing j*step - arc, so vertex 7 is 27
+    // degrees off centre -- the last one still inside the 31.6-degree view.
+    const float edge_bearing = 7.0f * step - arc;
+    camera_at(800, 800, 0);
+    mock_device_clear_graphics();
+    run("horizon");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.05f, k * tanf(edge_bearing * (float)M_PI / 180.0f),
+                                     horizon_vertex(7),
+                                     "the horizon is not k*tan at the view's edge");
+}
+
+// The map itself, at every vertex of a walk: screen x is `k * tan(bearing)`,
+// which is what an object at that bearing would get.  Checked at a heading that
+// is not a multiple of the table's step, so the vertices land at bearings the
+// table does not name.
+void test_the_horizon_maps_bearing_through_the_same_tangent_as_the_world(void)
+{
+    const float k = num(":k"), step = num(":mn.step"), arc = num(":mn.arc");
+
+    for (float h = 0.0f; h < 360.0f; h += 17.0f)
+    {
+        char expr[64];
+        snprintf(expr, sizeof(expr), "make \"ph %g  cam.setup", h);
+        run(expr);
+        mock_device_clear_graphics();
+        run("horizon");
+
+        // The first vertex sits in [-(arc + step), -arc]; each one after it is
+        // `step` degrees further round.
+        const float first = -arc - fmodf(h + arc, step);
+        for (int j = 0; j <= (int)num(":mn.seen"); j++)
+        {
+            const float bearing = first + (float)j * step;
+            const float want = k * tanf(bearing * (float)M_PI / 180.0f);
+            snprintf(expr, sizeof(expr), "vertex %d at heading %g", j, h);
+            TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.5f, want, horizon_vertex(j), expr);
+        }
+    }
+}
+
 void test_the_horizon_ignores_the_camera_position(void)
 {
     camera_at(0, 0, 40);
@@ -687,48 +935,82 @@ void test_the_moon_appears_only_when_it_is_in_view(void)
 // The treads
 //==========================================================================
 
-// The pair drives forward speed (l + r) and turn rate (l - r), and the sign is
-// the physical one: a tank whose right tread runs forward pivots LEFT, so a
-// clockwise turn -- an increasing Logo heading -- needs l > r.  Easy to get
-// backwards and impossible to miss once you drive it.
-void test_the_arrows_drive_the_treads(void)
+// Each key drives ONE tread in ONE direction, and no key does anything else:
+// there is no intent layer to get wrong, so what this pins down is the wiring.
+void test_each_key_drives_its_own_tread(void)
 {
     run("make \"ph 0");
 
-    press(KEY_UP);
+    press(KEY_LFWD);
+    run("pollkeys  treads");
+    TEST_ASSERT_EQUAL_FLOAT(1, num(":left.tread"));
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":right.tread"), "the left key moved the right tread");
+    release(KEY_LFWD);
+
+    press(KEY_LBACK);
+    run("pollkeys  treads");
+    TEST_ASSERT_EQUAL_FLOAT(-1, num(":left.tread"));
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":right.tread"));
+    release(KEY_LBACK);
+
+    press(KEY_RFWD);
+    run("pollkeys  treads");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":left.tread"), "the right key moved the left tread");
+    TEST_ASSERT_EQUAL_FLOAT(1, num(":right.tread"));
+    release(KEY_RFWD);
+
+    press(KEY_RBACK);
+    run("pollkeys  treads");
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":left.tread"));
+    TEST_ASSERT_EQUAL_FLOAT(-1, num(":right.tread"));
+    release(KEY_RBACK);
+
+    press_forward();
     run("pollkeys  treads");
     TEST_ASSERT_EQUAL_FLOAT(1, num(":left.tread"));
     TEST_ASSERT_EQUAL_FLOAT(1, num(":right.tread"));
-    release(KEY_UP);
+    release_forward();
 
-    press(KEY_RIGHT);
-    run("pollkeys  treads");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":left.tread"), "a right pivot needs the left tread forward");
-    TEST_ASSERT_EQUAL_FLOAT(-1, num(":right.tread"));
-    release(KEY_RIGHT);
-
-    // Up and right together is a genuine one-tread arc, not a scripted curve.
-    press(KEY_UP);
-    press(KEY_RIGHT);
-    run("pollkeys  treads");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":left.tread"), "the tread sum was not clamped");
-    TEST_ASSERT_EQUAL_FLOAT(0, num(":right.tread"));
-    release(KEY_UP);
-    release(KEY_RIGHT);
-
-    press(KEY_DOWN);
+    press(KEY_LBACK);
+    press(KEY_RBACK);
     run("pollkeys  treads");
     TEST_ASSERT_EQUAL_FLOAT(-1, num(":left.tread"));
     TEST_ASSERT_EQUAL_FLOAT(-1, num(":right.tread"));
-    release(KEY_DOWN);
+    release(KEY_LBACK);
+    release(KEY_RBACK);
+
+    // Both keys of one tread at once is the back one, the way down beat up
+    // before: the second `if` simply runs last.
+    press(KEY_LFWD);
+    press(KEY_LBACK);
+    run("pollkeys  treads");
+    TEST_ASSERT_EQUAL_FLOAT(-1, num(":left.tread"));
+    release(KEY_LFWD);
+    release(KEY_LBACK);
 }
 
-void test_a_right_pivot_increases_the_heading(void)
+// The two motions the controls are FOR, stated the way a player would: one key
+// arcs, two keys pivot.  The pair drives forward speed (l + r) and turn rate
+// (l - r), and the sign is the physical one -- a tank whose right tread runs
+// forward pivots LEFT, so a clockwise turn needs l > r.  Easy to get backwards
+// and impossible to miss once you drive it.
+void test_one_key_arcs_and_two_keys_pivot(void)
 {
-    run("make \"ph 0  make \"px 800  make \"pz 800");
-    press(KEY_RIGHT);
+    // `1` alone: the left tread forward and the right one stopped, so the tank
+    // goes forward AND clockwise -- an arc to the right, not a scripted curve.
+    camera_at(800, 800, 0);
+    press(KEY_LFWD);
     run("pollkeys  step.tank");
-    release(KEY_RIGHT);
+    release(KEY_LFWD);
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":turn.rate"), num(":ph"), "one tread forward did not arc right");
+    TEST_ASSERT_TRUE_MESSAGE(num(":px") > 800.0f || num(":pz") > 800.0f, "an arc stood still");
+
+    // `1` and `p` together: the treads oppose, the sum is zero and the tank
+    // spins on the spot at twice the rate.
+    camera_at(800, 800, 0);
+    press_pivot_right();
+    run("pollkeys  step.tank");
+    release_pivot_right();
     TEST_ASSERT_EQUAL_FLOAT(2 * num(":turn.rate"), num(":ph"));
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(800, num(":px"), "a pivot moved the tank");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(800, num(":pz"), "a pivot moved the tank");
@@ -738,17 +1020,17 @@ void test_a_right_pivot_increases_the_heading(void)
 // and not in x.  A sign or an axis swap here puts the whole world sideways.
 void test_driving_forward_moves_along_the_heading(void)
 {
-    run("make \"ph 0  make \"px 800  make \"pz 100");
-    press(KEY_UP);
+    camera_at(800, 100, 0);
+    press_forward();
     run("pollkeys  step.tank");
-    release(KEY_UP);
+    release_forward();
     TEST_ASSERT_EQUAL_FLOAT(800, num(":px"));
     TEST_ASSERT_EQUAL_FLOAT(100 + 2 * num(":tread.step"), num(":pz"));
 
-    run("make \"ph 90  make \"px 800  make \"pz 100");
-    press(KEY_UP);
+    camera_at(800, 100, 90);
+    press_forward();
     run("pollkeys  step.tank");
-    release(KEY_UP);
+    release_forward();
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 800 + 2 * num(":tread.step"), num(":px"));
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 100, num(":pz"));
 }
@@ -780,10 +1062,10 @@ void test_you_cannot_drive_close_enough_for_an_obstacle_to_vanish(void)
     run("make \"okind [1 1 1 1]  make \"okind se :okind [1 1 1 1]");
     run("make \"px 800  make \"pz 100  make \"ph 0");
 
-    press(KEY_UP);
+    press_forward();
     for (int i = 0; i < 120; i++)
         run("pollkeys  step.tank");
-    release(KEY_UP);
+    release_forward();
 
     TEST_ASSERT_TRUE_MESSAGE(truth(":bumped"), "the tank never reached the obstacle");
     mock_device_clear_graphics();
@@ -800,11 +1082,11 @@ void test_a_blocked_tank_can_still_turn(void)
     run("make \"oz [200 200 200 200]  make \"oz se :oz [200 200 200 200]");
     run("make \"px 800  make \"pz 150  make \"ph 0");
 
-    press(KEY_UP);
-    press(KEY_RIGHT);
+    // The arc, not the pivot: a pivot's sum is zero, so it never asks to move
+    // and there would be nothing for `blocked?` to refuse.
+    press(KEY_LFWD);
     run("pollkeys  step.tank");
-    release(KEY_UP);
-    release(KEY_RIGHT);
+    release(KEY_LFWD);
 
     TEST_ASSERT_TRUE_MESSAGE(truth(":bumped"), "the tank was not blocked");
     TEST_ASSERT_TRUE_MESSAGE(num(":ph") > 0, "a blocked tank could not turn");
@@ -827,7 +1109,7 @@ void test_a_frame_runs_and_draws_the_scene(void)
     run("play.frame");
 
     const int n = mock_device_line_count();
-    TEST_ASSERT_TRUE_MESSAGE(n > SEGS_HORIZON + EDGES_SIGHT,
+    TEST_ASSERT_TRUE_MESSAGE(n > SEGS_HORIZON + EDGES_SIGHT + 1,
                              "the start view holds no obstacles at all");
     TEST_ASSERT_EQUAL_FLOAT(1, num(":frame.count"));
 }
@@ -842,10 +1124,10 @@ void test_a_long_run_of_frames_reclaims(void)
     run("make \"quit false  make \"frame.count 0");
     run("pollkeys");
 
-    press(KEY_UP);
+    press_forward();
     for (int i = 0; i < 600; i++)
         run("play.frame");
-    release(KEY_UP);
+    release_forward();
 
     TEST_ASSERT_EQUAL_FLOAT(600, num(":frame.count"));
     TEST_ASSERT_TRUE_MESSAGE(num("atoms") > 0, "the workspace ran out over a long run");
@@ -864,13 +1146,11 @@ void test_a_paused_frame_neither_drives_nor_draws(void)
     release(KEY_PAUSE);
     TEST_ASSERT_TRUE(truth(":paused"));
 
-    press(KEY_UP);
-    press(KEY_RIGHT);
+    press(KEY_LFWD);
     run("pollkeys");
     mock_device_clear_graphics();
     run("play.frame");
-    release(KEY_UP);
-    release(KEY_RIGHT);
+    release(KEY_LFWD);
 
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(800, num(":pz"), "a paused tank drove");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":ph"), "a paused tank turned");
@@ -999,14 +1279,822 @@ void test_the_readout_keeps_a_peak_not_an_average_of_peaks(void)
 // `make "x` inside a procedure body must be either a prefixed temporary or one
 // of the named pieces of game state.  A rename to `b` fails here rather than
 // silently returning zeros on a board.
+//==========================================================================
+// M2 -- the enemy
+//==========================================================================
+
+void test_the_enemy_draws_thirteen_edges(void)
+{
+    camera_at(800, 800, 0);
+    enemy_at(800, 1100, 90);
+    TEST_ASSERT_TRUE(truth("project.enemy"));
+    mock_device_clear_graphics();
+    run("draw.enemy");
+    TEST_ASSERT_EQUAL_INT(EDGES_ENEMY, mock_device_line_count());
+}
+
+// THE TEST THIS MILESTONE MOST NEEDED, and the defect it was written from is
+// in M0's own harness: it built the enemy's half-offset from (cos eh, sin eh)
+// instead of (sin eh, cos eh), so its gun pointed at 90 - eh.  With a fixed
+// heading and nothing aiming down the barrel that is invisible -- which is
+// exactly why it survived a measurement run and would have been copied here.
+//
+// It is not invisible in a game: `hunt` aims the gun and `enemy.fires` shoots
+// along it, so a tank whose barrel is 90 degrees off its line of fire shoots
+// sideways at you while facing you.
+//
+// The camera looks down +z from the origin of the offsets and the enemy is
+// dead ahead facing +x, so its barrel runs left-to-right across the view: the
+// tip is 2*ehalf to the RIGHT of the hull centre.  Under the transposed
+// spelling the barrel would point away down +z and project to a point.
+void test_the_gun_points_where_the_enemy_faces(void)
+{
+    const float k = num(":k"), ehalf = num(":ehalf");
+
+    camera_at(800, 800, 0);
+    enemy_at(800, 1100, 90);
+    TEST_ASSERT_TRUE(truth("project.enemy"));
+    const float root = item_of("gunx", 1), tip = item_of("gunx", 2);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, root);
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, 2.0f * ehalf * k / 300.0f, tip);
+
+    // And the other way round when it faces the other way.
+    enemy_at(800, 1100, 270);
+    TEST_ASSERT_TRUE(truth("project.enemy"));
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, -2.0f * ehalf * k / 300.0f, item_of("gunx", 2));
+
+    // Facing straight away, the barrel foreshortens to nothing rather than
+    // swinging sideways -- which is the same claim from the third direction.
+    enemy_at(800, 1100, 0);
+    TEST_ASSERT_TRUE(truth("project.enemy"));
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, 0.0f, item_of("gunx", 2));
+}
+
+// The hull is a square that turns with the enemy, which is the other half of
+// section 8.2's trick: the camera-frame right offset is the forward one turned
+// 90 degrees, and turning 90 degrees commutes with the camera's rotation.  Get
+// that wrong and the hull stops being square as it turns.
+void test_the_enemy_hull_is_a_square_that_turns(void)
+{
+    const float k = num(":k"), ehalf = num(":ehalf");
+    camera_at(800, 800, 0);
+
+    // Axis-aligned: the widest column is ehalf from the centre.
+    enemy_at(800, 1100, 0);
+    TEST_ASSERT_TRUE(truth("project.enemy"));
+    float widest = 0.0f;
+    for (int i = 1; i <= 4; i++)
+    {
+        const float x = fabsf(item_of("cx", i));
+        if (x > widest) widest = x;
+    }
+    TEST_ASSERT_FLOAT_WITHIN(0.6f, ehalf * k / 300.0f, widest);
+
+    // On the diagonal it is a corner that is widest, at ehalf*sqrt(2).
+    enemy_at(800, 1100, 45);
+    TEST_ASSERT_TRUE(truth("project.enemy"));
+    widest = 0.0f;
+    for (int i = 1; i <= 4; i++)
+    {
+        const float x = fabsf(item_of("cx", i));
+        if (x > widest) widest = x;
+    }
+    TEST_ASSERT_FLOAT_WITHIN(0.6f, ehalf * sqrtf(2.0f) * k / 300.0f, widest);
+}
+
+// Conservative in the same way the obstacles are, and for the same reason: one
+// corner behind you swings the projection through infinity.
+void test_the_enemy_is_culled_at_the_near_plane(void)
+{
+    const float near = num(":near");
+    camera_at(800, 800, 0);
+
+    enemy_at(800, 800 + near + 40.0f, 0);
+    TEST_ASSERT_TRUE_MESSAGE(truth("project.enemy"), "an enemy in clear view was culled");
+
+    enemy_at(800, 800 + near - 1.0f, 0);
+    TEST_ASSERT_FALSE_MESSAGE(truth("project.enemy"), "an enemy inside the near plane was drawn");
+
+    enemy_at(800, 700, 0);
+    TEST_ASSERT_FALSE_MESSAGE(truth("project.enemy"), "an enemy behind the camera was drawn");
+}
+
+// The hunt turns towards the player and stops turning when it is looking at
+// them, which is the whole of its aim.
+void test_the_enemy_turns_towards_the_player(void)
+{
+    camera_at(800, 800, 0);
+
+    // Ahead and to the player's right, facing back down -z at the player: it
+    // has to turn clockwise to look at them.
+    enemy_at(900, 1100, 180);
+    run("make \"e.cool 99  hunt");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":e.t"), "the enemy turned away from the player");
+
+    enemy_at(700, 1100, 180);
+    run("make \"e.cool 99  hunt");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(-1, num(":e.t"), "the enemy turned away from the player");
+
+    enemy_at(800, 1100, 180);
+    run("make \"e.cool 99  hunt");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":e.t"), "the enemy kept turning past the player");
+}
+
+// Design section 19.3: at 15 fps a decision every third frame is invisible and
+// costs a third as much.  The two frames in between act on the intents the
+// third left behind, so this checks that the decision is on a period and that
+// the acting is not.
+void test_the_enemy_thinks_on_one_frame_in_three(void)
+{
+    camera_at(800, 800, 0);
+    enemy_at(900, 1100, 180);
+    const int think = (int)num(":e.think");
+    TEST_ASSERT_TRUE_MESSAGE(think > 1, "the enemy thinks every frame");
+
+    // A frame that is not a thinking frame leaves the intent alone.
+    run("make \"e.t 0  make \"e.f 0  make \"e.fire false");
+    run("make \"frame.count 1  step.enemy");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":e.t"), "a non-thinking frame decided");
+
+    // The thinking frame finds the player.
+    char expr[64];
+    snprintf(expr, sizeof(expr), "make \"frame.count %d  step.enemy", think);
+    run(expr);
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":e.t"), "the thinking frame did not decide");
+
+    // And the frame after it acts on what the thinking frame left behind.
+    const float before = num(":e.h");
+    run("make \"frame.count 1  step.enemy");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(before + num(":e.turn"), num(":e.h"),
+                                    "a non-thinking frame did not act on the intent");
+}
+
+// It closes to `e.range` and then holds, or it drives into your face and the
+// near cull makes it vanish.
+void test_the_enemy_closes_and_then_holds_its_range(void)
+{
+    camera_at(800, 800, 0);
+    const float range = num(":e.range");
+
+    enemy_at(800, 800 + range + 200.0f, 180);
+    run("make \"e.cool 99  hunt");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":e.f"), "the enemy would not close");
+
+    enemy_at(800, 800 + range - 60.0f, 180);
+    run("make \"e.cool 99  hunt");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":e.f"), "the enemy drove past its stand-off");
+}
+
+// Obstacles block the enemy exactly as they block you -- which is what makes
+// hiding behind one work in both directions.
+void test_the_enemy_cannot_drive_through_an_obstacle(void)
+{
+    run("make \"ox [800 800 800 800]  make \"ox se :ox [100 100 100 100]");
+    run("make \"oz [1000 1000 1000 1000]  make \"oz se :oz [100 100 100 100]");
+    camera_at(800, 800, 0);
+
+    // Straight in front of the cube at 1,000, driving into it.
+    enemy_at(800, 1000 - num(":e.coll") + 2.0f, 0);
+    const float before = num(":e.z");
+    run("make \"e.f 1  make \"e.t 0  move.enemy");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(before, num(":e.z"), "the enemy drove into a cube");
+
+    // Facing away from it, it is free to go.
+    enemy_at(800, 1000 - num(":e.coll") + 2.0f, 180);
+    run("make \"e.f 1  make \"e.t 0  move.enemy");
+    TEST_ASSERT_TRUE_MESSAGE(num(":e.z") < before, "the enemy could not drive away from a cube");
+}
+
+// A spawn is the only way anything in this game can arrive INSIDE an obstacle,
+// because every other placement is a move `blocked?` refused.  And an enemy
+// that starts inside the guard radius can never leave it in any direction --
+// every candidate step is still inside -- so it spends its whole life sitting
+// in a cube shooting at you.
+//
+// Four bearings is not a guarantee and this does not test one.  What it tests
+// is the RATE: the field below is eight obstacles laid on the spawning ring
+// itself, which blocks about a quarter of all bearings, so without the re-roll
+// something like fifteen of these sixty spawns would land in a cube.  `rerandom`
+// makes the sequence the same every run, so the threshold is a real bound and
+// not a coin toss.
+void test_a_spawn_is_re_rolled_out_of_an_obstacle(void)
+{
+    // A ring of obstacles at exactly spawning distance.
+    run("make \"ox [800 1420 800 180]  make \"ox se :ox [1239 1239 361 361]");
+    run("make \"oz [1420 800 180 800]  make \"oz se :oz [1239 361 361 1239]");
+    camera_at(800, 800, 0);
+    run("rerandom");
+
+    int stuck = 0;
+    for (int trial = 0; trial < 60; trial++)
+    {
+        run("spawn.enemy");
+        run("make \"tk.dx :e.dx  make \"tk.dz :e.dz");
+        run("make \"tk.guard :e.coll");
+        if (truth("blocked?"))
+            stuck++;
+    }
+    char msg[96];
+    snprintf(msg, sizeof(msg), "%d of 60 spawns landed inside an obstacle", stuck);
+    TEST_ASSERT_TRUE_MESSAGE(stuck <= 3, msg);
+}
+
+//==========================================================================
+// M2 -- the shells
+//==========================================================================
+
+// The tunnelling invariant, in arithmetic rather than in play: a shell moves
+// `sh.step` between two frames and is tested only at the ends of that step, so
+// every guard has to be at least half a step wider than the thing it tests
+// against or a fast shell passes through a solid object.
+void test_the_shell_guards_clear_half_a_step(void)
+{
+    const float half_step = num(":sh.step") / 2.0f;
+    TEST_ASSERT_TRUE_MESSAGE(num(":sh.guard") >= num(":half") + half_step,
+                             "a shell tunnels through an obstacle");
+    TEST_ASSERT_TRUE_MESSAGE(num(":e.hit") >= num(":ehalf") + half_step,
+                             "a shell tunnels through the enemy");
+    TEST_ASSERT_TRUE_MESSAGE(num(":tk.hit") >= half_step,
+                             "the enemy's shell tunnels through the player");
+}
+
+// A shell flies where the gun was pointing and not where it is pointing now.
+// The velocity is fixed at the moment of firing, so turning after the shot
+// does not steer it -- which is the difference between a cannon and a missile,
+// and the missile is M3.
+void test_a_shell_flies_the_heading_it_was_fired_along(void)
+{
+    camera_at(800, 800, 0);
+    run("make \"sh.on false  make \"tk.boom 0  fire");
+    TEST_ASSERT_TRUE(truth(":sh.on"));
+
+    // Spin the tank right round before the shell steps.
+    camera_at(800, 800, 90);
+    run("make \"e.alive false  step.shell");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(800, num(":sh.x"), "the shell followed the turret");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(800 + num(":sh.step"), num(":sh.z"),
+                                    "the shell did not fly down its own heading");
+}
+
+void test_only_one_shell_is_in_the_air_at_a_time(void)
+{
+    camera_at(800, 800, 0);
+    run("make \"sh.on false  make \"tk.boom 0  fire");
+    const float z = num(":sh.z");
+    run("make \"e.alive false  step.shell  step.shell");
+    run("fire");
+    TEST_ASSERT_TRUE_MESSAGE(num(":sh.z") > z, "firing again reloaded the shell in flight");
+}
+
+// The kill, the explosion and the replacement, in one run of frames.
+void test_a_shell_kills_the_enemy_and_another_arrives(void)
+{
+    run("make \"ox [100 100 100 100]  make \"ox se :ox [100 100 100 100]");
+    run("make \"oz [100 100 100 100]  make \"oz se :oz [100 100 100 100]");
+    camera_at(800, 800, 0);
+    enemy_at(800, 1000, 180);
+    run("make \"kills 0  make \"sh.on false  make \"tk.boom 0  fire");
+
+    for (int i = 0; i < 12 && truth(":e.alive"); i++)
+        run("step.shell");
+
+    TEST_ASSERT_FALSE_MESSAGE(truth(":e.alive"), "the shell flew through the enemy");
+    TEST_ASSERT_EQUAL_FLOAT(1, num(":kills"));
+    TEST_ASSERT_FALSE_MESSAGE(truth(":sh.on"), "the shell survived its own kill");
+    TEST_ASSERT_TRUE_MESSAGE(num(":e.boom") > 0, "the enemy died without an explosion");
+
+    // The explosion runs down and a new enemy takes the field.
+    for (int i = 0; i < (int)num(":boom.frames") + 1; i++)
+        run("step.enemy");
+    TEST_ASSERT_TRUE_MESSAGE(truth(":e.alive"), "no enemy came back");
+
+    // On the plain, and out at spawning distance rather than on top of you.
+    const float world = num(":world");
+    TEST_ASSERT_TRUE(num(":e.x") >= 0 && num(":e.x") < world);
+    TEST_ASSERT_TRUE(num(":e.z") >= 0 && num(":e.z") < world);
+    const float d = fabsf(num(":e.dx")) + fabsf(num(":e.dz"));
+    TEST_ASSERT_TRUE_MESSAGE(d > num(":e.range"), "the replacement arrived in your lap");
+}
+
+// Design section 2: obstacles block shots and can be hidden behind.  Without
+// this the cubes are scenery.
+void test_an_obstacle_stops_a_shell(void)
+{
+    run("make \"ox [800 800 800 800]  make \"ox se :ox [100 100 100 100]");
+    run("make \"oz [1000 1000 1000 1000]  make \"oz se :oz [100 100 100 100]");
+    camera_at(800, 800, 0);
+    // The enemy is directly behind the cube: a clean line of sight would kill
+    // it, and the cube is what makes the shot miss.
+    enemy_at(800, 1200, 180);
+    run("make \"kills 0  make \"sh.on false  make \"tk.boom 0  fire");
+
+    for (int i = 0; i < 20 && truth(":sh.on"); i++)
+        run("step.shell");
+
+    TEST_ASSERT_TRUE_MESSAGE(truth(":e.alive"), "the shell went through a cube");
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":kills"));
+    TEST_ASSERT_TRUE_MESSAGE(num(":sh.z") < 1000.0f, "the shell was stopped past the cube");
+}
+
+// B19's own case, in this game: a shot that crosses the seam has to hit the
+// obstacle that is three steps away and not miss the one that reads as 1,597.
+// One wrapped table is what makes this true by construction rather than by a
+// comparison somebody remembered to write.
+void test_a_shell_hits_an_obstacle_across_the_seam(void)
+{
+    run("make \"ox [20 100 100 100]  make \"ox se :ox [100 100 100 100]");
+    run("make \"oz [20 900 900 900]  make \"oz se :oz [900 900 900 900]");
+    // Just inside the far corner of the plain, driving at the seam.
+    camera_at(1590.0f, 1500.0f, 0.0f);
+    run("make \"e.alive false  make \"sh.on false  make \"tk.boom 0  fire");
+
+    for (int i = 0; i < 6 && truth(":sh.on"); i++)
+        run("step.shell");
+    TEST_ASSERT_FALSE_MESSAGE(truth(":sh.on"),
+                              "the shell flew past an obstacle on the far side of the seam");
+}
+
+void test_a_shell_that_hits_nothing_expires(void)
+{
+    run("make \"ox [100 100 100 100]  make \"ox se :ox [100 100 100 100]");
+    run("make \"oz [100 100 100 100]  make \"oz se :oz [100 100 100 100]");
+    camera_at(800, 800, 0);
+    run("make \"e.alive false  make \"sh.on false  make \"tk.boom 0  fire");
+
+    for (int i = 0; i < (int)num(":sh.frames") + 2; i++)
+        run("step.shell");
+    TEST_ASSERT_FALSE_MESSAGE(truth(":sh.on"), "a shell flew for ever");
+}
+
+// The stand-off and the hit box are ONE number, and the first board play test
+// is what found it: the enemy read as a tank that comes straight at you with
+// perfect aim, because it was.  A shot fired within `e.aim` of you is thrown
+// sideways by d * tan(e.aim), the player is a `tk.hit` box, and while the first
+// is smaller than the second the shot cannot miss -- so the enemy parking at a
+// stand-off inside that radius is an enemy that never misses again.  This is
+// the same shape of test as the collision radius covering the near plane: two
+// constants that have to be checked against each other or they drift apart.
+void test_the_enemy_cannot_park_where_it_cannot_miss(void)
+{
+    const float deg = (float)M_PI / 180.0f;
+    // `e.d` is Manhattan, so the true distance at the stand-off is as little as
+    // range/sqrt2 on the diagonal.  Check the worst case, not the best.
+    const float closest = num(":e.range") / 1.4143f;
+    const float throw_at_the_edge = closest * tanf(num(":e.wob") * deg);
+
+    TEST_ASSERT_TRUE_MESSAGE(throw_at_the_edge > num(":tk.hit"),
+                             "the enemy holds a range from which its aim cannot miss");
+}
+
+// The stand-off alone would not have fixed it.  `hunt` turns in `e.turn` steps
+// and stops the moment it is inside `e.aim`, so against a player holding still
+// the error it fires with is the SAME error every shot: the tank hits every
+// time or misses every time for a whole approach, which is a coin flipped once
+// rather than an aim.  `e.wob` is a fresh error per shot, so this drives it.
+void test_the_enemys_aim_varies_from_shot_to_shot(void)
+{
+    // The obstacles out of the way, so what stops a shell is the player or the
+    // end of its life and never a cube.
+    run("make \"ox [100 100 100 100]  make \"ox se :ox [100 100 100 100]");
+    run("make \"oz [100 100 100 100]  make \"oz se :oz [100 100 100 100]");
+    // The mock's hardware random source is a CONSTANT 42, so without this every
+    // shot draws the same wobble and the test would be measuring nothing.
+    // `rerandom` switches to the seeded sequence, which varies and repeats.
+    run("rerandom");
+
+    const float range = num(":e.range");
+    const float deg = (float)M_PI / 180.0f;
+    int hits = 0;
+    int misses = 0;
+
+    for (int shot = 0; shot < 40; shot++)
+    {
+        camera_at(800, 800, 0);
+        // Dead ahead at the stand-off and facing straight back down the line,
+        // so the bearing error is zero and what is left is the wobble alone.
+        enemy_at(800, 800 + range, 180);
+        run("make \"hits 0  make \"tk.boom 0  make \"es.on false  enemy.fires");
+
+        // Fired within the wobble of its own heading, every time.
+        const float aimed = atan2f(num(":es.vx"), num(":es.vz")) / deg;
+        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(num(":e.wob") + 0.001f, 180.0f, fabsf(aimed),
+                                         "a shot went outside the aim error");
+
+        for (int i = 0; i < 30 && truth(":es.on"); i++)
+            run("step.eshell");
+
+        if (num(":hits") > 0)
+            hits++;
+        else
+            misses++;
+    }
+
+    // Both, not a ratio: the split is 15/25 at these constants, but the ratio is
+    // exactly what M4 is for and a test that pins it down would fight the tuning.
+    TEST_ASSERT_TRUE_MESSAGE(hits > 0, "the enemy could not hit from its own stand-off");
+    TEST_ASSERT_TRUE_MESSAGE(misses > 0, "the enemy never missed in forty shots");
+}
+
+// The cheapest collision in the game: the player is at the origin of the frame
+// every offset here is already in, so it is two comparisons and no arithmetic.
+void test_the_enemys_shell_hits_the_player_and_pauses_the_tank(void)
+{
+    run("make \"ox [100 100 100 100]  make \"ox se :ox [100 100 100 100]");
+    run("make \"oz [100 100 100 100]  make \"oz se :oz [100 100 100 100]");
+    camera_at(800, 800, 0);
+    enemy_at(800, 900, 180);
+    run("make \"hits 0  make \"tk.boom 0  make \"es.on false  enemy.fires");
+    TEST_ASSERT_TRUE(truth(":es.on"));
+
+    for (int i = 0; i < 8 && truth(":es.on"); i++)
+        run("step.eshell");
+
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":hits"), "the enemy's shell went through the player");
+    TEST_ASSERT_TRUE_MESSAGE(num(":tk.boom") > 0, "being hit cost the player nothing");
+
+    // And the pause is a pause: the treads do not drive during it.
+    press_forward();
+    run("pollkeys  step.tank");
+    release_forward();
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(800, num(":pz"), "a burning tank drove off");
+    TEST_ASSERT_TRUE_MESSAGE(num(":tk.boom") > 0, "the pause ended in one frame");
+
+    // It runs down and the tank drives again.
+    for (int i = 0; i < (int)num(":boom.frames") + 1; i++)
+        run("step.tank");
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":tk.boom"));
+    press_forward();
+    run("pollkeys  step.tank");
+    release_forward();
+    TEST_ASSERT_TRUE_MESSAGE(num(":pz") > 800.0f, "the tank never came back");
+}
+
+//==========================================================================
+// M2 -- the explosion and the radar
+//==========================================================================
+
+void test_the_explosion_draws_its_fragments_and_runs_down(void)
+{
+    camera_at(800, 800, 0);
+    enemy_at(800, 1000, 180);
+    run("make \"kills 0  kill.enemy");
+    TEST_ASSERT_EQUAL_FLOAT(num(":boom.frames"), num(":bm.n"));
+
+    mock_device_clear_graphics();
+    run("draw.boom");
+    TEST_ASSERT_EQUAL_INT(FRAGS_BOOM, mock_device_line_count());
+
+    for (int i = 0; i < (int)num(":boom.frames") + 2; i++)
+        run("draw.boom");
+    mock_device_clear_graphics();
+    run("draw.boom");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, mock_device_line_count(), "the explosion never went out");
+}
+
+// The blip is the enemy's camera-frame position scaled, which is what makes it
+// free: right of you is right on the radar, behind you is below the centre.
+// An arctangent here would be the same picture and three statements more.
+void test_the_blip_is_the_enemy_in_the_camera_frame(void)
+{
+    const float cx = num(":rd.x"), cy = num(":rd.y");
+    camera_at(800, 800, 0);
+
+    enemy_at(1000, 1000, 0);          // ahead and to the right
+    run("blip");
+    TEST_ASSERT_TRUE_MESSAGE(num(":rd.bx") > cx, "a blip to the right drew to the left");
+    TEST_ASSERT_TRUE_MESSAGE(num(":rd.by") > cy, "a blip ahead drew behind");
+
+    enemy_at(600, 600, 0);            // behind and to the left
+    run("blip");
+    TEST_ASSERT_TRUE_MESSAGE(num(":rd.bx") < cx, "a blip to the left drew to the right");
+    TEST_ASSERT_TRUE_MESSAGE(num(":rd.by") < cy, "a blip behind drew ahead");
+
+    // Turning the tank turns the radar picture, because the frame is the
+    // camera's and not the world's.
+    camera_at(800, 800, 90);
+    enemy_at(1000, 800, 0);           // now dead ahead
+    run("blip");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, cx, num(":rd.bx"), "the radar did not turn with the tank");
+}
+
+void test_the_radar_is_drawn_and_the_blip_is_inside_it(void)
+{
+    camera_at(800, 800, 0);
+    enemy_at(800, 1000, 180);
+    mock_device_clear_graphics();
+    run("radar");
+    const int with_blip = mock_device_line_count();
+
+    run("make \"e.alive false");
+    mock_device_clear_graphics();
+    run("radar");
+    const int without = mock_device_line_count();
+    TEST_ASSERT_TRUE_MESSAGE(with_blip > without, "a live enemy drew no blip");
+
+    // The face of the radar IS the far plane: an enemy at `far` dead ahead sits
+    // on the rim, and one further out than that -- which a fresh spawn on the
+    // diagonal can be -- falls off the face rather than being drawn outside the
+    // circle.
+    const float far = num(":far");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.001f, num(":rd.r") / far, num(":rd.sc"),
+                                     "the radar's face is not the far plane");
+    enemy_at(800, 800 + far - 10.0f, 180);
+    mock_device_clear_graphics();
+    run("radar");
+    TEST_ASSERT_TRUE_MESSAGE(mock_device_line_count() > without,
+                             "an enemy just inside the far plane fell off the radar");
+
+    enemy_at(800 + far, 800 + far, 180);
+    mock_device_clear_graphics();
+    run("radar");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(without, mock_device_line_count(),
+                                  "a distant enemy drew a blip outside the radar");
+}
+
+//==========================================================================
+// M2 -- the clock, and the density that depends on it
+//==========================================================================
+
+// M1 closed with this settled: ask for the fast clock, READ IT BACK, and cut
+// the field if the board refused.  M2's line items are about 17 ms against 16
+// spare at 150 MHz and 33 at 300, so the overclock is this milestone's
+// enabling condition and the cut is what makes a refusal playable instead of
+// slow.
+void test_the_game_asks_for_the_fast_clock_and_reads_it_back(void)
+{
+    set_mock_cpu_khz(true, LOGO_CPU_KHZ_NORMAL);
+    run("clock");
+    TEST_ASSERT_EQUAL_STRING("fast", value_to_string(eval_string(":cpu.at").value));
+    TEST_ASSERT_EQUAL_FLOAT(num(":fast.obstacles"), num(":max.obstacles"));
+    TEST_ASSERT_EQUAL_UINT32(LOGO_CPU_KHZ_FAST, mock_cpu_khz);
+}
+
+// B50: a game that leaves the board overclocked has changed the machine and not
+// just played on it.  On a board with PSRAM that is not merely impolite -- the
+// QMI's timing for the external RAM is computed once at boot against the clock
+// running then, so an overclock nothing retunes drives it out of spec, and the
+// editor's buffers are the things that live there.
+//
+// It restores what it FOUND rather than `normal`, so a session that was already
+// fast when the game started stays fast when it ends.
+void test_the_game_gives_the_clock_back_when_it_exits(void)
+{
+    set_mock_cpu_khz(true, LOGO_CPU_KHZ_NORMAL);
+    run("clock");
+    TEST_ASSERT_EQUAL_UINT32(LOGO_CPU_KHZ_FAST, mock_cpu_khz);
+    run("restore.clock");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(LOGO_CPU_KHZ_NORMAL, mock_cpu_khz,
+                                     "the game left the board overclocked");
+
+    // Already fast when it started: it stays fast, because the clock was not
+    // this game's to change back.
+    set_mock_cpu_khz(true, LOGO_CPU_KHZ_FAST);
+    run("clock");
+    run("restore.clock");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(LOGO_CPU_KHZ_FAST, mock_cpu_khz,
+                                     "the game undid a clock it did not set");
+
+    // A board with no settable clock has nothing to put back and must not error.
+    set_mock_cpu_khz(false, LOGO_CPU_KHZ_NORMAL);
+    run("clock");
+    run("restore.clock");
+    TEST_ASSERT_EQUAL_STRING("unknown", value_to_string(eval_string(":cpu.was").value));
+    set_mock_cpu_khz(true, LOGO_CPU_KHZ_NORMAL);
+}
+
+// The exit path has to actually call it, and no test can enter the loop that
+// precedes it -- so this reads the tail of `battlezone` out of the source, the
+// way the frame-order test reads `play.frame`.
+void test_the_exit_path_restores_the_clock(void)
+{
+    FILE *f = fopen(BATTLEZONE_SOURCE, "rb");
+    TEST_ASSERT_NOT_NULL(f);
+
+    char line[512];
+    bool in_body = false, after_loop = false, restores = false;
+    while (fgets(line, sizeof(line), f))
+    {
+        char *p = line;
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p == ';')
+            continue;
+        if (!in_body) { in_body = strncmp(p, "to battlezone", 13) == 0; continue; }
+        if (repl_line_is_end(p))
+            break;
+        if (strncmp(p, "until", 5) == 0) { after_loop = true; continue; }
+        if (after_loop && strncmp(p, "restore.clock", 13) == 0)
+            restores = true;
+    }
+    fclose(f);
+    TEST_ASSERT_TRUE_MESSAGE(after_loop, "battlezone has no play loop");
+    TEST_ASSERT_TRUE_MESSAGE(restores, "battlezone exits without giving the clock back");
+}
+
+// A board with no settable clock has no `hw.cpu` either, so `cpu.at` stays
+// `unknown` and the readout says so beside the milliseconds it explains.  What
+// matters is that the density follows the answer and not the request.
+void test_a_board_that_refuses_the_clock_gets_the_smaller_field(void)
+{
+    set_mock_cpu_khz(false, LOGO_CPU_KHZ_NORMAL);
+    run("clock");
+    TEST_ASSERT_EQUAL_STRING("unknown", value_to_string(eval_string(":cpu.at").value));
+    TEST_ASSERT_EQUAL_FLOAT(num(":slow.obstacles"), num(":max.obstacles"));
+    TEST_ASSERT_TRUE_MESSAGE(num(":slow.obstacles") < num(":fast.obstacles"),
+                             "the refusal cut nothing");
+    set_mock_cpu_khz(true, LOGO_CPU_KHZ_NORMAL);
+}
+
+//==========================================================================
+// M2 -- one wrapped table, and the order the frame reads it in
+//==========================================================================
+
+// The design's own answer to B19: the plain wraps in exactly one place, so a
+// collision cannot get it wrong in one test and right in another.  This reads
+// the table back at the seam, which is where a fold that is off by a world is
+// visible and nowhere else is.
+void test_the_hoisted_field_is_wrapped_about_the_camera(void)
+{
+    const float world = num(":world"), half = num(":half.world");
+    run("make \"ox [20 100 100 100]  make \"ox se :ox [100 100 100 100]");
+    run("make \"oz [1580 100 100 100]  make \"oz se :oz [100 100 100 100]");
+    camera_at(1590.0f, 20.0f, 0.0f);
+
+    // The obstacle at x = 20 is 30 steps ahead across the seam, not 1,570 back.
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 30.0f, item_of("obx", 1));
+    // And the one at z = 1,580 is 40 behind, not 1,560 ahead.
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, -40.0f, item_of("obz", 1));
+
+    for (int i = 1; i <= (int)num(":ob.count"); i++)
+    {
+        TEST_ASSERT_TRUE_MESSAGE(fabsf(item_of("obx", i)) <= half, "a folded offset left the plain");
+        TEST_ASSERT_TRUE_MESSAGE(fabsf(item_of("obz", i)) <= half, "a folded offset left the plain");
+    }
+    TEST_ASSERT_EQUAL_INT((int)num(":ob.count"), (int)num("count :obx"));
+    TEST_ASSERT_EQUAL_INT((int)num(":ob.count"), (int)num("count :obz"));
+    TEST_ASSERT_TRUE(world > 0);
+}
+
+// Every move happens before any draw, and it is load-bearing rather than tidy.
+// The shells step last because the frame that kills the enemy must not also
+// draw it: a shell stepped after the drawing would hit a tank the player had
+// already watched explode.  And `ob.scan` follows the tank's move, so anything
+// that reads the table has to come after `step.tank`.
+//
+// Nothing on the host can see this by playing -- it is one frame of one
+// picture -- so this reads the order back out of the Logo source, the way the
+// frame-timer test reads the timers.
+void test_the_frame_moves_everything_before_it_draws_anything(void)
+{
+    FILE *f = fopen(BATTLEZONE_SOURCE, "rb");
+    TEST_ASSERT_NOT_NULL(f);
+
+    char line[512];
+    bool in_play_frame = false;
+    int tank = -1, enemy = -1, shell = -1, eshell = -1, clear = -1, n = 0;
+
+    while (fgets(line, sizeof(line), f))
+    {
+        char *p = line;
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p == ';')
+            continue;
+        if (strncmp(p, "to play.frame", 13) == 0) { in_play_frame = true; n = 0; continue; }
+        if (!in_play_frame)
+            continue;
+        if (repl_line_is_end(p))
+            break;
+        n++;
+        if (strncmp(p, "step.tank", 9) == 0) tank = n;
+        if (strncmp(p, "step.enemy", 10) == 0) enemy = n;
+        if (strncmp(p, "step.shell", 10) == 0) shell = n;
+        if (strncmp(p, "step.eshell", 11) == 0) eshell = n;
+        if (strncmp(p, "clean", 5) == 0) clear = n;
+    }
+    fclose(f);
+
+    TEST_ASSERT_TRUE_MESSAGE(tank > 0 && enemy > 0 && shell > 0 && eshell > 0 && clear > 0,
+                             "play.frame is missing one of its steps");
+    TEST_ASSERT_TRUE_MESSAGE(tank < enemy, "the enemy steps before the table is rescanned");
+    TEST_ASSERT_TRUE_MESSAGE(enemy < shell, "a shell is tested against last frame's enemy");
+    TEST_ASSERT_TRUE_MESSAGE(enemy < eshell, "a shell is tested against last frame's enemy");
+    TEST_ASSERT_TRUE_MESSAGE(shell < clear, "a shell steps after the frame is drawn");
+    TEST_ASSERT_TRUE_MESSAGE(eshell < clear, "a shell steps after the frame is drawn");
+}
+
+// `ob.scan` is what makes every collision in this game two comparisons, and it
+// only works if the tank's move rebuilds it.  Leave it out and the field is
+// drawn from wherever the camera was last time.
+void test_the_tank_rescans_the_field_when_it_moves(void)
+{
+    run("make \"ox [800 800 800 800]  make \"ox se :ox [100 100 100 100]");
+    run("make \"oz [1200 1200 1200 1200]  make \"oz se :oz [100 100 100 100]");
+    camera_at(800, 800, 0);
+    const float before = item_of("obz", 1);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 400.0f, before);
+
+    press_forward();
+    run("pollkeys  step.tank");
+    release_forward();
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 400.0f - 2.0f * num(":tread.step"),
+                                     item_of("obz", 1),
+                                     "the field was not rescanned after the tank moved");
+}
+
+// `battlezone` itself is the one procedure no test can call, because it ends in
+// a loop that only a keypress leaves and a test cannot press a key in the
+// middle of a call.  Nothing in this tree tests a game's entry point for that
+// reason -- and M2 put new work in this one: the clock, the enemy's first
+// spawn and a dozen resets.  A misspelled name there is a crash on the board
+// and nothing at all on the host.
+//
+// So this runs the entry point's statements, from the source, up to the loop
+// it cannot enter.  It is the same trick the frame-order test uses, pointed at
+// running the lines rather than counting them.
+void test_the_entry_point_sets_the_game_up(void)
+{
+    FILE *f = fopen(BATTLEZONE_SOURCE, "rb");
+    TEST_ASSERT_NOT_NULL(f);
+
+    char line[512];
+    bool in_body = false;
+    int ran = 0;
+    while (fgets(line, sizeof(line), f))
+    {
+        char *p = line;
+        while (*p == ' ' || *p == '\t') p++;
+        size_t len = strlen(p);
+        while (len > 0 && (p[len - 1] == '\n' || p[len - 1] == '\r')) p[--len] = '\0';
+        if (len == 0 || *p == ';')
+            continue;
+        if (!in_body) { in_body = strncmp(p, "to battlezone", 13) == 0; continue; }
+        if (strncmp(p, "until", 5) == 0)
+            break;
+        run(p);
+        ran++;
+    }
+    fclose(f);
+    TEST_ASSERT_TRUE_MESSAGE(ran > 10, "the entry point's body was not found");
+
+    // It leaves a game ready to play: an enemy out on the plain, nothing in
+    // the air, and the tallies at zero.
+    TEST_ASSERT_TRUE(truth(":e.alive"));
+    TEST_ASSERT_FALSE(truth(":sh.on"));
+    TEST_ASSERT_FALSE(truth(":es.on"));
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":kills"));
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":hits"));
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":tk.boom"));
+    const float d = fabsf(num(":e.dx")) + fabsf(num(":e.dz"));
+    TEST_ASSERT_TRUE_MESSAGE(d > num(":e.range"), "the game opens with an enemy in your lap");
+
+    // And it asked for the clock, which is what M2's budget rests on.
+    TEST_ASSERT_EQUAL_STRING("fast", value_to_string(eval_string(":cpu.at").value));
+
+    run("setrefresh \"auto");
+}
+
+// The whole frame, with an enemy and both shells in the air, so that whatever
+// the pieces do separately they also do together.
+void test_a_frame_with_an_enemy_and_shells_runs(void)
+{
+    run("make \"paused false  make \"quit false  make \"frame.count 0");
+    camera_at(800, 800, 0);
+    enemy_at(800, 1100, 180);
+    run("make \"tk.boom 0  make \"sh.on false  make \"es.on false");
+    run("make \"kills 0  make \"hits 0  pollkeys");
+
+    press(KEY_FIRE);
+    run("play.frame");
+    release(KEY_FIRE);
+    TEST_ASSERT_TRUE_MESSAGE(truth(":sh.on"), "] did not fire");
+
+    mock_device_clear_graphics();
+    run("play.frame");
+    TEST_ASSERT_TRUE_MESSAGE(mock_device_line_count() > SEGS_HORIZON + EDGES_SIGHT + EDGES_ENEMY,
+                             "the frame did not draw the enemy and the radar");
+
+    press_forward();
+    for (int i = 0; i < 200; i++)
+        run("play.frame");
+    release_forward();
+    TEST_ASSERT_TRUE_MESSAGE(num("atoms") > 0, "the workspace ran out with the enemy in the frame");
+    const float world = num(":world");
+    TEST_ASSERT_TRUE_MESSAGE(num(":e.x") >= 0 && num(":e.x") < world, "the enemy left the plain");
+    TEST_ASSERT_TRUE_MESSAGE(num(":e.z") >= 0 && num(":e.z") < world, "the enemy left the plain");
+}
+
 void test_every_hot_path_temporary_is_prefixed(void)
 {
-    static const char *const prefixes[] = {"p.", "ob.", "mt.", "tk.", "mn.", "hud.", NULL};
+    static const char *const prefixes[] = {
+        "p.", "ob.", "mt.", "tk.", "mn.", "hud.",
+        // M2's four: the enemy, the two shells and the radar.  The explosion
+        // shares `bm.`.
+        "e.", "sh.", "es.", "bm.", "rd.", NULL};
     static const char *const state[] = {
         "px", "pz", "ph", "cs", "sn", "a", "b", "apx", "apy",
         "left.tread", "right.tread", "bumped", "paused", "quit",
-        "frame.count", "frame.ms", "body.ms", "cpu.at",
-        "max.obstacles", "ox", "oz", "okind", NULL};
+        "frame.count", "frame.ms", "body.ms", "cpu.at", "cpu.was",
+        "max.obstacles", "ox", "oz", "okind",
+        "kills", "hits", NULL};
 
     FILE *f = fopen(BATTLEZONE_SOURCE, "rb");
     TEST_ASSERT_NOT_NULL(f);
@@ -1072,6 +2160,7 @@ int main(void)
     RUN_TEST(test_a_cube_draws_twelve_edges);
     RUN_TEST(test_a_pyramid_draws_eight_edges);
     RUN_TEST(test_the_gunsight_is_a_fixed_overlay);
+    RUN_TEST(test_no_part_of_the_gunsight_lies_along_the_horizon);
     RUN_TEST(test_the_sight_and_the_world_are_different_colours);
 
     RUN_TEST(test_the_field_is_on_the_plain_and_clear_of_the_start);
@@ -1079,14 +2168,17 @@ int main(void)
     RUN_TEST(test_obstacles_behind_the_camera_do_not_crowd_out_the_one_in_front);
     RUN_TEST(test_an_obstacle_beyond_the_far_plane_is_not_drawn);
 
+    RUN_TEST(test_the_ground_is_one_flat_line_at_the_horizon);
     RUN_TEST(test_the_horizon_cull_walks_only_the_visible_points);
     RUN_TEST(test_the_horizon_covers_the_whole_view_at_every_heading);
     RUN_TEST(test_no_horizon_segment_spans_the_whole_screen);
+    RUN_TEST(test_a_pivot_moves_the_horizon_and_the_world_together);
+    RUN_TEST(test_the_horizon_maps_bearing_through_the_same_tangent_as_the_world);
     RUN_TEST(test_the_horizon_ignores_the_camera_position);
     RUN_TEST(test_the_moon_appears_only_when_it_is_in_view);
 
-    RUN_TEST(test_the_arrows_drive_the_treads);
-    RUN_TEST(test_a_right_pivot_increases_the_heading);
+    RUN_TEST(test_each_key_drives_its_own_tread);
+    RUN_TEST(test_one_key_arcs_and_two_keys_pivot);
     RUN_TEST(test_driving_forward_moves_along_the_heading);
 
     RUN_TEST(test_the_collision_radius_covers_the_near_plane);
@@ -1101,6 +2193,46 @@ int main(void)
     RUN_TEST(test_the_frame_timer_brackets_the_present);
     RUN_TEST(test_the_readout_is_averaged_over_a_second);
     RUN_TEST(test_the_readout_keeps_a_peak_not_an_average_of_peaks);
+
+    // M2 -- the enemy
+    RUN_TEST(test_the_enemy_draws_thirteen_edges);
+    RUN_TEST(test_the_gun_points_where_the_enemy_faces);
+    RUN_TEST(test_the_enemy_hull_is_a_square_that_turns);
+    RUN_TEST(test_the_enemy_is_culled_at_the_near_plane);
+    RUN_TEST(test_the_enemy_turns_towards_the_player);
+    RUN_TEST(test_the_enemy_thinks_on_one_frame_in_three);
+    RUN_TEST(test_the_enemy_closes_and_then_holds_its_range);
+    RUN_TEST(test_the_enemy_cannot_drive_through_an_obstacle);
+
+    RUN_TEST(test_a_spawn_is_re_rolled_out_of_an_obstacle);
+
+    // M2 -- the shells
+    RUN_TEST(test_the_shell_guards_clear_half_a_step);
+    RUN_TEST(test_a_shell_flies_the_heading_it_was_fired_along);
+    RUN_TEST(test_only_one_shell_is_in_the_air_at_a_time);
+    RUN_TEST(test_a_shell_kills_the_enemy_and_another_arrives);
+    RUN_TEST(test_an_obstacle_stops_a_shell);
+    RUN_TEST(test_a_shell_hits_an_obstacle_across_the_seam);
+    RUN_TEST(test_a_shell_that_hits_nothing_expires);
+    RUN_TEST(test_the_enemy_cannot_park_where_it_cannot_miss);
+    RUN_TEST(test_the_enemys_aim_varies_from_shot_to_shot);
+    RUN_TEST(test_the_enemys_shell_hits_the_player_and_pauses_the_tank);
+
+    // M2 -- the explosion and the radar
+    RUN_TEST(test_the_explosion_draws_its_fragments_and_runs_down);
+    RUN_TEST(test_the_blip_is_the_enemy_in_the_camera_frame);
+    RUN_TEST(test_the_radar_is_drawn_and_the_blip_is_inside_it);
+
+    // M2 -- the clock and the frame
+    RUN_TEST(test_the_game_asks_for_the_fast_clock_and_reads_it_back);
+    RUN_TEST(test_the_game_gives_the_clock_back_when_it_exits);
+    RUN_TEST(test_the_exit_path_restores_the_clock);
+    RUN_TEST(test_a_board_that_refuses_the_clock_gets_the_smaller_field);
+    RUN_TEST(test_the_hoisted_field_is_wrapped_about_the_camera);
+    RUN_TEST(test_the_frame_moves_everything_before_it_draws_anything);
+    RUN_TEST(test_the_tank_rescans_the_field_when_it_moves);
+    RUN_TEST(test_the_entry_point_sets_the_game_up);
+    RUN_TEST(test_a_frame_with_an_enemy_and_shells_runs);
 
     RUN_TEST(test_every_hot_path_temporary_is_prefixed);
 

@@ -360,6 +360,20 @@ constant should be.
   tank whose *right* tread runs forward pivots to the **left**, so a clockwise
   turn — an increasing Logo heading — is `l > r`. This section said `(r − l)`
   until M1 drove it (§16.4).
+- **One key per tread per direction**, and the keys sit where the sticks do:
+  `1` runs the left tread forward and `Q` runs it back, `0` runs the right tread
+  forward and `P` runs it back, so each hand drives its own side. `]` fires,
+  space pauses, `Esc` quits. Driving straight is both forward keys, a pivot is
+  one of each, and a one-tread arc is one key — `1` alone is the left tread
+  forward against a stopped right one, which is forward *and* clockwise, an arc
+  to the right; `1` and `P` together oppose, the sum is zero and the tank spins
+  right on the spot at twice the rate. Nine tread pairs out of four keys with no
+  mapping in between, so nothing has to clamp. M1 shipped the arrows over an
+  intent layer instead — up/down a forward intent, left/right a turn intent,
+  summed and clamped into the pair — which is a steering wheel wearing a tank's
+  controls; §7 always said the motion is per tread, and this is the input
+  finally saying the same thing. It retires the M4 question of whether a direct
+  key pair feels better.
 - `cos ph` and `sin ph` are hoisted into `:cs` and `:sn` **once a frame**, which
   is the single most important hoist in the file: it is the difference between
   two trig calls a frame and two per vertex.
@@ -400,7 +414,20 @@ Two levers, both taken:
   world's. Only the turret and gun need general vertices.
 
 Estimated at **6.0 ms**, and it is an estimate: unlike the box figure, nothing
-has measured a column-form tank. M0 measures it.
+has measured a column-form tank. M0 measures it. **M0 read 5.3 ms** (Pico 2 W)
+for 13 edges — a hull box and a gun line, with **no turret box**, which is the
+shape M2 ships for the reason B48 set: the shape that ships is the shape that
+was measured. A turret is four more columns and twelve more edges, about 3 ms at
+stock, and it is M4's call with a price on it.
+
+**Two corrections M2 made to this section (§16.5).** The half-offset is
+`ehalf × (sin eh, cos eh)` and not `(cos eh, sin eh)` — this compass has heading
+0 down +z — and M0's harness used the second, which mirrors the hull square and
+points the gun at 90° − eh. Invisible at a fixed heading and fatal in a game
+that aims it. And **the second half-offset is free**: the right offset is the
+forward one turned 90°, turning 90° commutes with the camera's rotation, so the
+camera-frame right offset is `(pzc, −pxc)` read straight off the forward one.
+Four statements, not six.
 
 ### 8.3 Models are generated, not hand-typed
 
@@ -409,11 +436,102 @@ and edge lists, and the output is pasted into the game file. Hand-typing a
 vertex table is how you get a tank with one edge going to the wrong corner and
 no way to see which.
 
+**It was never written, and M2 settled why rather than deferring it again.**
+Every model in this game is generated *by arithmetic on the board* rather than
+read out of a table: an obstacle is four ground columns from `half`, the enemy is
+four from `ehalf` and its own rotation, the horizon is a height table you can
+read as a silhouette off the numbers, and the gun is two vertices. There is
+nothing to emit. The hazard this section exists for is real and it did land at
+M2 — as a **transposed pair of trig calls** (§16.5) rather than as a mistyped
+vertex, which a generator would not have caught and a test that aims the gun
+did.
+
+### 8.3a The ground is one line, and the range needs it
+
+The plain is `eye` below the camera and screen y is `hz − eye/z × k`, so as z
+goes to infinity the ground rises to exactly `hz` and stops. **One flat line
+across the view at that y is the true horizon** — the boundary where the plain
+meets the sky — and it is the whole of what this game draws below the peaks.
+
+**Added at M2, from playing it**, which is what M1's hardware pass existed for.
+It also cost the gunsight its two horizontal arms, which lay along it (§11).
+Without it the mountain range reads as *a squiggle hanging in space* rather than
+as a ridge standing on something: a wireframe silhouette is a line and not a
+filled shape, so nothing anchors its lower edge, and there is nothing else below
+the peaks to say where the ground is. §14 cuts ground texture on the grounds that
+the cabinet has none, which is true and is exactly why the cabinet's own horizon
+has to do this job by itself.
+
+It is a **separate procedure from `horizon`**, and that is not tidiness: this
+segment spans the whole screen deliberately, and a *horizon* segment that spans
+the whole screen is the signature of the `wrap` defect M0 hit (§16.4). Keeping
+them apart lets `test_no_horizon_segment_spans_the_whole_screen` go on watching
+what it was written to watch instead of carrying an exception.
+
+It is also **the most expensive single line the game draws** — a full-width edge
+at §10's measured per-step costs is about 0.38 ms of pixel loop on a Pico 2 W and
+0.18 on a Plus 2 W, plus three statements. It buys the whole scene a floor.
+
+### 8.3b A scale is not a tangent, and the mountains slipped against the world
+
+**§8.4 said `(azimuth − ph) × scale` — "linear rather than `k · tan`, which is
+what the cabinet's own backdrop amounts to and saves a tangent a point". The
+saving was real and the approximation was not free.** Everything else in the
+game projects through `k · xc/zc`, which for a direction is `k · tan(bearing)`,
+and a straight line against a tangent is not the same curve twice.
+
+**The invariant it broke is the one that makes a 3D scene cohere: in a pure
+pivot, distance does not matter.** A rotation changes every bearing by the same
+amount, so a peak at infinity and a cube in front of you, at the same place on
+screen, must move by the same number of pixels — distance cancels out of
+`k · xc/zc` entirely. `mn.sc` was 5.06, which is `160 / 31.61°`: fitted so the
+linear map is exact at the *screen edge*. That put the whole of the error in the
+middle of the view and gave it a sign flip:
+
+| bearing | mountain moves | object moves | error |
+|---:|---:|---:|---:|
+| 0° (centre) | 15.18 | 13.63 | **+11.4 %** |
+| 10° | 15.18 | 13.92 | +9.0 % |
+| 20° | 15.18 | 15.14 | +0.2 % |
+| 30° (near the edge) | 15.18 | 17.63 | **−13.9 %** |
+
+(one 3° frame, in turtle steps). The mountains scrolled at a **constant** rate
+while the world accelerated toward the edges. Over a second of turning, a cube
+and a peak that started together finished **32 steps apart** at the centre, or
+12 the other way near the edge.
+
+**Found by watching it turn**, which is the only way it shows — every still
+frame is plausible. That is the second defect in this design invisible to a
+screenful of correct-looking geometry; §16.5's enemy gun was the first.
+
+Fixed by giving the horizon and the moon the same `k · tan` as everything else.
+The cost is one statement and one `tan` a point, about **0.6 ms** at 150 MHz,
+and it retires `mn.sc`, `mn.dx` and the increment trick with them: the spacing
+is no longer uniform, so each point takes the tangent of its own running angle.
+That angle is never wrapped and never leaves ±45°, so the tangent is bounded by
+1 and the singularity is unreachable. **The moon's cull moved from steps into
+degrees** for the same reason — it can be anywhere in the circle, and `tan` of a
+bearing near 90° is not a number to hand to `setpos`.
+
+`test_a_pivot_moves_the_horizon_and_the_world_together` pins the invariant
+directly: it reads a peak and a projected point through one 3° turn and requires
+the same displacement. On the old map it reads 15.18 against 13.63.
+
+**One thing this does *not* explain.** The report that prompted it was that in
+the arcade the mountains move *slower* in turns than nearer objects. A correct
+projection cannot do that from a pure pivot at any distance. What would is the
+**pivot centre sitting behind the eye** — a tank rotates about its hull while
+the periscope is forward of it, so a turn also swings the eye sideways, which
+moves near objects and cannot move something at infinity. At 20 steps of offset
+against a target 300 away that is about +7 % on the near object. It is a feel
+change rather than a correctness fix, and it needs its own collision handling
+since the eye then moves during a pure turn, so it is **M4's** (§19.8).
+
 ### 8.4 The horizon is at infinity and is the most expensive thing in the frame
 
 The mountain range, the volcano and the moon have no depth: screen x is
-`(azimuth − ph) × scale`, wrapped, and screen y comes straight from a stored
-table. No divide, no rotation — and **M0 measured a 32-point scan at 13.845 ms**,
+`k × tan(azimuth − ph)` and screen y comes straight from a stored table. No
+divide, no rotation — and **M0 measured a 32-point scan at 13.845 ms**,
 against this section's estimated 10.1, because four statements a point at
 §3.1's 53.5 µs is what four statements a point costs.
 
@@ -423,7 +541,8 @@ part of the design.
 
 **How many points survive it? Seven, not the twelve this section first wrote** —
 found while building M0's harness, and arithmetic rather than measurement.
-Thirty-two points over 360° at 5.06 steps a degree sit 57 steps apart, and a
+Thirty-two points over 360° sit about 57 steps apart near the centre of the
+view, and a
 320-step viewport holds about seven, which
 `test_the_horizon_cull_keeps_about_seven_of_thirty_two_points` pins.
 
@@ -538,12 +657,55 @@ B19's warning applies — the plain wraps, so the comparisons must wrap too, and
 this game gets that right from the start rather than logging it as Asteroids
 did.
 
+**What "getting it right" turned out to mean (§16.5): wrap once, in one place.**
+M2 hoists the whole obstacle field into camera-relative `(obx, obz)` in
+`ob.scan`, once a frame, after the tank's move commits — and after that every
+collision is **two comparisons** against a number that is already small, and
+there is exactly one `modulo` pair in the file that can be wrong. It costs
+3.9 ms and saves about 8 across four callers, but the reason to write it this way
+is that **B19 is a defect a single wrapped table cannot have**. The one caller
+that cannot read the current table is the tank's own move, which has to be
+refused before it is committed, so `blocked?` takes an *offset* rather than a
+position and the tank passes its step delta against last frame's table.
+
+**The enemy's shell against the player is two comparisons and no arithmetic at
+all**, because the player is at the origin of the camera-relative frame every
+offset in the file is already in.
+
 **The radar** is one `arc` (a C-side primitive, ~0.2 ms), a swept wedge that is
-two `setpos` lines, and a blip. ~3.0 ms with the bearing arithmetic.
+two `setpos` lines, and a blip. ~3.0 ms with the bearing arithmetic — **and
+there is no bearing arithmetic** (§16.5). A radar is a top-down view in the
+*camera's* frame, and the enemy's camera-frame coordinates are exactly the
+`(xc, zc)` its projection already computes, so the blip is three statements with
+no arctangent and no distance. The whole radar is about 1 ms, and the face of it
+is the far plane: `rd.sc = rd.r / far`, so an enemy you could draw is an enemy
+you can see on the glass.
 
 **The gunsight** is a fixed overlay: about eight lines from a straight-line
 procedure with no arithmetic in it at all, exactly as P11 §6.1 writes an
 outline. ~1.5 ms with the HUD text.
+
+**It has no horizontal line in it, and §8.3a is why.** It was two long arms at
+y = 40 with the verticals hanging off them — and 40 is `hz`, so the arms lay
+exactly along the ground line. Two things drawn on the same row of pixels in two
+colours are one thing as far as the eye is concerned: the sight read as part of
+the horizon and the horizon as part of the sight.
+
+So the shape moved off that row: **two brackets facing each other**, eight
+edges. A bar 30 above the aiming point with its ends turning *down* toward it, a
+bar 30 below with its ends turning *up*, and a stalk leaving outward along the
+centreline from each. Every number is mirrored about y = 40 — bars at ±30, teeth
+reaching back in to ±15, stalks from ±30 out to ±60, ±30 of width — and that
+symmetry is the part to preserve if it is redrawn, because a sight that is not
+symmetric about its aiming point says the gun is somewhere it is not.
+
+**The bars are horizontal, and that was never the problem.** What matters is not
+the direction of a stroke but that no stroke lies on `hz` or crosses it — which
+is what `test_no_part_of_the_gunsight_lies_along_the_horizon` checks, and why it
+has no opinion about the shape. **The gap is the point**: a shell flies at eye
+height and so appears at y = `hz`, dead centre when aimed, which is on the
+horizon and is exactly where the target is. The middle thirty rows are left
+empty, so the sight frames what it is pointing at without ever covering it.
 
 **Sound** on the PSG: a two-voice engine idle whose pitch follows tread speed,
 a noise burst for the cannon, a pitched explosion, and the rising two-tone
@@ -1361,7 +1523,9 @@ overclocked slope of 3.22 ms an object that is about **ten more objects — twel
 or thirteen in view at 15 fps**, which is the arcade's density and the number
 §13's L4 verdict called *"unreachable in Logo at any frame rate worth playing."*
 Or spend it on rate: 33.7 ms fits **24 fps** (41.7) at the present density and
-the horizon scene fits 30. Both are M4's call, and the caution that comes with
+the horizon scene fits 30. **Both of those rate figures are means, and §16.6
+retires them**: M2 read the peak as well, a rate is made by the worst frame, and
+the answer there is 18 fps and not 24. Both are M4's call, and the caution that comes with
 the rate half is Asteroids' — `turn.rate` and `tread.step` are per-frame
 constants, so changing `fps` re-cuts them or the tank turns and drives 1.6× too
 fast.
@@ -1453,6 +1617,281 @@ and `tests/logo/p11rocks` still settles it in ten minutes.
 explosions, the radar. This is the frame-budget milestone — the one that
 corresponds to P11's M2, which is the one that missed by 19.7 ms.
 
+### 16.5 M2 is built, and it is waiting on a board
+
+**Everything in M2's list is in `logo/games/battlezone`**: the enemy tank and
+its hunt, both shells, all four collision pairs, the explosions, the radar and
+the fire key — plus **the ground line** (§8.3a), which is not on M2's list and
+came from driving M1: without it the mountain range reads as a squiggle hanging
+in space rather than as a ridge, and there is nothing else below the peaks to
+tell the driver where the ground is. **It cost the gunsight its two horizontal
+arms**, which were at y = 40 and so lay exactly along it (§11) — it is two
+brackets facing each other now, clear of that row in both directions. `tests/test_battlezone.c` is
+73 tests, 35 of them M2's. What is
+*not* here is the number this milestone exists to produce — M2 is the
+frame-budget milestone, and a frame budget needs a board. §16.6 is that board.
+
+**The predicted addition is about 17 ms**, at M0's rates and M1's measured
+frame:
+
+| | Pico 2 W at 150 | at 300 |
+|---|---:|---:|
+| M1's measured frame, driving at cubes (§16.4.3) | 50.8 | 33.7 |
+| project the enemy (M0 Q5) | 5.3 | 2.6 |
+| draw the enemy, 13 edges (M0) | 2.4 | 1.2 |
+| `ob.scan`, 64 statements | 3.9 | 1.9 |
+| four collision scans, ~2.5 statements an obstacle | 2.4 | 1.2 |
+| the two shells, stepped and drawn | 2.1 | 1.0 |
+| the radar and the hunt | 1.4 | 0.7 |
+| the ground line, a full-width edge (§8.3a) | 0.5 | 0.4 |
+| the horizon's tangent, one statement + `tan` a point (§8.3b) | 0.6 | 0.3 |
+| **total** | **69.4** | **43.0** |
+
+**Which is why M2 asks for the clock.** 69.4 is over 66.7 and 43.0 is under it
+with 24 ms to spare, so the overclock is this milestone's enabling condition and
+not a luxury — exactly as §12.3.1b predicted it would be for *something*, and
+this is the something. `battlezone` now calls `hw.setcpu "fast`, reads `hw.cpu`
+**back**, and cuts `max.obstacles` from three to two if the board refused, which
+is §14's held-in-reserve lever and is worth 7.3 ms at stock. The readout carries
+the answer next to the milliseconds it explains.
+
+**Five things M2 settled that this document had left open, guessed at, or got
+wrong.**
+
+1. **M0's enemy model had its gun pointing at 90° − eh, and it took a game to
+   notice.** The harness built the enemy's half-offset from `(cos eh, sin eh)`
+   where this compass wants `(sin eh, cos eh)`, so the hull square was mirrored
+   and the barrel ran at right angles to the facing. With a fixed heading and
+   nothing aiming down the barrel that is *invisible*, which is precisely why it
+   survived a measurement run and would have been copied into the game — the
+   hull is square, so the mirroring shows only as a rotation, and the gun was the
+   only witness. It matters here because `hunt` aims the gun and `enemy.fires`
+   shoots along it: the shipped bug would have been a tank that faces you and
+   shoots sideways. `test_the_gun_points_where_the_enemy_faces` checks three
+   headings, and the third — facing straight away, where the barrel must
+   *foreshorten to nothing* rather than swing across the view — is the one that
+   catches a sign as well as a transposition.
+2. **The second half-offset is free, and M0 paid for it.** The enemy's right
+   half-offset is its forward one turned 90°, and turning 90° **commutes with
+   the camera's rotation** — so the camera-frame right offset is `(p.pz, −p.px)`
+   read straight off the forward one. Two multiplies and two adds a frame go
+   away, and §8.2's "six statements buy what would otherwise be four multiplies
+   a corner" is now four.
+3. **One wrapped scan a frame, and B19 becomes unreachable.** M1 wrapped the
+   obstacle field twice — in `draw.field` and in `blocked?` — and M2 would have
+   made it five times, since the enemy and both shells each need the same eight
+   tests. So the wrap is hoisted into `ob.scan`, which folds all eight obstacles
+   into camera-relative `(obx, obz)` once, and every collision after it is two
+   comparisons. It costs 3.9 ms and saves about 8. **The reason to write it this
+   way is not the milliseconds**: B19 is one collision test out of several
+   getting the wrap wrong, and a single predicate over a single wrapped table
+   cannot have that defect. §11 said "this game gets that right from the start";
+   this is what getting it right turned out to mean.
+4. **The table belongs to the camera it was hoisted against, and the tank's own
+   collision is the one caller that cannot wait for it.** A move has to be
+   refused *before* it is committed, and the rescan follows the commit — so
+   `blocked?` takes an **offset** rather than a position, and the tank passes its
+   step delta against last frame's table. That is exact rather than approximate.
+   The cost is a real invariant: anything that teleports the camera must rescan,
+   and two M1 tests that moved it with a bare `make` had to start going through
+   `camera_at`. The game teleports in exactly one place, `battlezone`, which
+   rescans.
+5. **A spawn is the only way anything can arrive inside an obstacle, and an
+   enemy that does can never leave.** Every other placement in this game is a
+   move `blocked?` refused, so nothing is ever *inside* a guard radius — except
+   a respawn, which arrives somewhere rather than driving there. And the guard is
+   symmetric: an enemy 50 steps from a cube's centre has every candidate step
+   refused in every direction, so it sits in the middle of a cube shooting at you
+   for the rest of its life. `spawn.enemy` therefore tests and re-rolls up to
+   four times. `test_a_spawn_is_re_rolled_out_of_an_obstacle` lays eight
+   obstacles on the spawning ring so a quarter of all bearings are blocked, and
+   with the re-roll removed it reads 20 of 60 rather than 0.
+
+**§8.3's model generator has no input, and that is now settled rather than
+deferred.** M1 closed saying the hazard §8.3 exists for — an edge going to the
+wrong corner with no way to see which — "arrives with the enemy tank at M2, and
+so does the generator." It did not, because **every model in this game is
+generated by arithmetic on the board rather than read out of a table**: an
+obstacle is four ground columns from `half`, the enemy is four ground columns
+from `ehalf` and its own rotation, the horizon is a height table you can read as
+a silhouette, and the gun is two vertices. There is nothing for
+`scripts/gen_models.py` to emit. The hazard is real and it landed as predicted —
+it just landed as a *transposed pair of trig calls* rather than as a mistyped
+vertex, and a generator would not have caught it. A test that aims the gun did.
+
+**§8.2's turret box is not here, and the reason is the discipline B48 set.**
+The section lists a hull box, a turret box and a gun line; M0 priced a hull box
+and a gun line at 13 edges, and **the shape that ships is the shape that was
+measured**. A turret is four more columns and twelve more edges — about 3 ms at
+stock — and adding it is M4's call with a price attached rather than M2's
+unpriced flourish.
+
+**Two smaller things, both cheap and both worth knowing.** The radar needs **no
+trigonometry at all**: a radar is a top-down view in the *camera's* frame, and
+the enemy's camera-frame coordinates are exactly the `(e.xc, e.zc)` the
+projection already computes, so the blip is three statements and the face of the
+radar is the far plane (`rd.sc = rd.r / far`). And the enemy's shell hits the
+player in **two comparisons and no arithmetic**, because the player sits at the
+origin of the camera-relative frame every offset in the file is already in — the
+cheapest collision in the game is the one that matters most.
+
+**What the first hardware run has to answer**, in this order: does the frame
+still make 66.7 ms with the enemy in it; is the readout's BODY figure near the
+69.4/43.0 predicted above at each clock, since a large miss means the collision
+or the hunt estimates are wrong rather than the enemy's; and does the enemy play
+— whether `e.step`, `e.turn`, `e.range` and `e.reload` make something that hunts
+you rather than something that circles. The last is M4's material and only a
+board can produce it.
+
+**Two open questions M2 leaves in front of a board.** Whether the object cap
+should rise at 300 MHz — §12.3.1b's twelve-at-15-fps is now reachable with the
+enemy in the frame, and M2 deliberately did not spend it, because density is M4's
+decision and this milestone's job was to find out what the enemy costs. And
+§19.5's arithmetic-statement discrepancy, still open and still ten minutes of
+`tests/logo/p11rocks`.
+
+### 16.6 M2 measured on hardware, and the enemy is what it found
+
+**Both clocks, both numbers, with a tank shooting at you** — the loaded case,
+which is the one the milestone exists to price:
+
+| with the enemy in the frame | BODY | MAX BODY | + present | frame | peak frame |
+|---|---:|---:|---:|---:|---:|
+| 150 MHz | 44 | 65 | 19.8 | 63.8 | **84.8** |
+| 300 MHz | 22 | 33 | 18.7 | 40.7 | **51.7** |
+
+**At 300 MHz the rate is made on every frame**, not on average: the worst frame
+is 51.7 against 66.7, with **15 ms still in hand**. That is the answer M2 exists
+to produce and the milestone passes on it.
+
+**At 150 MHz it is made on the average and lost on the peak.** 63.8 fits with 2.9
+ms to spare and the worst frame is **84.8 — over by 18.1**. P11's M2 is the
+milestone that missed by 19.7 ms, this document has said so in six places, and
+the number this game misses its stock-clock peak by is **18.1**. The overclock is
+not this milestone's convenience, it is the thing standing between Battlezone and
+the same failure, exactly as §12.3.1b said it would be for *something*.
+
+Against the prediction, at the clock the game actually runs at:
+
+| at 300 MHz | predicted | measured |
+|---|---:|---:|
+| M1's body, driving at cubes (§16.4.3) | 15 | 15 |
+| M2's additions | 9.3 | **7** |
+| **body** | **24.3** | **22** |
+| the present (§16.4.3, 18.7 at this clock) | 18.7 | 18.7 |
+| **frame** | **43.0** | **40.7** |
+
+**Read the body against 24.3 and not against 43.0**, which is the trap §15 built
+the two-number readout for: 43.0 is a *frame* and the readout's BODY stops before
+the present. M1's first board run was compared against the wrong half of exactly
+this pair and the prediction was blamed for it. Done properly the prediction is
+**5 % high on the frame and 9 % high on the body**, and at 150 it is 49.6 body
+predicted against 44 measured — 11 % high, the same direction and the same size.
+M0's rates are good to about a tenth at both clocks.
+
+**The peak is 1.5× the average, and it is interpretation.** 65/44 is 1.48 and
+33/22 is 1.50, and — the number that says what the spike is made of — **the peak
+halves with the clock just as cleanly as the average does**: 44 → 22 is exactly
+2.0× and 65 → 33 is 1.97×, against a clock ratio of 2.000 and §12.3's measured
+interpretation slope of 2.059. A spike made of present, SPI or any fixed cost
+could not do that. It is Logo work, which means it is `recycle`, which means
+§18's reclamation is the only lever that reaches it.
+
+**What the headroom actually buys, and it is less than the average says.** 26 ms
+of the 66.7 is free at 300 MHz *on the mean*, but a frame rate has to be made by
+the worst frame and not the mean one:
+
+| at 300 MHz | mean 40.7 | peak 51.7 |
+|---|---|---|
+| 24 fps (41.7) | fits by 1.0 | **misses by 10.0** |
+| 20 fps (50.0) | fits by 9.3 | **misses by 1.7** |
+| 18 fps (55.6) | fits by 14.9 | fits by 3.9 |
+| 15 fps (66.7) | fits by 26.0 | fits by 15.0 |
+
+So **18 fps is what the peak supports** — not the 24 the mean appears to offer,
+and 20 misses by 1.7 ms, which is inside the readout's own integer resolution and
+is therefore a coin toss rather than a margin. §16.4.3's "33.7 fits 24 fps" was
+computed from a mean for the same reason, and it should be read as 18 as well.
+The other lever, **scene**, is unaffected by any of this and is the better buy:
+15 ms of peak headroom at M0's overclocked 3.22 ms an object is **four more
+objects** at the rate that already works. Both stay M4's call, and the caution
+§16.4.3 attached to the rate half now lives in the file beside the constants it
+governs — `turn.rate` and `tread.step` are **per frame**, so `fps` cannot move
+without re-cutting them.
+
+**And the refused-clock fallback does not work.** `battlezone` cuts
+`max.obstacles` three to two if the board would not take `"fast`, which is worth
+7.8 ms at M0's stock rate: peak body 65 → 57.2, peak frame **77.0**, still 10.3
+over 66.7. Getting the *peak* inside 66.7 at 150 MHz needs the obstacle field
+gone entirely, which is not a game. What does fit is a **rate** cut on that path
+— two obstacles at 12 fps is 77.0 against 83.3, in hand by 6.3 — and that is a
+decision rather than a measurement, so it is recorded here and left to M3. It is
+a contingency and not the main path: every board this game has run on has taken
+the clock.
+
+**All four of M2's open board questions are closed.** §19.2's split screen
+positions its text correctly under `sync` (B49 confirmed on a board). The new
+per-tread controls report the key codes the file assumes. The frame budget is the
+table above. And the enemy plays — the question §16 said only a board could
+answer, and the answer was **no**.
+
+#### 16.6.1 The stand-off and the hit box were one number, and neither knew it
+
+**The enemy came straight at you with perfect aim.** It was not a feeling; it is
+arithmetic, and both halves of it were sitting in this document unchecked
+against each other:
+
+- The player is a `tk.hit` box, **30 steps** half-width, tested in the
+  camera-relative frame (§9).
+- The enemy fires along **its own heading**, and `hunt` lets it fire once it is
+  within `e.aim` = 7° of you. A shot is therefore thrown sideways by
+  `d · tan(e.aim)`.
+- `d · tan 7° < 30` for every `d` inside **244 steps**. Inside that radius the
+  shot cannot miss, whatever the aim error does.
+- `e.range`, the stand-off it closes to and holds, was **240**.
+
+So the tank drove to the one distance from which it could not miss, and stopped
+there. This is the same failure shape as the collision radius and the near plane
+(§9) — two constants that only mean anything relative to each other, written down
+in different sections, never compared — and it is now a test in the same shape as
+that one.
+
+**Moving the stand-off alone would not have fixed it.** `hunt` turns in `e.turn`
+= 4° steps and stops the moment it is inside `e.aim`, so the error it fires with
+is whatever that last step left, and **against a player holding still it is the
+same error on every shot**. The tank does not miss sometimes and hit sometimes;
+it hits every time or misses every time, for a whole approach. That is a coin
+flipped once, not an aim, and no stand-off distance turns it into one.
+
+**Both halves therefore moved.** `e.range` 240 → **400**, which is 283 even on
+the diagonal where `e.d`'s Manhattan distance is furthest from the true one; and
+a per-shot aim error `e.wob` of **±10°**, applied in `enemy.fires`, which is two
+`sin`/`cos` calls **a shot** rather than a frame — against a 20 ms body that is
+not a number worth thinking about. At the stand-off, 283 · tan 10° is **50 steps
+against a 30 box**, so the cone genuinely straddles the player: driven over forty
+shots dead-on at the stand-off, **15 hit and 25 missed**.
+
+The two tests are `test_the_enemy_cannot_park_where_it_cannot_miss` — the
+constants against each other, the §9 shape — and
+`test_the_enemys_aim_varies_from_shot_to_shot`, which drives the forty shots and
+requires both outcomes. It asserts *both*, not a ratio: the ratio is exactly what
+M4 tunes, and a test that pinned it down would fight the tuning. **The mock's
+hardware random source is a constant 42**, so that test calls `rerandom` first,
+which is the precedent the spawn re-roll test already set.
+
+#### 16.6.2 90 degrees a second is too fast to aim with
+
+`turn.rate` was **3 degrees a frame per unit of tread difference**, which at 15
+fps is 90°/s on a pivot and 45 on a one-tread arc. A board says that is too fast
+to aim with, and it is **2** now — 60 on the pivot, 30 on the arc. The number
+that moved is the one the player feels; nothing about the frame changed.
+
+This is where §16.4.3's caution earns its keep, and it now lives beside the two
+constants rather than only here: **both are per frame**, so they are really
+per-second figures multiplied by `fps`, and neither can be read on its own.
+Spend the headroom above on rate and these two have to move the other way, or
+the tank turns and drives faster for no reason a player can see.
+
 **M3 — the game.** Lives, scoring, the enemy sequence (tank → missile →
 supertank → saucer), the cracked screen, the attract screen, the high score
 table, sound.
@@ -1462,7 +1901,8 @@ table, sound.
 ## 17. Tests
 
 `tests/test_battlezone.c` on the mock device, mirroring `test_asteroids.c`'s
-shape. **Written at M1; 34 tests.** The ones that are specific to this game:
+shape. **38 at M1's close; 73 at M2's.** The ones that are specific to
+this game:
 
 - **The projection is right.** Known camera, known world point, known screen
   coordinate, computed by hand. This is the test that would have caught a
@@ -1483,12 +1923,37 @@ shape. **Written at M1; 34 tests.** The ones that are specific to this game:
 - **The horizon cull keeps the visible points.** Off-by-one at the field-of-view
   edge is a mountain that flicks in and out as you turn.
 
+M2's additions, and the failure each exists for:
+
+- **The gun points where the enemy faces.** Three headings, including facing
+  straight away, where the barrel must foreshorten to nothing rather than swing
+  across the view. This is the test that caught M0's transposed half-offset
+  (§16.5), and the only one that could have: the hull is square, so the same
+  error shows there only as a rotation.
+- **A shell is stopped by an obstacle, including across the seam.** B19's own
+  case, in this game, against the single wrapped table that is supposed to make
+  it impossible.
+- **A spawn is re-rolled out of an obstacle.** Eight obstacles laid on the
+  spawning ring, and a *rate* rather than a guarantee: 0 of 60 with the re-roll
+  and 20 of 60 without it.
+- **The frame moves everything before it draws anything.** Read out of the Logo
+  source, like the frame-timer test, because it is one frame of one picture and
+  nothing on the host can see it by playing. A shell stepped after the drawing
+  would hit a tank the player had already watched explode.
+- **The entry point sets the game up.** `battlezone` ends in a loop only a
+  keypress leaves, so no test in this tree has ever called a game's entry point
+  — and M2 put the clock, the first spawn and a dozen resets in this one. This
+  runs its statements, from the source, up to the loop it cannot enter.
+- **The clock is asked for and read back, and a refusal cuts the field.** Both
+  halves, through the mock's settable clock and through a mock with no settable
+  clock at all.
+
 ## 18. Risks
 
 | Risk | Where it bites | What answers it |
 |---|---|---|
 | Long-line drawing cost is 2–3× the short-line figure | §12's 4.0 ms becomes 10 | M0 Q1, first thing measured |
-| The column-form enemy does not hold its estimate | §12 by up to 5 ms | M0 Q5 |
+| The column-form enemy does not hold its estimate | §12 by up to 5 ms | M0 Q5 — measured at 5.3 ms against 6.0 predicted; **closed** |
 | Split mode's unsent dirty rows cost something | §6's 6.6 ms saving shrinks | M0 Q2 |
 | 180× does not hold on a Pico 2 | Every estimate here, on one of three boards | M0 Q3, run on both boards |
 | The projection is subtly wrong in a way play reveals and tests do not | M1 | Hardware play test at M1, not M3 |
@@ -1502,10 +1967,12 @@ shape. **Written at M1; 34 tests.** The ones that are specific to this game:
 2. **Is `splitscreen`'s text area usable while `sync` is driving the graphics
    half?** §6 assumes the score can live there and be written with `print`
    rather than costing graphics rows.
-3. **Should the enemy's hunt logic run every frame?** At 15 fps a decision
-   every third frame is invisible and costs a third as much. P11's saucer
-   pacing is the precedent for taking the arcade's own numbers rather than
-   inventing one.
+3. ~~**Should the enemy's hunt logic run every frame?**~~ **Answered at M2: no,
+   one frame in three.** `hunt` decides the turn, the drive and the fire and
+   leaves those three *intents* behind; the two frames in between act on them,
+   so the enemy turns and drives every frame and only re-aims on the third. At
+   15 fps that is invisible and it is the difference between 0.6 ms a frame and
+   0.2.
 4. **`min`/`max` (§13 L1)** — worth opening as a cheap win regardless of this
    game?
 5. **Why is a local arithmetic statement 53.5 µs when P11 M0 measured 42–44.5
@@ -1518,6 +1985,14 @@ shape. **Written at M1; 34 tests.** The ones that are specific to this game:
 6. **Does a *tiered* Pico 2 run this frame?** (§16.3.) The untiered one does
    not, by a factor of two, and the flag is now on. The prediction is that it
    lands within a few per cent of the Pico 2 W; the run is one `p13m0` away.
+8. **Should the tank pivot about a point behind the eye?** (§8.3b.) A real tank
+   rotates about its hull while the periscope sits forward of that, so a turn
+   swings the eye sideways as well as rotating it — which makes near objects
+   outrun the horizon by ~7 % at 300 steps and is the likeliest explanation for
+   what the cabinet looks like in a turn. Two or three statements a frame, and
+   the catch is that the eye then moves during a pure turn, so a pivot needs the
+   collision test a drive gets. **M4**, with the rest of the feel.
+
 7. **The per-step cost of a line differs 3.3× between two boards of the same
    silicon.** Four builds, and the tiering experiment turned this from a puzzle
    into a well-posed question:
