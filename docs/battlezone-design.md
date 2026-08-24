@@ -2289,6 +2289,46 @@ dominates. **That is an estimate and the board is what settles it**, exactly as
 It also costs **7 globals**: 236 of 254, leaving 18 against the 16 the budget
 test enforces. The next model that wants a temporary will have to find one.
 
+#### 16.8.1 Lines all over: `/` binds tighter than `-`
+
+The first play test of §16.8 saw the shell cubes and the tank's barrel throwing
+lines across the screen. It was one defect in three places, and it is the
+plainest kind this file has produced.
+
+Every perspective divide here is `k / z` for a range `z`. The three parts §16.8
+added wrote theirs **inline**:
+
+```
+make "p.iz :k / :p.za - :p.px      ; wrong
+make "p.iz :k / (:p.za - :p.px)    ; right
+```
+
+`/` binds tighter than `-`, so the first is `(k / za) - px`. At 300 steps that is
+**0.867 − 8 = −7.13** where the range wanted 0.839 — negative, and an order of
+magnitude out — so every vertex of the turret, the barrel and the shell cube
+landed somewhere arbitrary.
+
+**Nothing older had it**, and the reason is a habit rather than luck: every
+projection written before §16.8 hoists its range into a `p.z*` first and then
+divides by a bare name, which cannot be mis-parsed. The three new procedures did
+not need the range afterwards, so they inlined it, and inlining is what exposed
+the precedence.
+
+**The edge-count tests were blind to it, and that is the lesson.** Twelve edges
+drawn through nonsense coordinates is still twelve edges — every model test in
+§16.8 passed while the picture was wrecked, and the board is what found it. So
+the tests now check **where the vertices land**: `test_every_part_of_a_tank_lands_on_the_tank`
+and `test_a_shell_cube_lands_on_the_shell` require every column of every part to
+sit within a generous bound of the object's own centre. The bound is loose on
+purpose — it is catching a projection that has come apart, not tuning a
+silhouette — and it fails on the old code with *"the turret column 1 is at
+x −69.7, 69.7 from the object's centre"*.
+
+**And one thing the picture showed that was not a defect:** the barrel came out
+of the *bottom* of the turret, level with the hull top, because `e.bt`/`e.bb`
+were cut from `e.te`. They now straddle the turret's mid-height, which is where a
+gun comes out of a tank.
+
 **M4 — tuning.** Played, then cut.
 
 ## 17. Tests

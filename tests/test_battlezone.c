@@ -1439,6 +1439,72 @@ void test_the_enemy_hull_is_a_square_that_turns(void)
 
 // Conservative in the same way the obstacles are, and for the same reason: one
 // corner behind you swings the projection through infinity.
+// LINES ALL OVER, which is what a board saw and what no test in this file could.
+//
+// Every perspective divide here is `k / z` for a hoisted range z.  The three
+// parts M4 added wrote theirs INLINE -- `:k / :p.za - :p.px` -- and `/` binds
+// tighter than `-`, so that is `(k / za) - px`.  At 300 steps it is
+// 0.867 - 8 = -7.13 instead of 0.839: `p.iz` comes out negative and an order of
+// magnitude too big, and every vertex of the turret, the barrel and the shell
+// cube lands somewhere arbitrary.
+//
+// THE EDGE COUNT IS BLIND TO IT.  Twelve edges drawn through nonsense is still
+// twelve edges, so every model test passed while the picture was wrecked.  What
+// this checks instead is WHERE the vertices land: every column of every part of
+// a tank has to sit near the tank.  The bound is generous on purpose -- it is
+// catching a projection that has come apart, not tuning a silhouette.
+static void assert_part_lands_on_the_object(const char *part, float centre, float bound)
+{
+    for (int i = 1; i <= 4; i++)
+    {
+        char msg[160];
+        const float x = item_of("cx", i);
+        const float lo = item_of("cy1", i), hi = item_of("cy2", i);
+        snprintf(msg, sizeof(msg), "%s column %d is at x %.1f, %.1f from the object's centre",
+                 part, i, (double)x, (double)fabsf(x - centre));
+        TEST_ASSERT_TRUE_MESSAGE(fabsf(x - centre) < bound, msg);
+        snprintf(msg, sizeof(msg), "%s column %d spans y %.1f to %.1f", part, i,
+                 (double)lo, (double)hi);
+        TEST_ASSERT_TRUE_MESSAGE(hi > lo, msg);
+        TEST_ASSERT_TRUE_MESSAGE(fabsf(lo) < 400.0f && fabsf(hi) < 400.0f, msg);
+    }
+}
+
+void test_every_part_of_a_tank_lands_on_the_tank(void)
+{
+    const float k = num(":k");
+    // Broadside, so the barrel reaches sideways and is at its widest on screen.
+    camera_at(800, 800, 0);
+    foe_at(1, 800, 1200, 90);
+    TEST_ASSERT_TRUE(truth("project.enemy"));
+
+    const float centre = k * num(":e.xc") / num(":e.zc");
+    // The barrel reaches `e.bl` from the centre, so allow twice that and some.
+    const float bound = 3.0f * k * num(":e.bl") / num(":e.zc");
+
+    assert_part_lands_on_the_object("the hull", centre, bound);
+    run("turret.columns");
+    assert_part_lands_on_the_object("the turret", centre, bound);
+    run("barrel.columns");
+    assert_part_lands_on_the_object("the barrel", centre, bound);
+}
+
+// The same failure, in the object it was most visible on: a shell cube at 300
+// steps is a few pixels across, so a divide that has come apart throws its
+// twelve edges across the whole screen.
+void test_a_shell_cube_lands_on_the_shell(void)
+{
+    const float k = num(":k");
+    camera_at(800, 800, 0);
+    run("make \"sh.on true  make \"sh.dx 0  make \"sh.dz 300");
+    run("make \"p.zc 300  make \"p.xc 0  make \"sh.y 0  shell.columns");
+
+    const float across = k * num(":sh.r") / 300.0f;
+    TEST_ASSERT_TRUE_MESSAGE(across > 1.0f, "the test placed the shell too far to see");
+    // Four columns of a cube 5 steps across at 300: a handful of pixels wide.
+    assert_part_lands_on_the_object("the shell cube", 0.0f, 6.0f * across);
+}
+
 void test_the_enemy_is_culled_at_the_near_plane(void)
 {
     const float near = num(":near");
@@ -3461,6 +3527,7 @@ void test_every_hot_path_temporary_is_prefixed(void)
 }
 
 
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -3509,6 +3576,8 @@ int main(void)
     RUN_TEST(test_the_gun_points_where_the_enemy_faces);
     RUN_TEST(test_the_turret_sits_on_the_hull_and_inside_it);
     RUN_TEST(test_the_enemy_hull_is_a_square_that_turns);
+    RUN_TEST(test_every_part_of_a_tank_lands_on_the_tank);
+    RUN_TEST(test_a_shell_cube_lands_on_the_shell);
     RUN_TEST(test_the_enemy_is_culled_at_the_near_plane);
     RUN_TEST(test_the_enemy_turns_towards_the_player);
     RUN_TEST(test_the_enemy_thinks_on_one_frame_in_three);

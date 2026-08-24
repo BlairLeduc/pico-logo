@@ -2136,6 +2136,22 @@ end
 ; `e.es`/`e.ec` rather than scaled off
 ; the hull's, because a scale is a
 ; divide and this is two multiplies.
+;
+; THE PARENTHESES ROUND EVERY DIVISOR
+; CHANGE THE ANSWER, which is the only
+; kind this file writes. `/` binds
+; tighter than `-`, so `:k / :p.za -
+; :p.px` is (k / za) - px: at 300 steps
+; that is 0.867 - 8 = -7.13 where the
+; range wanted 0.839, and every vertex
+; of the part lands somewhere arbitrary.
+; It drew lines all over the screen and
+; the edge-count tests could not see it,
+; because twelve edges through nonsense
+; is still twelve edges. Everywhere else
+; in this file the range is hoisted into
+; a `p.z*` first, which is why nothing
+; older had the defect.
 to turret.columns
   make "p.fx :e.tw * :e.es
   make "p.fz :e.tw * :e.ec
@@ -2145,19 +2161,19 @@ to turret.columns
   make "p.zb :e.zc - :p.pz
   make "p.xa :e.xc + :p.px
   make "p.xb :e.xc - :p.px
-  make "p.iz :k / :p.za - :p.px
+  make "p.iz :k / (:p.za - :p.px)
   .setitem 1 :cx (:p.xa + :p.pz) * :p.iz
   .setitem 1 :cy1 :hz + :e.te * :p.iz
   .setitem 1 :cy2 :hz + :e.tt * :p.iz
-  make "p.iz :k / :p.za + :p.px
+  make "p.iz :k / (:p.za + :p.px)
   .setitem 2 :cx (:p.xa - :p.pz) * :p.iz
   .setitem 2 :cy1 :hz + :e.te * :p.iz
   .setitem 2 :cy2 :hz + :e.tt * :p.iz
-  make "p.iz :k / :p.zb + :p.px
+  make "p.iz :k / (:p.zb + :p.px)
   .setitem 3 :cx (:p.xb - :p.pz) * :p.iz
   .setitem 3 :cy1 :hz + :e.te * :p.iz
   .setitem 3 :cy2 :hz + :e.tt * :p.iz
-  make "p.iz :k / :p.zb - :p.px
+  make "p.iz :k / (:p.zb - :p.px)
   .setitem 4 :cx (:p.xb + :p.pz) * :p.iz
   .setitem 4 :cy1 :hz + :e.te * :p.iz
   .setitem 4 :cy2 :hz + :e.tt * :p.iz
@@ -2189,19 +2205,19 @@ to barrel.columns
   make "p.qz :p.fz * :cs + :p.fx * :sn
   make "p.xa :e.xc + :p.px
   make "p.za :e.zc + :p.pz
-  make "p.iz :k / :e.zc - :p.qx
+  make "p.iz :k / (:e.zc - :p.qx)
   .setitem 1 :cx (:e.xc + :p.qz) * :p.iz
   .setitem 1 :cy1 :hz + :e.bb * :p.iz
   .setitem 1 :cy2 :hz + :e.bt * :p.iz
-  make "p.iz :k / :e.zc + :p.qx
+  make "p.iz :k / (:e.zc + :p.qx)
   .setitem 2 :cx (:e.xc - :p.qz) * :p.iz
   .setitem 2 :cy1 :hz + :e.bb * :p.iz
   .setitem 2 :cy2 :hz + :e.bt * :p.iz
-  make "p.iz :k / :p.za + :p.qx
+  make "p.iz :k / (:p.za + :p.qx)
   .setitem 3 :cx (:p.xa - :p.qz) * :p.iz
   .setitem 3 :cy1 :hz + :e.bb * :p.iz
   .setitem 3 :cy2 :hz + :e.bt * :p.iz
-  make "p.iz :k / :p.za - :p.qx
+  make "p.iz :k / (:p.za - :p.qx)
   .setitem 4 :cx (:p.xa + :p.qz) * :p.iz
   .setitem 4 :cy1 :hz + :e.bb * :p.iz
   .setitem 4 :cy2 :hz + :e.bt * :p.iz
@@ -2798,6 +2814,14 @@ end
 ; 16.6.1 is the standing reason for not
 ; writing a number twice.
 ;
+; The barrel's top and bottom straddle
+; the MIDDLE of the turret rather than
+; the top of the hull, which is where a
+; gun comes out of a tank. They read
+; `e.te + 0.35 +/- 0.22` of the hull's
+; half-width, and 0.35 is the turret's
+; own half-height.
+;
 ; Six multiplies once a spawn, and the
 ; frame reads the results. The literals
 ; are here rather than named because
@@ -2814,8 +2838,8 @@ to set.kind
   make "e.tt :e.te + :e.hw * 0.7
   make "e.bl :e.hw * 2.2
   make "e.bw :e.hw * 0.17
-  make "e.bt :e.te + :e.hw * 0.22
-  make "e.bb :e.te - :e.hw * 0.22
+  make "e.bt :e.te + :e.hw * 0.57
+  make "e.bb :e.te + :e.hw * 0.13
 end
 
 to spawn.enemy
@@ -3082,19 +3106,19 @@ to shell.columns
   make "p.pz :sh.r * :sn
   make "p.za :sh.y + :sh.r
   make "p.zb :sh.y - :sh.r
-  make "p.iz :k / :p.zc + :p.pz
+  make "p.iz :k / (:p.zc + :p.pz)
   .setitem 1 :cx (:p.xc + :p.px) * :p.iz
   .setitem 1 :cy1 :hz + :p.zb * :p.iz
   .setitem 1 :cy2 :hz + :p.za * :p.iz
-  make "p.iz :k / :p.zc + :p.px
+  make "p.iz :k / (:p.zc + :p.px)
   .setitem 2 :cx (:p.xc - :p.pz) * :p.iz
   .setitem 2 :cy1 :hz + :p.zb * :p.iz
   .setitem 2 :cy2 :hz + :p.za * :p.iz
-  make "p.iz :k / :p.zc - :p.pz
+  make "p.iz :k / (:p.zc - :p.pz)
   .setitem 3 :cx (:p.xc - :p.px) * :p.iz
   .setitem 3 :cy1 :hz + :p.zb * :p.iz
   .setitem 3 :cy2 :hz + :p.za * :p.iz
-  make "p.iz :k / :p.zc - :p.px
+  make "p.iz :k / (:p.zc - :p.px)
   .setitem 4 :cx (:p.xc + :p.pz) * :p.iz
   .setitem 4 :cy1 :hz + :p.zb * :p.iz
   .setitem 4 :cy2 :hz + :p.za * :p.iz
