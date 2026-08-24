@@ -2282,16 +2282,32 @@ to judge it by and a cube grows. It is axis-aligned to the *world* rather than t
 its flight — nothing about a shell's roll is observable — which is the saucer's
 two-statement trick again.
 
-**What it costs, predicted rather than measured.** 41 more edges and 16 more
-divides on the worst frame; at M0's overclocked rates that is roughly **3–4 ms**,
-taking the peak from 48.7 to about **52 against 66.7**. The new edges are all
-*short* — a turret, a barrel and two small cubes — so the per-step half of the
-drawing cost barely moves, and it is the fixed per-statement charge that
-dominates. **That is an estimate and the board is what settles it**, exactly as
-§16.7's was; the levers if it misses are known and unchanged (§14).
+**What it costs, and the prediction held.** 41 more edges and 16 more divides on
+the worst frame; the estimate was **3–4 ms**, taking the peak to about 52.
+Measured on a board at 300 MHz:
+
+| | BODY | MAX BODY | + present | frame | peak frame |
+|---|---:|---:|---:|---:|---:|
+| M3, enemy in the frame | 22 | 30 | 18.7 | 40.7 | 48.7 |
+| **M4, enemy in the frame** | **26** | **33** | 18.7 | **44.7** | **51.7** |
+| M4, enemy and a shot | 28 | — | 18.7 | 46.7 | — |
+
+**+4 ms on the mean and +3 on the peak**, against 3–4 predicted. The peak frame is
+51.7 against 66.7 with **15 ms still in hand**, which is the same peak M2 read
+before any of M3 or M4 existed. A shell cube is **+2 ms**, so both in the air at
+once is a mean of about 30 and a peak near 36 — a frame of ~55, still 11 ms
+clear.
+
+**What the two readings do not support is a per-edge rate.** Solving the tank's
+19 edges and 6 divides against the shell's 11 and 3 gives edges a cost of zero
+and divides 0.67 ms each, which cannot be right — `turret.columns` is five
+statements a divide and that would make a statement 130 µs. Two points at 1 ms of
+readout resolution is not enough to separate the drawing from the projection, and
+the honest figure is the total.
 
 It also costs **7 globals**: 236 of 254, leaving 18 against the 16 the budget
-test enforces. The next model that wants a temporary will have to find one.
+test enforces. The next model that wants a temporary will have to find one — and
+that, rather than the frame, is now the binding constraint on adding detail.
 
 #### 16.8.1 Lines all over: `/` binds tighter than `-`
 
