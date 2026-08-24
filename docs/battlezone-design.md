@@ -1917,13 +1917,16 @@ the tank turns and drives faster for no reason a player can see.
 supertank → saucer), the cracked screen, the attract screen, the high score
 table, sound.
 
-### 16.7 M3 is built, and it is waiting on a board
+### 16.7 M3 is built, and measured
 
 `logo/games/battlezone` is the game now rather than the engine: three tanks, the
 arcade's score table, the four enemies on a ring, the shattered periscope, an
 attract screen with ten high scores kept in `/games/battlezone.scores`, and the
-four sounds §11 asked for. **125 host tests, 84/84 ctest green**, and all three
+four sounds §11 asked for. **124 host tests, 84/84 ctest green**, and all three
 presets link.
+
+**Measured on both boards and the budget is closed (§16.7.4a); the play test
+broke the enemy and §16.7.4b is the fix.**
 
 **What M3 costs the frame is almost nothing, and that is the point of having
 done it last.** The score, the lives and the enemy sequence are arithmetic on
@@ -1989,17 +1992,21 @@ cheaper than a comparison.
 was two constants that only mean something against each other written down in
 different sections and never compared — the stand-off and the hit box. Eight
 parallel lists indexed by kind is that failure with a mechanism. A row keeps an
-enemy's numbers where they can be read together, and `e.range` and `e.wob` are
-three lines apart in every one of them.
+enemy's numbers where they can be read together, and `e.wide` and its stand-off
+are three lines apart in every one of them.
 
 **And the invariant is now a test over every kind that carries a gun**, which is
 what M3 needed it to be: the supertank is "smarter" by wobbling **7°** rather
 than 10, and a *tighter* cone at the same distance is a cone that fits inside
 the hit box — M2's defect, reopened by the fix for it. So the supertank's
 stand-off had to go **out** rather than in: 420 against the tank's 400, which
-puts 297 · tan 7° = 36.5 steps against a 30 box. The test drives all four kinds
-and requires at least two guns, so a third gun kind cannot be added without
-meeting it.
+puts 297 · tan 7° = 36.5 steps against a 30 box.
+
+*(That is the reasoning as it stood before the board ran, and the tangent in it
+is what §16.7.4b retires: an angular error is the wrong SHAPE whatever its size,
+and moving a stand-off cannot fix it because the player picks the range. The
+supertank is still the wider stand-off and the tighter cone; the cone is now
+measured in steps.)*
 
 #### 16.7.3 The fallback is gone: the fast clock is a precondition
 
@@ -2079,6 +2086,100 @@ points on all three boards — 88.89 / 86.38 / 91.29 % to 89.08 / 86.57 / 91.48.
 It costs **nothing in time**: `find_global` has gone through a hash index since
 P11 M4, so a read is a hash and a probe whatever the table holds, and the line in
 `limits.h` that said otherwise predated that index and is corrected.
+
+#### 16.7.4a M3 measured on hardware, and the play test broke the enemy again
+
+**Both boards, at 300 MHz, and they read the same:**
+
+| with the enemy in the frame | BODY | MAX BODY | + present | frame | peak frame |
+|---|---:|---:|---:|---:|---:|
+| M2 | 22 | 33 | 18.7 | 40.7 | 51.7 |
+| **M3, Plus 2 W** | **22** | **30** | 18.7 | **40.7** | **48.7** |
+| **M3, Pico 2 W** | **22** | **30** | 18.7 | **40.7** | **48.7** |
+
+**M3 is free**, which is what §16.7 predicted and is worth stating plainly: lives,
+scoring, four enemy kinds, two new models, the cracked screen and the sound
+together did not move the body, and the *peak* came down 3 ms. 18 ms in hand on
+the worst frame against 66.7. The budget question is closed.
+
+**The two boards reading identically is not something §19.7 predicted.** Its table
+has the Pico 2 W's per-step line cost at 0.984 µs against the Plus 2 W's 0.350 —
+3.3× apart on the same silicon — and a frame that is a third drawing should show
+that. It does not, at 1 ms of readout resolution. That is evidence and not a
+resolution; §19.7's one-minute experiment is still the thing that settles it.
+
+**And the play test broke the enemy, for the second milestone running and in the
+same place.** *"The tanks never miss."*
+
+#### 16.7.4b The aim error was an angle, and an angle is the wrong shape
+
+§16.6.1 caught the enemy coming straight at you with perfect aim, diagnosed it as
+`e.range` against `tk.hit`, and fixed it by moving the stand-off to 400 and
+adding a per-shot angular wobble of ±10°. **It then validated that fix at exactly
+one distance** — the stand-off — where the tank does miss 55 % of the time, and
+called it done.
+
+A board found the rest of the curve. Measured against a stationary player:
+
+| tank fires from | old model | new model |
+|---:|---:|---:|
+| 400 steps | 19 / 40 hit | 29 / 40 |
+| 283 | 27 | 19 |
+| 200 | 33 | 19 |
+| 150 | **40 / 40** | 20 |
+| 100 | **40 / 40** | 20 |
+| 60 | **40 / 40** | 21 |
+
+**An angular error is thrown `d · tan(wob)` sideways, so it shrinks to nothing as
+the range does — and the range is not the enemy's to choose, because the player
+can always drive closer.** Inside 170 steps the tank could not miss; inside 244
+the supertank could not, and the supertank is *newer than the fix*, added by M3
+with a tighter 7° cone precisely because tighter meant smarter. **No value of an
+angular `e.wob` fixes this. The shrinking is the shape of the error, not its
+size**, which is why two rounds of moving the stand-off did not help.
+
+So the error is now **a lateral offset at the target, in steps** — `e.wide`,
+turned into an angle for the range it is fired over, three statements and one
+`arctan` a shot. That is what a gunner's error actually is, and it makes accuracy
+range-independent by construction.
+
+**The invariant collapses to one comparison in one unit.** §16.6.1's version
+joined three numbers in two units with a tangent —
+`e.range / √2 · tan(e.wob) > tk.hit` — and was wrong twice. The new one is
+**`e.wide > tk.hit`**: a shot thrown fewer steps sideways than the half-width of
+the box it is aimed at cannot miss. Both numbers are in steps and they sit three
+lines apart in every kind row.
+
+**And the test now sweeps range instead of asserting at a point.**
+`test_no_range_is_a_range_the_enemy_cannot_miss_from` drives forty shots at each
+of six ranges from point blank to beyond the stand-off, for every kind that
+carries a gun, and requires **both outcomes at every one of them**. On the old
+model it fails with `kind 1 at 60 steps: 40 hit, 0 missed of 40` — the board's
+sentence, in a test. It asserts both and never a ratio, because the ratio is what
+M4 tunes.
+
+**What the fix leaves standing is the mechanic the game is supposed to have.**
+Movement was always the player's lever and it still works — a shell takes `d/32`
+frames to arrive and the player moves 8 steps a frame, so a lateral drive
+displaces `d/4` steps before it lands:
+
+| tank fires from | player still | player strafing |
+|---:|---:|---:|
+| 400 steps | 29 / 40 hit | **0 / 40** |
+| 283 | 19 | 3 |
+| 200 | 19 | 14 |
+| 100 | 20 | 24 |
+| 60 | 21 | 26 |
+
+So standing still is punished at every range and moving saves you beyond ~200
+steps, while up close nothing does. That is Battlezone. **The old model had the
+same gradient but with a floor of certain death under it**, and the floor was the
+whole of what the board was complaining about.
+
+**One more number the board moved: the missile was 11 steps a frame against the
+treads' 8** — 1.4× — and *"very fast"*. It is 9 now, 1.1×. The margin and not the
+speed is what decides whether a thing is dodgeable, and the property that matters
+is only that it cannot be outrun.
 
 #### 16.7.5 Four things building it found
 
@@ -2177,10 +2278,13 @@ M2's additions, and the failure each exists for:
 
 M3's additions, and the failure each exists for:
 
-- **No kind that shoots can park where it cannot miss.** §16.6.1's invariant,
-  now a loop over every kind carrying a gun and refusing to run against fewer
-  than two of them. The supertank's tighter wobble is exactly the change that
-  reopens M2's defect, and this is what closes it.
+- **The aim error is wider than the box it is aimed at**, and **no range is a
+  range the enemy cannot miss from.** The first is `e.wide > tk.hit`, one
+  comparison in one unit, over every kind that carries a gun. The second drives
+  forty shots at each of six ranges from point blank outwards and requires both
+  outcomes at every one — which is the test §16.6.1 needed and did not have, its
+  version having fired only from the stand-off, the one distance the old model
+  was safe at (§16.7.4b).
 - **Every kind sets a whole row.** `set.kind` chooses by comparing against four
   literals, so a kind matching none of them would leave the *previous* enemy's
   numbers in place — a supertank wearing a saucer's score, and nothing on the

@@ -470,8 +470,12 @@ make "ebode :ebodyh - :eye
 ; diagonal where `e.d`'s Manhattan
 ; distance is furthest from the real
 ; one, and 283 * tan 10 is 50 against a
-; 30 box. `e.wob` below is the other
-; half of the same fix.
+; 30 box. `e.wide` below is the other
+; half of the same fix -- and M3 had to
+; correct it again, because an ANGULAR
+; error shrinks to nothing as the range
+; does and the range is the player's to
+; choose. See `e.wide`.
 ;
 ; THESE EIGHT ARE LIVE STATE FROM M3 ON,
 ; not tuning. `set.kind` writes the row
@@ -491,9 +495,9 @@ make "e.naim 0 - :e.aim
 make "e.hw :ehalf
 make "e.te :ebode
 
-; The aim error, in degrees either way,
-; and the span `random` needs to produce
-; it.
+; The aim error, IN STEPS either way at
+; the target, and the span `random`
+; needs to produce it.
 ;
 ; THE STAND-OFF ALONE WOULD NOT HAVE
 ; FIXED IT. `hunt` turns in `e.turn`
@@ -513,8 +517,50 @@ make "e.te :ebode
 ; calls A SHOT rather than a frame,
 ; which at the measured 20 ms body is
 ; not a number worth thinking about.
-make "e.wob 10
-make "e.wob2 21
+;
+; AND IT IS A DISTANCE AND NOT AN ANGLE,
+; which is M3's correction and the third
+; time this pair has been wrong. An
+; angular error is thrown d * tan(wob)
+; sideways, so it SHRINKS TO NOTHING as
+; the range does -- and the range is not
+; the enemy's to choose, because the
+; player can always drive closer. M2
+; moved the stand-off out to 400 and
+; validated the fix at that one
+; distance, where the tank misses 55 %
+; of the time. Measured across the
+; ranges a player actually reaches, a
+; board found what the design could not:
+;
+;   stationary player, tank firing
+;    400 steps   19 of 40 hit
+;    283         27
+;    200         33
+;    150         40 -- every shot
+;    100         40
+;     60         40
+;
+; No value of an angular `e.wob` fixes
+; that, because the shrinking is the
+; SHAPE of the error and not its size.
+; So the error is now a lateral offset
+; AT THE TARGET, converted to an angle
+; for the range it is fired over --
+; which is what a gunner's error
+; actually is, and it makes accuracy
+; range-independent by construction.
+;
+; THE INVARIANT BECOMES ONE COMPARISON
+; IN ONE UNIT: `e.wide` must exceed
+; `tk.hit`, or the cone is narrower than
+; the box and the shot cannot miss. That
+; is the whole of section 16.6.1's
+; relation -- three numbers in two units
+; joined by a tangent -- reduced to two
+; numbers in steps.
+make "e.wide 60
+make "e.wide2 121
 
 ; Frames between hunt decisions (design
 ; section 19.3: at 15 fps a decision
@@ -2381,6 +2427,20 @@ to move.enemy
   make "e.dz :tk.dz
 end
 
+; The lateral miss is drawn in STEPS and
+; then turned into the angle that throws
+; it that far over THIS range, which is
+; the whole of the range-independence:
+; the shot lands `e.wide` either side of
+; you whether you are at 60 steps or
+; 600.
+;
+; The range is floored at `tk.hit`
+; because it divides. Nothing stops the
+; player driving onto the enemy --
+; `blocked?` tests obstacles and not
+; tanks -- and inside the hit box the
+; angle would be meaningless anyway.
 to enemy.fires
   make "e.fire false
   if :es.on [stop]
@@ -2388,8 +2448,11 @@ to enemy.fires
   make "es.on true
   make "es.x :e.x
   make "es.z :e.z
-  make "e.d :e.h + (random :e.wob2)
-  make "e.d :e.d - :e.wob
+  make "e.b (abs :e.dx) + (abs :e.dz)
+  if :tk.hit > :e.b [make "e.b :tk.hit]
+  make "e.d (random :e.wide2) - :e.wide
+  make "e.d arctan :e.d / :e.b
+  make "e.d :e.h + :e.d
   make "es.vx :sh.step * sin :e.d
   make "es.vz :sh.step * cos :e.d
   make "es.dx :e.dx
@@ -2430,13 +2493,16 @@ end
 ; numbers that only mean something
 ; against each other, written down in
 ; different places and never compared.
-; `e.range` and `e.wob` are exactly such
-; a pair -- a stand-off closer than
-; range/sqrt2 * tan(wob) > `tk.hit` is
-; an enemy that cannot miss -- so they
-; are three lines apart in every row
-; here and the invariant is a test over
-; every kind that carries a gun.
+; `e.wide` and `tk.hit` are exactly such
+; a pair: a shot thrown fewer steps
+; sideways than the half-width of the
+; box it is aimed at cannot miss. Both
+; are in STEPS, which is what M3's fix
+; bought -- section 16.6.1's version of
+; this invariant joined three numbers in
+; two units with a tangent, and it was
+; wrong twice. The test sweeps every gun
+; kind AND every range.
 ;
 ; A SUPERTANK IS THE TANK'S ROW, BETTER
 ; IN FOUR PLACES: faster, turns harder,
@@ -2460,8 +2526,8 @@ to kind.tank
   make "e.step 6
   make "e.turn 4
   make "e.range 400
-  make "e.wob 10
-  make "e.wob2 21
+  make "e.wide 60
+  make "e.wide2 121
   make "e.aim 7
   make "e.reload 24
   make "e.hit 34
@@ -2478,8 +2544,8 @@ to kind.super
   make "e.step 9
   make "e.turn 5
   make "e.range 420
-  make "e.wob 7
-  make "e.wob2 15
+  make "e.wide 50
+  make "e.wide2 101
   make "e.aim 6
   make "e.reload 15
   make "e.hit 40
@@ -2490,13 +2556,22 @@ end
 ; A missile has no gun and no stand-off:
 ; it closes forever and kills by
 ; ARRIVING, which is what `e.ram` says.
-; It is faster than you can drive -- 11
+; It is faster than you can drive -- 9
 ; steps a frame against the treads' 8 --
 ; so it cannot be outrun, and it turns
 ; at 2 degrees a frame against your 4,
 ; so it can be turned inside. That pair
 ; is the whole mechanic: you dodge it,
 ; you do not escape it.
+;
+; It WAS 11, which is 1.4x the player.
+; A board called that "very fast" and it
+; was: the margin, not the speed, is
+; what decides whether a thing is
+; dodgeable, and 1.4x leaves no room to
+; turn inside before it arrives. 9 is
+; 1.1x -- still not outrunnable, which
+; is the property that matters.
 ;
 ; `e.te` is 0 because it flies at eye
 ; height, which is also where its
@@ -2507,11 +2582,11 @@ to kind.missile
   make "e.drift false
   make "e.hw :ms.fin
   make "e.te 0
-  make "e.step 11
+  make "e.step 9
   make "e.turn 2
   make "e.range 0
-  make "e.wob 10
-  make "e.wob2 21
+  make "e.wide 60
+  make "e.wide2 121
   make "e.aim 0
   make "e.reload 0
   make "e.hit 24
@@ -2542,8 +2617,8 @@ to kind.saucer
   make "e.step 5
   make "e.turn 0
   make "e.range 0
-  make "e.wob 10
-  make "e.wob2 21
+  make "e.wide 60
+  make "e.wide2 121
   make "e.aim 0
   make "e.reload 0
   make "e.hit 40

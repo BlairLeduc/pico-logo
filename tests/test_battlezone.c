@@ -269,6 +269,16 @@ static void enemy_at(float ex, float ez, float eh)
     run(expr);
 }
 
+// Put one kind of enemy in front of the camera, the way a spawn would: the
+// row read into the live `e.*` names first, then the placement.
+static void foe_at(int kind, float ex, float ez, float eh)
+{
+    char expr[64];
+    snprintf(expr, sizeof(expr), "make \"e.kind %d  set.kind", kind);
+    run(expr);
+    enemy_at(ex, ez, eh);
+}
+
 // Project one object at a world-space offset from the camera, the way
 // `draw.field` does: through the `pb.` globals rather than as parameters.
 static bool project(const char *which, float dx, float dz)
@@ -1636,32 +1646,61 @@ void test_a_shell_that_hits_nothing_expires(void)
     TEST_ASSERT_FALSE_MESSAGE(truth(":sh.on"), "a shell flew for ever");
 }
 
-// The stand-off and the hit box are ONE number, and the first board play test
-// is what found it: the enemy read as a tank that comes straight at you with
-// perfect aim, because it was.  A shot fired within `e.aim` of you is thrown
-// sideways by d * tan(e.aim), the player is a `tk.hit` box, and while the first
-// is smaller than the second the shot cannot miss -- so the enemy parking at a
-// stand-off inside that radius is an enemy that never misses again.  This is
-// the same shape of test as the collision radius covering the near plane: two
-// constants that have to be checked against each other or they drift apart.
-void test_the_enemy_cannot_park_where_it_cannot_miss(void)
+// THE AIM ERROR IS A DISTANCE AND NOT AN ANGLE, and this is the invariant that
+// took three attempts to state.
+//
+// M2 found the enemy came straight at you with perfect aim, diagnosed it as
+// `e.range` against `tk.hit`, and fixed it by moving the stand-off out to 400
+// and adding a per-shot angular wobble.  It then validated that fix at exactly
+// one distance -- the stand-off -- where the tank does miss 55 % of the time.
+//
+// A BOARD FOUND THE REST OF THE CURVE.  An angular error is thrown
+// `d * tan(wob)` sideways, so it shrinks to nothing as the range does -- and
+// the range is not the enemy's to choose, because the player can always drive
+// closer.  Measured against a stationary player, the old model hit 19 of 40 at
+// 400 steps, 33 at 200, and 40 of 40 everywhere inside 150.  No value of an
+// angular wobble fixes that: the shrinking is the SHAPE of the error, not its
+// size.
+//
+// So `e.wide` is now a lateral offset AT THE TARGET, in steps, turned into an
+// angle for the range it is fired over.  The invariant collapses to one
+// comparison in one unit -- a shot thrown fewer steps sideways than the
+// half-width of the box it is aimed at cannot miss -- where §16.6.1's version
+// joined three numbers in two units with a tangent and was wrong twice.
+void test_the_aim_error_is_wider_than_the_box_it_is_aimed_at(void)
 {
-    const float deg = (float)M_PI / 180.0f;
-    // `e.d` is Manhattan, so the true distance at the stand-off is as little as
-    // range/sqrt2 on the diagonal.  Check the worst case, not the best.
-    const float closest = num(":e.range") / 1.4143f;
-    const float throw_at_the_edge = closest * tanf(num(":e.wob") * deg);
+    int guns = 0;
+    for (int k = 1; k <= 4; k++)
+    {
+        char expr[64], msg[128];
+        snprintf(expr, sizeof(expr), "make \"e.kind %d  set.kind", k);
+        run(expr);
+        if (!truth(":e.gun"))
+            continue;
+        guns++;
 
-    TEST_ASSERT_TRUE_MESSAGE(throw_at_the_edge > num(":tk.hit"),
-                             "the enemy holds a range from which its aim cannot miss");
+        snprintf(msg, sizeof(msg),
+                 "kind %d throws its shot %g steps against a %g box -- it cannot miss",
+                 k, (double)num(":e.wide"), (double)num(":tk.hit"));
+        TEST_ASSERT_TRUE_MESSAGE(num(":e.wide") > num(":tk.hit"), msg);
+
+        // The span `random` draws from has to cover both sides of it, or the
+        // error is one-sided and the enemy leads every shot the same way.
+        snprintf(msg, sizeof(msg), "kind %d's wobble span does not straddle zero", k);
+        TEST_ASSERT_TRUE_MESSAGE(num(":e.wide2") > 2 * num(":e.wide"), msg);
+    }
+    TEST_ASSERT_TRUE_MESSAGE(guns >= 2, "the invariant was checked against fewer than two guns");
 }
 
-// The stand-off alone would not have fixed it.  `hunt` turns in `e.turn` steps
-// and stops the moment it is inside `e.aim`, so against a player holding still
-// the error it fires with is the SAME error every shot: the tank hits every
-// time or misses every time for a whole approach, which is a coin flipped once
-// rather than an aim.  `e.wob` is a fresh error per shot, so this drives it.
-void test_the_enemys_aim_varies_from_shot_to_shot(void)
+// And the same thing measured rather than argued: drive forty shots at each of
+// six ranges, from point blank to beyond the stand-off, and require BOTH
+// outcomes at every one of them.  This is the test M2 needed and did not have
+// -- its version fired only from the stand-off, which is the one distance the
+// old model was safe at.
+//
+// It asserts both and never a ratio: the ratio is exactly what M4 tunes, and a
+// test that pinned it would fight the tuning.
+void test_no_range_is_a_range_the_enemy_cannot_miss_from(void)
 {
     // The obstacles out of the way, so what stops a shell is the player or the
     // end of its life and never a cube.
@@ -1669,40 +1708,39 @@ void test_the_enemys_aim_varies_from_shot_to_shot(void)
     run("make \"oz [100 100 100 100]  make \"oz se :oz [100 100 100 100]");
     // The mock's hardware random source is a CONSTANT 42, so without this every
     // shot draws the same wobble and the test would be measuring nothing.
-    // `rerandom` switches to the seeded sequence, which varies and repeats.
     run("rerandom");
 
-    const float range = num(":e.range");
-    const float deg = (float)M_PI / 180.0f;
-    int hits = 0;
-    int misses = 0;
-
-    for (int shot = 0; shot < 40; shot++)
+    const int ranges[] = {60, 100, 150, 200, 283, 400};
+    for (int k = 1; k <= 4; k++)
     {
-        camera_at(800, 800, 0);
-        // Dead ahead at the stand-off and facing straight back down the line,
-        // so the bearing error is zero and what is left is the wobble alone.
-        enemy_at(800, 800 + range, 180);
-        run("make \"hits 0  make \"tk.boom 0  make \"es.on false  enemy.fires");
+        char expr[64];
+        snprintf(expr, sizeof(expr), "make \"e.kind %d  set.kind", k);
+        run(expr);
+        if (!truth(":e.gun"))
+            continue;
 
-        // Fired within the wobble of its own heading, every time.
-        const float aimed = atan2f(num(":es.vx"), num(":es.vz")) / deg;
-        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(num(":e.wob") + 0.001f, 180.0f, fabsf(aimed),
-                                         "a shot went outside the aim error");
+        for (int r = 0; r < 6; r++)
+        {
+            int hits = 0, misses = 0;
+            for (int shot = 0; shot < 40; shot++)
+            {
+                camera_at(800, 800, 0);
+                // Dead ahead and facing straight back down the line, so the
+                // bearing error is zero and what is left is the wobble alone.
+                foe_at(k, 800, (float)(800 + ranges[r]), 180);
+                run("make \"hits 0  make \"tk.boom 0  make \"es.on false  enemy.fires");
+                for (int i = 0; i < 40 && truth(":es.on"); i++)
+                    run("step.eshell");
+                if (num(":hits") > 0) hits++; else misses++;
+            }
 
-        for (int i = 0; i < 30 && truth(":es.on"); i++)
-            run("step.eshell");
-
-        if (num(":hits") > 0)
-            hits++;
-        else
-            misses++;
+            char msg[160];
+            snprintf(msg, sizeof(msg),
+                     "kind %d at %d steps: %d hit, %d missed of 40", k, ranges[r], hits, misses);
+            TEST_ASSERT_TRUE_MESSAGE(hits > 0, msg);
+            TEST_ASSERT_TRUE_MESSAGE(misses > 0, msg);
+        }
     }
-
-    // Both, not a ratio: the split is 15/25 at these constants, but the ratio is
-    // exactly what M4 is for and a test that pins it down would fight the tuning.
-    TEST_ASSERT_TRUE_MESSAGE(hits > 0, "the enemy could not hit from its own stand-off");
-    TEST_ASSERT_TRUE_MESSAGE(misses > 0, "the enemy never missed in forty shots");
 }
 
 // The cheapest collision in the game: the player is at the origin of the frame
@@ -2202,15 +2240,6 @@ static uint32_t last_freq_on(int voice)
     return 0;
 }
 
-// Put one kind of enemy in front of the camera, the way a spawn would: the
-// row read into the live `e.*` names first, then the placement.
-static void foe_at(int kind, float ex, float ez, float eh)
-{
-    char expr[64];
-    snprintf(expr, sizeof(expr), "make \"e.kind %d  set.kind", kind);
-    run(expr);
-    enemy_at(ex, ez, eh);
-}
 
 //--------------------------------------------------------------------------
 // The enemy sequence
@@ -2308,41 +2337,6 @@ void test_each_kind_is_worth_its_arcade_score(void)
     }
 }
 
-// M2's defect, generalised to every enemy that carries a gun.  The failure was
-// two constants that only mean something against each other written down in
-// different places: `e.range` is the stand-off it holds and `tk.hit` is the
-// box it is shooting at, and inside range/sqrt2 * tan(wob) < tk.hit the shot
-// cannot miss whatever the aim does.  M3 adds a second gun kind with a TIGHTER
-// wobble, which is exactly the change that reopens it -- a narrower cone at the
-// same distance is a cone that fits inside the box.
-void test_no_kind_that_shoots_can_park_where_it_cannot_miss(void)
-{
-    const float deg = (float)M_PI / 180.0f;
-    int guns = 0;
-
-    for (int k = 1; k <= 4; k++)
-    {
-        char expr[64];
-        snprintf(expr, sizeof(expr), "make \"e.kind %d  set.kind", k);
-        run(expr);
-        if (!truth(":e.gun"))
-            continue;
-        guns++;
-
-        // `e.d` is Manhattan, so the true distance at the stand-off is as
-        // little as range/sqrt2 on the diagonal.  The worst case, not the best.
-        const float closest = num(":e.range") / 1.4143f;
-        const float thrown = closest * tanf(num(":e.wob") * deg);
-
-        char msg[128];
-        snprintf(msg, sizeof(msg),
-                 "kind %d holds a range from which its aim cannot miss (%.0f thrown, %.0f box)",
-                 k, (double)thrown, (double)num(":tk.hit"));
-        TEST_ASSERT_TRUE_MESSAGE(thrown > num(":tk.hit"), msg);
-    }
-
-    TEST_ASSERT_TRUE_MESSAGE(guns >= 2, "the invariant was checked against fewer than two guns");
-}
 
 // "Faster, smarter" is four numbers, and a supertank that was only bigger would
 // pass every other test in this file.
@@ -2350,13 +2344,13 @@ void test_a_supertank_outclasses_a_tank(void)
 {
     run("make \"e.kind 1  set.kind");
     const float step = num(":e.step"), turn = num(":e.turn");
-    const float reload = num(":e.reload"), wob = num(":e.wob"), hw = num(":e.hw");
+    const float reload = num(":e.reload"), wide = num(":e.wide"), hw = num(":e.hw");
 
     run("make \"e.kind 3  set.kind");
     TEST_ASSERT_TRUE_MESSAGE(num(":e.step") > step, "a supertank is no faster");
     TEST_ASSERT_TRUE_MESSAGE(num(":e.turn") > turn, "a supertank turns no harder");
     TEST_ASSERT_TRUE_MESSAGE(num(":e.reload") < reload, "a supertank reloads no faster");
-    TEST_ASSERT_TRUE_MESSAGE(num(":e.wob") < wob, "a supertank is no more accurate");
+    TEST_ASSERT_TRUE_MESSAGE(num(":e.wide") < wide, "a supertank is no more accurate");
     TEST_ASSERT_TRUE_MESSAGE(num(":e.hw") > hw, "a supertank looks exactly like a tank");
 }
 
@@ -3464,8 +3458,8 @@ int main(void)
     RUN_TEST(test_an_obstacle_stops_a_shell);
     RUN_TEST(test_a_shell_hits_an_obstacle_across_the_seam);
     RUN_TEST(test_a_shell_that_hits_nothing_expires);
-    RUN_TEST(test_the_enemy_cannot_park_where_it_cannot_miss);
-    RUN_TEST(test_the_enemys_aim_varies_from_shot_to_shot);
+    RUN_TEST(test_the_aim_error_is_wider_than_the_box_it_is_aimed_at);
+    RUN_TEST(test_no_range_is_a_range_the_enemy_cannot_miss_from);
     RUN_TEST(test_the_enemys_shell_hits_the_player_and_pauses_the_tank);
     RUN_TEST(test_the_explosion_draws_its_fragments_and_runs_down);
     RUN_TEST(test_the_blip_is_the_enemy_in_the_camera_frame);
@@ -3486,7 +3480,6 @@ int main(void)
     RUN_TEST(test_the_ring_carries_all_four_kinds);
     RUN_TEST(test_every_kind_sets_a_whole_row);
     RUN_TEST(test_each_kind_is_worth_its_arcade_score);
-    RUN_TEST(test_no_kind_that_shoots_can_park_where_it_cannot_miss);
     RUN_TEST(test_a_supertank_outclasses_a_tank);
     RUN_TEST(test_a_missile_closes_forever_and_never_fires);
     RUN_TEST(test_a_missile_kills_by_arriving_and_dies_of_it);
