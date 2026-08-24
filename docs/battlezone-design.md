@@ -2506,27 +2506,28 @@ M3's additions, and the failure each exists for:
    0.2.
 4. **`min`/`max` (§13 L1)** — worth opening as a cheap win regardless of this
    game?
-5. **Why is a local arithmetic statement 53.5 µs when P11 M0 measured 42–44.5
-   on the same board twelve days earlier?** (§3.2.) Either the interpreter
-   regressed — which would touch every game in the tree — or the two harnesses
-   differ invisibly. `tests/logo/p11rocks` still runs and settles it.
+5. ~~**Why is a local arithmetic statement 53.5 µs when P11 M0 measured 42–44.5
+   on the same board twelve days earlier?**~~ **Answered on 2026-08-24, and it is
+   the bad answer: the interpreter regressed.** `tests/logo/p11rocks` — the very
+   harness that produced 42–44.5 — reads **53 µs** today on the same board, so
+   the "two harnesses differ invisibly" half is closed by construction. It is now
+   **B51** ([`bugs.md`](bugs.md)) rather than an open question here.
 
-   **The run itself takes seconds, not the "ten minutes" this used to say** —
-   that was an estimate of the *effort*, and it read as a duration. The
-   calibration loops are 2,000 iterations and the frame passes are 60 frames,
-   so a board is finished almost at once. The number wanted is the line
-   `arithmetic statement` in `/p11rocks.txt`, which the script appends to
-   because figures on the PicoCalc's display cannot be copied off it.
+   **What the same run narrows it to.** The bare `repeat` iteration is
+   **unchanged at 4.5 µs**, so it is not the loop, the frame push or the clock —
+   it is what happens inside the brackets. The **host does not reproduce it at
+   all**: 400,000 of the same statement through `build-host/logo` is 244 ns net
+   of the loop at P11 M0's commit and 225 ns at HEAD, which is 8 % *faster*, so
+   the C is not doing more work per statement. And the **hot set is unchanged** —
+   `eval_primary`, `var_set`, `var_get` and `frame_find_binding_in_chain` are
+   RAM-resident at both commits — while the image grew 6 % and the flash-resident
+   parts of the path moved about 32 KB.
 
-   **Two things will spoil the comparison if they are not checked first.** The
-   board must be at the STOCK clock — `p11rocks` predates `hw.setcpu` and does
-   not set one, so a session left at 300 MHz reads about half and looks like a
-   spectacular improvement. And `erall` before loading is not optional the way
-   it once was: the script's own header warns about `MAX_PROCEDURES`, but
-   Battlezone now leaves **237 of 254 globals** behind (§16.7.4), and a
-   workspace still holding it has nowhere to put `p11rocks`' own. **This is the one open question that is not about Battlezone**, and
-   it should be answered before M1 spends L0.5 on the strength of a host
-   measurement.
+   So it is instruction fetch, the class [`hot.h`](../core/hot.h) exists for, and
+   the awkward part is that the obvious candidates are already hot. **It cannot
+   be bisected on the host**, because the host does not reproduce it; B51 carries
+   the board-bisect recipe.
+
 6. ~~**Does a *tiered* Pico 2 run this frame?**~~ **Answered at M0: yes, and
    the prediction was 7 % low** (§16.3). It reads 70.6 ms against a predicted
    65.7 and closes to **55.1 with §12.1's levers, 11.6 ms in hand** — so a

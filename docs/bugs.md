@@ -22,8 +22,66 @@ edge case)
 
 | ID | Bug | Area | Severity | Found | Status |
 |---|---|---|---|---|---|
+| [B51](#b51--an-arithmetic-statement-got-23--slower-on-the-board-and-only-on-the-board) | An arithmetic statement got 23 % slower on the board, and only on the board | interpreter | medium | 2026-08-24 | open |
 | [B19](#b19--collision-tests-ignore-the-wrapped-playfield) | Collision tests ignore the wrapped playfield (Asteroids) | games | low | 2026-08-12 | open |
 | [B6](#b6--penreverse-ignores-pen-size-always-1-px) | `penreverse` ignores pen size (always 1 px) | graphics | low | 2026-07-18 | won't fix (documented) |
+
+### B51 — An arithmetic statement got 23 % slower on the board, and only on the board
+
+`tests/logo/p11rocks` is the harness P11 M0 calibrated with on 2026-08-11. Run
+again on **the same board with the same script** on 2026-08-24:
+
+| unit | 2026-08-11 | 2026-08-24 | |
+|---|---:|---:|---|
+| arithmetic statement (`make "x :x + 1`, a local, inside a procedure) | 42–44.5 µs | **53 µs** | **1.23×** |
+| bare `repeat` iteration | 4.5 µs | **4.5 µs** | unchanged |
+
+This was [`battlezone-design.md`](battlezone-design.md) §19.5, which asked
+whether the interpreter had regressed **or** whether P13 M0's harness differed
+invisibly from P11 M0's. **It is not the harness.** The same script produced both
+numbers, so that half is closed; P13 M0's independent 53.5 µs on 2026-08-23
+agrees with today's 53, which also dates the regression to before that.
+
+**Three things narrow it, and all three are measurements rather than argument.**
+
+1. **The bare loop is unchanged.** `repeat` iteration is 4.5 µs on both dates, so
+   it is not the evaluator's loop, its frame push, or the clock. What moved is
+   what happens *inside* the brackets: a local read, a `+`, and a local write.
+2. **The host does not reproduce it at all.** Timing the same statement 400,000
+   times through `build-host/logo`, the P11 M0 commit (`02c8a0a`) is **244 ns**
+   net of the bare loop and today's HEAD is **225 ns** — HEAD is 8 % *faster*.
+   So the C is not doing more work per statement; the regression is not
+   algorithmic.
+3. **The hot set is essentially unchanged.** Building `pico2w` at both commits,
+   `var_set`, `var_get`, `frame_find_binding_in_chain` and `eval_primary` are
+   RAM-resident in both, and `eval_expression` and `prim_sum` are flash-resident
+   in both. What did change is *where in flash*: the image grew 781 → 830 KB
+   (+6 %) and both flash-resident members of the statement path moved about
+   32 KB.
+
+**So the leading hypothesis is instruction fetch, which is the class
+[`hot.h`](../core/hot.h) exists for** — P10 M5's diagnosis was exactly a path
+costing far more on the board than its share of the work, cured by moving it into
+SRAM. What makes this one awkward is that the obvious candidates are *already*
+hot: `eval_primary` is 2.9 KB in RAM and `eval_expression` is a 14-byte wrapper,
+so there is no large flash-resident lump left on the path to move. The remaining
+suspects are the callees the statement reaches through and the RP2350's 16 KB XIP
+cache, whose set mapping changed underneath everything when the image grew.
+
+**It cannot be bisected on the host, because the host does not reproduce it.** It
+needs a *board* bisect: `tests/logo/p11rocks` takes seconds to run, so five or
+six firmwares across 2026-08-11 → 2026-08-23 (`02c8a0a` to `4e8ffde`) bracket it,
+reading the `arithmetic statement` line out of `/p11rocks.txt` each time. Two
+things must be held still or the reading is meaningless: the board must be at the
+**stock clock** (`p11rocks` predates `hw.setcpu` and sets none, so 300 MHz reads
+about half), and `erall` must come first (Battlezone now leaves 237 of 254
+globals behind).
+
+**Severity is medium rather than high because nothing is broken by it.** Every
+game in the tree still makes its frame budget — Battlezone's peak is 51.7 ms
+against 66.7 — but 23 % of the most-used unit in the interpreter is real debt,
+and against Battlezone's 22 ms body it is worth about 5 ms, a third of its
+headroom.
 
 ### B19 — Collision tests ignore the wrapped playfield
 
