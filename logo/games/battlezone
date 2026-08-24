@@ -754,6 +754,16 @@ make "sh.frames 22
 make "sh.guard 36
 make "tk.hit 30
 
+; Half-width of the shell cube, and the
+; height its axis flies at -- written by
+; whichever of the two is being drawn.
+; 5 is small enough that the cube reads
+; as a round rather than a crate, and
+; big enough to grow visibly as it
+; closes.
+make "sh.r 5
+make "sh.y 0
+
 ;--------------------------------------
 ; The explosion
 ;
@@ -982,6 +992,14 @@ make "cy2 [0 0 0 0]
 ; divide.
 make "apx 0
 make "apy 0
+; The far apex of a spindle -- the
+; saucer's keel and the missile's tail.
+; The saucer's shares the near apex's x
+; because it is rotationally symmetric;
+; the missile's does not, because its
+; two ends are at different ranges.
+make "p.tx 0
+make "p.ty 0
 
 make "left.tread 0
 make "right.tread 0
@@ -1027,6 +1045,16 @@ make "e.fire false
 ; the moment of the spawn.
 make "e.kind 1
 make "e.pts 0
+; The turret's half-width and top, and
+; the barrel's reach, half-width, top
+; and bottom -- all derived from the
+; hull by `set.kind`, all above the eye.
+make "e.tw 0
+make "e.tt 0
+make "e.bl 0
+make "e.bw 0
+make "e.bt 0
+make "e.bb 0
 make "e.gun true
 make "e.ram false
 make "e.drift false
@@ -2049,8 +2077,6 @@ end
 ; of the centre, so the centre is beyond
 ; 79.8 and the tip beyond 51.8. Near,
 ; never zero, and never negative.
-make "gunx [0 0]
-make "guny [0 0]
 
 to project.enemy
   make "p.fx :e.hw * :e.es
@@ -2085,15 +2111,122 @@ to project.enemy
   .setitem 4 :cx (:p.xb + :p.pz) * :p.iz
   .setitem 4 :cy1 :hz - :eye * :p.iz
   .setitem 4 :cy2 :hz + :e.te * :p.iz
-  make "p.iz :k / :e.zc
-  .setitem 1 :gunx :e.xc * :p.iz
-  .setitem 1 :guny :hz + :e.te * :p.iz
-  make "p.g :e.zc + :p.pz + :p.pz
-  make "p.iz :k / :p.g
-  make "p.g :e.xc + :p.px + :p.px
-  .setitem 2 :gunx :p.g * :p.iz
-  .setitem 2 :guny :hz + :e.te * :p.iz
   output "true
+end
+
+; THE TURRET AND THE BARREL REFILL THE
+; SAME THREE LISTS THE HULL JUST USED,
+; which is the whole reason a tank can
+; be thirty-two edges without costing a
+; single new global. `draw.enemy` draws
+; the hull, calls this, and draws again
+; -- project-then-draw would need three
+; more four-element lists per part, and
+; this file is 25 slots from its ceiling
+; (design section 16.7.4).
+;
+; NO CULL TEST HERE, and that is not an
+; oversight: the turret sits inside the
+; hull's footprint, so every column of
+; it is further from the near plane than
+; the hull column it sits under. If the
+; hull passed, this passes.
+;
+; The rotation is recomputed from
+; `e.es`/`e.ec` rather than scaled off
+; the hull's, because a scale is a
+; divide and this is two multiplies.
+to turret.columns
+  make "p.fx :e.tw * :e.es
+  make "p.fz :e.tw * :e.ec
+  make "p.px :p.fx * :cs - :p.fz * :sn
+  make "p.pz :p.fz * :cs + :p.fx * :sn
+  make "p.za :e.zc + :p.pz
+  make "p.zb :e.zc - :p.pz
+  make "p.xa :e.xc + :p.px
+  make "p.xb :e.xc - :p.px
+  make "p.iz :k / :p.za - :p.px
+  .setitem 1 :cx (:p.xa + :p.pz) * :p.iz
+  .setitem 1 :cy1 :hz + :e.te * :p.iz
+  .setitem 1 :cy2 :hz + :e.tt * :p.iz
+  make "p.iz :k / :p.za + :p.px
+  .setitem 2 :cx (:p.xa - :p.pz) * :p.iz
+  .setitem 2 :cy1 :hz + :e.te * :p.iz
+  .setitem 2 :cy2 :hz + :e.tt * :p.iz
+  make "p.iz :k / :p.zb + :p.px
+  .setitem 3 :cx (:p.xb - :p.pz) * :p.iz
+  .setitem 3 :cy1 :hz + :e.te * :p.iz
+  .setitem 3 :cy2 :hz + :e.tt * :p.iz
+  make "p.iz :k / :p.zb - :p.px
+  .setitem 4 :cx (:p.xb + :p.pz) * :p.iz
+  .setitem 4 :cy1 :hz + :e.te * :p.iz
+  .setitem 4 :cy2 :hz + :e.tt * :p.iz
+end
+
+; A BARREL IS A THIN BOX LYING DOWN, and
+; the saving is section 16.7.1's again:
+; a vertical offset does not change z,
+; so the top and bottom of each corner
+; share one divide. Eight corners, FOUR
+; divides.
+;
+; `p.px`/`p.pz` is the reach along the
+; heading and (p.qz, -p.qx) is the
+; lateral half-width -- the free ninety
+; degrees the hull uses, used once more.
+; The base ring is not drawn because it
+; is inside the turret, so the eight
+; edges are four longitudinals and the
+; muzzle.
+to barrel.columns
+  make "p.fx :e.bl * :e.es
+  make "p.fz :e.bl * :e.ec
+  make "p.px :p.fx * :cs - :p.fz * :sn
+  make "p.pz :p.fz * :cs + :p.fx * :sn
+  make "p.fx :e.bw * :e.es
+  make "p.fz :e.bw * :e.ec
+  make "p.qx :p.fx * :cs - :p.fz * :sn
+  make "p.qz :p.fz * :cs + :p.fx * :sn
+  make "p.xa :e.xc + :p.px
+  make "p.za :e.zc + :p.pz
+  make "p.iz :k / :e.zc - :p.qx
+  .setitem 1 :cx (:e.xc + :p.qz) * :p.iz
+  .setitem 1 :cy1 :hz + :e.bb * :p.iz
+  .setitem 1 :cy2 :hz + :e.bt * :p.iz
+  make "p.iz :k / :e.zc + :p.qx
+  .setitem 2 :cx (:e.xc - :p.qz) * :p.iz
+  .setitem 2 :cy1 :hz + :e.bb * :p.iz
+  .setitem 2 :cy2 :hz + :e.bt * :p.iz
+  make "p.iz :k / :p.za + :p.qx
+  .setitem 3 :cx (:p.xa - :p.qz) * :p.iz
+  .setitem 3 :cy1 :hz + :e.bb * :p.iz
+  .setitem 3 :cy2 :hz + :e.bt * :p.iz
+  make "p.iz :k / :p.za - :p.qx
+  .setitem 4 :cx (:p.xa + :p.qz) * :p.iz
+  .setitem 4 :cy1 :hz + :e.bb * :p.iz
+  .setitem 4 :cy2 :hz + :e.bt * :p.iz
+end
+
+; Eight edges: the top and bottom runs
+; from base to muzzle down each side,
+; and the muzzle ring closing them. The
+; two chains carry the muzzle's top and
+; bottom edges with them, so only its
+; two verticals are left to draw.
+to draw.barrel
+  pu (setpos item 1 :cx item 1 :cy2)
+  pd (setpos item 4 :cx item 4 :cy2)
+  (setpos item 3 :cx item 3 :cy2)
+  (setpos item 2 :cx item 2 :cy2)
+  pu (setpos item 1 :cx item 1 :cy1)
+  pd (setpos item 4 :cx item 4 :cy1)
+  (setpos item 3 :cx item 3 :cy1)
+  (setpos item 2 :cx item 2 :cy1)
+  pu (setpos item 4 :cx item 4 :cy1)
+  pd (setpos item 4 :cx item 4 :cy2)
+  pu (setpos item 3 :cx item 3 :cy1)
+  pd (setpos item 3 :cx item 3 :cy2)
+  pu
 end
 
 ; Thirteen edges: the hull's twelve and
@@ -2102,63 +2235,72 @@ end
 ; do, which is why the enemy is drawn in
 ; its own phase rather than inside the
 ; field scan.
+; THIRTY-TWO EDGES OVER TWELVE DIVIDES:
+; the hull's twelve, the turret's twelve
+; and the barrel's eight. It was
+; thirteen over six -- a hull and a
+; single line for a gun -- and design
+; section 8.2 refused the turret at M0
+; with a price attached, because M0 had
+; measured the hull-and-gun form and the
+; shape that ships should be the shape
+; that was measured. M3's board run left
+; 18 ms of peak headroom and this is M4
+; spending some of it.
+;
+; The order is hull, turret, barrel, and
+; each REFILLS the same three column
+; lists before drawing. That is why the
+; draw and the projection are
+; interleaved here where every other
+; object in this file projects first: a
+; tank is three boxes and three boxes
+; would otherwise be nine lists.
 to draw.enemy
   draw.box
-  pu (setpos item 1 :gunx item 1 :guny)
-  pd (setpos item 2 :gunx item 2 :guny)
-  pu
+  turret.columns
+  draw.box
+  barrel.columns
+  draw.barrel
 end
 
 ;--------------------------------------
 ; The missile
 ;
-; A spike with four fins, and it draws
-; in FOUR edges over four divides --
-; cheaper than a shape with six vertices
-; has any right to be, for two separate
-; reasons.
+; A LONG PYRAMID WITH FINS, and it is
+; the same solid the saucer is: a
+; four-point ring with an apex either
+; side of it. The saucer's ring is wide
+; and its apexes are short, so it reads
+; as a plate; the missile's ring is
+; narrow and its nose is long, so it
+; reads as a dart. One shape, two sets
+; of numbers, and ONE PROCEDURE DRAWS
+; BOTH -- twelve edges over five
+; divides.
 ;
-; A VERTICAL OFFSET DOES NOT CHANGE Z.
-; The fins above and below the tail sit
-; at the tail's own (x, z) with only the
-; height moved, so they share the tail's
-; perspective divide exactly -- and
-; since the divide is the expensive part
-; of a vertex, two of the six vertices
-; here are free. The left and right fins
-; are the only ones that cost anything,
-; and they cost one divide each.
+; The ring IS the fins. A dart with a
+; ring wider than its body has fins by
+; construction, and separate fin spikes
+; would have wanted four more divides
+; and four more x slots than `cx` has.
 ;
-; The transverse offset is the forward
-; one turned 90 degrees, which COMMUTES
-; with the camera's rotation, so it is
-; read straight off the forward offset
-; as (p.qz, -p.qx) with no second pair
-; of trig -- the enemy hull's trick,
-; used again.
+; The saving is section 16.7.1's, twice
+; over. A vertical offset does not
+; change z, so the top and bottom of the
+; ring share the centre's divide and are
+; free. And the lateral offset is the
+; forward one turned ninety degrees,
+; which commutes with the camera's
+; rotation, so it is read off without a
+; second pair of trig.
 ;
 ; It flies at eye height because it is
-; aimed at the eye, so its centre line
-; sits on `hz` and a missile coming
-; straight at you is dead in the middle
-; of the gunsight. That is the shot you
-; have to take or dodge.
-;
-; AND THE TWO VERTICAL FINS ARE ONE
-; STROKE. They sit at the tail's own x
-; with only the height moved, so the
-; upper tip, the tail and the lower tip
-; are three points on one straight line
-; -- and a line through the middle point
-; is the same ink as two lines out of
-; it. Four fins, three edges. `draw.box`
-; needed four pen-ups for its verticals
-; and this needs one.
-;
-; The four cull tests are the nose, the
-; tail and the two side fins. The
-; vertical fins cannot fail one the tail
-; passed, since they are at its z.
+; aimed at the eye, so its axis sits on
+; `hz` and a missile coming straight at
+; you is dead in the middle of the
+; gunsight. That is the shot you have to
+; take or dodge.
 to project.missile
   make "p.fx :ms.ln * :e.es
   make "p.fz :ms.ln * :e.ec
@@ -2170,45 +2312,30 @@ to project.missile
   make "p.zb :p.fz * :cs + :p.fx * :sn
   make "p.z1 :e.zc + :p.pz
   make "p.z2 :e.zc - :p.pz
-  make "p.z3 :p.z2 - :p.za
-  make "p.z4 :p.z2 + :p.za
+  make "p.z3 :e.zc - :p.za
+  make "p.z4 :e.zc + :p.za
   if :near > :p.z1 [output "false]
   if :near > :p.z2 [output "false]
   if :near > :p.z3 [output "false]
   if :near > :p.z4 [output "false]
-  make "p.xa :e.xc - :p.px
   make "p.iz :k / :p.z1
   make "apx (:e.xc + :p.px) * :p.iz
   make "apy :hz
   make "p.iz :k / :p.z2
-  .setitem 1 :cx :p.xa * :p.iz
-  .setitem 1 :cy1 :hz
-  .setitem 1 :cy2 :hz + :ms.fin * :p.iz
-  .setitem 2 :cy2 :hz - :ms.fin * :p.iz
+  make "p.tx (:e.xc - :p.px) * :p.iz
+  make "p.ty :hz
   make "p.iz :k / :p.z3
-  .setitem 2 :cx (:p.xa + :p.zb) * :p.iz
-  .setitem 2 :cy1 :hz
+  .setitem 1 :cx (:e.xc + :p.zb) * :p.iz
+  .setitem 1 :cy1 :hz
   make "p.iz :k / :p.z4
-  .setitem 3 :cx (:p.xa - :p.zb) * :p.iz
+  .setitem 3 :cx (:e.xc - :p.zb) * :p.iz
   .setitem 3 :cy1 :hz
+  make "p.iz :k / :e.zc
+  .setitem 2 :cx :e.xc * :p.iz
+  .setitem 2 :cy1 :hz + :ms.fin * :p.iz
+  .setitem 4 :cx :e.xc * :p.iz
+  .setitem 4 :cy1 :hz - :ms.fin * :p.iz
   output "true
-end
-
-; Four edges in eight statements: the
-; body from the nose back to the tail
-; and on out to the left fin, the tail
-; out to the right fin, and both
-; vertical fins as one stroke THROUGH
-; the tail rather than two out of it.
-to draw.missile
-  pu (setpos :apx :apy)
-  pd (setpos item 1 :cx item 1 :cy1)
-  (setpos item 2 :cx item 2 :cy1)
-  pu (setpos item 1 :cx item 1 :cy1)
-  pd (setpos item 3 :cx item 3 :cy1)
-  pu (setpos item 1 :cx item 1 :cy2)
-  pd (setpos item 1 :cx item 2 :cy2)
-  pu
 end
 
 ;--------------------------------------
@@ -2278,7 +2405,8 @@ to project.saucer
   make "p.iz :k / :e.zc
   make "apx :e.xc * :p.iz
   make "apy :hz + :sc.a * :p.iz
-  make "p.g :hz + :sc.k * :p.iz
+  make "p.tx :apx
+  make "p.ty :hz + :sc.k * :p.iz
   output "true
 end
 
@@ -2286,7 +2414,18 @@ end
 ; and the pen-ups are the same four
 ; `draw.pyr` needs: a fan out of an apex
 ; cannot be walked without lifting.
-to draw.saucer
+; ONE PROCEDURE DRAWS THE SAUCER AND THE
+; MISSILE, because they are the same
+; solid: a four-point ring in `cx`/`cy1`
+; with an apex at (apx, apy) on one side
+; and another at (p.tx, p.ty) on the
+; other. A wide ring with short apexes
+; is a saucer; a narrow ring with a long
+; nose is a dart. Twelve edges in
+; seventeen statements, and the four
+; pen-ups are the ones a fan out of an
+; apex cannot avoid.
+to draw.spindle
   pu (setpos item 1 :cx item 1 :cy1)
   pd (setpos item 2 :cx item 2 :cy1)
   (setpos item 3 :cx item 3 :cy1)
@@ -2298,10 +2437,10 @@ to draw.saucer
   pd (setpos :apx :apy)
   (setpos item 4 :cx item 4 :cy1)
   pu (setpos item 1 :cx item 1 :cy1)
-  pd (setpos :apx :p.g)
+  pd (setpos :p.tx :p.ty)
   (setpos item 2 :cx item 2 :cy1)
   pu (setpos item 3 :cx item 3 :cy1)
-  pd (setpos :apx :p.g)
+  pd (setpos :p.tx :p.ty)
   (setpos item 4 :cx item 4 :cy1)
   pu
 end
@@ -2315,11 +2454,11 @@ end
 ; where a boolean is a read.
 to draw.foe
   if :e.ram [
-    if project.missile [draw.missile]
+    if project.missile [draw.spindle]
     stop
   ]
   if :e.drift [
-    if project.saucer [draw.saucer]
+    if project.saucer [draw.spindle]
     stop
   ]
   if project.enemy [draw.enemy]
@@ -2646,12 +2785,37 @@ end
 ; in each of them, which is the only
 ; thing this procedure does besides
 ; choose.
+; The one derived number is hoisted out
+; of the four rows rather than repeated
+; in each of them, which is the only
+; thing this procedure does besides
+; choose -- and the turret and the
+; barrel are the same idea: they are cut
+; as FRACTIONS OF THE HULL, so a
+; supertank gets a bigger one without a
+; second row of numbers that has to be
+; kept in step with the first. Section
+; 16.6.1 is the standing reason for not
+; writing a number twice.
+;
+; Six multiplies once a spawn, and the
+; frame reads the results. The literals
+; are here rather than named because
+; each is used exactly once and this
+; file is 25 global slots from its
+; ceiling (design section 16.7.4).
 to set.kind
   if 3 = :e.kind [kind.super]
   if 2 = :e.kind [kind.missile]
   if 4 = :e.kind [kind.saucer]
   if 1 = :e.kind [kind.tank]
   make "e.naim 0 - :e.aim
+  make "e.tw :e.hw * 0.62
+  make "e.tt :e.te + :e.hw * 0.7
+  make "e.bl :e.hw * 2.2
+  make "e.bw :e.hw * 0.17
+  make "e.bt :e.te + :e.hw * 0.22
+  make "e.bb :e.te - :e.hw * 0.22
 end
 
 to spawn.enemy
@@ -2880,38 +3044,78 @@ to step.eshell
   if blocked? [make "es.on false]
 end
 
-; A shell is a four-pixel dash and not a
-; projected object: it has no size worth
-; transforming and one edge is the
-; smallest thing this engine can draw.
-; The player's flies at EYE HEIGHT, so
-; its screen y is `hz` with no
-; arithmetic at all -- which is also why
-; a shot you aimed goes through the
-; middle of the gunsight.
+; A SHELL IS A CUBE, which it was not:
+; it was a four-pixel dash, on the
+; argument that a shell has no size
+; worth transforming. It has, up close,
+; and a round coming at you is the one
+; object in this game you most need to
+; read the range of -- a dash gives you
+; nothing to judge it by and a cube
+; grows.
+;
+; It is AXIS-ALIGNED TO THE WORLD and
+; not to its own flight, which costs two
+; statements instead of four: a cube is
+; nearly symmetric, nothing about a
+; shell's roll is observable, and the
+; camera turns the world axes into one
+; offset pair and its own perpendicular
+; -- the saucer's trick, and the same
+; two lines.
+;
+; Four columns, four divides, and the
+; twelve edges come out of `draw.box`
+; unchanged. The cost is real and it is
+; the largest single item in this
+; milestone's drawing: two shells in the
+; air is twenty-four edges where it used
+; to be two.
+;
+; `sh.y` is the height its axis flies
+; at, above the eye. The player's is
+; zero -- a shot you aimed goes through
+; the middle of the gunsight -- and the
+; enemy's is the barrel it left.
+to shell.columns
+  make "p.px :sh.r * :cs
+  make "p.pz :sh.r * :sn
+  make "p.za :sh.y + :sh.r
+  make "p.zb :sh.y - :sh.r
+  make "p.iz :k / :p.zc + :p.pz
+  .setitem 1 :cx (:p.xc + :p.px) * :p.iz
+  .setitem 1 :cy1 :hz + :p.zb * :p.iz
+  .setitem 1 :cy2 :hz + :p.za * :p.iz
+  make "p.iz :k / :p.zc + :p.px
+  .setitem 2 :cx (:p.xc - :p.pz) * :p.iz
+  .setitem 2 :cy1 :hz + :p.zb * :p.iz
+  .setitem 2 :cy2 :hz + :p.za * :p.iz
+  make "p.iz :k / :p.zc - :p.pz
+  .setitem 3 :cx (:p.xc - :p.px) * :p.iz
+  .setitem 3 :cy1 :hz + :p.zb * :p.iz
+  .setitem 3 :cy2 :hz + :p.za * :p.iz
+  make "p.iz :k / :p.zc - :p.px
+  .setitem 4 :cx (:p.xc + :p.pz) * :p.iz
+  .setitem 4 :cy1 :hz + :p.zb * :p.iz
+  .setitem 4 :cy2 :hz + :p.za * :p.iz
+end
+
 to draw.shell
   make "p.zc :sh.dz * :cs + :sh.dx * :sn
   if :near > :p.zc [stop]
   make "p.xc :sh.dx * :cs - :sh.dz * :sn
-  make "p.iz :k / :p.zc
-  make "p.sx :p.xc * :p.iz
-  make "p.s2 :p.sx + 4
-  pu (setpos :p.sx :hz)
-  pd (setpos :p.s2 :hz)
-  pu
+  make "sh.y 0
+  shell.columns
+  draw.box
 end
 
 to draw.eshell
   make "p.zc :es.dz * :cs + :es.dx * :sn
   if :near > :p.zc [stop]
   make "p.xc :es.dx * :cs - :es.dz * :sn
-  make "p.iz :k / :p.zc
-  make "p.sx :p.xc * :p.iz
-  make "p.sy :hz + :es.y * :p.iz
-  make "p.s2 :p.sx + 4
-  pu (setpos :p.sx :p.sy)
-  pd (setpos :p.s2 :p.sy)
-  pu
+  make "sh.y :es.y
+  shell.columns
+  draw.box
 end
 
 ;======================================

@@ -429,6 +429,12 @@ forward one turned 90°, turning 90° commutes with the camera's rotation, so th
 camera-frame right offset is `(pzc, −pxc)` read straight off the forward one.
 Four statements, not six.
 
+**The turret is bought at M4 (§16.8).** The price it was refused at stands — it
+is four more columns and twelve more edges — and M3's board run left 18 ms of
+peak headroom to pay it out of. The barrel went with it: one line became a thin
+box lying down, eight edges over four divides, because a vertical offset does not
+change z (§16.7.1). Thirteen edges became **32**.
+
 ### 8.3 Models are generated, not hand-typed
 
 As P11 §6.3 did for the rock outlines: `scripts/gen_models.py` emits the vertex
@@ -2224,6 +2230,65 @@ engine idle and the closing alarm do what §11 claims for them, and whether the
 saucer reads as a saucer from a tank's eye height. Every one of those is M4's
 material and none of them is a number.
 
+### 16.8 M4: the models get their detail, and §8.2's turret is bought
+
+The first thing the play test asked for. Three shapes changed, and the two
+arguments the design had already made about each of them are what made it cheap.
+
+| | before | after | divides |
+|---|---:|---:|---:|
+| tank / supertank | 13 edges | **32** | 6 → 12 |
+| missile | 4 | **12** | 4 → 5 |
+| shell (each) | 1 | **12** | 1 → 4 |
+| worst-case frame | 135 edges | **176** | |
+
+**A tank is a hull, a turret and a barrel.** §8.2 refused the turret at M0 —
+*"another 3 ms at stock, and M0 measured the hull-and-gun form... adding it is
+M4's call with a price attached"* — and this is M4 paying it. The barrel stops
+being one line and becomes a thin box lying down: eight corners over **four**
+divides, because §16.7.1's rule holds here too and the top and bottom of each
+corner share one. Eight edges, and the base ring is not drawn because it is
+inside the turret.
+
+**The turret needs no cull test**, which is worth stating because it looks like
+an omission. It sits inside the hull's footprint, so every column of it is
+further from the near plane than the hull column beneath it: if the hull passed,
+it passes.
+
+**And a tank is thirty-two edges without one new list**, which is the part that
+had to be designed rather than written. Project-then-draw would want three more
+four-element lists per part — nine lists for three boxes — against a file 18
+slots from its ceiling (§16.7.4). So `draw.enemy` **refills the same three
+columns between parts**: hull, draw, turret, draw, barrel, draw. It is the only
+object in this file whose projection and drawing interleave, and the reason is
+the global table rather than the frame.
+
+**A missile is a long pyramid with fins, and it is the saucer's solid.** Both are
+a four-point ring with an apex either side: a *wide* ring with short apexes reads
+as a plate, a *narrow* ring with a long nose reads as a dart. One `draw.spindle`
+serves both, twelve edges over five divides. **The ring is the fins** — a dart
+whose ring is wider than its body has them by construction, and separate fin
+spikes would have wanted four more divides and four more `cx` slots than exist.
+
+**A shell is a cube**, which is the largest single item here: two in the air is
+24 edges where it was 2. The dash was defended on the grounds that a shell has no
+size worth transforming; it has, up close, and **a round coming at you is the one
+object in this game whose range you most need to read**. A dash gives you nothing
+to judge it by and a cube grows. It is axis-aligned to the *world* rather than to
+its flight — nothing about a shell's roll is observable — which is the saucer's
+two-statement trick again.
+
+**What it costs, predicted rather than measured.** 41 more edges and 16 more
+divides on the worst frame; at M0's overclocked rates that is roughly **3–4 ms**,
+taking the peak from 48.7 to about **52 against 66.7**. The new edges are all
+*short* — a turret, a barrel and two small cubes — so the per-step half of the
+drawing cost barely moves, and it is the fixed per-statement charge that
+dominates. **That is an estimate and the board is what settles it**, exactly as
+§16.7's was; the levers if it misses are known and unchanged (§14).
+
+It also costs **7 globals**: 236 of 254, leaving 18 against the 16 the budget
+test enforces. The next model that wants a temporary will have to find one.
+
 **M4 — tuning.** Played, then cut.
 
 ## 17. Tests
@@ -2257,7 +2322,9 @@ M2's additions, and the failure each exists for:
   straight away, where the barrel must foreshorten to nothing rather than swing
   across the view. This is the test that caught M0's transposed half-offset
   (§16.5), and the only one that could have: the hull is square, so the same
-  error shows there only as a rotation.
+  error shows there only as a rotation. It reads the *barrel's* columns from
+  §16.8 on, and it is joined by **the turret sits on the hull and inside it** —
+  the second half of which is what lets the turret skip the near-plane test.
 - **A shell is stopped by an obstacle, including across the seam.** B19's own
   case, in this game, against the single wrapped table that is supposed to make
   it impossible.

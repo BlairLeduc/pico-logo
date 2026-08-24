@@ -67,10 +67,19 @@
 // The horizon walks `mtn.seen` + 1 points, so it strokes `mtn.seen` segments.
 #define SEGS_HORIZON 9
 
-// The enemy is the hull's twelve edges and the gun's one.  Design section 8.2
-// lists a turret box as well; it is not in the shape M0 priced and it is not
-// here, so thirteen is the number that has a measurement behind it.
-#define EDGES_ENEMY 13
+// The enemy is the hull's twelve edges, the turret's twelve and the barrel's
+// eight.  It was thirteen -- a hull and one line for a gun -- and §8.2 refused
+// the turret at M0 "with a price attached", because the shape that ships should
+// be the shape that was measured.  M3's board run left 18 ms of peak headroom
+// and M4 is spending some of it.
+#define EDGES_ENEMY 32
+
+// A missile and a saucer are the same solid: a four-point ring with an apex
+// either side of it.  Twelve edges over five divides, one draw procedure.
+#define EDGES_SPINDLE 12
+
+// A shell is a cube now rather than a four-pixel dash.
+#define EDGES_SHELL 12
 
 // The explosion is five short strokes on a growing radius.
 #define FRAGS_BOOM 5
@@ -849,11 +858,14 @@ void test_a_pivot_moves_the_horizon_and_the_world_together(void)
     TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 0.0f, peak_before,
                                      "the walk does not start at -mn.arc");
 
-    // An object at the same bearing: the enemy's gun root is its centre, which
-    // is a plain projected point.
-    enemy_at(800, 1100, 180);
+    // An object at the same bearing: the enemy's own centre, projected.  Taken
+    // from `e.xc`/`e.zc` rather than off any model, because the midpoint of two
+    // projected corners is NOT the projection of the midpoint -- they sit at
+    // different ranges and the divide is per point, which is worth 0.2 steps
+    // even on a barrel two steps wide.
+    foe_at(1, 800, 1100, 180);
     TEST_ASSERT_TRUE(truth("project.enemy"));
-    const float obj_before = item_of("gunx", 1);
+    const float obj_before = k * num(":e.xc") / num(":e.zc");
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, obj_before);
 
     const float turn = num(":turn.rate");
@@ -861,9 +873,9 @@ void test_a_pivot_moves_the_horizon_and_the_world_together(void)
     mock_device_clear_graphics();
     run("horizon");
     const float peak_after = horizon_vertex(4);
-    enemy_at(800, 1100, 180);
+    foe_at(1, 800, 1100, 180);
     TEST_ASSERT_TRUE(truth("project.enemy"));
-    const float obj_after = item_of("gunx", 1);
+    const float obj_after = k * num(":e.xc") / num(":e.zc");
 
     const float peak_moved = peak_after - peak_before;
     const float obj_moved = obj_after - obj_before;
@@ -1329,25 +1341,68 @@ void test_the_enemy_draws_thirteen_edges(void)
 // spelling the barrel would point away down +z and project to a point.
 void test_the_gun_points_where_the_enemy_faces(void)
 {
-    const float k = num(":k"), ehalf = num(":ehalf");
+    const float k = num(":k");
 
+    // Broadside, facing east: the muzzle end of the barrel is `e.bl` further
+    // east than the base, and the base straddles the tank's centre.
     camera_at(800, 800, 0);
-    enemy_at(800, 1100, 90);
+    foe_at(1, 800, 1100, 90);
     TEST_ASSERT_TRUE(truth("project.enemy"));
-    const float root = item_of("gunx", 1), tip = item_of("gunx", 2);
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, root);
-    TEST_ASSERT_FLOAT_WITHIN(0.05f, 2.0f * ehalf * k / 300.0f, tip);
+    run("barrel.columns");
+    const float reach = num(":e.bl");
+    // Columns 1 and 2 are the base pair, 3 and 4 the muzzle pair; each pair
+    // straddles the axis by the barrel's half-width, so the midpoints are what
+    // carry the direction.
+    const float base = 0.5f * (item_of("cx", 1) + item_of("cx", 2));
+    const float muzzle = 0.5f * (item_of("cx", 3) + item_of("cx", 4));
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, 0.0f, base);
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.5f, reach * k / 300.0f, muzzle,
+                                     "the barrel does not point where the tank faces");
 
     // And the other way round when it faces the other way.
-    enemy_at(800, 1100, 270);
+    foe_at(1, 800, 1100, 270);
     TEST_ASSERT_TRUE(truth("project.enemy"));
-    TEST_ASSERT_FLOAT_WITHIN(0.05f, -2.0f * ehalf * k / 300.0f, item_of("gunx", 2));
+    run("barrel.columns");
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, -reach * k / 300.0f,
+                             0.5f * (item_of("cx", 3) + item_of("cx", 4)));
 
     // Facing straight away, the barrel foreshortens to nothing rather than
-    // swinging sideways -- which is the same claim from the third direction.
-    enemy_at(800, 1100, 0);
+    // swinging sideways -- which is the same claim from the third direction,
+    // and the one that caught M0's transposed half-offset.  The hull is square,
+    // so that error shows there only as a rotation; here it is a barrel
+    // pointing 90 degrees wrong.
+    foe_at(1, 800, 1100, 0);
     TEST_ASSERT_TRUE(truth("project.enemy"));
-    TEST_ASSERT_FLOAT_WITHIN(0.05f, 0.0f, item_of("gunx", 2));
+    run("barrel.columns");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.5f, 0.0f,
+                                     0.5f * (item_of("cx", 3) + item_of("cx", 4)),
+                                     "the barrel swung sideways instead of foreshortening");
+}
+
+// The turret sits on the hull and inside its footprint, which is what lets it
+// skip the near-plane test: every column of it is further from the near plane
+// than the hull column it sits under.  If that stopped being true the turret
+// would be the thing that divides by nearly zero.
+void test_the_turret_sits_on_the_hull_and_inside_it(void)
+{
+    camera_at(800, 800, 0);
+    foe_at(1, 800, 1100, 0);
+    TEST_ASSERT_TRUE(truth("project.enemy"));
+    const float hull_x = item_of("cx", 1), hull_top = item_of("cy2", 1);
+
+    run("turret.columns");
+    // The same WORLD height, so nearly the same screen height -- but not
+    // exactly, because the turret's corner is narrower and therefore at a
+    // slightly different range, and the divide is per column.  A pixel of
+    // tolerance is the honest assertion; zero would be asserting a coincidence.
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(1.0f, hull_top, item_of("cy1", 1),
+                                     "the turret does not stand on the hull");
+    TEST_ASSERT_TRUE_MESSAGE(item_of("cy2", 1) > item_of("cy1", 1),
+                             "the turret has no height");
+    TEST_ASSERT_TRUE_MESSAGE(fabsf(item_of("cx", 1)) < fabsf(hull_x),
+                             "the turret is wider than the hull it skips the cull behind");
+    TEST_ASSERT_TRUE_MESSAGE(num(":e.tw") < num(":e.hw"),
+                             "the turret is not narrower than the hull");
 }
 
 // The hull is a square that turns with the enemy, which is the other half of
@@ -2413,19 +2468,19 @@ void test_a_missile_that_has_not_arrived_does_nothing(void)
     TEST_ASSERT_TRUE(truth(":e.alive"));
 }
 
-// Four edges: the body, two side fins, and both vertical fins as ONE stroke --
-// they are three points on a straight line through the tail, so a line through
-// the middle one is the same ink as two lines out of it.  The count is what
-// pins the model, exactly as the cube's twelve and the enemy's thirteen do,
-// and it is four rather than five because of that stroke.
-void test_a_missile_draws_four_edges(void)
+// Twelve edges: the ring of four, a fan to the nose and a fan to the tail.  The
+// ring IS the fins -- a dart with a ring wider than its body has them by
+// construction, and separate spikes would have wanted four more divides and
+// four more x slots than `cx` has.
+void test_a_missile_draws_twelve_edges(void)
 {
     camera_at(800, 800, 0);
     foe_at(2, 800, 1100, 180);
     mock_device_clear_graphics();
     TEST_ASSERT_TRUE_MESSAGE(truth("project.missile"), "the missile in front of you was culled");
-    run("draw.missile");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(4, mock_device_line_count(), "the missile is not four edges");
+    run("draw.spindle");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(EDGES_SPINDLE, mock_device_line_count(),
+                                  "the missile is not twelve edges");
 }
 
 // It flies at eye height, which is why a missile coming straight at you sits in
@@ -2439,10 +2494,16 @@ void test_a_missile_flies_at_eye_height(void)
 
     const float hz = num(":hz");
     TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, hz, num(":apy"), "the nose is off the eye line");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, hz, item_of("cy1", 1), "the tail is off the eye line");
-    // The fins straddle it.
-    TEST_ASSERT_TRUE_MESSAGE(item_of("cy2", 1) > hz, "the upper fin is not above the eye line");
-    TEST_ASSERT_TRUE_MESSAGE(hz > item_of("cy2", 2), "the lower fin is not below the eye line");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, hz, num(":p.ty"), "the tail is off the eye line");
+    // The ring straddles it: 1 and 3 are the lateral pair, on the axis; 2 and 4
+    // are above and below.
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, hz, item_of("cy1", 1), "the ring is off the axis");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, hz, item_of("cy1", 3), "the ring is off the axis");
+    TEST_ASSERT_TRUE_MESSAGE(item_of("cy1", 2) > hz, "the upper fin is not above the eye line");
+    TEST_ASSERT_TRUE_MESSAGE(hz > item_of("cy1", 4), "the lower fin is not below the eye line");
+    // And it is LONG: the nose reaches further than the ring is wide, which is
+    // the difference between a dart and the saucer's plate.
+    TEST_ASSERT_TRUE_MESSAGE(num(":ms.ln") > num(":ms.fin"), "the missile is not a long pyramid");
 }
 
 //--------------------------------------------------------------------------
@@ -2517,8 +2578,9 @@ void test_a_saucer_draws_twelve_edges(void)
     foe_at(4, 800, 1100, 0);
     mock_device_clear_graphics();
     TEST_ASSERT_TRUE_MESSAGE(truth("project.saucer"), "the saucer in front of you was culled");
-    run("draw.saucer");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(12, mock_device_line_count(), "the saucer is not twelve edges");
+    run("draw.spindle");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(EDGES_SPINDLE, mock_device_line_count(),
+                                  "the saucer is not twelve edges");
 }
 
 // It is rotationally symmetric, so its own heading must not reach the
@@ -2553,7 +2615,7 @@ void test_a_saucer_floats_above_the_horizon(void)
     const float rim = item_of("cy1", 1);
     TEST_ASSERT_TRUE_MESSAGE(rim > hz, "the saucer is sitting on the ground");
     TEST_ASSERT_TRUE_MESSAGE(num(":apy") > rim, "the dome is not above the rim");
-    TEST_ASSERT_TRUE_MESSAGE(rim > num(":p.g"), "the keel is not below the rim");
+    TEST_ASSERT_TRUE_MESSAGE(rim > num(":p.ty"), "the keel is not below the rim");
 }
 
 //--------------------------------------------------------------------------
@@ -2587,7 +2649,7 @@ void test_the_new_models_are_culled_at_the_near_plane(void)
 void test_the_frame_draws_the_model_that_matches_the_kind(void)
 {
     const struct { int kind; int edges; } table[] = {
-        {1, EDGES_ENEMY}, {2, 4}, {3, EDGES_ENEMY}, {4, 12}};
+        {1, EDGES_ENEMY}, {2, EDGES_SPINDLE}, {3, EDGES_ENEMY}, {4, EDGES_SPINDLE}};
 
     for (int i = 0; i < 4; i++)
     {
@@ -3398,6 +3460,7 @@ void test_every_hot_path_temporary_is_prefixed(void)
     TEST_ASSERT_FALSE(in_def);
 }
 
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -3444,6 +3507,7 @@ int main(void)
     RUN_TEST(test_the_readout_keeps_a_peak_not_an_average_of_peaks);
     RUN_TEST(test_the_enemy_draws_thirteen_edges);
     RUN_TEST(test_the_gun_points_where_the_enemy_faces);
+    RUN_TEST(test_the_turret_sits_on_the_hull_and_inside_it);
     RUN_TEST(test_the_enemy_hull_is_a_square_that_turns);
     RUN_TEST(test_the_enemy_is_culled_at_the_near_plane);
     RUN_TEST(test_the_enemy_turns_towards_the_player);
@@ -3484,7 +3548,7 @@ int main(void)
     RUN_TEST(test_a_missile_closes_forever_and_never_fires);
     RUN_TEST(test_a_missile_kills_by_arriving_and_dies_of_it);
     RUN_TEST(test_a_missile_that_has_not_arrived_does_nothing);
-    RUN_TEST(test_a_missile_draws_four_edges);
+    RUN_TEST(test_a_missile_draws_twelve_edges);
     RUN_TEST(test_a_missile_flies_at_eye_height);
     RUN_TEST(test_a_saucer_drifts_and_does_not_hunt);
     RUN_TEST(test_a_saucer_flies_over_the_obstacles);
