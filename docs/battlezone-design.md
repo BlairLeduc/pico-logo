@@ -810,6 +810,15 @@ worst**, against 53.1 / 56.0 at stock.
 **The die barely warms**: 24.3 → 26.9 °C over a 200-frame run at 300 MHz, and
 25.7 → 26.6 in the earlier sweep. Thermals are not a constraint.
 
+**And that is not a peculiarity of these two boards** (2026-08-24, from reading
+around rather than from a run here, so it is second-hand where everything else
+in this section is measured): 300 MHz is widely reported as safe on the RP2350
+generally, without heatsinking and without thermal trouble, so a board that
+*refuses* the clock is rare rather than merely absent from this bench. That
+matters to §16.7.3 and not to the budget — the frame numbers above stand on
+their own measurements either way. What it supports is the **decision to require
+the clock**, which until now rested on three boards all happening to take it.
+
 ### 12.3.1 It got there the hard way: clk_peri
 
 The first sweep read the present at **58.95, 59.45 and 57.4 ms** at 200, 250 and
@@ -2007,7 +2016,9 @@ arrangement of the two levers rescues it. Two obstacles is still over by 10.3.
 Getting the *peak* inside at stock needs the obstacle field gone entirely, which
 is not a game. And 12 fps with two obstacles, which does fit, is a different and
 slower game maintained for a board nobody has: every board this has run on took
-the clock.
+the clock, and §12.3 records why that is the expected case rather than luck —
+300 MHz is safe on this silicon generally, unheatsinked, so a board that refuses
+is rare and not merely absent from this bench.
 
 So `clock` **answers a question instead of cutting the scene**. It asks, reads
 `hw.cpu` back — the hardware and not the request, so a refusal cannot report an

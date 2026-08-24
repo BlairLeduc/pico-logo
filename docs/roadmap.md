@@ -1049,7 +1049,10 @@ precondition** (§16.7.3). M2 measured the refused-clock fallback and it does no
 close the gap — two obstacles at 150 MHz is a peak frame of 77.0 against 66.7,
 still over by 10.3 — and getting the peak inside at stock needs the obstacle
 field gone, which is not a game. A 12 fps variant does fit and is a different,
-slower game maintained for a board nobody has. So `clock` now **answers a
+slower game maintained for a board nobody has — and §12.3 now records why that
+is the expected case rather than luck: 300 MHz is safe on this silicon
+generally, unheatsinked, so a board that refuses is rare and not merely absent
+from this bench. So `clock` now **answers a
 question instead of cutting the scene**, and a board that refuses gets the
 measurement rather than a game. What the fallback really cost was not its four
 constants but that `fps` and `max.obstacles` were things `clock` *wrote*, so
