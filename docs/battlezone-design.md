@@ -1771,7 +1771,7 @@ board can produce it.
 should rise at 300 MHz — §12.3.1b's twelve-at-15-fps is now reachable with the
 enemy in the frame, and M2 deliberately did not spend it, because density is M4's
 decision and this milestone's job was to find out what the enemy costs. And
-§19.5's arithmetic-statement discrepancy, still open and still ten minutes of
+§19.5's arithmetic-statement discrepancy, still open and still one run of
 `tests/logo/p11rocks`.
 
 ### 16.6 M2 measured on hardware, and the enemy is what it found
@@ -2509,8 +2509,22 @@ M3's additions, and the failure each exists for:
 5. **Why is a local arithmetic statement 53.5 µs when P11 M0 measured 42–44.5
    on the same board twelve days earlier?** (§3.2.) Either the interpreter
    regressed — which would touch every game in the tree — or the two harnesses
-   differ invisibly. `tests/logo/p11rocks` still runs and settles it in ten
-   minutes. **This is the one open question that is not about Battlezone**, and
+   differ invisibly. `tests/logo/p11rocks` still runs and settles it.
+
+   **The run itself takes seconds, not the "ten minutes" this used to say** —
+   that was an estimate of the *effort*, and it read as a duration. The
+   calibration loops are 2,000 iterations and the frame passes are 60 frames,
+   so a board is finished almost at once. The number wanted is the line
+   `arithmetic statement` in `/p11rocks.txt`, which the script appends to
+   because figures on the PicoCalc's display cannot be copied off it.
+
+   **Two things will spoil the comparison if they are not checked first.** The
+   board must be at the STOCK clock — `p11rocks` predates `hw.setcpu` and does
+   not set one, so a session left at 300 MHz reads about half and looks like a
+   spectacular improvement. And `erall` before loading is not optional the way
+   it once was: the script's own header warns about `MAX_PROCEDURES`, but
+   Battlezone now leaves **237 of 254 globals** behind (§16.7.4), and a
+   workspace still holding it has nowhere to put `p11rocks`' own. **This is the one open question that is not about Battlezone**, and
    it should be answered before M1 spends L0.5 on the strength of a host
    measurement.
 6. ~~**Does a *tiered* Pico 2 run this frame?**~~ **Answered at M0: yes, and
